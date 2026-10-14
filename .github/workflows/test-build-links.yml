@@ -7,6 +7,11 @@ name: Test build links
 #
 # test-build.yml from a fork runs as the fork has it, so a build is linked only when a maintainer
 # started its run: their own push, or the label they added. See docs/releasing.md › Test builds.
+#
+# Each linked build is also posted to the Discord forum channel whose webhook URL is the secret
+# DISCORD_WEBHOOK_TESTING: the first build of a pull request opens a forum thread, later builds
+# post "updated" in the same thread. The thread's id is kept in the comment, in a hidden marker.
+# Without the secret nothing is posted, and a failed post fails nothing else.
 
 on:
   workflow_run:
@@ -28,11 +33,14 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/github-script@v7
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_TESTING }}
         with:
           script: |
             // The maintainers are listed here and in test-build.yml.
             const MAINTAINERS = ['juhamikael'];
             const MARKER = '<!-- suhina-test-build -->';
+            const THREAD = /<!-- suhina-discord-thread: (\d+) -->/;
             const { owner, repo } = context.repo;
             const run = context.payload.workflow_run;
 
@@ -116,16 +124,71 @@ jobs:
             const previous = comments.find(
               (c) => c.user.type === 'Bot' && c.body.startsWith(MARKER),
             );
+            const known = previous && previous.body.match(THREAD);
+            let thread = known ? known[1] : null;
+            const withThread = () => body.join('\n') + (thread ? `\n<!-- suhina-discord-thread: ${thread} -->` : '');
+            let comment;
             if (previous) {
-              await github.rest.issues.updateComment({
-                owner, repo, comment_id: previous.id, body: body.join('\n'),
-              });
+              ({ data: comment } = await github.rest.issues.updateComment({
+                owner, repo, comment_id: previous.id, body: withThread(),
+              }));
             } else {
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: number, body: body.join('\n'),
-              });
+              ({ data: comment } = await github.rest.issues.createComment({
+                owner, repo, issue_number: number, body: withThread(),
+              }));
             }
             core.info(`Linked run ${run.id} from #${number}.`);
+
+            // Discord: a forum thread per pull request, opened by its first build. A failed post
+            // is a warning, never a failed run.
+            const webhook = process.env.DISCORD_WEBHOOK;
+            if (!webhook) {
+              core.info('No DISCORD_WEBHOOK_TESTING secret; nothing posted to Discord.');
+              return;
+            }
+            if (!builds.some((job) => job.conclusion === 'success')) {
+              core.info('No platform built; nothing posted to Discord.');
+              return;
+            }
+            const title = pr.title.replace(/\s+/g, ' ').trim();
+            const lines = (head) => [head, '', `Download: <${comment.html_url}>`, `Pull request: ${pr.html_url}`].join('\n').slice(0, 2000);
+            // allowed_mentions: a title never pings anyone.
+            const send = (query, payload) => fetch(`${webhook}?wait=true${query}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...payload, allowed_mentions: { parse: [] } }),
+            });
+            try {
+              if (thread) {
+                const res = await send(`&thread_id=${thread}`, {
+                  content: lines(`**Updated:** a new test build of commit \`${commit}\`.`),
+                });
+                if (res.ok) {
+                  core.info(`Posted the update to Discord thread ${thread}.`);
+                  return;
+                }
+                // The thread was deleted or archived for good: open a new one.
+                core.warning(`Discord thread ${thread} refused the update (${res.status}); opening a new thread.`);
+                thread = null;
+              }
+              const res = await send('', {
+                thread_name: `#${number} ${title}`.slice(0, 100),
+                content: lines(`**${title}**\nA test build of commit \`${commit}\` is ready to try.`),
+              });
+              if (!res.ok) {
+                core.warning(`Discord refused the post (${res.status}): ${await res.text()}`);
+                return;
+              }
+              const message = await res.json();
+              // In a forum channel the message's channel is the new thread.
+              thread = message.channel_id;
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: comment.id, body: withThread(),
+              });
+              core.info(`Opened Discord thread ${thread} for #${number}.`);
+            } catch (error) {
+              core.warning(`Posting to Discord failed: ${error.message}`);
+            }
 
   unlabel:
     name: take the label off new commits

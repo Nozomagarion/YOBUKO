@@ -147,12 +147,18 @@ else. No mention in a post pings anyone.
 |---|---|---|
 | releases | `DISCORD_WEBHOOK_RELEASES` | each nightly (`release.yml`); each release when a person publishes it, with its *New and changed* section (`discord.yml`) |
 | events | `DISCORD_WEBHOOK_EVENTS` | pull requests opened, merged, closed and reopened; issues opened, closed and reopened (`discord.yml`) |
+| testing (a forum channel) | `DISCORD_WEBHOOK_TESTING` | each linked test build (`test-build-links.yml`): the first build of a pull request opens a thread named `#<number> <title>`, later builds post *Updated* in it |
 
 [`scripts/discord_post.py`](../scripts/discord_post.py) writes the posts of `discord.yml` from
 the event. The nightly never reaches `discord.yml`: it is created with the workflow's own token,
 which starts no other workflow. `discord.yml` runs on `pull_request_target`, so pull requests from
 forks are posted too; it checks out the base branch and never runs the pull request's code. No
 repository webhook (Settings › Webhooks) posts to Discord; one would post the nightly twice.
+
+A test build's post links the build comment (the downloads) and the pull request. The thread's id
+is kept in that comment as a hidden `<!-- suhina-discord-thread: … -->` marker, so the next build
+of the same pull request finds its thread; if the thread is gone, Discord refuses the post and a
+new thread is opened. A run in which no platform built posts nothing.
 
 ## Packages
 
