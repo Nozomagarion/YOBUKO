@@ -319,7 +319,7 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 - A menu bar and a **Settings** dialog over the window (Options › Settings, Ctrl+,; Escape closes
   it) with its pages listed down the
   left: General, Interface (with Theme, Arrangement, Detail area and Browser under it), Graphics, Audio,
-  Shortcuts, Plug-ins; animations, which side the track headers are on, the renderer (wgpu or
+  Shortcuts, Plug-ins, About; animations, which side the track headers are on, the renderer (wgpu or
   OpenGL); saved in `settings.txt`.
 - The whole window zooms from 50 % to 200 % (Ctrl and + or -, Cmd on macOS; Ctrl and 0 for
   100 %; View › Zoom in and Settings › Interface › Zoom), and the zoom is kept for the next run
@@ -376,6 +376,8 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   ([#176](https://github.com/suhina-daw/suhina-daw/issues/176)).
 - Settings › Plug-ins: the folders scanned (add, remove), Scan and Rescan all in the background,
   and the plug-ins found and the files that failed.
+- Settings › About: the version Suhina was built as, the system, and a Copy button for the line a
+  bug report asks for.
 - Every key is the user's to change: Settings › Shortcuts and `keymap.json` bind any command
   that needs no parameters, the actions on the selection (copy, cut, paste, duplicate, delete,
   group) and the window's own ([shortcuts](docs/shortcuts.md)).

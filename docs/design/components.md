@@ -3,7 +3,7 @@ description: Measurements, states and tokens of every UI component, from the min
 read_when: widget sizes, clip slot states, value field, slider, knob, toggle, meter, track header levels, device panel, piano roll layout
 type: spec
 status: draft
-last_verified: 2026-10-13
+last_verified: 2026-10-14
 covers:
   - crates/ui/src/theme.rs
   - crates/ui/src/session_view.rs
@@ -241,6 +241,7 @@ The list of pages: 20 px rows, 11 px names 6 px in, `text.secondary`; the page s
 - Audio
 - Shortcuts
 - Plug-ins
+- About
 
 A page starts with its title (10 px `text.hint` over a 1 px `border`), level with the top of
 the list; each setting is a 34 px row with its name (11 px `text.primary`), a note under it
@@ -273,6 +274,7 @@ the list; each setting is a 34 px row with its name (11 px `text.primary`), a no
 | Audio › Output | Buffer size | Default (1024 frames), then the device's sizes with their length in ms |
 | Audio › Output | Exclusive mode | On, Off (default): WASAPI only; the note says when the device does not allow it |
 | Audio › Now | Output, Latency | Read only: the device in use, and its measured latency and underruns; "List devices again" (120 px) on the Output row. Changes on this page run `audio.setOutput` |
+| About | Version, System, For a bug report | Read only: the version Suhina was built as (a nightly's with its date and commit), the system and architecture, and the line "Suhina <version> (<system> <architecture>)" with a 64 px Copy button that puts it on the clipboard for an issue's "Suhina version or commit" field |
 
 **Interface › Theme**: the themes as 20 px rows in a list that scrolls after eight, the user's
 own first and then those that come with Suhina, the name on the left and the file name or

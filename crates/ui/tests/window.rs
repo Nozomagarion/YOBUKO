@@ -1578,3 +1578,20 @@ fn the_wheel_over_open_settings_leaves_the_arrangement_alone() {
     assert!(!harness.state().settings_open());
     assert_eq!(clip(&harness), before, "the arrangement neither scrolled nor zoomed");
 }
+
+#[test]
+fn settings_about_shows_the_version_and_copies_it_for_a_bug_report() {
+    let mut harness = window(demo_app());
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    harness.run();
+    harness.get_by_label("Settings page: About").click();
+    harness.run();
+
+    let line = suhina_ui::settings_view::version_line();
+    assert!(line.starts_with(&format!("Suhina {} (", env!("CARGO_PKG_VERSION"))), "{line}");
+    assert!(line.contains(std::env::consts::OS), "{line}");
+    harness.get_by_label("Copy version").click();
+    harness.step();
+    let copied = harness.output().platform_output.commands.contains(&egui::OutputCommand::CopyText(line.clone()));
+    assert!(copied, "Copy puts \"{line}\" on the clipboard");
+}

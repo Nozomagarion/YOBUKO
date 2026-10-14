@@ -122,11 +122,12 @@ pub enum Page {
     Audio,
     Shortcuts,
     Plugins,
+    About,
 }
 
 impl Page {
     /// Every page with its name, and whether it belongs to the page above it (Interface).
-    pub const ALL: [(Page, &'static str, bool); 10] = [
+    pub const ALL: [(Page, &'static str, bool); 11] = [
         (Page::General, "General", false),
         (Page::Interface, "Interface", false),
         (Page::Theme, "Theme", true),
@@ -137,6 +138,7 @@ impl Page {
         (Page::Audio, "Audio", false),
         (Page::Shortcuts, "Shortcuts", false),
         (Page::Plugins, "Plug-ins", false),
+        (Page::About, "About", false),
     ];
 }
 
@@ -549,8 +551,40 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
             y += PAD;
             outcome.plugins = plugin_section(ui, &painter, page, &mut y, bottom, plugins);
         }
+        Page::About => {
+            section(&mut y, "About");
+            let r = row(&mut y);
+            label(&painter, r, "Version", env!("CARGO_PKG_VERSION"));
+            let r = row(&mut y);
+            label(&painter, r, "System", &format!("{} {}", std::env::consts::OS, std::env::consts::ARCH));
+            let r = row(&mut y);
+            let line = version_line();
+            label(&painter, r, "For a bug report", &line);
+            let copy = control_rect(r, 1);
+            let response = widgets::button_area(ui, copy, Id::new("settings-copy-version"), "Copy version");
+            let hover = widgets::hover(ui, &response);
+            painter.rect_filled(copy, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+            widgets::text_in(
+                &painter,
+                copy,
+                Align2::CENTER_CENTER,
+                "Copy",
+                theme::ui_font(theme::TEXT_SMALL),
+                theme::text_primary(),
+            );
+            if response.clicked() {
+                ui.ctx().copy_text(line);
+            }
+        }
     }
     outcome
+}
+
+/// The line Settings › About copies for a bug report's "Suhina version or commit" field: the
+/// version Suhina was built as (a nightly's carries its date and commit), the system and the
+/// architecture.
+pub fn version_line() -> String {
+    format!("Suhina {} ({} {})", env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH)
 }
 
 /// The list of pages: Interface's own pages indented under it, the page shown filled. Returns
