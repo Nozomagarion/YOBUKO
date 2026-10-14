@@ -3,7 +3,7 @@ description: The MCP server for agents: tools, file roots, errors and how to run
 read_when: MCP, agents, audio output, audio device, buffer size, ASIO, project_open, command_run, file roots, rmcp, suhina-cli mcp, several projects, project id, plug-in commands, device commands, library commands, add samples, track.add, clip.addFiles, preview
 type: system
 status: current
-last_verified: 2026-10-13
+last_verified: 2026-10-14
 covers:
   - crates/automation/src/server.rs
   - crates/automation/src/workspace.rs
@@ -101,7 +101,8 @@ suhina-cli mcp --read-root ./projects --write-root ./renders [--audio]
 
 - **Previews.** With `--audio`, `preview.play {path, from?, track?, gain?}` previews a sample or
   a MIDI file after the main channel (a MIDI file through `track`'s instrument, or the FM synth);
-  `preview.stop` stops it; `launcher.state` reports `preview`.
+  `preview.stop` stops it; `launcher.state` reports `preview`. With no project open they still
+  work, through an output of their own that closes before a project opens one (ADR 0011).
 
 - **CPU load.** `launcher.state` reports `cpu`: the audio engine's share of wall time spent
   rendering, in percent, measured over windows of 0.2 s and smoothed so it settles within about

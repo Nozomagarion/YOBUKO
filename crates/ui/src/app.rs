@@ -22,7 +22,7 @@ use crate::loading_dialog;
 use crate::motion;
 use crate::project_dialog::{self, Choice, DialogState, Lists, SaveChoice, SavePrompt, UnsavedChoice};
 use crate::session_view::{self, SessionViewState};
-use crate::settings::{DeviceLayout, EditorPlacement, OnOpen, Settings, Side};
+use crate::settings::{AtStart, DeviceLayout, EditorPlacement, OnOpen, Settings, Side};
 use crate::settings_view::{self, About, PageState, PluginRequest, PluginsView, Sources};
 use crate::theme::{self, PAD};
 use crate::themes::{FileAction, ThemeEntry, Themes};
@@ -619,6 +619,51 @@ impl App {
         self.save_prompt = None;
         self.project_dialog = Some(DialogState { path: String::new(), focus_path: open });
         self.lists_wanted = true;
+    }
+
+    /// Opens what Settings › General › At start says, for Suhina started without a project:
+    /// the New or open dialog, or asks for a new project, one from the start template, or the
+    /// project opened last (`last`), which the app takes up as it does the user's own requests
+    /// ([`App::take_new_request`], [`App::take_open_request`]). A template or last project that
+    /// is not there shows the dialog, with a hint saying why.
+    pub fn open_at_start(&mut self, last: Option<PathBuf>) {
+        let missing = match self.settings.at_start {
+            AtStart::Dialog => None,
+            AtStart::Blank => {
+                self.new_request = Some(NewProject::Blank);
+                return;
+            }
+            AtStart::Template => match self.start_template() {
+                Some(path) if path.is_file() => {
+                    self.new_request = Some(NewProject::Template(path));
+                    return;
+                }
+                Some(path) => Some(format!("The template to start from is not there: {}", path.display())),
+                None => Some("No template is chosen to start from (Settings › General › Start template)".into()),
+            },
+            AtStart::Last => match last {
+                Some(path) => {
+                    self.request_open(path);
+                    return;
+                }
+                None => Some("No project was opened before; choose one to start".into()),
+            },
+        };
+        self.open_project_dialog(false);
+        if let Some(hint) = missing {
+            self.set_status(Status::Hint(hint));
+        }
+    }
+
+    /// The template At start makes a new project from: its path, a name in the templates folder.
+    fn start_template(&self) -> Option<PathBuf> {
+        match self.settings.start_template.trim() {
+            "" => None,
+            name => {
+                let path = PathBuf::from(name);
+                Some(if path.is_absolute() { path } else { self.templates_folder().join(path) })
+            }
+        }
     }
 
     pub fn project_dialog_open(&self) -> bool {

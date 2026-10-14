@@ -27,8 +27,9 @@ usage: suhina [<project.suhina> | <project.als> | --demo] [--renderer wgpu|glow]
   --renderer         how the window is drawn this time: wgpu or glow (OpenGL); the
                      default is the one chosen in Options > Settings
   --no-animations    turn the interface's animations off this time
-Without a project the window opens empty; Ctrl+T makes a new one or opens one, and a
-.suhina, .locr or .als file dropped on it opens.
+Without a project the window opens what Options > Settings > General > At start says (the
+New or open dialog unless changed); Ctrl+T makes a new one or opens one, and a .suhina,
+.locr or .als file dropped on it opens.
 Settings are kept in settings.txt, the keys in keymap.json and themes in themes/<name>.json,
 in Suhina's folder of the user's app data.";
 
@@ -274,7 +275,8 @@ impl eframe::App for Window {
 }
 
 impl Window {
-    /// Starts the browser's library and the sample map, and opens the project asked for.
+    /// Starts the browser's library and the sample map, and opens the project asked for, or what
+    /// Settings › General › At start says without one.
     fn start(&mut self, start_up: StartUp) {
         let StartUp { source, output_choice, mut warnings } = start_up;
         // The browser's library: browser.json and the folder indexes beside the settings (ADR 0012).
@@ -286,17 +288,20 @@ impl Window {
         self.app.set_file_library(library);
         // The sample map analyses the library's samples in the background (ADR 0013).
         self.app.projects_mut().start_sound_map();
+        // Shown first, so what opening the project says comes after it.
+        if let Some(warning) = warnings.first() {
+            self.app.set_status(Status::Hint(warning.clone()));
+        }
         match source {
-            Source::Nothing => {}
+            // What Settings › General › At start says; the last project is the newest recent one.
+            Source::Nothing => self.app.open_at_start(self.recent.existing().into_iter().next()),
             Source::Demo => {
+                self.app.projects_mut().close_preview_output();
                 let session = Session::new(suhina_ui::demo::demo_project());
                 let (session, opened) = with_audio(session, &output_choice);
                 self.app.open_project(session, &opened, OpenAs::NewTab);
             }
             Source::Als(path) => self.open(&path, OpenAs::NewTab),
-        }
-        if let Some(warning) = warnings.first() {
-            self.app.set_status(Status::Hint(warning.clone()));
         }
     }
 
@@ -332,6 +337,8 @@ impl Window {
         let waveforms = suhina_ui::waveform::from_pool(&audio);
         session.set_audio(audio);
         let choice = self.app.projects().output_choice().clone();
+        // A device may only be open once: the previews' own output closes first (ADR 0011).
+        self.app.projects_mut().close_preview_output();
         let (session, output_warnings) = with_audio(session, &choice);
         warnings.extend(output_warnings);
         if self.app.open_project(session, &warnings, how).is_some() {

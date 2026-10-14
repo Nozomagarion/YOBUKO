@@ -3,7 +3,7 @@ description: Suhina's own project file (.suhina; .locr from before October 2026 
 read_when: project file, save, open, .suhina, .locr, file extension, native format, project.save, templates, new project, blank project, unsaved changes, recent projects
 type: decision
 status: current
-last_verified: 2026-10-13
+last_verified: 2026-10-14
 covers:
   - crates/project-file
   - crates/session/src/lib.rs
@@ -61,7 +61,12 @@ Suhina (October 2026) the extension followed: files are `.suhina` from 2026-10-1
    found next to the template.
 9. **The window** offers New or open (Ctrl+T): a new blank project, one from a template in the
    templates folder, or a project to open from a typed path or the recent list (kept in
-   `recent.txt`); Save (Ctrl+S), Save as (Ctrl+Shift+S) and Save as template ask for a name and
+   `recent.txt`). Started without a project given, it opens what Settings › General › At start
+   says (`at_start` in `settings.txt`, #234): the New or open dialog (the default), a new
+   blank project, a new one from the start template (`start_template`: a name in the templates
+   folder or a path), or the project opened last (the newest in `recent.txt`); a template or
+   last project that is not there shows the dialog with a hint saying why. A project given on
+   the command line opens instead; Save (Ctrl+S), Save as (Ctrl+Shift+S) and Save as template ask for a name and
    folder. The projects and templates folders are settings. There is no system file dialog: the
    dialog lists what Suhina knows, and a path can be typed or a file dropped. Closing a project,
    opening another in its place or quitting while a project has unsaved changes asks first:

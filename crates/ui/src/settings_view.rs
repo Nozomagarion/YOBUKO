@@ -6,7 +6,7 @@ use egui::{Align2, Id, Pos2, Rect, Sense, Ui, Vec2};
 
 use crate::keymap::{Keymap, Shortcut, actions};
 use crate::motion;
-use crate::settings::{DeviceLayout, EditorPlacement, Graphics, OnOpen, Settings, Side, StopReturn};
+use crate::settings::{AtStart, DeviceLayout, EditorPlacement, Graphics, OnOpen, Settings, Side, StopReturn};
 use crate::theme::{self, PAD, Palette};
 use crate::widgets;
 
@@ -275,7 +275,26 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
                 settings.on_open = choice;
                 outcome.changed = true;
             }
-            let folders = [
+            let r = row(&mut y);
+            label(
+                &painter,
+                r,
+                "At start",
+                "With no project given: the dialog, a new one, one from a template, or the last",
+            );
+            let options = [
+                ("Dialog", AtStart::Dialog),
+                ("New", AtStart::Blank),
+                ("Template", AtStart::Template),
+                ("Last", AtStart::Last),
+            ];
+            if let Some(choice) = segmented(ui, &painter, control_rect(r, 4), "At start", &options, settings.at_start) {
+                settings.at_start = choice;
+                outcome.changed = true;
+            }
+            let template_hint = String::from("A template's file name, or a path");
+            let starts_from_template = settings.at_start == AtStart::Template;
+            let mut folders = vec![
                 (
                     "Projects folder",
                     "Where a new project is saved first",
@@ -289,6 +308,14 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
                     &about.templates_default,
                 ),
             ];
+            if starts_from_template {
+                folders.push((
+                    "Start template",
+                    "The template At start makes a new project from",
+                    &mut settings.start_template,
+                    &template_hint,
+                ));
+            }
             for (name, note, value, default) in folders {
                 let r = row(&mut y);
                 // The note is cut where the field starts.

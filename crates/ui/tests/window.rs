@@ -1578,3 +1578,92 @@ fn the_wheel_over_open_settings_leaves_the_arrangement_alone() {
     assert!(!harness.state().settings_open());
     assert_eq!(clip(&harness), before, "the arrangement neither scrolled nor zoomed");
 }
+
+/// A window with nothing open that starts as `settings` say, given the last project `last`.
+fn started(settings: suhina_ui::settings::Settings, last: Option<std::path::PathBuf>) -> Harness<'static, App> {
+    let mut app = App::new();
+    app.set_settings(&egui::Context::default(), settings);
+    app.open_at_start(last);
+    window(app)
+}
+
+fn at_start(choice: suhina_ui::settings::AtStart) -> suhina_ui::settings::Settings {
+    suhina_ui::settings::Settings { at_start: choice, ..Default::default() }
+}
+
+#[test]
+fn at_start_the_dialog_shows_unless_the_settings_say_otherwise() {
+    use suhina_ui::settings::AtStart;
+    let mut harness = started(at_start(AtStart::Dialog), None);
+    assert!(harness.state().project_dialog_open());
+    assert!(harness.query_by_label("New blank project").is_some(), "the New or open dialog shows");
+    assert_eq!(harness.state_mut().take_new_request(), None);
+
+    let mut harness = started(at_start(AtStart::Blank), None);
+    assert!(!harness.state().project_dialog_open());
+    assert_eq!(harness.state_mut().take_new_request(), Some(suhina_ui::NewProject::Blank));
+}
+
+#[test]
+fn at_start_a_new_project_comes_from_the_start_template_or_the_dialog_says_why_not() {
+    use suhina_ui::settings::AtStart;
+    let folder = std::env::temp_dir().join(format!("suhina-at-start-{}", std::process::id()));
+    std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
+    let template = folder.join("Four on the floor.suhina");
+    std::fs::write(&template, b"{}").unwrap_or_else(|e| panic!("{e}"));
+    let mut settings = at_start(AtStart::Template);
+    settings.templates_folder = folder.display().to_string();
+    // A name in the templates folder, or a whole path.
+    for named in ["Four on the floor.suhina".to_string(), template.display().to_string()] {
+        settings.start_template = named;
+        let mut harness = started(settings.clone(), None);
+        assert!(!harness.state().project_dialog_open());
+        assert_eq!(harness.state_mut().take_new_request(), Some(suhina_ui::NewProject::Template(template.clone())));
+    }
+    settings.start_template = "Gone.suhina".into();
+    let mut harness = started(settings.clone(), None);
+    assert!(harness.state().project_dialog_open());
+    assert_eq!(harness.state_mut().take_new_request(), None);
+    assert!(
+        matches!(harness.state().status(), Status::Hint(h) if h.contains("not there")),
+        "{:?}",
+        harness.state().status()
+    );
+    settings.start_template = String::new();
+    let harness = started(settings, None);
+    assert!(harness.state().project_dialog_open());
+    assert!(matches!(harness.state().status(), Status::Hint(h) if h.contains("No template")));
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn at_start_the_last_project_opens_or_the_dialog_says_there_is_none() {
+    use suhina_ui::settings::AtStart;
+    let last = std::path::PathBuf::from("/songs/Last night.suhina");
+    let mut harness = started(at_start(AtStart::Last), Some(last.clone()));
+    assert!(!harness.state().project_dialog_open());
+    assert_eq!(harness.state_mut().take_open_request(), Some((last, OpenAs::NewTab)));
+
+    let mut harness = started(at_start(AtStart::Last), None);
+    assert!(harness.state().project_dialog_open());
+    assert_eq!(harness.state_mut().take_open_request(), None);
+    assert!(matches!(harness.state().status(), Status::Hint(h) if h.contains("No project was opened before")));
+}
+
+#[test]
+fn at_start_is_chosen_in_settings_and_template_asks_for_the_template() {
+    use suhina_ui::settings::AtStart;
+    let mut harness = window(demo_app());
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    harness.run();
+    assert!(harness.query_by_label("Start template").is_none(), "only for a template");
+    harness.get_by_label("At start: Template").click();
+    harness.run();
+    assert_eq!(harness.state().settings().at_start, AtStart::Template);
+    assert!(harness.query_by_label("Start template").is_some());
+    harness.get_by_label("At start: Last").click();
+    harness.run();
+    assert_eq!(harness.state().settings().at_start, AtStart::Last);
+    let saved = harness.state_mut().take_changed_settings().map(|s| s.to_text()).unwrap_or_default();
+    assert!(saved.contains("at_start = last"), "{saved}");
+}

@@ -241,11 +241,10 @@ pub fn show(ui: &mut Ui, area: Rect, state: &mut BrowserState, cx: Context<'_>) 
     }
     // A sample decoded for its preview plays now.
     if let Some((path, from, data)) = state.take_ready_preview() {
-        if let Ok(session) = projects.session_mut(None) {
-            session.provide_audio(&path, data);
-        }
+        // With no project open this opens the previews' own output (ADR 0011).
+        let provided = projects.preview_session_mut().map(|session| session.provide_audio(&path, data));
         let params = json!({ "path": path.display().to_string(), "from": from, "gain": settings.preview_volume });
-        match projects.execute("preview.play", &params) {
+        match provided.and_then(|()| projects.execute("preview.play", &params)) {
             Ok(_) => state.previewing = Some(path.display().to_string()),
             Err(e) => out.status = Some(Status::Error(format!("Cannot preview: {}", e.0))),
         }
@@ -856,10 +855,12 @@ fn mode_switch(ui: &mut Ui, area: Rect, state: &mut BrowserState) {
     }
 }
 
-/// Why nothing can preview now, if so: previews play through the active project's audio output.
+/// Why nothing can preview now, if so: previews play through the active project's audio output,
+/// or with no project open through an output of their own.
 pub fn can_preview(projects: &Projects) -> Result<(), String> {
     match active(projects) {
-        None => Err("Open or make a project to preview: previews play through its audio output".into()),
+        None if projects.audio_system().is_none() => Err("Cannot preview: there is no audio output here".into()),
+        None => Ok(()),
         Some(s) if s.player().is_none() => {
             Err("Cannot preview: the project has no audio output (see the warnings when it opened)".into())
         }
@@ -912,7 +913,8 @@ fn preview_strip(
         }
     };
     let Some(path) = item.path() else { return };
-    let monitor = active(projects)
+    let monitor = projects
+        .preview_session()
         .and_then(|s| s.player())
         .map(|p| (p.preview_monitor().playing(), p.preview_monitor().seconds()));
     let playing_this = state.previewing.as_deref() == Some(item.key.as_str()) && monitor.is_some_and(|m| m.0);

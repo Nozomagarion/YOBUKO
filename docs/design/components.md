@@ -251,6 +251,8 @@ the list; each setting is a 34 px row with its name (11 px `text.primary`), a no
 | Page | Setting | Values |
 |---|---|---|
 | General | When opening a project | Ask (default), New tab, Replace |
+| General | At start | Dialog (default), New, Template, Last: what opens when Suhina starts without a project given (ADR 0010) |
+| General | Start template | Shown with At start › Template: a 300 px field, a template's file name in the templates folder or a path |
 | General | Projects folder, Templates folder | A 300 px field each; empty uses `Documents/Suhina/Projects` and `…/Templates`, shown as the hint |
 | General › Dropping files | Several files | One track (default), One each; Ctrl while dropping does the other ([browser spec](../spec/browser.md) › Files) |
 | General › Dropping files | Warp mode | Rhythmic (default), Tonal, Texture, Smooth, High quality, Re-pitch: how a dropped sample with a known tempo is stretched |

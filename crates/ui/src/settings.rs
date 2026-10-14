@@ -21,6 +21,20 @@ pub enum OnOpen {
     Replace,
 }
 
+/// What opens when Suhina starts without a project given (Settings › General › At start).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AtStart {
+    /// The New or open dialog, with the recent projects.
+    #[default]
+    Dialog,
+    /// A new blank project.
+    Blank,
+    /// A new project from the template `Settings::start_template` names.
+    Template,
+    /// The project opened or saved last.
+    Last,
+}
+
 /// Where the playhead goes when the transport stops (`transport.stop`'s `return`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StopReturn {
@@ -143,6 +157,10 @@ pub struct Settings {
     /// MIDI clips moved over others stack instead of replacing them.
     pub midi_stacking: bool,
     pub on_open: OnOpen,
+    pub at_start: AtStart,
+    /// The template `AtStart::Template` starts from: a path, or a file name in the templates
+    /// folder.
+    pub start_template: String,
     /// Where Stop leaves the playhead.
     pub stop: StopReturn,
     pub device_layout: DeviceLayout,
@@ -200,6 +218,8 @@ impl Default for Settings {
             sample_stacking: false,
             midi_stacking: false,
             on_open: OnOpen::Ask,
+            at_start: AtStart::Dialog,
+            start_template: String::new(),
             stop: StopReturn::Marker,
             device_layout: DeviceLayout::Row,
             plugin_editors: EditorPlacement::Window,
@@ -294,15 +314,22 @@ impl Settings {
             OnOpen::NewTab => "tab",
             OnOpen::Replace => "replace",
         };
+        let at_start = match self.at_start {
+            AtStart::Dialog => "dialog",
+            AtStart::Blank => "blank",
+            AtStart::Template => "template",
+            AtStart::Last => "last",
+        };
         let editors = match self.plugin_editors {
             EditorPlacement::Window => "window",
             EditorPlacement::DeviceView => "device",
         };
         format!(
-            "# Suhina settings; changed from Options > Settings.\nanimations = {}\ntrack_headers = {headers}\nrenderer = {graphics}\nsample_stacking = {}\nmidi_stacking = {}\nopen_projects = {on_open}\nstop = {stop}\ndevice_chain = {devices}\nplugin_editors = {editors}\ntheme = {}\nprojects_folder = {}\ntemplates_folder = {}\nbrowser = {}\nbrowser_side = {browser_side}\nbrowser_width = {}\npreview_autoplay = {}\npreview_volume = {}\ndrop_files = {drop}\nwarp_mode = {}\nmap_layout = {map_layout}\nmap_hover_preview = {}\nmap_max_seconds = {}\nmap_window = {}\nmap_window_rect = {}\naudio_host = {}\naudio_device = {}\naudio_sample_rate = {}\naudio_buffer = {}\naudio_exclusive = {}\nzoom = {}\nwaveform_scale = {waveform_scale}\n",
+            "# Suhina settings; changed from Options > Settings.\nanimations = {}\ntrack_headers = {headers}\nrenderer = {graphics}\nsample_stacking = {}\nmidi_stacking = {}\nopen_projects = {on_open}\nat_start = {at_start}\nstart_template = {}\nstop = {stop}\ndevice_chain = {devices}\nplugin_editors = {editors}\ntheme = {}\nprojects_folder = {}\ntemplates_folder = {}\nbrowser = {}\nbrowser_side = {browser_side}\nbrowser_width = {}\npreview_autoplay = {}\npreview_volume = {}\ndrop_files = {drop}\nwarp_mode = {}\nmap_layout = {map_layout}\nmap_hover_preview = {}\nmap_max_seconds = {}\nmap_window = {}\nmap_window_rect = {}\naudio_host = {}\naudio_device = {}\naudio_sample_rate = {}\naudio_buffer = {}\naudio_exclusive = {}\nzoom = {}\nwaveform_scale = {waveform_scale}\n",
             on(self.animations),
             on(self.sample_stacking),
             on(self.midi_stacking),
+            self.start_template,
             self.theme,
             self.projects_folder,
             self.templates_folder,
@@ -362,6 +389,11 @@ impl Settings {
                 ("open_projects", "ask") => settings.on_open = OnOpen::Ask,
                 ("open_projects", "tab") => settings.on_open = OnOpen::NewTab,
                 ("open_projects", "replace") => settings.on_open = OnOpen::Replace,
+                ("at_start", "dialog") => settings.at_start = AtStart::Dialog,
+                ("at_start", "blank") => settings.at_start = AtStart::Blank,
+                ("at_start", "template") => settings.at_start = AtStart::Template,
+                ("at_start", "last") => settings.at_start = AtStart::Last,
+                ("start_template", path) => settings.start_template = path.to_string(),
                 ("stop", "marker") => settings.stop = StopReturn::Marker,
                 ("stop", "here") => settings.stop = StopReturn::Here,
                 ("renderer", "wgpu") => settings.graphics = Graphics::Gpu,
@@ -458,6 +490,8 @@ mod tests {
             sample_stacking: true,
             midi_stacking: false,
             on_open: OnOpen::Replace,
+            at_start: AtStart::Template,
+            start_template: "Four on the floor = mine.suhina".into(),
             stop: StopReturn::Here,
             device_layout: DeviceLayout::Stack,
             plugin_editors: EditorPlacement::DeviceView,
@@ -486,6 +520,22 @@ mod tests {
         };
         assert_eq!(Settings::from_text(&settings.to_text()), (settings, Vec::new()));
         assert_eq!(Settings::from_text(&Settings::default().to_text()).0, Settings::default());
+    }
+
+    #[test]
+    fn at_start_reads_each_choice_and_keeps_the_dialog_for_anything_else() {
+        for (text, choice) in [
+            ("dialog", AtStart::Dialog),
+            ("blank", AtStart::Blank),
+            ("template", AtStart::Template),
+            ("last", AtStart::Last),
+        ] {
+            let (settings, warnings) = Settings::from_text(&format!("at_start = {text}\n"));
+            assert_eq!((settings.at_start, warnings.len()), (choice, 0), "{text}");
+        }
+        let (settings, warnings) = Settings::from_text("at_start = everything\nat_start\n");
+        assert_eq!(settings.at_start, AtStart::Dialog);
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
     }
 
     #[test]

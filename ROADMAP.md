@@ -272,6 +272,12 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 - A **splash** while Suhina starts: a 300 × 200 px panel centred in the window with the name and
   the version, shown while the browser's library, the sample map and the project asked for start,
   then fading into the ready window ([components](docs/design/components.md#splash)).
+- **At start** (Settings › General): with no project given, Suhina opens the New or open dialog,
+  a new blank project, a new one from a chosen template, or the project opened last
+  ([ADR 0010](docs/decisions/0010-project-files.md)).
+- With **no project open**, the browser works as with one: browsing, searching, the sample map
+  and previews, which then play through an output of their own
+  ([ADR 0011](docs/decisions/0011-preview-and-added-audio.md)).
 - The **Arrangement view** (Tab switches): bar ruler, one lane per track with its clips and their
   notes (loops repeated), the playhead, track headers on the right that show volume and pan once
   a lane is tall enough (drag its lower edge), return and main rows along the bottom. Clips move
