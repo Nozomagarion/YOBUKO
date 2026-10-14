@@ -20,6 +20,8 @@ covers:
   - crates/ui/src/loading_dialog.rs
   - crates/ui/src/missing_files.rs
   - crates/ui/src/splash.rs
+  - crates/ui/src/logo.rs
+  - assets/brand/**
 ---
 
 # Components
@@ -371,8 +373,8 @@ for, and the splash fades out over the window that is ready.
 |---|---|
 | Behind | The whole window `window.background`; clicks there do nothing until it has gone |
 | Panel | 300 × 200 px (smaller in a smaller window), centred, `panel.background`, 1 px `border.strong` border |
-| Name | "Suhina", 13 px `text.primary`, centred 10 px above the middle |
-| Version | "Version x.y.z" (the app's `CARGO_PKG_VERSION`), 10 px mono `text.secondary`, under the name |
+| Logo | The Suhina logo (`assets/brand/suhina-logo.svg`) 200 px wide (24 px clear of the panel's sides in a narrower one), its centre 12 px above the middle; the name in `text.primary`, the wave in its own `#FFD97D`. The app fills the file's paths itself (`crates/ui/src/logo.rs`, tiny-skia) at the screen's pixel density; if that fails, "Suhina" in 13 px `text.primary` instead |
+| Version | "Version x.y.z" (the app's `CARGO_PKG_VERSION`), 10 px mono `text.secondary`, under the logo |
 | Status | "Starting", 10 px `text.hint`, centred at the bottom |
 | Going | Fades out in 120 ms once the start-up work has run; at once with animations off |
 

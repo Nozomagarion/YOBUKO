@@ -269,7 +269,7 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   playing with progress), scene launch, stop buttons, and a mixer strip with pan, volume and
   track on/off
   ([ADR 0009](docs/decisions/0009-ui-toolkit-and-look.md), [spec](docs/spec/ui-session-view.md)).
-- A **splash** while Suhina starts: a 300 × 200 px panel centred in the window with the name and
+- A **splash** while Suhina starts: a 300 × 200 px panel centred in the window with the logo and
   the version, shown while the browser's library, the sample map and the project asked for start,
   then fading into the ready window ([components](docs/design/components.md#splash)).
 - **At start** (Settings › General): with no project given, Suhina opens the New or open dialog,

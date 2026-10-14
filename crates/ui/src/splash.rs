@@ -1,4 +1,4 @@
-//! The splash shown while Suhina starts: a small panel with the name and the version, drawn
+//! The splash shown while Suhina starts: a small panel with the logo and the version, drawn
 //! centred in the main window over its first frames. The work that makes starting slow (the
 //! browser's library, the sample map, the project to open) waits until the splash has been on
 //! screen, runs once, and the splash fades out over the window that is ready.
@@ -18,8 +18,11 @@ pub const SIZE: Vec2 = Vec2::new(300.0, 200.0);
 /// Frames the splash is drawn before the start-up work runs, so it is on screen while it does:
 /// the window is made visible after its first frame.
 const DRAWN_BEFORE_START: u64 = 2;
-/// The name, 13 px like a page title.
+/// The name, 13 px like a page title, when the logo cannot be drawn.
 const NAME: f32 = theme::TEXT + 2.0;
+/// The logo's width on the panel, and the least room kept on each side of it.
+const LOGO_WIDTH: f32 = 200.0;
+const LOGO_MARGIN: f32 = 24.0;
 
 #[derive(Debug, Clone)]
 pub struct Splash {
@@ -88,15 +91,25 @@ impl Splash {
         let line = |center_y: f32, height: f32| {
             Rect::from_center_size(egui::pos2(rect.center().x, center_y), Vec2::new(rect.width(), height))
         };
-        let name = line(rect.center().y - 10.0, theme::ROW);
-        widgets::text_in(
-            &painter,
-            name,
-            Align2::CENTER_CENTER,
-            "Suhina",
-            theme::ui_font(NAME),
-            fade(theme::text_primary()),
-        );
+        // The logo, the name in the theme's text colour; the name as text if it cannot be drawn.
+        let width = (rect.width() - 2.0 * LOGO_MARGIN).clamp(0.0, LOGO_WIDTH);
+        let size = Vec2::new(width, width / crate::logo::aspect());
+        let name = Rect::from_center_size(egui::pos2(rect.center().x, rect.center().y - 12.0), size);
+        let pixels = (size * ui.ctx().pixels_per_point()).round();
+        match crate::logo::texture(ui.ctx(), pixels.x as u32, pixels.y as u32, theme::text_primary()) {
+            Some(logo) => {
+                let uv = Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                painter.image(logo.id(), name, uv, fade(Color32::WHITE));
+            }
+            None => widgets::text_in(
+                &painter,
+                name,
+                Align2::CENTER_CENTER,
+                "Suhina",
+                theme::ui_font(NAME),
+                fade(theme::text_primary()),
+            ),
+        }
         name_for_readers(ui, name, "Suhina");
         let version = line(name.bottom() + 8.0, 16.0);
         let shown = format!("Version {}", self.version);
@@ -179,11 +192,14 @@ mod tests {
     const WINDOW: Vec2 = Vec2::new(800.0, 500.0);
 
     #[test]
-    fn it_shows_the_name_and_version_from_its_first_frame() {
+    fn it_shows_the_logo_and_version_from_its_first_frame() {
         let mut harness = harness(WINDOW, true);
         harness.step();
-        harness.get_by_label("Suhina");
-        harness.get_by_label("Version 1.2.3");
+        // The name is the logo, at the logo's own proportions, with the version under it.
+        let logo = harness.get_by_label("Suhina").rect();
+        assert!((logo.width() / logo.height() - crate::logo::aspect()).abs() < 0.05, "{logo:?}");
+        assert_eq!(logo.width(), LOGO_WIDTH);
+        assert!(harness.get_by_label("Version 1.2.3").rect().top() >= logo.bottom());
         assert!(harness.state().starts.is_empty(), "nothing starts before the splash is on screen");
         assert_eq!(harness.state().window_frames, 0, "the window waits under the splash");
     }

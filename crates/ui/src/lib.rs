@@ -12,6 +12,7 @@ pub mod drop;
 pub mod grid;
 pub mod keymap;
 pub mod loading_dialog;
+pub mod logo;
 pub mod menus;
 pub mod missing_files;
 pub mod motion;

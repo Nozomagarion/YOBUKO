@@ -4317,6 +4317,7 @@ dependencies = [
  "suhina-plugins",
  "suhina-session",
  "suhina-soundmap",
+ "tiny-skia",
 ]
 
 [[package]]
