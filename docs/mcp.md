@@ -68,8 +68,9 @@ suhina-cli mcp --read-root ./projects --write-root ./renders [--audio]
   default output and the result's `notice` says so. The engine renders in blocks of
   `buffer_frames` (64 to 4096), which sets the plug-ins' deadline. `audio.info` says what plays
   now: `host`, `device`, `sample_rate`, `buffer_frames` (the device's, measured),
-  `engine_block`, `exclusive`, `latency_ms` (engine to speaker, measured), `underruns` and
-  `failed`. Without `--audio`, `audio.devices` returns an error.
+  `engine_block`, `exclusive`, `latency_ms` (engine to speaker, measured), `live` (a track is
+  armed, so the engine keeps one block ahead instead of two), `live_latency_ms` (the longest a
+  key on a MIDI controller takes to be heard), `underruns` and `failed`. Without `--audio`, `audio.devices` returns an error.
 
 - **MIDI controllers.** With `--audio`, the server also opens every MIDI input port
   ([ADR 0017](decisions/0017-inputs-and-latency.md)). `midi.inputs` lists them with `enabled`,

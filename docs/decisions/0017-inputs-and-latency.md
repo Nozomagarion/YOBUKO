@@ -9,11 +9,12 @@ covers:
   - crates/engine/src/live_tests.rs
   - crates/session/src/midi.rs
   - crates/midi/src/lib.rs
+  - crates/output/src/lib.rs
 ---
 
 # 0017: Inputs, arming and live latency
 
-- **Status:** accepted (MIDI input); audio input, monitoring and recording are planned in [#263](https://github.com/suhina-daw/suhina-daw/issues/263)
+- **Status:** accepted (MIDI input, and the shallower queue while armed, #265); audio input, monitoring and recording are planned in [#263](https://github.com/suhina-daw/suhina-daw/issues/263)
 - **Date:** 2026-10-14
 
 ## Context
@@ -67,12 +68,26 @@ engine code.
    again every two seconds (every thirty when they cannot be listed at all), so a controller
    plugged in is heard without a restart, and one taken out is closed. Closing a port lets go of
    its keys.
-5. **What a key press costs today**, from the driver's callback to the speaker: up to one block
-   until the render thread starts its next one, the two blocks queued ahead, and the device's
-   buffer and its own delay. At 48 kHz with 128-frame blocks that is roughly 5 to 8 ms plus the
-   device; at the default 1024 frames, 43 to 64 ms, too slow to play. The window's Settings ›
-   Audio says which buffer size is chosen; a player sets it small (64 to 256 frames, with ASIO or
-   WASAPI exclusive mode on Windows).
+5. **What a key press costs**, from the driver's callback to the speaker: up to one block until
+   the render thread starts its next one, what is queued ahead in the ring, and the device's
+   buffer and its own delay. A player sets the buffer small (64 to 256 frames, with ASIO or
+   WASAPI exclusive mode on Windows); the default 1024 frames is too slow to play.
+6. **While a track is armed, the output keeps one block queued instead of two** (amendment,
+   [#265](https://github.com/suhina-daw/suhina-daw/issues/265)). The render thread reads
+   `Renderer::live_armed` before each block and aims for one block or one device buffer,
+   whichever is more, instead of two blocks or a device buffer and a block. It is automatic, not
+   a setting: an armed track is the one sign that someone may be playing, and playback alone
+   keeps the safer depth. Arming lets the device drain the queue to the new depth and disarming
+   lets the thread fill it again, so neither is heard. The cost is time to render: the thread
+   has one device buffer's time to fill the next block instead of two, so a heavy project or a
+   slow plug-in shows as underruns (Settings › Audio, `audio.info`), and the answer is a larger
+   buffer. At 48 kHz with 128-frame blocks a key now waits at most about 5.3 ms plus the device
+   (8 ms before); at 256 frames, 10.7 ms (16 ms).
+7. **The latency is reported.** `audio.info` gives `live` (a track is armed) and
+   `live_latency_ms`, the longest a key takes to be heard: the measured engine-to-speaker latency
+   and one block. Settings › Audio shows it as *Key to sound*. The engine's own part is tested
+   offline: a live note sounds from the first frames of the next block, at any block size; the
+   output's queue depth is tested on the real render thread.
 
 ## Consequences
 
@@ -85,14 +100,15 @@ engine code.
   restarts it, and either's release ends it.
 - Arming is lost when the project closes. Saving it with the project can be added later as a
   project field without changing the engine side.
-- The render queue's depth is the largest part of the latency at small buffers; measuring the
-  note-to-sound time and a shallower queue while a track is armed are next
-  ([#265](https://github.com/suhina-daw/suhina-daw/issues/265)), with real-time priority
+- The last queued block is the one left between the engine and the device; rendering inside the
+  device's callback would remove it, but would put plug-in round trips and graph swaps on the
+  driver's thread, so it is not done. Lower latency from here comes from real-time priority
   ([#150](https://github.com/suhina-daw/suhina-daw/issues/150)) and fewer plug-in round trips
-  ([#108](https://github.com/suhina-daw/suhina-daw/issues/108)).
+  ([#108](https://github.com/suhina-daw/suhina-daw/issues/108)), which make small buffers safe.
 
 ## Planned
 
 The rest of [#263](https://github.com/suhina-daw/suhina-daw/issues/263) follows this ADR and
 amends it as it lands: MIDI recording with count-in (#266), audio inputs and monitoring In / Auto /
-Off (#267), and audio recording lined up for input and output latency (#268).
+Off (#267), and audio recording lined up for input and output latency (#268). Monitored audio
+input takes the same shallower queue while its track is armed.

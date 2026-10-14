@@ -100,6 +100,11 @@ impl Live {
         self.armed.get(..self.armed_count).unwrap_or_default()
     }
 
+    /// Whether any track is armed: the output then keeps a shallower queue (ADR 0017).
+    pub(crate) fn any_armed(&self) -> bool {
+        self.armed_count > 0
+    }
+
     /// Arms or disarms `track`. A disarmed track lets go of the keys held down, at `frame` of
     /// the block; a newly armed one hears the next key pressed, not the ones already down.
     pub(crate) fn set_armed(&mut self, chains: &mut [Chain], track: TrackId, armed: bool, frame: usize) {

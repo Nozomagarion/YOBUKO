@@ -364,6 +364,12 @@ impl Renderer {
     }
 
     /// Frames of stretched clips that were not ready in time and played as silence.
+    /// Whether a track is armed to play the live input (ADR 0017): someone may be playing, so
+    /// the output keeps less queued ahead of the device. Lock-free; for the render thread.
+    pub fn live_armed(&self) -> bool {
+        self.live.any_armed()
+    }
+
     pub fn stretch_underruns(&self) -> u64 {
         self.underruns_before + self.graph.ahead.underruns()
     }

@@ -1125,6 +1125,19 @@ fn audio_page(
     );
     let r = row(y);
     label(painter, r, "Latency", &format!("Engine to speaker, measured: {latency}"));
+    // A key on a MIDI controller (ADR 0017): the engine keeps less ahead while a track is armed.
+    let r = row(y);
+    let key = match &about.audio_live {
+        Some(info) if info.live => {
+            format!("Up to {:.1} ms; a track is armed, so the engine keeps one block ahead", info.live_latency_ms)
+        }
+        Some(info) => format!(
+            "Up to {:.1} ms now; arming a track keeps one block ahead, so less. Smaller buffers are quicker",
+            info.live_latency_ms
+        ),
+        None => "-".to_string(),
+    };
+    label(painter, r, "Key to sound", &key);
     (picked, response.clicked())
 }
 

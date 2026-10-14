@@ -225,3 +225,33 @@ fn the_sustain_pedal_holds_released_keys_until_it_comes_up() {
     let gone = blocks(&mut renderer, 400, 256);
     assert!(peak(&gone[380 * 512..]) < held * 0.05);
 }
+
+#[test]
+fn the_renderer_says_whether_a_track_is_armed() {
+    let mut renderer = stopped(&synth());
+    let mut controller = renderer.controller();
+    assert!(!renderer.live_armed());
+    controller.send(LaunchCommand::SetArmed { track: TrackId(1), armed: true }).unwrap();
+    blocks(&mut renderer, 1, 64);
+    assert!(renderer.live_armed());
+    controller.send(LaunchCommand::SetArmed { track: TrackId(1), armed: false }).unwrap();
+    blocks(&mut renderer, 1, 64);
+    assert!(!renderer.live_armed());
+}
+
+#[test]
+fn a_live_note_is_heard_from_the_start_of_the_next_block_at_any_block_size() {
+    // The engine's part of a key's latency is at most one block: the note waits for the next
+    // block and sounds from its first frames, whatever the block size.
+    for frames in [64, 128, 256, 1024] {
+        let mut renderer = stopped(&synth());
+        let mut controller = renderer.controller();
+        let mut live = controller.take_live_input().unwrap();
+        controller.send(LaunchCommand::SetArmed { track: TrackId(1), armed: true }).unwrap();
+        assert_eq!(peak(&blocks(&mut renderer, 1, frames)), 0.0);
+        live.send(LiveEvent::NoteOn { key: 69, velocity: 1.0 });
+        let out = blocks(&mut renderer, 1, frames);
+        let first = out.iter().position(|s| s.abs() > 1e-6).map(|i| i / 2);
+        assert!(first.is_some_and(|f| f < 8), "{frames}: first sound at {first:?}");
+    }
+}

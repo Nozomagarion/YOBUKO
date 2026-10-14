@@ -138,6 +138,11 @@ pub struct OutputInfo {
     pub exclusive: bool,
     /// Measured time from the engine rendering a frame to the device playing it, in ms.
     pub latency_ms: f64,
+    /// A track is armed, so the engine keeps less queued ahead of the device (ADR 0017).
+    pub live: bool,
+    /// The longest time from a key pressed on a MIDI controller to the speaker, in ms: the
+    /// measured latency and one engine block (ADR 0017).
+    pub live_latency_ms: f64,
     /// Device buffers the engine had not filled in time.
     pub underruns: u64,
     /// The device reported an error (unplugged, taken by another program).
@@ -154,6 +159,8 @@ impl OutputInfo {
             "engine_block": self.engine_block,
             "exclusive": self.exclusive,
             "latency_ms": (self.latency_ms * 100.0).round() / 100.0,
+            "live": self.live,
+            "live_latency_ms": (self.live_latency_ms * 100.0).round() / 100.0,
             "underruns": self.underruns,
             "failed": self.failed,
         })
@@ -230,7 +237,7 @@ static AUDIO_COMMANDS: &[CommandSpec<Projects>] = &[
     },
     CommandSpec {
         id: "audio.info",
-        label: "Say what the active project plays on now: host, device, sample rate, buffer frames, the engine's block, measured latency and underruns",
+        label: "Say what the active project plays on now: host, device, sample rate, buffer frames, the engine's block, measured latency, the longest a key on a MIDI controller takes to be heard, whether a track is armed (which keeps less queued) and underruns",
         params: &[],
         kind: CommandKind::Audio,
         run: info,

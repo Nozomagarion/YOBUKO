@@ -7,7 +7,9 @@
 //! the ring, converts samples and sets atomics: no allocation, locks or I/O on either thread
 //! (AGENTS.md rule 3). The plug-ins of a block get a share of that block's playing time
 //! (ADR 0006), so the deadline follows the buffer the user chose. The ring keeps two blocks
-//! ahead, or a device buffer and a block when the device asks for more at once. Launcher
+//! ahead, or a device buffer and a block when the device asks for more at once; while a track
+//! is armed to play a MIDI controller, one block or a device buffer, so a key sounds sooner
+//! (ADR 0017). Launcher
 //! commands reach the renderer through its lock-free command queue, and stretched clips are
 //! rendered ahead on a worker thread of their own (ADR 0003).
 //!
@@ -37,6 +39,9 @@ pub const ENGINE_BLOCK: usize = 1024;
 /// Blocks the ring keeps ahead of the device: the latency from the engine to the device is up
 /// to this many blocks (more when the device takes more than a block at once).
 const RING_BLOCKS: usize = 2;
+/// Blocks the ring keeps ahead while a track is armed (ADR 0017): a key pressed waits for one
+/// block less, and the render thread has one device buffer's time to fill the next.
+const LIVE_RING_BLOCKS: usize = 1;
 /// The largest device buffer the ring makes room for, in frames.
 const MAX_DEVICE_FRAMES: usize = 8192;
 /// How long the render thread waits when the ring is full before looking again.
@@ -61,6 +66,10 @@ pub struct Progress {
     callback_frames: AtomicUsize,
     /// The last measured latency, engine to speaker, in microseconds.
     latency_us: AtomicU64,
+    /// The render thread keeps the shallower queue of live playing (a track is armed).
+    live: AtomicBool,
+    /// Frames the engine renders per block, set when the render thread starts.
+    block: AtomicUsize,
     /// The render thread, woken when the device has taken from the ring.
     render: std::sync::OnceLock<std::thread::Thread>,
 }
@@ -90,6 +99,19 @@ impl Progress {
     /// The last measured time from the engine rendering a frame to the device playing it.
     pub fn latency(&self) -> Duration {
         Duration::from_micros(self.latency_us.load(Ordering::Relaxed))
+    }
+
+    /// Whether the render thread keeps the shallower queue of live playing (ADR 0017).
+    pub fn live(&self) -> bool {
+        self.live.load(Ordering::Relaxed)
+    }
+
+    /// The longest time from a key pressed on a MIDI controller to the speaker: the measured
+    /// latency and one block, which is how long the note may wait for the render thread to
+    /// begin its next block.
+    pub fn live_latency(&self, sample_rate: u32) -> Duration {
+        let block = self.block.load(Ordering::Relaxed);
+        self.latency().saturating_add(Duration::from_secs_f64(block as f64 / f64::from(sample_rate.max(1))))
     }
 
     pub(crate) fn fail(&self) {
@@ -196,9 +218,12 @@ fn block_for(chosen: Option<u32>, overridden: Option<&str>) -> usize {
 }
 
 /// Frames the render thread keeps ahead in the ring: two blocks, or a device buffer and a
-/// block when the device takes more at once.
-fn ring_target(block: usize, device_frames: usize) -> usize {
-    (RING_BLOCKS * block).max(device_frames.min(MAX_DEVICE_FRAMES) + block)
+/// block when the device takes more at once. While someone may be playing live (`live`, a
+/// track armed), one block or one device buffer: the device's next callback is then all the
+/// render thread has to fill the ring again, so underruns tell when it is too little.
+fn ring_target(block: usize, device_frames: usize, live: bool) -> usize {
+    let device = device_frames.min(MAX_DEVICE_FRAMES);
+    if live { (LIVE_RING_BLOCKS * block).max(device) } else { (RING_BLOCKS * block).max(device + block) }
 }
 
 /// The device's side of a playing stream.
@@ -493,7 +518,7 @@ impl Output {
 
 /// A ring for blocks of `block` frames: room for the target and a device buffer more.
 fn ring(block: usize) -> (rtrb::Producer<f32>, Ring) {
-    rtrb::RingBuffer::<f32>::new((ring_target(block, MAX_DEVICE_FRAMES) + block) * 2)
+    rtrb::RingBuffer::<f32>::new((ring_target(block, MAX_DEVICE_FRAMES, false) + block) * 2)
 }
 
 /// The render thread: runs the engine a block at a time whenever the ring holds less than its
@@ -509,9 +534,14 @@ fn render_ahead(
     let _realtime = RealTime::join(frames, renderer.sample_rate());
     let mut block = vec![0.0f32; frames * 2];
     let capacity = ring.buffer().capacity();
+    progress.block.store(frames, Ordering::Relaxed);
     while !stop.load(Ordering::Acquire) {
         let queued = (capacity - ring.slots()) / 2;
-        let target = ring_target(frames, progress.callback_frames());
+        // Arming shrinks the queue as the device drains it, and disarming fills it again: no
+        // jump either way.
+        let live = renderer.live_armed();
+        progress.live.store(live, Ordering::Relaxed);
+        let target = ring_target(frames, progress.callback_frames(), live);
         if queued >= target || ring.slots() < block.len() {
             std::thread::park_timeout(RENDER_WAIT);
             continue;
@@ -628,6 +658,8 @@ impl LiveOutput for Live {
             engine_block: u32::try_from(self.block).unwrap_or(u32::MAX),
             exclusive: self.exclusive,
             latency_ms: self.progress.latency().as_secs_f64() * 1000.0,
+            live: self.progress.live(),
+            live_latency_ms: self.progress.live_latency(self.sample_rate).as_secs_f64() * 1000.0,
             underruns: self.progress.underruns(),
             failed: self.progress.failed(),
         }

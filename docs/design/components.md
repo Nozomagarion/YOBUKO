@@ -272,7 +272,7 @@ the list; each setting is a 34 px row with its name (11 px `text.primary`), a no
 | Audio › Output | Sample rate | The device's own (default), then the rates the device offers |
 | Audio › Output | Buffer size | Default (1024 frames), then the device's sizes with their length in ms |
 | Audio › Output | Exclusive mode | On, Off (default): WASAPI only; the note says when the device does not allow it |
-| Audio › Now | Output, Latency | Read only: the device in use, and its measured latency and underruns; "List devices again" (120 px) on the Output row. Changes on this page run `audio.setOutput` |
+| Audio › Now | Output, Latency, Key to sound | Read only: the device in use, its measured latency and underruns, and the longest a key on a MIDI controller takes to be heard (saying whether a track is armed, which keeps one block ahead); "List devices again" (120 px) on the Output row. Changes on this page run `audio.setOutput` |
 | Audio › MIDI inputs | Each MIDI input port | On (default), Off: the note says whether it plays the armed tracks or why it could not be opened; "None" when no controller is connected. Listed again every 2 s while the page shows; runs `midi.setInput` |
 
 **Interface › Theme**: the themes as 20 px rows in a list that scrolls after eight, the user's
