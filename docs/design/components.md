@@ -365,9 +365,11 @@ Shown while Suhina starts (`crates/ui/src/splash.rs`), drawn inside the main win
 first frames rather than in a window of its own: a second window would need its own GL or wgpu
 context, the slowest part of starting, and one window that shrinks and grows would fight the
 main window's remembered size and position (and Wayland lets a program neither place nor
-re-decorate its window). The window opens; the splash is drawn in two whole frames, so it is on
-screen; then the desktop app starts the browser's library, the sample map and the project asked
-for, and the splash fades out over the window that is ready.
+re-decorate its window). The window opens; the splash is drawn for at least two whole frames and
+0.2 s, so it is on screen; then the desktop app starts the browser's library, the sample map and
+the project asked for, and the splash fades out over the window that is ready. Frames alone are
+not enough: on macOS the first frames are drawn before the window has come on screen, so a
+splash that went after them was never seen.
 
 | Part | Spec |
 |---|---|
@@ -376,7 +378,7 @@ for, and the splash fades out over the window that is ready.
 | Logo | The Suhina logo (`assets/brand/suhina-logo.svg`) 200 px wide (24 px clear of the panel's sides in a narrower one), its centre 12 px above the middle; the name in `text.primary`, the wave in its own `#FFD97D`. The app fills the file's paths itself (`crates/ui/src/logo.rs`, tiny-skia) at the screen's pixel density; if that fails, "Suhina" in 13 px `text.primary` instead |
 | Version | "Version x.y.z" (the app's `CARGO_PKG_VERSION`), 10 px mono `text.secondary`, under the logo |
 | Status | "Starting", 10 px `text.hint`, centred at the bottom |
-| Going | Fades out in 120 ms once the start-up work has run; at once with animations off |
+| Going | Fades out in 120 ms once the start-up work has run, it has been shown for 1 s, and 0.3 s have passed since the first frame after that work (where the window comes on screen only once the work is done, it is still seen there); at once with animations off |
 
 ## Clip properties
 
