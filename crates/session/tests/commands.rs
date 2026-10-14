@@ -10,6 +10,7 @@ fn project() -> Project {
         content: ContentKinds { notes: true, audio: false },
         channel: Some(ChannelId(id)),
         parent: None,
+        midi_input: Default::default(),
         extensions: Extensions::default(),
     };
     let channel = |id: u32| Channel {

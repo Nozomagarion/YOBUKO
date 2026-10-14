@@ -2,7 +2,7 @@
 
 use egui::{Id, Key, Sense, Ui, Vec2};
 use serde_json::json;
-use suhina_engine::model::{Rgb, TrackId};
+use suhina_engine::model::{MidiInput, MidiPort, Rgb, TrackId};
 
 use crate::grid::to_rgb;
 use crate::theme;
@@ -31,6 +31,56 @@ pub struct TrackMenu<'a> {
     pub is_group: bool,
     /// The tracks selected in the view; grouping takes them when this track is one of them.
     pub selection: &'a [TrackId],
+    /// For a track that plays notes: what it hears while armed, and the MIDI ports there are.
+    pub midi: Option<(&'a MidiInput, &'a [String])>,
+}
+
+/// How a track's MIDI input reads: "All ports", the port, or "No input", with the channel.
+pub fn midi_input_text(input: &MidiInput) -> String {
+    let port = match &input.port {
+        MidiPort::All => "All ports",
+        MidiPort::Named(name) => name.as_str(),
+        MidiPort::Nothing => "No input",
+    };
+    match input.channel {
+        Some(channel) if input.port != MidiPort::Nothing => format!("{port} · Ch {channel}"),
+        _ => port.to_string(),
+    }
+}
+
+/// The choices of a track's MIDI input (ADR 0017): every port, each port there is (and the one
+/// chosen, if it is not there now), none; then every channel or one. A pick runs
+/// `track.setMidiInput`.
+pub fn midi_input_choices(ui: &mut Ui, track: TrackId, input: &MidiInput, ports: &[String], actions: &mut Vec<Action>) {
+    let text = |t: &str| egui::RichText::new(t).font(theme::ui_font(theme::TEXT_SMALL));
+    let mut pick = |ui: &mut Ui, label: &str, on: bool, params: serde_json::Value| {
+        if ui.selectable_label(on, text(label)).clicked() && !on {
+            let mut params = params;
+            params["track"] = json!(track.0);
+            actions.push(Action::new("track.setMidiInput", params));
+            ui.close();
+        }
+    };
+    pick(ui, "All ports", input.port == MidiPort::All, json!({ "port": "all" }));
+    let chosen = match &input.port {
+        MidiPort::Named(name) if !ports.contains(name) => Some(name),
+        _ => None,
+    };
+    for name in ports.iter().chain(chosen) {
+        let label = if Some(name) == chosen { format!("{name} (not connected)") } else { name.clone() };
+        pick(ui, &label, input.port == MidiPort::Named(name.clone()), json!({ "port": name }));
+    }
+    pick(ui, "No input", input.port == MidiPort::Nothing, json!({ "port": "none" }));
+    ui.separator();
+    pick(ui, "All channels", input.channel.is_none(), json!({ "channel": 0 }));
+    egui::Grid::new(("midi-channels", track.0)).spacing(Vec2::splat(2.0)).show(ui, |ui| {
+        for channel in 1..=16u8 {
+            pick(ui, &format!("Ch {channel}"), input.channel == Some(channel), json!({ "channel": channel }));
+            if channel % 4 == 0 {
+                ui.end_row();
+            }
+        }
+    });
 }
 
 /// The menu of a track header or column: name, colour, group, ungroup, delete.
@@ -70,6 +120,11 @@ pub fn track_menu(ui: &mut Ui, menu: &TrackMenu<'_>, actions: &mut Vec<Action>) 
             }
         }
     });
+    if let Some((input, ports)) = menu.midi {
+        ui.menu_button(format!("MIDI input: {}", midi_input_text(input)), |ui| {
+            midi_input_choices(ui, menu.track, input, ports, actions);
+        });
+    }
     ui.separator();
 
     let selected = menu.selection.contains(&menu.track) && menu.selection.len() > 1;

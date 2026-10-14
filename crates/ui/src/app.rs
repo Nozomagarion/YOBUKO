@@ -913,6 +913,7 @@ impl App {
 
         let grid = self.session().map(|s| {
             let mut grid = Grid::build(s.project(), s.player().map(|p| p.monitor()));
+            grid.midi_ports = self.projects.midi_ports().to_vec();
             for column in &mut grid.columns {
                 column.armed = s.is_armed(column.track);
             }
@@ -1007,6 +1008,8 @@ impl App {
                                     timeline
                                 }
                             };
+                            let mut timeline = timeline;
+                            timeline.midi_ports = self.projects.midi_ports().to_vec();
                             arrangement_view::show(ui, &timeline, &mut self.arrangement, &mut actions);
                             self.timeline = Some((self.revision, timeline));
                             // The headers can be moved from the view itself; that is the setting too.

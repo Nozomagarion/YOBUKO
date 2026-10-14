@@ -68,7 +68,30 @@ pub struct Track {
     pub channel: Option<ChannelId>,
     /// The group track this track belongs to, if any.
     pub parent: Option<TrackId>,
+    /// Which MIDI controllers the track hears while it is armed (ADR 0017).
+    pub midi_input: MidiInput,
     pub extensions: Extensions,
+}
+
+/// Which MIDI controllers a track hears while it is armed: a port, or every one, or none, and
+/// one channel or every one.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct MidiInput {
+    pub port: MidiPort,
+    /// 1 to 16, or `None` for every channel.
+    pub channel: Option<u8>,
+}
+
+/// The MIDI input port a track hears.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum MidiPort {
+    /// Every port that is on.
+    #[default]
+    All,
+    /// One port, by the name the system gives it; a port that is not there plays nothing.
+    Named(String),
+    /// No port: the track is not played from a controller.
+    Nothing,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -513,6 +536,8 @@ pub enum ValidationError {
         lane: usize,
         clip: usize,
     },
+    /// The track's MIDI input names an empty port or a channel outside 1 … 16.
+    BadMidiInput(TrackId),
 }
 
 impl fmt::Display for ValidationError {
@@ -524,6 +549,9 @@ impl fmt::Display for ValidationError {
             Self::MissingTrack(id) => write!(f, "track {} does not exist", id.0),
             Self::MissingChannel(id) => write!(f, "channel {} does not exist", id.0),
             Self::MissingContent(id) => write!(f, "clip content {} does not exist", id.0),
+            Self::BadMidiInput(id) => {
+                write!(f, "track {} has a MIDI input with an empty port name or a channel outside 1 to 16", id.0)
+            }
             Self::BadFades { lane, clip } => {
                 write!(
                     f,
@@ -569,6 +597,10 @@ impl Project {
             }
             if let Some(parent) = track.parent {
                 track_ref(parent, &mut errors);
+            }
+            let bad_port = matches!(&track.midi_input.port, MidiPort::Named(name) if name.trim().is_empty());
+            if bad_port || track.midi_input.channel.is_some_and(|c| !(1..=16).contains(&c)) {
+                errors.push(ValidationError::BadMidiInput(track.id));
             }
         }
         for channel in &self.channels {
@@ -649,6 +681,7 @@ mod tests {
             content: ContentKinds { notes: true, audio: false },
             channel: Some(ChannelId(channel)),
             parent: None,
+            midi_input: Default::default(),
             extensions: Extensions::default(),
         }
     }

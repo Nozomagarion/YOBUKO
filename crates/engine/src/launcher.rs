@@ -95,10 +95,12 @@ pub enum LaunchCommand {
         gain: Option<f32>,
     },
     /// Arms or disarms a track: an armed track's instrument plays the notes of the live input
-    /// (ADR 0017). Disarming lets go of the keys held down.
+    /// that `input` takes (ADR 0017). Arming an armed track changes what it hears. Disarming
+    /// lets go of the keys held down.
     SetArmed {
         track: suhina_model::TrackId,
         armed: bool,
+        input: crate::live::LiveFilter,
     },
 }
 
@@ -677,9 +679,9 @@ impl Renderer {
             LaunchCommand::Stop => self.stop_transport(false),
             LaunchCommand::StopHere => self.stop_transport(true),
             LaunchCommand::SetPosition { beat } => self.set_position(beat),
-            LaunchCommand::SetArmed { track, armed } => {
+            LaunchCommand::SetArmed { track, armed, input } => {
                 let frame = self.block_frame;
-                self.live.set_armed(&mut self.graph.chains, track, armed, frame);
+                self.live.set_armed(&mut self.graph.chains, track, armed, input, frame);
             }
             LaunchCommand::SetMetronome { on, gain } => {
                 self.metronome.set(on, gain);
@@ -1130,6 +1132,7 @@ mod tests {
                     content: ContentKinds { notes: true, audio: true },
                     channel: Some(ChannelId(i)),
                     parent: None,
+                    midi_input: Default::default(),
                     extensions: Extensions::default(),
                 })
                 .collect(),

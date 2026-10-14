@@ -80,6 +80,7 @@ fn project(length: f64, two: bool, devices: Vec<Device>) -> Project {
             content: ContentKinds { notes: true, audio: false },
             channel: Some(ChannelId(1)),
             parent: None,
+            midi_input: Default::default(),
             extensions: Extensions::default(),
         }],
         channels: vec![Channel {

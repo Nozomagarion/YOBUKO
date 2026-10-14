@@ -29,6 +29,7 @@ fn grouped(group_devices: Vec<Device>, outside: bool) -> Project {
         content: ContentKinds { notes: parent.is_some() || id == 4, audio: false },
         channel: Some(ChannelId(id)),
         parent: parent.map(TrackId),
+        midi_input: Default::default(),
         extensions: Extensions::default(),
     };
     let clip = Clip {

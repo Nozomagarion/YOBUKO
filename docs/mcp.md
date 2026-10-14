@@ -77,7 +77,10 @@ suhina-cli mcp --read-root ./projects --write-root ./renders [--audio]
   `open` and the `error` a port could not be opened with, and whether the playing engine takes
   their notes (`connected`); `midi.setInput {port, enabled}` turns one off or on again.
   `track.setArm {track, armed, exclusive?}` arms a track: its instrument plays what the ports
-  play, transport running or not. Arming is not an edit (no undo step, not saved) and works
+  play, transport running or not. `track.setMidiInput {track, port?, channel?}` chooses which
+  controllers it hears (`port` `"all"`, `"none"` or a port's name from `midi.inputs`; `channel`
+  1 to 16, or 0 for every one), so two controllers can play two armed tracks; it is an edit,
+  saved with the project, and `project.tracks` reports each track's `midi_input`. Arming is not an edit (no undo step, not saved) and works
   before an engine plays; `project.tracks` says which tracks are `armed`. Without `--audio`,
   `midi.*` returns an error.
 

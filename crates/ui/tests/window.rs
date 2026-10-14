@@ -627,6 +627,35 @@ impl suhina_session::MidiSystem for StandMidi {
 }
 
 #[test]
+fn a_tracks_menu_chooses_the_midi_port_and_channel_it_hears() {
+    use suhina_engine::model::{MidiInput, MidiPort};
+    let mut app = demo_app();
+    app.projects_mut().set_midi_system(std::sync::Arc::new(StandMidi(vec!["Keys In".into(), "Pads In".into()])));
+    let mut harness = window(app);
+    let input = |h: &Harness<'static, App>| {
+        h.state()
+            .session()
+            .and_then(|s| s.project().tracks.iter().find(|t| t.name == "Keys").map(|t| t.midi_input.clone()))
+    };
+    harness.get_by_label("Track Keys").click_secondary();
+    harness.run();
+    harness.get_by_label_contains("MIDI input: All ports").click();
+    harness.run();
+    harness.get_by_label("Pads In").click();
+    harness.run();
+    assert_eq!(input(&harness), Some(MidiInput { port: MidiPort::Named("Pads In".into()), channel: None }));
+
+    harness.get_by_label("Track Keys").click_secondary();
+    harness.run();
+    harness.get_by_label_contains("MIDI input: Pads In").click();
+    harness.run();
+    harness.get_by_label("Ch 10").click();
+    harness.run();
+    assert_eq!(input(&harness), Some(MidiInput { port: MidiPort::Named("Pads In".into()), channel: Some(10) }));
+    assert!(harness.state().session().is_some_and(Session::can_undo), "an edit, saved with the project");
+}
+
+#[test]
 fn settings_audio_lists_the_midi_inputs_and_one_turned_off_is_saved() {
     let mut app = demo_app();
     app.projects_mut().set_audio_system(std::sync::Arc::new(StandAudio));

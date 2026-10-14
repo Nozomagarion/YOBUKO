@@ -82,10 +82,10 @@ CHAPTERS = [
      "Launch quantisation (none, 8 bars..1/32, triplets), scenes, stop, loop, back to arrangement, "
      "warped launched clips. Missing launch modes, legato, velocity amount, clip offset/nudge, "
      "follow actions."),
-    (17, "Routing and I/O", 22, 0.15, "absent",
-     "Track output to main or a group (track.setOutput); MIDI controllers play the armed tracks "
-     "(every port, no per-track input choice). Track input is otherwise a model field read from "
-     ".als. No audio input, monitoring, MIDI out, resampling, sidechain, multi-timbral."),
+    (17, "Routing and I/O", 22, 0.20, "partial",
+     "Track output to main or a group (track.setOutput); MIDI controllers play the armed tracks, "
+     "each track choosing its MIDI port and channel (track.setMidiInput). No audio input, "
+     "monitoring, MIDI out, resampling, sidechain, multi-timbral."),
     (18, "Mixing", 18, 0.30, "partial",
      "Faders, pan, mute, solo (exclusive/Ctrl), groups as buses, master, latency compensation, "
      "return tracks imported and drawn. Return tracks are silent: sends live in the model and in "

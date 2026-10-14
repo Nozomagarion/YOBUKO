@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use midir::{Ignore, MidiInput, MidiInputConnection};
-use suhina_engine::LiveEvent;
+use suhina_engine::{LiveEvent, LiveSource, port_id};
 use suhina_session::{LiveInput, MidiSystem};
 
 /// The name Suhina's ports carry in the system's MIDI graph.
@@ -21,25 +21,26 @@ const SUSTAIN: u8 = 64;
 const ALL_SOUND_OFF: u8 = 120;
 const ALL_NOTES_OFF: u8 = 123;
 
-/// The engine's live note for one MIDI message, on any channel; `None` for anything else,
-/// including short or malformed messages.
-pub fn parse(message: &[u8]) -> Option<LiveEvent> {
+/// The engine's live note for one MIDI message, with its channel (0 to 15); `None` for anything
+/// else, including short or malformed messages.
+pub fn parse(message: &[u8]) -> Option<(u8, LiveEvent)> {
     let (&status, data) = message.split_first()?;
     let (&first, rest) = data.split_first()?;
     let &second = rest.first()?;
     if first >= 0x80 || second >= 0x80 {
         return None;
     }
-    match status & 0xF0 {
-        0x90 if second > 0 => Some(LiveEvent::NoteOn { key: first, velocity: f32::from(second) / 127.0 }),
-        0x90 | 0x80 => Some(LiveEvent::NoteOff { key: first }),
+    let event = match status & 0xF0 {
+        0x90 if second > 0 => LiveEvent::NoteOn { key: first, velocity: f32::from(second) / 127.0 },
+        0x90 | 0x80 => LiveEvent::NoteOff { key: first },
         0xB0 => match first {
-            SUSTAIN => Some(LiveEvent::Sustain { on: second >= 64 }),
-            ALL_SOUND_OFF | ALL_NOTES_OFF => Some(LiveEvent::AllNotesOff),
-            _ => None,
+            SUSTAIN => LiveEvent::Sustain { on: second >= 64 },
+            ALL_SOUND_OFF | ALL_NOTES_OFF => LiveEvent::AllNotesOff,
+            _ => return None,
         },
-        _ => None,
-    }
+        _ => return None,
+    };
+    Some((status & 0x0F, event))
 }
 
 /// The system's MIDI input ports.
@@ -60,10 +61,11 @@ fn client() -> Result<MidiInput, String> {
     Ok(input)
 }
 
-/// An open port: closing it lets go of the keys it holds.
+/// An open port: closing it lets go of the keys it holds, on every channel.
 struct Port {
     connection: Option<MidiInputConnection<()>>,
     input: Arc<LiveInput>,
+    port: u64,
 }
 
 impl Drop for Port {
@@ -71,7 +73,9 @@ impl Drop for Port {
         if let Some(connection) = self.connection.take() {
             connection.close();
         }
-        self.input.send(LiveEvent::AllNotesOff);
+        for channel in 0..16 {
+            self.input.send_from(LiveSource { port: self.port, channel }, LiveEvent::AllNotesOff);
+        }
     }
 }
 
@@ -89,19 +93,20 @@ impl MidiSystem for Midi {
             .find(|port| client.port_name(port).is_ok_and(|n| n == name))
             .ok_or_else(|| format!("{name} is not there"))?;
         let sink = Arc::clone(&input);
+        let id = port_id(name);
         let connection = client
             .connect(
                 &port,
                 &format!("{CLIENT} input"),
                 move |_, message, _| {
-                    if let Some(event) = parse(message) {
-                        sink.send(event);
+                    if let Some((channel, event)) = parse(message) {
+                        sink.send_from(LiveSource { port: id, channel }, event);
                     }
                 },
                 (),
             )
             .map_err(|e| e.to_string())?;
-        Ok(Box::new(Port { connection: Some(connection), input }))
+        Ok(Box::new(Port { connection: Some(connection), input, port: id }))
     }
 }
 
@@ -111,21 +116,21 @@ mod tests {
 
     #[test]
     fn notes_on_every_channel_are_read() {
-        assert_eq!(parse(&[0x90, 60, 127]), Some(LiveEvent::NoteOn { key: 60, velocity: 1.0 }));
-        assert_eq!(parse(&[0x9F, 0, 1]), Some(LiveEvent::NoteOn { key: 0, velocity: 1.0 / 127.0 }));
-        assert_eq!(parse(&[0x80, 60, 64]), Some(LiveEvent::NoteOff { key: 60 }));
-        assert_eq!(parse(&[0x8A, 127, 0]), Some(LiveEvent::NoteOff { key: 127 }));
+        assert_eq!(parse(&[0x90, 60, 127]), Some((0, LiveEvent::NoteOn { key: 60, velocity: 1.0 })));
+        assert_eq!(parse(&[0x9F, 0, 1]), Some((15, LiveEvent::NoteOn { key: 0, velocity: 1.0 / 127.0 })));
+        assert_eq!(parse(&[0x80, 60, 64]), Some((0, LiveEvent::NoteOff { key: 60 })));
+        assert_eq!(parse(&[0x8A, 127, 0]), Some((10, LiveEvent::NoteOff { key: 127 })));
         // A note on of velocity 0 is a note off.
-        assert_eq!(parse(&[0x93, 72, 0]), Some(LiveEvent::NoteOff { key: 72 }));
+        assert_eq!(parse(&[0x93, 72, 0]), Some((3, LiveEvent::NoteOff { key: 72 })));
     }
 
     #[test]
     fn the_pedal_and_all_notes_off_are_read() {
-        assert_eq!(parse(&[0xB0, 64, 127]), Some(LiveEvent::Sustain { on: true }));
-        assert_eq!(parse(&[0xB5, 64, 64]), Some(LiveEvent::Sustain { on: true }));
-        assert_eq!(parse(&[0xB0, 64, 63]), Some(LiveEvent::Sustain { on: false }));
-        assert_eq!(parse(&[0xB0, 123, 0]), Some(LiveEvent::AllNotesOff));
-        assert_eq!(parse(&[0xB0, 120, 0]), Some(LiveEvent::AllNotesOff));
+        assert_eq!(parse(&[0xB0, 64, 127]), Some((0, LiveEvent::Sustain { on: true })));
+        assert_eq!(parse(&[0xB5, 64, 64]), Some((5, LiveEvent::Sustain { on: true })));
+        assert_eq!(parse(&[0xB0, 64, 63]), Some((0, LiveEvent::Sustain { on: false })));
+        assert_eq!(parse(&[0xB0, 123, 0]), Some((0, LiveEvent::AllNotesOff)));
+        assert_eq!(parse(&[0xB0, 120, 0]), Some((0, LiveEvent::AllNotesOff)));
         assert_eq!(parse(&[0xB0, 7, 100]), None, "volume is not read");
     }
 
@@ -147,7 +152,7 @@ mod tests {
             assert_eq!(parse(message), None, "{message:?}");
         }
         // Bytes after a whole message are left alone.
-        assert_eq!(parse(&[0x90, 60, 100, 1, 2]), Some(LiveEvent::NoteOn { key: 60, velocity: 100.0 / 127.0 }));
+        assert_eq!(parse(&[0x90, 60, 100, 1, 2]), Some((0, LiveEvent::NoteOn { key: 60, velocity: 100.0 / 127.0 })));
     }
 
     #[test]
@@ -155,8 +160,13 @@ mod tests {
         for status in 0..=255u8 {
             for first in [0u8, 1, 64, 120, 123, 127, 128, 255] {
                 for second in [0u8, 1, 63, 64, 127, 128, 255] {
-                    if let Some(LiveEvent::NoteOn { velocity, .. }) = parse(&[status, first, second]) {
-                        assert!(velocity > 0.0 && velocity <= 1.0);
+                    match parse(&[status, first, second]) {
+                        Some((channel, LiveEvent::NoteOn { velocity, .. })) => {
+                            assert!(velocity > 0.0 && velocity <= 1.0);
+                            assert_eq!(channel, status & 0x0F);
+                        }
+                        Some((channel, _)) => assert!(channel < 16),
+                        None => {}
                     }
                 }
             }

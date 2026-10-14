@@ -159,7 +159,9 @@ fn the_render_thread_keeps_less_ahead_while_a_track_is_armed() {
     assert!(!progress.live());
 
     // Armed: the device drains the queue down to one block, which the thread keeps.
-    controller.send(LaunchCommand::SetArmed { track: model::TrackId(1), armed: true }).unwrap();
+    controller
+        .send(LaunchCommand::SetArmed { track: model::TrackId(1), armed: true, input: Default::default() })
+        .unwrap();
     let mut device = vec![0.0f32; BLOCK * 2];
     assert!(eventually(|| {
         read_ring(&mut consumer, &mut device, &progress);
@@ -169,7 +171,9 @@ fn the_render_thread_keeps_less_ahead_while_a_track_is_armed() {
     assert!(queued(&consumer) >= BLOCK && queued(&consumer) < 2 * BLOCK, "{}", queued(&consumer));
 
     // Disarmed: back to two blocks.
-    controller.send(LaunchCommand::SetArmed { track: model::TrackId(1), armed: false }).unwrap();
+    controller
+        .send(LaunchCommand::SetArmed { track: model::TrackId(1), armed: false, input: Default::default() })
+        .unwrap();
     assert!(eventually(|| {
         if !progress.live() && queued(&consumer) >= 2 * BLOCK {
             return true;

@@ -346,11 +346,17 @@ impl Session {
         self.player = Some(player);
         self.audio_changed = false;
         // A new engine hears the tracks armed before it.
-        let armed = self.armed();
+        self.send_armed();
+    }
+
+    /// Tells the playing engine every armed track and what each hears (its MIDI input): after a
+    /// new player, an arm, or an edit or undo that may have changed an input.
+    fn send_armed(&mut self) {
+        let armed: Vec<_> = self.armed().into_iter().map(|track| (track, live_filter(&self.project, track))).collect();
         if let Some(player) = self.player.as_mut() {
-            for track in armed {
+            for (track, input) in armed {
                 // A full queue means an engine that does not run; it has nothing to arm.
-                let _ = player.send(suhina_engine::LaunchCommand::SetArmed { track, armed: true });
+                let _ = player.send(suhina_engine::LaunchCommand::SetArmed { track, armed: true, input });
             }
         }
     }
@@ -374,13 +380,16 @@ impl Session {
         if armed {
             self.armed.push(track);
         }
-        let Some(player) = self.player.as_mut() else { return };
-        for id in before.iter().filter(|id| !self.armed.contains(id)) {
-            let _ = player.send(suhina_engine::LaunchCommand::SetArmed { track: *id, armed: false });
+        if let Some(player) = self.player.as_mut() {
+            for id in before.iter().filter(|id| !self.armed.contains(id)) {
+                let _ = player.send(suhina_engine::LaunchCommand::SetArmed {
+                    track: *id,
+                    armed: false,
+                    input: Default::default(),
+                });
+            }
         }
-        for id in self.armed.iter().filter(|id| !before.contains(id)) {
-            let _ = player.send(suhina_engine::LaunchCommand::SetArmed { track: *id, armed: true });
-        }
+        self.send_armed();
     }
 
     /// The sending end of the playing engine's live-note queue, the first time it is asked for.
@@ -619,6 +628,8 @@ impl Session {
             CommandKind::History => {
                 let value = (spec.run)(self, params)?;
                 self.update_player()?;
+                // Undo may have changed what an armed track hears.
+                self.send_armed();
                 Ok(value)
             }
             CommandKind::Edit => {
@@ -640,6 +651,8 @@ impl Session {
                             };
                             if !sent {
                                 self.update_player()?;
+                                // The edit may have changed what an armed track hears.
+                                self.send_armed();
                             }
                         }
                         Ok(value)
@@ -707,4 +720,19 @@ fn unknown_command(id: &str) -> CommandError {
     } else {
         CommandError(format!("unknown command {id}; did you mean one of: {}", similar.join(", ")))
     }
+}
+
+/// What `track` hears while armed, for the engine: its MIDI input, by port id (ADR 0017).
+fn live_filter(project: &Project, track: suhina_model::TrackId) -> suhina_engine::LiveFilter {
+    use suhina_engine::{LiveFilter, LivePorts};
+    use suhina_model::MidiPort;
+    let Some(input) = project.tracks.iter().find(|t| t.id == track).map(|t| &t.midi_input) else {
+        return LiveFilter::default();
+    };
+    let ports = match &input.port {
+        MidiPort::All => LivePorts::All,
+        MidiPort::Named(name) => LivePorts::One(suhina_engine::port_id(name)),
+        MidiPort::Nothing => LivePorts::Nothing,
+    };
+    LiveFilter { ports, channel: input.channel.and_then(|c| c.checked_sub(1)) }
 }

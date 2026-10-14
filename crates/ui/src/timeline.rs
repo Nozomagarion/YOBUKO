@@ -100,6 +100,8 @@ pub struct Lane {
     /// knows, not the project, so [`Timeline::build`] leaves it false.
     pub armable: bool,
     pub armed: bool,
+    /// What the track hears while armed.
+    pub midi_input: suhina_engine::model::MidiInput,
     pub volume_db: f64,
     pub pan: f64,
     /// The group track this track plays into; `None` is the main output.
@@ -111,6 +113,8 @@ pub struct Lane {
 pub struct Timeline {
     /// Tracks in project order, then return tracks.
     pub lanes: Vec<Lane>,
+    /// The MIDI input ports there are, for the tracks' MIDI inputs; set by the app.
+    pub midi_ports: Vec<String>,
     /// The main channel's volume, if the project has one.
     pub main_volume_db: Option<f64>,
     /// Where the last clip ends, in beats.
@@ -184,6 +188,7 @@ impl Timeline {
                 solo: channel.is_some_and(|c| c.solo),
                 armable: kind == ColumnKind::Track && track.content.notes,
                 armed: false,
+                midi_input: track.midi_input.clone(),
                 volume_db: channel.map_or(0.0, |c| gain_to_db(c.volume)),
                 pan: channel.map_or(0.0, |c| c.pan),
                 output: channel
@@ -199,6 +204,7 @@ impl Timeline {
         let main_volume_db =
             project.channels.iter().find(|c| c.role == ChannelRole::Master).map(|c| gain_to_db(c.volume));
         let mut timeline = Self {
+            midi_ports: Vec::new(),
             lanes,
             main_volume_db,
             end,

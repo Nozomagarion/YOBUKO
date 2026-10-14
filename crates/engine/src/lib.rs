@@ -40,7 +40,7 @@ use chain::{CHAIN_INPUT_GAIN, Chain, MAX_BLOCK};
 pub use cpu::CpuMonitor;
 use launcher::Launcher;
 pub use launcher::{ColumnStatus, Controller, LaunchCommand, LauncherMonitor, MAX_START_BEAT, Quantization, Queued};
-pub use live::{LIVE_QUEUE, LiveEvent, LiveSender, MAX_ARMED};
+pub use live::{LIVE_QUEUE, LiveEvent, LiveFilter, LivePorts, LiveSender, LiveSource, MAX_ARMED, MAX_SOURCES, port_id};
 use plugin::{DEADLINE_SHARE, Delay};
 pub use plugin::{
     OFFLINE_TIMEOUT, PluginDevice, PluginProcessor, PluginSlotInfo, Plugins, Sent, plugin_devices, plugin_key,
@@ -1083,6 +1083,7 @@ mod tests {
                     content: ContentKinds { notes: true, audio: false },
                     channel: Some(ChannelId(i)),
                     parent: None,
+                    midi_input: Default::default(),
                     extensions: Extensions::default(),
                 })
                 .collect(),

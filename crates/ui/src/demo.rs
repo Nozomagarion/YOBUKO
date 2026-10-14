@@ -45,6 +45,7 @@ pub fn demo_project() -> Project {
             content: ContentKinds { notes: true, audio: false },
             channel: Some(ChannelId(id)),
             parent: None,
+            midi_input: Default::default(),
             extensions: Extensions::default(),
         });
         let mut channel = channel(ChannelId(id), name, ChannelRole::Regular, Some(main));
@@ -87,6 +88,7 @@ pub fn demo_project() -> Project {
             content: ContentKinds::default(),
             channel: Some(*channel_id),
             parent: None,
+            midi_input: Default::default(),
             extensions: Extensions::default(),
         });
         project.channels.push(channel(*channel_id, name, ChannelRole::Effect, Some(main)));

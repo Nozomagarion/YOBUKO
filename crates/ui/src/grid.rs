@@ -75,6 +75,8 @@ pub struct Column {
     /// whether it is: the session knows, not the project, so [`Grid::build`] leaves it false.
     pub armable: bool,
     pub armed: bool,
+    /// What the track hears while armed.
+    pub midi_input: suhina_engine::model::MidiInput,
     pub volume_db: f64,
     /// The track's place in the project's track order, as `track.move` counts it, and how many
     /// groups it is inside.
@@ -97,6 +99,8 @@ pub struct Scene {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Grid {
     pub columns: Vec<Column>,
+    /// The MIDI input ports there are, for the tracks' MIDI input menus; set by the app.
+    pub midi_ports: Vec<String>,
     pub scenes: Vec<Scene>,
     pub running: bool,
     /// Beats since the transport started.
@@ -171,6 +175,7 @@ impl Grid {
                 solo: channel.is_some_and(|c| c.solo),
                 armable: kind == ColumnKind::Track && track.content.notes,
                 armed: false,
+                midi_input: track.midi_input.clone(),
                 volume_db: channel.map_or(0.0, |c| gain_to_db(c.volume)),
                 position: index,
                 depth: crate::timeline::depth(project, track.parent),
@@ -203,7 +208,7 @@ impl Grid {
             None => (false, 0.0, project.transport.tempo_bpm),
         };
         let beat = if beat.is_finite() { beat.max(0.0) } else { 0.0 };
-        Self { columns, scenes, running, beat, tempo_bpm, bar_beats }
+        Self { columns, midi_ports: Vec::new(), scenes, running, beat, tempo_bpm, bar_beats }
     }
 
     /// The transport position as bar.beat.sixteenth, counted from 1.

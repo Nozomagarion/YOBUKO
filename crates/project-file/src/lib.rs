@@ -23,8 +23,8 @@ use serde_json::{Map, Value, json};
 use suhina_model::{
     Arrangement, ArrangementLane, AudioRegion, Channel, ChannelId, ChannelRole, Clip, ClipContent, ContentId,
     ContentKinds, ContentLane, Device, DeviceKind, DeviceParam, Extension, Extensions, FadeCurve, FadeShape, LaneData,
-    Launcher, LauncherColumn, LoopRange, Note, Project, Rgb, Scene, Send, Slot, StretchMode, TimeSignature, Track,
-    TrackId, Transport, WarpMarker,
+    Launcher, LauncherColumn, LoopRange, MidiInput, MidiPort, Note, Project, Rgb, Scene, Send, Slot, StretchMode,
+    TimeSignature, Track, TrackId, Transport, WarpMarker,
 };
 
 /// The file extension, without the dot.
@@ -239,6 +239,15 @@ fn track_value(t: &Track) -> Value {
         "parent": t.parent.map(|p| p.0),
     });
     if let Some(map) = out.as_object_mut() {
+        // Left out while it is the default: every port, every channel.
+        if t.midi_input != MidiInput::default() {
+            let port = match &t.midi_input.port {
+                MidiPort::All => Value::String("all".into()),
+                MidiPort::Nothing => Value::String("none".into()),
+                MidiPort::Named(name) => json!({ "name": name }),
+            };
+            map.insert("midi_input".into(), json!({ "port": port, "channel": t.midi_input.channel }));
+        }
         with_extensions(map, &t.extensions);
     }
     out
@@ -600,8 +609,35 @@ fn read_track(value: &Value, at: &str) -> Result<Track, ProjectFileError> {
         content: ContentKinds { notes: flag(t, "notes", false, at)?, audio: flag(t, "audio", false, at)? },
         channel: optional_whole(t, "channel", at)?.map(ChannelId),
         parent: optional_whole(t, "parent", at)?.map(TrackId),
+        midi_input: read_midi_input(t.get("midi_input"), at)?,
         extensions: extensions(t, at)?,
     })
+}
+
+/// A track's `midi_input`: `{ "port": "all" | "none" | { "name" }, "channel": 1–16 or null }`,
+/// every port and channel when it is left out.
+fn read_midi_input(value: Option<&Value>, at: &str) -> Result<MidiInput, ProjectFileError> {
+    let at = format!("{at}.midi_input");
+    let Some(value) = value.filter(|v| !v.is_null()) else { return Ok(MidiInput::default()) };
+    let m = object(value, &at)?;
+    let port = match m.get("port") {
+        None | Some(Value::Null) => MidiPort::All,
+        Some(Value::String(s)) if s == "all" => MidiPort::All,
+        Some(Value::String(s)) if s == "none" => MidiPort::Nothing,
+        Some(Value::Object(port)) => match port.get("name").and_then(Value::as_str) {
+            Some(name) if !name.trim().is_empty() => MidiPort::Named(name.to_string()),
+            _ => return Err(format!("{at}.port.name: expected a port's name").into()),
+        },
+        Some(_) => return Err(format!("{at}.port: expected \"all\", \"none\" or {{ \"name\" }}").into()),
+    };
+    let channel = match m.get("channel") {
+        None | Some(Value::Null) => None,
+        Some(v) => match v.as_u64() {
+            Some(c @ 1..=16) => u8::try_from(c).ok(),
+            _ => return Err(format!("{at}.channel: expected 1 to 16 or null").into()),
+        },
+    };
+    Ok(MidiInput { port, channel })
 }
 
 fn read_channel(value: &Value, at: &str) -> Result<Channel, ProjectFileError> {

@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde_json::{Value, json};
-use suhina_engine::{LiveEvent, LiveSender};
+use suhina_engine::{LiveEvent, LiveSender, LiveSource};
 
 use crate::commands::{CommandKind, CommandSpec, ParamType, param};
 use crate::{CommandError, Projects};
@@ -34,9 +34,16 @@ pub struct LiveInput {
 }
 
 impl LiveInput {
-    /// Sends `event` to the engine that plays now. Returns false when it went nowhere.
+    /// Sends `event`, from an unknown port, to the engine that plays now: only tracks that hear
+    /// every port play it. Returns false when it went nowhere.
     pub fn send(&self, event: LiveEvent) -> bool {
-        self.lock().as_mut().is_some_and(|sender| sender.send(event))
+        self.send_from(LiveSource::default(), event)
+    }
+
+    /// Sends `event` from `source` (a port and channel) to the engine that plays now; the armed
+    /// tracks whose MIDI input takes the source play it. Returns false when it went nowhere.
+    pub fn send_from(&self, source: LiveSource, event: LiveEvent) -> bool {
+        self.lock().as_mut().is_some_and(|sender| sender.send_from(source, event))
     }
 
     /// Notes go to `sender` from now on.
@@ -68,6 +75,8 @@ pub(crate) struct MidiInputs {
     failed: Vec<(String, String)>,
     /// When the ports were last looked at, so a controller plugged in later is found.
     pub(crate) checked: Option<std::time::Instant>,
+    /// The ports there were then, by name.
+    pub(crate) ports: Vec<String>,
 }
 
 /// How often the ports are looked at again for controllers plugged in or taken out.
@@ -90,6 +99,7 @@ impl MidiInputs {
                 return self.fail("", e);
             }
         };
+        self.ports.clone_from(&ports);
         let off = &self.off;
         self.open.retain(|(name, _)| ports.contains(name) && !off.contains(name));
         self.failed.retain(|(name, _)| ports.contains(name) && !off.contains(name));

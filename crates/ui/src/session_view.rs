@@ -100,7 +100,14 @@ pub fn show(
     painter.hline(area.x_range(), header.bottom(), theme::hairline(theme::border_strong()));
     painter.hline(area.x_range(), mixer.top() - 1.0, theme::hairline(theme::border_strong()));
 
-    let bands = Bands { header, body, mixer, top: body.top() - state.scroll.y, scenes: grid.scenes.len() };
+    let bands = Bands {
+        midi_ports: &grid.midi_ports,
+        header,
+        body,
+        mixer,
+        top: body.top() - state.scroll.y,
+        scenes: grid.scenes.len(),
+    };
     // Where each track column is this frame, for a dragged header to find its place.
     let mut spans: Vec<(&Column, egui::Rangef)> = Vec::new();
     let mut track_x = area.left() - state.scroll.x;
@@ -259,7 +266,9 @@ pub(crate) fn empty_space(ui: &Ui, painter: &egui::Painter, area: Rect, actions:
 }
 
 /// The view's horizontal bands, and where the first scene row is after scrolling.
-struct Bands {
+struct Bands<'a> {
+    /// The MIDI input ports there are, for the tracks' menus.
+    midi_ports: &'a [String],
     header: Rect,
     body: Rect,
     mixer: Rect,
@@ -283,7 +292,7 @@ fn draw_column(
 ) {
     let id = Id::new(("session-column", column.track.0));
     let header = Rect::from_x_y_ranges(span, bands.header.y_range()).intersect(clip);
-    column_header(ui, painter, header, column, state, actions);
+    column_header(ui, painter, header, column, bands.midi_ports, state, actions);
     let body_clip = bands.body.intersect(clip);
     column_body(
         ui,
@@ -310,6 +319,7 @@ fn column_header(
     painter: &egui::Painter,
     rect: Rect,
     column: &Column,
+    midi_ports: &[String],
     state: &mut SessionViewState,
     actions: &mut Vec<Action>,
 ) {
@@ -336,6 +346,7 @@ fn column_header(
             name: &column.name,
             is_group: column.kind == ColumnKind::Group,
             selection: &[],
+            midi: column.armable.then_some((&column.midi_input, midi_ports)),
         };
         menus::track_menu(ui, &menu, actions);
     });

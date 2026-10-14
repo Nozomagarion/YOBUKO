@@ -88,6 +88,20 @@ engine code.
    and one block. Settings › Audio shows it as *Key to sound*. The engine's own part is tested
    offline: a live note sounds from the first frames of the next block, at any block size; the
    output's queue depth is tested on the real render thread.
+8. **Each track chooses what it hears** (amendment,
+   [#278](https://github.com/suhina-daw/suhina-daw/issues/278)), so two players, or a keyboard
+   and a pad controller, each play their own armed track. A track's `midi_input` is part of the
+   project (model, `.suhina`, undone like any edit): a port (every port, the default; one by
+   name; or none) and a channel (every one, or 1 to 16). `track.setMidiInput` sets it; the
+   track's menu in both views and, at 90 px, a dropdown in the Arrangement header show it. Each
+   live note carries its source, a port and a channel: the MIDI layer tags it with a hash of the
+   port's name (`port_id`, FNV-1a), which the session computes the same way from the track's
+   input, so no table of ports is shared between threads. `SetArmed` carries the track's input
+   as a `LiveFilter`; the session sends it again after every edit and undo, so a changed input
+   is heard at once. The keys held and the sustain pedal are followed per source (up to 16 at
+   once, silent ones reused), so one controller's pedal does not hold another's notes. A track
+   that stops hearing a source lets go of that source's keys. A Live Set's track input routing
+   is not read yet; imported tracks hear every port.
 
 ## Consequences
 

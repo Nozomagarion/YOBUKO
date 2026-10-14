@@ -384,6 +384,10 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   `midi.setInput`); a controller plugged in later is found within seconds. The latency follows
   the buffer size. Still to do: recording and audio inputs
   ([#263](https://github.com/suhina-daw/suhina-daw/issues/263)).
+- **A MIDI input per track:** each track hears every MIDI port, one port, or none, and every
+  channel or one, so a keyboard and a pad controller (or two players) each play their own armed
+  track; set from the track's menu or the Arrangement header (`track.setMidiInput`), saved with
+  the project ([#278](https://github.com/suhina-daw/suhina-daw/issues/278), ADR 0017).
 - **Lower latency for live playing:** while a track is armed the engine keeps one block queued
   ahead of the device instead of two, and Settings › Audio and `audio.info` say how long a key
   takes to be heard (`live_latency_ms`); at 128 frames, at most about 5 ms plus the device

@@ -146,6 +146,12 @@ impl Projects {
         std::sync::Arc::clone(&self.midi.input)
     }
 
+    /// The MIDI input ports there were when they were last looked at (every two seconds while
+    /// the window polls), by name: what a track's MIDI input can be set to.
+    pub fn midi_ports(&self) -> &[String] {
+        &self.midi.ports
+    }
+
     pub(crate) fn midi_mut(&mut self) -> &mut crate::midi::MidiInputs {
         &mut self.midi
     }
