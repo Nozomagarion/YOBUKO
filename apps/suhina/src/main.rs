@@ -14,6 +14,7 @@ use suhina_session::{OutputChoice, Session};
 use suhina_ui::keymap::Keymap;
 use suhina_ui::settings::{Graphics, Settings};
 use suhina_ui::settings_view::About;
+use suhina_ui::splash::Splash;
 use suhina_ui::themes::FileAction;
 use suhina_ui::{App, NewProject, OpenAs, Status};
 
@@ -90,33 +91,24 @@ fn main() -> ExitCode {
     let (theme_list, theme_warnings) = themes.read_all();
     settings_warnings.extend(theme_warnings);
     let recent = recent::Recent::load(eframe::storage_dir(app_id()).map(|d| d.join(RECENT_FILE)));
-    let mut window = Window { app: App::new(), graphics_now, editors_embeddable: false, themes, recent };
+    let mut window = Window {
+        app: App::new(),
+        graphics_now,
+        editors_embeddable: false,
+        themes,
+        recent,
+        splash: Some(Splash::new(env!("CARGO_PKG_VERSION"))),
+        start_up: Some(StartUp {
+            source: args.source,
+            output_choice: settings.output_choice(),
+            warnings: settings_warnings,
+        }),
+    };
     // The audio devices, and the output the settings choose (Settings › Audio, `audio.*`).
     window.app.projects_mut().set_audio_system(std::sync::Arc::new(suhina_output::DeviceOutput::new()));
     window.app.projects_mut().set_output_choice(settings.output_choice());
-    // The browser's library: browser.json and the folder indexes beside the settings (ADR 0012).
-    let mut library = suhina_library::Library::new(eframe::storage_dir(app_id()));
-    settings_warnings.extend(library.take_warnings());
-    if let Err(e) = library.start() {
-        settings_warnings.push(e);
-    }
-    window.app.set_file_library(library);
-    // The sample map analyses the library's samples in the background (ADR 0013).
-    window.app.projects_mut().start_sound_map();
     let (projects, templates) = default_folders();
     window.app.set_default_folders(projects, templates);
-    match args.source {
-        Source::Nothing => {}
-        Source::Demo => {
-            let session = Session::new(suhina_ui::demo::demo_project());
-            let (session, warnings) = with_audio(session, &settings.output_choice());
-            window.app.open_project(session, &warnings, OpenAs::NewTab);
-        }
-        Source::Als(path) => window.open(&path, OpenAs::NewTab),
-    }
-    if let Some(warning) = settings_warnings.first() {
-        window.app.set_status(Status::Hint(warning.clone()));
-    }
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
@@ -190,6 +182,10 @@ fn parse_args(args: &[String]) -> Result<Option<Args>, String> {
 
 struct Window {
     app: App,
+    /// Shown over the first frames while Suhina starts; gone once it has faded out.
+    splash: Option<Splash>,
+    /// What starting does once the splash is on screen.
+    start_up: Option<StartUp>,
     graphics_now: Graphics,
     /// The main window is a Win32 or X11 one, which plug-in editors can be embedded in.
     editors_embeddable: bool,
@@ -198,8 +194,31 @@ struct Window {
     recent: recent::Recent,
 }
 
+/// The slow part of starting, done in the window once the splash shows rather than before the
+/// window opens: the browser's library (its saved indexes), the sample map and the project
+/// asked for.
+struct StartUp {
+    source: Source,
+    output_choice: OutputChoice,
+    /// Warnings from reading the settings, keymap and themes.
+    warnings: Vec<String>,
+}
+
 impl eframe::App for Window {
     fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
+        if let Some(splash) = self.splash.as_mut()
+            && splash.take_start(ui.ctx())
+            && let Some(start_up) = self.start_up.take()
+        {
+            self.start(start_up);
+        }
+        if let Some(splash) = self.splash.as_mut()
+            && !splash.started()
+        {
+            // The window is not ready yet: only the splash.
+            let _shown = splash.show(ui);
+            return;
+        }
         self.app.ui(ui);
         if let Some((path, how)) = self.app.take_open_request() {
             self.open(&path, how);
@@ -246,10 +265,41 @@ impl eframe::App for Window {
             self.app.set_status(Status::Error(e));
         }
         self.sync_themes(ui.ctx());
+        if let Some(splash) = self.splash.as_mut()
+            && !splash.show(ui)
+        {
+            self.splash = None;
+        }
     }
 }
 
 impl Window {
+    /// Starts the browser's library and the sample map, and opens the project asked for.
+    fn start(&mut self, start_up: StartUp) {
+        let StartUp { source, output_choice, mut warnings } = start_up;
+        // The browser's library: browser.json and the folder indexes beside the settings (ADR 0012).
+        let mut library = suhina_library::Library::new(eframe::storage_dir(app_id()));
+        warnings.extend(library.take_warnings());
+        if let Err(e) = library.start() {
+            warnings.push(e);
+        }
+        self.app.set_file_library(library);
+        // The sample map analyses the library's samples in the background (ADR 0013).
+        self.app.projects_mut().start_sound_map();
+        match source {
+            Source::Nothing => {}
+            Source::Demo => {
+                let session = Session::new(suhina_ui::demo::demo_project());
+                let (session, opened) = with_audio(session, &output_choice);
+                self.app.open_project(session, &opened, OpenAs::NewTab);
+            }
+            Source::Als(path) => self.open(&path, OpenAs::NewTab),
+        }
+        if let Some(warning) = warnings.first() {
+            self.app.set_status(Status::Hint(warning.clone()));
+        }
+    }
+
     /// Opens a Live Set in a new tab or in place of the active project: imports it, decodes its
     /// audio and starts playing it, stopped.
     fn open(&mut self, path: &Path, how: OpenAs) {

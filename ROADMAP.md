@@ -269,6 +269,9 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   playing with progress), scene launch, stop buttons, and a mixer strip with pan, volume and
   track on/off
   ([ADR 0009](docs/decisions/0009-ui-toolkit-and-look.md), [spec](docs/spec/ui-session-view.md)).
+- A **splash** while Suhina starts: a 300 × 200 px panel centred in the window with the name and
+  the version, shown while the browser's library, the sample map and the project asked for start,
+  then fading into the ready window ([components](docs/design/components.md#splash)).
 - The **Arrangement view** (Tab switches): bar ruler, one lane per track with its clips and their
   notes (loops repeated), the playhead, track headers on the right that show volume and pan once
   a lane is tall enough (drag its lower edge), return and main rows along the bottom. Clips move

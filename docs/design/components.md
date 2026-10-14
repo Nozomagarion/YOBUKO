@@ -3,7 +3,7 @@ description: Measurements, states and tokens of every UI component, from the min
 read_when: widget sizes, clip slot states, value field, slider, knob, toggle, meter, track header levels, device panel, piano roll layout
 type: spec
 status: draft
-last_verified: 2026-10-13
+last_verified: 2026-10-14
 covers:
   - crates/ui/src/theme.rs
   - crates/ui/src/session_view.rs
@@ -19,6 +19,7 @@ covers:
   - crates/ui/src/browser_view.rs
   - crates/ui/src/loading_dialog.rs
   - crates/ui/src/missing_files.rs
+  - crates/ui/src/splash.rs
 ---
 
 # Components
@@ -41,7 +42,7 @@ replaces them.
     (bar numbers in the ruler too);
   - 9 px only for tags beside a name: a device's kind, a clip's gain, key labels in the clip
     editor;
-  - 13 px only for a page title (Settings) and the drop overlay.
+  - 13 px only for a page title (Settings), the drop overlay and the name on the splash.
 - Text colours: `text.primary` for values and names, `text.secondary` for labels,
   `text.hint` for inactive and hints. The one pure white (`#FFFFFF`) is the name of a playing
   or recording clip.
@@ -353,6 +354,25 @@ until none is loading or it is sent to the background; a project opened next sho
 | Panel | 360 px wide, centred, `panel.background`, 1 px `border.strong` border; 20 px `control.background` title "Loading plug-ins · <project>" in 11 px `text.primary` |
 | Progress | A 4 px bar, `control.background`, filled with `accent` for the share ready; under it 16 px rows in 10 px: "N of M ready, K not installed" `text.secondary`, "Loading <name>" `text.hint` (six, then "and N more"), "Could not start <name>" `recording` |
 | Button | 150 × 18 px, bottom right, as the device panel's: "Continue in the background"; Escape does the same. The project plays meanwhile |
+
+## Splash
+
+Shown while Suhina starts (`crates/ui/src/splash.rs`), drawn inside the main window over its
+first frames rather than in a window of its own: a second window would need its own GL or wgpu
+context, the slowest part of starting, and one window that shrinks and grows would fight the
+main window's remembered size and position (and Wayland lets a program neither place nor
+re-decorate its window). The window opens; the splash is drawn in two whole frames, so it is on
+screen; then the desktop app starts the browser's library, the sample map and the project asked
+for, and the splash fades out over the window that is ready.
+
+| Part | Spec |
+|---|---|
+| Behind | The whole window `window.background`; clicks there do nothing until it has gone |
+| Panel | 300 × 200 px (smaller in a smaller window), centred, `panel.background`, 1 px `border.strong` border |
+| Name | "Suhina", 13 px `text.primary`, centred 10 px above the middle |
+| Version | "Version x.y.z" (the app's `CARGO_PKG_VERSION`), 10 px mono `text.secondary`, under the name |
+| Status | "Starting", 10 px `text.hint`, centred at the bottom |
+| Going | Fades out in 120 ms once the start-up work has run; at once with animations off |
 
 ## Clip properties
 

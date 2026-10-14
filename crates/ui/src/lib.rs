@@ -22,6 +22,7 @@ pub mod sample_map_panel;
 pub mod session_view;
 pub mod settings;
 pub mod settings_view;
+pub mod splash;
 pub mod theme;
 pub mod themes;
 pub mod timeline;
