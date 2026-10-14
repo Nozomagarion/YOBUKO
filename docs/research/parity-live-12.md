@@ -102,6 +102,8 @@ Suhina is pre-alpha with milestones M0-M2, M5 done and M3, M4, M6, M8 in progres
   - MIDI controllers play the armed tracks' instruments live, with the sustain pedal (#264).
   - While a track is armed the engine keeps one block ahead instead of two, so a key sounds
     within about 5 ms plus the device at 128 frames, and Settings › Audio says how long (#265).
+  - Each track chooses the MIDI port and channel it hears, so two controllers play two armed
+    tracks each its own (#278).
 
 ### Three places the repository's own docs read better than the code
 
