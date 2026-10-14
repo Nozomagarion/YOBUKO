@@ -3,7 +3,7 @@ description: How the browser behaves: places, categories, search, the tree, prev
 read_when: browser, library, samples, drag from the browser, drop files, preview, audition, search, folders, pinned, recent, colour tags, track.add, clip.addFiles, library commands, preview.play, MIDI file import, .mid, presets, .syx, new track, empty area
 type: spec
 status: draft
-last_verified: 2026-10-13
+last_verified: 2026-10-14
 covers:
   - crates/library/**
   - crates/media/src/midi.rs
@@ -118,8 +118,10 @@ then by name. Each row shows the folder it is in after the name.
 
 **Rows:** a chevron for what opens, the type icon, the name, the colour tag dots after it and
 on the right the duration of a sample (`0:04.2`, read when the row is first shown) or the kind
-of a device ("instrument", "effect", the plug-in's format). A folder opens and closes with a
-click on its chevron or a double-click; its contents are read from disk when it opens, sorted
+of a device ("instrument", "effect", the plug-in's format). A heading (*Instruments*,
+*Effects*, *Plug-ins*, a vendor) opens and closes with one click anywhere on it, its chevron
+included. A folder opens and closes with a click on its chevron or a double-click; a click
+elsewhere on it only selects it. Its contents are read from disk when it opens, sorted
 folders first then by name (natural order: "Kick 2" before "Kick 10"). A preset bank opens
 into its 32 voices.
 

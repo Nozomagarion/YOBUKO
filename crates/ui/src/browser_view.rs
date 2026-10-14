@@ -657,10 +657,12 @@ fn results_view(
             out.add = vec![row.item.clone()];
         }
     }
-    // A click on a chevron opens; a click elsewhere on a folder only selects it.
+    // A click on a chevron opens; a click elsewhere on a folder only selects it. A heading opens
+    // with a click anywhere, which `click_row` did already, so it is not toggled twice.
     if let Some((index, _)) = clicked
         && let Some(row) = rows.get(index)
         && row.opens
+        && row.item.kind != ItemKind::Heading
         && ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| p.x < area.left() + 16.0 + row.depth as f32 * INDENT)
     {
         state.toggle(&row.item.key);

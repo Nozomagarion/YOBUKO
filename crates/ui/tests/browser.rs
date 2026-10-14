@@ -108,6 +108,29 @@ fn double_click(harness: &mut Harness<'static, App>, label: &str) {
     harness.run();
 }
 
+/// Presses at `at` and lets go a frame later, like a mouse click.
+fn click_at(harness: &mut Harness<'static, App>, at: Pos2) {
+    harness.hover_at(at);
+    harness.run();
+    harness.drag_at(at);
+    harness.step();
+    harness.drop_at(at);
+    harness.step();
+    harness.run();
+}
+
+/// Where the chevron of a top-level row is drawn.
+fn chevron_of(harness: &Harness<'static, App>, label: &str) -> Pos2 {
+    let rect = harness.get_by_label(label).rect();
+    Pos2::new(rect.left() + 9.0, rect.center().y)
+}
+
+/// Where the name of a top-level row is drawn.
+fn title_of(harness: &Harness<'static, App>, label: &str) -> Pos2 {
+    let rect = harness.get_by_label(label).rect();
+    Pos2::new(rect.left() + 40.0, rect.center().y)
+}
+
 /// Steps the window until `done` holds (a drop decodes its samples on another thread).
 fn until(harness: &mut Harness<'static, App>, done: impl Fn(&App) -> bool) -> bool {
     let end = Instant::now() + Duration::from_secs(10);
@@ -139,6 +162,53 @@ fn the_tree_lists_devices_and_folders_and_opens_them() {
     double_click(&mut harness, &row("Drums"));
     harness.run();
     assert!(harness.query_by_label(&row("Kick Hard.wav")).is_some());
+    let _ = std::fs::remove_dir_all(&settings);
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn a_click_on_a_headings_chevron_opens_it_once_and_a_second_closes_it() {
+    let (settings, folder) = (temp("heading-chevron-settings"), temp("heading-chevron"));
+    pack(&folder);
+    let mut harness = window(&settings, &folder);
+    let at = chevron_of(&harness, &row("Effects"));
+    click_at(&mut harness, at);
+    assert!(harness.query_by_label(&row("Overdrive")).is_some(), "the section stays open");
+    click_at(&mut harness, at);
+    assert!(harness.query_by_label(&row("Overdrive")).is_none(), "a second click closes it");
+    let _ = std::fs::remove_dir_all(&settings);
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn a_click_on_a_headings_title_opens_it_once_and_a_second_closes_it() {
+    let (settings, folder) = (temp("heading-title-settings"), temp("heading-title"));
+    pack(&folder);
+    let mut harness = window(&settings, &folder);
+    let at = title_of(&harness, &row("Effects"));
+    click_at(&mut harness, at);
+    assert!(harness.query_by_label(&row("Overdrive")).is_some(), "the section stays open");
+    click_at(&mut harness, at);
+    assert!(harness.query_by_label(&row("Overdrive")).is_none(), "a second click closes it");
+    let _ = std::fs::remove_dir_all(&settings);
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn a_click_on_a_folders_chevron_opens_it_and_on_its_title_only_selects_it() {
+    let (settings, folder) = (temp("folder-chevron-settings"), temp("folder-chevron"));
+    pack(&folder);
+    let mut harness = window(&settings, &folder);
+    let name = row(&folder.file_name().unwrap().to_string_lossy());
+    let title = title_of(&harness, &name);
+    click_at(&mut harness, title);
+    assert!(harness.query_by_label(&row("Groove.mid")).is_none(), "a click on the title does not open it");
+    assert_eq!(harness.state().browser.selected().len(), 1, "it selects it");
+    let at = chevron_of(&harness, &name);
+    click_at(&mut harness, at);
+    assert!(harness.query_by_label(&row("Groove.mid")).is_some(), "the folder stays open");
+    click_at(&mut harness, at);
+    assert!(harness.query_by_label(&row("Groove.mid")).is_none(), "a second click closes it");
     let _ = std::fs::remove_dir_all(&settings);
     let _ = std::fs::remove_dir_all(&folder);
 }
