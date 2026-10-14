@@ -17,6 +17,20 @@ use suhina_ui::{App, theme};
 
 const SIZE: (f32, f32) = (1280.0, 800.0);
 
+/// A file dropped on the window from the system in a test.
+#[derive(Debug)]
+struct TestFile(PathBuf);
+
+impl egui::DroppedFile for TestFile {
+    fn path(&self) -> &Path {
+        &self.0
+    }
+
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        Ok(Vec::new())
+    }
+}
+
 fn temp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("suhina-browser-ui-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -129,6 +143,19 @@ fn chevron_of(harness: &Harness<'static, App>, label: &str) -> Pos2 {
 fn title_of(harness: &Harness<'static, App>, label: &str) -> Pos2 {
     let rect = harness.get_by_label(label).rect();
     Pos2::new(rect.left() + 40.0, rect.center().y)
+}
+
+/// Drags `path` from the system over the window to `at` and drops it there, as the windowing
+/// layer reports it: hovered files for a frame, then the dropped file.
+fn system_drop(harness: &mut Harness<'static, App>, path: &Path, at: Pos2) {
+    harness.hover_at(at);
+    harness.run();
+    harness.input_mut().hovered_files.push(egui::HoveredFile { path: Some(path.into()), ..Default::default() });
+    harness.step();
+    // The windowing layer stops reporting them as hovered when they are dropped.
+    harness.input_mut().hovered_files.clear();
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(TestFile(path.into())));
+    harness.step();
 }
 
 /// Steps the window until `done` holds (a drop decodes its samples on another thread).
@@ -302,6 +329,95 @@ fn a_midi_file_dragged_onto_a_slot_becomes_a_clip_there() {
     };
     assert!(until(&mut harness, keys_clip), "the clip is in Keys' first slot");
     assert!(harness.state().browser.drag.is_none());
+    let _ = std::fs::remove_dir_all(&settings);
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn a_midi_file_dropped_from_the_system_onto_a_slot_becomes_a_clip_there() {
+    let (settings, folder) = (temp("system-slot-settings"), temp("system-slot"));
+    pack(&folder);
+    let mut harness = window(&settings, &folder);
+    let to = harness.get_by_label("Stop Keys (scene 1)").rect().center();
+    system_drop(&mut harness, &folder.join("Groove.mid"), to);
+    let keys_clip = |app: &App| {
+        app.session().is_some_and(|s| {
+            let p = s.project();
+            let keys = p.tracks.iter().find(|t| t.name == "Keys").map(|t| t.id);
+            p.launcher.columns.iter().find(|c| Some(c.track) == keys).and_then(|c| c.slots[0].clip.as_ref()).is_some()
+        })
+    };
+    assert!(until(&mut harness, keys_clip), "the clip is in Keys' first slot");
+    assert!(!matches!(harness.state().status(), suhina_ui::Status::Error(_)), "no error");
+    let _ = std::fs::remove_dir_all(&settings);
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn a_sample_dropped_from_the_system_onto_the_empty_space_makes_an_audio_track() {
+    let (settings, folder) = (temp("system-empty-settings"), temp("system-empty"));
+    pack(&folder);
+    let mut harness = window(&settings, &folder);
+    let tracks = |app: &App| app.session().map_or(0, |s| s.project().tracks.len());
+    let before = tracks(harness.state());
+    let to = harness.get_by_label("+ Audio track").rect().center() + egui::vec2(0.0, 40.0);
+    system_drop(&mut harness, &folder.join("Loop 120bpm.wav"), to);
+    assert!(until(&mut harness, |app| tracks(app) == before + 1), "a new track");
+    let session = harness.state().session().unwrap();
+    assert!(session.project().tracks.iter().any(|t| t.name == "Loop 120bpm" && t.content.audio));
+    let _ = std::fs::remove_dir_all(&settings);
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn a_midi_file_dropped_from_the_system_onto_an_arrangement_lane_lands_on_that_track() {
+    let (settings, folder) = (temp("system-lane-settings"), temp("system-lane"));
+    pack(&folder);
+    let mut harness = window(&settings, &folder);
+    harness.state_mut().do_action("view.toggle", &mut Vec::new());
+    harness.run();
+    let header = harness.get_by_label("Track Keys").rect();
+    // The lane is beside the header, on the side away from the window's edge.
+    let x = if header.center().x < SIZE.0 / 2.0 { header.right() + 60.0 } else { header.left() - 60.0 };
+    system_drop(&mut harness, &folder.join("Groove.mid"), Pos2::new(x, header.center().y));
+    let landed = |app: &App| {
+        app.session().is_some_and(|s| {
+            let p = s.project();
+            let keys = p.tracks.iter().find(|t| t.name == "Keys").map(|t| t.id);
+            let groove = |c: &suhina_engine::model::Clip| {
+                p.contents.iter().any(|x| x.id == c.content && x.name.starts_with("Groove"))
+            };
+            p.tracks.len() == demo_project().tracks.len()
+                && p.arrangement.lanes.iter().any(|l| l.track == keys && l.clips.iter().any(groove))
+        })
+    };
+    assert!(until(&mut harness, landed), "a Groove clip on Keys, no new track");
+    let _ = std::fs::remove_dir_all(&settings);
+    let _ = std::fs::remove_dir_all(&folder);
+}
+
+#[test]
+fn system_files_without_a_pointer_position_go_where_enter_puts_them_and_projects_still_open() {
+    let (settings, folder) = (temp("system-nopos-settings"), temp("system-nopos"));
+    pack(&folder);
+    let mut harness = window(&settings, &folder);
+    let tracks = |app: &App| app.session().map_or(0, |s| s.project().tracks.len());
+    let before = tracks(harness.state());
+    // The pointer is outside the window, as during an OS drag that reports no position.
+    harness.remove_cursor();
+    harness.run();
+    let wav = folder.join("Loop 120bpm.wav");
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(TestFile(wav)));
+    harness.step();
+    assert!(until(&mut harness, |app| tracks(app) == before + 1), "no track selected: a new track");
+
+    let song = folder.join("Song.suhina");
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(TestFile(song)));
+    harness.step();
+    harness.run();
+    let asked = harness.state_mut().take_open_request().is_some()
+        || harness.query_by_label_contains("Open Song.suhina").is_some();
+    assert!(asked, "a project dropped from the system still opens");
     let _ = std::fs::remove_dir_all(&settings);
     let _ = std::fs::remove_dir_all(&folder);
 }

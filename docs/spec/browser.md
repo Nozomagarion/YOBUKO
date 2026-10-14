@@ -256,6 +256,23 @@ changes.
 
 **One undo step:** everything one drop does (new tracks, new scenes, clips) is undone together.
 
+### Files from the system
+
+Samples, Stems files and MIDI files dragged from the system's file manager onto the window
+are a drag into the project like one from the browser, with the same targets, label, Ctrl and
+results (`clip.addFiles`, one undo step; files that cannot be read are `skipped`). While they
+hover the window, the target under the pointer is outlined and the label says what a drop does.
+
+Where the pointer is during the drag depends on the system: some report no pointer position
+while files are dragged over a window. Then nothing is outlined, and a drop goes where the
+pointer was when it was dropped; when that is not known either, the files go where Enter puts
+them (*Adding without dragging*). A drop outside the views (on the browser, the bars) says in
+the status bar where files can go. Without an open project nothing is added.
+
+Folders, projects (`.suhina`, `.als`) and themes (`.json`, `.zip`) dropped on the window are
+not a drag into the project: a folder joins the browser (*Sidebar*), a project opens and a theme
+is added. Other files are an error in the status bar.
+
 ### Built-in effects and instruments, presets and plug-ins
 
 | Dropped on | Result |
