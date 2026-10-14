@@ -186,6 +186,9 @@ pub struct Settings {
     pub audio_buffer: u32,
     /// WASAPI exclusive mode; off, so other programs stay heard.
     pub audio_exclusive: bool,
+    /// The MIDI input ports turned off, by name (Settings › MIDI, `midi.setInput`); every
+    /// other port is on. One `midi_input_off` line each, since a port's name may hold commas.
+    pub midi_inputs_off: Vec<String>,
     /// The size of the whole window, in percent (`ZOOMS`): everything is drawn this much larger
     /// or smaller.
     pub zoom: u32,
@@ -224,6 +227,7 @@ impl Default for Settings {
             audio_sample_rate: 0,
             audio_buffer: 0,
             audio_exclusive: false,
+            midi_inputs_off: Vec::new(),
             zoom: ZOOM,
         }
     }
@@ -329,7 +333,7 @@ impl Settings {
                 Side::Right => "right",
             },
             drop = if self.drop_separate { "separate" } else { "one_track" },
-        )
+        ) + &self.midi_inputs_off.iter().map(|port| format!("midi_input_off = {port}\n")).collect::<String>()
     }
 
     /// Reads a settings file. Unknown keys and values are skipped with a warning and leave the
@@ -414,6 +418,11 @@ impl Settings {
                     settings.audio_buffer = frames.parse().unwrap_or(0);
                 }
                 ("audio_exclusive", "on" | "off") => settings.audio_exclusive = value == "on",
+                ("midi_input_off", port) if !port.is_empty() => {
+                    if !settings.midi_inputs_off.iter().any(|p| p == port) {
+                        settings.midi_inputs_off.push(port.to_string());
+                    }
+                }
                 _ => {
                     warnings.push(format!("settings line {}: {key} = {value} is not a known setting", number + 1));
                 }
@@ -480,6 +489,7 @@ mod tests {
             audio_sample_rate: 48_000,
             audio_buffer: 256,
             audio_exclusive: true,
+            midi_inputs_off: vec!["Keys, port 1".into(), "Pads:Pads MIDI 1 20:0".into()],
             zoom: 130,
             map_window: true,
             map_window_rect: Some([-1600, 40, 900, 700]),

@@ -32,8 +32,9 @@ pub enum CommandKind {
     /// The browser's library: folders, search, pins, recent items, tags (ADR 0012); belongs
     /// to Suhina, not to one project. Runs on [`crate::Projects`].
     Library,
-    /// Lists or chooses the audio output (host, device, sample rate, buffer size) or reports
-    /// on it; belongs to Suhina, not to one project. Runs on [`crate::Projects`].
+    /// Lists or chooses the audio output (host, device, sample rate, buffer size) or the MIDI
+    /// inputs, or reports on them; belongs to Suhina, not to one project. Runs on
+    /// [`crate::Projects`].
     Audio,
 }
 
@@ -203,7 +204,7 @@ static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "project.tracks",
-        label: "List tracks with id, name, volume (dB), pan, mute and devices",
+        label: "List tracks with id, name, volume (dB), pan, mute, whether armed, and devices",
         params: &[],
         kind: CommandKind::Read,
         run: tracks,
@@ -464,6 +465,17 @@ static COMMANDS: &[CommandSpec] = &[
         ],
         kind: CommandKind::Transport,
         run: set_metronome,
+    },
+    CommandSpec {
+        id: "track.setArm",
+        label: "Arm a track or disarm it: an armed track's instrument plays what the MIDI inputs play (midi.inputs), whether the transport runs or not. Arming is not an edit: it is not undone and not saved",
+        params: &[
+            TRACK,
+            param("armed", ParamType::Bool, "true arms the track"),
+            optional("exclusive", ParamType::Bool, "true also disarms every other track (false by default)"),
+        ],
+        kind: CommandKind::Transport,
+        run: set_arm,
     },
     CommandSpec {
         id: "clip.launch",
@@ -781,6 +793,7 @@ fn tracks(session: &mut Session, _: &Value) -> Result<Value, CommandError> {
                     "volume_db": channel.map(|c| to_db(c.volume)),
                     "pan": channel.map(|c| c.pan),
                     "mute": channel.map(|c| c.mute),
+                    "armed": session.is_armed(t.id),
                     "devices": channel.map(|c| c.devices.iter().map(|d| d.name.clone()).collect::<Vec<_>>()),
                     "arrangement_clips": clips,
                 })
@@ -1342,6 +1355,18 @@ fn set_solo(session: &mut Session, params: &Value) -> Result<Value, CommandError
         }
     }
     Ok(json!({ "solo": solo }))
+}
+
+fn set_arm(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let armed = params.get("armed").and_then(Value::as_bool).ok_or("armed must be true or false")?;
+    let exclusive = match params.get("exclusive") {
+        None => false,
+        Some(v) => v.as_bool().ok_or("exclusive must be true or false")?,
+    };
+    let track = track_id(&session.project, params)?;
+    session.set_armed(track, armed, exclusive);
+    let tracks: Vec<u32> = session.armed().iter().map(|t| t.0).collect();
+    Ok(json!({ "armed": armed, "armed_tracks": tracks, "playing": session.player().is_some() }))
 }
 
 fn set_metronome(session: &mut Session, params: &Value) -> Result<Value, CommandError> {

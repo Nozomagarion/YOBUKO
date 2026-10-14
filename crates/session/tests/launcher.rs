@@ -113,7 +113,8 @@ fn advance(renderer: &mut Renderer, frames: usize) {
 #[test]
 fn transport_commands_need_a_player() {
     let mut session = Session::new(project());
-    for spec in commands().iter().filter(|c| c.kind == CommandKind::Transport) {
+    // Arming is kept by the session and told to each new player, so it needs none (ADR 0017).
+    for spec in commands().iter().filter(|c| c.kind == CommandKind::Transport && c.id != "track.setArm") {
         let params = json!({ "track": "Drums", "scene": 1, "value": "1 bar", "on": true, "beats": 4.0 });
         let params: Value = params
             .as_object()

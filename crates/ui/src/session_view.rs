@@ -590,7 +590,20 @@ fn mixer_strip(
         Vec2::new(inner.width(), theme::TOGGLE),
     );
     let label = if column.mute { format!("Turn {} on", column.name) } else { format!("Turn {} off", column.name) };
-    let solo = Rect::from_min_max(Pos2::new(toggle.right() - (toggle.width() - 2.0) / 3.0, toggle.top()), toggle.max);
+    // Track on takes two thirds and solo one; on a track that can be armed, solo and arm take a
+    // quarter each.
+    let small = if column.armable { (toggle.width() - 4.0) / 4.0 } else { (toggle.width() - 2.0) / 3.0 };
+    let toggle = if column.armable {
+        let arm = Rect::from_min_max(Pos2::new(toggle.right() - small, toggle.top()), toggle.max);
+        if let Some(action) = widgets::arm_button(ui, painter, arm, id.with("arm"), track.0, &column.name, column.armed)
+        {
+            actions.push(action);
+        }
+        Rect::from_min_max(toggle.min, Pos2::new(arm.left() - 2.0, toggle.bottom()))
+    } else {
+        toggle
+    };
+    let solo = Rect::from_min_max(Pos2::new(toggle.right() - small, toggle.top()), toggle.max);
     let toggle = Rect::from_min_max(toggle.min, Pos2::new(solo.left() - 2.0, toggle.bottom()));
     if let Some(action) = widgets::solo_button(ui, painter, solo, id.with("solo"), track.0, &column.name, column.solo) {
         actions.push(action);

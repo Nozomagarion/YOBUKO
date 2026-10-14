@@ -94,6 +94,12 @@ pub enum LaunchCommand {
         on: bool,
         gain: Option<f32>,
     },
+    /// Arms or disarms a track: an armed track's instrument plays the notes of the live input
+    /// (ADR 0017). Disarming lets go of the keys held down.
+    SetArmed {
+        track: suhina_model::TrackId,
+        armed: bool,
+    },
 }
 
 /// What a column is waiting to do, as reported by [`LauncherMonitor::column`].
@@ -209,9 +215,17 @@ pub struct Controller {
     pub(crate) preview: crate::preview::PreviewSender,
     pub(crate) preview_monitor: Arc<crate::preview::PreviewMonitor>,
     pub(crate) cpu_monitor: Arc<crate::cpu::CpuMonitor>,
+    /// The live-note queue's sending end, until taken for the MIDI input (ADR 0017).
+    live: Option<crate::live::LiveSender>,
 }
 
 impl Controller {
+    /// The sending end of the renderer's live-note queue, for the thread a MIDI driver calls
+    /// back on; `None` once taken.
+    pub fn take_live_input(&mut self) -> Option<crate::live::LiveSender> {
+        self.live.take()
+    }
+
     /// Queues a command for the start of the next audio block. Fails only if the queue is full,
     /// which means the renderer is not running.
     pub fn send(&mut self, command: LaunchCommand) -> Result<(), String> {
@@ -638,6 +652,7 @@ impl Renderer {
             preview: self.preview.sender(),
             preview_monitor: Arc::clone(&self.preview.monitor),
             cpu_monitor: Arc::clone(&self.cpu.monitor),
+            live: Some(self.live.sender()),
         }
     }
 
@@ -662,6 +677,10 @@ impl Renderer {
             LaunchCommand::Stop => self.stop_transport(false),
             LaunchCommand::StopHere => self.stop_transport(true),
             LaunchCommand::SetPosition { beat } => self.set_position(beat),
+            LaunchCommand::SetArmed { track, armed } => {
+                let frame = self.block_frame;
+                self.live.set_armed(&mut self.graph.chains, track, armed, frame);
+            }
             LaunchCommand::SetMetronome { on, gain } => {
                 self.metronome.set(on, gain);
                 self.graph.launcher.monitor.metronome.store(self.metronome.on(), Ordering::Relaxed);

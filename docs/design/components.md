@@ -3,7 +3,7 @@ description: Measurements, states and tokens of every UI component, from the min
 read_when: widget sizes, clip slot states, value field, slider, knob, toggle, meter, track header levels, device panel, piano roll layout
 type: spec
 status: draft
-last_verified: 2026-10-13
+last_verified: 2026-10-14
 covers:
   - crates/ui/src/theme.rs
   - crates/ui/src/session_view.rs
@@ -153,10 +153,10 @@ part is empty (the main track's strip is planned). From top to bottom:
 | Knob row | 22 px: the pan knob at the left. Sends (planned) as more knobs in the same row |
 | Knob | 22 px; circle r 9, `control.background` fill, 1 px `text.hint` stroke; pointer 1.5 px from centre to r 8; travel −135° … +135°; pan pointer `text.primary`, sends `#C9C4BB` |
 | Values row | 12 px, 4 px under the knobs: pan left (10 px mono `text.secondary`, "C", "15L"), volume right (10 px mono `#C9C4BB`, dragged up or down) |
-| Toggles | 18 px at the bottom: track on (two thirds, the track number, or the return's letter, in 10 px mono) and solo (one third, "S" in 10 px), 2 px apart; arm (planned) |
+| Toggles | 18 px at the bottom: track on (two thirds, the track number, or the return's letter, in 10 px mono) and solo (one third, "S" in 10 px), 2 px apart; on a track that plays notes, solo and arm take a quarter each and track on the rest |
 | Track on | On: `#C9C4BB` with `window.background` text. Off: `control.background` with `text.hint` |
 | Solo | On: `accent` with `window.background` text; off: `control.background`, `text.secondary`. A click solos the track alone; Ctrl (Cmd) adds it to the tracks soloed already |
-| Arm | (planned) Off: 1.2 px `text.secondary` ring. On: `#3A2B2A` background, filled red dot |
+| Arm | Off: a 1.2 px `text.secondary` ring on `control.background` (hover `control.hoverBackground`). On: `recording.background`, the ring filled in `recording`. A click arms the track alone (`track.setArm`, exclusive); Ctrl (Cmd) adds it to the tracks armed already. Only tracks that play notes have one, until audio inputs come |
 | Meter | (planned) Two 4 px bars, 2 px apart, on `window.background`, beside the values; `meter.normal`, the top 12 % `meter.hot` when above −3 dB |
 
 ## Arrangement view
@@ -190,7 +190,7 @@ a lane between 20 and 26 px shows the first row clipped.
 
 | Track height | Shows |
 |---|---|
-| ≥ 26 px | Row 1, 15 px: track on (30 px, the track number in 10 px mono), solo (18 px, "S"), a 6 px colour square, the name in 11 px; arm (planned) |
+| ≥ 26 px | Row 1, 15 px: track on (30 px, the track number in 10 px mono), solo (18 px, "S"), arm (18 px, on a track that plays notes), a 6 px colour square, the name in 11 px |
 | ≥ 48 px | Row 2, 6 px under row 1: the volume field (the rest of the row) and the pan field (46 px), 4 px apart |
 | ≥ 70 px | Routing, 4 px under row 2: "→" and the output dropdown ("Main" or a group track, `track.setOutput`); input and channel dropdowns and monitor In / Auto / Off (planned, with recording) |
 | ≥ 114 px | (planned) Send fields, one per return, labelled "Send A", "Send B", once the engine plays sends; routing then moves below them |
@@ -273,6 +273,7 @@ the list; each setting is a 34 px row with its name (11 px `text.primary`), a no
 | Audio › Output | Buffer size | Default (1024 frames), then the device's sizes with their length in ms |
 | Audio › Output | Exclusive mode | On, Off (default): WASAPI only; the note says when the device does not allow it |
 | Audio › Now | Output, Latency | Read only: the device in use, and its measured latency and underruns; "List devices again" (120 px) on the Output row. Changes on this page run `audio.setOutput` |
+| Audio › MIDI inputs | Each MIDI input port | On (default), Off: the note says whether it plays the armed tracks or why it could not be opened; "None" when no controller is connected. Listed again every 2 s while the page shows; runs `midi.setInput` |
 
 **Interface › Theme**: the themes as 20 px rows in a list that scrolls after eight, the user's
 own first and then those that come with Suhina, the name on the left and the file name or

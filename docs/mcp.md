@@ -1,13 +1,14 @@
 ---
 description: The MCP server for agents: tools, file roots, errors and how to run it
-read_when: MCP, agents, audio output, audio device, buffer size, ASIO, project_open, command_run, file roots, rmcp, suhina-cli mcp, several projects, project id, plug-in commands, device commands, library commands, add samples, track.add, clip.addFiles, preview
+read_when: MCP, agents, audio output, MIDI input, arm, audio device, buffer size, ASIO, project_open, command_run, file roots, rmcp, suhina-cli mcp, several projects, project id, plug-in commands, device commands, library commands, add samples, track.add, clip.addFiles, preview
 type: system
 status: current
-last_verified: 2026-10-13
+last_verified: 2026-10-14
 covers:
   - crates/automation/src/server.rs
   - crates/automation/src/workspace.rs
   - crates/session/src/audio.rs
+  - crates/session/src/midi.rs
   - crates/automation/src/render.rs
   - crates/engine/src/cpu.rs
   - apps/suhina-cli/src/main.rs
@@ -69,6 +70,15 @@ suhina-cli mcp --read-root ./projects --write-root ./renders [--audio]
   now: `host`, `device`, `sample_rate`, `buffer_frames` (the device's, measured),
   `engine_block`, `exclusive`, `latency_ms` (engine to speaker, measured), `underruns` and
   `failed`. Without `--audio`, `audio.devices` returns an error.
+
+- **MIDI controllers.** With `--audio`, the server also opens every MIDI input port
+  ([ADR 0017](decisions/0017-inputs-and-latency.md)). `midi.inputs` lists them with `enabled`,
+  `open` and the `error` a port could not be opened with, and whether the playing engine takes
+  their notes (`connected`); `midi.setInput {port, enabled}` turns one off or on again.
+  `track.setArm {track, armed, exclusive?}` arms a track: its instrument plays what the ports
+  play, transport running or not. Arming is not an edit (no undo step, not saved) and works
+  before an engine plays; `project.tracks` says which tracks are `armed`. Without `--audio`,
+  `midi.*` returns an error.
 
 - **Play position.** `transport.setPosition {beats}` moves the play start marker, where
   `transport.play` starts (a jump while playing). `transport.stop` returns the playhead to the

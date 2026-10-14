@@ -187,6 +187,8 @@ pub struct App {
     /// The plug-in loading dialog was sent to the background for the project shown now.
     plugin_dialog_hidden: bool,
     about: About,
+    /// When Settings › Audio last listed the MIDI ports, so a controller plugged in shows up.
+    midi_listed: Option<std::time::Instant>,
     /// The themes to pick from; the settings say which is in use.
     themes: Themes,
     /// The project dialog (File › New or open) while it shows, and what it lists.
@@ -262,6 +264,7 @@ impl App {
             settings_open: false,
             plugin_dialog_hidden: false,
             about: About::default(),
+            midi_listed: None,
             themes: Themes::default(),
             project_dialog: None,
             project_lists: Lists::default(),
@@ -839,7 +842,8 @@ impl App {
                     .iter()
                     .find(|c| c.id == action.id)
                     .is_some_and(|c| matches!(c.kind, CommandKind::Edit | CommandKind::History));
-                if changes_project {
+                // Arming changes no project, but the track headers show it.
+                if changes_project || action.id == "track.setArm" {
                     self.revision += 1;
                 }
                 if action.id == "launcher.setQuantization"
@@ -907,7 +911,13 @@ impl App {
         let scale = if self.settings.waveform_db { crate::waveform::Scale::Db } else { crate::waveform::Scale::Linear };
         crate::waveform::set_scale(ui.ctx(), scale);
 
-        let grid = self.session().map(|s| Grid::build(s.project(), s.player().map(|p| p.monitor())));
+        let grid = self.session().map(|s| {
+            let mut grid = Grid::build(s.project(), s.player().map(|p| p.monitor()));
+            for column in &mut grid.columns {
+                column.armed = s.is_armed(column.track);
+            }
+            grid
+        });
         let progress = grid.as_ref().map(|g| self.progress(g)).unwrap_or_default();
         // The CPU load the control bar shows, from the engine's monitor, in per mille.
         let cpu = self.session().and_then(|s| s.player()).map(|p| p.cpu_monitor().load_milli());
@@ -990,6 +1000,9 @@ impl App {
                                 }
                                 _ => {
                                     let mut timeline = Timeline::build(session.project(), monitor);
+                                    for lane in &mut timeline.lanes {
+                                        lane.armed = session.is_armed(lane.track);
+                                    }
                                     timeline.waveforms = self.waveforms.clone();
                                     timeline
                                 }
@@ -1324,6 +1337,40 @@ impl App {
             }
             Err(e) => self.status = Status::Error(e.0),
         }
+        self.list_midi_inputs();
+    }
+
+    /// Lists the MIDI input ports for Settings › Audio (`midi.inputs`).
+    fn list_midi_inputs(&mut self) {
+        self.midi_listed = Some(std::time::Instant::now());
+        self.about.midi_inputs = self.projects.execute("midi.inputs", &json!({})).map_err(|e| e.0).map(|listed| {
+            listed["inputs"]
+                .as_array()
+                .map(|ports| {
+                    ports
+                        .iter()
+                        .map(|p| settings_view::MidiPort {
+                            name: p["name"].as_str().unwrap_or_default().to_string(),
+                            enabled: p["enabled"].as_bool().unwrap_or(false),
+                            open: p["open"].as_bool().unwrap_or(false),
+                            error: p["error"].as_str().map(String::from),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        });
+    }
+
+    /// Turns a MIDI input port on or off (`midi.setInput`) and keeps the choice in the settings.
+    fn set_midi_input(&mut self, port: &str, enabled: bool) {
+        match self.projects.execute("midi.setInput", &json!({ "port": port, "enabled": enabled })) {
+            Ok(_) => {
+                self.settings.midi_inputs_off = self.projects.midi_inputs_off();
+                self.settings_changed = true;
+            }
+            Err(e) => self.status = Status::Error(e.0),
+        }
+        self.list_midi_inputs();
     }
 
     /// Plays on the output `choice` names from now on (`audio.setOutput`): the active project's
@@ -1391,8 +1438,11 @@ impl App {
         let tag_limit = self.projects.file_library_mut().tag_limit();
         self.about.audio_live = self.session().and_then(Session::player).and_then(suhina_session::Player::output_info);
         if self.page.page == settings_view::Page::Audio {
-            // The latency and underruns change while it plays.
+            // The latency and underruns change while it plays, and controllers come and go.
             ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+            if self.midi_listed.is_none_or(|t| t.elapsed() >= std::time::Duration::from_secs(2)) {
+                self.list_midi_inputs();
+            }
         }
         let sources = Sources {
             about: &self.about,
@@ -1425,6 +1475,9 @@ impl App {
         }
         if let Some(choice) = outcome.audio_output.clone() {
             self.choose_output(&choice);
+        }
+        if let Some((port, enabled)) = outcome.midi_input.clone() {
+            self.set_midi_input(&port, enabled);
         }
         if outcome.changed {
             motion::set_enabled(ui.ctx(), self.settings.animations);

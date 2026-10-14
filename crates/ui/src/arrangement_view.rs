@@ -1351,7 +1351,12 @@ fn track_header(
     let row = Rect::from_min_size(inner.min, Vec2::new(inner.width(), HEADER_ROW));
     let toggle = Rect::from_min_size(row.min, Vec2::new(ON_TOGGLE, HEADER_ROW));
     let solo = Rect::from_min_size(Pos2::new(toggle.right() + 2.0, row.top()), Vec2::new(SOLO, HEADER_ROW));
-    let square = Rect::from_min_size(Pos2::new(solo.right() + PAD, row.center().y - 3.0), Vec2::splat(6.0));
+    // A track that can be armed has its arm button after solo, as wide.
+    let arm = lane
+        .armable
+        .then(|| Rect::from_min_size(Pos2::new(solo.right() + 2.0, row.top()), Vec2::new(SOLO, HEADER_ROW)));
+    let square =
+        Rect::from_min_size(Pos2::new(arm.unwrap_or(solo).right() + PAD, row.center().y - 3.0), Vec2::splat(6.0));
     painter.rect_filled(square, 0.0, if lane.mute { rgb(lane.color).gamma_multiply(0.55) } else { rgb(lane.color) });
     let name = Rect::from_min_max(Pos2::new(square.right() + PAD, row.top()), row.max);
     let name_color = if lane.mute { theme::text_hint() } else { theme::text_primary() };
@@ -1359,6 +1364,12 @@ fn track_header(
     if solo.intersects(clip)
         && let Some(action) =
             widgets::solo_button(ui, painter, solo, id.with("solo"), lane.track.0, &lane.name, lane.solo)
+    {
+        actions.push(action);
+    }
+    if let Some(arm) = arm.filter(|a| a.intersects(clip))
+        && let Some(action) =
+            widgets::arm_button(ui, painter, arm, id.with("arm"), lane.track.0, &lane.name, lane.armed)
     {
         actions.push(action);
     }

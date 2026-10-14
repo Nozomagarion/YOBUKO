@@ -118,7 +118,10 @@ Per track, top to bottom: pan, volume with numeric field and meter, track on/off
 track number), solo, arm (MIDI and audio tracks). **Solo:** while any track is soloed, only the
 soloed tracks are heard, with the groups they play into, the tracks inside a soloed group, and
 the return tracks (so effects stay audible); mute still wins. A click solos one track and ends
-the other solos; with a modifier (Ctrl) it adds to them (`track.setSolo`, `exclusive`). MIDI tracks without an instrument show no
+the other solos; with a modifier (Ctrl) it adds to them (`track.setSolo`, `exclusive`). **Arm:**
+an armed track's instrument plays what the MIDI controllers play; a click arms one track and
+disarms the others, Ctrl adds (`track.setArm`, `exclusive`; [ADR 0017](../decisions/0017-inputs-and-latency.md)).
+Suhina shows arm on tracks that play notes only, until audio inputs come. MIDI tracks without an instrument show no
 volume, pan or sends, only the MIDI meter. The height of this section is a saved view setting
 **(observed: `ViewStateSessionMixerVolumeSectionHeight`)**.
 

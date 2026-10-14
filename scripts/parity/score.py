@@ -37,7 +37,8 @@ COMMANDS = 92
 CHAPTERS = [
     (1, "Welcome to Live", 1, None, "n/a", "Front matter."),
     (2, "First Steps (installation, Learn/Info view, Settings)", 11, 0.50, "partial",
-     "Settings pages: General, Interface, Graphics, Audio (driver/device/rate/buffer/exclusive), "
+     "Settings pages: General, Interface, Graphics, Audio (driver/device/rate/buffer/exclusive, "
+     "MIDI inputs on/off), "
      "Shortcuts, Plug-ins. Missing Link, Tempo & MIDI, File & Folder, Library, Record/Warp/Launch, "
      "Learn view, Info view."),
     (3, "Live Concepts", 27, 0.50, "partial",
@@ -81,15 +82,17 @@ CHAPTERS = [
      "Launch quantisation (none, 8 bars..1/32, triplets), scenes, stop, loop, back to arrangement, "
      "warped launched clips. Missing launch modes, legato, velocity amount, clip offset/nudge, "
      "follow actions."),
-    (17, "Routing and I/O", 22, 0.10, "absent",
-     "Only track output to main or a group (track.setOutput); track input is a model field read "
-     "from .als. No monitoring, external audio/MIDI in-out, resampling, sidechain, multi-timbral."),
+    (17, "Routing and I/O", 22, 0.15, "absent",
+     "Track output to main or a group (track.setOutput); MIDI controllers play the armed tracks "
+     "(every port, no per-track input choice). Track input is otherwise a model field read from "
+     ".als. No audio input, monitoring, MIDI out, resampling, sidechain, multi-timbral."),
     (18, "Mixing", 18, 0.30, "partial",
      "Faders, pan, mute, solo (exclusive/Ctrl), groups as buses, master, latency compensation, "
      "return tracks imported and drawn. Return tracks are silent: sends live in the model and in "
      "the .als importer only, so nothing feeds them. Missing crossfader, cue, meters, track delay."),
     (19, "Recording New Clips", 13, 0.00, "absent",
-     "No audio or MIDI recording, no arm, no overdub, no count-in, no capture MIDI."),
+     "Arming exists for playing MIDI controllers live only; no audio or MIDI recording, no "
+     "overdub, no count-in, no capture MIDI."),
     (20, "Bounce to Audio", 6, 0.15, "partial",
      "Whole-project offline render to 32-bit float WAV (CLI/MCP); no per-track or group bounce, "
      "no paste."),

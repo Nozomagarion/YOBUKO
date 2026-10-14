@@ -29,7 +29,9 @@ The gaps that matter most, in the order [ADR 0016](docs/decisions/0016-parity-ta
    [spec](docs/spec/ui-clip-editor.md)).
 2. **Automation:** device, plug-in and mixer parameters first, then tempo
    ([#109](https://github.com/suhina-daw/suhina-daw/issues/109) for plug-in parameters).
-3. **Recording and inputs:** audio and MIDI recording, arming, monitoring, count-in.
+3. **Recording and inputs:** audio and MIDI recording, audio inputs, monitoring, count-in
+   ([#263](https://github.com/suhina-daw/suhina-daw/issues/263); arming and playing from MIDI
+   controllers work).
 4. **Sends, returns, cue and level meters:** return tracks are shown but play nothing yet.
 5. **Arrangement editing:** the loop brace ([#98](https://github.com/suhina-daw/suhina-daw/issues/98)),
    locators ([#99](https://github.com/suhina-daw/suhina-daw/issues/99)), split and consolidate.
@@ -374,6 +376,14 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   going back to the chosen device when it returns
   ([#177](https://github.com/suhina-daw/suhina-daw/issues/177)), the ASIO driver's control panel
   ([#176](https://github.com/suhina-daw/suhina-daw/issues/176)).
+- **MIDI controllers** play the armed tracks' instruments, built in or plug-ins, with the
+  transport running or stopped, and with the sustain pedal
+  ([ADR 0017](docs/decisions/0017-inputs-and-latency.md)): an arm button in the Session mixer
+  and the Arrangement headers (`track.setArm`; a click arms one track, Ctrl adds), every MIDI
+  input port opened and Settings › Audio › MIDI inputs to turn one off (`midi.inputs`,
+  `midi.setInput`); a controller plugged in later is found within seconds. The latency follows
+  the buffer size. Still to do: recording, audio inputs and lower latency for live playing
+  ([#263](https://github.com/suhina-daw/suhina-daw/issues/263)).
 - Settings › Plug-ins: the folders scanned (add, remove), Scan and Rescan all in the background,
   and the plug-ins found and the files that failed.
 - Every key is the user's to change: Settings › Shortcuts and `keymap.json` bind any command

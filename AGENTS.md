@@ -80,6 +80,8 @@ crates/
   automation L3 MCP server (rmcp) over a session, file roots, WAV rendering (docs/mcp.md)
   output   L3 the audio device: lists hosts and devices (cpal; ASIO with the `asio` feature), opens the one
            chosen (WASAPI exclusive through `wasapi`), plays an engine in blocks of the chosen buffer
+  midi     L3 MIDI controllers: lists the input ports and opens them (midir); their notes play the armed
+           tracks' instruments (ADR 0017)
   ui       L3 the main window, the browser and the views (egui, ADR 0009); every change is a command
   dsp      L0 signal-processing blocks for built-in effects and instruments: smoothing, filters, crossovers, LFOs, shapers, oversampling (ADR 0004)
   device-api L0 the Device trait, parameter descriptions, contract tests every device runs

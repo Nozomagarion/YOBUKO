@@ -96,6 +96,10 @@ pub struct Lane {
     pub position: usize,
     pub mute: bool,
     pub solo: bool,
+    /// The track plays notes, so it can be armed (ADR 0017), and whether it is: the session
+    /// knows, not the project, so [`Timeline::build`] leaves it false.
+    pub armable: bool,
+    pub armed: bool,
     pub volume_db: f64,
     pub pan: f64,
     /// The group track this track plays into; `None` is the main output.
@@ -178,6 +182,8 @@ impl Timeline {
                 position,
                 mute: channel.is_some_and(|c| c.mute),
                 solo: channel.is_some_and(|c| c.solo),
+                armable: kind == ColumnKind::Track && track.content.notes,
+                armed: false,
                 volume_db: channel.map_or(0.0, |c| gain_to_db(c.volume)),
                 pan: channel.map_or(0.0, |c| c.pan),
                 output: channel

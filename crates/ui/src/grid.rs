@@ -71,6 +71,10 @@ pub struct Column {
     pub stop_queued: bool,
     pub mute: bool,
     pub solo: bool,
+    /// The track plays notes, so it can be armed to play a MIDI controller (ADR 0017), and
+    /// whether it is: the session knows, not the project, so [`Grid::build`] leaves it false.
+    pub armable: bool,
+    pub armed: bool,
     pub volume_db: f64,
     /// The track's place in the project's track order, as `track.move` counts it, and how many
     /// groups it is inside.
@@ -165,6 +169,8 @@ impl Grid {
                 stop_queued: queued == Some(Queued::Stop),
                 mute: channel.is_some_and(|c| c.mute),
                 solo: channel.is_some_and(|c| c.solo),
+                armable: kind == ColumnKind::Track && track.content.notes,
+                armed: false,
                 volume_db: channel.map_or(0.0, |c| gain_to_db(c.volume)),
                 position: index,
                 depth: crate::timeline::depth(project, track.parent),

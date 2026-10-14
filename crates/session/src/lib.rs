@@ -8,6 +8,7 @@ mod commands;
 mod devices;
 mod files;
 mod library;
+mod midi;
 mod plugins;
 mod preview;
 mod projects;
@@ -27,6 +28,7 @@ pub use blank::blank_project;
 pub use commands::{CommandKind, CommandSpec, Param, ParamType, Run, commands, parse_quantization};
 pub use files::{MAX_FILES, file_tempo};
 pub use library::{Category, Found, file_info, library_commands, search_items};
+pub use midi::{LiveInput, MidiSystem, midi_commands};
 pub use plugins::{device_plugin, plugin_commands};
 pub use projects::{MAX_OPEN_PROJECTS, ProjectId, Projects, all_commands, commands_markdown, project_commands};
 pub use rack::{
@@ -147,6 +149,11 @@ impl Player {
         &mut self.controller
     }
 
+    /// The sending end of the engine's live-note queue (ADR 0017); `None` once taken.
+    pub fn take_live_input(&mut self) -> Option<suhina_engine::LiveSender> {
+        self.controller.take_live_input()
+    }
+
     /// Hands a running plug-in's audio half to the engine for the plug-in device `key`.
     pub fn send_plugin(
         &mut self,
@@ -195,6 +202,9 @@ pub struct Session {
     audio_changed: bool,
     /// Files decoded ahead of a command that uses them (`provide_audio`), newest last.
     decoded: Vec<(String, std::sync::Arc<suhina_engine::AudioData>)>,
+    /// The armed tracks, whose instruments play the MIDI inputs (ADR 0017). Not part of the
+    /// project: arming is not undone and not saved.
+    armed: Vec<suhina_model::TrackId>,
 }
 
 /// Files kept decoded ahead of the commands that use them.
@@ -217,6 +227,7 @@ impl Session {
             audio: suhina_engine::AudioPool::new(),
             audio_changed: false,
             decoded: Vec::new(),
+            armed: Vec::new(),
         }
     }
 
@@ -334,6 +345,47 @@ impl Session {
     pub fn attach_player(&mut self, player: Player) {
         self.player = Some(player);
         self.audio_changed = false;
+        // A new engine hears the tracks armed before it.
+        let armed = self.armed();
+        if let Some(player) = self.player.as_mut() {
+            for track in armed {
+                // A full queue means an engine that does not run; it has nothing to arm.
+                let _ = player.send(suhina_engine::LaunchCommand::SetArmed { track, armed: true });
+            }
+        }
+    }
+
+    /// The armed tracks that are in the project, in the order they were armed.
+    pub fn armed(&self) -> Vec<suhina_model::TrackId> {
+        self.armed.iter().copied().filter(|id| self.project.tracks.iter().any(|t| t.id == *id)).collect()
+    }
+
+    pub fn is_armed(&self, track: suhina_model::TrackId) -> bool {
+        self.armed.contains(&track) && self.project.tracks.iter().any(|t| t.id == track)
+    }
+
+    /// Arms `track` or disarms it; `exclusive` also disarms every other track. The playing
+    /// engine hears it from its next block.
+    pub(crate) fn set_armed(&mut self, track: suhina_model::TrackId, armed: bool, exclusive: bool) {
+        let before = self.armed.clone();
+        // Tracks removed since they were armed are forgotten.
+        let tracks = &self.project.tracks;
+        self.armed.retain(|id| *id != track && !exclusive && tracks.iter().any(|t| t.id == *id));
+        if armed {
+            self.armed.push(track);
+        }
+        let Some(player) = self.player.as_mut() else { return };
+        for id in before.iter().filter(|id| !self.armed.contains(id)) {
+            let _ = player.send(suhina_engine::LaunchCommand::SetArmed { track: *id, armed: false });
+        }
+        for id in self.armed.iter().filter(|id| !before.contains(id)) {
+            let _ = player.send(suhina_engine::LaunchCommand::SetArmed { track: *id, armed: true });
+        }
+    }
+
+    /// The sending end of the playing engine's live-note queue, the first time it is asked for.
+    pub(crate) fn take_live_input(&mut self) -> Option<suhina_engine::LiveSender> {
+        self.player.as_mut().and_then(Player::take_live_input)
     }
 
     /// Replaces the player with the one `open` makes from the old one, keeping the project's

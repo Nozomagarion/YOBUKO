@@ -14,6 +14,9 @@ mod cpu;
 #[cfg(test)]
 mod fade_tests;
 mod launcher;
+mod live;
+#[cfg(test)]
+mod live_tests;
 mod metronome;
 mod plugin;
 #[cfg(test)]
@@ -37,6 +40,7 @@ use chain::{CHAIN_INPUT_GAIN, Chain, MAX_BLOCK};
 pub use cpu::CpuMonitor;
 use launcher::Launcher;
 pub use launcher::{ColumnStatus, Controller, LaunchCommand, LauncherMonitor, MAX_START_BEAT, Quantization, Queued};
+pub use live::{LIVE_QUEUE, LiveEvent, LiveSender, MAX_ARMED};
 use plugin::{DEADLINE_SHARE, Delay};
 pub use plugin::{
     OFFLINE_TIMEOUT, PluginDevice, PluginProcessor, PluginSlotInfo, Plugins, Sent, plugin_devices, plugin_key,
@@ -224,6 +228,8 @@ pub struct Renderer {
     plugin_info: HashMap<u64, PluginSlotInfo>,
     /// The browser's preview voice (ADR 0011).
     preview: preview::Preview,
+    /// Notes played on a MIDI controller, and the armed tracks that hear them (ADR 0017).
+    live: live::Live,
     /// The audio thread's CPU load, published to the controller's `CpuMonitor`.
     cpu: cpu::CpuMeter,
 }
@@ -276,6 +282,7 @@ impl Renderer {
             offline: false,
             plugin_info: plugins.info,
             preview: preview::Preview::new(sample_rate),
+            live: live::Live::new(),
             cpu: cpu::CpuMeter::new(),
         })
     }
@@ -428,6 +435,8 @@ impl Renderer {
         self.preview.receive(&mut self.graph.chains);
         self.preview.begin(&self.graph.chains);
         self.drain_commands();
+        // Live notes after the commands, so a track armed in this block hears them.
+        self.live.receive(&mut self.graph.chains, self.position);
         self.receive_params();
         // A rewind moves along even while the transport is stopped, so the stretched clips are
         // ready again by the next start.
