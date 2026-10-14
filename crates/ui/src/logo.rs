@@ -154,17 +154,17 @@ fn path(d: &str) -> Option<Path> {
         let values = numbers(piece.get(1..)?);
         match command {
             'M' | 'L' => {
-                for (n, pair) in values.chunks_exact(2).enumerate() {
+                for (n, [x, y]) in values.as_chunks::<2>().0.iter().enumerate() {
                     if command == 'M' && n == 0 {
-                        builder.move_to(pair[0], pair[1]);
+                        builder.move_to(*x, *y);
                     } else {
-                        builder.line_to(pair[0], pair[1]);
+                        builder.line_to(*x, *y);
                     }
                 }
             }
             'C' => {
-                for c in values.chunks_exact(6) {
-                    builder.cubic_to(c[0], c[1], c[2], c[3], c[4], c[5]);
+                for [x1, y1, x2, y2, x, y] in values.as_chunks::<6>().0 {
+                    builder.cubic_to(*x1, *y1, *x2, *y2, *x, *y);
                 }
             }
             'Z' | 'z' => builder.close(),
