@@ -10,7 +10,8 @@ name: Test build links
 #
 # Each linked build is also posted to the Discord forum channel whose webhook URL is the secret
 # DISCORD_WEBHOOK_TESTING: the first build of a pull request opens a forum thread, later builds
-# post "updated" in the same thread. The thread's id is kept in the comment, in a hidden marker.
+# post "New build is available for testing" in the same thread. The thread's id is kept in the
+# comment, in a hidden marker.
 # Without the secret nothing is posted, and a failed post fails nothing else.
 
 on:
@@ -161,7 +162,7 @@ jobs:
             try {
               if (thread) {
                 const res = await send(`&thread_id=${thread}`, {
-                  content: lines(`**Updated:** a new test build of commit \`${commit}\`.`),
+                  content: lines(`**New build is available for testing** (commit \`${commit}\`).`),
                 });
                 if (res.ok) {
                   core.info(`Posted the update to Discord thread ${thread}.`);

@@ -147,7 +147,7 @@ else. No mention in a post pings anyone.
 |---|---|---|
 | releases | `DISCORD_WEBHOOK_RELEASES` | each nightly (`release.yml`); each release when a person publishes it, with its *New and changed* section (`discord.yml`) |
 | events | `DISCORD_WEBHOOK_EVENTS` | pull requests opened, merged, closed and reopened; issues opened, closed and reopened (`discord.yml`) |
-| testing (a forum channel) | `DISCORD_WEBHOOK_TESTING` | each linked test build (`test-build-links.yml`): the first build of a pull request opens a thread named `#<number> <title>`, later builds post *Updated* in it |
+| testing (a forum channel) | `DISCORD_WEBHOOK_TESTING` | each linked test build (`test-build-links.yml`): the first build of a pull request opens a thread named `#<number> <title>`, later builds post *New build is available for testing* in it |
 
 [`scripts/discord_post.py`](../scripts/discord_post.py) writes the posts of `discord.yml` from
 the event. The nightly never reaches `discord.yml`: it is created with the workflow's own token,
