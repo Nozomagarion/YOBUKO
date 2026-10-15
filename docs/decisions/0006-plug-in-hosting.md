@@ -3,7 +3,7 @@ description: How third-party plug-ins are hosted out of process (process model, 
 read_when: plug-in, plugin host, CLAP, VST3, VST2, sandbox, out of process, IPC, shared memory, unsafe, plug-in crash, scanning, plug-in editor
 type: decision
 status: current
-last_verified: 2026-10-14
+last_verified: 2026-10-15
 covers:
   - crates/ipc/**
   - crates/plugins/**
@@ -124,7 +124,10 @@ workspace forbids.
      them again after a restart.
 4. **Block sync and deadline.** The engine signals the host, the host processes and signals
    back. Primitives: a futex in the shared memory on Linux; duplicated auto-reset events on
-   Windows; semaphores on macOS, prototyped first because they are the least certain. The host's
+   Windows, waited on together with a high-resolution waitable timer that wakes the wait 1 ms
+   before the deadline, the rest spent yielding, so a miss ends on time and not on the system
+   timer's next 15.6 ms tick (#211); semaphores on macOS, prototyped first because they are the
+   least certain. The host's
    audio thread runs at the engine's real-time priority (MMCSS "Pro Audio" on Windows; the
    engine's audio workgroup on macOS). The engine waits at most the rest of the block's time.
    On a miss it outputs the plug-in's input (an effect) or silence (an instrument) for that block
