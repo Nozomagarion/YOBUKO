@@ -176,6 +176,13 @@ cargo test --workspace
 
 Keep the tree building at every step.
 
+**Every commit is signed off.** Commit with `git commit -s`, so the commit ends with
+`Signed-off-by:` for the person the agent works for, from their `git config user.name` and
+`user.email` (CONTRIBUTING.md › Developer Certificate of Origin). The sign-off is that person's
+certificate, not the agent's: an agent never writes one in another name, and CI accepts no commit
+as signed because an agent made it. When the sign-off would not match the commit's author, say so
+to the user rather than writing another name in.
+
 **A change in what Suhina does comes with steps to check it.** When a pull request changes
 anything a user sees, hears or does, in the app or outside it (a view, a menu, a dialog, a
 shortcut, a setting, drag and drop, playback and sound, a file it opens, imports or writes, a

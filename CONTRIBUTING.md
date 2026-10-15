@@ -181,6 +181,10 @@ any other work.
 
 AI coding agents are welcome, under these rules:
 
+- **Sign off as yourself.** An agent commits with `git commit -s`, so each commit carries your
+  `Signed-off-by:` line ([Developer Certificate of Origin](#developer-certificate-of-origin)).
+  The certificate is yours, not the agent's: a commit is not taken as signed because an agent
+  made it or because the history shows the model.
 - **Credit the model.** Keep the `Co-Authored-By:` trailer your tool adds (for example
   `Co-Authored-By: Claude <noreply@anthropic.com>`), so the history shows how each change was made.
 - **Steps anyone can follow.** A change in what Suhina does, in the app, its sound, the files it
