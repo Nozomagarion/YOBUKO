@@ -64,7 +64,9 @@ that describe them (*Code and its documents*). Read only the documents that matc
 10. **No links to private agent sessions.** The repository is public. Never put a link to an
     agent's own session (such as `https://claude.ai/code/session_...`) in a commit message, a pull
     request description, an issue or a comment, even when the tool's default attribution adds
-    one: leave that line out. The `Co-Authored-By:` trailer stays.
+    one: leave that line out. The `Co-Authored-By:` trailer stays. `.claude/settings.json` turns
+    the link off (`attribution.sessionUrl: false`) and sets `.githooks/commit-msg`, which deletes
+    such a line from every commit message, as the hooks of the clone.
 
 ## 2. Workspace map
 

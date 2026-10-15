@@ -1,0 +1,5 @@
+#!/bin/sh
+# Removes links to private agent sessions from commit messages (AGENTS.md, rule 10).
+# Claude Code sessions turn this hook on (.claude/settings.json); anyone else can with
+# `git config core.hooksPath .githooks`.
+sed -i -e '/claude\.ai\/code\/session_/d' "$1"
