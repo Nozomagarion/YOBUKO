@@ -1,0 +1,119 @@
+name: DCO comment
+
+# The trusted half of the `dco` job in ci.yml: it runs from main and never checks out or runs a
+# pull request's code, only reads its commits through the API. When a commit in a pull request from
+# a fork has no sign-off for its author, it says so on the pull request at once, naming the commits
+# and how to fix them, in one comment that each new push updates. CI from a fork cannot comment
+# itself: its token only reads. CONTRIBUTING.md › Developer Certificate of Origin.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions: {}
+
+concurrency:
+  group: dco-comment-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  comment:
+    name: comment on a missing sign-off
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const MARKER = '<!-- suhina-dco -->';
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+
+            // The same rule as the `dco` job in ci.yml: every commit but a merge carries
+            // `Signed-off-by: <author name> <author email>`, compared without case.
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner, repo, pull_number: pr.number, per_page: 100,
+            });
+            const missing = commits
+              .filter((c) => c.parents.length < 2)
+              .map((c) => ({
+                sha: c.sha,
+                author: `${c.commit.author.name} <${c.commit.author.email}>`,
+                message: c.commit.message,
+              }))
+              .filter((c) => !c.message.toLowerCase().includes(`signed-off-by: ${c.author}`.toLowerCase()))
+              .map((c) => ({ ...c, title: c.message.split('\n')[0] }));
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            const previous = comments.find(
+              (c) => c.user.type === 'Bot' && c.body.startsWith(MARKER),
+            );
+
+            // Text from the pull request is shown in code spans in a table; a backtick would end the
+            // span early and a bar the cell.
+            const plain = (text) => text.replace(/`/g, "'").replace(/\|/g, '/');
+            let body;
+            if (missing.length === 0) {
+              if (!previous) {
+                core.info(`Every commit in #${pr.number} is signed off.`);
+                return;
+              }
+              body = [
+                MARKER,
+                '### Sign-off',
+                '',
+                `Every commit is signed off now (\`${pr.head.sha.slice(0, 7)}\`). Thank you.`,
+              ];
+            } else {
+              const onlyLast = missing.length === 1 && missing[0].sha === pr.head.sha;
+              const fix = onlyLast
+                ? [
+                    'Only the latest commit is missing it, so amending that commit is enough:',
+                    '',
+                    '```sh',
+                    'git commit --amend -s --no-edit',
+                    'git push --force-with-lease',
+                    '```',
+                  ]
+                : [
+                    'Sign off every commit of the branch by replaying it on main:',
+                    '',
+                    '```sh',
+                    `git fetch https://github.com/${owner}/${repo}.git ${pr.base.ref}`,
+                    'git rebase --signoff FETCH_HEAD',
+                    'git push --force-with-lease',
+                    '```',
+                  ];
+              body = [
+                MARKER,
+                '### Sign-off missing',
+                '',
+                'Every commit in a pull request ends with a `Signed-off-by:` line for its author, which certifies the [Developer Certificate of Origin](https://developercertificate.org/) and the clean-room rules ([CONTRIBUTING.md › Developer Certificate of Origin](https://github.com/' + `${owner}/${repo}` + '/blob/main/CONTRIBUTING.md#developer-certificate-of-origin)). These commits have none:',
+                '',
+                '| Commit | Author | Title |',
+                '|---|---|---|',
+                ...missing.map(
+                  (m) => `| ${m.sha.slice(0, 7)} | \`${plain(m.author)}\` | \`${plain(m.title)}\` |`,
+                ),
+                '',
+                ...fix,
+                '',
+                'The sign-off is written from `git config user.name` and `user.email`, which must match the author shown above. A commit made in the GitHub web editor has none: `git pull` it into your clone first, then sign it off as above. `git commit -s` adds the line to new commits.',
+              ];
+            }
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: previous.id, body: body.join('\n'),
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr.number, body: body.join('\n'),
+              });
+            }
+            core.info(`#${pr.number}: ${missing.length} commit(s) without a sign-off.`);
