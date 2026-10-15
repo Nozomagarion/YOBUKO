@@ -254,10 +254,12 @@ mod tests {
         late.sort();
         let worst = late.last().copied().unwrap_or_default();
         let median = late.get(late.len() / 2).copied().unwrap_or_default();
-        // Without the fix a wait on Windows ended up to a tick (15.6 ms) late, so the median
-        // lay at several milliseconds; the worst case leaves room for a busy test machine.
+        // Without the fix a wait on Windows ended on the system timer's next tick, up to
+        // 15.6 ms late, so the median lay at several milliseconds. A single wait can still be
+        // late when the test machine is busy (the other tests run at the same time), so the
+        // worst case only has the bound the link's own test has.
         assert!(median < Duration::from_millis(1), "median {median:?}, all {late:?}");
-        assert!(worst < Duration::from_millis(8), "worst {worst:?}, all {late:?}");
+        assert!(worst < Duration::from_millis(40), "worst {worst:?}, all {late:?}");
     }
 
     /// A ring wakes a sleeping wait long before its deadline.
