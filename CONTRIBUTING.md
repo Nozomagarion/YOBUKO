@@ -221,18 +221,21 @@ If you are unsure whether a source is allowed, ask in an issue before using it.
 
 ## Developer Certificate of Origin
 
-Every commit in a pull request from outside the project ends with a sign-off line:
+Every commit in a pull request from a fork ends with a sign-off line:
 
 ```text
 Signed-off-by: Your Name <you@example.com>
 ```
 
-`git commit -s` adds it. By signing off you certify the
+`git commit -s` adds it, and it must name the commit's author exactly as git records it, since the
+check compares the two. By signing off you certify the
 [Developer Certificate of Origin 1.1](https://developercertificate.org/): that you wrote the
 change or have the right to submit it under the project's licence. For Suhina this includes
 the clean-room rules above: the change does not come from disassembled, decompiled or leaked
 material, from notes based on such material, or from content of a proprietary product, and no
-agent that wrote it was given such material. CI checks the sign-off on pull requests from forks.
+agent that wrote it was given such material. CI checks the sign-off on pull requests from forks
+(a merge commit needs none); [AGENTS.md › Before you finish a task](AGENTS.md#4-before-you-finish-a-task)
+states the same for the commits an agent makes.
 
 ## Reporting a rights problem
 

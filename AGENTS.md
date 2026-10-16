@@ -240,6 +240,21 @@ cargo deny check   # when Cargo.lock changed (CONTRIBUTING.md › Dependencies)
 
 Keep the tree building at every step.
 
+**`git commit -s`, always.** A pull request from a fork runs `dco`
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)), which walks the branch's non-merge
+commits (`git rev-list --no-merges`) and fails when one has no `Signed-off-by:` line, or when
+its line is not the commit's author exactly as `git log -1 --format='%an <%ae>'` prints it —
+same name, same address. A merge commit needs no line; a commit you amend or write while fixing
+someone else's branch needs one too, under the author that commit already carries. So every
+commit, amend and rebase you make ends in `-s` (`git commit -s`, `git commit --amend -s`,
+`git rebase --signoff`), and `git log --format='%h %an <%ae>%n%(trailers:key=Signed-off-by)'`
+before you push shows each commit's two lines matching. A local hook is not the answer: `.git/hooks`
+is not in the repository, so a fresh clone and an agent's sandbox have none, and the DCO job does
+not run for a branch of this repository, so pushing a fix to your own branch passes the check that
+a fork's pull request fails. The certificate itself is the contributor's signature to make; when
+a commit is not yours to sign, say so instead of adding the line — CONTRIBUTING.md ›
+[Developer Certificate of Origin](CONTRIBUTING.md#developer-certificate-of-origin).
+
 **A change in what Suhina does comes with steps to check it.** When a pull request changes
 anything a user sees, hears or does, in the app or outside it (a view, a menu, a dialog, a
 shortcut, a setting, drag and drop, playback and sound, a file it opens, imports or writes, a
