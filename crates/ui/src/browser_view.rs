@@ -687,6 +687,19 @@ fn results_view(
             if let Some(tag) = tags.iter().find(|t| t.name == *name) {
                 let center = Pos2::new(name_end + 5.0 + i as f32 * (DOT + 2.0), rect.center().y);
                 painter.circle_filled(center, DOT / 2.0, tag_color(&tag.color));
+                // The dot answers a hover with its tag's name: a tooltip, the status bar, and
+                // an accessible label (a 10 px hit area around the 6 px dot).
+                let dot = ui
+                    .interact(
+                        Rect::from_center_size(center, Vec2::splat(DOT + 4.0)),
+                        Id::new(("browser-tag-dot", &row.item.key, name.as_str())),
+                        Sense::hover(),
+                    )
+                    .on_hover_text(format!("Tag {name}"));
+                dot.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Tagged {name}")));
+                if dot.hovered() {
+                    out.status = Some(Status::Hint(format!("Tag {name}")));
+                }
             }
         }
         if !meta.is_empty() {
@@ -1520,6 +1533,17 @@ fn footer_view(
         }
         let response = widgets::button_area(ui, rect, Id::new(("browser-tag", &tag.name)), format!("Tag {}", tag.name))
             .on_hover_text(&tag.name);
+        if response.hovered() {
+            // The tag's name and how many items carry it, in the status bar.
+            let items = projects
+                .file_library_mut()
+                .tagged()
+                .into_iter()
+                .filter(|(_, names)| names.iter().any(|n| n == &tag.name))
+                .count();
+            out.status =
+                Some(Status::Hint(format!("Tag {} — {} item{}", tag.name, items, if items == 1 { "" } else { "s" })));
+        }
         let on = state.tag_filter.contains(&tag.name);
         if response.clicked() {
             if on {
