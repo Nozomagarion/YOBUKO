@@ -1247,18 +1247,11 @@ fn preview_strip(
     }
 }
 
-/// The browser's tag editor, over the results' bottom, opened by the footer's Edit tags
-/// button: every tag in a list — its colour, its name (typed to rename), how many items
-/// carry it and Remove, with a confirm; the last row adds one. A click on a row filters
-/// by it, as the footer's dots do ([browser](browser.md) › Colour tags).
 /// The browser's tag editor, the popup right above the footer's Edit tags button: every tag
-/// in a list — its colour, its name (typed to rename), how many
-/// items carry it and Remove, with a confirm; the last row adds one. A click on a row filters
-/// by it, as the footer's dots do ([browser](browser.md) › Colour tags).
-/// The browser's tag editor, the popup right above the footer's Edit tags button: every tag
-/// in a list — its colour, its name (typed to rename), how many
-/// items carry it and Remove, with a confirm; the last row adds one. Its checkbox filters by
-/// the tag, as the footer's dots do ([browser](browser.md) › Colour tags).
+/// in a list — its colour, its name (typed to rename), how many items carry it and Remove,
+/// with a confirm; the last row adds one. Its checkbox filters by the tag, as the footer's
+/// dots do, or with items selected applies the tag to them, as a row's Tag menu does
+/// ([browser](browser.md) › Colour tags).
 fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut Projects, out: &mut BrowserOut) {
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
