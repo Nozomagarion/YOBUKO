@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! A prepared block signal interpreter with a per-frame delayed-graph fallback.
+//! A prepared block signal interpreter with per-frame feedback islands.
 //! All persistent processing storage is allocated during compilation.
 use crate::{DeviceGraph, DeviceSdkError, FilterMode, NodeKind, Parameter, ProcessContext};
 use suhina_device_api::Device;
@@ -19,6 +19,10 @@ struct Op {
     defaults: [f64; 5],
     parameter: Option<usize>,
     state: State,
+}
+struct Island {
+    nodes: Vec<usize>,
+    sources: Vec<usize>,
 }
 enum State {
     Sampler(Box<crate::sampler::Sampler>),
@@ -60,6 +64,7 @@ pub struct PreparedEffect {
     block_values: Vec<[[f64; 2]; 64]>,
     block_parameters: Vec<[f64; 64]>,
     block_safe: bool,
+    islands: Vec<Island>,
 }
 
 fn finite(value: f64) -> f64 {
@@ -67,6 +72,51 @@ fn finite(value: f64) -> f64 {
 }
 fn coefficient(seconds: f64, rate: f64) -> f64 {
     if seconds <= 0.0 { 0.0 } else { (-1.0 / (seconds.min(60.0) * rate)).exp() }
+}
+
+fn feedback_islands(nodes: &[Op], order: &[usize]) -> Vec<Island> {
+    let count = nodes.len();
+    let mut reachable = vec![vec![false; count]; count];
+    for (target, op) in nodes.iter().enumerate() {
+        reachable[target][target] = true;
+        for wire in op.inputs.iter().flatten() {
+            reachable[wire.source][target] = true;
+        }
+    }
+    for via in 0..count {
+        for from in 0..count {
+            for to in 0..count {
+                reachable[from][to] |= reachable[from][via] && reachable[via][to];
+            }
+        }
+    }
+    let mut scheduled = vec![false; count];
+    let mut islands = Vec::new();
+    for _ in 0..count {
+        let Some(&root) = order.iter().find(|&&candidate| {
+            !scheduled[candidate]
+                && order
+                    .iter()
+                    .all(|&source| !reachable[source][candidate] || reachable[candidate][source] || scheduled[source])
+        }) else {
+            break;
+        };
+        let island: Vec<_> =
+            order.iter().copied().filter(|&node| reachable[root][node] && reachable[node][root]).collect();
+        for &node in &island {
+            scheduled[node] = true;
+        }
+        let mut sources = Vec::new();
+        for &node in &island {
+            for wire in nodes[node].inputs.iter().flatten() {
+                if !island.contains(&wire.source) && !sources.contains(&wire.source) {
+                    sources.push(wire.source);
+                }
+            }
+        }
+        islands.push(Island { nodes: island, sources });
+    }
+    islands
 }
 
 impl PreparedEffect {
@@ -150,6 +200,15 @@ impl PreparedEffect {
             .iter()
             .position(|n| n.kind == NodeKind::AudioOutput)
             .ok_or_else(|| DeviceSdkError("missing output".into()))?;
+        let islands = feedback_islands(&nodes, &order);
+        // When only I/O sits outside feedback, there is no block work to amortize the scratch copies.
+        let block_safe = islands.iter().any(|island| {
+            island.nodes.len() == 1
+                && island
+                    .nodes
+                    .first()
+                    .is_some_and(|&node| !matches!(nodes[node].kind, NodeKind::AudioInput | NodeKind::AudioOutput))
+        });
         Ok(Self {
             nodes,
             order,
@@ -164,7 +223,8 @@ impl PreparedEffect {
             midi: [0.0; 3],
             block_values: vec![[[0.0; 2]; 64]; graph.nodes.len()],
             block_parameters: vec![[0.0; 64]; graph.parameters.len()],
-            block_safe: !graph.nodes.iter().any(|n| matches!(n.kind, NodeKind::Delay { .. } | NodeKind::SampleDelay)),
+            block_safe,
+            islands,
         })
     }
 
@@ -358,7 +418,50 @@ impl PreparedEffect {
                     self.block_parameters[index][frame] = *value;
                 }
             }
-            for &index in &self.order {
+            for island in &self.islands {
+                let Some(&index) = island.nodes.first() else { continue };
+                if island.nodes.len() > 1 || matches!(self.nodes[index].state, State::Delay { .. }) {
+                    for (frame, input) in block.iter().enumerate() {
+                        for &source in &island.sources {
+                            self.values[source] = self.block_values[source][frame];
+                        }
+                        for &node in &island.nodes {
+                            if let Some(parameter) = self.nodes[node].parameter {
+                                self.parameter_values[parameter] = self.block_parameters[parameter][frame];
+                            }
+                            evaluate(
+                                &mut self.nodes,
+                                &mut self.values,
+                                &self.parameter_values,
+                                self.midi,
+                                self.sample_rate,
+                                node,
+                                input.map(|v| finite(f64::from(v))),
+                                tempo,
+                                beats[frame],
+                                context,
+                            );
+                            self.block_values[node][frame] = self.values[node];
+                        }
+                        for &node in &island.nodes {
+                            let op = &mut self.nodes[node];
+                            if let State::Delay { history, cursor, .. } = &mut op.state {
+                                let input = op.inputs[0]
+                                    .and_then(|wire| {
+                                        self.values.get(wire.source).map(|v| {
+                                            wire.channel.and_then(|c| v.get(c)).map_or(*v, |value| [*value; 2])
+                                        })
+                                    })
+                                    .unwrap_or([0.0; 2]);
+                                if let Some(slot) = history.get_mut(*cursor) {
+                                    *slot = input;
+                                }
+                                *cursor = (*cursor + 1) % history.len();
+                            }
+                        }
+                    }
+                    continue;
+                }
                 if let State::Sampler(sampler) = &mut self.nodes[index].state {
                     let mut audio = [0.0; 128];
                     sampler.process_prepared(&mut audio[..block.len() * 2]);
@@ -688,9 +791,113 @@ mod block_tests {
     use super::*;
     use crate::{Connection, DeviceRole, Node};
 
+    fn delayed_graph(feedback: bool) -> DeviceGraph {
+        let mut graph = DeviceGraph::new("org.test.islands", "Islands", DeviceRole::Effect);
+        graph.parameters.push(Parameter::new("gain", "Gain", (0.0, 1.0), 0.25));
+        graph.nodes.push(Node::audio_input("in"));
+        let mut source = "in".to_owned();
+        for index in 0..3 {
+            let sum = format!("sum{index}");
+            let gain = format!("gain{index}");
+            let delay = format!("delay{index}");
+            graph.nodes.extend([
+                Node::new(&sum, NodeKind::Add),
+                Node::new(&gain, NodeKind::Gain { parameter: "gain".into() }),
+                Node::new(
+                    &delay,
+                    if index == 1 { NodeKind::Delay { max_seconds: 0.01 } } else { NodeKind::SampleDelay },
+                ),
+            ]);
+            graph.connections.extend([
+                Connection::ports(&source, "out", &sum, "a"),
+                Connection::ports(if feedback { &delay } else { &source }, "out", &sum, "b"),
+                Connection::new(&sum, &gain),
+                Connection::new(&gain, &delay),
+            ]);
+            source = delay;
+        }
+        graph.nodes.push(Node::audio_output("out"));
+        graph.connections.push(Connection::new(&source, "out"));
+        graph
+    }
+
+    #[test]
+    fn feedback_islands_match_reference_across_boundaries_and_reset() {
+        for topology in 0..3 {
+            let feedback = topology != 0;
+            let mut graph = delayed_graph(feedback);
+            if topology == 2 {
+                graph
+                    .connections
+                    .iter_mut()
+                    .find(|edge| edge.to == "sum0" && edge.to_port == "b")
+                    .expect("feedback edge")
+                    .from = "delay2".into();
+            }
+            let mut block = PreparedEffect::new(&graph, 48000.0).expect("graph");
+            assert_eq!(block.block_safe, !feedback);
+            block.block_safe = true;
+            let mut reference = PreparedEffect::new(&graph, 48000.0).expect("graph");
+            reference.block_safe = false;
+            assert!(block.islands.iter().any(|island| island.nodes.len() == 1));
+            assert_eq!(
+                block.islands.iter().filter(|island| island.nodes.len() > 1).count(),
+                match topology {
+                    0 => 0,
+                    1 => 3,
+                    _ => 1,
+                }
+            );
+            for pass in 0..3 {
+                block.set_parameter(0, 0.1 + pass as f64 * 0.1);
+                reference.set_parameter(0, 0.1 + pass as f64 * 0.1);
+                for size in [0, 1, 2, 126, 128, 130, 2049] {
+                    let mut actual: Vec<_> = (0..size)
+                        .map(|i| match i % 17 {
+                            0 => f32::NAN,
+                            1 => f32::INFINITY,
+                            _ => (i as f32 * 0.1).sin(),
+                        })
+                        .collect();
+                    let mut expected = actual.clone();
+                    block.process(&mut actual);
+                    reference.process(&mut expected);
+                    assert_eq!(actual, expected, "feedback={feedback}, pass={pass}, size={size}");
+                }
+                block.reset();
+                reference.reset();
+            }
+        }
+    }
+
     #[test]
     #[ignore = "manual release callback timing"]
     fn representative_graph_callback_timing() {
+        for (feedback, tail) in [(false, 0), (true, 0), (true, 16)] {
+            let mut graph = delayed_graph(feedback);
+            graph.connections.retain(|edge| edge.to != "out");
+            let mut previous = "delay2".to_owned();
+            for i in 0..tail {
+                let id = format!("tail{i}");
+                graph.nodes.push(Node::new(&id, NodeKind::Gain { parameter: "gain".into() }));
+                graph.connections.push(Connection::new(&previous, &id));
+                previous = id;
+            }
+            graph.connections.push(Connection::new(&previous, "out"));
+            for enabled in [false, true] {
+                let mut effect = PreparedEffect::new(&graph, 48000.0).expect("graph");
+                effect.block_safe &= enabled;
+                let mut audio = [0.1; 512];
+                let start = std::time::Instant::now();
+                for _ in 0..10000 {
+                    effect.process(std::hint::black_box(&mut audio));
+                }
+                eprintln!(
+                    "three delay islands feedback={feedback} tail={tail} block={enabled}: {:?}/256 frames",
+                    start.elapsed() / 10000
+                );
+            }
+        }
         for count in [2, 16, 128] {
             let mut graph = DeviceGraph::new("org.test.timing", "Timing", DeviceRole::Effect);
             graph.parameters.push(Parameter::new("gain", "Gain", (0.0, 2.0), 0.99));

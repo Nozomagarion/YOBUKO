@@ -80,12 +80,18 @@ Exactly one role-appropriate input/output is required, and every node must contr
 Missing references, duplicate ids, invalid ports,
 missing required inputs and cycles are rejected with node/port diagnostics. Only the `in` port
 of sample_delay/delay breaks a cycle; its input is written after all current-frame evaluations.
-Graphs without delay nodes execute node by node in chunks of at most 64 stereo frames, using
+Graphs execute node by node in chunks of at most 64 stereo frames, using
 node buffers and parameter timelines allocated during compilation. Native sampler sources render
 one chunk per call. Input, output, constants, parameters, gain, addition and multiplication
 select their scalar kernel once per node chunk; other scalar nodes share the frame evaluator. Transport beats and parameter smoothing still advance for every frame;
-timestamped MIDI splits processing before applying each event. Graphs containing any delay
-retain the frame interpreter, including feed-forward delays, so feedback timing is unchanged.
+timestamped MIDI splits processing before applying each event. Compilation finds strongly connected
+components over all signal edges, including delayed inputs, and schedules their dependency graph.
+Only feedback components execute frame by frame in the validated node order, committing their
+delay inputs after the component has evaluated each frame. Feed-forward delay nodes read and
+commit each frame within their node chunk. Other components retain block processing, so delays
+do not force unrelated nodes through the frame interpreter. If only audio input/output sit outside
+feedback components, the original frame schedule avoids unnecessary scratch copies. Feedback
+timing is unchanged.
 Processing a longer host buffer reuses the same bounded scratch storage.
 Delay time is an ordinary dependency, so a cycle through it is rejected.
 

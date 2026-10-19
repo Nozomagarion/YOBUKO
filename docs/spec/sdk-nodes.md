@@ -25,6 +25,9 @@ at most one connection; use add/mix to sum signals. Required inputs have no defa
 Values are finite and limited to the f32 range after each node; non-finite results become zero.
 MIDI event ports carry timestamped `NoteEvent` values and are only used in MIDI-effect graphs.
 An odd final sample in a stereo buffer is cleared. No node allocates or performs I/O while processing.
+The runtime schedules strongly connected feedback components frame by frame, committing their
+delays after all component nodes have evaluated. Acyclic nodes use bounded 64-frame chunks;
+feed-forward delays read and commit per frame within their chunk.
 
 The Rust API is `Node::new(id, NodeKind::Variant { configuration })` and
 `Connection::ports(source, source_port, destination, destination_port)`.
