@@ -190,7 +190,10 @@ reserves space for each slider's value so controls stay inside narrow device car
 
 All three roles execute. Instrument graphs expose `midi_key`, `midi_velocity` and `midi_gate`
 signals to the existing audio nodes to generate sound. This initial instrument runtime is
-monophonic: the latest note controls the graph, and note-off releases its gate. MIDI effects go
+monophonic for these three signals: the latest note controls them, and note-off releases the gate.
+The `sampler` source instead owns polyphonic voices and broadcasts no MIDI value signals.
+It receives timestamped events, exposes stereo audio, and requires off-thread PCM/control binding
+through `PreparedEffect::sampler_mut`; sample assets are not embedded in the file. MIDI effects go
 before the track instrument; their event buffers are prepared with the chain, so processing does
 not allocate on the audio thread. On a track with no instrument the notes they send play as the
 track's sine tones, as for built-in MIDI effects ([ADR 0004](../decisions/0004-built-in-devices.md) › 13).

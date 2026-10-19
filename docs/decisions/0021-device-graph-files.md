@@ -87,7 +87,10 @@ authoring fields are accepted.
   through MCP command dispatch. The same catalog generates the node reference table;
   tests reject stale documentation. [The authoring guide](../device-sdk.md) includes AI workflows.
 - The graph runs in offline and real-time chains without loading community Rust code.
-- Executable custom DSP, polyphonic instruments, spectral processing, oversampling and
+- Instrument graphs may also compose polyphonic `sampler` sources whose PCM and controls
+  are bound through the prepared Rust API off the audio thread. Source assets are not embedded
+  in `.sd` yet; the stock instrument retains its native wrapper.
+- Executable custom DSP, general graph-level polyphonic voice allocation, spectral processing, oversampling and
   graph editing remain outside this data-only effect implementation. Delay memory and node
   counts are bounded, but graph admission is not a hardware CPU deadline guarantee.
 
