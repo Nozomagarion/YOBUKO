@@ -363,7 +363,7 @@ impl PreparedEffect {
                     let mut audio = [0.0; 128];
                     sampler.process_prepared(&mut audio[..block.len() * 2]);
                     for (frame, pair) in audio.as_chunks::<2>().0.iter().take(block.len()).enumerate() {
-                        self.block_values[index][frame] = [f64::from(pair[0]), f64::from(pair[1])];
+                        self.block_values[index][frame] = [finite(f64::from(pair[0])), finite(f64::from(pair[1]))];
                     }
                     continue;
                 }
