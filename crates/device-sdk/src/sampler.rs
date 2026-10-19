@@ -104,18 +104,8 @@ pub const PARAMS: &[ParamInfo] = &[
     ParamInfo::integer("lfo_division", "LFO division", (1, 64), 4, Unit::None),
     continuous("source_bpm", "Source BPM", 0., 999., 0., Unit::None),
 ];
-pub(crate) fn lfo_hz(rate: f64, time: f64, division: f64, mode: f64, tempo: f64) -> f64 {
-    let division = division.round().clamp(1., 64.);
-    let bpm = tempo.clamp(1., 1000.);
-    match mode.round().clamp(0., 5.) as u8 {
-        0 => rate.clamp(0.01, 20.),
-        1 => 1000. / time.clamp(1., 20000.),
-        2 => bpm * division / 240.,
-        3 => bpm * division / 160.,
-        4 => bpm * division / 360.,
-        _ => bpm / (15. * division),
-    }
-}
+use crate::modulation::lfo_hz;
+
 pub const INFO: DeviceInfo = DeviceInfo { id: "sampler", name: "Sampler", role: Role::Instrument, params: PARAMS };
 
 #[derive(Clone, Copy, Default)]

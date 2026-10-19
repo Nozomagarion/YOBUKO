@@ -12,6 +12,8 @@ covers:
   - crates/device-sdk/src/graph.rs
   - crates/device-sdk/src/midi.rs
   - crates/device-sdk/src/runtime.rs
+  - crates/device-sdk/src/native_node.rs
+  - crates/device-sdk/src/modulation.rs
   - crates/device-sdk/examples/gain.rs
   - crates/model/src/lib.rs
   - crates/project-file/src/lib.rs
@@ -34,6 +36,12 @@ helpers alone changes neither the file schema version nor the device revision. S
 An `.sd` file describes a device as data. It contains no Rust source, executable code or external
 assets. The Rust SDK builds and validates the graph, writes the JSON file and can prepare the
 supported graph for audio processing.
+
+Native stereo source graph nodes implement a device-neutral `NativeNode` lifecycle: preparation and
+resource binding happen off the audio thread; span preparation, rendering, note events and
+reset are allocation-free. A separate factory maps graph metadata to native implementations.
+The interpreter stores trait objects and never selects concrete instrument implementations.
+Sampler resource access is an adapter over the generic native-node binding boundary.
 
 ## File and device versions
 

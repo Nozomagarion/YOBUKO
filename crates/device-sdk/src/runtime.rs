@@ -3,8 +3,8 @@
 
 //! A prepared block signal interpreter with per-frame feedback islands.
 //! All persistent processing storage is allocated during compilation.
+use crate::native_node::NativeNode;
 use crate::{DeviceGraph, DeviceSdkError, FilterMode, NodeKind, Parameter, ProcessContext};
-use suhina_device_api::Device;
 use suhina_dsp::{Biquad, Coefficients};
 
 #[derive(Clone, Copy)]
@@ -25,7 +25,7 @@ struct Island {
     sources: Vec<usize>,
 }
 enum State {
-    Sampler(Box<crate::sampler::Sampler>),
+    Native(Box<dyn NativeNode>),
     None,
     Phase(f64),
     Random(u32),
@@ -164,34 +164,35 @@ impl PreparedEffect {
                 }
                 _ => None,
             };
-            let state = match node.kind {
-                NodeKind::Sampler => {
-                    let mut sampler = Box::new(crate::sampler::Sampler::new());
-                    sampler.prepare(sample_rate).map_err(|e| DeviceSdkError(e.to_string()))?;
-                    State::Sampler(sampler)
+            let state = if let Some(native) = crate::native_node::prepare(&node.kind, sample_rate)? {
+                State::Native(native)
+            } else {
+                match node.kind {
+                    NodeKind::Oscillator { .. } => State::Phase(0.0),
+                    NodeKind::Noise { seed } => State::Random(seed.max(1)),
+                    NodeKind::Smooth | NodeKind::Envelope { .. } => State::Smooth([0.0; 2]),
+                    NodeKind::SampleHold => State::Held { value: [0.0; 2], trigger: [0.0; 2] },
+                    NodeKind::Filter { .. } => {
+                        State::Filter { channels: [Biquad::default(); 2], controls: [f64::NAN; 3] }
+                    }
+                    NodeKind::Delay { max_seconds } => State::Delay {
+                        history: vec![[0.0; 2]; (max_seconds * sample_rate).ceil() as usize + 2],
+                        cursor: 0,
+                        max_frames: (max_seconds * sample_rate).max(1.0),
+                        heads: [0.; 2],
+                        targets: [0.; 2],
+                        fades: [0; 2],
+                    },
+                    NodeKind::SampleDelay => State::Delay {
+                        history: vec![[0.0; 2]; 2],
+                        cursor: 0,
+                        max_frames: 1.0,
+                        heads: [0.; 2],
+                        targets: [0.; 2],
+                        fades: [0; 2],
+                    },
+                    _ => State::None,
                 }
-                NodeKind::Oscillator { .. } => State::Phase(0.0),
-                NodeKind::Noise { seed } => State::Random(seed.max(1)),
-                NodeKind::Smooth | NodeKind::Envelope { .. } => State::Smooth([0.0; 2]),
-                NodeKind::SampleHold => State::Held { value: [0.0; 2], trigger: [0.0; 2] },
-                NodeKind::Filter { .. } => State::Filter { channels: [Biquad::default(); 2], controls: [f64::NAN; 3] },
-                NodeKind::Delay { max_seconds } => State::Delay {
-                    history: vec![[0.0; 2]; (max_seconds * sample_rate).ceil() as usize + 2],
-                    cursor: 0,
-                    max_frames: (max_seconds * sample_rate).max(1.0),
-                    heads: [0.; 2],
-                    targets: [0.; 2],
-                    fades: [0; 2],
-                },
-                NodeKind::SampleDelay => State::Delay {
-                    history: vec![[0.0; 2]; 2],
-                    cursor: 0,
-                    max_frames: 1.0,
-                    heads: [0.; 2],
-                    targets: [0.; 2],
-                    fades: [0; 2],
-                },
-                _ => State::None,
             };
             nodes.push(Op { id: node.id.clone(), kind: node.kind.clone(), inputs, defaults, parameter, state });
         }
@@ -228,15 +229,14 @@ impl PreparedEffect {
         })
     }
 
-    /// Access a sample source for resource binding and control setup off the audio thread.
-    /// Sample replacement can release the old resource, so never call this in a callback.
-    pub fn sampler_mut(&mut self, node: &str) -> Option<&mut crate::sampler::Sampler> {
+    /// Bind native resources off the audio thread; replacements may release storage.
+    pub fn native_node_mut(&mut self, node: &str) -> Option<&mut (dyn NativeNode + 'static)> {
         self.nodes.iter_mut().find_map(|op| {
             if op.id != node {
                 return None;
             }
             match &mut op.state {
-                State::Sampler(sampler) => Some(sampler.as_mut()),
+                State::Native(native) => Some(native.as_mut()),
                 _ => None,
             }
         })
@@ -288,7 +288,7 @@ impl PreparedEffect {
         self.started = false;
         for op in &mut self.nodes {
             match &mut op.state {
-                State::Sampler(sampler) => sampler.reset(),
+                State::Native(native) => native.reset(),
                 State::Phase(phase) => *phase = 0.0,
                 State::Random(value) => {
                     if let NodeKind::Noise { seed } = op.kind {
@@ -332,8 +332,8 @@ impl PreparedEffect {
         let mut beat = finite(context.beat);
         let beat_step = if context.playing { tempo / (60.0 * self.sample_rate) } else { 0.0 };
         for op in &mut self.nodes {
-            if let State::Sampler(sampler) = &mut op.state {
-                sampler.prepare_block(context);
+            if let State::Native(native) = &mut op.state {
+                native.prepare_block(context);
             }
         }
         let (chunks, remainder) = buffer.as_chunks_mut::<2>();
@@ -394,8 +394,8 @@ impl PreparedEffect {
         let mut beat = finite(context.beat);
         let step = if context.playing { tempo / (60.0 * self.sample_rate) } else { 0.0 };
         for op in &mut self.nodes {
-            if let State::Sampler(sampler) = &mut op.state {
-                sampler.prepare_block(context);
+            if let State::Native(native) = &mut op.state {
+                native.prepare_block(context);
             }
         }
         let (frames, remainder) = buffer.as_chunks_mut::<2>();
@@ -462,9 +462,9 @@ impl PreparedEffect {
                     }
                     continue;
                 }
-                if let State::Sampler(sampler) = &mut self.nodes[index].state {
+                if let State::Native(native) = &mut self.nodes[index].state {
                     let mut audio = [0.0; 128];
-                    sampler.process_prepared(&mut audio[..block.len() * 2]);
+                    native.process(&mut audio[..block.len() * 2]);
                     for (frame, pair) in audio.as_chunks::<2>().0.iter().take(block.len()).enumerate() {
                         self.block_values[index][frame] = [finite(f64::from(pair[0])), finite(f64::from(pair[1]))];
                     }
@@ -547,8 +547,8 @@ impl PreparedEffect {
                 self.process_context(&span_context, span);
             }
             for op in &mut self.nodes {
-                if let State::Sampler(sampler) = &mut op.state {
-                    sampler.event(event);
+                if let State::Native(native) = &mut op.state {
+                    native.event(event);
                 }
             }
             match event {
@@ -599,9 +599,9 @@ fn evaluate(
     let mut output = [0.0; 2];
     use NodeKind::*;
     match (&op.kind, &mut op.state) {
-        (Sampler, State::Sampler(sampler)) => {
+        (_, State::Native(native)) => {
             let mut audio = [0.0; 2];
-            sampler.process_prepared(&mut audio);
+            native.process(&mut audio);
             output = audio.map(f64::from);
         }
         (AudioInput, _) => output = input,
@@ -610,7 +610,7 @@ fn evaluate(
         (Parameter { .. }, _) => output = [parameter; 2],
         (Tempo, _) => output = [tempo; 2],
         (LfoRate, _) => {
-            let hz = crate::sampler::lfo_hz(x[0][0], x[1][0], x[2][0], x[3][0], x[4][0]);
+            let hz = crate::modulation::lfo_hz(x[0][0], x[1][0], x[2][0], x[3][0], x[4][0]);
             output = [hz; 2];
         }
         (Beat, _) => output = [beat; 2],
@@ -790,6 +790,58 @@ fn evaluate(
 mod block_tests {
     use super::*;
     use crate::{Connection, DeviceRole, Node};
+
+    #[test]
+    fn native_source_lifecycle_is_independent_of_graph_kind() {
+        struct Source {
+            value: f32,
+            spans: usize,
+        }
+        impl NativeNode for Source {
+            fn prepare_block(&mut self, _: &ProcessContext) {
+                self.spans += 1;
+            }
+            fn process(&mut self, buffer: &mut [f32]) {
+                buffer.fill(self.value);
+            }
+            fn event(&mut self, _: suhina_device_api::NoteEvent) {
+                self.value = 0.75;
+            }
+            fn reset(&mut self) {
+                self.value = 0.0;
+            }
+            fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+                self
+            }
+        }
+        let mut graph = DeviceGraph::new("org.test.native", "Native", DeviceRole::Instrument);
+        graph.nodes = vec![Node::new("source", NodeKind::Constant { value: 0.0 }), Node::audio_output("out")];
+        graph.connections = vec![Connection::new("source", "out")];
+        for blocks in [false, true] {
+            let mut prepared = PreparedEffect::new(&graph, 48000.).expect("compile");
+            prepared.nodes[0].state = State::Native(Box::new(Source { value: 0.25, spans: 0 }));
+            prepared.block_safe = blocks;
+            let mut audio = [0.0; 260];
+            prepared.process_instrument_context(
+                &ProcessContext::default(),
+                &[(65, suhina_device_api::NoteEvent::Off { key: 60, velocity: 0.0 })],
+                &mut audio,
+            );
+            assert!(audio[..130].iter().all(|&v| v == 0.25));
+            assert!(audio[130..].iter().all(|&v| v == 0.75));
+            let source = prepared
+                .native_node_mut("source")
+                .expect("binding")
+                .as_any_mut()
+                .downcast_mut::<Source>()
+                .expect("type");
+            assert_eq!(source.spans, 2);
+            prepared.reset();
+            prepared.process(&mut audio);
+            assert!(audio.iter().all(|&v| v == 0.0));
+            assert!(prepared.native_node_mut("missing").is_none());
+        }
+    }
 
     fn delayed_graph(feedback: bool) -> DeviceGraph {
         let mut graph = DeviceGraph::new("org.test.islands", "Islands", DeviceRole::Effect);
