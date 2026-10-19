@@ -367,6 +367,35 @@ impl PreparedEffect {
                     }
                     continue;
                 }
+                // Select cheap kernels once per node, outside their sample loops.
+                macro_rules! kernel {
+                    ($render:expr) => {{
+                        let op = &self.nodes[index];
+                        for (frame, input) in block.iter().enumerate() {
+                            let read = |port: usize| match op.inputs[port] {
+                                Some(wire) => {
+                                    let value = self.block_values[wire.source][frame];
+                                    wire.channel.map_or(value, |channel| [value[channel]; 2])
+                                }
+                                None => [op.defaults[port]; 2],
+                            };
+                            let parameter = op.parameter.map_or(0.0, |p| self.block_parameters[p][frame]);
+                            let output: [f64; 2] = $render(read(0), read(1), parameter, *input);
+                            self.block_values[index][frame] = output.map(finite);
+                        }
+                        continue;
+                    }};
+                }
+                match self.nodes[index].kind {
+                    NodeKind::AudioInput => kernel!(|_, _, _, input: [f32; 2]| input.map(f64::from)),
+                    NodeKind::AudioOutput => kernel!(|a, _, _, _| a),
+                    NodeKind::Constant { value } => kernel!(|_, _, _, _| [value; 2]),
+                    NodeKind::Parameter { .. } => kernel!(|_, _, p, _| [p; 2]),
+                    NodeKind::Gain { .. } => kernel!(|a: [f64; 2], _, p, _| a.map(|v| v * p)),
+                    NodeKind::Add => kernel!(|a: [f64; 2], b: [f64; 2], _, _| [a[0] + b[0], a[1] + b[1]]),
+                    NodeKind::Multiply => kernel!(|a: [f64; 2], b: [f64; 2], _, _| [a[0] * b[0], a[1] * b[1]]),
+                    _ => {}
+                }
                 for (frame, input) in block.iter().enumerate() {
                     for wire in self.nodes[index].inputs.iter().flatten() {
                         self.values[wire.source] = self.block_values[wire.source][frame];
