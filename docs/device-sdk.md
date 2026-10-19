@@ -388,3 +388,14 @@ a graph parameter, binds a generated one-second sine sample off the audio thread
 and renders timestamped note events. It prints 48000 frames and a nonzero peak.
 See [Sampler](spec/sampler.md#composable-sample-source-first-stage) for the
 first-stage limits; embedded stock Sampler definitions continue using their native wrapper.
+
+## Trusted native graph effects
+
+Use `NodeKind::NativeEffect { effect }` to wire a trusted host effect into a graph.
+Connect audio to `in`; the four optional `control1` through `control4` inputs carry
+additional stereo signals and default to zero. Prepare with `compile_with_native_at`
+and a host resolver that returns a fresh `NativeNode` prepared for the supplied sample rate.
+The kernel receives five read-only interleaved stereo input buffers and a separate output
+buffer of equal length. It must overwrite output without allocating, locking or doing I/O.
+This host API does not load third-party plug-ins, and ordinary `compile_at` rejects
+unresolved effects. MIDI events and reset use the same lifecycle as native sources.

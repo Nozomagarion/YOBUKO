@@ -41,6 +41,11 @@ impl DeviceGraph {
             match &node.kind {
                 NodeKind::Sampler if instrument => midi_sources += 1,
                 NodeKind::Sampler => return Err(fail("sampler is only valid in instrument graphs")),
+                NodeKind::NativeEffect { effect } => {
+                    if effect.is_empty() || effect.len() > MAX_TEXT_BYTES {
+                        return Err(fail("native effect id must be 1..128 bytes"));
+                    }
+                }
                 NodeKind::NativeDevice { device } => {
                     if device.is_empty() || device.len() > MAX_TEXT_BYTES {
                         return Err(fail("native device id must be 1..128 bytes"));

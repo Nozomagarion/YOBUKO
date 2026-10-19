@@ -37,11 +37,19 @@ An `.sd` file describes a device as data. It contains no Rust source, executable
 assets. The Rust SDK builds and validates the graph, writes the JSON file and can prepare the
 supported graph for audio processing.
 
-Native stereo source graph nodes implement a device-neutral `NativeNode` lifecycle: preparation and
+Native stereo source and effect graph nodes implement a device-neutral `NativeNode` lifecycle: preparation and
 resource binding happen off the audio thread; span preparation, rendering, note events and
 reset are allocation-free. A separate factory maps graph metadata to native implementations.
 The interpreter stores trait objects and never selects concrete instrument implementations.
 Sampler resource access is an adapter over the generic native-node binding boundary.
+
+A `native_effect` node names a trusted host kernel by `effect`. Its fixed ports are `in`,
+`control1`, `control2`, `control3` and `control4`, each a stereo signal with a zero default.
+`out` carries stereo; `left` and `right` select and duplicate one channel. Every input buffer
+has the same interleaved stereo length as the output. Kernels must overwrite their output;
+sources ignore inputs. `compile_with_native_at` resolves fresh, sample-rate-prepared kernels
+off-thread; ordinary compilation rejects unresolved kernels. File data never loads code.
+The existing `native_device` whole-device restriction remains unchanged.
 
 ## File and device versions
 

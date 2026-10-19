@@ -67,6 +67,7 @@ The JSON catalog uses the same records and includes a minimal configuration exam
 | JSON kind / Rust variant | Inputs (default, unit) | Behaviour |
 |---|---|---|
 | `native_device` / `NativeDevice` | `in` (0, signal) | Whole-device native wrapper. Effects wire audio_input -> native_device -> audio_output; instruments wire native_device -> audio_output. Requires the host's registered factory via prepare_native_at; no arbitrary code or feedback. Parameters preserve the native contract. Processing/reset/events use Device's real-time-safe API. |
+| `native_effect` / `NativeEffect` | `in` (0, signal), `control1` (0, signal), `control2` (0, signal), `control3` (0, signal), `control4` (0, signal) | Trusted native graph kernel, resolved off-thread by the host. Supports graph wiring and delayed feedback; never loads third-party code. |
 | `sampler` / `Sampler` | None | Polyphonic sample source using the shared Sampler kernel. Receives timestamped instrument events; bind sample data and parameters by node id before processing. Audio can feed any signal node. |
 | `audio_input` / `AudioInput` | None | Stereo input of the track; no state. |
 | `audio_output` / `AudioOutput` | `in` (required, signal) | Final stereo output; no state. |
@@ -160,3 +161,5 @@ preallocated voices, and passes the advancing transport beat to each source.
 This stage does not migrate the stock Sampler definition. Typed resource/event
 edges, graph-controlled sample parameters, smaller playback/envelope/granular
 nodes and authored sample bindings remain subsequent stages of issue #733.
+
+Native kernels receive five bounded stereo input spans, in the same order as their declared ports. Unconnected ports carry their declared defaults. Source kernels ignore these spans. Block and feedback scheduling use the same input contract; kernels never retain borrowed input spans.

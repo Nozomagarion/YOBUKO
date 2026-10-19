@@ -121,6 +121,16 @@ fn feedback_islands(nodes: &[Op], order: &[usize]) -> Vec<Island> {
 
 impl PreparedEffect {
     pub(crate) fn new(graph: &DeviceGraph, sample_rate: f64) -> Result<Self, DeviceSdkError> {
+        Self::new_with_native(graph, sample_rate, &mut |id, _| {
+            Err(DeviceSdkError(format!("unregistered native effect {id:?}")))
+        })
+    }
+
+    pub(crate) fn new_with_native(
+        graph: &DeviceGraph,
+        sample_rate: f64,
+        resolve: &mut impl FnMut(&str, f64) -> Result<Box<dyn NativeNode>, DeviceSdkError>,
+    ) -> Result<Self, DeviceSdkError> {
         if graph.nodes.iter().any(|n| matches!(n.kind, NodeKind::NativeDevice { .. })) {
             return Err(DeviceSdkError(
                 "native_device requires prepare_native_at and a registered host factory".into(),
@@ -164,7 +174,11 @@ impl PreparedEffect {
                 }
                 _ => None,
             };
-            let state = if let Some(native) = crate::native_node::prepare(&node.kind, sample_rate)? {
+            let prepared_native = match &node.kind {
+                NodeKind::NativeEffect { effect } => Some(resolve(effect, sample_rate)?),
+                _ => crate::native_node::prepare(&node.kind, sample_rate)?,
+            };
+            let state = if let Some(native) = prepared_native {
                 State::Native(native)
             } else {
                 match node.kind {
@@ -462,9 +476,25 @@ impl PreparedEffect {
                     }
                     continue;
                 }
+                let mut native_inputs = [[0.0; 128]; 5];
+                if matches!(self.nodes[index].state, State::Native(_)) {
+                    let op = &self.nodes[index];
+                    for (port, samples) in native_inputs.iter_mut().enumerate() {
+                        for (frame, pair) in samples.as_chunks_mut::<2>().0.iter_mut().take(block.len()).enumerate() {
+                            let value = op.inputs[port].map_or([op.defaults[port]; 2], |wire| {
+                                let value = self.block_values[wire.source][frame];
+                                wire.channel.map_or(value, |channel| [value[channel]; 2])
+                            });
+                            *pair = value.map(|v| v as f32);
+                        }
+                    }
+                }
                 if let State::Native(native) = &mut self.nodes[index].state {
                     let mut audio = [0.0; 128];
-                    native.process(&mut audio[..block.len() * 2]);
+                    native.process(
+                        native_inputs.each_ref().map(|v| &v[..block.len() * 2]),
+                        &mut audio[..block.len() * 2],
+                    );
                     for (frame, pair) in audio.as_chunks::<2>().0.iter().take(block.len()).enumerate() {
                         self.block_values[index][frame] = [finite(f64::from(pair[0])), finite(f64::from(pair[1]))];
                     }
@@ -601,7 +631,8 @@ fn evaluate(
     match (&op.kind, &mut op.state) {
         (_, State::Native(native)) => {
             let mut audio = [0.0; 2];
-            native.process(&mut audio);
+            let inputs = x.map(|pair| pair.map(|v| v as f32));
+            native.process(inputs.each_ref().map(|v| v.as_slice()), &mut audio);
             output = audio.map(f64::from);
         }
         (AudioInput, _) => output = input,
@@ -801,7 +832,7 @@ mod block_tests {
             fn prepare_block(&mut self, _: &ProcessContext) {
                 self.spans += 1;
             }
-            fn process(&mut self, buffer: &mut [f32]) {
+            fn process(&mut self, _inputs: [&[f32]; 5], buffer: &mut [f32]) {
                 buffer.fill(self.value);
             }
             fn event(&mut self, _: suhina_device_api::NoteEvent) {

@@ -45,6 +45,10 @@ pub enum NodeKind {
     },
     /// Polyphonic sample source; resources are bound off the audio thread.
     Sampler,
+    /// Trusted host-provided graph effect with five fixed signal ports.
+    NativeEffect {
+        effect: String,
+    },
     AudioInput,
     AudioOutput,
     MidiInput,
@@ -153,6 +157,23 @@ const SAMPLER: NodeInfo = NodeInfo {
     example: r#"{"kind":"sampler"}"#,
 };
 
+const NATIVE_EFFECT: NodeInfo = NodeInfo {
+    kind: "native_effect",
+    name: "Native effect",
+    rust_variant: "NativeEffect",
+    inputs: &[
+        PortInfo { name: "in", default: Some(0.), unit: "signal" },
+        PortInfo { name: "control1", default: Some(0.), unit: "signal" },
+        PortInfo { name: "control2", default: Some(0.), unit: "signal" },
+        PortInfo { name: "control3", default: Some(0.), unit: "signal" },
+        PortInfo { name: "control4", default: Some(0.), unit: "signal" },
+    ],
+    outputs: &["out", "left", "right"],
+    description: "Trusted native graph kernel, resolved off-thread by the host. Supports graph wiring and delayed feedback; never loads third-party code.",
+    configuration: "effect: registered kernel id, 1..128 bytes",
+    example: r#"{"kind":"native_effect","effect":"org.example.gain"}"#,
+};
+
 const NATIVE_DEVICE: NodeInfo = NodeInfo {
     kind: "native_device",
     name: "Native device",
@@ -172,6 +193,7 @@ mod stereo;
 mod transport;
 pub static NODE_CATALOG: &[NodeInfo] = &[
     NATIVE_DEVICE,
+    NATIVE_EFFECT,
     SAMPLER,
     io::AUDIO_INPUT,
     io::AUDIO_OUTPUT,
@@ -234,6 +256,7 @@ impl NodeKind {
     pub fn info(&self) -> &'static NodeInfo {
         match self {
             Self::Sampler => &SAMPLER,
+            Self::NativeEffect { .. } => &NATIVE_EFFECT,
             Self::NativeDevice { .. } => &NATIVE_DEVICE,
             Self::AudioInput => &io::AUDIO_INPUT,
             Self::AudioOutput => &io::AUDIO_OUTPUT,

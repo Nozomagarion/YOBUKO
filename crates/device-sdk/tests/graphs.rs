@@ -98,7 +98,7 @@ fn every_catalog_node_round_trips_resets_and_ignores_host_block_size() {
             continue;
         }
         for sr in [8000.0, 44100.0, 48000.0, 96000.0, 384000.0] {
-            let mut effect = g.compile_at(sr).unwrap();
+            let mut effect = g.compile_with_native_at(sr, |_, _| Ok(Box::new(CatalogNative))).unwrap();
             let input = (0..2048).flat_map(|n| [(n as f32 * 0.03).sin(), -(n as f32 * 0.05).cos()]).collect::<Vec<_>>();
             let mut expected = input.clone();
             effect.process(&mut expected);
@@ -907,5 +907,18 @@ fn sampler_graph_max_polyphony_callback_timing() {
             worst = worst.max(callback.elapsed());
         }
         eprintln!("{name}: mean {:?}, worst {:?}; 256-frame deadline 5.333 ms", start.elapsed() / 1000, worst);
+    }
+}
+
+struct CatalogNative;
+impl suhina_device_sdk::native_node::NativeNode for CatalogNative {
+    fn prepare_block(&mut self, _: &ProcessContext) {}
+    fn process(&mut self, inputs: [&[f32]; 5], output: &mut [f32]) {
+        output.copy_from_slice(inputs[0]);
+    }
+    fn event(&mut self, _: suhina_device_api::NoteEvent) {}
+    fn reset(&mut self) {}
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
