@@ -1,7 +1,8 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! A prepared per-frame signal interpreter. All storage is allocated during compilation.
+//! A prepared block signal interpreter with a per-frame delayed-graph fallback.
+//! All persistent processing storage is allocated during compilation.
 use crate::{DeviceGraph, DeviceSdkError, FilterMode, NodeKind, Parameter, ProcessContext};
 use suhina_device_api::Device;
 use suhina_dsp::{Biquad, Coefficients};
@@ -56,6 +57,9 @@ pub struct PreparedEffect {
     sample_rate: f64,
     output: usize,
     midi: [f64; 3],
+    block_values: Vec<[[f64; 2]; 64]>,
+    block_parameters: Vec<[f64; 64]>,
+    block_safe: bool,
 }
 
 fn finite(value: f64) -> f64 {
@@ -158,6 +162,9 @@ impl PreparedEffect {
             remaining: vec![0; graph.parameters.len()],
             started: false,
             midi: [0.0; 3],
+            block_values: vec![[[0.0; 2]; 64]; graph.nodes.len()],
+            block_parameters: vec![[0.0; 64]; graph.parameters.len()],
+            block_safe: !graph.nodes.iter().any(|n| matches!(n.kind, NodeKind::Delay { .. } | NodeKind::SampleDelay)),
         })
     }
 
@@ -257,6 +264,10 @@ impl PreparedEffect {
     }
 
     pub fn process_context(&mut self, context: &ProcessContext, buffer: &mut [f32]) {
+        if self.block_safe {
+            self.process_blocks(context, buffer);
+            return;
+        }
         let tempo = if context.tempo.is_finite() { context.tempo.clamp(1.0, 1000.0) } else { 120.0 };
         let mut beat = finite(context.beat);
         let beat_step = if context.playing { tempo / (60.0 * self.sample_rate) } else { 0.0 };
@@ -281,217 +292,18 @@ impl PreparedEffect {
             }
             let input = [finite(frame[0] as f64), finite(frame[1] as f64)];
             for &index in &self.order {
-                let Some(op) = self.nodes.get_mut(index) else { continue };
-                let x = std::array::from_fn::<_, 5, _>(|i| match op.inputs[i] {
-                    Some(Wire { source, channel }) => {
-                        let value = self.values.get(source).copied().unwrap_or([0.0; 2]);
-                        channel.and_then(|i| value.get(i).copied()).map_or(value, |v| [v; 2])
-                    }
-                    None => [op.defaults[i]; 2],
-                });
-                let parameter = op.parameter.and_then(|i| self.parameter_values.get(i)).copied().unwrap_or(0.0);
-                let mut output = [0.0; 2];
-                use NodeKind::*;
-                match (&op.kind, &mut op.state) {
-                    (Sampler, State::Sampler(sampler)) => {
-                        let mut audio = [0.0; 2];
-                        sampler.process_prepared(&mut audio);
-                        output = audio.map(f64::from);
-                    }
-                    (AudioInput, _) => output = input,
-                    (AudioOutput, _) => output = x[0],
-                    (Constant { value }, _) => output = [*value; 2],
-                    (Parameter { .. }, _) => output = [parameter; 2],
-                    (Tempo, _) => output = [tempo; 2],
-                    (LfoRate, _) => {
-                        let hz = crate::sampler::lfo_hz(x[0][0], x[1][0], x[2][0], x[3][0], x[4][0]);
-                        output = [hz; 2];
-                    }
-                    (Beat, _) => output = [beat; 2],
-                    (Playing, _) => output = [f64::from(context.playing); 2],
-                    (MidiKey, _) => output = [self.midi[0]; 2],
-                    (MidiVelocity, _) => output = [self.midi[1]; 2],
-                    (MidiGate, _) => output = [self.midi[2]; 2],
-                    (Noise { .. }, State::Random(seed)) => {
-                        *seed ^= *seed << 13;
-                        *seed ^= *seed >> 17;
-                        *seed ^= *seed << 5;
-                        output = [*seed as f64 / u32::MAX as f64 * 2.0 - 1.0; 2];
-                    }
-                    (Oscillator { shape }, State::Phase(phase)) => {
-                        output = [suhina_dsp::lfo::wave(shape.dsp(), *phase); 2];
-                        *phase = (*phase
-                            + x[0][0].clamp(-0.49 * self.sample_rate, 0.49 * self.sample_rate) / self.sample_rate)
-                            .rem_euclid(1e9);
-                    }
-                    (SyncedLfo { shape }, _) => output = [suhina_dsp::lfo::wave(shape.dsp(), beat * x[0][0]); 2],
-                    (Stereo, _) => output = [x[0][0], x[1][1]],
-                    (Mono, _) => output = [(x[0][0] + x[0][1]) * 0.5; 2],
-                    (MidSideEncode, _) => output = [(x[0][0] + x[0][1]) * 0.5, (x[0][0] - x[0][1]) * 0.5],
-                    (MidSideDecode, _) => output = [x[0][0] + x[0][1], x[0][0] - x[0][1]],
-                    (Pan, _) => {
-                        output = [x[0][0] * (1.0 - x[1][0].clamp(0.0, 1.0)), x[0][1] * (1.0 + x[1][0].clamp(-1.0, 0.0))]
-                    }
-                    (Filter { mode }, State::Filter { channels, controls }) => {
-                        let next = [
-                            x[1][0].clamp(1.0, self.sample_rate * 0.49),
-                            x[2][0].clamp(0.025, 100.0),
-                            x[3][0].clamp(-48.0, 48.0),
-                        ];
-                        if next != *controls {
-                            *controls = next;
-                            let [f, q, g] = next;
-                            let c = match mode {
-                                FilterMode::Lowpass => Coefficients::lowpass(self.sample_rate, f, q),
-                                FilterMode::Highpass => Coefficients::highpass(self.sample_rate, f, q),
-                                FilterMode::Bandpass => Coefficients::bandpass(self.sample_rate, f, q),
-                                FilterMode::Peak => Coefficients::peak(self.sample_rate, f, q, g),
-                                FilterMode::LowShelf => Coefficients::low_shelf(self.sample_rate, f, q, g),
-                                FilterMode::HighShelf => Coefficients::high_shelf(self.sample_rate, f, q, g),
-                            };
-                            for channel in channels.iter_mut() {
-                                channel.set(c);
-                            }
-                        }
-                        for c in 0..2 {
-                            output[c] = channels[c].process(x[0][c]);
-                        }
-                    }
-                    (
-                        Delay { .. } | SampleDelay,
-                        State::Delay { history, cursor, max_frames, heads, targets, fades },
-                    ) => {
-                        let len = history.len();
-                        let fade_frames = (self.sample_rate * 0.02).max(1.0) as usize;
-                        for c in 0..2 {
-                            let frames = if matches!(op.kind, SampleDelay) {
-                                1.0
-                            } else {
-                                (x[1][c] * self.sample_rate).clamp(1.0, *max_frames)
-                            };
-                            let read = |distance: f64| {
-                                let whole = distance.floor() as usize;
-                                let fraction = distance - whole as f64;
-                                let at = (*cursor + len - whole) % len;
-                                let prev = (at + len - 1) % len;
-                                history
-                                    .get(at)
-                                    .zip(history.get(prev))
-                                    .map_or(0.0, |(a, b)| a[c] * (1.0 - fraction) + b[c] * fraction)
-                            };
-                            if x[2][0].round() == 1.0 && heads[c] > 0.0 {
-                                if fades[c] == 0 && (frames - targets[c]).abs() >= 1.0 {
-                                    heads[c] = targets[c];
-                                    targets[c] = frames;
-                                    fades[c] = fade_frames;
-                                }
-                                if fades[c] > 0 {
-                                    let blend = 1.0 - fades[c] as f64 / fade_frames as f64;
-                                    output[c] = read(heads[c]) * (1.0 - blend) + read(targets[c]) * blend;
-                                    fades[c] -= 1;
-                                    if fades[c] == 0 {
-                                        heads[c] = targets[c];
-                                    }
-                                } else {
-                                    output[c] = read(targets[c]);
-                                }
-                            } else {
-                                let frames = if x[2][0].round() == 0.0 && heads[c] > 0.0 {
-                                    heads[c] + (frames - heads[c]) / fade_frames as f64
-                                } else {
-                                    frames
-                                };
-                                output[c] = read(frames);
-                                heads[c] = frames;
-                                targets[c] = frames;
-                                fades[c] = 0;
-                            }
-                        }
-                    }
-                    (Smooth | Envelope { .. }, State::Smooth(state)) => {
-                        for c in 0..2 {
-                            let rms = matches!(op.kind, Envelope { rms: true });
-                            let target = if matches!(op.kind, Smooth) {
-                                x[0][c]
-                            } else if rms {
-                                x[0][c] * x[0][c]
-                            } else {
-                                x[0][c].abs()
-                            };
-                            let seconds =
-                                if matches!(op.kind, Smooth) || target > state[c] { x[1][c] } else { x[2][c] };
-                            let a = coefficient(seconds, self.sample_rate);
-                            state[c] = finite(a * state[c] + (1.0 - a) * target);
-                            output[c] = if rms { state[c].max(0.0).sqrt() } else { state[c] };
-                        }
-                    }
-                    (SampleHold, State::Held { value, trigger }) => {
-                        for c in 0..2 {
-                            if x[1][c] > 0.0 && trigger[c] <= 0.0 {
-                                value[c] = x[0][c];
-                            }
-                            trigger[c] = x[1][c];
-                        }
-                        output = *value;
-                    }
-                    (kind, _) => {
-                        for c in 0..2 {
-                            let a = x[0][c];
-                            let b = x[1][c];
-                            let d = x[2][c];
-                            output[c] = match kind {
-                                Gain { .. } => a * parameter,
-                                Add => a + b,
-                                Subtract => a - b,
-                                Multiply => a * b,
-                                Divide => {
-                                    if b == 0.0 {
-                                        0.0
-                                    } else {
-                                        a / b
-                                    }
-                                }
-                                Min => a.min(b),
-                                Max => a.max(b),
-                                Power => a.powf(b),
-                                Less => f64::from(a < b),
-                                Greater => f64::from(a > b),
-                                Abs => a.abs(),
-                                Negate => -a,
-                                Sqrt => a.max(0.0).sqrt(),
-                                Exp => a.exp(),
-                                Log => {
-                                    if a > 0.0 {
-                                        a.ln()
-                                    } else {
-                                        0.0
-                                    }
-                                }
-                                Floor => a.floor(),
-                                Fract => a - a.floor(),
-                                Sin => a.sin(),
-                                Cos => a.cos(),
-                                Tanh => a.tanh(),
-                                Atan => a.atan(),
-                                DbToGain => 10.0f64.powf(a.clamp(-120.0, 120.0) / 20.0),
-                                GainToDb => (20.0 * a.abs().max(1e-6).log10()).max(-120.0),
-                                Clamp => a.clamp(b.min(d), b.max(d)),
-                                Mix => a * (1.0 - d.clamp(0.0, 1.0)) + b * d.clamp(0.0, 1.0),
-                                Select => {
-                                    if d > 0.0 {
-                                        b
-                                    } else {
-                                        a
-                                    }
-                                }
-                                _ => 0.0,
-                            };
-                        }
-                    }
-                }
-                if let Some(slot) = self.values.get_mut(index) {
-                    *slot = output.map(finite);
-                }
+                evaluate(
+                    &mut self.nodes,
+                    &mut self.values,
+                    &self.parameter_values,
+                    self.midi,
+                    self.sample_rate,
+                    index,
+                    input,
+                    tempo,
+                    beat,
+                    context,
+                );
             }
             // Commit delay inputs only after every node has evaluated the current frame.
             for op in &mut self.nodes {
@@ -513,6 +325,73 @@ impl PreparedEffect {
             frame[0] = output[0] as f32;
             frame[1] = output[1] as f32;
             beat += beat_step;
+        }
+        remainder.fill(0.0);
+    }
+
+    fn process_blocks(&mut self, context: &ProcessContext, buffer: &mut [f32]) {
+        let tempo = if context.tempo.is_finite() { context.tempo.clamp(1.0, 1000.0) } else { 120.0 };
+        let mut beat = finite(context.beat);
+        let step = if context.playing { tempo / (60.0 * self.sample_rate) } else { 0.0 };
+        for op in &mut self.nodes {
+            if let State::Sampler(sampler) = &mut op.state {
+                sampler.prepare_block(context);
+            }
+        }
+        let (frames, remainder) = buffer.as_chunks_mut::<2>();
+        for block in frames.chunks_mut(64) {
+            let mut beats = [0.0; 64];
+            for (frame, slot) in beats.iter_mut().take(block.len()).enumerate() {
+                *slot = beat;
+                beat += step;
+                self.started = true;
+                for (index, ((value, target), remaining)) in
+                    self.parameter_values.iter_mut().zip(&self.targets).zip(&mut self.remaining).enumerate()
+                {
+                    if *remaining > 0 {
+                        *value += (*target - *value) / *remaining as f64;
+                        *remaining -= 1;
+                        if *remaining == 0 {
+                            *value = *target;
+                        }
+                    }
+                    self.block_parameters[index][frame] = *value;
+                }
+            }
+            for &index in &self.order {
+                if let State::Sampler(sampler) = &mut self.nodes[index].state {
+                    let mut audio = [0.0; 128];
+                    sampler.process_prepared(&mut audio[..block.len() * 2]);
+                    for (frame, pair) in audio.as_chunks::<2>().0.iter().take(block.len()).enumerate() {
+                        self.block_values[index][frame] = [f64::from(pair[0]), f64::from(pair[1])];
+                    }
+                    continue;
+                }
+                for (frame, input) in block.iter().enumerate() {
+                    for wire in self.nodes[index].inputs.iter().flatten() {
+                        self.values[wire.source] = self.block_values[wire.source][frame];
+                    }
+                    if let Some(parameter) = self.nodes[index].parameter {
+                        self.parameter_values[parameter] = self.block_parameters[parameter][frame];
+                    }
+                    evaluate(
+                        &mut self.nodes,
+                        &mut self.values,
+                        &self.parameter_values,
+                        self.midi,
+                        self.sample_rate,
+                        index,
+                        input.map(|v| finite(f64::from(v))),
+                        tempo,
+                        beats[frame],
+                        context,
+                    );
+                    self.block_values[index][frame] = self.values[index];
+                }
+            }
+            for (frame, output) in block.iter_mut().enumerate() {
+                *output = self.block_values[self.output][frame].map(|v| v as f32);
+            }
         }
         remainder.fill(0.0);
     }
@@ -559,6 +438,316 @@ impl PreparedEffect {
                 span_context.beat += offset as f64 * span_context.tempo / (60.0 * self.sample_rate);
             }
             self.process_context(&span_context, span);
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn evaluate(
+    nodes: &mut [Op],
+    values: &mut [[f64; 2]],
+    parameter_values: &[f64],
+    midi: [f64; 3],
+    sample_rate: f64,
+    index: usize,
+    input: [f64; 2],
+    tempo: f64,
+    beat: f64,
+    context: &ProcessContext,
+) {
+    let Some(op) = nodes.get_mut(index) else { return };
+    let x = std::array::from_fn::<_, 5, _>(|i| match op.inputs[i] {
+        Some(Wire { source, channel }) => {
+            let value = values.get(source).copied().unwrap_or([0.0; 2]);
+            channel.and_then(|i| value.get(i).copied()).map_or(value, |v| [v; 2])
+        }
+        None => [op.defaults[i]; 2],
+    });
+    let parameter = op.parameter.and_then(|i| parameter_values.get(i)).copied().unwrap_or(0.0);
+    let mut output = [0.0; 2];
+    use NodeKind::*;
+    match (&op.kind, &mut op.state) {
+        (Sampler, State::Sampler(sampler)) => {
+            let mut audio = [0.0; 2];
+            sampler.process_prepared(&mut audio);
+            output = audio.map(f64::from);
+        }
+        (AudioInput, _) => output = input,
+        (AudioOutput, _) => output = x[0],
+        (Constant { value }, _) => output = [*value; 2],
+        (Parameter { .. }, _) => output = [parameter; 2],
+        (Tempo, _) => output = [tempo; 2],
+        (LfoRate, _) => {
+            let hz = crate::sampler::lfo_hz(x[0][0], x[1][0], x[2][0], x[3][0], x[4][0]);
+            output = [hz; 2];
+        }
+        (Beat, _) => output = [beat; 2],
+        (Playing, _) => output = [f64::from(context.playing); 2],
+        (MidiKey, _) => output = [midi[0]; 2],
+        (MidiVelocity, _) => output = [midi[1]; 2],
+        (MidiGate, _) => output = [midi[2]; 2],
+        (Noise { .. }, State::Random(seed)) => {
+            *seed ^= *seed << 13;
+            *seed ^= *seed >> 17;
+            *seed ^= *seed << 5;
+            output = [*seed as f64 / u32::MAX as f64 * 2.0 - 1.0; 2];
+        }
+        (Oscillator { shape }, State::Phase(phase)) => {
+            output = [suhina_dsp::lfo::wave(shape.dsp(), *phase); 2];
+            *phase = (*phase + x[0][0].clamp(-0.49 * sample_rate, 0.49 * sample_rate) / sample_rate).rem_euclid(1e9);
+        }
+        (SyncedLfo { shape }, _) => output = [suhina_dsp::lfo::wave(shape.dsp(), beat * x[0][0]); 2],
+        (Stereo, _) => output = [x[0][0], x[1][1]],
+        (Mono, _) => output = [(x[0][0] + x[0][1]) * 0.5; 2],
+        (MidSideEncode, _) => output = [(x[0][0] + x[0][1]) * 0.5, (x[0][0] - x[0][1]) * 0.5],
+        (MidSideDecode, _) => output = [x[0][0] + x[0][1], x[0][0] - x[0][1]],
+        (Pan, _) => output = [x[0][0] * (1.0 - x[1][0].clamp(0.0, 1.0)), x[0][1] * (1.0 + x[1][0].clamp(-1.0, 0.0))],
+        (Filter { mode }, State::Filter { channels, controls }) => {
+            let next =
+                [x[1][0].clamp(1.0, sample_rate * 0.49), x[2][0].clamp(0.025, 100.0), x[3][0].clamp(-48.0, 48.0)];
+            if next != *controls {
+                *controls = next;
+                let [f, q, g] = next;
+                let c = match mode {
+                    FilterMode::Lowpass => Coefficients::lowpass(sample_rate, f, q),
+                    FilterMode::Highpass => Coefficients::highpass(sample_rate, f, q),
+                    FilterMode::Bandpass => Coefficients::bandpass(sample_rate, f, q),
+                    FilterMode::Peak => Coefficients::peak(sample_rate, f, q, g),
+                    FilterMode::LowShelf => Coefficients::low_shelf(sample_rate, f, q, g),
+                    FilterMode::HighShelf => Coefficients::high_shelf(sample_rate, f, q, g),
+                };
+                for channel in channels.iter_mut() {
+                    channel.set(c);
+                }
+            }
+            for c in 0..2 {
+                output[c] = channels[c].process(x[0][c]);
+            }
+        }
+        (Delay { .. } | SampleDelay, State::Delay { history, cursor, max_frames, heads, targets, fades }) => {
+            let len = history.len();
+            let fade_frames = (sample_rate * 0.02).max(1.0) as usize;
+            for c in 0..2 {
+                let frames =
+                    if matches!(op.kind, SampleDelay) { 1.0 } else { (x[1][c] * sample_rate).clamp(1.0, *max_frames) };
+                let read = |distance: f64| {
+                    let whole = distance.floor() as usize;
+                    let fraction = distance - whole as f64;
+                    let at = (*cursor + len - whole) % len;
+                    let prev = (at + len - 1) % len;
+                    history
+                        .get(at)
+                        .zip(history.get(prev))
+                        .map_or(0.0, |(a, b)| a[c] * (1.0 - fraction) + b[c] * fraction)
+                };
+                if x[2][0].round() == 1.0 && heads[c] > 0.0 {
+                    if fades[c] == 0 && (frames - targets[c]).abs() >= 1.0 {
+                        heads[c] = targets[c];
+                        targets[c] = frames;
+                        fades[c] = fade_frames;
+                    }
+                    if fades[c] > 0 {
+                        let blend = 1.0 - fades[c] as f64 / fade_frames as f64;
+                        output[c] = read(heads[c]) * (1.0 - blend) + read(targets[c]) * blend;
+                        fades[c] -= 1;
+                        if fades[c] == 0 {
+                            heads[c] = targets[c];
+                        }
+                    } else {
+                        output[c] = read(targets[c]);
+                    }
+                } else {
+                    let frames = if x[2][0].round() == 0.0 && heads[c] > 0.0 {
+                        heads[c] + (frames - heads[c]) / fade_frames as f64
+                    } else {
+                        frames
+                    };
+                    output[c] = read(frames);
+                    heads[c] = frames;
+                    targets[c] = frames;
+                    fades[c] = 0;
+                }
+            }
+        }
+        (Smooth | Envelope { .. }, State::Smooth(state)) => {
+            for c in 0..2 {
+                let rms = matches!(op.kind, Envelope { rms: true });
+                let target = if matches!(op.kind, Smooth) {
+                    x[0][c]
+                } else if rms {
+                    x[0][c] * x[0][c]
+                } else {
+                    x[0][c].abs()
+                };
+                let seconds = if matches!(op.kind, Smooth) || target > state[c] { x[1][c] } else { x[2][c] };
+                let a = coefficient(seconds, sample_rate);
+                state[c] = finite(a * state[c] + (1.0 - a) * target);
+                output[c] = if rms { state[c].max(0.0).sqrt() } else { state[c] };
+            }
+        }
+        (SampleHold, State::Held { value, trigger }) => {
+            for c in 0..2 {
+                if x[1][c] > 0.0 && trigger[c] <= 0.0 {
+                    value[c] = x[0][c];
+                }
+                trigger[c] = x[1][c];
+            }
+            output = *value;
+        }
+        (kind, _) => {
+            for c in 0..2 {
+                let a = x[0][c];
+                let b = x[1][c];
+                let d = x[2][c];
+                output[c] = match kind {
+                    Gain { .. } => a * parameter,
+                    Add => a + b,
+                    Subtract => a - b,
+                    Multiply => a * b,
+                    Divide => {
+                        if b == 0.0 {
+                            0.0
+                        } else {
+                            a / b
+                        }
+                    }
+                    Min => a.min(b),
+                    Max => a.max(b),
+                    Power => a.powf(b),
+                    Less => f64::from(a < b),
+                    Greater => f64::from(a > b),
+                    Abs => a.abs(),
+                    Negate => -a,
+                    Sqrt => a.max(0.0).sqrt(),
+                    Exp => a.exp(),
+                    Log => {
+                        if a > 0.0 {
+                            a.ln()
+                        } else {
+                            0.0
+                        }
+                    }
+                    Floor => a.floor(),
+                    Fract => a - a.floor(),
+                    Sin => a.sin(),
+                    Cos => a.cos(),
+                    Tanh => a.tanh(),
+                    Atan => a.atan(),
+                    DbToGain => 10.0f64.powf(a.clamp(-120.0, 120.0) / 20.0),
+                    GainToDb => (20.0 * a.abs().max(1e-6).log10()).max(-120.0),
+                    Clamp => a.clamp(b.min(d), b.max(d)),
+                    Mix => a * (1.0 - d.clamp(0.0, 1.0)) + b * d.clamp(0.0, 1.0),
+                    Select => {
+                        if d > 0.0 {
+                            b
+                        } else {
+                            a
+                        }
+                    }
+                    _ => 0.0,
+                };
+            }
+        }
+    }
+    if let Some(slot) = values.get_mut(index) {
+        *slot = output.map(finite);
+    }
+}
+
+#[cfg(test)]
+mod block_tests {
+    use super::*;
+    use crate::{Connection, DeviceRole, Node};
+
+    #[test]
+    #[ignore = "manual release callback timing"]
+    fn representative_graph_callback_timing() {
+        for count in [2, 16, 128] {
+            let mut graph = DeviceGraph::new("org.test.timing", "Timing", DeviceRole::Effect);
+            graph.parameters.push(Parameter::new("gain", "Gain", (0.0, 2.0), 0.99));
+            graph.nodes.push(Node::audio_input("in"));
+            let mut previous = "in".to_string();
+            for i in 0..count {
+                let id = format!("gain{i}");
+                graph.nodes.push(Node::new(&id, NodeKind::Gain { parameter: "gain".into() }));
+                graph.connections.push(Connection::new(&previous, &id));
+                previous = id;
+            }
+            graph.nodes.push(Node::audio_output("out"));
+            graph.connections.push(Connection::new(&previous, "out"));
+            for enabled in [false, true] {
+                let mut effect = PreparedEffect::new(&graph, 48000.0).expect("graph");
+                effect.block_safe = enabled;
+                let mut audio = [0.1; 512];
+                let start = std::time::Instant::now();
+                for _ in 0..10000 {
+                    effect.process(std::hint::black_box(&mut audio));
+                }
+                eprintln!("{count} gains block={enabled}: {:?}/256 frames", start.elapsed() / 10000);
+            }
+        }
+    }
+
+    #[test]
+    fn blocks_match_frame_interpreter_with_smoothing_and_transport() {
+        for source in [
+            NodeKind::Beat,
+            NodeKind::Noise { seed: 71 },
+            NodeKind::MidiGate,
+            NodeKind::Oscillator { shape: crate::Waveform::Sine },
+        ] {
+            let mut graph = DeviceGraph::new("org.test.block", "Block", DeviceRole::Effect);
+            graph.parameters.push(Parameter::new("gain", "Gain", (0.0, 2.0), 0.5));
+            graph.nodes = vec![
+                Node::new("source", source),
+                Node::new("gain", NodeKind::Gain { parameter: "gain".into() }),
+                Node::audio_output("out"),
+            ];
+            graph.connections = vec![Connection::new("source", "gain"), Connection::new("gain", "out")];
+            let mut block = PreparedEffect::new(&graph, 48000.0).expect("graph");
+            let mut reference = PreparedEffect::new(&graph, 48000.0).expect("graph");
+            reference.block_safe = false;
+            let context = ProcessContext { tempo: 91.0, beat: 1.25, playing: true };
+            for size in [0, 1, 2, 126, 128, 130, 2049] {
+                let mut actual = vec![0.1; size];
+                let mut expected = actual.clone();
+                block.set_parameter(0, 1.5);
+                reference.set_parameter(0, 1.5);
+                block.process_context(&context, &mut actual);
+                reference.process_context(&context, &mut expected);
+                assert_eq!(actual, expected, "buffer size {size}");
+            }
+        }
+    }
+    #[test]
+    fn many_parameter_timelines_match_frame_interpreter() {
+        let mut graph = DeviceGraph::new("org.test.parameters", "Parameters", DeviceRole::Effect);
+        graph.nodes.push(Node::new("source", NodeKind::Beat));
+        let mut previous = "source".to_owned();
+        for index in 0..128 {
+            let id = format!("gain{index}");
+            graph.parameters.push(Parameter::new(&id, &id, (0.0, 2.0), 1.0));
+            graph.nodes.push(Node::new(&id, NodeKind::Gain { parameter: id.clone() }));
+            graph.connections.push(Connection::new(&previous, &id));
+            previous = id;
+        }
+        graph.nodes.push(Node::audio_output("out"));
+        graph.connections.push(Connection::new(&previous, "out"));
+        let mut block = PreparedEffect::new(&graph, 48000.0).expect("graph");
+        let mut reference = PreparedEffect::new(&graph, 48000.0).expect("graph");
+        reference.block_safe = false;
+        let context = ProcessContext { tempo: 123.0, beat: 0.5, playing: true };
+        for pass in 0..3 {
+            for index in 0..128 {
+                let value = 0.99 + ((index + pass) % 3) as f64 * 0.01;
+                block.set_parameter(index, value);
+                reference.set_parameter(index, value);
+            }
+            let mut actual = vec![0.0; 2050];
+            let mut expected = actual.clone();
+            block.process_context(&context, &mut actual);
+            reference.process_context(&context, &mut expected);
+            assert_eq!(actual, expected, "parameter update pass {pass}");
         }
     }
 }

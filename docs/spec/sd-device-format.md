@@ -80,6 +80,12 @@ Exactly one role-appropriate input/output is required, and every node must contr
 Missing references, duplicate ids, invalid ports,
 missing required inputs and cycles are rejected with node/port diagnostics. Only the `in` port
 of sample_delay/delay breaks a cycle; its input is written after all current-frame evaluations.
+Graphs without delay nodes execute node by node in chunks of at most 64 stereo frames, using
+node buffers and parameter timelines allocated during compilation. Native sampler sources render
+one chunk per call. Transport beats and parameter smoothing still advance for every frame;
+timestamped MIDI splits processing before applying each event. Graphs containing any delay
+retain the frame interpreter, including feed-forward delays, so feedback timing is unchanged.
+Processing a longer host buffer reuses the same bounded scratch storage.
 Delay time is an ordinary dependency, so a cycle through it is rejected.
 
 File size is capped at 2 MiB, graphs at 128 nodes, 640 connections and 256 parameters.
