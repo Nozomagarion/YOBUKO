@@ -166,6 +166,12 @@ file (`arrangement.rs` for `arrangement/`), and code names it by its full path
 
 ## From a file to the speakers
 
+Native stereo source nodes use the device-neutral `NativeNode` contract. The graph
+interpreter stores prepared trait objects; a separate factory and implementation adapters
+own concrete kernel selection and off-thread resource binding. Rendering, span preparation,
+note events and reset remain allocation-free. Shared modulation math lives outside concrete
+instruments.
+
 The SDK also preserves optional editor geometry (node rectangles, wire bends and port
 anchors). This remains authoring data in the embedded JSON; it is validated off the audio thread
 and does not add processing nodes or a runtime/UI dependency. The current node list does not
