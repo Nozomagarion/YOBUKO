@@ -808,3 +808,104 @@ fn sampler_source_composes_and_preserves_timestamped_polyphony() {
     invalid.role = DeviceRole::Effect;
     assert!(invalid.validate().is_err());
 }
+
+#[test]
+fn sampler_graph_matches_two_independent_kernels_across_blocks() {
+    use suhina_device_api::{Device, NoteEvent};
+    use suhina_device_sdk::sampler::Sampler;
+    for mode in [0., 1.] {
+        let mut graph = DeviceGraph::new("org.test.two-samples", "Two samples", DeviceRole::Instrument);
+        graph.nodes =
+            vec![N::new("a", K::Sampler), N::new("b", K::Sampler), N::new("sum", K::Add), N::audio_output("out")];
+        graph.connections =
+            vec![C::ports("a", "out", "sum", "a"), C::ports("b", "out", "sum", "b"), C::new("sum", "out")];
+        let mut prepared = graph.compile_instrument_at(48000.).expect("compile");
+        let mut kernels = [Sampler::new(), Sampler::new()];
+        for (index, kernel) in kernels.iter_mut().enumerate() {
+            let source: std::sync::Arc<[f32]> =
+                (0..8192).map(|i| ((i as f32 * (0.03 + index as f32 * 0.02)).sin()) * 0.2).collect::<Vec<_>>().into();
+            for sampler in [prepared.sampler_mut(if index == 0 { "a" } else { "b" }).expect("source"), kernel] {
+                sampler.load_sample(48000, 1, source.clone());
+                for (parameter, value) in [(0, mode), (8, 2.), (11, 0.001), (12, 0.002), (13, 0.8), (14, 0.03)] {
+                    sampler.set_param(parameter, value);
+                }
+            }
+        }
+        for block in 0..24 {
+            let events = match block {
+                0 => {
+                    vec![(7, NoteEvent::On { key: 60, velocity: 0.8 }), (91, NoteEvent::On { key: 67, velocity: 0.6 })]
+                }
+                3 => vec![(53, NoteEvent::PitchBend(0.7))],
+                9 => vec![(31, NoteEvent::Off { key: 60, velocity: 0. })],
+                16 => vec![(103, NoteEvent::AllNotesOff)],
+                _ => vec![],
+            };
+            let context = ProcessContext::default();
+            let mut actual = [0.; 512];
+            prepared.process_instrument_context(&context, &events, &mut actual);
+            let mut expected = [0.; 512];
+            for kernel in &mut kernels {
+                let mut rendered = [0.; 512];
+                let mut offset = 0;
+                for &(at, event) in &events {
+                    kernel.process(&context, &mut rendered[offset * 2..at * 2]);
+                    kernel.event(event);
+                    offset = at;
+                }
+                kernel.process(&context, &mut rendered[offset * 2..]);
+                for (sum, value) in expected.iter_mut().zip(rendered) {
+                    *sum += value;
+                }
+            }
+            for (frame, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+                assert!(
+                    (actual - expected).abs() < 1e-6,
+                    "mode {mode}, block {block}, sample {frame}: {actual} != {expected}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+#[ignore = "manual release callback timing"]
+fn sampler_graph_max_polyphony_callback_timing() {
+    use suhina_device_api::{Device, NoteEvent};
+    use suhina_device_sdk::sampler::Sampler;
+    let mut graph = DeviceGraph::new("org.test.sample-timing", "Timing", DeviceRole::Instrument);
+    graph.nodes = vec![N::new("sample", K::Sampler), N::audio_output("out")];
+    graph.connections = vec![C::new("sample", "out")];
+    let mut prepared = graph.compile_instrument_at(48000.).expect("compile");
+    let mut native = Sampler::new();
+    for sampler in [prepared.sampler_mut("sample").expect("source"), &mut native] {
+        sampler.load_sample(48000, 1, vec![0.1; 48000].into());
+        for (parameter, value) in [(0, 1.), (7, 32.), (8, 2.), (22, 500.), (23, 100.)] {
+            sampler.set_param(parameter, value);
+        }
+        for key in 48..80 {
+            sampler.event(NoteEvent::On { key, velocity: 1. });
+        }
+    }
+    let context = ProcessContext::default();
+    let mut buffer = [0.; 512];
+    for _ in 0..200 {
+        native.process(&context, &mut buffer);
+        prepared.process_context(&context, &mut buffer);
+    }
+    for (name, graph_mode) in [("native", false), ("graph", true)] {
+        let start = std::time::Instant::now();
+        let mut worst = std::time::Duration::ZERO;
+        for _ in 0..1000 {
+            let callback = std::time::Instant::now();
+            if graph_mode {
+                prepared.process_context(&context, &mut buffer);
+            } else {
+                native.process(&context, &mut buffer);
+            }
+            std::hint::black_box(&buffer);
+            worst = worst.max(callback.elapsed());
+        }
+        eprintln!("{name}: mean {:?}, worst {:?}; 256-frame deadline 5.333 ms", start.elapsed() / 1000, worst);
+    }
+}
