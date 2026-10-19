@@ -826,16 +826,16 @@ fn sampler_graph_matches_two_independent_kernels_across_blocks() {
                 (0..8192).map(|i| ((i as f32 * (0.03 + index as f32 * 0.02)).sin()) * 0.2).collect::<Vec<_>>().into();
             for sampler in [prepared.sampler_mut(if index == 0 { "a" } else { "b" }).expect("source"), kernel] {
                 sampler.load_sample(48000, 1, source.clone());
-                for (parameter, value) in [(0, mode), (8, 2.), (11, 0.001), (12, 0.002), (13, 0.8), (14, 0.03)] {
+                for (parameter, value) in
+                    [(0, mode), (7, 32.), (8, 2.), (11, 0.001), (12, 0.002), (13, 0.8), (14, 0.03)]
+                {
                     sampler.set_param(parameter, value);
                 }
             }
         }
         for block in 0..24 {
             let events = match block {
-                0 => {
-                    vec![(7, NoteEvent::On { key: 60, velocity: 0.8 }), (91, NoteEvent::On { key: 67, velocity: 0.6 })]
-                }
+                0 => (60..76).enumerate().map(|(i, key)| (7 + i * 5, NoteEvent::On { key, velocity: 0.8 })).collect(),
                 3 => vec![(53, NoteEvent::PitchBend(0.7))],
                 9 => vec![(31, NoteEvent::Off { key: 60, velocity: 0. })],
                 16 => vec![(103, NoteEvent::AllNotesOff)],

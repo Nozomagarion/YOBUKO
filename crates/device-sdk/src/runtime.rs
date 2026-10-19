@@ -260,6 +260,11 @@ impl PreparedEffect {
         let tempo = if context.tempo.is_finite() { context.tempo.clamp(1.0, 1000.0) } else { 120.0 };
         let mut beat = finite(context.beat);
         let beat_step = if context.playing { tempo / (60.0 * self.sample_rate) } else { 0.0 };
+        for op in &mut self.nodes {
+            if let State::Sampler(sampler) = &mut op.state {
+                sampler.prepare_block(context);
+            }
+        }
         let (chunks, remainder) = buffer.as_chunks_mut::<2>();
         for frame in chunks {
             self.started = true;
@@ -290,9 +295,7 @@ impl PreparedEffect {
                 match (&op.kind, &mut op.state) {
                     (Sampler, State::Sampler(sampler)) => {
                         let mut audio = [0.0; 2];
-                        let mut frame_context = *context;
-                        frame_context.beat = beat;
-                        sampler.process(&frame_context, &mut audio);
+                        sampler.process_prepared(&mut audio);
                         output = audio.map(f64::from);
                     }
                     (AudioInput, _) => output = input,

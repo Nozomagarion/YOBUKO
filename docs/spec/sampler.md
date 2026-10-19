@@ -19,6 +19,9 @@ determined by MIDI key (root 60), transpose and cents. Grain schedules bounded,
 Hann-windowed grains from the same source. Both use the same amplitude envelope,
 filter and output controls. All voices and grains are allocated before processing.
 Sample decoding, replacement and disposal occur outside the audio callback.
+The graph source prepares the shared kernel once per processing span (split at
+timestamped note events), retaining the native block grain budget when voices
+finish during the span.
 
 The SDK panel uses a 900 by 168 logical-pixel canvas (200 pixels including the
 host header and padding). Sample and Grain buttons at the upper left select the
