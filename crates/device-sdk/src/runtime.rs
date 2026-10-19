@@ -3,6 +3,7 @@
 
 //! A prepared per-frame signal interpreter. All storage is allocated during compilation.
 use crate::{DeviceGraph, DeviceSdkError, FilterMode, NodeKind, Parameter, ProcessContext};
+use suhina_device_api::Device;
 use suhina_dsp::{Biquad, Coefficients};
 
 #[derive(Clone, Copy)]
@@ -11,6 +12,7 @@ struct Wire {
     channel: Option<usize>,
 }
 struct Op {
+    id: String,
     kind: NodeKind,
     inputs: [Option<Wire>; 5],
     defaults: [f64; 5],
@@ -18,6 +20,7 @@ struct Op {
     state: State,
 }
 enum State {
+    Sampler(Box<crate::sampler::Sampler>),
     None,
     Phase(f64),
     Random(u32),
@@ -108,6 +111,11 @@ impl PreparedEffect {
                 _ => None,
             };
             let state = match node.kind {
+                NodeKind::Sampler => {
+                    let mut sampler = Box::new(crate::sampler::Sampler::new());
+                    sampler.prepare(sample_rate).map_err(|e| DeviceSdkError(e.to_string()))?;
+                    State::Sampler(sampler)
+                }
                 NodeKind::Oscillator { .. } => State::Phase(0.0),
                 NodeKind::Noise { seed } => State::Random(seed.max(1)),
                 NodeKind::Smooth | NodeKind::Envelope { .. } => State::Smooth([0.0; 2]),
@@ -131,7 +139,7 @@ impl PreparedEffect {
                 },
                 _ => State::None,
             };
-            nodes.push(Op { kind: node.kind.clone(), inputs, defaults, parameter, state });
+            nodes.push(Op { id: node.id.clone(), kind: node.kind.clone(), inputs, defaults, parameter, state });
         }
         let output = graph
             .nodes
@@ -150,6 +158,20 @@ impl PreparedEffect {
             remaining: vec![0; graph.parameters.len()],
             started: false,
             midi: [0.0; 3],
+        })
+    }
+
+    /// Access a sample source for resource binding and control setup off the audio thread.
+    /// Sample replacement can release the old resource, so never call this in a callback.
+    pub fn sampler_mut(&mut self, node: &str) -> Option<&mut crate::sampler::Sampler> {
+        self.nodes.iter_mut().find_map(|op| {
+            if op.id != node {
+                return None;
+            }
+            match &mut op.state {
+                State::Sampler(sampler) => Some(sampler.as_mut()),
+                _ => None,
+            }
         })
     }
 
@@ -199,6 +221,7 @@ impl PreparedEffect {
         self.started = false;
         for op in &mut self.nodes {
             match &mut op.state {
+                State::Sampler(sampler) => sampler.reset(),
                 State::Phase(phase) => *phase = 0.0,
                 State::Random(value) => {
                     if let NodeKind::Noise { seed } = op.kind {
@@ -265,6 +288,13 @@ impl PreparedEffect {
                 let mut output = [0.0; 2];
                 use NodeKind::*;
                 match (&op.kind, &mut op.state) {
+                    (Sampler, State::Sampler(sampler)) => {
+                        let mut audio = [0.0; 2];
+                        let mut frame_context = *context;
+                        frame_context.beat = beat;
+                        sampler.process(&frame_context, &mut audio);
+                        output = audio.map(f64::from);
+                    }
                     (AudioInput, _) => output = input,
                     (AudioOutput, _) => output = x[0],
                     (Constant { value }, _) => output = [*value; 2],
@@ -501,6 +531,11 @@ impl PreparedEffect {
                     span_context.beat += offset as f64 * span_context.tempo / (60.0 * self.sample_rate);
                 }
                 self.process_context(&span_context, span);
+            }
+            for op in &mut self.nodes {
+                if let State::Sampler(sampler) = &mut op.state {
+                    sampler.event(event);
+                }
             }
             match event {
                 suhina_device_api::NoteEvent::On { key, velocity }

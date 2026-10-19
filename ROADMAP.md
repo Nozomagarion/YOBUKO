@@ -139,6 +139,9 @@ refused or suspended, never by losing its edits.
 
 ## What works now
 
+- **Composable SDK sample source:** Rust-authored instrument graphs can bind PCM to
+  independent polyphonic `sampler` nodes and process their audio with ordinary SDK nodes.
+
 - **Device SDK authoring:** checked Rust graph handles, parameter-source helpers and standard
   panel-control constructors produce the same data-only `.sd` devices and use the existing runtime.
 

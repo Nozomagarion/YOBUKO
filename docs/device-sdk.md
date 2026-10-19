@@ -379,3 +379,12 @@ parameter; pressing the active tab returns to zero. Sampler uses this to switch
 between its normal controls, envelopes and LFO without changing audio parameters.
 
 `Widget::Envelope` provides a theme-aware point editor for cumulative ADSR or bipolar Attack/Decay envelopes; the sampler demonstrates both, with separate numeric readouts.
+
+## Compose a sample source
+
+Run `cargo run -p suhina-device-sdk --example sample_source` from the repository
+root. The example constructs a Sampler source, multiplies its stereo output by
+a graph parameter, binds a generated one-second sine sample off the audio thread,
+and renders timestamped note events. It prints 48000 frames and a nonzero peak.
+See [Sampler](spec/sampler.md#composable-sample-source-first-stage) for the
+first-stage limits; embedded stock Sampler definitions continue using their native wrapper.

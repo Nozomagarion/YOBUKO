@@ -296,3 +296,22 @@ are ended rather than resumed later. Normalization follows the active grain limi
 
 Grain normalization follows a separate 5 ms ramp when density, grain size or the
 voice budget changes; it does not share the master gain ramp.
+
+## Composable sample source (first stage)
+
+An instrument graph may contain `{"kind":"sampler"}` sources. Each owns the
+shared polyphonic Sampler kernel and exposes `out`, `left` and `right` audio
+outputs, so filtering, gain, mixing and feedback can use ordinary SDK nodes.
+Every source receives the graph's timestamped note events. Sources have no
+signal inputs in this stage. Effect and MIDI-effect graphs reject them.
+
+Compile with `compile_instrument_at`, then bind PCM and configure each source
+through `PreparedEffect::sampler_mut(node_id)` and the existing `Device` API.
+Do this off the audio thread: replacement may allocate and release resources.
+Missing ids return `None`. Unbound sources are silent; reset clears voices while
+retaining PCM and controls. Processing uses fixed stack stereo buffers and
+preallocated voices, and passes the advancing transport beat to each source.
+
+This stage does not migrate the stock Sampler definition. Typed resource/event
+edges, graph-controlled sample parameters, smaller playback/envelope/granular
+nodes and authored sample bindings remain subsequent stages of issue #733.

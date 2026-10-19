@@ -64,6 +64,7 @@ The JSON catalog uses the same records and includes a minimal configuration exam
 | JSON kind / Rust variant | Inputs (default, unit) | Behaviour |
 |---|---|---|
 | `native_device` / `NativeDevice` | `in` (0, signal) | Whole-device native wrapper. Effects wire audio_input -> native_device -> audio_output; instruments wire native_device -> audio_output. Requires the host's registered factory via prepare_native_at; no arbitrary code or feedback. Parameters preserve the native contract. Processing/reset/events use Device's real-time-safe API. |
+| `sampler` / `Sampler` | None | Polyphonic sample source using the shared Sampler kernel. Receives timestamped instrument events; bind sample data and parameters by node id before processing. Audio can feed any signal node. |
 | `audio_input` / `AudioInput` | None | Stereo input of the track; no state. |
 | `audio_output` / `AudioOutput` | `in` (required, signal) | Final stereo output; no state. |
 | `gain` / `Gain` | `in` (required, signal) | Multiplies by the declared parameter in linear amplitude; legacy gain node. |
@@ -137,3 +138,22 @@ prefix without the appended LFO destinations, shape, source fades, warp controls
 LFO timing selectors and Source BPM; the oldest may also omit
 `panel_view`. New depths and fades default to zero; shape defaults to Sine. All declared audio parameter contracts
 still match exactly; other omissions or changed native parameters remain errors.
+
+## Composable sample source (first stage)
+
+An instrument graph may contain `{"kind":"sampler"}` sources. Each owns the
+shared polyphonic Sampler kernel and exposes `out`, `left` and `right` audio
+outputs, so filtering, gain, mixing and feedback can use ordinary SDK nodes.
+Every source receives the graph's timestamped note events. Sources have no
+signal inputs in this stage. Effect and MIDI-effect graphs reject them.
+
+Compile with `compile_instrument_at`, then bind PCM and configure each source
+through `PreparedEffect::sampler_mut(node_id)` and the existing `Device` API.
+Do this off the audio thread: replacement may allocate and release resources.
+Missing ids return `None`. Unbound sources are silent; reset clears voices while
+retaining PCM and controls. Processing uses fixed stack stereo buffers and
+preallocated voices, and passes the advancing transport beat to each source.
+
+This stage does not migrate the stock Sampler definition. Typed resource/event
+edges, graph-controlled sample parameters, smaller playback/envelope/granular
+nodes and authored sample bindings remain subsequent stages of issue #733.

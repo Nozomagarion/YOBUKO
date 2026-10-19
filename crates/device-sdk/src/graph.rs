@@ -39,6 +39,8 @@ impl DeviceGraph {
                 return Err(fail("MIDI value nodes are only valid in instrument graphs"));
             }
             match &node.kind {
+                NodeKind::Sampler if instrument => midi_sources += 1,
+                NodeKind::Sampler => return Err(fail("sampler is only valid in instrument graphs")),
                 NodeKind::NativeDevice { device } => {
                     if device.is_empty() || device.len() > MAX_TEXT_BYTES {
                         return Err(fail("native device id must be 1..128 bytes"));

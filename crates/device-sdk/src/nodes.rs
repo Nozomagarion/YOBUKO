@@ -43,6 +43,8 @@ pub enum NodeKind {
     NativeDevice {
         device: String,
     },
+    /// Polyphonic sample source; resources are bound off the audio thread.
+    Sampler,
     AudioInput,
     AudioOutput,
     MidiInput,
@@ -140,6 +142,17 @@ pub struct NodeInfo {
     pub rust_variant: &'static str,
 }
 
+const SAMPLER: NodeInfo = NodeInfo {
+    kind: "sampler",
+    name: "Sampler",
+    rust_variant: "Sampler",
+    inputs: &[],
+    outputs: &["out", "left", "right"],
+    description: "Polyphonic sample source using the shared Sampler kernel. Receives timestamped instrument events; bind sample data and parameters by node id before processing. Audio can feed any signal node.",
+    configuration: "none; source and controls are bound through PreparedEffect",
+    example: r#"{"kind":"sampler"}"#,
+};
+
 const NATIVE_DEVICE: NodeInfo = NodeInfo {
     kind: "native_device",
     name: "Native device",
@@ -159,6 +172,7 @@ mod stereo;
 mod transport;
 pub static NODE_CATALOG: &[NodeInfo] = &[
     NATIVE_DEVICE,
+    SAMPLER,
     io::AUDIO_INPUT,
     io::AUDIO_OUTPUT,
     io::GAIN,
@@ -219,6 +233,7 @@ pub static NODE_CATALOG: &[NodeInfo] = &[
 impl NodeKind {
     pub fn info(&self) -> &'static NodeInfo {
         match self {
+            Self::Sampler => &SAMPLER,
             Self::NativeDevice { .. } => &NATIVE_DEVICE,
             Self::AudioInput => &io::AUDIO_INPUT,
             Self::AudioOutput => &io::AUDIO_OUTPUT,

@@ -20,7 +20,7 @@ fn graph(kind: K) -> DeviceGraph {
         g.connections = vec![C::new("in", "node"), C::new("node", "out")];
         return g;
     }
-    if matches!(kind, K::MidiKey | K::MidiVelocity | K::MidiGate) {
+    if matches!(kind, K::MidiKey | K::MidiVelocity | K::MidiGate | K::Sampler) {
         let mut g = DeviceGraph::new("org.test.graph", "Graph", DeviceRole::Instrument);
         g.nodes = vec![N::new("node", kind), N::audio_output("out")];
         g.connections = vec![C::new("node", "out")];
@@ -770,4 +770,41 @@ fn parameter_controls_share_discrete_semantics() {
         parameter.control = control;
         assert_eq!(parameter.clamp(0.7), if stepped { 1.0 } else { 0.7 });
     }
+}
+
+#[test]
+fn sampler_source_composes_and_preserves_timestamped_polyphony() {
+    use std::sync::Arc;
+    use suhina_device_api::{Device, NoteEvent};
+    let mut g = DeviceGraph::new("org.test.sampler", "Sampler graph", DeviceRole::Instrument);
+    g.nodes = vec![
+        N::new("source", K::Sampler),
+        N::new("half", K::Constant { value: 0.5 }),
+        N::new("scale", K::Multiply),
+        N::audio_output("out"),
+    ];
+    g.connections =
+        vec![C::ports("source", "out", "scale", "a"), C::ports("half", "out", "scale", "b"), C::new("scale", "out")];
+    let encoded = g.to_sd().expect("serialize");
+    let g = DeviceGraph::from_sd(&encoded).expect("round trip");
+    let mut prepared = g.compile_instrument_at(48000.).expect("compile");
+    assert!(prepared.sampler_mut("missing").is_none());
+    let source = prepared.sampler_mut("source").expect("source binding");
+    source.load_sample(48000, 1, Arc::from(vec![0.25; 4800]));
+    source.set_param(11, 0.);
+    source.set_param(12, 0.);
+    source.set_param(13, 1.);
+    let events = [(8, NoteEvent::On { key: 60, velocity: 1. }), (16, NoteEvent::On { key: 64, velocity: 1. })];
+    let mut audio = [0.; 128];
+    prepared.process_instrument_context(&ProcessContext::default(), &events, &mut audio);
+    assert!(audio[..16].iter().all(|v| *v == 0.));
+    assert!(audio[16..32].iter().any(|v| *v > 0.));
+    assert!(audio[32..].iter().any(|v| *v > audio[30]));
+    prepared.reset();
+    let mut silent = [1.; 128];
+    prepared.process_instrument_context(&ProcessContext::default(), &[], &mut silent);
+    assert!(silent.iter().all(|v| *v == 0.));
+    let mut invalid = g;
+    invalid.role = DeviceRole::Effect;
+    assert!(invalid.validate().is_err());
 }
