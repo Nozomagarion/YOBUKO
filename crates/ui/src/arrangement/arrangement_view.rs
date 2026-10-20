@@ -29,7 +29,7 @@ use crate::kit::widgets::{self, Action, Drag, VOLUME_RANGE, volume_position};
 pub const HEADER_COLUMN: f32 = 336.0;
 const HEADER_COLUMN_RANGE: (f32, f32) = (160.0, 520.0);
 const RULER: f32 = ROW;
-const DEFAULT_LANE: f32 = 64.0;
+const DEFAULT_LANE: f32 = 48.0;
 const MIN_LANE: f32 = 20.0;
 const MAX_LANE: f32 = 400.0;
 /// How much a point of wheel movement with Alt held grows the lanes (as a power of e).
@@ -3792,6 +3792,8 @@ fn track_header(
     // Narrow/short headers retain their compact arrangement, including send overflow rules.
     let name_first = rect.height() >= SHOWS_MIXER
         && inner.width() - FOLD - 2.0 - ON_TOGGLE - 3.0 * (SOLO + 2.0) - PAD - PAN_FIELD - 4.0 >= LEAST_VOLUME;
+    let automation_x = first_x;
+    let first_x = if name_first { first_x } else { first_x + SOLO + PAD };
     let row_top = if name_first { inner.top() + header_row + header_gap } else { inner.top() };
     let row = Rect::from_min_max(Pos2::new(first_x, row_top), Pos2::new(inner.right(), row_top + header_row));
     let toggle = Rect::from_min_size(row.min, Vec2::new(ON_TOGGLE, header_row));
@@ -3820,7 +3822,7 @@ fn track_header(
             Vec2::new(SOLO, header_row),
         )
     } else {
-        Rect::from_min_size(Pos2::new(row.right() - SOLO, row.top()), Vec2::new(SOLO, header_row))
+        Rect::from_min_size(Pos2::new(automation_x, row.top()), Vec2::new(SOLO, header_row))
     };
     if lanes_button.intersects(clip) {
         automation::header_button(
@@ -3858,10 +3860,7 @@ fn track_header(
             Pos2::new(sends_left - SEND_GAP - 4.0, below.top() + header_row),
         )
     } else {
-        Rect::from_min_max(
-            Pos2::new(arm.unwrap_or(cue).right() + PAD, row.top()),
-            Pos2::new(lanes_button.left() - 4.0, row.bottom()),
-        )
+        Rect::from_min_max(Pos2::new(arm.unwrap_or(cue).right() + PAD, row.top()), Pos2::new(row.right(), row.bottom()))
     };
     // Keep a usable level control even on a single-row lane. Reserve the name's
     // minimum first; sends and pan stay in the expanded layout.

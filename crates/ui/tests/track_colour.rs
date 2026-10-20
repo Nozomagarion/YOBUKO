@@ -41,12 +41,17 @@ fn arrangement() -> Harness<'static, App> {
 }
 
 #[test]
-fn default_header_has_roomy_controls_without_clipping_sends() {
+fn default_header_is_48_px_and_keeps_controls_and_sends_inside() {
     let harness = arrangement();
     let header = harness.get_by_label("Track Drums").rect();
+    assert!((header.height() - 48.0).abs() < 0.5, "default header: {header:?}");
+    let automation = harness.get_by_label("Show automation of Drums").rect();
+    let volume = harness.get_by_label("Drums volume").rect();
+    assert!(automation.left() < volume.left(), "automation stays at the left");
+    assert!(header.contains_rect(automation), "automation is visible at the default height");
     for label in ["Turn Drums off", "Solo Drums", "Drums volume", "Drums send to A Reverb"] {
         let control = harness.get_by_label(label).rect();
-        assert!(control.height() >= 20.0, "{label}: {control:?}");
+        assert!(control.height() >= 16.0, "{label}: {control:?}");
         assert!(header.contains_rect(control), "{label} must fit inside its header");
     }
 }

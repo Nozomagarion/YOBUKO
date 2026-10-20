@@ -743,9 +743,10 @@ leading edge, without a contrasting title stripe. A clip tall enough for its tit
 previews start below it with a gap. Short clips omit the title rather than painting it over
 the preview. MIDI preview ink follows the body contrast in both light and dark themes.
 
-### Spacious track-header default
+### Compact track-header default
 
-New Arrangement lanes and return rows default to 64 px, with a 336 px header. At 60 px or
+New Arrangement lanes and return rows default to 48 px, with a 336 px header. The default
+two-row layout uses 16 px controls, 4 px vertical padding and a 6 px row gap. At 60 px or
 more the name uses 14 px text and controls use 20 px rows with 6 px vertical padding. Below
 that height the compact metrics remain in use. Solo/cue/arm controls are 26 px wide. Manual
 resizing remains available. Volume fill is tinted by the track color; the Main channel keeps
@@ -770,3 +771,6 @@ are text and chevron until hovered or focused. Menus, keyboard focus and drag ta
 A single-row Arrangement header reserves a 48–80 px volume field after the name whenever
 40 px of name space remains. It uses the same drag, keyboard and reset behavior as the expanded
 volume field; pan and sends remain in the expanded rows.
+
+The automation visibility button stays at the leading edge of the header in compact, default
+and expanded layouts; it is not moved to the trailing edge when the row shrinks.
