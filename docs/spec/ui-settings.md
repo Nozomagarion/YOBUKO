@@ -7,6 +7,7 @@ last_verified: 2026-10-19
 covers:
   - crates/ui/src/settings/settings_view.rs
   - crates/ui/src/settings/settings_rows.rs
+  - crates/ui/src/settings/track_sizes.rs
   - crates/ui/src/settings.rs
   - crates/ui/tests/settings_window.rs
 ---
@@ -44,6 +45,7 @@ is on exactly one page, under one heading.
 | Plug-ins | Library | Folders (each on or off, with its format; add with a format, remove), Scan and Rescan all with a count of what was found, Plug-in manager (opens the [plug-in manager](plugin-manager.md)) |
 | Arrangement | Clips | Allow sample stacking, Allow MIDI stacking |
 | Arrangement | Tracks | Track headers |
+| Arrangement | Track sizes | Default track size, Default return size, Advanced track sizes, Compact height, Small height, Medium height, Large height |
 | Session and mixer | Launching | Select on launch |
 | Session and mixer | Mixer | Mixer controls |
 | Clip editor | Piano roll | Pulled to the top, Piano roll grid, Toolbar size |
@@ -91,3 +93,7 @@ section changes. Most entries are one row (a name, a note and a segmented contro
 few are a block that draws several rows or a list (the audio output, the themes, the shortcuts).
 Adding a setting to the window is adding its entry under its section; moving one is changing its
 page and section. Tests check that every saved setting is on exactly one page.
+
+Named row sizes and their ordering, live application and persistence are specified in
+[Arrangement editing](arrangement-editing.md#named-row-sizes). Pixel values are hidden until
+Advanced track sizes is enabled; the same bounded controls remain editable in both modes.

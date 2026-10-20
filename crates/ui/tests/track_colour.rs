@@ -68,12 +68,12 @@ fn arrangement_header_surfaces_follow_custom_theme_tokens() {
     let header = harness.get_by_label("Track Drums").rect();
     let color = default_drums();
     let has_surface =
-        filled_with(&harness, header, suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.18))
+        filled_with(&harness, header, suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.26))
             || filled_with(
                 &harness,
                 header,
                 suhina_ui::kit::motion::mix(
-                    suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.18),
+                    suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.26),
                     theme::text_primary(),
                     0.07,
                 ),
@@ -237,4 +237,46 @@ fn return_defaults_to_minimum_and_quick_expand_is_reversible() {
     h.get_by_label("Expand Drums").click();
     h.run();
     assert!((h.get_by_label("Track Drums").rect().height() - 40.0).abs() < 0.5);
+}
+
+#[test]
+fn custom_presets_apply_live_and_resize_all_includes_hidden_returns() {
+    use suhina_ui::settings::track_sizes::TrackSize;
+    let mut h = arrangement();
+    let mut settings = h.state().settings().clone();
+    settings.view.track_sizes.set_height(TrackSize::Small, 44);
+    settings.view.track_sizes.set_height(TrackSize::Compact, 24);
+    let ctx = h.ctx.clone();
+    h.state_mut().set_settings(&ctx, settings);
+    h.run();
+    assert!((h.get_by_label("Track Drums").rect().height() - 44.0).abs() < 0.5);
+    assert!((h.get_by_label("Track A Reverb").rect().height() - 24.0).abs() < 0.5);
+    h.get_by_label("Hide returns").click();
+    h.run();
+    h.get_by_label("Resize all tracks").click();
+    h.run();
+    h.get_by_label("Medium").click();
+    h.run();
+    assert!((h.get_by_label("Track Drums").rect().height() - 64.0).abs() < 0.5);
+    h.get_by_label("Show returns").click();
+    h.run();
+    assert!((h.get_by_label("Track A Reverb").rect().height() - 64.0).abs() < 0.5);
+    assert!(!h.state().session().unwrap().can_undo(), "resizing never edits the music project");
+}
+
+#[test]
+fn named_track_default_can_be_changed_from_settings_search() {
+    let mut h = arrangement();
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    h.run();
+    h.get_by_label("Search settings").focus();
+    h.run();
+    h.get_by_label("Search settings").type_text("default track size");
+    h.run();
+    h.get_by_label("Default track size: Medium").click();
+    h.run();
+    assert_eq!(h.state().settings().view.track_sizes.tracks, suhina_ui::settings::track_sizes::TrackSize::Medium);
+    h.get_by_label("Close settings").click();
+    h.run();
+    assert!((h.get_by_label("Track Drums").rect().height() - 64.0).abs() < 0.5);
 }

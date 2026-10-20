@@ -9,6 +9,7 @@
 //! `cx.on_off(r, |s| &mut s.field)` or `cx.choose(r, &[("Text", value), …], |s| &mut s.field)`.
 
 use crate::settings::settings_view::{Entry, Page, block, row};
+use crate::settings::track_sizes::TrackSize;
 use crate::settings::view_settings::DetailLayout;
 use crate::settings::{
     AtStart, DeviceLayout, EditorPlacement, Graphics, MixerControls, OnOpen, PianoRollTop, PlayFrom, Side, StopReturn,
@@ -364,6 +365,74 @@ pub(crate) static ROWS: &[Entry] = &[
         "Whether the Arrangement shows the return tracks' rows along the bottom; its Hide returns button by the ruler switches it too",
         &["arrangement_returns"],
         |cx, r| cx.choose(r, &[("Shown", false), ("Hidden", true)], |s| &mut s.view.returns_hidden),
+    ),
+    row(
+        Page::Arrangement,
+        "Track sizes",
+        "Default track size",
+        "Named height for ordinary Arrangement tracks",
+        &["arrangement_track_size"],
+        |cx, r| {
+            cx.choose(
+                r,
+                &[
+                    ("Compact", TrackSize::Compact),
+                    ("Small", TrackSize::Small),
+                    ("Medium", TrackSize::Medium),
+                    ("Large", TrackSize::Large),
+                ],
+                |s| &mut s.view.track_sizes.tracks,
+            );
+        },
+    ),
+    row(
+        Page::Arrangement,
+        "Track sizes",
+        "Default return size",
+        "Return tracks have their own default size",
+        &["arrangement_return_size"],
+        |cx, r| {
+            cx.choose(
+                r,
+                &[
+                    ("Compact", TrackSize::Compact),
+                    ("Small", TrackSize::Small),
+                    ("Medium", TrackSize::Medium),
+                    ("Large", TrackSize::Large),
+                ],
+                |s| &mut s.view.track_sizes.returns,
+            );
+        },
+    ),
+    row(
+        Page::Arrangement,
+        "Track sizes",
+        "Advanced track sizes",
+        "Show exact heights in pixels; all sizes stay ordered",
+        &["arrangement_sizes_advanced"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.track_sizes.advanced),
+    ),
+    row(
+        Page::Arrangement,
+        "Track sizes",
+        "Compact height",
+        "Adjust the smallest usable row; always below Small",
+        &["arrangement_size_heights"],
+        |cx, r| cx.track_size_height(r, TrackSize::Compact),
+    ),
+    row(Page::Arrangement, "Track sizes", "Small height", "Adjust Small between Compact and Medium", &[], |cx, r| {
+        cx.track_size_height(r, TrackSize::Small)
+    }),
+    row(Page::Arrangement, "Track sizes", "Medium height", "Adjust Medium between Small and Large", &[], |cx, r| {
+        cx.track_size_height(r, TrackSize::Medium)
+    }),
+    row(
+        Page::Arrangement,
+        "Track sizes",
+        "Large height",
+        "Adjust the largest named row; always above Medium",
+        &[],
+        |cx, r| cx.track_size_height(r, TrackSize::Large),
     ),
     // Session view and mixer.
     row(

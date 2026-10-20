@@ -252,10 +252,10 @@ pub enum Drag {
     Done(f64),
 }
 
-/// Whether the wheel over a value field changes its value this frame: with Alt held. Without it
+/// Whether the wheel over a value field changes its value this frame: with Ctrl/Cmd held. Without it
 /// the wheel scrolls the view under the field (`docs/spec/arrangement-editing.md`).
 pub fn wheel_moves_value(ui: &Ui) -> bool {
-    ui.input(|i| i.modifiers.alt)
+    ui.input(|i| (i.modifiers.ctrl || i.modifiers.command) && !i.modifiers.alt)
 }
 
 /// The points one tick of a wheel scrolls, which is one step of a value control (egui reports a
@@ -396,7 +396,7 @@ fn value_keys(ui: &Ui, response: &Response) -> (i32, bool, Option<String>) {
     // Keep the target ring outside the surface: custom value painters run after key handling
     // and would cover an inset rectangle, leaving only sharp yellow corners behind.
     let radius = if response.rect.width() > response.rect.height() * 4.0 { response.rect.height() * 0.5 } else { 4.0 };
-    painter.rect_stroke(response.rect, radius, Stroke::new(1.0, theme::accent()), egui::StrokeKind::Outside);
+    painter.rect_stroke(response.rect, radius, Stroke::new(1.0, theme::text_secondary()), egui::StrokeKind::Outside);
     if !typed.is_empty() {
         painter.rect_filled(response.rect.shrink(1.0), 0.0, theme::control_active());
         painter.text(
@@ -440,7 +440,7 @@ pub fn drag_value(
         *preview = None;
         return Drag::Done((from + step).clamp(range.0, range.1));
     }
-    // Alt and the wheel over the control move it, as a drag would; the caller commits what it is
+    // Ctrl/Cmd and the wheel over the control move it, as a drag would; the caller commits what it is
     // given. The wheel alone scrolls the view, so scrolling past a field never changes it.
     // Scrolling up raises the value, as dragging up does; Shift too, ten times finer.
     if response.hovered() && wheel_moves_value(ui) {

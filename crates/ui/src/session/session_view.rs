@@ -228,7 +228,7 @@ pub fn show(
     let fields = std::mem::take(&mut state.value_areas);
     let lists = std::mem::take(&mut state.scroll_areas);
     if ui.rect_contains_pointer(area) {
-        // Alt and the wheel over a value field are the field's; the wheel alone scrolls.
+        // Ctrl and the wheel over a value field are the field's; the wheel alone scrolls.
         let pointer = ui.ctx().pointer_hover_pos();
         let over_field = (widgets::wheel_moves_value(ui)
             && pointer.is_some_and(|pointer| fields.iter().any(|rect| rect.contains(pointer))))

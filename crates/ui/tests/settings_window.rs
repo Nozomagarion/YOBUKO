@@ -74,7 +74,7 @@ fn every_page_scrolls_to_its_last_setting_in_a_short_window() {
         ("Audio", Some("List the audio devices again")),
         ("MIDI", None),
         ("Plug-ins", Some("Open the plug-in manager")),
-        ("Arrangement", Some("Track headers: Right")),
+        ("Arrangement", Some("Large height")),
         ("Session and mixer", Some("Mixer controls: Knob")),
         ("Clip editor", Some("Double-click on a note: Nothing")),
         ("Transport", Some("Stop: Stay")),

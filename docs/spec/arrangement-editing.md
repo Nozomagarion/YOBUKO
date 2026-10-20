@@ -755,7 +755,7 @@ off or on, and the whole list is one undo step. With one track selected, or with
 the selection, they act on that track alone, and it is heard while it is dragged: each frame sets
 the value with `continue`, so the drag is one undo step.
 
-**Alt and the wheel over a field** change its value instead of scrolling the view: one tick of a
+**Ctrl (Cmd on macOS) and the wheel over a field** change its value instead of scrolling the view: one tick of a
 wheel is one step (1 dB, or 0.02 of pan), Shift as well makes it ten times finer, and the view
 stays where it is. The wheel alone scrolls the view over a field too, so scrolling down the track
 headers never moves a fader. The same holds for a clip's gain field, a send's knob, the main
@@ -833,3 +833,19 @@ track or return toggles between that compact row and 40 px (or its last manually
 height). Group arrows retain their existing child-folding behavior. Automation remains visible
 at the left and a compact volume field follows the name when the header has sufficient width.
 Row height is view state, not an edit to the music project.
+
+## Named row sizes
+
+Settings › Arrangement › Track sizes chooses independent named defaults for ordinary tracks
+and returns: Compact, Small, Medium and Large. Initial heights are 20, 40, 64 and 104 px,
+respectively; the defaults are Small for tracks and Compact for returns. Sliders customize each
+size without showing units. Advanced track sizes exposes exact pixel values on those sliders.
+Sizes are strictly ordered and bounded to 20–400 px, including when loading hand-edited settings.
+Changing a default updates rows without manual overrides. Changing a preset updates matching
+preset heights, preserving other manual sizes.
+
+Resize all, beside Hide returns and waveform zoom above the track headers, sets every track
+and return to one of the four named heights (including hidden returns and folded children).
+It changes view state, not the project or its undo history. Subsequent tracks still use the
+independent defaults. Quick-expand restores the last expanded height or the customized Small
+height; collapse uses the customized Compact height. No Minimal size is offered.

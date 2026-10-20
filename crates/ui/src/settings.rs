@@ -9,6 +9,7 @@ pub mod plugin_manager;
 mod settings_rows;
 pub mod settings_view;
 pub mod themes;
+pub mod track_sizes;
 pub mod update_settings;
 pub mod view_settings;
 pub mod workflow;

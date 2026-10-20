@@ -735,7 +735,7 @@ and snapping are unchanged; bars remain stronger than subdivisions.
 
 Manrope explicitly uses weight 500; the variable font asset defaults to weight 200 and must
 not be used without selecting its weight. UI text is 12 px and small labels/values 11 px.
-Track header surfaces mix the theme background with 18 percent track color. Selection lifts
+Track header surfaces mix the theme background with 26 percent track color. Selection lifts
 that surface 7 percent toward the theme text color. The edge band retains the track color.
 
 Clips use one strong color surface (82 percent clip color, 94 percent selected) with a 3 px
@@ -782,3 +782,13 @@ Ordinary tracks and returns have a leading quick-expand arrow: return rows compa
 Clips with a visible title have a 1 px separator below it, using 40 percent of the leading-edge
 contrast. It runs from the inner edge of the leading stripe to the right edge. Short clips without
 a title omit this separator, preserving the full preview area.
+
+### Named row sizes
+
+Arrangement › Track sizes has Compact, Small, Medium and Large defaults, independently for
+tracks and returns. Each size has a tuning slider; Advanced reveals the numeric pixel value.
+Neighbouring sizes bound each slider, preserving strict order. The same presets are available
+through Resize all in the header corner beside the returns toggle and waveform zoom. Below
+210 px header width the returns toggle moves to the middle line to avoid overlap. Value-field
+keyboard focus uses a neutral `text.secondary` outline. Ctrl/Cmd+wheel adjusts a value field;
+Alt+wheel remains available to zoom track heights.

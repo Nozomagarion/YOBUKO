@@ -1465,7 +1465,7 @@ fn gain_of(db: f64) -> f64 {
 }
 
 #[test]
-fn alt_and_the_wheel_over_a_fader_change_the_volume_and_the_wheel_alone_does_not() {
+fn ctrl_and_the_wheel_over_a_fader_change_the_volume_and_the_wheel_alone_does_not() {
     let mut harness = arrangement_app();
     let at = harness.get_by_label("Drums volume").rect().center();
     harness.hover_at(at);
@@ -1482,14 +1482,23 @@ fn alt_and_the_wheel_over_a_fader_change_the_volume_and_the_wheel_alone_does_not
     harness.input_mut().events.push(tick(Modifiers::NONE));
     harness.run();
     assert!((volume(&harness) - 1.0).abs() < 1e-9, "the wheel alone left it: {}", volume(&harness));
-    // Alt and the wheel move the fader, and the view stays where it is.
+    // Ctrl and the wheel move the fader, and the view stays where it is.
     let scroll = harness.state().arrangement().scroll;
-    harness.event(egui::Event::ModifiersChanged(Modifiers::ALT));
-    harness.input_mut().events.push(tick(Modifiers::ALT));
+    harness.event(egui::Event::ModifiersChanged(Modifiers::COMMAND));
+    harness.input_mut().events.push(tick(Modifiers::COMMAND));
     harness.run();
     harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
     assert!((volume(&harness) - gain_of(1.0)).abs() < 1e-6, "one tick raised it by 1 dB: {}", volume(&harness));
     assert_eq!(harness.state().arrangement().scroll, scroll, "and the view stayed where it was");
+    // Alt now belongs to height zoom, even over the same value control.
+    let before = volume(&harness);
+    let height = harness.get_by_label("Track Drums").rect().height();
+    harness.event(egui::Event::ModifiersChanged(Modifiers::ALT));
+    harness.input_mut().events.push(tick(Modifiers::ALT));
+    harness.run();
+    harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
+    assert_eq!(volume(&harness), before, "Alt+wheel must not change the fader");
+    assert!(harness.get_by_label("Track Drums").rect().height() > height, "Alt+wheel still zooms height");
 }
 
 #[test]

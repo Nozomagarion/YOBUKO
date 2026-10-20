@@ -429,6 +429,22 @@ impl Cx<'_> {
         }
     }
 
+    /// Tune a named size; numbers and units are reserved for Advanced mode.
+    pub fn track_size_height(&mut self, row: Rect, size: crate::settings::track_sizes::TrackSize) {
+        let sizes = self.settings.view.track_sizes;
+        let (lower, upper) = sizes.bounds(size);
+        let mut value = sizes.height(size);
+        let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
+        let slider = egui::Slider::new(&mut value, lower..=upper).show_value(sizes.advanced);
+        let slider = if sizes.advanced { slider.suffix(" px") } else { slider };
+        let response = self.ui.put(rect, slider);
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, self.name));
+        if response.changed() {
+            self.settings.view.track_sizes.set_height(size, value);
+            self.outcome.changed = true;
+        }
+    }
+
     /// On and Off for the setting `field` gives.
     pub fn on_off(&mut self, row: Rect, field: impl FnOnce(&mut Settings) -> &mut bool) {
         self.choose(row, &[("On", true), ("Off", false)], field);

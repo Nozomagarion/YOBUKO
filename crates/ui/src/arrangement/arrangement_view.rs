@@ -24,11 +24,13 @@ use crate::kit::motion;
 use crate::kit::theme::{self, PAD, ROW};
 use crate::kit::waveform;
 use crate::kit::widgets::{self, Action, Drag, VOLUME_RANGE, volume_position};
+use crate::settings::track_sizes::{TrackSize, TrackSizes};
 
 /// Width of the track header column: the default and how far it can be dragged.
 pub const HEADER_COLUMN: f32 = 336.0;
 const HEADER_COLUMN_RANGE: (f32, f32) = (160.0, 520.0);
 const RULER: f32 = ROW;
+#[cfg(test)]
 const DEFAULT_LANE: f32 = 40.0;
 const MIN_LANE: f32 = 20.0;
 const MAX_LANE: f32 = 400.0;
@@ -369,6 +371,7 @@ pub struct ArrangementViewState {
     pub ara_default: Option<String>,
     pub header_width: f32,
     heights: HashMap<TrackId, f32>,
+    sizes: TrackSizes,
     expanded_heights: HashMap<TrackId, f32>,
     /// The selected clips, in the order they were picked, and the one clicked last: a Shift-click
     /// takes the run of clips from it, and the other views work on it.
@@ -497,6 +500,7 @@ impl Default for ArrangementViewState {
             ara_default: None,
             header_width: HEADER_COLUMN,
             heights: HashMap::new(),
+            sizes: TrackSizes::default(),
             expanded_heights: HashMap::new(),
             selected: Vec::new(),
             anchor: None,
@@ -787,22 +791,50 @@ impl ArrangementViewState {
 
     /// How tall a return track's row is: a row's height until its edge is dragged.
     fn return_height(&self, track: TrackId) -> f32 {
-        self.heights.get(&track).copied().unwrap_or(MIN_LANE)
+        self.heights.get(&track).copied().unwrap_or(f32::from(self.sizes.height(self.sizes.returns)))
+    }
+
+    /// Set every track and return to one named size, including folded/hidden rows.
+    fn resize_all(&mut self, timeline: &Timeline, size: TrackSize) {
+        let height = f32::from(self.sizes.height(size));
+        for lane in &timeline.lanes {
+            self.heights.insert(lane.track, height);
+            if size != TrackSize::Compact {
+                self.expanded_heights.insert(lane.track, height);
+            }
+        }
+    }
+
+    /// Apply named sizes live, retaining manual heights that do not match a preset.
+    pub fn set_size_settings(&mut self, sizes: TrackSizes) {
+        if sizes == self.sizes {
+            return;
+        }
+        for height in self.heights.values_mut().chain(self.expanded_heights.values_mut()) {
+            if let Some(size) = TrackSize::ALL.into_iter().find(|s| f32::from(self.sizes.height(*s)) == *height) {
+                *height = f32::from(sizes.height(size));
+            }
+        }
+        self.sizes = sizes;
     }
 
     /// Toggle a lane between the smallest row and its last expanded height.
     fn toggle_height(&mut self, track: TrackId, height: f32) {
-        if height >= SHOWS_MIXER {
+        let compact = f32::from(self.sizes.height(TrackSize::Compact));
+        if height > compact {
             self.expanded_heights.insert(track, height);
-            self.heights.insert(track, MIN_LANE);
+            self.heights.insert(track, compact);
         } else {
-            self.heights.insert(track, self.expanded_heights.get(&track).copied().unwrap_or(SHOWS_MIXER));
+            self.heights.insert(
+                track,
+                self.expanded_heights.get(&track).copied().unwrap_or(f32::from(self.sizes.height(TrackSize::Small))),
+            );
         }
     }
 
     /// How tall `track`'s lane is.
     pub fn lane_height(&self, track: TrackId) -> f32 {
-        self.heights.get(&track).copied().unwrap_or(DEFAULT_LANE)
+        self.heights.get(&track).copied().unwrap_or(f32::from(self.sizes.height(self.sizes.tracks)))
     }
 
     /// How tall the view is when it shows only `track` ([`Self::focus`]): the ruler, the loop
@@ -1150,7 +1182,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     let bar_beats = if timeline.bar_beats > 0.0 { timeline.bar_beats } else { 4.0 };
 
     // Zoom around the pointer with Ctrl and the wheel, lane heights with Alt and the wheel; the
-    // wheel alone scrolls, over a value field too. Alt and the wheel over a value field are the
+    // wheel alone scrolls, over a value field too. Ctrl and the wheel over a value field are the
     // field's (`value_areas`), so the view leaves them alone.
     let fields = std::mem::take(&mut state.value_areas);
     if let Some(pointer) = widgets::pointer_over(ui, area) {
@@ -1455,6 +1487,23 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             ui.close();
         }
     });
+    // A named, shared resize control beside returns and waveform zoom.
+    let resize_x =
+        if state.headers_left && corner.width() >= 210.0 { corner.right() - 102.0 } else { corner.left() + 6.0 };
+    let resize = Rect::from_min_size(Pos2::new(resize_x, corner.top() + 4.0), Vec2::new(96.0, 18.0)).intersect(corner);
+    let response = widgets::button_area(ui, resize, Id::new("arrangement-resize-all"), "Resize all tracks");
+    widgets::subtle_dropdown(ui, &painter, resize, &response, "Resize all");
+    egui::Popup::menu(&response).show(|ui| {
+        for size in TrackSize::ALL {
+            let height = f32::from(state.sizes.height(size));
+            let selected = timeline.lanes.iter().all(|lane| (state.height(lane) - height).abs() < 0.5);
+            if ui.selectable_label(selected, size.name()).clicked() {
+                state.resize_all(timeline, size);
+                ui.ctx().request_repaint();
+                ui.close();
+            }
+        }
+    });
     // The waveform zoom, on the corner's lower line: a waveform mark, a slider and its value.
     // Right draws audio clips' waveforms larger, the sound unchanged; a click puts the handle
     // there, the wheel steps it, a double-click puts it back to ×1.
@@ -1550,7 +1599,11 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         let width = widgets::text_width(ui, label, font.clone()) + 12.0;
         // On the corner's top line, the zoom under it.
         let x = if state.headers_left { corner.left() + 6.0 } else { corner.right() - 6.0 - width };
-        let button = Rect::from_min_size(Pos2::new(x, corner.top() + 4.0), Vec2::new(width, 18.0)).intersect(corner);
+        let button = Rect::from_min_size(
+            Pos2::new(x, corner.top() + if corner.width() < 210.0 { 24.0 } else { 4.0 }),
+            Vec2::new(width, 18.0),
+        )
+        .intersect(corner);
         let response = widgets::button_area(ui, button, Id::new("arrangement-returns-toggle"), label);
         let hover = widgets::hover(ui, &response);
         painter.rect_filled(button, 2.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
@@ -3716,7 +3769,7 @@ fn track_header(
     let selected = state.selected_tracks.contains(&lane.track) || state.focus == Some(lane.track);
     // Preserve track identity when selected: a small brightness lift and outline, without
     // replacing the track colour with the global selection accent.
-    let surface = motion::mix(theme::track_header_background(), rgb(lane.color), 0.18);
+    let surface = motion::mix(theme::track_header_background(), rgb(lane.color), 0.26);
     let header_fill = if selected { motion::mix(surface, theme::text_primary(), 0.07) } else { surface };
     painter.rect_filled(rect, 0.0, header_fill);
     if selected {
@@ -3765,7 +3818,11 @@ fn track_header(
     let group_fold = lane.kind == ColumnKind::Group && order.children > 0;
     let fold = Some(Rect::from_min_size(inner.min, Vec2::new(FOLD, header_row)));
     if let Some(fold) = fold {
-        let folded = if group_fold { state.folds.is_folded(lane.track) } else { rect.height() < SHOWS_MIXER };
+        let folded = if group_fold {
+            state.folds.is_folded(lane.track)
+        } else {
+            rect.height() <= f32::from(state.sizes.height(TrackSize::Compact))
+        };
         let label = if group_fold {
             if folded { format!("Unfold {}", lane.name) } else { format!("Fold {}", lane.name) }
         } else if folded {

@@ -31,6 +31,7 @@ impl DetailLayout {
 /// The settings this module reads and writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ViewSettings {
+    pub track_sizes: super::track_sizes::TrackSizes,
     /// The Session mixer's height, in points.
     pub mixer_height: u32,
     /// The strips' fader height the divider under their device lists sets, in points; 0 is
@@ -74,6 +75,7 @@ pub struct ViewSettings {
 impl Default for ViewSettings {
     fn default() -> Self {
         Self {
+            track_sizes: super::track_sizes::TrackSizes::default(),
             mixer_height: MIXER_HEIGHTS.1,
             strip_fader: 0,
             detail_layout: DetailLayout::Beside,
@@ -115,12 +117,15 @@ impl ViewSettings {
             if self.clip_halves { "halves" } else { "name_bar" },
             if self.grid_in_clips { "on" } else { "off" },
             f64::from(self.waveform_zoom) / 100.0,
-        )
+        ) + &self.track_sizes.to_text()
     }
 
     /// Reads one line of the settings file; `false` when the key and value are not one of these
     /// settings, so the caller goes on with its own.
     pub fn parse(&mut self, key: &str, value: &str) -> bool {
+        if self.track_sizes.parse(key, value) {
+            return true;
+        }
         match (key, value) {
             ("session_mixer_height", height) => match height.parse::<u32>() {
                 Ok(height) => self.mixer_height = height.clamp(MIXER_HEIGHTS.0, MIXER_HEIGHTS.2),
@@ -162,6 +167,7 @@ mod tests {
     #[test]
     fn view_settings_survive_a_round_trip_through_the_settings_file() {
         let view = ViewSettings {
+            track_sizes: super::super::track_sizes::TrackSizes::default(),
             mixer_height: 300,
             strip_fader: 90,
             detail_layout: DetailLayout::FullWidth,
