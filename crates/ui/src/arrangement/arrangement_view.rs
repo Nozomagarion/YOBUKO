@@ -3465,11 +3465,11 @@ fn paint_clip(
         if x < view.left() - 4.0 || x > view.right() + 4.0 || x <= rect.left() || x >= rect.right() {
             continue;
         }
-        painter.vline(x, rect.y_range(), egui::Stroke::new(1.5, edge_ink));
-        let notch = 2.5_f32.min(rect.height() * 0.2);
+        painter.vline(x, rect.y_range(), egui::Stroke::new(1.0, motion::mix(body, edge_ink, 0.5)));
+        let notch = 4.0_f32.min(rect.height() * 0.2);
         painter.add(egui::Shape::convex_polygon(
             vec![Pos2::new(x - notch, rect.top()), Pos2::new(x + notch, rect.top()), Pos2::new(x, rect.top() + notch)],
-            edge_ink,
+            theme::window_background(),
             egui::Stroke::NONE,
         ));
     }
@@ -3769,7 +3769,7 @@ fn track_header(
     let selected = state.selected_tracks.contains(&lane.track) || state.focus == Some(lane.track);
     // Preserve track identity when selected: a small brightness lift and outline, without
     // replacing the track colour with the global selection accent.
-    let surface = motion::mix(theme::track_header_background(), rgb(lane.color), 0.26);
+    let surface = motion::mix(theme::track_header_background(), rgb(lane.color), 0.34);
     let header_fill = if selected { motion::mix(surface, theme::text_primary(), 0.07) } else { surface };
     painter.rect_filled(rect, 0.0, header_fill);
     if selected {

@@ -708,8 +708,8 @@ room, so a group's tracks start clearly to the right of their group, and each le
 is filled with that group's colour, so a group and its tracks read as one block. A group's menu
 has **Assign track color to all tracks and clips**, which gives every track inside it, at any depth,
 the colour the group shows, and turns the clips of the group and of those tracks back to their
-track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's top notches are at most 2.5 px wide on each side of the boundary and
-shrink with the lane height. Its 1.5 px boundary line uses the leading edge's contrast. A group that holds tracks has
+track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's top notches are at most 4 px wide on each side of the boundary and
+shrink with the lane height. Its 1 px boundary line uses half the leading edge's contrast; the top notch cuts through to the canvas colour for a clearer silhouette. A group that holds tracks has
 the fold triangle at the start of its header (Folded groups): the lanes of every track inside it, at any
 depth, are hidden while it is folded, and the Session view hides their columns; both views fold
 the same groups, and folding is part of the view, not an edit, so it does not undo. A dragged

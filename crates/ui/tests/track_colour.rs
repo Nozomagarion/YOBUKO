@@ -68,12 +68,12 @@ fn arrangement_header_surfaces_follow_custom_theme_tokens() {
     let header = harness.get_by_label("Track Drums").rect();
     let color = default_drums();
     let has_surface =
-        filled_with(&harness, header, suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.26))
+        filled_with(&harness, header, suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.34))
             || filled_with(
                 &harness,
                 header,
                 suhina_ui::kit::motion::mix(
-                    suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.26),
+                    suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.34),
                     theme::text_primary(),
                     0.07,
                 ),

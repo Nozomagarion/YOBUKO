@@ -735,7 +735,7 @@ and snapping are unchanged; bars remain stronger than subdivisions.
 
 Manrope explicitly uses weight 500; the variable font asset defaults to weight 200 and must
 not be used without selecting its weight. UI text is 12 px and small labels/values 11 px.
-Track header surfaces mix the theme background with 26 percent track color. Selection lifts
+Track header surfaces mix the theme background with 34 percent track color. Selection lifts
 that surface 7 percent toward the theme text color. The edge band retains the track color.
 
 Clips use one strong color surface (82 percent clip color, 94 percent selected) with a 3 px
@@ -762,8 +762,8 @@ The Arrangement grid blends major lines 55 percent and minor lines 35 percent to
 editable theme tokens from the canvas background. Horizontal lane boundaries follow the major
 line strength. Clip titles reserve up to 22 px (less than half the clip height), with 7 px left inset and 12 px type. Content stays below
 the title. A contrasting, same-hue leading edge is 3 px, widening to 4 px when selected; selection
-outlines are 1 px. Loop seams use the leading-edge contrast with a 1.5 px continuous vertical line and a
-small top notch (up to 2.5 px); there is no bottom notch.
+outlines are 1 px. Loop seams use half the leading-edge contrast with a 1 px continuous vertical line and a
+canvas-coloured top cutout (up to 4 px deep); there is no bottom notch.
 
 Track buttons keep their filled hit areas but draw outlines only on hover or keyboard focus.
 Sends show their destination, value and level rail without an idle box. Secondary routing fields
