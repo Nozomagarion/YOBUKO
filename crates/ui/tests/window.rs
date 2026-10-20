@@ -2029,6 +2029,51 @@ fn hide_returns_takes_the_return_rows_out_of_the_arrangement_and_show_brings_the
 }
 
 #[test]
+fn waveform_colour_changes_live_in_settings_without_changing_the_project() {
+    use suhina_ui::settings::view_settings::WaveformColour;
+    let mut h = window(audio_app());
+    h.get_by_label("Arrangement view").click();
+    h.run();
+    let custom = egui::Color32::from_rgb(123, 210, 57);
+    let mut settings = h.state().settings().clone();
+    settings.view.waveform.custom = custom;
+    let ctx = h.ctx.clone();
+    h.state_mut().set_settings(&ctx, settings);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    h.run();
+    h.get_by_label("Search settings").focus();
+    h.run();
+    h.get_by_label("Search settings").type_text("waveform colour");
+    h.run();
+    fn has_ink(shape: &egui::Shape, clip: egui::Rect, ink: egui::Color32) -> bool {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().any(|s| has_ink(s, clip, ink)),
+            egui::Shape::Mesh(mesh) => mesh.vertices.iter().any(|v| clip.contains(v.pos) && v.color == ink),
+            _ => false,
+        }
+    }
+    for (name, mode, colour) in [
+        ("Light", WaveformColour::Light, egui::Color32::from_rgb(240, 237, 232)),
+        ("Dark", WaveformColour::Dark, egui::Color32::from_rgb(32, 31, 29)),
+        ("Custom", WaveformColour::Custom, custom),
+    ] {
+        h.get_by_label(&format!("Waveform colour: {name}")).click();
+        h.run();
+        assert_eq!(h.state().settings().view.waveform.mode, mode);
+        let clip = h.get_by_label("Clip Loop on Loop at bar 1").rect();
+        assert!(
+            h.output().shapes.iter().any(|s| has_ink(&s.shape, clip, colour)),
+            "{name} applies while Settings is open"
+        );
+    }
+    assert!(h.query_by_label("Custom waveform colour").is_some());
+    h.get_by_label("Waveform colour: Auto").click();
+    h.run();
+    assert!(h.query_by_label("Custom waveform colour").is_none());
+    assert!(!h.state().session().unwrap().can_undo());
+}
+
+#[test]
 fn the_waveform_zoom_draws_every_audio_clip_larger_and_is_kept_as_a_setting() {
     let mut harness = arrangement_app();
     assert_eq!(harness.state().arrangement().waveform_zoom, 1.0);

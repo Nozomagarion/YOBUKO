@@ -865,3 +865,13 @@ Advanced and the height controls. Changing a default applies immediately to all 
 kind, replacing earlier Resize all/manual height overrides for those rows. The other kind's
 heights stay as they are. Editing a named height updates matching sizes live, including while
 Settings remains open.
+
+## Waveform colour
+
+Settings › Arrangement › Clips offers Waveform colour: Auto (the default), Light, Dark or
+Custom. Auto chooses contrasting light or dark ink from each clip's background; the other
+modes give every audio waveform the same chosen ink. Custom reveals an opaque colour picker.
+The choice and custom RGB colour persist in application settings and update existing clips
+immediately, including while Settings is open. Clip names and MIDI notes retain their own
+automatic contrast. ARA note overlays retain automatic contrast; waveforms under them are
+dimmed from the chosen waveform colour as before. No audio or project data changes.

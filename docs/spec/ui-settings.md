@@ -43,7 +43,7 @@ is on exactly one page, under one heading.
 | MIDI | MIDI inputs | Each MIDI input port, On or Off |
 | Plug-ins | Editors | Editors (Window, Device view) |
 | Plug-ins | Library | Folders (each on or off, with its format; add with a format, remove), Scan and Rescan all with a count of what was found, Plug-in manager (opens the [plug-in manager](plugin-manager.md)) |
-| Arrangement | Clips | Allow sample stacking, Allow MIDI stacking |
+| Arrangement | Clips | Allow sample stacking, Allow MIDI stacking, Waveform colour (Auto, Light, Dark, Custom), Custom waveform colour |
 | Arrangement | Tracks | Track headers |
 | Arrangement | Track sizes | Default track size, Default return size, Advanced track sizes, Tiny height, Compact height, Small height, Medium height, Large height |
 | Session and mixer | Launching | Select on launch |

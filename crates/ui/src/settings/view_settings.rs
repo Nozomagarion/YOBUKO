@@ -9,6 +9,50 @@
 /// (the view clamps it further to the space it has).
 pub const MIXER_HEIGHTS: (u32, u32, u32) = (46, 166, 2000);
 
+/// How Arrangement audio waveforms choose their ink, independently of clip names and notes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WaveformColour {
+    #[default]
+    Auto,
+    Light,
+    Dark,
+    Custom,
+}
+
+impl WaveformColour {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Light => "light",
+            Self::Dark => "dark",
+            Self::Custom => "custom",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WaveformAppearance {
+    pub mode: WaveformColour,
+    pub custom: egui::Color32,
+}
+
+impl Default for WaveformAppearance {
+    fn default() -> Self {
+        Self { mode: WaveformColour::Auto, custom: egui::Color32::from_rgb(232, 228, 221) }
+    }
+}
+
+impl WaveformAppearance {
+    pub fn ink(self, automatic: egui::Color32) -> egui::Color32 {
+        match self.mode {
+            WaveformColour::Auto => automatic,
+            WaveformColour::Light => egui::Color32::from_rgb(240, 237, 232),
+            WaveformColour::Dark => egui::Color32::from_rgb(32, 31, 29),
+            WaveformColour::Custom => self.custom,
+        }
+    }
+}
+
 /// Where the detail area goes: beside the browser, or under it across the window.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DetailLayout {
@@ -32,6 +76,7 @@ impl DetailLayout {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ViewSettings {
     pub track_sizes: super::track_sizes::TrackSizes,
+    pub waveform: WaveformAppearance,
     /// The Session mixer's height, in points.
     pub mixer_height: u32,
     /// The strips' fader height the divider under their device lists sets, in points; 0 is
@@ -76,6 +121,7 @@ impl Default for ViewSettings {
     fn default() -> Self {
         Self {
             track_sizes: super::track_sizes::TrackSizes::default(),
+            waveform: WaveformAppearance::default(),
             mixer_height: MIXER_HEIGHTS.1,
             strip_fader: 0,
             detail_layout: DetailLayout::Beside,
@@ -117,6 +163,10 @@ impl ViewSettings {
             if self.clip_halves { "halves" } else { "name_bar" },
             if self.grid_in_clips { "on" } else { "off" },
             f64::from(self.waveform_zoom) / 100.0,
+        ) + &format!(
+            "waveform_colour = {}\nwaveform_custom_colour = {}\n",
+            self.waveform.mode.name(),
+            crate::kit::theme::hex(self.waveform.custom),
         ) + &self.track_sizes.to_text()
     }
 
@@ -127,6 +177,19 @@ impl ViewSettings {
             return true;
         }
         match (key, value) {
+            ("waveform_colour", mode) => {
+                self.waveform.mode = match mode {
+                    "auto" => WaveformColour::Auto,
+                    "light" => WaveformColour::Light,
+                    "dark" => WaveformColour::Dark,
+                    "custom" => WaveformColour::Custom,
+                    _ => return false,
+                };
+            }
+            ("waveform_custom_colour", colour) => {
+                let Some(colour) = crate::kit::theme::parse_hex(colour) else { return false };
+                self.waveform.custom = colour;
+            }
             ("session_mixer_height", height) => match height.parse::<u32>() {
                 Ok(height) => self.mixer_height = height.clamp(MIXER_HEIGHTS.0, MIXER_HEIGHTS.2),
                 Err(_) => return false,
@@ -168,6 +231,10 @@ mod tests {
     fn view_settings_survive_a_round_trip_through_the_settings_file() {
         let view = ViewSettings {
             track_sizes: super::super::track_sizes::TrackSizes::default(),
+            waveform: WaveformAppearance {
+                mode: WaveformColour::Custom,
+                custom: egui::Color32::from_rgb(120, 210, 80),
+            },
             mixer_height: 300,
             strip_fader: 90,
             detail_layout: DetailLayout::FullWidth,
@@ -204,5 +271,19 @@ mod tests {
             Settings::from_text("session_mixer_height = tall\ndetail_layout = up\ndouble_click_clip = maybe\n");
         assert_eq!(warnings.len(), 3, "{warnings:?}");
         assert_eq!(read.view, ViewSettings::default());
+    }
+
+    #[test]
+    fn waveform_choices_round_trip_and_invalid_colours_preserve_defaults() {
+        for mode in [WaveformColour::Auto, WaveformColour::Light, WaveformColour::Dark, WaveformColour::Custom] {
+            let mut settings = Settings::default();
+            settings.view.waveform = WaveformAppearance { mode, custom: egui::Color32::from_rgb(23, 140, 212) };
+            let (read, warnings) = Settings::from_text(&settings.to_text());
+            assert!(warnings.is_empty());
+            assert_eq!(read.view.waveform, settings.view.waveform);
+        }
+        let (read, warnings) = Settings::from_text("waveform_colour = rainbow\nwaveform_custom_colour = #xyz123\n");
+        assert_eq!(warnings.len(), 2);
+        assert_eq!(read.view.waveform, WaveformAppearance::default());
     }
 }

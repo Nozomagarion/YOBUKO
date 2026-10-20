@@ -196,6 +196,7 @@ const WAVEFORM_ZOOM_WIDTH: f32 = 72.0;
 const CLIP_GRID: &str = "arrangement-clip-grid";
 /// The waveform zoom this frame, for `paint_clip`.
 const WAVEFORM_ZOOM: &str = "arrangement-waveform-zoom";
+const WAVEFORM_APPEARANCE: &str = "arrangement-waveform-appearance";
 /// The waveform zoom's range.
 pub const WAVEFORM_ZOOM_RANGE: (f32, f32) = (1.0, 16.0);
 
@@ -465,6 +466,7 @@ pub struct ArrangementViewState {
     /// How much larger audio clips' waveforms are drawn, 1 … 16: the display only, never the
     /// sound or the clip's gain (the slider by the ruler; Ctrl+Alt+Up and Down).
     pub waveform_zoom: f32,
+    pub waveform_appearance: crate::settings::view_settings::WaveformAppearance,
     /// Where the last click in a lane or a clip's body put the play start, on which track: a
     /// thin line there in that lane while the play start is still there.
     pub insert: Option<(TrackId, f64)>,
@@ -544,6 +546,7 @@ impl Default for ArrangementViewState {
             name_bar_moves: true,
             grid_in_clips: true,
             waveform_zoom: 1.0,
+            waveform_appearance: crate::settings::view_settings::WaveformAppearance::default(),
             insert: None,
             open_devices: None,
             automation: LanesState::default(),
@@ -1357,6 +1360,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     ui.ctx().data_mut(|d| {
         d.insert_temp(Id::new(CLIP_GRID), std::sync::Arc::new(grid_xs));
         d.insert_temp(Id::new(WAVEFORM_ZOOM), state.waveform_zoom);
+        d.insert_temp(Id::new(WAVEFORM_APPEARANCE), state.waveform_appearance);
     });
     // Tempo and time-signature changes: a line in the accent colour and what changes, after
     // room for the bar number.
@@ -3375,7 +3379,12 @@ fn paint_clip(
     // Notes an ARA plug-in found in an audio clip go over its waveform, which dims a little under
     // them so both read (ADR 0028, #720): dimmed to 40 % it read as an empty clip on a light body.
     let ara_notes = timeline.ara_notes.get(&clip.id).filter(|_| clip.audio).zip(timeline.tempo.as_ref());
-    let wave_ink = if ara_notes.is_some() { motion::mix(body, ink, 0.75) } else { ink };
+    let appearance = painter
+        .ctx()
+        .data(|d| d.get_temp::<crate::settings::view_settings::WaveformAppearance>(Id::new(WAVEFORM_APPEARANCE)))
+        .unwrap_or_default();
+    let wave_ink = appearance.ink(ink);
+    let wave_ink = if ara_notes.is_some() { motion::mix(body, wave_ink, 0.75) } else { wave_ink };
     let dim = |_: Color32| wave_ink;
     let color = ink;
     let text_color = ink_on(body);

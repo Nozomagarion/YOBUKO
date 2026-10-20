@@ -735,6 +735,7 @@ impl App {
         self.arrangement.headers_left = headers_left;
         self.arrangement.returns_hidden = returns_hidden;
         self.arrangement.waveform_zoom = waveform_zoom;
+        self.arrangement.waveform_appearance = self.settings.view.waveform;
         self.arrangement.header_width = header_width;
         self.selected_device = stash.selected_device;
         self.revision = stash.revision.wrapping_add(1);
@@ -1097,6 +1098,7 @@ impl App {
         self.arrangement.headers_left = settings.track_headers == Side::Left;
         self.arrangement.returns_hidden = settings.view.returns_hidden;
         self.arrangement.waveform_zoom = settings.view.waveform_zoom as f32 / 100.0;
+        self.arrangement.waveform_appearance = settings.view.waveform;
         if settings.map_window {
             self.sample_map.set_window(true, &mut self.browser);
         }
@@ -4143,6 +4145,7 @@ impl App {
             self.arrangement.headers_left = self.settings.track_headers == Side::Left;
             self.arrangement.returns_hidden = self.settings.view.returns_hidden;
             self.arrangement.waveform_zoom = self.settings.view.waveform_zoom as f32 / 100.0;
+            self.arrangement.waveform_appearance = self.settings.view.waveform;
             self.settings_changed = true;
         }
         if outcome.close {

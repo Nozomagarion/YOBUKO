@@ -429,6 +429,28 @@ impl Cx<'_> {
         }
     }
 
+    /// The custom audio-waveform ink, with the picker's RGB/hex controls.
+    pub fn waveform_colour(&mut self, row: Rect) {
+        let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
+        let mut colour = self.settings.view.waveform.custom;
+        self.ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+            ui.horizontal(|ui| {
+                let response =
+                    egui::color_picker::color_edit_button_srgba(ui, &mut colour, egui::color_picker::Alpha::Opaque);
+                response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ColorButton, true, self.name));
+                ui.label(
+                    egui::RichText::new(theme::hex(colour))
+                        .font(theme::mono_font(theme::TEXT_SMALL))
+                        .color(theme::text_primary()),
+                );
+            });
+        });
+        if colour != self.settings.view.waveform.custom {
+            self.settings.view.waveform.custom = colour;
+            self.outcome.changed = true;
+        }
+    }
+
     /// Tune a named size; numbers and units are reserved for Advanced mode.
     pub fn track_size_height(&mut self, row: Rect, size: crate::settings::track_sizes::TrackSize) {
         let sizes = self.settings.view.track_sizes;

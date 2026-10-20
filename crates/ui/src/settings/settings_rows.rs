@@ -10,7 +10,7 @@
 
 use crate::settings::settings_view::{Entry, Page, block, row};
 use crate::settings::track_sizes::TrackSize;
-use crate::settings::view_settings::DetailLayout;
+use crate::settings::view_settings::{DetailLayout, WaveformColour};
 use crate::settings::{
     AtStart, DeviceLayout, EditorPlacement, Graphics, MixerControls, OnOpen, PianoRollTop, PlayFrom, Side, StopReturn,
     ToolbarSize, WarpMode,
@@ -318,6 +318,34 @@ pub(crate) static ROWS: &[Entry] = &[
         &["waveform_zoom"],
         |cx, r| cx.choose(r, &[("×1", 100), ("×2", 200), ("×4", 400), ("×8", 800)], |s| &mut s.view.waveform_zoom),
     ),
+    row(
+        Page::Arrangement,
+        "Clips",
+        "Waveform colour",
+        "Auto follows each clip's brightness; Light, Dark and Custom use one colour for all audio waveforms",
+        &["waveform_colour"],
+        |cx, r| {
+            cx.choose(
+                r,
+                &[
+                    ("Auto", WaveformColour::Auto),
+                    ("Light", WaveformColour::Light),
+                    ("Dark", WaveformColour::Dark),
+                    ("Custom", WaveformColour::Custom),
+                ],
+                |s| &mut s.view.waveform.mode,
+            )
+        },
+    ),
+    row(
+        Page::Arrangement,
+        "Clips",
+        "Custom waveform colour",
+        "Choose the audio waveform colour; applies immediately",
+        &["waveform_custom_colour"],
+        |cx, r| cx.waveform_colour(r),
+    )
+    .when(|s| s.view.waveform.mode == WaveformColour::Custom),
     row(
         Page::Arrangement,
         "Clips",
