@@ -93,7 +93,9 @@ fn arrangement_grid_uses_its_own_theme_colors() {
             _ => false,
         }
     }
-    let has_major = harness.output().shapes.iter().any(|shape| has_line(&shape.shape, custom.grid_major));
+    let has_major = harness.output().shapes.iter().any(|shape| {
+        has_line(&shape.shape, suhina_ui::kit::motion::mix(custom.window_background, custom.grid_major, 0.55))
+    });
     theme::set_palette(&harness.ctx, previous);
     assert!(has_major, "timeline grid lines must follow their own theme token");
 }

@@ -738,8 +738,8 @@ not be used without selecting its weight. UI text is 12 px and small labels/valu
 Track header surfaces mix the theme background with 18 percent track color. Selection lifts
 that surface 7 percent toward the theme text color. The edge band retains the track color.
 
-Clips use one strong color surface (82 percent clip color, 94 percent selected) with a 2 px
-identity edge, without a contrasting title stripe. A clip tall enough for its title reserves that strip for the name; note/waveform
+Clips use one strong color surface (82 percent clip color, 94 percent selected) with a 3 px
+leading edge, without a contrasting title stripe. A clip tall enough for its title reserves that strip for the name; note/waveform
 previews start below it with a gap. Short clips omit the title rather than painting it over
 the preview. MIDI preview ink follows the body contrast in both light and dark themes.
 
@@ -754,3 +754,15 @@ the theme fill. The selected-header outline is 1 px and more restrained.
 Arrangement clips retain a strong track-derived fill against the subdued grid. Selection lifts
 brightness within the same hue; track headers use a restrained brightness lift and colour-aware
 outline rather than a global blue fill. Clip names reserve a top strip above content previews.
+
+### Minimal control hierarchy
+
+The Arrangement grid blends major lines 55 percent and minor lines 35 percent toward their
+editable theme tokens from the canvas background. Horizontal lane boundaries follow the major
+line strength. Clip titles reserve 22 px, with 7 px left inset and 12 px type. Content stays below
+the title. A contrasting, same-hue leading edge is 3 px, widening to 4 px when selected; selection
+outlines are 1 px. Loop seams use subdued ink and at most 2 px edge marks.
+
+Track buttons keep their filled hit areas but draw outlines only on hover or keyboard focus.
+Sends show their destination, value and level rail without an idle box. Secondary routing fields
+are text and chevron until hovered or focused. Menus, keyboard focus and drag targets remain available.

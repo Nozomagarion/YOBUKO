@@ -86,8 +86,10 @@ pub fn hover(ui: &Ui, response: &Response) -> f32 {
 pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Response, fill: Color32) {
     let radius = (rect.height() * 0.25).min(5.0);
     painter.rect_filled(rect, radius, fill);
-    let edge = if response.has_focus() { theme::accent() } else { theme::border_strong() };
-    painter.rect_stroke(rect, radius, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+    if response.has_focus() || response.hovered() {
+        let edge = if response.has_focus() { theme::accent() } else { theme::border_strong() };
+        painter.rect_stroke(rect, radius, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+    }
 }
 
 /// Fill and text of a track-on toggle: light when on, dark when off, a step brighter hovered.
@@ -214,6 +216,22 @@ pub fn arm_button(
 pub fn dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str) {
     let fill = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, response));
     painter.rect_filled(rect, 0.0, fill);
+    dropdown_contents(painter, rect, text);
+}
+
+/// A secondary routing field: quiet until hovered, with the same menu and hit area.
+pub fn subtle_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str) {
+    let amount = hover(ui, response);
+    if amount > 0.0 || response.has_focus() {
+        painter.rect_filled(rect, 3.0, theme::control_hover().gamma_multiply(amount.max(0.3)));
+    }
+    if response.has_focus() {
+        painter.rect_stroke(rect, 3.0, Stroke::new(1.0, theme::accent()), egui::StrokeKind::Inside);
+    }
+    dropdown_contents(painter, rect, text);
+}
+
+fn dropdown_contents(painter: &Painter, rect: Rect, text: &str) {
     let inner = rect.shrink2(Vec2::new(4.0, 0.0));
     let chevron = Rect::from_center_size(Pos2::new(inner.right() - 3.0, rect.center().y), Vec2::new(6.0, 4.0));
     painter.add(egui::Shape::convex_polygon(

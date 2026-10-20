@@ -177,9 +177,18 @@ fn edge_extent(clip: &ClipBox, drag: EdgeDrag, grid: &Grid, free: bool) -> (f64,
     }
 }
 
+/// Subordinate timeline structure to clips while retaining editable theme colours.
+fn grid_color(major: bool) -> Color32 {
+    motion::mix(
+        theme::window_background(),
+        if major { theme::grid_major() } else { theme::grid_minor() },
+        if major { 0.55 } else { 0.35 },
+    )
+}
+
 /// The height of a clip's name bar, and the least a clip's height must be to have a body under
 /// it for selecting time.
-const CLIP_NAME_BAR: f32 = 16.0;
+const CLIP_NAME_BAR: f32 = 22.0;
 /// The waveform zoom slider's track width, in the header column's corner.
 const WAVEFORM_ZOOM_WIDTH: f32 = 72.0;
 /// The grid's lines this frame, as (x, on a bar), for the clips' bodies.
@@ -1246,7 +1255,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         for (beat, on_bar) in grid.lines(first_beat, last_beat, max_lines) {
             let x = x_of(beat).round() + 0.5;
             grid_xs.push((x, on_bar));
-            let stroke = theme::hairline(if on_bar { theme::grid_major() } else { theme::grid_minor() });
+            let stroke = theme::hairline(grid_color(on_bar));
             for band in grid_bands.iter().filter(|b| b.span() > 0.0) {
                 grid_painter.vline(x, *band, stroke);
             }
@@ -1266,12 +1275,12 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             }
             for band in grid_bands.iter().filter(|b| b.span() > 0.0) {
                 if bar_width >= 6.0 || bar % label_every == 0 {
-                    grid_painter.vline(x, *band, theme::hairline(theme::grid_major()));
+                    grid_painter.vline(x, *band, theme::hairline(grid_color(true)));
                 }
                 if state.beat_width >= 10.0 {
                     for beat in 1..this_bar_beats.ceil() as u32 {
                         let x = x_of(start + f64::from(beat)).round() + 0.5;
-                        grid_painter.vline(x, *band, theme::hairline(theme::grid_minor()));
+                        grid_painter.vline(x, *band, theme::hairline(grid_color(false)));
                     }
                 }
             }
@@ -1782,7 +1791,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         if lane.overrides {
             lanes_painter.rect_filled(lane_rect, 0.0, theme::window_background().gamma_multiply(0.45));
         }
-        lanes_painter.hline(area.x_range(), lane_rect.bottom() + 0.5, theme::hairline(theme::grid_major()));
+        lanes_painter.hline(area.x_range(), lane_rect.bottom() + 0.5, theme::hairline(grid_color(true)));
         // The track's automation lanes, under it.
         let lanes = automation::TrackLanes {
             track: lane.track,
@@ -3104,10 +3113,13 @@ fn clip_box<'a>(
     // Picked by a click in its body: not lit (the play start is what the click chose), but
     // outlined, so the clip the editor and the keys work on is plain to see.
     if selected && !lit && state.clip_drag.is_none() {
+        let edge = Rect::from_min_size(rect.min, Vec2::new(4.0, rect.height()));
+        let body = motion::mix(theme::panel_background(), rgb(clip.color), 0.82);
+        painter.with_clip_rect(row.clip).rect_filled(edge, 0.0, motion::mix(body, ink_on(body), 0.5));
         painter.with_clip_rect(row.clip).rect_stroke(
             rect,
             0.0,
-            egui::Stroke::new(1.5, theme::text_primary()),
+            egui::Stroke::new(1.0, theme::text_primary()),
             StrokeKind::Inside,
         );
     }
@@ -3249,15 +3261,17 @@ fn paint_clip(
     let off = lane.mute || !clip.enabled;
     let base = if off { motion::mix(rgb(clip.color), theme::text_hint(), 0.7) } else { rgb(clip.color) };
     let body = motion::mix(theme::panel_background(), base, if selected { 0.94 } else { 0.82 });
-    painter.rect_filled(rect, 0.0, body);
+    painter.rect_filled(rect, 2.0, body);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
-        painter.rect_filled(bar, 0.0, body);
+        painter.rect_filled(bar.shrink2(Vec2::new(2.0, 0.0)), 0.0, motion::mix(body, ink_on(body), 0.045));
     } else {
         painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, base);
     }
     let ink = ink_on(body);
-    painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(2.0, rect.height())), 0.0, base);
+    let edge_width = if selected { 4.0 } else { 3.0 };
+    let edge_ink = motion::mix(body, ink, 0.5);
+    painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(edge_width, rect.height())), 0.0, edge_ink);
     // A looping clip's passes are marked by the notches and lines at their starts (below), not by
     // shades: the body is one colour all along.
     // The grid shows through the body, faintly, the bars a little stronger.
@@ -3289,17 +3303,12 @@ fn paint_clip(
     let has_name = bar.is_some();
     if has_name {
         // The name stays in view while the clip's start is scrolled off to the left.
-        let left = rect.left().max(view.left()) + 4.0;
-        let name_rect =
-            Rect::from_min_max(Pos2::new(left, rect.top() + 3.0), Pos2::new(rect.right() - 2.0, rect.top() + 15.0));
-        widgets::text_in(
-            painter,
-            name_rect,
-            Align2::LEFT_CENTER,
-            &clip.name,
-            theme::ui_font(theme::TEXT_SMALL),
-            text_color,
+        let left = rect.left().max(view.left()) + 7.0;
+        let name_rect = Rect::from_min_max(
+            Pos2::new(left, rect.top() + 3.0),
+            Pos2::new(rect.right() - 5.0, rect.top() + CLIP_NAME_BAR - 3.0),
         );
+        widgets::text_in(painter, name_rect, Align2::LEFT_CENTER, &clip.name, theme::ui_font(theme::TEXT), text_color);
     }
     let marks = Rect::from_min_max(
         Pos2::new(rect.left() + 3.0, rect.top() + if has_name { CLIP_NAME_BAR + 3.0 } else { 4.0 }),
@@ -3380,7 +3389,7 @@ fn paint_clip(
     // dashed line between them, the repeats drawn as the clip itself (#700).
     if !clip.seams.is_empty() {
         // Dark, as the notches cut into the clip are: a light line read as a note or the playhead.
-        let mark = motion::mix(body, theme::window_background(), 0.6);
+        let mark = motion::mix(body, ink, 0.18);
         let top = bar.map_or(rect.top(), |bar| bar.bottom());
         let (first, last) = (view.left() - 4.0, view.right() + 4.0);
         // As wide as the passes allow: zoomed out, a pass a few points wide keeps its body and
@@ -3388,7 +3397,7 @@ fn paint_clip(
         let pass =
             clip.seams.windows(2).map(|w| w[1] - w[0]).chain(clip.seams.first().copied()).fold(f64::MAX, f64::min);
         let pass_width = (pass.max(0.0) as f32) * beat_width;
-        let notch = (pass_width * 0.1).clamp(1.5, 4.0);
+        let notch = (pass_width * 0.06).clamp(1.0, 2.0);
         for seam in &clip.seams {
             let x = x_of(start + seam).round() + 0.5;
             if x < first || x > last || x <= rect.left() || x >= rect.right() {
@@ -3401,7 +3410,7 @@ fn paint_clip(
                 3.0,
             ));
             // Cut out of the clip, in the lane's colour, so they show on a light name bar too.
-            let cut = theme::window_background();
+            let cut = motion::mix(body, ink, 0.35);
             painter.add(egui::Shape::convex_polygon(
                 vec![
                     Pos2::new(x - notch, rect.top()),
@@ -3436,7 +3445,7 @@ fn paint_clip(
         }
     }
     if selected {
-        painter.rect_stroke(rect, 0.0, egui::Stroke::new(2.0, theme::text_primary()), StrokeKind::Inside);
+        painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, motion::mix(body, ink, 0.45)), StrokeKind::Inside);
     }
 }
 
@@ -3506,7 +3515,7 @@ fn routing(
     let mut picked = None;
     let response =
         widgets::button_area(ui, field, Id::new(("output", lane.track.0)), format!("{} output: {current}", lane.name));
-    widgets::dropdown(ui, painter, field, &response, current);
+    widgets::subtle_dropdown(ui, painter, field, &response, current);
     egui::Popup::menu(&response).show(|ui| {
         let text = |t: &str| egui::RichText::new(t).font(theme::ui_font(theme::TEXT_SMALL));
         if ui.selectable_label(lane.output.is_none(), text("Main")).clicked() && lane.output.is_some() {
@@ -3550,7 +3559,7 @@ fn midi_input(
         Id::new(("midi-input", lane.track.0)),
         format!("{} MIDI input: {current}", lane.name),
     );
-    widgets::dropdown(ui, painter, field, &response, &current);
+    widgets::subtle_dropdown(ui, painter, field, &response, &current);
     egui::Popup::menu(&response).show(|ui| menus::midi_input_choices(ui, lane.track, &lane.midi_input, ports, actions));
 }
 
@@ -3581,7 +3590,7 @@ fn audio_input(
         Id::new(("audio-input", lane.track.0)),
         format!("{} audio input: {current}", lane.name),
     );
-    widgets::dropdown(ui, painter, field, &response, &current);
+    widgets::subtle_dropdown(ui, painter, field, &response, &current);
     egui::Popup::menu(&response)
         .show(|ui| menus::audio_input_choices(ui, lane.track, &lane.audio_input, channels, actions));
 }
@@ -4100,8 +4109,10 @@ fn send_knob(
     let position = ((shown - VOLUME_RANGE.0) / (VOLUME_RANGE.1 - VOLUME_RANGE.0)) as f32;
     let amount = widgets::hover(ui, &response);
     let pointer = motion::mix(theme::text_value(), theme::text_primary(), amount);
-    let fill = motion::mix(theme::control_background(), theme::control_hover(), amount);
-    widgets::track_button_face(ui, painter, rect, &response, fill);
+    if amount > 0.0 || response.has_focus() {
+        let fill = theme::control_hover().gamma_multiply(amount.max(0.3));
+        widgets::track_button_face(ui, painter, rect, &response, fill);
+    }
     // A labelled send tile with a small level rail, rather than a miniature rotary dial.
     let rail = Rect::from_min_max(
         Pos2::new(rect.left() + 4.0, rect.bottom() - 3.0),
