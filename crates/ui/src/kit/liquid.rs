@@ -97,7 +97,13 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
         Surface::Track => options.tracks,
         Surface::Clip => options.clips,
     };
-    if level == 0 || !effects_allowed(painter.ctx()) || rect.width() < 12.0 || rect.height() < 12.0 {
+    if level == 0
+        || !effects_allowed(painter.ctx())
+        || !rect.is_finite()
+        || rect.width() < 12.0
+        || rect.height() < 12.0
+        || !painter.clip_rect().intersects(rect)
+    {
         return;
     }
     let painter = painter.with_clip_rect(painter.clip_rect().intersect(rect));
@@ -110,34 +116,24 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
         painter.image(backdrop.texture, rect, Rect::from_min_max(uv_min.to_pos2(), uv_max.to_pos2()), Color32::WHITE);
         painter.rect_filled(rect, 0.0, base.gamma_multiply(1.0 - 0.45 * strength));
     }
+    if surface != Surface::Panel {
+        painter.add(rim_mesh(rect, strength));
+        return;
+    }
     let light = motion::mix(base, Color32::WHITE, 0.28 * strength);
     let shade = motion::mix(base, Color32::BLACK, 0.16 * strength);
     let mut mesh = egui::Mesh::default();
-    if surface == Surface::Panel {
-        let top = Rect::from_min_max(rect.min, pos2(rect.right(), rect.top() + 22.0_f32.min(rect.height() * 0.34)));
-        for (position, color) in [
-            (top.left_top(), light.gamma_multiply(0.35 * strength)),
-            (top.right_top(), light.gamma_multiply(0.35 * strength)),
-            (top.left_bottom(), Color32::TRANSPARENT),
-            (top.right_bottom(), Color32::TRANSPARENT),
-        ] {
-            mesh.colored_vertex(position, color);
-        }
-        mesh.add_triangle(0, 1, 2);
-        mesh.add_triangle(2, 1, 3);
-    } else {
-        // A continuous reflection across the coloured body, not a white wash over its labels.
-        for (fraction, color) in [(0.0, light), (0.24, motion::mix(base, light, 0.35)), (0.55, base), (1.0, shade)] {
-            let y = rect.top() + rect.height() * fraction;
-            mesh.colored_vertex(pos2(rect.left(), y), color);
-            mesh.colored_vertex(pos2(rect.right(), y), color);
-        }
-        for row in 0..3_u32 {
-            let start = row * 2;
-            mesh.add_triangle(start, start + 1, start + 2);
-            mesh.add_triangle(start + 2, start + 1, start + 3);
-        }
+    let top = Rect::from_min_max(rect.min, pos2(rect.right(), rect.top() + 22.0_f32.min(rect.height() * 0.34)));
+    for (position, color) in [
+        (top.left_top(), light.gamma_multiply(0.35 * strength)),
+        (top.right_top(), light.gamma_multiply(0.35 * strength)),
+        (top.left_bottom(), Color32::TRANSPARENT),
+        (top.right_bottom(), Color32::TRANSPARENT),
+    ] {
+        mesh.colored_vertex(position, color);
     }
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(2, 1, 3);
     painter.add(mesh);
     painter.hline(rect.x_range(), rect.top() + 0.5, Stroke::new(1.0, light));
     painter.hline(rect.x_range(), rect.bottom() - 0.5, Stroke::new(1.0, shade));
@@ -151,9 +147,109 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
     }
 }
 
+/// A bounded rounded rim, with a quiet transparent centre. All vertices stay inside
+/// the editing rectangle: adjacent clips cannot cast highlights onto one another.
+/// This models reflected light only; it never samples or distorts musical content.
+fn rim_mesh(rect: Rect, strength: f32) -> egui::Mesh {
+    let mut mesh = egui::Mesh::default();
+    if !rect.is_finite() || rect.width() < 12.0 || rect.height() < 12.0 || !strength.is_finite() {
+        return mesh;
+    }
+    let scale = ((rect.height().min(rect.width()) - 12.0) / 28.0).clamp(0.0, 1.0);
+    let strength = strength.clamp(0.0, 1.0) * scale;
+    if strength == 0.0 {
+        return mesh;
+    }
+    let radius = (rect.height().min(rect.width()) * 0.16).clamp(2.0, 6.0);
+    // Normalised depth, facing highlight, inner shade, opposing light return.
+    // The outer transparent ring supplies a subpixel antialiasing fringe.
+    let rings = [
+        (0.0, 0.0, 0.0, 0.0),
+        (0.65, 0.78, 0.06, 0.30),
+        (1.25, 0.16, 0.22, 0.04),
+        (2.3, 0.0, 0.12, 0.0),
+        (3.6, 0.0, 0.0, 0.18),
+        (5.5, 0.0, 0.0, 0.0),
+    ];
+    const CORNER_STEPS: u32 = 8;
+    const PERIMETER: u32 = 4 * (CORNER_STEPS + 1);
+    mesh.vertices.reserve(rings.len() * PERIMETER as usize);
+    mesh.indices.reserve((rings.len() - 1) * PERIMETER as usize * 6);
+    for (depth, highlight, shade, returned) in rings {
+        let inset = depth * (0.55 + 0.45 * scale);
+        let inner = rect.shrink(inset);
+        let r = (radius - inset).max(0.0);
+        for corner in 0..4 {
+            let centre = match corner {
+                0 => pos2(inner.right() - r, inner.top() + r),
+                1 => pos2(inner.right() - r, inner.bottom() - r),
+                2 => pos2(inner.left() + r, inner.bottom() - r),
+                _ => pos2(inner.left() + r, inner.top() + r),
+            };
+            for step in 0..=CORNER_STEPS {
+                let angle = (corner as f32 - 1.0 + step as f32 / CORNER_STEPS as f32) * std::f32::consts::FRAC_PI_2;
+                let normal = egui::vec2(angle.cos(), angle.sin());
+                let facing = normal.dot(egui::vec2(-0.6, -0.8));
+                let lit = facing.max(0.0).powi(3);
+                let opposite = (-facing).max(0.0).powi(4);
+                let white = highlight * (0.12 + 0.88 * lit) + returned * opposite;
+                let black = shade * (0.25 + 0.75 * opposite);
+                // Each ring has a single premultiplied overlay, preserving the source hue.
+                let color = if white >= black {
+                    Color32::WHITE.gamma_multiply((white - black) * strength)
+                } else {
+                    Color32::BLACK.gamma_multiply((black - white) * strength)
+                };
+                mesh.colored_vertex(centre + normal * r, color);
+            }
+        }
+    }
+    for ring in 0..(rings.len() as u32 - 1) {
+        for point in 0..PERIMETER {
+            let next = (point + 1) % PERIMETER;
+            let outer = ring * PERIMETER;
+            let inner = outer + PERIMETER;
+            mesh.add_triangle(outer + point, outer + next, inner + point);
+            mesh.add_triangle(inner + point, outer + next, inner + next);
+        }
+    }
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn optical_rim_is_bounded_and_leaves_the_centre_clear() {
+        for size in [egui::vec2(13.0, 14.0), egui::vec2(220.0, 64.0), egui::vec2(1600.0, 200.0)] {
+            let rect = Rect::from_min_size(pos2(30.0, 50.0), size);
+            let mesh = rim_mesh(rect, 1.0);
+            assert!(mesh.is_valid());
+            assert_eq!(mesh.vertices.len(), 216);
+            for vertex in &mesh.vertices {
+                assert!(rect.expand(0.001).contains(vertex.pos));
+                assert!(vertex.pos.distance(rect.center()) > size.min_elem() * 0.2);
+                assert!(vertex.color.r() <= vertex.color.a());
+                assert!(vertex.color.g() <= vertex.color.a());
+                assert!(vertex.color.b() <= vertex.color.a());
+            }
+        }
+    }
+
+    #[test]
+    fn rim_fades_at_small_sizes_and_rejects_invalid_geometry() {
+        let area = |height| Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(200.0, height));
+        let peak = |height, strength| {
+            rim_mesh(area(height), strength).vertices.iter().map(|vertex| vertex.color.a()).max().unwrap_or(0)
+        };
+        assert!(peak(14.0, 1.0) < peak(40.0, 1.0));
+        assert!(peak(40.0, 0.5) < peak(40.0, 1.0));
+        assert_eq!(peak(12.0, 1.0), 0);
+        assert!(rim_mesh(area(40.0), 0.0).is_empty());
+        assert!(rim_mesh(area(f32::NAN), 1.0).is_empty());
+        assert!(rim_mesh(area(40.0), f32::INFINITY).is_empty());
+    }
 
     #[test]
     fn default_reduced_effects_and_tiny_surfaces_remain_solid() {

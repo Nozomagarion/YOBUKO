@@ -12,6 +12,17 @@ covers:
 
 # Glass rendering experiment
 
+## Optical direction
+
+Public references: [Materials](https://developer.apple.com/design/human-interface-guidelines/materials)
+and [Meet Liquid Glass](https://developer.apple.com/videos/play/wwdc2025/219/) describe
+transmission, edge lensing and directional highlights rather than a full-body bevel.
+The implementation is independently written; no reference shader or asset is imported.
+For dense musical content, use a quiet centre and a narrow curved rim: a directional
+outer highlight, an inner dark band and a weaker opposing light return. Scale these
+down with row height and keep them inside the existing editing rectangle. This is an
+optical coating, not physical refraction; real background displacement remains future work.
+
 ## Current state
 
 The original static experiment below remains available. There is also an experimental
@@ -35,13 +46,17 @@ No swapchain readback, previous frame or recursive rendering is used.
 The UI-facing provider and independent Panel/Track/Clip options live in
 `crates/ui/src/kit/liquid.rs`. Settings uses the live blurred backdrop under a theme tint.
 Arrangement and Session track headers and clip backgrounds get a lightweight optical
-coating (a continuous reflection with a brighter upper body and darker lower edge),
+coating (a narrow rounded rim with directional highlights, an inner shade and a
+weaker opposing light return; the centre retains its flat source colour),
 painted before labels, controls,
 notes and waveforms. These coatings do **not** perform per-clip backdrop blur or refraction.
 Surfaces smaller than 12 logical pixels stay solid. The three strengths are independently
 saved percentages: 0 is off, 100 is the strongest supported material. Panels interpolate
-from opaque to a 55% theme tint at full strength; track and clip gradients keep the source
-hue and draw all text/notes/waveforms sharply on top. Missing settings default to 0.
+from opaque to a 55% theme tint at full strength; track and clip rims keep the source
+hue and draw all text/notes/waveforms sharply on top. Rim intensity fades with the
+shorter surface dimension between 12 and 40 logical pixels. Each rim is bounded to
+216 vertices, regardless of clip length; its transparent centre and geometry stay
+inside the editing rectangle. Missing settings default to 0.
 
 The wgpu host installs its provider even while all strengths are 0; no backdrop capture
 is requested until Panel liquid is raised. OpenGL has no provider and disables the controls.
@@ -60,8 +75,9 @@ A GPU-only blur does not imply that the whole capture is free.
 
 The native hardware test was run explicitly on Windows: constant RGB preservation,
 linear-light checkerboard mean, impulse symmetry and a changed frame at a new size passed.
-GPU readback exists only in that test, not in the application path. The two kit tests cover
-default/tiny/reduced-effects solid rendering and removal of an old backdrop on failure.
+GPU readback exists only in that test, not in the application path. Kit tests cover
+default/tiny/reduced-effects solid rendering, removal of an old backdrop on failure,
+bounded premultiplied rim geometry and intensity scaling at small sizes.
 Settings-window (7, including live independent strength controls and persistence) and constrained-pane (16) regression tests also passed, as did Clippy
 for both the application and UI with all targets. These checks do not replace visual QA
 or playback performance measurements.

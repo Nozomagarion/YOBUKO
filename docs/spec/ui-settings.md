@@ -114,8 +114,9 @@ frame and persist as `liquid_panel_strength`, `liquid_track_strength` and
 produce the usual settings warning. Older files leave all three off.
 
 Panel liquid controls how much of the Settings backdrop shows through the theme tint.
-Track liquid controls the light-to-dark reflection on MIDI/audio track headers in both
-views; Clip liquid controls the same coating on clip bodies. Labels, controls, notes and
+Track liquid controls a curved directional rim on MIDI/audio track headers in both
+views; Clip liquid controls the same coating on clip bodies. The centre retains the
+source colour, and rim intensity decreases on smaller surfaces. Labels, controls, notes and
 waveforms are drawn afterward. The latter two are surface reflections, not per-clip blur.
 The renderer is described in [Glass rendering experiment](../design/glass-rendering.md).
 
