@@ -16,6 +16,24 @@ use suhina_ui::{App, kit::theme};
 const SHORT: (f32, f32) = (1000.0, 420.0);
 
 #[test]
+fn settings_can_undock_and_dock_without_losing_the_page() {
+    let mut harness = short_window();
+    harness.get_by_label("Settings page: Appearance").click();
+    settle(&mut harness);
+    harness.get_by_label("Open in window").click();
+    settle(&mut harness);
+    assert!(harness.state().settings_open());
+    harness.get_by_label("Track liquid");
+    harness.get_by_label("Dock").click();
+    settle(&mut harness);
+    harness.get_by_label("Open in window");
+    harness.get_by_label("Track liquid");
+    harness.get_by_label("Close settings").click();
+    settle(&mut harness);
+    assert!(!harness.state().settings_open());
+}
+
+#[test]
 fn liquid_sliders_change_independent_saved_strengths_without_restarting() {
     struct Host;
     impl suhina_ui::kit::liquid::Provider for Host {

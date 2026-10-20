@@ -18,6 +18,15 @@ Options › Settings (Ctrl+,) opens the Settings window over the main window. Ho
 (sizes, colours, the controls) is in [components](../design/components.md) › Settings; this spec
 says what is on each page, how the pages scroll and how a setting finds its place.
 
+The title's Open in window button moves Settings into a separate native, resizable
+window that can be moved to another monitor. Dock returns it to the main-window
+overlay, preserving page, search and edited settings. Closing either form closes
+Settings. The detached window never dims or blocks the main view. Its background
+is solid: it must not sample the unrelated main-window backdrop.
+In the overlay, dimming temporarily disappears during control adjustments and for
+600 ms afterward so the project remains visible for live comparison. Background
+clicks remain blocked. Text inputs use transparent fills and thin theme borders.
+
 ## Sources
 
 Suhina's own layout: no other program was observed for it. The grouping follows what the user is

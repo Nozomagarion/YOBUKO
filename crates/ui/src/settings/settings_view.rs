@@ -5,7 +5,7 @@
 //! left under a search field; each setting is a row: a label, a short note and its control. What
 //! is on which page is the table in `settings_rows.rs` (`docs/spec/ui-settings.md`).
 
-use egui::{Align2, Id, Pos2, Rect, Sense, Ui, Vec2};
+use egui::{Align2, Id, Pos2, Rect, Sense, Ui, Vec2, pos2};
 
 use crate::interaction::pick::PickField;
 use crate::kit::motion;
@@ -244,6 +244,8 @@ impl Page {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PageState {
     pub page: Page,
+    /// Settings lives in a separate native viewport until Dock is chosen.
+    pub window: bool,
     pub capture: Option<String>,
     /// The name being typed for a theme, with the theme's id.
     pub theme_name: Option<(String, String)>,
@@ -560,6 +562,31 @@ impl Cx<'_> {
     }
 }
 
+/// Form inputs share the surrounding material, with quiet outlines and a focus accent.
+pub(crate) fn input_style(ui: &mut Ui) {
+    let visuals = &mut ui.style_mut().visuals;
+    visuals.text_edit_bg_color = Some(egui::Color32::TRANSPARENT);
+    visuals.widgets.inactive.bg_stroke = theme::hairline(theme::border());
+    visuals.widgets.hovered.bg_stroke = theme::hairline(theme::border_strong());
+    visuals.widgets.active.bg_stroke = theme::hairline(theme::accent());
+}
+
+/// Hide the overlay tint only while adjusting, plus a short comparison interval.
+pub(crate) fn previewing(ctx: &egui::Context, adjusting: bool) -> bool {
+    let id = Id::new("settings-live-preview-until");
+    let now = ctx.input(|input| input.time);
+    if adjusting {
+        ctx.data_mut(|data| data.insert_temp(id, now + 0.6));
+    }
+    let until = ctx.data(|data| data.get_temp::<f64>(id)).unwrap_or(f64::NEG_INFINITY);
+    if now < until {
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64((until - now).min(0.6)));
+        true
+    } else {
+        false
+    }
+}
+
 /// Draws the page into the space left in `ui`.
 pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &mut PageState) -> Outcome {
     let mut outcome = Outcome::default();
@@ -567,7 +594,10 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
-    crate::kit::liquid::paint(&painter, area, theme::window_background(), crate::kit::liquid::Surface::Panel);
+    if !state.window {
+        crate::kit::liquid::paint(&painter, area, theme::window_background(), crate::kit::liquid::Surface::Panel);
+    }
+    input_style(ui);
 
     let width = SIDEBAR + SIDEBAR_GAP + PAGE_WIDTH;
     let whole = Rect::from_min_max(
@@ -599,6 +629,11 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
         theme::ui_font(theme::TEXT),
         theme::text_primary(),
     );
+    let toggle = Rect::from_min_max(pos2(title.right() - 170.0, title.top()), pos2(close.left() - 6.0, title.bottom()));
+    let label = if state.window { "Dock" } else { "Open in window" };
+    if ui.put(toggle, egui::Button::new(label)).clicked() {
+        state.window = !state.window;
+    }
     let top = title.bottom() + 16.0;
 
     // The search field over the list of pages: Escape in it empties it.
@@ -1764,7 +1799,7 @@ fn choice_dropdown<T: Clone + PartialEq>(
     );
     let shown = options.iter().find(|(_, v)| v == current).map_or("-", |(text, _)| text.as_str());
     let response = widgets::button_area(ui, field, Id::new(("audio-setting", name)), format!("{name}: {shown}"));
-    widgets::dropdown(ui, painter, field, &response, shown);
+    widgets::form_dropdown(ui, painter, field, &response, shown);
     let mut picked = None;
     egui::Popup::menu(&response).show(|ui| {
         let text = |t: &str| egui::RichText::new(t).font(theme::ui_font(theme::TEXT_SMALL));
@@ -1831,6 +1866,31 @@ fn segmented<T: Copy + PartialEq>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preview_clears_the_tint_during_adjustment_then_restores_it() {
+        let ctx = egui::Context::default();
+        for (time, adjusting, expected) in
+            [(1.0, false, false), (1.1, true, true), (1.4, false, true), (1.8, false, false)]
+        {
+            let mut output = ctx.run_ui(egui::RawInput { time: Some(time), ..Default::default() }, |ui| {
+                assert_eq!(previewing(ui.ctx(), adjusting), expected);
+            });
+            output.textures_delta.clear();
+        }
+    }
+
+    #[test]
+    fn form_fields_have_transparent_fills_and_visible_borders() {
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            input_style(ui);
+            assert_eq!(ui.visuals().text_edit_bg_color(), egui::Color32::TRANSPARENT);
+            assert!(ui.visuals().widgets.inactive.bg_stroke.width > 0.0);
+            assert_eq!(ui.visuals().widgets.hovered.bg_stroke.color, theme::border_strong());
+        });
+        output.textures_delta.clear();
+    }
 
     #[test]
     fn the_output_now_says_which_chosen_device_it_waits_for() {

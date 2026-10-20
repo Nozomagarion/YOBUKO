@@ -2761,8 +2761,10 @@ impl App {
         self.project_dialogs(ui, window);
         if self.settings_open {
             // Embedded plug-in editors are windows of their own and would cover the dialog.
-            self.place_editors(&[]);
-            crate::kit::liquid::prepare(ui.ctx());
+            if !self.page.window {
+                self.place_editors(&[]);
+                crate::kit::liquid::prepare(ui.ctx());
+            }
             self.settings_dialog(ui, window);
         }
         self.update_title(ui.ctx());
@@ -3637,7 +3639,7 @@ impl App {
     /// Whether something drawn over the whole window is open (Settings or a dialog): an embedded
     /// plug-in editor is a native window egui cannot draw over, so it is hidden meanwhile (#723).
     fn over_the_window(&self) -> bool {
-        self.settings_open
+        (self.settings_open && !self.page.window)
             || self.about_open
             || self.updates.open
             || self.project_dialog.is_some()
@@ -4047,47 +4049,75 @@ impl App {
         self.scan.is_some()
     }
 
-    /// Settings as a dialog over the window: the view stays behind it, dimmed, and its clicks
-    /// are swallowed. Escape, Close and the Settings key close it.
+    /// Settings can stay over the main view or move into an independent native window.
     fn settings_dialog(&mut self, ui: &Ui, window: Rect) {
+        if self.page.window {
+            let ctx = ui.ctx().clone();
+            let builder = egui::ViewportBuilder::default()
+                .with_title("Settings - Suhina")
+                .with_inner_size(SETTINGS_SIZE)
+                .with_min_inner_size([600.0, 320.0]);
+            ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("settings-window"), builder, |ui, _| {
+                let panel = ui.available_rect_before_wrap();
+                self.settings_contents(ui, panel);
+                if ui.input(|input| {
+                    input.viewport().close_requested()
+                        || (self.page.capture.is_none() && input.modifiers.command && input.key_pressed(Key::Comma))
+                }) {
+                    self.settings_open = false;
+                }
+            });
+            return;
+        }
         egui::Area::new(Id::new("settings-dialog")).order(egui::Order::Foreground).fixed_pos(window.min).show(
             ui.ctx(),
             |ui| {
                 ui.set_min_size(window.size());
                 let behind = ui.interact(window, Id::new("settings-behind"), Sense::click_and_drag());
                 let _swallowed = behind.clicked();
-                ui.painter().rect_filled(window, 0.0, theme::window_background().gamma_multiply(0.6));
+                let tint = ui.painter().add(egui::Shape::Noop);
                 let size = Vec2::new(
                     SETTINGS_SIZE.x.min(window.width() - 2.0 * PAD),
                     SETTINGS_SIZE.y.min(window.height() - 2.0 * PAD),
                 );
                 let panel = Rect::from_center_size(window.center(), size);
-                if self.plugins.manager.open {
-                    // The plug-in manager takes the dialog's place until it is closed.
-                    if !self.plugins_read {
-                        self.read_plugins();
-                    }
-                    let out = ui
-                        .scope_builder(egui::UiBuilder::new().max_rect(panel), |ui| {
-                            crate::settings::plugin_manager::show(ui, panel, &mut self.plugins)
-                        })
-                        .inner;
-                    if out.close {
-                        self.plugins.manager.open = false;
-                    }
-                    if let Some(request) = out.request {
-                        self.plugin_request(request);
-                    }
-                } else {
-                    ui.scope_builder(egui::UiBuilder::new().max_rect(panel), |ui| self.settings_page(ui));
+                let adjusting = self.settings_contents(ui, panel);
+                if !settings_view::previewing(ui.ctx(), adjusting) {
+                    ui.painter().set(
+                        tint,
+                        egui::Shape::rect_filled(window, 0.0, theme::window_background().gamma_multiply(0.6)),
+                    );
                 }
                 ui.painter().rect_stroke(panel, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
             },
         );
     }
 
+    fn settings_contents(&mut self, ui: &mut Ui, panel: Rect) -> bool {
+        if self.plugins.manager.open {
+            if !self.plugins_read {
+                self.read_plugins();
+            }
+            let out = ui
+                .scope_builder(egui::UiBuilder::new().max_rect(panel), |ui| {
+                    settings_view::input_style(ui);
+                    crate::settings::plugin_manager::show(ui, panel, &mut self.plugins)
+                })
+                .inner;
+            if out.close {
+                self.plugins.manager.open = false;
+            }
+            if let Some(request) = out.request {
+                self.plugin_request(request);
+            }
+            false
+        } else {
+            ui.scope_builder(egui::UiBuilder::new().max_rect(panel), |ui| self.settings_page(ui)).inner
+        }
+    }
+
     /// The Settings page, applying each change as it is made.
-    fn settings_page(&mut self, ui: &mut Ui) {
+    fn settings_page(&mut self, ui: &mut Ui) -> bool {
         if !self.plugins_read {
             self.read_plugins();
         }
@@ -4163,6 +4193,7 @@ impl App {
         if outcome.close {
             self.settings_open = false;
         }
+        outcome.changed || outcome.themes.is_some() || ui.ctx().dragged_id().is_some()
     }
 
     /// The menu bar: the same actions as the shortcuts and the views' controls.
@@ -4402,7 +4433,8 @@ impl App {
             || !self.agent_asks.is_empty();
         let session_view = self.shown == View::Session && !self.sample_map.view.large;
         // A clicked slot or button keeps the focus; only a text field takes the keys away.
-        let focused = session_view && !dialog && !self.settings_open && !ui.ctx().text_edit_focused();
+        let focused =
+            session_view && !dialog && !(self.settings_open && !self.page.window) && !ui.ctx().text_edit_focused();
         let lost = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::WindowFocused(false))));
         let Some(project) = self.projects.active().and_then(|id| self.projects.get(id)).map(Session::project) else {
             return;

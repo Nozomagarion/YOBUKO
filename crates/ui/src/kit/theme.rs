@@ -485,6 +485,7 @@ fn visuals(visuals: &mut egui::Visuals, p: &Palette) {
     visuals.panel_fill = p.panel_background;
     visuals.window_fill = p.panel_background;
     visuals.extreme_bg_color = p.window_background;
+    visuals.text_edit_bg_color = Some(Color32::TRANSPARENT);
     visuals.faint_bg_color = p.panel_background;
     visuals.window_stroke = hairline(p.border);
     visuals.window_corner_radius = egui::CornerRadius::ZERO;

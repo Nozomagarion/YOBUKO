@@ -219,6 +219,18 @@ pub fn dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, tex
     dropdown_contents(painter, rect, text, theme::text_value(), theme::text_hint());
 }
 
+/// A form field whose surrounding surface shows through, outlined rather than filled.
+pub fn form_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str) {
+    let hover = hover(ui, response);
+    let border = if response.has_focus() {
+        theme::accent()
+    } else {
+        motion::mix(theme::border(), theme::border_strong(), hover)
+    };
+    painter.rect_stroke(rect, 0.0, theme::hairline(border), egui::StrokeKind::Inside);
+    dropdown_contents(painter, rect, text, theme::text_value(), theme::text_hint());
+}
+
 /// A secondary routing field: quiet until hovered, with the same menu and hit area.
 pub fn subtle_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str, background: Color32) {
     let amount = hover(ui, response);
@@ -561,6 +573,19 @@ pub(crate) fn button(ui: &Ui, painter: &egui::Painter, rect: Rect, text: &str, l
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn form_dropdown_outlines_the_field_without_covering_the_material() {
+        let ctx = egui::Context::default();
+        let rect = Rect::from_min_size(Pos2::new(20.0, 20.0), Vec2::new(180.0, 18.0));
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            let response = button_area(ui, rect, Id::new("form-dropdown-test"), "Choice");
+            form_dropdown(ui, ui.painter(), rect, &response, "Every 5 minutes");
+        });
+        assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Rect(shape) if shape.rect == rect && shape.fill == Color32::TRANSPARENT && shape.stroke.width > 0.0)));
+        output.textures_delta.clear();
+    }
 
     #[test]
     fn values_read_like_the_mixer() {
