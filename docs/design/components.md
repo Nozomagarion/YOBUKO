@@ -749,8 +749,9 @@ New Arrangement lanes default to 40 px and return rows to 20 px, with a 336 px h
 two-row layout uses 16 px controls, 2 px vertical padding and a 4 px row gap. At 60 px or
 more the name uses 14 px text and controls use 20 px rows with 6 px vertical padding. Below
 that height the compact metrics remain in use. Solo/cue/arm controls are 26 px wide. Manual
-resizing remains available. Volume fill is tinted by the track color; the Main channel keeps
-the theme fill. The selected-header outline is 1 px and more restrained.
+resizing remains available. Arrangement volume fills use the neutral `text.value` colour
+(soft white in dark themes), including Main. Values use contrasting ink over the filled
+portion and normal text over the unfilled portion. The selected-header outline is 1 px and more restrained.
 
 Arrangement clips retain a strong track-derived fill against the subdued grid. Selection lifts
 brightness within the same hue; track headers use a restrained brightness lift and colour-aware

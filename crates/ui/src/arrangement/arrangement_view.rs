@@ -2124,13 +2124,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             }
             Drag::None => {}
         }
-        volume_field(
-            &fixed_painter,
-            field,
-            state.main_drag.unwrap_or(db),
-            widgets::hover(ui, &response),
-            theme::control_playing(),
-        );
+        volume_field(&fixed_painter, field, state.main_drag.unwrap_or(db), widgets::hover(ui, &response));
         let at = lying_meter(field.left() - PAD, inner.center().y);
         let level = state.meters.main;
         meter::show(ui, &fixed_painter, at, "Main", meter::Source::Main, &level, actions);
@@ -4369,9 +4363,7 @@ fn value_control(
     match control {
         Control::Volume if plain => volume_text(painter, rect, shown, hover),
         Control::Volume if state.knobs => volume_knob(painter, rect, shown, hover),
-        Control::Volume => {
-            volume_field(painter, rect, shown, hover, motion::mix(theme::control_background(), rgb(lane.color), 0.45))
-        }
+        Control::Volume => volume_field(painter, rect, shown, hover),
         Control::Pan if state.knobs => pan_knob(painter, rect, shown),
         Control::Pan => pan_field(painter, rect, shown, hover),
     }
@@ -4435,7 +4427,8 @@ fn value_action(control: Control, tracks: &[TrackId], from: f64, to: f64) -> Act
 }
 
 /// A volume field: fill from the left up to the level, a tick at its end, the value on the right.
-fn volume_field(painter: &egui::Painter, rect: Rect, db: f64, hover: f32, fill: Color32) {
+fn volume_field(painter: &egui::Painter, rect: Rect, db: f64, hover: f32) {
+    let fill = theme::text_value();
     let radius = rect.height() * 0.5;
     painter.rect_filled(rect, radius, motion::mix(theme::control_background(), theme::control_hover(), hover));
     let x = rect.left() + rect.width() * volume_position(db);
@@ -4443,13 +4436,23 @@ fn volume_field(painter: &egui::Painter, rect: Rect, db: f64, hover: f32, fill: 
     let filled = Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom()));
     painter.with_clip_rect(painter.clip_rect().intersect(filled)).rect_filled(rect, radius, fill);
     let text = rect.shrink2(Vec2::new(8.0, 0.0));
+    let unfilled = Rect::from_min_max(Pos2::new(x, rect.top()), rect.max);
     widgets::text_in(
-        painter,
+        &painter.with_clip_rect(painter.clip_rect().intersect(unfilled)),
         text,
         Align2::RIGHT_CENTER,
         &widgets::format_db(db),
         theme::mono_font(theme::TEXT_SMALL),
         theme::text_primary(),
+    );
+    // The value can cross the fill boundary; keep both portions readable.
+    widgets::text_in(
+        &painter.with_clip_rect(painter.clip_rect().intersect(filled)),
+        text,
+        Align2::RIGHT_CENTER,
+        &widgets::format_db(db),
+        theme::mono_font(theme::TEXT_SMALL),
+        theme::text_on(fill),
     );
 }
 
