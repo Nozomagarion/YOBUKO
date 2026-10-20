@@ -12,9 +12,9 @@ pub const MIXER_HEIGHTS: (u32, u32, u32) = (46, 166, 2000);
 /// How Arrangement audio waveforms choose their ink, independently of clip names and notes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WaveformColour {
-    #[default]
     Auto,
     Light,
+    #[default]
     Dark,
     Custom,
 }
@@ -38,7 +38,7 @@ pub struct WaveformAppearance {
 
 impl Default for WaveformAppearance {
     fn default() -> Self {
-        Self { mode: WaveformColour::Auto, custom: egui::Color32::from_rgb(232, 228, 221) }
+        Self { mode: WaveformColour::Dark, custom: egui::Color32::from_rgb(232, 228, 221) }
     }
 }
 
@@ -275,6 +275,7 @@ mod tests {
 
     #[test]
     fn waveform_choices_round_trip_and_invalid_colours_preserve_defaults() {
+        assert_eq!(Settings::from_text("").0.view.waveform.mode, WaveformColour::Dark);
         for mode in [WaveformColour::Auto, WaveformColour::Light, WaveformColour::Dark, WaveformColour::Custom] {
             let mut settings = Settings::default();
             settings.view.waveform = WaveformAppearance { mode, custom: egui::Color32::from_rgb(23, 140, 212) };

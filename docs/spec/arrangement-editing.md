@@ -868,8 +868,9 @@ Settings remains open.
 
 ## Waveform colour
 
-Settings › Arrangement › Clips offers Waveform colour: Auto (the default), Light, Dark or
-Custom. Auto chooses contrasting light or dark ink from each clip's background; the other
+Settings › Arrangement › Clips offers Waveform colour: Auto, Light, Dark (the default) or
+Custom. Dark gives existing settings files without a waveform preference uniform dark ink.
+Auto chooses contrasting light or dark ink from each clip's background; the other
 modes give every audio waveform the same chosen ink. Custom reveals an opaque colour picker.
 The choice and custom RGB colour persist in application settings and update existing clips
 immediately, including while Settings is open. Clip names and MIDI notes retain their own
