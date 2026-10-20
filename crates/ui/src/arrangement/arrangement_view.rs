@@ -197,6 +197,7 @@ const CLIP_GRID: &str = "arrangement-clip-grid";
 /// The waveform zoom this frame, for `paint_clip`.
 const WAVEFORM_ZOOM: &str = "arrangement-waveform-zoom";
 const WAVEFORM_APPEARANCE: &str = "arrangement-waveform-appearance";
+const AUDIO_COLOUR_STRENGTH: &str = "arrangement-audio-colour-strength";
 /// The waveform zoom's range.
 pub const WAVEFORM_ZOOM_RANGE: (f32, f32) = (1.0, 16.0);
 
@@ -467,6 +468,8 @@ pub struct ArrangementViewState {
     /// sound or the clip's gain (the slider by the ruler; Ctrl+Alt+Up and Down).
     pub waveform_zoom: f32,
     pub waveform_appearance: crate::settings::view_settings::WaveformAppearance,
+    pub audio_colour_strength: u8,
+    pub header_colour_strength: u8,
     /// Where the last click in a lane or a clip's body put the play start, on which track: a
     /// thin line there in that lane while the play start is still there.
     pub insert: Option<(TrackId, f64)>,
@@ -547,6 +550,8 @@ impl Default for ArrangementViewState {
             grid_in_clips: true,
             waveform_zoom: 1.0,
             waveform_appearance: crate::settings::view_settings::WaveformAppearance::default(),
+            audio_colour_strength: 82,
+            header_colour_strength: 82,
             insert: None,
             open_devices: None,
             automation: LanesState::default(),
@@ -1361,6 +1366,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         d.insert_temp(Id::new(CLIP_GRID), std::sync::Arc::new(grid_xs));
         d.insert_temp(Id::new(WAVEFORM_ZOOM), state.waveform_zoom);
         d.insert_temp(Id::new(WAVEFORM_APPEARANCE), state.waveform_appearance);
+        d.insert_temp(Id::new(AUDIO_COLOUR_STRENGTH), state.audio_colour_strength);
     });
     // Tempo and time-signature changes: a line in the accent colour and what changes, after
     // room for the bar number.
@@ -1517,7 +1523,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         if state.headers_left && corner.width() >= 210.0 { corner.right() - 102.0 } else { corner.left() + 6.0 };
     let resize = Rect::from_min_size(Pos2::new(resize_x, corner.top() + 4.0), Vec2::new(96.0, 18.0)).intersect(corner);
     let response = widgets::button_area(ui, resize, Id::new("arrangement-resize-all"), "Resize all tracks");
-    widgets::subtle_dropdown(ui, &painter, resize, &response, "Resize all");
+    widgets::subtle_dropdown(ui, &painter, resize, &response, "Resize all", theme::panel_background());
     egui::Popup::menu(&response).show(|ui| {
         for size in TrackSize::ALL {
             let height = f32::from(state.sizes.height(size));
@@ -3343,14 +3349,19 @@ fn paint_clip(
     // Keep the clip colour legible against the quiet grid. Selection changes brightness,
     // never hue; the reserved title area leaves notes and waveforms unobstructed.
     let off = lane.mute || !clip.enabled;
-    let base = if off { motion::mix(rgb(clip.color), theme::text_hint(), 0.7) } else { rgb(clip.color) };
-    let body = motion::mix(theme::panel_background(), base, if selected { 0.94 } else { 0.82 });
+    let strength = if clip.audio {
+        painter.ctx().data(|d| d.get_temp::<u8>(Id::new(AUDIO_COLOUR_STRENGTH))).unwrap_or(82)
+    } else {
+        82
+    };
+    let strength = if selected { strength.saturating_add(12).min(100) } else { strength };
+    let body = colour_surface(theme::panel_background(), rgb(clip.color), strength, off);
     painter.rect_filled(rect, 2.0, body);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
         painter.rect_filled(bar.shrink2(Vec2::new(2.0, 0.0)), 0.0, motion::mix(body, ink_on(body), 0.045));
     } else {
-        painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, base);
+        painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, body);
     }
     let ink = ink_on(body);
     let edge_width = if selected { 4.0 } else { 3.0 };
@@ -3383,8 +3394,8 @@ fn paint_clip(
         .ctx()
         .data(|d| d.get_temp::<crate::settings::view_settings::WaveformAppearance>(Id::new(WAVEFORM_APPEARANCE)))
         .unwrap_or_default();
-    let wave_ink = appearance.ink(ink);
-    let wave_ink = if ara_notes.is_some() { motion::mix(body, wave_ink, 0.75) } else { wave_ink };
+    let content_ink = appearance.ink(ink);
+    let wave_ink = if ara_notes.is_some() { motion::mix(body, content_ink, 0.75) } else { content_ink };
     let dim = |_: Color32| wave_ink;
     let color = ink;
     let text_color = ink_on(body);
@@ -3459,7 +3470,7 @@ fn paint_clip(
         let span_end = f64::from((rect.right() - x_of(start)) / beat_width);
         // Dark on the clip's colour, as notes read on a vivid body; light ink read as a
         // highlight and vanished on the light colours.
-        let note_ink = ink;
+        let note_ink = content_ink;
         for note in clip.notes.iter().filter(|n| n.start + n.length >= first && n.start <= last && n.start < span_end) {
             let x = x_of(start + note.start);
             let right = x_of(start + span_end);
@@ -3472,7 +3483,7 @@ fn paint_clip(
     if let Some((notes, tempo)) = ara_notes
         && marks.height() >= 4.0
     {
-        paint_ara_notes(painter, rect, marks, notes, tempo, start, clip.length, x_of, beat_width, ink);
+        paint_ara_notes(painter, rect, marks, notes, tempo, start, clip.length, x_of, beat_width, content_ink);
     }
     // An ARA plug-in loading or analysing the track's audio: said on the clip, which shows no
     // notes yet and cannot be edited in it until it is done.
@@ -3572,6 +3583,12 @@ fn paint_ara_activity(
     }
 }
 
+/// Keep hue and dim a muted source by reducing its strength over the same theme surface.
+fn colour_surface(background: Color32, source: Color32, strength: u8, dim: bool) -> Color32 {
+    let amount = f32::from(strength.min(100)) / 100.0;
+    motion::mix(background, source, if dim { amount * 0.55 } else { amount })
+}
+
 /// Text and marks that read on `background`: dark on a light colour, light on a dark one.
 fn ink_on(background: Color32) -> Color32 {
     let [r, g, b, _] = background.to_array();
@@ -3586,16 +3603,24 @@ fn routing(
     rect: Rect,
     lane: &Lane,
     groups: &[(TrackId, String)],
+    background: Color32,
     actions: &mut Vec<Action>,
 ) {
     let current = lane.output.and_then(|t| groups.iter().find(|(g, _)| *g == t)).map_or("Main", |(_, name)| name);
     let label = Rect::from_min_size(rect.min, Vec2::new(18.0, rect.height()));
-    widgets::text_in(painter, label, Align2::LEFT_CENTER, "→", theme::ui_font(theme::TEXT_SMALL), theme::text_value());
+    widgets::text_in(
+        painter,
+        label,
+        Align2::LEFT_CENTER,
+        "→",
+        theme::ui_font(theme::TEXT_SMALL),
+        theme::text_on(background),
+    );
     let field = Rect::from_min_max(Pos2::new(label.right(), rect.top()), rect.max);
     let mut picked = None;
     let response =
         widgets::button_area(ui, field, Id::new(("output", lane.track.0)), format!("{} output: {current}", lane.name));
-    widgets::subtle_dropdown(ui, painter, field, &response, current);
+    widgets::subtle_dropdown(ui, painter, field, &response, current, background);
     egui::Popup::menu(&response).show(|ui| {
         let text = |t: &str| egui::RichText::new(t).font(theme::ui_font(theme::TEXT_SMALL));
         if ui.selectable_label(lane.output.is_none(), text("Main")).clicked() && lane.output.is_some() {
@@ -3620,6 +3645,7 @@ fn midi_input(
     rect: Rect,
     lane: &Lane,
     ports: &[String],
+    background: Color32,
     actions: &mut Vec<Action>,
 ) {
     let current = menus::midi_input_text(&lane.midi_input);
@@ -3630,7 +3656,7 @@ fn midi_input(
         Align2::LEFT_CENTER,
         "MIDI",
         theme::ui_font(theme::TEXT_SMALL),
-        theme::text_value(),
+        theme::text_on(background),
     );
     let field = Rect::from_min_max(Pos2::new(label.right(), rect.top()), rect.max);
     let response = widgets::button_area(
@@ -3639,7 +3665,7 @@ fn midi_input(
         Id::new(("midi-input", lane.track.0)),
         format!("{} MIDI input: {current}", lane.name),
     );
-    widgets::subtle_dropdown(ui, painter, field, &response, &current);
+    widgets::subtle_dropdown(ui, painter, field, &response, &current, background);
     egui::Popup::menu(&response).show(|ui| menus::midi_input_choices(ui, lane.track, &lane.midi_input, ports, actions));
 }
 
@@ -3651,6 +3677,7 @@ fn audio_input(
     rect: Rect,
     lane: &Lane,
     channels: u16,
+    background: Color32,
     actions: &mut Vec<Action>,
 ) {
     let current = menus::audio_input_text(&lane.audio_input);
@@ -3661,7 +3688,7 @@ fn audio_input(
         Align2::LEFT_CENTER,
         "Audio",
         theme::ui_font(theme::TEXT_SMALL),
-        theme::text_value(),
+        theme::text_on(background),
     );
     let field = Rect::from_min_max(Pos2::new(label.right(), rect.top()), rect.max);
     let response = widgets::button_area(
@@ -3670,7 +3697,7 @@ fn audio_input(
         Id::new(("audio-input", lane.track.0)),
         format!("{} audio input: {current}", lane.name),
     );
-    widgets::subtle_dropdown(ui, painter, field, &response, &current);
+    widgets::subtle_dropdown(ui, painter, field, &response, &current, background);
     egui::Popup::menu(&response)
         .show(|ui| menus::audio_input_choices(ui, lane.track, &lane.audio_input, channels, actions));
 }
@@ -3821,7 +3848,8 @@ fn track_header(
     let selected = state.selected_tracks.contains(&lane.track) || state.focus == Some(lane.track);
     // Preserve track identity when selected: a small brightness lift and outline, without
     // replacing the track colour with the global selection accent.
-    let surface = motion::mix(theme::track_header_background(), rgb(lane.color), 0.34);
+    let surface =
+        colour_surface(theme::track_header_background(), rgb(lane.color), state.header_colour_strength, lane.mute);
     let header_fill = if selected { motion::mix(surface, theme::text_primary(), 0.07) } else { surface };
     painter.rect_filled(rect, 0.0, header_fill);
     if selected {
@@ -3886,7 +3914,7 @@ fn track_header(
             format!("Collapse {}", lane.name)
         };
         let response = widgets::button_area(ui, fold.intersect(clip), id.with("fold"), label);
-        let color = motion::mix(theme::text_hint(), theme::text_primary(), widgets::hover(ui, &response));
+        let color = motion::mix(header_fill, theme::text_on(header_fill), 0.75 + 0.25 * widgets::hover(ui, &response));
         let center = fold.center();
         let (wide, tall) = (7.0, 4.0);
         // Pointing right while the group is folded, down while it is open.
@@ -4002,7 +4030,11 @@ fn track_header(
     } else {
         None
     };
-    let name_color = if lane.mute { theme::text_hint() } else { theme::text_primary() };
+    let name_color = if lane.mute {
+        motion::mix(header_fill, theme::text_on(header_fill), 0.75)
+    } else {
+        theme::text_on(header_fill)
+    };
     widgets::text_in(
         painter,
         name,
@@ -4149,7 +4181,7 @@ fn track_header(
                 Pos2::new(sends_left + step * index as f32, below.top()),
                 Vec2::new(SEND_WIDTH, field_height),
             );
-            send_knob(ui, painter, knob, clip, lane, send, id, state, actions);
+            send_knob(ui, painter, knob, clip, lane, send, id, state, header_fill, actions);
         }
     }
 
@@ -4158,15 +4190,15 @@ fn track_header(
         let top = row.bottom().max(below.bottom()) + PAD + 4.0;
         let line = Rect::from_min_max(Pos2::new(inner.left(), top), Pos2::new(inner.right(), top + DROPDOWN));
         if line.bottom() <= inner.bottom() && line.intersects(clip) {
-            routing(ui, painter, line, lane, nest.groups, actions);
+            routing(ui, painter, line, lane, nest.groups, header_fill, actions);
         }
         // Taller still, on a track that plays notes: which controllers it hears when armed.
         let input = line.translate(Vec2::new(0.0, DROPDOWN + PAD));
         if rect.height() >= SHOWS_MIDI_INPUT && input.bottom() <= inner.bottom() && input.intersects(clip) {
             if lane.plays_notes {
-                midi_input(ui, painter, input, lane, &timeline.midi_ports, actions);
+                midi_input(ui, painter, input, lane, &timeline.midi_ports, header_fill, actions);
             } else if lane.plays_audio {
-                audio_input(ui, painter, input, lane, timeline.input_channels, actions);
+                audio_input(ui, painter, input, lane, timeline.input_channels, header_fill, actions);
             }
         }
     }
@@ -4204,6 +4236,7 @@ fn send_knob(
     send: &crate::interaction::grid::SendKnob,
     id: Id,
     state: &mut ArrangementViewState,
+    background: Color32,
     actions: &mut Vec<Action>,
 ) {
     if !rect.intersects(clip) {
@@ -4257,7 +4290,8 @@ fn send_knob(
     };
     let position = ((shown - VOLUME_RANGE.0) / (VOLUME_RANGE.1 - VOLUME_RANGE.0)) as f32;
     let amount = widgets::hover(ui, &response);
-    let pointer = motion::mix(theme::text_value(), theme::text_primary(), amount);
+    let surface = motion::mix(background, theme::control_hover(), amount);
+    let pointer = theme::text_on(surface);
     if amount > 0.0 || response.has_focus() {
         let fill = theme::control_hover().gamma_multiply(amount.max(0.3));
         widgets::track_button_face(ui, painter, rect, &response, fill);
@@ -4282,7 +4316,7 @@ fn send_knob(
         pointer,
     );
     if send.pre_fader {
-        painter.circle_filled(Pos2::new(rect.center().x, rect.bottom() + 1.5), 1.5, theme::text_value());
+        painter.circle_filled(Pos2::new(rect.center().x, rect.bottom() + 1.5), 1.5, pointer);
     }
 }
 

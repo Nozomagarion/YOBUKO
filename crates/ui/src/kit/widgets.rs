@@ -216,31 +216,34 @@ pub fn arm_button(
 pub fn dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str) {
     let fill = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, response));
     painter.rect_filled(rect, 0.0, fill);
-    dropdown_contents(painter, rect, text);
+    dropdown_contents(painter, rect, text, theme::text_value(), theme::text_hint());
 }
 
 /// A secondary routing field: quiet until hovered, with the same menu and hit area.
-pub fn subtle_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str) {
+pub fn subtle_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str, background: Color32) {
     let amount = hover(ui, response);
+    let mut surface = background;
     if amount > 0.0 || response.has_focus() {
-        painter.rect_filled(rect, 3.0, theme::control_hover().gamma_multiply(amount.max(0.3)));
+        surface = motion::mix(background, theme::control_hover(), amount.max(0.3));
+        painter.rect_filled(rect, 3.0, surface);
     }
     if response.has_focus() {
         painter.rect_stroke(rect, 3.0, Stroke::new(1.0, theme::accent()), egui::StrokeKind::Inside);
     }
-    dropdown_contents(painter, rect, text);
+    let ink = theme::text_on(surface);
+    dropdown_contents(painter, rect, text, ink, motion::mix(surface, ink, 0.65));
 }
 
-fn dropdown_contents(painter: &Painter, rect: Rect, text: &str) {
+fn dropdown_contents(painter: &Painter, rect: Rect, text: &str, ink: Color32, hint: Color32) {
     let inner = rect.shrink2(Vec2::new(4.0, 0.0));
     let chevron = Rect::from_center_size(Pos2::new(inner.right() - 3.0, rect.center().y), Vec2::new(6.0, 4.0));
     painter.add(egui::Shape::convex_polygon(
         vec![chevron.left_top(), chevron.right_top(), chevron.center_bottom()],
-        theme::text_hint(),
+        hint,
         Stroke::NONE,
     ));
     let label = Rect::from_min_max(inner.min, Pos2::new(chevron.left() - 4.0, inner.bottom()));
-    text_in(painter, label, Align2::LEFT_CENTER, text, theme::ui_font(theme::TEXT_SMALL), theme::text_value());
+    text_in(painter, label, Align2::LEFT_CENTER, text, theme::ui_font(theme::TEXT_SMALL), ink);
 }
 
 /// What a value control did this frame.

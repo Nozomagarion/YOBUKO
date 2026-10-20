@@ -429,7 +429,16 @@ impl Cx<'_> {
         }
     }
 
-    /// The custom audio-waveform ink, with the picker's RGB/hex controls.
+    /// A percentage applied live to its colour surface.
+    pub fn colour_strength(&mut self, row: Rect, field: impl FnOnce(&mut Settings) -> &mut u8) {
+        let value = field(self.settings);
+        let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
+        let response = self.ui.put(rect, egui::Slider::new(value, 0..=100).suffix(" %"));
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, self.name));
+        self.outcome.changed |= response.changed();
+    }
+
+    /// The custom waveform and note ink, with the picker's RGB/hex controls.
     pub fn waveform_colour(&mut self, row: Rect) {
         let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
         let mut colour = self.settings.view.waveform.custom;

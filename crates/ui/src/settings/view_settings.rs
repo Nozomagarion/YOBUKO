@@ -9,7 +9,7 @@
 /// (the view clamps it further to the space it has).
 pub const MIXER_HEIGHTS: (u32, u32, u32) = (46, 166, 2000);
 
-/// How Arrangement audio waveforms choose their ink, independently of clip names and notes.
+/// How Arrangement waveforms and note previews choose their ink, independently of clip names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WaveformColour {
     Auto,
@@ -77,6 +77,10 @@ impl DetailLayout {
 pub struct ViewSettings {
     pub track_sizes: super::track_sizes::TrackSizes,
     pub waveform: WaveformAppearance,
+    /// Audio clip colour strength, as a percentage of its source RGB colour.
+    pub audio_colour_strength: u8,
+    /// Track header colour strength, as a percentage of its source RGB colour.
+    pub header_colour_strength: u8,
     /// The Session mixer's height, in points.
     pub mixer_height: u32,
     /// The strips' fader height the divider under their device lists sets, in points; 0 is
@@ -122,6 +126,8 @@ impl Default for ViewSettings {
         Self {
             track_sizes: super::track_sizes::TrackSizes::default(),
             waveform: WaveformAppearance::default(),
+            audio_colour_strength: 82,
+            header_colour_strength: 82,
             mixer_height: MIXER_HEIGHTS.1,
             strip_fader: 0,
             detail_layout: DetailLayout::Beside,
@@ -164,9 +170,11 @@ impl ViewSettings {
             if self.grid_in_clips { "on" } else { "off" },
             f64::from(self.waveform_zoom) / 100.0,
         ) + &format!(
-            "waveform_colour = {}\nwaveform_custom_colour = {}\n",
+            "waveform_colour = {}\nwaveform_custom_colour = {}\naudio_clip_colour_strength = {}\ntrack_header_colour_strength = {}\n",
             self.waveform.mode.name(),
             crate::kit::theme::hex(self.waveform.custom),
+            self.audio_colour_strength,
+            self.header_colour_strength,
         ) + &self.track_sizes.to_text()
     }
 
@@ -177,6 +185,15 @@ impl ViewSettings {
             return true;
         }
         match (key, value) {
+            ("audio_clip_colour_strength" | "track_header_colour_strength", strength) => {
+                let Ok(strength) = strength.parse::<u32>() else { return false };
+                let strength = strength.min(100) as u8;
+                if key == "audio_clip_colour_strength" {
+                    self.audio_colour_strength = strength;
+                } else {
+                    self.header_colour_strength = strength;
+                }
+            }
             ("waveform_colour", mode) => {
                 self.waveform.mode = match mode {
                     "auto" => WaveformColour::Auto,
@@ -235,6 +252,8 @@ mod tests {
                 mode: WaveformColour::Custom,
                 custom: egui::Color32::from_rgb(120, 210, 80),
             },
+            audio_colour_strength: 64,
+            header_colour_strength: 75,
             mixer_height: 300,
             strip_fader: 90,
             detail_layout: DetailLayout::FullWidth,
@@ -286,5 +305,14 @@ mod tests {
         let (read, warnings) = Settings::from_text("waveform_colour = rainbow\nwaveform_custom_colour = #xyz123\n");
         assert_eq!(warnings.len(), 2);
         assert_eq!(read.view.waveform, WaveformAppearance::default());
+    }
+
+    #[test]
+    fn colour_strengths_are_bounded_and_invalid_input_does_not_change_defaults() {
+        let (read, warnings) =
+            Settings::from_text("audio_clip_colour_strength = 9999\ntrack_header_colour_strength = -1\n");
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(read.view.audio_colour_strength, 100);
+        assert_eq!(read.view.header_colour_strength, 82);
     }
 }

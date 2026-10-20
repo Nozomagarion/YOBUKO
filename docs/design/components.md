@@ -735,13 +735,13 @@ and snapping are unchanged; bars remain stronger than subdivisions.
 
 Manrope explicitly uses weight 500; the variable font asset defaults to weight 200 and must
 not be used without selecting its weight. UI text is 12 px and small labels/values 11 px.
-Track header surfaces mix the theme background with 34 percent track color. Selection lifts
+Track header surfaces mix the theme background with the chosen track colour strength (82 percent by default, matching clips). Selection lifts
 that surface 7 percent toward the theme text color. The edge band retains the track color.
 
 Clips use one strong color surface (82 percent clip color, 94 percent selected) with a 3 px
 leading edge, without a contrasting title stripe. A clip tall enough for its title reserves that strip for the name; note/waveform
 previews start below it with a gap. Short clips omit the title rather than painting it over
-the preview. MIDI preview ink follows the body contrast in both light and dark themes.
+the preview. Waveforms, MIDI previews and ARA notes share the chosen content ink: dark by default, or Light, Auto or Custom in Arrangement settings. Audio clip colour strength has its own live percentage slider. Muting reduces colour strength while preserving the source hue.
 
 ### Compact track-header default
 

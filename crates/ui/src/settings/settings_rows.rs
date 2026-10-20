@@ -321,8 +321,8 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Clips",
-        "Waveform colour",
-        "Auto follows each clip's brightness; Light, Dark and Custom use one colour for all audio waveforms",
+        "Waveform and note colour",
+        "Auto follows each clip's brightness; Light, Dark and Custom use one colour for waveforms, MIDI notes and ARA notes",
         &["waveform_colour"],
         |cx, r| {
             cx.choose(
@@ -340,12 +340,20 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Clips",
-        "Custom waveform colour",
-        "Choose the audio waveform colour; applies immediately",
+        "Custom waveform and note colour",
+        "Choose the waveform and note colour; applies immediately",
         &["waveform_custom_colour"],
         |cx, r| cx.waveform_colour(r),
     )
     .when(|s| s.view.waveform.mode == WaveformColour::Custom),
+    row(
+        Page::Arrangement,
+        "Clips",
+        "Audio clip colour strength",
+        "How strongly audio clips show their original colour; applies immediately",
+        &["audio_clip_colour_strength"],
+        |cx, r| cx.colour_strength(r, |s| &mut s.view.audio_colour_strength),
+    ),
     row(
         Page::Arrangement,
         "Clips",
@@ -377,6 +385,14 @@ pub(crate) static ROWS: &[Entry] = &[
         "Alternating: each new track takes the next colour of the palette, by its place; fixed: every new track takes the palette's first colour. A track keeps the colour it was made with",
         &["new_track_colour"],
         |cx, r| cx.choose(r, &[("Alternating", false), ("Fixed", true)], |s| &mut s.view.fixed_track_colour),
+    ),
+    row(
+        Page::Arrangement,
+        "Tracks",
+        "Track header colour strength",
+        "How strongly track headers show their original colour; applies immediately",
+        &["track_header_colour_strength"],
+        |cx, r| cx.colour_strength(r, |s| &mut s.view.header_colour_strength),
     ),
     row(
         Page::Arrangement,

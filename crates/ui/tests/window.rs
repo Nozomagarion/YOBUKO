@@ -2049,6 +2049,7 @@ fn waveform_colour_changes_live_in_settings_without_changing_the_project() {
         match shape {
             egui::Shape::Vec(shapes) => shapes.iter().any(|s| has_ink(s, clip, ink)),
             egui::Shape::Mesh(mesh) => mesh.vertices.iter().any(|v| clip.contains(v.pos) && v.color == ink),
+            egui::Shape::Rect(rect) => rect.fill == ink && clip.contains(rect.rect.center()),
             _ => false,
         }
     }
@@ -2057,7 +2058,7 @@ fn waveform_colour_changes_live_in_settings_without_changing_the_project() {
         ("Dark", WaveformColour::Dark, egui::Color32::from_rgb(32, 31, 29)),
         ("Custom", WaveformColour::Custom, custom),
     ] {
-        h.get_by_label(&format!("Waveform colour: {name}")).click();
+        h.get_by_label(&format!("Waveform and note colour: {name}")).click();
         h.run();
         assert_eq!(h.state().settings().view.waveform.mode, mode);
         let clip = h.get_by_label("Clip Loop on Loop at bar 1").rect();
@@ -2065,11 +2066,95 @@ fn waveform_colour_changes_live_in_settings_without_changing_the_project() {
             h.output().shapes.iter().any(|s| has_ink(&s.shape, clip, colour)),
             "{name} applies while Settings is open"
         );
+        let midi = h.get_by_label("Clip Beat A on Drums at bar 1").rect();
+        assert!(h.output().shapes.iter().any(|s| has_ink(&s.shape, midi, colour)), "{name} also applies to MIDI notes");
     }
-    assert!(h.query_by_label("Custom waveform colour").is_some());
-    h.get_by_label("Waveform colour: Auto").click();
+    assert!(h.query_by_label("Custom waveform and note colour").is_some());
+    h.get_by_label("Waveform and note colour: Auto").click();
     h.run();
-    assert!(h.query_by_label("Custom waveform colour").is_none());
+    assert!(h.query_by_label("Custom waveform and note colour").is_none());
+    assert!(!h.state().session().unwrap().can_undo());
+}
+
+#[test]
+fn ara_note_overlays_use_the_same_content_colour_as_midi_and_waveforms() {
+    use suhina_ui::settings::view_settings::WaveformColour;
+    let (project, waveforms) = project_with_audio();
+    let mut timeline = Timeline::build(&project, None);
+    timeline.waveforms = std::sync::Arc::new(waveforms);
+    let clip = timeline.lanes.iter().find(|lane| lane.track == TrackId(30)).unwrap().clips[0].id;
+    timeline.ara_notes.insert(
+        clip,
+        suhina_session::ClipNotes {
+            notes: vec![suhina_plugins::protocol::AraNote { start: 0.5, length: 1.0, pitch: 60, volume: 1.0 }].into(),
+            low: 60,
+            high: 60,
+        },
+    );
+    let mut h = Harness::builder().with_size(SIZE).build_ui_state(
+        |ui, state: &mut (Timeline, ArrangementViewState, Vec<Action>)| {
+            arrangement_view::show(ui, &state.0, &mut state.1, &mut state.2)
+        },
+        (timeline, ArrangementViewState::default(), Vec::new()),
+    );
+    theme::install(&h.ctx);
+    for (mode, colour) in [
+        (WaveformColour::Dark, egui::Color32::from_rgb(32, 31, 29)),
+        (WaveformColour::Custom, egui::Color32::from_rgb(212, 88, 50)),
+    ] {
+        h.state_mut().1.waveform_appearance.mode = mode;
+        h.state_mut().1.waveform_appearance.custom = colour;
+        h.run();
+        let area = h.get_by_label("Clip Loop on Loop at bar 1").rect();
+        fn note(shape: &egui::Shape, area: egui::Rect, colour: egui::Color32) -> bool {
+            match shape {
+                egui::Shape::Vec(shapes) => shapes.iter().any(|s| note(s, area, colour)),
+                egui::Shape::Rect(r) => r.fill == colour && r.rect.height() <= 6.0 && area.contains(r.rect.center()),
+                _ => false,
+            }
+        }
+        assert!(h.output().shapes.iter().any(|s| note(&s.shape, area, colour)), "ARA notes follow {mode:?}");
+    }
+}
+
+#[test]
+fn audio_and_header_colour_strengths_apply_live_and_match_at_equal_strength() {
+    let mut h = window(audio_app());
+    h.get_by_label("Arrangement view").click();
+    h.run();
+    fn surface(h: &Harness<'static, App>, label: &str) -> egui::Color32 {
+        let area = h.get_by_label(label).rect();
+        fn find(shape: &egui::Shape, area: egui::Rect) -> Option<egui::Color32> {
+            match shape {
+                egui::Shape::Vec(shapes) => shapes.iter().find_map(|s| find(s, area)),
+                egui::Shape::Rect(r)
+                    if (r.rect.width() - area.width()).abs() < 3.0
+                        && (r.rect.height() - area.height()).abs() < 3.0
+                        && r.rect.center().distance(area.center()) < 2.0
+                        && r.fill.a() > 0 =>
+                {
+                    Some(r.fill)
+                }
+                _ => None,
+            }
+        }
+        h.output().shapes.iter().find_map(|s| find(&s.shape, area)).expect("painted surface")
+    }
+    let clip = "Clip Loop on Loop at bar 1";
+    let original = surface(&h, clip);
+    assert_eq!(surface(&h, "Track Loop"), original, "the same source colour uses the same default strength");
+    let mut settings = h.state().settings().clone();
+    settings.view.audio_colour_strength = 25;
+    let ctx = h.ctx.clone();
+    h.state_mut().set_settings(&ctx, settings.clone());
+    h.run();
+    let softer = surface(&h, clip);
+    assert_ne!(softer, original);
+    assert_eq!(surface(&h, "Track Loop"), original, "audio tuning leaves the header's chosen strength alone");
+    settings.view.header_colour_strength = 25;
+    h.state_mut().set_settings(&ctx, settings);
+    h.run();
+    assert_eq!(surface(&h, "Track Loop"), softer, "matched strengths keep the source colour consistent");
     assert!(!h.state().session().unwrap().can_undo());
 }
 

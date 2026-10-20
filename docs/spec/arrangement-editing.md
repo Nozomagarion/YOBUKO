@@ -869,11 +869,22 @@ Settings remains open.
 
 ## Waveform colour
 
-Settings › Arrangement › Clips offers Waveform colour: Auto, Light, Dark (the default) or
+Settings › Arrangement › Clips offers Waveform and note colour: Auto, Light, Dark (the default) or
 Custom. Dark gives existing settings files without a waveform preference uniform dark ink.
 Auto chooses contrasting light or dark ink from each clip's background; the other
-modes give every audio waveform the same chosen ink. Custom reveals an opaque colour picker.
+modes give every audio waveform, MIDI preview and ARA note overlay the same chosen ink.
+Custom reveals an opaque colour picker.
 The choice and custom RGB colour persist in application settings and update existing clips
-immediately, including while Settings is open. Clip names and MIDI notes retain their own
-automatic contrast. ARA note overlays retain automatic contrast; waveforms under them are
+immediately, including while Settings is open. Clip names retain their own
+automatic contrast. Waveforms under ARA note overlays are
 dimmed from the chosen waveform colour as before. No audio or project data changes.
+
+Audio clip colour strength and Track header colour strength are independent 0–100 percent
+sliders in Arrangement settings. Both start at 82 percent, matching the existing MIDI clip
+strength. Their fills mix their theme surface with the original clip or track RGB colour;
+muting reduces that strength to 55 percent of its chosen value, preserving hue rather than
+mixing grey into the source colour. Disabled clips dim the same way. Selected clips lift
+their strength by 12 percentage points (capped at 100); selected headers retain a subtle
+brightness lift. Header names, fold indicators, routing and send labels maintain contrast on
+the resulting surface. Explicit clip colours continue to override track colours. Changes
+apply live and persist as application settings without modifying project data.
