@@ -29,8 +29,6 @@ const SEGMENT: f32 = 15.0;
 const FOLDER_FIELD: f32 = 300.0;
 /// The Browse… button at the end of a path field.
 const BROWSE_WIDTH: f32 = 60.0;
-/// Themes shown before their list scrolls.
-const THEME_ROWS: usize = 8;
 /// A dropdown on the right of its row (Settings › Audio).
 const DROPDOWN_FIELD: f32 = 260.0;
 /// Room right of the page for its scroll bar.
@@ -164,6 +162,8 @@ pub enum PluginRequest {
 pub struct ThemesView {
     /// Each theme's id, name and whether it comes with Suhina: the user's own first.
     pub list: Vec<(String, String, bool)>,
+    /// Palette snapshots for miniature previews; drawing one never installs it globally.
+    pub previews: Vec<(String, Palette)>,
     /// The id of the theme in use, whether it comes with Suhina, its name and its colours.
     pub current: String,
     pub built_in: bool,
@@ -210,7 +210,7 @@ pub enum Page {
     DetailArea,
     Browser,
     Appearance,
-    /// Appearance › Theme, a page of its own under Appearance in the list.
+    /// Appearance › Themes, a page of its own under Appearance in the list.
     Theme,
     Shortcuts,
 }
@@ -229,7 +229,7 @@ impl Page {
         (Page::DetailArea, "Detail area"),
         (Page::Browser, "Browser"),
         (Page::Appearance, "Appearance"),
-        (Page::Theme, "Theme"),
+        (Page::Theme, "Themes"),
         (Page::Shortcuts, "Shortcuts"),
     ];
 
@@ -249,8 +249,12 @@ pub struct PageState {
     pub capture: Option<String>,
     /// The name being typed for a theme, with the theme's id.
     pub theme_name: Option<(String, String)>,
-    /// The theme the list was last scrolled to, so it shows the one in use when that changes.
-    pub theme_shown: Option<String>,
+    /// The colour editor is a child view of Themes, not another sidebar page.
+    pub theme_editor: bool,
+    pub theme_original: Option<Palette>,
+    pub theme_rename_focus: bool,
+    /// A colour picker is open while its primary pointer button is held.
+    pub theme_colour_held: bool,
     /// The audio devices were listed since the Audio page was opened.
     pub audio_listed: Option<bool>,
     /// What is typed in the search field: while it has text, the settings that match it are shown
@@ -461,11 +465,14 @@ impl Cx<'_> {
     pub fn waveform_colour(&mut self, row: Rect) {
         let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
         let mut colour = self.settings.view.waveform.custom;
+        let mut held = false;
         self.ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
             ui.horizontal(|ui| {
+                let popup = ui.auto_id_with("popup");
                 let response =
                     egui::color_picker::color_edit_button_srgba(ui, &mut colour, egui::color_picker::Alpha::Opaque);
                 response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ColorButton, true, self.name));
+                held = egui::Popup::is_id_open(ui.ctx(), popup) && ui.input(|input| input.pointer.primary_down());
                 ui.label(
                     egui::RichText::new(theme::hex(colour))
                         .font(theme::mono_font(theme::TEXT_SMALL))
@@ -473,6 +480,7 @@ impl Cx<'_> {
                 );
             });
         });
+        self.outcome.adjusting |= held;
         if colour != self.settings.view.waveform.custom {
             self.settings.view.waveform.custom = colour;
             self.outcome.changed = true;
@@ -664,10 +672,11 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
     );
     if let Some(picked) = page_list(ui, &painter, sidebar, (!searching).then_some(state.page)) {
         state.page = picked;
+        state.theme_editor = false;
+        state.theme_original = None;
         state.search.clear();
         state.capture = None;
         state.audio_listed = None;
-        state.theme_shown = None;
     }
 
     // The page shown, beside the list: it scrolls (wheel, scroll bar, a control given the focus)
@@ -813,10 +822,11 @@ fn page_list(ui: &Ui, painter: &egui::Painter, rect: Rect, shown: Option<Page>) 
     picked
 }
 
-/// Appearance › Theme: the themes, the theme in use and its colours.
+/// Appearance › Themes: the themes, the theme in use and its colours.
 pub(crate) fn theme_block(cx: &mut Cx<'_>, y: &mut f32) {
     let bottom = cx.page.bottom();
     cx.outcome.themes = theme_page(cx.ui, cx.painter, cx.page, y, bottom, cx.themes, cx.state);
+    cx.outcome.adjusting |= cx.state.theme_colour_held;
 }
 
 /// Shortcuts › Keys: every action's keys and the preset.
@@ -864,155 +874,226 @@ pub(crate) fn midi_inputs(cx: &mut Cx<'_>, y: &mut f32) {
     }
 }
 
-/// Appearance › Theme: the themes to pick from, what can be done with them, and the colours of the
-/// one in use. Returns what the user asked for.
+/// Themes is a gallery; editing the current palette is a separate child view.
 fn theme_page(
     ui: &mut Ui,
-    painter: &egui::Painter,
+    _painter: &egui::Painter,
     page: Rect,
     at: &mut f32,
-    bottom: f32,
+    _bottom: f32,
     themes: &ThemesView,
     state: &mut PageState,
 ) -> Option<ThemeRequest> {
-    let mut y = *at;
+    state.theme_colour_held = false;
     let mut request = None;
-    let small = theme::ui_font(theme::TEXT_SMALL);
-
-    // The themes, in a list that scrolls once it is taller than eight rows: a click uses one.
-    let rows = themes.list.len().clamp(1, THEME_ROWS) as f32;
-    let list = Rect::from_min_size(Pos2::new(page.left(), y), Vec2::new(page.width(), rows * theme::ROW));
-    y = list.bottom() + 8.0;
-    ui.scope_builder(egui::UiBuilder::new().max_rect(list), |ui| {
-        egui::ScrollArea::vertical().id_salt("themes").auto_shrink([false, false]).show(ui, |ui| {
-            for (id, name, built_in) in &themes.list {
-                let (r, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), theme::ROW), Sense::hover());
-                let response = widgets::button_area(ui, r, Id::new(("theme", id)), format!("Theme: {name}"));
-                let current = *id == themes.current;
-                let selected = motion::toward(ui.ctx(), response.id.with("selected"), current, motion::VALUE);
-                let idle = motion::mix(theme::window_background(), theme::panel_hover(), widgets::hover(ui, &response));
-                let painter = ui.painter();
-                painter.rect_filled(r, 0.0, motion::mix(idle, theme::control_background(), selected));
-                let inner = r.shrink2(Vec2::new(PAD, 0.0));
-                let color = motion::mix(theme::text_secondary(), theme::text_primary(), selected);
-                widgets::text_in(painter, inner, Align2::LEFT_CENTER, name, theme::ui_font(theme::TEXT), color);
-                let file = if *built_in { "built-in".to_string() } else { format!("{id}.json") };
-                widgets::text_in(painter, inner, Align2::RIGHT_CENTER, &file, small.clone(), theme::text_hint());
-                if response.clicked() && !current {
-                    request = Some(ThemeRequest::Use(id.clone()));
+    ui.scope_builder(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(page.left(), *at), page.max)), |ui| {
+        ui.set_width(page.width());
+        if state.theme_editor {
+            request = theme_editor(ui, themes, state);
+        } else {
+            ui.horizontal(|ui| {
+                ui.label(format!("Current theme: {}", themes.name));
+                if ui.button("Edit current theme…").clicked() {
+                    state.theme_editor = true;
+                    state.theme_original = Some(themes.colors);
+                    state.scrolled = None;
                 }
-                if current && state.theme_shown.as_ref() != Some(id) {
-                    response.scroll_to_me(None);
-                    state.theme_shown = Some(id.clone());
-                }
+                ui.menu_button("More", |ui| {
+                    for (label, action) in [
+                        ("Duplicate theme", ThemeRequest::Duplicate),
+                        ("Reload themes", ThemeRequest::Reload),
+                        ("Open the themes folder", ThemeRequest::OpenFolder),
+                        ("Back up themes", ThemeRequest::Backup),
+                        ("Export the theme template", ThemeRequest::ExportTemplate),
+                    ] {
+                        if ui.button(label).clicked() {
+                            request = Some(action);
+                            ui.close();
+                        }
+                    }
+                });
+            });
+            ui.add_space(10.0);
+            let gap = 10.0;
+            let width = ((page.width() - gap) / 2.0).max(80.0);
+            for row in themes.list.chunks(2) {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = gap;
+                    for (id, name, built_in) in row {
+                        let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 142.0), Sense::hover());
+                        let response = widgets::button_area(ui, rect, Id::new(("theme", id)), format!("Theme: {name}"));
+                        let current = *id == themes.current;
+                        let palette =
+                            themes.previews.iter().find(|(key, _)| key == id).map_or(&themes.colors, |(_, p)| p);
+                        if ui.is_rect_visible(rect) {
+                            let preview =
+                                Rect::from_min_size(rect.min + Vec2::splat(5.0), Vec2::new(width - 10.0, 92.0));
+                            crate::kit::theme_preview::paint(ui.painter(), preview, palette);
+                            let border = if current {
+                                theme::accent()
+                            } else if response.hovered() {
+                                theme::border_strong()
+                            } else {
+                                theme::border()
+                            };
+                            ui.painter().rect_stroke(rect, 3.0, theme::hairline(border), egui::StrokeKind::Inside);
+                            let name_rect = Rect::from_min_size(
+                                pos2(rect.left() + 8.0, rect.top() + 101.0),
+                                Vec2::new(width - 16.0, 18.0),
+                            );
+                            widgets::text_in(
+                                ui.painter(),
+                                name_rect,
+                                Align2::LEFT_CENTER,
+                                name,
+                                theme::ui_font(theme::TEXT),
+                                theme::text_primary(),
+                            );
+                            let note = if current {
+                                "Active"
+                            } else if *built_in {
+                                "Built-in"
+                            } else {
+                                "Custom"
+                            };
+                            widgets::text_in(
+                                ui.painter(),
+                                name_rect.translate(Vec2::new(0.0, 18.0)),
+                                Align2::LEFT_CENTER,
+                                note,
+                                theme::ui_font(theme::TEXT_SMALL),
+                                if current { theme::accent() } else { theme::text_secondary() },
+                            );
+                        }
+                        if response.clicked() && !current {
+                            request = Some(ThemeRequest::Use(id.clone()));
+                        }
+                    }
+                });
+                ui.add_space(gap);
             }
-        });
+        }
+        *at = ui.min_rect().bottom();
     });
+    request
+}
 
-    // The theme in use: its name, typed over and kept on Enter or leaving the field (a built-in
-    // theme's name does not change).
-    let r = Rect::from_min_size(Pos2::new(page.left(), y), Vec2::new(page.width(), SETTING_ROW));
-    y += SETTING_ROW;
-    let note = match &themes.folder {
-        Some(folder) => format!("Kept in {folder}; drop a theme file or a zip of them on the window to add it"),
-        None => "There is no folder to keep theme files in".to_string(),
-    };
-    if themes.built_in {
-        label(painter, r, &format!("{} (built-in; changing a colour makes a copy)", themes.name), &note);
+/// Each colour appears in exactly one understandable group; the token name stays visible.
+fn colour_group(key: &str) -> &'static str {
+    if key.starts_with("text.") {
+        "Text"
+    } else if key.starts_with("kind.") {
+        "Sample map"
+    } else if key.starts_with("track.") || key.starts_with("clip.") {
+        "Tracks & clips"
+    } else if key.starts_with("meter.") {
+        "Meters"
+    } else if key.starts_with("control.") || matches!(key, "accent" | "recording" | "playhead" | "selection") {
+        "Controls"
     } else {
-        if state.theme_name.as_ref().is_none_or(|(id, _)| *id != themes.current) {
-            state.theme_name = Some((themes.current.clone(), themes.name.clone()));
-        }
-        if let Some((_, name)) = state.theme_name.as_mut() {
-            let field = Rect::from_min_size(r.min, Vec2::new(r.width() / 2.0, 16.0));
-            let edit = ui.put(
-                field,
-                egui::TextEdit::singleline(name).frame(widgets::input_frame()).font(theme::ui_font(theme::TEXT)),
-            );
-            edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Theme name"));
-            widgets::input_line(ui, &edit);
-            if edit.lost_focus() && name.trim() != themes.name && !name.trim().is_empty() {
-                request = Some(ThemeRequest::Rename(name.trim().to_string()));
-            }
-        }
-        let line = Rect::from_min_size(Pos2::new(r.left(), r.top() + 18.0), Vec2::new(r.width(), 14.0));
-        widgets::text_in(painter, line, Align2::LEFT_CENTER, &note, small.clone(), theme::text_secondary());
+        "Surfaces"
     }
+}
 
-    // What can be done with the themes.
-    let actions = [
-        ("Duplicate", "Duplicate theme", ThemeRequest::Duplicate),
-        ("Reload", "Reload themes", ThemeRequest::Reload),
-        ("Open folder", "Open the themes folder", ThemeRequest::OpenFolder),
-        ("Back up", "Back up themes", ThemeRequest::Backup),
-        ("Export template", "Export the theme template", ThemeRequest::ExportTemplate),
-    ];
-    let mut x = page.left();
-    for (index, (text, name, asked)) in actions.into_iter().enumerate() {
-        let width = widgets::text_width(ui, text, small.clone()) + 2.0 * PAD + 8.0;
-        let cell = Rect::from_min_size(Pos2::new(x, y), Vec2::new(width, SEGMENT + 2.0));
-        x = cell.right() + 1.0;
-        let response = widgets::button_area(ui, cell, Id::new(("theme-action", index)), name);
-        let fill = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(cell, 0.0, fill);
-        widgets::text_in(painter, cell, Align2::CENTER_CENTER, text, small.clone(), theme::text_primary());
-        if response.clicked() {
-            request = Some(asked);
+fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Option<ThemeRequest> {
+    let mut request = None;
+    if ui.button("Back to themes").clicked() {
+        state.theme_editor = false;
+        state.scrolled = None;
+        return None;
+    }
+    ui.label(egui::RichText::new("Edit current theme").strong());
+    ui.label(&themes.name);
+    ui.label(
+        egui::RichText::new("Changes apply and save immediately. Built-in themes become a custom copy.")
+            .small()
+            .color(theme::text_secondary()),
+    );
+    if state.theme_name.as_ref().is_none_or(|(id, _)| *id != themes.current) {
+        state.theme_name = Some((themes.current.clone(), themes.name.clone()));
+    }
+    if let Some((_, name)) = state.theme_name.as_mut() {
+        let edit = ui.add_enabled(
+            !themes.built_in,
+            egui::TextEdit::singleline(name).frame(widgets::input_frame()).desired_width(260.0),
+        );
+        edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, !themes.built_in, "Theme name"));
+        widgets::input_line(ui, &edit);
+        if state.theme_rename_focus {
+            edit.request_focus();
+            state.theme_rename_focus = false;
+        }
+        if !themes.built_in && edit.lost_focus() && !name.trim().is_empty() && name.trim() != themes.name {
+            request = Some(ThemeRequest::Rename(name.trim().to_string()));
         }
     }
-    y += SEGMENT + 2.0 + 12.0;
-
-    // Its colours, in the space left.
-    let r = Rect::from_min_size(Pos2::new(page.left(), y), Vec2::new(page.width(), 16.0));
-    widgets::text_in(painter, r, Align2::LEFT_CENTER, "Colours", small.clone(), theme::text_hint());
-    painter.hline(page.x_range(), r.bottom() + 2.5, theme::hairline(theme::border()));
-    y = r.bottom() + 6.0;
-    let list =
-        Rect::from_min_max(Pos2::new(page.left(), y), Pos2::new(page.right(), (bottom - 12.0).max(y + LIST_LEAST)));
-    *at = list.bottom();
-    let colors = themes.colors;
-    let mut edited = colors;
-    ui.scope_builder(egui::UiBuilder::new().max_rect(list), |ui| {
-        egui::ScrollArea::vertical().id_salt("colours").auto_shrink([false, false]).show(ui, |ui| {
-            let left = egui::Layout::left_to_right(egui::Align::Center);
-            for (key, purpose, color) in colors.tokens() {
+    ui.horizontal(|ui| {
+        if ui.button("Save as new theme…").clicked() {
+            request = Some(ThemeRequest::Duplicate);
+            state.theme_rename_focus = true;
+        }
+        let original = *state.theme_original.get_or_insert(themes.colors);
+        if ui.add_enabled(original != themes.colors, egui::Button::new("Reset changes")).clicked() {
+            request = Some(ThemeRequest::Edit(original));
+        }
+    });
+    ui.add_space(8.0);
+    let mut edited = themes.colors;
+    let tokens = themes.colors.tokens();
+    for group in ["Surfaces", "Text", "Tracks & clips", "Controls", "Meters", "Sample map"] {
+        ui.add_space(8.0);
+        ui.label(egui::RichText::new(group).strong());
+        ui.separator();
+        for &(key, purpose, color) in tokens.iter().filter(|(key, _, _)| colour_group(key) == group) {
+            ui.push_id(("theme-colour", key), |ui| {
                 ui.horizontal(|ui| {
                     let mut picked = color;
+                    let popup = ui.auto_id_with("popup");
                     let swatch =
                         egui::color_picker::color_edit_button_srgba(ui, &mut picked, egui::color_picker::Alpha::Opaque);
-                    // An outline, so a swatch the colour of the page still shows where it is.
-                    ui.painter().rect_stroke(
-                        swatch.rect,
-                        0.0,
-                        theme::hairline(theme::border_strong()),
-                        egui::StrokeKind::Inside,
-                    );
-                    let name = format!("Colour {key}");
-                    swatch.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ColorButton, true, &name));
+                    swatch.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::ColorButton, true, format!("Colour {key}"))
+                    });
+                    state.theme_colour_held |=
+                        egui::Popup::is_id_open(ui.ctx(), popup) && ui.input(|input| input.pointer.primary_down());
                     if picked != color
                         && let Some(slot) = edited.token_mut(key)
                     {
                         *slot = picked;
                     }
-                    ui.allocate_ui_with_layout(Vec2::new(64.0, 18.0), left, |ui| {
-                        ui.set_min_width(64.0);
-                        let text = egui::RichText::new(theme::hex(picked))
-                            .font(theme::mono_font(theme::TEXT_SMALL))
-                            .color(theme::text_value());
-                        ui.label(text);
-                    });
-                    ui.allocate_ui_with_layout(Vec2::new(170.0, 18.0), left, |ui| {
-                        ui.set_min_width(170.0);
-                        let text = egui::RichText::new(key).font(theme::mono_font(theme::TEXT_SMALL));
-                        ui.label(text.color(theme::text_primary()));
-                    });
-                    let text = egui::RichText::new(purpose).font(small.clone()).color(theme::text_hint());
-                    ui.add(egui::Label::new(text).truncate());
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(64.0, 18.0),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.set_min_width(64.0);
+                            ui.label(
+                                egui::RichText::new(theme::hex(picked))
+                                    .font(theme::mono_font(theme::TEXT_SMALL))
+                                    .color(theme::text_value()),
+                            );
+                        },
+                    );
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(170.0, 18.0),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.set_min_width(170.0);
+                            ui.label(
+                                egui::RichText::new(key)
+                                    .font(theme::mono_font(theme::TEXT_SMALL))
+                                    .color(theme::text_primary()),
+                            );
+                        },
+                    );
+                    ui.add(
+                        egui::Label::new(egui::RichText::new(purpose).small().color(theme::text_secondary()))
+                            .truncate(),
+                    );
                 });
-            }
-        });
-    });
-    if edited != colors {
+            });
+        }
+    }
+    if edited != themes.colors {
         request = Some(ThemeRequest::Edit(edited));
     }
     request

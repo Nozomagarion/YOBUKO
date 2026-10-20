@@ -15,6 +15,105 @@ use suhina_ui::{App, kit::theme};
 /// A window too short for most pages.
 const SHORT: (f32, f32) = (1000.0, 420.0);
 
+#[test]
+#[ignore = "renders GPU review images; run explicitly after changing the theme UI"]
+fn render_themes_gallery_and_editor_for_review() {
+    let mut app = App::new();
+    app.set_session(Session::new(demo_project()), &[]);
+    let mut harness =
+        Harness::builder().with_size((1200.0, 900.0)).wgpu().build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    theme::install(&harness.ctx);
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    harness.run();
+    harness.get_by_label("Settings page: Themes").click();
+    harness.run();
+    harness.get_by_label("Theme: Suhina Studio Light").click();
+    harness.run();
+    harness.remove_cursor();
+    harness.run();
+    let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/theme-gallery-review");
+    std::fs::create_dir_all(&folder).unwrap();
+    harness.render().unwrap().save(folder.join("themes.png")).unwrap();
+    harness.get_by_label("Edit current theme…").click();
+    harness.run();
+    harness.remove_cursor();
+    harness.run();
+    harness.render().unwrap().save(folder.join("editor.png")).unwrap();
+}
+
+#[test]
+fn themes_gallery_switches_immediately_and_opens_a_separate_editor() {
+    let mut harness = short_window();
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    assert!(harness.query_by_label("Colour grid.major").is_none());
+    harness.get_by_label("Theme: Suhina Studio Light").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().settings().theme, "suhina-studio-light");
+    let palette = theme::palette();
+    harness.get_by_label("Edit current theme…").click();
+    settle(&mut harness);
+    harness.get_by_label("Colour grid.major");
+    assert!(harness.query_by_label("Theme: Suhina Studio Light").is_none());
+    assert_eq!(theme::palette(), palette, "opening the editor must not change the theme");
+    harness.get_by_label("Back to themes").click();
+    settle(&mut harness);
+    harness.get_by_label("Theme: Suhina Studio Light");
+}
+
+#[test]
+fn colour_picker_keeps_preview_clear_while_held_and_reset_restores_the_palette() {
+    let mut harness = short_window();
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    harness.get_by_label("Edit current theme…").click();
+    settle(&mut harness);
+    let original = theme::palette();
+    harness.get_by_label("Colour grid.major").click();
+    settle(&mut harness);
+    let square = harness
+        .output()
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Mesh(mesh) => {
+                let rect = mesh.calc_bounds();
+                (rect.width() > 250.0 && rect.width() < 300.0 && (rect.width() - rect.height()).abs() < 1.0)
+                    .then_some(rect)
+            }
+            _ => None,
+        })
+        .expect("the actual colour picker's saturation/value square");
+    let pointer = square.center();
+    harness.hover_at(pointer);
+    harness.step();
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: pointer,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    for _ in 0..6 {
+        harness.step();
+    }
+    assert_ne!(theme::palette().grid_major, original.grid_major);
+    assert!(!dimmed(&harness), "stationary held colour picker must keep the background clear");
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: pointer,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    assert!(dimmed(&harness), "releasing the colour picker must restore the dimmer immediately");
+    egui::Popup::close_all(&harness.ctx);
+    harness.step();
+    harness.get_by_label("Reset changes").click();
+    settle(&mut harness);
+    assert_eq!(theme::palette(), original);
+}
+
 fn dimmed(harness: &Harness<'static, App>) -> bool {
     let tint = theme::window_background().gamma_multiply(0.6);
     harness.output().shapes.iter().any(|shape| {
@@ -229,7 +328,7 @@ fn every_page_scrolls_to_its_last_setting_in_a_short_window() {
         ("Detail area", Some("Detail area layout: Full width")),
         ("Browser", Some("Tag limit: 1024")),
         ("Appearance", Some("Renderer: OpenGL")),
-        ("Theme", Some("Export the theme template")),
+        ("Themes", Some("Edit current theme…")),
         ("Shortcuts", Some("Change keys of file.new")),
     ];
     let names: Vec<&str> = Page::ALL.iter().map(|(_, name)| *name).collect();

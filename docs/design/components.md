@@ -400,17 +400,20 @@ the wheel over it, as far as its last row and no further.
 | Appearance › Waveforms | Waveform scale | Linear (default), dB ([waveforms](../spec/waveforms.md)) |
 | Appearance › Graphics | Renderer | GPU (wgpu, default), OpenGL (glow) |
 
-**Appearance › Theme** (a page of its own, listed stepped in under Appearance): the themes as 20 px rows in a list that scrolls after eight, the user's
-own first and then those that come with Suhina, the name on the left and the file name or
-`built-in` on the right (10 px `text.hint`); a click uses one, the one in use filled like the page
-list and scrolled into view when the page opens. Under them a 34 px row: the name of the theme in
-use in a field, kept on Enter or leaving it (a built-in theme shows its name and "changing a
-colour makes a copy"), and the folder of the theme files as the note. Then a row of buttons
-(15 px, as wide as their text): Duplicate, Reload, Open folder, Back up, Export template. Then
-"Colours" over a hairline and every colour token in a list that scrolls: an egui colour button
-with a 1 px `border.strong` outline, the value and the token name (10 px mono), and what it is
-used for, at least 160 px tall. Changing a colour of a built-in theme first makes a copy of it
-("<name> (custom)").
+**Appearance › Themes** is a two-column palette gallery. Cards are 142 px tall with a
+92 px high miniature of the same browser, grid, MIDI/audio clips, controls and meters;
+a 10 px gap separates cards. Preview painting takes explicit palette snapshots and does
+not install a theme. The active card has an accent border and Active label, and clicking
+another card applies it immediately. The header contains the active theme name,
+Edit current theme and a More menu for file actions.
+
+Edit current theme opens a child view with Back to themes, the theme name, Save as new
+theme and Reset changes. The live colour rows are grouped into Surfaces, Text, Tracks &
+clips, Controls, Meters and Sample map. Each row keeps its swatch, hex, token and purpose.
+The built-in name field reserves the same height as an editable custom name so the
+picker does not move when its first edit creates a custom copy. An open picker keeps
+the background undimmed while the primary button is held, even when stationary;
+release restores dimming immediately. Reset restores the editor-entry palette.
 See [brief](brief.md) › Themes.
 
 **Shortcuts › Keys** lists every action under its group (File, Transport, View, Edit, Tracks, Commands): its

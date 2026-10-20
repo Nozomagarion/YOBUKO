@@ -74,12 +74,32 @@ is on exactly one page, under one heading.
 | Appearance | Window | Zoom, Animations |
 | Appearance | Waveforms | Waveform scale |
 | Appearance | Graphics | Renderer |
-| Appearance | Theme | The themes, the theme in use, its colours |
+| Themes (under Appearance) | Theme | Two-column preview gallery; click applies immediately; Edit current theme opens grouped colours |
 | Shortcuts | Keys | The preset, every action's keys, Reset all |
 
 Where a setting is shown never changes how it is saved: each keeps the key it has in
 `settings.json` (or `keymap.json` for keys and the mouse switches), so a settings file written
 before a setting moved loads with the same values.
+
+## Theme gallery and colour editor
+
+Themes shows a miniature musical scene for every built-in or custom palette. The scenes
+use the same browser, MIDI/audio clips, grid, controls and meters; drawing them never
+installs a theme or loads another project. The active card has an accent border and Active
+label. Clicking a card immediately applies and saves the selected theme, as before.
+More holds Duplicate, Reload, Open folder, Back up and Export template.
+
+Edit current theme opens a child view, with Back to themes and the current theme name.
+Colours are grouped into Surfaces, Text, Tracks & clips, Controls, Meters and Sample map.
+Changes apply and save live; editing a built-in palette still creates a custom copy.
+Save as new theme duplicates the current palette and focuses its editable name. Reset
+changes restores the palette captured when entering the editor, without changing the
+built-in source. The name field reserves the same space for built-in and custom themes,
+so making the first custom edit does not shift the picker.
+
+An open colour picker holds the undimmed preview for the entire primary-button press,
+including frames with no pointer motion or colour change. Release restores dimming on
+the same frame. This also applies to the custom waveform colour picker.
 
 ## Scrolling
 

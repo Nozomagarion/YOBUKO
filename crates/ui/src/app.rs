@@ -4216,7 +4216,12 @@ impl App {
             ui.ctx().data_mut(|data| data.insert_temp(Id::new("settings-panel-position"), position));
             ui.ctx().request_repaint();
         }
-        outcome.changed || outcome.themes.is_some() || outcome.adjusting
+        outcome.changed
+            || outcome.adjusting
+            || outcome
+                .themes
+                .as_ref()
+                .is_some_and(|request| !matches!(request, crate::settings::settings_view::ThemeRequest::Edit(_)))
     }
 
     /// The menu bar: the same actions as the shortcuts and the views' controls.

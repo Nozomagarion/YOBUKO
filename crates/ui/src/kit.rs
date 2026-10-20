@@ -10,5 +10,6 @@ pub mod logo;
 pub mod meter;
 pub mod motion;
 pub mod theme;
+pub mod theme_preview;
 pub mod waveform;
 pub mod widgets;

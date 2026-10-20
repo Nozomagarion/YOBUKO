@@ -327,10 +327,10 @@ colour written out; copy it, give it a name and change the colours.\n\
 \n\
 ## Installing it\n\
 \n\
-Save it as `<id>.json` in Suhina's `themes` folder (Settings › Appearance › Theme › Open folder\n\
+Save it as `<id>.json` in Suhina's `themes` folder (Settings › Appearance › Themes › More › Open the themes folder\n\
 shows it), or drop the file on Suhina's window. The file name without `.json` is the theme's\n\
 id: letters, digits and `-`, for example `night-blue.json`. Pick it in Settings › Appearance ›\n\
-Theme. While it is in use, every save of the file shows within a second.\n\
+Themes. While it is in use, every save of the file shows within a second.\n\
 \n\
 ## Making a good theme\n\
 \n\

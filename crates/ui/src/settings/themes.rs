@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The themes the user can pick from: those that come with Suhina and those read from theme
-//! files, and what Settings › Appearance › Theme does with them. The app reads and writes the
+//! files, and what Settings › Appearance › Themes does with them. The app reads and writes the
 //! files; this keeps the list, says what to do with the files, and picks the colours to draw with.
 
 use std::path::PathBuf;
@@ -115,6 +115,7 @@ impl Themes {
                 .chain(self.entries[..self.built_in].iter().map(|e| (e.id.clone(), e.theme.name.clone(), true)))
                 .collect(),
             current: shown.to_string(),
+            previews: self.entries.iter().map(|entry| (entry.id.clone(), entry.theme.colors)).collect(),
             built_in: theme::is_built_in(shown),
             name: theme.name,
             colors: theme.colors,
@@ -276,6 +277,13 @@ mod tests {
         assert!(view.list.iter().any(|(id, _, built_in)| id == "nord" && *built_in));
         assert_eq!(view.list.len(), theme::built_in_themes().len() + 1);
         assert_eq!(view.colors, night().theme.colors);
+        assert_eq!(view.previews.len(), view.list.len());
+        for (id, _, _) in &view.list {
+            assert_eq!(
+                view.previews.iter().find(|(key, _)| key == id).map(|(_, colors)| *colors),
+                Some(themes.palette(id))
+            );
+        }
         assert!(!view.built_in);
         assert!(!themes.put(fake));
         assert_eq!(themes.palette(BUILT_IN), Palette::DARK);
