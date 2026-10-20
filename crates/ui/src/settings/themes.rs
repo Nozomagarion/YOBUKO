@@ -116,6 +116,7 @@ impl Themes {
                 .collect(),
             current: shown.to_string(),
             previews: self.entries.iter().map(|entry| (entry.id.clone(), entry.theme.colors)).collect(),
+            preview_scene: Default::default(),
             built_in: theme::is_built_in(shown),
             name: theme.name,
             colors: theme.colors,

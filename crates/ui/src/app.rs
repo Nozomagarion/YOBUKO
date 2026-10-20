@@ -4139,7 +4139,10 @@ impl App {
         if !self.plugins_read {
             self.read_plugins();
         }
-        let themes = self.themes.view(&self.settings.theme);
+        let mut themes = self.themes.view(&self.settings.theme);
+        if let Some(session) = self.session() {
+            themes.preview_scene = crate::kit::theme_preview::Scene::from_project(session.project());
+        }
         self.about.projects_default = self.default_folders.0.display().to_string();
         self.about.templates_default = self.default_folders.1.display().to_string();
         self.about.nam_models_default = self.nam_default_folders.0.display().to_string();

@@ -164,6 +164,8 @@ pub struct ThemesView {
     pub list: Vec<(String, String, bool)>,
     /// Palette snapshots for miniature previews; drawing one never installs it globally.
     pub previews: Vec<(String, Palette)>,
+    /// Existing project colours stay unchanged when a different theme is selected.
+    pub preview_scene: crate::kit::theme_preview::Scene,
     /// The id of the theme in use, whether it comes with Suhina, its name and its colours.
     pub current: String,
     pub built_in: bool,
@@ -913,6 +915,7 @@ fn theme_page(
                     }
                 });
             });
+            ui.label("Existing tracks and clips keep their colours.");
             ui.add_space(10.0);
             let gap = 10.0;
             let width = ((page.width() - gap) / 2.0).max(80.0);
@@ -928,7 +931,7 @@ fn theme_page(
                         if ui.is_rect_visible(rect) {
                             let preview =
                                 Rect::from_min_size(rect.min + Vec2::splat(5.0), Vec2::new(width - 10.0, 92.0));
-                            crate::kit::theme_preview::paint(ui.painter(), preview, palette);
+                            crate::kit::theme_preview::paint(ui.painter(), preview, palette, &themes.preview_scene);
                             let border = if current {
                                 theme::accent()
                             } else if response.hovered() {

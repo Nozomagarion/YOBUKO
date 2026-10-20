@@ -401,7 +401,9 @@ the wheel over it, as far as its last row and no further.
 | Appearance › Graphics | Renderer | GPU (wgpu, default), OpenGL (glow) |
 
 **Appearance › Themes** is a two-column palette gallery. Cards are 142 px tall with a
-92 px high miniature of the same browser, grid, MIDI/audio clips, controls and meters;
+92 px high miniature of the same browser, grid, four MIDI/audio lanes, controls and meters;
+the lanes retain the open project's colour overrides, falling back to the candidate theme,
+with clip colours mixed at 82% over its panel surface, as in the Arrangement;
 a 10 px gap separates cards. Preview painting takes explicit palette snapshots and does
 not install a theme. The active card has an accent border and Active label, and clicking
 another card applies it immediately. The header contains the active theme name,

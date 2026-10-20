@@ -43,6 +43,37 @@ fn render_themes_gallery_and_editor_for_review() {
 }
 
 #[test]
+fn theme_cards_keep_the_open_projects_clip_colour() {
+    let mut project = demo_project();
+    let source = suhina_engine::model::Rgb(35, 150, 125);
+    project.arrangement.lanes[0].clips[0].color = Some(source);
+    let mut app = App::new();
+    app.set_session(Session::new(project), &[]);
+    let mut harness = Harness::builder().with_size((1200.0, 900.0)).build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    theme::install(&harness.ctx);
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    harness.run();
+    harness.get_by_label("Settings page: Themes").click();
+    harness.run();
+    for name in ["Suhina Studio Light", "Suhina Dark"] {
+        harness.get_by_label(&format!("Theme: {name}")).click();
+        harness.run();
+        let card = harness.get_by_label(&format!("Theme: {name}")).rect();
+        let expected = suhina_ui::kit::motion::mix(
+            theme::panel_background(),
+            egui::Color32::from_rgb(source.0, source.1, source.2),
+            0.82,
+        );
+        assert!(
+            harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Rect(shape) if card.contains_rect(shape.rect) && shape.fill == expected)),
+            "{name} must preview the project's explicit clip colour on its own surface"
+        );
+    }
+}
+
+#[test]
 fn themes_gallery_switches_immediately_and_opens_a_separate_editor() {
     let mut harness = short_window();
     harness.get_by_label("Settings page: Themes").click();

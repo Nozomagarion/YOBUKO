@@ -89,6 +89,13 @@ installs a theme or loads another project. The active card has an accent border 
 label. Clicking a card immediately applies and saves the selected theme, as before.
 More holds Duplicate, Reload, Open folder, Back up and Export template.
 
+The four miniature lanes use the open project's first four track colours and their first
+arrangement clips' explicit colour overrides. An unset colour follows the candidate theme's
+corresponding track token. Clip fills use the Arrangement's 82% colour strength over the
+candidate panel surface, rather than raw saturated swatches. A short gallery note explains
+that existing tracks and clips keep their colours when selecting a theme. Previews never
+recolour the project.
+
 Edit current theme opens a child view, with Back to themes and the current theme name.
 Colours are grouped into Surfaces, Text, Tracks & clips, Controls, Meters and Sample map.
 Changes apply and save live; editing a built-in palette still creates a custom copy.
