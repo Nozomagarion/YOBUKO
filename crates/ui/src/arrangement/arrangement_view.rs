@@ -3244,11 +3244,11 @@ fn paint_clip(
     if !rect.intersects(view) {
         return;
     }
-    // The clip in its colour (its own, or its track's): the name bar in full colour, the body a
-    // shade of it, and its notes or waveform in ink that reads on both. Off or muted, it greys.
+    // Keep the clip colour legible against the quiet grid. Selection changes brightness,
+    // never hue; the reserved title area leaves notes and waveforms unobstructed.
     let off = lane.mute || !clip.enabled;
     let base = if off { motion::mix(rgb(clip.color), theme::text_hint(), 0.7) } else { rgb(clip.color) };
-    let body = motion::mix(theme::panel_background(), base, if selected { 0.62 } else { 0.44 });
+    let body = motion::mix(theme::panel_background(), base, if selected { 0.94 } else { 0.82 });
     painter.rect_filled(rect, 0.0, body);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
@@ -3698,13 +3698,10 @@ fn track_header(
         menus::track_menu(ui, &menu, actions);
     });
     let selected = state.selected_tracks.contains(&lane.track) || state.focus == Some(lane.track);
-    // Keep the controls on a neutral theme surface. Track colour belongs to the edge band;
-    // selection has both a distinct surface and an outline, so it does not rely on hue alone.
-    let header_fill = if selected {
-        motion::mix(theme::track_header_selected(), rgb(lane.color), 0.32)
-    } else {
-        motion::mix(theme::track_header_background(), rgb(lane.color), 0.18)
-    };
+    // Preserve track identity when selected: a small brightness lift and outline, without
+    // replacing the track colour with the global selection accent.
+    let surface = motion::mix(theme::track_header_background(), rgb(lane.color), 0.18);
+    let header_fill = if selected { motion::mix(surface, theme::text_primary(), 0.07) } else { surface };
     painter.rect_filled(rect, 0.0, header_fill);
     if selected {
         let outline = motion::mix(theme::border_strong(), saturated(rgb(lane.color)), 0.5);

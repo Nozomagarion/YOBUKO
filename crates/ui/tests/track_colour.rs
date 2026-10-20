@@ -64,7 +64,15 @@ fn arrangement_header_surfaces_follow_custom_theme_tokens() {
     let color = default_drums();
     let has_surface =
         filled_with(&harness, header, suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.18))
-            || filled_with(&harness, header, suhina_ui::kit::motion::mix(custom.track_header_selected, color, 0.32));
+            || filled_with(
+                &harness,
+                header,
+                suhina_ui::kit::motion::mix(
+                    suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.18),
+                    theme::text_primary(),
+                    0.07,
+                ),
+            );
     theme::set_palette(&harness.ctx, previous);
     assert!(has_surface, "the header must tint the editable theme surface with its track color");
 }

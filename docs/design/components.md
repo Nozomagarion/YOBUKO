@@ -735,11 +735,11 @@ and snapping are unchanged; bars remain stronger than subdivisions.
 
 Manrope explicitly uses weight 500; the variable font asset defaults to weight 200 and must
 not be used without selecting its weight. UI text is 12 px and small labels/values 11 px.
-Track header surfaces mix the user theme color with the track color (18 percent normally,
-32 percent selected). The edge band retains the track color.
+Track header surfaces mix the theme background with 18 percent track color. Selection lifts
+that surface 7 percent toward the theme text color. The edge band retains the track color.
 
-Clips use one muted color surface with a 2 px identity edge, not a bright contrasting title
-stripe. A clip tall enough for its title reserves that strip for the name; note/waveform
+Clips use one strong color surface (82 percent clip color, 94 percent selected) with a 2 px
+identity edge, without a contrasting title stripe. A clip tall enough for its title reserves that strip for the name; note/waveform
 previews start below it with a gap. Short clips omit the title rather than painting it over
 the preview. MIDI preview ink follows the body contrast in both light and dark themes.
 
@@ -750,3 +750,7 @@ more the name uses 14 px text and controls use 20 px rows with 6 px vertical pad
 that height the compact metrics remain in use. Solo/cue/arm controls are 26 px wide. Manual
 resizing remains available. Volume fill is tinted by the track color; the Main channel keeps
 the theme fill. The selected-header outline is 1 px and more restrained.
+
+Arrangement clips retain a strong track-derived fill against the subdued grid. Selection lifts
+brightness within the same hue; track headers use a restrained brightness lift and colour-aware
+outline rather than a global blue fill. Clip names reserve a top strip above content previews.
