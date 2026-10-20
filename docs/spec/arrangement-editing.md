@@ -830,7 +830,7 @@ them is drawn.
 
 ## Compact rows and quick expansion
 
-New regular tracks start at 40 px; return rows start at the minimum 20 px height. A leading arrow on an ordinary
+New regular tracks start at 40 px; return rows start at the compact 20 px height. A leading arrow on an ordinary
 track or return toggles between that compact row and 40 px (or its last manually expanded
 height). Group arrows retain their existing child-folding behavior. Automation remains visible
 at the left and a compact volume field follows the name when the header has sufficient width.
@@ -839,15 +839,17 @@ Row height is view state, not an edit to the music project.
 ## Named row sizes
 
 Settings › Arrangement › Track sizes chooses independent named defaults for ordinary tracks
-and returns: Compact, Small, Medium and Large. Initial heights are 20, 40, 64 and 104 px,
+and returns: Tiny, Compact, Small, Medium and Large. Initial heights are 14, 20, 40, 64 and 104 px,
 respectively; the defaults are Small for tracks and Compact for returns. Sliders customize each
 size without showing units. Advanced track sizes replaces the sliders with directly editable pixel fields.
-Sizes are strictly ordered and bounded to 20–400 px, including when loading hand-edited settings.
+Sizes are strictly ordered and bounded to 14–400 px, including when loading hand-edited settings.
+Tiny keeps a single 12 px control row with 1 px padding; automation, volume and track controls
+remain accessible. Existing four-size settings retain their heights and gain Tiny at 14 px.
 Changing a default updates all rows of that kind, replacing their earlier height overrides. Changing a preset updates matching
 preset heights, preserving other manual sizes.
 
 Resize all, beside Hide returns and waveform zoom above the track headers, sets every track
-and return to one of the four named heights (including hidden returns and folded children).
+and return to one of the five named heights (including hidden returns and folded children).
 It changes view state, not the project or its undo history. Subsequent tracks still use the
 independent defaults. Quick-expand restores the last expanded height or the customized Small
 height; collapse uses the customized Compact height. No Minimal size is offered.

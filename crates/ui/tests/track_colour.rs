@@ -216,7 +216,7 @@ fn picking_the_colour_the_track_has_changes_nothing() {
 }
 
 #[test]
-fn return_defaults_to_minimum_and_quick_expand_is_reversible() {
+fn return_defaults_to_compact_and_quick_expand_is_reversible() {
     let mut h = arrangement();
     let label = "Track A Reverb";
     let small = h.get_by_label(label).rect();
@@ -237,6 +237,36 @@ fn return_defaults_to_minimum_and_quick_expand_is_reversible() {
     h.get_by_label("Expand Drums").click();
     h.run();
     assert!((h.get_by_label("Track Drums").rect().height() - 40.0).abs() < 0.5);
+}
+
+#[test]
+fn tiny_rows_keep_controls_inside_the_header_and_tune_live() {
+    use suhina_ui::settings::track_sizes::TrackSize;
+    let mut h = arrangement();
+    h.get_by_label("Resize all tracks").click();
+    h.run();
+    for size in TrackSize::ALL {
+        assert!(h.query_by_label(size.name()).is_some());
+    }
+    h.get_by_label("Tiny").click();
+    h.run();
+    let header = h.get_by_label("Track Drums").rect();
+    assert_eq!(header.height(), 14.0);
+    assert_eq!(h.get_by_label("Track A Reverb").rect().height(), 14.0);
+    for label in ["Show automation of Drums", "Drums volume", "Turn Drums off", "Expand Drums"] {
+        let control = h.get_by_label(label).rect();
+        assert!(header.contains_rect(control), "{label}: {control:?} outside {header:?}");
+    }
+    let mut settings = h.state().settings().clone();
+    settings.view.track_sizes.set_height(TrackSize::Tiny, 17);
+    let ctx = h.ctx.clone();
+    h.state_mut().set_settings(&ctx, settings);
+    h.run();
+    assert_eq!(h.get_by_label("Track Drums").rect().height(), 17.0);
+    h.get_by_label("Expand Drums").click();
+    h.run();
+    assert_eq!(h.get_by_label("Track Drums").rect().height(), 40.0);
+    assert!(!h.state().session().unwrap().can_undo());
 }
 
 #[test]

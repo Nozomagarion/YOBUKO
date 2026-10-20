@@ -32,7 +32,7 @@ const HEADER_COLUMN_RANGE: (f32, f32) = (160.0, 520.0);
 const RULER: f32 = ROW;
 #[cfg(test)]
 const DEFAULT_LANE: f32 = 40.0;
-const MIN_LANE: f32 = 20.0;
+const MIN_LANE: f32 = 14.0;
 const MAX_LANE: f32 = 400.0;
 /// How much a point of wheel movement with Alt held grows the lanes (as a power of e).
 const LANE_ZOOM_PER_POINT: f32 = 0.004;
@@ -802,7 +802,7 @@ impl ArrangementViewState {
         let height = f32::from(self.sizes.height(size));
         for lane in &timeline.lanes {
             self.heights.insert(lane.track, height);
-            if size != TrackSize::Compact {
+            if !matches!(size, TrackSize::Tiny | TrackSize::Compact) {
                 self.expanded_heights.insert(lane.track, height);
             }
         }
@@ -3737,9 +3737,18 @@ fn track_header(
     actions: &mut Vec<Action>,
 ) {
     let spacious = rect.height() >= 60.0;
-    let header_row = if spacious { 20.0 } else { HEADER_ROW };
+    let tiny = rect.height() < 20.0;
+    let header_row = if tiny {
+        (rect.height() - 2.0).max(1.0)
+    } else if spacious {
+        20.0
+    } else {
+        HEADER_ROW
+    };
     let field_height = if spacious { 20.0 } else { FIELD };
-    let header_pad = if rect.height() < 48.0 {
+    let header_pad = if tiny {
+        1.0
+    } else if rect.height() < 48.0 {
         2.0
     } else if spacious {
         6.0
@@ -3995,7 +4004,13 @@ fn track_header(
         name,
         Align2::LEFT_CENTER,
         &lane.name,
-        theme::ui_font(if spacious { theme::TEXT + 2.0 } else { theme::TEXT }),
+        theme::ui_font(if tiny {
+            10.0
+        } else if spacious {
+            theme::TEXT + 2.0
+        } else {
+            theme::TEXT
+        }),
         name_color,
     );
     // The name's place, for a rename in place (Ctrl+R, #696).

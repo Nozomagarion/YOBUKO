@@ -45,7 +45,7 @@ is on exactly one page, under one heading.
 | Plug-ins | Library | Folders (each on or off, with its format; add with a format, remove), Scan and Rescan all with a count of what was found, Plug-in manager (opens the [plug-in manager](plugin-manager.md)) |
 | Arrangement | Clips | Allow sample stacking, Allow MIDI stacking |
 | Arrangement | Tracks | Track headers |
-| Arrangement | Track sizes | Default track size, Default return size, Advanced track sizes, Compact height, Small height, Medium height, Large height |
+| Arrangement | Track sizes | Default track size, Default return size, Advanced track sizes, Tiny height, Compact height, Small height, Medium height, Large height |
 | Session and mixer | Launching | Select on launch |
 | Session and mixer | Mixer | Mixer controls |
 | Clip editor | Piano roll | Pulled to the top, Piano roll grid, Toolbar size |

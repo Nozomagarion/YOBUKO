@@ -376,6 +376,7 @@ pub(crate) static ROWS: &[Entry] = &[
             cx.choose(
                 r,
                 &[
+                    ("Tiny", TrackSize::Tiny),
                     ("Compact", TrackSize::Compact),
                     ("Small", TrackSize::Small),
                     ("Medium", TrackSize::Medium),
@@ -395,6 +396,7 @@ pub(crate) static ROWS: &[Entry] = &[
             cx.choose(
                 r,
                 &[
+                    ("Tiny", TrackSize::Tiny),
                     ("Compact", TrackSize::Compact),
                     ("Small", TrackSize::Small),
                     ("Medium", TrackSize::Medium),
@@ -415,11 +417,14 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Track sizes",
-        "Compact height",
-        "Adjust the smallest usable row; always below Small",
+        "Tiny height",
+        "Adjust the smallest row; always below Compact",
         &["arrangement_size_heights"],
-        |cx, r| cx.track_size_height(r, TrackSize::Compact),
+        |cx, r| cx.track_size_height(r, TrackSize::Tiny),
     ),
+    row(Page::Arrangement, "Track sizes", "Compact height", "Adjust Compact between Tiny and Small", &[], |cx, r| {
+        cx.track_size_height(r, TrackSize::Compact)
+    }),
     row(Page::Arrangement, "Track sizes", "Small height", "Adjust Small between Compact and Medium", &[], |cx, r| {
         cx.track_size_height(r, TrackSize::Small)
     }),
