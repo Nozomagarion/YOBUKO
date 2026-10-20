@@ -10,6 +10,7 @@ Apache-2.0, OFL, CC0, CC BY) and keep their license file next to them.
 
 | Path | Title | Author | Source | License |
 |---|---|---|---|---|
+| `crates/ui/fonts/manrope/Manrope-Variable.ttf` | Manrope (default UI typeface) | The Manrope Project Authors | [google/fonts](https://github.com/google/fonts/tree/main/ofl/manrope) | OFL-1.1 (`crates/ui/fonts/manrope/OFL.txt`) |
 | `crates/ui/fonts/encode-sans/EncodeSansSemiExpanded-Regular.ttf` | Encode Sans Semi Expanded Regular (the UI typeface) | The Encode Project Authors (Pablo Impallari, Andres Torresi, Jacques Le Bailly) | [google/fonts](https://github.com/google/fonts/tree/main/ofl/encodesanssemiexpanded) | OFL-1.1 (`crates/ui/fonts/encode-sans/OFL.txt`) |
 | `crates/ui/fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf` | IBM Plex Mono Regular (numbers, times, positions) | IBM Corp. | [google/fonts](https://github.com/google/fonts/tree/main/ofl/ibmplexmono) | OFL-1.1 (`crates/ui/fonts/ibm-plex-mono/OFL.txt`) |
 | `crates/ui/themes/dracula.json` | Dracula colour palette, mapped onto Suhina's tokens | Dracula Theme | [dracula/dracula-theme](https://github.com/dracula/dracula-theme) | MIT (`crates/ui/themes/licenses/dracula.txt`) |

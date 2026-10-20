@@ -19,7 +19,9 @@ use suhina_ui::session::session_view::{self, SessionViewState};
 use suhina_ui::settings::themes::FileAction;
 use suhina_ui::{App, OpenAs, Status, View, kit::theme};
 
-const SIZE: (f32, f32) = (1280.0, 800.0);
+// The full-workspace fixture leaves five spacious lanes visible for audio gain/fade tests.
+// Short and constrained layouts are exercised separately in short_panes.rs.
+const SIZE: (f32, f32) = (1280.0, 900.0);
 
 /// A file dropped on the window in a test.
 #[derive(Debug)]
@@ -392,8 +394,10 @@ fn a_dropped_clip_replaces_what_it_covers_unless_midi_stacking_is_on() {
 fn dragging_a_clip_down_moves_it_to_the_next_track() {
     let mut harness = arrangement_app();
     let from = harness.get_by_label("Clip Beat B on Drums at bar 17").rect().center_top() + egui::vec2(0.0, 6.0);
-    // Lanes are 48 points high with a line between them.
-    let to = from + egui::vec2(0.0, 49.0);
+    // Move to the next track using the drawn geometry, independent of UI density.
+    let drums = harness.get_by_label("Track Drums").rect();
+    let bass = harness.get_by_label("Track Bass").rect();
+    let to = from + egui::vec2(0.0, bass.top() - drums.top());
     harness.hover_at(from);
     harness.run();
     harness.drag_at(from);
@@ -1608,8 +1612,9 @@ fn menus_delete_a_track_and_duplicate_a_clip() {
 fn dragging_a_header_moves_the_track() {
     let mut harness = arrangement_app();
     let from = harness.get_by_label("Track Vox").rect().center();
-    // Three lanes up (49 points each), into the upper half of Drums.
-    let to = from - egui::vec2(0.0, 3.0 * 49.0 + 14.0);
+    // Target the upper half of the first track, independent of lane height.
+    let drums = harness.get_by_label("Track Drums").rect();
+    let to = egui::pos2(from.x, drums.top() + drums.height() * 0.2);
     harness.hover_at(from);
     harness.run();
     harness.drag_at(from);

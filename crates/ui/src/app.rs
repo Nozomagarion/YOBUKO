@@ -6148,8 +6148,10 @@ impl App {
             );
             return;
         };
+        // The transport has its own comfortable hit height, independent of dense list rows.
         let row = |x: f32, width: f32| {
-            Rect::from_min_size(Pos2::new(x, bar.center().y - theme::ROW / 2.0), Vec2::new(width, theme::ROW))
+            let height = theme::CONTROL_BAR - 2.0 * PAD;
+            Rect::from_min_size(Pos2::new(x, bar.center().y - height / 2.0), Vec2::new(width, height))
         };
 
         // Left: the browser's show/hide button, tempo, time signature, launch quantisation.

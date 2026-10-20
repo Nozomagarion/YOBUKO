@@ -52,6 +52,14 @@ macro_rules! palette {
 }
 
 palette! {
+    grid_major, "grid.major", 0x30312D,
+        "Arrangement bar lines and lane separators";
+    grid_minor, "grid.minor", 0x252622,
+        "Arrangement subdivisions between bar lines";
+    track_header_background, "track.headerBackground", 0x252421,
+        "The neutral surface behind Arrangement track controls";
+    track_header_selected, "track.headerSelectedBackground", 0x34332F,
+        "The surface behind a selected Arrangement track's controls";
     window_background, "window.background", 0x1D1C1A,
         "The window behind everything: grid, empty slots, lanes, Settings";
     panel_background, "panel.background", 0x252421,
@@ -200,7 +208,9 @@ pub const BUILT_IN: &str = "suhina-dark";
 /// The themes that come with Suhina besides Suhina Dark, as theme files: id and text.
 /// Dracula, Nord, Catppuccin and Solarized are popular open palettes (MIT, their licences in
 /// `themes/licenses/`), mapped onto Suhina's tokens.
-const BUILT_IN_FILES: [(&str, &str); 8] = [
+const BUILT_IN_FILES: [(&str, &str); 10] = [
+    ("suhina-studio-dark", include_str!("../../themes/suhina-studio-dark.json")),
+    ("suhina-studio-light", include_str!("../../themes/suhina-studio-light.json")),
     ("editor-dark", include_str!("../../themes/editor-dark.json")),
     ("suhina-light", include_str!("../../themes/suhina-light.json")),
     ("high-contrast", include_str!("../../themes/high-contrast.json")),
@@ -388,7 +398,7 @@ pub const ROW: f32 = 20.0;
 /// A row of the browser's lists and tree.
 pub const BROWSER_ROW: f32 = 17.0;
 pub const MENU_BAR: f32 = 20.0;
-pub const CONTROL_BAR: f32 = 28.0;
+pub const CONTROL_BAR: f32 = 40.0;
 pub const STATUS_BAR: f32 = 20.0;
 pub const TRACK_COLUMN: f32 = 116.0;
 pub const RETURN_COLUMN: f32 = 84.0;
@@ -399,8 +409,8 @@ pub const TOGGLE: f32 = 18.0;
 pub const PAD: f32 = 6.0;
 
 /// Text sizes: UI text, small values and labels, rulers and key labels.
-pub const TEXT: f32 = 11.0;
-pub const TEXT_SMALL: f32 = 10.0;
+pub const TEXT: f32 = 12.0;
+pub const TEXT_SMALL: f32 = 11.0;
 pub const TEXT_TINY: f32 = 9.0;
 
 pub fn ui_font(size: f32) -> FontId {
@@ -416,20 +426,28 @@ pub fn hairline(color: Color32) -> Stroke {
     Stroke::new(1.0, color)
 }
 
-/// The UI typeface: Encode Sans Semi Expanded (SIL Open Font License 1.1,
-/// `fonts/encode-sans/OFL.txt`).
-const UI_FONT: &[u8] = include_bytes!("../../fonts/encode-sans/EncodeSansSemiExpanded-Regular.ttf");
+/// The default UI typeface, shared with the website (SIL Open Font License 1.1).
+const UI_FONT: &[u8] = include_bytes!("../../fonts/manrope/Manrope-Variable.ttf");
+/// Preserve the previous UI font as an embedded alternative and glyph fallback.
+const LEGACY_UI_FONT: &[u8] = include_bytes!("../../fonts/encode-sans/EncodeSansSemiExpanded-Regular.ttf");
 /// Numbers, times and positions: IBM Plex Mono (SIL Open Font License 1.1,
 /// `fonts/ibm-plex-mono/OFL.txt`).
 const MONO_FONT: &[u8] = include_bytes!("../../fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf");
 
-/// egui's fonts with ours first: Encode Sans for UI text, IBM Plex Mono for numbers. egui's own
+/// egui's fonts with ours first: Manrope for UI text, IBM Plex Mono for numbers. egui's own
 /// fonts stay behind them for characters ours lack.
 fn fonts() -> egui::FontDefinitions {
     let mut fonts = egui::FontDefinitions::default();
-    fonts.font_data.insert("encode-sans".into(), std::sync::Arc::new(egui::FontData::from_static(UI_FONT)));
+    let manrope = egui::FontData::from_static(UI_FONT).tweak(egui::FontTweak {
+        coords: egui::epaint::text::VariationCoords::new([(b"wght", 500.0)]),
+        ..Default::default()
+    });
+    fonts.font_data.insert("manrope".into(), std::sync::Arc::new(manrope));
+    fonts.font_data.insert("encode-sans".into(), std::sync::Arc::new(egui::FontData::from_static(LEGACY_UI_FONT)));
     fonts.font_data.insert("ibm-plex-mono".into(), std::sync::Arc::new(egui::FontData::from_static(MONO_FONT)));
     fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "encode-sans".into());
+    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "manrope".into());
+    fonts.families.insert(FontFamily::Name("encode-sans".into()), vec!["encode-sans".into()]);
     fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "ibm-plex-mono".into());
     fonts
 }
@@ -555,6 +573,8 @@ mod tests {
         assert_eq!(theme.name, "Blue");
         assert_eq!(theme.colors.accent, rgb(0x3366FF));
         assert_eq!(theme.colors.window_background, Palette::DARK.window_background);
+        assert_eq!(theme.colors.track_header_background, Palette::DARK.track_header_background);
+        assert_eq!(theme.colors.track_header_selected, Palette::DARK.track_header_selected);
     }
 
     #[test]
@@ -607,6 +627,33 @@ mod tests {
             assert_ne!(theme.name, Theme::default().name);
         }
         assert!(!is_built_in("night"));
+    }
+
+    #[test]
+    fn default_ui_font_is_manrope_and_previous_font_remains_available() {
+        let definitions = fonts();
+        assert_eq!(definitions.families[&FontFamily::Proportional].first().map(String::as_str), Some("manrope"));
+        assert!(definitions.font_data.contains_key("encode-sans"));
+        assert_eq!(
+            definitions.font_data["manrope"].tweak.coords,
+            egui::epaint::text::VariationCoords::new([(b"wght", 500.0)])
+        );
+        assert!(definitions.families.contains_key(&FontFamily::Name("encode-sans".into())));
+    }
+
+    #[test]
+    fn studio_themes_keep_text_readable_and_round_trip() {
+        for (id, theme) in built_in_themes().into_iter().filter(|(id, _)| id.starts_with("suhina-studio-")) {
+            let p = theme.colors;
+            for background in [p.window_background, p.panel_background, p.control_background] {
+                assert!(contrast(p.text_primary, background) >= 7.0, "{id}: primary text");
+                assert!(contrast(p.text_secondary, background) >= 4.5, "{id}: secondary text");
+                assert!(contrast(p.accent, background) >= 3.0, "{id}: accent");
+            }
+            let (restored, warnings) = Theme::from_json(&theme.to_json());
+            assert!(warnings.is_empty(), "{id}: {warnings:?}");
+            assert_eq!(restored, theme, "{id}: custom colors must survive saving");
+        }
     }
 
     #[test]

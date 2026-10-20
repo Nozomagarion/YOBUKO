@@ -40,6 +40,56 @@ fn arrangement() -> Harness<'static, App> {
     harness
 }
 
+#[test]
+fn default_header_has_roomy_controls_without_clipping_sends() {
+    let harness = arrangement();
+    let header = harness.get_by_label("Track Drums").rect();
+    for label in ["Turn Drums off", "Solo Drums", "Drums volume", "Drums send to A Reverb"] {
+        let control = harness.get_by_label(label).rect();
+        assert!(control.height() >= 20.0, "{label}: {control:?}");
+        assert!(header.contains_rect(control), "{label} must fit inside its header");
+    }
+}
+
+#[test]
+fn arrangement_header_surfaces_follow_custom_theme_tokens() {
+    let mut harness = arrangement();
+    let previous = theme::palette();
+    let mut custom = previous;
+    custom.track_header_background = Color32::from_rgb(31, 45, 53);
+    custom.track_header_selected = Color32::from_rgb(65, 72, 84);
+    theme::set_palette(&harness.ctx, custom);
+    harness.run();
+    let header = harness.get_by_label("Track Drums").rect();
+    let color = default_drums();
+    let has_surface =
+        filled_with(&harness, header, suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.18))
+            || filled_with(&harness, header, suhina_ui::kit::motion::mix(custom.track_header_selected, color, 0.32));
+    theme::set_palette(&harness.ctx, previous);
+    assert!(has_surface, "the header must tint the editable theme surface with its track color");
+}
+
+#[test]
+fn arrangement_grid_uses_its_own_theme_colors() {
+    let mut harness = arrangement();
+    let previous = theme::palette();
+    let mut custom = previous;
+    custom.grid_major = Color32::from_rgb(117, 83, 149);
+    custom.grid_minor = Color32::from_rgb(53, 79, 101);
+    theme::set_palette(&harness.ctx, custom);
+    harness.run();
+    fn has_line(shape: &Shape, color: Color32) -> bool {
+        match shape {
+            Shape::LineSegment { stroke, .. } => stroke.color == color,
+            Shape::Vec(shapes) => shapes.iter().any(|shape| has_line(shape, color)),
+            _ => false,
+        }
+    }
+    let has_major = harness.output().shapes.iter().any(|shape| has_line(&shape.shape, custom.grid_major));
+    theme::set_palette(&harness.ctx, previous);
+    assert!(has_major, "timeline grid lines must follow their own theme token");
+}
+
 /// Drums' colour as the project has it (`None`: the default one).
 fn drums_colour(harness: &Harness<'static, App>) -> Option<Rgb> {
     harness.state().session().unwrap().project().tracks[0].color

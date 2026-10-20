@@ -455,7 +455,9 @@ fn a_click_on_empty_arrangement_space_clears_the_clip_selection() {
     let empty = h
         .query_all_by_label_contains("Lane ")
         .map(|n| n.rect())
-        .flat_map(|lane| (0..100).map(move |i| pos2(lane.left() + 4.0 + i as f32 * 10.0, lane.center().y)))
+        .flat_map(|lane| {
+            (0..100).map(move |i| pos2(lane.left() + 4.0 + i as f32 * (lane.width() - 8.0) / 100.0, lane.center().y))
+        })
         .find(|p| !clips.iter().any(|c| c.expand(2.0).contains(*p)) && p.x < SIZE.0 - 8.0)
         .expect("an empty spot on some lane");
     click(&mut h, empty);

@@ -26,10 +26,10 @@ use crate::kit::waveform;
 use crate::kit::widgets::{self, Action, Drag, VOLUME_RANGE, volume_position};
 
 /// Width of the track header column: the default and how far it can be dragged.
-pub const HEADER_COLUMN: f32 = 232.0;
+pub const HEADER_COLUMN: f32 = 336.0;
 const HEADER_COLUMN_RANGE: (f32, f32) = (160.0, 520.0);
 const RULER: f32 = ROW;
-const DEFAULT_LANE: f32 = 48.0;
+const DEFAULT_LANE: f32 = 64.0;
 const MIN_LANE: f32 = 20.0;
 const MAX_LANE: f32 = 400.0;
 /// How much a point of wheel movement with Alt held grows the lanes (as a power of e).
@@ -41,18 +41,19 @@ const SHOWS_ROUTING: f32 = 70.0;
 const SHOWS_MIDI_INPUT: f32 = 90.0;
 const DROPDOWN: f32 = 15.0;
 /// Padding inside a header: top and bottom, and the sides.
-const HEADER_PAD_Y: f32 = 5.0;
-const HEADER_ROW: f32 = 15.0;
+const HEADER_PAD_Y: f32 = 4.0;
+const HEADER_ROW: f32 = 16.0;
 const FIELD: f32 = 16.0;
-const PAN_FIELD: f32 = 46.0;
+const PAN_FIELD: f32 = 40.0;
 /// The gap between a header's send knobs.
 const SEND_GAP: f32 = 3.0;
+const SEND_WIDTH: f32 = 64.0;
 /// The least width a header's volume bar keeps: narrower, the header stacks it on its own row.
-const LEAST_VOLUME: f32 = 56.0;
+const LEAST_VOLUME: f32 = 72.0;
 /// The least room a track's name keeps on a header's lower row before sends are left out.
 const LEAST_NAME: f32 = 48.0;
 const ON_TOGGLE: f32 = 30.0;
-const SOLO: f32 = 18.0;
+const SOLO: f32 = 26.0;
 /// A group's fold triangle at the start of its header row.
 const FOLD: f32 = 12.0;
 /// How far a track inside a group is indented in its header, a level.
@@ -775,7 +776,7 @@ impl ArrangementViewState {
 
     /// How tall a return track's row is: a row's height until its edge is dragged.
     fn return_height(&self, track: TrackId) -> f32 {
-        self.heights.get(&track).copied().unwrap_or(SHOWS_MIXER)
+        self.heights.get(&track).copied().unwrap_or(DEFAULT_LANE)
     }
 
     /// How tall `track`'s lane is.
@@ -1132,7 +1133,8 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     // field's (`value_areas`), so the view leaves them alone.
     let fields = std::mem::take(&mut state.value_areas);
     if let Some(pointer) = widgets::pointer_over(ui, area) {
-        let over_field = fields.iter().any(|rect| rect.contains(pointer)) && widgets::wheel_moves_value(ui);
+        let over_field = fields.iter().any(|rect| rect.contains(pointer))
+            && (widgets::wheel_moves_value(ui) || ui.input(|i| i.modifiers.shift));
         let zoom = ui.input(|i| i.zoom_delta());
         if zoom != 1.0 && time.contains(pointer) && !over_field {
             let beat = (pointer.x - time.left() + state.scroll.x) / state.beat_width;
@@ -1244,7 +1246,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         for (beat, on_bar) in grid.lines(first_beat, last_beat, max_lines) {
             let x = x_of(beat).round() + 0.5;
             grid_xs.push((x, on_bar));
-            let stroke = theme::hairline(if on_bar { theme::border() } else { theme::panel_background() });
+            let stroke = theme::hairline(if on_bar { theme::grid_major() } else { theme::grid_minor() });
             for band in grid_bands.iter().filter(|b| b.span() > 0.0) {
                 grid_painter.vline(x, *band, stroke);
             }
@@ -1264,12 +1266,12 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             }
             for band in grid_bands.iter().filter(|b| b.span() > 0.0) {
                 if bar_width >= 6.0 || bar % label_every == 0 {
-                    grid_painter.vline(x, *band, theme::hairline(theme::border()));
+                    grid_painter.vline(x, *band, theme::hairline(theme::grid_major()));
                 }
                 if state.beat_width >= 10.0 {
                     for beat in 1..this_bar_beats.ceil() as u32 {
                         let x = x_of(start + f64::from(beat)).round() + 0.5;
-                        grid_painter.vline(x, *band, theme::hairline(theme::panel_background()));
+                        grid_painter.vline(x, *band, theme::hairline(theme::grid_minor()));
                     }
                 }
             }
@@ -1780,7 +1782,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         if lane.overrides {
             lanes_painter.rect_filled(lane_rect, 0.0, theme::window_background().gamma_multiply(0.45));
         }
-        lanes_painter.hline(area.x_range(), lane_rect.bottom() + 0.5, theme::hairline(theme::border_strong()));
+        lanes_painter.hline(area.x_range(), lane_rect.bottom() + 0.5, theme::hairline(theme::grid_major()));
         // The track's automation lanes, under it.
         let lanes = automation::TrackLanes {
             track: lane.track,
@@ -2027,7 +2029,13 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             }
             Drag::None => {}
         }
-        volume_field(&fixed_painter, field, state.main_drag.unwrap_or(db), widgets::hover(ui, &response));
+        volume_field(
+            &fixed_painter,
+            field,
+            state.main_drag.unwrap_or(db),
+            widgets::hover(ui, &response),
+            theme::control_playing(),
+        );
         let at = lying_meter(field.left() - PAD, inner.center().y);
         let level = state.meters.main;
         meter::show(ui, &fixed_painter, at, "Main", meter::Source::Main, &level, actions);
@@ -3240,15 +3248,16 @@ fn paint_clip(
     // shade of it, and its notes or waveform in ink that reads on both. Off or muted, it greys.
     let off = lane.mute || !clip.enabled;
     let base = if off { motion::mix(rgb(clip.color), theme::text_hint(), 0.7) } else { rgb(clip.color) };
-    let body = motion::mix(theme::window_background(), base, if selected { 0.85 } else { 0.62 });
+    let body = motion::mix(theme::panel_background(), base, if selected { 0.62 } else { 0.44 });
     painter.rect_filled(rect, 0.0, body);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
-        painter.rect_filled(bar, 0.0, base);
+        painter.rect_filled(bar, 0.0, body);
     } else {
         painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, base);
     }
     let ink = ink_on(body);
+    painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(2.0, rect.height())), 0.0, base);
     // A looping clip's passes are marked by the notches and lines at their starts (below), not by
     // shades: the body is one colour all along.
     // The grid shows through the body, faintly, the bars a little stronger.
@@ -3267,7 +3276,7 @@ fn paint_clip(
     let wave_ink = if ara_notes.is_some() { motion::mix(body, ink, 0.75) } else { ink };
     let dim = |_: Color32| wave_ink;
     let color = ink;
-    let text_color = ink_on(if bar.is_some() { base } else { body });
+    let text_color = ink_on(body);
     // The name's place, for a rename in place (Ctrl+R).
     let strip = Rect::from_min_max(
         Pos2::new(rect.left().max(view.left()), rect.top()),
@@ -3277,7 +3286,7 @@ fn paint_clip(
     painter.ctx().data_mut(|d| {
         d.insert_temp(Id::new((crate::app::NAME_RECT_CLIP, u64::from(clip.id.0))), (strip, pass));
     });
-    let has_name = rect.height() >= 20.0;
+    let has_name = bar.is_some();
     if has_name {
         // The name stays in view while the clip's start is scrolled off to the left.
         let left = rect.left().max(view.left()) + 4.0;
@@ -3293,7 +3302,7 @@ fn paint_clip(
         );
     }
     let marks = Rect::from_min_max(
-        Pos2::new(rect.left(), rect.top() + if has_name && rect.height() >= 30.0 { 17.0 } else { 4.0 }),
+        Pos2::new(rect.left() + 3.0, rect.top() + if has_name { CLIP_NAME_BAR + 3.0 } else { 4.0 }),
         Pos2::new(rect.right(), rect.bottom() - 3.0),
     );
     if let Some(view) = clip.audio_view.as_ref().filter(|_| marks.height() >= 4.0)
@@ -3344,7 +3353,7 @@ fn paint_clip(
         let span_end = f64::from((rect.right() - x_of(start)) / beat_width);
         // Dark on the clip's colour, as notes read on a vivid body; light ink read as a
         // highlight and vanished on the light colours.
-        let note_ink = motion::mix(body, Color32::BLACK, 0.7);
+        let note_ink = ink;
         for note in clip.notes.iter().filter(|n| n.start + n.length >= first && n.start <= last && n.start < span_end) {
             let x = x_of(start + note.start);
             let right = x_of(start + span_end);
@@ -3633,6 +3642,11 @@ fn track_header(
     state: &mut ArrangementViewState,
     actions: &mut Vec<Action>,
 ) {
+    let spacious = rect.height() >= 60.0;
+    let header_row = if spacious { 20.0 } else { HEADER_ROW };
+    let field_height = if spacious { 20.0 } else { FIELD };
+    let header_pad = if spacious { 6.0 } else { HEADER_PAD_Y };
+    let header_gap = if spacious { 10.0 } else { PAD };
     let id = Id::new(("arrangement-header", lane.track.0));
     let clip = rect.intersect(lanes_area);
 
@@ -3684,16 +3698,17 @@ fn track_header(
         menus::track_menu(ui, &menu, actions);
     });
     let selected = state.selected_tracks.contains(&lane.track) || state.focus == Some(lane.track);
-    // The header in its track's colour; a selected track's is brighter and more saturated, with
-    // an outline, so the selection reads at a glance (#690).
+    // Keep the controls on a neutral theme surface. Track colour belongs to the edge band;
+    // selection has both a distinct surface and an outline, so it does not rely on hue alone.
     let header_fill = if selected {
-        motion::mix(theme::panel_background(), saturated(rgb(lane.color)), 0.85)
+        motion::mix(theme::track_header_selected(), rgb(lane.color), 0.32)
     } else {
-        motion::mix(theme::panel_background(), rgb(lane.color), 0.6)
+        motion::mix(theme::track_header_background(), rgb(lane.color), 0.18)
     };
     painter.rect_filled(rect, 0.0, header_fill);
     if selected {
-        painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.5, saturated(rgb(lane.color))), StrokeKind::Inside);
+        let outline = motion::mix(theme::border_strong(), saturated(rgb(lane.color)), 0.5);
+        painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, outline), StrokeKind::Inside);
     }
     // The track's colour runs down the header's left edge; a click there opens the palette.
     let band = colour_band(ui, painter, rect, clip, lane, id, actions);
@@ -3716,11 +3731,14 @@ fn track_header(
     // The meter stands at the right edge; the rows keep clear of it.
     let meter_x = rect.right() - PAD - meter::WIDTH;
     let inner = Rect::from_min_max(
-        Pos2::new(band.right() + PAD + lane.depth as f32 * INDENT, rect.top() + HEADER_PAD_Y),
-        Pos2::new(meter_x - PAD, rect.bottom() - HEADER_PAD_Y),
+        Pos2::new(band.right() + PAD + lane.depth as f32 * INDENT, rect.top() + header_pad),
+        Pos2::new(meter_x - PAD, rect.bottom() - header_pad),
     );
-    let meter_bottom =
-        if rect.height() >= SHOWS_MIXER { inner.top() + HEADER_ROW + PAD + FIELD } else { inner.top() + HEADER_ROW };
+    let meter_bottom = if rect.height() >= SHOWS_MIXER {
+        inner.top() + header_row + header_gap + field_height
+    } else {
+        inner.top() + header_row
+    };
     let at = Rect::from_min_max(
         Pos2::new(meter_x, inner.top()),
         Pos2::new(meter_x + meter::WIDTH, meter_bottom.min(inner.bottom())),
@@ -3732,7 +3750,7 @@ fn track_header(
     // selection while this track is part of one.
     let controlled: Vec<u32> = state.controlled_tracks(lane.track).iter().map(|t| t.0).collect();
     let fold = (lane.kind == ColumnKind::Group && order.children > 0)
-        .then(|| Rect::from_min_size(inner.min, Vec2::new(FOLD, HEADER_ROW)));
+        .then(|| Rect::from_min_size(inner.min, Vec2::new(FOLD, header_row)));
     if let Some(fold) = fold {
         let folded = state.folds.is_folded(lane.track);
         let label = if folded { format!("Unfold {}", lane.name) } else { format!("Fold {}", lane.name) };
@@ -3764,13 +3782,18 @@ fn track_header(
     // Every header keeps the fold triangle's room, so a group's tracks line up under it and their
     // indent shows; a group without the triangle (no tracks yet) lines up the same.
     let first_x = inner.left() + FOLD + 2.0;
-    let row = Rect::from_min_max(Pos2::new(first_x, inner.top()), Pos2::new(inner.right(), inner.top() + HEADER_ROW));
-    let toggle = Rect::from_min_size(row.min, Vec2::new(ON_TOGGLE, HEADER_ROW));
-    let solo = Rect::from_min_size(Pos2::new(toggle.right() + 2.0, row.top()), Vec2::new(SOLO, HEADER_ROW));
-    let cue = Rect::from_min_size(Pos2::new(solo.right() + 2.0, row.top()), Vec2::new(SOLO, HEADER_ROW));
+    // On a roomy header the name gets the top line; buttons and level controls sit below.
+    // Narrow/short headers retain their compact arrangement, including send overflow rules.
+    let name_first = rect.height() >= SHOWS_MIXER
+        && inner.width() - FOLD - 2.0 - ON_TOGGLE - 3.0 * (SOLO + 2.0) - PAD - PAN_FIELD - 4.0 >= LEAST_VOLUME;
+    let row_top = if name_first { inner.top() + header_row + header_gap } else { inner.top() };
+    let row = Rect::from_min_max(Pos2::new(first_x, row_top), Pos2::new(inner.right(), row_top + header_row));
+    let toggle = Rect::from_min_size(row.min, Vec2::new(ON_TOGGLE, header_row));
+    let solo = Rect::from_min_size(Pos2::new(toggle.right() + 2.0, row.top()), Vec2::new(SOLO, header_row));
+    let cue = Rect::from_min_size(Pos2::new(solo.right() + 2.0, row.top()), Vec2::new(SOLO, header_row));
     // A track that can be armed has its arm button after cue, as wide.
     let arm =
-        lane.armable.then(|| Rect::from_min_size(Pos2::new(cue.right() + 2.0, row.top()), Vec2::new(SOLO, HEADER_ROW)));
+        lane.armable.then(|| Rect::from_min_size(Pos2::new(cue.right() + 2.0, row.top()), Vec2::new(SOLO, header_row)));
     // A lane tall enough for two rows has its volume and pan beside the buttons, where the
     // other level controls are, and the automation button, the name and the sends on the row
     // below, the button under the track-on toggle; a short lane keeps one row of buttons, name
@@ -3782,18 +3805,16 @@ fn track_header(
     let beside_room = row.right() - PAN_FIELD - 4.0 - (arm.unwrap_or(cue).right() + PAD);
     let side = tall && beside_room >= LEAST_VOLUME;
     let stacked = tall && !side;
-    let below = Rect::from_min_max(
-        Pos2::new(first_x, row.bottom() + PAD),
-        Pos2::new(inner.right(), row.bottom() + PAD + FIELD),
-    );
+    let below_top = if name_first { inner.top() } else { row.bottom() + header_gap };
+    let below = Rect::from_min_max(Pos2::new(first_x, below_top), Pos2::new(inner.right(), below_top + field_height));
     // The automation button shows and hides the track's lanes.
     let lanes_button = if side {
         Rect::from_min_size(
             Pos2::new(below.left() + (ON_TOGGLE - SOLO) / 2.0, below.top()),
-            Vec2::new(SOLO, HEADER_ROW),
+            Vec2::new(SOLO, header_row),
         )
     } else {
-        Rect::from_min_size(Pos2::new(row.right() - SOLO, row.top()), Vec2::new(SOLO, HEADER_ROW))
+        Rect::from_min_size(Pos2::new(row.right() - SOLO, row.top()), Vec2::new(SOLO, header_row))
     };
     if lanes_button.intersects(clip) {
         automation::header_button(
@@ -3807,27 +3828,28 @@ fn track_header(
         );
     }
     // Two rows: the sends at the end of the lower row, as many as leave the name its room.
-    let step = FIELD + SEND_GAP;
+    let step = SEND_WIDTH + SEND_GAP;
     let stacked_pan =
         Rect::from_min_max(Pos2::new(below.right() - PAN_FIELD, below.top()), Pos2::new(below.right(), below.bottom()));
-    let shown_sends = if side {
-        let room = ((below.right() - lanes_button.right() - PAD - LEAST_NAME) / step).floor().max(0.0) as usize;
-        lane.sends.len().min(room)
+    let send_room = if side {
+        below.right() - lanes_button.right() - PAD - LEAST_NAME
     } else if stacked {
-        let room = ((stacked_pan.left() - 4.0 - below.left() - LEAST_VOLUME) / step).floor().max(0.0) as usize;
-        lane.sends.len().min(room)
+        stacked_pan.left() - 4.0 - below.left() - LEAST_VOLUME
     } else {
-        0
+        0.0
     };
+    let overflow = lane.sends.len() > (send_room / step).floor().max(0.0) as usize;
+    let navigation = if overflow && send_room >= step + 36.0 { 36.0 } else { 0.0 };
+    let shown_sends = lane.sends.len().min(((send_room - navigation) / step).floor().max(0.0) as usize);
     let sends_left = if stacked {
-        stacked_pan.left() - 4.0 - step * shown_sends as f32 + SEND_GAP
+        stacked_pan.left() - 4.0 - step * shown_sends as f32 - navigation + SEND_GAP
     } else {
-        below.right() - step * shown_sends as f32 + SEND_GAP
+        below.right() - step * shown_sends as f32 - navigation + SEND_GAP
     };
     let name = if side {
         Rect::from_min_max(
             Pos2::new(lanes_button.right() + PAD, below.top()),
-            Pos2::new(sends_left - SEND_GAP - 4.0, below.top() + HEADER_ROW),
+            Pos2::new(sends_left - SEND_GAP - 4.0, below.top() + header_row),
         )
     } else {
         Rect::from_min_max(
@@ -3836,7 +3858,14 @@ fn track_header(
         )
     };
     let name_color = if lane.mute { theme::text_hint() } else { theme::text_primary() };
-    widgets::text_in(painter, name, Align2::LEFT_CENTER, &lane.name, theme::ui_font(theme::TEXT), name_color);
+    widgets::text_in(
+        painter,
+        name,
+        Align2::LEFT_CENTER,
+        &lane.name,
+        theme::ui_font(if spacious { theme::TEXT + 2.0 } else { theme::TEXT }),
+        name_color,
+    );
     // The name's place, for a rename in place (Ctrl+R, #696).
     let pass = ui.ctx().cumulative_pass_nr();
     ui.ctx().data_mut(|d| {
@@ -3874,7 +3903,7 @@ fn track_header(
             actions.push(Action::new("track.setMute", json!({ "tracks": controlled, "mute": !lane.mute })));
         }
         let (fill, text) = widgets::toggle_colors(ui, &response, !lane.mute);
-        painter.rect_filled(toggle, 0.0, fill);
+        widgets::track_button_face(ui, painter, toggle, &response, fill);
         let number = if lane.kind == ColumnKind::Return {
             lane.name.chars().next().map(String::from).unwrap_or_default()
         } else {
@@ -3897,23 +3926,88 @@ fn track_header(
         };
         value_control(ui, painter, volume, clip, lane, Control::Volume, false, id, state, actions);
         value_control(ui, painter, pan, clip, lane, Control::Pan, false, id, state, actions);
-        for (index, send) in lane.sends.iter().take(shown_sends).enumerate() {
-            let knob =
-                Rect::from_min_size(Pos2::new(sends_left + step * index as f32, below.top()), Vec2::splat(FIELD));
+        let offset_id = id.with("send-scroll-offset");
+        let max_offset = lane.sends.len().saturating_sub(shown_sends);
+        let mut offset = ui.ctx().data(|d| d.get_temp::<usize>(offset_id)).unwrap_or(0).min(max_offset);
+        if navigation > 0.0 && shown_sends > 0 {
+            let viewport = Rect::from_min_max(
+                Pos2::new(sends_left, below.top()),
+                Pos2::new(sends_left + step * shown_sends as f32 + navigation - SEND_GAP, below.bottom()),
+            );
+            state.value_areas.push(viewport.intersect(clip));
+            if ui.rect_contains_pointer(viewport.intersect(clip)) {
+                let scroll = ui.input_mut(|i| {
+                    if i.modifiers.shift {
+                        let mut delta = 0.0;
+                        i.raw.events.retain(|event| {
+                            if let egui::Event::MouseWheel { delta: wheel, .. } = event {
+                                delta += wheel.x + wheel.y;
+                                false
+                            } else {
+                                true
+                            }
+                        });
+                        i.smooth_scroll_delta = Vec2::ZERO;
+                        delta
+                    } else {
+                        0.0
+                    }
+                });
+                if scroll < 0.0 {
+                    offset = (offset + 1).min(max_offset);
+                }
+                if scroll > 0.0 {
+                    offset = offset.saturating_sub(1);
+                }
+            }
+            for (index, (glyph, label, enabled)) in
+                [("‹", "Previous sends", offset > 0), ("›", "Next sends", offset < max_offset)].into_iter().enumerate()
+            {
+                let at = Rect::from_min_size(
+                    Pos2::new(sends_left + step * shown_sends as f32 + index as f32 * 18.0, below.top()),
+                    Vec2::new(16.0, field_height),
+                );
+                let response = widgets::button_area(
+                    ui,
+                    at.intersect(clip),
+                    id.with(("send-scroll", index)),
+                    format!("{label} on {}", lane.name),
+                )
+                .on_hover_text("Scroll sends with Shift + mouse wheel");
+                widgets::track_button_face(ui, painter, at, &response, theme::control_background());
+                widgets::text_in(
+                    painter,
+                    at,
+                    Align2::CENTER_CENTER,
+                    glyph,
+                    theme::ui_font(theme::TEXT + 2.0),
+                    if enabled { theme::text_primary() } else { theme::text_hint() },
+                );
+                if enabled && response.clicked() {
+                    offset = if index == 0 { offset.saturating_sub(1) } else { (offset + 1).min(max_offset) };
+                }
+            }
+        }
+        ui.ctx().data_mut(|d| d.insert_temp(offset_id, offset));
+        for (index, send) in lane.sends.iter().skip(offset).take(shown_sends).enumerate() {
+            let knob = Rect::from_min_size(
+                Pos2::new(sends_left + step * index as f32, below.top()),
+                Vec2::new(SEND_WIDTH, field_height),
+            );
             send_knob(ui, painter, knob, clip, lane, send, id, state, actions);
         }
     }
 
     // Row 3, taller still: where the track's audio goes.
     if rect.height() >= SHOWS_ROUTING {
-        let top = row.bottom() + PAD + FIELD + PAD + 4.0;
+        let top = row.bottom().max(below.bottom()) + PAD + 4.0;
         let line = Rect::from_min_max(Pos2::new(inner.left(), top), Pos2::new(inner.right(), top + DROPDOWN));
-        if line.intersects(clip) {
+        if line.bottom() <= inner.bottom() && line.intersects(clip) {
             routing(ui, painter, line, lane, nest.groups, actions);
         }
         // Taller still, on a track that plays notes: which controllers it hears when armed.
         let input = line.translate(Vec2::new(0.0, DROPDOWN + PAD));
-        if rect.height() >= SHOWS_MIDI_INPUT && input.intersects(clip) {
+        if rect.height() >= SHOWS_MIDI_INPUT && input.bottom() <= inner.bottom() && input.intersects(clip) {
             if lane.plays_notes {
                 midi_input(ui, painter, input, lane, &timeline.midi_ports, actions);
             } else if lane.plays_audio {
@@ -4007,17 +4101,28 @@ fn send_knob(
         _ => committed.unwrap_or(level),
     };
     let position = ((shown - VOLUME_RANGE.0) / (VOLUME_RANGE.1 - VOLUME_RANGE.0)) as f32;
-    let pointer = motion::mix(theme::text_value(), theme::text_primary(), widgets::hover(ui, &response));
-    widgets::knob(painter, rect.center(), FIELD, position, pointer);
-    // The return's letter in the knob, and a dot under it when the send is before the fader.
+    let amount = widgets::hover(ui, &response);
+    let pointer = motion::mix(theme::text_value(), theme::text_primary(), amount);
+    let fill = motion::mix(theme::control_background(), theme::control_hover(), amount);
+    widgets::track_button_face(ui, painter, rect, &response, fill);
+    // A labelled send tile with a small level rail, rather than a miniature rotary dial.
+    let rail = Rect::from_min_max(
+        Pos2::new(rect.left() + 4.0, rect.bottom() - 3.0),
+        Pos2::new(rect.right() - 4.0, rect.bottom() - 1.5),
+    );
+    painter.rect_filled(rail, 1.0, theme::border_strong());
+    let level = Rect::from_min_size(rail.min, Vec2::new(rail.width() * position.clamp(0.0, 1.0), rail.height()));
+    painter.rect_filled(level, 1.0, pointer);
+    // The destination stays legible; a dot denotes pre-fader mode.
     let letter = send.name.chars().next().map(String::from).unwrap_or_default();
+    let caption = format!("{letter} {}", widgets::format_db(shown));
     widgets::text_in(
         painter,
-        rect,
+        rect.translate(Vec2::new(0.0, -1.0)),
         Align2::CENTER_CENTER,
-        &letter,
-        theme::mono_font(theme::TEXT_SMALL - 2.0),
-        theme::text_hint(),
+        &caption,
+        theme::mono_font(theme::TEXT_SMALL),
+        pointer,
     );
     if send.pre_fader {
         painter.circle_filled(Pos2::new(rect.center().x, rect.bottom() + 1.5), 1.5, theme::text_value());
@@ -4111,7 +4216,9 @@ fn value_control(
     match control {
         Control::Volume if plain => volume_text(painter, rect, shown, hover),
         Control::Volume if state.knobs => volume_knob(painter, rect, shown, hover),
-        Control::Volume => volume_field(painter, rect, shown, hover),
+        Control::Volume => {
+            volume_field(painter, rect, shown, hover, motion::mix(theme::control_background(), rgb(lane.color), 0.45))
+        }
         Control::Pan if state.knobs => pan_knob(painter, rect, shown),
         Control::Pan => pan_field(painter, rect, shown, hover),
     }
@@ -4175,14 +4282,14 @@ fn value_action(control: Control, tracks: &[TrackId], from: f64, to: f64) -> Act
 }
 
 /// A volume field: fill from the left up to the level, a tick at its end, the value on the right.
-fn volume_field(painter: &egui::Painter, rect: Rect, db: f64, hover: f32) {
-    painter.rect_filled(rect, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+fn volume_field(painter: &egui::Painter, rect: Rect, db: f64, hover: f32, fill: Color32) {
+    let radius = rect.height() * 0.5;
+    painter.rect_filled(rect, radius, motion::mix(theme::control_background(), theme::control_hover(), hover));
     let x = rect.left() + rect.width() * volume_position(db);
-    painter.rect_filled(Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom())), 0.0, theme::control_playing());
-    let tick = x.round() - 0.5;
-    painter.vline(tick, egui::Rangef::new(rect.top(), rect.top() + 2.0), theme::hairline(theme::text_value()));
-    painter.vline(tick, egui::Rangef::new(rect.bottom() - 2.0, rect.bottom()), theme::hairline(theme::text_value()));
-    let text = rect.shrink2(Vec2::new(4.0, 0.0));
+    // Clip the filled capsule rather than introducing square corners at its left edge.
+    let filled = Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom()));
+    painter.with_clip_rect(painter.clip_rect().intersect(filled)).rect_filled(rect, radius, fill);
+    let text = rect.shrink2(Vec2::new(8.0, 0.0));
     widgets::text_in(
         painter,
         text,

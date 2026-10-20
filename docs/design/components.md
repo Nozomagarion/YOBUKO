@@ -97,7 +97,7 @@ the view with the detail area, status bar.
 |---|---|
 | Menu bar | 20 px, `panel.background`, items 14 px apart in `text.secondary`: File (New or open…, Open…, Open recent › the recent projects newest first, up to 10, by name with the path as the tooltip, each opened as Open… opens a file, greyed out while there are none, a file that is gone saying so in the status bar; Save, Save as…, Save as template…, Quit), Edit, View, Projects, Options, Help (About Suhina, [spec](../spec/about.md)); Create, Playback and Navigate (planned) |
 | Tab row | 22 px, `window.background`, shown while two or more projects are open (ADR 0007): one tab per project, name (with " •" while it has unsaved changes, as the window title has) and a 12 px × to close; the active tab `panel.background` with `text.primary`, others `text.secondary`; Ctrl+Tab and Ctrl+Shift+Tab move between them |
-| Control bar | 28 px, `panel.background`, a 1 px `border` under it. Left: the browser's show/hide button (20 × 20, `control.background`, a 14 × 11 panel outline whose left part is filled in `text.primary` while the browser shows; "Hide browser" / "Show browser", the same as Ctrl+B), 4 px on, then 6 px apart: tempo (56 × 20 value field, `control.background`, 11 px mono right-aligned, dragged up or down), time signature (40 px, 11 px mono `text.secondary`, "4 / 4"), the grid and launch quantisation (64 px dropdown, 11 px mono, its list tall enough for every value; the tooltip says it also sets the Arrangement grid). Centre: play and stop (28 × 20 each, 1 px apart), the position (64 × 20 on `window.background`, 11 px mono, "bar.beat.sixteenth", bars through the time-signature changes). Right: the CPU load (56 × 20 on `window.background`, only while an engine plays: "CPU" in 9 px `text.hint` left and the smoothed percentage in 10 px mono `text.secondary` right, over a 2 px-tall bar of the load, `meter.normal` fill, `meter.hot` from 80 %, in a `control.background` track; the audio thread's share of wall time inside the engine's render call, per mille smoothed over 0.2 s windows, published as an atomic), then the view switch at the right edge, 6 px from it. Left of the CPU load, 6 px apart, the RAM (76 × 20 on `window.background`, always shown: "RAM" in 9 px `text.hint` left, the program's resident memory in 10 px mono `text.secondary` right, "512 MB", "2.3 GB"). Right, left to right: RAM, CPU load, view switch; a block that would come within 6 px of the position is left out, the RAM first. (planned): metronome, record, loop |
+| Control bar | 40 px, `panel.background`, a 1 px `border` under it. Left: the browser's show/hide button (20 × 20, `control.background`, a 14 × 11 panel outline whose left part is filled in `text.primary` while the browser shows; "Hide browser" / "Show browser", the same as Ctrl+B), 4 px on, then 6 px apart: tempo (56 × 20 value field, `control.background`, 11 px mono right-aligned, dragged up or down), time signature (40 px, 11 px mono `text.secondary`, "4 / 4"), the grid and launch quantisation (64 px dropdown, 11 px mono, its list tall enough for every value; the tooltip says it also sets the Arrangement grid). Centre: play and stop (28 × 20 each, 1 px apart), the position (64 × 20 on `window.background`, 11 px mono, "bar.beat.sixteenth", bars through the time-signature changes). Right: the CPU load (56 × 20 on `window.background`, only while an engine plays: "CPU" in 9 px `text.hint` left and the smoothed percentage in 10 px mono `text.secondary` right, over a 2 px-tall bar of the load, `meter.normal` fill, `meter.hot` from 80 %, in a `control.background` track; the audio thread's share of wall time inside the engine's render call, per mille smoothed over 0.2 s windows, published as an atomic), then the view switch at the right edge, 6 px from it. Left of the CPU load, 6 px apart, the RAM (76 × 20 on `window.background`, always shown: "RAM" in 9 px `text.hint` left, the program's resident memory in 10 px mono `text.secondary` right, "512 MB", "2.3 GB"). Right, left to right: RAM, CPU load, view switch; a block that would come within 6 px of the position is left out, the RAM first. (planned): metronome, record, loop |
 | Transport button | 28 × 20, `control.background`; play shows `control.activeBackground` while playing, its glyph in `accent`; stop is an 8 × 8 square in `text.primary`; record (planned) a 1.5 px red ring |
 | View switch | Text only, 11 px, right-aligned, 12 px apart: "Session", "Arrangement"; the current one `text.primary` with a 1 px underline, the other `text.secondary`. While a clip is dragged over the other view's name, a 1 px `accent` outline 3 px around it; after 0.5 s the view switches |
 | Open prompt | When a project is dropped while another is open and the setting says Ask: a 32 px row on `panel.background` above the view: "Open x:" In a new tab, In place of y, Cancel, Remember (which sets the setting) |
@@ -681,3 +681,72 @@ The rest of this table is planned.
 | Note | Track colour; opacity 0.4 + 0.6 × velocity / 127; name in 9 px when ≥ 2 beats wide; 1 px gap to neighbours; selected = 1 px `text.primary` inset |
 | Velocity lane | 72 px default (resizable); 36 px scale column (127, 64, 1); one 1 px stem per note with a 5 × 2 head, chord notes 4 px apart; selected stem `text.primary` |
 | Velocity tools | 18 px: Randomize, Ramp, Deviation as small value fields |
+
+## Local UI polish: Arrangement and transport
+
+The control bar is 40 px tall; custom transport fields and buttons are 28 px tall with
+6 px vertical padding. Dense list rows retain their existing height. Arrangement headers
+default to 336 px wide; new lanes default to 64 px; existing saved dimensions and manual
+resizing remain in use. Header surfaces use `track.headerBackground` and
+`track.headerSelectedBackground`, both editable theme colors, with a colored edge band
+and a selection outline. Muting, solo, arming, cueing, routing and sends remain available.
+
+### Track button experiment
+
+Shared solo, cue, arm, track-on and automation surfaces have a thin theme-colored outline,
+a distinct focus outline and a small proportional corner radius. Arrangement buttons are
+22 px wide (track-on remains 30 px). At roomy widths, the name and sends occupy the top
+line and transport-related track controls, volume and pan sit below. Narrow headers retain
+the compact layout. Sends, meters, routing, selection and command identifiers are preserved.
+The radius is currently a shared drawing rule, not yet an exposed appearance setting.
+
+### Header proportion refinement
+
+The default header width is 304 px, with a 72 px minimum volume field before the compact
+layout takes over. The pan field is 40 px wide. Track names use a 12 px label, separate
+from the 10 px values. The horizontal volume uses a capsule silhouette with its level fill
+clipped inside that silhouette and 8 px horizontal text padding. Existing header resizing
+and compact layouts remain available. These dimensions are still implementation constants.
+
+### Send fields and active value targets
+
+Arrangement sends use 64 px labelled fields with destination letters, numeric dB values and a small level rail.
+Dragging, double-click reset, numeric entry and pre/post context actions retain their commands.
+The pre-fader dot remains visible. The active numeric target uses an outside rounded accent
+ring so later surface drawing cannot leave sharp corner fragments; it does not change the
+background fill. Keyboard handling is unchanged.
+
+### Send overflow
+
+Sends remain on one horizontal line. When the available width cannot fit them all, reserve
+space for previous/next arrows and show a window of the send list. Shift plus mouse wheel
+over the send area moves that window by one destination per wheel event; the timeline
+does not scroll simultaneously. Each track keeps its own offset, clamped when the return
+count or header width changes. No automatic track-height changes or wrapping.
+
+### Quiet timeline grid
+
+Arrangement bar lines and track separators read `grid.major`; subdivisions read `grid.minor`.
+These are independent editable theme colors rather than shared panel/border colors. Studio
+Light uses pale warm-grey lines, following the Suhina website visual direction. Grid spacing
+and snapping are unchanged; bars remain stronger than subdivisions.
+
+### Typography, track tint and clip hierarchy
+
+Manrope explicitly uses weight 500; the variable font asset defaults to weight 200 and must
+not be used without selecting its weight. UI text is 12 px and small labels/values 11 px.
+Track header surfaces mix the user theme color with the track color (18 percent normally,
+32 percent selected). The edge band retains the track color.
+
+Clips use one muted color surface with a 2 px identity edge, not a bright contrasting title
+stripe. A clip tall enough for its title reserves that strip for the name; note/waveform
+previews start below it with a gap. Short clips omit the title rather than painting it over
+the preview. MIDI preview ink follows the body contrast in both light and dark themes.
+
+### Spacious track-header default
+
+New Arrangement lanes and return rows default to 64 px, with a 336 px header. At 60 px or
+more the name uses 14 px text and controls use 20 px rows with 6 px vertical padding. Below
+that height the compact metrics remain in use. Solo/cue/arm controls are 26 px wide. Manual
+resizing remains available. Volume fill is tinted by the track color; the Main channel keeps
+the theme fill. The selected-header outline is 1 px and more restrained.

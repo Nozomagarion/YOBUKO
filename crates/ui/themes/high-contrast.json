@@ -50,6 +50,10 @@
     "kind.vocal": "#E8D0A0",
     "kind.effect": "#9CC49C",
     "kind.other": "#8A8680",
-    "selection": "#FFD400"
+    "selection": "#FFD400",
+    "track.headerBackground": "#0A0A0A",
+    "track.headerSelectedBackground": "#3A3A3A",
+    "grid.major": "#3B3B3B",
+    "grid.minor": "#1A1A1A"
   }
 }

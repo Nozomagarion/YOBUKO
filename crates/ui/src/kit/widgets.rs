@@ -81,6 +81,15 @@ pub fn hover(ui: &Ui, response: &Response) -> f32 {
     motion::toward(ui.ctx(), response.id.with("hover"), response.hovered() || response.dragged(), motion::HOVER)
 }
 
+/// Shared track-button surface. Colors and focus outlines follow the active theme.
+/// Geometry stays inside the caller's hit target, including compact mixer strips.
+pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Response, fill: Color32) {
+    let radius = (rect.height() * 0.25).min(5.0);
+    painter.rect_filled(rect, radius, fill);
+    let edge = if response.has_focus() { theme::accent() } else { theme::border_strong() };
+    painter.rect_stroke(rect, radius, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+}
+
 /// Fill and text of a track-on toggle: light when on, dark when off, a step brighter hovered.
 pub fn toggle_colors(ui: &Ui, response: &Response, on: bool) -> (Color32, Color32) {
     let hover = hover(ui, response);
@@ -107,7 +116,7 @@ pub fn solo_button(
     let response = button_area(ui, rect, id, label);
     let lit = motion::toward(ui.ctx(), response.id.with("on"), solo, motion::VALUE);
     let off = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
-    painter.rect_filled(rect, 0.0, motion::mix(off, theme::accent(), lit));
+    track_button_face(ui, painter, rect, &response, motion::mix(off, theme::accent(), lit));
     let text = motion::mix(theme::text_secondary(), theme::window_background(), lit);
     text_in(painter, rect, Align2::CENTER_CENTER, "S", theme::ui_font(theme::TEXT_SMALL), text);
     if !response.clicked() {
@@ -135,7 +144,7 @@ pub fn cue_button(
     let label = if cue { format!("Stop cueing {name}") } else { format!("Cue {name} on the headphones") };
     let response = button_area(ui, rect, id, label);
     let (fill, text) = toggle_colors(ui, &response, cue);
-    painter.rect_filled(rect, 0.0, fill);
+    track_button_face(ui, painter, rect, &response, fill);
     headphones(painter, rect, text);
     response.clicked().then(|| Action::new("track.setCue", serde_json::json!({ "track": track, "cue": !cue })))
 }
@@ -183,7 +192,7 @@ pub fn arm_button(
     let response = button_area(ui, rect, id, label);
     let lit = motion::toward(ui.ctx(), response.id.with("on"), armed, motion::VALUE);
     let off = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
-    painter.rect_filled(rect, 0.0, motion::mix(off, theme::recording_background(), lit));
+    track_button_face(ui, painter, rect, &response, motion::mix(off, theme::recording_background(), lit));
     let radius = (rect.height().min(rect.width()) * 0.22).clamp(2.5, 4.0);
     let ring = motion::mix(theme::text_secondary(), theme::recording(), lit);
     painter.circle_stroke(rect.center(), radius, Stroke::new(1.2, ring));
@@ -366,7 +375,10 @@ fn value_keys(ui: &Ui, response: &Response) -> (i32, bool, Option<String>) {
     ctx.data_mut(|d| d.insert_temp(typed_id, typed.clone()));
     // Lit while it takes the keys; what is typed shows over it.
     let painter = ui.painter_at(response.rect);
-    painter.rect_stroke(response.rect, 0.0, Stroke::new(1.0, theme::accent()), egui::StrokeKind::Inside);
+    // Keep the target ring outside the surface: custom value painters run after key handling
+    // and would cover an inset rectangle, leaving only sharp yellow corners behind.
+    let radius = if response.rect.width() > response.rect.height() * 4.0 { response.rect.height() * 0.5 } else { 4.0 };
+    painter.rect_stroke(response.rect, radius, Stroke::new(1.0, theme::accent()), egui::StrokeKind::Outside);
     if !typed.is_empty() {
         painter.rect_filled(response.rect.shrink(1.0), 0.0, theme::control_active());
         painter.text(

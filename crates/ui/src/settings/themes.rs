@@ -21,7 +21,7 @@ pub struct ThemeEntry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileAction {
     /// Write the theme to `<id>.json`.
-    Save { id: String, theme: Theme },
+    Save { id: String, theme: Box<Theme> },
     /// Rename `<from>.json` to `<to>.json`, before it is saved under its new name.
     Rename { from: String, to: String },
     /// Read every theme file again.
@@ -182,7 +182,7 @@ impl Themes {
         for item in pending {
             let action = match item {
                 Pending::Save(id) => match self.get(&id) {
-                    Some(theme) => FileAction::Save { id, theme: theme.clone() },
+                    Some(theme) => FileAction::Save { id, theme: Box::new(theme.clone()) },
                     None => continue,
                 },
                 Pending::Other(action) => *action,
@@ -328,7 +328,7 @@ mod tests {
                 FileAction::Rename { from: "night".into(), to: "deep-sea".into() },
                 FileAction::Save {
                     id: "deep-sea".into(),
-                    theme: Theme { name: "Deep Sea".into(), colors: night().theme.colors }
+                    theme: Box::new(Theme { name: "Deep Sea".into(), colors: night().theme.colors })
                 },
             ]
         );

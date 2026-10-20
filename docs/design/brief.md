@@ -44,7 +44,7 @@ From [research](#sources) and the first design rounds:
 1. **Grey first.** Build hierarchy with lightness only, check it in greyscale, add colour last.
 2. **Quiet the surroundings** instead of shouting the important thing.
 3. **States differ in lightness, not hue alone** (playing is brighter, not just "accent").
-4. **Two type sizes:** 11 px for UI text, 10 px for small values. No bold headings. 9 px is
+4. **Two type sizes:** 12 px for UI text, 11 px for small values. No bold headings. 9 px is
    kept for tags beside a name, 13 px for a page title (components › Global rules).
 5. **One window, no pop-ups.** Menus and pickers open in place. The exceptions are plug-in
    editors, which float in their own windows (ADR 0006), the project dialogs, and the sample map
@@ -74,7 +74,7 @@ From [research](#sources) and the first design rounds:
 | Base palette | Warm graphite surfaces in four lightness steps (see tokens) | Live's neutral mid-grey |
 | Accent | Iris `#A6A3FF`, used sparingly: transport play, solo, queued, device on, selected parameter | Orange as the active colour; cyan as the value colour |
 | Track colours | Our own muted palette (terracotta, ochre, steel blue, lavender, …) | Live's saturated pastel palette |
-| Type | Encode Sans Semi Expanded for UI text, IBM Plex Mono for numbers and time | Live's typeface |
+| Type | Manrope for UI text, IBM Plex Mono for numbers and time | Live's typeface |
 | Knobs | Small circle with a pointer line, value below | Live's open arc knobs |
 | Value fields | Neutral grey fill; volume fills full height with a level tick at the edges only; pan is a thin bottom bar growing from a centre tick | Live's cyan-filled boxes |
 | Toggles | Track on = light grey number button; solo = accent; arm = red ring, filled when armed | The orange numbered track button |
@@ -191,3 +191,34 @@ If (2) fails, change colours, control shapes, typography and wording, not the la
   [linux-audio-dev on dark themes](https://lists.linuxaudio.org/archives/linux-audio-dev/2022-June/038377.html),
   [MOD forum on knob readability](https://forum.mod.audio/t/plugin-artwork/7353/98).
 - [Mycroft, QMUL: visual load and listening](https://qmro.qmul.ac.uk/xmlui/handle/123456789/44047?show=full).
+
+## Local Studio appearance experiment
+
+Studio Light and Studio Dark are opt-in themes using warm surfaces and gold accents.
+Arrangement headers keep their track-color edge band on neutral, theme-editable surfaces
+(`track.headerBackground`, `track.headerSelectedBackground`). Missing new tokens in older
+theme files fall back to the built-in palette. Header selection retains an outline.
+The larger transport and initial Arrangement dimensions are described in components.
+These initial dimensions are shared implementation constants, not yet user-configurable
+appearance metrics; the planned metrics settings remain follow-up work.
+
+### Website-to-application direction
+
+Use the Suhina website as the primary visual reference: warm paper/charcoal, muted clip
+colors, a restrained gold accent, thin quiet grid lines and readable hierarchy. Preserve a
+dense music workspace without making every field equally prominent. Glass is an optional
+material, not the visual foundation; solid mode must look complete on its own. Grid strength
+is independently editable through `grid.major` and `grid.minor`.
+
+Public references reviewed on 20 October 2026: [Bitwig display profiles](https://www.bitwig.com/userguide/latest/a_musical_swiss_army_knife/),
+[Live display and theme settings](https://www.ableton.com/en/manual/first-steps/), and
+[FabFilter scaling](https://www.fabfilter.com/help/micro/using/scaling). These inform general
+principles (adaptable density, separate color controls, usable scaling), not copied graphics,
+text, widget shapes or layouts. No proprietary assets were downloaded into this repository.
+
+### Default UI typeface
+
+Manrope is the default proportional UI font, matching the website. The original Encode Sans
+Semi Expanded asset and license remain embedded as a fallback and the named `encode-sans`
+font family. This does not yet add a user-facing font selector (#513). Number fields retain
+IBM Plex Mono. All bundled fonts load offline.

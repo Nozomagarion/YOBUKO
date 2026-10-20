@@ -585,7 +585,7 @@ pub fn header_button(
     }
     let hover = widgets::hover(ui, &response);
     let off = crate::kit::motion::mix(theme::control_background(), theme::control_hover(), hover);
-    painter.rect_filled(rect, 0.0, if open { theme::control_active() } else { off });
+    widgets::track_button_face(ui, painter, rect, &response, if open { theme::control_active() } else { off });
     // A small envelope: up, along, down.
     let glyph = rect.shrink2(Vec2::new(4.0, 4.0));
     let line = vec![
