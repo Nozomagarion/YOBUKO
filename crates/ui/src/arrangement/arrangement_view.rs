@@ -59,7 +59,6 @@ const SOLO: f32 = 26.0;
 /// A group's fold triangle at the start of its header row.
 const FOLD: f32 = 12.0;
 /// How far a track inside a group is indented in its header, a level.
-const INDENT: f32 = 16.0;
 /// The track colour's band down a header's left edge.
 const COLOUR_BAND: f32 = 6.0;
 /// Points per beat: the default and the zoom range.
@@ -3680,6 +3679,15 @@ fn lying_meter(right: f32, y: f32) -> Rect {
     Rect::from_min_max(Pos2::new(right - LYING_METER, y - meter::WIDTH / 2.0), Pos2::new(right, y + meter::WIDTH / 2.0))
 }
 
+fn nesting_band_width(depth: usize) -> f32 {
+    match depth {
+        0 => COLOUR_BAND,
+        1 => 4.0,
+        2 => 3.0,
+        _ => 2.0,
+    }
+}
+
 /// A header's colour band: the track's colour down its left edge, the full height of the header
 /// (dimmed while the track is off). A click opens the palette; gives the band's rectangle.
 fn colour_band(
@@ -3691,7 +3699,7 @@ fn colour_band(
     id: Id,
     actions: &mut Vec<Action>,
 ) -> Rect {
-    let band = Rect::from_min_size(rect.min, Vec2::new(COLOUR_BAND, rect.height()));
+    let band = Rect::from_min_size(rect.min, Vec2::new(nesting_band_width(lane.depth), rect.height()));
     painter.rect_filled(band, 0.0, colour_picker::fill(lane.color, lane.mute));
     if band.intersects(clip) {
         colour_picker::area(ui, band.intersect(clip), id.with("colour"), lane.track, &lane.name, lane.color, actions);
@@ -3807,8 +3815,6 @@ fn track_header(
         let outline = motion::mix(theme::border_strong(), saturated(rgb(lane.color)), 0.5);
         painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, outline), StrokeKind::Inside);
     }
-    // The track's colour runs down the header's left edge; a click there opens the palette.
-    let band = colour_band(ui, painter, rect, clip, lane, id, actions);
     // A track inside groups has their colours down its indent, the outermost first, so a group and
     // its tracks read as one block: the group's colour runs from its header down all of them.
     let mut ancestors = Vec::new();
@@ -3818,17 +3824,22 @@ fn track_header(
         ancestors.push(group_lane.color);
         parent = group_lane.parent;
     }
+    let mut band_left = rect.left();
     for (level, color) in ancestors.iter().rev().enumerate() {
-        let left = band.right() + level as f32 * INDENT;
-        let strip = Rect::from_min_max(Pos2::new(left, rect.top()), Pos2::new(left + INDENT - 2.0, rect.bottom()));
+        let width = nesting_band_width(level);
+        let strip = Rect::from_min_size(Pos2::new(band_left, rect.top()), Vec2::new(width, rect.height()));
         if strip.intersects(clip) {
             painter.rect_filled(strip.intersect(clip), 0.0, rgb(*color));
         }
+        band_left += width + 2.0;
     }
+    // The track's own band follows its ancestors and opens its colour palette.
+    let band_rect = Rect::from_min_max(Pos2::new(band_left, rect.top()), rect.max);
+    let band = colour_band(ui, painter, band_rect, clip, lane, id, actions);
     // The meter stands at the right edge; the rows keep clear of it.
     let meter_x = rect.right() - PAD - meter::WIDTH;
     let inner = Rect::from_min_max(
-        Pos2::new(band.right() + PAD + lane.depth as f32 * INDENT, rect.top() + header_pad),
+        Pos2::new(band.right() + PAD, rect.top() + header_pad),
         Pos2::new(meter_x - PAD, rect.bottom() - header_pad),
     );
     let meter_bottom = if rect.height() >= SHOWS_MIXER {

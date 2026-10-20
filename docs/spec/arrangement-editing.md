@@ -703,9 +703,11 @@ output; each group's volume, mute and devices apply on the way ([ADR 0004](../de
 › 10), and solo follows the nesting: a soloed track is heard through every group above it, a
 soloed group plays everything inside it at any depth.
 
-A header shows its nesting by stepping in 16 px per level; every header keeps the fold triangle's
-room, so a group's tracks start clearly to the right of their group, and each level of the indent
-is filled with that group's colour, so a group and its tracks read as one block. A group's menu
+A header shows its nesting with full-height colour bands, outermost group first and the track's
+own band last. Bands narrow with depth: 6, 4, 3, then 2 px at every deeper level, with 2 px between
+bands. Descendants keep each ancestor's band aligned with its header, so a group reads as one
+block without deep nesting crowding the controls. Every header keeps the fold triangle's room.
+A group's menu
 has **Assign track color to all tracks and clips**, which gives every track inside it, at any depth,
 the colour the group shows, and turns the clips of the group and of those tracks back to their
 track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's top notches are at most 4 px wide on each side of the boundary and

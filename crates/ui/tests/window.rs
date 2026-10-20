@@ -1659,6 +1659,14 @@ fn groups_nest_fold_and_take_tracks_from_the_menu_and_by_dragging() {
     assert_eq!(names(&harness)[..3], ["Group", "Group", "Drums"]);
     assert_eq!(parent_name(&harness, "Drums").as_deref(), Some("Group"));
 
+    // Ancestor bands stay aligned while each deeper level becomes thinner.
+    let groups: Vec<_> = harness.get_all_by_label("Group colour").map(|node| node.rect()).collect();
+    let drums = harness.get_by_label("Drums colour").rect();
+    assert_eq!(groups.len(), 2);
+    assert_eq!((groups[0].width(), groups[1].width(), drums.width()), (6.0, 4.0, 3.0));
+    assert_eq!(groups[1].left() - groups[0].left(), 8.0);
+    assert_eq!(drums.left() - groups[1].left(), 6.0);
+
     // Keys into the outer group from its menu.
     harness.get_by_label("Track Keys").click_secondary();
     harness.run();
