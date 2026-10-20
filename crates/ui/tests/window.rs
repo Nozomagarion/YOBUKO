@@ -4989,15 +4989,21 @@ fn loop_boundaries_appear_while_extending_the_clip_before_release() {
         fn notch_at(shape: &egui::Shape, x: f32, y: f32) -> bool {
             match shape {
                 egui::Shape::Vec(shapes) => shapes.iter().any(|s| notch_at(s, x, y)),
-                egui::Shape::Path(path) if path.closed && path.points.len() == 3 => {
-                    path.points.iter().any(|p| (p.x - x).abs() < 1.0 && p.y > y + 1.0 && p.y < y + 6.0)
-                        && path.points.iter().any(|p| (p.y - y).abs() < 0.5)
+                egui::Shape::Circle(circle) => {
+                    (circle.center.x - x).abs() < 1.0
+                        && (circle.center.y - y).abs() < 0.5
+                        && circle.radius > 1.0
+                        && circle.radius <= 4.0
                 }
                 _ => false,
             }
         }
         for boundary in [clip.left() + 32.5, clip.left() + 64.5] {
-            let drawn = h.output().shapes.iter().any(|s| notch_at(&s.shape, boundary, clip.top()));
+            let drawn = h
+                .output()
+                .shapes
+                .iter()
+                .any(|s| notch_at(&s.shape, boundary, clip.top()) && s.clip_rect.top() >= clip.top());
             assert_eq!(
                 drawn,
                 looped && period * 8.0 >= 24.0,

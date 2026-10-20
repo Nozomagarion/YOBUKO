@@ -764,7 +764,7 @@ editable theme tokens from the canvas background. Horizontal lane boundaries fol
 line strength. Clip titles reserve up to 22 px (less than half the clip height), with 7 px left inset and 12 px type. Content stays below
 the title. A contrasting, same-hue leading edge is 3 px, widening to 4 px when selected; selection
 outlines are 1 px. Loop seams use half the leading-edge contrast with a 1 px continuous vertical line and a
-canvas-coloured top cutout (up to 4 px deep); there is no bottom notch.
+canvas-coloured semicircular top cutout (up to 4 px deep); there is no bottom notch.
 
 Track buttons keep their filled hit areas but draw outlines only on hover or keyboard focus.
 Sends show their destination, value and level rail without an idle box. Secondary routing fields

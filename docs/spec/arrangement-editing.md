@@ -857,7 +857,8 @@ height; collapse uses the customized Compact height. No Minimal size is offered.
 Loop boundaries follow the live right-edge resize span before release. They are calculated from
 the loop's source timing, not limited to marks cached at the committed clip length. Non-looping
 clips gain no repeat marks. Top notches are suppressed below 24 px per loop pass; above that,
-their width scales with pass width, up to 4 px. This avoids a sawtooth edge when zoomed out.
+their radius scales with pass width, up to 4 px. The cutout is a smooth semicircle clipped
+inside the clip, rather than a pointed V. This avoids a sawtooth edge when zoomed out.
 
 Searching for a track-size setting keeps the entire Track sizes section visible, including
 Advanced and the height controls. Changing a default applies immediately to all rows of that

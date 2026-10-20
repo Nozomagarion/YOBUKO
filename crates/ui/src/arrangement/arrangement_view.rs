@@ -3491,11 +3491,12 @@ fn paint_clip(
             continue;
         }
         let notch = 4.0_f32.min(pass_width * 0.06).min(rect.height() * 0.2);
-        painter.add(egui::Shape::convex_polygon(
-            vec![Pos2::new(x - notch, rect.top()), Pos2::new(x + notch, rect.top()), Pos2::new(x, rect.top() + notch)],
+        // Only the lower semicircle cuts into the clip; leave the grid above intact.
+        painter.with_clip_rect(painter.clip_rect().intersect(rect)).circle_filled(
+            Pos2::new(x, rect.top()),
+            notch,
             theme::window_background(),
-            egui::Stroke::NONE,
-        ));
+        );
     }
     // A fade is a line over the waveform, from the clip's bottom corner to where it ends at
     // the top, following its shape and curve.
