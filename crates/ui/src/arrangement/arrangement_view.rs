@@ -372,6 +372,8 @@ pub struct ArrangementViewState {
     pub header_width: f32,
     heights: HashMap<TrackId, f32>,
     sizes: TrackSizes,
+    apply_track_default: bool,
+    apply_return_default: bool,
     expanded_heights: HashMap<TrackId, f32>,
     /// The selected clips, in the order they were picked, and the one clicked last: a Shift-click
     /// takes the run of clips from it, and the other views work on it.
@@ -501,6 +503,8 @@ impl Default for ArrangementViewState {
             header_width: HEADER_COLUMN,
             heights: HashMap::new(),
             sizes: TrackSizes::default(),
+            apply_track_default: false,
+            apply_return_default: false,
             expanded_heights: HashMap::new(),
             selected: Vec::new(),
             anchor: None,
@@ -810,12 +814,29 @@ impl ArrangementViewState {
         if sizes == self.sizes {
             return;
         }
+        self.apply_track_default |= sizes.tracks != self.sizes.tracks;
+        self.apply_return_default |= sizes.returns != self.sizes.returns;
         for height in self.heights.values_mut().chain(self.expanded_heights.values_mut()) {
             if let Some(size) = TrackSize::ALL.into_iter().find(|s| f32::from(self.sizes.height(*s)) == *height) {
                 *height = f32::from(sizes.height(size));
             }
         }
         self.sizes = sizes;
+    }
+
+    /// A changed default applies to its rows immediately, including a previous Resize all.
+    pub(crate) fn apply_size_defaults(&mut self, timeline: &Timeline) {
+        if !self.apply_track_default && !self.apply_return_default {
+            return;
+        }
+        for lane in &timeline.lanes {
+            if if lane.kind == ColumnKind::Return { self.apply_return_default } else { self.apply_track_default } {
+                self.heights.remove(&lane.track);
+                self.expanded_heights.remove(&lane.track);
+            }
+        }
+        self.apply_track_default = false;
+        self.apply_return_default = false;
     }
 
     /// Toggle a lane between the smallest row and its last expanded height.
@@ -1116,6 +1137,7 @@ pub fn show(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState, 
 }
 
 fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState, actions: &mut Vec<Action>) {
+    state.apply_size_defaults(timeline);
     // The track lanes shown: every one but the return tracks, or only the focused one.
     let focus = state.focus;
     let area = ui.available_rect_before_wrap();
@@ -3460,13 +3482,22 @@ fn paint_clip(
     }
     // Loop boundaries share the leading edge's contrast, with a small top notch so they
     // remain distinct from the grid and playhead at every lane height.
-    for seam in &clip.seams {
+    let span = f64::from((rect.right() - x_of(start)) / beat_width);
+    let preview_seams =
+        (span > clip.length + 1e-6).then(|| super::timeline::loop_seams_for_span(clip.loop_range, clip.offset, span));
+    let seams = preview_seams.as_deref().unwrap_or(&clip.seams);
+    let pass_width = clip.loop_range.map_or(0.0, |range| (range.end - range.start) as f32 * beat_width);
+    for seam in seams {
         let x = x_of(start + seam).round() + 0.5;
         if x < view.left() - 4.0 || x > view.right() + 4.0 || x <= rect.left() || x >= rect.right() {
             continue;
         }
         painter.vline(x, rect.y_range(), egui::Stroke::new(1.0, motion::mix(body, edge_ink, 0.5)));
-        let notch = 4.0_f32.min(rect.height() * 0.2);
+        // Dense passes should not turn the top edge into a sawtooth.
+        if pass_width < 24.0 {
+            continue;
+        }
+        let notch = 4.0_f32.min(pass_width * 0.06).min(rect.height() * 0.2);
         painter.add(egui::Shape::convex_polygon(
             vec![Pos2::new(x - notch, rect.top()), Pos2::new(x + notch, rect.top()), Pos2::new(x, rect.top() + notch)],
             theme::window_background(),

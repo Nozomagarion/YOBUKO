@@ -97,3 +97,9 @@ page and section. Tests check that every saved setting is on exactly one page.
 Named row sizes and their ordering, live application and persistence are specified in
 [Arrangement editing](arrangement-editing.md#named-row-sizes). Pixel values are hidden until
 Advanced track sizes is enabled; the same bounded controls remain editable in both modes.
+
+Track sizes is an interdependent search group: a match on any of its settings shows the whole
+section, so searching for the default also exposes Advanced and per-size tuning. Default changes
+and tuning apply on the next frame, including while Settings is open. Changing a default replaces
+height overrides for that kind of row (regular tracks or returns); preset tuning preserves manual
+heights that do not match a named size.

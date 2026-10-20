@@ -8,7 +8,9 @@
 use std::sync::Arc;
 use suhina_engine::LauncherMonitor;
 
-use suhina_engine::model::{ChannelRole, Clip, ClipContent, ClipId, FadeCurve, LaneData, Meter, Project, Rgb, TrackId};
+use suhina_engine::model::{
+    ChannelRole, Clip, ClipContent, ClipId, FadeCurve, LaneData, LoopRange, Meter, Project, Rgb, TrackId,
+};
 
 use crate::interaction::grid::{ColumnKind, default_track_colour, gain_to_db};
 use crate::interaction::nesting::depth;
@@ -88,6 +90,9 @@ pub struct ClipBox {
     /// Where a looping clip starts another pass through its loop, in beats from its start: the
     /// clip marks each with a continuous vertical line and a small top notch (#700).
     pub seams: Vec<f64>,
+    /// Loop source timing, retained for right-edge previews beyond the committed length.
+    pub loop_range: Option<LoopRange>,
+    pub offset: f64,
     /// The sub-row the clip is drawn in, and how many the lane has: more than one where clips
     /// overlap (stacked), so each stays visible.
     pub row: usize,
@@ -332,6 +337,8 @@ impl Timeline {
                                 audio_view: content.and_then(|c| audio_view(c, clip, project.transport.tempo_bpm)),
                                 notes: content.map(|c| note_marks(c, clip)).unwrap_or_default(),
                                 seams: loop_seams(clip),
+                                loop_range: clip.loop_range,
+                                offset: clip.offset,
                                 row: 0,
                                 rows: 1,
                             }
@@ -706,13 +713,21 @@ fn sub_rows(mut clips: Vec<ClipBox>, track: TrackId, before: &StackRows, after: 
 /// plays it: the first pass runs from its offset (or the loop's start, for an offset past the
 /// loop) to the loop's end, each after it through the whole loop. None when it does not loop.
 pub fn loop_seams(clip: &Clip) -> Vec<f64> {
-    let Some(range) = clip.loop_range.filter(|r| r.start.is_finite() && r.end.is_finite() && r.end > r.start) else {
+    loop_seams_for_span(clip.loop_range, clip.offset, clip.length)
+}
+
+/// Loop marks for a visible span, including a resize that has not been committed yet.
+pub fn loop_seams_for_span(range: Option<LoopRange>, offset: f64, length: f64) -> Vec<f64> {
+    if !offset.is_finite() || !length.is_finite() || length <= 0.0 {
+        return Vec::new();
+    }
+    let Some(range) = range.filter(|r| r.start.is_finite() && r.end.is_finite() && r.end > r.start) else {
         return Vec::new();
     };
     let pass = range.end - range.start;
-    let mut at = if clip.offset >= range.end { pass } else { range.end - clip.offset };
+    let mut at = if offset >= range.end { pass } else { range.end - offset };
     let mut seams = Vec::new();
-    while at < clip.length - 1e-9 && seams.len() < MAX_MARKS {
+    while at < length - 1e-9 && seams.len() < MAX_MARKS {
         seams.push(at);
         at += pass;
     }

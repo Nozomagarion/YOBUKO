@@ -786,9 +786,12 @@ a title omit this separator, preserving the full preview area.
 ### Named row sizes
 
 Arrangement › Track sizes has Compact, Small, Medium and Large defaults, independently for
-tracks and returns. Each size has a tuning slider; Advanced reveals the numeric pixel value.
+tracks and returns. Each size has a tuning slider; Advanced offers directly editable pixel fields.
 Neighbouring sizes bound each slider, preserving strict order. The same presets are available
 through Resize all in the header corner beside the returns toggle and waveform zoom. Below
 210 px header width the returns toggle moves to the middle line to avoid overlap. Value-field
 keyboard focus uses a neutral `text.secondary` outline. Ctrl/Cmd+wheel adjusts a value field;
 Alt+wheel remains available to zoom track heights.
+
+Loop notches scale with the on-screen pass width and disappear below 24 px per pass. The
+continuous loop separator remains, and live right-edge resizing reveals new boundaries before release.

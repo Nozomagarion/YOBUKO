@@ -4953,3 +4953,68 @@ fn ctrl_r_with_several_clips_selected_renames_them_all() {
         .count();
     assert_eq!(named, count);
 }
+
+#[test]
+fn loop_boundaries_appear_while_extending_the_clip_before_release() {
+    for (looped, period) in [(true, 4.0), (false, 4.0), (true, 1.0)] {
+        let mut project = demo_project();
+        let clips = &mut project.arrangement.lanes[0].clips;
+        clips.retain(|c| (c.start - 64.0).abs() < 1e-6);
+        clips[0].length = 4.0;
+        clips[0].offset = 0.0;
+        clips[0].loop_range = looped.then_some(suhina_engine::model::LoopRange { start: 0.0, end: period });
+        let mut app = App::new();
+        app.set_session(Session::new(project), &[]);
+        let mut h = window(app);
+        h.get_by_label("Arrangement view").click();
+        h.run();
+        let clip = h.get_by_label("Clip Beat B on Drums at bar 17").rect();
+        let edge = h.get_by_label("Right edge of Beat B on Drums").rect().center();
+        h.hover_at(edge);
+        h.run();
+        h.drag_at(edge);
+        h.run();
+        for dx in [16.0, 32.0, 64.0] {
+            h.hover_at(edge + egui::vec2(dx, 0.0));
+            h.run();
+        }
+        fn notch_at(shape: &egui::Shape, x: f32, y: f32) -> bool {
+            match shape {
+                egui::Shape::Vec(shapes) => shapes.iter().any(|s| notch_at(s, x, y)),
+                egui::Shape::Path(path) if path.closed && path.points.len() == 3 => {
+                    path.points.iter().any(|p| (p.x - x).abs() < 1.0 && p.y > y + 1.0 && p.y < y + 6.0)
+                        && path.points.iter().any(|p| (p.y - y).abs() < 0.5)
+                }
+                _ => false,
+            }
+        }
+        for boundary in [clip.left() + 32.5, clip.left() + 64.5] {
+            let drawn = h.output().shapes.iter().any(|s| notch_at(&s.shape, boundary, clip.top()));
+            assert_eq!(
+                drawn,
+                looped && period * 8.0 >= 24.0,
+                "live notch at {boundary}, looped={looped}, period={period}"
+            );
+            fn boundary_at(shape: &egui::Shape, x: f32, clip: egui::Rect) -> bool {
+                match shape {
+                    egui::Shape::Vec(shapes) => shapes.iter().any(|s| boundary_at(s, x, clip)),
+                    egui::Shape::LineSegment { points, .. } => {
+                        points.iter().all(|p| (p.x - x).abs() < 0.5)
+                            && (points[0].y - clip.top()).abs() < 0.5
+                            && (points[1].y - clip.bottom()).abs() < 0.5
+                    }
+                    _ => false,
+                }
+            }
+            let line = h.output().shapes.iter().any(|s| boundary_at(&s.shape, boundary, clip));
+            assert_eq!(line, looped, "boundary remains visible when distant notches are suppressed");
+        }
+        assert_eq!(
+            h.state().session().unwrap().project().arrangement.lanes[0].clips[0].length,
+            4.0,
+            "the preview is checked before committing the resize"
+        );
+        h.drop_at(edge + egui::vec2(64.0, 0.0));
+        h.run();
+    }
+}

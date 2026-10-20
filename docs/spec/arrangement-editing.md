@@ -839,9 +839,9 @@ Row height is view state, not an edit to the music project.
 Settings › Arrangement › Track sizes chooses independent named defaults for ordinary tracks
 and returns: Compact, Small, Medium and Large. Initial heights are 20, 40, 64 and 104 px,
 respectively; the defaults are Small for tracks and Compact for returns. Sliders customize each
-size without showing units. Advanced track sizes exposes exact pixel values on those sliders.
+size without showing units. Advanced track sizes replaces the sliders with directly editable pixel fields.
 Sizes are strictly ordered and bounded to 20–400 px, including when loading hand-edited settings.
-Changing a default updates rows without manual overrides. Changing a preset updates matching
+Changing a default updates all rows of that kind, replacing their earlier height overrides. Changing a preset updates matching
 preset heights, preserving other manual sizes.
 
 Resize all, beside Hide returns and waveform zoom above the track headers, sets every track
@@ -849,3 +849,14 @@ and return to one of the four named heights (including hidden returns and folded
 It changes view state, not the project or its undo history. Subsequent tracks still use the
 independent defaults. Quick-expand restores the last expanded height or the customized Small
 height; collapse uses the customized Compact height. No Minimal size is offered.
+
+Loop boundaries follow the live right-edge resize span before release. They are calculated from
+the loop's source timing, not limited to marks cached at the committed clip length. Non-looping
+clips gain no repeat marks. Top notches are suppressed below 24 px per loop pass; above that,
+their width scales with pass width, up to 4 px. This avoids a sawtooth edge when zoomed out.
+
+Searching for a track-size setting keeps the entire Track sizes section visible, including
+Advanced and the height controls. Changing a default applies immediately to all rows of that
+kind, replacing earlier Resize all/manual height overrides for those rows. The other kind's
+heights stay as they are. Editing a named height updates matching sizes live, including while
+Settings remains open.

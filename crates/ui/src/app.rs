@@ -2251,6 +2251,9 @@ impl App {
         self.arrangement.name_bar_moves = !self.settings.view.clip_halves;
         self.arrangement.grid_in_clips = self.settings.view.grid_in_clips;
         self.arrangement.set_size_settings(self.settings.view.track_sizes);
+        if let Some((_, _, timeline)) = &self.timeline {
+            self.arrangement.apply_size_defaults(timeline);
+        }
         self.arrangement.stretch_alt = self.settings.view.stretch_alt;
         // Any press ends a device panel's hold on Delete and the mute key; a click on a panel
         // takes it again when the button comes up, whether or not the detail area is shown.

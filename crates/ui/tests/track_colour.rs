@@ -267,16 +267,45 @@ fn custom_presets_apply_live_and_resize_all_includes_hidden_returns() {
 #[test]
 fn named_track_default_can_be_changed_from_settings_search() {
     let mut h = arrangement();
+    // Explicit Resize all overrides must not block later changes to the default.
+    h.get_by_label("Resize all tracks").click();
+    h.run();
+    h.get_by_label("Large").click();
+    h.run();
     h.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
     h.run();
     h.get_by_label("Search settings").focus();
     h.run();
     h.get_by_label("Search settings").type_text("default track size");
     h.run();
+    assert!(h.query_by_label("Advanced track sizes: On").is_some(), "search keeps Advanced visible");
+    assert!(h.query_by_label("Medium height").is_some(), "search keeps size tuning visible");
     h.get_by_label("Default track size: Medium").click();
     h.run();
     assert_eq!(h.state().settings().view.track_sizes.tracks, suhina_ui::settings::track_sizes::TrackSize::Medium);
+    assert_eq!(
+        h.state().arrangement().lane_height(suhina_engine::model::TrackId(1)),
+        64.0,
+        "default applies live before closing Settings, even after Resize all"
+    );
+    h.get_by_label("Advanced track sizes: On").click();
+    h.run();
+    h.get_by_label("Medium height").click();
+    h.run();
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.run();
+    h.input_mut().events.push(egui::Event::Text("78".into()));
+    h.run();
+    h.key_press(Key::Enter);
+    h.run();
+    let tuned = h.state().settings().view.track_sizes.height(suhina_ui::settings::track_sizes::TrackSize::Medium);
+    assert_eq!(tuned, 78, "the user can type an exact height in Advanced");
+    assert_eq!(
+        h.state().arrangement().lane_height(suhina_engine::model::TrackId(1)),
+        f32::from(tuned),
+        "height tuning applies live without closing Settings"
+    );
     h.get_by_label("Close settings").click();
     h.run();
-    assert!((h.get_by_label("Track Drums").rect().height() - 64.0).abs() < 0.5);
+    assert!((h.get_by_label("Track Drums").rect().height() - f32::from(tuned)).abs() < 0.5);
 }

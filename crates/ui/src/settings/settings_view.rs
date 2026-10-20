@@ -435,10 +435,13 @@ impl Cx<'_> {
         let (lower, upper) = sizes.bounds(size);
         let mut value = sizes.height(size);
         let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
-        let slider = egui::Slider::new(&mut value, lower..=upper).show_value(sizes.advanced);
-        let slider = if sizes.advanced { slider.suffix(" px") } else { slider };
-        let response = self.ui.put(rect, slider);
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, self.name));
+        let response = if sizes.advanced {
+            self.ui.put(rect, egui::DragValue::new(&mut value).range(lower..=upper).speed(1).suffix(" px"))
+        } else {
+            self.ui.put(rect, egui::Slider::new(&mut value, lower..=upper).show_value(false))
+        };
+        let kind = if sizes.advanced { egui::WidgetType::DragValue } else { egui::WidgetType::Slider };
+        response.widget_info(|| egui::WidgetInfo::labeled(kind, true, self.name));
         if response.changed() {
             self.settings.view.track_sizes.set_height(size, value);
             self.outcome.changed = true;
@@ -658,8 +661,15 @@ fn page_body(
     };
     let mut y = page.top();
     let mut heading: Option<(Page, &str)> = None;
+    // Size defaults, tuning and Advanced form one interdependent group in search results.
+    let sizes_match = !words.is_empty()
+        && entries().iter().any(|e| e.page == Page::Arrangement && e.section == "Track sizes" && e.matches(&words));
     for entry in entries() {
-        let listed = if words.is_empty() { entry.page == shown } else { entry.matches(&words) };
+        let listed = if words.is_empty() {
+            entry.page == shown
+        } else {
+            entry.matches(&words) || (sizes_match && entry.page == Page::Arrangement && entry.section == "Track sizes")
+        };
         if !listed || !(entry.shown)(cx.settings) {
             continue;
         }
