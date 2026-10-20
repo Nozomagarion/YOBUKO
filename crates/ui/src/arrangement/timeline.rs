@@ -86,7 +86,7 @@ pub struct ClipBox {
     pub audio_view: Option<AudioView>,
     pub notes: Vec<NoteMark>,
     /// Where a looping clip starts another pass through its loop, in beats from its start: the
-    /// clip marks each with notches and a dashed line (#700).
+    /// clip marks each with a continuous vertical line and a small top notch (#700).
     pub seams: Vec<f64>,
     /// The sub-row the clip is drawn in, and how many the lane has: more than one where clips
     /// overlap (stacked), so each stays visible.

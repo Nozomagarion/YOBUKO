@@ -29,13 +29,13 @@ use crate::kit::widgets::{self, Action, Drag, VOLUME_RANGE, volume_position};
 pub const HEADER_COLUMN: f32 = 336.0;
 const HEADER_COLUMN_RANGE: (f32, f32) = (160.0, 520.0);
 const RULER: f32 = ROW;
-const DEFAULT_LANE: f32 = 48.0;
+const DEFAULT_LANE: f32 = 40.0;
 const MIN_LANE: f32 = 20.0;
 const MAX_LANE: f32 = 400.0;
 /// How much a point of wheel movement with Alt held grows the lanes (as a power of e).
 const LANE_ZOOM_PER_POINT: f32 = 0.004;
 /// Heights at which a header shows its next group (components › Track header levels).
-const SHOWS_MIXER: f32 = 48.0;
+const SHOWS_MIXER: f32 = 40.0;
 const SHOWS_ROUTING: f32 = 70.0;
 /// A track that plays notes shows its MIDI input under its routing from this height.
 const SHOWS_MIDI_INPUT: f32 = 90.0;
@@ -3283,6 +3283,14 @@ fn paint_clip(
     let ink = ink_on(body);
     let edge_width = if selected { 4.0 } else { 3.0 };
     let edge_ink = motion::mix(body, ink, 0.5);
+    if let Some(bar) = bar {
+        // A quiet divider ties the title to the stronger leading edge without framing the preview.
+        painter.hline(
+            (rect.left() + edge_width)..=rect.right(),
+            bar.bottom() - 0.5,
+            theme::hairline(motion::mix(body, edge_ink, 0.4)),
+        );
+    }
     painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(edge_width, rect.height())), 0.0, edge_ink);
     // A looping clip's passes are marked by the notches and lines at their starts (below), not by
     // shades: the body is one colour all along.
@@ -3318,12 +3326,12 @@ fn paint_clip(
         let left = rect.left().max(view.left()) + 7.0;
         let name_rect = Rect::from_min_max(
             Pos2::new(left, rect.top() + 3.0),
-            Pos2::new(rect.right() - 5.0, rect.top() + CLIP_NAME_BAR - 3.0),
+            Pos2::new(rect.right() - 5.0, bar.map_or(rect.top(), |bar| bar.bottom()) - 3.0),
         );
         widgets::text_in(painter, name_rect, Align2::LEFT_CENTER, &clip.name, theme::ui_font(theme::TEXT), text_color);
     }
     let marks = Rect::from_min_max(
-        Pos2::new(rect.left() + 3.0, rect.top() + if has_name { CLIP_NAME_BAR + 3.0 } else { 4.0 }),
+        Pos2::new(rect.left() + 3.0, bar.map_or(rect.top() + 4.0, |bar| bar.bottom() + 3.0)),
         Pos2::new(rect.right(), rect.bottom() - 3.0),
     );
     if let Some(view) = clip.audio_view.as_ref().filter(|_| marks.height() >= 4.0)
@@ -3397,51 +3405,20 @@ fn paint_clip(
     {
         paint_ara_activity(painter, marks, body, ink, name, *progress);
     }
-    // Where a looping clip starts another pass: a notch in its top and bottom edges and a
-    // dashed line between them, the repeats drawn as the clip itself (#700).
-    if !clip.seams.is_empty() {
-        // Dark, as the notches cut into the clip are: a light line read as a note or the playhead.
-        let mark = motion::mix(body, ink, 0.18);
-        let top = bar.map_or(rect.top(), |bar| bar.bottom());
-        let (first, last) = (view.left() - 4.0, view.right() + 4.0);
-        // As wide as the passes allow: zoomed out, a pass a few points wide keeps its body and
-        // still shows a small notch.
-        let pass =
-            clip.seams.windows(2).map(|w| w[1] - w[0]).chain(clip.seams.first().copied()).fold(f64::MAX, f64::min);
-        let pass_width = (pass.max(0.0) as f32) * beat_width;
-        let notch = (pass_width * 0.06).clamp(1.0, 2.0);
-        for seam in &clip.seams {
-            let x = x_of(start + seam).round() + 0.5;
-            if x < first || x > last || x <= rect.left() || x >= rect.right() {
-                continue;
-            }
-            painter.add(egui::Shape::dashed_line(
-                &[Pos2::new(x, top), Pos2::new(x, rect.bottom())],
-                theme::hairline(mark),
-                3.0,
-                3.0,
-            ));
-            // Cut out of the clip, in the lane's colour, so they show on a light name bar too.
-            let cut = motion::mix(body, ink, 0.35);
-            painter.add(egui::Shape::convex_polygon(
-                vec![
-                    Pos2::new(x - notch, rect.top()),
-                    Pos2::new(x + notch, rect.top()),
-                    Pos2::new(x, rect.top() + notch),
-                ],
-                cut,
-                egui::Stroke::NONE,
-            ));
-            painter.add(egui::Shape::convex_polygon(
-                vec![
-                    Pos2::new(x - notch, rect.bottom()),
-                    Pos2::new(x, rect.bottom() - notch),
-                    Pos2::new(x + notch, rect.bottom()),
-                ],
-                cut,
-                egui::Stroke::NONE,
-            ));
+    // Loop boundaries share the leading edge's contrast, with a small top notch so they
+    // remain distinct from the grid and playhead at every lane height.
+    for seam in &clip.seams {
+        let x = x_of(start + seam).round() + 0.5;
+        if x < view.left() - 4.0 || x > view.right() + 4.0 || x <= rect.left() || x >= rect.right() {
+            continue;
         }
+        painter.vline(x, rect.y_range(), egui::Stroke::new(1.5, edge_ink));
+        let notch = 2.5_f32.min(rect.height() * 0.2);
+        painter.add(egui::Shape::convex_polygon(
+            vec![Pos2::new(x - notch, rect.top()), Pos2::new(x + notch, rect.top()), Pos2::new(x, rect.top() + notch)],
+            edge_ink,
+            egui::Stroke::NONE,
+        ));
     }
     // A fade is a line over the waveform, from the clip's bottom corner to where it ends at
     // the top, following its shape and curve.
@@ -3470,7 +3447,11 @@ fn clip_grab_area(rect: Rect) -> Option<Rect> {
 /// The bar along a clip's top that carries its name, on a lane tall enough to have a body under
 /// it (a title bar); the drag that moves the clip takes the whole upper half.
 fn clip_name_bar(rect: Rect) -> Option<Rect> {
-    (rect.height() >= CLIP_BODY_LEAST).then(|| Rect::from_min_size(rect.min, Vec2::new(rect.width(), CLIP_NAME_BAR)))
+    (rect.height() >= CLIP_BODY_LEAST).then(|| {
+        // Leave the lower-half body gesture clear even on compact two-row lanes.
+        let height = CLIP_NAME_BAR.min(rect.height() * 0.5 - 1.0);
+        Rect::from_min_size(rect.min, Vec2::new(rect.width(), height))
+    })
 }
 
 /// An ARA plug-in loading or analysing a clip's audio, over the clip's waveform: the body dimmed,
@@ -3666,7 +3647,7 @@ fn track_header(
     let spacious = rect.height() >= 60.0;
     let header_row = if spacious { 20.0 } else { HEADER_ROW };
     let field_height = if spacious { 20.0 } else { FIELD };
-    let header_pad = if rect.height() <= MIN_LANE {
+    let header_pad = if rect.height() < 48.0 {
         2.0
     } else if spacious {
         6.0
@@ -3675,7 +3656,13 @@ fn track_header(
     };
     let solo_width = if rect.height() < SHOWS_MIXER { 18.0 } else { SOLO };
     let on_width = if rect.height() < SHOWS_MIXER { 24.0 } else { ON_TOGGLE };
-    let header_gap = if spacious { 10.0 } else { PAD };
+    let header_gap = if rect.height() < 48.0 {
+        4.0
+    } else if spacious {
+        10.0
+    } else {
+        PAD
+    };
     let id = Id::new(("arrangement-header", lane.track.0));
     let clip = rect.intersect(lanes_area);
 

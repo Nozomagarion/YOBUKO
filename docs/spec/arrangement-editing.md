@@ -190,7 +190,7 @@ Let go, it is
 - A looping clip goes on as far as its edge is dragged, its loop repeating: its right edge into
   later passes, its left edge back into earlier ones (to the song's start). Its repeats are
   drawn as the clip itself, in its colour, one colour all along; where each pass starts it has a
-  notch cut into its top and bottom edges and a dashed line between them, so the repeats read as
+  small notch at its top edge and a continuous vertical line in the leading edge's shade, so the repeats read as
   blocks even in an empty clip (#700). A MIDI clip's notes are drawn in every pass.
 - The right edge is one handle over the clip's full height; there is no separate loop handle
   at the corner (#700). The loop is turned on in the clip column (› Clip column in
@@ -708,8 +708,8 @@ room, so a group's tracks start clearly to the right of their group, and each le
 is filled with that group's colour, so a group and its tracks read as one block. A group's menu
 has **Assign track color to all tracks and clips**, which gives every track inside it, at any depth,
 the colour the group shows, and turns the clips of the group and of those tracks back to their
-track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's notches are a
-tenth of a pass wide, from a point and a half to four points, so a zoomed-out clip keeps its body. A group that holds tracks has
+track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's top notches are at most 2.5 px wide on each side of the boundary and
+shrink with the lane height. Its 1.5 px boundary line uses the leading edge's contrast. A group that holds tracks has
 the fold triangle at the start of its header (Folded groups): the lanes of every track inside it, at any
 depth, are hidden while it is folded, and the Session view hides their columns; both views fold
 the same groups, and folding is part of the view, not an edit, so it does not undo. A dragged
@@ -828,8 +828,8 @@ them is drawn.
 
 ## Compact rows and quick expansion
 
-New regular tracks start at 48 px; return rows start at the minimum 20 px height. A leading arrow on an ordinary
-track or return toggles between that compact row and 48 px (or its last manually expanded
+New regular tracks start at 40 px; return rows start at the minimum 20 px height. A leading arrow on an ordinary
+track or return toggles between that compact row and 40 px (or its last manually expanded
 height). Group arrows retain their existing child-folding behavior. Automation remains visible
 at the left and a compact volume field follows the name when the header has sufficient width.
 Row height is view state, not an edit to the music project.

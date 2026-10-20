@@ -745,8 +745,8 @@ the preview. MIDI preview ink follows the body contrast in both light and dark t
 
 ### Compact track-header default
 
-New Arrangement lanes default to 48 px and return rows to 20 px, with a 336 px header. The quick-expanded 48 px
-two-row layout uses 16 px controls, 4 px vertical padding and a 6 px row gap. At 60 px or
+New Arrangement lanes default to 40 px and return rows to 20 px, with a 336 px header. The quick-expanded 40 px
+two-row layout uses 16 px controls, 2 px vertical padding and a 4 px row gap. At 60 px or
 more the name uses 14 px text and controls use 20 px rows with 6 px vertical padding. Below
 that height the compact metrics remain in use. Solo/cue/arm controls are 26 px wide. Manual
 resizing remains available. Volume fill is tinted by the track color; the Main channel keeps
@@ -760,9 +760,10 @@ outline rather than a global blue fill. Clip names reserve a top strip above con
 
 The Arrangement grid blends major lines 55 percent and minor lines 35 percent toward their
 editable theme tokens from the canvas background. Horizontal lane boundaries follow the major
-line strength. Clip titles reserve 22 px, with 7 px left inset and 12 px type. Content stays below
+line strength. Clip titles reserve up to 22 px (less than half the clip height), with 7 px left inset and 12 px type. Content stays below
 the title. A contrasting, same-hue leading edge is 3 px, widening to 4 px when selected; selection
-outlines are 1 px. Loop seams use subdued ink and at most 2 px edge marks.
+outlines are 1 px. Loop seams use the leading-edge contrast with a 1.5 px continuous vertical line and a
+small top notch (up to 2.5 px); there is no bottom notch.
 
 Track buttons keep their filled hit areas but draw outlines only on hover or keyboard focus.
 Sends show their destination, value and level rail without an idle box. Secondary routing fields
@@ -775,5 +776,9 @@ volume field; pan and sends remain in the expanded rows.
 The automation visibility button stays at the leading edge of the header in compact, default
 and expanded layouts; it is not moved to the trailing edge when the row shrinks.
 
-Ordinary tracks and returns have a leading quick-expand arrow: return rows compact at 20 px by default, regular tracks expanded at 48 px, restoring the last expanded height after a collapse. Compact rows use
+Ordinary tracks and returns have a leading quick-expand arrow: return rows compact at 20 px by default, regular tracks expanded at 40 px, restoring the last expanded height after a collapse. Compact rows use
 18 px solo/cue/arm controls, a 24 px track toggle and 2 px vertical padding.
+
+Clips with a visible title have a 1 px separator below it, using 40 percent of the leading-edge
+contrast. It runs from the inner edge of the leading stripe to the right edge. Short clips without
+a title omit this separator, preserving the full preview area.

@@ -41,10 +41,10 @@ fn arrangement() -> Harness<'static, App> {
 }
 
 #[test]
-fn default_header_is_48_px_and_keeps_controls_and_sends_inside() {
+fn default_header_is_40_px_and_keeps_controls_and_sends_inside() {
     let harness = arrangement();
     let header = harness.get_by_label("Track Drums").rect();
-    assert!((header.height() - 48.0).abs() < 0.5, "default header: {header:?}");
+    assert!((header.height() - 40.0).abs() < 0.5, "default header: {header:?}");
     let automation = harness.get_by_label("Show automation of Drums").rect();
     let volume = harness.get_by_label("Drums volume").rect();
     assert!(automation.left() < volume.left(), "automation stays at the left");
@@ -224,17 +224,17 @@ fn return_defaults_to_minimum_and_quick_expand_is_reversible() {
     h.get_by_label("Expand A Reverb").click();
     h.run();
     let expanded = h.get_by_label(label).rect();
-    assert!((expanded.height() - 48.0).abs() < 0.5, "return expands: {expanded:?}");
+    assert!((expanded.height() - 40.0).abs() < 0.5, "return expands: {expanded:?}");
     assert!(h.query_by_label("Show automation of A Reverb").is_some());
     h.get_by_label("Collapse A Reverb").click();
     h.run();
     assert!((h.get_by_label(label).rect().height() - 20.0).abs() < 0.5);
-    assert!((h.get_by_label("Track Drums").rect().height() - 48.0).abs() < 0.5);
+    assert!((h.get_by_label("Track Drums").rect().height() - 40.0).abs() < 0.5);
     h.get_by_label("Collapse Drums").click();
     h.run();
     assert!(h.query_by_label("Drums volume").is_some());
     assert!(h.query_by_label("Show automation of Drums").is_some());
     h.get_by_label("Expand Drums").click();
     h.run();
-    assert!((h.get_by_label("Track Drums").rect().height() - 48.0).abs() < 0.5);
+    assert!((h.get_by_label("Track Drums").rect().height() - 40.0).abs() < 0.5);
 }
