@@ -1947,6 +1947,8 @@ fn two_projects() -> Harness<'static, App> {
 #[test]
 fn a_return_in_the_arrangement_has_a_tracks_controls_and_main_a_volume_bar_and_they_grow_upward() {
     let mut harness = arrangement_app();
+    harness.get_by_label("Expand A Reverb").click();
+    harness.run();
     // A return's header is a track's: volume and pan, its on switch, its automation lanes.
     for label in ["A Reverb volume", "A Reverb pan", "Turn A Reverb off"] {
         assert!(harness.query_by_label(label).is_some(), "missing {label}");

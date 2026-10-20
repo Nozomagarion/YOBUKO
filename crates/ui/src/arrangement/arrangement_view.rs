@@ -369,6 +369,7 @@ pub struct ArrangementViewState {
     pub ara_default: Option<String>,
     pub header_width: f32,
     heights: HashMap<TrackId, f32>,
+    expanded_heights: HashMap<TrackId, f32>,
     /// The selected clips, in the order they were picked, and the one clicked last: a Shift-click
     /// takes the run of clips from it, and the other views work on it.
     selected: Vec<(TrackId, ClipId)>,
@@ -496,6 +497,7 @@ impl Default for ArrangementViewState {
             ara_default: None,
             header_width: HEADER_COLUMN,
             heights: HashMap::new(),
+            expanded_heights: HashMap::new(),
             selected: Vec::new(),
             anchor: None,
             marquee: None,
@@ -785,7 +787,17 @@ impl ArrangementViewState {
 
     /// How tall a return track's row is: a row's height until its edge is dragged.
     fn return_height(&self, track: TrackId) -> f32 {
-        self.heights.get(&track).copied().unwrap_or(DEFAULT_LANE)
+        self.heights.get(&track).copied().unwrap_or(MIN_LANE)
+    }
+
+    /// Toggle a lane between the smallest row and its last expanded height.
+    fn toggle_height(&mut self, track: TrackId, height: f32) {
+        if height >= SHOWS_MIXER {
+            self.expanded_heights.insert(track, height);
+            self.heights.insert(track, MIN_LANE);
+        } else {
+            self.heights.insert(track, self.expanded_heights.get(&track).copied().unwrap_or(SHOWS_MIXER));
+        }
     }
 
     /// How tall `track`'s lane is.
@@ -3654,7 +3666,15 @@ fn track_header(
     let spacious = rect.height() >= 60.0;
     let header_row = if spacious { 20.0 } else { HEADER_ROW };
     let field_height = if spacious { 20.0 } else { FIELD };
-    let header_pad = if spacious { 6.0 } else { HEADER_PAD_Y };
+    let header_pad = if rect.height() <= MIN_LANE {
+        2.0
+    } else if spacious {
+        6.0
+    } else {
+        HEADER_PAD_Y
+    };
+    let solo_width = if rect.height() < SHOWS_MIXER { 18.0 } else { SOLO };
+    let on_width = if rect.height() < SHOWS_MIXER { 24.0 } else { ON_TOGGLE };
     let header_gap = if spacious { 10.0 } else { PAD };
     let id = Id::new(("arrangement-header", lane.track.0));
     let clip = rect.intersect(lanes_area);
@@ -3755,11 +3775,17 @@ fn track_header(
     // Row 1: a group's fold triangle, track on, solo, cue, arm, name. Mixer controls act on the whole
     // selection while this track is part of one.
     let controlled: Vec<u32> = state.controlled_tracks(lane.track).iter().map(|t| t.0).collect();
-    let fold = (lane.kind == ColumnKind::Group && order.children > 0)
-        .then(|| Rect::from_min_size(inner.min, Vec2::new(FOLD, header_row)));
+    let group_fold = lane.kind == ColumnKind::Group && order.children > 0;
+    let fold = Some(Rect::from_min_size(inner.min, Vec2::new(FOLD, header_row)));
     if let Some(fold) = fold {
-        let folded = state.folds.is_folded(lane.track);
-        let label = if folded { format!("Unfold {}", lane.name) } else { format!("Fold {}", lane.name) };
+        let folded = if group_fold { state.folds.is_folded(lane.track) } else { rect.height() < SHOWS_MIXER };
+        let label = if group_fold {
+            if folded { format!("Unfold {}", lane.name) } else { format!("Fold {}", lane.name) }
+        } else if folded {
+            format!("Expand {}", lane.name)
+        } else {
+            format!("Collapse {}", lane.name)
+        };
         let response = widgets::button_area(ui, fold.intersect(clip), id.with("fold"), label);
         let color = motion::mix(theme::text_hint(), theme::text_primary(), widgets::hover(ui, &response));
         let center = fold.center();
@@ -3780,7 +3806,11 @@ fn track_header(
         };
         painter.add(egui::Shape::convex_polygon(points, color, egui::Stroke::NONE));
         if response.clicked() {
-            state.folds.toggle(lane.track);
+            if group_fold {
+                state.folds.toggle(lane.track);
+            } else {
+                state.toggle_height(lane.track, rect.height());
+            }
             // What the lanes are changes without the project changing: draw the next frame.
             ui.ctx().request_repaint();
         }
@@ -3791,17 +3821,18 @@ fn track_header(
     // On a roomy header the name gets the top line; buttons and level controls sit below.
     // Narrow/short headers retain their compact arrangement, including send overflow rules.
     let name_first = rect.height() >= SHOWS_MIXER
-        && inner.width() - FOLD - 2.0 - ON_TOGGLE - 3.0 * (SOLO + 2.0) - PAD - PAN_FIELD - 4.0 >= LEAST_VOLUME;
+        && inner.width() - FOLD - 2.0 - on_width - 3.0 * (solo_width + 2.0) - PAD - PAN_FIELD - 4.0 >= LEAST_VOLUME;
     let automation_x = first_x;
-    let first_x = if name_first { first_x } else { first_x + SOLO + PAD };
+    let first_x = if name_first { first_x } else { first_x + solo_width + PAD };
     let row_top = if name_first { inner.top() + header_row + header_gap } else { inner.top() };
     let row = Rect::from_min_max(Pos2::new(first_x, row_top), Pos2::new(inner.right(), row_top + header_row));
-    let toggle = Rect::from_min_size(row.min, Vec2::new(ON_TOGGLE, header_row));
-    let solo = Rect::from_min_size(Pos2::new(toggle.right() + 2.0, row.top()), Vec2::new(SOLO, header_row));
-    let cue = Rect::from_min_size(Pos2::new(solo.right() + 2.0, row.top()), Vec2::new(SOLO, header_row));
+    let toggle = Rect::from_min_size(row.min, Vec2::new(on_width, header_row));
+    let solo = Rect::from_min_size(Pos2::new(toggle.right() + 2.0, row.top()), Vec2::new(solo_width, header_row));
+    let cue = Rect::from_min_size(Pos2::new(solo.right() + 2.0, row.top()), Vec2::new(solo_width, header_row));
     // A track that can be armed has its arm button after cue, as wide.
-    let arm =
-        lane.armable.then(|| Rect::from_min_size(Pos2::new(cue.right() + 2.0, row.top()), Vec2::new(SOLO, header_row)));
+    let arm = lane
+        .armable
+        .then(|| Rect::from_min_size(Pos2::new(cue.right() + 2.0, row.top()), Vec2::new(solo_width, header_row)));
     // A lane tall enough for two rows has its volume and pan beside the buttons, where the
     // other level controls are, and the automation button, the name and the sends on the row
     // below, the button under the track-on toggle; a short lane keeps one row of buttons, name
@@ -3818,11 +3849,11 @@ fn track_header(
     // The automation button shows and hides the track's lanes.
     let lanes_button = if side {
         Rect::from_min_size(
-            Pos2::new(below.left() + (ON_TOGGLE - SOLO) / 2.0, below.top()),
-            Vec2::new(SOLO, header_row),
+            Pos2::new(below.left() + (on_width - solo_width) / 2.0, below.top()),
+            Vec2::new(solo_width, header_row),
         )
     } else {
-        Rect::from_min_size(Pos2::new(automation_x, row.top()), Vec2::new(SOLO, header_row))
+        Rect::from_min_size(Pos2::new(automation_x, row.top()), Vec2::new(solo_width, header_row))
     };
     if lanes_button.intersects(clip) {
         automation::header_button(
@@ -3864,7 +3895,7 @@ fn track_header(
     };
     // Keep a usable level control even on a single-row lane. Reserve the name's
     // minimum first; sends and pan stay in the expanded layout.
-    let compact_volume = if !tall && name.width() >= 40.0 + PAD + 48.0 {
+    let compact_volume = if !tall && name.width() >= 28.0 + PAD + 48.0 {
         let width = (name.width() * 0.45).clamp(48.0, 80.0);
         let volume = Rect::from_min_max(Pos2::new(name.right() - width, row.top()), name.right_bottom());
         name.max.x = volume.left() - PAD;

@@ -825,3 +825,11 @@ them is drawn.
 - Dragging along the ruler to scrub (a drag there selects time now).
 - Closing or opening a gap with a time selection (Delete Time, Insert Time).
 - A consolidated audio clip warped to the project, so it follows a later tempo change.
+
+## Compact rows and quick expansion
+
+New regular tracks start at 48 px; return rows start at the minimum 20 px height. A leading arrow on an ordinary
+track or return toggles between that compact row and 48 px (or its last manually expanded
+height). Group arrows retain their existing child-folding behavior. Automation remains visible
+at the left and a compact volume field follows the name when the header has sufficient width.
+Row height is view state, not an edit to the music project.

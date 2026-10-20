@@ -745,7 +745,7 @@ the preview. MIDI preview ink follows the body contrast in both light and dark t
 
 ### Compact track-header default
 
-New Arrangement lanes and return rows default to 48 px, with a 336 px header. The default
+New Arrangement lanes default to 48 px and return rows to 20 px, with a 336 px header. The quick-expanded 48 px
 two-row layout uses 16 px controls, 4 px vertical padding and a 6 px row gap. At 60 px or
 more the name uses 14 px text and controls use 20 px rows with 6 px vertical padding. Below
 that height the compact metrics remain in use. Solo/cue/arm controls are 26 px wide. Manual
@@ -769,8 +769,11 @@ Sends show their destination, value and level rail without an idle box. Secondar
 are text and chevron until hovered or focused. Menus, keyboard focus and drag targets remain available.
 
 A single-row Arrangement header reserves a 48–80 px volume field after the name whenever
-40 px of name space remains. It uses the same drag, keyboard and reset behavior as the expanded
+28 px of name space remains. It uses the same drag, keyboard and reset behavior as the expanded
 volume field; pan and sends remain in the expanded rows.
 
 The automation visibility button stays at the leading edge of the header in compact, default
 and expanded layouts; it is not moved to the trailing edge when the row shrinks.
+
+Ordinary tracks and returns have a leading quick-expand arrow: return rows compact at 20 px by default, regular tracks expanded at 48 px, restoring the last expanded height after a collapse. Compact rows use
+18 px solo/cue/arm controls, a 24 px track toggle and 2 px vertical padding.
