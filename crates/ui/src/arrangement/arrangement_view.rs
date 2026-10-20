@@ -3852,7 +3852,7 @@ fn track_header(
     } else {
         below.right() - step * shown_sends as f32 - navigation + SEND_GAP
     };
-    let name = if side {
+    let mut name = if side {
         Rect::from_min_max(
             Pos2::new(lanes_button.right() + PAD, below.top()),
             Pos2::new(sends_left - SEND_GAP - 4.0, below.top() + header_row),
@@ -3862,6 +3862,16 @@ fn track_header(
             Pos2::new(arm.unwrap_or(cue).right() + PAD, row.top()),
             Pos2::new(lanes_button.left() - 4.0, row.bottom()),
         )
+    };
+    // Keep a usable level control even on a single-row lane. Reserve the name's
+    // minimum first; sends and pan stay in the expanded layout.
+    let compact_volume = if !tall && name.width() >= 40.0 + PAD + 48.0 {
+        let width = (name.width() * 0.45).clamp(48.0, 80.0);
+        let volume = Rect::from_min_max(Pos2::new(name.right() - width, row.top()), name.right_bottom());
+        name.max.x = volume.left() - PAD;
+        Some(volume)
+    } else {
+        None
     };
     let name_color = if lane.mute { theme::text_hint() } else { theme::text_primary() };
     widgets::text_in(
@@ -3916,6 +3926,10 @@ fn track_header(
             track_number.to_string()
         };
         widgets::text_in(painter, toggle, Align2::CENTER_CENTER, &number, theme::mono_font(theme::TEXT_SMALL), text);
+    }
+
+    if let Some(volume) = compact_volume {
+        value_control(ui, painter, volume, clip, lane, Control::Volume, false, id, state, actions);
     }
 
     // Two rows: volume and pan beside the buttons, the sends after the name below; or, narrow,

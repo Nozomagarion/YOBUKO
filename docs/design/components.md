@@ -766,3 +766,7 @@ outlines are 1 px. Loop seams use subdued ink and at most 2 px edge marks.
 Track buttons keep their filled hit areas but draw outlines only on hover or keyboard focus.
 Sends show their destination, value and level rail without an idle box. Secondary routing fields
 are text and chevron until hovered or focused. Menus, keyboard focus and drag targets remain available.
+
+A single-row Arrangement header reserves a 48–80 px volume field after the name whenever
+40 px of name space remains. It uses the same drag, keyboard and reset behavior as the expanded
+volume field; pan and sends remain in the expanded rows.

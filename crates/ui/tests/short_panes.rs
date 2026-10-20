@@ -195,6 +195,10 @@ fn a_lane_at_its_least_height_still_shows_its_notes() {
     let short = h.get_by_label(CLIP).rect();
     assert!(short.height() < 21.0, "the lane is at its least height: {short:?}");
     assert!(note_marks(&h, short) > 0, "a 20 px lane still shows its clip's notes");
+    let volume = h.get_by_label("Drums volume").rect();
+    let header = h.get_by_label("Track Drums").rect();
+    assert!(volume.width() >= 48.0, "a compact lane keeps a usable volume field");
+    assert!(header.contains_rect(volume), "the volume hit area stays inside the compact header");
 }
 
 // 2. The piano roll's least height, and closing it with the splitter.
