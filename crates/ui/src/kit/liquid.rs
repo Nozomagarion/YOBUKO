@@ -117,6 +117,7 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
         painter.rect_filled(rect, 0.0, base.gamma_multiply(1.0 - 0.45 * strength));
     }
     if surface != Surface::Panel {
+        painter.add(body_mesh(rect, base, strength));
         painter.add(rim_mesh(rect, strength));
         return;
     }
@@ -147,6 +148,39 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
     }
 }
 
+/// Broad coloured reflection below the narrow rim and above the source fill.
+/// Different left/right intensities give a gentle directional light, not a white stripe.
+fn body_mesh(rect: Rect, base: Color32, strength: f32) -> egui::Mesh {
+    let mut mesh = egui::Mesh::default();
+    if !rect.is_finite() || rect.width() < 12.0 || rect.height() < 12.0 || !strength.is_finite() {
+        return mesh;
+    }
+    let strength = strength.clamp(0.0, 1.0) * surface_scale(rect);
+    if strength == 0.0 {
+        return mesh;
+    }
+    // Fraction of height, left light/shade, right light/shade. Positive reflects light.
+    for (fraction, left, right) in
+        [(0.0, 0.34_f32, 0.22_f32), (0.25, 0.16, 0.08), (0.55, -0.02, -0.04), (0.86, -0.17, -0.11), (1.0, -0.06, 0.06)]
+    {
+        let y = rect.top() + rect.height() * fraction;
+        for (x, light) in [(rect.left(), left), (rect.right(), right)] {
+            let target = if light >= 0.0 { Color32::WHITE } else { Color32::BLACK };
+            mesh.colored_vertex(pos2(x, y), motion::mix(base, target, light.abs() * strength));
+        }
+    }
+    for row in 0..4_u32 {
+        let start = row * 2;
+        mesh.add_triangle(start, start + 1, start + 2);
+        mesh.add_triangle(start + 2, start + 1, start + 3);
+    }
+    mesh
+}
+
+fn surface_scale(rect: Rect) -> f32 {
+    ((rect.height().min(rect.width()) - 12.0) / 28.0).clamp(0.0, 1.0)
+}
+
 /// A bounded rounded rim, with a quiet transparent centre. All vertices stay inside
 /// the editing rectangle: adjacent clips cannot cast highlights onto one another.
 /// This models reflected light only; it never samples or distorts musical content.
@@ -155,7 +189,7 @@ fn rim_mesh(rect: Rect, strength: f32) -> egui::Mesh {
     if !rect.is_finite() || rect.width() < 12.0 || rect.height() < 12.0 || !strength.is_finite() {
         return mesh;
     }
-    let scale = ((rect.height().min(rect.width()) - 12.0) / 28.0).clamp(0.0, 1.0);
+    let scale = surface_scale(rect);
     let strength = strength.clamp(0.0, 1.0) * scale;
     if strength == 0.0 {
         return mesh;
@@ -219,6 +253,23 @@ fn rim_mesh(rect: Rect, strength: f32) -> egui::Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn coloured_body_retains_a_gradient_between_the_rims() {
+        let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(220.0, 64.0));
+        for base in [Color32::from_rgb(204, 210, 175), Color32::from_rgb(45, 60, 80)] {
+            let mesh = body_mesh(rect, base, 1.0);
+            assert!(mesh.is_valid());
+            assert_eq!(mesh.calc_bounds(), rect);
+            assert!(mesh.vertices.iter().any(|vertex| vertex.pos.y > rect.top() && vertex.pos.y < rect.bottom()));
+            assert!(mesh.vertices.iter().any(|vertex| vertex.color.r() > base.r()));
+            assert!(mesh.vertices.iter().any(|vertex| vertex.color.r() < base.r()));
+            assert!(mesh.vertices.iter().all(|vertex| vertex.color.is_opaque()));
+        }
+        assert!(body_mesh(rect, Color32::GRAY, 0.0).is_empty());
+        assert!(body_mesh(rect, Color32::GRAY, f32::NAN).is_empty());
+        assert!(body_mesh(Rect::NOTHING, Color32::GRAY, 1.0).is_empty());
+    }
 
     #[test]
     fn optical_rim_is_bounded_and_leaves_the_centre_clear() {

@@ -23,6 +23,13 @@ outer highlight, an inner dark band and a weaker opposing light return. Scale th
 down with row height and keep them inside the existing editing rectangle. This is an
 optical coating, not physical refraction; real background displacement remains future work.
 
+[Microsoft Acrylic](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic)
+also builds depth from layered background, blur and tint. In the dense content layer,
+combine a source-coloured body gradient with the rim rather than replacing the body
+with edge lighting alone. The body has a broad upper reflection, a shaded lower body
+and a weaker light return at the bottom. The reflection is slightly directional,
+without a hard glossy stripe across notes or waveforms.
+
 ## Current state
 
 The original static experiment below remains available. There is also an experimental
@@ -47,7 +54,7 @@ The UI-facing provider and independent Panel/Track/Clip options live in
 `crates/ui/src/kit/liquid.rs`. Settings uses the live blurred backdrop under a theme tint.
 Arrangement and Session track headers and clip backgrounds get a lightweight optical
 coating (a narrow rounded rim with directional highlights, an inner shade and a
-weaker opposing light return; the centre retains its flat source colour),
+weaker opposing light return, over a source-coloured directional body gradient),
 painted before labels, controls,
 notes and waveforms. These coatings do **not** perform per-clip backdrop blur or refraction.
 Surfaces smaller than 12 logical pixels stay solid. The three strengths are independently
@@ -55,8 +62,9 @@ saved percentages: 0 is off, 100 is the strongest supported material. Panels int
 from opaque to a 55% theme tint at full strength; track and clip rims keep the source
 hue and draw all text/notes/waveforms sharply on top. Rim intensity fades with the
 shorter surface dimension between 12 and 40 logical pixels. Each rim is bounded to
-216 vertices, regardless of clip length; its transparent centre and geometry stay
-inside the editing rectangle. Missing settings default to 0.
+216 vertices plus 10 body-gradient vertices, regardless of clip length; the rim's
+transparent centre reveals the body gradient. All geometry stays inside the editing
+rectangle. Missing settings default to 0.
 
 The wgpu host installs its provider even while all strengths are 0; no backdrop capture
 is requested until Panel liquid is raised. OpenGL has no provider and disables the controls.
@@ -78,6 +86,8 @@ linear-light checkerboard mean, impulse symmetry and a changed frame at a new si
 GPU readback exists only in that test, not in the application path. Kit tests cover
 default/tiny/reduced-effects solid rendering, removal of an old backdrop on failure,
 bounded premultiplied rim geometry and intensity scaling at small sizes.
+The body-gradient regression also checks shading on light and dark source colours,
+coverage between the rims and a solid fallback for invalid/disabled inputs.
 Settings-window (7, including live independent strength controls and persistence) and constrained-pane (16) regression tests also passed, as did Clippy
 for both the application and UI with all targets. These checks do not replace visual QA
 or playback performance measurements.
