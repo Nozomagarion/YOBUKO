@@ -12,6 +12,7 @@ use super::theme::Palette;
 pub struct Scene {
     pub tracks: [Option<egui::Color32>; 4],
     pub clips: [Option<egui::Color32>; 4],
+    pub audio: [bool; 4],
 }
 
 impl Scene {
@@ -19,6 +20,7 @@ impl Scene {
         let mut scene = Self::default();
         let colour = |c: suhina_engine::model::Rgb| egui::Color32::from_rgb(c.0, c.1, c.2);
         for (index, track) in project.tracks.iter().take(4).enumerate() {
+            scene.audio[index] = track.content.audio && !track.content.notes;
             scene.tracks[index] = track.color.map(colour);
             scene.clips[index] = project
                 .arrangement
@@ -62,10 +64,8 @@ pub fn paint(painter: &Painter, rect: Rect, palette: &Palette, scene: &Scene) {
         let grid = cell(0.23 + bar as f32 * 0.09, 0.2, 0.0, 0.75);
         painter.vline(grid.left(), grid.y_range(), Stroke::new(0.6, palette.grid_major));
     }
-    for (row, fallback) in [palette.track_color_1, palette.track_color_2, palette.track_color_3, palette.track_color_4]
-        .into_iter()
-        .enumerate()
-    {
+    for row in 0..4 {
+        let fallback = if scene.audio[row] { palette.audio_clip_default } else { palette.midi_clip_default };
         let colour = scene.clips[row].or(scene.tracks[row]).unwrap_or(fallback);
         // Arrangement MIDI clips use 82% of the source over the panel surface.
         let colour = super::motion::mix(palette.panel_background, colour, 0.82);
@@ -79,7 +79,7 @@ pub fn paint(painter: &Painter, rect: Rect, palette: &Palette, scene: &Scene) {
         } else {
             palette.window_background
         };
-        if row == 1 {
+        if scene.audio[row] {
             for sample in 0..24 {
                 let x = clip.left() + clip.width() * (sample as f32 + 0.5) / 24.0;
                 let amplitude = clip.height() * (0.1 + ((sample * 7 % 13) as f32 / 13.0) * 0.3);
@@ -119,7 +119,7 @@ mod tests {
             let ctx = egui::Context::default();
             let rect = Rect::from_min_size(pos2(10.0, 10.0), vec2(240.0, 92.0));
             let mut output = ctx.run_ui(Default::default(), |ui| paint(ui.painter(), rect, &palette, &scene));
-            for source in [egui::Color32::from_rgb(55, 190, 160), palette.track_color_2] {
+            for source in [egui::Color32::from_rgb(55, 190, 160), palette.midi_clip_default] {
                 let expected = super::super::motion::mix(palette.panel_background, source, 0.82);
                 assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
                     egui::Shape::Rect(shape) if shape.fill == expected)));

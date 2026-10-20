@@ -120,6 +120,8 @@ impl Themes {
             built_in: theme::is_built_in(shown),
             name: theme.name,
             colors: theme.colors,
+            liquid: theme.liquid,
+            global_liquid: Default::default(),
             folder: self.folder.clone(),
         }
     }
@@ -130,6 +132,12 @@ impl Themes {
         let editable = self.get(current).is_some() && !theme::is_built_in(current);
         match request {
             ThemeRequest::Use(id) => self.get(&id).is_some().then_some(id),
+            ThemeRequest::ResetEdits { colors, liquid } => {
+                let switched = self.request(current, ThemeRequest::Edit(colors));
+                let id = switched.as_deref().unwrap_or(current);
+                self.request(id, ThemeRequest::EditLiquid(liquid));
+                switched
+            }
             ThemeRequest::Edit(colors) => {
                 let (id, copied) = if editable {
                     (self.real_id(current), false)
@@ -139,6 +147,19 @@ impl Themes {
                 };
                 if let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) {
                     entry.theme.colors = colors;
+                }
+                self.actions.push(Pending::Save(id.clone()));
+                copied.then_some(id)
+            }
+            ThemeRequest::EditLiquid(options) => {
+                let (id, copied) = if editable {
+                    (self.real_id(current), false)
+                } else {
+                    let name = format!("{} (custom)", self.get(current).map_or("Suhina Dark", |t| &t.name));
+                    (self.copy(current, &name), true)
+                };
+                if let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) {
+                    entry.theme.liquid = options;
                 }
                 self.actions.push(Pending::Save(id.clone()));
                 copied.then_some(id)
@@ -163,6 +184,17 @@ impl Themes {
                 let name = format!("{} copy", self.get(current).map_or("Suhina Dark", |t| t.name.as_str()));
                 let id = self.copy(current, &name);
                 self.actions.push(Pending::Save(id.clone()));
+                Some(id)
+            }
+            ThemeRequest::RestoreBuiltIn { id, save_copy } => {
+                if !theme::is_built_in(&id) || self.get(&id).is_none() {
+                    return None;
+                }
+                if save_copy {
+                    let name = format!("{} copy", self.get(current).map_or("Theme", |t| t.name.as_str()));
+                    let copy = self.copy(current, &name);
+                    self.actions.push(Pending::Save(copy));
+                }
                 Some(id)
             }
             ThemeRequest::Reload => self.file_action(FileAction::Reload),
@@ -208,9 +240,9 @@ impl Themes {
 
     /// Adds a copy of the theme `from` named `name`, under a new id. Returns the id.
     fn copy(&mut self, from: &str, name: &str) -> String {
-        let colors = self.palette(from);
+        let original = self.get(from).cloned().unwrap_or_default();
         let id = self.free_id(name);
-        self.entries.push(ThemeEntry { id: id.clone(), theme: Theme { name: name.to_string(), colors } });
+        self.entries.push(ThemeEntry { id: id.clone(), theme: Theme { name: name.to_string(), ..original } });
         id
     }
 
@@ -253,7 +285,7 @@ mod tests {
     fn night() -> ThemeEntry {
         let mut colors = Palette::DARK;
         colors.accent = egui::Color32::from_rgb(1, 2, 3);
-        ThemeEntry { id: "night".into(), theme: Theme { name: "Night".into(), colors } }
+        ThemeEntry { id: "night".into(), theme: Theme { name: "Night".into(), colors, liquid: None } }
     }
 
     fn saved(themes: &mut Themes) -> Vec<(String, String)> {
@@ -265,6 +297,31 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn restoring_a_built_in_can_save_a_copy_without_overwriting_either_theme() {
+        let mut themes = Themes::default();
+        themes.set(vec![night()], None);
+        let original = themes.get("night").cloned();
+        let built_in = themes.palette(BUILT_IN);
+        assert_eq!(
+            themes.request("night", ThemeRequest::RestoreBuiltIn { id: BUILT_IN.into(), save_copy: true }),
+            Some(BUILT_IN.into())
+        );
+        assert_eq!(themes.get("night"), original.as_ref());
+        assert_eq!(themes.palette(BUILT_IN), built_in);
+        let actions = themes.take_actions();
+        assert!(
+            matches!(actions.as_slice(), [FileAction::Save { theme, .. }] if theme.colors == original.as_ref().unwrap().colors)
+        );
+        assert_eq!(
+            themes.request("night", ThemeRequest::RestoreBuiltIn { id: "nord".into(), save_copy: false }),
+            Some("nord".into())
+        );
+        assert!(themes.take_actions().is_empty());
+        assert_eq!(themes.request("night", ThemeRequest::RestoreBuiltIn { id: "night".into(), save_copy: true }), None);
+        assert!(themes.take_actions().is_empty());
     }
 
     #[test]
@@ -337,7 +394,7 @@ mod tests {
                 FileAction::Rename { from: "night".into(), to: "deep-sea".into() },
                 FileAction::Save {
                     id: "deep-sea".into(),
-                    theme: Box::new(Theme { name: "Deep Sea".into(), colors: night().theme.colors })
+                    theme: Box::new(Theme { name: "Deep Sea".into(), colors: night().theme.colors, liquid: None })
                 },
             ]
         );

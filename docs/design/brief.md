@@ -155,7 +155,9 @@ A token the file leaves out keeps Suhina Dark's colour, so a file needs only the
 changes; an unknown token or a value that is not `#RRGGBB` is skipped with a warning. Files with
 the first token names (`surface.0`, `line`, `text.tertiary` …) still read. Only colours belong to
 a theme: sizes, spacing and type stay the design's. A track's own colour comes from the project; tracks without one take the theme's
-`track.1`–`track.4` in turn.
+`clip.midiDefault` or `clip.audioDefault` according to their content type. The theme editor
+offers these two defaults; numbered `track.1`–`track.8` remain legacy swatches for file
+compatibility and colour pickers, rather than a list of default track colours.
 
 Themes that come with Suhina (`crates/ui/themes/`, read-only; editing one makes a copy):
 Suhina Dark (the default), Editor Dark (cool greys and blue, like a code editor), Suhina

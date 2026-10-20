@@ -2197,8 +2197,16 @@ impl App {
         // Tracks keep the colour they show when others come and go (#690, #709).
         if let Ok(session) = self.projects.session_mut(None) {
             let palette = crate::interaction::grid::track_palette();
-            let fixed = self.settings.view.fixed_track_colour.then(|| palette[0]);
+            let fixed = self
+                .settings
+                .view
+                .fixed_track_colour
+                .then(|| crate::interaction::grid::to_rgb(theme::midi_clip_default()));
             session.set_track_colours(palette.to_vec(), fixed);
+            session.set_track_type_colours(
+                crate::interaction::grid::to_rgb(theme::midi_clip_default()),
+                crate::interaction::grid::to_rgb(theme::audio_clip_default()),
+            );
         }
         let notices = self.projects.poll_plugins();
         if let Some(last) = notices.last() {
@@ -2231,7 +2239,9 @@ impl App {
 
     /// Draws the window into `ui` and runs what the user asked for.
     pub fn ui(&mut self, ui: &mut Ui) {
-        crate::kit::liquid::configure(ui.ctx(), self.settings.view.liquid);
+        let liquid =
+            self.themes.get(&self.settings.theme).and_then(|theme| theme.liquid).unwrap_or(self.settings.view.liquid);
+        crate::kit::liquid::configure(ui.ctx(), liquid);
         crate::kit::liquid::set_effects_allowed(
             ui.ctx(),
             self.settings.animations && self.settings.theme != "high-contrast",
@@ -4140,6 +4150,7 @@ impl App {
             self.read_plugins();
         }
         let mut themes = self.themes.view(&self.settings.theme);
+        themes.global_liquid = self.settings.view.liquid;
         if let Some(session) = self.session() {
             themes.preview_scene = crate::kit::theme_preview::Scene::from_project(session.project());
         }
@@ -4221,10 +4232,13 @@ impl App {
         }
         outcome.changed
             || outcome.adjusting
-            || outcome
-                .themes
-                .as_ref()
-                .is_some_and(|request| !matches!(request, crate::settings::settings_view::ThemeRequest::Edit(_)))
+            || outcome.themes.as_ref().is_some_and(|request| {
+                !matches!(
+                    request,
+                    crate::settings::settings_view::ThemeRequest::Edit(_)
+                        | crate::settings::settings_view::ThemeRequest::EditLiquid(_)
+                )
+            })
     }
 
     /// The menu bar: the same actions as the shortcuts and the views' controls.

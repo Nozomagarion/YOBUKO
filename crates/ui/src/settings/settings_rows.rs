@@ -382,9 +382,9 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Arrangement,
         "Tracks",
         "New track colour",
-        "Alternating: each new track takes the next colour of the palette, by its place; fixed: every new track takes the palette's first colour. A track keeps the colour it was made with",
+        "By clip type: MIDI and audio tracks use their theme defaults. One colour: all new tracks use the MIDI default. Existing custom colours stay unchanged",
         &["new_track_colour"],
-        |cx, r| cx.choose(r, &[("Alternating", false), ("Fixed", true)], |s| &mut s.view.fixed_track_colour),
+        |cx, r| cx.choose(r, &[("By clip type", false), ("One colour", true)], |s| &mut s.view.fixed_track_colour),
     ),
     row(
         Page::Arrangement,

@@ -17,7 +17,7 @@ use crate::detail::piano_roll_ghosts::{self as ghost_view, GhostSource, Ghosts};
 use crate::detail::piano_roll_grid::{FIXED_VALUES, GridMode, PianoGrid, Width};
 use crate::detail::piano_roll_ruler::{self as ruler_view, ClipShape, RulerState};
 use crate::detail::piano_roll_scale::{self as scale_view, Fold, KeyRows};
-use crate::interaction::grid::default_track_colour;
+use crate::interaction::grid::track_colour;
 use crate::kit::theme;
 use crate::kit::widgets::{self, Action};
 use crate::settings::ToolbarSize;
@@ -221,7 +221,11 @@ fn piano_clip_from(project: &Project, track: TrackId, clip: &Clip, quantization:
         return None;
     }
     let position = project.tracks.iter().position(|t| t.id == track)?;
-    let color = project.tracks.get(position).and_then(|t| t.color).unwrap_or_else(|| default_track_colour(position));
+    let color = project
+        .tracks
+        .get(position)
+        .map(track_colour)
+        .unwrap_or_else(|| crate::interaction::grid::to_rgb(theme::midi_clip_default()));
     let ts = project.transport.time_signature;
     let bar_beats =
         if ts.denominator == 0 { 4.0 } else { f64::from(ts.numerator.max(1)) * 4.0 / f64::from(ts.denominator) };

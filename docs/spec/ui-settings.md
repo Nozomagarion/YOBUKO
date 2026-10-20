@@ -86,18 +86,47 @@ before a setting moved loads with the same values.
 Themes shows a miniature musical scene for every built-in or custom palette. The scenes
 use the same browser, MIDI/audio clips, grid, controls and meters; drawing them never
 installs a theme or loads another project. The active card has an accent border and Active
-label. Clicking a card immediately applies and saves the selected theme, as before.
+label. The active theme is featured once at full width with a 170 px preview; other
+themes remain in a two-column grid. Clicking a card immediately applies and saves the
+selected theme and returns the gallery to the top. Holding the primary button on the
+active card keeps the background clear, including stationary frames; release restores
+the blur and dimming immediately.
 More holds Duplicate, Reload, Open folder, Back up and Export template.
+
+Restore built-in opens a choice of the original built-in palettes, in both gallery and
+editor. Selecting one asks whether to save a new copy of the current theme first:
+Save a copy & restore, Restore without a copy, or Cancel restore. Nothing changes until
+that choice. Existing custom files are already saved by live editing and remain in the
+library in either restore path; this is stated in the prompt. Restore never overwrites
+a built-in or deletes the custom theme. A saved copy gets a free file name.
 
 The four miniature lanes use the open project's first four track colours and their first
 arrangement clips' explicit colour overrides. An unset colour follows the candidate theme's
-corresponding track token. Clip fills use the Arrangement's 82% colour strength over the
+MIDI or audio clip default. Clip fills use the Arrangement's 82% colour strength over the
 candidate panel surface, rather than raw saturated swatches. A short gallery note explains
 that existing tracks and clips keep their colours when selecting a theme. Previews never
 recolour the project.
 
 Edit current theme opens a child view, with Back to themes and the current theme name.
+Its Liquid section defaults to Use global liquid settings. Turning that off copies the
+current global Panel/Track/Clip strengths into independent theme overrides. The three
+sliders then apply live and save with the theme; turning inheritance back on removes
+the override. Editing a built-in creates a custom copy. The renderer uses theme values
+when present, otherwise global settings; GPU support, reduced effects and high contrast
+remain final gates. Theme JSON optionally contains `liquid: {panels, tracks, clips}`,
+with each integer from 0 to 100. Missing `liquid` preserves global inheritance. Copies
+and exports retain these values; Reset changes restores both entry colours and inheritance.
 Colours are grouped into Surfaces, Text, Tracks & clips, Controls, Meters and Sample map.
+Each colour has its swatch, hex and wrapping token on the first line, followed by the
+full wrapping explanation on a separate line. No fixed token/description columns or
+truncation hide the purpose or let long token names overlap it.
+Tracks & clips exposes two defaults: Default MIDI clip (`clip.midiDefault`) and Default
+audio clip (`clip.audioDefault`). These colour tracks and their inherited clips when no
+project colour is assigned, in both Arrangement and Session, and set new tracks' stored
+colours by content type. Explicit track and clip colours keep precedence. The old numbered
+`track.1`–`track.8` swatches remain readable in theme files and in colour pickers/browser
+icons for compatibility, but are hidden from this editor. Older theme files inherit their
+MIDI default from `track.3` and audio default from `track.1`; explicit new tokens win.
 Changes apply and save live; editing a built-in palette still creates a custom copy.
 Save as new theme duplicates the current palette and focuses its editable name. Reset
 changes restores the palette captured when entering the editor, without changing the

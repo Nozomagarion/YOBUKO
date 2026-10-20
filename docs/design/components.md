@@ -145,7 +145,8 @@ space, the mixer at the bottom.
 | Stop row | 20 px under the last scene, `panel.background`: per track a 7 × 7 square outline in `text.secondary` (`accent` while the stop is queued), centred; in the scene column the square and "Stop all" |
 | Empty space | Right of the last track: "+ MIDI track", "+ Audio track" and "+ Return track" buttons (a right-click anywhere there offers Insert audio track, Insert MIDI track, Insert return track) (20 px, `control.background`, 10 px `text.secondary`, 2 px apart, 6 px from its top left) and, below them, "Drop files or devices to add a track" in 10 px `text.hint`. Drops from the browser there make new tracks; the Arrangement has the same under its last lane |
 
-Track colours: the track's own colour if it has one, else `track.1`–`track.4` in track order.
+Track colours: the track's own colour if it has one, else `clip.midiDefault` for MIDI tracks
+and `clip.audioDefault` for audio tracks. New tracks store their type's colour; custom colours win.
 
 ### Colour palette
 
@@ -400,7 +401,8 @@ the wheel over it, as far as its last row and no further.
 | Appearance › Waveforms | Waveform scale | Linear (default), dB ([waveforms](../spec/waveforms.md)) |
 | Appearance › Graphics | Renderer | GPU (wgpu, default), OpenGL (glow) |
 
-**Appearance › Themes** is a two-column palette gallery. Cards are 142 px tall with a
+**Appearance › Themes** features the active palette once in a full-width 220 px card
+with a 170 px preview, followed by the other themes in two columns. Compact cards are 142 px tall with a
 92 px high miniature of the same browser, grid, four MIDI/audio lanes, controls and meters;
 the lanes retain the open project's colour overrides, falling back to the candidate theme,
 with clip colours mixed at 82% over its panel surface, as in the Arrangement;
@@ -408,10 +410,16 @@ a 10 px gap separates cards. Preview painting takes explicit palette snapshots a
 not install a theme. The active card has an accent border and Active label, and clicking
 another card applies it immediately. The header contains the active theme name,
 Edit current theme and a More menu for file actions.
+Holding the active card clears the backdrop until the primary button is released.
+Restore built-in is available in both gallery and editor: choosing an original palette
+asks Save a copy & restore, Restore without a copy, or Cancel restore. The current
+custom theme remains saved in the library; no file is deleted or overwritten.
 
 Edit current theme opens a child view with Back to themes, the theme name, Save as new
-theme and Reset changes. The live colour rows are grouped into Surfaces, Text, Tracks &
-clips, Controls, Meters and Sample map. Each row keeps its swatch, hex, token and purpose.
+theme and Reset changes. The Liquid section inherits global strengths unless Use global liquid settings is turned off;
+then independent panel, track and clip sliders save into the theme. The live colour rows are grouped into Surfaces, Text, Tracks &
+clips, Controls, Meters and Sample map. Each entry puts swatch, hex and a wrapping token
+above the full wrapping purpose, with 6 px between entries; no truncated second column.
 The built-in name field reserves the same height as an editable custom name so the
 picker does not move when its first edit creates a custom copy. An open picker keeps
 the background undimmed while the primary button is held, even when stationary;

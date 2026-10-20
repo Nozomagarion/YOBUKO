@@ -171,6 +171,8 @@ pub struct ThemesView {
     pub built_in: bool,
     pub name: String,
     pub colors: Palette,
+    pub liquid: Option<crate::kit::liquid::Options>,
+    pub global_liquid: crate::kit::liquid::Options,
     /// The folder theme files are kept in, if there is one.
     pub folder: Option<String>,
 }
@@ -182,10 +184,20 @@ pub enum ThemeRequest {
     Use(String),
     /// Use these colours; a built-in theme is copied first, since it does not change.
     Edit(Palette),
+    EditLiquid(Option<crate::kit::liquid::Options>),
+    ResetEdits {
+        colors: Palette,
+        liquid: Option<crate::kit::liquid::Options>,
+    },
     /// Give the theme in use this name (and its file a name made from it).
     Rename(String),
     /// A copy of the theme in use, to change.
     Duplicate,
+    /// Optionally save a new copy, then activate an unchanged built-in palette.
+    RestoreBuiltIn {
+        id: String,
+        save_copy: bool,
+    },
     /// Read the theme files again.
     Reload,
     /// Show the themes folder in the file manager.
@@ -253,6 +265,8 @@ pub struct PageState {
     pub theme_name: Option<(String, String)>,
     /// The colour editor is a child view of Themes, not another sidebar page.
     pub theme_editor: bool,
+    pub theme_restore: Option<(String, String)>,
+    pub theme_original_liquid: Option<Option<crate::kit::liquid::Options>>,
     pub theme_original: Option<Palette>,
     pub theme_rename_focus: bool,
     /// A colour picker is open while its primary pointer button is held.
@@ -676,6 +690,8 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
         state.page = picked;
         state.theme_editor = false;
         state.theme_original = None;
+        state.theme_original_liquid = None;
+        state.theme_restore = None;
         state.search.clear();
         state.capture = None;
         state.audio_listed = None;
@@ -890,6 +906,36 @@ fn theme_page(
     let mut request = None;
     ui.scope_builder(egui::UiBuilder::new().max_rect(Rect::from_min_max(pos2(page.left(), *at), page.max)), |ui| {
         ui.set_width(page.width());
+        ui.menu_button("Restore built-in…", |ui| {
+            for (id, name, built_in) in &themes.list {
+                if *built_in && ui.button(format!("Restore {name}")).clicked() {
+                    state.theme_restore = Some((id.clone(), name.clone()));
+                    ui.close();
+                }
+            }
+        });
+        if let Some((id, name)) = state.theme_restore.clone() {
+            egui::Frame::group(ui.style()).show(ui, |ui| {
+                ui.label(egui::RichText::new(format!("Save a copy before restoring {name}?")).strong());
+                ui.label("Your current theme is already saved and will stay in the library.");
+                ui.horizontal_wrapped(|ui| {
+                    for (label, save_copy) in [("Save a copy & restore", true), ("Restore without a copy", false)] {
+                        if ui.button(label).clicked() {
+                            request = Some(ThemeRequest::RestoreBuiltIn { id: id.clone(), save_copy });
+                            state.theme_restore = None;
+                            state.theme_editor = false;
+                            state.theme_original = None;
+                            state.scrolled = None;
+                        }
+                    }
+                    if ui.button("Cancel restore").clicked() {
+                        state.theme_restore = None;
+                    }
+                });
+            });
+            *at = ui.min_rect().bottom();
+            return;
+        }
         if state.theme_editor {
             request = theme_editor(ui, themes, state);
         } else {
@@ -898,6 +944,7 @@ fn theme_page(
                 if ui.button("Edit current theme…").clicked() {
                     state.theme_editor = true;
                     state.theme_original = Some(themes.colors);
+                    state.theme_original_liquid = Some(themes.liquid);
                     state.scrolled = None;
                 }
                 ui.menu_button("More", |ui| {
@@ -919,57 +966,22 @@ fn theme_page(
             ui.add_space(10.0);
             let gap = 10.0;
             let width = ((page.width() - gap) / 2.0).max(80.0);
-            for row in themes.list.chunks(2) {
+            if let Some((id, name, built_in)) = themes.list.iter().find(|(id, _, _)| *id == themes.current) {
+                let active = theme_card(ui, themes, id, name, *built_in, page.width(), true);
+                state.theme_colour_held |=
+                    active.is_pointer_button_down_on() && ui.input(|input| input.pointer.primary_down());
+                ui.add_space(gap);
+            }
+            ui.label("Other themes");
+            let mut others = themes.list.iter().filter(|(id, _, _)| *id != themes.current);
+            while let Some(first) = others.next() {
+                let second = others.next();
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
-                    for (id, name, built_in) in row {
-                        let (rect, _) = ui.allocate_exact_size(Vec2::new(width, 142.0), Sense::hover());
-                        let response = widgets::button_area(ui, rect, Id::new(("theme", id)), format!("Theme: {name}"));
-                        let current = *id == themes.current;
-                        let palette =
-                            themes.previews.iter().find(|(key, _)| key == id).map_or(&themes.colors, |(_, p)| p);
-                        if ui.is_rect_visible(rect) {
-                            let preview =
-                                Rect::from_min_size(rect.min + Vec2::splat(5.0), Vec2::new(width - 10.0, 92.0));
-                            crate::kit::theme_preview::paint(ui.painter(), preview, palette, &themes.preview_scene);
-                            let border = if current {
-                                theme::accent()
-                            } else if response.hovered() {
-                                theme::border_strong()
-                            } else {
-                                theme::border()
-                            };
-                            ui.painter().rect_stroke(rect, 3.0, theme::hairline(border), egui::StrokeKind::Inside);
-                            let name_rect = Rect::from_min_size(
-                                pos2(rect.left() + 8.0, rect.top() + 101.0),
-                                Vec2::new(width - 16.0, 18.0),
-                            );
-                            widgets::text_in(
-                                ui.painter(),
-                                name_rect,
-                                Align2::LEFT_CENTER,
-                                name,
-                                theme::ui_font(theme::TEXT),
-                                theme::text_primary(),
-                            );
-                            let note = if current {
-                                "Active"
-                            } else if *built_in {
-                                "Built-in"
-                            } else {
-                                "Custom"
-                            };
-                            widgets::text_in(
-                                ui.painter(),
-                                name_rect.translate(Vec2::new(0.0, 18.0)),
-                                Align2::LEFT_CENTER,
-                                note,
-                                theme::ui_font(theme::TEXT_SMALL),
-                                if current { theme::accent() } else { theme::text_secondary() },
-                            );
-                        }
-                        if response.clicked() && !current {
+                    for (id, name, built_in) in std::iter::once(first).chain(second) {
+                        if theme_card(ui, themes, id, name, *built_in, width, false).clicked() {
                             request = Some(ThemeRequest::Use(id.clone()));
+                            state.scrolled = None;
                         }
                     }
                 });
@@ -979,6 +991,63 @@ fn theme_page(
         *at = ui.min_rect().bottom();
     });
     request
+}
+
+/// The current palette is featured once; every other palette stays in the compact grid.
+fn theme_card(
+    ui: &mut Ui,
+    themes: &ThemesView,
+    id: &str,
+    name: &str,
+    built_in: bool,
+    width: f32,
+    active: bool,
+) -> egui::Response {
+    let preview_height = if active { 170.0 } else { 92.0 };
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(width, preview_height + 50.0), Sense::hover());
+    let response =
+        ui.interact(rect, Id::new(("theme", id)), if active { Sense::click_and_drag() } else { Sense::click() });
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Theme: {name}")));
+    if ui.is_rect_visible(rect) {
+        let palette = themes.previews.iter().find(|(key, _)| key == id).map_or(&themes.colors, |(_, p)| p);
+        let preview = Rect::from_min_size(rect.min + Vec2::splat(5.0), Vec2::new(width - 10.0, preview_height));
+        crate::kit::theme_preview::paint(ui.painter(), preview, palette, &themes.preview_scene);
+        let border = if active {
+            theme::accent()
+        } else if response.hovered() {
+            theme::border_strong()
+        } else {
+            theme::border()
+        };
+        ui.painter().rect_stroke(rect, 3.0, theme::hairline(border), egui::StrokeKind::Inside);
+        let name_rect = Rect::from_min_size(
+            pos2(rect.left() + 8.0, rect.top() + preview_height + 9.0),
+            Vec2::new(width - 16.0, 18.0),
+        );
+        widgets::text_in(
+            ui.painter(),
+            name_rect,
+            Align2::LEFT_CENTER,
+            name,
+            theme::ui_font(theme::TEXT),
+            theme::text_primary(),
+        );
+        widgets::text_in(
+            ui.painter(),
+            name_rect.translate(Vec2::new(0.0, 18.0)),
+            Align2::LEFT_CENTER,
+            if active {
+                "Active"
+            } else if built_in {
+                "Built-in"
+            } else {
+                "Custom"
+            },
+            theme::ui_font(theme::TEXT_SMALL),
+            if active { theme::accent() } else { theme::text_secondary() },
+        );
+    }
+    response
 }
 
 /// Each colour appears in exactly one understandable group; the token name stays visible.
@@ -1036,18 +1105,49 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
             state.theme_rename_focus = true;
         }
         let original = *state.theme_original.get_or_insert(themes.colors);
-        if ui.add_enabled(original != themes.colors, egui::Button::new("Reset changes")).clicked() {
-            request = Some(ThemeRequest::Edit(original));
+        let original_liquid = *state.theme_original_liquid.get_or_insert(themes.liquid);
+        if ui
+            .add_enabled(
+                original != themes.colors || original_liquid != themes.liquid,
+                egui::Button::new("Reset changes"),
+            )
+            .clicked()
+        {
+            request = Some(ThemeRequest::ResetEdits { colors: original, liquid: original_liquid });
         }
     });
     ui.add_space(8.0);
+    ui.label(egui::RichText::new("Liquid (experimental)").strong());
+    let mut inherit = themes.liquid.is_none();
+    if ui.checkbox(&mut inherit, "Use global liquid settings").changed() {
+        request = Some(ThemeRequest::EditLiquid(if inherit { None } else { Some(themes.global_liquid) }));
+    }
+    let mut options = themes.liquid.unwrap_or(themes.global_liquid);
+    let original_options = options;
+    let available = crate::kit::liquid::available(ui.ctx());
+    ui.add_enabled_ui(!inherit && available, |ui| {
+        for (name, value) in [
+            ("Theme panel liquid", &mut options.panels),
+            ("Theme track liquid", &mut options.tracks),
+            ("Theme clip liquid", &mut options.clips),
+        ] {
+            let response = ui.add(egui::Slider::new(value, 0..=100).suffix(" %").text(name));
+            state.theme_colour_held |= response.dragged() || response.is_pointer_button_down_on();
+        }
+    });
+    if options != original_options {
+        request = Some(ThemeRequest::EditLiquid(Some(options)));
+    }
+    ui.add(egui::Label::new(egui::RichText::new("Turn off inheritance to save independent panel, track and clip strengths with this theme. Requires the GPU renderer; reduced effects and high contrast still apply.").small().color(theme::text_secondary())).wrap());
     let mut edited = themes.colors;
     let tokens = themes.colors.tokens();
     for group in ["Surfaces", "Text", "Tracks & clips", "Controls", "Meters", "Sample map"] {
         ui.add_space(8.0);
         ui.label(egui::RichText::new(group).strong());
         ui.separator();
-        for &(key, purpose, color) in tokens.iter().filter(|(key, _, _)| colour_group(key) == group) {
+        for &(key, purpose, color) in tokens.iter().filter(|(key, _, _)| {
+            colour_group(key) == group && !key.strip_prefix("track.").is_some_and(|suffix| suffix.parse::<u8>().is_ok())
+        }) {
             ui.push_id(("theme-colour", key), |ui| {
                 ui.horizontal(|ui| {
                     let mut picked = color;
@@ -1076,23 +1176,21 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
                             );
                         },
                     );
-                    ui.allocate_ui_with_layout(
-                        Vec2::new(170.0, 18.0),
-                        egui::Layout::left_to_right(egui::Align::Center),
-                        |ui| {
-                            ui.set_min_width(170.0);
-                            ui.label(
-                                egui::RichText::new(key)
-                                    .font(theme::mono_font(theme::TEXT_SMALL))
-                                    .color(theme::text_primary()),
-                            );
-                        },
-                    );
                     ui.add(
-                        egui::Label::new(egui::RichText::new(purpose).small().color(theme::text_secondary()))
-                            .truncate(),
+                        egui::Label::new(
+                            egui::RichText::new(match key {
+                                "clip.midiDefault" => "Default MIDI clip",
+                                "clip.audioDefault" => "Default audio clip",
+                                _ => key,
+                            })
+                            .font(theme::mono_font(theme::TEXT_SMALL))
+                            .color(theme::text_primary()),
+                        )
+                        .wrap(),
                     );
                 });
+                ui.add(egui::Label::new(egui::RichText::new(purpose).small().color(theme::text_secondary())).wrap());
+                ui.add_space(6.0);
             });
         }
     }

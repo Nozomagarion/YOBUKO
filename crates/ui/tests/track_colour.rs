@@ -137,7 +137,7 @@ fn filled_with(harness: &Harness<'static, App>, area: Rect, colour: Color32) -> 
 }
 
 fn default_drums() -> Color32 {
-    colour_picker::color32(colour_picker::swatches()[0])
+    theme::midi_clip_default()
 }
 
 #[test]
@@ -215,7 +215,12 @@ fn picking_the_colour_the_track_has_changes_nothing() {
     let mut harness = arrangement();
     harness.get_by_label("Drums colour").click();
     harness.run();
-    harness.get_by_label(&format!("Colour {}", colour_picker::hex(colour_picker::swatches()[0]))).click();
+    harness
+        .get_by_label(&format!(
+            "Colour {}",
+            colour_picker::hex(suhina_ui::interaction::grid::to_rgb(theme::midi_clip_default()))
+        ))
+        .click();
     harness.run();
     assert!(!harness.state().session().unwrap().can_undo(), "no command for the same colour");
 }

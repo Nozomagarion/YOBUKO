@@ -340,6 +340,7 @@ pub struct Session {
     /// The colours a track without one of its own shows, by its place among the tracks (the
     /// window's palette), and the one a new track gets instead, when set ([`Session::set_track_colours`]).
     track_colours: (Vec<suhina_model::Rgb>, Option<suhina_model::Rgb>),
+    track_type_colours: Option<(suhina_model::Rgb, suhina_model::Rgb)>,
     /// The project's plug-ins, running while it plays (ADR 0006).
     pub(crate) plugins: rack::Rack,
     /// The project's decoded audio, by the key its regions name (ADR 0011).
@@ -404,6 +405,7 @@ impl Session {
             unheard_edit: false,
             param_gesture: None,
             track_colours: (Vec::new(), None),
+            track_type_colours: None,
             plugins: rack::Rack::default(),
             audio: suhina_engine::AudioPool::new(),
             audio_changed: false,
@@ -1137,9 +1139,15 @@ impl Session {
     /// window's palette, which follows the theme), and `fixed`, the colour a new track gets
     /// instead of the palette's, when set. Without a palette, tracks keep no colour of their own.
     pub fn set_track_colours(&mut self, palette: Vec<suhina_model::Rgb>, fixed: Option<suhina_model::Rgb>) {
+        self.track_type_colours = None;
         if self.track_colours.0 != palette || self.track_colours.1 != fixed {
             self.track_colours = (palette, fixed);
         }
+    }
+
+    /// Optional MIDI/audio defaults for newly created tracks; existing explicit colours win.
+    pub fn set_track_type_colours(&mut self, midi: suhina_model::Rgb, audio: suhina_model::Rgb) {
+        self.track_type_colours = Some((midi, audio));
     }
 
     /// After an edit that adds, removes or moves tracks: every track keeps the colour it showed
@@ -1148,7 +1156,7 @@ impl Session {
     /// colour of its place, or the fixed one. Part of the same undo step.
     fn keep_track_colours(&mut self, before: &Project) {
         let (palette, fixed) = &self.track_colours;
-        if palette.is_empty() {
+        if palette.is_empty() && self.track_type_colours.is_none() {
             return;
         }
         let order = |p: &Project| p.tracks.iter().map(|t| t.id).collect::<Vec<_>>();
@@ -1156,15 +1164,20 @@ impl Session {
         if was == order(&self.project) {
             return;
         }
-        let colour = |place: usize| palette[place % palette.len()];
+        let colour = |place: usize, track: &suhina_model::Track| {
+            self.track_type_colours.map_or_else(
+                || palette[place % palette.len()],
+                |(midi, audio)| if track.content.audio && !track.content.notes { audio } else { midi },
+            )
+        };
         for (place, track) in before.tracks.iter().enumerate().filter(|(_, t)| t.color.is_none()) {
             if let Some(now) = self.project.tracks.iter_mut().find(|t| t.id == track.id && t.color.is_none()) {
-                now.color = Some(colour(place));
+                now.color = Some(colour(place, track));
             }
         }
         for (place, track) in self.project.tracks.iter_mut().enumerate() {
             if track.color.is_none() && !was.contains(&track.id) {
-                track.color = Some(fixed.unwrap_or_else(|| colour(place)));
+                track.color = Some(fixed.unwrap_or_else(|| colour(place, track)));
             }
         }
     }

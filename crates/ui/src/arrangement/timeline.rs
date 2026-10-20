@@ -12,7 +12,7 @@ use suhina_engine::model::{
     ChannelRole, Clip, ClipContent, ClipId, FadeCurve, LaneData, LoopRange, Meter, Project, Rgb, TrackId,
 };
 
-use crate::interaction::grid::{ColumnKind, default_track_colour, gain_to_db};
+use crate::interaction::grid::{ColumnKind, gain_to_db, track_colour};
 use crate::interaction::nesting::depth;
 use crate::kit::waveform::Waveforms;
 
@@ -300,7 +300,7 @@ impl Timeline {
                 Some(ChannelRole::Submix) => ColumnKind::Group,
                 _ => ColumnKind::Track,
             };
-            let track_color = track.color.unwrap_or_else(|| default_track_colour(position));
+            let track_color = track_colour(track);
             let clips = project
                 .arrangement
                 .lanes
@@ -350,7 +350,7 @@ impl Timeline {
             let lane = Lane {
                 track: track.id,
                 name: track.name.clone(),
-                color: track.color.unwrap_or_else(|| default_track_colour(position)),
+                color: track_colour(track),
                 kind,
                 notes: kind == ColumnKind::Track && track.content.notes,
                 depth: depth(project, track.parent),

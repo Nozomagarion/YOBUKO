@@ -79,6 +79,27 @@ fn a_clips_colour_survives_saving() {
 }
 
 #[test]
+fn midi_and_audio_defaults_follow_the_type_and_keep_explicit_colours() {
+    let mut session = Session::new(blank_project());
+    let midi = Rgb(4, 150, 210);
+    let audio = Rgb(240, 130, 50);
+    session.set_track_type_colours(midi, audio);
+    run(&mut session, "track.add", json!({ "kind": "audio" })).unwrap();
+    run(&mut session, "track.add", json!({ "kind": "midi" })).unwrap();
+    for track in &session.project().tracks {
+        assert_eq!(track.color, Some(if track.content.audio && !track.content.notes { audio } else { midi }));
+    }
+    let before = session.project().tracks.iter().map(|t| (t.id, t.color)).collect::<Vec<_>>();
+    session.set_track_type_colours(Rgb(1, 1, 1), Rgb(2, 2, 2));
+    run(&mut session, "track.add", json!({ "kind": "audio" })).unwrap();
+    assert!(
+        before.iter().all(|(id, colour)| session.project().tracks.iter().any(|t| t.id == *id && t.color == *colour))
+    );
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(session.project().tracks.iter().map(|t| (t.id, t.color)).collect::<Vec<_>>(), before);
+}
+
+#[test]
 fn tracks_keep_the_colour_they_show_when_tracks_come_and_go() {
     let palette = vec![Rgb(1, 0, 0), Rgb(0, 2, 0), Rgb(0, 0, 3), Rgb(4, 4, 0)];
     let mut session = Session::new(blank_project());

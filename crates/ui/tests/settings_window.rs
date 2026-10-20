@@ -74,11 +74,121 @@ fn theme_cards_keep_the_open_projects_clip_colour() {
 }
 
 #[test]
+fn active_theme_is_featured_and_holding_it_keeps_the_preview_clear() {
+    let mut harness = short_window();
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    let id = harness.state().settings().theme.clone();
+    let name = suhina_ui::kit::theme::built_in_themes().into_iter().find(|(key, _)| *key == id).unwrap().1.name;
+    let rect = harness.get_by_label(&format!("Theme: {name}")).rect();
+    assert!(rect.width() > 500.0 && rect.height() > 200.0);
+    let pointer = rect.center_top() + Vec2::new(0.0, 20.0);
+    harness.hover_at(pointer);
+    harness.step();
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: pointer,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    for _ in 0..6 {
+        harness.step();
+        assert!(!dimmed(&harness));
+    }
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: pointer,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    assert!(dimmed(&harness));
+    assert_eq!(harness.state().settings().theme, id);
+}
+
+#[test]
+fn restoring_a_built_in_waits_for_the_save_choice_and_can_be_cancelled() {
+    let mut harness = short_window();
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    let original = harness.state().settings().theme.clone();
+    harness.get_by_label("Restore built-in…").click();
+    settle(&mut harness);
+    harness.get_by_label("Restore Nord").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().settings().theme, original);
+    harness.get_by_label("Cancel restore").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().settings().theme, original);
+    harness.get_by_label("Restore built-in…").click();
+    settle(&mut harness);
+    harness.get_by_label("Restore Nord").click();
+    settle(&mut harness);
+    harness.get_by_label("Save a copy & restore").click();
+    settle(&mut harness);
+    assert_eq!(harness.state().settings().theme, "nord");
+    assert!(harness.get_by_label("Theme: Nord").rect().width() > 500.0);
+    harness.get_by_label(&format!(
+        "Theme: {name} copy",
+        name = suhina_ui::kit::theme::built_in_themes().into_iter().find(|(id, _)| *id == original).unwrap().1.name
+    ));
+}
+
+#[test]
+fn theme_liquid_overrides_save_without_changing_global_settings() {
+    struct Host;
+    impl suhina_ui::kit::liquid::Provider for Host {
+        fn capture(&self, _: &egui::Context) -> Option<suhina_ui::kit::liquid::Backdrop> {
+            None
+        }
+    }
+    let mut harness = short_window();
+    suhina_ui::kit::liquid::install(&harness.ctx, std::sync::Arc::new(Host));
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    harness.get_by_label("Edit current theme…").click();
+    settle(&mut harness);
+    let global = harness.state().settings().view.liquid;
+    harness.get_by_label("Use global liquid settings").click();
+    settle(&mut harness);
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.liquid == Some(global))));
+    assert_eq!(harness.state().settings().view.liquid, global);
+    harness.get_by_label("Use global liquid settings").click();
+    settle(&mut harness);
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(actions.iter().any(
+        |action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.liquid.is_none())
+    ));
+    assert_eq!(harness.state().settings().view.liquid, global);
+    assert!(harness.query_by_label("Colour track.1").is_none());
+    wheel_to(&mut harness, "Colour clip.midiDefault", 40);
+    harness.get_by_label("Colour clip.midiDefault");
+    harness.get_by_label("Colour clip.audioDefault");
+}
+
+#[test]
+fn colour_explanations_wrap_below_the_token_instead_of_overlapping_it() {
+    let mut harness = short_window();
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    harness.get_by_label("Edit current theme…").click();
+    settle(&mut harness);
+    let purpose = theme::palette().tokens().into_iter().find(|(key, _, _)| *key == "window.background").unwrap().1;
+    wheel_to(&mut harness, purpose, 40);
+    let token = harness.get_by_label("window.background").rect();
+    let description = harness.get_by_label(purpose).rect();
+    assert!(description.top() >= token.bottom(), "{token:?} overlaps {description:?}");
+    assert!(description.width() <= 560.0, "description escapes the editor width");
+}
+
+#[test]
 fn themes_gallery_switches_immediately_and_opens_a_separate_editor() {
     let mut harness = short_window();
     harness.get_by_label("Settings page: Themes").click();
     settle(&mut harness);
     assert!(harness.query_by_label("Colour grid.major").is_none());
+    wheel_to(&mut harness, "Theme: Suhina Studio Light", 40);
     harness.get_by_label("Theme: Suhina Studio Light").click();
     settle(&mut harness);
     assert_eq!(harness.state().settings().theme, "suhina-studio-light");
@@ -101,6 +211,7 @@ fn colour_picker_keeps_preview_clear_while_held_and_reset_restores_the_palette()
     harness.get_by_label("Edit current theme…").click();
     settle(&mut harness);
     let original = theme::palette();
+    wheel_to(&mut harness, "Colour grid.major", 40);
     harness.get_by_label("Colour grid.major").click();
     settle(&mut harness);
     let square = harness
@@ -140,6 +251,7 @@ fn colour_picker_keeps_preview_clear_while_held_and_reset_restores_the_palette()
     assert!(dimmed(&harness), "releasing the colour picker must restore the dimmer immediately");
     egui::Popup::close_all(&harness.ctx);
     harness.step();
+    wheel_to(&mut harness, "Reset changes", 40);
     harness.get_by_label("Reset changes").click();
     settle(&mut harness);
     assert_eq!(theme::palette(), original);

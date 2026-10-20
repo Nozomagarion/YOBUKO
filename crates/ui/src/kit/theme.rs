@@ -108,14 +108,18 @@ palette! {
         "Behind a track header's pan field";
     pan_centre, "pan.centre", 0x55524C,
         "The centre mark of a pan field";
+    midi_clip_default, "clip.midiDefault", 0x4FC3F7,
+        "Default MIDI clip colour on tracks without a custom colour; existing custom colours stay unchanged";
+    audio_clip_default, "clip.audioDefault", 0xFF9A3C,
+        "Default audio clip colour on tracks without a custom colour; existing custom colours stay unchanged";
     track_color_1, "track.1", 0xFF9A3C,
-        "The first default track colour: new tracks take them in turn; also effects in the browser";
+        "Colour-picker swatch 1; also effects in the browser (legacy track token)";
     track_color_2, "track.2", 0xF2D541,
-        "The second default track colour; also MIDI files in the browser";
+        "Colour-picker swatch 2; also MIDI files in the browser (legacy track token)";
     track_color_3, "track.3", 0x4FC3F7,
-        "The third default track colour; also samples in the browser";
+        "Colour-picker swatch 3; also samples in the browser (legacy track token)";
     track_color_4, "track.4", 0xB38BFF,
-        "The fourth default track colour; also instruments and presets in the browser";
+        "Colour-picker swatch 4; also instruments and presets in the browser (legacy track token)";
     track_color_5, "track.5", 0x7FDB5A,
         "A colour the track colour palette offers";
     track_color_6, "track.6", 0xFF6FA8,
@@ -243,11 +247,13 @@ pub fn is_built_in(id: &str) -> bool {
 pub struct Theme {
     pub name: String,
     pub colors: Palette,
+    /// None inherits the application's global material strengths.
+    pub liquid: Option<super::liquid::Options>,
 }
 
 impl Default for Theme {
     fn default() -> Self {
-        Self { name: "Suhina Dark".into(), colors: Palette::DARK }
+        Self { name: "Suhina Dark".into(), colors: Palette::DARK, liquid: None }
     }
 }
 
@@ -278,11 +284,34 @@ impl Theme {
                         (Some(_), None) => warnings.push(format!("{key}: {value} is not a #RRGGBB colour")),
                     }
                 }
+                // Older palettes only supplied the numbered colour-picker swatches.
+                if !colors.contains_key("clip.midiDefault") {
+                    theme.colors.midi_clip_default = theme.colors.track_color_3;
+                }
+                if !colors.contains_key("clip.audioDefault") {
+                    theme.colors.audio_clip_default = theme.colors.track_color_1;
+                }
             }
             Some(_) => warnings.push("the theme's colors are not an object".into()),
             None => {}
         }
-        let known = |k: &str| matches!(k, "name" | "colors" | "description" | "$schema");
+        if let Some(value) = root.get("liquid") {
+            if let Some(values) = value.as_object() {
+                let mut options = super::liquid::Options::default();
+                for (key, slot) in
+                    [("panels", &mut options.panels), ("tracks", &mut options.tracks), ("clips", &mut options.clips)]
+                {
+                    match values.get(key).and_then(Value::as_u64).filter(|n| *n <= 100) {
+                        Some(n) => *slot = n as u8,
+                        None => warnings.push(format!("liquid.{key} must be a number from 0 to 100")),
+                    }
+                }
+                theme.liquid = Some(options);
+            } else {
+                warnings.push("liquid must be an object of panels, tracks and clips strengths".into());
+            }
+        }
+        let known = |k: &str| matches!(k, "name" | "colors" | "liquid" | "description" | "$schema");
         for key in root.keys().filter(|k| !known(k)) {
             warnings.push(format!("{key} is not part of a theme"));
         }
@@ -300,6 +329,12 @@ impl Theme {
         let mut root = Map::new();
         root.insert("name".into(), Value::String(self.name.clone()));
         root.insert("colors".into(), Value::Object(colors));
+        if let Some(options) = self.liquid {
+            root.insert(
+                "liquid".into(),
+                serde_json::json!({ "panels": options.panels, "tracks": options.tracks, "clips": options.clips }),
+            );
+        }
         serde_json::to_string_pretty(&Value::Object(root)).unwrap_or_default()
     }
 }
@@ -345,7 +380,9 @@ Themes. While it is in use, every save of the file shows within a second.\n\
   whose label is then drawn in `window.background`: the two must contrast.\n\
 - `accent` marks the playhead, queued clips and a key being set; it should stand out from every\n\
   background. `recording` is also used for errors.\n\
-- Track and clip colours come from the project, not the theme.\n\
+- Explicit track and clip colours come from the project. Uncoloured MIDI/audio tracks use clip.midiDefault/clip.audioDefault.\n\
+\n\
+An optional `liquid` object with `panels`, `tracks` and `clips` integers (0 to 100) overrides global material strengths. Leave it out to inherit them.\n\
 \n\
 ## Tokens\n\
 \n\
@@ -521,6 +558,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn old_clip_defaults_migrate_and_explicit_defaults_and_materials_round_trip() {
+        let (old, warnings) = Theme::from_json(r##"{"colors":{"track.1":"#123456","track.3":"#ABCDEF"}}"##);
+        assert!(warnings.is_empty());
+        assert_eq!(old.colors.audio_clip_default, rgb(0x123456));
+        assert_eq!(old.colors.midi_clip_default, rgb(0xABCDEF));
+        assert_eq!(old.liquid, None);
+        let (theme, warnings) = Theme::from_json(
+            r##"{"colors":{"clip.midiDefault":"#010203","clip.audioDefault":"#040506"},"liquid":{"panels":38,"tracks":52,"clips":40}}"##,
+        );
+        assert!(warnings.is_empty());
+        assert_eq!(theme.colors.midi_clip_default, rgb(0x010203));
+        assert_eq!(theme.colors.audio_clip_default, rgb(0x040506));
+        assert_eq!(theme.liquid, Some(super::super::liquid::Options { panels: 38, tracks: 52, clips: 40 }));
+        assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
+        let (invalid, warnings) = Theme::from_json(r#"{"liquid":{"panels":999,"tracks":-1,"clips":"bad"}}"#);
+        assert_eq!(warnings.len(), 3);
+        assert_eq!(invalid.liquid, Some(super::super::liquid::Options::default()));
+    }
+
+    #[test]
     fn every_theme_that_comes_with_suhina_sets_every_token() {
         let tokens: Vec<&str> = Palette::DARK.tokens().iter().map(|(key, _, _)| *key).collect();
         for (id, text) in BUILT_IN_FILES {
@@ -561,7 +618,7 @@ mod tests {
 
     #[test]
     fn a_theme_survives_a_round_trip() {
-        let mut theme = Theme { name: "Night".into(), colors: Palette::DARK };
+        let mut theme = Theme { name: "Night".into(), colors: Palette::DARK, liquid: None };
         theme.colors.accent = rgb(0x12AB9F);
         theme.colors.window_background = rgb(0x000000);
         assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));

@@ -25,6 +25,8 @@
     "track.mutedBackground": "#353B48",
     "pan.background": "#2A303B",
     "pan.centre": "#7B88A1",
+    "clip.midiDefault": "#4FC3F7",
+    "clip.audioDefault": "#FF9A3C",
     "track.1": "#FF9A3C",
     "track.2": "#F2D541",
     "track.3": "#4FC3F7",
