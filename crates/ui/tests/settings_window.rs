@@ -15,6 +15,50 @@ use suhina_ui::{App, kit::theme};
 /// A window too short for most pages.
 const SHORT: (f32, f32) = (1000.0, 420.0);
 
+#[test]
+fn liquid_sliders_change_independent_saved_strengths_without_restarting() {
+    struct Host;
+    impl suhina_ui::kit::liquid::Provider for Host {
+        fn capture(&self, _: &egui::Context) -> Option<suhina_ui::kit::liquid::Backdrop> {
+            None
+        }
+    }
+    let mut app = App::new();
+    app.set_session(Session::new(demo_project()), &[]);
+    let mut harness = Harness::builder()
+        .with_size((1200.0, 850.0))
+        .with_step_dt(0.25)
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    theme::install(&harness.ctx);
+    suhina_ui::kit::liquid::install(&harness.ctx, std::sync::Arc::new(Host));
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    harness.run();
+    harness.get_by_label("Settings page: Appearance").click();
+    harness.run();
+    harness.get_by_label("Panel liquid").click();
+    harness.run();
+    let panels = harness.state().settings().view.liquid.panels;
+    assert!(panels > 0);
+    assert_eq!(harness.state().settings().view.liquid.tracks, 0);
+    assert_eq!(harness.state().settings().view.liquid.clips, 0);
+    harness.get_by_label("Track liquid").click();
+    harness.run();
+    let tracks = harness.state().settings().view.liquid.tracks;
+    assert!(tracks > 0);
+    assert_eq!(harness.state().settings().view.liquid.panels, panels);
+    assert_eq!(harness.state().settings().view.liquid.clips, 0);
+    harness.get_by_label("Clip liquid").click();
+    harness.run();
+    let changed = harness.state_mut().take_changed_settings().expect("slider persists changed settings");
+    assert!(changed.view.liquid.clips > 0);
+    assert_eq!(changed.view.liquid.panels, panels);
+    assert_eq!(changed.view.liquid.tracks, tracks);
+    let (read, warnings) = suhina_ui::settings::Settings::from_text(&changed.to_text());
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(read.view.liquid, changed.view.liquid);
+}
+
 fn short_window() -> Harness<'static, App> {
     let mut app = App::new();
     app.set_browser_open(false);

@@ -212,19 +212,10 @@ fn main() -> ExitCode {
             window.editors_embeddable = owner.is_some();
             window.app.set_editor_owner(owner);
             window.app.set_settings(&cc.egui_ctx, settings);
-            // Developer preview only until GPU correctness/performance checks are complete.
-            // Missing GPU support, high contrast and reduced effects always keep solid surfaces.
-            if std::env::var_os("SUHINA_LIQUID_PREVIEW").is_some_and(|value| value == "1")
-                && animations
-                && window.app.settings().animations
-                && window.app.settings().theme != "high-contrast"
-                && let Some(gpu) = cc.wgpu_render_state.clone()
-            {
-                suhina_ui::kit::liquid::install(
-                    &cc.egui_ctx,
-                    std::sync::Arc::new(liquid::Liquid::new(gpu)),
-                    suhina_ui::kit::liquid::Options { panels: true, tracks: true, clips: true },
-                );
+            // Strengths default to zero. The experimental Appearance controls apply live;
+            // unsupported renderers and reduced effects keep solid surfaces.
+            if animations && let Some(gpu) = cc.wgpu_render_state.clone() {
+                suhina_ui::kit::liquid::install(&cc.egui_ctx, std::sync::Arc::new(liquid::Liquid::new(gpu)));
             }
             let folder = window.themes.folder_text();
             window.app.set_themes(&cc.egui_ctx, theme_list, folder);

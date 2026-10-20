@@ -438,6 +438,17 @@ impl Cx<'_> {
         self.outcome.changed |= response.changed();
     }
 
+    /// Per-surface material strength, available only in a host with the GPU provider.
+    pub fn liquid_strength(&mut self, row: Rect, field: impl FnOnce(&mut Settings) -> &mut u8) {
+        let available = crate::kit::liquid::available(self.ui.ctx());
+        let value = field(self.settings);
+        let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
+        let response =
+            self.ui.add_enabled_ui(available, |ui| ui.put(rect, egui::Slider::new(value, 0..=100).suffix(" %"))).inner;
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, available, self.name));
+        self.outcome.changed |= response.changed();
+    }
+
     /// The custom waveform and note ink, with the picker's RGB/hex controls.
     pub fn waveform_colour(&mut self, row: Rect) {
         let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));

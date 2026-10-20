@@ -15,9 +15,11 @@ covers:
 ## Current state
 
 The original static experiment below remains available. There is also an experimental
-native integration, disabled by default and not yet exposed as a normal Appearance setting.
+native integration, disabled by default, with per-surface strengths under
+Appearance › Liquid (experimental).
 
-Run a build with `SUHINA_LIQUID_PREVIEW=1` and `--renderer wgpu` to opt in for that process.
+Run with `--renderer wgpu` and raise a strength above 0 to opt in. The old
+`SUHINA_LIQUID_PREVIEW` environment switch is no longer needed.
 `--new-instance --demo` opens a separate review window without replacing the running project.
 Do not force-close the user's existing project to try it.
 
@@ -33,10 +35,16 @@ No swapchain readback, previous frame or recursive rendering is used.
 The UI-facing provider and independent Panel/Track/Clip options live in
 `crates/ui/src/kit/liquid.rs`. Settings uses the live blurred backdrop under a theme tint.
 Arrangement and Session track headers and clip backgrounds get a lightweight optical
-coating (an upper highlight and lower edge), painted before labels, controls,
+coating (a continuous reflection with a brighter upper body and darker lower edge),
+painted before labels, controls,
 notes and waveforms. These coatings do **not** perform per-clip backdrop blur or refraction.
-Surfaces smaller than 12 logical pixels stay solid. The options are currently host-side
-preview switches, not saved user preferences.
+Surfaces smaller than 12 logical pixels stay solid. The three strengths are independently
+saved percentages: 0 is off, 100 is the strongest supported material. Panels interpolate
+from opaque to a 55% theme tint at full strength; track and clip gradients keep the source
+hue and draw all text/notes/waveforms sharply on top. Missing settings default to 0.
+
+The wgpu host installs its provider even while all strengths are 0; no backdrop capture
+is requested until Panel liquid is raised. OpenGL has no provider and disables the controls.
 
 OpenGL, disabled animations and the built-in high-contrast theme keep solid surfaces.
 The accessibility gate is checked after running settings/theme changes too. If replay
@@ -46,7 +54,7 @@ back to solid rather than displaying an incomplete or stale backdrop.
 Remaining costs/limits: capture currently clones/tessellates UI shapes and copies/compares
 the current CPU font atlas, uploading the atlas only when it changes. This is UI-thread
 work, never audio callback work, but needs profiling and a more efficient atlas update
-path before becoming a normal material. Foreign image support, playback/scroll/zoom
+path before the material can leave its experimental status. Foreign image support, playback/scroll/zoom
 measurements, interactive visual QA and true edge refraction are still outstanding.
 A GPU-only blur does not imply that the whole capture is free.
 
@@ -54,7 +62,7 @@ The native hardware test was run explicitly on Windows: constant RGB preservatio
 linear-light checkerboard mean, impulse symmetry and a changed frame at a new size passed.
 GPU readback exists only in that test, not in the application path. The two kit tests cover
 default/tiny/reduced-effects solid rendering and removal of an old backdrop on failure.
-Settings-window (6) and constrained-pane (16) regression tests also passed, as did Clippy
+Settings-window (7, including live independent strength controls and persistence) and constrained-pane (16) regression tests also passed, as did Clippy
 for both the application and UI with all targets. These checks do not replace visual QA
 or playback performance measurements.
 

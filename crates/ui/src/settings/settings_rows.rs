@@ -655,6 +655,30 @@ pub(crate) static ROWS: &[Entry] = &[
     // Appearance.
     row(
         Page::Appearance,
+        "Liquid (experimental)",
+        "Panel liquid",
+        "Settings backdrop transparency; 0% is solid. Requires GPU renderer and Animations on",
+        &["liquid_panel_strength"],
+        |cx, r| cx.liquid_strength(r, |s| &mut s.view.liquid.panels),
+    ),
+    row(
+        Page::Appearance,
+        "Liquid (experimental)",
+        "Track liquid",
+        "Reflection on MIDI and audio track headers; 0% is flat. Requires GPU renderer and Animations on",
+        &["liquid_track_strength"],
+        |cx, r| cx.liquid_strength(r, |s| &mut s.view.liquid.tracks),
+    ),
+    row(
+        Page::Appearance,
+        "Liquid (experimental)",
+        "Clip liquid",
+        "Reflection on clip backgrounds; notes and waveforms stay sharp. 0% is flat; requires GPU and Animations on",
+        &["liquid_clip_strength"],
+        |cx, r| cx.liquid_strength(r, |s| &mut s.view.liquid.clips),
+    ),
+    row(
+        Page::Appearance,
         "Window",
         "Zoom",
         "The size of the whole window; Ctrl and + or -, Ctrl and 0 for 100 %",

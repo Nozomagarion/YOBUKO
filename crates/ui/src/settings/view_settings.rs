@@ -75,6 +75,8 @@ impl DetailLayout {
 /// The settings this module reads and writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ViewSettings {
+    /// Experimental materials, independent of theme colours. Each 0..=100 strength defaults off.
+    pub liquid: crate::kit::liquid::Options,
     pub track_sizes: super::track_sizes::TrackSizes,
     pub waveform: WaveformAppearance,
     /// Audio clip colour strength, as a percentage of its source RGB colour.
@@ -124,6 +126,7 @@ pub struct ViewSettings {
 impl Default for ViewSettings {
     fn default() -> Self {
         Self {
+            liquid: crate::kit::liquid::Options::default(),
             track_sizes: super::track_sizes::TrackSizes::default(),
             waveform: WaveformAppearance::default(),
             audio_colour_strength: 82,
@@ -175,6 +178,9 @@ impl ViewSettings {
             crate::kit::theme::hex(self.waveform.custom),
             self.audio_colour_strength,
             self.header_colour_strength,
+        ) + &format!(
+            "liquid_panel_strength = {}\nliquid_track_strength = {}\nliquid_clip_strength = {}\n",
+            self.liquid.panels, self.liquid.tracks, self.liquid.clips,
         ) + &self.track_sizes.to_text()
     }
 
@@ -185,6 +191,15 @@ impl ViewSettings {
             return true;
         }
         match (key, value) {
+            ("liquid_panel_strength" | "liquid_track_strength" | "liquid_clip_strength", strength) => {
+                let Ok(strength) = strength.parse::<u32>() else { return false };
+                let strength = strength.min(100) as u8;
+                match key {
+                    "liquid_panel_strength" => self.liquid.panels = strength,
+                    "liquid_track_strength" => self.liquid.tracks = strength,
+                    _ => self.liquid.clips = strength,
+                }
+            }
             ("audio_clip_colour_strength" | "track_header_colour_strength", strength) => {
                 let Ok(strength) = strength.parse::<u32>() else { return false };
                 let strength = strength.min(100) as u8;
@@ -247,6 +262,7 @@ mod tests {
     #[test]
     fn view_settings_survive_a_round_trip_through_the_settings_file() {
         let view = ViewSettings {
+            liquid: crate::kit::liquid::Options { panels: 40, tracks: 60, clips: 80 },
             track_sizes: super::super::track_sizes::TrackSizes::default(),
             waveform: WaveformAppearance {
                 mode: WaveformColour::Custom,
@@ -314,5 +330,14 @@ mod tests {
         assert_eq!(warnings.len(), 1);
         assert_eq!(read.view.audio_colour_strength, 100);
         assert_eq!(read.view.header_colour_strength, 82);
+    }
+
+    #[test]
+    fn liquid_strengths_default_off_and_parse_independently_with_bounds() {
+        assert_eq!(Settings::from_text("").0.view.liquid, crate::kit::liquid::Options::default());
+        let (read, warnings) =
+            Settings::from_text("liquid_panel_strength = 999\nliquid_track_strength = -1\nliquid_clip_strength = 37\n");
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(read.view.liquid, crate::kit::liquid::Options { panels: 100, tracks: 0, clips: 37 });
     }
 }

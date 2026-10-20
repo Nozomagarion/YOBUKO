@@ -2231,6 +2231,7 @@ impl App {
 
     /// Draws the window into `ui` and runs what the user asked for.
     pub fn ui(&mut self, ui: &mut Ui) {
+        crate::kit::liquid::configure(ui.ctx(), self.settings.view.liquid);
         crate::kit::liquid::set_effects_allowed(
             ui.ctx(),
             self.settings.animations && self.settings.theme != "high-contrast",

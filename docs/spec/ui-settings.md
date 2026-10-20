@@ -56,6 +56,7 @@ is on exactly one page, under one heading.
 | Browser | Previews | Auto-play, Preview volume |
 | Browser | Sample map | Map layout, Map preview on hover, Map: longest sample |
 | Browser | Tags | Tag limit |
+| Appearance | Liquid (experimental) | Panel liquid, Track liquid, Clip liquid: independent 0–100% strengths, 0% off |
 | Appearance | Window | Zoom, Animations |
 | Appearance | Waveforms | Waveform scale |
 | Appearance | Graphics | Renderer |
@@ -103,3 +104,23 @@ section, so searching for the default also exposes Advanced and per-size tuning.
 and tuning apply on the next frame, including while Settings is open. Changing a default replaces
 height overrides for that kind of row (regular tracks or returns); preset tuning preserves manual
 heights that do not match a named size.
+
+## Experimental surface materials
+
+Appearance › Liquid (experimental) has three independent percentage sliders: Panel liquid,
+Track liquid and Clip liquid. All default to 0 (solid/flat), update the material on the next
+frame and persist as `liquid_panel_strength`, `liquid_track_strength` and
+`liquid_clip_strength`. Input is clamped to 100; invalid values preserve the default and
+produce the usual settings warning. Older files leave all three off.
+
+Panel liquid controls how much of the Settings backdrop shows through the theme tint.
+Track liquid controls the light-to-dark reflection on MIDI/audio track headers in both
+views; Clip liquid controls the same coating on clip bodies. Labels, controls, notes and
+waveforms are drawn afterward. The latter two are surface reflections, not per-clip blur.
+The renderer is described in [Glass rendering experiment](../design/glass-rendering.md).
+
+Controls are unavailable in a host without the GPU provider. Selecting GPU in Renderer
+requires restarting the app if it is currently running on OpenGL. Disabled animations or
+the built-in high-contrast theme keep the material off without erasing saved strengths.
+The feature remains experimental: full playback performance qualification and refraction
+are not complete.

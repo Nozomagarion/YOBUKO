@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Experimental, current-frame modal backdrop. Enable only with SUHINA_LIQUID_PREVIEW=1.
+//! Experimental, current-frame modal backdrop. Appearance strengths default to zero.
 //! Own offscreen renderer and targets: never sample the swapchain or a previous UI frame.
 
 use std::sync::Mutex;

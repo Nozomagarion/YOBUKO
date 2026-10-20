@@ -3357,13 +3357,13 @@ fn paint_clip(
     let strength = if selected { strength.saturating_add(12).min(100) } else { strength };
     let body = colour_surface(theme::panel_background(), rgb(clip.color), strength, off);
     painter.rect_filled(rect, 2.0, body);
-    crate::kit::liquid::paint(painter, rect.shrink(1.0), body, crate::kit::liquid::Surface::Clip);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
         painter.rect_filled(bar.shrink2(Vec2::new(2.0, 0.0)), 0.0, motion::mix(body, ink_on(body), 0.045));
     } else {
         painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, body);
     }
+    crate::kit::liquid::paint(painter, rect.shrink(1.0), body, crate::kit::liquid::Surface::Clip);
     let ink = ink_on(body);
     let edge_width = if selected { 4.0 } else { 3.0 };
     let edge_ink = motion::mix(body, ink, 0.5);
