@@ -629,6 +629,7 @@ fn column_header(
     // track's header has an outline in that colour.
     let fill = colour_picker::fill(column.color, column.mute);
     painter.rect_filled(rect, 0.0, fill);
+    crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Track);
     let color = theme::text_on(fill);
     if state.selected == Some(column.track) {
         painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.5, color), StrokeKind::Inside);
@@ -926,6 +927,7 @@ fn slot_cell(
             let fill = motion::mix(base, Color32::WHITE, 0.14 * hover);
             let fill = if column.mute { motion::mix(theme::control_background(), fill, 0.45) } else { fill };
             painter.rect_filled(rect, 0.0, fill);
+            crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Clip);
             let (mark, text) = if slot.enabled {
                 (theme::text_on(fill), theme::text_on(fill))
             } else {
@@ -957,6 +959,7 @@ fn slot_cell(
             let fill = motion::mix(clip_color, Color32::WHITE, 0.10 + 0.14 * hover);
             let fill = if column.mute { motion::mix(theme::control_background(), fill, 0.45) } else { fill };
             painter.rect_filled(rect, 0.0, fill);
+            crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Clip);
             let ink = theme::text_on(fill);
             // The mark is the shape its click does: a stop square while playing. A stopped
             // clip's mark is the play triangle the same way, for its click's launch.

@@ -3357,6 +3357,7 @@ fn paint_clip(
     let strength = if selected { strength.saturating_add(12).min(100) } else { strength };
     let body = colour_surface(theme::panel_background(), rgb(clip.color), strength, off);
     painter.rect_filled(rect, 2.0, body);
+    crate::kit::liquid::paint(painter, rect.shrink(1.0), body, crate::kit::liquid::Surface::Clip);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
         painter.rect_filled(bar.shrink2(Vec2::new(2.0, 0.0)), 0.0, motion::mix(body, ink_on(body), 0.045));
@@ -3852,6 +3853,7 @@ fn track_header(
         colour_surface(theme::track_header_background(), rgb(lane.color), state.header_colour_strength, lane.mute);
     let header_fill = if selected { motion::mix(surface, theme::text_primary(), 0.07) } else { surface };
     painter.rect_filled(rect, 0.0, header_fill);
+    crate::kit::liquid::paint(painter, rect, header_fill, crate::kit::liquid::Surface::Track);
     if selected {
         let outline = motion::mix(theme::border_strong(), saturated(rgb(lane.color)), 0.5);
         painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, outline), StrokeKind::Inside);

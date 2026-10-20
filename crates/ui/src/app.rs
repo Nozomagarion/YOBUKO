@@ -2231,6 +2231,10 @@ impl App {
 
     /// Draws the window into `ui` and runs what the user asked for.
     pub fn ui(&mut self, ui: &mut Ui) {
+        crate::kit::liquid::set_effects_allowed(
+            ui.ctx(),
+            self.settings.animations && self.settings.theme != "high-contrast",
+        );
         self.frame_trace.start();
         self.frame_trace.causes(ui.ctx());
         // Closing: the dialog alone, so nothing of the window without its projects shows behind.
@@ -2757,6 +2761,7 @@ impl App {
         if self.settings_open {
             // Embedded plug-in editors are windows of their own and would cover the dialog.
             self.place_editors(&[]);
+            crate::kit::liquid::prepare(ui.ctx());
             self.settings_dialog(ui, window);
         }
         self.update_title(ui.ctx());

@@ -1,5 +1,5 @@
 ---
-description: Initial glass rendering investigation and an unintegrated GPU blur shader prototype
+description: Experimental live modal backdrop and optical coatings for track and clip surfaces
 read_when: glass effect, backdrop blur, rendering materials, Aero
 type: plan
 status: draft
@@ -14,18 +14,62 @@ covers:
 
 ## Current state
 
-The application creates eframe with either wgpu or OpenGL. Its Window::ui delegates to
-App::ui and does not own the final framebuffer. There is no custom render callback or
-offscreen backdrop path in the UI crate. Painting translucent rectangles alone will not
-blur previously drawn controls. The current build contains no glass effect.
+The original static experiment below remains available. There is also an experimental
+native integration, disabled by default and not yet exposed as a normal Appearance setting.
+
+Run a build with `SUHINA_LIQUID_PREVIEW=1` and `--renderer wgpu` to opt in for that process.
+`--new-instance --demo` opens a separate review window without replacing the running project.
+Do not force-close the user's existing project to try it.
+
+`apps/suhina/src/liquid.rs` replays this frame's already-painted egui shapes into its own
+offscreen renderer **before** the Settings modal and dimmer are painted. The source and
+horizontal intermediate are sRGB attachments, sampled in linear light; the final vertical
+pass explicitly encodes the result for egui's gamma-encoded native-texture contract.
+The blur is separable, 19 taps per direction, sigma 3 downsampled pixels. The longest target
+side is bounded at 1024 physical pixels. Three targets, sampler and bind groups are retained
+until their dimensions change; the main renderer's texture ID is reused when resized.
+No swapchain readback, previous frame or recursive rendering is used.
+
+The UI-facing provider and independent Panel/Track/Clip options live in
+`crates/ui/src/kit/liquid.rs`. Settings uses the live blurred backdrop under a theme tint.
+Arrangement and Session track headers and clip backgrounds get a lightweight optical
+coating (an upper highlight and lower edge), painted before labels, controls,
+notes and waveforms. These coatings do **not** perform per-clip backdrop blur or refraction.
+Surfaces smaller than 12 logical pixels stay solid. The options are currently host-side
+preview switches, not saved user preferences.
+
+OpenGL, disabled animations and the built-in high-contrast theme keep solid surfaces.
+The accessibility gate is checked after running settings/theme changes too. If replay
+would require an unsupported image texture or a foreign paint callback, the panel falls
+back to solid rather than displaying an incomplete or stale backdrop.
+
+Remaining costs/limits: capture currently clones/tessellates UI shapes and copies/compares
+the current CPU font atlas, uploading the atlas only when it changes. This is UI-thread
+work, never audio callback work, but needs profiling and a more efficient atlas update
+path before becoming a normal material. Foreign image support, playback/scroll/zoom
+measurements, interactive visual QA and true edge refraction are still outstanding.
+A GPU-only blur does not imply that the whole capture is free.
+
+The native hardware test was run explicitly on Windows: constant RGB preservation,
+linear-light checkerboard mean, impulse symmetry and a changed frame at a new size passed.
+GPU readback exists only in that test, not in the application path. The two kit tests cover
+default/tiny/reduced-effects solid rendering and removal of an old backdrop on failure.
+Settings-window (6) and constrained-pane (16) regression tests also passed, as did Clippy
+for both the application and UI with all targets. These checks do not replace visual QA
+or playback performance measurements.
+
+```sh
+cargo test -p suhina --bin suhina liquid::tests -- --include-ignored
+cargo test -p suhina-ui --lib kit::liquid::tests
+```
 
 The two-pass shader in `crates/ui/src/kit/glass_blur.wgsl` now runs in the standalone
 `glass_preview` native example. It uploads a fixed synthetic backdrop once, keeps three
 768 by 432 RGBA textures and re-runs the horizontal/vertical GPU blur only when Blur changes.
 Controls are drawn sharply over the material; Tint and a solid fallback can be compared.
 The example built and its native window started on Windows with no GPU validation error
-reported in stderr. Image-level correctness, performance measurements and live DAW backdrop
-integration are still outstanding. The main application does not load this shader yet.
+reported in stderr. This older example has not been re-profiled or connected to the DAW;
+the native integration above uses its separate `apps/suhina/src/liquid.wgsl` instead.
 
 Run `cargo run -p suhina --example glass_preview` from the worktree. No new dependencies were added.
 The preview uses fixed-size gamma-space RGBA textures to match egui native texture support;

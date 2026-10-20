@@ -556,6 +556,7 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
+    crate::kit::liquid::paint(&painter, area, theme::window_background(), crate::kit::liquid::Surface::Panel);
 
     let width = SIDEBAR + SIDEBAR_GAP + PAGE_WIDTH;
     let whole = Rect::from_min_max(
