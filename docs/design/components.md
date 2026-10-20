@@ -764,7 +764,7 @@ editable theme tokens from the canvas background. Horizontal lane boundaries fol
 line strength. Clip titles reserve up to 22 px (less than half the clip height), with 7 px left inset and 12 px type. Content stays below
 the title. A contrasting, same-hue leading edge is 3 px, widening to 4 px when selected; selection
 outlines are 1 px. Loop seams use half the leading-edge contrast with a 1 px continuous vertical line and a
-canvas-coloured semicircular top cutout (up to 4 px deep); there is no bottom notch.
+canvas-coloured shallow circular top cutout (up to 1.25 px deep); there is no bottom notch.
 
 Track buttons keep their filled hit areas but draw outlines only on hover or keyboard focus.
 Sends show their destination, value and level rail without an idle box. Secondary routing fields
@@ -794,5 +794,5 @@ through Resize all in the header corner beside the returns toggle and waveform z
 keyboard focus uses a neutral `text.secondary` outline. Ctrl/Cmd+wheel adjusts a value field;
 Alt+wheel remains available to zoom track heights.
 
-Loop notches scale with the on-screen pass width and disappear below 24 px per pass. The
+Loop notches scale with the on-screen pass width and disappear below 64 px per pass. The
 continuous loop separator remains, and live right-edge resizing reveals new boundaries before release.

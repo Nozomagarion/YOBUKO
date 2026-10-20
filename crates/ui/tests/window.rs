@@ -5009,7 +5009,7 @@ fn ctrl_r_with_several_clips_selected_renames_them_all() {
 
 #[test]
 fn loop_boundaries_appear_while_extending_the_clip_before_release() {
-    for (looped, period) in [(true, 4.0), (false, 4.0), (true, 1.0)] {
+    for (looped, period) in [(true, 4.0), (false, 4.0), (true, 1.0), (true, 8.0)] {
         let mut project = demo_project();
         let clips = &mut project.arrangement.lanes[0].clips;
         clips.retain(|c| (c.start - 64.0).abs() < 1e-6);
@@ -5036,14 +5036,16 @@ fn loop_boundaries_appear_while_extending_the_clip_before_release() {
                 egui::Shape::Vec(shapes) => shapes.iter().any(|s| notch_at(s, x, y)),
                 egui::Shape::Circle(circle) => {
                     (circle.center.x - x).abs() < 1.0
-                        && (circle.center.y - y).abs() < 0.5
-                        && circle.radius > 1.0
-                        && circle.radius <= 4.0
+                        && (circle.center.y + circle.radius * 0.5 - y).abs() < 0.5
+                        && circle.radius > 0.0
+                        && circle.radius <= 2.5
                 }
                 _ => false,
             }
         }
-        for boundary in [clip.left() + 32.5, clip.left() + 64.5] {
+        for boundary in
+            [1.0, 2.0].into_iter().filter(|n| n * period < 12.0).map(|n| clip.left() + (n * period * 8.0) as f32 + 0.5)
+        {
             let drawn = h
                 .output()
                 .shapes
@@ -5051,7 +5053,7 @@ fn loop_boundaries_appear_while_extending_the_clip_before_release() {
                 .any(|s| notch_at(&s.shape, boundary, clip.top()) && s.clip_rect.top() >= clip.top());
             assert_eq!(
                 drawn,
-                looped && period * 8.0 >= 24.0,
+                looped && period * 8.0 >= 64.0,
                 "live notch at {boundary}, looped={looped}, period={period}"
             );
             fn boundary_at(shape: &egui::Shape, x: f32, clip: egui::Rect) -> bool {

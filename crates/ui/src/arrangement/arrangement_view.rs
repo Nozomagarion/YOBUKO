@@ -3496,13 +3496,13 @@ fn paint_clip(
         }
         painter.vline(x, rect.y_range(), egui::Stroke::new(1.0, motion::mix(body, edge_ink, 0.5)));
         // Dense passes should not turn the top edge into a sawtooth.
-        if pass_width < 24.0 {
+        if pass_width < 64.0 {
             continue;
         }
-        let notch = 4.0_f32.min(pass_width * 0.06).min(rect.height() * 0.2);
-        // Only the lower semicircle cuts into the clip; leave the grid above intact.
+        let notch = 2.5_f32.min(pass_width * 0.012).min(rect.height() * 0.1);
+        // Only a shallow circular segment cuts into the clip; leave the grid above intact.
         painter.with_clip_rect(painter.clip_rect().intersect(rect)).circle_filled(
-            Pos2::new(x, rect.top()),
+            Pos2::new(x, rect.top() - notch * 0.5),
             notch,
             theme::window_background(),
         );

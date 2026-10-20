@@ -710,7 +710,7 @@ block without deep nesting crowding the controls. Every header keeps the fold tr
 A group's menu
 has **Assign track color to all tracks and clips**, which gives every track inside it, at any depth,
 the colour the group shows, and turns the clips of the group and of those tracks back to their
-track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's top notches are at most 4 px wide on each side of the boundary and
+track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's top notches are at most 2.5 px wide on each side of the boundary and
 shrink with the lane height. Its 1 px boundary line uses half the leading edge's contrast; the top notch cuts through to the canvas colour for a clearer silhouette. A group that holds tracks has
 the fold triangle at the start of its header (Folded groups): the lanes of every track inside it, at any
 depth, are hidden while it is folded, and the Session view hides their columns; both views fold
@@ -856,9 +856,10 @@ height; collapse uses the customized Compact height. No Minimal size is offered.
 
 Loop boundaries follow the live right-edge resize span before release. They are calculated from
 the loop's source timing, not limited to marks cached at the committed clip length. Non-looping
-clips gain no repeat marks. Top notches are suppressed below 24 px per loop pass; above that,
-their radius scales with pass width, up to 4 px. The cutout is a smooth semicircle clipped
-inside the clip, rather than a pointed V. This avoids a sawtooth edge when zoomed out.
+clips gain no repeat marks. Top notches are suppressed below 64 px per loop pass; above that,
+their radius scales with pass width, up to 2.5 px and 10 percent of the row height. Only the
+lowest half of the lower semicircle cuts into the clip, making a shallow curved dip at most
+1.25 px deep. This avoids a sawtooth edge when zoomed out.
 
 Searching for a track-size setting keeps the entire Track sizes section visible, including
 Advanced and the height controls. Changing a default applies immediately to all rows of that
