@@ -221,10 +221,12 @@ pub fn show(ui: &mut Ui, area: Rect, plugins: &mut PluginsView) -> ManagerOut {
     let edit = ui.put(
         search,
         egui::TextEdit::singleline(&mut plugins.manager.search)
+            .frame(widgets::input_frame())
             .hint_text("Find by name, vendor or file")
             .font(small.clone()),
     );
     edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Find a plug-in"));
+    widgets::input_line(ui, &edit);
     if plugins.scanning {
         let hint = Rect::from_min_max(
             Pos2::new(search.right() + 12.0, search.top()),

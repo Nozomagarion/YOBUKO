@@ -155,6 +155,12 @@ impl Targets {
 
 impl Provider for Liquid {
     fn capture(&self, ctx: &egui::Context) -> Option<Backdrop> {
+        suhina_plugins::trace::timed("liquid backdrop", || self.capture_frame(ctx))
+    }
+}
+
+impl Liquid {
+    fn capture_frame(&self, ctx: &egui::Context) -> Option<Backdrop> {
         let screen = ctx.content_rect();
         let size = target_size(screen, ctx.pixels_per_point())?;
         let mut state = self.state.lock().ok()?;
@@ -183,11 +189,21 @@ impl Provider for Liquid {
         }
         // The UI's atlas covers text and vector meshes. An unsupported image/callback forces
         // a solid fallback instead of silently dropping live content from the backdrop.
-        if jobs.iter().any(|job| match &job.primitive {
+        if let Some(job) = jobs.iter().find(|job| match &job.primitive {
             egui::epaint::Primitive::Mesh(mesh) => mesh.texture_id != egui::TextureId::Managed(0),
             egui::epaint::Primitive::Callback(_) => true,
         }) {
+            if suhina_plugins::trace::on() {
+                let reason = match &job.primitive {
+                    egui::epaint::Primitive::Mesh(mesh) => format!("solid: unsupported texture {:?}", mesh.texture_id),
+                    egui::epaint::Primitive::Callback(_) => "solid: foreign callback".into(),
+                };
+                suhina_plugins::trace::state("liquid capture", reason);
+            }
             return None;
+        }
+        if suhina_plugins::trace::on() {
+            suhina_plugins::trace::state("liquid capture", format!("live {}x{}", size[0], size[1]));
         }
         let scale = size[0] as f32 / screen.width();
         // Content rect coordinates are in points; translate to the offscreen origin.
@@ -253,6 +269,56 @@ fn attachment(view: &wgpu::TextureView) -> wgpu::RenderPassColorAttachment<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires a native GPU; run explicitly for rendering changes"]
+    fn opening_settings_keeps_a_live_backdrop_across_frames() {
+        struct Observed {
+            liquid: Liquid,
+            captures: Mutex<Vec<bool>>,
+        }
+        impl Provider for Observed {
+            fn capture(&self, ctx: &egui::Context) -> Option<Backdrop> {
+                let result = self.liquid.capture(ctx);
+                self.captures.lock().unwrap().push(result.is_some());
+                result
+            }
+        }
+        let instance = wgpu::Instance::default();
+        let gpu =
+            wait(egui_wgpu::RenderState::create(&Default::default(), &instance, None, Default::default())).unwrap();
+        let host = std::sync::Arc::new(Observed { liquid: Liquid::new(gpu), captures: Mutex::new(Vec::new()) });
+        let ctx = egui::Context::default();
+        suhina_ui::kit::theme::install(&ctx);
+        suhina_ui::kit::liquid::install(&ctx, host.clone());
+        let mut app = suhina_ui::App::new();
+        app.set_session(suhina_session::Session::new(suhina_ui::demo::demo_project()), &[]);
+        let mut settings = suhina_ui::settings::Settings::default();
+        settings.view.liquid.panels = 55;
+        app.set_settings(&ctx, settings);
+        for frame in 0..40 {
+            let mut input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1100.0, 850.0))),
+                time: Some(f64::from(frame) / 60.0),
+                ..Default::default()
+            };
+            if frame == 2 {
+                input.events.push(egui::Event::ModifiersChanged(egui::Modifiers::COMMAND));
+                input.events.push(egui::Event::Key {
+                    key: egui::Key::Comma,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::COMMAND,
+                });
+            }
+            let mut output = ctx.run_ui(input, |ui| app.ui(ui));
+            output.textures_delta.clear();
+        }
+        let captures = host.captures.lock().unwrap();
+        assert!(captures.len() >= 30, "Settings did not open: {captures:?}");
+        assert!(captures.iter().all(|captured| *captured), "backdrop alternated with solid fallback: {captures:?}");
+    }
 
     fn wait<F: std::future::Future>(future: F) -> F::Output {
         struct Wake(std::thread::Thread);

@@ -23,9 +23,14 @@ window that can be moved to another monitor. Dock returns it to the main-window
 overlay, preserving page, search and edited settings. Closing either form closes
 Settings. The detached window never dims or blocks the main view. Its background
 is solid: it must not sample the unrelated main-window backdrop.
-In the overlay, dimming temporarily disappears during control adjustments and for
-600 ms afterward so the project remains visible for live comparison. Background
-clicks remain blocked. Text inputs use transparent fills and thin theme borders.
+The embedded panel can also be dragged by its title, within the main window.
+In the overlay, dimming disappears during control adjustments and returns immediately
+on release, without a delayed comparison interval. Background
+clicks remain blocked. Only actual value changes or holding/dragging value controls
+start that preview; background and navigation drags must not toggle the dimmer.
+Text inputs and dropdowns use transparent fills and only a
+theme-coloured underline, stronger on hover and accented on focus. Navigation rows
+have no opaque background: only selected/hovered rows add a translucent tint.
 
 ## Sources
 

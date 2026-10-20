@@ -4055,6 +4055,8 @@ impl App {
             let ctx = ui.ctx().clone();
             let builder = egui::ViewportBuilder::default()
                 .with_title("Settings - Suhina")
+                .with_decorations(true)
+                .with_resizable(true)
                 .with_inner_size(SETTINGS_SIZE)
                 .with_min_inner_size([600.0, 320.0]);
             ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("settings-window"), builder, |ui, _| {
@@ -4080,9 +4082,25 @@ impl App {
                     SETTINGS_SIZE.x.min(window.width() - 2.0 * PAD),
                     SETTINGS_SIZE.y.min(window.height() - 2.0 * PAD),
                 );
-                let panel = Rect::from_center_size(window.center(), size);
+                let position = ui
+                    .ctx()
+                    .data(|data| data.get_temp::<Pos2>(Id::new("settings-panel-position")))
+                    .unwrap_or(window.center() - size / 2.0);
+                let bounds = window.shrink(PAD);
+                let position = egui::pos2(
+                    position.x.clamp(bounds.left(), (bounds.right() - size.x).max(bounds.left())),
+                    position.y.clamp(bounds.top(), (bounds.bottom() - size.y).max(bounds.top())),
+                );
+                let panel = Rect::from_min_size(position, size);
                 let adjusting = self.settings_contents(ui, panel);
-                if !settings_view::previewing(ui.ctx(), adjusting) {
+                let previewing = adjusting;
+                if suhina_plugins::trace::on() {
+                    suhina_plugins::trace::state(
+                        "settings overlay",
+                        format!("adjusting={adjusting} previewing={previewing} rect={panel:?}"),
+                    );
+                }
+                if !previewing {
                     ui.painter().set(
                         tint,
                         egui::Shape::rect_filled(window, 0.0, theme::window_background().gamma_multiply(0.6)),
@@ -4193,7 +4211,12 @@ impl App {
         if outcome.close {
             self.settings_open = false;
         }
-        outcome.changed || outcome.themes.is_some() || ui.ctx().dragged_id().is_some()
+        if outcome.move_by.is_finite() && outcome.move_by != Vec2::ZERO {
+            let position = ui.max_rect().min + outcome.move_by;
+            ui.ctx().data_mut(|data| data.insert_temp(Id::new("settings-panel-position"), position));
+            ui.ctx().request_repaint();
+        }
+        outcome.changed || outcome.themes.is_some() || outcome.adjusting
     }
 
     /// The menu bar: the same actions as the shortcuts and the views' controls.

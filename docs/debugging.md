@@ -221,6 +221,20 @@ Tips:
 - Run the trace log at the same time; the times of the log and the video can be matched by an
   action you can see in both (a click, a play).
 
+## Settings and liquid surfaces
+
+With liquid panels enabled, `liquid capture` reports transitions between a live
+backdrop and a solid fallback, including unsupported texture IDs or foreign callbacks.
+`slow liquid backdrop` measures captures taking at least 5 ms. `settings overlay`
+reports whether a control is adjusting, whether the temporary undimmed preview is
+active and the panel rectangle. These distinguish capture failure, a changing dimmer
+and unstable layout; frame-rate summaries alone do not establish a visual flicker.
+The native GPU test `liquid::tests::opening_settings_keeps_a_live_backdrop_across_frames`
+opens the actual App and checks successive captures. It does not replace observing
+the native compositor or comparing recorded frames. A separate Settings-window
+regression checks that dragging the modal background cannot trigger the undimmed
+control preview: using the context's global dragged widget ID caused that bug.
+
 ## When to take a trace point out
 
 Keep trace points. Take one out only when it is noisy and no longer tells anything, and say so

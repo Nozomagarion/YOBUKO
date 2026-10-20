@@ -15,6 +15,92 @@ use suhina_ui::{App, kit::theme};
 /// A window too short for most pages.
 const SHORT: (f32, f32) = (1000.0, 420.0);
 
+fn dimmed(harness: &Harness<'static, App>) -> bool {
+    let tint = theme::window_background().gamma_multiply(0.6);
+    harness.output().shapes.iter().any(|shape| {
+        matches!(&shape.shape,
+        egui::Shape::Rect(shape) if shape.fill == tint && shape.rect.width() > 900.0)
+    })
+}
+
+#[test]
+fn embedded_settings_can_be_moved_by_its_title() {
+    let mut harness = short_window();
+    let before = harness.get_by_label("Move Settings").rect();
+    let from = before.center();
+    harness.hover_at(from);
+    harness.step();
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: from,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    let to = from + Vec2::new(60.0, 0.0);
+    harness.hover_at(to);
+    harness.step();
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: to,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    let after = harness.get_by_label("Move Settings").rect();
+    assert!((after.left() - before.left() - 60.0).abs() < 1.0, "{before:?} -> {after:?}");
+    assert!(dimmed(&harness), "moving the title must not trigger a value preview");
+}
+
+#[test]
+fn dragging_the_modal_background_does_not_toggle_live_preview() {
+    let mut harness = short_window();
+    let from = Pos2::new(10.0, 100.0);
+    harness.hover_at(from);
+    harness.step();
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: from,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    harness.hover_at(Pos2::new(40.0, 125.0));
+    harness.step();
+    assert!(dimmed(&harness), "a background drag unexpectedly hid the dimmer");
+}
+
+#[test]
+fn holding_a_real_slider_keeps_the_live_preview_visible() {
+    let mut harness = short_window();
+    harness.get_by_label("Search settings").focus();
+    settle(&mut harness);
+    harness.get_by_label("Search settings").type_text("Track header colour strength");
+    settle(&mut harness);
+    let rect = harness.get_by_label("Track header colour strength").rect();
+    let pointer = rect.center();
+    harness.hover_at(pointer);
+    harness.step();
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: pointer,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    for _ in 0..6 {
+        harness.step();
+    }
+    assert!(!dimmed(&harness), "held slider lost its preview");
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: pointer,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    assert!(dimmed(&harness), "dimmer must return on the release frame without a delay");
+}
+
 #[test]
 fn settings_can_undock_and_dock_without_losing_the_page() {
     let mut harness = short_window();

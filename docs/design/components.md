@@ -305,7 +305,8 @@ Options › Settings (Ctrl+,) opens a dialog over the window until it is closed 
 Ctrl+, again): the view stays behind it, dimmed with `window.background` at 60 % and taking no
 clicks, wheel or pinch (they reach only the dialog, as with every dialog over the window);
 embedded plug-in editors hide while it shows. Adjusting a control removes the tint during
-the adjustment and for 600 ms afterward, while background input stays blocked.
+the adjustment; it returns immediately on release, while background input stays blocked.
+Drag the title to move the embedded panel within the main window.
 Open in window moves Settings to a native resizable window, with Dock to return;
 that window does not dim the main view or hide its plug-in editors. Detached Settings
 uses a solid background rather than sampling the main window's content.
@@ -313,8 +314,10 @@ The dialog is at most 772 × 720 px (6 px
 less than the window on each side when that is smaller), `window.background` with a 1 px
 `border.strong` border. Inside, a centred block at most 724 px wide: the title "Settings" in 13 px
 with a 52 px Close button and an Open in window/Dock button on the right;
-text input fills are transparent, with thin `border` outlines and stronger hover/focus
-outlines. Under the title, the list of pages (140 px), 24 px of space, and
+text input and dropdown fills are transparent, with only a thin `border` underline,
+stronger on hover and accented on focus. Unselected navigation rows stay transparent,
+with a faint hover tint; the selected row has a translucent selection tint.
+Under the title, the list of pages (140 px), 24 px of space, and
 the page (560 px). A change applies at once and is saved; one that needs a restart (the
 renderer) says so in its note.
 

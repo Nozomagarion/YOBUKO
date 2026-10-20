@@ -284,6 +284,10 @@ impl PageState {
 #[derive(Debug, Default, PartialEq)]
 pub struct Outcome {
     pub changed: bool,
+    /// A value control is being held or dragged, even if its value did not move this frame.
+    pub adjusting: bool,
+    /// Move the embedded panel by this frame's title drag; native windows use OS chrome.
+    pub move_by: Vec2,
     pub close: bool,
     pub plugins: Option<PluginRequest>,
     pub themes: Option<ThemeRequest>,
@@ -437,6 +441,7 @@ impl Cx<'_> {
         let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
         let response = self.ui.put(rect, egui::Slider::new(value, 0..=100).suffix(" %"));
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, self.name));
+        self.outcome.adjusting |= response.dragged() || response.is_pointer_button_down_on();
         self.outcome.changed |= response.changed();
     }
 
@@ -448,6 +453,7 @@ impl Cx<'_> {
         let response =
             self.ui.add_enabled_ui(available, |ui| ui.put(rect, egui::Slider::new(value, 0..=100).suffix(" %"))).inner;
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, available, self.name));
+        self.outcome.adjusting |= response.dragged() || response.is_pointer_button_down_on();
         self.outcome.changed |= response.changed();
     }
 
@@ -486,6 +492,7 @@ impl Cx<'_> {
         };
         let kind = if sizes.advanced { egui::WidgetType::DragValue } else { egui::WidgetType::Slider };
         response.widget_info(|| egui::WidgetInfo::labeled(kind, true, self.name));
+        self.outcome.adjusting |= response.dragged() || response.is_pointer_button_down_on();
         if response.changed() {
             self.settings.view.track_sizes.set_height(size, value);
             self.outcome.changed = true;
@@ -530,10 +537,15 @@ impl Cx<'_> {
             Vec2::new(FOLDER_FIELD - BROWSE_WIDTH - 4.0, SEGMENT + 2.0),
         );
         let value = field(self.settings);
-        let edit = self
-            .ui
-            .put(rect, egui::TextEdit::singleline(value).hint_text(hint).font(theme::ui_font(theme::TEXT_SMALL)));
+        let edit = self.ui.put(
+            rect,
+            egui::TextEdit::singleline(value)
+                .frame(widgets::input_frame())
+                .hint_text(hint)
+                .font(theme::ui_font(theme::TEXT_SMALL)),
+        );
         edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, name));
+        widgets::input_line(self.ui, &edit);
         if edit.changed() {
             self.outcome.changed = true;
         }
@@ -562,29 +574,10 @@ impl Cx<'_> {
     }
 }
 
-/// Form inputs share the surrounding material, with quiet outlines and a focus accent.
+/// Form inputs share the surrounding material; individual fields draw their underline.
 pub(crate) fn input_style(ui: &mut Ui) {
     let visuals = &mut ui.style_mut().visuals;
     visuals.text_edit_bg_color = Some(egui::Color32::TRANSPARENT);
-    visuals.widgets.inactive.bg_stroke = theme::hairline(theme::border());
-    visuals.widgets.hovered.bg_stroke = theme::hairline(theme::border_strong());
-    visuals.widgets.active.bg_stroke = theme::hairline(theme::accent());
-}
-
-/// Hide the overlay tint only while adjusting, plus a short comparison interval.
-pub(crate) fn previewing(ctx: &egui::Context, adjusting: bool) -> bool {
-    let id = Id::new("settings-live-preview-until");
-    let now = ctx.input(|input| input.time);
-    if adjusting {
-        ctx.data_mut(|data| data.insert_temp(id, now + 0.6));
-    }
-    let until = ctx.data(|data| data.get_temp::<f64>(id)).unwrap_or(f64::NEG_INFINITY);
-    if now < until {
-        ctx.request_repaint_after(std::time::Duration::from_secs_f64((until - now).min(0.6)));
-        true
-    } else {
-        false
-    }
 }
 
 /// Draws the page into the space left in `ui`.
@@ -609,6 +602,13 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
 
     // Title and close.
     let title = Rect::from_min_size(Pos2::new(whole.left(), y), Vec2::new(whole.width(), theme::ROW));
+    if !state.window {
+        let grip = Rect::from_min_max(title.min, pos2(title.right() - 180.0, title.bottom()));
+        let drag =
+            ui.interact(grip, Id::new("settings-title-drag"), Sense::drag()).on_hover_cursor(egui::CursorIcon::Grab);
+        drag.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Move Settings"));
+        outcome.move_by = drag.drag_delta();
+    }
     widgets::text_in(
         &painter,
         title,
@@ -641,10 +641,12 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
     let edit = ui.put(
         field,
         egui::TextEdit::singleline(&mut state.search)
+            .frame(widgets::input_frame())
             .hint_text("Search settings")
             .font(theme::ui_font(theme::TEXT_SMALL)),
     );
     edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Search settings"));
+    widgets::input_line(ui, &edit);
     let escaped = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape));
     if escaped {
         state.search.clear();
@@ -799,8 +801,9 @@ fn page_list(ui: &Ui, painter: &egui::Painter, rect: Rect, shown: Option<Page>) 
             picked = Some(page);
         }
         let selected = motion::toward(ui.ctx(), response.id.with("selected"), Some(page) == shown, motion::VALUE);
-        let idle = motion::mix(theme::window_background(), theme::panel_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(row, 0.0, motion::mix(idle, theme::control_background(), selected));
+        let hover = widgets::hover(ui, &response);
+        painter.rect_filled(row, 0.0, theme::panel_hover().gamma_multiply(0.25 * hover));
+        painter.rect_filled(row, 0.0, theme::control_background().gamma_multiply(0.8 * selected));
         // A page under another (Theme under Appearance) is stepped in.
         let indent = if page == Page::Theme { PAD * 2.0 } else { 0.0 };
         let text = Rect::from_min_max(Pos2::new(row.left() + PAD + indent, row.top()), row.max);
@@ -922,8 +925,12 @@ fn theme_page(
         }
         if let Some((_, name)) = state.theme_name.as_mut() {
             let field = Rect::from_min_size(r.min, Vec2::new(r.width() / 2.0, 16.0));
-            let edit = ui.put(field, egui::TextEdit::singleline(name).font(theme::ui_font(theme::TEXT)));
+            let edit = ui.put(
+                field,
+                egui::TextEdit::singleline(name).frame(widgets::input_frame()).font(theme::ui_font(theme::TEXT)),
+            );
             edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Theme name"));
+            widgets::input_line(ui, &edit);
             if edit.lost_focus() && name.trim() != themes.name && !name.trim().is_empty() {
                 request = Some(ThemeRequest::Rename(name.trim().to_string()));
             }
@@ -1066,10 +1073,12 @@ fn shortcuts_page(
     let edit = ui.put(
         filter,
         egui::TextEdit::singleline(&mut state.key_filter)
+            .frame(widgets::input_frame())
             .hint_text("Filter shortcuts")
             .font(theme::ui_font(theme::TEXT_SMALL)),
     );
     edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Filter shortcuts"));
+    widgets::input_line(ui, &edit);
     if edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
         state.key_filter.clear();
     }
@@ -1289,10 +1298,12 @@ fn plugin_section(
     let edit = ui.put(
         field,
         egui::TextEdit::singleline(&mut plugins.new_folder)
+            .frame(widgets::input_frame())
             .hint_text("A folder to look in as well")
             .font(small.clone()),
     );
     edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Plug-in folder to add"));
+    widgets::input_line(ui, &edit);
     let width = formats.width() / 4.0;
     for (index, (format, title)) in [
         (FolderFormat::Any, "Both"),
@@ -1868,26 +1879,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn preview_clears_the_tint_during_adjustment_then_restores_it() {
+    fn settings_tree_does_not_cover_the_material_with_opaque_rows() {
         let ctx = egui::Context::default();
-        for (time, adjusting, expected) in
-            [(1.0, false, false), (1.1, true, true), (1.4, false, true), (1.8, false, false)]
-        {
-            let mut output = ctx.run_ui(egui::RawInput { time: Some(time), ..Default::default() }, |ui| {
-                assert_eq!(previewing(ui.ctx(), adjusting), expected);
-            });
-            output.textures_delta.clear();
-        }
+        motion::set_enabled(&ctx, false);
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            page_list(ui, ui.painter(), Rect::from_min_size(Pos2::ZERO, Vec2::new(140.0, 300.0)), Some(Page::General));
+        });
+        assert!(!output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Rect(shape) if shape.fill.is_opaque())));
+        output.textures_delta.clear();
     }
 
     #[test]
-    fn form_fields_have_transparent_fills_and_visible_borders() {
+    fn form_fields_have_transparent_fills() {
         let ctx = egui::Context::default();
         let mut output = ctx.run_ui(Default::default(), |ui| {
             input_style(ui);
             assert_eq!(ui.visuals().text_edit_bg_color(), egui::Color32::TRANSPARENT);
-            assert!(ui.visuals().widgets.inactive.bg_stroke.width > 0.0);
-            assert_eq!(ui.visuals().widgets.hovered.bg_stroke.color, theme::border_strong());
         });
         output.textures_delta.clear();
     }

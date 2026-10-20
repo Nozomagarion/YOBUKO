@@ -219,7 +219,23 @@ pub fn dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, tex
     dropdown_contents(painter, rect, text, theme::text_value(), theme::text_hint());
 }
 
-/// A form field whose surrounding surface shows through, outlined rather than filled.
+/// Text fields have no enclosing box; their underline is painted after interaction.
+pub fn input_frame() -> egui::Frame {
+    egui::Frame::NONE.inner_margin(2.0)
+}
+
+/// A quiet underline, stronger on hover and accented while editing.
+pub fn input_line(ui: &Ui, response: &Response) {
+    let amount = hover(ui, response);
+    let color = if response.has_focus() {
+        theme::accent()
+    } else {
+        motion::mix(theme::border(), theme::border_strong(), amount)
+    };
+    ui.painter().hline(response.rect.x_range(), response.rect.bottom() - 0.5, theme::hairline(color));
+}
+
+/// A form field whose surrounding surface shows through, with only an underline.
 pub fn form_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str) {
     let hover = hover(ui, response);
     let border = if response.has_focus() {
@@ -227,7 +243,7 @@ pub fn form_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response
     } else {
         motion::mix(theme::border(), theme::border_strong(), hover)
     };
-    painter.rect_stroke(rect, 0.0, theme::hairline(border), egui::StrokeKind::Inside);
+    painter.hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline(border));
     dropdown_contents(painter, rect, text, theme::text_value(), theme::text_hint());
 }
 
@@ -575,7 +591,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn form_dropdown_outlines_the_field_without_covering_the_material() {
+    fn form_dropdown_has_an_underline_without_a_box_or_fill() {
         let ctx = egui::Context::default();
         let rect = Rect::from_min_size(Pos2::new(20.0, 20.0), Vec2::new(180.0, 18.0));
         let mut output = ctx.run_ui(Default::default(), |ui| {
@@ -583,7 +599,11 @@ mod tests {
             form_dropdown(ui, ui.painter(), rect, &response, "Every 5 minutes");
         });
         assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
-            egui::Shape::Rect(shape) if shape.rect == rect && shape.fill == Color32::TRANSPARENT && shape.stroke.width > 0.0)));
+            egui::Shape::LineSegment { points, stroke } if points[0].y == rect.bottom() - 0.5
+                && points[0].y == points[1].y && stroke.width > 0.0)));
+        assert!(
+            !output.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Rect(shape) if shape.rect == rect))
+        );
         output.textures_delta.clear();
     }
 
