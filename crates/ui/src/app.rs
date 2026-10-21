@@ -273,6 +273,7 @@ struct NamCache {
 /// The window's state.
 pub struct App {
     background: background::Background,
+    background_visible: bool,
     /// When the level meters last showed something new (`ui.input` time).
     meters_moved_at: f64,
     projects: Projects,
@@ -497,6 +498,7 @@ impl App {
         Self {
             projects,
             background: background::Background::default(),
+            background_visible: false,
             shown_project: None,
             stashes: HashMap::new(),
             open_prompt: None,
@@ -2274,9 +2276,10 @@ impl App {
             palette.panel_background = palette.panel_background.gamma_multiply(opacity);
             palette.border = palette.border.gamma_multiply(opacity);
         }
-        if theme::palette() != palette {
+        if (visible || self.background_visible) && theme::palette() != palette {
             theme::set_palette(ui.ctx(), palette);
         }
+        self.background_visible = visible;
         let liquid =
             self.themes.get(&self.settings.theme).and_then(|theme| theme.liquid).unwrap_or(self.settings.view.liquid);
         crate::kit::liquid::configure(ui.ctx(), liquid);
