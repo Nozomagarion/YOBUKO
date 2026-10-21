@@ -414,11 +414,13 @@ fn file_row(
     };
     let mut choice: Option<String> = None;
     // Cut short to the row, never drawn under the steppers beside it.
-    let response = egui::ComboBox::from_id_salt(id_salt)
-        .width((rect.width() - 16.0).max(24.0))
-        .truncate()
-        .selected_text(egui::RichText::new(current_name).font(theme::ui_font(theme::TEXT_SMALL)))
-        .show_ui(&mut row, |ui| {
+    let response = crate::kit::widgets::combo_box(
+        &mut row,
+        egui::ComboBox::from_id_salt(id_salt)
+            .width((rect.width() - 16.0).max(24.0))
+            .truncate()
+            .selected_text(egui::RichText::new(current_name).font(theme::ui_font(theme::TEXT_SMALL))),
+        |ui| {
             if files.is_empty() {
                 let empty_label = ui
                     .selectable_label(false, egui::RichText::new(empty).font(theme::ui_font(theme::TEXT_TINY)).weak());
@@ -440,8 +442,9 @@ fn file_row(
                     egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{label}: {name}"))
                 });
             }
-        })
-        .response;
+        },
+    )
+    .response;
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, label));
     (response, choice)
 }

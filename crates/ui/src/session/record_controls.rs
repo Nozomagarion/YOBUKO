@@ -156,15 +156,18 @@ pub fn count_in_menu(ui: &mut Ui, rect: Rect, bars: u8, actions: &mut Vec<Action
     let mut chosen = bars;
     let shown = COUNT_INS.iter().find(|(b, _)| *b == bars).map_or("Off", |(_, name)| name);
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
-        let response = egui::ComboBox::from_id_salt("count-in")
-            .width(rect.width())
-            .selected_text(egui::RichText::new(shown).font(mono.clone()).color(theme::text_value()))
-            .show_ui(ui, |ui| {
+        let response = crate::kit::widgets::combo_box(
+            ui,
+            egui::ComboBox::from_id_salt("count-in")
+                .width(rect.width())
+                .selected_text(egui::RichText::new(shown).font(mono.clone()).color(theme::text_value())),
+            |ui| {
                 for (value, name) in COUNT_INS {
                     ui.selectable_value(&mut chosen, value, egui::RichText::new(name).font(mono.clone()));
                 }
-            })
-            .response;
+            },
+        )
+        .response;
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, COUNT_IN_LABEL));
         response.on_hover_text("Count-in: clicks before recording starts the transport");
     });

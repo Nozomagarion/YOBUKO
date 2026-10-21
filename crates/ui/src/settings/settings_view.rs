@@ -510,7 +510,11 @@ impl Cx<'_> {
         let mut value = sizes.height(size);
         let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
         let response = if sizes.advanced {
-            self.ui.put(rect, egui::DragValue::new(&mut value).range(lower..=upper).speed(1).suffix(" px"))
+            crate::kit::widgets::number_input_at(
+                self.ui,
+                rect,
+                egui::DragValue::new(&mut value).range(lower..=upper).speed(1).suffix(" px"),
+            )
         } else {
             self.ui.put(rect, egui::Slider::new(&mut value, lower..=upper).show_value(false))
         };

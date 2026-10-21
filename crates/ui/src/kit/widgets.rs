@@ -214,14 +214,80 @@ pub fn arm_button(
 /// A dropdown field (components › Dropdown): the current choice and a chevron; the caller opens
 /// its menu from `response`.
 pub fn dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str) {
-    let fill = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, response));
-    painter.rect_filled(rect, 0.0, fill);
-    dropdown_contents(painter, rect, text, theme::text_value(), theme::text_hint());
+    form_dropdown(ui, painter, rect, response, text);
 }
 
 /// Text fields have no enclosing box; their underline is painted after interaction.
 pub fn input_frame() -> egui::Frame {
     egui::Frame::NONE.inner_margin(2.0)
+}
+
+/// A text edit with the same transparent surface and focus underline in every view.
+pub fn text_input(ui: &mut Ui, edit: egui::TextEdit<'_>) -> Response {
+    let response = ui.add(edit.frame(input_frame()));
+    input_line(ui, &response);
+    response
+}
+
+/// The fixed-rectangle counterpart used by browser rows and project dialogs.
+pub fn text_input_at(ui: &mut Ui, rect: Rect, edit: egui::TextEdit<'_>) -> Response {
+    let response = ui.put(rect, edit.frame(input_frame()));
+    input_line(ui, &response);
+    response
+}
+
+/// Closed choice fields show their surrounding surface; their menus retain normal styling.
+pub fn combo_box<R>(
+    ui: &mut Ui,
+    combo: egui::ComboBox,
+    contents: impl FnOnce(&mut Ui) -> R,
+) -> egui::InnerResponse<Option<R>> {
+    let menu_style = ui.style().clone();
+    ui.scope(|ui| {
+        transparent_control(ui);
+        let response = combo.show_ui(ui, |ui| {
+            ui.set_style(menu_style);
+            contents(ui)
+        });
+        input_line(ui, &response.response);
+        response
+    })
+    .inner
+}
+
+fn transparent_control(ui: &mut Ui) {
+    let visuals = &mut ui.style_mut().visuals;
+    for widget in [
+        &mut visuals.widgets.inactive,
+        &mut visuals.widgets.hovered,
+        &mut visuals.widgets.active,
+        &mut visuals.widgets.open,
+    ] {
+        widget.bg_fill = Color32::TRANSPARENT;
+        widget.weak_bg_fill = Color32::TRANSPARENT;
+        widget.bg_stroke = Stroke::NONE;
+    }
+}
+
+/// Draggable/typed numeric fields share the form underline without changing interaction.
+pub fn number_input(ui: &mut Ui, size: Option<egui::Vec2>, number: egui::DragValue<'_>) -> Response {
+    ui.scope(|ui| {
+        transparent_control(ui);
+        let response = if let Some(size) = size { ui.add_sized(size, number) } else { ui.add(number) };
+        input_line(ui, &response);
+        response
+    })
+    .inner
+}
+
+pub fn number_input_at(ui: &mut Ui, rect: Rect, number: egui::DragValue<'_>) -> Response {
+    ui.scope(|ui| {
+        transparent_control(ui);
+        let response = ui.put(rect, number);
+        input_line(ui, &response);
+        response
+    })
+    .inner
 }
 
 /// A quiet underline, stronger on hover and accented while editing.
@@ -253,11 +319,13 @@ pub fn subtle_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Respon
     let mut surface = background;
     if amount > 0.0 || response.has_focus() {
         surface = motion::mix(background, theme::control_hover(), amount.max(0.3));
-        painter.rect_filled(rect, 3.0, surface);
     }
-    if response.has_focus() {
-        painter.rect_stroke(rect, 3.0, Stroke::new(1.0, theme::accent()), egui::StrokeKind::Inside);
-    }
+    let line = if response.has_focus() {
+        theme::accent()
+    } else {
+        motion::mix(background, theme::text_on(background), 0.25 + 0.25 * amount)
+    };
+    painter.hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline(line));
     let ink = theme::text_on(surface);
     dropdown_contents(painter, rect, text, ink, motion::mix(surface, ink, 0.65));
 }
@@ -589,6 +657,34 @@ pub(crate) fn button(ui: &Ui, painter: &egui::Painter, rect: Rect, text: &str, l
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_form_controls_keep_surfaces_transparent_and_do_not_restyle_buttons() {
+        let ctx = egui::Context::default();
+        let mut text = String::from("Project name");
+        let mut number = 12;
+        let mut fields = Vec::new();
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            let original = ui.visuals().widgets.inactive.bg_fill;
+            fields.push(text_input(ui, egui::TextEdit::singleline(&mut text)).rect);
+            fields.push(number_input(ui, None, egui::DragValue::new(&mut number)).rect);
+            fields.push(
+                combo_box(ui, egui::ComboBox::from_id_salt("shared-choice").selected_text("One"), |ui| {
+                    ui.label("Two");
+                })
+                .response
+                .rect,
+            );
+            assert_eq!(ui.visuals().widgets.inactive.bg_fill, original);
+        });
+        for rect in fields {
+            assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+                egui::Shape::LineSegment { points, stroke } if points[0].y == rect.bottom() - 0.5 && points[0].y == points[1].y && stroke.width > 0.0)));
+            assert!(!output.shapes.iter().any(|shape| matches!(&shape.shape,
+                egui::Shape::Rect(shape) if rect.contains_rect(shape.rect) && (shape.fill.a() > 0 || shape.stroke.width > 0.0))));
+        }
+        output.textures_delta.clear();
+    }
 
     #[test]
     fn form_dropdown_has_an_underline_without_a_box_or_fill() {

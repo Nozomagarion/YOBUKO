@@ -259,7 +259,8 @@ fn projects(ui: &mut Ui, area: Rect, state: &mut StartState, lists: &Lists, now:
     if search_width > 60.0 {
         let field =
             Rect::from_min_size(Pos2::new(inner.right() - search_width, inner.top()), Vec2::new(search_width, LINE));
-        let edit = ui.put(
+        let edit = crate::kit::widgets::text_input_at(
+            ui,
             field,
             egui::TextEdit::singleline(&mut state.search).hint_text("Search").font(theme::ui_font(theme::TEXT_SMALL)),
         );

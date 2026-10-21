@@ -1626,7 +1626,8 @@ impl App {
                         .order(egui::Order::Foreground)
                         .fixed_pos(rect.min)
                         .show(ui.ctx(), |ui| {
-                            let field = ui.add(
+                            let field = crate::kit::widgets::text_input(
+                                ui,
                                 egui::TextEdit::singleline(&mut draft)
                                     .id(egui::Id::new("inline-rename-field"))
                                     .font(theme::ui_font(theme::TEXT_SMALL))
@@ -6332,17 +6333,20 @@ impl App {
         let current = self.session().map_or(DEFAULT_QUANTIZATION, |s| quantization_label(s.quantization()));
         let mut chosen = current;
         ui.scope_builder(egui::UiBuilder::new().max_rect(quant_rect), |ui| {
-            let response = egui::ComboBox::from_id_salt("quantization")
-                .width(quant_rect.width())
-                // Tall enough for every value at once, without a scroll bar.
-                .height(QUANTIZATION.len() as f32 * 2.0 * theme::ROW)
-                .selected_text(egui::RichText::new(chosen).font(mono.clone()).color(theme::text_value()))
-                .show_ui(ui, |ui| {
+            let response = crate::kit::widgets::combo_box(
+                ui,
+                egui::ComboBox::from_id_salt("quantization")
+                    .width(quant_rect.width())
+                    // Tall enough for every value at once, without a scroll bar.
+                    .height(QUANTIZATION.len() as f32 * 2.0 * theme::ROW)
+                    .selected_text(egui::RichText::new(chosen).font(mono.clone()).color(theme::text_value())),
+                |ui| {
                     for q in QUANTIZATION {
                         ui.selectable_value(&mut chosen, q, egui::RichText::new(q).font(mono.clone()));
                     }
-                })
-                .response;
+                },
+            )
+            .response;
             response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, QUANTIZATION_LABEL));
             response.on_hover_text(
                 "Grid: when launched clips start, and the Arrangement view's grid lines and snapping (Alt: off the \

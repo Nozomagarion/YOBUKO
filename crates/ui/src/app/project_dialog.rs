@@ -116,7 +116,8 @@ fn draw(ui: &mut Ui, area: Rect, state: &mut DialogState, lists: &Lists) -> Opti
         choice = Some(Choice::Browse);
     }
     let field = Rect::from_min_max(Pos2::new(right.left(), y), Pos2::new(browse.left() - 4.0, y + 20.0));
-    let edit = ui.put(
+    let edit = crate::kit::widgets::text_input_at(
+        ui,
         field,
         egui::TextEdit::singleline(&mut state.path).hint_text("Path to a .suhina or .als file").font(small.clone()),
     );
@@ -208,7 +209,7 @@ fn draw_save(ui: &mut Ui, area: Rect, prompt: &mut SavePrompt) -> Option<SaveCho
             browse_folder = button(ui, &painter, browse, "Browse…", "Browse for the folder");
             input.max.x = browse.left() - 4.0;
         }
-        let edit = ui.put(input, egui::TextEdit::singleline(value).font(small.clone()));
+        let edit = crate::kit::widgets::text_input_at(ui, input, egui::TextEdit::singleline(value).font(small.clone()));
         edit.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, label));
         if focus {
             edit.request_focus();

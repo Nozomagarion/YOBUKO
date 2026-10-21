@@ -1531,12 +1531,12 @@ fn device_panel(
                                     response
                                 }
                                 suhina_device_sdk::ParameterControl::Choice => {
-                                    egui::ComboBox::from_id_salt("choice")
+                                    crate::kit::widgets::combo_box(ui, egui::ComboBox::from_id_salt("choice")
                                         .selected_text(
                                             parameter.ui.options.get(value as usize).map_or("", String::as_str),
                                         )
                                         .width(slider_rect.width())
-                                        .show_ui(ui, |ui| {
+                                        , |ui| {
                                             for (i, label) in parameter.ui.options.iter().enumerate() {
                                                 ui.selectable_value(&mut value, i as f64, label);
                                             }
@@ -1551,7 +1551,7 @@ fn device_panel(
                                     })
                                     .response
                                 }
-                                suhina_device_sdk::ParameterControl::Number => ui.add(
+                                suhina_device_sdk::ParameterControl::Number => crate::kit::widgets::number_input(ui, None,
                                     egui::DragValue::new(&mut value)
                                         .range(parameter.min..=parameter.max)
                                         .speed(if parameter.ui.step > 0.0 {

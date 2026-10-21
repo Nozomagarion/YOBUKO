@@ -189,7 +189,10 @@ pub fn track_menu(ui: &mut Ui, menu: &TrackMenu<'_>, actions: &mut Vec<Action>) 
     // Name: edited in place, applied with Enter.
     let id = Id::new(("rename", track));
     let mut text = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| menu.name.to_string());
-    let response = ui.add(egui::TextEdit::singleline(&mut text).hint_text("Name").desired_width(200.0));
+    let response = crate::kit::widgets::text_input(
+        ui,
+        egui::TextEdit::singleline(&mut text).hint_text("Name").desired_width(200.0),
+    );
     if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
         let name = text.trim();
         if !name.is_empty() && name != menu.name {
@@ -358,7 +361,8 @@ pub fn clip_menu(
     } else if let [(_, clip)] = clips {
         let id = Id::new(("clip-rename", clip.0));
         let mut draft: String = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_else(|| name.to_string());
-        let field = ui.add(egui::TextEdit::singleline(&mut draft).id(id).desired_width(140.0));
+        let field =
+            crate::kit::widgets::text_input(ui, egui::TextEdit::singleline(&mut draft).id(id).desired_width(140.0));
         ui.ctx().data_mut(|d| d.insert_temp(id, draft.clone()));
         field.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, format!("Rename clip {}", name))
@@ -458,7 +462,10 @@ pub fn scene_menu(ui: &mut Ui, menu: &SceneMenu<'_>, actions: &mut Vec<Action>) 
     for (key, current, hint) in fields {
         let id = Id::new(("scene-field", key, scene));
         let mut text = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| current.clone());
-        let response = ui.add(egui::TextEdit::singleline(&mut text).hint_text(hint).desired_width(f32::INFINITY));
+        let response = crate::kit::widgets::text_input(
+            ui,
+            egui::TextEdit::singleline(&mut text).hint_text(hint).desired_width(f32::INFINITY),
+        );
         if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
             if text.trim() != current {
                 actions.extend(scene_field_action(key, scene, &text));
@@ -565,7 +572,8 @@ pub fn slot_menu(
     } else if has_clip {
         let id = Id::new(("slot-rename", track, scene));
         let mut draft: String = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_else(|| name.to_string());
-        let field = ui.add(egui::TextEdit::singleline(&mut draft).id(id).desired_width(140.0));
+        let field =
+            crate::kit::widgets::text_input(ui, egui::TextEdit::singleline(&mut draft).id(id).desired_width(140.0));
         ui.ctx().data_mut(|d| d.insert_temp(id, draft.clone()));
         field.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, format!("Rename clip {}", name))

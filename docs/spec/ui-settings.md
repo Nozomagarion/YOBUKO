@@ -139,6 +139,17 @@ the same frame. This also applies to the custom waveform colour picker.
 
 ## Scrolling
 
+Liquid panel refraction samples the current frame's captured backdrop through a bounded
+edge lens. Texture coordinates bend smoothly near the perimeter and stay unchanged in
+the centre; sampling is clamped to the captured screen. Text, inputs and musical marks
+are painted after the lens. No prior frame or another window's pixels are sampled.
+Reduced effects, unsupported renderers and zero strength retain the solid fallback.
+
+Text inputs and closed selection fields throughout the native UI use the shared
+transparent, underline-only treatment. Popup lists keep opaque theme surfaces and
+selection highlights. Keyboard focus accents the underline; hit targets, text editing,
+selection, commit/cancel behaviour and accessibility labels remain unchanged.
+
 Each page scrolls when it is taller than the room under the title, at any window size: with the
 mouse wheel over the page, by dragging its scroll bar on the right, and by moving the keyboard
 focus (Tab) to a control out of view, which scrolls it into view. Opening another page shows it

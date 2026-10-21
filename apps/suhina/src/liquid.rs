@@ -32,6 +32,7 @@ struct Targets {
     scratch: wgpu::Texture,
     output: wgpu::Texture,
     image: egui::TextureId,
+    sharp_image: egui::TextureId,
     horizontal: wgpu::BindGroup,
     vertical: wgpu::BindGroup,
 }
@@ -100,7 +101,12 @@ fn target_size(screen: egui::Rect, scale: f32) -> Option<[u32; 2]> {
 }
 
 impl Targets {
-    fn new(gpu: &egui_wgpu::RenderState, state: &State, size: [u32; 2], previous: Option<egui::TextureId>) -> Self {
+    fn new(
+        gpu: &egui_wgpu::RenderState,
+        state: &State,
+        size: [u32; 2],
+        previous: Option<(egui::TextureId, egui::TextureId)>,
+    ) -> Self {
         let device = &gpu.device;
         let texture = |label, format| {
             device.create_texture(&wgpu::TextureDescriptor {
@@ -113,7 +119,11 @@ impl Targets {
                 usage: wgpu::TextureUsages::RENDER_ATTACHMENT
                     | wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::COPY_SRC,
-                view_formats: &[],
+                view_formats: if format == wgpu::TextureFormat::Rgba8UnormSrgb {
+                    &[wgpu::TextureFormat::Rgba8Unorm]
+                } else {
+                    &[]
+                },
             })
         };
         let source = texture("liquid current UI", wgpu::TextureFormat::Rgba8UnormSrgb);
@@ -143,13 +153,24 @@ impl Targets {
         let vertical = bindings(&state.vertical, &scratch, [0.0, 1.0 / size[1] as f32, 3.0, 0.0]);
         let view = output.create_view(&Default::default());
         let mut renderer = gpu.renderer.write();
-        let image = if let Some(id) = previous {
+        let image = if let Some((id, _)) = previous {
             renderer.update_egui_texture_from_wgpu_texture(device, &view, wgpu::FilterMode::Linear, id);
             id
         } else {
             renderer.register_native_texture(device, &view, wgpu::FilterMode::Linear)
         };
-        Self { size, source, scratch, output, image, horizontal, vertical }
+        // Reinterpret the encoded source without sRGB decoding, matching egui's image sampler.
+        let sharp_view = source.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(wgpu::TextureFormat::Rgba8Unorm),
+            ..Default::default()
+        });
+        let sharp_image = if let Some((_, id)) = previous {
+            renderer.update_egui_texture_from_wgpu_texture(device, &sharp_view, wgpu::FilterMode::Linear, id);
+            id
+        } else {
+            renderer.register_native_texture(device, &sharp_view, wgpu::FilterMode::Linear)
+        };
+        Self { size, source, scratch, output, image, sharp_image, horizontal, vertical }
     }
 }
 
@@ -165,7 +186,7 @@ impl Liquid {
         let size = target_size(screen, ctx.pixels_per_point())?;
         let mut state = self.state.lock().ok()?;
         if state.targets.as_ref().is_none_or(|targets| targets.size != size) {
-            let previous = state.targets.as_ref().map(|targets| targets.image);
+            let previous = state.targets.as_ref().map(|targets| (targets.image, targets.sharp_image));
             state.targets = Some(Targets::new(&self.gpu, &state, size, previous));
         }
         // Read painted shapes at this point in this frame, before the modal layer exists.
@@ -253,7 +274,7 @@ impl Liquid {
             pass.draw(0..3, 0..1);
         }
         queue.submit(commands.into_iter().chain([encoder.finish()]));
-        Some(Backdrop { texture: targets.image, screen })
+        Some(Backdrop { texture: targets.image, sharp_texture: Some(targets.sharp_image), screen })
     }
 }
 
@@ -343,33 +364,36 @@ mod tests {
 
     fn pixels(liquid: &Liquid) -> Vec<u8> {
         let state = liquid.state.lock().unwrap();
-        let targets = state.targets.as_ref().unwrap();
-        let row = (targets.size[0] * 4).div_ceil(256) * 256;
-        let buffer = liquid.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        texture_pixels(&liquid.gpu, &state.targets.as_ref().unwrap().output)
+    }
+
+    fn texture_pixels(gpu: &egui_wgpu::RenderState, texture: &wgpu::Texture) -> Vec<u8> {
+        let row = (texture.width() * 4).div_ceil(256) * 256;
+        let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("test-only liquid readback"),
-            size: u64::from(row) * u64::from(targets.size[1]),
+            size: u64::from(row) * u64::from(texture.height()),
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
-        let mut encoder = liquid.gpu.device.create_command_encoder(&Default::default());
+        let mut encoder = gpu.device.create_command_encoder(&Default::default());
         encoder.copy_texture_to_buffer(
-            targets.output.as_image_copy(),
+            texture.as_image_copy(),
             wgpu::TexelCopyBufferInfo {
                 buffer: &buffer,
                 layout: wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(row), rows_per_image: None },
             },
-            targets.output.size(),
+            texture.size(),
         );
-        liquid.gpu.queue.submit([encoder.finish()]);
+        gpu.queue.submit([encoder.finish()]);
         let (send, receive) = std::sync::mpsc::channel();
         buffer.slice(..).map_async(wgpu::MapMode::Read, move |result| {
             let _ = send.send(result);
         });
-        liquid.gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        gpu.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
         receive.recv().unwrap().unwrap();
         let mapped = buffer.slice(..).get_mapped_range().unwrap();
         let result =
-            mapped.chunks(row as usize).flat_map(|row| row[..targets.size[0] as usize * 4].iter().copied()).collect();
+            mapped.chunks(row as usize).flat_map(|row| row[..texture.width() as usize * 4].iter().copied()).collect();
         drop(mapped);
         buffer.unmap();
         result
@@ -421,6 +445,8 @@ mod tests {
             captured.unwrap()
         };
         let first = draw(64.0, 0);
+        assert!(first.sharp_texture.is_some());
+        assert_ne!(first.sharp_texture, Some(first.texture));
         let constant = pixels(&liquid);
         let center = (32 * 64 + 32) * 4;
         for (actual, expected) in constant[center..center + 4].iter().zip([100_u8, 150, 200, 255]) {
@@ -439,9 +465,120 @@ mod tests {
         assert!(impulse[center - 8].abs_diff(impulse[center + 8]) <= 3);
         let resized = draw(128.0, 3);
         assert_eq!(first.texture, resized.texture);
+        assert_eq!(first.sharp_texture, resized.sharp_texture);
         let blue = pixels(&liquid);
         let center = (64 * 128 + 64) * 4;
         assert!(blue[center] < 3 && blue[center + 2] > 250, "old frame leaked into resized output");
+    }
+
+    #[test]
+    #[ignore = "requires a native GPU; renders review images explicitly"]
+    fn gpu_refracting_panel_preserves_foreground_and_current_background() {
+        use suhina_ui::kit::liquid::{self as material, Options, Surface};
+        let instance = wgpu::Instance::default();
+        let gpu =
+            wait(egui_wgpu::RenderState::create(&Default::default(), &instance, None, Default::default())).unwrap();
+        let liquid = std::sync::Arc::new(Liquid::new(gpu.clone()));
+        let ctx = egui::Context::default();
+        material::install(&ctx, liquid);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(640.0, 400.0));
+        let panel = egui::Rect::from_min_size(egui::pos2(80.0, 60.0), egui::vec2(480.0, 280.0));
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/liquid-refraction-review");
+        std::fs::create_dir_all(&folder).unwrap();
+        let mut images = Vec::new();
+        for strength in [0, 100] {
+            material::configure(&ctx, Options { panels: strength, ..Default::default() });
+            let mut output = ctx.run_ui(egui::RawInput { screen_rect: Some(screen), ..Default::default() }, |ui| {
+                let painter = ui.painter();
+                painter.rect_filled(screen, 0.0, egui::Color32::from_rgb(40, 50, 65));
+                for x in (0..640).step_by(20) {
+                    painter.vline(
+                        x as f32,
+                        screen.y_range(),
+                        egui::Stroke::new(2.0, egui::Color32::from_rgb(175, 180, 190)),
+                    );
+                }
+                for y in (0..400).step_by(20) {
+                    painter.hline(
+                        screen.x_range(),
+                        y as f32,
+                        egui::Stroke::new(2.0, egui::Color32::from_rgb(175, 180, 190)),
+                    );
+                }
+                painter.rect_filled(
+                    egui::Rect::from_min_size(egui::pos2(50.0, 130.0), egui::vec2(540.0, 50.0)),
+                    0.0,
+                    egui::Color32::from_rgb(70, 160, 200),
+                );
+                material::prepare(&ctx);
+                let base = egui::Color32::from_rgb(65, 75, 90);
+                painter.rect_filled(panel, 0.0, base);
+                material::paint(painter, panel, base, Surface::Panel);
+                painter.rect_filled(
+                    egui::Rect::from_center_size(panel.center(), egui::vec2(16.0, 16.0)),
+                    0.0,
+                    egui::Color32::WHITE,
+                );
+                painter.text(
+                    egui::pos2(110.0, 95.0),
+                    egui::Align2::LEFT_TOP,
+                    "Sharp foreground",
+                    egui::FontId::proportional(22.0),
+                    egui::Color32::WHITE,
+                );
+            });
+            let jobs = ctx.tessellate(output.shapes, output.pixels_per_point);
+            let target = gpu.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("refraction review output"),
+                size: wgpu::Extent3d { width: 640, height: 400, depth_or_array_layers: 1 },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: gpu.target_format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            let mut encoder = gpu.device.create_command_encoder(&Default::default());
+            let descriptor =
+                egui_wgpu::ScreenDescriptor { size_in_pixels: [640, 400], pixels_per_point: output.pixels_per_point };
+            let mut renderer = gpu.renderer.write();
+            for (id, deltas) in &output.textures_delta.set {
+                for delta in deltas {
+                    renderer.update_texture(&gpu.device, &gpu.queue, *id, delta);
+                }
+            }
+            output.textures_delta.clear();
+            let commands = renderer.update_buffers(&gpu.device, &gpu.queue, &mut encoder, &jobs, &descriptor);
+            let view = target.create_view(&Default::default());
+            {
+                let mut pass = encoder
+                    .begin_render_pass(&wgpu::RenderPassDescriptor {
+                        color_attachments: &[Some(attachment(&view))],
+                        ..Default::default()
+                    })
+                    .forget_lifetime();
+                renderer.render(&mut pass, &jobs, &descriptor);
+            }
+            drop(renderer);
+            gpu.queue.submit(commands.into_iter().chain([encoder.finish()]));
+            let rgba = texture_pixels(&gpu, &target);
+            let mut ppm = b"P6\n640 400\n255\n".to_vec();
+            for pixel in rgba.as_chunks::<4>().0 {
+                if matches!(gpu.target_format, wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb) {
+                    ppm.extend_from_slice(&[pixel[2], pixel[1], pixel[0]]);
+                } else {
+                    ppm.extend_from_slice(&pixel[..3]);
+                }
+            }
+            std::fs::write(folder.join(if strength == 0 { "flat.ppm" } else { "glass.ppm" }), ppm).unwrap();
+            images.push(rgba);
+        }
+        let pixel = |x: usize, y: usize| (y * 640 + x) * 4;
+        let center = pixel(320, 200);
+        assert_eq!(&images[0][center..center + 4], &images[1][center..center + 4], "foreground changed");
+        let outside = pixel(30, 30);
+        assert_eq!(&images[0][outside..outside + 4], &images[1][outside..outside + 4], "lens escaped its panel");
+        assert!(images[0].iter().zip(&images[1]).filter(|(a, b)| a != b).count() > 1000, "no visible material");
     }
 
     #[test]

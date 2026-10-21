@@ -31,6 +31,8 @@ pub enum Surface {
 #[derive(Clone, Copy)]
 pub struct Backdrop {
     pub texture: TextureId,
+    /// The same frame before blur, for the narrow refracting rim.
+    pub sharp_texture: Option<TextureId>,
     pub screen: Rect,
 }
 
@@ -114,7 +116,9 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
         let uv_min = (rect.min - backdrop.screen.min) / backdrop.screen.size();
         let uv_max = (rect.max - backdrop.screen.min) / backdrop.screen.size();
         painter.image(backdrop.texture, rect, Rect::from_min_max(uv_min.to_pos2(), uv_max.to_pos2()), Color32::WHITE);
+        painter.add(refraction_mesh(rect, backdrop, strength));
         painter.rect_filled(rect, 0.0, base.gamma_multiply(1.0 - 0.45 * strength));
+        painter.add(rim_mesh(rect, strength));
     }
     if surface != Surface::Panel {
         painter.add(body_mesh(rect, base, strength));
@@ -146,6 +150,73 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
             StrokeKind::Inside,
         );
     }
+}
+
+/// A bounded edge lens over this frame's backdrop. The centre is optically quiet and
+/// all coordinates stay inside the captured screen, even against a window edge.
+fn refraction_mesh(rect: Rect, backdrop: Backdrop, strength: f32) -> egui::Mesh {
+    let mut mesh = egui::Mesh::with_texture(backdrop.sharp_texture.unwrap_or(backdrop.texture));
+    if !rect.is_finite()
+        || !backdrop.screen.is_finite()
+        || !strength.is_finite()
+        || rect.width() <= 0.0
+        || rect.height() <= 0.0
+        || backdrop.screen.width() <= 0.0
+        || backdrop.screen.height() <= 0.0
+        || strength <= 0.0
+    {
+        return mesh;
+    }
+    let strength = strength.min(1.0) * surface_scale(rect);
+    if strength == 0.0 {
+        return mesh;
+    }
+    let band = (rect.size().min_elem() * 0.25).min(32.0);
+    let axis = |length: f32| {
+        [
+            0.0,
+            band * 0.25,
+            band * 0.5,
+            band * 0.75,
+            band,
+            length * 0.5,
+            length - band,
+            length - band * 0.75,
+            length - band * 0.5,
+            length - band * 0.25,
+            length,
+        ]
+    };
+    let profile = |distance: f32| {
+        let t = (distance / band).clamp(0.0, 1.0);
+        4.0 * t * (1.0 - t)
+    };
+    let xs = axis(rect.width());
+    let ys = axis(rect.height());
+    mesh.vertices.reserve(121);
+    mesh.indices.reserve(600);
+    for y in ys {
+        for x in xs {
+            let (left, right, top, bottom) =
+                (profile(x), profile(rect.width() - x), profile(y), profile(rect.height() - y));
+            let offset = egui::vec2(left - right, top - bottom) * (band * 0.18 * strength);
+            let position = rect.min + egui::vec2(x, y);
+            let uv = (position + offset - backdrop.screen.min) / backdrop.screen.size();
+            mesh.vertices.push(egui::epaint::Vertex {
+                pos: position,
+                uv: pos2(uv.x.clamp(0.0, 1.0), uv.y.clamp(0.0, 1.0)),
+                color: Color32::WHITE.gamma_multiply(left.max(right).max(top).max(bottom) * 0.75 * strength),
+            });
+        }
+    }
+    for y in 0..10_u32 {
+        for x in 0..10_u32 {
+            let i = y * 11 + x;
+            mesh.add_triangle(i, i + 1, i + 11);
+            mesh.add_triangle(i + 11, i + 1, i + 12);
+        }
+    }
+    mesh
 }
 
 /// Broad coloured reflection below the narrow rim and above the source fill.
@@ -255,6 +326,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn edge_refraction_bends_current_backdrop_without_moving_the_centre() {
+        let screen = Rect::from_min_size(pos2(10.0, 20.0), egui::vec2(800.0, 600.0));
+        let rect = Rect::from_min_size(pos2(50.0, 60.0), egui::vec2(400.0, 300.0));
+        let backdrop = Backdrop { screen, texture: TextureId::User(1), sharp_texture: Some(TextureId::User(2)) };
+        let mesh = refraction_mesh(rect, backdrop, 1.0);
+        assert!(mesh.is_valid());
+        assert_eq!(mesh.vertices.len(), 121);
+        assert_eq!(mesh.indices.len(), 600);
+        assert_eq!(mesh.texture_id, TextureId::User(2));
+        assert_eq!(mesh.calc_bounds(), rect);
+        let center = &mesh.vertices[60];
+        assert_eq!(center.pos, rect.center());
+        assert_eq!(center.uv, ((rect.center() - screen.min) / screen.size()).to_pos2());
+        assert_eq!(center.color.a(), 0);
+        assert!(
+            mesh.vertices.iter().any(|v| v.color.a() > 0 && v.uv != ((v.pos - screen.min) / screen.size()).to_pos2())
+        );
+        for row in mesh.vertices.chunks(11) {
+            assert!(row.windows(2).all(|v| v[0].uv.x <= v[1].uv.x), "lens folded its texture");
+        }
+        for vertex in &mesh.vertices {
+            assert!(vertex.uv.x.is_finite() && vertex.uv.y.is_finite());
+            assert!((0.0..=1.0).contains(&vertex.uv.x) && (0.0..=1.0).contains(&vertex.uv.y));
+        }
+        let low = refraction_mesh(rect, backdrop, 0.25);
+        assert!(low.vertices.iter().map(|v| v.color.a()).max() < mesh.vertices.iter().map(|v| v.color.a()).max());
+        assert!(refraction_mesh(rect, backdrop, f32::NAN).is_empty());
+        assert!(refraction_mesh(rect, backdrop, 0.0).is_empty());
+        assert!(refraction_mesh(Rect::NOTHING, backdrop, 1.0).is_empty());
+        assert!(refraction_mesh(rect, Backdrop { screen: Rect::NOTHING, ..backdrop }, 1.0).is_empty());
+        let clipped = refraction_mesh(Rect::from_min_size(pos2(-20.0, -30.0), rect.size()), backdrop, 1.0);
+        assert!(clipped.vertices.iter().all(|v| (0.0..=1.0).contains(&v.uv.x) && (0.0..=1.0).contains(&v.uv.y)));
+    }
+
+    #[test]
     fn coloured_body_retains_a_gradient_between_the_rims() {
         let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(220.0, 64.0));
         for base in [Color32::from_rgb(204, 210, 175), Color32::from_rgb(45, 60, 80)] {
@@ -335,7 +441,10 @@ mod tests {
     fn failed_capture_does_not_reuse_a_previous_backdrop() {
         let ctx = Context::default();
         ctx.data_mut(|data| {
-            data.insert_temp(Id::new(BACKDROP), Backdrop { texture: TextureId::User(42), screen: Rect::EVERYTHING })
+            data.insert_temp(
+                Id::new(BACKDROP),
+                Backdrop { texture: TextureId::User(42), sharp_texture: None, screen: Rect::EVERYTHING },
+            )
         });
         prepare(&ctx);
         assert!(ctx.data(|data| data.get_temp::<Backdrop>(Id::new(BACKDROP))).is_none());

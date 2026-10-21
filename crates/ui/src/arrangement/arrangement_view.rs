@@ -2332,7 +2332,10 @@ fn marker_flags(
                 return;
             };
             let index = *index;
-            let field = ui.add(egui::TextEdit::singleline(name).hint_text("Marker name").desired_width(140.0));
+            let field = crate::kit::widgets::text_input(
+                ui,
+                egui::TextEdit::singleline(name).hint_text("Marker name").desired_width(140.0),
+            );
             let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if ui.button("Rename").clicked() || entered {
                 let name = name.trim().to_string();

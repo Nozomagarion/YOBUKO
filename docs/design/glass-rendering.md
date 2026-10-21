@@ -21,7 +21,8 @@ The implementation is independently written; no reference shader or asset is imp
 For dense musical content, use a quiet centre and a narrow curved rim: a directional
 outer highlight, an inner dark band and a weaker opposing light return. Scale these
 down with row height and keep them inside the existing editing rectangle. This is an
-optical coating, not physical refraction; real background displacement remains future work.
+optical coating on tracks and clips. Floating panels additionally refract the current
+background through a bounded edge lens, independently implemented in the shared kit.
 
 [Microsoft Acrylic](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic)
 also builds depth from layered background, blur and tint. In the dense content layer,
@@ -33,8 +34,9 @@ without a hard glossy stripe across notes or waveforms.
 ## Current state
 
 The original static experiment below remains available. There is also an experimental
-native integration, disabled by default, with per-surface strengths under
-Appearance › Liquid (experimental).
+native integration, disabled by default, with per-surface global strengths under
+Appearance › Liquid (experimental), and optional overrides saved with each theme in
+Edit current theme. Use global liquid settings removes the theme override.
 
 Run with `--renderer wgpu` and raise a strength above 0 to opt in. The old
 `SUHINA_LIQUID_PREVIEW` environment switch is no longer needed.
@@ -47,11 +49,19 @@ horizontal intermediate are sRGB attachments, sampled in linear light; the final
 pass explicitly encodes the result for egui's gamma-encoded native-texture contract.
 The blur is separable, 19 taps per direction, sigma 3 downsampled pixels. The longest target
 side is bounded at 1024 physical pixels. Three targets, sampler and bind groups are retained
-until their dimensions change; the main renderer's texture ID is reused when resized.
+until their dimensions change; the main renderer's blurred and sharp texture IDs are reused
+when resized. The sharp view reinterprets the sRGB source as unorm so egui samples the
+encoded colour values without a second decode; no additional capture or render target is needed.
 No swapchain readback, previous frame or recursive rendering is used.
 
 The UI-facing provider and independent Panel/Track/Clip options live in
-`crates/ui/src/kit/liquid.rs`. Settings uses the live blurred backdrop under a theme tint.
+`crates/ui/src/kit/liquid.rs`. Settings uses the live blurred backdrop under a theme tint. A 121-vertex, 200-triangle
+edge mesh samples the same frame's sharp source with smoothly displaced UVs. The lens
+band is at most 32 logical pixels and no more than a quarter of the shorter dimension;
+maximum displacement is 18% of that band, scaled by Panel strength and small-surface
+fading. Coordinates remain monotonic (no folded image), clamped to the captured screen.
+The centre has zero displacement and zero sharp-overlay opacity. All labels and controls
+are painted afterward. Missing sharp sources fall back to the blurred current backdrop.
 Arrangement and Session track headers and clip backgrounds get a lightweight optical
 coating (a narrow rounded rim with directional highlights, an inner shade and a
 weaker opposing light return, over a source-coloured directional body gradient),
@@ -78,7 +88,7 @@ Remaining costs/limits: capture currently clones/tessellates UI shapes and copie
 the current CPU font atlas, uploading the atlas only when it changes. This is UI-thread
 work, never audio callback work, but needs profiling and a more efficient atlas update
 path before the material can leave its experimental status. Foreign image support, playback/scroll/zoom
-measurements, interactive visual QA and true edge refraction are still outstanding.
+measurements, interactive visual QA on more hardware are still outstanding.
 A GPU-only blur does not imply that the whole capture is free.
 
 The native hardware test was run explicitly on Windows: constant RGB preservation,

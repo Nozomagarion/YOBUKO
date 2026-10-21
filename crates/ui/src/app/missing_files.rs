@@ -291,7 +291,8 @@ impl MissingFiles {
                     self.checked = None;
                 }
                 ui.label(egui::RichText::new("or a folder:").color(theme::text_secondary()).font(small.clone()));
-                let field = ui.add(
+                let field = crate::kit::widgets::text_input(
+                    ui,
                     egui::TextEdit::singleline(&mut self.folder)
                         .font(small.clone())
                         .hint_text("A folder path")
@@ -383,7 +384,8 @@ fn row_view(ui: &mut Ui, index: usize, row: &mut Row, small: &egui::FontId) {
         let clips = format!("{} clip{}", row.clips, if row.clips == 1 { "" } else { "s" });
         ui.label(egui::RichText::new(clips).color(theme::text_hint()).font(small.clone()));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let field = ui.add(
+            let field = crate::kit::widgets::text_input(
+                ui,
                 egui::TextEdit::singleline(&mut row.locate)
                     .font(small.clone())
                     .hint_text("Locate: a file path")
@@ -415,10 +417,12 @@ fn row_view(ui: &mut Ui, index: usize, row: &mut Row, small: &egui::FontId) {
         ui.add_space(14.0);
         ui.label(egui::RichText::new("→").color(theme::text_hint()).font(small.clone()));
         let shown = row.chosen.as_ref().map_or_else(|| "not found".to_string(), |p| p.display().to_string());
-        egui::ComboBox::from_id_salt(("missing-candidate", index))
-            .selected_text(egui::RichText::new(shown).font(small.clone()))
-            .width(440.0)
-            .show_ui(ui, |ui| {
+        crate::kit::widgets::combo_box(
+            ui,
+            egui::ComboBox::from_id_salt(("missing-candidate", index))
+                .selected_text(egui::RichText::new(shown).font(small.clone()))
+                .width(440.0),
+            |ui| {
                 for candidate in row.candidates.clone() {
                     let label = candidate.display().to_string();
                     if ui.selectable_label(row.chosen.as_ref() == Some(&candidate), label).clicked() {
@@ -430,7 +434,8 @@ fn row_view(ui: &mut Ui, index: usize, row: &mut Row, small: &egui::FontId) {
                     row.chosen = None;
                     row.by_hand = true;
                 }
-            });
+            },
+        );
     });
     ui.add_space(4.0);
 }

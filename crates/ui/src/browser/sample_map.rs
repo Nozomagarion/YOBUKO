@@ -649,12 +649,12 @@ fn controls(ui: &mut Ui, view: &mut MapView, events: &mut Vec<MapEvent>) {
         ui.label(egui::RichText::new("Size").color(theme::text_secondary()).size(theme::TEXT_SMALL));
         let mut percent = (view.dot_size * 100.0).round() as u32;
         let (low, high) = crate::settings::MAP_DOT_SIZES;
-        let size = ui
-            .add_sized(
-                Vec2::new(48.0, ui.spacing().interact_size.y),
-                egui::DragValue::new(&mut percent).range(low..=high).speed(2.0).suffix(" %"),
-            )
-            .on_hover_text("Point size: drag or type. The points stay where they are, so smaller ones stand apart");
+        let size = crate::kit::widgets::number_input(
+            ui,
+            Some(Vec2::new(48.0, ui.spacing().interact_size.y)),
+            egui::DragValue::new(&mut percent).range(low..=high).speed(2.0).suffix(" %"),
+        )
+        .on_hover_text("Point size: drag or type. The points stay where they are, so smaller ones stand apart");
         if size.changed() {
             view.dot_size = percent as f32 / 100.0;
             events.push(MapEvent::DotSize(percent));

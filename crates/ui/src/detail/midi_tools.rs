@@ -215,14 +215,17 @@ fn quantise_block(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, ac
     heading(ui, "Quantise", theme::text_primary());
     let mut settings = state.quantize;
     let shown = settings.grid;
-    let menu = egui::ComboBox::from_id_salt("piano-roll-quantise-grid")
-        .width(64.0)
-        .selected_text(egui::RichText::new(shown).font(mono.clone()))
-        .show_ui(ui, |ui| {
+    let menu = crate::kit::widgets::combo_box(
+        ui,
+        egui::ComboBox::from_id_salt("piano-roll-quantise-grid")
+            .width(64.0)
+            .selected_text(egui::RichText::new(shown).font(mono.clone())),
+        |ui| {
             for grid in QUANTIZE_GRIDS {
                 ui.selectable_value(&mut settings.grid, grid, egui::RichText::new(grid).font(mono.clone()));
             }
-        });
+        },
+    );
     menu.response
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, format!("Quantise grid {shown}")));
     let slider = ui.add_sized(
@@ -266,8 +269,9 @@ fn note_tools(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, action
     let mut settings = state.tools.clone();
 
     heading(ui, "Transpose", theme::text_secondary());
-    let transpose = ui.add_sized(
-        Vec2::new(ui.available_width().min(64.0), 16.0),
+    let transpose = crate::kit::widgets::number_input(
+        ui,
+        Some(Vec2::new(ui.available_width().min(64.0), 16.0)),
         egui::DragValue::new(&mut settings.transpose).range(-24..=24).speed(1.0).prefix(""),
     );
     transpose.widget_info(|| {
@@ -285,8 +289,9 @@ fn note_tools(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, action
 
     ui.add_space(PAD);
     heading(ui, "Humanise", theme::text_secondary());
-    let time = ui.add_sized(
-        Vec2::new(ui.available_width().min(64.0), 16.0),
+    let time = crate::kit::widgets::number_input(
+        ui,
+        Some(Vec2::new(ui.available_width().min(64.0), 16.0)),
         egui::DragValue::new(&mut settings.humanize_time).range(0.0..=1.0).speed(0.01).max_decimals(3).prefix("Time "),
     );
     time.widget_info(|| {
@@ -296,8 +301,9 @@ fn note_tools(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, action
             format!("Humanise time {:.3}", settings.humanize_time),
         )
     });
-    let velocity = ui.add_sized(
-        Vec2::new(ui.available_width().min(64.0), 16.0),
+    let velocity = crate::kit::widgets::number_input(
+        ui,
+        Some(Vec2::new(ui.available_width().min(64.0), 16.0)),
         egui::DragValue::new(&mut settings.humanize_velocity).range(0.0..=127.0).speed(1.0).prefix("Velocity "),
     );
     velocity.widget_info(|| {
@@ -319,25 +325,31 @@ fn note_tools(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, action
     heading(ui, "Fit to scale", theme::text_secondary());
     let root = ROOTS.get(settings.root).map_or("C", |(name, _)| *name);
     let mono = theme::mono_font(theme::TEXT_SMALL);
-    let menu = egui::ComboBox::from_id_salt("piano-roll-tools-root")
-        .width(56.0)
-        .selected_text(egui::RichText::new(root).font(mono.clone()))
-        .show_ui(ui, |ui| {
+    let menu = crate::kit::widgets::combo_box(
+        ui,
+        egui::ComboBox::from_id_salt("piano-roll-tools-root")
+            .width(56.0)
+            .selected_text(egui::RichText::new(root).font(mono.clone())),
+        |ui| {
             for (index, (name, _)) in ROOTS.iter().enumerate() {
                 ui.selectable_value(&mut settings.root, index, egui::RichText::new(*name).font(mono.clone()));
             }
-        });
+        },
+    );
     menu.response
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, format!("Tools root {root}")));
     let scale = SCALES.get(settings.scale).map_or("Major", |(name, _)| *name);
-    let menu = egui::ComboBox::from_id_salt("piano-roll-tools-scale")
-        .width(96.0)
-        .selected_text(egui::RichText::new(scale).font(mono.clone()))
-        .show_ui(ui, |ui| {
+    let menu = crate::kit::widgets::combo_box(
+        ui,
+        egui::ComboBox::from_id_salt("piano-roll-tools-scale")
+            .width(96.0)
+            .selected_text(egui::RichText::new(scale).font(mono.clone())),
+        |ui| {
             for (index, (name, _)) in SCALES.iter().enumerate() {
                 ui.selectable_value(&mut settings.scale, index, egui::RichText::new(*name).font(mono.clone()));
             }
-        });
+        },
+    );
     menu.response
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, format!("Tools scale {scale}")));
     if button(ui, "Fit to scale", &small) {
@@ -373,8 +385,9 @@ fn note_tools(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, action
 
     ui.add_space(PAD);
     heading(ui, "Velocity", theme::text_secondary());
-    let amount = ui.add_sized(
-        Vec2::new(ui.available_width().min(64.0), 16.0),
+    let amount = crate::kit::widgets::number_input(
+        ui,
+        Some(Vec2::new(ui.available_width().min(64.0), 16.0)),
         egui::DragValue::new(&mut settings.random_amount).range(0.0..=127.0).speed(1.0).prefix("Amount "),
     );
     amount.widget_info(|| {
@@ -389,15 +402,17 @@ fn note_tools(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, action
         params["amount"] = json!(settings.random_amount.clamp(0.0, 127.0));
         actions.push(Action::new("note.randomizeVelocity", params));
     }
-    let from = ui.add_sized(
-        Vec2::new(ui.available_width().min(64.0), 16.0),
+    let from = crate::kit::widgets::number_input(
+        ui,
+        Some(Vec2::new(ui.available_width().min(64.0), 16.0)),
         egui::DragValue::new(&mut settings.ramp_from).range(1..=127).speed(1.0).prefix("From "),
     );
     from.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, format!("Ramp from {}", settings.ramp_from))
     });
-    let to = ui.add_sized(
-        Vec2::new(ui.available_width().min(64.0), 16.0),
+    let to = crate::kit::widgets::number_input(
+        ui,
+        Some(Vec2::new(ui.available_width().min(64.0), 16.0)),
         egui::DragValue::new(&mut settings.ramp_to).range(1..=127).speed(1.0).prefix("To "),
     );
     to.widget_info(|| {

@@ -379,7 +379,7 @@ fn search_field(ui: &mut Ui, rect: Rect, state: &mut BrowserState, key: &str, ou
         .hint_text(egui::RichText::new("Search").color(theme::text_hint()))
         .font(theme::ui_font(theme::TEXT))
         .text_color(theme::text_primary());
-    let response = ui.put(field, edit);
+    let response = crate::kit::widgets::text_input_at(ui, field, edit);
     if std::mem::take(&mut state.focus_search) {
         response.request_focus();
     }
@@ -635,7 +635,8 @@ fn sidebar_view(
                 state.new_folder = None;
                 return;
             }
-            let response = ui.put(
+            let response = crate::kit::widgets::text_input_at(
+                ui,
                 Rect::from_min_max(field.min, Pos2::new(browse.left() - 4.0, field.bottom())).intersect(area),
                 edit,
             );
@@ -1015,7 +1016,10 @@ fn row_menu(
         // A new tag, set on the item at once.
         let id = Id::new("browser-new-tag");
         let mut name: String = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
-        let response = ui.add(egui::TextEdit::singleline(&mut name).hint_text("New tag…").desired_width(120.0));
+        let response = crate::kit::widgets::text_input(
+            ui,
+            egui::TextEdit::singleline(&mut name).hint_text("New tag…").desired_width(120.0),
+        );
         ui.ctx().data_mut(|d| d.insert_temp(id, name.clone()));
         if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) && !name.trim().is_empty() {
             let palette = suhina_library::store::default_tags();
@@ -1504,7 +1508,8 @@ fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut 
         let field_rect = Rect::from_min_max(Pos2::new(field_left, rect.top()), Pos2::new(field_right, rect.bottom()));
         let id = Id::new(("tag-editor-name", &tag.name));
         let mut name: String = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_else(|| tag.name.clone());
-        let field = ui.put(
+        let field = crate::kit::widgets::text_input_at(
+            ui,
             field_rect,
             egui::TextEdit::singleline(&mut name)
                 .id(id)
@@ -1604,7 +1609,8 @@ fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut 
         let mut name: String = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_default();
         let field_rect =
             Rect::from_min_max(Pos2::new(area.left() + PAD, rect.top()), Pos2::new(area.right() - PAD, rect.bottom()));
-        let field = ui.put(
+        let field = crate::kit::widgets::text_input_at(
+            ui,
             field_rect,
             egui::TextEdit::singleline(&mut name)
                 .id(id)
@@ -1675,7 +1681,7 @@ fn footer_view(
         egui::Popup::context_menu(&response).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
             let id = Id::new(("browser-rename-tag", &tag.name));
             let mut name: String = ui.ctx().data(|d| d.get_temp(id)).unwrap_or_else(|| tag.name.clone());
-            let field = ui.add(egui::TextEdit::singleline(&mut name).desired_width(120.0));
+            let field = crate::kit::widgets::text_input(ui, egui::TextEdit::singleline(&mut name).desired_width(120.0));
             ui.ctx().data_mut(|d| d.insert_temp(id, name.clone()));
             if field.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) && name.trim() != tag.name {
                 if run(projects, "library.setTag", json!({ "name": tag.name, "rename": name.trim() }), out) {

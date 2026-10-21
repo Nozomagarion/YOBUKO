@@ -293,11 +293,21 @@ dragging, and a drag is one undo step.
 | Text | Value right-aligned, 10 px mono | Centred | Label left (sans), value right (mono) |
 | Mapping | 0 dB at 85 % of the travel | 50L … C … 50R | as volume |
 
+### Shared form fields
+
+Browser search, folder/tag fields, rename popups, project/open/save dialogs, missing-file
+locators and Settings share `widgets::text_input` / `text_input_at`: a transparent frame,
+2 px inset and one bottom underline. Numeric DragValue fields use the same underline,
+retaining drag, wheel and typed entry. Shared ComboBox styling affects its closed button
+only: the menu restores the original theme's fills, hover/selection states and popup surface.
+Focus accents the line; hover strengthens it. Caller styles and subsequent buttons are
+unchanged. Custom routing dropdowns also retain only a contrast-aware underline.
+
 ### Dropdown and segmented control
 
 | Part | Spec |
 |---|---|
-| Dropdown | 15 px high, `control.background`, 4 px padding, 10 px text `#C9C4BB`, 6 × 4 chevron `text.hint` right |
+| Dropdown | 15 px high, transparent surface with a 1 px bottom underline, 4 px padding, 10 px `text.value`, 6 × 4 chevron `text.hint` right |
 | Segmented | 15 px, equal parts 1 px apart (64 px each in Settings); selected `#C9C4BB` with `window.background` text, others `control.background` with `text.secondary`, 10 px text |
 
 ## Settings
