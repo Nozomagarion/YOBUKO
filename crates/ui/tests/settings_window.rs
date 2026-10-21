@@ -16,6 +16,48 @@ use suhina_ui::{App, kit::theme};
 const SHORT: (f32, f32) = (1000.0, 420.0);
 
 #[test]
+fn theme_default_edits_preserve_existing_project_colours_and_opacity_saves() {
+    let mut app = App::new();
+    app.set_session(Session::new(demo_project()), &[]);
+    let mut harness = Harness::builder().with_size((1200.0, 900.0)).build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    theme::install(&harness.ctx);
+    harness.run();
+    let before = harness.state().session().unwrap().project().clone();
+    let mut custom = theme::Theme { name: "New defaults".into(), ..Default::default() };
+    custom.colors.midi_clip_default = egui::Color32::from_rgb(20, 30, 40);
+    custom.colors.audio_clip_default = egui::Color32::from_rgb(50, 60, 70);
+    let context = harness.ctx.clone();
+    harness
+        .state_mut()
+        .put_theme(&context, suhina_ui::settings::themes::ThemeEntry { id: "new-defaults".into(), theme: custom });
+    harness.state_mut().use_theme(&context, "new-defaults");
+    harness.run();
+    assert_eq!(harness.state().session().unwrap().project(), &before);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    harness.run();
+    harness.get_by_label("Settings page: Themes").click();
+    harness.run();
+    harness.get_by_label("Edit current theme…").click();
+    harness.run();
+    harness.state_mut().take_theme_actions();
+    let opacity = harness.get_by_label("Opacity grid.major").rect();
+    let pointer = opacity.left_center() + Vec2::new(48.0, 0.0);
+    harness.hover_at(pointer);
+    harness.step();
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: pointer,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    assert!(theme::palette().grid_major.a() < 255);
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.colors.grid_major.a() < 255 && theme::Theme::from_json(&theme.to_json()).0.colors == theme.colors)));
+    assert_eq!(harness.state().session().unwrap().project(), &before);
+}
+
+#[test]
 #[ignore = "renders GPU review images; run explicitly after changing the theme UI"]
 fn render_themes_gallery_and_editor_for_review() {
     let mut app = App::new();

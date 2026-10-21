@@ -109,9 +109,9 @@ palette! {
     pan_centre, "pan.centre", 0x55524C,
         "The centre mark of a pan field";
     midi_clip_default, "clip.midiDefault", 0x4FC3F7,
-        "Default MIDI clip colour on tracks without a custom colour; existing custom colours stay unchanged";
+        "RGB colour copied only to newly created MIDI tracks and clips; existing tracks and clips never change";
     audio_clip_default, "clip.audioDefault", 0xFF9A3C,
-        "Default audio clip colour on tracks without a custom colour; existing custom colours stay unchanged";
+        "RGB colour copied only to newly created audio tracks and clips; existing tracks and clips never change";
     track_color_1, "track.1", 0xFF9A3C,
         "Colour-picker swatch 1; also effects in the browser (legacy track token)";
     track_color_2, "track.2", 0xF2D541,
@@ -259,7 +259,7 @@ impl Default for Theme {
 
 impl Theme {
     /// Reads a theme file. Tokens it leaves out keep Suhina Dark's colour, so a file only needs
-    /// the colours it changes; unknown tokens and values that are not `#RRGGBB` are skipped with
+    /// the colours it changes; unknown tokens and values that are not `#RRGGBB` or `#RRGGBBAA` are skipped with
     /// a warning. A `"$schema"` or `"description"` is allowed and ignored.
     pub fn from_json(text: &str) -> (Self, Vec<String>) {
         let mut theme = Self::default();
@@ -281,7 +281,9 @@ impl Theme {
                     match (theme.colors.token_mut(key), parsed) {
                         (Some(slot), Some(color)) => *slot = color,
                         (None, _) => warnings.push(format!("{key} is not a colour token")),
-                        (Some(_), None) => warnings.push(format!("{key}: {value} is not a #RRGGBB colour")),
+                        (Some(_), None) => {
+                            warnings.push(format!("{key}: {value} is not a #RRGGBB or #RRGGBBAA colour"))
+                        }
                     }
                 }
                 // Older palettes only supplied the numbered colour-picker swatches.
@@ -355,9 +357,9 @@ colour written out; copy it, give it a name and change the colours.\n\
 ```\n\
 \n\
 - `name`: what Settings shows. Any text.\n\
-- `colors`: token name to colour. Every colour is `#RRGGBB` (six hex digits, no alpha).\n\
+- `colors`: token name to colour. Colours use `#RRGGBB` or `#RRGGBBAA` (alpha last; 00 transparent, FF opaque). Creation defaults store RGB.\n\
 - A token left out keeps Suhina Dark's colour, so a theme may list only what it changes.\n\
-- An unknown token or a colour that is not `#RRGGBB` is skipped, and Suhina shows a warning.\n\
+- An unknown token or a colour that is not `#RRGGBB` or `#RRGGBBAA` is skipped, and Suhina shows a warning.\n\
 - Nothing else belongs in the file (`description` and `$schema` are allowed and ignored).\n\
 \n\
 ## Installing it\n\
@@ -380,7 +382,7 @@ Themes. While it is in use, every save of the file shows within a second.\n\
   whose label is then drawn in `window.background`: the two must contrast.\n\
 - `accent` marks the playhead, queued clips and a key being set; it should stand out from every\n\
   background. `recording` is also used for errors.\n\
-- Explicit track and clip colours come from the project. Uncoloured MIDI/audio tracks use clip.midiDefault/clip.audioDefault.\n\
+- Track and clip colours come from the project. clip.midiDefault/clip.audioDefault are copied only when creating new tracks and clips.\n\
 \n\
 An optional `liquid` object with `panels`, `tracks` and `clips` integers (0 to 100) overrides global material strengths. Leave it out to inherit them.\n\
 \n\
@@ -395,18 +397,24 @@ An optional `liquid` object with `panels`, `tracks` and `clips` integers (0 to 1
     text
 }
 
-/// `#RRGGBB`, as theme files write a colour.
+/// Opaque `#RRGGBB`, or `#RRGGBBAA` when opacity is present.
 pub fn hex(color: Color32) -> String {
-    format!("#{:02X}{:02X}{:02X}", color.r(), color.g(), color.b())
+    let [r, g, b, a] = color.to_srgba_unmultiplied();
+    if a == 255 { format!("#{r:02X}{g:02X}{b:02X}") } else { format!("#{r:02X}{g:02X}{b:02X}{a:02X}") }
 }
 
-/// Reads `#RRGGBB` (the `#` may be left out).
+/// Reads `#RRGGBB` or `#RRGGBBAA` (the `#` may be left out).
 pub fn parse_hex(text: &str) -> Option<Color32> {
     let digits = text.trim().strip_prefix('#').unwrap_or(text.trim());
-    if digits.len() != 6 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
+    if !matches!(digits.len(), 6 | 8) || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
     }
-    u32::from_str_radix(digits, 16).ok().map(rgb)
+    let value = u32::from_str_radix(digits, 16).ok()?;
+    Some(if digits.len() == 6 {
+        rgb(value)
+    } else {
+        Color32::from_rgba_unmultiplied((value >> 24) as u8, (value >> 16) as u8, (value >> 8) as u8, value as u8)
+    })
 }
 
 /// Text drawn on `fill`: `text.primary` or `window.background`, whichever stands out more from
@@ -556,6 +564,18 @@ fn visuals(visuals: &mut egui::Visuals, p: &Palette) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn translucent_theme_colours_preserve_alpha_in_files() {
+        for colour in [Color32::from_rgba_unmultiplied(100, 150, 200, 128), Color32::TRANSPARENT, rgb(0xAABBCC)] {
+            assert_eq!(parse_hex(&hex(colour)), Some(colour));
+            let mut theme = Theme::default();
+            theme.colors.grid_major = colour;
+            assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
+        }
+        assert!(parse_hex("#1234567").is_none());
+        assert!(parse_hex("#112233GG").is_none());
+    }
 
     #[test]
     fn old_clip_defaults_migrate_and_explicit_defaults_and_materials_round_trip() {

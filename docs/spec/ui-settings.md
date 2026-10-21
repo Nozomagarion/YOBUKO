@@ -121,9 +121,11 @@ Each colour has its swatch, hex and wrapping token on the first line, followed b
 full wrapping explanation on a separate line. No fixed token/description columns or
 truncation hide the purpose or let long token names overlap it.
 Tracks & clips exposes two defaults: Default MIDI clip (`clip.midiDefault`) and Default
-audio clip (`clip.audioDefault`). These colour tracks and their inherited clips when no
-project colour is assigned, in both Arrangement and Session, and set new tracks' stored
-colours by content type. Explicit track and clip colours keep precedence. The old numbered
+audio clip (`clip.audioDefault`). The session copies these RGB colours only into newly created tracks and clips.
+Opening a legacy project resolves its unset track colours from the existing numbered
+palette once, without adding an undo step or marking the project dirty. Existing
+tracks/clips never read the live creation defaults. Changes apply only to future
+creations; explicit colours and copies of existing clip content remain unchanged. The old numbered
 `track.1`–`track.8` swatches remain readable in theme files and in colour pickers/browser
 icons for compatibility, but are hidden from this editor. Older theme files inherit their
 MIDI default from `track.3` and audio default from `track.1`; explicit new tokens win.
@@ -136,6 +138,13 @@ so making the first custom edit does not shift the picker.
 An open colour picker holds the undimmed preview for the entire primary-button press,
 including frames with no pointer motion or colour change. Release restores dimming on
 the same frame. This also applies to the custom waveform colour picker.
+
+Theme surface colours expose Opacity (0–100%) and the picker's alpha channel. Files
+write opaque colours as `#RRGGBB`, translucent colours as `#RRGGBBAA` (alpha last).
+The two clip creation defaults are RGB assignments, so they keep an opaque picker.
+Premultiplied interpolation preserves transparency, including the liquid body gradient.
+Opacity changes apply live and save with the theme; holding their slider previews the
+background without dimming, as with the other colour controls.
 
 ## Scrolling
 

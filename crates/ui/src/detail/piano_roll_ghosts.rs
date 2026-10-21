@@ -173,7 +173,7 @@ pub fn ghosts(project: &Project, edited: ClipRef, source: GhostSource) -> Ghosts
         let rgb = project
             .tracks
             .get(position)
-            .map(track_colour)
+            .map(|track| track_colour(track, position))
             .unwrap_or_else(|| crate::interaction::grid::to_rgb(theme::midi_clip_default()));
         let color = Color32::from_rgb(rgb.0, rgb.1, rgb.2);
         let source = ghosts.sources.iter().position(|s| *s == name).unwrap_or(ghosts.sources.len());

@@ -300,7 +300,7 @@ impl Timeline {
                 Some(ChannelRole::Submix) => ColumnKind::Group,
                 _ => ColumnKind::Track,
             };
-            let track_color = track_colour(track);
+            let track_color = track_colour(track, position);
             let clips = project
                 .arrangement
                 .lanes
@@ -350,7 +350,7 @@ impl Timeline {
             let lane = Lane {
                 track: track.id,
                 name: track.name.clone(),
-                color: track_colour(track),
+                color: track_colour(track, position),
                 kind,
                 notes: kind == ColumnKind::Track && track.content.notes,
                 depth: depth(project, track.parent),

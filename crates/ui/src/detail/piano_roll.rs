@@ -224,7 +224,7 @@ fn piano_clip_from(project: &Project, track: TrackId, clip: &Clip, quantization:
     let color = project
         .tracks
         .get(position)
-        .map(track_colour)
+        .map(|track| track_colour(track, position))
         .unwrap_or_else(|| crate::interaction::grid::to_rgb(theme::midi_clip_default()));
     let ts = project.transport.time_signature;
     let bar_beats =

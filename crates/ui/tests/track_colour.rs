@@ -137,7 +137,7 @@ fn filled_with(harness: &Harness<'static, App>, area: Rect, colour: Color32) -> 
 }
 
 fn default_drums() -> Color32 {
-    theme::midi_clip_default()
+    theme::track_color_1()
 }
 
 #[test]
@@ -167,6 +167,7 @@ fn the_session_header_and_the_strip_show_the_track_colour() {
 #[test]
 fn the_colour_area_opens_the_palette_a_swatch_sets_the_colour_and_undo_brings_it_back() {
     let mut harness = arrangement();
+    let original_colour = drums_colour(&harness);
     let pick = colour_picker::swatches()[4];
     let label = format!("Colour {}", colour_picker::hex(pick));
     assert!(harness.query_by_label(&label).is_none(), "the palette is closed");
@@ -181,7 +182,7 @@ fn the_colour_area_opens_the_palette_a_swatch_sets_the_colour_and_undo_brings_it
 
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
     harness.run();
-    assert_eq!(drums_colour(&harness), None, "one undo brings the old colour back");
+    assert_eq!(drums_colour(&harness), original_colour, "one undo brings the old colour back");
     assert!(!harness.state().session().unwrap().can_undo());
 }
 
@@ -218,7 +219,7 @@ fn picking_the_colour_the_track_has_changes_nothing() {
     harness
         .get_by_label(&format!(
             "Colour {}",
-            colour_picker::hex(suhina_ui::interaction::grid::to_rgb(theme::midi_clip_default()))
+            colour_picker::hex(suhina_ui::interaction::grid::to_rgb(theme::track_color_1()))
         ))
         .click();
     harness.run();

@@ -18,7 +18,7 @@ fn arrangement(session: Session) -> Harness<'static, App> {
     app.set_browser_open(false);
     app.set_session(session, &[]);
     let mut harness = Harness::builder()
-        .with_size(egui::vec2(1280.0, 800.0))
+        .with_size(egui::vec2(1600.0, 800.0))
         .with_step_dt(0.25)
         .with_max_steps(4)
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
@@ -70,7 +70,7 @@ fn ctrl_e_splits_the_selected_clip_at_the_playhead() {
     // A click on the ruler moves the playhead to bar 30 (beat 116); the next block takes it.
     let ruler = harness.get_by_label("Ruler").rect();
     let fill = harness.get_by_label("Clip Fill on Drums at bar 29").rect();
-    let at = egui::pos2(fill.left() + 4.0 * 8.0 + 1.0, ruler.center().y);
+    let at = egui::pos2(fill.left() + 4.0 * harness.state().arrangement().beat_width, ruler.center().y);
     harness.hover_at(at);
     harness.run();
     harness.drag_at(at);

@@ -1139,6 +1139,15 @@ impl Session {
     /// window's palette, which follows the theme), and `fixed`, the colour a new track gets
     /// instead of the palette's, when set. Without a palette, tracks keep no colour of their own.
     pub fn set_track_colours(&mut self, palette: Vec<suhina_model::Rgb>, fixed: Option<suhina_model::Rgb>) {
+        // Resolve legacy inherited colours once, before a later theme/default edit can change them.
+        // This is display normalisation, not an undoable project edit.
+        if !palette.is_empty() {
+            for (index, track) in self.project.tracks.iter_mut().enumerate() {
+                if track.color.is_none() {
+                    track.color = palette.get(index % palette.len()).copied();
+                }
+            }
+        }
         self.track_type_colours = None;
         if self.track_colours.0 != palette || self.track_colours.1 != fixed {
             self.track_colours = (palette, fixed);
@@ -1171,13 +1180,63 @@ impl Session {
             )
         };
         for (place, track) in before.tracks.iter().enumerate().filter(|(_, t)| t.color.is_none()) {
-            if let Some(now) = self.project.tracks.iter_mut().find(|t| t.id == track.id && t.color.is_none()) {
-                now.color = Some(colour(place, track));
+            if let Some(now) = self.project.tracks.iter_mut().find(|t| t.id == track.id && t.color.is_none())
+                && !palette.is_empty()
+            {
+                now.color = palette.get(place % palette.len()).copied();
             }
         }
         for (place, track) in self.project.tracks.iter_mut().enumerate() {
             if track.color.is_none() && !was.contains(&track.id) {
                 track.color = Some(fixed.unwrap_or_else(|| colour(place, track)));
+            }
+        }
+    }
+
+    /// New content takes the creation default once. Existing clips, shared-content copies
+    /// and explicit colours never follow later changes to that default.
+    fn colour_new_clips(&mut self, before: &Project) {
+        let Some((midi, audio)) = self.track_type_colours else { return };
+        if self.project.contents.len() == before.contents.len() {
+            return;
+        }
+        let old_contents: std::collections::HashSet<_> = before.contents.iter().map(|content| content.id).collect();
+        let old_clips: std::collections::HashSet<_> = before
+            .arrangement
+            .lanes
+            .iter()
+            .flat_map(|lane| &lane.clips)
+            .chain(
+                before.launcher.columns.iter().flat_map(|column| &column.slots).filter_map(|slot| slot.clip.as_ref()),
+            )
+            .map(|clip| clip.id)
+            .collect();
+        let new_contents: std::collections::HashMap<_, _> = self
+            .project
+            .contents
+            .iter()
+            .filter(|content| !old_contents.contains(&content.id))
+            .map(|content| {
+                (
+                    content.id,
+                    if content.lanes.iter().any(|lane| matches!(lane.data, suhina_model::LaneData::Audio(_))) {
+                        audio
+                    } else {
+                        midi
+                    },
+                )
+            })
+            .collect();
+        for clip in self.project.arrangement.lanes.iter_mut().flat_map(|lane| &mut lane.clips).chain(
+            self.project
+                .launcher
+                .columns
+                .iter_mut()
+                .flat_map(|column| &mut column.slots)
+                .filter_map(|slot| slot.clip.as_mut()),
+        ) {
+            if clip.color.is_none() && !old_clips.contains(&clip.id) {
+                clip.color = new_contents.get(&clip.content).copied();
             }
         }
     }
@@ -1265,6 +1324,7 @@ impl Session {
                     // A lane, clip or scene the command added without an id gets one now.
                     self.project.assign_ids()?;
                     self.keep_track_colours(&before);
+                    self.colour_new_clips(&before);
                     Ok(value)
                 });
                 let result = result.and_then(|value| match self.project.validate() {

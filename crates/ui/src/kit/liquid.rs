@@ -236,7 +236,8 @@ fn body_mesh(rect: Rect, base: Color32, strength: f32) -> egui::Mesh {
     {
         let y = rect.top() + rect.height() * fraction;
         for (x, light) in [(rect.left(), left), (rect.right(), right)] {
-            let target = if light >= 0.0 { Color32::WHITE } else { Color32::BLACK };
+            let target =
+                if light >= 0.0 { Color32::from_white_alpha(base.a()) } else { Color32::from_black_alpha(base.a()) };
             mesh.colored_vertex(pos2(x, y), motion::mix(base, target, light.abs() * strength));
         }
     }
@@ -324,6 +325,16 @@ fn rim_mesh(rect: Rect, strength: f32) -> egui::Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn coloured_gradient_keeps_the_fill_opacity() {
+        let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(220.0, 64.0));
+        for alpha in [0, 64, 128, 255] {
+            let base = Color32::from_rgba_unmultiplied(120, 160, 200, alpha);
+            let mesh = body_mesh(rect, base, 1.0);
+            assert!(mesh.vertices.iter().all(|v| v.color.a() == alpha));
+        }
+    }
 
     #[test]
     fn edge_refraction_bends_current_backdrop_without_moving_the_centre() {

@@ -81,12 +81,13 @@ fn a_clips_colour_survives_saving() {
 #[test]
 fn midi_and_audio_defaults_follow_the_type_and_keep_explicit_colours() {
     let mut session = Session::new(blank_project());
+    let existing: Vec<_> = session.project().tracks.iter().map(|track| track.id).collect();
     let midi = Rgb(4, 150, 210);
     let audio = Rgb(240, 130, 50);
     session.set_track_type_colours(midi, audio);
     run(&mut session, "track.add", json!({ "kind": "audio" })).unwrap();
     run(&mut session, "track.add", json!({ "kind": "midi" })).unwrap();
-    for track in &session.project().tracks {
+    for track in session.project().tracks.iter().filter(|track| !existing.contains(&track.id)) {
         assert_eq!(track.color, Some(if track.content.audio && !track.content.notes { audio } else { midi }));
     }
     let before = session.project().tracks.iter().map(|t| (t.id, t.color)).collect::<Vec<_>>();
@@ -97,6 +98,37 @@ fn midi_and_audio_defaults_follow_the_type_and_keep_explicit_colours() {
     );
     run(&mut session, "edit.undo", json!({})).unwrap();
     assert_eq!(session.project().tracks.iter().map(|t| (t.id, t.color)).collect::<Vec<_>>(), before);
+}
+
+#[test]
+fn editing_creation_defaults_does_not_recolour_existing_tracks_or_clips() {
+    let mut session = Session::new(project());
+    let legacy = vec![Rgb(240, 140, 30), Rgb(230, 200, 50), Rgb(40, 170, 220), Rgb(160, 100, 220)];
+    session.set_track_colours(legacy.clone(), None);
+    let tracks = session.project().tracks.clone();
+    let old_clips = clips(&session, 1);
+    assert!(!session.has_unsaved_changes());
+    session.set_track_type_colours(Rgb(10, 20, 30), Rgb(30, 20, 10));
+    session.set_track_colours(vec![Rgb(1, 1, 1); 4], None);
+    let midi = Rgb(90, 100, 110);
+    let audio = Rgb(120, 130, 140);
+    session.set_track_type_colours(midi, audio);
+    assert_eq!(session.project().tracks, tracks);
+    assert_eq!(clips(&session, 1), old_clips);
+    assert!(!session.has_unsaved_changes());
+    run(&mut session, "clip.create", json!({"track":1,"start":16.0,"length":4.0})).unwrap();
+    assert_eq!(&clips(&session, 1)[..2], old_clips.as_slice());
+    assert_eq!(clips(&session, 1)[2].color, Some(midi));
+    run(&mut session, "track.add", json!({"kind":"audio"})).unwrap();
+    assert_eq!(
+        session.project().tracks.iter().find(|track| !tracks.iter().any(|old| old.id == track.id)).unwrap().color,
+        Some(audio)
+    );
+    assert!(tracks.iter().all(|old| session.project().tracks.iter().any(|track| track == old)));
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(clips(&session, 1), old_clips);
+    assert_eq!(session.project().tracks, tracks);
 }
 
 #[test]

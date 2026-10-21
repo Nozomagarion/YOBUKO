@@ -145,8 +145,9 @@ space, the mixer at the bottom.
 | Stop row | 20 px under the last scene, `panel.background`: per track a 7 × 7 square outline in `text.secondary` (`accent` while the stop is queued), centred; in the scene column the square and "Stop all" |
 | Empty space | Right of the last track: "+ MIDI track", "+ Audio track" and "+ Return track" buttons (a right-click anywhere there offers Insert audio track, Insert MIDI track, Insert return track) (20 px, `control.background`, 10 px `text.secondary`, 2 px apart, 6 px from its top left) and, below them, "Drop files or devices to add a track" in 10 px `text.hint`. Drops from the browser there make new tracks; the Arrangement has the same under its last lane |
 
-Track colours: the track's own colour if it has one, else `clip.midiDefault` for MIDI tracks
-and `clip.audioDefault` for audio tracks. New tracks store their type's colour; custom colours win.
+Track colours: the track's own colour if it has one, else its legacy palette colour resolved once on project attachment. `clip.midiDefault`
+and `clip.audioDefault` are copied only into future MIDI/audio tracks and clips; changing
+them never recolours existing project content.
 
 ### Colour palette
 
@@ -429,7 +430,7 @@ Edit current theme opens a child view with Back to themes, the theme name, Save 
 theme and Reset changes. The Liquid section inherits global strengths unless Use global liquid settings is turned off;
 then independent panel, track and clip sliders save into the theme. The live colour rows are grouped into Surfaces, Text, Tracks &
 clips, Controls, Meters and Sample map. Each entry puts swatch, hex and a wrapping token
-above the full wrapping purpose, with 6 px between entries; no truncated second column.
+above an Opacity slider for theme surfaces and the full wrapping purpose, with 6 px between entries; no truncated second column.
 The built-in name field reserves the same height as an editable custom name so the
 picker does not move when its first edit creates a custom copy. An open picker keeps
 the background undimmed while the primary button is held, even when stationary;

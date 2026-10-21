@@ -152,10 +152,12 @@ A theme is a JSON file in the `themes` folder of Suhina's app-data folder, besid
 ```
 
 A token the file leaves out keeps Suhina Dark's colour, so a file needs only the colours it
-changes; an unknown token or a value that is not `#RRGGBB` is skipped with a warning. Files with
+changes; an unknown token or a value that is not `#RRGGBB` or `#RRGGBBAA` is skipped with a warning. Files with
 the first token names (`surface.0`, `line`, `text.tertiary` …) still read. Only colours belong to
 a theme: sizes, spacing and type stay the design's. A track's own colour comes from the project; tracks without one take the theme's
-`clip.midiDefault` or `clip.audioDefault` according to their content type. The theme editor
+a numbered palette colour resolved once when opened. `clip.midiDefault` and
+`clip.audioDefault` are creation-only RGB defaults, copied to new tracks and clips;
+existing project colours never follow edits to those defaults. The theme editor
 offers these two defaults; numbered `track.1`–`track.8` remain legacy swatches for file
 compatibility and colour pickers, rather than a list of default track colours.
 

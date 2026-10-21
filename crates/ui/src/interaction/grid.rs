@@ -18,20 +18,16 @@ pub fn track_palette() -> [Rgb; 4] {
     [theme::track_color_1(), theme::track_color_2(), theme::track_color_3(), theme::track_color_4()].map(to_rgb)
 }
 
-/// Explicit project colours win; uncoloured tracks follow their clip type's theme default.
-pub fn track_colour(track: &Track) -> Rgb {
-    track.color.unwrap_or_else(|| {
-        to_rgb(if track.content.audio && !track.content.notes {
-            theme::audio_clip_default()
-        } else {
-            theme::midi_clip_default()
-        })
-    })
+/// Legacy tracks resolve their indexed swatch once when attached to the UI. Creation
+/// defaults are applied by the session only to newly created tracks and clips.
+pub fn track_colour(track: &Track, index: usize) -> Rgb {
+    track.color.unwrap_or_else(|| track_palette()[index % 4])
 }
 
 /// A theme colour as a project's track colour.
 pub fn to_rgb(colour: egui::Color32) -> Rgb {
-    Rgb(colour.r(), colour.g(), colour.b())
+    let [r, g, b, _] = colour.to_srgba_unmultiplied();
+    Rgb(r, g, b)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -309,7 +305,7 @@ impl Grid {
             let column = Column {
                 track: track.id,
                 name: track.name.clone(),
-                color: track_colour(track),
+                color: track_colour(track, index),
                 kind,
                 notes: kind == ColumnKind::Track && track.content.notes,
                 launcher,

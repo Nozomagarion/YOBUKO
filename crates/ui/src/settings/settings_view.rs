@@ -1153,26 +1153,29 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
             colour_group(key) == group && !key.strip_prefix("track.").is_some_and(|suffix| suffix.parse::<u8>().is_ok())
         }) {
             ui.push_id(("theme-colour", key), |ui| {
+                let mut picked = color;
+                let rgb_default = matches!(key, "clip.midiDefault" | "clip.audioDefault");
                 ui.horizontal(|ui| {
-                    let mut picked = color;
                     let popup = ui.auto_id_with("popup");
-                    let swatch =
-                        egui::color_picker::color_edit_button_srgba(ui, &mut picked, egui::color_picker::Alpha::Opaque);
+                    let swatch = egui::color_picker::color_edit_button_srgba(
+                        ui,
+                        &mut picked,
+                        if matches!(key, "clip.midiDefault" | "clip.audioDefault") {
+                            egui::color_picker::Alpha::Opaque
+                        } else {
+                            egui::color_picker::Alpha::OnlyBlend
+                        },
+                    );
                     swatch.widget_info(|| {
                         egui::WidgetInfo::labeled(egui::WidgetType::ColorButton, true, format!("Colour {key}"))
                     });
                     state.theme_colour_held |=
                         egui::Popup::is_id_open(ui.ctx(), popup) && ui.input(|input| input.pointer.primary_down());
-                    if picked != color
-                        && let Some(slot) = edited.token_mut(key)
-                    {
-                        *slot = picked;
-                    }
                     ui.allocate_ui_with_layout(
-                        Vec2::new(64.0, 18.0),
+                        Vec2::new(82.0, 18.0),
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
-                            ui.set_min_width(64.0);
+                            ui.set_min_width(82.0);
                             ui.label(
                                 egui::RichText::new(theme::hex(picked))
                                     .font(theme::mono_font(theme::TEXT_SMALL))
@@ -1193,6 +1196,24 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
                         .wrap(),
                     );
                 });
+                if !rgb_default {
+                    let mut opacity = (f32::from(picked.a()) * 100.0 / 255.0).round() as u8;
+                    let response = ui.add(egui::Slider::new(&mut opacity, 0..=100).suffix(" %").text("Opacity"));
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, format!("Opacity {key}"))
+                    });
+                    state.theme_colour_held |= response.dragged() || response.is_pointer_button_down_on();
+                    if response.changed() {
+                        let [r, g, b, _] = picked.to_srgba_unmultiplied();
+                        picked =
+                            egui::Color32::from_rgba_unmultiplied(r, g, b, (f32::from(opacity) * 2.55).round() as u8);
+                    }
+                }
+                if picked != color
+                    && let Some(slot) = edited.token_mut(key)
+                {
+                    *slot = picked;
+                }
                 ui.add(egui::Label::new(egui::RichText::new(purpose).small().color(theme::text_secondary())).wrap());
                 ui.add_space(6.0);
             });
