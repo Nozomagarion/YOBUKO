@@ -33,14 +33,6 @@ without a hard glossy stripe across notes or waveforms.
 
 ## Current state
 
-On Windows 11, Appearance > Background > Windows Mica independently opts into the native
-wallpaper material. The desktop host uses the safe, fallible `window-vibrancy` API and
-only clears its GPU surface with alpha after successful activation. Failed activation or
-deactivation restores opaque drawing. A private image and High Contrast take precedence;
-other platforms and OpenGL retain the opaque background. Mica does not capture desktop
-icons or other windows. Its system-managed backdrop is not available as a texture to the
-in-app refraction pass; liquid lenses continue to sample Suhina's own surfaces.
-
 The original static experiment below remains available. There is also an experimental
 native integration, disabled by default, with per-surface global strengths under
 Appearance › Liquid (experimental), and optional overrides saved with each theme in
@@ -92,8 +84,7 @@ rectangle. Missing settings default to 0.
 
 The wgpu host installs its provider even while all strengths are 0; no backdrop capture
 is requested until a liquid strength is raised; Track/Clip strengths request only the
-shared content substrate, Panel strength requests the modal capture. OpenGL has no provider;
-the controls still save values, with a note explaining that the GPU renderer is required.
+shared content substrate, Panel strength requests the modal capture. OpenGL has no provider and disables the controls.
 
 OpenGL, disabled animations and the built-in high-contrast theme keep solid surfaces.
 The accessibility gate is checked after running settings/theme changes too. If replay
@@ -180,3 +171,54 @@ polygons. Intermediate stops remain exact at diagonal angles without a fixed-res
 grid. Colours interpolate premultiplied RGBA. Geometry is bounded by eight stops, and
 all polygons stay within the surface. This changes appearance only, never project RGB
 colours or creation defaults.
+
+Private background image decoding, filtering and placement live in separate modules under
+`crates/ui/src/app/background/`. The decoded source is retained while blur or window size
+changes. One bounded worker owns filtering; only the current request may publish a texture.
+Blur uses premultiplied alpha and is converted from logical display pixels to texture pixels.
+Settings uses its original theme base, not the main-window opacity-scaled colour.
+The removed experimental Mica key is accepted and ignored when reading old preferences.
+
+## Desktop-aligned wallpaper: platform investigation (not implemented)
+
+A wallpaper-only background needs two independent inputs: the image and its placement on
+an output, and the client area's location in that same coordinate system. A compositor
+blur-behind effect is not a substitute: it can include other windows or desktop icons.
+The current implementation still renders an explicitly chosen image fitted to the window.
+No automatic wallpaper discovery or desktop alignment is shipped by this change.
+
+Public API findings checked on 2026-10-22:
+
+| Platform | Image and layout | Window position and limitation |
+| --- | --- | --- |
+| Windows | `IDesktopWallpaper` exposes per-monitor image paths, monitor rectangles and placement mode. | Native window position is available. Mixed DPI, spanning and disconnected displays need explicit handling. |
+| macOS | `NSWorkspace.desktopImageURL(for:)` and desktop image options describe each screen's image and layout. | Native window/screen coordinates are available; convert the coordinate origin and backing scale. Query AppKit on the main thread. A dynamic wallpaper is not necessarily a single current image file. |
+| X11 | Read the desktop environment's wallpaper configuration; X11 itself does not standardise a wallpaper file path. | Translate the client origin to root coordinates. Do not capture the root window, which can include unrelated content. |
+| Sway/Wayland | Wallpaper source depends on the wallpaper program and configuration. | Documented IPC `GET_TREE` and `GET_OUTPUTS` provide geometry; combine container and client offsets and output scale. |
+| Plasma/Wayland | Plasma wallpaper configuration is separate from window geometry. | A KWin integration can expose client geometry and change notifications. The private plasma window-management protocol explicitly excludes ordinary applications and must not become a direct dependency of Suhina. |
+| GNOME/Wayland | GNOME background settings identify static wallpaper sources. | Mutter exposes geometry inside the shell; a Shell integration is a candidate bridge, not an API an ordinary application can simply call. |
+
+The XDG Wallpaper portal sets a wallpaper; it does not provide a getter for the current
+wallpaper or the window's global coordinates. Winit reports global position as unsupported
+on Wayland. Neither fact proves that desktop-specific integrations are impossible.
+
+A future platform adapter should supply image identity, placement mode, output bounds and
+scale, and the client rectangle, with explicit availability. Keep crop calculation and
+filtering platform-independent. Moving a window should update crop coordinates without
+redecoding or reblurring the image. Multi-monitor windows may need multiple image regions.
+Do not silently describe a window-fitted image as desktop-aligned. Desktop helpers and their
+installation, permissions and Rust-only compatibility still need a design decision; they
+have not been implemented or tested here. Animated backgrounds remain separate extension
+work under ADR 0015.
+
+Sources:
+
+- [Windows wallpaper API](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nn-shobjidl_core-idesktopwallpaper)
+- [AppKit desktop image](https://developer.apple.com/documentation/appkit/nsworkspace/desktopimageurl(for:))
+- [Xlib coordinate translation](https://xorg.freedesktop.org/X11R7.0/doc/PDF/xlib.pdf)
+- [Sway IPC specification](https://github.com/swaywm/sway/blob/master/sway/sway-ipc.7.scd)
+- [KWin scripting API](https://develop.kde.org/docs/plasma/kwin/api/)
+- [Plasma private protocol warning](https://github.com/KDE/plasma-wayland-protocols/blob/master/src/protocols/plasma-window-management.xml)
+- [Mutter window geometry](https://gnome.pages.gitlab.gnome.org/mutter/meta/method.Window.get_frame_rect.html)
+- [XDG Wallpaper portal](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.Wallpaper.html)
+- [Winit window positioning](https://docs.rs/winit/0.30.13/winit/window/struct.Window.html)

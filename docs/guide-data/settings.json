@@ -1741,31 +1741,6 @@
       "workInProgress": false
     },
     {
-      "id": "Appearance/Background/windows_mica",
-      "page": "Appearance",
-      "section": "Background",
-      "name": "Windows Mica",
-      "note": "Use the native Windows 11 wallpaper material behind Suhina.",
-      "keys": [
-        "windows_mica"
-      ],
-      "sourceFingerprint": "8e6c1c45181d5b5fb5e9061570104a96a90b72e41448ccc0f55e3481626f4e1c",
-      "helpStatus": "reviewed",
-      "description": "Off by default. With Windows 11 and the GPU renderer, On requests the system Mica material without capturing desktop icons or other windows. A selected background image or High Contrast overrides Mica. Surface opacity adjusts Suhina surfaces above it; Background blur affects only a chosen PNG. If activation fails, the background stays opaque and Suhina reports the error. Windows can substitute a solid material when system effects are disabled.",
-      "options": [
-        {
-          "name": "Off",
-          "description": "Use the normal theme or your chosen background image. This is the default."
-        },
-        {
-          "name": "On",
-          "description": "Request native Mica on Windows 11 with GPU rendering. Unsupported systems retain a solid background."
-        }
-      ],
-      "whenToChange": "Enable for a subtle system-wallpaper glass appearance. Clear Background image first. Keep it off for the normal solid theme. The in-app liquid controls remain independent.",
-      "workInProgress": true
-    },
-    {
       "id": "Appearance/Background/background_image",
       "page": "Appearance",
       "section": "Background",
@@ -1786,15 +1761,15 @@
       "page": "Appearance",
       "section": "Background",
       "name": "Surface opacity",
-      "note": "Adjust neutral surface opacity above Mica or a private background image.",
+      "note": "Tint over the background image; 100% makes neutral panels solid",
       "keys": [
         "background_tint"
       ],
-      "sourceFingerprint": "360fa62a44fbb1b3fd01cf863d1f0bd1334b29daed20e48e2185f741356a01d2",
+      "sourceFingerprint": "c3d42417d2389b0c19dc7d63bc3468a577f8e716c7d75f479ff8ceeecf40d63b",
       "helpStatus": "reviewed",
-      "description": "Opacity of neutral Suhina surfaces above a private background image or successfully enabled Windows Mica material. The default is 70 percent. At 100 percent neutral surfaces are solid; lower values reveal more of the chosen backdrop. Without either backdrop this setting has no effect. Text and controls keep their own theme colours.",
+      "description": "Set neutral main-window surface opacity over the selected background image, from 0 to 100 percent. At 100 percent opaque theme surfaces cover the image; lower values reveal it. Settings uses its original theme surface with Panel liquid independently. Text, controls, track and clip colours are unchanged. Has no effect without a loaded image.",
       "options": [],
-      "whenToChange": "Lower it to reveal more of your image or Mica; raise it for stronger contrast behind text and controls.",
+      "whenToChange": "Increase for stronger separation and readability, or decrease to reveal more of your image.",
       "workInProgress": false
     },
     {
@@ -1808,7 +1783,7 @@
       ],
       "sourceFingerprint": "46d40d4788a13c70f2c73e35e80ac483697a4ce4864fe305151c15b60bc0db41",
       "helpStatus": "reviewed",
-      "description": "Blur the selected image by 0 to 40 pixels after scaling it to the display limit. Processing happens in a background worker. It never samples the desktop. Has no effect without a loaded image.",
+      "description": "Blur the selected image by 0 to 40 logical display pixels. The source is decoded once and cached; filtering runs in one background worker and obsolete results are discarded. Zero bypasses blur. It never samples the desktop. Has no effect without a loaded image.",
       "options": [],
       "whenToChange": "Increase when background details distract from text and controls.",
       "workInProgress": false

@@ -7,7 +7,6 @@
 // Release builds on Windows start without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod backdrop;
 mod liquid;
 #[cfg(target_os = "macos")]
 mod mac_menu;
@@ -153,7 +152,6 @@ fn main() -> ExitCode {
     let recent = recent::Recent::load(eframe::storage_dir(app_id()).map(|d| d.join(RECENT_FILE)));
     let mut window = Window {
         app: App::new(),
-        mica: backdrop::Mica::default(),
         agents,
         graphics_now,
         editors_embeddable: false,
@@ -196,9 +194,7 @@ fn main() -> ExitCode {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Suhina")
             .with_decorations(!cfg!(target_os = "windows"))
-            // The surface needs alpha for Mica. clear_color stays opaque until the OS
-            // confirms the backdrop, including startup and unsupported Windows versions.
-            .with_transparent(cfg!(target_os = "windows"))
+            .with_transparent(false)
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([640.0, 400.0])
             .with_drag_and_drop(true),
@@ -287,7 +283,6 @@ fn parse_args(args: &[String]) -> Result<Option<Args>, String> {
 }
 
 struct Window {
-    mica: backdrop::Mica,
     app: App,
     /// The build's endpoints: later starts' projects, and agents working on the open projects
     /// (ADR 0028); `None` with `--new-instance`.
@@ -318,24 +313,7 @@ struct StartUp {
 }
 
 impl eframe::App for Window {
-    fn clear_color(&self, _visuals: &eframe::egui::Visuals) -> [f32; 4] {
-        if self.mica.active() {
-            [0.0; 4]
-        } else {
-            suhina_ui::kit::theme::window_background().to_opaque().to_normalized_gamma_f32()
-        }
-    }
-
-    fn ui(&mut self, ui: &mut eframe::egui::Ui, frame: &mut eframe::Frame) {
-        let settings = self.app.settings();
-        let mica = settings.view.windows_mica
-            && self.graphics_now == Graphics::Gpu
-            && settings.theme != "high-contrast"
-            && settings.background_image.is_empty();
-        if let Some(error) = self.mica.sync(frame, mica, ui.visuals().dark_mode) {
-            self.app.set_status(Status::Error(error));
-        }
-        self.app.set_native_backdrop(self.mica.active());
+    fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
         if let Some(splash) = self.splash.as_mut()
             && splash.take_start(ui.ctx())
             && let Some(start_up) = self.start_up.take()

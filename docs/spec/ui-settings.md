@@ -251,19 +251,13 @@ non-overlapping cells. On Windows this bar replaces native decorations; dragging
 maximise, minimise, close and all eight edge/corner resize directions remain available.
 Other platforms keep native decorations.
 
-Appearance > Background > Windows Mica opts into Windows 11's native wallpaper-based
-material with the GPU renderer. It is off by default and applied live. A selected private
-image or High Contrast takes precedence. Surface opacity controls the neutral UI tint
-over the material; Background blur only affects the private image. Mica is supplied by
-Windows, not a desktop capture: desktop icons and other windows are not its input.
-If applying Mica fails, Suhina keeps an opaque clear colour and reports the failure.
-The system may substitute a solid material when its accessibility or power settings
-disable effects. This does not change the independent in-app liquid/refraction controls.
-The native behaviour follows [Microsoft's Mica documentation](https://learn.microsoft.com/en-us/windows/apps/design/style/mica).
-
 Appearance > Background accepts a user-owned PNG, limited to 32 MiB and 8192 pixels per
 axis. Loading and image blur run away from the UI thread; the displayed image is reduced
-to at most 1600 pixels per axis. Background blur ranges from 0 to 40 pixels and Surface
+to at most 1600 pixels per axis. The decoded image is cached separately from filtering.
+Only one image job runs at a time; obsolete results are discarded before publication.
+Background blur is measured in logical display pixels, converted to source pixels using
+the cover scale, so resizing and different image sizes retain the requested visual strength.
+Zero blur bypasses filtering. Background blur ranges from 0 to 40 pixels and Surface
 opacity from 0 to 100 percent. Clearing the path removes the image. High Contrast does
 not show it. The native window stays opaque: this feature never captures the desktop,
 its icons, or other application windows. Alpha blends neutral UI surfaces over the chosen
@@ -275,3 +269,8 @@ saving and loading a theme. Returning opacity to 100 percent restores the origin
 Suhina Glass is a bundled, editable blue glass preset. Its JSON includes all colour tokens,
 subtle surface gradients and liquid overrides. A background image remains a local user
 choice, so sharing the theme does not share an image or a machine-specific file path.
+
+The background source, image processing and placement are separate internal modules.
+They do not introduce an extension protocol; future animated sources must follow ADR 0015.
+Settings uses its unattenuated theme surface as the liquid base, independently of the
+main background surface opacity, to avoid multiplying two transparency controls.

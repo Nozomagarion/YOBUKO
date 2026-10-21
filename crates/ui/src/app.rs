@@ -273,8 +273,6 @@ struct NamCache {
 /// The window's state.
 pub struct App {
     background: background::Background,
-    background_visible: bool,
-    native_backdrop: bool,
     /// When the level meters last showed something new (`ui.input` time).
     meters_moved_at: f64,
     projects: Projects,
@@ -499,8 +497,6 @@ impl App {
         Self {
             projects,
             background: background::Background::default(),
-            background_visible: false,
-            native_backdrop: false,
             shown_project: None,
             stashes: HashMap::new(),
             open_prompt: None,
@@ -2260,34 +2256,12 @@ impl App {
         }
     }
 
-    /// The host has successfully enabled a wallpaper-based native material.
-    pub fn set_native_backdrop(&mut self, active: bool) {
-        self.native_backdrop = active;
-    }
-
     /// Draws the window into `ui` and runs what the user asked for.
     pub fn ui(&mut self, ui: &mut Ui) {
-        let image_path = if self.settings.theme == "high-contrast" { "" } else { &self.settings.background_image };
         application_bar::resize_edges(ui);
-        let visible = match self.background.paint(ui, image_path, self.settings.view.background_blur) {
-            Ok(visible) => visible,
-            Err(error) => {
-                self.status = Status::Error(error);
-                false
-            }
-        };
-        let visible = visible || self.native_backdrop;
-        let mut palette = self.themes.palette(&self.settings.theme);
-        if visible {
-            let opacity = f32::from(self.settings.view.background_tint.min(100)) / 100.0;
-            palette.window_background = palette.window_background.gamma_multiply(opacity);
-            palette.panel_background = palette.panel_background.gamma_multiply(opacity);
-            palette.border = palette.border.gamma_multiply(opacity);
+        if let Err(error) = self.background.update(ui, &self.settings, self.themes.palette(&self.settings.theme)) {
+            self.status = Status::Error(error);
         }
-        if (visible || self.background_visible) && theme::palette() != palette {
-            theme::set_palette(ui.ctx(), palette);
-        }
-        self.background_visible = visible;
         let liquid =
             self.themes.get(&self.settings.theme).and_then(|theme| theme.liquid).unwrap_or(self.settings.view.liquid);
         crate::kit::liquid::configure(ui.ctx(), liquid);

@@ -107,10 +107,8 @@ pub struct ViewSettings {
     pub bar_project_centered: bool,
     /// Opacity of neutral surfaces above the private background image, 0..=100.
     pub background_tint: u8,
-    /// Blur radius for the background image, in pixels after bounded downsampling.
+    /// Blur radius for the background image, in logical display pixels.
     pub background_blur: u8,
-    /// Request Windows 11's native wallpaper material behind neutral surfaces.
-    pub windows_mica: bool,
     /// Ctrl+drag over a clip selects time; off (the default), a drag from a clip's upper half
     /// does.
     pub time_select_ctrl: bool,
@@ -160,7 +158,6 @@ impl Default for ViewSettings {
             bar_project_centered: true,
             background_tint: 70,
             background_blur: 12,
-            windows_mica: false,
             time_select_ctrl: false,
             clip_halves: false,
             grid_in_clips: true,
@@ -211,7 +208,6 @@ impl ViewSettings {
                 self.app_name_centered, self.bar_project_name, self.bar_project_timing, self.bar_project_centered
             )
             + &format!("background_tint = {}\nbackground_blur = {}\n", self.background_tint, self.background_blur)
-            + &format!("windows_mica = {}\n", if self.windows_mica { "on" } else { "off" })
             + &self.track_sizes.to_text()
     }
 
@@ -222,7 +218,8 @@ impl ViewSettings {
             return true;
         }
         match (key, value) {
-            ("windows_mica", "on" | "off") => self.windows_mica = value == "on",
+            // Retired experimental native backdrop: accept old preferences without enabling it.
+            ("windows_mica", "on" | "off") => {}
             ("background_tint" | "background_blur", value) => {
                 let Ok(value) = value.parse::<u8>() else { return false };
                 if key == "background_tint" {
@@ -313,6 +310,13 @@ mod tests {
     use crate::settings::Settings;
 
     #[test]
+    fn retired_mica_preference_is_ignored_and_not_written_back() {
+        let (settings, warnings) = Settings::from_text("windows_mica = on\n");
+        assert!(warnings.is_empty());
+        assert!(!settings.to_text().contains("windows_mica"));
+    }
+
+    #[test]
     fn view_settings_survive_a_round_trip_through_the_settings_file() {
         let view = ViewSettings {
             liquid: crate::kit::liquid::Options { panels: 40, tracks: 60, clips: 80 },
@@ -346,7 +350,6 @@ mod tests {
             bar_project_centered: false,
             background_tint: 45,
             background_blur: 20,
-            windows_mica: true,
         };
         let settings = Settings { view, ..Settings::default() };
         let (read, warnings) = Settings::from_text(&settings.to_text());
@@ -367,14 +370,6 @@ mod tests {
             Settings::from_text("session_mixer_height = tall\ndetail_layout = up\ndouble_click_clip = maybe\n");
         assert_eq!(warnings.len(), 3, "{warnings:?}");
         assert_eq!(read.view, ViewSettings::default());
-    }
-
-    #[test]
-    fn mica_is_opt_in_and_rejects_invalid_saved_values() {
-        assert!(!Settings::default().view.windows_mica);
-        let (read, warnings) = Settings::from_text("windows_mica = maybe\n");
-        assert!(!read.view.windows_mica);
-        assert_eq!(warnings.len(), 1);
     }
 
     #[test]

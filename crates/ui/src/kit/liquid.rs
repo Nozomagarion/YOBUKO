@@ -10,6 +10,15 @@ use egui::{Color32, Context, Id, Painter, Rect, Stroke, StrokeKind, TextureId, p
 
 use super::{motion, theme};
 
+/// The theme panel colour before main-window background opacity is applied.
+pub fn set_panel_base(ctx: &Context, color: Color32) {
+    ctx.data_mut(|data| data.insert_temp(Id::new("liquid-panel-base"), color));
+}
+
+pub fn panel_base(ctx: &Context) -> Color32 {
+    ctx.data(|data| data.get_temp::<Color32>(Id::new("liquid-panel-base"))).unwrap_or_else(theme::window_background)
+}
+
 /// A bounded app-owned background image the host may include in its offscreen renderer.
 #[derive(Clone)]
 pub struct BackgroundImage {

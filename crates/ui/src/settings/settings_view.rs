@@ -634,9 +634,10 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    let panel_base = crate::kit::liquid::panel_base(ui.ctx());
+    painter.rect_filled(area, 0.0, panel_base);
     if !state.window {
-        crate::kit::liquid::paint(&painter, area, theme::window_background(), crate::kit::liquid::Surface::Panel);
+        crate::kit::liquid::paint(&painter, area, panel_base, crate::kit::liquid::Surface::Panel);
     }
     input_style(ui);
 

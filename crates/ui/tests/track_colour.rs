@@ -110,22 +110,6 @@ fn arrangement_grid_uses_its_own_theme_colors() {
     assert!(has_major, "timeline grid lines must follow their own theme token");
 }
 
-#[test]
-fn native_backdrop_tint_does_not_accumulate_and_disabling_restores_the_theme() {
-    let mut harness = arrangement();
-    let original = theme::palette();
-    harness.state_mut().set_native_backdrop(true);
-    harness.run();
-    let tinted = theme::palette();
-    assert!(tinted.window_background.a() < original.window_background.a());
-    assert_eq!(tinted.text_primary, original.text_primary, "foreground remains opaque");
-    harness.run();
-    assert_eq!(theme::palette(), tinted, "surface alpha must not compound across frames");
-    harness.state_mut().set_native_backdrop(false);
-    harness.run();
-    assert_eq!(theme::palette(), original);
-}
-
 /// Drums' colour as the project has it (`None`: the default one).
 fn drums_colour(harness: &Harness<'static, App>) -> Option<Rgb> {
     harness.state().session().unwrap().project().tracks[0].color

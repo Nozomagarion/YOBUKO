@@ -139,8 +139,9 @@ refused or suspended, never by losing its edits.
 
 ## What works now
 
+- Private image backgrounds use a cached source and display-scaled, alpha-correct blur; Settings keeps its own readable material. Native Mica has been removed.
+
 - Theme customization includes independent Browser/coloured-surface text, alpha-preserving gradients, editable liquid strengths, a private image backdrop and configurable application-bar identity/project information.
-- Windows Mica can supply the native wallpaper material behind the GPU-rendered UI, with an opaque fallback when unavailable; native visual verification is pending.
 
 - **Device SDK authoring:** checked Rust graph handles, parameter-source helpers and standard
   panel-control constructors produce the same data-only `.sd` devices and use the existing runtime.

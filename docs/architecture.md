@@ -43,11 +43,6 @@ page wrong updates it in the same pull request (AGENTS.md › Before you finish 
 
 ## Layers
 
-The Windows desktop host optionally applies the system Mica backdrop through
-`window-vibrancy`, a safe, fallible native wrapper. Only confirmed activation permits
-transparent GPU clearing; the UI receives an active flag for its neutral surface tint.
-No desktop pixels are captured and this platform dependency stays in `apps/suhina`.
-
 A crate may depend only on crates in lower layers. Nothing below the UI depends on a GUI toolkit.
 
 ```text
@@ -395,3 +390,12 @@ do not add DSP graph nodes or run on the audio thread.
 Sampler read-head positions travel through the engine meter monitor as atomic values. The UI reads them without accessing audio-thread device state.
 
 Host-owned AudioData implements AsRef<[f32]> so sample instruments share decoded PCM through Device::load_shared_sample without a copy. SDK transient analyses are shared by source identity and format in an off-thread weak cache, which retains no unused source or analysis. Device::set_context receives each block context before its MIDI events, including events at frame zero.
+
+### Private background images
+
+The UI background coordinator owns the active texture and one bounded worker. Separate
+source, filter and placement modules decode the local image, apply alpha-correct blur,
+and map it into display coordinates. Cached source pixels survive effect changes.
+Obsolete workers cannot publish into a newer request. Main-window surface opacity is
+separate from the Settings panel material; neither changes text opacity. This is an
+internal boundary, not an extension host or a new dependency of the audio engine.
