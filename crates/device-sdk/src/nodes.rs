@@ -49,6 +49,16 @@ pub enum NodeKind {
     NativeEffect {
         effect: String,
     },
+    PlaybackPosition,
+    PlaybackBounds,
+    LoopPosition,
+    PlaybackRate,
+    RegionFade,
+    RangeMap,
+    Curve,
+    BeatToPosition,
+    TempoRatio,
+    GrainWindow,
     AudioInput,
     AudioOutput,
     MidiInput,
@@ -146,55 +156,32 @@ pub struct NodeInfo {
     pub rust_variant: &'static str,
 }
 
-const SAMPLER: NodeInfo = NodeInfo {
-    kind: "sampler",
-    name: "Sampler",
-    rust_variant: "Sampler",
-    inputs: &[],
-    outputs: &["out", "left", "right"],
-    description: "Polyphonic sample source using the shared Sampler kernel. Receives timestamped instrument events; bind sample data and parameters by node id before processing. Audio can feed any signal node.",
-    configuration: "none; source and controls are bound through PreparedEffect",
-    example: r#"{"kind":"sampler"}"#,
-};
-
-const NATIVE_EFFECT: NodeInfo = NodeInfo {
-    kind: "native_effect",
-    name: "Native effect",
-    rust_variant: "NativeEffect",
-    inputs: &[
-        PortInfo { name: "in", default: Some(0.), unit: "signal" },
-        PortInfo { name: "control1", default: Some(0.), unit: "signal" },
-        PortInfo { name: "control2", default: Some(0.), unit: "signal" },
-        PortInfo { name: "control3", default: Some(0.), unit: "signal" },
-        PortInfo { name: "control4", default: Some(0.), unit: "signal" },
-    ],
-    outputs: &["out", "left", "right"],
-    description: "Trusted native graph kernel, resolved off-thread by the host. Supports graph wiring and delayed feedback; never loads third-party code.",
-    configuration: "effect: registered kernel id, 1..128 bytes",
-    example: r#"{"kind":"native_effect","effect":"org.example.gain"}"#,
-};
-
-const NATIVE_DEVICE: NodeInfo = NodeInfo {
-    kind: "native_device",
-    name: "Native device",
-    rust_variant: "NativeDevice",
-    inputs: &[PortInfo { name: "in", default: Some(0.), unit: "signal" }],
-    outputs: &["out", "left", "right"],
-    description: "Whole-device native wrapper. Effects wire audio_input -> native_device -> audio_output; instruments wire native_device -> audio_output. Requires the host's registered factory via prepare_native_at; no arbitrary code or feedback. Parameters preserve the native contract. Processing/reset/events use Device's real-time-safe API.",
-    configuration: "device: stable registered device id, 1..128 bytes",
-    example: r#"{"kind":"native_device","device":"utility"}"#,
-};
-/// Catalog for humans, CLI tooling and AI agents; serialize with serde_json.
+mod granular;
 mod io;
 mod math;
 mod midi;
 mod modulation;
+mod native;
+mod playback;
+mod processor;
+/// Catalog for humans, CLI tooling and AI agents; serialize with serde_json.
+pub(crate) mod sample;
 mod stereo;
 mod transport;
 pub static NODE_CATALOG: &[NodeInfo] = &[
-    NATIVE_DEVICE,
-    NATIVE_EFFECT,
-    SAMPLER,
+    native::NATIVE_DEVICE,
+    native::NATIVE_EFFECT,
+    sample::SAMPLER,
+    playback::PLAYBACK_POSITION,
+    playback::PLAYBACK_BOUNDS,
+    playback::LOOP_POSITION,
+    playback::PLAYBACK_RATE,
+    playback::REGION_FADE,
+    modulation::RANGE_MAP,
+    modulation::CURVE,
+    transport::BEAT_TO_POSITION,
+    transport::TEMPO_RATIO,
+    granular::GRAIN_WINDOW,
     io::AUDIO_INPUT,
     io::AUDIO_OUTPUT,
     io::GAIN,
@@ -255,9 +242,20 @@ pub static NODE_CATALOG: &[NodeInfo] = &[
 impl NodeKind {
     pub fn info(&self) -> &'static NodeInfo {
         match self {
-            Self::Sampler => &SAMPLER,
-            Self::NativeEffect { .. } => &NATIVE_EFFECT,
-            Self::NativeDevice { .. } => &NATIVE_DEVICE,
+            Self::Sampler => &sample::SAMPLER,
+            Self::PlaybackPosition => &playback::PLAYBACK_POSITION,
+            Self::PlaybackBounds => &playback::PLAYBACK_BOUNDS,
+            Self::LoopPosition => &playback::LOOP_POSITION,
+            Self::PlaybackRate => &playback::PLAYBACK_RATE,
+            Self::RegionFade => &playback::REGION_FADE,
+            Self::RangeMap => &modulation::RANGE_MAP,
+            Self::Curve => &modulation::CURVE,
+            Self::BeatToPosition => &transport::BEAT_TO_POSITION,
+            Self::TempoRatio => &transport::TEMPO_RATIO,
+            Self::GrainWindow => &granular::GRAIN_WINDOW,
+
+            Self::NativeEffect { .. } => &native::NATIVE_EFFECT,
+            Self::NativeDevice { .. } => &native::NATIVE_DEVICE,
             Self::AudioInput => &io::AUDIO_INPUT,
             Self::AudioOutput => &io::AUDIO_OUTPUT,
             Self::Gain { .. } => &io::GAIN,
@@ -339,4 +337,11 @@ pub fn node_reference_markdown() -> String {
             writeln!(text, "| `{}` / `{}` | {} | {} |", node.kind, node.rust_variant, ports, node.description);
     }
     text
+}
+
+pub(crate) fn prepare(kind: &NodeKind) -> Option<Box<dyn crate::native_node::NativeNode>> {
+    playback::prepare(kind)
+        .or_else(|| modulation::prepare(kind))
+        .or_else(|| transport::prepare(kind))
+        .or_else(|| granular::prepare(kind))
 }

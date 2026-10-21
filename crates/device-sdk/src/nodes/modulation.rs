@@ -120,3 +120,48 @@ pub const DELAY: NodeInfo = NodeInfo {
     example: "{\"kind\":\"delay\",\"max_seconds\":0.01}",
     rust_variant: "Delay",
 };
+
+pub(crate) const RANGE_MAP: NodeInfo = NodeInfo {
+    kind: "range_map",
+    name: "RangeMap",
+    rust_variant: "RangeMap",
+    inputs: &[
+        PortInfo { name: "value", default: Some(0.0), unit: "signal" },
+        PortInfo { name: "in_min", default: Some(0.0), unit: "signal" },
+        PortInfo { name: "in_max", default: Some(1.0), unit: "signal" },
+        PortInfo { name: "out_min", default: Some(0.0), unit: "signal" },
+        PortInfo { name: "out_max", default: Some(1.0), unit: "signal" },
+    ],
+    outputs: &["out", "left", "right"],
+    description: "Affine range conversion with safe zero input span.",
+    configuration: "none",
+    example: r#"{"kind":"range_map"}"#,
+};
+fn range_map(x: [f64; 5]) -> f64 {
+    if x[2] == x[1] { x[3] } else { x[3] + (x[0] - x[1]) / (x[2] - x[1]) * (x[4] - x[3]) }
+}
+
+pub(crate) const CURVE: NodeInfo = NodeInfo {
+    kind: "curve",
+    name: "Curve",
+    rust_variant: "Curve",
+    inputs: &[
+        PortInfo { name: "value", default: Some(0.0), unit: "signal" },
+        PortInfo { name: "exponent", default: Some(1.0), unit: "signal" },
+    ],
+    outputs: &["out", "left", "right"],
+    description: "Normalized power curve for controls and velocity.",
+    configuration: "none",
+    example: r#"{"kind":"curve"}"#,
+};
+fn curve(x: [f64; 5]) -> f64 {
+    x[0].clamp(0., 1.).powf(x[1].clamp(0.001, 1000.))
+}
+
+pub(crate) fn prepare(kind: &super::NodeKind) -> Option<Box<dyn crate::native_node::NativeNode>> {
+    match kind {
+        super::NodeKind::RangeMap => Some(super::processor::boxed(range_map)),
+        super::NodeKind::Curve => Some(super::processor::boxed(curve)),
+        _ => None,
+    }
+}

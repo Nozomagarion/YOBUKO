@@ -131,6 +131,16 @@ impl PreparedEffect {
         sample_rate: f64,
         resolve: &mut impl FnMut(&str, f64) -> Result<Box<dyn NativeNode>, DeviceSdkError>,
     ) -> Result<Self, DeviceSdkError> {
+        Self::new_with_factory(graph, sample_rate, &mut |kind, rate| {
+            crate::native_node::prepare_with(kind, rate, resolve)
+        })
+    }
+
+    pub(crate) fn new_with_factory(
+        graph: &DeviceGraph,
+        sample_rate: f64,
+        prepare: &mut impl FnMut(&NodeKind, f64) -> Result<Option<Box<dyn NativeNode>>, DeviceSdkError>,
+    ) -> Result<Self, DeviceSdkError> {
         if graph.nodes.iter().any(|n| matches!(n.kind, NodeKind::NativeDevice { .. })) {
             return Err(DeviceSdkError(
                 "native_device requires prepare_native_at and a registered host factory".into(),
@@ -174,10 +184,7 @@ impl PreparedEffect {
                 }
                 _ => None,
             };
-            let prepared_native = match &node.kind {
-                NodeKind::NativeEffect { effect } => Some(resolve(effect, sample_rate)?),
-                _ => crate::native_node::prepare(&node.kind, sample_rate)?,
-            };
+            let prepared_native = prepare(&node.kind, sample_rate)?;
             let state = if let Some(native) = prepared_native {
                 State::Native(native)
             } else {

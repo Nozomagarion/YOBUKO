@@ -6,6 +6,13 @@ status: current
 last_verified: 2026-10-19
 covers:
   - crates/device-sdk/src/sample_resource.rs
+  - crates/device-sdk/src/nodes/native.rs
+  - crates/device-sdk/src/nodes/sample.rs
+  - crates/device-sdk/src/nodes/playback.rs
+  - crates/device-sdk/src/nodes/processor.rs
+  - crates/device-sdk/src/nodes/modulation.rs
+  - crates/device-sdk/src/nodes/transport.rs
+  - crates/device-sdk/src/nodes/granular.rs
   - crates/device-sdk/src/nodes.rs
   - crates/device-sdk/src/midi.rs
   - crates/device-sdk/src/runtime.rs
@@ -70,6 +77,16 @@ The JSON catalog uses the same records and includes a minimal configuration exam
 | `native_device` / `NativeDevice` | `in` (0, signal) | Whole-device native wrapper. Effects wire audio_input -> native_device -> audio_output; instruments wire native_device -> audio_output. Requires the host's registered factory via prepare_native_at; no arbitrary code or feedback. Parameters preserve the native contract. Processing/reset/events use Device's real-time-safe API. |
 | `native_effect` / `NativeEffect` | `in` (0, signal), `control1` (0, signal), `control2` (0, signal), `control3` (0, signal), `control4` (0, signal) | Trusted native graph kernel, resolved off-thread by the host. Supports graph wiring and delayed feedback; never loads third-party code. |
 | `sampler` / `Sampler` | None | Polyphonic sample source using the shared Sampler kernel. Receives timestamped instrument events; bind sample data and parameters by node id before processing. Audio can feed any signal node. |
+| `playback_position` / `PlaybackPosition` | `rate` (1, signal), `start` (0, signal), `reset` (0, signal), `gate` (1, signal) | Signed frame position with rising-edge retrigger and gate. |
+| `playback_bounds` / `PlaybackBounds` | `position` (0, signal), `start` (0, signal), `end` (1, signal), `gate` (1, signal) | Half-open position bounds; -1 means inactive. |
+| `loop_position` / `LoopPosition` | `position` (0, signal), `start` (0, signal), `end` (1, signal), `ping_pong` (0, signal) | Forward or ping-pong position wrapping for signed positions. |
+| `playback_rate` / `PlaybackRate` | `key` (60, signal), `root` (60, signal), `fine` (0, signal), `bend` (0, signal), `ratio` (1, signal) | Pitch and sample-rate ratio to signed frame advancement. |
+| `region_fade` / `RegionFade` | `position` (0, signal), `length` (1, signal), `fade` (0, signal) | Linear source-region edge gain. |
+| `range_map` / `RangeMap` | `value` (0, signal), `in_min` (0, signal), `in_max` (1, signal), `out_min` (0, signal), `out_max` (1, signal) | Affine range conversion with safe zero input span. |
+| `curve` / `Curve` | `value` (0, signal), `exponent` (1, signal) | Normalized power curve for controls and velocity. |
+| `beat_to_position` / `BeatToPosition` | `beat` (0, signal), `bpm` (120, signal), `sample_rate` (48000, signal) | Source beat position to sample frames. |
+| `tempo_ratio` / `TempoRatio` | `source_bpm` (120, signal), `target_bpm` (120, signal) | Target tempo divided by positive source tempo. |
+| `grain_window` / `GrainWindow` | `position` (0, signal), `duration` (1, signal) | Hann grain lifetime window, zero outside duration. |
 | `audio_input` / `AudioInput` | None | Stereo input of the track; no state. |
 | `audio_output` / `AudioOutput` | `in` (required, signal) | Final stereo output; no state. |
 | `gain` / `Gain` | `in` (required, signal) | Multiplies by the declared parameter in linear amplitude; legacy gain node. |
@@ -177,3 +194,19 @@ Negative, nonfinite or out-of-region positions are silent. Mono duplicates to st
 multichannel data the first two channels are read. Nonfinite PCM values become zero.
 This API is resource preparation/read groundwork, not yet serialized resource ports or a
 replacement for existing Sampler playback, looping, grain or stretch algorithms.
+
+## Playback and mapping primitives
+
+Positions and lengths are sample frames; region ends are exclusive. PlaybackPosition emits
+its current position and then advances by signed rate while gate is positive. A rising reset
+or note-on restarts at the start input. LoopPosition maps arbitrary positions into a checked
+forward or ping-pong interval; invalid/empty intervals return the start. PlaybackBounds returns
+-1 outside a half-open interval or with a closed gate. PlaybackRate converts key/root, cents,
+bend semitones and source/output rate ratio to frame advancement (pitch capped to 20 octaves).
+RegionFade is a linear gain at both edges with fade length capped to half the region.
+RangeMap is an unclamped affine conversion; zero input span returns output minimum.
+Curve maps clamped 0..1 values through a bounded positive exponent and also serves velocity
+curves. BeatToPosition uses source BPM and sample rate; TempoRatio is target/source BPM.
+GrainWindow is a Hann lifetime window, silent outside its positive duration.
+All nodes preserve stereo independence, clear private state on reset, and do no I/O or allocation.
+These primitives do not yet implement voice graphs, serialized assets or grain allocation.
