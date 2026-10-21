@@ -5,6 +5,7 @@
 //! waveforms. Nothing here knows about a view.
 
 pub mod frame_trace;
+pub mod gradient;
 pub mod liquid;
 pub mod logo;
 pub mod meter;

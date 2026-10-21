@@ -937,7 +937,7 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
     colors.accent = egui::Color32::from_rgb(0x12, 0xAB, 0x9F);
     let night = suhina_ui::settings::themes::ThemeEntry {
         id: "night".into(),
-        theme: theme::Theme { name: "Night".into(), colors, liquid: None },
+        theme: theme::Theme { name: "Night".into(), colors, liquid: None, gradients: Default::default() },
     };
     let ctx = harness.ctx.clone();
     harness.state_mut().set_themes(&ctx, vec![night], Some("themes".into()));
@@ -987,7 +987,7 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
     colors.accent = egui::Color32::from_rgb(1, 2, 3);
     let edited = suhina_ui::settings::themes::ThemeEntry {
         id: "night-copy".into(),
-        theme: theme::Theme { name: "Night copy".into(), colors, liquid: None },
+        theme: theme::Theme { name: "Night copy".into(), colors, liquid: None, gradients: Default::default() },
     };
     harness.state_mut().put_theme(&ctx, edited);
     assert_eq!(theme::accent(), colors.accent);

@@ -216,3 +216,21 @@ requires restarting the app if it is currently running on OpenGL. Disabled anima
 the built-in high-contrast theme keep the material off without erasing saved strengths.
 The feature remains experimental: full playback performance qualification and refraction
 are not complete.
+
+### Surface gradients and content refraction
+
+Edit current theme has independent Panel, Track and Clip gradient overlays. Each has
+a toggle, clockwise direction (0 degrees left to right, 90 down), and 2–8 stops, each
+with position 0–100, colour and opacity. Stops can be added and removed. Changes apply
+live, save, duplicate, export and reset with the theme, without changing project colours.
+Gradients work without GPU liquid; high contrast and reduced effects suppress materials.
+An optional `gradients` object stores `panels`, `tracks`, `clips`; each enabled surface
+has an `angle` integer 0–360 and `stops` array of `position` integer and RGBA `color`.
+Missing surfaces remain unmodified. Invalid surfaces warn and fall back independently.
+
+Track and clip refraction samples a shared current-frame substrate of visible coloured
+surface bodies and their gradients, with a bounded edge lens. Foreground notes, labels,
+waveforms and controls are excluded from this capture and painted sharply afterward.
+Only one content capture is made per frame, independently of the panel backdrop; no
+per-clip capture, previous-frame image or recursive sampling is allowed. Missing GPU
+sources keep the optical gradient/rim fallback.

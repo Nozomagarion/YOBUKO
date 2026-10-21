@@ -173,6 +173,7 @@ pub struct ThemesView {
     pub colors: Palette,
     pub liquid: Option<crate::kit::liquid::Options>,
     pub global_liquid: crate::kit::liquid::Options,
+    pub gradients: crate::kit::gradient::Gradients,
     /// The folder theme files are kept in, if there is one.
     pub folder: Option<String>,
 }
@@ -185,9 +186,11 @@ pub enum ThemeRequest {
     /// Use these colours; a built-in theme is copied first, since it does not change.
     Edit(Palette),
     EditLiquid(Option<crate::kit::liquid::Options>),
+    EditGradients(crate::kit::gradient::Gradients),
     ResetEdits {
         colors: Palette,
         liquid: Option<crate::kit::liquid::Options>,
+        gradients: crate::kit::gradient::Gradients,
     },
     /// Give the theme in use this name (and its file a name made from it).
     Rename(String),
@@ -267,6 +270,7 @@ pub struct PageState {
     pub theme_editor: bool,
     pub theme_restore: Option<(String, String)>,
     pub theme_original_liquid: Option<Option<crate::kit::liquid::Options>>,
+    pub theme_original_gradients: Option<crate::kit::gradient::Gradients>,
     pub theme_original: Option<Palette>,
     pub theme_rename_focus: bool,
     /// A colour picker is open while its primary pointer button is held.
@@ -695,6 +699,7 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
         state.theme_editor = false;
         state.theme_original = None;
         state.theme_original_liquid = None;
+        state.theme_original_gradients = None;
         state.theme_restore = None;
         state.search.clear();
         state.capture = None;
@@ -949,6 +954,7 @@ fn theme_page(
                     state.theme_editor = true;
                     state.theme_original = Some(themes.colors);
                     state.theme_original_liquid = Some(themes.liquid);
+                    state.theme_original_gradients = Some(themes.gradients.clone());
                     state.scrolled = None;
                 }
                 ui.menu_button("More", |ui| {
@@ -1071,6 +1077,124 @@ fn colour_group(key: &str) -> &'static str {
     }
 }
 
+fn gradient_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Option<ThemeRequest> {
+    use crate::kit::gradient::{Gradient, Stop};
+    let mut gradients = themes.gradients.clone();
+    ui.add_space(8.0);
+    ui.label(egui::RichText::new("Surface gradients").strong());
+    ui.add(
+        egui::Label::new("Colour overlays saved with this theme. Project track and clip colours stay unchanged.")
+            .wrap(),
+    );
+    for (name, slot) in
+        [("Panel", &mut gradients.panels), ("Track", &mut gradients.tracks), ("Clip", &mut gradients.clips)]
+    {
+        ui.push_id(("surface-gradient", name), |ui| {
+            ui.collapsing(format!("{name} gradient"), |ui| {
+                let mut enabled = slot.is_some();
+                if ui.checkbox(&mut enabled, format!("Enable {name} gradient")).changed() {
+                    *slot = enabled.then(Gradient::default);
+                }
+                let Some(gradient) = slot else { return };
+                if !(2..=8).contains(&gradient.stops.len()) {
+                    *gradient = Gradient::default();
+                }
+                for stop in &mut gradient.stops {
+                    stop.position = stop.position.min(100);
+                }
+                gradient.stops.sort_by_key(|stop| stop.position);
+                let direction = ui
+                    .add(egui::Slider::new(&mut gradient.angle, 0..=360).suffix("°").text(format!("{name} direction")));
+                state.theme_colour_held |= direction.dragged() || direction.is_pointer_button_down_on();
+                ui.label(egui::RichText::new("0° left → right · 90° top → bottom").small());
+                let (preview, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), egui::Sense::hover());
+                ui.painter().rect_filled(preview, 0.0, theme::panel_background());
+                ui.painter().add(gradient.mesh(preview));
+                let count = gradient.stops.len();
+                let mut remove = None;
+                for index in 0..count {
+                    let low = index.checked_sub(1).map_or(0, |previous| gradient.stops[previous].position);
+                    let high = gradient.stops.get(index + 1).map_or(100, |next| next.position);
+                    let stop = &mut gradient.stops[index];
+                    ui.push_id(index, |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            let popup = ui.auto_id_with("popup");
+                            let picker = egui::color_picker::color_edit_button_srgba(
+                                ui,
+                                &mut stop.color,
+                                egui::color_picker::Alpha::OnlyBlend,
+                            );
+                            picker.widget_info(|| {
+                                egui::WidgetInfo::labeled(
+                                    egui::WidgetType::ColorButton,
+                                    true,
+                                    format!("{name} stop {} colour", index + 1),
+                                )
+                            });
+                            state.theme_colour_held |= egui::Popup::is_id_open(ui.ctx(), popup)
+                                && ui.input(|input| input.pointer.primary_down());
+                            ui.label(theme::hex(stop.color));
+                            if ui
+                                .add_enabled(count > 2, egui::Button::new(format!("Remove stop {}", index + 1)))
+                                .clicked()
+                            {
+                                remove = Some(index);
+                            }
+                        });
+                        let position = ui.add(
+                            egui::Slider::new(&mut stop.position, low..=high)
+                                .suffix(" %")
+                                .text(format!("{name} stop {} position", index + 1)),
+                        );
+                        let mut opacity = (f32::from(stop.color.a()) * 100.0 / 255.0).round() as u8;
+                        let alpha = ui.add(
+                            egui::Slider::new(&mut opacity, 0..=100)
+                                .suffix(" %")
+                                .text(format!("{name} stop {} opacity", index + 1)),
+                        );
+                        state.theme_colour_held |= position.dragged()
+                            || position.is_pointer_button_down_on()
+                            || alpha.dragged()
+                            || alpha.is_pointer_button_down_on();
+                        if alpha.changed() {
+                            let [r, g, b, _] = stop.color.to_srgba_unmultiplied();
+                            stop.color = egui::Color32::from_rgba_unmultiplied(
+                                r,
+                                g,
+                                b,
+                                (f32::from(opacity) * 2.55).round() as u8,
+                            );
+                        }
+                    });
+                }
+                if let Some(index) = remove {
+                    gradient.stops.remove(index);
+                }
+                if ui
+                    .add_enabled(gradient.stops.len() < 8, egui::Button::new(format!("Add {name} colour stop")))
+                    .clicked()
+                {
+                    let gap = gradient
+                        .stops
+                        .windows(2)
+                        .enumerate()
+                        .max_by_key(|(_, pair)| pair[1].position.saturating_sub(pair[0].position))
+                        .map(|(index, _)| index)
+                        .unwrap_or(0);
+                    let left = &gradient.stops[gap];
+                    let right = &gradient.stops[gap + 1];
+                    let stop = Stop {
+                        position: left.position + (right.position - left.position) / 2,
+                        color: crate::kit::motion::mix(left.color, right.color, 0.5),
+                    };
+                    gradient.stops.insert(gap + 1, stop);
+                }
+            });
+        });
+    }
+    (gradients != themes.gradients).then_some(ThemeRequest::EditGradients(gradients))
+}
+
 fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Option<ThemeRequest> {
     let mut request = None;
     if ui.button("Back to themes").clicked() {
@@ -1110,14 +1234,19 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
         }
         let original = *state.theme_original.get_or_insert(themes.colors);
         let original_liquid = *state.theme_original_liquid.get_or_insert(themes.liquid);
+        let original_gradients = state.theme_original_gradients.get_or_insert_with(|| themes.gradients.clone()).clone();
         if ui
             .add_enabled(
-                original != themes.colors || original_liquid != themes.liquid,
+                original != themes.colors || original_liquid != themes.liquid || original_gradients != themes.gradients,
                 egui::Button::new("Reset changes"),
             )
             .clicked()
         {
-            request = Some(ThemeRequest::ResetEdits { colors: original, liquid: original_liquid });
+            request = Some(ThemeRequest::ResetEdits {
+                colors: original,
+                liquid: original_liquid,
+                gradients: original_gradients,
+            });
         }
     });
     ui.add_space(8.0);
@@ -1143,6 +1272,9 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
         request = Some(ThemeRequest::EditLiquid(Some(options)));
     }
     ui.add(egui::Label::new(egui::RichText::new("Turn off inheritance to save independent panel, track and clip strengths with this theme. Requires the GPU renderer; reduced effects and high contrast still apply.").small().color(theme::text_secondary())).wrap());
+    if let Some(change) = gradient_editor(ui, themes, state) {
+        request = Some(change);
+    }
     let mut edited = themes.colors;
     let tokens = themes.colors.tokens();
     for group in ["Surfaces", "Text", "Tracks & clips", "Controls", "Meters", "Sample map"] {

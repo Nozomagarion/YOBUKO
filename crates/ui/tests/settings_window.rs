@@ -16,6 +16,49 @@ use suhina_ui::{App, kit::theme};
 const SHORT: (f32, f32) = (1000.0, 420.0);
 
 #[test]
+fn gradient_editor_enables_saves_and_resets_without_editing_the_project() {
+    let mut app = App::new();
+    app.set_session(Session::new(demo_project()), &[]);
+    let mut harness =
+        Harness::builder().with_size((1200.0, 1200.0)).build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    theme::install(&harness.ctx);
+    harness.run();
+    let before = harness.state().session().unwrap().project().clone();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    harness.run();
+    harness.get_by_label("Settings page: Themes").click();
+    harness.run();
+    harness.get_by_label("Edit current theme…").click();
+    harness.run();
+    harness.get_by_label("Track gradient").click();
+    harness.run();
+    harness.get_by_label("Enable Track gradient").click();
+    harness.run();
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.gradients.tracks.is_some() && theme::Theme::from_json(&theme.to_json()).0.gradients == theme.gradients)));
+    assert_eq!(harness.state().session().unwrap().project(), &before);
+    harness.get_by_label("Add Track colour stop").focus();
+    harness.run();
+    harness.get_by_label("Add Track colour stop").click();
+    harness.run();
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.gradients.tracks.as_ref().is_some_and(|gradient| gradient.stops.len() == 3))));
+    harness.get_by_label("Remove stop 2").focus();
+    harness.run();
+    harness.get_by_label("Remove stop 2").click();
+    harness.run();
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.gradients.tracks.as_ref().is_some_and(|gradient| gradient.stops.len() == 2))));
+    harness.get_by_label("Reset changes").focus();
+    harness.run();
+    harness.get_by_label("Reset changes").click();
+    harness.run();
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.gradients == Default::default())));
+    assert_eq!(harness.state().session().unwrap().project(), &before);
+}
+
+#[test]
 fn theme_default_edits_preserve_existing_project_colours_and_opacity_saves() {
     let mut app = App::new();
     app.set_session(Session::new(demo_project()), &[]);
@@ -82,6 +125,13 @@ fn render_themes_gallery_and_editor_for_review() {
     harness.remove_cursor();
     harness.run();
     harness.render().unwrap().save(folder.join("editor.png")).unwrap();
+    harness.get_by_label("Track gradient").click();
+    harness.run();
+    harness.get_by_label("Enable Track gradient").click();
+    harness.run();
+    harness.remove_cursor();
+    harness.run();
+    harness.render().unwrap().save(folder.join("gradient-editor.png")).unwrap();
 }
 
 #[test]
@@ -486,9 +536,10 @@ fn wheel_to(harness: &mut Harness<'static, App>, label: &str, turns: usize) -> u
         }
         harness.hover_at(over);
         harness.step();
+        let delta = if harness.get_by_label(label).rect().top() < title.bottom() { 80.0 } else { -80.0 };
         harness.input_mut().events.push(egui::Event::MouseWheel {
             unit: egui::MouseWheelUnit::Point,
-            delta: Vec2::new(0.0, -80.0),
+            delta: Vec2::new(0.0, delta),
             modifiers: Modifiers::NONE,
             phase: egui::TouchPhase::Move,
         });

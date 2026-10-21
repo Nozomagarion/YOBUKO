@@ -20,9 +20,9 @@ transmission, edge lensing and directional highlights rather than a full-body be
 The implementation is independently written; no reference shader or asset is imported.
 For dense musical content, use a quiet centre and a narrow curved rim: a directional
 outer highlight, an inner dark band and a weaker opposing light return. Scale these
-down with row height and keep them inside the existing editing rectangle. This is an
-optical coating on tracks and clips. Floating panels additionally refract the current
-background through a bounded edge lens, independently implemented in the shared kit.
+down with row height and keep them inside the existing editing rectangle. Track and clip lenses refract a shared current-frame substrate of surface bodies and
+gradients. Floating panels refract the current UI background through the same bounded
+edge lens, independently implemented in the shared kit.
 
 [Microsoft Acrylic](https://learn.microsoft.com/en-us/windows/apps/design/style/acrylic)
 also builds depth from layered background, blur and tint. In the dense content layer,
@@ -66,7 +66,13 @@ Arrangement and Session track headers and clip backgrounds get a lightweight opt
 coating (a narrow rounded rim with directional highlights, an inner shade and a
 weaker opposing light return, over a source-coloured directional body gradient),
 painted before labels, controls,
-notes and waveforms. These coatings do **not** perform per-clip backdrop blur or refraction.
+notes and waveforms. A second, lazy GPU capture renders only visible surface bodies and their theme gradients,
+excluding labels, notes, waveforms and controls. Deferred edge meshes are inserted before
+foreground at the original paint positions. One substrate serves all visible track and
+clip lenses. It has independent targets/texture IDs from the modal capture and skips the
+Gaussian passes: content lenses use the sharp encoded source. There are no per-clip
+captures. Temporarily hiding content lenses during modal replay prevents recursive
+texture sampling and unsupported-texture fallback; the lenses are restored afterward.
 Surfaces smaller than 12 logical pixels stay solid. The three strengths are independently
 saved percentages: 0 is off, 100 is the strongest supported material. Panels interpolate
 from opaque to a 55% theme tint at full strength; track and clip rims keep the source
@@ -77,7 +83,8 @@ transparent centre reveals the body gradient. All geometry stays inside the edit
 rectangle. Missing settings default to 0.
 
 The wgpu host installs its provider even while all strengths are 0; no backdrop capture
-is requested until Panel liquid is raised. OpenGL has no provider and disables the controls.
+is requested until a liquid strength is raised; Track/Clip strengths request only the
+shared content substrate, Panel strength requests the modal capture. OpenGL has no provider and disables the controls.
 
 OpenGL, disabled animations and the built-in high-contrast theme keep solid surfaces.
 The accessibility gate is checked after running settings/theme changes too. If replay
@@ -150,3 +157,17 @@ This avoids the sparse-sample ghost bands of the earlier large-radius experiment
 Stepped texture toggle retains the five-sample sparse kernel as an explicit artistic option.
 Both modes run only on a blur/mode change in the static preview. The denser kernel needs GPU
 measurement before use on a live UI; no frame-rate claim has been established.
+
+## Editable theme gradients
+
+Edit current theme provides independent panel, track and clip overlays. Each has a
+toggle, clockwise direction, live preview and 2–8 RGBA stops with positions, opacity,
+add and remove controls. The optional theme `gradients` object follows saves, copies,
+exports and Reset changes. A gradient is independent of the liquid strength and GPU
+availability. Reduced effects and high contrast still suppress surface materials.
+
+The kit clips the rectangle against each pair of stop planes and triangulates those
+polygons. Intermediate stops remain exact at diagonal angles without a fixed-resolution
+grid. Colours interpolate premultiplied RGBA. Geometry is bounded by eight stops, and
+all polygons stay within the surface. This changes appearance only, never project RGB
+colours or creation defaults.

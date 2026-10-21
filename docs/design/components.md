@@ -831,3 +831,10 @@ Alt+wheel remains available to zoom track heights.
 
 Loop notches scale with the on-screen pass width and disappear below 64 px per pass. The
 continuous loop separator remains, and live right-edge resizing reveals new boundaries before release.
+
+Surface gradients live under Edit current theme, separately for Panel, Track and Clip.
+Each collapsed section exposes an enable toggle, direction, live preview and 2–8 colour
+stops with position and opacity. The layout wraps and scrolls in a narrow window.
+They save/reset/copy with the theme; no project track or clip colours are rewritten.
+Content refraction uses one foreground-free substrate per frame, inserted before sharp
+labels, controls, notes and waveforms.

@@ -2243,6 +2243,10 @@ impl App {
         let liquid =
             self.themes.get(&self.settings.theme).and_then(|theme| theme.liquid).unwrap_or(self.settings.view.liquid);
         crate::kit::liquid::configure(ui.ctx(), liquid);
+        crate::kit::liquid::begin_frame(
+            ui.ctx(),
+            self.themes.get(&self.settings.theme).map(|theme| theme.gradients.clone()).unwrap_or_default(),
+        );
         crate::kit::liquid::set_effects_allowed(
             ui.ctx(),
             self.settings.animations && self.settings.theme != "high-contrast",
@@ -2768,6 +2772,7 @@ impl App {
         suhina_plugins::trace::timed("drop poll", || self.poll_drop(ui.ctx()));
         self.frame_trace.mark("drags");
 
+        crate::kit::liquid::finish_surfaces(ui.ctx());
         self.plugin_dialog(ui, window);
         self.project_dialogs(ui, window);
         if self.settings_open {
@@ -4246,6 +4251,7 @@ impl App {
                     request,
                     crate::settings::settings_view::ThemeRequest::Edit(_)
                         | crate::settings::settings_view::ThemeRequest::EditLiquid(_)
+                        | crate::settings::settings_view::ThemeRequest::EditGradients(_)
                 )
             })
     }

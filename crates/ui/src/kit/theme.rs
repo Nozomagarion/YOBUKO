@@ -249,11 +249,12 @@ pub struct Theme {
     pub colors: Palette,
     /// None inherits the application's global material strengths.
     pub liquid: Option<super::liquid::Options>,
+    pub gradients: super::gradient::Gradients,
 }
 
 impl Default for Theme {
     fn default() -> Self {
-        Self { name: "Suhina Dark".into(), colors: Palette::DARK, liquid: None }
+        Self { name: "Suhina Dark".into(), colors: Palette::DARK, liquid: None, gradients: Default::default() }
     }
 }
 
@@ -313,7 +314,10 @@ impl Theme {
                 warnings.push("liquid must be an object of panels, tracks and clips strengths".into());
             }
         }
-        let known = |k: &str| matches!(k, "name" | "colors" | "liquid" | "description" | "$schema");
+        if let Some(value) = root.get("gradients") {
+            theme.gradients = super::gradient::Gradients::from_json(value, &mut warnings);
+        }
+        let known = |k: &str| matches!(k, "name" | "colors" | "liquid" | "gradients" | "description" | "$schema");
         for key in root.keys().filter(|k| !known(k)) {
             warnings.push(format!("{key} is not part of a theme"));
         }
@@ -331,6 +335,9 @@ impl Theme {
         let mut root = Map::new();
         root.insert("name".into(), Value::String(self.name.clone()));
         root.insert("colors".into(), Value::Object(colors));
+        if self.gradients != super::gradient::Gradients::default() {
+            root.insert("gradients".into(), self.gradients.to_json());
+        }
         if let Some(options) = self.liquid {
             root.insert(
                 "liquid".into(),
@@ -384,6 +391,7 @@ Themes. While it is in use, every save of the file shows within a second.\n\
   background. `recording` is also used for errors.\n\
 - Track and clip colours come from the project. clip.midiDefault/clip.audioDefault are copied only when creating new tracks and clips.\n\
 \n\
+An optional `gradients` object sets surface overlays. Each of `panels`, `tracks`, `clips` takes an object with `angle` (0–360 clockwise) and 2–8 `stops`, each with `position` (0–100) and `color` (#RRGGBB or #RRGGBBAA). Missing surfaces have no overlay.\n\
 An optional `liquid` object with `panels`, `tracks` and `clips` integers (0 to 100) overrides global material strengths. Leave it out to inherit them.\n\
 \n\
 ## Tokens\n\
@@ -638,7 +646,8 @@ mod tests {
 
     #[test]
     fn a_theme_survives_a_round_trip() {
-        let mut theme = Theme { name: "Night".into(), colors: Palette::DARK, liquid: None };
+        let mut theme =
+            Theme { name: "Night".into(), colors: Palette::DARK, liquid: None, gradients: Default::default() };
         theme.colors.accent = rgb(0x12AB9F);
         theme.colors.window_background = rgb(0x000000);
         assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));

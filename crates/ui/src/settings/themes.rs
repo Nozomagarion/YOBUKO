@@ -121,6 +121,7 @@ impl Themes {
             name: theme.name,
             colors: theme.colors,
             liquid: theme.liquid,
+            gradients: theme.gradients,
             global_liquid: Default::default(),
             folder: self.folder.clone(),
         }
@@ -132,10 +133,11 @@ impl Themes {
         let editable = self.get(current).is_some() && !theme::is_built_in(current);
         match request {
             ThemeRequest::Use(id) => self.get(&id).is_some().then_some(id),
-            ThemeRequest::ResetEdits { colors, liquid } => {
+            ThemeRequest::ResetEdits { colors, liquid, gradients } => {
                 let switched = self.request(current, ThemeRequest::Edit(colors));
                 let id = switched.as_deref().unwrap_or(current);
                 self.request(id, ThemeRequest::EditLiquid(liquid));
+                self.request(id, ThemeRequest::EditGradients(gradients));
                 switched
             }
             ThemeRequest::Edit(colors) => {
@@ -160,6 +162,19 @@ impl Themes {
                 };
                 if let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) {
                     entry.theme.liquid = options;
+                }
+                self.actions.push(Pending::Save(id.clone()));
+                copied.then_some(id)
+            }
+            ThemeRequest::EditGradients(gradients) => {
+                let (id, copied) = if editable {
+                    (self.real_id(current), false)
+                } else {
+                    let name = format!("{} (custom)", self.get(current).map_or("Suhina Dark", |t| &t.name));
+                    (self.copy(current, &name), true)
+                };
+                if let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) {
+                    entry.theme.gradients = gradients;
                 }
                 self.actions.push(Pending::Save(id.clone()));
                 copied.then_some(id)
@@ -282,10 +297,34 @@ fn same_id(a: &str, b: &str) -> bool {
 mod tests {
     use super::*;
 
+    #[test]
+    fn gradient_edits_copy_builtins_save_duplicate_and_reset_with_the_theme() {
+        use crate::kit::gradient::{Gradient, Gradients};
+        let mut themes = Themes::default();
+        let gradients =
+            Gradients { tracks: Some(Gradient::default()), clips: Some(Gradient::default()), ..Default::default() };
+        let id = themes.request("nord", ThemeRequest::EditGradients(gradients.clone())).unwrap();
+        assert_eq!(themes.get("nord").unwrap().gradients, Gradients::default());
+        let edited = themes.get(&id).unwrap().clone();
+        assert_eq!(edited.gradients, gradients);
+        assert_eq!(Theme::from_json(&edited.to_json()), (edited.clone(), Vec::new()));
+        let copy = themes.request(&id, ThemeRequest::Duplicate).unwrap();
+        assert_eq!(themes.get(&copy).unwrap().gradients, gradients);
+        themes.request(
+            &id,
+            ThemeRequest::ResetEdits { colors: edited.colors, liquid: edited.liquid, gradients: Gradients::default() },
+        );
+        assert_eq!(themes.get(&id).unwrap().gradients, Gradients::default());
+        assert_eq!(themes.get(&copy).unwrap().gradients, gradients);
+    }
+
     fn night() -> ThemeEntry {
         let mut colors = Palette::DARK;
         colors.accent = egui::Color32::from_rgb(1, 2, 3);
-        ThemeEntry { id: "night".into(), theme: Theme { name: "Night".into(), colors, liquid: None } }
+        ThemeEntry {
+            id: "night".into(),
+            theme: Theme { name: "Night".into(), colors, liquid: None, gradients: Default::default() },
+        }
     }
 
     fn saved(themes: &mut Themes) -> Vec<(String, String)> {
@@ -394,7 +433,12 @@ mod tests {
                 FileAction::Rename { from: "night".into(), to: "deep-sea".into() },
                 FileAction::Save {
                     id: "deep-sea".into(),
-                    theme: Box::new(Theme { name: "Deep Sea".into(), colors: night().theme.colors, liquid: None })
+                    theme: Box::new(Theme {
+                        name: "Deep Sea".into(),
+                        colors: night().theme.colors,
+                        liquid: None,
+                        gradients: Default::default()
+                    })
                 },
             ]
         );

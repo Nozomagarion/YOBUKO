@@ -39,6 +39,10 @@ pub struct Backdrop {
 /// Host-side GPU work, always requested on the UI thread before the floating panel is drawn.
 pub trait Provider: Send + Sync {
     fn capture(&self, ctx: &Context) -> Option<Backdrop>;
+    /// One content-only substrate, independent of the modal capture and its textures.
+    fn capture_surfaces(&self, _ctx: &Context, _shapes: Vec<egui::epaint::ClippedShape>) -> Option<Backdrop> {
+        None
+    }
 }
 
 #[derive(Clone)]
@@ -48,6 +52,52 @@ const OPTIONS: &str = "liquid-options";
 const HOST: &str = "liquid-host";
 const BACKDROP: &str = "liquid-backdrop";
 const ACCESSIBLE: &str = "liquid-effects-allowed";
+const SURFACES: &str = "liquid-frame-surfaces";
+const GRADIENTS: &str = "liquid-gradients";
+
+#[derive(Clone, Default)]
+struct Surfaces {
+    source: Vec<egui::epaint::ClippedShape>,
+    lenses: Vec<Lens>,
+}
+
+#[derive(Clone)]
+struct Lens {
+    layer: egui::LayerId,
+    clip: Rect,
+    opacity: f32,
+    index: egui::layers::ShapeIdx,
+    rect: Rect,
+    strength: f32,
+    mesh: Option<egui::Mesh>,
+}
+
+/// Clear frame-local placeholders. The source never contains text or previous-frame lenses.
+pub fn begin_frame(ctx: &Context, gradients: super::gradient::Gradients) {
+    ctx.data_mut(|data| {
+        data.insert_temp(Id::new(SURFACES), Surfaces::default());
+        data.insert_temp(Id::new(GRADIENTS), gradients);
+    });
+}
+
+/// Resolve all content lenses once the visible substrate is complete, before modal chrome.
+pub fn finish_surfaces(ctx: &Context) {
+    let mut surfaces = ctx.data_mut(|data| data.remove_temp::<Surfaces>(Id::new(SURFACES))).unwrap_or_default();
+    if !surfaces.lenses.is_empty() && effects_allowed(ctx) {
+        let host = ctx.data(|data| data.get_temp::<Host>(Id::new(HOST)));
+        if let Some(backdrop) = host.and_then(|host| host.0.capture_surfaces(ctx, std::mem::take(&mut surfaces.source)))
+        {
+            for lens in &mut surfaces.lenses {
+                let mesh = refraction_mesh(lens.rect, backdrop, lens.strength);
+                let mut painter = ctx.layer_painter(lens.layer).with_clip_rect(lens.clip);
+                painter.set_opacity(lens.opacity);
+                painter.set(lens.index, mesh.clone());
+                lens.mesh = Some(mesh);
+            }
+        }
+    }
+    ctx.data_mut(|data| data.insert_temp(Id::new(SURFACES), surfaces));
+}
 
 /// Updated by the app when reduced effects or a high-contrast theme is selected.
 pub fn set_effects_allowed(ctx: &Context, allowed: bool) {
@@ -84,35 +134,84 @@ pub fn prepare(ctx: &Context) {
         return;
     }
     let host = ctx.data(|data| data.get_temp::<Host>(Id::new(HOST)));
-    if let Some(backdrop) = host.and_then(|host| host.0.capture(ctx)) {
+    // Panel capture replays bodies/foreground but excludes native content lenses: no
+    // sampling another capture target or forcing an unsupported-texture fallback.
+    let surfaces = ctx.data_mut(|data| data.remove_temp::<Surfaces>(Id::new(SURFACES))).unwrap_or_default();
+    for lens in &surfaces.lenses {
+        ctx.layer_painter(lens.layer).with_clip_rect(lens.clip).set(lens.index, egui::Shape::Noop);
+    }
+    let backdrop = host.and_then(|host| host.0.capture(ctx));
+    for lens in &surfaces.lenses {
+        if let Some(mesh) = &lens.mesh {
+            let mut painter = ctx.layer_painter(lens.layer).with_clip_rect(lens.clip);
+            painter.set_opacity(lens.opacity);
+            painter.set(lens.index, mesh.clone());
+        }
+    }
+    ctx.data_mut(|data| data.insert_temp(Id::new(SURFACES), surfaces));
+    if let Some(backdrop) = backdrop {
         ctx.data_mut(|data| data.insert_temp(Id::new(BACKDROP), backdrop));
     }
 }
 
 /// Paint the base first, then this material, then the surface's text, waveform and controls.
-/// Non-overlapping track/clip surfaces use a restrained optical coating; floating panels
-/// additionally use the real live backdrop. Tiny surfaces stay solid at distant zooms.
+/// Content lenses resolve against a shared foreground-free substrate at finish_surfaces.
+/// Floating panels use the complete current UI backdrop. Tiny surfaces stay solid.
 pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
+    if !rect.is_finite()
+        || rect.width() < 12.0
+        || rect.height() < 12.0
+        || !painter.clip_rect().intersects(rect)
+        || !effects_allowed(painter.ctx())
+    {
+        return;
+    }
+    let gradient = painter.ctx().data(|data| data.get_temp::<super::gradient::Gradients>(Id::new(GRADIENTS))).and_then(
+        |gradients| match surface {
+            Surface::Panel => gradients.panels,
+            Surface::Track => gradients.tracks,
+            Surface::Clip => gradients.clips,
+        },
+    );
     let options = painter.ctx().data(|data| data.get_temp::<Options>(Id::new(OPTIONS))).unwrap_or_default();
     let level = match surface {
         Surface::Panel => options.panels,
         Surface::Track => options.tracks,
         Surface::Clip => options.clips,
     };
-    if level == 0
-        || !effects_allowed(painter.ctx())
-        || !rect.is_finite()
-        || rect.width() < 12.0
-        || rect.height() < 12.0
-        || !painter.clip_rect().intersects(rect)
-    {
+    if level == 0 {
+        if surface != Surface::Panel && (options.tracks > 0 || options.clips > 0) {
+            painter.ctx().data_mut(|data| {
+                let surfaces = data.get_temp_mut_or_default::<Surfaces>(Id::new(SURFACES));
+                if surfaces.source.len() < 12288 {
+                    let clip_rect = painter.clip_rect().intersect(rect);
+                    surfaces.source.push(egui::epaint::ClippedShape {
+                        clip_rect,
+                        shape: egui::Shape::rect_filled(rect, 0.0, base),
+                    });
+                    if let Some(gradient) = &gradient {
+                        surfaces
+                            .source
+                            .push(egui::epaint::ClippedShape { clip_rect, shape: gradient.mesh(rect).into() });
+                    }
+                }
+            });
+        }
+        if let Some(gradient) = gradient {
+            painter.add(gradient.mesh(rect));
+        }
         return;
     }
     let painter = painter.with_clip_rect(painter.clip_rect().intersect(rect));
     let strength = f32::from(level.min(100)) / 100.0;
     if surface == Surface::Panel {
         let backdrop = painter.ctx().data(|data| data.get_temp::<Backdrop>(Id::new(BACKDROP)));
-        let Some(backdrop) = backdrop else { return };
+        let Some(backdrop) = backdrop else {
+            if let Some(gradient) = gradient {
+                painter.add(gradient.mesh(rect));
+            }
+            return;
+        };
         let uv_min = (rect.min - backdrop.screen.min) / backdrop.screen.size();
         let uv_max = (rect.max - backdrop.screen.min) / backdrop.screen.size();
         painter.image(backdrop.texture, rect, Rect::from_min_max(uv_min.to_pos2(), uv_max.to_pos2()), Color32::WHITE);
@@ -122,8 +221,40 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
     }
     if surface != Surface::Panel {
         painter.add(body_mesh(rect, base, strength));
+        if let Some(gradient) = &gradient {
+            painter.add(gradient.mesh(rect));
+        }
+        let index = painter.add(egui::Shape::Noop);
+        painter.ctx().data_mut(|data| {
+            let surfaces = data.get_temp_mut_or_default::<Surfaces>(Id::new(SURFACES));
+            // Bound CPU geometry even for unusually large visible arrangements.
+            if surfaces.lenses.len() < 4096 {
+                let clip_rect = painter.clip_rect();
+                surfaces
+                    .source
+                    .push(egui::epaint::ClippedShape { clip_rect, shape: egui::Shape::rect_filled(rect, 0.0, base) });
+                surfaces
+                    .source
+                    .push(egui::epaint::ClippedShape { clip_rect, shape: body_mesh(rect, base, strength).into() });
+                if let Some(gradient) = &gradient {
+                    surfaces.source.push(egui::epaint::ClippedShape { clip_rect, shape: gradient.mesh(rect).into() });
+                }
+                surfaces.lenses.push(Lens {
+                    layer: painter.layer_id(),
+                    clip: painter.clip_rect(),
+                    opacity: painter.opacity(),
+                    index,
+                    rect,
+                    strength,
+                    mesh: None,
+                });
+            }
+        });
         painter.add(rim_mesh(rect, strength));
         return;
+    }
+    if let Some(gradient) = gradient {
+        painter.add(gradient.mesh(rect));
     }
     let light = motion::mix(base, Color32::WHITE, 0.28 * strength);
     let shade = motion::mix(base, Color32::BLACK, 0.16 * strength);
@@ -325,6 +456,72 @@ fn rim_mesh(rect: Rect, strength: f32) -> egui::Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn content_lenses_share_one_current_substrate_and_do_not_poison_panel_capture() {
+        use std::sync::{
+            Mutex,
+            atomic::{AtomicUsize, Ordering},
+        };
+        struct Observed {
+            calls: AtomicUsize,
+            sources: Mutex<Vec<Vec<egui::epaint::ClippedShape>>>,
+        }
+        impl Provider for Observed {
+            fn capture(&self, ctx: &Context) -> Option<Backdrop> {
+                // A modal replay must never contain the content capture's native texture.
+                let order: Vec<_> = ctx.memory(|memory| memory.layer_ids().collect());
+                let shapes = ctx.graphics(|layers| layers.clone().drain(&order, &Default::default()));
+                assert!(!shapes.iter().any(
+                    |shape| matches!(&shape.shape, egui::Shape::Mesh(mesh) if mesh.texture_id == TextureId::User(99))
+                ));
+                Some(Backdrop { texture: TextureId::User(100), sharp_texture: None, screen: ctx.content_rect() })
+            }
+            fn capture_surfaces(&self, ctx: &Context, shapes: Vec<egui::epaint::ClippedShape>) -> Option<Backdrop> {
+                self.sources.lock().unwrap().push(shapes);
+                self.calls.fetch_add(1, Ordering::SeqCst);
+                Some(Backdrop {
+                    texture: TextureId::User(99),
+                    sharp_texture: Some(TextureId::User(99)),
+                    screen: ctx.content_rect(),
+                })
+            }
+        }
+        let host = Arc::new(Observed { calls: AtomicUsize::new(0), sources: Mutex::new(Vec::new()) });
+        let ctx = Context::default();
+        install(&ctx, host.clone());
+        configure(&ctx, Options { panels: 50, tracks: 65, clips: 75 });
+        for frame in 0..2 {
+            let mut output = ctx.run_ui(Default::default(), |ui| {
+                begin_frame(ui.ctx(), Default::default());
+                let painter = ui.painter();
+                for (x, surface) in [(20.0, Surface::Track), (240.0, Surface::Clip)] {
+                    let rect = Rect::from_min_size(pos2(x, 20.0), egui::vec2(200.0, 80.0));
+                    let base = if frame == 0 { Color32::RED } else { Color32::BLUE };
+                    painter.rect_filled(rect, 0.0, base);
+                    paint(painter, rect, base, surface);
+                    painter.text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "Sharp notes",
+                        egui::FontId::proportional(15.0),
+                        Color32::WHITE,
+                    );
+                }
+                finish_surfaces(ui.ctx());
+                prepare(ui.ctx());
+            });
+            assert_eq!(host.calls.load(Ordering::SeqCst), frame + 1);
+            assert!(output.shapes.iter().any(
+                |shape| matches!(&shape.shape, egui::Shape::Mesh(mesh) if mesh.texture_id == TextureId::User(99))
+            ));
+            output.textures_delta.clear();
+        }
+        let sources = host.sources.lock().unwrap();
+        assert!(sources.iter().flatten().all(|shape| !matches!(shape.shape, egui::Shape::Text(_))));
+        assert!(matches!(&sources[0][0].shape, egui::Shape::Rect(rect) if rect.fill == Color32::RED));
+        assert!(matches!(&sources[1][0].shape, egui::Shape::Rect(rect) if rect.fill == Color32::BLUE));
+    }
 
     #[test]
     fn coloured_gradient_keeps_the_fill_opacity() {
