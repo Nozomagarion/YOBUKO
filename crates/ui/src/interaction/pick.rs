@@ -11,6 +11,8 @@ use std::path::PathBuf;
 /// The field a chosen path goes into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PickField {
+    /// User-owned background PNG; no desktop capture.
+    BackgroundImage,
     /// Settings › General › Projects folder.
     ProjectsFolder,
     /// Settings › General › Templates folder.
@@ -32,12 +34,13 @@ pub enum PickField {
 impl PickField {
     /// Whether a folder is picked rather than a file.
     pub fn folder(self) -> bool {
-        !matches!(self, Self::StartTemplate | Self::OpenProject)
+        !matches!(self, Self::StartTemplate | Self::OpenProject | Self::BackgroundImage)
     }
 
     /// The dialog's title.
     pub fn title(self) -> &'static str {
         match self {
+            Self::BackgroundImage => "Background image (PNG)",
             Self::ProjectsFolder => "Projects folder",
             Self::TemplatesFolder => "Templates folder",
             Self::StartTemplate => "Template to start from",
@@ -51,7 +54,13 @@ impl PickField {
 
     /// The file extensions a file dialog offers; none for a folder.
     pub fn extensions(self) -> &'static [&'static str] {
-        if self.folder() { &[] } else { &["suhina", "als"] }
+        if self == Self::BackgroundImage {
+            &["png"]
+        } else if self.folder() {
+            &[]
+        } else {
+            &["suhina", "als"]
+        }
     }
 }
 

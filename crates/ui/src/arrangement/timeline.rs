@@ -176,6 +176,8 @@ pub type StackRows = std::collections::HashMap<(TrackId, (u32, u64)), (usize, f6
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Timeline {
+    /// Current recording spans supplied by the session, not committed editable clips.
+    pub recording_spans: Vec<(TrackId, f64, f64)>,
     /// Tracks in project order, then return tracks.
     pub lanes: Vec<Lane>,
     /// The sub-row each stacked clip was put in, by track and [`ClipBox::stack_key`]: the next
@@ -418,6 +420,7 @@ impl Timeline {
         let main_volume_db =
             project.channels.iter().find(|c| c.role == ChannelRole::Master).map(|c| gain_to_db(c.volume));
         let mut timeline = Self {
+            recording_spans: Vec::new(),
             stack_rows,
             ara_notes: std::collections::HashMap::new(),
             ara_activity: std::collections::HashMap::new(),

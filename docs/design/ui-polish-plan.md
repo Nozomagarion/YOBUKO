@@ -66,9 +66,10 @@ not disable its commands or shortcuts.
 
 ## Advanced skinning: gradients and glass
 
-Include optional gradients and Aero-style glass in the long-term appearance design. These are
-proposals, not implemented capabilities. Gradient tracking already exists in #515; glass needs
-a separate feasibility assessment before any implementation commitment.
+Editable panel, track and clip gradient overlays and GPU liquid/refraction are implemented.
+Theme strengths can override global settings. A private user-supplied background image can
+sit beneath tinted UI surfaces; the window stays opaque and does not capture the desktop.
+Playback performance, fallback and high-DPI qualification remain verification work.
 
 - Describe materials through appearance tokens, independently of layout and interaction.
   Keep solid fills as the default and as the fallback for old themes.

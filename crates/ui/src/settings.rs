@@ -258,6 +258,8 @@ pub const ZOOM_STEP: u32 = 10;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
+    /// User-owned PNG beneath translucent surfaces; never captures the desktop.
+    pub background_image: String,
     pub animations: bool,
     pub track_headers: Side,
     pub graphics: Graphics,
@@ -364,6 +366,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             animations: true,
+            background_image: String::new(),
             track_headers: Side::Right,
             graphics: Graphics::Gpu,
             sample_stacking: false,
@@ -560,6 +563,7 @@ impl Settings {
             },
             piano_toolbar = self.toolbar_size.param(),
         ) + &self.view.to_text()
+            + &format!("background_image = {}\n", self.background_image.replace(['\r', '\n'], ""))
             + &format!("agents = {}\n", if self.agents { "on" } else { "off" })
             + &self.updates.to_text()
             + &self.midi_inputs_off.iter().map(|port| format!("midi_input_off = {port}\n")).collect::<String>()
@@ -585,6 +589,7 @@ impl Settings {
             }
             match (key, value) {
                 ("animations", "on" | "off") => settings.animations = value == "on",
+                ("background_image", path) => settings.background_image = path.to_string(),
                 ("sample_stacking", "on" | "off") => settings.sample_stacking = value == "on",
                 ("agents", "on" | "off") => settings.agents = value == "on",
                 ("midi_stacking", "on" | "off") => settings.midi_stacking = value == "on",
@@ -866,6 +871,7 @@ midi_input_off = Keys
             mixer_controls: MixerControls::Knob,
             plugin_editors: EditorPlacement::DeviceView,
             theme: "Night blue".into(),
+            background_image: "C:/Pictures/background.png".into(),
             projects_folder: "C:/Music/Songs = mine".into(),
             templates_folder: "/home/me/templates".into(),
             nam_models_folder: "/home/me/nam models".into(),

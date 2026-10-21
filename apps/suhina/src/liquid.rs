@@ -25,6 +25,7 @@ struct State {
     vertical: wgpu::RenderPipeline,
     sampler: wgpu::Sampler,
     font: Option<egui::ColorImage>,
+    background: Option<egui::TextureId>,
 }
 
 struct Targets {
@@ -84,6 +85,7 @@ impl State {
                 ..Default::default()
             }),
             font: None,
+            background: None,
         }
     }
 }
@@ -233,10 +235,28 @@ impl Liquid {
             );
             state.font = Some(font);
         }
+        let background = suhina_ui::kit::liquid::background_image(ctx);
+        let background_id = background.as_ref().map(|image| image.id);
+        if state.background != background_id {
+            if let Some(old) = state.background.take() {
+                state.renderer.free_texture(&old);
+            }
+            if let Some(image) = background {
+                state.renderer.update_texture(
+                    device,
+                    queue,
+                    image.id,
+                    &egui::epaint::ImageDelta::full(image.pixels, Default::default()),
+                );
+                state.background = Some(image.id);
+            }
+        }
         // The UI's atlas covers text and vector meshes. An unsupported image/callback forces
         // a solid fallback instead of silently dropping live content from the backdrop.
         if let Some(job) = jobs.iter().find(|job| match &job.primitive {
-            egui::epaint::Primitive::Mesh(mesh) => mesh.texture_id != egui::TextureId::Managed(0),
+            egui::epaint::Primitive::Mesh(mesh) => {
+                mesh.texture_id != egui::TextureId::Managed(0) && Some(mesh.texture_id) != background_id
+            }
             egui::epaint::Primitive::Callback(_) => true,
         }) {
             if suhina_plugins::trace::on() {
@@ -561,9 +581,9 @@ mod tests {
                     let gradient = Gradient {
                         angle: 37,
                         stops: vec![
-                            Stop { position: 0, color: egui::Color32::RED },
-                            Stop { position: 40, color: egui::Color32::from_rgb(30, 200, 180) },
-                            Stop { position: 100, color: egui::Color32::BLUE },
+                            Stop { transparent_rgb: None, position: 0, color: egui::Color32::RED },
+                            Stop { transparent_rgb: None, position: 40, color: egui::Color32::from_rgb(30, 200, 180) },
+                            Stop { transparent_rgb: None, position: 100, color: egui::Color32::BLUE },
                         ],
                     };
                     material::begin_frame(

@@ -432,6 +432,7 @@ pub struct ArrangementViewState {
     /// Where the volume, pan and gain fields were drawn last frame: the wheel over one changes its
     /// value instead of scrolling the view, which has to know before they draw themselves again.
     value_areas: Vec<Rect>,
+    send_scroll_areas: Vec<Rect>,
     /// Volume and pan as knobs instead of fields (Settings › Session and mixer).
     pub knobs: bool,
     /// The track the user last worked on: the header they clicked, or the track of the clip they
@@ -536,6 +537,7 @@ impl Default for ArrangementViewState {
             track_anchor: None,
             folds: Folds::default(),
             value_areas: Vec::new(),
+            send_scroll_areas: Vec::new(),
             knobs: false,
             targeted: None,
             track_drag: None,
@@ -1214,9 +1216,10 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     // wheel alone scrolls, over a value field too. Ctrl and the wheel over a value field are the
     // field's (`value_areas`), so the view leaves them alone.
     let fields = std::mem::take(&mut state.value_areas);
+    let sends = std::mem::take(&mut state.send_scroll_areas);
     if let Some(pointer) = widgets::pointer_over(ui, area) {
-        let over_field = fields.iter().any(|rect| rect.contains(pointer))
-            && (widgets::wheel_moves_value(ui) || ui.input(|i| i.modifiers.shift));
+        let over_field = (fields.iter().any(|rect| rect.contains(pointer)) && widgets::wheel_moves_value(ui))
+            || (sends.iter().any(|rect| rect.contains(pointer)) && ui.input(|i| i.modifiers.shift));
         let zoom = ui.input(|i| i.zoom_delta());
         if zoom != 1.0 && time.contains(pointer) && !over_field {
             let beat = (pointer.x - time.left() + state.scroll.x) / state.beat_width;
@@ -1233,7 +1236,12 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
                 state.zoom_lanes(&timeline.lanes, (steps * LANE_ZOOM_PER_POINT).exp(), pointer.y - lanes_area.top());
             }
         } else {
-            state.scroll -= wheel;
+            // Track controls have their own horizontal send navigation. Only the
+            // timeline owns horizontal arrangement scrolling; vertical lanes stay linked.
+            if time.contains(pointer) {
+                state.scroll.x -= wheel.x;
+            }
+            state.scroll.y -= wheel.y;
         }
     }
     // Free movement with the middle button held: the timeline follows the pointer both ways.
@@ -1854,6 +1862,28 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
                     actions,
                 );
                 ghost = ghost.or(found);
+            }
+        }
+        for &(track, start, end) in &timeline.recording_spans {
+            if track == clips_lane.track {
+                let rect = Rect::from_min_max(
+                    Pos2::new(x_of(start), row.time.top()),
+                    Pos2::new(x_of(end).max(x_of(start) + 2.0), row.time.bottom()),
+                )
+                .intersect(row.time);
+                if rect.is_positive() {
+                    lanes_painter.rect_filled(rect, 0.0, theme::recording().gamma_multiply(0.35));
+                    lanes_painter.rect_stroke(rect, 0.0, theme::hairline(theme::recording()), egui::StrokeKind::Inside);
+                    widgets::text_in(
+                        &lanes_painter,
+                        rect.shrink(3.0),
+                        Align2::LEFT_TOP,
+                        "Recording…",
+                        theme::ui_font(theme::TEXT_SMALL),
+                        theme::text_primary(),
+                    );
+                }
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(33));
             }
         }
         // The insert marker: where a click in this lane put the play start, while it is there.
@@ -4126,7 +4156,7 @@ fn track_header(
                 Pos2::new(sends_left, below.top()),
                 Pos2::new(sends_left + step * shown_sends as f32 + navigation - SEND_GAP, below.bottom()),
             );
-            state.value_areas.push(viewport.intersect(clip));
+            state.send_scroll_areas.push(viewport.intersect(clip));
             if ui.rect_contains_pointer(viewport.intersect(clip)) {
                 let scroll = ui.input_mut(|i| {
                     if i.modifiers.shift {

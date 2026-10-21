@@ -97,7 +97,7 @@ fn icon_color(kind: ItemKind) -> Color32 {
         ItemKind::Sample => theme::track_color_3(),
         ItemKind::Instrument | ItemKind::Preset => theme::track_color_4(),
         ItemKind::Effect | ItemKind::AudioEffect => theme::track_color_1(),
-        ItemKind::Folder | ItemKind::Heading | ItemKind::Project => theme::text_secondary(),
+        ItemKind::Folder | ItemKind::Heading | ItemKind::Project => theme::browser_text_secondary(),
     }
 }
 
@@ -146,7 +146,7 @@ fn icon(painter: &egui::Painter, rect: Rect, kind: ItemKind, color: Color32) {
 }
 
 fn tag_color(text: &str) -> Color32 {
-    theme::parse_hex(text).unwrap_or_else(theme::text_hint)
+    theme::parse_hex(text).unwrap_or_else(theme::browser_text_hint)
 }
 
 /// Runs a library or preview command for the browser; an error goes to the status bar.
@@ -228,8 +228,8 @@ pub fn show(ui: &mut Ui, area: Rect, state: &mut BrowserState, cx: Context<'_>) 
         }
         let lit = motion::toward(ui.ctx(), response.id.with("on"), chosen, motion::VALUE);
         let idle = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(rect, 0.0, motion::mix(idle, theme::text_value(), lit));
-        let text = motion::mix(theme::text_secondary(), theme::window_background(), lit);
+        painter.rect_filled(rect, 0.0, motion::mix(idle, theme::browser_text_value(), lit));
+        let text = motion::mix(theme::browser_text_secondary(), theme::window_background(), lit);
         widgets::text_in(&painter, rect, Align2::CENTER_CENTER, title, small.clone(), text);
         x = rect.right() + FILTER_GAP;
     }
@@ -323,9 +323,11 @@ fn search_field(ui: &mut Ui, rect: Rect, state: &mut BrowserState, key: &str, ou
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, theme::window_background());
     let glass = Pos2::new(rect.left() + PAD + 5.0, rect.center().y);
-    painter.circle_stroke(glass + Vec2::new(-1.0, -1.0), 3.5, Stroke::new(1.1, theme::text_hint()));
-    painter
-        .line_segment([glass + Vec2::new(1.5, 1.5), glass + Vec2::new(4.5, 4.5)], Stroke::new(1.1, theme::text_hint()));
+    painter.circle_stroke(glass + Vec2::new(-1.0, -1.0), 3.5, Stroke::new(1.1, theme::browser_text_hint()));
+    painter.line_segment(
+        [glass + Vec2::new(1.5, 1.5), glass + Vec2::new(4.5, 4.5)],
+        Stroke::new(1.1, theme::browser_text_hint()),
+    );
     let hint = theme::mono_font(theme::TEXT_TINY);
     let key_width = widgets::text_width(ui, key, hint.clone());
     let field = Rect::from_min_max(
@@ -367,9 +369,9 @@ fn search_field(ui: &mut Ui, rect: Rect, state: &mut BrowserState, key: &str, ou
     let edit = egui::TextEdit::singleline(&mut state.search)
         .id(id)
         .frame(egui::Frame::NONE)
-        .hint_text(egui::RichText::new("Search").color(theme::text_hint()))
+        .hint_text(egui::RichText::new("Search").color(theme::browser_text_hint()))
         .font(theme::ui_font(theme::TEXT))
-        .text_color(theme::text_primary());
+        .text_color(theme::browser_text_primary());
     let response = crate::kit::widgets::text_input_at(ui, field, edit);
     if std::mem::take(&mut state.focus_search) {
         response.request_focus();
@@ -394,7 +396,7 @@ fn search_field(ui: &mut Ui, rect: Rect, state: &mut BrowserState, key: &str, ou
         Align2::RIGHT_CENTER,
         key,
         hint,
-        theme::text_hint(),
+        theme::browser_text_hint(),
     );
 }
 
@@ -448,7 +450,7 @@ fn sidebar_view(
     let title = |y: &mut f32, text: &str| {
         *y += 8.0;
         let rect = Rect::from_min_size(Pos2::new(area.left() + PAD, *y), Vec2::new(area.width() - PAD, 12.0));
-        widgets::text_in(&painter, rect, Align2::LEFT_CENTER, text, title_font.clone(), theme::text_hint());
+        widgets::text_in(&painter, rect, Align2::LEFT_CENTER, text, title_font.clone(), theme::browser_text_hint());
         *y += 12.0;
     };
     let mut entry = |ui: &mut Ui, y: &mut f32, target: Target, label: &str, note: Option<&str>| -> egui::Response {
@@ -488,7 +490,7 @@ fn sidebar_view(
                     };
                     painter.rect_filled(rect.intersect(area), 0.0, fill);
                     let text = Rect::from_min_max(rect.min + Vec2::new(PAD + 2.0, 0.0), rect.max - Vec2::new(PAD, 0.0));
-                    let color = if chosen { theme::text_primary() } else { theme::text_secondary() };
+                    let color = if chosen { theme::browser_text_primary() } else { theme::browser_text_secondary() };
                     widgets::text_in(&painter, text, Align2::LEFT_CENTER, label, item_font.clone(), color);
                 }
                 return response;
@@ -502,7 +504,7 @@ fn sidebar_view(
         if rect.intersects(area) {
             painter.rect_filled(rect.intersect(area), 0.0, fill);
             let text = Rect::from_min_max(rect.min + Vec2::new(PAD + 2.0, 0.0), rect.max - Vec2::new(PAD, 0.0));
-            let color = if chosen { theme::text_primary() } else { theme::text_secondary() };
+            let color = if chosen { theme::browser_text_primary() } else { theme::browser_text_secondary() };
             widgets::text_in(&painter, text, Align2::LEFT_CENTER, label, item_font.clone(), color);
             if let Some(note) = note.filter(|_| !chosen) {
                 widgets::text_in(
@@ -511,7 +513,7 @@ fn sidebar_view(
                     Align2::RIGHT_CENTER,
                     note,
                     theme::mono_font(theme::TEXT_TINY),
-                    theme::text_hint(),
+                    theme::browser_text_hint(),
                 );
             }
         }
@@ -524,7 +526,8 @@ fn sidebar_view(
                 Id::new(("browser-place-clear", place.param())),
                 "Show everything",
             );
-            let color = motion::mix(theme::text_hint(), theme::text_primary(), widgets::hover(ui, &cleared));
+            let color =
+                motion::mix(theme::browser_text_hint(), theme::browser_text_primary(), widgets::hover(ui, &cleared));
             widgets::text_in(&painter, clear, Align2::CENTER_CENTER, "×", item_font.clone(), color);
             if cleared.clicked() {
                 state.place = None;
@@ -598,7 +601,8 @@ fn sidebar_view(
     match state.new_folder.as_mut() {
         None => {
             let response = widgets::button_area(ui, rect.intersect(area), Id::new("browser-add-folder"), "Add folder");
-            let color = motion::mix(theme::text_hint(), theme::text_primary(), widgets::hover(ui, &response));
+            let color =
+                motion::mix(theme::browser_text_hint(), theme::browser_text_primary(), widgets::hover(ui, &response));
             widgets::text_in(
                 &painter,
                 rect.shrink2(Vec2::new(PAD + 2.0, 0.0)),
@@ -617,7 +621,7 @@ fn sidebar_view(
                 .id(id)
                 .hint_text("A folder's path")
                 .font(item_font.clone())
-                .text_color(theme::text_primary());
+                .text_color(theme::browser_text_primary());
             let field = rect.shrink2(Vec2::new(4.0, 1.0));
             let browse =
                 Rect::from_min_size(Pos2::new(field.right() - 56.0, field.top()), Vec2::new(56.0, field.height()));
@@ -693,7 +697,7 @@ fn results_view(
             Align2::CENTER_TOP,
             text,
             theme::ui_font(theme::TEXT_SMALL),
-            theme::text_hint(),
+            theme::browser_text_hint(),
         );
         return;
     }
@@ -738,7 +742,7 @@ fn results_view(
         let lead = Rect::from_min_size(Pos2::new(x, rect.top()), Vec2::new(10.0, ROW));
         let previewable = matches!(row.item.kind, ItemKind::Sample | ItemKind::Midi);
         if row.opens {
-            widgets::chevron(&painter, lead.center(), row.open, theme::text_hint());
+            widgets::chevron(&painter, lead.center(), row.open, theme::browser_text_hint());
         } else if previewable && (selected || response.hovered()) {
             let button = widgets::button_area(
                 ui,
@@ -751,7 +755,7 @@ fn results_view(
                 &painter,
                 lead.center(),
                 playing,
-                if button.hovered() { theme::text_primary() } else { theme::text_secondary() },
+                if button.hovered() { theme::browser_text_primary() } else { theme::browser_text_secondary() },
                 7.0,
             );
             if button.clicked() {
@@ -767,7 +771,14 @@ fn results_view(
             let small = theme::ui_font(theme::TEXT_TINY);
             if let Some((left, right)) = column_span(area, 1) {
                 let span = Rect::from_min_max(Pos2::new(left, rect.top()), Pos2::new(right, rect.bottom()));
-                widgets::text_in(&painter, span, Align2::RIGHT_CENTER, columns.format, small, theme::text_hint());
+                widgets::text_in(
+                    &painter,
+                    span,
+                    Align2::RIGHT_CENTER,
+                    columns.format,
+                    small,
+                    theme::browser_text_hint(),
+                );
             }
         }
         // On the right: a sample's length, a device's kind, where a search found it. The
@@ -796,7 +807,7 @@ fn results_view(
         let name_space = (name_right - meta_width - x).max(0.0);
         let item_tags = projects.file_library_mut().item_tags(&row.item.key);
         let dots = item_tags.len() as f32 * DOT_HIT;
-        let color = if selected { theme::text_primary() } else { theme::text_value() };
+        let color = if selected { theme::browser_text_primary() } else { theme::browser_text_value() };
         let galley = widgets::fitted(&painter, &row.item.name, font.clone(), color, (name_space - dots).max(0.0));
         let name_pos = Pos2::new(x, rect.center().y - galley.size().y / 2.0);
         let name_end = name_pos.x + galley.size().x;
@@ -823,7 +834,14 @@ fn results_view(
         if !meta.is_empty() {
             let meta_rect =
                 Rect::from_min_max(Pos2::new(rect.right() - meta_width, rect.top()), rect.max - Vec2::new(PAD, 0.0));
-            widgets::text_in(&painter, meta_rect, Align2::RIGHT_CENTER, &meta, mono.clone(), theme::text_hint());
+            widgets::text_in(
+                &painter,
+                meta_rect,
+                Align2::RIGHT_CENTER,
+                &meta,
+                mono.clone(),
+                theme::browser_text_hint(),
+            );
         }
         if response.is_pointer_button_down_on() && ui.input(|i| i.pointer.primary_pressed()) {
             pressed = Some((index, ui.input(|i| i.modifiers)));
@@ -1098,8 +1116,8 @@ fn plugins_view_switch(
             run(projects, "library.setPluginsView", json!({ "view": view.name() }), out);
         }
         let idle = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(rect, 0.0, if chosen == view { theme::text_value() } else { idle });
-        let text = if chosen == view { theme::window_background() } else { theme::text_secondary() };
+        painter.rect_filled(rect, 0.0, if chosen == view { theme::browser_text_value() } else { idle });
+        let text = if chosen == view { theme::window_background() } else { theme::browser_text_secondary() };
         widgets::text_in(&painter, rect, Align2::CENTER_CENTER, name, small.clone(), text);
         x = rect.right() + FILTER_GAP;
     }
@@ -1153,7 +1171,7 @@ fn columns_header(ui: &mut Ui, area: Rect, state: &mut BrowserState) {
         let chosen = sorted == index as u8;
         let label =
             if chosen { format!("{name} {}", if descending { "▼" } else { "▲" }) } else { name.to_string() };
-        let color = if chosen { theme::text_primary() } else { theme::text_hint() };
+        let color = if chosen { theme::browser_text_primary() } else { theme::browser_text_hint() };
         let hover = motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response));
         painter.rect_filled(rect, 0.0, hover);
         let align = if index == 0 { Align2::LEFT_CENTER } else { Align2::RIGHT_CENTER };
@@ -1240,7 +1258,7 @@ fn preview_strip(
                 Align2::LEFT_CENTER,
                 "Select a sample or MIDI file to preview",
                 theme::ui_font(theme::TEXT_SMALL),
-                theme::text_hint(),
+                theme::browser_text_hint(),
             );
             return;
         }
@@ -1272,7 +1290,7 @@ fn preview_strip(
         &painter,
         play.center(),
         playing_this,
-        if playing_this { theme::accent() } else { theme::text_primary() },
+        if playing_this { theme::accent() } else { theme::browser_text_primary() },
         7.0,
     );
     if response.clicked() {
@@ -1297,7 +1315,7 @@ fn preview_strip(
     let facts = facts.join("  ");
     let facts_width = widgets::text_width(ui, &facts, mono.clone());
     let text_rect = Rect::from_min_max(Pos2::new(play.right() + PAD, top.top()), top.max);
-    widgets::text_in(&painter, text_rect, Align2::RIGHT_CENTER, &facts, mono, theme::text_secondary());
+    widgets::text_in(&painter, text_rect, Align2::RIGHT_CENTER, &facts, mono, theme::browser_text_secondary());
     let name_rect =
         Rect::from_min_max(text_rect.min, Pos2::new(text_rect.right() - facts_width - PAD, text_rect.bottom()));
     widgets::text_in(
@@ -1306,7 +1324,7 @@ fn preview_strip(
         Align2::LEFT_CENTER,
         &item.name,
         theme::ui_font(theme::TEXT_SMALL),
-        theme::text_primary(),
+        theme::browser_text_primary(),
     );
 
     // The waveform, or the notes, with the part played brighter and the playhead.
@@ -1343,9 +1361,13 @@ fn preview_strip(
         crate::kit::waveform::paint(
             &clipped(done),
             &shape,
-            crate::kit::waveform::Colors::from(theme::text_secondary()),
+            crate::kit::waveform::Colors::from(theme::browser_text_secondary()),
         );
-        crate::kit::waveform::paint(&clipped(rest), &shape, crate::kit::waveform::Colors::from(theme::text_hint()));
+        crate::kit::waveform::paint(
+            &clipped(rest),
+            &shape,
+            crate::kit::waveform::Colors::from(theme::browser_text_hint()),
+        );
     } else if let Some(notes) = &info.notes {
         let (low, high) = notes.iter().fold((127u8, 0u8), |(l, h), n| (l.min(n.2), h.max(n.2)));
         let span = f32::from(high.saturating_sub(low).max(1));
@@ -1354,7 +1376,7 @@ fn preview_strip(
             let x0 = wave.left() + (*start / beats) as f32 * wave.width();
             let x1 = wave.left() + ((start + length) / beats) as f32 * wave.width();
             let y = wave.bottom() - f32::from(key - low) / span * (wave.height() - 2.0) - 2.0;
-            let color = if x0 <= played_x { theme::text_secondary() } else { theme::text_hint() };
+            let color = if x0 <= played_x { theme::browser_text_secondary() } else { theme::browser_text_hint() };
             painter.rect_filled(Rect::from_min_max(Pos2::new(x0, y), Pos2::new(x1.max(x0 + 1.0), y + 2.0)), 0.0, color);
         }
     } else {
@@ -1364,7 +1386,7 @@ fn preview_strip(
             Align2::LEFT_CENTER,
             "Reading…",
             theme::ui_font(theme::TEXT_SMALL),
-            theme::text_hint(),
+            theme::browser_text_hint(),
         );
     }
     if playing_this {
@@ -1453,7 +1475,7 @@ fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut 
                 },
             )
         });
-        painter.rect_filled(box_rect, 3.0, if on { theme::text_value() } else { theme::control_background() });
+        painter.rect_filled(box_rect, 3.0, if on { theme::browser_text_value() } else { theme::control_background() });
         if on {
             painter.rect_filled(box_rect.shrink(4.0), 0.0, theme::window_background());
         }
@@ -1539,7 +1561,7 @@ fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut 
                 Align2::RIGHT_CENTER,
                 &format!("{} items", counts.get(&tag.name).copied().unwrap_or(0)),
                 theme::mono_font(theme::TEXT_TINY),
-                theme::text_hint(),
+                theme::browser_text_hint(),
             );
         }
         // Remove, armed by the first click and done by the second; Keep stands it down.
@@ -1560,7 +1582,7 @@ fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut 
             Align2::CENTER_CENTER,
             &remove_label,
             theme::ui_font(theme::TEXT_SMALL),
-            if armed { theme::recording() } else { theme::text_secondary() },
+            if armed { theme::recording() } else { theme::browser_text_secondary() },
         );
         if remove.clicked() {
             if armed {
@@ -1586,7 +1608,7 @@ fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut 
                 Align2::CENTER_CENTER,
                 "Keep",
                 theme::ui_font(theme::TEXT_SMALL),
-                theme::text_secondary(),
+                theme::browser_text_secondary(),
             );
             if keep.clicked() {
                 state.tag_editor_confirm = None;
@@ -1706,7 +1728,7 @@ fn footer_view(
         });
         painter.circle_filled(rect.center(), DOT / 2.0, tag_color(&tag.color));
         if on {
-            painter.circle_stroke(rect.center(), DOT / 2.0 + 1.5, Stroke::new(1.0, theme::text_primary()));
+            painter.circle_stroke(rect.center(), DOT / 2.0 + 1.5, Stroke::new(1.0, theme::browser_text_primary()));
         }
     }
     let count = match state.selected.len() {
@@ -1730,8 +1752,8 @@ fn footer_view(
         }
         let lit = motion::toward(ui.ctx(), response.id.with("on"), state.tag_editor, motion::VALUE);
         let idle = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(rect, 0.0, motion::mix(idle, theme::text_value(), lit));
-        let text = motion::mix(theme::text_secondary(), theme::window_background(), lit);
+        painter.rect_filled(rect, 0.0, motion::mix(idle, theme::browser_text_value(), lit));
+        let text = motion::mix(theme::browser_text_secondary(), theme::window_background(), lit);
         widgets::text_in(&painter, rect, Align2::CENTER_CENTER, "Edit tags", small.clone(), text);
     }
     widgets::text_in(
@@ -1740,7 +1762,7 @@ fn footer_view(
         Align2::RIGHT_CENTER,
         &count,
         theme::mono_font(theme::TEXT_TINY),
-        theme::text_hint(),
+        theme::browser_text_hint(),
     );
     edit_rect
 }

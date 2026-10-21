@@ -53,8 +53,8 @@ replaces them.
 - Parts marked **(planned)** are designed but not built yet; everything else is what the app
   draws today.
 - Type, by role:
-  - 11 px `Encode Sans Semi Expanded` for UI text (names, labels of controls, menu items);
-  - 10 px for small values and labels, and every number, time and position in `IBM Plex Mono`
+  - 12 px `Manrope` for UI text (names, labels of controls, menu items);
+  - 11 px for small values and labels, and every number, time and position in `IBM Plex Mono`
     (bar numbers in the ruler too);
   - 9 px only for tags beside a name: a device's kind, a clip's gain, key labels in the clip
     editor;
@@ -260,7 +260,7 @@ track along the bottom edge.
 | Fade handles | 7 × 7 px squares at the clip's top corners, inside the clip, shown while it is hovered or selected (and while dragged) on clips at least 21 × 14 px; with a fade, at the fade's end along the top edge. `text.secondary`, `text.primary` hovered, 1 px `window.background` outline; an 11 × 11 px area takes the pointer, drawn and hit above the gain field. A horizontal drag sets the fade (`clip.setFades`): the fade's end snaps to the grid, Alt for free; double-click removes it; right-click opens a menu of the shapes with the current one checked |
 | Fade curve handle | A 7 px circle on the fade's line half-way through the fade, on fades at least 21 px wide, drawn and hit (11 × 11 px) like the fade handles. A vertical drag moves it with the pointer and bends the curve so the line passes through it (`clip.setFades` `inCurve`/`outCurve`): up towards +1, down towards −1, stopping at either; double-click sets it to 0. The line is drawn with at most 256 points |
 | Playhead | 1 px `accent` through the ruler and all lanes while playing; while stopped, at the play start marker once it is past beat 0 |
-| Header column | 232 px by default, dragged wider or narrower by its inner edge (160–520 px); on the right of the timeline, or the left (Settings, or right-click above the headers); `panel.background` (`control.background` when selected), the 6 px colour band down its left edge (Colour palette), 5 px top/bottom and 6 px side padding after the band (nested colour bands narrow from 6 to 4 to 3 to 2 px, separated by 2 px), 6 px between groups. A click selects the track (Ctrl adds), a drag moves it, a right-click opens its menu (name field, colour swatches, group, ungroup, delete) |
+| Header column | 336 px by default, dragged wider or narrower by its inner edge (160–520 px); on the right of the timeline, or the left (Settings, or right-click above the headers); `panel.background` (`control.background` when selected), the 6 px colour band down its left edge (Colour palette), 5 px top/bottom and 6 px side padding after the band (nested colour bands narrow from 6 to 4 to 3 to 2 px, separated by 2 px), 6 px between groups. A click selects the track (Ctrl adds), a drag moves it, a right-click opens its menu (name field, colour swatches, group, ungroup, delete) |
 | Group fold triangle | 12 px at the start of a group's first row, before the track number, on a group that holds tracks: a 7 × 4 px triangle, `text.hint` (`text.primary` under the pointer), pointing right while the group is folded and down while it is open. A click folds the group's tracks away or opens it ([spec](../spec/arrangement-editing.md) › Folded groups); a folded group's row then draws the clips of the track it stands in for |
 | Automation lanes | Under a track while its envelope button (an 18 × 15 px button at the end of the header's first row: `control.background`, `control.activeBackground` while lanes are shown, a small envelope line in `text.secondary`, `text.primary` when shown) has them open: 40 px each, a 1 px `border` under each. The envelope is a 1.5 px line in the track colour (`text.hint` while a manual change has it off), 4 px from the lane's top and bottom; points are 3.5 px circles (4.5 px hovered) in the same colour, `text.primary` when selected, with a 1 px `window.background` outline; an 11 × 11 px area takes the pointer. A selection box is `accent` at 15 % with a 1 px `accent` line. The lane's header (`panel.background`, 5 px top and 6 px side padding): a dropdown of track mixer, built-in device and .sd device parameters (its menu, 240 px wide, under the dropdown or over it when there is more room above, never moving while open: a search field, then the list in a scroll area at most 60 % of the window tall and never past the window, 8 px from its edge, the mixer's rows first, then a heading per device and, indented under an open one, a heading per group: a heading is a row as tall as a button, the browser's chevron in `text.hint` 6 px from its left, the group's name 14 px from its left in the text colour, its parameter count (" •" with points) in `text.hint` 4 px from its right, `widgets.hovered` fill on hover; an open heading's rows are indented), the 30 × 15 px On/Off toggle (as the track-on toggle; off has a 1 px `accent` inset), 16 × 15 px **+** and **×** buttons (`control.background`, 11 px `text.secondary`), and under them a 10 px line: the number of points in `text.hint`, "Off: set by hand" in `text.secondary`, or "Click the lane to add a point". Gestures: [automation spec](../spec/automation.md#in-the-arrangement-view) |
 | Return and main rows | 20 px each along the bottom, `panel.background` headers: a return's colour band as a track's (the main row has none, its name lined up with the others), the name in 11 px and the volume as a plain 10 px mono value on the right (dragged up or down; the main track's is shown only); between them the meter lying down, 48 px long, 6 px left of the volume, its clip light at the right end |
@@ -721,7 +721,7 @@ The rest of this table is planned.
 
 The control bar is 40 px tall; custom transport fields and buttons are 28 px tall with
 6 px vertical padding. Dense list rows retain their existing height. Arrangement headers
-default to 336 px wide; new lanes default to 64 px; existing saved dimensions and manual
+default to 336 px wide; new lanes default to 40 px; existing saved dimensions and manual
 resizing remain in use. Header surfaces use `track.headerBackground` and
 `track.headerSelectedBackground`, both editable theme colors, with a colored edge band
 and a selection outline. Muting, solo, arming, cueing, routing and sends remain available.
@@ -737,7 +737,7 @@ The radius is currently a shared drawing rule, not yet an exposed appearance set
 
 ### Header proportion refinement
 
-The default header width is 304 px, with a 72 px minimum volume field before the compact
+The default header width is 336 px, with a 72 px minimum volume field before the compact
 layout takes over. The pan field is 40 px wide. Track names use a 12 px label, separate
 from the 10 px values. The horizontal volume uses a capsule silhouette with its level fill
 clipped inside that silhouette and 8 px horizontal text padding. Existing header resizing
@@ -838,3 +838,11 @@ stops with position and opacity. The layout wraps and scrolls in a narrow window
 They save/reset/copy with the theme; no project track or clip colours are rewritten.
 Content refraction uses one foreground-free substrate per frame, inserted before sharp
 labels, controls, notes and waveforms.
+
+### Application identity bar
+
+The 28 px application bar precedes the menu. Suhina is always present; Appearance chooses
+Left or Centre. Optional project name/unsaved marker and tempo/time signature share their own
+position. Single-line text truncates with an ellipsis inside separate cells before reaching
+the three 32 px window buttons. On Windows this replaces native decorations, supports dragging,
+double-click maximise and a 5 px resize edge/corner. Other platforms retain native decorations.

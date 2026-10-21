@@ -6,6 +6,8 @@
 //! Every change goes through `Session::execute` (AGENTS.md rule 6); the window only reads the
 //! project and the engine's monitor to draw them.
 
+mod application_bar;
+mod background;
 pub mod closing_dialog;
 pub mod loading_dialog;
 pub mod missing_files;
@@ -270,6 +272,7 @@ struct NamCache {
 
 /// The window's state.
 pub struct App {
+    background: background::Background,
     /// When the level meters last showed something new (`ui.input` time).
     meters_moved_at: f64,
     projects: Projects,
@@ -493,6 +496,7 @@ impl App {
         projects.read_local_audio(true);
         Self {
             projects,
+            background: background::Background::default(),
             shown_project: None,
             stashes: HashMap::new(),
             open_prompt: None,
@@ -1408,6 +1412,7 @@ impl App {
             PickField::TemplatesFolder | PickField::StartTemplate => Some(self.templates_folder()),
             PickField::SaveFolder => self.save_prompt.as_ref().and_then(|p| folder_of(&p.folder)),
             PickField::BrowserFolder => None,
+            PickField::BackgroundImage => None,
         };
         self.pick_request = Some(PickRequest { field, start });
     }
@@ -1424,6 +1429,7 @@ impl App {
         let text = path.display().to_string();
         match field {
             PickField::ProjectsFolder => self.settings.projects_folder = text,
+            PickField::BackgroundImage => self.settings.background_image = text,
             PickField::NamModelsFolder => self.settings.nam_models_folder = text,
             PickField::IrFolder => self.settings.irs_folder = text,
             PickField::TemplatesFolder => self.settings.templates_folder = text,
@@ -2207,7 +2213,8 @@ impl App {
         }
         self.projects.set_editor_embedding(self.settings.plugin_editors == EditorPlacement::DeviceView);
         // Tracks keep the colour they show when others come and go (#690, #709).
-        if let Ok(session) = self.projects.session_mut(None) {
+        for id in self.projects.ids() {
+            let Ok(session) = self.projects.session_mut(Some(id)) else { continue };
             let palette = crate::interaction::grid::track_palette();
             let fixed = self
                 .settings
@@ -2251,6 +2258,25 @@ impl App {
 
     /// Draws the window into `ui` and runs what the user asked for.
     pub fn ui(&mut self, ui: &mut Ui) {
+        let image_path = if self.settings.theme == "high-contrast" { "" } else { &self.settings.background_image };
+        application_bar::resize_edges(ui);
+        let visible = match self.background.paint(ui, image_path, self.settings.view.background_blur) {
+            Ok(visible) => visible,
+            Err(error) => {
+                self.status = Status::Error(error);
+                false
+            }
+        };
+        let mut palette = self.themes.palette(&self.settings.theme);
+        if visible {
+            let opacity = f32::from(self.settings.view.background_tint.min(100)) / 100.0;
+            palette.window_background = palette.window_background.gamma_multiply(opacity);
+            palette.panel_background = palette.panel_background.gamma_multiply(opacity);
+            palette.border = palette.border.gamma_multiply(opacity);
+        }
+        if theme::palette() != palette {
+            theme::set_palette(ui.ctx(), palette);
+        }
         let liquid =
             self.themes.get(&self.settings.theme).and_then(|theme| theme.liquid).unwrap_or(self.settings.view.liquid);
         crate::kit::liquid::configure(ui.ctx(), liquid);
@@ -2387,6 +2413,29 @@ impl App {
         }
         self.frame_trace.mark("plug-in requests");
 
+        let project_info = self
+            .projects
+            .active()
+            .map(|id| {
+                let name = self.projects.name(id).unwrap_or("Untitled");
+                let dirty = self.projects.get(id).is_some_and(Session::has_unsaved_changes);
+                format!("{name}{}", if dirty { " •" } else { "" })
+            })
+            .unwrap_or_default();
+        let timing = self
+            .session()
+            .map(|session| {
+                let transport = &session.project().transport;
+                format!(
+                    "{:.1} BPM · {}/{}",
+                    transport.tempo_bpm, transport.time_signature.numerator, transport.time_signature.denominator
+                )
+            })
+            .unwrap_or_default();
+        egui::Panel::top("application-bar")
+            .exact_size(28.0)
+            .frame(egui::Frame::NONE.fill(theme::panel_background()))
+            .show(ui, |ui| application_bar::show(ui, self.settings.view, &project_info, &timing));
         egui::Panel::top("menu-bar")
             .exact_size(theme::MENU_BAR)
             .frame(egui::Frame::NONE.fill(theme::panel_background()).inner_margin(egui::Margin::symmetric(4, 0)))
@@ -2681,6 +2730,7 @@ impl App {
                             self.arrangement.grid = session.quantization();
                             let mut timeline = timeline;
                             timeline.follow_automation(session.project());
+                            timeline.recording_spans = session.arrangement_recording_spans();
                             timeline.midi_ports = self.projects.midi_ports().to_vec();
                             // What ARA plug-ins found in the audio clips, as it is now (#720).
                             timeline.ara_notes = timeline
@@ -4261,6 +4311,7 @@ impl App {
                 !matches!(
                     request,
                     crate::settings::settings_view::ThemeRequest::Edit(_)
+                        | crate::settings::settings_view::ThemeRequest::EditRgba { .. }
                         | crate::settings::settings_view::ThemeRequest::EditLiquid(_)
                         | crate::settings::settings_view::ThemeRequest::EditGradients(_)
                 )
@@ -5108,12 +5159,19 @@ impl App {
                     Some((track, id)) => timeline
                         .and_then(|t| t.lanes.iter().find(|l| l.track == track))
                         .and_then(|l| l.clips.iter().find(|c| c.id == id))
-                        .map(|c| (track, c.start + c.length)),
-                    None => self.arrangement.selected_tracks.first().map(|t| (*t, timeline.map_or(0.0, |t| t.beat))),
+                        .map(|c| (track, if self.settings.view.replace_clip { c.start } else { c.start + c.length })),
+                    None => self.arrangement.insert.or_else(|| {
+                        self.arrangement.selected_tracks.first().map(|t| (*t, timeline.map_or(0.0, |t| t.beat)))
+                    }),
                 };
                 match target {
                     Some((track, start)) => {
                         let mut params = json!({ "track": track.0, "start": start });
+                        if self.settings.view.replace_clip
+                            && let Some((_, clip)) = self.arrangement.selected_clip()
+                        {
+                            params["replace"] = json!(clip.0);
+                        }
                         // The pasted clip follows the stacking setting for its kind, as a moved clip does.
                         let audio = self.session().and_then(Session::copied_clip_is_audio);
                         if audio.is_some_and(|audio| self.stacks(audio)) {

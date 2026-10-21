@@ -193,6 +193,8 @@ fn main() -> ExitCode {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Suhina")
+            .with_decorations(!cfg!(target_os = "windows"))
+            .with_transparent(false)
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([640.0, 400.0])
             .with_drag_and_drop(true),
@@ -637,7 +639,16 @@ fn pick(request: &suhina_ui::interaction::pick::PickRequest) -> Option<PathBuf> 
     if request.field.folder() {
         dialog.pick_folder()
     } else {
-        dialog.add_filter("Projects", request.field.extensions()).pick_file()
+        dialog
+            .add_filter(
+                if request.field == suhina_ui::interaction::pick::PickField::BackgroundImage {
+                    "PNG image"
+                } else {
+                    "Projects"
+                },
+                request.field.extensions(),
+            )
+            .pick_file()
     }
 }
 

@@ -10,6 +10,21 @@ use egui::{Color32, Context, Id, Painter, Rect, Stroke, StrokeKind, TextureId, p
 
 use super::{motion, theme};
 
+/// A bounded app-owned background image the host may include in its offscreen renderer.
+#[derive(Clone)]
+pub struct BackgroundImage {
+    pub id: TextureId,
+    pub pixels: Arc<egui::ColorImage>,
+}
+
+pub fn set_background_image(ctx: &Context, image: Option<BackgroundImage>) {
+    ctx.data_mut(|data| data.insert_temp(Id::new("liquid-background-image"), image));
+}
+
+pub fn background_image(ctx: &Context) -> Option<BackgroundImage> {
+    ctx.data(|data| data.get_temp::<Option<BackgroundImage>>(Id::new("liquid-background-image"))).flatten()
+}
+
 /// Surfaces can be enabled independently without changing a colour theme.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Options {

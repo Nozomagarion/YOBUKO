@@ -228,14 +228,7 @@ fn restoring_a_built_in_waits_for_the_save_choice_and_can_be_cancelled() {
 
 #[test]
 fn theme_liquid_overrides_save_without_changing_global_settings() {
-    struct Host;
-    impl suhina_ui::kit::liquid::Provider for Host {
-        fn capture(&self, _: &egui::Context) -> Option<suhina_ui::kit::liquid::Backdrop> {
-            None
-        }
-    }
     let mut harness = short_window();
-    suhina_ui::kit::liquid::install(&harness.ctx, std::sync::Arc::new(Host));
     harness.get_by_label("Settings page: Themes").click();
     settle(&mut harness);
     harness.get_by_label("Edit current theme…").click();
@@ -246,6 +239,10 @@ fn theme_liquid_overrides_save_without_changing_global_settings() {
     let actions = harness.state_mut().take_theme_actions();
     assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.liquid == Some(global))));
     assert_eq!(harness.state().settings().view.liquid, global);
+    harness.query_all_by_label("Theme panel liquid").next().unwrap().click();
+    settle(&mut harness);
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.liquid.is_some_and(|value| value.panels > global.panels))));
     harness.get_by_label("Use global liquid settings").click();
     settle(&mut harness);
     let actions = harness.state_mut().take_theme_actions();
@@ -455,12 +452,6 @@ fn settings_can_undock_and_dock_without_losing_the_page() {
 
 #[test]
 fn liquid_sliders_change_independent_saved_strengths_without_restarting() {
-    struct Host;
-    impl suhina_ui::kit::liquid::Provider for Host {
-        fn capture(&self, _: &egui::Context) -> Option<suhina_ui::kit::liquid::Backdrop> {
-            None
-        }
-    }
     let mut app = App::new();
     app.set_session(Session::new(demo_project()), &[]);
     let mut harness = Harness::builder()
@@ -468,7 +459,6 @@ fn liquid_sliders_change_independent_saved_strengths_without_restarting() {
         .with_step_dt(0.25)
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     theme::install(&harness.ctx);
-    suhina_ui::kit::liquid::install(&harness.ctx, std::sync::Arc::new(Host));
     harness.run();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
     harness.run();

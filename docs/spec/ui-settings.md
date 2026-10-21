@@ -211,11 +211,18 @@ surfaces. Labels, controls, notes and
 waveforms are drawn afterward. The latter two are surface reflections, not per-clip blur.
 The renderer is described in [Glass rendering experiment](../design/glass-rendering.md).
 
-Controls are unavailable in a host without the GPU provider. Selecting GPU in Renderer
-requires restarting the app if it is currently running on OpenGL. Disabled animations or
+Controls remain editable and save their values even in a host without the GPU provider.
+The theme editor explains when preview is unavailable; global controls also show this
+explanation on hover. Selecting GPU in Renderer requires restarting the app if it is
+currently running on OpenGL. Disabled animations or
 the built-in high-contrast theme keep the material off without erasing saved strengths.
-The feature remains experimental: full playback performance qualification and refraction
-are not complete.
+The feature remains experimental: full playback performance qualification is not complete.
+
+The colour editor has a separate Browser text group: primary, secondary, hint and value.
+These change browser text without recolouring the rest of the interface. Text on coloured
+tracks, returns and clips uses `text.onColorLight` or `text.onColorDark`, whichever has
+greater contrast with the surface, rather than reusing the window background as text.
+Older theme files inherit these new roles from their previous text/background tokens.
 
 ### Surface gradients and content refraction
 
@@ -234,3 +241,27 @@ waveforms and controls are excluded from this capture and painted sharply afterw
 Only one content capture is made per frame, independently of the panel backdrop; no
 per-clip capture, previous-frame image or recursive sampling is allowed. Missing GPU
 sources keep the optical gradient/rim fallback.
+
+### Application bar and private background
+
+Appearance > Application bar keeps Suhina visible, with Left or Centre placement.
+Project name (including its unsaved marker) and project timing (tempo and time signature)
+are optional and share a separate Left/Centre position. Long names are clipped inside
+non-overlapping cells. On Windows this bar replaces native decorations; dragging, double-click
+maximise, minimise, close and all eight edge/corner resize directions remain available.
+Other platforms keep native decorations.
+
+Appearance > Background accepts a user-owned PNG, limited to 32 MiB and 8192 pixels per
+axis. Loading and image blur run away from the UI thread; the displayed image is reduced
+to at most 1600 pixels per axis. Background blur ranges from 0 to 40 pixels and Surface
+opacity from 0 to 100 percent. Clearing the path removes the image. High Contrast does
+not show it. The native window stays opaque: this feature never captures the desktop,
+its icons, or other application windows. Alpha blends neutral UI surfaces over the chosen
+image inside Suhina. It is not an operating-system backdrop.
+
+Colour and gradient editors retain unmultiplied RGB at zero opacity, including after
+saving and loading a theme. Returning opacity to 100 percent restores the original hue.
+
+Suhina Glass is a bundled, editable blue glass preset. Its JSON includes all colour tokens,
+subtle surface gradients and liquid overrides. A background image remains a local user
+choice, so sharing the theme does not share an image or a machine-specific file path.

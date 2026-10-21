@@ -937,7 +937,13 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
     colors.accent = egui::Color32::from_rgb(0x12, 0xAB, 0x9F);
     let night = suhina_ui::settings::themes::ThemeEntry {
         id: "night".into(),
-        theme: theme::Theme { name: "Night".into(), colors, liquid: None, gradients: Default::default() },
+        theme: theme::Theme {
+            name: "Night".into(),
+            colors,
+            liquid: None,
+            gradients: Default::default(),
+            transparent_rgb: Default::default(),
+        },
     };
     let ctx = harness.ctx.clone();
     harness.state_mut().set_themes(&ctx, vec![night], Some("themes".into()));
@@ -987,7 +993,13 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
     colors.accent = egui::Color32::from_rgb(1, 2, 3);
     let edited = suhina_ui::settings::themes::ThemeEntry {
         id: "night-copy".into(),
-        theme: theme::Theme { name: "Night copy".into(), colors, liquid: None, gradients: Default::default() },
+        theme: theme::Theme {
+            name: "Night copy".into(),
+            colors,
+            liquid: None,
+            gradients: Default::default(),
+            transparent_rgb: Default::default(),
+        },
     };
     harness.state_mut().put_theme(&ctx, edited);
     assert_eq!(theme::accent(), colors.accent);
@@ -1506,6 +1518,24 @@ fn ctrl_and_the_wheel_over_a_fader_change_the_volume_and_the_wheel_alone_does_no
 }
 
 #[test]
+fn horizontal_wheel_over_track_headers_does_not_scroll_the_timeline() {
+    let mut harness = arrangement_app();
+    let header = harness.get_by_label("Track Drums").rect();
+    harness.hover_at(header.center_top() + egui::vec2(0.0, 6.0));
+    harness.run();
+    let before = harness.state().arrangement().scroll.x;
+    harness.event(egui::Event::ModifiersChanged(Modifiers::SHIFT));
+    harness.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(-120.0, 0.0),
+        modifiers: Modifiers::SHIFT,
+        phase: egui::TouchPhase::Move,
+    });
+    harness.run();
+    assert_eq!(harness.state().arrangement().scroll.x, before);
+}
+
+#[test]
 fn dragging_one_fader_of_a_selection_moves_every_track_in_proportion() {
     let mut harness = arrangement_app();
     harness.state_mut().run(&Action::new("track.setVolume", json!({ "tracks": [1], "db": -6.0 })));
@@ -1802,6 +1832,28 @@ fn audio_app() -> App {
     app.set_session(Session::new(project), &[]);
     app.set_waveforms(waveforms);
     app
+}
+
+#[test]
+fn shift_wheel_over_clip_gain_scrolls_timeline_without_editing_gain() {
+    let mut harness = window(audio_app());
+    harness.get_by_label("Arrangement view").click();
+    harness.run();
+    let before = harness.state().session().unwrap().project().clone();
+    let field = harness.get_by_label("Gain of Loop on Loop").rect().center();
+    harness.hover_at(field);
+    harness.run();
+    let scroll = harness.state().arrangement().scroll.x;
+    harness.event(egui::Event::ModifiersChanged(Modifiers::SHIFT));
+    harness.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(-120.0, 0.0),
+        modifiers: Modifiers::SHIFT,
+        phase: egui::TouchPhase::Move,
+    });
+    harness.run();
+    assert!(harness.state().arrangement().scroll.x > scroll);
+    assert_eq!(harness.state().session().unwrap().project(), &before);
 }
 
 #[test]
@@ -2455,6 +2507,62 @@ fn keys_copy_paste_and_delete_the_selected_clip() {
     harness.run();
     assert_eq!(spans(&harness).len(), before - 1);
     assert!(!spans(&harness).contains(&(0.0, 64.0)));
+}
+
+#[test]
+fn paste_uses_an_empty_lane_click_and_can_replace_a_selected_clip() {
+    let mut harness = arrangement_app();
+    let ctx = harness.ctx.clone();
+    let mut settings = harness.state().settings().clone();
+    settings.view.replace_clip = true;
+    harness.state_mut().set_settings(&ctx, settings);
+    harness.get_by_label("Clip Fill on Drums at bar 29").click();
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::C);
+    harness.run();
+    harness.get_by_label("Clip Beat A on Drums at bar 1").click();
+    harness.run();
+    let destination = harness.state().selected_clip().unwrap().1;
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::V);
+    harness.run();
+    let clips = &harness.state().session().unwrap().project().arrangement.lanes[0].clips;
+    assert!(clips.iter().all(|clip| clip.id != destination));
+    assert!(clips.iter().any(|clip| clip.start == 0.0 && clip.length == 16.0));
+    // There is now empty space between the pasted short clip and Beat B.
+    let lane = harness.get_by_label("Lane Drums").rect();
+    let start = harness.get_by_label("Clip Fill on Drums at bar 1").rect().right();
+    let at = egui::pos2(start + 20.0, lane.center().y);
+    harness.hover_at(at);
+    harness.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    harness.event(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.run();
+    let (track, beat) = harness.state().arrangement().insert.unwrap();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::V);
+    harness.run();
+    assert!(
+        harness
+            .state()
+            .session()
+            .unwrap()
+            .project()
+            .arrangement
+            .lanes
+            .iter()
+            .filter(|lane| lane.track == Some(track))
+            .flat_map(|lane| &lane.clips)
+            .any(|clip| (clip.start - beat).abs() < 1e-6)
+    );
 }
 
 /// The selection names a clip by its id (ADR 0025): when a clip before it moves away, the

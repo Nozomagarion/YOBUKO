@@ -72,7 +72,8 @@ What the law protects decides how close the UI may get (summary, not legal advic
    theme file the user picks and edits ([brief](../design/brief.md) › Themes).
 
 7. **One main window.** Views open in place in the main window, not in windows of their own.
-   Two exceptions have a window of their own: plug-in editors (ADR 0006), and the sample map when
+   Three exceptions have a window of their own: plug-in editors (ADR 0006), Settings when
+   explicitly detached, and the sample map when
    the user asks for it (View › Sample map in a window), so it can sit on a second screen. The
    map's window is an eframe viewport drawn in the same frame as the main window (an immediate
    viewport), so it shares the window's state: the browser, the previews and drags into the main
@@ -80,6 +81,12 @@ What the law protects decides how close the UI may get (summary, not legal advic
 
 `AudioEffect` controls and visible node-flow views are also drawn with egui and the same theme tokens
 ([ADR 0021](0021-device-graph-files.md)).
+
+Appearance materials remain inside the native renderer: user-owned PNG backgrounds are decoded
+with the GPL-compatible `image` crate on a bounded background worker, and the native window stays
+opaque. Theme alpha, gradients and optional GPU refraction never expose the desktop or other apps.
+Windows uses an egui application identity bar with configurable project information and native
+move/resize commands; other platforms retain their native decorations.
 
 ## Consequences
 

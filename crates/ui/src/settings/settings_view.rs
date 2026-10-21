@@ -160,6 +160,7 @@ pub enum PluginRequest {
 /// The themes as the page shows them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ThemesView {
+    pub transparent_rgb: std::collections::BTreeMap<String, [u8; 3]>,
     /// Each theme's id, name and whether it comes with Suhina: the user's own first.
     pub list: Vec<(String, String, bool)>,
     /// Palette snapshots for miniature previews; drawing one never installs it globally.
@@ -185,9 +186,14 @@ pub enum ThemeRequest {
     Use(String),
     /// Use these colours; a built-in theme is copied first, since it does not change.
     Edit(Palette),
+    EditRgba {
+        colors: Palette,
+        transparent_rgb: std::collections::BTreeMap<String, [u8; 3]>,
+    },
     EditLiquid(Option<crate::kit::liquid::Options>),
     EditGradients(crate::kit::gradient::Gradients),
     ResetEdits {
+        transparent_rgb: std::collections::BTreeMap<String, [u8; 3]>,
         colors: Palette,
         liquid: Option<crate::kit::liquid::Options>,
         gradients: crate::kit::gradient::Gradients,
@@ -272,6 +278,7 @@ pub struct PageState {
     pub theme_original_liquid: Option<Option<crate::kit::liquid::Options>>,
     pub theme_original_gradients: Option<crate::kit::gradient::Gradients>,
     pub theme_original: Option<Palette>,
+    pub theme_original_rgb: Option<std::collections::BTreeMap<String, [u8; 3]>>,
     pub theme_rename_focus: bool,
     /// A colour picker is open while its primary pointer button is held.
     pub theme_colour_held: bool,
@@ -469,14 +476,23 @@ impl Cx<'_> {
         self.outcome.changed |= response.changed();
     }
 
-    /// Per-surface material strength, available only in a host with the GPU provider.
-    pub fn liquid_strength(&mut self, row: Rect, field: impl FnOnce(&mut Settings) -> &mut u8) {
-        let available = crate::kit::liquid::available(self.ui.ctx());
-        let value = field(self.settings);
+    pub fn background_blur(&mut self, row: Rect) {
         let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
         let response =
-            self.ui.add_enabled_ui(available, |ui| ui.put(rect, egui::Slider::new(value, 0..=100).suffix(" %"))).inner;
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, available, self.name));
+            self.ui.put(rect, egui::Slider::new(&mut self.settings.view.background_blur, 0..=40).suffix(" px"));
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, self.name));
+        self.outcome.changed |= response.changed();
+    }
+
+    /// Per-surface material strength; saved even without a GPU provider.
+    pub fn liquid_strength(&mut self, row: Rect, field: impl FnOnce(&mut Settings) -> &mut u8) {
+        let value = field(self.settings);
+        let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
+        let response = self.ui.put(rect, egui::Slider::new(value, 0..=100).suffix(" %"));
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, self.name));
+        if !crate::kit::liquid::available(self.ui.ctx()) {
+            response.clone().on_hover_text("Saved for later. To see liquid, select GPU in Appearance > Renderer, enable Animations and restart Suhina.");
+        }
         self.outcome.adjusting |= response.dragged() || response.is_pointer_button_down_on();
         self.outcome.changed |= response.changed();
     }
@@ -698,6 +714,7 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
         state.page = picked;
         state.theme_editor = false;
         state.theme_original = None;
+        state.theme_original_rgb = None;
         state.theme_original_liquid = None;
         state.theme_original_gradients = None;
         state.theme_restore = None;
@@ -934,6 +951,7 @@ fn theme_page(
                             state.theme_restore = None;
                             state.theme_editor = false;
                             state.theme_original = None;
+                            state.theme_original_rgb = None;
                             state.scrolled = None;
                         }
                     }
@@ -953,6 +971,7 @@ fn theme_page(
                 if ui.button("Edit current theme…").clicked() {
                     state.theme_editor = true;
                     state.theme_original = Some(themes.colors);
+                    state.theme_original_rgb = Some(themes.transparent_rgb.clone());
                     state.theme_original_liquid = Some(themes.liquid);
                     state.theme_original_gradients = Some(themes.gradients.clone());
                     state.scrolled = None;
@@ -1062,7 +1081,9 @@ fn theme_card(
 
 /// Each colour appears in exactly one understandable group; the token name stays visible.
 fn colour_group(key: &str) -> &'static str {
-    if key.starts_with("text.") {
+    if key.starts_with("browser.") {
+        "Browser text"
+    } else if key.starts_with("text.") {
         "Text"
     } else if key.starts_with("kind.") {
         "Sample map"
@@ -1116,14 +1137,11 @@ fn gradient_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> O
                     let low = index.checked_sub(1).map_or(0, |previous| gradient.stops[previous].position);
                     let high = gradient.stops.get(index + 1).map_or(100, |next| next.position);
                     let stop = &mut gradient.stops[index];
+                    let mut rgba = stop.rgba();
                     ui.push_id(index, |ui| {
                         ui.horizontal_wrapped(|ui| {
                             let popup = ui.auto_id_with("popup");
-                            let picker = egui::color_picker::color_edit_button_srgba(
-                                ui,
-                                &mut stop.color,
-                                egui::color_picker::Alpha::OnlyBlend,
-                            );
+                            let picker = edit_rgba(ui, &mut rgba, egui::color_picker::Alpha::OnlyBlend);
                             picker.widget_info(|| {
                                 egui::WidgetInfo::labeled(
                                     egui::WidgetType::ColorButton,
@@ -1133,7 +1151,7 @@ fn gradient_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> O
                             });
                             state.theme_colour_held |= egui::Popup::is_id_open(ui.ctx(), popup)
                                 && ui.input(|input| input.pointer.primary_down());
-                            ui.label(theme::hex(stop.color));
+                            ui.label(theme::hex_rgba(rgba));
                             if ui
                                 .add_enabled(count > 2, egui::Button::new(format!("Remove stop {}", index + 1)))
                                 .clicked()
@@ -1146,7 +1164,7 @@ fn gradient_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> O
                                 .suffix(" %")
                                 .text(format!("{name} stop {} position", index + 1)),
                         );
-                        let mut opacity = (f32::from(stop.color.a()) * 100.0 / 255.0).round() as u8;
+                        let mut opacity = (f32::from(rgba[3]) * 100.0 / 255.0).round() as u8;
                         let alpha = ui.add(
                             egui::Slider::new(&mut opacity, 0..=100)
                                 .suffix(" %")
@@ -1157,15 +1175,10 @@ fn gradient_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> O
                             || alpha.dragged()
                             || alpha.is_pointer_button_down_on();
                         if alpha.changed() {
-                            let [r, g, b, _] = stop.color.to_srgba_unmultiplied();
-                            stop.color = egui::Color32::from_rgba_unmultiplied(
-                                r,
-                                g,
-                                b,
-                                (f32::from(opacity) * 2.55).round() as u8,
-                            );
+                            rgba[3] = (f32::from(opacity) * 2.55).round() as u8;
                         }
                     });
+                    stop.set_rgba(rgba);
                 }
                 if let Some(index) = remove {
                     gradient.stops.remove(index);
@@ -1184,6 +1197,7 @@ fn gradient_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> O
                     let left = &gradient.stops[gap];
                     let right = &gradient.stops[gap + 1];
                     let stop = Stop {
+                        transparent_rgb: None,
                         position: left.position + (right.position - left.position) / 2,
                         color: crate::kit::motion::mix(left.color, right.color, 0.5),
                     };
@@ -1233,16 +1247,21 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
             state.theme_rename_focus = true;
         }
         let original = *state.theme_original.get_or_insert(themes.colors);
+        let original_rgb = state.theme_original_rgb.get_or_insert_with(|| themes.transparent_rgb.clone()).clone();
         let original_liquid = *state.theme_original_liquid.get_or_insert(themes.liquid);
         let original_gradients = state.theme_original_gradients.get_or_insert_with(|| themes.gradients.clone()).clone();
         if ui
             .add_enabled(
-                original != themes.colors || original_liquid != themes.liquid || original_gradients != themes.gradients,
+                original != themes.colors
+                    || original_rgb != themes.transparent_rgb
+                    || original_liquid != themes.liquid
+                    || original_gradients != themes.gradients,
                 egui::Button::new("Reset changes"),
             )
             .clicked()
         {
             request = Some(ThemeRequest::ResetEdits {
+                transparent_rgb: original_rgb,
                 colors: original,
                 liquid: original_liquid,
                 gradients: original_gradients,
@@ -1258,7 +1277,7 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
     let mut options = themes.liquid.unwrap_or(themes.global_liquid);
     let original_options = options;
     let available = crate::kit::liquid::available(ui.ctx());
-    ui.add_enabled_ui(!inherit && available, |ui| {
+    ui.add_enabled_ui(!inherit, |ui| {
         for (name, value) in [
             ("Theme panel liquid", &mut options.panels),
             ("Theme track liquid", &mut options.tracks),
@@ -1271,13 +1290,17 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
     if options != original_options {
         request = Some(ThemeRequest::EditLiquid(Some(options)));
     }
+    if !available {
+        ui.add(egui::Label::new("Liquid preview is unavailable. Values can be saved. Select GPU in Appearance > Renderer, enable Animations and restart Suhina to see the effect.").wrap());
+    }
     ui.add(egui::Label::new(egui::RichText::new("Turn off inheritance to save independent panel, track and clip strengths with this theme. Requires the GPU renderer; reduced effects and high contrast still apply.").small().color(theme::text_secondary())).wrap());
     if let Some(change) = gradient_editor(ui, themes, state) {
         request = Some(change);
     }
     let mut edited = themes.colors;
+    let mut transparent_rgb = themes.transparent_rgb.clone();
     let tokens = themes.colors.tokens();
-    for group in ["Surfaces", "Text", "Tracks & clips", "Controls", "Meters", "Sample map"] {
+    for group in ["Surfaces", "Text", "Browser text", "Tracks & clips", "Controls", "Meters", "Sample map"] {
         ui.add_space(8.0);
         ui.label(egui::RichText::new(group).strong());
         ui.separator();
@@ -1285,13 +1308,18 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
             colour_group(key) == group && !key.strip_prefix("track.").is_some_and(|suffix| suffix.parse::<u8>().is_ok())
         }) {
             ui.push_id(("theme-colour", key), |ui| {
-                let mut picked = color;
+                let mut rgba = color.to_srgba_unmultiplied();
+                if color.a() == 0
+                    && let Some(rgb) = transparent_rgb.get(key)
+                {
+                    rgba[..3].copy_from_slice(rgb);
+                }
                 let rgb_default = matches!(key, "clip.midiDefault" | "clip.audioDefault");
                 ui.horizontal(|ui| {
                     let popup = ui.auto_id_with("popup");
-                    let swatch = egui::color_picker::color_edit_button_srgba(
+                    let swatch = edit_rgba(
                         ui,
-                        &mut picked,
+                        &mut rgba,
                         if matches!(key, "clip.midiDefault" | "clip.audioDefault") {
                             egui::color_picker::Alpha::Opaque
                         } else {
@@ -1309,7 +1337,7 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
                         |ui| {
                             ui.set_min_width(82.0);
                             ui.label(
-                                egui::RichText::new(theme::hex(picked))
+                                egui::RichText::new(theme::hex_rgba(rgba))
                                     .font(theme::mono_font(theme::TEXT_SMALL))
                                     .color(theme::text_value()),
                             );
@@ -1329,17 +1357,22 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
                     );
                 });
                 if !rgb_default {
-                    let mut opacity = (f32::from(picked.a()) * 100.0 / 255.0).round() as u8;
+                    let mut opacity = (f32::from(rgba[3]) * 100.0 / 255.0).round() as u8;
                     let response = ui.add(egui::Slider::new(&mut opacity, 0..=100).suffix(" %").text("Opacity"));
                     response.widget_info(|| {
                         egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, format!("Opacity {key}"))
                     });
                     state.theme_colour_held |= response.dragged() || response.is_pointer_button_down_on();
                     if response.changed() {
-                        let [r, g, b, _] = picked.to_srgba_unmultiplied();
-                        picked =
-                            egui::Color32::from_rgba_unmultiplied(r, g, b, (f32::from(opacity) * 2.55).round() as u8);
+                        rgba[3] = (f32::from(opacity) * 2.55).round() as u8;
                     }
+                }
+                let [r, g, b, a] = rgba;
+                let picked = egui::Color32::from_rgba_unmultiplied(r, g, b, a);
+                if a == 0 && [r, g, b] != [0, 0, 0] {
+                    transparent_rgb.insert(key.to_string(), [r, g, b]);
+                } else {
+                    transparent_rgb.remove(key);
                 }
                 if picked != color
                     && let Some(slot) = edited.token_mut(key)
@@ -1351,8 +1384,8 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
             });
         }
     }
-    if edited != themes.colors {
-        request = Some(ThemeRequest::Edit(edited));
+    if edited != themes.colors || transparent_rgb != themes.transparent_rgb {
+        request = Some(ThemeRequest::EditRgba { colors: edited, transparent_rgb });
     }
     request
 }
@@ -2211,6 +2244,16 @@ fn segmented<T: Copy + PartialEq>(
         widgets::text_in(painter, cell, Align2::CENTER_CENTER, text, theme::ui_font(theme::TEXT_SMALL), color);
     }
     picked
+}
+
+/// Keep unmultiplied colour channels even at zero alpha.
+fn edit_rgba(ui: &mut Ui, rgba: &mut [u8; 4], alpha: egui::color_picker::Alpha) -> egui::Response {
+    let mut hsva = egui::ecolor::Hsva::from_srgba_unmultiplied(*rgba);
+    let response = egui::color_picker::color_edit_button_hsva(ui, &mut hsva, alpha);
+    if response.changed() {
+        *rgba = hsva.to_srgba_unmultiplied();
+    }
+    response
 }
 
 #[cfg(test)]
