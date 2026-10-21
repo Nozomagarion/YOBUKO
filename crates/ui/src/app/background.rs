@@ -88,7 +88,8 @@ fn load(path: &str, blur: u8) -> Loaded {
     limits.max_alloc = Some(128 * 1024 * 1024);
     reader.limits(limits);
     let image = reader.decode().map_err(|error| format!("Background PNG: {error}"))?;
-    let image = image.thumbnail(1600, 1600).blur(f32::from(blur.min(40))).into_rgba8();
+    let image = if image.width() > 1600 || image.height() > 1600 { image.thumbnail(1600, 1600) } else { image };
+    let image = image.blur(f32::from(blur.min(40))).into_rgba8();
     let size = [image.width() as usize, image.height() as usize];
     Ok(ColorImage::from_rgba_unmultiplied(size, image.as_raw()))
 }
