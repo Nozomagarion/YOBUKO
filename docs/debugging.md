@@ -99,6 +99,12 @@ Arrangement's lanes and clips, rebuilt only after the project changed: `timeline
 more when the window is closed, before it asks whether to save) and `rest`. The part that stands
 out is where to look.
 
+Detached Settings adds `slow settings native contents` for UI work taking at least 5 ms
+and `slow settings native viewport` for the enclosing native draw/present call. A long
+viewport call with fast contents points to native rendering/presentation rather than
+the settings controls. `settings placement` distinguishes native and embedded Settings;
+the outer `dialogs` frame measurement includes the synchronous native presentation wait.
+
 A closed project's plug-ins are unloaded on a thread of their own, so the window goes on drawing
 meanwhile: `closed project let go in …` says how long it took. Quitting lets every project go at
 once and shows "Closing Suhina" for up to 2 s: `quit: projects let go in …`, or

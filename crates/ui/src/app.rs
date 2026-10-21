@@ -4061,6 +4061,12 @@ impl App {
 
     /// Settings can stay over the main view or move into an independent native window.
     fn settings_dialog(&mut self, ui: &Ui, window: Rect) {
+        if suhina_plugins::trace::on() {
+            suhina_plugins::trace::state(
+                "settings placement",
+                if self.page.window { "native" } else { "embedded" }.into(),
+            );
+        }
         if self.page.window {
             let ctx = ui.ctx().clone();
             let builder = egui::ViewportBuilder::default()
@@ -4069,15 +4075,17 @@ impl App {
                 .with_resizable(true)
                 .with_inner_size(SETTINGS_SIZE)
                 .with_min_inner_size([600.0, 320.0]);
-            ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("settings-window"), builder, |ui, _| {
-                let panel = ui.available_rect_before_wrap();
-                self.settings_contents(ui, panel);
-                if ui.input(|input| {
-                    input.viewport().close_requested()
-                        || (self.page.capture.is_none() && input.modifiers.command && input.key_pressed(Key::Comma))
-                }) {
-                    self.settings_open = false;
-                }
+            suhina_plugins::trace::timed("settings native viewport", || {
+                ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("settings-window"), builder, |ui, _| {
+                    let panel = ui.available_rect_before_wrap();
+                    suhina_plugins::trace::timed("settings native contents", || self.settings_contents(ui, panel));
+                    if ui.input(|input| {
+                        input.viewport().close_requested()
+                            || (self.page.capture.is_none() && input.modifiers.command && input.key_pressed(Key::Comma))
+                    }) {
+                        self.settings_open = false;
+                    }
+                });
             });
             return;
         }
