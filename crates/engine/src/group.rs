@@ -217,9 +217,13 @@ impl Builder<'_> {
         let graph = suhina_device_sdk::DeviceGraph::from_sd(text).ok()?;
         let rate = f64::from(self.sample_rate);
         let mut slot = match graph.role {
-            suhina_device_sdk::DeviceRole::Effect => Slot::Sd(graph.compile_at(rate).ok()?),
+            suhina_device_sdk::DeviceRole::Effect => {
+                Slot::Sd(suhina_device_registry::compile_graph(&graph, rate).ok()?)
+            }
             suhina_device_sdk::DeviceRole::MidiEffect => Slot::MidiSd(graph.compile_midi().ok()?),
-            suhina_device_sdk::DeviceRole::Instrument => Slot::InstrumentSd(graph.compile_instrument_at(rate).ok()?),
+            suhina_device_sdk::DeviceRole::Instrument => {
+                Slot::InstrumentSd(suhina_device_registry::compile_graph(&graph, rate).ok()?)
+            }
         };
         let mut values = Vec::with_capacity(graph.parameters.len());
         for (index, parameter) in graph.parameters.iter().enumerate() {

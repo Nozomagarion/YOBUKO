@@ -491,6 +491,9 @@ pub(crate) fn add_sd(session: &mut Session, params: &Value) -> Result<Value, Com
             .collect();
         return Ok(json!({"device":index,"id":graph.id,"name":graph.name,"kind":"sd","implementation":id}));
     }
+    if graph.role != suhina_device_sdk::DeviceRole::MidiEffect {
+        let _prepared = suhina_device_registry::compile_graph(&graph, 48000.).map_err(|e| e.to_string())?;
+    }
     let values: Vec<DeviceParam> =
         graph.parameters.iter().map(|parameter| DeviceParam::new(parameter.id.clone(), parameter.default)).collect();
     let state = graph.to_sd().map_err(|e| e.to_string())?.into_bytes();

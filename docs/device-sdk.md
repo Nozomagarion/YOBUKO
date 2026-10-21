@@ -399,3 +399,10 @@ The kernel receives five read-only interleaved stereo input buffers and a separa
 buffer of equal length. It must overwrite output without allocating, locking or doing I/O.
 This host API does not load third-party plug-ins, and ordinary `compile_at` rejects
 unresolved effects. MIDI events and reset use the same lifecycle as native sources.
+
+Registered built-in audio effects resolve automatically when a `.sd` graph is added and
+when track or group chains are prepared. The registry adapter supplies the `in` audio
+signal at the effect defaults; additional control ports are reserved and ignored by this
+adapter. Custom Rust hosts can still supply their own input-aware kernels. Unknown ids,
+non-effect devices and effects reporting nonzero latency are rejected before insertion;
+latency compensation between graph paths is not implemented. This never loads plug-in code.

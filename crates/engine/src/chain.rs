@@ -199,7 +199,10 @@ impl Chain {
                     }
                     let mut slot = match graph.role {
                         suhina_device_sdk::DeviceRole::Effect => {
-                            let Ok(effect) = graph.compile_at(f64::from(sample_rate)) else { continue };
+                            let Ok(effect) = suhina_device_registry::compile_graph(&graph, f64::from(sample_rate))
+                            else {
+                                continue;
+                            };
                             Slot::Sd(effect)
                         }
                         suhina_device_sdk::DeviceRole::MidiEffect => {
@@ -207,7 +210,8 @@ impl Chain {
                             Slot::MidiSd(effect)
                         }
                         suhina_device_sdk::DeviceRole::Instrument => {
-                            let Ok(instrument) = graph.compile_instrument_at(f64::from(sample_rate)) else {
+                            let Ok(instrument) = suhina_device_registry::compile_graph(&graph, f64::from(sample_rate))
+                            else {
                                 continue;
                             };
                             Slot::InstrumentSd(instrument)
