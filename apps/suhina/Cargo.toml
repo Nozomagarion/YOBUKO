@@ -34,6 +34,10 @@ eframe = { version = "0.36", features = ["glow", "persistence"] }  # MIT OR Apac
 # desktop portal, in Rust, with no GTK.
 rfd = "0.17"  # MIT
 
+[target.'cfg(target_os = "windows")'.dependencies]
+# Safe, fallible access to the system Mica material; no desktop capture.
+window-vibrancy = "0.8.1"  # MIT OR Apache-2.0
+
 [target.'cfg(target_os = "macos")'.dependencies]
 # The system's menu bar on macOS (#650): AppKit's NSMenu, with no unsafe code here.
 muda = { version = "0.21", default-features = false }  # MIT OR Apache-2.0

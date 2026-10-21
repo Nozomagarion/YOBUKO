@@ -33,6 +33,14 @@ without a hard glossy stripe across notes or waveforms.
 
 ## Current state
 
+On Windows 11, Appearance > Background > Windows Mica independently opts into the native
+wallpaper material. The desktop host uses the safe, fallible `window-vibrancy` API and
+only clears its GPU surface with alpha after successful activation. Failed activation or
+deactivation restores opaque drawing. A private image and High Contrast take precedence;
+other platforms and OpenGL retain the opaque background. Mica does not capture desktop
+icons or other windows. Its system-managed backdrop is not available as a texture to the
+in-app refraction pass; liquid lenses continue to sample Suhina's own surfaces.
+
 The original static experiment below remains available. There is also an experimental
 native integration, disabled by default, with per-surface global strengths under
 Appearance › Liquid (experimental), and optional overrides saved with each theme in
@@ -84,7 +92,8 @@ rectangle. Missing settings default to 0.
 
 The wgpu host installs its provider even while all strengths are 0; no backdrop capture
 is requested until a liquid strength is raised; Track/Clip strengths request only the
-shared content substrate, Panel strength requests the modal capture. OpenGL has no provider and disables the controls.
+shared content substrate, Panel strength requests the modal capture. OpenGL has no provider;
+the controls still save values, with a note explaining that the GPU renderer is required.
 
 OpenGL, disabled animations and the built-in high-contrast theme keep solid surfaces.
 The accessibility gate is checked after running settings/theme changes too. If replay

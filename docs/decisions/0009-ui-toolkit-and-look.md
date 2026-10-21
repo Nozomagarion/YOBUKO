@@ -82,9 +82,11 @@ What the law protects decides how close the UI may get (summary, not legal advic
 `AudioEffect` controls and visible node-flow views are also drawn with egui and the same theme tokens
 ([ADR 0021](0021-device-graph-files.md)).
 
-Appearance materials remain inside the native renderer: user-owned PNG backgrounds are decoded
-with the GPL-compatible `image` crate on a bounded background worker, and the native window stays
-opaque. Theme alpha, gradients and optional GPU refraction never expose the desktop or other apps.
+User-owned PNG backgrounds are decoded with the GPL-compatible `image` crate on a bounded
+background worker. Windows can alternatively provide its native Mica wallpaper material through
+the safe `window-vibrancy` wrapper. Only successful activation enables transparent GPU clearing;
+the unavailable/disabled path remains opaque. Theme alpha, gradients and optional GPU refraction
+never expose desktop icons or other apps. Refraction samples app surfaces, not the system material.
 Windows uses an egui application identity bar with configurable project information and native
 move/resize commands; other platforms retain their native decorations.
 

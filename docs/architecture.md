@@ -43,6 +43,11 @@ page wrong updates it in the same pull request (AGENTS.md › Before you finish 
 
 ## Layers
 
+The Windows desktop host optionally applies the system Mica backdrop through
+`window-vibrancy`, a safe, fallible native wrapper. Only confirmed activation permits
+transparent GPU clearing; the UI receives an active flag for its neutral surface tint.
+No desktop pixels are captured and this platform dependency stays in `apps/suhina`.
+
 A crate may depend only on crates in lower layers. Nothing below the UI depends on a GUI toolkit.
 
 ```text

@@ -251,6 +251,16 @@ non-overlapping cells. On Windows this bar replaces native decorations; dragging
 maximise, minimise, close and all eight edge/corner resize directions remain available.
 Other platforms keep native decorations.
 
+Appearance > Background > Windows Mica opts into Windows 11's native wallpaper-based
+material with the GPU renderer. It is off by default and applied live. A selected private
+image or High Contrast takes precedence. Surface opacity controls the neutral UI tint
+over the material; Background blur only affects the private image. Mica is supplied by
+Windows, not a desktop capture: desktop icons and other windows are not its input.
+If applying Mica fails, Suhina keeps an opaque clear colour and reports the failure.
+The system may substitute a solid material when its accessibility or power settings
+disable effects. This does not change the independent in-app liquid/refraction controls.
+The native behaviour follows [Microsoft's Mica documentation](https://learn.microsoft.com/en-us/windows/apps/design/style/mica).
+
 Appearance > Background accepts a user-owned PNG, limited to 32 MiB and 8192 pixels per
 axis. Loading and image blur run away from the UI thread; the displayed image is reduced
 to at most 1600 pixels per axis. Background blur ranges from 0 to 40 pixels and Surface

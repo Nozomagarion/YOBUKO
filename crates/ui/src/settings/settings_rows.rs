@@ -664,6 +664,14 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Appearance,
         "Background",
+        "Windows Mica",
+        "Windows 11 and GPU rendering; uses wallpaper without desktop icons. A chosen image takes precedence",
+        &["windows_mica"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.windows_mica),
+    ),
+    row(
+        Page::Appearance,
+        "Background",
         "Background image",
         "Choose your own PNG; desktop icons and other windows are never captured. Empty removes the image",
         &["background_image"],
@@ -675,7 +683,7 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Appearance,
         "Background",
         "Surface opacity",
-        "Tint over the background image; 100% makes neutral panels solid",
+        "Tint over Mica or the background image; 100% makes neutral panels solid",
         &["background_tint"],
         |cx, r| cx.colour_strength(r, |s| &mut s.view.background_tint),
     ),
