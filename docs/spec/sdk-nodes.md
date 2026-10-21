@@ -5,6 +5,7 @@ type: spec
 status: current
 last_verified: 2026-10-19
 covers:
+  - crates/device-sdk/src/sample_resource.rs
   - crates/device-sdk/src/nodes.rs
   - crates/device-sdk/src/midi.rs
   - crates/device-sdk/src/runtime.rs
@@ -163,3 +164,16 @@ edges, graph-controlled sample parameters, smaller playback/envelope/granular
 nodes and authored sample bindings remain subsequent stages of issue #733.
 
 Native kernels receive five bounded stereo input spans, in the same order as their declared ports. Unconnected ports carry their declared defaults. Source kernels ignore these spans. Block and feedback scheduling use the same input contract; kernels never retain borrowed input spans.
+
+## Prepared sample resources
+
+The Rust `sample_resource` API describes host-prepared immutable PCM, independently of any
+instrument. Construction validates an integer rate of 8000..384000 Hz, 1..32 interleaved
+channels and complete frames. PCM stays shared through `Arc`; no decoding, analysis or copying
+occurs during reads. The host owns preparation, binding, replacement and retirement off-thread.
+`SampleRegion` is a half-open frame interval within one asset; empty regions are valid and silent.
+Reads use a region-relative fractional position, linear interpolation and a clamped last frame.
+Negative, nonfinite or out-of-region positions are silent. Mono duplicates to stereo; for
+multichannel data the first two channels are read. Nonfinite PCM values become zero.
+This API is resource preparation/read groundwork, not yet serialized resource ports or a
+replacement for existing Sampler playback, looping, grain or stretch algorithms.

@@ -183,6 +183,15 @@ pub fn compile_graph(
     graph: &suhina_device_sdk::DeviceGraph,
     rate: f64,
 ) -> Result<suhina_device_sdk::PreparedEffect, suhina_device_sdk::DeviceSdkError> {
+    for node in &graph.nodes {
+        if matches!(node.kind, suhina_device_sdk::NodeKind::NativeEffect { .. })
+            && graph.connections.iter().any(|edge| edge.to == node.id && edge.to_port != "in")
+        {
+            return Err(suhina_device_sdk::DeviceSdkError(
+                "registered effect control bindings are not implemented".into(),
+            ));
+        }
+    }
     graph.compile_with_native_at(rate, |id, rate| {
         let mut device =
             create(id).ok_or_else(|| suhina_device_sdk::DeviceSdkError(format!("unknown graph effect {id:?}")))?;
@@ -246,6 +255,9 @@ mod graph_kernel_tests {
         prepared.process(&mut audio);
         assert!(audio.iter().all(|v| v.is_finite()));
         assert!(audio.iter().any(|v| v.abs() > 0.01));
+        let mut controlled = graph.clone();
+        controlled.connections.push(Connection::ports("in", "out", "fx", "control1"));
+        assert!(compile_graph(&controlled, 48000.).is_err());
         for id in ["missing", "sampler", "limiter"] {
             let mut invalid = graph.clone();
             invalid.nodes[1].kind = NodeKind::NativeEffect { effect: id.into() };
