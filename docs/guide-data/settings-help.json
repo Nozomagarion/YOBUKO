@@ -847,27 +847,25 @@
     ]
   },
   "Arrangement/Tracks/new_track_colour": {
-    "sourceFingerprint": "8d2cb6d9efde9d5984130eaa6afd94184f0df991b710c278d321a3061b70e6c8",
-    "summary": "Give new tracks successive palette colors or one fixed palette color.",
-    "description": "The palette is the theme’s set of track colors. This chooses how a new track gets its initial color. Existing tracks retain their stored colors when the preference changes or tracks are reordered. You can still set a track’s color individually.",
+    "sourceFingerprint": "383a4a56f1bfa2e6159503ad9aad0d33587d103879f7341bbc420672f0f5386c",
+    "summary": "Choose whether new track colours follow their type or share one default.",
+    "description": "Sets the initial colour of newly created tracks from the active theme. Existing tracks retain their stored colours when this setting or the theme changes. Change the MIDI and audio defaults in Themes > Edit current theme > Tracks & clips; tracks can also be coloured individually.",
     "options": [
       {
-        "name": "Alternating",
-        "description": "Choose a palette color by the new track’s position. This is the default."
+        "name": "By clip type",
+        "description": "Use the theme MIDI default for MIDI tracks and audio default for audio tracks. This is the default."
       },
       {
-        "name": "Fixed",
-        "description": "Give each new track the palette’s first color."
+        "name": "One colour",
+        "description": "Use the theme MIDI default for all new tracks."
       }
     ],
-    "whenToChange": "Choose Alternating to distinguish adjacent tracks quickly, or Fixed when you prefer assigning your own colors after creation.",
+    "whenToChange": "Use By clip type to distinguish MIDI and audio tracks, or One colour for a uniform starting colour.",
     "references": [
       "crates/ui/src/settings/settings_rows.rs",
-      "crates/ui/src/settings.rs",
-      "crates/ui/src/settings/view_settings.rs",
       "crates/ui/src/app.rs",
-      "crates/ui/src/arrangement/arrangement_view.rs",
-      "docs/spec/arrangement-editing.md"
+      "crates/ui/src/settings/themes.rs",
+      "docs/spec/ui-settings.md"
     ]
   },
   "Arrangement/Tracks/track_headers": {
@@ -1482,16 +1480,17 @@
   "Theme/Theme/theme": {
     "sourceFingerprint": "e516b56c81ec152dca39879226b7cfbb3e891000dd35765817c1a2276f974d9c",
     "summary": "Select a theme and edit or manage its interface colors.",
-    "description": "A theme is a set of interface colors. Click a theme in the list to use it. Colours lists editable swatches with their purpose and color value; changing a built-in theme’s color first makes a personal copy. A personal theme can be renamed using its name field. Duplicate creates an editable copy; Reload reads theme files again; Open folder shows their location; Back up creates a zip of the theme files; Export template creates a starter theme and format instructions. Dropping a theme file or a zip of themes onto Suhina adds it. These controls affect appearance rather than audio or musical project data.",
+    "description": "Select a preview card to apply a theme immediately. The active theme has a larger preview. Existing tracks and clips keep their stored colours. Edit current theme opens grouped colour controls with opacity for surface colours; editing a built-in creates a personal copy and changes save live. Tracks & clips sets the MIDI and audio colours used for future creations. Surface gradients offers independent Panel, Track and Clip overlays, each with a toggle, direction and 2–8 colour/opacity stops. Gradients work without GPU liquid, but reduced effects and high contrast suppress materials. Liquid inherits the global strengths unless Use global liquid settings is turned off to save per-theme overrides; GPU and accessibility restrictions still apply. Save as new theme creates another copy; Reset changes restores the palette captured on entering the editor and its liquid inheritance. Restore built-in offers Save a copy & restore, Restore without a copy, or Cancel restore; existing custom files remain in the library. More provides Duplicate, Reload, Open folder, Back up and Export template. Dropping a theme file or a zip of themes onto Suhina adds it. Interface changes do not alter audio.",
     "options": [],
-    "whenToChange": "Pick a theme that is comfortable to read, then duplicate it before tailoring colors for your workspace.",
+    "whenToChange": "Choose a comfortable theme, then use Edit current theme to tailor its colours, gradients and liquid settings. Save a copy before restoring if you want an additional version of your current work.",
     "references": [
       "crates/ui/src/settings/settings_rows.rs",
       "crates/ui/src/settings.rs",
       "crates/ui/src/settings/settings_view.rs",
       "crates/ui/src/settings/themes.rs",
       "docs/design/brief.md",
-      "docs/design/components.md"
+      "docs/design/components.md",
+      "docs/spec/ui-settings.md"
     ]
   },
   "Shortcuts/Keys/keymap.json": {
@@ -1524,6 +1523,272 @@
       "crates/ui/src/settings/keymap.rs",
       "crates/ui/src/settings/workflow.rs",
       "docs/shortcuts.md"
+    ]
+  },
+  "Arrangement/Clips/waveform_colour": {
+    "sourceFingerprint": "e655bbace96b4873da22753dd77c17c674cd8136db5016ec1de6019a8702b608",
+    "summary": "Choose the colour of Arrangement waveforms and note previews.",
+    "description": "Controls the ink used for audio waveforms, MIDI note previews and ARA note overlays in Arrangement. Changes apply immediately to existing clips. Clip names keep their automatic contrast; the sound and project data do not change.",
+    "options": [
+      {
+        "name": "Auto",
+        "description": "Choose contrasting light or dark ink from each clip background."
+      },
+      {
+        "name": "Light",
+        "description": "Use the same light ink on every clip."
+      },
+      {
+        "name": "Dark",
+        "description": "Use the same dark ink on every clip. This is the default."
+      },
+      {
+        "name": "Custom",
+        "description": "Use Custom waveform and note colour; selecting this reveals its picker."
+      }
+    ],
+    "whenToChange": "Use Auto for contrasting ink on differently coloured clips, or select a consistent ink colour.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Clips/waveform_custom_colour": {
+    "sourceFingerprint": "b9c6278afa632a490c7593be4a1629a7a29954c0e55551e7d05f6a33edc026cf",
+    "summary": "Choose the custom ink for waveforms and note previews.",
+    "description": "This opaque colour picker appears when Waveform and note colour is Custom. Choose an RGB colour with the picker; the hexadecimal value is displayed beside it. Changes apply immediately to Arrangement waveforms, MIDI previews and ARA notes. The saved colour has no effect in Auto, Light or Dark mode.",
+    "options": [],
+    "whenToChange": "Select Custom first, then choose ink that is readable against your clip backgrounds.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Clips/audio_clip_colour_strength": {
+    "sourceFingerprint": "3cb754e1123db5e2c0e8b993aa654a93f3d65de81f8a4134a4c5d21b4e7bf579",
+    "summary": "Adjust how strongly audio clips show their assigned colour.",
+    "description": "A 0–100% slider mixes the theme surface with the audio clip colour: 0% uses the surface and 100% uses the full assigned colour. The default is 82%. Existing audio clip fills update immediately without changing their stored colours, MIDI clip strength or audio.",
+    "options": [],
+    "whenToChange": "Lower this for softer audio clip fills, or raise it to make their colours more prominent.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Tracks/track_header_colour_strength": {
+    "sourceFingerprint": "cc22790241cbb3d51545e4b17b10aa9c2b239de84e67089ec4409cf0ce6aa310",
+    "summary": "Adjust how strongly track headers show their assigned colour.",
+    "description": "A 0–100% slider mixes the theme surface with each track header colour. At 0% the surface dominates; at 100% the full assigned colour is used. The default is 82%. Changes apply immediately without recolouring stored tracks or changing clip strength.",
+    "options": [],
+    "whenToChange": "Lower this to soften headers, or raise it to make tracks easier to distinguish.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Track sizes/arrangement_track_size": {
+    "sourceFingerprint": "717640224f18489ae4f20f8ffe8b47d60642f9c3718e1499a5806d8d1796c54f",
+    "summary": "Choose the default Arrangement height for ordinary tracks.",
+    "description": "Applies the selected named height immediately to all ordinary tracks, replacing their previous manual height overrides. Newly created rows of this kind use it too. Heights of return tracks stay unchanged. Customize the named heights with the height controls below; this changes the view rather than project data or undo history.",
+    "options": [
+      {
+        "name": "Tiny",
+        "description": "The smallest named row, initially 14 pixels."
+      },
+      {
+        "name": "Compact",
+        "description": "A compact row, initially 20 pixels; the default for returns."
+      },
+      {
+        "name": "Small",
+        "description": "A small row, initially 40 pixels; the default for ordinary tracks."
+      },
+      {
+        "name": "Medium",
+        "description": "A medium row, initially 64 pixels."
+      },
+      {
+        "name": "Large",
+        "description": "The largest named row, initially 104 pixels."
+      }
+    ],
+    "whenToChange": "Choose a smaller size to fit more rows, or a larger size for clearer clip detail.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/track_sizes.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Track sizes/arrangement_return_size": {
+    "sourceFingerprint": "d1bee0e3f43681e39570e752e22ec4027a2c9c35b36984953f724c369ec936c2",
+    "summary": "Choose the default Arrangement height for return tracks.",
+    "description": "Applies the selected named height immediately to all return tracks, replacing their previous manual height overrides. Newly created rows of this kind use it too. Heights of ordinary tracks stay unchanged. Customize the named heights with the height controls below; this changes the view rather than project data or undo history.",
+    "options": [
+      {
+        "name": "Tiny",
+        "description": "The smallest named row, initially 14 pixels."
+      },
+      {
+        "name": "Compact",
+        "description": "A compact row, initially 20 pixels; the default for returns."
+      },
+      {
+        "name": "Small",
+        "description": "A small row, initially 40 pixels; the default for ordinary tracks."
+      },
+      {
+        "name": "Medium",
+        "description": "A medium row, initially 64 pixels."
+      },
+      {
+        "name": "Large",
+        "description": "The largest named row, initially 104 pixels."
+      }
+    ],
+    "whenToChange": "Choose a smaller size to fit more rows, or a larger size for clearer clip detail.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/track_sizes.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Track sizes/arrangement_sizes_advanced": {
+    "sourceFingerprint": "916762583074faa5bb35f6361c0da54c30343990fc5d00d2e5c796a4101c985e",
+    "summary": "Show exact pixel heights for the named track sizes.",
+    "description": "Off shows sliders without numeric units for the five named heights. On replaces them with editable pixel fields. Both modes enforce the same ordering and bounds; switching modes does not reset heights.",
+    "options": [
+      {
+        "name": "Off",
+        "description": "Tune heights using sliders without showing pixels. This is the default."
+      },
+      {
+        "name": "On",
+        "description": "Edit each named height directly in pixels."
+      }
+    ],
+    "whenToChange": "Turn this on when you want to enter exact heights.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/track_sizes.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Track sizes/arrangement_size_heights": {
+    "sourceFingerprint": "f2aba39c10102eaf404f7ff07079cf71c8063b0f517e3194ab749de09f84f1a3",
+    "summary": "Customize the Tiny Arrangement row height.",
+    "description": "The initial Tiny height is 14 pixels. Its control keeps it at least 14 pixels and below Compact. Advanced track sizes shows an exact pixel field; otherwise use the slider. Changes update matching named row heights immediately and preserve manually sized rows that do not match a named height. The five heights are saved together.",
+    "options": [],
+    "whenToChange": "Adjust this when the named size is useful but you want a different amount of vertical space.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/track_sizes.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Track sizes/Compact height": {
+    "sourceFingerprint": "bc72002b85c58592db4b47a39dccd8e5f219038e13a8de5b21cef5eee831d8ba",
+    "summary": "Customize the Compact Arrangement row height.",
+    "description": "The initial Compact height is 20 pixels. Its control keeps it above Tiny and below Small. Advanced track sizes shows an exact pixel field; otherwise use the slider. Changes update matching named row heights immediately and preserve manually sized rows that do not match a named height. The five heights are saved together.",
+    "options": [],
+    "whenToChange": "Adjust this when the named size is useful but you want a different amount of vertical space.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/track_sizes.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Track sizes/Small height": {
+    "sourceFingerprint": "8abcee97af25cb1ef2206cbaf4023cc88829a8de52c9d41f9c086b1177ce4c96",
+    "summary": "Customize the Small Arrangement row height.",
+    "description": "The initial Small height is 40 pixels. Its control keeps it above Compact and below Medium. Advanced track sizes shows an exact pixel field; otherwise use the slider. Changes update matching named row heights immediately and preserve manually sized rows that do not match a named height. The five heights are saved together.",
+    "options": [],
+    "whenToChange": "Adjust this when the named size is useful but you want a different amount of vertical space.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/track_sizes.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Track sizes/Medium height": {
+    "sourceFingerprint": "1d8d31528e43003fd6e50da1f42cfde7549d516ce3cc45536416eed7663a6c8c",
+    "summary": "Customize the Medium Arrangement row height.",
+    "description": "The initial Medium height is 64 pixels. Its control keeps it above Small and below Large. Advanced track sizes shows an exact pixel field; otherwise use the slider. Changes update matching named row heights immediately and preserve manually sized rows that do not match a named height. The five heights are saved together.",
+    "options": [],
+    "whenToChange": "Adjust this when the named size is useful but you want a different amount of vertical space.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/track_sizes.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Track sizes/Large height": {
+    "sourceFingerprint": "c7cdce4e070c629f65297475e2195f54b474ea57f31cc1c0c9859b4a8e59990f",
+    "summary": "Customize the Large Arrangement row height.",
+    "description": "The initial Large height is 104 pixels. Its control keeps it above Medium and at most 400 pixels. Advanced track sizes shows an exact pixel field; otherwise use the slider. Changes update matching named row heights immediately and preserve manually sized rows that do not match a named height. The five heights are saved together.",
+    "options": [],
+    "whenToChange": "Adjust this when the named size is useful but you want a different amount of vertical space.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/track_sizes.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Appearance/Liquid (experimental)/liquid_panel_strength": {
+    "sourceFingerprint": "df96bf57b722303c2540782940662b9338374d32e518ed9682958b1b260c394c",
+    "summary": "Set the global panel liquid strength.",
+    "description": "Controls the transparency and edge refraction of the Settings backdrop through the theme tint. A detached Settings window keeps a solid background. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio.",
+    "options": [],
+    "whenToChange": "Increase this to preview a translucent Settings surface. Keep 0% for a flat surface.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "crates/ui/src/kit/liquid.rs",
+      "docs/spec/ui-settings.md",
+      "docs/design/glass-rendering.md"
+    ]
+  },
+  "Appearance/Liquid (experimental)/liquid_track_strength": {
+    "sourceFingerprint": "c7edd51b686a09733fa1ef2b588d87f3a9be5aea74c676b02e19e0cf7149c284",
+    "summary": "Set the global track liquid strength.",
+    "description": "Controls reflections and edge refraction on MIDI and audio track headers. Track labels and controls are painted sharply afterward. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio.",
+    "options": [],
+    "whenToChange": "Increase this to add a reflective coating to track headers. Keep 0% for a flat surface.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "crates/ui/src/kit/liquid.rs",
+      "docs/spec/ui-settings.md",
+      "docs/design/glass-rendering.md"
+    ]
+  },
+  "Appearance/Liquid (experimental)/liquid_clip_strength": {
+    "sourceFingerprint": "9058ef0b5cfa46c0200f80c00e601abeddacbbda69503fe8a24c07362f777d0b",
+    "summary": "Set the global clip liquid strength.",
+    "description": "Controls reflections and edge refraction on clip bodies. Notes, waveforms and labels are painted sharply afterward. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio.",
+    "options": [],
+    "whenToChange": "Increase this to add a reflective coating to clips. Keep 0% for a flat surface.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "crates/ui/src/kit/liquid.rs",
+      "docs/spec/ui-settings.md",
+      "docs/design/glass-rendering.md"
     ]
   }
 }

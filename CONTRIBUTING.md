@@ -19,6 +19,18 @@
   *Before you finish a task* lists which document covers what. Leave out what `main` writes after
   the merge: `docs/INDEX.md`, `docs/commands.md`, the parity report's marked parts and figures, and
   the `last_verified` line of a document you change (it is stamped with the day of the merge).
+- **Settings help:** adding, removing, moving, renaming or changing a setting includes its website
+  help in the same pull request, automatically for agents. Read
+  [`docs/spec/settings-guide-export.md`](docs/spec/settings-guide-export.md), review the control
+  and implementation, and update `docs/guide-data/settings-help.json` with descriptions, choice
+  explanations, defaults, dependencies, when-to-change guidance, references and status. Review
+  behavior changes even when the source fingerprint stays unchanged; update fingerprints only
+  after checking the text. Migrate moved IDs and remove deleted entries. Run
+  `python scripts/settings_guide.py` and commit its `docs/guide-data/settings.json` output too;
+  this export is intentionally tracked. Verify with `python scripts/settings_guide.py --check`
+  and `python -m unittest discover -s scripts -p 'test_settings_guide.py'`. Check all changed
+  settings, not only the first reported error; do not defer the help to another repository,
+  a follow-up or a separate request.
 - **Parity measurement:** a pull request that adds, changes or removes something a user can do
   updates its coverage in `scripts/parity/score.py` (and `scripts/parity/devices.json` for a
   built-in effect or instrument) in the same pull request, and leaves the numbers in

@@ -353,6 +353,25 @@ coverage writes `Parity: no change` and the reason in its description ("Parity: 
 refactor"). When a pull request changes `crates/`, `devices/` or `apps/` and does neither, the
 [Parity notice](.github/workflows/parity-notice.yml) check warns; it does not fail.
 
+**Settings include their website help.** Whenever you add, remove, move, rename or change a
+setting, complete its guide update automatically in the same pull request. Read
+[`docs/spec/settings-guide-export.md`](docs/spec/settings-guide-export.md), the control in
+`crates/ui/src/settings/settings_rows.rs` and its implementation. Update
+`docs/guide-data/settings-help.json`: description, summary when present, every choice's name
+and explanation, when to change it, implementation references and any work-in-progress status.
+Explain grouped controls, defaults, dependencies and when a control has no effect. Migrate IDs
+for moved settings and remove help for deleted settings. Review behavior changes even when
+the registry metadata and fingerprint stay unchanged. Copy the current source fingerprint
+only after reviewing the text; never refresh fingerprints merely to make CI pass.
+
+Run `python scripts/settings_guide.py` and commit `docs/guide-data/settings.json` with the
+authored help. This export is intentionally committed, unlike the generated files below.
+Then run `python scripts/settings_guide.py --check` and
+`python -m unittest discover -s scripts -p 'test_settings_guide.py'`. Check every changed
+setting, not just the first error: the exporter stops at the first missing or stale entry.
+Do not defer the guide to another repository or a follow-up, and do not wait for a separate
+request to document a setting.
+
 **Documentation is part of the change.** A pull request that changes how something works updates,
 in the same pull request, every document that describes it, so the docs never describe code
 that no longer exists:
