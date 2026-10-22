@@ -800,6 +800,8 @@ pub fn show_row(
     places: &mut Vec<EditorPlace>,
 ) -> Picked {
     let _style_class = crate::kit::style_class::enter("detail");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
@@ -1010,6 +1012,8 @@ pub fn show_stack(
     places: &mut Vec<EditorPlace>,
 ) -> Picked {
     let _style_class = crate::kit::style_class::enter("detail");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
@@ -1041,6 +1045,8 @@ pub fn show_stack(
 /// switch was clicked to, if it was.
 pub fn show_clip_column(ui: &mut Ui, info: &ClipInfo, stacked: bool, actions: &mut Vec<Action>) -> (Rect, Picked) {
     let _style_class = crate::kit::style_class::enter("clip-editor");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);

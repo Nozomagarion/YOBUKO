@@ -7,6 +7,7 @@ last_verified: 2026-10-22
 covers:
   - crates/ui/src/kit/native_css.rs
   - crates/ui/src/kit/native_css/paint.rs
+  - crates/ui/src/kit/native_css/geometry.rs
   - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
@@ -130,11 +131,12 @@ font size and radius to ordinary egui widgets without creating new UI identities
 unrelated CSS leaves native defaults intact. Some raw controls and complete
 geometry/container-query integration are still missing.
 
-Connected surfaces paint linear/repeating-linear gradients with bounded cached colour
-ramps and Stylo's colour interpolation. Token-level input budgets bound nesting and
+Connected surfaces paint linear, radial and conic gradients, including repeating forms,
+with bounded cached colour ramps/spatial textures and Stylo's colour interpolation.
+Native surface dimensions resolve the gradient's centre, extent and radii. Token-level input budgets bound nesting and
 source size. Source-line notices identify known unsupported effect/font declarations
-without deleting authored source. Full-layout control of panels, radial/conic gradients,
-shadows, transforms, filters, animation and comprehensive computed-style diagnostics
+without deleting authored source. Full-layout control of panels, shadows, transforms,
+filters, animation and comprehensive computed-style diagnostics
 remain implementation work. Parsed declarations that the painter does not consume do
 not imply support. Toolbar height remains the host's height. These limits are also
 visible in the advanced CSS editor. Before enabling that engine,

@@ -1,21 +1,22 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Native painting of computed linear gradients. Stylo owns parsing and colour interpolation.
+//! Native painting of computed CSS gradients. Stylo owns parsing and colour interpolation.
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use super::geometry::{Geometry, Mapping};
 use egui::{Color32, Painter, Pos2, Rect, Vec2};
 use style::color::AbsoluteColor;
 use style::color::mix::{ColorInterpolationMethod, ColorMixItem, mix_many};
-use style::values::computed::image::{Gradient as CssGradient, LineDirection};
-use style::values::computed::{Length, LengthPercentage};
+use style::values::computed::image::Gradient as CssGradient;
+use style::values::computed::{AngleOrPercentage, Length, LengthPercentage, Percentage};
 use style::values::generics::color::ColorMixFlags;
 use style::values::generics::image::{GradientFlags, GradientItem};
-use style::values::specified::position::{HorizontalPositionKeyword as X, VerticalPositionKeyword as Y};
 
 const SAMPLES: usize = 1024;
 const MAX_TEXTURES: usize = 64;
+const SPATIAL_SAMPLES: usize = 256;
 
 #[derive(Clone, Debug)]
 struct Stop {
@@ -27,7 +28,7 @@ struct Stop {
 #[derive(Clone, Debug)]
 pub(super) struct Gradient {
     key: u64,
-    direction: LineDirection,
+    geometry: Geometry,
     interpolation: ColorInterpolationMethod,
     repeating: bool,
     stops: Vec<Stop>,
@@ -35,9 +36,39 @@ pub(super) struct Gradient {
 
 impl Gradient {
     pub fn from_css(css: &CssGradient, foreground: &AbsoluteColor, key: u64) -> Option<Self> {
-        let CssGradient::Linear { direction, color_interpolation_method, items, flags, .. } = css else {
-            return None;
+        let (geometry, interpolation, flags, stops) = match css {
+            CssGradient::Linear { direction, color_interpolation_method, items, flags, .. } => (
+                Geometry::Linear(*direction),
+                *color_interpolation_method,
+                *flags,
+                Self::stops(items, foreground, Clone::clone)?,
+            ),
+            CssGradient::Radial { shape, position, color_interpolation_method, items, flags, .. } => (
+                Geometry::Radial(shape.clone(), position.clone()),
+                *color_interpolation_method,
+                *flags,
+                Self::stops(items, foreground, Clone::clone)?,
+            ),
+            CssGradient::Conic { angle, position, color_interpolation_method, items, flags } => (
+                Geometry::Conic { angle: angle.radians(), position: position.clone() },
+                *color_interpolation_method,
+                *flags,
+                Self::stops(items, foreground, |value| {
+                    LengthPercentage::new_percent(Percentage(match value {
+                        AngleOrPercentage::Angle(angle) => angle.radians() / std::f32::consts::TAU,
+                        AngleOrPercentage::Percentage(value) => value.0,
+                    }))
+                })?,
+            ),
         };
+        Some(Self { key, geometry, interpolation, repeating: flags.contains(GradientFlags::REPEATING), stops })
+    }
+
+    fn stops<T>(
+        items: &[GradientItem<style::values::computed::Color, T>],
+        foreground: &AbsoluteColor,
+        position: impl Fn(&T) -> LengthPercentage,
+    ) -> Option<Vec<Stop>> {
         if items.len() > 64 {
             return None;
         }
@@ -45,9 +76,9 @@ impl Gradient {
         for item in items.iter() {
             let (color, position) = match item {
                 GradientItem::SimpleColorStop(color) => (color, None),
-                GradientItem::ComplexColorStop { color, position } => (color, Some(position.clone())),
+                GradientItem::ComplexColorStop { color, position: at } => (color, Some(position(at))),
                 GradientItem::InterpolationHint(hint) => {
-                    stops.last_mut()?.hint = Some(hint.clone());
+                    stops.last_mut()?.hint = Some(position(hint));
                     continue;
                 }
             };
@@ -56,26 +87,7 @@ impl Gradient {
         if stops.len() < 2 {
             return None;
         }
-        Some(Self {
-            key,
-            direction: *direction,
-            interpolation: *color_interpolation_method,
-            repeating: flags.contains(GradientFlags::REPEATING),
-            stops,
-        })
-    }
-
-    fn axis(&self, size: Vec2) -> Vec2 {
-        let x = |value: X| if value == X::Left { -1.0 } else { 1.0 };
-        let y = |value: Y| if value == Y::Top { -1.0 } else { 1.0 };
-        match &self.direction {
-            LineDirection::Angle(angle) => Vec2::new(angle.radians().sin(), -angle.radians().cos()),
-            LineDirection::Horizontal(value) => Vec2::new(x(*value), 0.0),
-            LineDirection::Vertical(value) => Vec2::new(0.0, y(*value)),
-            LineDirection::Corner(horizontal, vertical) => {
-                Vec2::new(x(*horizontal) * size.y, y(*vertical) * size.x).normalized()
-            }
-        }
+        Some(stops)
     }
 
     fn positions(&self, basis: f32) -> Vec<f32> {
@@ -158,8 +170,9 @@ fn draw(painter: &Painter, rect: Rect, gradient: &Gradient, radius: f32, opacity
     if !rect.is_finite() || !rect.is_positive() {
         return false;
     }
-    let direction = gradient.axis(rect.size());
-    let basis = direction.x.abs() * rect.width() + direction.y.abs() * rect.height();
+    let mapping = gradient.geometry.resolve(rect.size());
+    let linear = matches!(mapping, Mapping::Linear { .. });
+    let basis = mapping.basis();
     if !basis.is_finite() || basis <= 0.0 {
         return false;
     }
@@ -179,11 +192,28 @@ fn draw(painter: &Painter, rect: Rect, gradient: &Gradient, radius: f32, opacity
         if !length.is_finite() || length <= f32::EPSILON {
             return false;
         }
-        let pixels = (0..SAMPLES)
+        let samples: Vec<_> = (0..SAMPLES)
             .map(|index| gradient.sample(&points, basis, start + length * index as f32 / (SAMPLES - 1) as f32))
             .collect();
+        let image = if linear {
+            egui::ColorImage::new([SAMPLES, 1], samples)
+        } else {
+            // Sample a cached 1D colour ramp rather than evaluating expensive CSS
+            // colour-space conversions separately for every spatial texel.
+            let mut pixels = Vec::with_capacity(SPATIAL_SAMPLES * SPATIAL_SAMPLES);
+            for y in 0..SPATIAL_SAMPLES {
+                for x in 0..SPATIAL_SAMPLES {
+                    let point = Vec2::new(x as f32, y as f32) / (SPATIAL_SAMPLES - 1) as f32 * rect.size();
+                    let value = (mapping.position(point) - start) / length;
+                    let value = if gradient.repeating { value.rem_euclid(1.0) } else { value.clamp(0.0, 1.0) };
+                    let index = (value * (SAMPLES - 1) as f32).round() as usize;
+                    pixels.push(samples.get(index).copied().unwrap_or(Color32::TRANSPARENT));
+                }
+            }
+            egui::ColorImage::new([SPATIAL_SAMPLES, SPATIAL_SAMPLES], pixels)
+        };
         let options = egui::TextureOptions {
-            wrap_mode: if gradient.repeating {
+            wrap_mode: if linear && gradient.repeating {
                 egui::TextureWrapMode::Repeat
             } else {
                 egui::TextureWrapMode::ClampToEdge
@@ -191,11 +221,7 @@ fn draw(painter: &Painter, rect: Rect, gradient: &Gradient, radius: f32, opacity
             ..egui::TextureOptions::LINEAR
         };
         let ramp = Ramp {
-            texture: painter.ctx().load_texture(
-                format!("css-gradient-{}", gradient.key),
-                egui::ColorImage::new([SAMPLES, 1], pixels),
-                options,
-            ),
+            texture: painter.ctx().load_texture(format!("css-gradient-{}", gradient.key), image, options),
             start,
             length,
         };
@@ -208,7 +234,12 @@ fn draw(painter: &Painter, rect: Rect, gradient: &Gradient, radius: f32, opacity
     drop(cache);
     let mut mesh = egui::Mesh::with_texture(ramp.texture.id());
     let uv = |point: Pos2| {
-        egui::pos2((((point - rect.center()).dot(direction) / basis + 0.5) - ramp.start) / ramp.length, 0.5)
+        if linear {
+            egui::pos2((mapping.position(point - rect.min) - ramp.start) / ramp.length, 0.5)
+        } else {
+            let uv = (point - rect.min) / rect.size();
+            egui::pos2(uv.x, uv.y)
+        }
     };
     let color = Color32::WHITE.gamma_multiply(opacity);
     mesh.vertices.push(egui::epaint::Vertex { pos: rect.center(), uv: uv(rect.center()), color });

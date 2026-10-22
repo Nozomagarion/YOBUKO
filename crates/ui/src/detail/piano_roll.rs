@@ -1331,6 +1331,8 @@ pub fn show(
     actions: &mut Vec<Action>,
 ) {
     let _style_class = crate::kit::style_class::enter("piano-roll");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let Context { options, keymap, copied, playhead } = cx;
     let scale = options.toolbar_size.scale();
     let fresh = state.shown.as_ref() != Some(&clip.address);

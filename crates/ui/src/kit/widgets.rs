@@ -269,6 +269,9 @@ pub fn combo_box<R>(
     combo: egui::ComboBox,
     contents: impl FnOnce(&mut Ui) -> R,
 ) -> egui::InnerResponse<Option<R>> {
+    let _style_class = super::style_class::enter("dropdown");
+    let mut styled_ui = super::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let menu_style = ui.style().clone();
     ui.scope(|ui| {
         transparent_control(ui);
@@ -298,6 +301,9 @@ fn transparent_control(ui: &mut Ui) {
 
 /// Draggable/typed numeric fields share the form underline without changing interaction.
 pub fn number_input(ui: &mut Ui, size: Option<egui::Vec2>, number: egui::DragValue<'_>) -> Response {
+    let _style_class = super::style_class::enter("value");
+    let mut styled_ui = super::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     ui.scope(|ui| {
         transparent_control(ui);
         let response = if let Some(size) = size { ui.add_sized(size, number) } else { ui.add(number) };
@@ -308,6 +314,9 @@ pub fn number_input(ui: &mut Ui, size: Option<egui::Vec2>, number: egui::DragVal
 }
 
 pub fn number_input_at(ui: &mut Ui, rect: Rect, number: egui::DragValue<'_>) -> Response {
+    let _style_class = super::style_class::enter("value");
+    let mut styled_ui = super::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     ui.scope(|ui| {
         transparent_control(ui);
         let response = ui.put(rect, number);
@@ -686,9 +695,15 @@ pub(crate) fn play_glyph(painter: &egui::Painter, center: Pos2, playing: bool, c
 
 pub(crate) fn button(ui: &Ui, painter: &egui::Painter, rect: Rect, text: &str, label: &str) -> bool {
     let response = button_area(ui, rect, Id::new(("dialog-button", label)), label);
+    let _style = super::style_class::enter_response("button", &response);
     let fill = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
-    painter.rect_filled(rect, 0.0, fill);
-    painter.rect_stroke(rect, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
+    let fill = super::style_class::background(fill);
+    let radius = super::style_class::radius(0.0);
+    if !super::skin::paint(painter, rect, "button", super::skin::State::response(&response, false), fill, 0.0) {
+        painter.rect_filled(rect, radius, fill);
+        super::native_css::background_rounded(painter, rect, radius);
+    }
+    painter.rect_stroke(rect, radius, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
     let small = theme::ui_font(theme::TEXT_SMALL);
     text_in(painter, rect, Align2::CENTER_CENTER, text, small, theme::text_primary());
     response.clicked()

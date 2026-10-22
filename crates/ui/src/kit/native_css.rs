@@ -18,6 +18,7 @@ use egui::{Color32, Rect, Vec2};
 
 use super::{skin, theme};
 mod diagnostics;
+mod geometry;
 mod paint;
 pub use diagnostics::{Notice, inspect};
 pub use paint::{background, background_rounded, background_with};
@@ -655,6 +656,49 @@ mod tests {
         assert!((127..=129).contains(&midpoint[3]));
         assert_eq!(image.pixels[1023], Color32::BLUE);
         output.textures_delta.clear();
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn radial_and_conic_gradients_publish_spatial_pixels_at_the_authored_origin() {
+        for (css, red, blue) in [
+            (
+                ".browser { background-image:radial-gradient(circle 20px at 25% 75%, red 0 99%, blue 100%); }",
+                (64, 191),
+                (255, 0),
+            ),
+            (
+                ".browser { background-image:conic-gradient(from 90deg at 50% 50%, red 0deg 90deg, blue 90deg 360deg); }",
+                (224, 160),
+                (128, 0),
+            ),
+            (
+                ".browser { background-image:repeating-radial-gradient(circle 20px at 50% 50%, red 0 50%, blue 50% 100%); }",
+                (128, 128),
+                (147, 128),
+            ),
+        ] {
+            prepare(css, 800.0);
+            let style = scoped(&["browser".into()]).unwrap();
+            assert_eq!(style.gradients.len(), 1);
+            let ctx = egui::Context::default();
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let rect = Rect::from_min_size(egui::Pos2::ZERO, Vec2::splat(256.0));
+                assert!(background_with(ui.painter(), rect, &style));
+                assert!(background_with(ui.painter(), rect, &style));
+            });
+            let images: Vec<_> = output
+                .textures_delta
+                .set
+                .values()
+                .flat_map(|d| d.iter())
+                .filter(|d| d.image.size() == [256, 256])
+                .collect();
+            assert_eq!(images.len(), 1, "spatial textures are cached");
+            let egui::ImageData::Color(image) = &images[0].image;
+            assert_eq!(image.pixels[red.1 * 256 + red.0], Color32::RED, "{css}");
+            assert_eq!(image.pixels[blue.1 * 256 + blue.0], Color32::BLUE, "{css}");
+            output.textures_delta.clear();
+        }
         skin::configure(&skin::Skin::default());
     }
     #[test]

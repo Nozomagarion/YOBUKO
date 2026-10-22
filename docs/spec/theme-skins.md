@@ -11,6 +11,7 @@ covers:
   - apps/suhina/src/theme_files.rs
   - crates/ui/src/kit/native_css.rs
   - crates/ui/src/kit/native_css/paint.rs
+  - crates/ui/src/kit/native_css/geometry.rs
   - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
@@ -106,10 +107,14 @@ Only authored values override native defaults. Scoped colour, font size and radi
 reach ordinary egui controls in connected panels; the style guard preserves widget ids
 and restores the caller's style. Remaining raw controls still need integration.
 
-Connected native surfaces paint linear and repeating linear gradients using Stylo's
-computed stops, CSS colour interpolation and premultiplied transparency. Up to four
-layers with 64 items each use bounded, cached 1024-pixel colour ramps. Radial/conic
-gradients, shadows, transforms, filters and animations are not painted. The editor
+Connected native surfaces paint linear, radial and conic gradients, including repeating
+forms, using Stylo's computed stops, CSS colour interpolation and premultiplied
+transparency. Radial geometry resolves circle/ellipse radii, extent keywords and the
+authored centre against the real surface; conic geometry resolves the authored centre
+and start angle. Up to four layers with 64 items each use bounded cached 1024-pixel
+colour ramps. Radial/conic images use cached 256-by-256 textures; at most 64 gradient
+textures are retained per egui context. Shadows, transforms, filters and animations are
+not painted. The editor
 reports source-line notices for known unsupported effect/font declarations while
 preserving them in the source. These notices are not a complete CSS validator.
 Token-level validation bounds input to 128 KiB and 64 nested blocks/functions, without

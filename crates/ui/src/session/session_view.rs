@@ -196,6 +196,8 @@ pub fn show(
     actions: &mut Vec<Action>,
 ) {
     let _style_class = crate::kit::style_class::enter("session");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);

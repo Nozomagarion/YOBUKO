@@ -2494,6 +2494,8 @@ impl App {
         crate::kit::skin::configure(&self.themes.get(&self.settings.theme).map(|t| t.skin.clone()).unwrap_or_default());
         let _css_frame = crate::kit::native_css::frame(ui);
         let _window_style = crate::kit::style_class::enter("window");
+        let mut styled_ui = crate::kit::style_class::ui(ui);
+        let ui = &mut *styled_ui;
         if let Err(error) = self.background.update(ui, &self.settings, self.themes.palette(&self.settings.theme)) {
             self.status = Status::Error(error);
         }
@@ -3974,6 +3976,8 @@ impl App {
     /// The tab row: one tab per open project, the active one lit; a tab's × closes it.
     fn tab_row(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
         let _style_class = crate::kit::style_class::enter("project-tabs");
+        let mut styled_ui = crate::kit::style_class::ui(ui);
+        let ui = &mut *styled_ui;
         let bar = ui.max_rect();
         crate::kit::native_css::background(ui.painter(), bar);
         ui.allocate_rect(bar, Sense::hover());
@@ -4558,6 +4562,8 @@ impl App {
     /// The menu bar: the same actions as the shortcuts and the views' controls.
     fn menu_bar(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
         let _style_class = crate::kit::style_class::enter("menu-bar");
+        let mut styled_ui = crate::kit::style_class::ui(ui);
+        let ui = &mut *styled_ui;
         let has_project = self.session().is_some();
         let (can_undo, can_redo) = self.session().map_or((false, false), |s| (s.can_undo(), s.can_redo()));
         let several = self.projects.len() >= 2;
@@ -6558,6 +6564,8 @@ impl App {
         actions: &mut Vec<Action>,
     ) {
         let _style_class = crate::kit::style_class::enter("toolbar");
+        let mut styled_ui = crate::kit::style_class::ui(ui);
+        let ui = &mut *styled_ui;
         if self.themed_toolbar(ui, grid, cpu, ram, actions) {
             return;
         }
@@ -6913,6 +6921,8 @@ impl App {
 
     fn status_bar(&self, ui: &mut Ui, grid: Option<&Grid>) {
         let _style_class = crate::kit::style_class::enter("status-bar");
+        let mut styled_ui = crate::kit::style_class::ui(ui);
+        let ui = &mut *styled_ui;
         let bar = ui.max_rect();
         let painter = ui.painter_at(bar);
         let (text, color) = match &self.status {
