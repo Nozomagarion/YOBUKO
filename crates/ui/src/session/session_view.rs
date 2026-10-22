@@ -735,6 +735,21 @@ fn column_body(
     let editable = column.kind == ColumnKind::Track;
     let can_paste = state.can_paste;
     let _column_style = crate::kit::style_class::enter_named("track-column", &format!("track-{}", column.track.0));
+    if crate::kit::style_class::property("--suhina-track-artwork").as_deref() == Some("on") {
+        let body = Rect::from_x_y_ranges(span, bands.body.y_range());
+        crate::kit::skin::paint_colored(
+            painter,
+            body,
+            "track.body",
+            if state.selected == Some(column.track) {
+                crate::kit::skin::State::Active
+            } else {
+                crate::kit::skin::State::Normal
+            },
+            rgb(column.color),
+            rgb(column.color),
+        );
+    }
     let (top, scenes) = (bands.top, bands.scenes);
     let mapping = state.launch_keys.mode.on && column.kind != ColumnKind::Return;
     let label = |target: MappingTarget| bands.mapped.iter().find(|(t, _)| *t == target).map(|(_, l)| l.as_str());
@@ -977,6 +992,7 @@ fn slot_cell(
     let track_color = rgb(column.color);
     // A clip slot is filled with the clip's colour (its track's unless it has its own).
     let clip_color = slot.color.map_or(track_color, rgb);
+    let textured = crate::kit::style_class::property("--suhina-track-artwork").as_deref() == Some("on");
     let empty =
         motion::mix(theme::window_background(), track_color, if column.mute { EMPTY_TINT / 2.0 } else { EMPTY_TINT });
     let mark_rect =
@@ -988,10 +1004,18 @@ fn slot_cell(
     let font = theme::ui_font(theme::TEXT);
     match slot.state {
         SlotState::Empty => {
-            painter.fill_background(rect, 0.0, empty);
+            if !textured {
+                painter.fill_background(rect, 0.0, empty);
+            }
         }
         SlotState::EmptyStop => {
-            painter.fill_background(rect, 0.0, motion::mix(empty, theme::panel_background(), hover));
+            if textured {
+                // Blend hover over artwork; a replacement-alpha background fill
+                // would erase the texture on native GPU surfaces.
+                painter.rect_filled(rect, 0.0, theme::panel_background().gamma_multiply(hover));
+            } else {
+                painter.fill_background(rect, 0.0, motion::mix(empty, theme::panel_background(), hover));
+            }
             painter.rect_filled(mark_rect(EMPTY_MARK), 0.0, theme::slot_empty());
         }
         SlotState::Stopped | SlotState::Queued => {

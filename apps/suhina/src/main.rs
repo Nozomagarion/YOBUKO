@@ -236,7 +236,12 @@ fn main() -> ExitCode {
             window.app.set_settings(&cc.egui_ctx, settings);
             // Strengths default to zero. The experimental Appearance controls apply live;
             // unsupported renderers and reduced effects keep solid surfaces.
-            if animations && let Some(gpu) = cc.wgpu_render_state.clone() {
+            // Liquid shares encoded and linear views of its captures. Older GL
+            // adapters may draw egui but cannot create these aliases safely.
+            if animations
+                && let Some(gpu) = cc.wgpu_render_state.clone()
+                && gpu.adapter.get_downlevel_capabilities().flags.contains(eframe::wgpu::DownlevelFlags::VIEW_FORMATS)
+            {
                 suhina_ui::kit::liquid::install(&cc.egui_ctx, std::sync::Arc::new(liquid::Liquid::new(gpu)));
             }
             let folder = window.themes.folder_text();

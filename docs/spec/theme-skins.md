@@ -12,9 +12,19 @@ covers:
   - crates/ui/src/kit/control_layout.rs
   - assets/themes/default/*.svg
   - assets/themes/examples/*.svg
+  - assets/themes/sheet/*.svg
+  - assets/themes/meadow/*.svg
+  - assets/themes/meadow/meadow.png
+  - assets/themes/blocks/*.svg
   - crates/ui/themes/THEME-PACKAGE-README.md
   - crates/ui/themes/dark-gloss.css
   - crates/ui/themes/compact-session.css
+  - crates/ui/themes/suhina-sheet.json
+  - crates/ui/themes/suhina-sheet.css
+  - crates/ui/themes/suhina-meadow.json
+  - crates/ui/themes/suhina-meadow.css
+  - crates/ui/themes/suhina-blocks.json
+  - crates/ui/themes/suhina-blocks.css
   - crates/ui/src/kit/skin.rs
   - crates/ui/src/app/themed_toolbar.rs
   - crates/ui/src/settings/skin_editor.rs
@@ -75,6 +85,57 @@ and explicit limits. Its palette reference is generated from the token registry.
 # Theme skins
 
 ## Session density and meter materials
+
+The original **Suhina Sheet** built-in theme demonstrates a light spreadsheet-like
+Session, green application chrome, compact cells and square controls. Its own
+self-contained SVG artwork lives under `assets/themes/sheet/` and is embedded with
+the palette and CSS, so duplication/export includes the effective artwork without
+depending on installed files. It uses existing native controls, commands and views;
+it does not add spreadsheet functions or bundle third-party application artwork.
+The menu, toolbar and native Windows application bar enter their style scopes
+before painting their backgrounds, so their solid colours and CSS materials agree
+with the scoped foregrounds without changing layout or menu/transport actions.
+
+![Suhina Sheet Session with green browser, worksheet grid, SVG controls and measured meters](../design/reference/theme-sheet-session.png)
+
+This is an actual native Linux/OpenGL capture with the detail area hidden and demo
+playback providing the meter levels. The empty-space worksheet grid is decorative;
+clip launch, faders, pan, scenes and routing retain their native behavior.
+
+**Suhina Meadow** adds classic blue chrome, cream beveled controls and paper-like
+browser/device surfaces over a green-hill wallpaper. The landscape is an original
+AI-generated image, not a bundled operating-system photograph. Its PNG is embedded
+once and shared across theme instances; export writes it as editable `background.png`.
+The theme leaves the empty workspace transparent over this private image, with
+translucent blue/cream glass panels and theme-owned liquid strengths (panels 48,
+tracks 24, clips 12). The liquid renderer requires GPU rendering, animations enabled
+and encoded/linear texture-view support; older GL adapters retain ordinary alpha
+materials without installing unsupported captures. Effective SVG roles include shared original Sheet
+glyphs plus Meadow's own faders, knobs, button, paper icon and mixer body.
+While a private background image is active, the workspace's separator backdrop
+stays transparent. Panel surfaces and individual splitter controls still paint
+their own fills; without an image the native separator backdrop remains unchanged.
+
+![Suhina Meadow with visible private wallpaper, translucent panels and live liquid materials](../design/reference/theme-meadow-liquid.png)
+
+This native Vulkan capture uses the original generated wallpaper, actual theme
+liquid settings and measured demo levels. It was rendered with the software Vulkan
+adapter in an isolated X11 session; it does not establish physical-GPU timing.
+
+**Suhina Blocks** uses original brown plank/grain CSS, stone-like beveled controls
+and colour-keyed pixel SVG textures. It has no landscape or background PNG. Native
+`.track-column { --suhina-track-artwork: on; }` opts Session slot columns into the
+existing `track.body` artwork (including raw colour/state variants). The body stays
+behind clip cells; empty cells preserve it while hover/stop marks remain native.
+`off` or omission retains the original slot fills. JSON/CSS/export preserve this
+native style property, and it does not change launch/drop geometry or commands.
+
+![Suhina Blocks with brown plank workspace, colour-keyed pixel track textures and native meters](../design/reference/theme-blocks-session.png)
+
+This native Vulkan Session capture uses original SVG pixel textures and CSS brown
+planks. No landscape wallpaper or game artwork is used. Native replacement-alpha
+surfaces leave textured empty slots untouched; hover paints as an ordinary overlay
+so it cannot erase the underlying artwork.
 
 Session and Arrangement remain separate views. Theme customization does not introduce
 a combined view or the separately planned mixer view.

@@ -1346,6 +1346,31 @@ mod skin_package_tests {
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
+    fn example_builtins_export_their_css_svg_controls_and_background() {
+        for id in ["suhina-sheet", "suhina-meadow", "suhina-blocks"] {
+            let root = folder(id);
+            let (_, theme) = theme::built_in_themes().into_iter().find(|(key, _)| *key == id).unwrap();
+            let mut source = ThemeFiles::new(Some(root.join("source")));
+            source.write("sheet-copy", &theme).unwrap();
+            let zip = source.backup().unwrap();
+            let mut target = ThemeFiles::new(Some(root.join("target")));
+            let (ids, warnings) = target.import(&zip).unwrap();
+            assert_eq!(ids, ["sheet-copy"]);
+            assert!(warnings.is_empty(), "{warnings:?}");
+            assert_eq!(target.read_all().0[0].theme, theme);
+            let mut archive = zip::ZipArchive::new(std::fs::File::open(zip).unwrap()).unwrap();
+            for role in theme.skin.assets.keys() {
+                assert!(archive.by_name(&format!("sheet-copy/assets/{role}.svg")).is_ok(), "{role}");
+            }
+            assert!(archive.by_name("sheet-copy/advanced.css").is_ok());
+            assert!(archive.by_name("sheet-copy/style.css").is_ok());
+            assert!(archive.by_name("sheet-copy/README.md").is_ok());
+            assert_eq!(archive.by_name("sheet-copy/background.png").is_ok(), id == "suhina-meadow");
+            std::fs::remove_dir_all(root).unwrap();
+        }
+    }
+
+    #[test]
     fn package_round_trip_contains_svg_css_and_png() {
         let root = folder("package");
         let mut theme = styled();

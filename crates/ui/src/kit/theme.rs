@@ -261,7 +261,7 @@ pub const BUILT_IN: &str = "suhina-dark";
 /// The themes that come with Suhina besides Suhina Dark, as theme files: id and text.
 /// Dracula, Nord, Catppuccin and Solarized are popular open palettes (MIT, their licences in
 /// `themes/licenses/`), mapped onto Suhina's tokens.
-const BUILT_IN_FILES: [(&str, &str); 12] = [
+const BUILT_IN_FILES: [(&str, &str); 15] = [
     ("suhina-studio-dark", include_str!("../../themes/suhina-studio-dark.json")),
     ("suhina-studio-light", include_str!("../../themes/suhina-studio-light.json")),
     ("editor-dark", include_str!("../../themes/editor-dark.json")),
@@ -274,13 +274,88 @@ const BUILT_IN_FILES: [(&str, &str); 12] = [
     ("solarized-dark", include_str!("../../themes/solarized-dark.json")),
     ("suhina-glass", include_str!("../../themes/suhina-glass.json")),
     ("suhina-forest-amber", include_str!("../../themes/suhina-forest-amber.json")),
+    ("suhina-sheet", include_str!("../../themes/suhina-sheet.json")),
+    ("suhina-meadow", include_str!("../../themes/suhina-meadow.json")),
+    ("suhina-blocks", include_str!("../../themes/suhina-blocks.json")),
 ];
+
+const SHEET_SVGS: &[(&str, &str)] = &[
+    ("fader.cap", include_str!("../../../../assets/themes/sheet/fader.cap.svg")),
+    ("fader.rail", include_str!("../../../../assets/themes/sheet/fader.rail.svg")),
+    ("knob.body", include_str!("../../../../assets/themes/sheet/knob.body.svg")),
+    ("knob.pointer", include_str!("../../../../assets/themes/sheet/knob.pointer.svg")),
+    ("button", include_str!("../../../../assets/themes/sheet/button.svg")),
+    ("play", include_str!("../../../../assets/themes/sheet/play.svg")),
+    ("stop", include_str!("../../../../assets/themes/sheet/stop.svg")),
+    ("record", include_str!("../../../../assets/themes/sheet/record.svg")),
+    ("solo", include_str!("../../../../assets/themes/sheet/solo.svg")),
+    ("arm", include_str!("../../../../assets/themes/sheet/arm.svg")),
+    ("cue", include_str!("../../../../assets/themes/sheet/cue.svg")),
+    ("track.midi", include_str!("../../../../assets/themes/sheet/track.midi.svg")),
+    ("track.audio", include_str!("../../../../assets/themes/sheet/track.audio.svg")),
+    ("track.name", include_str!("../../../../assets/themes/sheet/track.name.svg")),
+    ("track.body", include_str!("../../../../assets/themes/sheet/track.body.svg")),
+    ("meter", include_str!("../../../../assets/themes/sheet/meter.svg")),
+];
+
+const MEADOW_SVGS: &[(&str, &str)] = &[
+    ("fader.cap", include_str!("../../../../assets/themes/meadow/fader.cap.svg")),
+    ("fader.rail", include_str!("../../../../assets/themes/meadow/fader.rail.svg")),
+    ("knob.body", include_str!("../../../../assets/themes/meadow/knob.body.svg")),
+    ("knob.pointer", include_str!("../../../../assets/themes/meadow/knob.pointer.svg")),
+    ("button", include_str!("../../../../assets/themes/meadow/button.svg")),
+    ("track.midi", include_str!("../../../../assets/themes/meadow/track.midi.svg")),
+    ("track.body", include_str!("../../../../assets/themes/meadow/track.body.svg")),
+];
+
+const BLOCKS_SVGS: &[(&str, &str)] = &[
+    ("fader.cap", include_str!("../../../../assets/themes/blocks/fader.cap.svg")),
+    ("fader.rail", include_str!("../../../../assets/themes/blocks/fader.rail.svg")),
+    ("knob.body", include_str!("../../../../assets/themes/blocks/knob.body.svg")),
+    ("knob.pointer", include_str!("../../../../assets/themes/blocks/knob.pointer.svg")),
+    ("button", include_str!("../../../../assets/themes/blocks/button.svg")),
+    ("track.midi", include_str!("../../../../assets/themes/blocks/track.midi.svg")),
+    ("track.audio", include_str!("../../../../assets/themes/blocks/track.audio.svg")),
+    ("track.name", include_str!("../../../../assets/themes/blocks/track.name.svg")),
+    ("track.body", include_str!("../../../../assets/themes/blocks/track.body.svg")),
+    ("track.body.color-ff9a3c", include_str!("../../../../assets/themes/blocks/track.body.color-ff9a3c.svg")),
+    ("track.body.color-f2d541", include_str!("../../../../assets/themes/blocks/track.body.color-f2d541.svg")),
+    ("track.body.color-4fc3f7", include_str!("../../../../assets/themes/blocks/track.body.color-4fc3f7.svg")),
+    ("track.body.color-b38bff", include_str!("../../../../assets/themes/blocks/track.body.color-b38bff.svg")),
+    ("track.body.color-7fdb5a", include_str!("../../../../assets/themes/blocks/track.body.color-7fdb5a.svg")),
+    ("track.body.color-e5484d", include_str!("../../../../assets/themes/blocks/track.body.color-e5484d.svg")),
+    ("track.body.color-80ada1", include_str!("../../../../assets/themes/blocks/track.body.color-80ada1.svg")),
+    ("track.body.color-a84f4f", include_str!("../../../../assets/themes/blocks/track.body.color-a84f4f.svg")),
+];
+
+fn meadow_background() -> Option<std::sync::Arc<str>> {
+    static BACKGROUND: std::sync::OnceLock<Option<std::sync::Arc<str>>> = std::sync::OnceLock::new();
+    BACKGROUND
+        .get_or_init(|| super::skin::encode_png(include_bytes!("../../../../assets/themes/meadow/meadow.png")).ok())
+        .clone()
+}
 
 /// The themes that come with Suhina, Suhina Dark first, with their ids. They do not change;
 /// editing one makes a copy.
 pub fn built_in_themes() -> Vec<(&'static str, Theme)> {
     let mut themes = vec![(BUILT_IN, Theme::default())];
-    themes.extend(BUILT_IN_FILES.iter().map(|(id, text)| (*id, Theme::from_json(text).0)));
+    themes.extend(BUILT_IN_FILES.iter().map(|(id, text)| {
+        let mut theme = Theme::from_json(text).0;
+        if matches!(*id, "suhina-sheet" | "suhina-meadow" | "suhina-blocks") {
+            theme.skin.assets = SHEET_SVGS.iter().map(|(role, svg)| ((*role).into(), (*svg).into())).collect();
+            if *id == "suhina-meadow" {
+                theme.skin.css = Some(include_str!("../../themes/suhina-meadow.css").into());
+                theme.skin.assets.extend(MEADOW_SVGS.iter().map(|(role, svg)| ((*role).into(), (*svg).into())));
+                theme.skin.background = meadow_background();
+            } else if *id == "suhina-blocks" {
+                theme.skin.css = Some(include_str!("../../themes/suhina-blocks.css").into());
+                theme.skin.assets.extend(BLOCKS_SVGS.iter().map(|(role, svg)| ((*role).into(), (*svg).into())));
+            } else {
+                theme.skin.css = Some(include_str!("../../themes/suhina-sheet.css").into());
+            }
+        }
+        (*id, theme)
+    }));
     themes
 }
 
@@ -730,6 +805,40 @@ mod tests {
         let (invalid, warnings) = Theme::from_json(r#"{"liquid":{"panels":999,"tracks":-1,"clips":"bad"}}"#);
         assert_eq!(warnings.len(), 3);
         assert_eq!(invalid.liquid, Some(super::super::liquid::Options::default()));
+    }
+
+    #[test]
+    fn example_themes_embed_their_paint_and_all_editable_artwork() {
+        for (id, width) in [("suhina-sheet", 88), ("suhina-meadow", 92), ("suhina-blocks", 92)] {
+            let (_, sheet) = built_in_themes().into_iter().find(|(key, _)| *key == id).unwrap();
+            assert!(sheet.skin.assets.len() >= super::super::skin::ROLES.len());
+            for role in super::super::skin::ROLES {
+                let svg = &sheet.skin.assets[*role];
+                assert!(super::super::skin::validate_artwork(svg).is_ok(), "{role}");
+            }
+            for (role, svg) in &sheet.skin.assets {
+                assert!(super::super::skin::validate_artwork(svg).is_ok(), "{role}");
+            }
+            assert!(super::super::native_css::inspect(sheet.skin.css.as_deref().unwrap()).unwrap().is_empty());
+            assert_eq!(sheet.skin.session.track_width, Some(width));
+            assert_eq!(sheet.skin.background.is_some(), id == "suhina-meadow");
+            let (restored, warnings) = Theme::from_json(&sheet.to_json());
+            assert!(warnings.is_empty(), "{warnings:?}");
+            assert_eq!(restored, sheet);
+            let mut native = sheet.clone();
+            assert!(super::super::theme_css::apply(&mut native, &super::super::theme_css::export(&sheet)).is_empty());
+            assert_eq!(native.skin.session, sheet.skin.session);
+            assert_eq!(native.skin.controls, sheet.skin.controls);
+            assert_eq!(native.skin.meter_intensity, sheet.skin.meter_intensity);
+            assert_eq!(native.skin.styles, sheet.skin.styles);
+        }
+        let first = meadow_background().unwrap();
+        let second = meadow_background().unwrap();
+        assert!(std::sync::Arc::ptr_eq(&first, &second));
+        let bytes = super::super::skin::decode_png(&first).unwrap();
+        let image = image::load_from_memory(&bytes).unwrap();
+        assert!(image.width() >= 1024 && image.width() <= 4096);
+        assert!(image.height() >= 512 && image.height() <= 4096);
     }
 
     #[test]

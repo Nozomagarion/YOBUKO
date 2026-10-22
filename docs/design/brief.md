@@ -198,6 +198,11 @@ and theme-specific liquid strengths. Its built-in id is `suhina-forest-amber`, l
 custom `forest-amber` files intact. Background images remain separately chosen local files.
 
 Themes that come with Suhina (`crates/ui/themes/`, read-only; editing one makes a copy):
+Suhina Sheet is an original playful spreadsheet-inspired light theme: green chrome,
+white cells, compact Session geometry and embedded square SVG controls. Its palette,
+CSS and artwork travel together when duplicated or exported.
+Suhina Meadow pairs classic blue/cream paper surfaces with an original generated
+green-hill background and translucent liquid materials. Its SVG controls and PNG are embedded and export with the theme. Suhina Blocks adds original brown plank surfaces, stone-like controls and colour-keyed pixel textures without landscape wallpaper.
 Suhina Dark (the default), Editor Dark (cool greys and blue, like a code editor), Suhina
 Light, High Contrast, and four popular open palettes mapped onto the tokens: Dracula, Nord,
 Catppuccin Mocha and Latte, Solarized Dark (all MIT, licences in `crates/ui/themes/licenses/`).

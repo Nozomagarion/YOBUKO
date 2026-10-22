@@ -2713,10 +2713,10 @@ impl App {
         // The application bar is the window's title bar where Suhina draws its own (Windows); where
         // the system draws one, it would be a second.
         if cfg!(target_os = "windows") {
-            egui::Panel::top("application-bar").exact_size(28.0).frame(egui::Frame::NONE).show(ui, |ui| {
-                ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
-                application_bar::show(ui, self.settings.view, &project_info, &timing)
-            });
+            egui::Panel::top("application-bar")
+                .exact_size(28.0)
+                .frame(egui::Frame::NONE)
+                .show(ui, |ui| application_bar::show(ui, self.settings.view, &project_info, &timing));
         }
         // The window's own menu bar, unless Settings turns it off (by default on macOS, whose bar
         // at the top of the screen has the same menus).
@@ -2725,11 +2725,10 @@ impl App {
                 .exact_size(theme::MENU_BAR)
                 .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 0)))
                 .show(ui, |ui| {
-                    ui.painter().fill_background(
-                        ui.max_rect().expand2(Vec2::new(4.0, 0.0)),
-                        0.0,
-                        theme::panel_background(),
-                    );
+                    let _style_class = crate::kit::style_class::enter("menu-bar");
+                    let bar = ui.max_rect().expand2(Vec2::new(4.0, 0.0));
+                    ui.painter().fill_background(bar, 0.0, theme::panel_background());
+                    crate::kit::native_css::background(ui.painter(), bar);
                     self.menu_bar(ui, &mut actions)
                 });
         }
@@ -2741,7 +2740,9 @@ impl App {
             });
         }
         egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+            let _style_class = crate::kit::style_class::enter("toolbar");
             ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
+            crate::kit::native_css::background(ui.painter(), ui.max_rect());
             self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions)
         });
         self.frame_trace.mark("control bar");
@@ -2757,7 +2758,14 @@ impl App {
             (false, false) => Some((dropped, true)),
             (false, true) => Some((self.hovered_files(ui), false)).filter(|(items, _)| !items.is_empty()),
         };
-        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(theme::border())).show(ui, |ui| {
+        // A private image is already painted underneath the workspace. Keep its
+        // transparent regions visible instead of covering them with separator ink.
+        let workspace_base = if crate::kit::liquid::background_image(ui.ctx()).is_some() {
+            egui::Color32::TRANSPARENT
+        } else {
+            theme::border()
+        };
+        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(workspace_base)).show(ui, |ui| {
             let _workspace_style = crate::kit::style_class::enter_named("workspace", "workspace");
             let area = ui.available_rect_before_wrap();
             // A 1 px gap shows the line colour between the bars and the view.
@@ -4658,7 +4666,6 @@ impl App {
 
     /// The menu bar: the same actions as the shortcuts and the views' controls.
     fn menu_bar(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
-        let _style_class = crate::kit::style_class::enter("menu-bar");
         let mut styled_ui = crate::kit::style_class::ui(ui);
         let ui = &mut *styled_ui;
         // Whether the File menu showed last frame, so its recent list is read once as it opens.
@@ -6685,7 +6692,6 @@ impl App {
         ram: Option<u64>,
         actions: &mut Vec<Action>,
     ) {
-        let _style_class = crate::kit::style_class::enter("toolbar");
         let mut styled_ui = crate::kit::style_class::ui(ui);
         let ui = &mut *styled_ui;
         if self.themed_toolbar(ui, grid, cpu, ram, actions) {

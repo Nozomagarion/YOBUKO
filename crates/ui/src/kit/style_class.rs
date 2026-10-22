@@ -64,6 +64,7 @@ pub fn valid_selector(selector: &str) -> bool {
 }
 pub fn valid_property(key: &str, value: &str) -> bool {
     match key {
+        "--suhina-track-artwork" => matches!(value, "on" | "off"),
         "--suhina-appearance" => matches!(value, "native" | "knob" | "field"),
         "color" | "background-color" | "border-color" => theme::parse_hex(value).is_some(),
         "border-radius" => value.strip_suffix("px").and_then(|v| v.parse::<u8>().ok()).is_some_and(|v| v <= 32),
@@ -91,15 +92,19 @@ pub fn property(key: &str) -> Option<String> {
     let skin = skin::current();
     STACK.with(|stack| {
         let stack = stack.borrow();
-        // More specific descendants win. Equal-specificity declarations are already normalized by the CSS reader.
-        skin.styles
-            .iter()
-            .filter(|(selector, _)| matches(selector, &stack))
-            .filter_map(|(selector, properties)| {
-                properties.get(key).map(|value| (selector.split_whitespace().count(), value))
-            })
-            .max_by_key(|(specificity, _)| *specificity)
-            .map(|(_, value)| value.clone())
+        // Native custom properties inherit from the nearest authored ancestor.
+        // Ordinary paint properties inherit through the scoped palette instead.
+        let first = if key.starts_with("--") { 1 } else { stack.len() };
+        (first..=stack.len()).rev().find_map(|end| {
+            skin.styles
+                .iter()
+                .filter(|(selector, _)| matches(selector, &stack[..end]))
+                .filter_map(|(selector, properties)| {
+                    properties.get(key).map(|value| (selector.split_whitespace().count(), value))
+                })
+                .max_by_key(|(specificity, _)| *specificity)
+                .map(|(_, value)| value.clone())
+        })
     })
 }
 
@@ -328,6 +333,32 @@ pub fn ui(ui: &mut egui::Ui) -> UiStyle<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn native_custom_properties_inherit_and_nearest_scope_overrides() {
+        let mut theme = theme::Theme::default();
+        assert!(
+            super::super::theme_css::apply(
+                &mut theme,
+                ".track-column { --suhina-track-artwork: on; } .track-column .clip { --suhina-track-artwork: off; }"
+            )
+            .is_empty()
+        );
+        skin::configure(&theme.skin);
+        {
+            let _column = enter("track-column");
+            assert_eq!(property("--suhina-track-artwork").as_deref(), Some("on"));
+            {
+                let _slot = enter("slot");
+                assert_eq!(property("--suhina-track-artwork").as_deref(), Some("on"));
+                let _clip = enter("clip");
+                assert_eq!(property("--suhina-track-artwork").as_deref(), Some("off"));
+            }
+            assert_eq!(property("--suhina-track-artwork").as_deref(), Some("on"));
+        }
+        assert!(property("--suhina-track-artwork").is_none());
+        skin::configure(&skin::Skin::default());
+    }
+
     #[test]
     fn portable_pan_appearance_survives_json_css_and_does_not_leak_out_of_its_scope() {
         for (value, forced) in [("knob", Some(true)), ("field", Some(false)), ("native", None)] {

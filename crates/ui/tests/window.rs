@@ -23,6 +23,122 @@ use suhina_ui::{App, OpenAs, Status, View, kit::theme};
 // Short and constrained layouts are exercised separately in short_panes.rs.
 const SIZE: (f32, f32) = (1280.0, 900.0);
 
+#[test]
+fn private_background_removes_the_opaque_workspace_backdrop_and_keeps_native_panels() {
+    use suhina_ui::settings::themes::ThemeEntry;
+    fn covers_workspace(shape: &egui::Shape, ink: egui::Color32) -> bool {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().any(|shape| covers_workspace(shape, ink)),
+            egui::Shape::Rect(rect) => {
+                rect.fill == ink && rect.rect.width() > SIZE.0 * 0.9 && rect.rect.height() > SIZE.1 * 0.5
+            }
+            _ => false,
+        }
+    }
+    let mut h = window(demo_app());
+    let border = theme::border();
+    assert!(h.output().shapes.iter().any(|shape| covers_workspace(&shape.shape, border)));
+    let before = h.state().session().unwrap().project().clone();
+    let ctx = h.ctx.clone();
+    let mut paper = theme::Theme { name: "Private paper".into(), ..Default::default() };
+    paper.colors.window_background = egui::Color32::TRANSPARENT;
+    paper.skin.background = Some("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQ6nD5DwADrAHuJHH6EQAAAABJRU5ErkJggg==".into());
+    paper.skin.background_opacity = 100;
+    h.state_mut().put_theme(&ctx, ThemeEntry { id: "private-paper".into(), theme: paper });
+    h.state_mut().use_theme(&ctx, "private-paper");
+    for _ in 0..100 {
+        h.step();
+        if suhina_ui::kit::liquid::background_image(&ctx).is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    let image = suhina_ui::kit::liquid::background_image(&ctx).expect("background worker completed");
+    assert!(h.output().shapes.iter().any(|shape| matches!(&shape.shape,
+        egui::Shape::Mesh(mesh) if mesh.texture_id == image.id && mesh.calc_bounds().width() > SIZE.0 * 0.9
+    )));
+    assert!(
+        !h.output().shapes.iter().any(|shape| covers_workspace(&shape.shape, border)),
+        "separator ink must not conceal the image"
+    );
+    assert!(
+        h.output().shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Rect(rect) if rect.fill == theme::panel_background() && rect.rect.height() > 10.0
+        )),
+        "native panel surfaces remain opaque"
+    );
+    assert_eq!(h.state().session().unwrap().project(), &before);
+}
+
+#[test]
+fn textured_empty_slots_do_not_clear_their_artwork_on_native_alpha_surfaces() {
+    use std::sync::{Arc, Mutex};
+    struct Replacement(Arc<Mutex<Vec<(egui::Rect, egui::Color32)>>>);
+    impl suhina_ui::kit::surface::Provider for Replacement {
+        fn shape(&self, rect: egui::Rect, radius: egui::CornerRadius, color: egui::Color32) -> egui::Shape {
+            if let Ok(mut fills) = self.0.lock() {
+                fills.push((rect, color));
+            }
+            egui::Shape::rect_filled(rect, radius, color)
+        }
+    }
+    let mut h = window(demo_app());
+    let ctx = h.ctx.clone();
+    h.state_mut().use_theme(&ctx, "suhina-blocks");
+    let fills = Arc::new(Mutex::new(Vec::new()));
+    suhina_ui::kit::surface::install(&ctx, Arc::new(Replacement(fills.clone())));
+    for _ in 0..4 {
+        fills.lock().unwrap().clear();
+        h.step();
+    }
+    let slot = h.get_by_label("Stop Keys (scene 1)").rect();
+    assert!(
+        !fills.lock().unwrap().iter().any(|(rect, color)| color.a() == 0
+            && rect.min.distance(slot.min) < 1.0
+            && rect.max.distance(slot.max) < 1.0),
+        "transparent replacement fills erase the column artwork on a native GPU surface"
+    );
+}
+
+#[test]
+fn sheet_menu_and_toolbar_paint_their_scoped_backgrounds_without_editing_the_project() {
+    let mut h = window(demo_app());
+    let before = h.state().session().unwrap().project().clone();
+    let ctx = h.ctx.clone();
+    h.state_mut().use_theme(&ctx, "suhina-sheet");
+    for _ in 0..4 {
+        h.step();
+    }
+    let mut previous_bottom: Option<f32> = None;
+    fn find_bar(shape: &egui::Shape, ink: egui::Color32, height: f32) -> Option<egui::Rect> {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().find_map(|shape| find_bar(shape, ink, height)),
+            egui::Shape::Rect(rect)
+                if rect.fill == ink
+                    && rect.rect.width() >= SIZE.0 * 0.9
+                    && (rect.rect.height() - height).abs() <= 1.0 =>
+            {
+                Some(rect.rect)
+            }
+            _ => None,
+        }
+    }
+    for (color, height) in [(0x217346, theme::MENU_BAR), (0xf3f5f3, theme::CONTROL_BAR)] {
+        let ink = egui::Color32::from_rgb((color >> 16) as u8, (color >> 8) as u8, color as u8);
+        let bar = h
+            .output()
+            .shapes
+            .iter()
+            .find_map(|shape| find_bar(&shape.shape, ink, height))
+            .unwrap_or_else(|| panic!("missing scoped bar background {color:x}"));
+        if let Some(bottom) = previous_bottom {
+            assert!((bar.top() - bottom).abs() <= 1.0);
+        }
+        previous_bottom = Some(bar.bottom());
+    }
+    assert_eq!(h.state().session().unwrap().project(), &before);
+}
+
 /// A file dropped on the window in a test.
 #[derive(Debug)]
 struct TestFile(std::path::PathBuf);
@@ -63,6 +179,33 @@ fn clicked(harness: &mut Harness<'static, SessionHarness>, label: &str) -> Vec<A
     harness.get_by_label(label).click();
     harness.run();
     harness.state().actions.clone()
+}
+
+#[test]
+fn blocks_artwork_covers_slot_columns_and_keeps_native_clip_launches() {
+    use suhina_ui::kit::skin;
+    let mut h = view();
+    let (_, mut blocks) = theme::built_in_themes().into_iter().find(|(id, _)| *id == "suhina-blocks").unwrap();
+    skin::configure(&blocks.skin);
+    theme::set_palette(&h.ctx, blocks.colors);
+    h.run_steps(3);
+    let slot = h.get_by_label("Launch Root on Bass (scene 1)").rect();
+    let has_body = |h: &Harness<'static, SessionHarness>| {
+        h.output().shapes.iter().any(|shape| matches!(&shape.shape,
+        egui::Shape::Mesh(mesh) if mesh.calc_bounds().contains(slot.center()) && mesh.calc_bounds().height() > slot.height() * 3.0
+    ))
+    };
+    assert!(has_body(&h), "colour-keyed body artwork spans the slot column");
+    assert_eq!(
+        clicked(&mut h, "Launch Walk on Bass (scene 2)"),
+        [Action::new("clip.launch", json!({"track":2,"scene":2}))]
+    );
+    blocks.skin.styles.get_mut(".track-column").unwrap().insert("--suhina-track-artwork".into(), "off".into());
+    skin::configure(&blocks.skin);
+    h.run_steps(3);
+    assert!(!has_body(&h), "opting out restores native column fills");
+    skin::configure(&skin::Skin::default());
+    theme::set_palette(&h.ctx, theme::Palette::DARK);
 }
 
 #[test]

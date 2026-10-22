@@ -96,6 +96,23 @@ Generic CSS `filter: brightness()` / `saturate()` is not connected to native pai
 
 ## Native element placement and artwork variants
 
+The built-in **Suhina Sheet** is a complete green-and-white worksheet-style example
+with original SVG artwork for all 16 base roles. Select it in Themes, duplicate it
+to edit, or export it to obtain its JSON, CSS and editable SVG files together.
+**Suhina Meadow** demonstrates classic paper controls and translucent glass panels over a private
+background image. Its original generated meadow exports as `background.png`,
+alongside the effective SVG artwork and blue/cream CSS. Its transparent empty
+workspace reveals the image; it does not require desktop transparency support.
+Its theme-owned liquid strengths are 48/24/12 for panels/tracks/clips. Actual liquid
+requires animations and a supported GPU renderer; ordinary alpha/CSS materials
+remain available with OpenGL or adapters without linear texture-view aliases.
+**Suhina Blocks** has brown plank CSS and original pixel SVGs, with no landscape
+or background PNG. Eight raw track colours choose distinct `track.body.color-RRGGBB`
+textures. Canonical `.track-column { --suhina-track-artwork: on; }` extends body
+artwork behind Session slots; empty cells preserve it and native clip launches remain
+unchanged. `off`/omission preserves native fills. Native custom properties inherit
+from the nearest authored ancestor, and a closer scope can override them.
+
 Right-click the toolbar and choose **Edit interface**. The real controls remain visible
 under outlines and an 8-point grid. Drag an outline, or select its semantic name in the
 tools window to change offsets, dimensions, bottom anchoring and volume direction.
