@@ -801,6 +801,14 @@ pub(crate) static ROWS: &[Entry] = &[
             cx.choose(r, &[("GPU", Graphics::Gpu), ("OpenGL", Graphics::OpenGl)], |s| &mut s.graphics);
         },
     ),
+    row(
+        Page::Appearance,
+        "Menu bar",
+        "Menu bar in the window",
+        "Show the menus at the top of the window; on macOS the bar at the top of the screen has them too",
+        &["menu_bar"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.menu_bar),
+    ),
     // Theme.
     block(
         Page::Theme,

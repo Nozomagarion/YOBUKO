@@ -1792,7 +1792,7 @@
       ],
       "sourceFingerprint": "37fdef83b1d8ad95be653aaa87d53ea35171ee01364be50a33cd91bf3b7a67a9",
       "helpStatus": "reviewed",
-      "description": "Choose a user-owned PNG or type its path. Clear the field to remove it. The native window remains opaque: no desktop icons or other windows are captured. Images are decoded away from the UI thread, limited to 32 MiB and 8192 pixels per axis, and displayed at up to 1600 pixels per axis. High Contrast suppresses the image. If loading fails, repair the PNG and choose it again with Browse to retry; failures are not retried continuously.",
+      "description": "Choose a user-owned PNG or type its path. Clear the field to remove it. The image is drawn over an opaque fill, so the desktop does not show through it, and nothing is captured from the screen. Images are decoded away from the UI thread, limited to 32 MiB and 8192 pixels per axis, and displayed at up to 1600 pixels per axis. High Contrast suppresses the image. If loading fails, repair the PNG and choose it again with Browse to retry; failures are not retried continuously.",
       "options": [],
       "whenToChange": "Choose an image when you want a private decorative backdrop behind neutral panels.",
       "workInProgress": false
@@ -1840,7 +1840,7 @@
       ],
       "sourceFingerprint": "2b2b70626478e0673196c8faf63662e552b926ccfe67ad052b4a88b88b882c09",
       "helpStatus": "reviewed",
-      "description": "Place the always-visible Suhina name at the left or centre of the application bar. Project fields have their own position; fields sharing a position appear together. Long project names are clipped before they overlap controls. On Linux and macOS the bar shows information only; native decorations provide the window controls.",
+      "description": "Place the always-visible Suhina name at the left or centre of the application bar. Project fields have their own position; fields sharing a position appear together. Long project names are clipped before they overlap controls. The bar shows on Windows only, where it is the window's title bar; Linux and macOS keep the system's title bar.",
       "options": [
         {
           "name": "Left",
@@ -2066,6 +2066,31 @@
         }
       ],
       "whenToChange": "Try the other renderer when drawing or resizing the interface is problematic on your system, then apply it at your next planned restart.",
+      "workInProgress": false
+    },
+    {
+      "id": "Appearance/Menu bar/menu_bar",
+      "page": "Appearance",
+      "section": "Menu bar",
+      "name": "Menu bar in the window",
+      "note": "Show the menus at the top of the window; on macOS the bar at the top of the screen has them too",
+      "keys": [
+        "menu_bar"
+      ],
+      "sourceFingerprint": "e894f56c19f517c2a8fa958d55ec1e00aae4a095b67743bc8acff78b9505ab3b",
+      "helpStatus": "reviewed",
+      "description": "Shows File, Edit, View, Projects, Options and Help at the top of the window. On macOS the menu bar at the top of the screen has the same menus and items, so the window's own bar is off by default there; on Windows and Linux it is the only menu bar and is on by default. Keys work either way.",
+      "options": [
+        {
+          "name": "Off",
+          "description": "No menu bar in the window."
+        },
+        {
+          "name": "On",
+          "description": "The menu bar shows under the title bar."
+        }
+      ],
+      "whenToChange": "Turn it on in macOS to keep the menus beside the window; turn it off on Windows or Linux only if you use keys for everything.",
       "workInProgress": false
     },
     {

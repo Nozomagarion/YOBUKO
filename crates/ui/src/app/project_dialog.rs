@@ -552,6 +552,8 @@ pub(crate) fn panel<T: CloseChoice>(ui: &Ui, area: Rect, size: Vec2, title: &str
     painter.rect_filled(area, 0.0, theme::window_background().gamma_multiply(0.6));
     let size = Vec2::new(size.x.min(area.width() - 2.0 * PAD), size.y.min(area.height() - 2.0 * PAD));
     let rect = Rect::from_center_size(area.center(), size);
+    // The window's content, blurred, under the panel.
+    crate::kit::liquid::backdrop(&painter, rect);
     painter.fill_background(rect, 0.0, theme::panel_background());
     painter.rect_stroke(rect, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
     let bar = Rect::from_min_size(rect.min, Vec2::new(rect.width(), ROW));

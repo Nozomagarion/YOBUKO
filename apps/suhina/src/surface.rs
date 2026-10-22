@@ -253,6 +253,26 @@ impl egui_wgpu::CallbackTrait for Fill {
     }
 }
 
+/// Whether the window's swapchain hands its alpha to the system's compositor, so backgrounds
+/// with alpha show the desktop. macOS's Metal layer does; so does DX12 with the swapchain made
+/// from a DirectComposition visual (`main.rs` asks for it on Windows). Otherwise a throwaway
+/// surface on the same window says whether the GPU can present premultiplied or postmultiplied
+/// alpha, the modes egui-wgpu picks for a transparent window.
+pub fn composites_alpha(gpu: &egui_wgpu::RenderState, window: impl Into<wgpu::SurfaceTarget<'static>>) -> bool {
+    if cfg!(target_os = "macos") {
+        return true;
+    }
+    if gpu.adapter.get_info().backend == wgpu::Backend::Dx12 {
+        // A second visual for the same window cannot be made to ask; the visual swapchain is
+        // documented to support transparency.
+        return cfg!(target_os = "windows");
+    }
+    let Ok(probe) = gpu.instance.create_surface(window) else { return false };
+    let modes = probe.get_capabilities(&gpu.adapter).alpha_modes;
+    modes.contains(&wgpu::CompositeAlphaMode::PreMultiplied)
+        || modes.contains(&wgpu::CompositeAlphaMode::PostMultiplied)
+}
+
 /// The provider for `kit::surface`, shared with egui's context.
 pub fn provider(gpu: &egui_wgpu::RenderState) -> Arc<dyn Provider> {
     Arc::new(Surfaces::new(gpu))

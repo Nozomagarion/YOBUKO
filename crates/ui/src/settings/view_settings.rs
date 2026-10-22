@@ -97,6 +97,9 @@ pub struct ViewSettings {
     pub notes_replace: bool,
     /// Pasting onto a selected arrangement clip replaces that clip at its start.
     pub replace_clip: bool,
+    /// The window shows its own menu bar. The macOS app turns it off when the settings file does not
+    /// say (`main.rs`), since the bar at the top of the screen has the same menus there.
+    pub menu_bar: bool,
     /// Centre the always-visible application name in the application bar.
     pub app_name_centered: bool,
     /// Show the active project's name in the application bar.
@@ -152,6 +155,7 @@ impl Default for ViewSettings {
             menu_name_field: false,
             notes_replace: true,
             replace_clip: false,
+            menu_bar: true,
             app_name_centered: false,
             bar_project_name: true,
             bar_project_timing: false,
@@ -203,6 +207,7 @@ impl ViewSettings {
             "liquid_panel_strength = {}\nliquid_track_strength = {}\nliquid_clip_strength = {}\n",
             self.liquid.panels, self.liquid.tracks, self.liquid.clips,
         ) + &format!("replace_clip = {}\n", if self.replace_clip { "on" } else { "off" })
+            + &format!("menu_bar = {}\n", if self.menu_bar { "on" } else { "off" })
             + &format!(
                 "app_name_centered = {}\nbar_project_name = {}\nbar_project_timing = {}\nbar_project_centered = {}\n",
                 self.app_name_centered, self.bar_project_name, self.bar_project_timing, self.bar_project_centered
@@ -241,6 +246,7 @@ impl ViewSettings {
                 }
             }
             ("replace_clip", "on" | "off") => self.replace_clip = value == "on",
+            ("menu_bar", "on" | "off") => self.menu_bar = value == "on",
             ("liquid_panel_strength" | "liquid_track_strength" | "liquid_clip_strength", strength) => {
                 let Ok(strength) = strength.parse::<u32>() else { return false };
                 let strength = strength.min(100) as u8;
@@ -344,6 +350,7 @@ mod tests {
             recent_chips: true,
             returns_hidden: true,
             replace_clip: true,
+            menu_bar: false,
             app_name_centered: true,
             bar_project_name: false,
             bar_project_timing: true,

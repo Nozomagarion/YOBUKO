@@ -1462,7 +1462,8 @@ fn lane_header(
                 .is_some_and(|p| last.is_some_and(|r| !r.contains(p)) && !response.rect.contains(p))
     });
     let menu = egui::Popup::menu(&response)
-        .frame(egui::Frame::popup(ui.style()).fill(theme::panel_background().to_opaque()))
+        // The theme's popup fill: see-through where the theme is, with the window blurred under it.
+        .frame(egui::Frame::popup(ui.style()))
         .align(align)
         .align_alternatives(&[])
         .close_behavior(egui::PopupCloseBehavior::IgnoreClicks);

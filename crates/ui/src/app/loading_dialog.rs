@@ -45,6 +45,7 @@ fn draw(ui: &Ui, area: Rect, project: &str, progress: &PluginProgress) -> bool {
     let lines = 1 + loading + progress.failed.len().min(LISTED);
     let height = ROW + PAD * 3.0 + BAR + lines as f32 * LINE + BUTTON.y + PAD;
     let rect = Rect::from_center_size(area.center(), Vec2::new(WIDTH.min(area.width() - 2.0 * PAD), height));
+    crate::kit::liquid::backdrop(&painter, rect);
     painter.fill_background(rect, 0.0, theme::panel_background());
     painter.rect_stroke(rect, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
 
