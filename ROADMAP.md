@@ -139,7 +139,7 @@ refused or suspended, never by losing its edits.
 
 ## What works now
 
-- Theme skins: editable SVG controls, configurable level-meter presentation, theme-owned toolbar layouts, and portable CSS/JSON/SVG/PNG packages with live literal-value synchronization. The native CSS subset is documented; advanced CSS engine integration remains draft work.
+- Theme skins: editable SVG controls, configurable level-meter presentation, theme-owned toolbar layouts, and portable CSS/JSON/SVG/PNG packages with live literal-value synchronization. The native CSS subset is documented; an experimental Stylo/Taffy adapter adds modern scoped styles and Flex/Grid toolbar layout, with full component-tree and paint integration still in progress.
 
 - Forest Amber is available as a built-in theme alongside the existing palettes.
 

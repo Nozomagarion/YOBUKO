@@ -11,6 +11,7 @@ pub const CLASSES: &[&str] = &[
     "menu-bar",
     "project-tabs",
     "toolbar",
+    "toolbar-module",
     "status-bar",
     "browser",
     "session",
@@ -114,15 +115,33 @@ pub fn enter(class: &str) -> Scope {
         palette.border = color;
         palette.border_strong = color;
     }
+    if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow())) {
+        palette.text_primary = values.color;
+        palette.text_secondary = values.color;
+        palette.text_value = values.color;
+        palette.browser_text_primary = values.color;
+        palette.browser_text_secondary = values.color;
+        if values.background.a() > 0 {
+            palette.window_background = values.background;
+            palette.panel_background = values.background;
+            palette.control_background = values.background;
+        }
+    }
     theme::local_palette(palette);
     Scope { palette: saved }
 }
 pub fn radius(fallback: f32) -> f32 {
+    if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow())) {
+        return values.radius;
+    }
     property("border-radius")
         .and_then(|v| v.strip_suffix("px").and_then(|n| n.parse::<u8>().ok()))
         .map_or(fallback, f32::from)
 }
 pub fn font_size(fallback: f32) -> f32 {
+    if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow())) {
+        return values.font_size;
+    }
     property("font-size")
         .and_then(|v| v.strip_suffix("px").and_then(|n| n.parse::<u8>().ok()))
         .map_or(fallback, f32::from)

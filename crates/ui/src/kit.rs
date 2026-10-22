@@ -11,6 +11,7 @@ pub mod logo;
 pub mod meter;
 pub mod mixer_controls;
 pub mod motion;
+pub mod native_css;
 pub mod skin;
 pub mod style_class;
 pub mod theme;

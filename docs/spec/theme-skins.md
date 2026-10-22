@@ -9,6 +9,7 @@ covers:
   - crates/ui/src/app/themed_toolbar.rs
   - crates/ui/src/settings/skin_editor.rs
   - apps/suhina/src/theme_files.rs
+  - crates/ui/src/kit/native_css.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
 ---
@@ -77,3 +78,21 @@ ZIP export places each JSON, style.css, SVG and background PNG together under it
 id. Import validates resources before writing any theme, and gives colliding ids a suffix.
 The in-app CSS editor accepts native values and styles; package-relative image URLs are
 resolved when importing or reloading theme files. The SVG editor accepts vector markup.
+
+## Advanced CSS adapter (experimental)
+
+`skin.css` retains an authored modern stylesheet verbatim in JSON. Export and native
+storage additionally write `advanced.css`, referenced by `advanced-stylesheet`.
+Editing either representation mirrors to the other without changing comments or
+formatting. Conflicting source edits preserve both files. This source remains separate
+from canonical `style.css`, which maps literal palette and skin values into native JSON.
+The same byte limit and package path restrictions apply to both stylesheets.
+
+The advanced editor supplies a Flex example and calls the Stylo/Taffy adapter. Stylo
+computes variables, layers, inheritance, CSS colours, value expressions and viewport
+media conditions for class scopes. Taffy computes Flex/Grid rectangles for the actual
+visible toolbar modules (`#tempo`, `#transport`, etc.); the same rectangles bound their
+native input targets. The host still defines toolbar height. Scoped class trees do not
+yet expose real project objects, siblings or interactive pseudo-class states. CSS
+painting of gradients, shadows, transforms, filters and animations remains unsupported.
+This integration is experimental, not a claim of universal CSS conformance.

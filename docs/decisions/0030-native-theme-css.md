@@ -5,6 +5,7 @@ type: decision
 status: draft
 last_verified: 2026-10-22
 covers:
+  - crates/ui/src/kit/native_css.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
   - crates/ui/src/kit/skin.rs
@@ -48,10 +49,16 @@ source or artwork was copied into this change.
 
 Use Stylo for CSS semantics and Taffy for layout, with egui retaining native controls
 and command dispatch. This direction was selected for the broad customization target.
-A safe adapter such as Blitz DOM may avoid implementing Stylo's low-level DOM traits
-in Suhina, but still requires a dependency, maturity and renderer assessment. The
-engines have not yet been integrated by this draft decision. In particular, the small current CSS reader must
-not be presented as the final advanced style engine.
+The initial adapter uses released `blitz-dom`, `blitz-html` and `blitz-traits`
+0.3.0-beta.2 with default features disabled: Stylo 0.20 and Taffy 0.14. There is no
+Blitz shell, networking provider, scripting engine or renderer. CSS enters through
+the style API, never by interpolating it into HTML. Host-generated markup contains
+only validated Suhina roles and toolbar module ids. Sequential style traversal avoids
+Blitz's documented shared traversal-pool concurrency hazard.
+
+This initial integration is experimental and still needs platform, conformance and
+performance verification. The native-property CSS reader remains for the existing
+palette/skin projection; the advanced source is separate and retained losslessly.
 
 A host-maintained style tree mirrors stable Suhina objects and UI roles. Identity must
 not depend on drawing order or a track's current index. Each node has a stable key,
@@ -103,8 +110,19 @@ not just literal colours.
 The branch supplies SVG resources, configurable meters, toolbar rearrangement, portable
 ZIP resources and a bounded native CSS subset with live CSS/JSON mirroring. It supplies
 an initial class registry and tests for literal-colour synchronization and conflicts.
-Those are reusable foundations. The full engine, broad capability groups above and
-lossless advanced-rule editing remain implementation work. Before enabling that engine,
+The initial Stylo adapter computes colour, typography and radii for active class
+ancestries and caches bounded contexts until CSS, palette or viewport changes. The
+Taffy adapter lays out the actual ordered toolbar module tree; native drawing and
+hit targets use those same rectangles. Advanced authored CSS is stored verbatim in
+`skin.css` and `advanced.css`, including comments, queries and source order; edits
+mirror between those two representations. Conditional rules are not flattened into
+unconditional palette values.
+
+This is not yet the complete retained component tree: project-object identity,
+sibling selectors, state pseudo-classes, full-layout control of panels, CSS effects,
+animation and per-property diagnostics remain implementation work. Parsed declarations
+that the painter does not consume do not imply support. Toolbar height remains the
+host's height. These limits are also visible in the advanced CSS editor. Before enabling that engine,
 verify package licences, platform builds, interaction/accessibility parity, malformed
 inputs, large projects and both rendering backends. A full browser-CSS claim is out of
 scope unless an explicit support matrix and conformance evidence establish it.

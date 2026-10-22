@@ -11,10 +11,18 @@ pub struct State {
     role: String,
     svg: String,
     css: String,
+    advanced: String,
     error: String,
 }
 
 pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option<ThemeRequest> {
+    if state.current != themes.current {
+        state.current = themes.current.clone();
+        state.role.clear();
+        state.css.clear();
+        state.advanced = themes.skin.css.as_deref().unwrap_or_default().into();
+        state.error.clear();
+    }
     let mut request = None;
     ui.collapsing("Controls, meters and toolbar", |ui| {
         let mut skin = themes.skin.clone();
@@ -89,6 +97,23 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
                 if theme.skin.assets.values().any(|s| !s.trim_start().starts_with('<')) { state.error = "Import CSS image URLs in a theme ZIP package, or paste SVG in the SVG editor.".into(); }
                 else if warnings.is_empty() { request = Some(ThemeRequest::EditCss(state.css.clone())); state.error.clear(); }
                 else { state.error = warnings.join("\n"); }
+            }
+        });
+        ui.collapsing("Advanced CSS (Stylo and Taffy)", |ui| {
+            ui.label("Modern cascade, variables, CSS colours, calc() and viewport media queries style native classes. Flex/Grid lays out toolbar modules by id (#tempo, #transport, #views). Source is kept in JSON and advanced.css.");
+            ui.label("This adapter does not yet paint CSS gradients, shadows, transforms or animations. Scoped classes do not yet expose project-object ids, siblings or state pseudo-classes. Toolbar height remains the host's height.");
+            if ui.button("Load current advanced CSS").clicked() { state.advanced = themes.skin.css.as_deref().unwrap_or_default().into(); }
+            if ui.button("Load Flex/Grid example").clicked() {
+                state.advanced = ":root { --ink: rgb(180 220 240); }\n.browser { color: var(--ink); font-size: clamp(10px, 1vw, 14px); }\n.toolbar { display: flex; gap: 8px; }\n#transport { order: -1; }\n@media (max-width: 1000px) { #performance { display: none; } }\n".into();
+            }
+            ui.add(egui::TextEdit::multiline(&mut state.advanced).code_editor().desired_rows(10).desired_width(f32::INFINITY));
+            if ui.button("Apply advanced CSS").clicked() {
+                if state.advanced.len() > theme_css::MAX_CSS { state.error = "Advanced CSS exceeds 128 KiB".into(); }
+                else {
+                    let mut skin = themes.skin.clone();
+                    skin.css = (!state.advanced.is_empty()).then(|| std::sync::Arc::from(state.advanced.as_str()));
+                    request = Some(ThemeRequest::EditSkin(skin)); state.error.clear();
+                }
             }
         });
         if !state.error.is_empty() { ui.colored_label(crate::kit::theme::recording(), &state.error); }

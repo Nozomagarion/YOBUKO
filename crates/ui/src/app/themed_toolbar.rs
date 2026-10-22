@@ -45,9 +45,51 @@ impl App {
         if changed {
             self.save_toolbar_skin(theme_skin.clone());
         }
-        let Some(mut toolbar) = theme_skin.toolbar.clone() else {
+        let Some(mut toolbar) =
+            theme_skin.toolbar.clone().or_else(|| theme_skin.css.as_ref().map(|_| Toolbar::default()))
+        else {
             return false;
         };
+        if !editing {
+            let modules: Vec<_> = toolbar
+                .order
+                .iter()
+                .filter(|id| !toolbar.hidden.contains(id))
+                .map(|id| (id.clone(), self.toolbar_module_width(id)))
+                .collect();
+            if let Some(modules) = crate::kit::native_css::toolbar(&modules, rect.size()) {
+                let mut hovered_switch = None;
+                for module in modules {
+                    let at = module.rect.translate(rect.min.to_vec2());
+                    if !at.intersects(ui.clip_rect()) {
+                        continue;
+                    }
+                    let painter = ui.painter().with_clip_rect(ui.clip_rect().intersect(at));
+                    painter.rect_filled(
+                        at,
+                        module.style.radius,
+                        module.style.background.gamma_multiply(module.style.opacity),
+                    );
+                    if let Some(grid) = grid {
+                        let mut module_ui =
+                            ui.new_child(egui::UiBuilder::new().id_salt(("css-toolbar", &module.name)).max_rect(at));
+                        module_ui.set_clip_rect(ui.clip_rect().intersect(at));
+                        self.toolbar_module(
+                            &mut module_ui,
+                            at,
+                            &module.name,
+                            grid,
+                            cpu,
+                            ram,
+                            actions,
+                            &mut hovered_switch,
+                        );
+                    }
+                }
+                self.hover_switch(ui.ctx(), hovered_switch);
+                return true;
+            }
+        }
         if ui.input(|i| i.key_pressed(Key::Escape)) {
             egui::DragAndDrop::clear_payload(ui.ctx());
         }
@@ -65,19 +107,7 @@ impl App {
                     let width = if editing {
                         (module.len() as f32 * 8.0 + 20.0).max(70.0)
                     } else {
-                        match module.as_str() {
-                            "browser" | "metronome" => 28.0,
-                            "tempo" => 62.0,
-                            "signature" => 45.0,
-                            "grid" | "count-in" => 70.0,
-                            "transport" => 86.0,
-                            "position" => 78.0,
-                            "mapping" => 64.0,
-                            "performance" => 145.0,
-                            "views" => 172.0,
-                            "agents" => (self.agents.len() as f32 * 140.0).max(1.0),
-                            _ => 0.0,
-                        }
+                        self.toolbar_module_width(module)
                     };
                     let (_, at) = ui.allocate_space(Vec2::new(width, (rect.height() - 4.0).max(24.0)));
                     if editing {
@@ -135,6 +165,22 @@ impl App {
         }
         self.hover_switch(ui.ctx(), hovered_switch);
         true
+    }
+
+    fn toolbar_module_width(&self, module: &str) -> f32 {
+        match module {
+            "browser" | "metronome" => 28.0,
+            "tempo" => 62.0,
+            "signature" => 45.0,
+            "grid" | "count-in" => 70.0,
+            "transport" => 86.0,
+            "position" => 78.0,
+            "mapping" => 64.0,
+            "performance" => 145.0,
+            "views" => 172.0,
+            "agents" => (self.agents.len() as f32 * 140.0).max(1.0),
+            _ => 0.0,
+        }
     }
 
     fn save_toolbar_skin(&mut self, skin: skin::Skin) {

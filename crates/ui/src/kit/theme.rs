@@ -385,7 +385,18 @@ impl Theme {
             theme.skin = super::skin::Skin::from_json(value, &mut warnings);
         }
         let known = |k: &str| {
-            matches!(k, "stylesheet" | "skin" | "name" | "colors" | "liquid" | "gradients" | "description" | "$schema")
+            matches!(
+                k,
+                "advanced-stylesheet"
+                    | "stylesheet"
+                    | "skin"
+                    | "name"
+                    | "colors"
+                    | "liquid"
+                    | "gradients"
+                    | "description"
+                    | "$schema"
+            )
         };
         for key in root.keys().filter(|k| !known(k)) {
             warnings.push(format!("{key} is not part of a theme"));

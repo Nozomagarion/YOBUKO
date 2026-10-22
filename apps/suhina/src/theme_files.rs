@@ -393,6 +393,14 @@ fn resolve_theme(
         return Err("a theme must be a JSON object".into());
     }
     let (mut theme, mut warnings) = Theme::from_json(text);
+    if let Some(path) = root.get("advanced-stylesheet") {
+        let path = path
+            .as_str()
+            .filter(|p| safe_relative(p) && p.ends_with(".css"))
+            .ok_or("advanced-stylesheet must name a relative CSS file")?;
+        let css = String::from_utf8(resource(path, theme_css::MAX_CSS as u64)?).map_err(|e| e.to_string())?;
+        theme.skin.css = (!css.is_empty()).then(|| std::sync::Arc::from(css));
+    }
     if let Some(path) = root.get("stylesheet") {
         let path = path
             .as_str()
@@ -433,6 +441,13 @@ fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, Stri
     let mut root: serde_json::Value = serde_json::from_str(&theme.to_json()).map_err(|e| e.to_string())?;
     root["stylesheet"] = serde_json::Value::String("style.css".into());
     let mut files = Vec::new();
+    if let Some(css) = &theme.skin.css {
+        if css.len() > suhina_ui::kit::theme_css::MAX_CSS {
+            return Err("advanced CSS exceeds 128 KiB".into());
+        }
+        root["advanced-stylesheet"] = serde_json::json!("advanced.css");
+        files.push((format!("{id}/advanced.css"), css.as_bytes().to_vec()));
+    }
     if let Some(background) = &theme.skin.background {
         let bytes = suhina_ui::kit::skin::decode_png(background)?;
         root["skin"]["background"] = serde_json::json!("background.png");
@@ -688,7 +703,9 @@ mod tests {
 fn read_versions(path: &Path) -> Result<(String, Option<String>, Theme, Theme), String> {
     let text = String::from_utf8(read_bounded(path, MAX_FILE)?).map_err(|e| e.to_string())?;
     let mut root: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    let stylesheet = root.as_object_mut().ok_or("theme must be a JSON object")?.remove("stylesheet");
+    let object = root.as_object_mut().ok_or("theme must be a JSON object")?;
+    let stylesheet = object.remove("stylesheet");
+    let advanced = object.remove("advanced-stylesheet");
     let folder = path.parent().unwrap_or(Path::new("."));
     let resource = |relative: &str, max: u64| {
         if !safe_relative(relative) {
@@ -704,19 +721,23 @@ fn read_versions(path: &Path) -> Result<(String, Option<String>, Theme, Theme), 
         read_bounded(&path, max)
     };
     let (json_theme, _) = resolve_theme(&root.to_string(), resource)?;
-    if let Some(stylesheet) = stylesheet {
+    if stylesheet.is_none() && advanced.is_none() {
+        return Ok((text, None, json_theme.clone(), json_theme));
+    }
+    let mut sources = Vec::new();
+    for name in [stylesheet, advanced].into_iter().flatten() {
         let name =
-            stylesheet.as_str().filter(|s| safe_relative(s) && s.ends_with(".css")).ok_or("invalid stylesheet path")?;
+            name.as_str().filter(|s| safe_relative(s) && s.ends_with(".css")).ok_or("invalid stylesheet path")?;
         let css =
             String::from_utf8(resource(name, suhina_ui::kit::theme_css::MAX_CSS as u64)?).map_err(|e| e.to_string())?;
-        let (css_theme, warnings) = resolve_theme(&text, resource)?;
-        if !warnings.is_empty() {
-            return Err(warnings.join("; "));
-        }
-        Ok((text, Some(css), json_theme, css_theme))
-    } else {
-        Ok((text, None, json_theme.clone(), json_theme))
+        sources.push((name.to_string(), css));
     }
+    let (css_theme, warnings) = resolve_theme(&text, resource)?;
+    if !warnings.is_empty() {
+        return Err(warnings.join("; "));
+    }
+    let sources = serde_json::to_string(&sources).map_err(|e| e.to_string())?;
+    Ok((text, Some(sources), json_theme, css_theme))
 }
 
 /// Merge independently edited JSON fields. A conflicting leaf preserves both files for correction.
@@ -768,6 +789,9 @@ fn persist_theme(folder: &Path, id: &str, theme: &Theme) -> Result<(), String> {
         if name == &json_name {
             let mut root: serde_json::Value = serde_json::from_slice(data).map_err(|e| e.to_string())?;
             root["stylesheet"] = serde_json::json!(format!("{id}/style.css"));
+            if theme.skin.css.is_some() {
+                root["advanced-stylesheet"] = serde_json::json!(format!("{id}/advanced.css"));
+            }
             if theme.skin.background.is_some() {
                 root["skin"]["background"] = serde_json::json!(format!("{id}/background.png"));
             }
@@ -861,6 +885,37 @@ mod skin_package_tests {
         theme.skin.meter = skin::MeterStyle::Segmented;
         assert!(theme_css::apply(&mut theme, ".browser { color: #123456; background-color: #111222; }").is_empty());
         theme
+    }
+    #[test]
+    fn advanced_css_source_mirrors_losslessly_and_survives_packages() {
+        let root = folder("advanced");
+        let mut theme = styled();
+        let source = "/* Keep my comment */\n@layer custom { :root { --ink: oklch(70% .1 240); } .browser { color:var(--ink); } }\n@media (width < 800px) { #performance { display:none; } }\n";
+        theme.skin.css = Some(std::sync::Arc::from(source));
+        let mut files = ThemeFiles::new(Some(root.join("themes")));
+        files.write("portable", &theme).unwrap();
+        let css = root.join("themes/portable/advanced.css");
+        assert_eq!(std::fs::read_to_string(&css).unwrap(), source);
+        let edited = source.replace("70%", "80%");
+        std::fs::write(&css, &edited).unwrap();
+        files.checked = None;
+        let (changed, warnings) = files.changed();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(changed[0].theme.skin.css.as_deref(), Some(edited.as_str()));
+        let json = root.join("themes/portable.json");
+        let mut saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&json).unwrap()).unwrap();
+        assert_eq!(saved["skin"]["css"], edited);
+        saved["skin"]["css"] = serde_json::json!(source);
+        std::fs::write(&json, serde_json::to_vec_pretty(&saved).unwrap()).unwrap();
+        files.checked = None;
+        let (_, warnings) = files.changed();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(std::fs::read_to_string(&css).unwrap(), source);
+        let zip = files.backup().unwrap();
+        let mut target = ThemeFiles::new(Some(root.join("imported")));
+        assert!(target.import(&zip).unwrap().1.is_empty());
+        assert_eq!(target.read_all().0[0].theme.skin.css.as_deref(), Some(source));
+        std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn css_json_and_editor_changes_are_mirrored_without_reload_loops() {

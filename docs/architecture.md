@@ -405,3 +405,14 @@ and map it into display coordinates. Cached source pixels survive effect changes
 Obsolete workers cannot publish into a newer request. Main-window surface opacity is
 separate from the Settings panel material; neither changes text opacity. This is an
 internal boundary, not an extension host or a new dependency of the audio engine.
+
+## Native theme styles
+
+The UI kit owns static SVG rasterization, scoped theme values and an experimental
+Stylo/Taffy adapter through Blitz's safe DOM API. The host supplies bounded role trees;
+themes supply CSS, never HTML or scripts. The adapter has no network or shell provider,
+uses sequential style traversal and caches computed class contexts on the UI thread.
+The toolbar consumes Taffy's rectangles for both native controls and input clipping.
+No theme work runs on the audio thread. The desktop theme-file service owns portable
+resources and CSS/JSON synchronization. Details and current adapter limits are in
+[ADR 0030](decisions/0030-native-theme-css.md) and the [skin spec](spec/theme-skins.md).

@@ -1,0 +1,38 @@
+name: Theme adapter diagnostics
+
+# Temporary validation while the native CSS dependency graph and adapter are developed.
+# The regular CI remains the merge gate; this job grants no write permission.
+on:
+  push:
+    branches: [feature/theme-skins-layout]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: theme-adapter-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  adapter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p suhina-ui --all-targets
+      - name: Resolved lockfile for review
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import base64, pathlib, zlib
+          print('THEME_LOCK_BEGIN')
+          print(base64.b64encode(zlib.compress(pathlib.Path('Cargo.lock').read_bytes())).decode())
+          print('THEME_LOCK_END')
+          PY
+      - run: cargo test -p suhina-ui --lib kit::native_css
+      - run: cargo test -p suhina theme_files

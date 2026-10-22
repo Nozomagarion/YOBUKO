@@ -73,6 +73,8 @@ impl Toolbar {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Skin {
+    /// Authored modern CSS, preserved losslessly alongside the native JSON projection.
+    pub css: Option<Arc<str>>,
     /// A portable PNG data URL, or a package-relative PNG path before resource resolution.
     pub background: Option<Arc<str>>,
     pub background_opacity: u8,
@@ -88,6 +90,7 @@ pub struct Skin {
 impl Default for Skin {
     fn default() -> Self {
         Self {
+            css: None,
             background: None,
             background_opacity: 70,
             background_blur: 0,
@@ -147,7 +150,8 @@ impl Skin {
         for key in root.keys() {
             if !matches!(
                 key.as_str(),
-                "background"
+                "css"
+                    | "background"
                     | "background-opacity"
                     | "background-blur"
                     | "styles"
@@ -157,6 +161,13 @@ impl Skin {
                     | "toolbar"
             ) {
                 warnings.push(format!("skin.{key} is unknown"));
+            }
+        }
+        if let Some(value) = root.get("css") {
+            if let Some(css) = value.as_str().filter(|css| css.len() <= super::theme_css::MAX_CSS) {
+                skin.css = (!css.is_empty()).then(|| Arc::from(css));
+            } else {
+                warnings.push("skin.css must be a stylesheet of at most 128 KiB".into());
             }
         }
         if let Some(value) = root.get("background") {
@@ -287,6 +298,9 @@ impl Skin {
     pub fn to_json(&self) -> Value {
         let mut value =
             json!({"styles":self.styles,"assets":self.assets,"meter":self.meter.name(),"segments":self.segments});
+        if let Some(css) = &self.css {
+            value["css"] = Value::String(css.to_string());
+        }
         if let Some(toolbar) = &self.toolbar {
             value["toolbar"] = json!({"order": toolbar.order, "hidden": toolbar.hidden});
         }
