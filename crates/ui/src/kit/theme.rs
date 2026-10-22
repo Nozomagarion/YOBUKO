@@ -73,7 +73,9 @@ palette! {
     control_active, "control.activeBackground", 0x45433F,
         "Selected or pressed: a selected clip or track, a dragged field";
     control_playing, "control.playingBackground", 0x4A4843,
-        "A playing clip or scene, the fill of a volume field";
+        "A playing clip or scene";
+    control_selected, "control.selectedBackground", 0xC9C4BB,
+        "The chosen option of a switch, a lit toggle, the level of a volume or pan field";
     border, "border", 0x383733,
         "Hairlines between regions and rows";
     border_strong, "border.strong", 0x45433F,
@@ -85,7 +87,9 @@ palette! {
     text_hint, "text.hint", 0x66625B,
         "Inactive text, hints and section titles";
     text_value, "text.value", 0xC9C4BB,
-        "Clip names, values on fields, the chosen option of a switch";
+        "Clip names and values on fields";
+    text_inverse, "text.inverse", 0x1D1C1A,
+        "Text on light or lit fills: a switch's chosen option, a lit button, a light track colour";
     text_playing, "text.playing", 0xFFFFFF,
         "The name of a playing clip";
     accent, "accent", 0xA6A3FF,
@@ -199,6 +203,28 @@ pub fn palette() -> Palette {
     PALETTE.with(Cell::get)
 }
 
+/// Whether a background of the theme in use lets the desktop show through the window.
+pub fn see_through() -> bool {
+    let p = palette();
+    [
+        p.window_background,
+        p.panel_background,
+        p.panel_hover,
+        p.control_background,
+        p.control_hover,
+        p.control_active,
+        p.control_playing,
+        p.control_selected,
+        p.track_header_background,
+        p.track_header_selected,
+        p.pan_background,
+        p.track_muted,
+        p.recording_background,
+    ]
+    .iter()
+    .any(|color| color.a() < 255)
+}
+
 /// Draws with `palette` from the next frame on: the tokens and egui's own visuals.
 pub fn set_palette(ctx: &egui::Context, palette: Palette) {
     PALETTE.with(|p| p.set(palette));
@@ -294,6 +320,14 @@ impl Theme {
                 if !colors.contains_key("clip.audioDefault") {
                     theme.colors.audio_clip_default = theme.colors.track_color_1;
                 }
+                // Older files drew these with a background and a text colour.
+                if !colors.contains_key("text.inverse") {
+                    let [r, g, b, _] = theme.colors.window_background.to_srgba_unmultiplied();
+                    theme.colors.text_inverse = Color32::from_rgb(r, g, b);
+                }
+                if !colors.contains_key("control.selectedBackground") {
+                    theme.colors.control_selected = theme.colors.text_value;
+                }
             }
             Some(_) => warnings.push("the theme's colors are not an object".into()),
             None => {}
@@ -385,8 +419,9 @@ Themes. While it is in use, every save of the file shows within a second.\n\
 - `text.primary` must read well on every background; `text.secondary` a little less, `text.hint`\n\
   least (it is for hints and inactive text). Keep `text.primary` on `window.background` at a\n\
   contrast of at least 7:1 and `text.hint` at 3:1.\n\
-- `text.value` is drawn on `control.background` and is the fill of the chosen option of a switch,\n\
-  whose label is then drawn in `window.background`: the two must contrast.\n\
+- `text.value` is drawn on `control.background`. The chosen option of a switch is filled with\n\
+  `control.selectedBackground` and labelled in `text.inverse`: the two must contrast.\n\
+- Text never takes a background's colour: `text.inverse` is the text on light or lit fills.\n\
 - `accent` marks the playhead, queued clips and a key being set; it should stand out from every\n\
   background. `recording` is also used for errors.\n\
 - Track and clip colours come from the project. clip.midiDefault/clip.audioDefault are copied only when creating new tracks and clips.\n\
@@ -425,10 +460,10 @@ pub fn parse_hex(text: &str) -> Option<Color32> {
     })
 }
 
-/// Text drawn on `fill`: `text.primary` or `window.background`, whichever stands out more from
-/// it, so a name stays readable on any track colour of any theme.
+/// Text drawn on `fill`: `text.primary` or `text.inverse`, whichever stands out more from it, so
+/// a name stays readable on any track colour of any theme.
 pub fn text_on(fill: Color32) -> Color32 {
-    let (light, dark) = (text_primary(), window_background());
+    let (light, dark) = (text_primary(), text_inverse());
     if contrast(fill, light) >= contrast(fill, dark) { light } else { dark }
 }
 
@@ -741,6 +776,36 @@ mod tests {
             assert!(warnings.is_empty(), "{id}: {warnings:?}");
             assert_eq!(restored, theme, "{id}: custom colors must survive saving");
         }
+    }
+
+    #[test]
+    fn text_never_takes_a_background_colour_in_files_from_before_text_inverse() {
+        let (old, warnings) =
+            Theme::from_json(r##"{"colors":{"window.background":"#10203080","text.value":"#ABCDEF"}}"##);
+        assert!(warnings.is_empty());
+        // Text on lit fills keeps the window's colour, opaque, and the chosen option its fill.
+        assert_eq!(old.colors.text_inverse, rgb(0x102030));
+        assert_eq!(old.colors.control_selected, rgb(0xABCDEF));
+        let (new, _) = Theme::from_json(
+            r##"{"colors":{"window.background":"#102030","text.inverse":"#FFFFFF","control.selectedBackground":"#00FF00"}}"##,
+        );
+        assert_eq!((new.colors.text_inverse, new.colors.control_selected), (rgb(0xFFFFFF), rgb(0x00FF00)));
+    }
+
+    #[test]
+    fn a_theme_is_see_through_when_a_background_has_alpha() {
+        let ctx = egui::Context::default();
+        set_palette(&ctx, Palette::DARK);
+        assert!(!see_through());
+        let mut glass = Palette::DARK;
+        glass.panel_background = Color32::from_rgba_unmultiplied(10, 20, 30, 200);
+        set_palette(&ctx, glass);
+        assert!(see_through());
+        // A see-through border is not a background.
+        let mut lines = Palette::DARK;
+        lines.border = Color32::from_rgba_unmultiplied(255, 255, 255, 40);
+        set_palette(&ctx, lines);
+        assert!(!see_through());
     }
 
     #[test]

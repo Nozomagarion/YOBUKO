@@ -230,8 +230,10 @@ Tips:
 
 ## Settings and liquid surfaces
 
-With liquid panels enabled, `liquid capture` reports transitions between a live
-backdrop and a solid fallback, including unsupported texture IDs or foreign callbacks.
+With liquid panels enabled, `liquid capture` reports each capture's size and how many draw
+jobs it left out (native callbacks, and textures it cannot bind); what is left out is not
+drawn, and the rest of the capture still is. `menu backdrop` reports how many open menus were
+found, and `no capture` when a menu's backdrop could not be made.
 `slow liquid backdrop` measures captures taking at least 5 ms. `settings overlay`
 reports whether a control is adjusting, whether the temporary undimmed preview is
 active and the panel rectangle. These distinguish capture failure, a changing dimmer

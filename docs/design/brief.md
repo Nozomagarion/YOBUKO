@@ -117,13 +117,15 @@ a theme file can change any of them (see Themes). Current values:
 | `control.background` | `#2E2D2A` | Fields, buttons and stopped clips |
 | `control.hoverBackground` | `#34332F` | A field, button or clip under the pointer |
 | `control.activeBackground` | `#45433F` | Selected or pressed: a selected clip or track, a dragged field |
-| `control.playingBackground` | `#4A4843` | A playing clip or scene, the fill of a volume field |
+| `control.playingBackground` | `#4A4843` | A playing clip or scene |
+| `control.selectedBackground` | `#C9C4BB` | The chosen option of a switch, a lit toggle, the level of a volume or pan field |
 | `border` | `#383733` | Hairlines between regions and rows |
 | `border.strong` | `#45433F` | Session columns and arrangement track lines |
 | `text.primary` | `#ECE8E1` | Names and values |
 | `text.secondary` | `#9A958C` | Labels and notes |
 | `text.hint` | `#66625B` | Inactive text, hints and section titles |
-| `text.value` | `#C9C4BB` | Clip names, values on fields, the chosen option of a switch |
+| `text.value` | `#C9C4BB` | Clip names and values on fields |
+| `text.inverse` | `#1D1C1A` | Text on light or lit fills: a switch's chosen option, a lit button, a light track colour |
 | `text.playing` | `#FFFFFF` | The name of a playing clip |
 | `accent` | `#A6A3FF` | The playhead, queued clips, a key being set |
 | `recording` | `#E5484D` | Recording and errors |
@@ -150,6 +152,21 @@ A theme is a JSON file in the `themes` folder of Suhina's app-data folder, besid
 ```json
 { "name": "Night", "colors": { "window.background": "#14161A", "accent": "#7FD1B9" } }
 ```
+
+Text and backgrounds never share a token: text on a light or lit fill is `text.inverse`, and the
+chosen option of a switch is filled with `control.selectedBackground`. A file from before these
+two tokens takes `window.background` (opaque) and `text.value` for them.
+
+A background token's alpha is how much of the desktop shows through the window there. A
+background (`window.background`, `panel.*`, `control.*Background`, `track.headerBackground`,
+`track.headerSelectedBackground`, `track.mutedBackground`, `pan.background`,
+`recording.background`, and colours mixed from them) sets the colour and alpha of the pixels it
+covers rather than blending with what is under it; text, lines, marks and overlays blend. While a
+background has alpha, the system blurs what is behind the window. Dialogs, menus and floating
+panels blend with the window behind them, and menus (the menu bar's, right-click menus and
+dropdowns) blur the window's content under them, with the GPU renderer and effects on. This works on macOS with the GPU renderer; elsewhere,
+and with OpenGL, the window stays opaque and backgrounds blend. On macOS the window's content
+runs under the title bar, which takes `panel.background`.
 
 A token the file leaves out keeps Suhina Dark's colour, so a file needs only the colours it
 changes; an unknown token or a value that is not `#RRGGBB` or `#RRGGBBAA` is skipped with a warning. Files with

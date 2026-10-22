@@ -14,6 +14,7 @@ pub mod splash;
 pub mod start_panel;
 pub mod updates;
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -380,6 +381,12 @@ pub struct App {
     /// The app's own window (`set_editor_owner`): a press on its controls takes the keyboard
     /// back from an embedded plug-in editor (`kit::keyboard`).
     window: Option<u64>,
+    /// The height of the system's title bar drawn over the top of the window (macOS, when the
+    /// window is see-through), kept free and given a background; 0 when it is outside the window.
+    title_bar: f32,
+    /// The radius of the window's rounded corners, which a see-through window does not clip to:
+    /// the bars at the top and bottom round theirs to match. 0 when the system clips them.
+    window_corner: u8,
     /// The detail area was closed as an editor (the splitter dragged down, the toolbar's ×, View ›
     /// Hide editor): selecting a clip opens it again. And the clip shown last frame, to tell when
     /// another is selected (`docs/spec/ui-clip-editor.md` › Least height and closing).
@@ -544,6 +551,8 @@ impl App {
             detail_max: false,
             detail_drag: None,
             window: None,
+            title_bar: 0.0,
+            window_corner: 0,
             editor_closed: false,
             last_clip: None,
             piano_grid: crate::detail::piano_roll_grid::PianoGrid::default(),
@@ -781,6 +790,13 @@ impl App {
     pub fn set_editor_owner(&mut self, owner: Option<u64>) {
         self.window = owner;
         self.projects.set_editor_owner(owner);
+    }
+
+    /// The height of the system's title bar over the top of the window (0 when it is not in it)
+    /// and the radius of the window's corners, when the window does not clip to them.
+    pub fn set_window_frame(&mut self, title_bar: f32, corner: u8) {
+        self.title_bar = title_bar.max(0.0);
+        self.window_corner = corner;
     }
 
     /// The open projects.
@@ -2254,6 +2270,7 @@ impl App {
         let liquid =
             self.themes.get(&self.settings.theme).and_then(|theme| theme.liquid).unwrap_or(self.settings.view.liquid);
         crate::kit::liquid::configure(ui.ctx(), liquid);
+        crate::kit::surface::begin_frame(ui.ctx());
         crate::kit::liquid::begin_frame(
             ui.ctx(),
             self.themes.get(&self.settings.theme).map(|theme| theme.gradients.clone()).unwrap_or_default(),
@@ -2387,26 +2404,44 @@ impl App {
         }
         self.frame_trace.mark("plug-in requests");
 
+        // Under the system's title bar: the window's background, as behind the bars below it.
+        // Full screen hides the title bar, and the room with it.
+        let full_screen = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
+        let corner = if full_screen { 0 } else { self.window_corner };
+        if self.title_bar > 0.0 && !full_screen {
+            egui::Panel::top("title-bar").exact_size(self.title_bar).frame(egui::Frame::NONE).show(ui, |ui| {
+                let top = egui::CornerRadius { nw: corner, ne: corner, sw: 0, se: 0 };
+                ui.painter().fill_background(ui.max_rect(), top, theme::panel_background());
+            });
+        }
         egui::Panel::top("menu-bar")
             .exact_size(theme::MENU_BAR)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()).inner_margin(egui::Margin::symmetric(4, 0)))
-            .show(ui, |ui| self.menu_bar(ui, &mut actions));
+            .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 0)))
+            .show(ui, |ui| {
+                ui.painter().fill_background(
+                    ui.max_rect().expand2(Vec2::new(4.0, 0.0)),
+                    0.0,
+                    theme::panel_background(),
+                );
+                self.menu_bar(ui, &mut actions)
+            });
         self.frame_trace.mark("menu bar");
         if self.projects.len() >= 2 {
-            egui::Panel::top("tabs")
-                .exact_size(TABS)
-                .frame(egui::Frame::NONE.fill(theme::window_background()))
-                .show(ui, |ui| self.tab_row(ui, &mut actions));
+            egui::Panel::top("tabs").exact_size(TABS).frame(egui::Frame::NONE).show(ui, |ui| {
+                ui.painter().fill_background(ui.max_rect(), 0.0, theme::window_background());
+                self.tab_row(ui, &mut actions)
+            });
         }
-        egui::Panel::top("control-bar")
-            .exact_size(theme::CONTROL_BAR)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()))
-            .show(ui, |ui| self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions));
+        egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+            ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
+            self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions)
+        });
         self.frame_trace.mark("control bar");
-        egui::Panel::bottom("status-bar")
-            .exact_size(theme::STATUS_BAR)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()))
-            .show(ui, |ui| self.status_bar(ui, grid.as_ref()));
+        egui::Panel::bottom("status-bar").exact_size(theme::STATUS_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+            let bottom = egui::CornerRadius { nw: 0, ne: 0, sw: corner, se: corner };
+            ui.painter().fill_background(ui.max_rect(), bottom, theme::panel_background());
+            self.status_bar(ui, grid.as_ref())
+        });
         self.frame_trace.mark("bars");
         // Samples and MIDI files from the system: dropped this frame, or still over the window.
         let system = match (self.browser.drag.is_some(), dropped.is_empty()) {
@@ -2551,7 +2586,7 @@ impl App {
                     .on_hover_text("Close the sample map (Esc)");
                 let fill =
                     motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-                over.rect_filled(close, 0.0, fill);
+                over.fill_background(close, 0.0, fill);
                 let ink = theme::text_primary();
                 for (from, to) in
                     [(Vec2::new(-4.0, -4.0), Vec2::new(4.0, 4.0)), (Vec2::new(-4.0, 4.0), Vec2::new(4.0, -4.0))]
@@ -3295,7 +3330,7 @@ impl App {
             self.detail_drag = None;
         }
         let painter = ui.painter_at(splitter);
-        painter.rect_filled(splitter, 0.0, theme::control_background());
+        painter.fill_background(splitter, 0.0, theme::control_background());
         let grip = if stacked { Vec2::new(2.0, 32.0) } else { Vec2::new(32.0, 2.0) };
         painter.rect_filled(Rect::from_center_size(splitter.center(), grip), 0.0, theme::text_hint());
 
@@ -3526,7 +3561,7 @@ impl App {
             self.detail_drag = None;
         }
         let painter = ui.painter_at(splitter);
-        painter.rect_filled(splitter, 0.0, theme::control_background());
+        painter.fill_background(splitter, 0.0, theme::control_background());
         painter.rect_filled(Rect::from_center_size(splitter.center(), Vec2::new(32.0, 2.0)), 0.0, theme::text_hint());
         Rect::from_min_max(area.min, Pos2::new(area.right(), splitter.top()))
     }
@@ -3716,7 +3751,7 @@ impl App {
             }
             let lit = motion::toward(ui.ctx(), response.id.with("active"), Some(id) == active, motion::VALUE);
             let idle = motion::mix(theme::window_background(), theme::panel_hover(), widgets::hover(ui, &response));
-            painter.rect_filled(tab, 0.0, motion::mix(idle, theme::panel_background(), lit));
+            painter.fill_background(tab, 0.0, motion::mix(idle, theme::panel_background(), lit));
             let text = motion::mix(theme::text_secondary(), theme::text_primary(), lit);
             painter.galley(Pos2::new(tab.left() + PAD, tab.center().y - galley.size().y / 2.0), galley, text);
             let cross = motion::mix(theme::text_hint(), theme::text_primary(), widgets::hover(ui, &close_response));
@@ -3732,7 +3767,7 @@ impl App {
     fn open_prompt_bar(&mut self, ui: &mut Ui) {
         let Some(path) = self.open_prompt.clone() else { return };
         let bar = ui.max_rect();
-        ui.painter().rect_filled(bar, 0.0, theme::panel_background());
+        ui.painter().fill_background(bar, 0.0, theme::panel_background());
         let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().to_string());
         let current = self.projects.active().and_then(|id| self.projects.name(id)).unwrap_or("the project").to_string();
         let mut choice = None;
@@ -5529,7 +5564,7 @@ impl App {
                 ui.max_rect()
             };
             ui.allocate_rect(rect, egui::Sense::hover());
-            ui.painter().rect_filled(rect, 0.0, theme::window_background());
+            ui.painter().fill_background(rect, 0.0, theme::window_background());
             let changed = panel.show(ui, rect, browser, projects, &mut settings, revision);
             // The window has its own keyboard: its keys run the same actions as the main window's,
             // unless a field in it is being typed in. Embedded, the main window reads them.
@@ -5798,7 +5833,7 @@ impl App {
         let font = theme::ui_font(theme::TEXT_SMALL);
         let galley = widgets::fitted(&painter, &text, font, theme::text_primary(), 280.0);
         let rect = Rect::from_min_size(pointer + Vec2::new(14.0, 10.0), galley.size() + Vec2::new(PAD * 2.0, 6.0));
-        painter.rect_filled(rect, 0.0, theme::control_active());
+        painter.fill_background(rect, 0.0, theme::control_active());
         painter.rect_stroke(
             rect,
             0.0,
@@ -6285,7 +6320,7 @@ impl App {
             Some(keys) => response.on_hover_text(format!("{label} ({keys})")),
             None => response.on_hover_text(label),
         };
-        painter.rect_filled(
+        painter.fill_background(
             browser_rect,
             0.0,
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
@@ -6314,7 +6349,7 @@ impl App {
             }
             Drag::Moving(_) | Drag::None => {}
         }
-        painter.rect_filled(
+        painter.fill_background(
             tempo_rect,
             0.0,
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
@@ -6395,7 +6430,7 @@ impl App {
         }
         let running = motion::toward(ui.ctx(), response.id.with("running"), grid.running, motion::VALUE);
         let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(play, 0.0, motion::mix(hover, theme::control_active(), running));
+        painter.fill_background(play, 0.0, motion::mix(hover, theme::control_active(), running));
         let glyph = motion::mix(theme::text_primary(), theme::accent(), running);
         let c = play.center();
         painter.add(egui::Shape::convex_polygon(
@@ -6409,7 +6444,7 @@ impl App {
         if response.clicked() {
             actions.push(self.stop_action());
         }
-        painter.rect_filled(
+        painter.fill_background(
             stop,
             0.0,
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
@@ -6420,7 +6455,7 @@ impl App {
         crate::session::record_controls::record_button(ui, &painter, record, recording, actions);
         x = record.right() + PAD;
         let position = row(x, 64.0);
-        painter.rect_filled(position, 0.0, theme::window_background());
+        painter.fill_background(position, 0.0, theme::window_background());
         widgets::text_in(
             &painter,
             position.shrink2(Vec2::new(PAD, 0.0)),
@@ -6469,7 +6504,7 @@ impl App {
         if let Some(milli) = cpu.filter(|_| fits(right, 56.0)) {
             let rect = row(right - 56.0, 56.0);
             let percent = f64::from(milli.min(1000)) / 10.0;
-            painter.rect_filled(rect, 0.0, theme::window_background());
+            painter.fill_background(rect, 0.0, theme::window_background());
             let inner = rect.shrink2(Vec2::new(PAD - 2.0, 0.0));
             widgets::text_in(
                 &painter,
@@ -6491,7 +6526,7 @@ impl App {
                 Pos2::new(rect.left() + 1.0, rect.bottom() - 3.0),
                 Pos2::new(rect.right() - 1.0, rect.bottom() - 1.0),
             );
-            painter.rect_filled(track, 0.0, theme::control_background());
+            painter.fill_background(track, 0.0, theme::control_background());
             let fill = track.width() * milli.min(1000) as f32 / 1000.0;
             let full = Rect::from_min_max(track.min, Pos2::new(track.left() + fill, track.bottom()));
             let color = if milli >= 800 { theme::meter_hot() } else { theme::meter_normal() };
@@ -6505,7 +6540,7 @@ impl App {
         // Left of that, the program's own RAM (its resident memory), in megabytes or gigabytes.
         if let Some(bytes) = ram.filter(|_| fits(right, 76.0)) {
             let rect = row(right - 76.0, 76.0);
-            painter.rect_filled(rect, 0.0, theme::window_background());
+            painter.fill_background(rect, 0.0, theme::window_background());
             let inner = rect.shrink2(Vec2::new(PAD - 2.0, 0.0));
             widgets::text_in(
                 &painter,
@@ -6709,7 +6744,7 @@ fn drag_label(ctx: &egui::Context, pointer: Pos2, text: &str, lands: bool) {
     let font = theme::ui_font(theme::TEXT_SMALL);
     let galley = widgets::fitted(&painter, text, font, theme::text_primary(), 280.0);
     let rect = Rect::from_min_size(pointer + Vec2::new(14.0, 10.0), galley.size() + Vec2::new(PAD * 2.0, 6.0));
-    painter.rect_filled(rect, 0.0, theme::control_active());
+    painter.fill_background(rect, 0.0, theme::control_active());
     painter.rect_stroke(
         rect,
         0.0,

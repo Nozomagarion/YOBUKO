@@ -12,6 +12,7 @@ mod liquid;
 mod mac_menu;
 mod recent;
 mod save_error;
+mod surface;
 mod theme_files;
 
 use std::path::{Path, PathBuf};
@@ -146,6 +147,10 @@ fn main() -> ExitCode {
         eframe::Renderer::Glow => Graphics::OpenGl,
         eframe::Renderer::Wgpu => Graphics::Gpu,
     };
+    // The window shows the desktop through its backgrounds' alpha where the GPU renderer can set
+    // the pixels directly and the system composites a window's alpha: on macOS. Elsewhere it
+    // stays opaque and backgrounds blend as before.
+    let see_through = cfg!(target_os = "macos") && renderer == eframe::Renderer::Wgpu;
     let mut themes = theme_files::ThemeFiles::new(eframe::storage_dir(app_id()).map(|d| d.join(THEMES_FOLDER)));
     let (theme_list, theme_warnings) = themes.read_all();
     settings_warnings.extend(theme_warnings);
@@ -155,6 +160,8 @@ fn main() -> ExitCode {
         agents,
         graphics_now,
         editors_embeddable: false,
+        see_through,
+        blurred: false,
         themes,
         recent,
         #[cfg(target_os = "macos")]
@@ -167,6 +174,10 @@ fn main() -> ExitCode {
         }),
     };
     // The audio devices, and the output the settings choose (Settings › Audio, `audio.*`).
+    if see_through {
+        let (title_bar, corner) = mac_window_frame();
+        window.app.set_window_frame(title_bar, corner);
+    }
     window.app.projects_mut().set_audio_system(std::sync::Arc::new(suhina_output::DeviceOutput::new()));
     window.app.projects_mut().set_output_choice(settings.output_choice());
     // The MIDI controllers, every port on but the ones the settings turn off (Settings › MIDI,
@@ -195,7 +206,12 @@ fn main() -> ExitCode {
             .with_title("Suhina")
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([640.0, 400.0])
-            .with_drag_and_drop(true),
+            .with_drag_and_drop(true)
+            .with_transparent(see_through)
+            // A see-through window's title bar would show the desktop bare: the content goes under
+            // it instead, and the app gives it the window's background.
+            .with_fullsize_content_view(see_through)
+            .with_titlebar_shown(!see_through),
         renderer,
         event_loop_builder: x11_first(),
         ..Default::default()
@@ -216,6 +232,9 @@ fn main() -> ExitCode {
             // unsupported renderers and reduced effects keep solid surfaces.
             if animations && let Some(gpu) = cc.wgpu_render_state.clone() {
                 suhina_ui::kit::liquid::install(&cc.egui_ctx, std::sync::Arc::new(liquid::Liquid::new(gpu)));
+            }
+            if see_through && let Some(gpu) = &cc.wgpu_render_state {
+                suhina_ui::kit::surface::install(&cc.egui_ctx, surface::provider(gpu));
             }
             let folder = window.themes.folder_text();
             window.app.set_themes(&cc.egui_ctx, theme_list, folder);
@@ -292,6 +311,10 @@ struct Window {
     graphics_now: Graphics,
     /// The main window is a Win32 or X11 one, which plug-in editors can be embedded in.
     editors_embeddable: bool,
+    /// The window shows the desktop through its backgrounds' alpha.
+    see_through: bool,
+    /// The system blurs what shows through: on while the theme has a see-through background.
+    blurred: bool,
     themes: theme_files::ThemeFiles,
     /// The projects opened and saved lately, for the project dialog.
     recent: recent::Recent,
@@ -311,7 +334,35 @@ struct StartUp {
 }
 
 impl eframe::App for Window {
-    fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
+    /// Nothing behind the backgrounds: where none is painted, the desktop shows.
+    fn clear_color(&self, visuals: &eframe::egui::Visuals) -> [f32; 4] {
+        if self.see_through { [0.0; 4] } else { visuals.panel_fill.to_normalized_gamma_f32() }
+    }
+
+    fn ui(&mut self, ui: &mut eframe::egui::Ui, frame: &mut eframe::Frame) {
+        self.draw(ui);
+        suhina_ui::kit::liquid::blur_behind_menus(ui.ctx());
+        suhina_ui::kit::surface::finish_frame(ui.ctx());
+        self.blur(frame);
+    }
+
+    /// Quitting: backups that quitting calls for are written, and the journal says nothing is
+    /// left to offer next time.
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let _finished_in_time = self.app.finish_backups();
+        let _let_go_in_time = self.app.let_go_of_projects();
+        // Restart now, after an update: the new build starts as this one closes.
+        if self.app.restart_wanted()
+            && let Err(e) = suhina_update::relaunch()
+        {
+            eprintln!("error: {e}");
+        }
+    }
+}
+
+impl Window {
+    /// One frame of the window: the splash while starting, then the app and what it asked for.
+    fn draw(&mut self, ui: &mut eframe::egui::Ui) {
         if let Some(splash) = self.splash.as_mut()
             && splash.take_start(ui.ctx())
             && let Some(start_up) = self.start_up.take()
@@ -406,21 +457,19 @@ impl eframe::App for Window {
         }
     }
 
-    /// Quitting: backups that quitting calls for are written, and the journal says nothing is
-    /// left to offer next time.
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        let _finished_in_time = self.app.finish_backups();
-        let _let_go_in_time = self.app.let_go_of_projects();
-        // Restart now, after an update: the new build starts as this one closes.
-        if self.app.restart_wanted()
-            && let Err(e) = suhina_update::relaunch()
-        {
-            eprintln!("error: {e}");
+    /// Turns the system's blur behind the window on while the theme has a see-through background.
+    fn blur(&mut self, frame: &eframe::Frame) {
+        let wanted = self.see_through && suhina_ui::kit::theme::see_through();
+        if wanted == self.blurred {
+            return;
+        }
+        if let Some(window) = frame.winit_window() {
+            // The window server blurs what is behind the whole window, under everything drawn.
+            window.set_blur(wanted);
+            self.blurred = wanted;
         }
     }
-}
 
-impl Window {
     /// Before drawing (ADR 0028): opens the projects later starts of this build handed over,
     /// passes on what agents ask, and runs their work on the open projects, so this frame shows
     /// it.
@@ -721,6 +770,16 @@ fn native_window(cc: &eframe::CreationContext<'_>) -> Option<u64> {
         RawWindowHandle::Xcb(handle) => Some(u64::from(handle.window.get())),
         _ => None,
     }
+}
+
+/// The height of macOS's title bar and the radius of a window's corners, in points: 32 and 16
+/// from macOS 26 on, 28 and 10 before it.
+fn mac_window_frame() -> (f32, u8) {
+    let version = std::process::Command::new("sw_vers").arg("-productVersion").output().ok();
+    let major = version
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .and_then(|text| text.trim().split('.').next().and_then(|n| n.parse::<u32>().ok()));
+    if major.is_some_and(|major| major >= 26) { (32.0, 16) } else { (28.0, 10) }
 }
 
 fn settings_path() -> Option<PathBuf> {

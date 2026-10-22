@@ -7,6 +7,7 @@
 //! timeline and its points edited with the pointer. Every edit is an `automation.*` command;
 //! which lanes are shown is the view's own state, like a lane's height.
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::{HashMap, HashSet};
 
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2};
@@ -1080,7 +1081,7 @@ fn heading_row(ui: &mut Ui, name: &str, count: usize, marked: bool, open: bool, 
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         if toggles && response.hovered() {
-            painter.rect_filled(rect, 2.0, ui.visuals().widgets.hovered.weak_bg_fill);
+            painter.fill_background(rect, 2.0, ui.visuals().widgets.hovered.weak_bg_fill);
         }
         widgets::chevron(painter, Pos2::new(rect.left() + 6.0, rect.center().y), open, theme::text_hint());
         let font = egui::TextStyle::Button.resolve(ui.style());
@@ -1292,7 +1293,7 @@ fn lane_header(
         return;
     }
     let painter = painter.with_clip_rect(clip);
-    painter.rect_filled(rect, 0.0, theme::panel_background());
+    painter.fill_background(rect, 0.0, theme::panel_background());
     let track = lanes.track;
     let id = Id::new(("automation-header", track.0, param.key.device, param.key.param.as_str()));
     let inner = rect.shrink2(Vec2::new(PAD, 5.0));
@@ -1397,7 +1398,7 @@ fn lane_header(
             response.on_hover_text("A manual change turned this automation off; click to follow it again")
         };
         let (fill, ink) = widgets::toggle_colors(ui, &response, param.enabled);
-        painter.rect_filled(toggle, 0.0, fill);
+        painter.fill_background(toggle, 0.0, fill);
         if !param.enabled {
             painter.rect_stroke(toggle, 0.0, theme::hairline(theme::accent()), StrokeKind::Inside);
         }
@@ -1458,7 +1459,7 @@ fn forget_menu(ui: &Ui, filter: Id, placed: Id) {
 fn small_button(ui: &Ui, painter: &egui::Painter, rect: Rect, response: &egui::Response, text: &str) {
     let fill =
         crate::kit::motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, response));
-    painter.rect_filled(rect, 0.0, fill);
+    painter.fill_background(rect, 0.0, fill);
     widgets::text_in(painter, rect, Align2::CENTER_CENTER, text, theme::ui_font(theme::TEXT), theme::text_secondary());
 }
 

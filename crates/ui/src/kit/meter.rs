@@ -6,6 +6,7 @@
 //! on the volume control's dB scale, with the highest peak of the last moments held as a line
 //! and a clip light that a click turns off (`mixer.resetClip`).
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Id, Pos2, Rect, Sense, Ui, Vec2};
 use serde_json::json;
 use suhina_engine::model::TrackId;
@@ -162,7 +163,7 @@ pub fn show(
         let light = Rect::from_min_max(Pos2::new(rect.right() - CLIP, rect.top()), rect.max);
         (light, Rect::from_min_max(rect.min, Pos2::new(light.left() - 1.0, rect.bottom())))
     };
-    painter.rect_filled(light, 0.0, if level.clipped { theme::recording() } else { theme::window_background() });
+    painter.fill_background(light, 0.0, if level.clipped { theme::recording() } else { theme::window_background() });
     let hot_from = ((HOT_DB - RANGE.0) / (RANGE.1 - RANGE.0)) as f32;
     for side in 0..2 {
         let offset = side as f32 * (BAR + GAP);
@@ -185,7 +186,7 @@ pub fn show(
                 )
             }
         };
-        painter.rect_filled(bar, 0.0, theme::window_background());
+        painter.fill_background(bar, 0.0, theme::window_background());
         let peak = fraction(level.peak.get(side).copied().unwrap_or(0.0));
         let rms = fraction(level.rms.get(side).copied().unwrap_or(0.0));
         // The peak dimmer, the RMS level in the full colour over it.

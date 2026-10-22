@@ -5,6 +5,7 @@
 //! along the bottom (`docs/spec/ui-session-view.md`, sizes in `docs/design/components.md`).
 //! It draws a [`Grid`] and turns clicks into [`Action`]s; it never changes the project itself.
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::BTreeSet;
 
 use egui::{Align2, Color32, Id, Pos2, Rect, Response, Sense, StrokeKind, Ui, Vec2};
@@ -196,7 +197,7 @@ pub fn show(
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
 
     // Fixed bands: header on top, mixer at the bottom, scene column on the right.
     let header = Rect::from_min_size(area.min, Vec2::new(area.width(), ROW));
@@ -384,7 +385,7 @@ pub fn show(
     painter.vline(scenes_x - 0.5, area.y_range(), theme::hairline(theme::border_strong()));
     let scene_span = egui::Rangef::new(scenes_x, area.right());
     let header_rect = Rect::from_x_y_ranges(scene_span, header.y_range());
-    painter.rect_filled(header_rect, 0.0, theme::control_background());
+    painter.fill_background(header_rect, 0.0, theme::control_background());
     widgets::text_in(
         &painter,
         header_rect.shrink2(Vec2::new(PAD, 0.0)),
@@ -403,7 +404,7 @@ pub fn show(
         actions,
     );
     let main_mixer = Rect::from_x_y_ranges(scene_span, mixer.y_range());
-    painter.rect_filled(main_mixer, 0.0, theme::panel_background());
+    painter.fill_background(main_mixer, 0.0, theme::panel_background());
     let level = state.meters.main;
     // The main meter stands where a track's does: beside the fader, or at the top of the strip
     // while the mixer is too low for a fader.
@@ -448,7 +449,7 @@ fn main_metronome(
         actions.push(Action::new("transport.setMetronome", json!({ "on": !on })));
     }
     let fill = if on { theme::control_active() } else { theme::control_background() };
-    painter.rect_filled(rect, 0.0, fill);
+    painter.fill_background(rect, 0.0, fill);
     let glyph = if on { theme::accent() } else { theme::text_primary() };
     crate::session::record_controls::metronome_glyph(painter, rect, glyph);
     // Held: the level's slider beside the button, where there is room.
@@ -628,7 +629,7 @@ fn column_header(
     // The header is the track's colour, its name in the text colour that reads on it; a selected
     // track's header has an outline in that colour.
     let fill = colour_picker::fill(column.color, column.mute);
-    painter.rect_filled(rect, 0.0, fill);
+    painter.fill_background(rect, 0.0, fill);
     crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Track);
     let color = theme::text_on(fill);
     if state.selected == Some(column.track) {
@@ -875,7 +876,7 @@ fn column_body(
         }
     }
     let fill = motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response));
-    painter.rect_filled(stop_rect, 0.0, fill);
+    painter.fill_background(stop_rect, 0.0, fill);
     let square = Rect::from_center_size(stop_rect.center(), Vec2::splat(7.0));
     let color = if column.stop_queued { theme::accent() } else { theme::text_secondary() };
     painter.rect_stroke(square, 0.0, theme::hairline(color), StrokeKind::Inside);
@@ -915,10 +916,10 @@ fn slot_cell(
     let font = theme::ui_font(theme::TEXT);
     match slot.state {
         SlotState::Empty => {
-            painter.rect_filled(rect, 0.0, empty);
+            painter.fill_background(rect, 0.0, empty);
         }
         SlotState::EmptyStop => {
-            painter.rect_filled(rect, 0.0, motion::mix(empty, theme::panel_background(), hover));
+            painter.fill_background(rect, 0.0, motion::mix(empty, theme::panel_background(), hover));
             painter.rect_filled(mark_rect(EMPTY_MARK), 0.0, theme::slot_empty());
         }
         SlotState::Stopped | SlotState::Queued => {
@@ -926,7 +927,7 @@ fn slot_cell(
             let base = if slot.enabled { clip_color } else { theme::control_background() };
             let fill = motion::mix(base, Color32::WHITE, 0.14 * hover);
             let fill = if column.mute { motion::mix(theme::control_background(), fill, 0.45) } else { fill };
-            painter.rect_filled(rect, 0.0, fill);
+            painter.fill_background(rect, 0.0, fill);
             crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Clip);
             let (mark, text) = if slot.enabled {
                 (theme::text_on(fill), theme::text_on(fill))
@@ -958,7 +959,7 @@ fn slot_cell(
             // A playing clip keeps its colour, brighter, so the column still reads as its track.
             let fill = motion::mix(clip_color, Color32::WHITE, 0.10 + 0.14 * hover);
             let fill = if column.mute { motion::mix(theme::control_background(), fill, 0.45) } else { fill };
-            painter.rect_filled(rect, 0.0, fill);
+            painter.fill_background(rect, 0.0, fill);
             crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Clip);
             let ink = theme::text_on(fill);
             // The mark is the shape its click does: a stop square while playing. A stopped
@@ -1022,7 +1023,7 @@ fn scene_column(
         let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
         let playing = motion::toward(ui.ctx(), response.id.with("playing"), scene.playing, motion::VALUE);
         let fill = motion::mix(hover, theme::control_playing(), playing);
-        painter.rect_filled(rect, 0.0, fill);
+        painter.fill_background(rect, 0.0, fill);
         // The row's glyph: the play arrow while its clips wait for a launch, the stop square
         // while the row plays — the click does what the glyph says.
         let glyph = Rect::from_min_size(
@@ -1083,7 +1084,7 @@ fn scene_column(
         if response.clicked() {
             actions.push(Action::new("launcher.stopAll", json!({})));
         }
-        painter.rect_filled(
+        painter.fill_background(
             rect,
             0.0,
             motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response)),

@@ -10,6 +10,7 @@
 //! takes the room under that line, and where it lands in the window is reported each frame
 //! ([`EditorPlace`]) for the host process to put it there.
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Align2, Id, Pos2, Rect, Sense, Ui, Vec2};
 use serde_json::json;
 use suhina_engine::model::{ClipId, DeviceKind, LaneData, Note, Project, StretchMode, TrackId};
@@ -734,7 +735,7 @@ pub fn show_row(
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
     match detail {
         Detail::Nothing => hint(&painter, area, "Select a track or a clip to see it here"),
         Detail::Devices(chain) => return chain_row(ui, &painter, area, chain, selected, actions, places),
@@ -868,7 +869,7 @@ fn chain_row(
     }
     ui.set_clip_rect(outer_clip);
     if let Some(bar) = bar {
-        painter.rect_filled(bar, 0.0, theme::control_background());
+        painter.fill_background(bar, 0.0, theme::control_background());
         let thumb_width = (area.width() / total * bar.width()).max(24.0);
         let thumb_left = bar.left() + offset / most * (bar.width() - thumb_width);
         let thumb =
@@ -931,7 +932,7 @@ pub fn show_stack(
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
     match detail {
         Detail::Nothing => hint(&painter, area, "Select a track or a clip"),
         Detail::Devices(chain) => return chain_stack(ui, &painter, area, chain, selected, actions, places),
@@ -961,7 +962,7 @@ pub fn show_clip_column(ui: &mut Ui, info: &ClipInfo, stacked: bool, actions: &m
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
     let (column, picked) = clip_properties(ui, &painter, area, info, stacked, actions);
     clip_for_readers(ui, column, info);
     let rest = if stacked {
@@ -1114,7 +1115,7 @@ fn plugin_button(
     );
     let hover = widgets::hover(ui, &response);
     let fill = crate::kit::motion::mix(theme::control_background(), theme::control_hover(), hover);
-    painter.rect_filled(button, 0.0, fill);
+    painter.fill_background(button, 0.0, fill);
     painter.rect_stroke(button, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
     widgets::text_in(
         painter,
@@ -1143,7 +1144,7 @@ pub fn show_ara_editor(
 ) {
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
     let Some(device) = chain.devices.iter().find(|d| d.index == device) else { return };
     let Some(plugin) = &device.plugin else { return };
     let response = ui.interact(area, egui::Id::new(("ara-editor", chain.track.0)), Sense::hover());
@@ -1222,7 +1223,11 @@ fn ara_button(
     let response =
         widgets::button_area(ui, rect, egui::Id::new(("ara-button", id.0.0, id.1)), format!("{label} {plugin}"));
     let hover = widgets::hover(ui, &response);
-    painter.rect_filled(rect, 0.0, crate::kit::motion::mix(theme::control_background(), theme::control_hover(), hover));
+    painter.fill_background(
+        rect,
+        0.0,
+        crate::kit::motion::mix(theme::control_background(), theme::control_hover(), hover),
+    );
     painter.rect_stroke(rect, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
     widgets::text_in(
         painter,
@@ -1286,9 +1291,9 @@ fn device_panel(
             painter.rect_stroke(rect, 1.0, theme::hairline(theme::selection()), egui::StrokeKind::Inside);
         }
     };
-    painter.rect_filled(rect, 0.0, theme::panel_background());
+    painter.fill_background(rect, 0.0, theme::panel_background());
     let header = Rect::from_min_size(rect.min, Vec2::new(rect.width(), ROW));
-    painter.rect_filled(header, 0.0, theme::control_background());
+    painter.fill_background(header, 0.0, theme::control_background());
     let switch = Rect::from_min_size(
         Pos2::new(header.left() + PAD, header.center().y - ON_SWITCH / 2.0),
         Vec2::splat(ON_SWITCH),
@@ -1420,7 +1425,7 @@ fn device_panel(
                 break;
             }
             let node_rect = Rect::from_min_size(row.min, Vec2::new((row.width() - PAD) * 0.78, NODE_ROW - PAD));
-            painter.rect_filled(node_rect, 1.0, theme::control_background());
+            painter.fill_background(node_rect, 1.0, theme::control_background());
             widgets::text_in(
                 painter,
                 node_rect.shrink(PAD / 2.0),
@@ -1596,7 +1601,7 @@ fn device_panel(
                                     let center=rect.center(); let knob_radius=size*9.0/22.0;
                                     let background=parameter.ui.background.map_or_else(theme::control_background,|[r,g,b]| egui::Color32::from_rgb(r,g,b));
                                     if parameter.ui.shape == suhina_device_sdk::ControlShape::Square {
-                                        ui.painter().rect_filled(egui::Rect::from_center_size(center,Vec2::splat(knob_radius*2.0)),0.0,background);
+                                        ui.painter().fill_background(egui::Rect::from_center_size(center,Vec2::splat(knob_radius*2.0)),0.0,background);
                                     } else { ui.painter().circle_filled(center,knob_radius,background); }
                                     let border=egui::Stroke::new(1.0,accent.unwrap_or_else(theme::text_hint));
                                     if parameter.ui.shape == suhina_device_sdk::ControlShape::Square {
@@ -1827,7 +1832,7 @@ fn clip_properties(
         Rect::from_min_max(area.min, Pos2::new(area.left() + CLIP_WIDTH, area.bottom()))
     }
     .intersect(area);
-    painter.rect_filled(column, 0.0, theme::panel_background());
+    painter.fill_background(column, 0.0, theme::panel_background());
     // Rows that do not fit under the column's bottom are left out rather than cut in half, the
     // title last; text never wraps (› Clip column in `docs/spec/ui-clip-editor.md`).
     let title = Rect::from_min_size(column.min, Vec2::new(column.width(), ROW));
@@ -1925,7 +1930,7 @@ fn clip_edit_row(
     let id = Id::new(("clip-edit", label));
     let draw_value = |response: &egui::Response, text: &str| {
         let fill = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, response));
-        painter.rect_filled(value_rect, 2.0, fill);
+        painter.fill_background(value_rect, 2.0, fill);
         widgets::text_in(
             painter,
             value_rect.shrink2(Vec2::new(PAD / 2.0, 0.0)),
@@ -2023,8 +2028,8 @@ fn switch(ui: &Ui, painter: &egui::Painter, rect: Rect, showing: Showing) -> Opt
         }
         let on = motion::toward(ui.ctx(), response.id.with("on"), value == showing, motion::VALUE);
         let idle = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(cell, 0.0, motion::mix(idle, theme::text_value(), on));
-        let color = motion::mix(theme::text_secondary(), theme::window_background(), on);
+        painter.fill_background(cell, 0.0, motion::mix(idle, theme::control_selected(), on));
+        let color = motion::mix(theme::text_secondary(), theme::text_inverse(), on);
         widgets::text_in(painter, cell, Align2::CENTER_CENTER, text, theme::ui_font(theme::TEXT_SMALL), color);
     }
     picked
@@ -2397,7 +2402,7 @@ fn group_panel(
         let lit = motion::toward(ui.ctx(), response.id.with("on"), branch.solo, motion::VALUE);
         let off = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
         painter.rect_filled(solo, 0.0, motion::mix(off, theme::accent(), lit));
-        let text = motion::mix(theme::text_secondary(), theme::window_background(), lit);
+        let text = motion::mix(theme::text_secondary(), theme::text_inverse(), lit);
         widgets::text_in(painter, solo, Align2::CENTER_CENTER, "S", theme::ui_font(theme::TEXT_SMALL), text);
         if response.clicked() {
             actions.push(Action::new(

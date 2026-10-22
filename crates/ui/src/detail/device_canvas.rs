@@ -3,6 +3,7 @@
 
 //! SDK drawing programs are evaluated only on the UI thread.
 use crate::detail::detail_view::GraphParameter;
+use crate::kit::surface::Backgrounds as _;
 use crate::kit::widgets::Action;
 use egui::{Color32, Pos2, Rect, Stroke, Vec2};
 use serde_json::json;
@@ -182,7 +183,7 @@ fn sample_waveform(
     });
     let source = ui.ctx().data(|data| data.get_temp::<Arc<suhina_engine::AudioData>>(sample_source_id(track, device)));
     let painter = ui.painter_at(visible);
-    painter.rect_filled(bounds, 0., crate::kit::theme::control_background());
+    painter.fill_background(bounds, 0., crate::kit::theme::control_background());
     let colors = crate::kit::theme::palette();
     let compact = bounds.height() < 100.;
     let field = if compact {
@@ -912,7 +913,7 @@ pub(crate) fn show(
     } else {
         color(canvas.background)
     };
-    painter.rect_filled(rect, 0.0, background);
+    painter.fill_background(rect, 0.0, background);
     paint(&painter, &canvas.layers, rect.min, parameters, &loaded);
     let sample_panel = canvas.controls.iter().any(|c| matches!(c.widget, Some(Widget::SampleWaveform)));
     for (control, drawings) in canvas.controls.iter().zip(&loaded.controls) {

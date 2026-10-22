@@ -10,6 +10,7 @@ pub mod liquid;
 pub mod logo;
 pub mod meter;
 pub mod motion;
+pub mod surface;
 pub mod theme;
 pub mod theme_preview;
 pub mod waveform;

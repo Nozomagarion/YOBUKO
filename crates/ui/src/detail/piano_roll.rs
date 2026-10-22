@@ -5,6 +5,7 @@
 //! column, a ruler, the note grid and a velocity lane. Every edit is a `note.*` command; the view
 //! keeps only what is on screen: zoom, scroll, the selected notes and a gesture in progress.
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::BTreeSet;
 
 use egui::{Align2, Color32, CursorIcon, Id, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
@@ -965,7 +966,7 @@ impl IconButton {
                     StrokeKind::Inside,
                 );
                 let front = Rect::from_center_size(at(1.5, 1.5), size(8.0, 8.0));
-                painter.rect_filled(front, 0.0, theme::panel_background());
+                painter.fill_background(front, 0.0, theme::panel_background());
                 painter.rect_stroke(front, 0.0, stroke, StrokeKind::Inside);
             }
             // Scissors: two rings and the blades crossing over them.
@@ -1813,7 +1814,7 @@ fn toolbar(ui: &mut Ui, rect: Rect, cx: ToolbarCx<'_>, state: &mut PianoRollStat
     }
     let painter = ui.painter_at(rect);
     let paint = ButtonPaint { ui, painter: &painter, keymap, scale };
-    painter.rect_filled(rect, 0.0, theme::panel_background());
+    painter.fill_background(rect, 0.0, theme::panel_background());
     painter.hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline(theme::border()));
     let row = rect.shrink2(Vec2::new(4.0, 3.0));
     // The icon box, the gap and the strokes scale with Toolbar size; the box never outgrows the
@@ -2113,7 +2114,7 @@ impl ButtonPaint<'_> {
         response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, active, chosen, hint.clone()));
         if active {
             let fill = if chosen { theme::control_active() } else { theme::control_background() };
-            painter.rect_filled(
+            painter.fill_background(
                 area,
                 0.0,
                 crate::kit::motion::mix(fill, theme::control_hover(), widgets::hover(ui, &response)),
@@ -2608,7 +2609,7 @@ fn draw(
     let last_key = layout.key_at(layout.grid.top() + 0.5).unwrap_or(127);
 
     // Rows: black keys darker, a stronger line under each C.
-    painter.rect_filled(layout.grid, 0.0, theme::window_background());
+    painter.fill_background(layout.grid, 0.0, theme::window_background());
     for key in (first_key..=last_key).filter(|k| layout.rows.shows(*k)) {
         let top = layout.y_of(key);
         let row = Rect::from_min_max(
@@ -2617,7 +2618,7 @@ fn draw(
         );
         // With a scale, its keys are lighter; without one, the white keys are (› Scale and key).
         let fill = scale_view::row_fill(clip.scale, key, is_black(key));
-        grid_painter.rect_filled(row, 0.0, fill);
+        grid_painter.fill_background(row, 0.0, fill);
         let line = if key % 12 == 0 { theme::border_strong() } else { theme::border() };
         grid_painter.hline(row.x_range(), row.bottom() - 0.5, theme::hairline(line));
     }
@@ -2626,7 +2627,7 @@ fn draw(
     let first_beat = layout.beat_at(layout.grid.left()).max(0.0);
     let last_beat = layout.beat_at(layout.grid.right());
     let bar = clip.bar_beats.max(EPSILON);
-    painter.rect_filled(layout.ruler, 0.0, theme::panel_background());
+    painter.fill_background(layout.ruler, 0.0, theme::panel_background());
     let lane_painter = painter.with_clip_rect(layout.lane);
     let mut beat = (first_beat / grid.step).floor() * grid.step;
     let mut drawn = 0;
@@ -2765,7 +2766,7 @@ fn draw(
                 Align2::LEFT_CENTER,
                 &key_name(note.key),
                 theme::mono_font(theme::TEXT_TINY),
-                theme::window_background(),
+                theme::text_inverse(),
             );
         }
         // Its velocity stem.
@@ -2809,7 +2810,7 @@ fn draw(
 
     // The key column: keys, every C named.
     let key_painter = painter.with_clip_rect(layout.keys);
-    key_painter.rect_filled(layout.keys, 0.0, theme::window_background());
+    key_painter.fill_background(layout.keys, 0.0, theme::window_background());
     for key in (first_key..=last_key).filter(|k| layout.rows.shows(*k)) {
         let top = layout.y_of(key);
         let row = Rect::from_min_max(
@@ -2825,7 +2826,7 @@ fn draw(
         } else {
             theme::control_background()
         };
-        key_painter.rect_filled(row.shrink2(Vec2::new(0.0, 0.5)), 0.0, fill);
+        key_painter.fill_background(row.shrink2(Vec2::new(0.0, 0.5)), 0.0, fill);
         scale_view::key_mark(&key_painter, clip.scale, key, row);
         // Folded, every row is named: the keys beside each other are no longer neighbours.
         if (key % 12 == 0 || layout.rows.folded()) && layout.key_height >= 8.0 {
@@ -2843,12 +2844,12 @@ fn draw(
         Pos2::new(layout.keys.left(), layout.ruler.top()),
         Pos2::new(layout.keys.right(), layout.ruler.bottom()),
     );
-    painter.rect_filled(corner, 0.0, theme::panel_background());
+    painter.fill_background(corner, 0.0, theme::panel_background());
     let lane_keys = Rect::from_min_max(
         Pos2::new(layout.keys.left(), layout.lane.top()),
         Pos2::new(layout.keys.right(), layout.lane.bottom()),
     );
-    painter.rect_filled(lane_keys, 0.0, theme::panel_background());
+    painter.fill_background(lane_keys, 0.0, theme::panel_background());
     if lane_keys.height() >= 24.0 {
         let font = theme::mono_font(theme::TEXT_TINY);
         widgets::text_in(

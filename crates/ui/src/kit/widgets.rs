@@ -4,6 +4,7 @@
 //! Small drawing helpers and the controls the views share: text that fits a cell, the value
 //! field drag, the knob.
 
+use crate::kit::surface::Backgrounds as _;
 use std::sync::Arc;
 
 use egui::text::{LayoutJob, TextWrapping};
@@ -95,7 +96,7 @@ pub fn hover(ui: &Ui, response: &Response) -> f32 {
 /// Geometry stays inside the caller's hit target, including compact mixer strips.
 pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Response, fill: Color32) {
     let radius = (rect.height() * 0.25).min(5.0);
-    painter.rect_filled(rect, radius, fill);
+    painter.fill_background(rect, radius, fill);
     if response.has_focus() || response.hovered() {
         let edge = if response.has_focus() { theme::accent() } else { theme::border_strong() };
         painter.rect_stroke(rect, radius, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
@@ -108,8 +109,8 @@ pub fn toggle_colors(ui: &Ui, response: &Response, on: bool) -> (Color32, Color3
     let lit = motion::toward(ui.ctx(), response.id.with("on"), on, motion::VALUE);
     let off_fill = motion::mix(theme::control_background(), theme::control_hover(), hover);
     let off_text = motion::mix(theme::text_hint(), theme::text_secondary(), hover);
-    let on_fill = motion::mix(theme::text_value(), theme::text_primary(), hover);
-    (motion::mix(off_fill, on_fill, lit), motion::mix(off_text, theme::window_background(), lit))
+    let on_fill = motion::mix(theme::control_selected(), Color32::WHITE, 0.2 * hover);
+    (motion::mix(off_fill, on_fill, lit), motion::mix(off_text, theme::text_inverse(), lit))
 }
 
 /// A track's solo button: draws it in `rect` and returns the command a click asks for. A click
@@ -129,7 +130,7 @@ pub fn solo_button(
     let lit = motion::toward(ui.ctx(), response.id.with("on"), solo, motion::VALUE);
     let off = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
     track_button_face(ui, painter, rect, &response, motion::mix(off, theme::accent(), lit));
-    let text = motion::mix(theme::text_secondary(), theme::window_background(), lit);
+    let text = motion::mix(theme::text_secondary(), theme::text_inverse(), lit);
     text_in(painter, rect, Align2::CENTER_CENTER, "S", theme::ui_font(theme::TEXT_SMALL), text);
     if !response.clicked() {
         return None;
@@ -507,7 +508,7 @@ fn value_keys(ui: &Ui, response: &Response) -> (i32, bool, Option<String>) {
     let radius = if response.rect.width() > response.rect.height() * 4.0 { response.rect.height() * 0.5 } else { 4.0 };
     painter.rect_stroke(response.rect, radius, Stroke::new(1.0, theme::text_secondary()), egui::StrokeKind::Outside);
     if !typed.is_empty() {
-        painter.rect_filled(response.rect.shrink(1.0), 0.0, theme::control_active());
+        painter.fill_background(response.rect.shrink(1.0), 0.0, theme::control_active());
         painter.text(
             response.rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -657,7 +658,7 @@ pub(crate) fn play_glyph(painter: &egui::Painter, center: Pos2, playing: bool, c
 pub(crate) fn button(ui: &Ui, painter: &egui::Painter, rect: Rect, text: &str, label: &str) -> bool {
     let response = button_area(ui, rect, Id::new(("dialog-button", label)), label);
     let fill = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
-    painter.rect_filled(rect, 0.0, fill);
+    painter.fill_background(rect, 0.0, fill);
     painter.rect_stroke(rect, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
     let small = theme::ui_font(theme::TEXT_SMALL);
     text_in(painter, rect, Align2::CENTER_CENTER, text, small, theme::text_primary());

@@ -7,6 +7,7 @@
 //! bottom, the failure note. Suhina's own look — theme tokens, a straight grid, no Live-style
 //! chrome — and everything a `device.*` command.
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::HashMap;
 
 use egui::{Align2, Rect, Sense, Ui};
@@ -213,7 +214,7 @@ fn mid_freq_line(
         egui::pos2(under.center().x - width / 2.0, under.top() + 16.0),
         egui::pos2(under.center().x + width / 2.0, under.top() + 18.0),
     );
-    painter.rect_filled(line, 1.0, theme::control_background());
+    painter.fill_background(line, 1.0, theme::control_background());
     let response = ui.interact(
         Rect::from_min_max(
             egui::pos2(line.left() - 8.0, under.top() + 10.0),
@@ -298,7 +299,7 @@ fn vslider(
         egui::pos2(column.center().x - 3.0, column.top() + 16.0),
         egui::pos2(column.center().x + 3.0, column.bottom() - 20.0),
     );
-    ui.painter().rect_filled(lane, 1.5, theme::control_background());
+    ui.painter().fill_background(lane, 1.5, theme::control_background());
     let handle_y = lane.bottom() - at * lane.height();
     ui.painter().rect_filled(
         Rect::from_min_max(
@@ -349,7 +350,7 @@ fn toggle(
     let id = egui::Id::new(("nam-toggle", track.0, device_index, parameter.id));
     let response = ui.interact(rect, id, Sense::click());
     let (fill, text) = widgets::toggle_colors(ui, &response, on);
-    ui.painter().rect_filled(rect, 3.0, fill);
+    ui.painter().fill_background(rect, 3.0, fill);
     widgets::text_in(
         ui.painter(),
         rect,
@@ -377,7 +378,7 @@ fn power(ui: &Ui, rect: Rect, track: TrackId, device: &DeviceBox, prefix: &str, 
     let id = egui::Id::new(("nam-power", track.0, &device.at));
     let response = ui.interact(rect, id, Sense::click());
     let (fill, text) = widgets::toggle_colors(ui, &response, device.enabled);
-    ui.painter().rect_filled(rect, 3.0, fill);
+    ui.painter().fill_background(rect, 3.0, fill);
     let word = if device.enabled { "On" } else { "Off" };
     widgets::text_in(ui.painter(), rect, Align2::CENTER_CENTER, word, theme::ui_font(theme::TEXT_SMALL), text);
     if response.clicked() {
@@ -474,7 +475,7 @@ fn stepper(ui: &mut Ui, rect: Rect, id_salt: egui::Id, up: bool, label: String) 
     let painter = ui.painter();
     let (fill, _) = widgets::toggle_colors(ui, &ui.interact(rect, egui::Id::new(id_salt), Sense::click()), false);
     let response = ui.interact(rect, egui::Id::new(id_salt), Sense::click());
-    painter.rect_filled(rect, 2.0, if response.hovered() { theme::control_hover() } else { fill });
+    painter.fill_background(rect, 2.0, if response.hovered() { theme::control_hover() } else { fill });
     let inner = rect.shrink(5.0);
     let center = inner.center();
     let dir = if up { -1.0 } else { 1.0 };

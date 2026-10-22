@@ -6,6 +6,7 @@
 //! `docs/design/components.md` › Mixer strip). [`layout`] says where each part goes for a height;
 //! [`show`] draws a column's strip and turns what is done there into [`Action`]s.
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Align2, Id, Pos2, Rect, Sense, Ui, Vec2};
 use serde_json::json;
 use suhina_engine::model::{InputChannels, Monitor, TrackId};
@@ -234,7 +235,7 @@ pub fn show(
         egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2),
         0.16,
     );
-    painter.rect_filled(rect, 0.0, tint);
+    painter.fill_background(rect, 0.0, tint);
     // The strip's own background, under its controls: a double-click shows the track's devices.
     let strip = ui.interact(rect.intersect(painter.clip_rect()), id.with("strip"), Sense::click());
     strip.widget_info(|| {
@@ -252,7 +253,7 @@ pub fn show(
     }
     // The track's colour down the left edge, at every height; a click opens the palette.
     let band = Rect::from_min_size(rect.min, Vec2::new(COLOUR_BAND, rect.height()));
-    painter.rect_filled(band, 0.0, colour_picker::fill(column.color, column.mute));
+    painter.fill_background(band, 0.0, colour_picker::fill(column.color, column.mute));
     let band_hit = band.intersect(painter.clip_rect());
     if band_hit.is_positive() {
         let colour_id = id.with("strip-colour");
@@ -331,7 +332,7 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{} strip", column.name)));
     // The name stands on the track's colour, as in the column's header.
     let fill = colour_picker::fill(column.color, column.mute);
-    painter.rect_filled(rect, 0.0, fill);
+    painter.fill_background(rect, 0.0, fill);
     let text = rect.shrink2(Vec2::new(4.0, 0.0));
     widgets::text_in(
         painter,
@@ -385,7 +386,7 @@ fn output_row(
 
 /// The main channel's devices in its strip, at the same height as every track's list (#683).
 pub fn main_devices(painter: &egui::Painter, rect: Rect, devices: &[crate::interaction::grid::StripDevice]) {
-    painter.rect_filled(rect, 0.0, theme::window_background());
+    painter.fill_background(rect, 0.0, theme::window_background());
     let list_painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
     if devices.is_empty() {
         widgets::text_in(
@@ -418,7 +419,7 @@ pub fn main_devices(painter: &egui::Painter, rect: Rect, devices: &[crate::inter
 /// The track's devices and plug-ins, one row each; the wheel scrolls them, a click shows the
 /// track's chain in the detail area.
 fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state: &mut SessionViewState, id: Id) {
-    painter.rect_filled(rect, 0.0, theme::window_background());
+    painter.fill_background(rect, 0.0, theme::window_background());
     let track = column.track;
     if column.devices.is_empty() {
         widgets::text_in(
@@ -477,7 +478,7 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
         } else {
             motion::mix(theme::window_background(), theme::control_hover(), widgets::hover(ui, &response))
         };
-        list_painter.rect_filled(row, 0.0, fill);
+        list_painter.fill_background(row, 0.0, fill);
         let text = row.shrink2(Vec2::new(4.0, 0.0));
         let color = if device.enabled { theme::text_secondary() } else { theme::text_hint() };
         let tag = match device.group {
@@ -592,7 +593,7 @@ fn audio_block(
         } else {
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response))
         };
-        painter.rect_filled(area, 0.0, fill);
+        painter.fill_background(area, 0.0, fill);
         widgets::text_in(
             painter,
             area.shrink2(Vec2::new(3.0, 0.0)),
@@ -753,9 +754,13 @@ fn paint_fader(ui: &Ui, painter: &egui::Painter, readout: Rect, fader: Rect, db:
     let at = |position: f32| travel.min + (travel.max - travel.min) * position;
     let x = fader.center().x;
     let track = Rect::from_center_size(Pos2::new(x, fader.center().y), Vec2::new(4.0, fader.height()));
-    painter.rect_filled(track, 0.0, theme::control_background());
+    painter.fill_background(track, 0.0, theme::control_background());
     let level = at(crate::kit::widgets::volume_position(db));
-    painter.rect_filled(Rect::from_min_max(Pos2::new(track.left(), level), track.max), 0.0, theme::control_playing());
+    painter.fill_background(
+        Rect::from_min_max(Pos2::new(track.left(), level), track.max),
+        0.0,
+        theme::control_playing(),
+    );
     let unity = at(crate::kit::widgets::volume_position(0.0)).round() + 0.5;
     painter.hline(
         egui::Rangef::new(track.left() - 5.0, track.right() + 5.0),
@@ -797,9 +802,13 @@ fn compact_volume(
         let center = Pos2::new(rect.left() + size / 2.0, rect.center().y);
         widgets::knob(painter, center, size, position, motion::mix(theme::text_value(), theme::text_primary(), hover));
     } else {
-        painter.rect_filled(rect, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+        painter.fill_background(rect, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
         let x = rect.left() + rect.width() * position;
-        painter.rect_filled(Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom())), 0.0, theme::control_playing());
+        painter.fill_background(
+            Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom())),
+            0.0,
+            theme::control_playing(),
+        );
     }
     widgets::text_in(painter, text, Align2::RIGHT_CENTER, &widgets::format_db(db), font, theme::text_primary());
 }
@@ -1006,7 +1015,7 @@ fn toggles(
         actions.push(Action::new("track.setMute", json!({ "tracks": [track.0], "mute": !column.mute })));
     }
     let (fill, text) = widgets::toggle_colors(ui, &response, !column.mute);
-    painter.rect_filled(toggle, 0.0, fill);
+    painter.fill_background(toggle, 0.0, fill);
     let number = if column.kind == ColumnKind::Return {
         column.name.chars().next().map(String::from).unwrap_or_default()
     } else {

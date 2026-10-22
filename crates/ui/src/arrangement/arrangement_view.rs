@@ -4477,7 +4477,7 @@ fn value_action(control: Control, tracks: &[TrackId], from: f64, to: f64) -> Act
 
 /// A volume field: fill from the left up to the level, a tick at its end, the value on the right.
 fn volume_field(painter: &egui::Painter, rect: Rect, db: f64, hover: f32) {
-    let fill = theme::text_value();
+    let fill = theme::control_selected();
     let radius = rect.height() * 0.5;
     painter.rect_filled(rect, radius, motion::mix(theme::control_background(), theme::control_hover(), hover));
     let x = rect.left() + rect.width() * volume_position(db);
@@ -4527,7 +4527,7 @@ fn pan_field(painter: &egui::Painter, rect: Rect, pan: f64, hover: f32) {
     let to = rect.center().x + rect.width() / 2.0 * pan.clamp(-1.0, 1.0) as f32;
     let bar =
         Rect::from_min_max(Pos2::new(centre.min(to), rect.bottom() - 2.0), Pos2::new(centre.max(to), rect.bottom()));
-    painter.rect_filled(bar, 0.0, theme::text_value());
+    painter.rect_filled(bar, 0.0, theme::control_selected());
     widgets::text_in(
         painter,
         rect,

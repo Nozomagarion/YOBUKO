@@ -5,6 +5,7 @@
 //! left under a search field; each setting is a row: a label, a short note and its control. What
 //! is on which page is the table in `settings_rows.rs` (`docs/spec/ui-settings.md`).
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Align2, Id, Pos2, Rect, Sense, Ui, Vec2, pos2};
 
 use crate::interaction::pick::PickField;
@@ -618,7 +619,7 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
     if !state.window {
         crate::kit::liquid::paint(&painter, area, theme::window_background(), crate::kit::liquid::Surface::Panel);
     }
@@ -652,7 +653,7 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
     let close = Rect::from_min_max(Pos2::new(title.right() - 52.0, title.top()), title.max);
     let response = widgets::button_area(ui, close, Id::new("settings-close"), "Close settings");
     let hover = widgets::hover(ui, &response);
-    painter.rect_filled(close, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+    painter.fill_background(close, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
     widgets::text_in(
         &painter,
         close,
@@ -1108,7 +1109,7 @@ fn gradient_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> O
                 state.theme_colour_held |= direction.dragged() || direction.is_pointer_button_down_on();
                 ui.label(egui::RichText::new("0° left → right · 90° top → bottom").small());
                 let (preview, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), egui::Sense::hover());
-                ui.painter().rect_filled(preview, 0.0, theme::panel_background());
+                ui.painter().fill_background(preview, 0.0, theme::panel_background());
                 ui.painter().add(gradient.mesh(preview));
                 let count = gradient.stops.len();
                 let mut remove = None;
@@ -1430,7 +1431,7 @@ fn shortcuts_page(
     );
     let response = widgets::button_area(ui, reset, Id::new("reset-keys"), "Reset all keys");
     let fill = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-    painter.rect_filled(reset, 0.0, fill);
+    painter.fill_background(reset, 0.0, fill);
     widgets::text_in(painter, reset, Align2::CENTER_CENTER, "Reset all", small.clone(), theme::text_primary());
     if response.clicked() {
         *keymap = Keymap::default();
@@ -1618,7 +1619,7 @@ fn plugin_section(
                 format!("Remove {}", folder.path),
             );
             let fill = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-            painter.rect_filled(remove, 0.0, fill);
+            painter.fill_background(remove, 0.0, fill);
             widgets::text_in(painter, remove, Align2::CENTER_CENTER, "Remove", small.clone(), theme::text_secondary());
             if response.clicked() {
                 request = Some(PluginRequest::RemoveFolder(folder.path.clone()));
@@ -1668,9 +1669,9 @@ fn plugin_section(
             plugins.new_format = format;
         }
         let idle = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(cell, 0.0, if chosen { theme::text_value() } else { idle });
+        painter.fill_background(cell, 0.0, if chosen { theme::control_selected() } else { idle });
         let color = if chosen {
-            theme::window_background()
+            theme::text_inverse()
         } else if format.hosted() {
             theme::text_secondary()
         } else {
@@ -1680,7 +1681,7 @@ fn plugin_section(
     }
     let response = widgets::button_area(ui, add, Id::new("add-folder"), "Add plug-in folder");
     let fill = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-    painter.rect_filled(add, 0.0, fill);
+    painter.fill_background(add, 0.0, fill);
     widgets::text_in(painter, add, Align2::CENTER_CENTER, "Add", small.clone(), theme::text_primary());
     let entered = edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
     if (response.clicked() || entered) && !plugins.new_folder.trim().is_empty() {
@@ -1719,7 +1720,7 @@ fn plugin_section(
             theme::control_hover(),
             if plugins.scanning { 0.0 } else { widgets::hover(ui, &response) },
         );
-        painter.rect_filled(cell, 0.0, fill);
+        painter.fill_background(cell, 0.0, fill);
         let color = if plugins.scanning { theme::text_hint() } else { theme::text_primary() };
         widgets::text_in(painter, cell, Align2::CENTER_CENTER, text, small.clone(), color);
         if response.clicked() && !plugins.scanning {
@@ -1733,7 +1734,7 @@ fn plugin_section(
     let open = control_rect(r, 2);
     let response = widgets::button_area(ui, open, Id::new("open-plugin-manager"), "Open the plug-in manager");
     let fill = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-    painter.rect_filled(open, 0.0, fill);
+    painter.fill_background(open, 0.0, fill);
     widgets::text_in(painter, open, Align2::CENTER_CENTER, "Manage plug-ins", small, theme::text_primary());
     if response.clicked() {
         plugins.manager.open = true;
@@ -2002,7 +2003,7 @@ fn now_rows(ui: &Ui, painter: &egui::Painter, page: Rect, y: &mut f32, settings:
     let refresh = Rect::from_min_size(Pos2::new(r.right() - 120.0, r.top() + 1.0), Vec2::new(120.0, SEGMENT));
     let response = widgets::button_area(ui, refresh, Id::new("audio-refresh"), "List the audio devices again");
     let hover = widgets::hover(ui, &response);
-    painter.rect_filled(refresh, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+    painter.fill_background(refresh, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
     widgets::text_in(
         painter,
         refresh,
@@ -2063,7 +2064,7 @@ fn preset_segmented(
         let chosen = *value == current;
         let response = widgets::button_area(ui, segment, Id::new(("keymap-preset", *text)), format!("Preset: {text}"));
         let fill = if chosen { theme::control_active() } else { theme::control_background() };
-        painter.rect_filled(segment, 0.0, motion::mix(fill, theme::control_hover(), widgets::hover(ui, &response)));
+        painter.fill_background(segment, 0.0, motion::mix(fill, theme::control_hover(), widgets::hover(ui, &response)));
         let color = if chosen { theme::text_primary() } else { theme::text_secondary() };
         widgets::text_in(painter, segment, Align2::CENTER_CENTER, text, small.clone(), color);
         if response.clicked() && !chosen {
@@ -2206,8 +2207,8 @@ fn segmented<T: Copy + PartialEq>(
         let selected = motion::toward(ui.ctx(), response.id.with("selected"), *value == current, motion::VALUE);
         let hover = widgets::hover(ui, &response);
         let idle = motion::mix(theme::control_background(), theme::control_hover(), hover);
-        painter.rect_filled(cell, 0.0, motion::mix(idle, theme::text_value(), selected));
-        let color = motion::mix(theme::text_secondary(), theme::window_background(), selected);
+        painter.fill_background(cell, 0.0, motion::mix(idle, theme::control_selected(), selected));
+        let color = motion::mix(theme::text_secondary(), theme::text_inverse(), selected);
         widgets::text_in(painter, cell, Align2::CENTER_CENTER, text, theme::ui_font(theme::TEXT_SMALL), color);
     }
     picked
