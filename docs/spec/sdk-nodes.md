@@ -250,8 +250,7 @@ occurs during reads. The host owns preparation, binding, replacement and retirem
 Reads use a region-relative fractional position, linear interpolation and a clamped last frame.
 Negative, nonfinite or out-of-region positions are silent. Mono duplicates to stereo; for
 multichannel data the first two channels are read. Nonfinite PCM values become zero.
-This API is resource preparation/read groundwork, not yet serialized resource ports or a
-replacement for existing Sampler playback, looping, grain or stretch algorithms.
+This API supplies serialized resource ports without embedding PCM in `.sd`; it is not a replacement for existing Sampler playback, looping, grain or stretch algorithms.
 
 ## Playback and mapping primitives
 

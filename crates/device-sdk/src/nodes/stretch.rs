@@ -39,9 +39,7 @@ impl Voice {
     }
 
     pub(crate) fn next(&mut self, speed: f64, pitch: f64, source: impl Fn(f64) -> [f64; 2]) -> [f64; 2] {
-        if speed != self.speed {
-            self.restart();
-        }
+        self.speed = speed;
         self.stretch.set_transpose_factor(pitch as f32, 0.);
         if !self.ready {
             self.speed = speed;
@@ -191,5 +189,18 @@ impl NativeNode for Player {
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn speed_changes_preserve_buffered_output() {
+        let mut voice = super::Voice::new(48000.);
+        voice.next(1., 1., |_| [0.5; 2]);
+        let cursor = voice.cursor;
+        voice.next(1.1, 1., |_| [0.5; 2]);
+        assert_eq!(voice.cursor, cursor + 1);
+        assert!(voice.ready);
     }
 }

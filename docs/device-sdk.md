@@ -109,7 +109,7 @@ cargo run -p suhina-device-sdk --example validate -- target/sdk-examples/wire-la
 ```
 An author writes Rust that assembles a graph from supported nodes; Suhina runs the graph as data.
 Use [the format specification](spec/sd-device-format.md) and [node reference](spec/sdk-nodes.md).
-Audio effects, MIDI effects and monophonic instruments execute. Parameters, nodes and device ids
+Audio effects, MIDI effects, monophonic MIDI-value instruments and polyphonic sampler and voice graphs execute. Parameters, nodes and device ids
 are stable saved identifiers.
 
 Generate the MIDI examples with:

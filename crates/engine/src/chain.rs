@@ -266,6 +266,12 @@ impl Chain {
                     let mut hasher = std::collections::hash_map::DefaultHasher::new();
                     use std::hash::{Hash, Hasher};
                     bytes.hash(&mut hasher);
+                    stored.sample_file().hash(&mut hasher);
+                    stored
+                        .sample_file()
+                        .and_then(|file| audio.files.get(file))
+                        .map(std::sync::Arc::as_ptr)
+                        .hash(&mut hasher);
                     slots.push(slot);
                     positions.push(position);
                     ids.push(format!("sd:{}:{:016x}", graph.id, hasher.finish()));
@@ -301,6 +307,7 @@ impl Chain {
                     }
                     let mut builder = crate::group::Builder {
                         sample_rate,
+                        audio,
                         assets,
                         plugins: &mut *plugins,
                         keys: &keys,

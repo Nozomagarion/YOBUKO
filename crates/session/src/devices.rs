@@ -66,8 +66,15 @@ pub(crate) fn load_sample(session: &mut Session, params: &Value) -> Result<Value
         return Err("sample needs at least two frames, 1..32 channels and a sample rate of 1000..384000 Hz".into());
     }
     if sdk {
-        suhina_device_sdk::sample_resource::SampleAsset::new(audio.clone(), audio.sample_rate, audio.channels)
-            .map_err(|e| e.to_string())?;
+        let asset =
+            suhina_device_sdk::sample_resource::SampleAsset::new(audio.clone(), audio.sample_rate, audio.channels)
+                .map_err(|e| e.to_string())?;
+        let graph = sd_graph(channel_param(session, params)?.devices.get(index).ok_or("device is missing")?)?;
+        if graph.role != suhina_device_sdk::DeviceRole::MidiEffect {
+            let mut samples = suhina_device_sdk::sample_resource::PreparedSamples::default();
+            samples.insert("sample", std::sync::Arc::new(asset)).map_err(|e| e.to_string())?;
+            suhina_device_registry::compile_graph_with_samples(&graph, 48000., &samples).map_err(|e| e.to_string())?;
+        }
         channel_param(session, params)?
             .devices
             .get_mut(index)

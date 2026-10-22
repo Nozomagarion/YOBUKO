@@ -333,7 +333,7 @@ reach the attached player; undo, redo and project saving preserve the pair.
 Registered built-in audio effects resolve automatically when a `.sd` graph is added and
 when track or group chains are prepared. The registry adapter supplies the `in` audio
 signal at the effect defaults; additional control connections are rejected by this
-adapter until parameter bindings are specified. Custom Rust hosts can still supply their own input-aware kernels. Unknown ids,
+adapter unconditionally. `Node::bind` maps parameters and does not enable control1 through control4 connections. Custom Rust hosts can still supply their own input-aware kernels. Unknown ids,
 non-effect devices and effects reporting nonzero latency are rejected before insertion;
 latency compensation between graph paths is not implemented. This never loads plug-in code.
 

@@ -236,6 +236,7 @@ fn a_nested_group_reports_its_latency_to_the_outer_one() {
     let mut builder = crate::group::Builder {
         sample_rate: SR,
         assets: &assets,
+        audio: &crate::AudioPool::default(),
         plugins: &mut plugins,
         keys: &[],
         channel: ChannelId(1),

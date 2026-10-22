@@ -66,7 +66,7 @@ semantically equivalent Suhina node. The SDK already covers a useful composition
 instruments: signal math, modulation, filtering, bounded delay, stereo utilities, parameters and
 basic MIDI note handling. A polyphonic `sampler` source can feed these signal nodes with
 PCM bound by Rust authors off the audio thread; typed sample-resource ports and smaller
-playback/granular building blocks remain absent. Missing breadth is primarily the Pd execution model and ecosystem:
+playback/granular building blocks are supported within the bounded native graph runtime. Missing breadth is primarily the Pd execution model and ecosystem:
 message/list semantics, arbitrary objects and externals, patch editing, and host-specific
 objects. Adding a similarly named node alone would not establish compatibility; each addition
 needs a clean-room behavior spec, explicit port and timing rules, validation, and runtime tests.
