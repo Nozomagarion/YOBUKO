@@ -55,6 +55,7 @@ pub enum Choice {
 
 /// Draws the project dialog over `area`, above everything else.
 pub fn show(ui: &Ui, area: Rect, state: &mut DialogState, lists: &Lists) -> Option<Choice> {
+    let _style_class = crate::kit::style_class::enter("dialog");
     egui::Area::new(Id::new("project-dialog"))
         .order(egui::Order::Foreground)
         .fixed_pos(area.min)
@@ -181,6 +182,7 @@ pub enum SaveChoice {
 
 /// Draws the save prompt over `area`.
 pub fn show_save(ui: &Ui, area: Rect, prompt: &mut SavePrompt) -> Option<SaveChoice> {
+    let _style_class = crate::kit::style_class::enter("dialog");
     egui::Area::new(Id::new("save-prompt"))
         .order(egui::Order::Foreground)
         .fixed_pos(area.min)
@@ -259,6 +261,7 @@ pub enum UnsavedChoice {
 
 /// Asks whether to save `name`'s changes before `doing` ("closing it", "quitting"), over `area`.
 pub fn show_unsaved(ui: &Ui, area: Rect, name: &str, doing: &str) -> Option<UnsavedChoice> {
+    let _style_class = crate::kit::style_class::enter("dialog");
     egui::Area::new(Id::new("unsaved-prompt"))
         .order(egui::Order::Foreground)
         .fixed_pos(area.min)
@@ -297,6 +300,7 @@ fn platform() -> String {
 
 /// Draws the About dialog over `area`. Returns what was chosen, or `None` while it stays open.
 pub fn show_about(ui: &Ui, area: Rect) -> Option<AboutChoice> {
+    let _style_class = crate::kit::style_class::enter("dialog");
     egui::Area::new(Id::new("about-dialog"))
         .order(egui::Order::Foreground)
         .fixed_pos(area.min)
@@ -380,6 +384,7 @@ pub enum AraEditsChoice {
 
 /// Asks whether clips `plugin` edits keep their edits on the track they go to, over `area`.
 pub fn show_ara_edits(ui: &Ui, area: Rect, plugin: &str) -> Option<AraEditsChoice> {
+    let _style_class = crate::kit::style_class::enter("dialog");
     egui::Area::new(Id::new("ara-edits-prompt"))
         .order(egui::Order::Foreground)
         .fixed_pos(area.min)
@@ -445,6 +450,7 @@ const RECOVERY_BUTTON: Vec2 = Vec2::new(120.0, 18.0);
 /// Offers the backup of `name` written at `written` (local time) that is newer than its project
 /// file, over `area`; `saved` says whether the project has a file at all.
 pub fn show_recovery(ui: &Ui, area: Rect, name: &str, written: &str, saved: bool) -> Option<RecoveryChoice> {
+    let _style_class = crate::kit::style_class::enter("dialog");
     egui::Area::new(Id::new("recovery-prompt"))
         .order(egui::Order::Foreground)
         .fixed_pos(area.min)
@@ -501,6 +507,7 @@ pub enum AgentChoice {
 /// Asks whether to let `client`, an agent that has just connected, work on the open projects,
 /// over `area`.
 pub fn show_agent(ui: &Ui, area: Rect, client: &str) -> Option<AgentChoice> {
+    let _style_class = crate::kit::style_class::enter("dialog");
     egui::Area::new(Id::new("agent-prompt"))
         .order(egui::Order::Foreground)
         .fixed_pos(area.min)

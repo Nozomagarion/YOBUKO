@@ -147,6 +147,16 @@ pub fn font_size(fallback: f32) -> f32 {
         .map_or(fallback, f32::from)
 }
 
+/// Background override for surfaces whose fallback colour is supplied by their caller.
+pub fn background(fallback: egui::Color32) -> egui::Color32 {
+    if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow()))
+        && values.background.a() > 0
+    {
+        return values.background;
+    }
+    property("background-color").as_deref().and_then(theme::parse_hex).unwrap_or(fallback)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

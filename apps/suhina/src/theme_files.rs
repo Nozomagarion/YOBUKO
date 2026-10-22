@@ -421,11 +421,11 @@ fn resolve_theme(
             }
         }
     }
-    if let Some(background) = &theme.skin.background {
-        if !background.starts_with("data:image/png;base64,") {
-            let bytes = resource(background, skin::MAX_PNG as u64)?;
-            theme.skin.background = Some(skin::encode_png(&bytes)?);
-        }
+    if let Some(background) = &theme.skin.background
+        && !background.starts_with("data:image/png;base64,")
+    {
+        let bytes = resource(background, skin::MAX_PNG as u64)?;
+        theme.skin.background = Some(skin::encode_png(&bytes)?);
     }
     for (role, source) in &mut theme.skin.assets {
         if !source.trim_start().starts_with('<') {
@@ -795,7 +795,7 @@ fn persist_theme(folder: &Path, id: &str, theme: &Theme) -> Result<(), String> {
             if theme.skin.background.is_some() {
                 root["skin"]["background"] = serde_json::json!(format!("{id}/background.png"));
             }
-            for (role, _) in &theme.skin.assets {
+            for role in theme.skin.assets.keys() {
                 root["skin"]["assets"][role] = serde_json::json!(format!("{id}/assets/{role}.svg"));
             }
             *data = serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?;
@@ -845,15 +845,12 @@ fn fingerprint(path: &Path) -> Result<u64, String> {
                 continue;
             }
             paths.push(entry.path());
-            if meta.is_dir() {
-                if let Ok(children) = std::fs::read_dir(entry.path()) {
-                    paths.extend(
-                        children
-                            .take(suhina_ui::kit::skin::MAX_ASSETS)
-                            .filter_map(Result::ok)
-                            .map(|child| child.path()),
-                    );
-                }
+            if meta.is_dir()
+                && let Ok(children) = std::fs::read_dir(entry.path())
+            {
+                paths.extend(
+                    children.take(suhina_ui::kit::skin::MAX_ASSETS).filter_map(Result::ok).map(|child| child.path()),
+                );
             }
         }
     }
@@ -878,8 +875,7 @@ mod skin_package_tests {
         path
     }
     fn styled() -> Theme {
-        let mut theme = Theme::default();
-        theme.name = "Portable".into();
+        let mut theme = Theme { name: "Portable".into(), ..Default::default() };
         theme.skin.assets = skin::example_assets();
         theme.skin.toolbar = Some(skin::Toolbar::default());
         theme.skin.meter = skin::MeterStyle::Segmented;

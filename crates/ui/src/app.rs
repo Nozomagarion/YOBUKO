@@ -6699,14 +6699,32 @@ impl App {
         }
         let running = motion::toward(ui.ctx(), response.id.with("running"), grid.running, motion::VALUE);
         let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(play, 0.0, motion::mix(hover, theme::control_active(), running));
+        if !crate::kit::skin::paint(
+            &painter,
+            play,
+            "button",
+            crate::kit::skin::State::response(&response, grid.running),
+            theme::control_background(),
+            0.0,
+        ) {
+            painter.rect_filled(play, 0.0, motion::mix(hover, theme::control_active(), running));
+        }
         let glyph = motion::mix(theme::text_primary(), theme::accent(), running);
         let c = play.center();
-        painter.add(egui::Shape::convex_polygon(
-            vec![c + Vec2::new(-3.5, -5.0), c + Vec2::new(5.0, 0.0), c + Vec2::new(-3.5, 5.0)],
+        if !crate::kit::skin::paint(
+            &painter,
+            play,
+            "play",
+            crate::kit::skin::State::response(&response, grid.running),
             glyph,
-            egui::Stroke::NONE,
-        ));
+            0.0,
+        ) {
+            painter.add(egui::Shape::convex_polygon(
+                vec![c + Vec2::new(-3.5, -5.0), c + Vec2::new(5.0, 0.0), c + Vec2::new(-3.5, 5.0)],
+                glyph,
+                egui::Stroke::NONE,
+            ));
+        }
         x = play.right() + 1.0;
         let stop = row(x, 28.0);
         let response = widgets::button_area(ui, stop, Id::new("stop"), "Stop");
@@ -6718,7 +6736,16 @@ impl App {
             0.0,
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
         );
-        painter.rect_filled(Rect::from_center_size(stop.center(), Vec2::splat(8.0)), 0.0, theme::text_primary());
+        if !crate::kit::skin::paint(
+            &painter,
+            stop,
+            "stop",
+            crate::kit::skin::State::response(&response, false),
+            theme::text_primary(),
+            0.0,
+        ) {
+            painter.rect_filled(Rect::from_center_size(stop.center(), Vec2::splat(8.0)), 0.0, theme::text_primary());
+        }
         let record = row(stop.right() + 1.0, 28.0);
         let recording = self.session().is_some_and(|s| s.records_arrangement());
         crate::session::record_controls::record_button(ui, &painter, record, recording, actions);

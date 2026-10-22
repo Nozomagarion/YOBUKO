@@ -1009,6 +1009,7 @@ fn scene_column(
     keys: &mut crate::session::launch_keys::LaunchKeys,
     actions: &mut Vec<Action>,
 ) {
+    let _style_class = crate::kit::style_class::enter("scene");
     let clip = painter.clip_rect();
     for scene in &grid.scenes {
         let y = top + (scene.number - 1) as f32 * PITCH;

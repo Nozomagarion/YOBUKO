@@ -143,6 +143,9 @@ pub fn scoped(stack: &[String]) -> Option<Computed> {
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         engine.source.as_ref()?;
+        if engine.source != skin::current().css {
+            return None;
+        }
         if let Some(values) = engine.contexts.get(stack) {
             return Some(values.clone());
         }
@@ -160,7 +163,7 @@ pub fn scoped(stack: &[String]) -> Option<Computed> {
         let defaults = format!(
             "html,body {{ margin:0; color:{}; font-size:{}px; }}",
             theme::hex(theme::text_primary()),
-            theme::TEXT_NORMAL
+            theme::TEXT
         );
         let mut doc = document(&engine, &body, &defaults)?;
         doc.resolve(0.0);
@@ -187,6 +190,7 @@ pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         engine.source.as_ref()?;
+        if engine.source != skin::current().css { return None; }
         let key = format!("{order:?}:{size:?}");
         if let Some((previous, modules)) = &engine.toolbar {
             if previous == &key { return Some(modules.clone()); }

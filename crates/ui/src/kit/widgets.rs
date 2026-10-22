@@ -96,6 +96,7 @@ pub fn hover(ui: &Ui, response: &Response) -> f32 {
 pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Response, fill: Color32) {
     let _style = crate::kit::style_class::enter("button");
     let radius = super::style_class::radius((rect.height() * 0.25).min(5.0));
+    let fill = super::style_class::background(fill);
     if !super::skin::paint(painter, rect, "button", super::skin::State::response(response, false), fill, 0.0) {
         painter.rect_filled(rect, radius, fill);
     }

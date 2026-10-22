@@ -3,6 +3,11 @@ name: Theme adapter diagnostics
 # Temporary validation while the native CSS dependency graph and adapter are developed.
 # The regular CI remains the merge gate; this job grants no write permission.
 on:
+  pull_request:
+    paths:
+      - 'crates/ui/**'
+      - 'apps/suhina/src/theme_files.rs'
+      - '.github/workflows/theme-adapter-check.yml'
   push:
     branches: [feature/theme-skins-layout]
 

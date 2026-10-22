@@ -495,6 +495,7 @@ pub fn show(
     tags: &[String],
     events: &mut Vec<MapEvent>,
 ) {
+    let _style_class = crate::kit::style_class::enter("sample-map");
     let full = ui.available_rect_before_wrap();
     ui.allocate_rect(full, Sense::hover());
     let height = top_bar(ui, full, view, status, details, events);

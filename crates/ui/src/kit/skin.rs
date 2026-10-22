@@ -452,8 +452,42 @@ pub fn example_assets() -> BTreeMap<String, String> {
 mod tests {
     use super::*;
     #[test]
+    fn svg_states_publish_distinct_pixels_and_reuse_cached_textures() {
+        let artwork = |color: &str| {
+            format!(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\"><rect width=\"16\" height=\"16\" fill=\"{color}\"/></svg>"
+            )
+        };
+        let skin = Skin {
+            assets: [("button".into(), artwork("#FF0000")), ("button.active".into(), artwork("#00FF00"))].into(),
+            ..Default::default()
+        };
+        configure(&skin);
+        let ctx = egui::Context::default();
+        let frame = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(16.0));
+            assert!(paint(ui.painter(), rect, "button", State::Normal, Color32::WHITE, 0.0));
+            assert!(paint(ui.painter(), rect, "button", State::Normal, Color32::WHITE, 0.0));
+            assert!(paint(ui.painter(), rect, "button", State::Active, Color32::WHITE, 0.0));
+            assert!(!paint(ui.painter(), rect, "absent", State::Normal, Color32::WHITE, 0.0));
+        });
+        let images: Vec<_> =
+            frame.textures_delta.set.iter().filter(|(_, delta)| delta.image.size() == [16, 16]).collect();
+        assert_eq!(images.len(), 2, "a repeated state should reuse its texture");
+        let pixels: Vec<_> = images
+            .iter()
+            .map(|(_, delta)| match &delta.image {
+                egui::ImageData::Color(image) => image.pixels[8 * 16 + 8],
+            })
+            .collect();
+        assert!(pixels.contains(&Color32::RED));
+        assert!(pixels.contains(&Color32::GREEN));
+        configure(&Skin::default());
+    }
+    #[test]
     fn skin_round_trip_and_old_defaults() {
         let skin = Skin {
+            css: Some(Arc::from("/* preserved */ @layer test { .browser { color:var(--ink); } }")),
             background: None,
             background_opacity: 70,
             background_blur: 0,
