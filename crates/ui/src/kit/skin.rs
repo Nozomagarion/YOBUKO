@@ -144,6 +144,7 @@ pub struct Skin {
     pub styles: BTreeMap<String, BTreeMap<String, String>>,
     pub meter: MeterStyle,
     pub segments: u8,
+    pub meter_intensity: u8,
     pub artwork_fps: u8,
     pub session: super::session_geometry::SessionGeometry,
     /// None preserves the original centred control-bar layout.
@@ -164,6 +165,7 @@ impl Default for Skin {
             styles: BTreeMap::new(),
             meter: MeterStyle::Continuous,
             segments: 24,
+            meter_intensity: 100,
             artwork_fps: 12,
             session: Default::default(),
             toolbar: None,
@@ -264,6 +266,7 @@ impl Skin {
                     | "assets"
                     | "meter"
                     | "segments"
+                    | "meter-intensity"
                     | "artwork-fps"
                     | "toolbar"
                     | "toolbar-offsets"
@@ -386,6 +389,13 @@ impl Skin {
                 warnings.push("skin.segments must be an integer from 4 to 64".into());
             }
         }
+        if let Some(value) = root.get("meter-intensity") {
+            if let Some(n) = value.as_u64().filter(|n| *n <= 100) {
+                skin.meter_intensity = n as u8;
+            } else {
+                warnings.push("skin.meter-intensity must be an integer from 0 to 100".into());
+            }
+        }
         if let Some(value) = root.get("artwork-fps") {
             if let Some(fps) = value.as_u64().filter(|fps| (1..=30).contains(fps)) {
                 skin.artwork_fps = fps as u8;
@@ -458,7 +468,7 @@ impl Skin {
     }
 
     pub fn to_json(&self) -> Value {
-        let mut value = json!({"styles":self.styles,"assets":self.assets,"meter":self.meter.name(),"segments":self.segments,"artwork-fps":self.artwork_fps});
+        let mut value = json!({"styles":self.styles,"assets":self.assets,"meter":self.meter.name(),"segments":self.segments,"meter-intensity":self.meter_intensity,"artwork-fps":self.artwork_fps});
         if self.session != Default::default() {
             value["session"] = self.session.to_json();
         }
@@ -936,6 +946,7 @@ mod tests {
             session: Default::default(),
             meter: MeterStyle::Segmented,
             segments: 16,
+            meter_intensity: 65,
             artwork_fps: 12,
             toolbar: Some(Toolbar::default()),
             toolbar_offsets: BTreeMap::from([("transport".into(), 80)]),

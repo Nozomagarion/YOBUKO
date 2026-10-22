@@ -126,7 +126,16 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
                         }
                     }
                 }
-                "meter" | ".meter" if matches!(property, "style" | "segments") => match property {
+                "meter" | ".meter" if matches!(property, "style" | "segments" | "intensity") => match property {
+                    "intensity" => {
+                        match value.strip_suffix('%').unwrap_or(value).parse::<u8>().ok().filter(|n| *n <= 100) {
+                            Some(n) => {
+                                theme.skin.meter_intensity = n;
+                                Ok(())
+                            }
+                            None => Err("meter intensity must be 0..100%"),
+                        }
+                    }
                     "style" => match value {
                         "continuous" => {
                             theme.skin.meter = skin::MeterStyle::Continuous;
@@ -225,7 +234,12 @@ pub fn export(theme: &Theme) -> String {
     for (key, _, color) in theme.colors.tokens() {
         css.push_str(&format!("  --{}: {};\n", key.replace('.', "-"), super::theme::hex_rgba(theme.rgba(key, color))));
     }
-    css.push_str(&format!("}}\nmeter {{ style: {}; segments: {}; }}\n", theme.skin.meter.name(), theme.skin.segments));
+    css.push_str(&format!(
+        "}}\nmeter {{ style: {}; segments: {}; intensity: {}%; }}\n",
+        theme.skin.meter.name(),
+        theme.skin.segments,
+        theme.skin.meter_intensity
+    ));
     css.push_str(&format!("artwork {{ fps: {}; }}\n", theme.skin.artwork_fps));
     for (name, value) in theme.skin.session.entries() {
         if let Some(value) = value {
@@ -324,6 +338,31 @@ mod tests {
             !apply(&mut restored, "toolbar { offset-transport: NaN; offset-views: 999999px; offset-bogus: 1px; }")
                 .is_empty()
         );
+    }
+    #[test]
+    fn meter_intensity_is_portable_bounded_and_defaults_to_full_strength() {
+        for intensity in [0, 35, 100] {
+            let mut theme = Theme::default();
+            assert!(apply(&mut theme, &format!("meter {{ intensity: {intensity}%; }}")).is_empty());
+            assert_eq!(theme.skin.meter_intensity, intensity);
+            let (restored, warnings) = Theme::from_json(&theme.to_json());
+            assert!(warnings.is_empty());
+            assert_eq!(restored, theme);
+            let mut css = Theme::default();
+            assert!(apply(&mut css, &export(&theme)).is_empty());
+            assert_eq!(css, theme);
+        }
+        for bad in ["-1", "101%", "NaN", "infinity", "0.5", "1%%"] {
+            let mut theme = Theme::default();
+            assert!(!apply(&mut theme, &format!("meter {{ intensity: {bad}; }}")).is_empty(), "{bad}");
+            assert_eq!(theme.skin.meter_intensity, 100);
+        }
+        for bad in [json!(-1), json!(101), json!(0.5), json!("NaN"), json!(null)] {
+            let mut warnings = Vec::new();
+            let skin = skin::Skin::from_json(&json!({"meter-intensity": bad}), &mut warnings);
+            assert_eq!(skin.meter_intensity, 100);
+            assert_eq!(warnings.len(), 1);
+        }
     }
     #[test]
     fn measured_meter_frames_mirror_css_and_json_without_changing_artwork_paths() {

@@ -16,6 +16,31 @@ use suhina_ui::{App, kit::theme};
 const SHORT: (f32, f32) = (1000.0, 420.0);
 
 #[test]
+fn meter_intensity_slider_saves_theme_without_changing_the_project() {
+    use suhina_ui::settings::themes::FileAction;
+    let mut harness = short_window();
+    let before = harness.state().session().unwrap().project().clone();
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    harness.get_by_label("Edit current theme…").click();
+    settle(&mut harness);
+    wheel_to(&mut harness, "Controls, meters and toolbar", 80);
+    harness.get_by_label("Controls, meters and toolbar").click();
+    settle(&mut harness);
+    harness.get_by_role_and_label(egui::accesskit::Role::Slider, "Meter intensity").scroll_to_me();
+    settle(&mut harness);
+    harness.state_mut().take_theme_actions();
+    harness.get_by_role_and_label(egui::accesskit::Role::Slider, "Meter intensity").click();
+    settle(&mut harness);
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(
+        actions.iter().any(|action| matches!(action, FileAction::Save {theme, ..} if theme.skin.meter_intensity < 100)),
+        "{actions:?}"
+    );
+    assert_eq!(harness.state().session().unwrap().project(), &before);
+}
+
+#[test]
 fn compact_session_css_applies_to_a_png_skin_without_changing_artwork_or_project() {
     use suhina_ui::settings::themes::{FileAction, ThemeEntry};
     let mut harness = short_window();

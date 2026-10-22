@@ -34,6 +34,8 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
                 ui.selectable_value(&mut skin.meter, style, style.name());
             }
         });
+        ui.add(egui::Slider::new(&mut skin.meter_intensity, 0..=100).text("Meter intensity").suffix("%"))
+            .on_hover_text("Dims the measured level, artwork and glow. Audio levels and clip warnings stay unchanged.");
         if skin.meter == skin::MeterStyle::Segmented { ui.add(egui::Slider::new(&mut skin.segments, 4..=64).text("Meter segments")); }
         if skin.meter == skin::MeterStyle::Frames { ui.label("Supply meter.frame-0, meter.frame-1, … artwork in this theme. The measured peak chooses a frame; missing sequences use the continuous meter."); }
         if ui.button("Customize default SVG controls").clicked() { skin.assets = skin::inherited_assets(); }
@@ -92,7 +94,7 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
             }
         });
         ui.collapsing("Native CSS", |ui| {
-            ui.label("Supported: :root colours, Session density, meter style/segments, toolbar order/hidden, .control-NAME placement, artwork frame rate and image URLs. Right-click the toolbar > Edit interface to move connected elements. Export a theme package for editable artwork and style.css.");
+            ui.label("Supported: :root colours, Session density, meter style/segments/intensity, toolbar order/hidden, .control-NAME placement, artwork frame rate and image URLs. Right-click the toolbar > Edit interface to move connected elements. Export a theme package for editable artwork and style.css.");
             if ui.button("Load compact Session geometry").clicked() { state.css = crate::kit::theme::COMPACT_SESSION_EXAMPLE.into(); }
             if ui.button("Load current style as CSS").clicked() {
                 let theme = crate::kit::theme::Theme { name: themes.name.clone(), colors: themes.colors, skin: themes.skin.clone(), transparent_rgb: themes.transparent_rgb.clone(), ..Default::default() };

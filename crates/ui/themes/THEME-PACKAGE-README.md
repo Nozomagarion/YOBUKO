@@ -84,6 +84,16 @@ colour stops anchored to the full dB range; peaks/RMS reveal the appropriate por
 Outset shadows form the glow around the lit region, without filling empty rails or
 segment gaps. This differs from a decorative gradient that stretches with the level.
 
+**Meter intensity** in the theme editor dims measured ink and glow from 0–100%.
+Canonical `meter { intensity: 65%; }` mirrors to JSON `skin.meter-intensity: 65`.
+It also affects needles, hold marks and signal-driven artwork frames, while keeping
+the native clip warning visible and native bar rails unchanged. Frame artwork dims
+as a whole, including any background baked into its image. This changes visual opacity, not audio
+gain or saturation. Change palette/gradient colours for different hues or saturation.
+Advanced `.meter-level { opacity: .5; }` additionally dims native bars, hold marks,
+needles and CSS fills/glow. Transparent CSS fills suppress native fill fallback.
+Generic CSS `filter: brightness()` / `saturate()` is not connected to native painting.
+
 ## Native element placement and artwork variants
 
 Right-click the toolbar and choose **Edit interface**. The real controls remain visible

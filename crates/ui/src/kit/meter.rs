@@ -171,6 +171,9 @@ pub fn show(
         (light, Rect::from_min_max(rect.min, Pos2::new(light.left() - 1.0, rect.bottom())))
     };
     painter.fill_background(light, 0.0, if level.clipped { theme::recording() } else { background });
+    // Intensity changes only measured ink, never rails or the safety indicator.
+    let mut ink = painter.clone();
+    ink.multiply_opacity(f32::from(skin.meter_intensity.min(100)) / 100.0);
     if skin.meter == super::skin::MeterStyle::Frames {
         let peak = fraction(level.peak.iter().copied().fold(0.0, f32::max));
         let state = if response.is_pointer_button_down_on() {
@@ -180,7 +183,7 @@ pub fn show(
         } else {
             super::skin::State::Normal
         };
-        if super::skin::meter_frame(painter, bars, state, peak) {
+        if super::skin::meter_frame(&ink, bars, state, peak) {
             return;
         }
     }
@@ -209,6 +212,10 @@ pub fn show(
             }
         };
         painter.fill_background(bar, 0.0, background);
+        let _level = super::style_class::enter("meter-level");
+        let opacity = super::style_class::computed().map_or(1.0, |style| style.opacity);
+        let mut native_ink = ink.clone();
+        native_ink.multiply_opacity(opacity);
         if skin.meter == super::skin::MeterStyle::Needle {
             let origin = if upright { bar.center_bottom() } else { bar.left_center() };
             for (value, width) in [
@@ -218,15 +225,14 @@ pub fn show(
                 let value = fraction(value);
                 let to = egui::pos2(bar.left() + bar.width() * value, bar.bottom() - bar.height() * value);
                 let color = if value > hot_from { theme::meter_hot() } else { theme::meter_normal() };
-                painter.line_segment([origin, to], egui::Stroke::new(width, color));
+                native_ink.line_segment([origin, to], egui::Stroke::new(width, color));
             }
             continue;
         }
         let peak = fraction(level.peak.get(side).copied().unwrap_or(0.0));
         let rms = fraction(level.rms.get(side).copied().unwrap_or(0.0));
-        let _level = super::style_class::enter("meter-level");
         if peak > 0.0 {
-            super::native_css::level_glow(painter, part(0.0, peak));
+            super::native_css::level_glow(&ink, part(0.0, peak));
         }
         // The peak dimmer, the RMS level in the full colour over it.
         for (to, alpha) in [(peak, 0.45), (rms, 1.0)] {
@@ -235,10 +241,10 @@ pub fn show(
             }
             let fill = |from: f32, to: f32, color: egui::Color32| {
                 let lit = part(from, to);
-                let mut clipped = painter.with_clip_rect(painter.clip_rect().intersect(lit));
+                let mut clipped = ink.with_clip_rect(painter.clip_rect().intersect(lit));
                 clipped.multiply_opacity(alpha);
                 if !super::native_css::level_fill(&clipped, bar) {
-                    painter.rect_filled(lit, 0.0, color.gamma_multiply(alpha));
+                    native_ink.rect_filled(lit, 0.0, color.gamma_multiply(alpha));
                 }
             };
             if skin.meter == super::skin::MeterStyle::Segmented {
@@ -269,7 +275,7 @@ pub fn show(
                 let x = (bar.left() + bar.width() * hold).min(bar.right());
                 Rect::from_x_y_ranges(egui::Rangef::new(x - 1.0, x), bar.y_range())
             };
-            painter.rect_filled(line, 0.0, color);
+            native_ink.rect_filled(line, 0.0, color);
         }
     }
 }
@@ -279,12 +285,91 @@ mod tests {
     use super::*;
 
     #[test]
+    fn intensity_dims_native_ink_without_changing_geometry_or_clip_light() {
+        use crate::kit::{native_css, skin};
+        for meter in [skin::MeterStyle::Continuous, skin::MeterStyle::Segmented, skin::MeterStyle::Needle] {
+            for upright in [true, false] {
+                let render = |intensity, css: Option<&str>| {
+                    let ctx = egui::Context::default();
+                    theme::install(&ctx);
+                    skin::configure(&skin::Skin {
+                        meter,
+                        meter_intensity: intensity,
+                        css: css.map(Into::into),
+                        ..Default::default()
+                    });
+                    let mut ink = Vec::new();
+                    for frame in 0..3 {
+                        let mut output = ctx.run_ui(
+                            egui::RawInput { time: Some(frame as f64 * 0.01), ..Default::default() },
+                            |ui| {
+                                let _frame = native_css::frame(ui);
+                                let size = if upright { Vec2::new(12.0, 100.0) } else { Vec2::new(100.0, 12.0) };
+                                show(
+                                    ui,
+                                    ui.painter(),
+                                    Rect::from_min_size(Pos2::new(20.0, 20.0), size),
+                                    "Main",
+                                    Source::Main,
+                                    &Level { peak: [0.5; 2], rms: [0.2; 2], clipped: true },
+                                    &mut Vec::new(),
+                                );
+                            },
+                        );
+                        output.textures_delta.clear();
+                        if frame == 2 {
+                            ink = output
+                                .shapes
+                                .into_iter()
+                                .filter_map(|shape| match shape.shape {
+                                    egui::Shape::Rect(rect) => Some((rect.rect, rect.fill)),
+                                    egui::Shape::LineSegment { points, stroke } => {
+                                        Some((Rect::from_two_pos(points[0], points[1]), stroke.color))
+                                    }
+                                    _ => None,
+                                })
+                                .collect();
+                        }
+                    }
+                    ink
+                };
+                let full = render(100, None);
+                let dim = render(50, None);
+                let opacity = render(100, Some(".meter-level { opacity: 0.5; }"));
+                assert_eq!(dim, opacity, "native CSS and theme intensity agree");
+                let zero = render(0, None);
+                assert_eq!(zero, render(100, Some(".meter-level { opacity: 0; }")));
+                assert!(zero.iter().any(|(_, color)| *color == theme::recording()));
+                assert_eq!(full.len(), dim.len());
+                let mut changed = 0;
+                for ((bounds, color), (dim_bounds, dim_color)) in full.iter().zip(&dim) {
+                    assert_eq!(bounds, dim_bounds);
+                    if color != dim_color {
+                        changed += 1;
+                        assert_eq!(*dim_color, color.gamma_multiply(0.5));
+                    }
+                }
+                assert!(changed >= 2, "both channels dim");
+                assert!(dim.iter().any(|(_, color)| *color == theme::recording()), "clip warning stays visible");
+                if meter != skin::MeterStyle::Needle {
+                    let transparent = render(100, Some(".meter-level { background-color: transparent; }"));
+                    assert!(
+                        !transparent.iter().any(|(_, color)| *color == theme::meter_normal().gamma_multiply(0.45)),
+                        "transparent fill must not revive native peak ink"
+                    );
+                }
+            }
+        }
+        skin::configure(&skin::Skin::default());
+    }
+
+    #[test]
     fn css_meter_ramps_keep_the_full_scale_anchor_when_signal_and_orientation_change() {
         use crate::kit::{native_css, skin};
         for upright in [true, false] {
             let ctx = egui::Context::default();
             theme::install(&ctx);
-            skin::configure(&skin::Skin { css: Some(".meter-vertical .meter-level { background: linear-gradient(to top, #00ff00, #ffff00 80%, #ff0000); } .meter-horizontal .meter-level { background: linear-gradient(to right, #00ff00, #ffff00 80%, #ff0000); }".into()), ..Default::default() });
+            skin::configure(&skin::Skin { meter_intensity: 50, css: Some(".meter-vertical .meter-level { background: linear-gradient(to top, #00ff00, #ffff00 80%, #ff0000); } .meter-horizontal .meter-level { background: linear-gradient(to right, #00ff00, #ffff00 80%, #ff0000); }".into()), ..Default::default() });
             let mut observed = Vec::new();
             for frame in 0..4 {
                 let peak = if frame == 3 { 1.0 } else { 0.1 };
@@ -315,7 +400,7 @@ mod tests {
             let low = observed[0].as_ref().expect("quiet gradient");
             let high = observed[1].as_ref().expect("loud gradient");
             assert_eq!((low.0, low.1), (high.0, high.1), "material must not move or stretch with signal");
-            assert!((110..=116).contains(&low.3), "native dim peak alpha is retained");
+            assert!((55..=58).contains(&low.3), "native dim peak alpha combines with theme intensity");
             if upright {
                 assert!(high.2.top() < low.2.top());
             } else {
@@ -329,7 +414,11 @@ mod tests {
     fn custom_frames_follow_signal_and_keep_native_clip_reset() {
         let ctx = egui::Context::default();
         theme::install(&ctx);
-        let mut skin = super::super::skin::Skin { meter: super::super::skin::MeterStyle::Frames, ..Default::default() };
+        let mut skin = super::super::skin::Skin {
+            meter: super::super::skin::MeterStyle::Frames,
+            meter_intensity: 50,
+            ..Default::default()
+        };
         for (index, color) in [(0, "#ff0000"), (1, "#00ff00")] {
             skin.assets.insert(format!("meter.frame-{index}"), format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="{color}"/></svg>"##));
         }
@@ -369,6 +458,9 @@ mod tests {
                 });
                 output.textures_delta.clear();
                 assert!(found, "missing signal frame {frame}");
+                assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+                    egui::Shape::Mesh(mesh) if mesh.vertices.iter().all(|vertex| (127..=128).contains(&vertex.color.a()))
+                )), "frame artwork respects intensity");
             }
         }
         assert_eq!(actions, vec![Action::new("mixer.resetClip", json!({"main": true}))]);

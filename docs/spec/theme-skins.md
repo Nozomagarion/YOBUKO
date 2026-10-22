@@ -249,6 +249,12 @@ play/stop/record/solo/arm/cue icons. State suffixes `.hover`, `.active`, `.disab
 optionally override a base role. `currentColor` uses the control's foreground.
 The fader cap moves along the rail; the knob pointer rotates with its value.
 
+Meter intensity is an integer percentage (`skin.meter-intensity`, default 100),
+editable with the theme slider and canonical `meter { intensity: 65%; }` CSS.
+It dims measured ink, hold marks, needles, frames and glow without changing audio,
+geometry, native bar rails or clip warnings. Frame artwork dims as a whole, including
+any background baked into the image. See [level meters](level-meters.md).
+
 Meter styles are continuous, segmented, needle and frames. The `frames` style selects
 contiguous `meter.frame-0` through `meter.frame-31` SVG/PNG artwork by the louder
 channel's normalized dBFS peak, from silence to the top of the existing meter range.
@@ -297,7 +303,7 @@ the native toolbar/workspace layout.
 
 The initial reader supports `:root` palette variables (`--window-background` maps to
 `window.background`), class/descendant colour, background and border colours, integer
-pixel font sizes and corner radii. `.meter` accepts `style` and `segments`; `.toolbar`
+pixel font sizes and corner radii. `.meter` accepts `style`, `segments` and `intensity`; `.toolbar`
 accepts comma-separated `order` and `hidden` module lists. Control `image` declarations
 name package-relative SVG/PNG artwork, including state suffixes. `.window` accepts a relative PNG
 `background-image`, `background-opacity` and `background-blur` (0–100).

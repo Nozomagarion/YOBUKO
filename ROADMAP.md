@@ -139,7 +139,7 @@ refused or suspended, never by losing its edits.
 
 ## What works now
 
-- Theme skins: editable SVG/PNG controls with colour/state variants and image sequences, configurable level-meter presentation including signal-driven artwork frames, theme-owned toolbar layouts and native element placement, and portable CSS/JSON/SVG/PNG packages with live literal-value synchronization. The experimental Stylo/Taffy adapter adds a retained native style tree, modern scoped styles, linear/radial/conic gradients, bounded box shadows, paint transitions/keyframes and Flex/Grid toolbar/workspace panel layout. Bar/window geometry, remaining raw controls and further CSS effects still need integration.
+- Theme skins: editable SVG/PNG controls with colour/state variants and image sequences, configurable level-meter presentation including signal-driven artwork frames and theme-owned intensity, theme-owned toolbar layouts and native element placement, and portable CSS/JSON/SVG/PNG packages with live literal-value synchronization. The experimental Stylo/Taffy adapter adds a retained native style tree, modern scoped styles, linear/radial/conic gradients, bounded box shadows, paint transitions/keyframes and Flex/Grid toolbar/workspace panel layout. Bar/window geometry, remaining raw controls and further CSS effects still need integration.
 - Theme presentation: native Session column widths and row heights mirror CSS/JSON; mixer/name backgrounds consume authored materials, and stereo meter gradients retain fixed dBFS colour positions with native peak/RMS opacity and lit-region glow. Fader scales move independently of the rail/cap.
 
 - Forest Amber is available as a built-in theme alongside the existing palettes.

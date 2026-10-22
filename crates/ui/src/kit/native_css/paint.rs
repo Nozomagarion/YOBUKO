@@ -296,7 +296,7 @@ pub fn background_with(painter: &Painter, rect: Rect, style: &super::Computed) -
 pub fn level_fill(painter: &Painter, scale: Rect) -> bool {
     let Some(style) = super::super::style_class::computed() else { return false };
     let mut painted = false;
-    if style.authored.background && style.background.a() > 0 {
+    if style.authored.background {
         painter.rect_filled(scale, 0.0, style.background.gamma_multiply(style.opacity));
         painted = true;
     }

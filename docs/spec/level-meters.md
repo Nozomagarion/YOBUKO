@@ -83,6 +83,15 @@ Sizes and tokens are in [components](../design/components.md) › Meter.
   Measured peak/RMS extents clip the gradient with native opacity; segment gaps
   remain empty and optional outset shadows glow around the lit region. Increasing
   the level reveals higher colours rather than stretching the gradient.
+- Theme `skin.meter-intensity` (integer 0–100, default 100) dims the measured
+  bars, hold marks, needles, artwork frames and glow together, preserving empty
+  native bar rails, the clip light and all measurement geometry. Frame images dim
+  as a whole, including any background authored inside them. Canonical CSS
+  `meter { intensity: 65%; }` and the theme editor's Meter intensity slider
+  mirror this value into JSON. This is visual opacity, not audio gain or colour
+  saturation. Advanced `.meter-level { opacity: .5; }` additionally dims native
+  bars, hold marks and needles as well as CSS fills/glow. An explicitly transparent
+  fill suppresses native fill fallback.
 - The window draws again whenever the levels change, and looks for new levels every 50 ms for
   0.3 s after they last changed while a meter shows something, so falling meters reach the
   bottom; an engine that stopped rendering leaves the window at rest.
