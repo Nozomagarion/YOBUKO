@@ -806,6 +806,7 @@ pub fn show_row(
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
+    crate::kit::native_css::background(&painter, area);
     match detail {
         Detail::Nothing => hint(&painter, area, "Select a track or a clip to see it here"),
         Detail::Devices(chain) => return chain_row(ui, &painter, area, chain, selected, actions, places),
@@ -1018,6 +1019,7 @@ pub fn show_stack(
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
+    crate::kit::native_css::background(&painter, area);
     match detail {
         Detail::Nothing => hint(&painter, area, "Select a track or a clip"),
         Detail::Devices(chain) => return chain_stack(ui, &painter, area, chain, selected, actions, places),
@@ -1051,6 +1053,7 @@ pub fn show_clip_column(ui: &mut Ui, info: &ClipInfo, stacked: bool, actions: &m
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
+    crate::kit::native_css::background(&painter, area);
     let (column, picked) = clip_properties(ui, &painter, area, info, stacked, actions);
     clip_for_readers(ui, column, info);
     let rest = if stacked {

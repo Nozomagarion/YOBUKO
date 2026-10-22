@@ -203,7 +203,7 @@ impl App {
         }
     }
 
-    fn save_toolbar_skin(&mut self, skin: skin::Skin) {
+    pub(super) fn save_toolbar_skin(&mut self, skin: skin::Skin) {
         if let Some(id) = self.themes.request(&self.settings.theme, ThemeRequest::EditSkin(skin)) {
             self.settings.theme = id;
             self.settings_changed = true;

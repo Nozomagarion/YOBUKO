@@ -9,6 +9,7 @@ covers:
   - crates/ui/src/kit/native_css/paint.rs
   - crates/ui/src/kit/native_css/geometry.rs
   - crates/ui/src/kit/native_css/shadows.rs
+  - crates/ui/src/kit/native_css/workspace.rs
   - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
@@ -138,7 +139,9 @@ Native surface dimensions resolve the gradient's centre, extent and radii. Token
 source size. Source-line notices identify known unsupported effect/font declarations
 without deleting authored source. Connected surfaces also paint bounded inset/outset
 box shadows using cached distance-field textures; blur is an approximation and follows
-native clipping. Full-layout control of panels, text shadows, transforms,
+native clipping. An optional workspace Flex/Grid adapter now provides actual browser,
+main-view and detail rectangles with matching native input clips. Removing CSS layout
+restores native splitters and sizes. Bars/floating-window layout, text shadows, transforms,
 filters and comprehensive computed-style diagnostics
 remain implementation work. Parsed declarations that the painter does not consume do
 not imply support. Toolbar height remains the host's height. These limits are also

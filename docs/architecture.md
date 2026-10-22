@@ -414,9 +414,11 @@ themes supply CSS, never HTML or scripts. The adapter has no network or shell pr
 uses sequential style traversal and caches computed class contexts on the UI thread.
 A retained scope tree carries project identities and native interaction states; changed
 snapshots publish computed values on the following repaint. Connected surfaces paint
-bounded cached linear-gradient ramps; scoped guards apply authored values to ordinary
-egui controls without changing widget identity. The toolbar consumes Taffy's rectangles
-for both native controls and input clipping. Token-level CSS validation bounds source
+bounded cached gradient ramps/spatial textures and inset/outset shadow textures; scoped
+guards apply authored values to ordinary egui controls without changing widget identity.
+The toolbar and optional workspace panel layout consume Taffy's rectangles for both
+native controls and input clipping. CSS-owned browser/detail sizes bypass native
+splitters while preserving saved native sizes. Token-level CSS validation bounds source
 size and nesting and reports known unsupported effects without deleting source.
 The document persists for an unchanged scope structure. State snapshots and egui's
 clock drive Stylo transitions/keyframes for connected paint properties. Active motion

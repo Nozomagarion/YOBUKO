@@ -7,6 +7,8 @@ use std::cell::RefCell;
 
 pub const CLASSES: &[&str] = &[
     "window",
+    "workspace",
+    "workspace-panel",
     "application-bar",
     "menu-bar",
     "project-tabs",
@@ -206,6 +208,17 @@ pub fn background(fallback: egui::Color32) -> egui::Color32 {
 pub struct UiStyle<'a> {
     ui: &'a mut egui::Ui,
     previous: Option<std::sync::Arc<egui::Style>>,
+    previous_clip: Option<egui::Rect>,
+}
+impl UiStyle<'_> {
+    /// Bound both native painting and interaction to CSS geometry, restoring the
+    /// caller's clipping on return without creating a different widget identity.
+    pub fn clipped_to(mut self, rect: egui::Rect) -> Self {
+        let previous = self.ui.clip_rect();
+        self.previous_clip = Some(previous);
+        self.ui.set_clip_rect(previous.intersect(rect));
+        self
+    }
 }
 impl std::ops::Deref for UiStyle<'_> {
     type Target = egui::Ui;
@@ -220,6 +233,9 @@ impl std::ops::DerefMut for UiStyle<'_> {
 }
 impl Drop for UiStyle<'_> {
     fn drop(&mut self) {
+        if let Some(previous) = self.previous_clip.take() {
+            self.ui.set_clip_rect(previous);
+        }
         if let Some(previous) = self.previous.take() {
             self.ui.set_style(previous);
         }
@@ -269,7 +285,7 @@ pub fn ui(ui: &mut egui::Ui) -> UiStyle<'_> {
     } else {
         None
     };
-    UiStyle { ui, previous }
+    UiStyle { ui, previous, previous_clip: None }
 }
 
 #[cfg(test)]
@@ -287,15 +303,19 @@ mod tests {
         context
             .run_ui(egui::RawInput::default(), |ui| {
                 let original = ui.style().clone();
+                let original_clip = ui.clip_rect();
                 let id = ui.id();
                 {
                     let _scope = enter("settings");
-                    let styled = self::ui(ui);
+                    let limited = egui::Rect::from_min_size(ui.max_rect().min, egui::Vec2::splat(16.0));
+                    let styled = self::ui(ui).clipped_to(limited);
                     assert_eq!(styled.id(), id);
+                    assert_eq!(styled.clip_rect(), original_clip.intersect(limited));
                     assert_eq!(styled.visuals().override_text_color, theme::parse_hex("#123456"));
                     assert!(styled.style().text_styles.values().all(|font| font.size == 19.0));
                 }
                 assert!(std::sync::Arc::ptr_eq(ui.style(), &original));
+                assert_eq!(ui.clip_rect(), original_clip);
             })
             .textures_delta
             .clear();

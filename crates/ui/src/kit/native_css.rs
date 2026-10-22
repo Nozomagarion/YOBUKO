@@ -21,8 +21,10 @@ mod diagnostics;
 mod geometry;
 mod paint;
 mod shadows;
+mod workspace;
 pub use diagnostics::{Notice, inspect};
 pub use paint::{background, background_rounded, background_with};
+pub use workspace::{Workspace, workspace};
 
 const MAX_CONTEXTS: usize = 128;
 const MAX_DEPTH: usize = 16;
@@ -62,6 +64,7 @@ struct Engine {
     dark: bool,
     contexts: HashMap<Vec<String>, Computed>,
     toolbar: Option<(String, Vec<Module>)>,
+    workspace: Option<(String, Option<Workspace>)>,
     toolbar_layout: bool,
     collecting: bool,
     nodes: Vec<StyleNode>,
@@ -168,6 +171,12 @@ pub fn leave() {
 }
 
 fn html_id(node: &StyleNode) -> String {
+    if (node.class == "workspace" && node.name.as_deref() == Some("workspace"))
+        || (node.class == "workspace-panel"
+            && node.name.as_deref().is_some_and(|name| ["panel-browser", "panel-main", "panel-detail"].contains(&name)))
+    {
+        return node.name.clone().unwrap_or_default();
+    }
     if node.class == "toolbar-module" && node.name.as_deref().is_some_and(|name| skin::MODULES.contains(&name)) {
         node.name.clone().unwrap_or_default()
     } else {
@@ -884,6 +893,22 @@ mod tests {
             assert!(engine.values[&key].authored.color);
             assert_eq!(engine.values[&key].color, Color32::BLUE);
         });
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn workspace_grid_resolves_real_panels_and_respects_native_visibility() {
+        prepare(
+            "#workspace { display:grid; grid-template-columns:minmax(0,1fr) 240px; grid-template-rows:minmax(0,1fr) 160px; gap:8px; } #panel-browser {grid-column:2;grid-row:1 / -1;} #panel-main {grid-column:1;grid-row:1;} #panel-detail {grid-column:1;grid-row:2;}",
+            800.0,
+        );
+        let layout = workspace(Vec2::new(800.0, 600.0), Some(200.0), Some((false, 120.0))).unwrap();
+        assert_eq!(layout.main, Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(552.0, 432.0)));
+        assert_eq!(layout.browser.unwrap().left(), 560.0);
+        assert_eq!(layout.detail.unwrap().top(), 440.0);
+        let closed = workspace(Vec2::new(800.0, 600.0), None, None).unwrap();
+        assert!(closed.browser.is_none() && closed.detail.is_none());
+        prepare(".browser {color:red;}", 800.0);
+        assert!(workspace(Vec2::new(800.0, 600.0), Some(200.0), Some((false, 120.0))).is_none());
         skin::configure(&skin::Skin::default());
     }
     #[test]

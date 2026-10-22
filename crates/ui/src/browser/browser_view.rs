@@ -171,6 +171,7 @@ pub fn show(ui: &mut Ui, area: Rect, state: &mut BrowserState, cx: Context<'_>) 
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::panel_background());
+    crate::kit::native_css::background(&painter, area);
     state.poll();
     suhina_plugins::trace::timed("library poll", || projects.file_library_mut().poll());
 

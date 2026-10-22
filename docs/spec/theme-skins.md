@@ -13,6 +13,7 @@ covers:
   - crates/ui/src/kit/native_css/paint.rs
   - crates/ui/src/kit/native_css/geometry.rs
   - crates/ui/src/kit/native_css/shadows.rs
+  - crates/ui/src/kit/native_css/workspace.rs
   - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
@@ -84,6 +85,18 @@ The in-app CSS editor accepts native values and styles; package-relative image U
 resolved when importing or reloading theme files. The SVG editor accepts vector markup.
 
 ## Advanced CSS adapter (experimental)
+
+### Workspace layout contract
+
+The native workspace exposes `.workspace` / `#workspace`, with `.workspace-panel`
+children `#panel-browser`, `#panel-main`, `#panel-detail`. They contain the browser,
+Session/Arrangement and detail scopes respectively. Authored layout declarations on
+these containers opt into CSS Flex/Grid geometry. With none, native splitters and layout
+remain in charge. Closed native panels do not become visible merely through CSS.
+In CSS layout mode, dimensions and placement come from the stylesheet, so browser/detail
+splitters do not change CSS-owned sizes. Drawing, input clipping and drag/drop targets
+must use the same resolved rectangles. Removing those layout declarations restores the
+native arrangement and its saved sizes. Bars and floating windows remain host-managed.
 
 `skin.css` retains an authored modern stylesheet verbatim in JSON. Export and native
 storage additionally write `advanced.css`, referenced by `advanced-stylesheet`.

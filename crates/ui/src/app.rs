@@ -2691,6 +2691,7 @@ impl App {
             (false, true) => Some((self.hovered_files(ui), false)).filter(|(items, _)| !items.is_empty()),
         };
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(theme::border())).show(ui, |ui| {
+            let _workspace_style = crate::kit::style_class::enter_named("workspace", "workspace");
             let area = ui.available_rect_before_wrap();
             // A 1 px gap shows the line colour between the bars and the view.
             let inner = Rect::from_min_max(area.min + Vec2::new(0.0, 1.0), area.max - Vec2::new(0.0, 1.0));
@@ -2717,8 +2718,25 @@ impl App {
             // It slides in and out from its side, with animations on (#708).
             self.browser_part = motion::toward(ui.ctx(), Id::new("browser-shown"), browser_wanted, BROWSER_SLIDE);
             let browser_shown = self.browser_part > 0.001;
+            let stacked = self.settings.device_layout == DeviceLayout::Stack;
+            let css_workspace = crate::kit::native_css::workspace(
+                inner.size(),
+                browser_shown.then_some(self.settings.browser_width as f32),
+                (grid.is_some() && self.detail_open)
+                    .then_some((stacked, if stacked { self.detail_width } else { self.detail_height })),
+            )
+            .map(|layout| layout.translated(inner.min.to_vec2()));
             self.frame_trace.mark("bars");
-            let inner = if browser_shown && !full_width { self.browser_panel(ui, inner) } else { inner };
+            let inner = if let Some(layout) = &css_workspace {
+                if let Some(panel) = layout.browser {
+                    self.browser_panel(ui, inner, Some((panel, layout.main)));
+                }
+                inner
+            } else if browser_shown && !full_width {
+                self.browser_panel(ui, inner, None)
+            } else {
+                inner
+            };
             self.frame_trace.mark("browser");
             let mut view_area = inner;
             self.detail_drop = None;
@@ -2745,8 +2763,13 @@ impl App {
             }
             self.last_clip = shown_clip;
             self.expanded_panel = None;
-            let inner = if grid.is_some() && self.detail_open {
-                self.detail_area(ui, inner, &mut actions)
+            let inner = if grid.is_some()
+                && self.detail_open
+                && css_workspace.as_ref().is_none_or(|layout| layout.detail.is_some())
+            {
+                let geometry =
+                    css_workspace.as_ref().and_then(|layout| layout.detail.map(|detail| (layout.main, detail)));
+                self.detail_area(ui, inner, &mut actions, geometry)
             } else {
                 self.place_editors(&[]);
                 // A hidden piano roll does not keep the keyboard, nor the view to one track, and
@@ -2755,15 +2778,17 @@ impl App {
                 actions.extend(self.piano_roll.stop_audition());
                 self.arrangement.focus = None;
                 // In a row under the view, the splitter stays along the bottom, to drag it open.
-                if grid.is_some() && self.settings.device_layout != DeviceLayout::Stack {
+                if let Some(layout) = &css_workspace {
+                    layout.main
+                } else if grid.is_some() && self.settings.device_layout != DeviceLayout::Stack {
                     self.collapsed_splitter(ui, inner)
                 } else {
                     inner
                 }
             };
             self.frame_trace.mark("detail");
-            let inner = if browser_shown && full_width {
-                let rest = self.browser_panel(ui, inner);
+            let inner = if browser_shown && full_width && css_workspace.is_none() {
+                let rest = self.browser_panel(ui, inner, None);
                 view_area = Rect::from_min_max(
                     Pos2::new(rest.left(), view_area.top()),
                     Pos2::new(rest.right(), view_area.bottom()),
@@ -2772,7 +2797,11 @@ impl App {
             } else {
                 inner
             };
+            if css_workspace.is_some() {
+                view_area = inner;
+            }
             self.frame_trace.mark("browser");
+            let _main_style = crate::kit::style_class::enter_named("workspace-panel", "panel-main");
             // A drag from the browser, or files from the system: the views say what is under the
             // pointer.
             let dragged = self.browser.drag.as_ref().or(system.as_ref().map(|(items, _)| items));
@@ -2813,7 +2842,10 @@ impl App {
             self.arrangement.meters = meters;
             // The large sample map takes the main area, except while something is dragged, so
             // the drop can land on a track.
-            if self.sample_map.view.large && dragged.is_none() {
+            let styled_ui = crate::kit::style_class::ui(ui);
+            let mut styled_ui = if css_workspace.is_some() { styled_ui.clipped_to(inner) } else { styled_ui };
+            let ui = &mut *styled_ui;
+            if self.sample_map.view.large && dragged.is_none() && inner.is_positive() {
                 let (panel, browser, projects, settings) =
                     (&mut self.sample_map, &mut self.browser, &mut self.projects, &mut self.settings);
                 if panel.show(ui, inner, browser, projects, settings, self.revision) {
@@ -3359,7 +3391,17 @@ impl App {
 
     /// Lays out the detail area beside or under the view in `area`, draws it with its splitter,
     /// and returns what is left for the view.
-    fn detail_area(&mut self, ui: &mut Ui, area: Rect, actions: &mut Vec<Action>) -> Rect {
+    fn detail_area(
+        &mut self,
+        ui: &mut Ui,
+        area: Rect,
+        actions: &mut Vec<Action>,
+        geometry: Option<(Rect, Rect)>,
+    ) -> Rect {
+        let _panel_style = crate::kit::style_class::enter_named("workspace-panel", "panel-detail");
+        let styled_ui = crate::kit::style_class::ui(ui);
+        let mut styled_ui = if let Some((_, detail)) = geometry { styled_ui.clipped_to(detail) } else { styled_ui };
+        let ui = &mut *styled_ui;
         let stacked = self.settings.device_layout == DeviceLayout::Stack;
         // What it shows: the selected clip, or the selected track's devices.
         let (track, clip) = match self.shown {
@@ -3483,7 +3525,8 @@ impl App {
         let least = self.least_detail_height();
         // The piano roll, or an ARA plug-in's editor in the clip's place, can be pulled to the
         // top, the edited track's lane above it (Melodyne as a MIDI clip's notes are).
-        let pullable = !stacked && (piano.is_some() || ara.is_some()) && self.shown == View::Arrangement;
+        let pullable =
+            geometry.is_none() && !stacked && (piano.is_some() || ara.is_some()) && self.shown == View::Arrangement;
         let pulled = pullable && self.detail_max;
         // With the switch on Devices the track's devices take the editor's place, and nothing is
         // pulled to the top (› Where it opens in `docs/spec/ui-clip-editor.md`).
@@ -3511,7 +3554,9 @@ impl App {
                 self.detail_showing,
             ),
         );
-        let (view, splitter, detail) = if stacked {
+        let (view, splitter, detail) = if let Some((view, detail)) = geometry {
+            (view, Rect::NOTHING, detail)
+        } else if stacked {
             self.detail_width = self.detail_width.clamp(180.0, (area.width() - 240.0).max(180.0));
             let x = area.right() - self.detail_width;
             (
@@ -3548,40 +3593,42 @@ impl App {
         // The splitter: dragged to make the detail area bigger or smaller; under the
         // Arrangement view, past the view's least height the piano roll goes to the top, and a
         // double-click takes it there and back.
-        let cursor = if stacked { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical };
-        let response =
-            ui.interact(splitter, Id::new("detail-splitter"), Sense::click_and_drag()).on_hover_cursor(cursor);
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Detail area splitter"));
-        // A double-click closes the detail area, as a double-click on a split view's divider does
-        // on macOS; a double-click on the closed splitter opens it at its default size.
-        if response.double_clicked() {
-            self.detail_max = false;
-            self.hide_editor();
-        }
-        if response.dragged_by(egui::PointerButton::Primary) {
-            let delta = response.drag_delta();
-            if stacked {
-                self.detail_width -= delta.x;
-            } else {
-                let height = self.detail_drag.unwrap_or(detail.height()) - delta.y;
-                self.detail_drag = Some(height);
-                self.detail_max = pullable && height > area.height() - MIN_VIEW;
-                if height < least / 2.0 {
-                    // Dragged down past half its least height, the detail area closes; the same
-                    // drag going back up opens it again (`collapsed_splitter`).
-                    self.detail_max = false;
-                    self.hide_editor();
-                } else if !self.detail_max {
-                    self.detail_height = height.max(least);
-                }
+        if geometry.is_none() {
+            let cursor = if stacked { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical };
+            let response =
+                ui.interact(splitter, Id::new("detail-splitter"), Sense::click_and_drag()).on_hover_cursor(cursor);
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Detail area splitter"));
+            // A double-click closes the detail area, as a double-click on a split view's divider does
+            // on macOS; a double-click on the closed splitter opens it at its default size.
+            if response.double_clicked() {
+                self.detail_max = false;
+                self.hide_editor();
             }
-        } else {
-            self.detail_drag = None;
+            if response.dragged_by(egui::PointerButton::Primary) {
+                let delta = response.drag_delta();
+                if stacked {
+                    self.detail_width -= delta.x;
+                } else {
+                    let height = self.detail_drag.unwrap_or(detail.height()) - delta.y;
+                    self.detail_drag = Some(height);
+                    self.detail_max = pullable && height > area.height() - MIN_VIEW;
+                    if height < least / 2.0 {
+                        // Dragged down past half its least height, the detail area closes; the same
+                        // drag going back up opens it again (`collapsed_splitter`).
+                        self.detail_max = false;
+                        self.hide_editor();
+                    } else if !self.detail_max {
+                        self.detail_height = height.max(least);
+                    }
+                }
+            } else {
+                self.detail_drag = None;
+            }
+            let painter = ui.painter_at(splitter);
+            painter.rect_filled(splitter, 0.0, theme::control_background());
+            let grip = if stacked { Vec2::new(2.0, 32.0) } else { Vec2::new(32.0, 2.0) };
+            painter.rect_filled(Rect::from_center_size(splitter.center(), grip), 0.0, theme::text_hint());
         }
-        let painter = ui.painter_at(splitter);
-        painter.rect_filled(splitter, 0.0, theme::control_background());
-        let grip = if stacked { Vec2::new(2.0, 32.0) } else { Vec2::new(32.0, 2.0) };
-        painter.rect_filled(Rect::from_center_size(splitter.center(), grip), 0.0, theme::text_hint());
 
         if let Some(shown_track) = clip.map(ClipRef::track).or(track) {
             self.detail_drop = Some((detail, shown_track));
@@ -5663,7 +5710,8 @@ impl App {
 
     /// Lays out the browser at the side of `area`, draws it with its handle, and returns what is
     /// left for the view.
-    fn browser_panel(&mut self, ui: &mut Ui, area: Rect) -> Rect {
+    fn browser_panel(&mut self, ui: &mut Ui, area: Rect, geometry: Option<(Rect, Rect)>) -> Rect {
+        let _panel_style = crate::kit::style_class::enter_named("workspace-panel", "panel-browser");
         let (low, high) = crate::settings::BROWSER_WIDTHS;
         let widest = (high as f32).min(area.width() * crate::settings::BROWSER_SHARE).max(low as f32);
         let width = (self.settings.browser_width as f32).clamp(low as f32, widest);
@@ -5672,7 +5720,9 @@ impl App {
         // squeezed, and its handle takes hold only once it is all there.
         let part = self.browser_part.clamp(0.0, 1.0);
         let (shown, handle_width) = (width * part, BROWSER_HANDLE * part);
-        let (panel, handle, rest) = if left {
+        let (panel, handle, rest) = if let Some((panel, rest)) = geometry {
+            (panel, Rect::NOTHING, rest)
+        } else if left {
             let panel = Rect::from_min_max(
                 Pos2::new(area.left() + shown - width, area.top()),
                 Pos2::new(area.left() + shown, area.bottom()),
@@ -5694,7 +5744,7 @@ impl App {
             (panel, handle, Rect::from_min_max(area.min, Pos2::new(handle.left(), area.bottom())))
         };
         let default_width = crate::settings::Settings::default().browser_width;
-        let (resized, done) = if part >= 1.0 {
+        let (resized, done) = if part >= 1.0 && geometry.is_none() {
             browser_view::resize_handle(ui, handle, width, left, default_width as f32)
         } else {
             (None, false)
@@ -7147,6 +7197,39 @@ fn bar_menu<R>(ui: &mut Ui, title: &str, content: impl FnOnce(&mut Ui) -> R) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn css_workspace_moves_native_controls_and_preserves_project_state() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = App::new();
+        app.set_session(Session::new(crate::demo::demo_project()), &[]);
+        app.settings.animations = false;
+        app.settings.browser_open = true;
+        app.detail_open = true;
+        let mut harness = egui_kittest::Harness::builder()
+            .with_size((1280.0, 800.0))
+            .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+        harness.run();
+        // Let the normal first-frame project/theme initialization finish before
+        // checking that changing presentation does not edit the project.
+        let before = harness.state().session().unwrap().project().clone();
+        harness.state_mut().save_toolbar_skin(crate::kit::skin::Skin {css:Some(std::sync::Arc::from("#workspace {display:grid;grid-template-columns:minmax(0,1fr) 240px;grid-template-rows:minmax(0,1fr) 160px;gap:8px;} #panel-browser {grid-column:2;grid-row:1 / -1;} #panel-main {grid-column:1;grid-row:1;} #panel-detail {grid-column:1;grid-row:2;}")),..Default::default()});
+        harness.run();
+        let slot = harness.get_by_label("Stop Keys (scene 1)").rect();
+        assert!(slot.right() < 1032.0, "native slot uses CSS main rectangle: {slot:?}");
+        assert!(harness.query_by_label("Detail area splitter").is_none());
+        assert_eq!(harness.state().session().unwrap().project(), &before);
+        harness.state_mut().save_toolbar_skin(crate::kit::skin::Skin::default());
+        harness.run();
+        let native_slot = harness.get_by_label("Stop Keys (scene 1)").rect();
+        assert!(
+            native_slot.left() > slot.left() + 100.0,
+            "removing CSS restores the native browser beside the view: {slot:?} -> {native_slot:?}"
+        );
+        assert!(harness.query_by_label("Detail area splitter").is_some());
+        assert_eq!(harness.state().session().unwrap().project(), &before);
+        crate::kit::skin::configure(&crate::kit::skin::Skin::default());
+    }
 
     #[test]
     fn a_pending_quit_check_continues_after_the_close_event_is_gone() {

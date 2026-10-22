@@ -1162,6 +1162,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     }
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
+    crate::kit::native_css::background(&painter, area);
 
     // The header column, on either side, and the timeline beside it.
     let max_header = (area.width() - 120.0).max(HEADER_COLUMN_RANGE.0);

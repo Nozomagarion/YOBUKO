@@ -2612,6 +2612,7 @@ fn draw(
 
     // Rows: black keys darker, a stronger line under each C.
     painter.rect_filled(layout.grid, 0.0, theme::window_background());
+    crate::kit::native_css::background(&painter, layout.grid);
     for key in (first_key..=last_key).filter(|k| layout.rows.shows(*k)) {
         let top = layout.y_of(key);
         let row = Rect::from_min_max(

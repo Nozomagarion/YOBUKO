@@ -202,6 +202,7 @@ pub fn show(
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
+    crate::kit::native_css::background(&painter, area);
 
     // Fixed bands: header on top, mixer at the bottom, scene column on the right.
     let header = Rect::from_min_size(area.min, Vec2::new(area.width(), ROW));

@@ -101,11 +101,14 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
             }
         });
         ui.collapsing("Advanced CSS (Stylo and Taffy)", |ui| {
-            ui.label("Modern cascade, variables, CSS colours, calc() and viewport media queries style native classes. Flex/Grid lays out toolbar modules by id (#tempo, #transport, #views). Source is kept in JSON and advanced.css.");
+            ui.label("Modern cascade, variables, CSS colours, calc() and viewport media queries style native classes. Flex/Grid lays out toolbar modules (#tempo, #transport, #views) and workspace panels (#panel-browser, #panel-main, #panel-detail). Source is kept in JSON and advanced.css.");
             ui.label("Connected surfaces paint linear, radial and conic gradients, including repeating forms, and bounded inset/outset box shadows with approximate blur. Transitions and keyframes animate connected paint properties; turning off animations suppresses them. Text shadows, transforms and filters are not painted. Registered scopes support siblings, named project objects and native response states; some raw controls still need integration. Toolbar height remains the host's height. Unsupported-effect notices appear when applying CSS.");
             if ui.button("Load current advanced CSS").clicked() { state.advanced = themes.skin.css.as_deref().unwrap_or_default().into(); }
             if ui.button("Load Flex/Grid example").clicked() {
                 state.advanced = ":root { --ink: rgb(180 220 240); }\n.browser { color: var(--ink); font-size: clamp(10px, 1vw, 14px); }\n.toolbar { display: flex; gap: 8px; }\n#transport { order: -1; }\n@media (max-width: 1000px) { #performance { display: none; } }\n".into();
+            }
+            if ui.button("Load workspace Grid example").clicked() {
+                state.advanced = "/* CSS owns panel geometry; removing these rules restores splitters. */\n#workspace { display:grid; grid-template-columns:minmax(0, 1fr) 240px; grid-template-rows:minmax(0, 1fr) 180px; gap:8px; }\n#panel-browser { grid-column:2; grid-row:1 / -1; }\n#panel-main { grid-column:1; grid-row:1; }\n#panel-detail { grid-column:1; grid-row:2; }\n".into();
             }
             ui.add(egui::TextEdit::multiline(&mut state.advanced).code_editor().desired_rows(10).desired_width(f32::INFINITY));
             if ui.button("Apply advanced CSS").clicked() {
