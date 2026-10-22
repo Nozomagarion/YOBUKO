@@ -204,6 +204,7 @@ thread_local! {
     /// The colours in use. The UI draws on one thread; tests each get their own, so a test that
     /// changes the theme does not change another's.
     static PALETTE: Cell<Palette> = const { Cell::new(Palette::DARK) };
+    static PALETTE_REVISION: Cell<u64> = const { Cell::new(0) };
 }
 
 /// The colours in use.
@@ -215,8 +216,14 @@ pub(crate) fn local_palette(palette: Palette) {
     PALETTE.with(|p| p.set(palette));
 }
 
+/// Scoped CSS overrides must never roll back a user theme change made while drawing.
+pub(crate) fn palette_revision() -> u64 {
+    PALETTE_REVISION.with(Cell::get)
+}
+
 /// Draws with `palette` from the next frame on: the tokens and egui's own visuals.
 pub fn set_palette(ctx: &egui::Context, palette: Palette) {
+    PALETTE_REVISION.with(|revision| revision.set(revision.get().wrapping_add(1)));
     PALETTE.with(|p| p.set(palette));
     ctx.all_styles_mut(|style| visuals(&mut style.visuals, &palette));
     ctx.request_repaint();

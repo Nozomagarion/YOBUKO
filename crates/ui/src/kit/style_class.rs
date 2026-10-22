@@ -29,6 +29,13 @@ pub const CLASSES: &[&str] = &[
     "clip-editor",
     "piano-roll",
     "device-panel",
+    "device-control",
+    "device-section",
+    "envelope",
+    "waveform",
+    "xy-control",
+    "label",
+    "separator",
     "settings",
     "dialog",
     "sample-map",
@@ -90,11 +97,14 @@ pub fn property(key: &str) -> Option<String> {
 
 pub struct Scope {
     palette: theme::Palette,
+    revision: u64,
     native: bool,
 }
 impl Drop for Scope {
     fn drop(&mut self) {
-        theme::local_palette(self.palette);
+        if theme::palette_revision() == self.revision {
+            theme::local_palette(self.palette);
+        }
         if self.native {
             super::native_css::leave();
         }
@@ -144,7 +154,7 @@ fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response
         }
     }
     theme::local_palette(palette);
-    Scope { palette: saved, native }
+    Scope { palette: saved, revision: theme::palette_revision(), native }
 }
 fn set_foreground(palette: &mut theme::Palette, color: egui::Color32, class: &str) {
     palette.text_primary = color;
@@ -291,6 +301,26 @@ pub fn ui(ui: &mut egui::Ui) -> UiStyle<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_live_theme_change_survives_all_enclosing_style_scopes() {
+        let original=theme::palette();
+        let mut skin=skin::Skin::default();
+        skin.styles.insert(".browser".into(),[("color".into(),"#123456".into())].into());
+        skin::configure(&skin);
+        let mut changed=original;
+        changed.text_primary=egui::Color32::from_rgb(40,50,60);
+        changed.grid_major=egui::Color32::from_rgba_unmultiplied(80,90,100,120);
+        let ctx=egui::Context::default();
+        {
+            let _window=enter("window");
+            let _browser=enter("browser");
+            assert_eq!(theme::text_primary(),theme::parse_hex("#123456").unwrap());
+            theme::set_palette(&ctx,changed);
+        }
+        assert_eq!(theme::palette(),changed);
+        theme::set_palette(&ctx,original);
+        skin::configure(&skin::Skin::default());
+    }
     #[test]
     fn ordinary_widget_style_preserves_ui_identity_and_restores_caller() {
         let mut skin = skin::Skin::default();
