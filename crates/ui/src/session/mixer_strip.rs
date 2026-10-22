@@ -56,8 +56,13 @@ const LEAST_DEVICES: f32 = 4.0;
 const UNDER_DEVICES: f32 = 4.0;
 /// The fader column's width, its cap, the least fader and the tallest it gets while the device
 /// list shows (the list takes the rest).
-const FADER_COLUMN: f32 = 22.0;
-const CAP: Vec2 = Vec2::new(18.0, 7.0);
+const FADER_COLUMN: f32 = 20.0;
+const SCALE_WIDTH: f32 = 14.0;
+const METER_GAP: f32 = 4.0;
+const SEND_HEIGHT: f32 = 22.0;
+/// Session meters use wider stereo bars than compact Arrangement headers.
+pub const METER_WIDTH: f32 = 14.0;
+const CAP: Vec2 = Vec2::new(20.0, 26.0);
 const LEAST_FADER: f32 = 48.0;
 const TALLEST_FADER_WITH_DEVICES: f32 = 140.0;
 
@@ -103,7 +108,7 @@ pub struct Shared {
 }
 
 /// The parts of a strip filling `rect` (the column's width, the mixer's height). A strip without
-/// sends gives their row to the fader; an audio track's strip holds the input's block above the
+/// sends leaves its footer empty; an audio track's strip holds the input's block above the
 /// toggles from [`INPUT_AT`] up.
 pub fn layout(rect: Rect, has_sends: bool, can_hear_input: bool) -> Layout {
     layout_shared(rect, has_sends, can_hear_input, Shared::default())
@@ -112,9 +117,14 @@ pub fn layout(rect: Rect, has_sends: bool, can_hear_input: bool) -> Layout {
 /// [`layout`], with what the mixer's strips share: the input block's room and the divider.
 pub fn layout_shared(rect: Rect, has_sends: bool, can_hear_input: bool, shared: Shared) -> Layout {
     let inner = rect.shrink(PAD);
-    let toggles =
-        Rect::from_min_max(Pos2::new(inner.left(), (inner.bottom() - theme::TOGGLE).max(inner.top())), inner.max);
     let height = rect.height();
+    // Reserve the footer on all strips so returns and Main keep their controls aligned.
+    let footer = if height >= SENDS_AT { SEND_HEIGHT + SEND_GAP } else { 0.0 };
+    let toggle_bottom = inner.bottom() - footer;
+    let toggles = Rect::from_min_max(
+        Pos2::new(inner.left(), (toggle_bottom - theme::TOGGLE).max(inner.top())),
+        Pos2::new(inner.right(), toggle_bottom),
+    );
     let mut parts = Layout {
         name: None,
         output: None,
@@ -167,15 +177,14 @@ pub fn layout_shared(rect: Rect, has_sends: bool, can_hear_input: bool, shared: 
         top += OUTPUT + UNDER_OUTPUT;
     }
     let pan = height >= PAN_AT;
-    let sends = height >= SENDS_AT && has_sends;
-    let fixed = READOUT + UNDER_READOUT + if pan { KNOB_ROW } else { 0.0 } + if sends { KNOB_ROW } else { 0.0 };
+    if height >= SENDS_AT && has_sends {
+        parts.sends = Some(row(toggles.bottom() + SEND_GAP, SEND_HEIGHT));
+    }
+    let fixed = READOUT + UNDER_READOUT + if pan { KNOB_ROW } else { 0.0 };
     let rest = (bottom - top - fixed).max(0.0);
     let fader = if height >= DEVICES_AT {
-        // The device list is as tall on every strip, Main and the returns too (#683): it is
-        // worked out as if the strip had a row of sends, and a strip without them gives that
-        // row to its fader.
-        let spare = if height >= SENDS_AT && !has_sends { KNOB_ROW } else { 0.0 };
-        let room = (rest - spare).max(0.0);
+        // Devices, pan and fader align across tracks, returns and Main, including the send footer.
+        let room = rest;
         let fader = if shared.fader > 0.0 {
             // The divider's height, as long as one device row still shows over it.
             shared.fader.clamp(LEAST_FADER, (room - DEVICE_ROW - UNDER_DEVICES).max(LEAST_FADER))
@@ -186,30 +195,30 @@ pub fn layout_shared(rect: Rect, has_sends: bool, can_hear_input: bool, shared: 
         if list >= DEVICE_ROW {
             parts.devices = Some(row(top, list));
             top += list + UNDER_DEVICES;
-            fader + spare
+            fader
         } else {
             rest
         }
     } else {
         rest
     };
-    if sends {
-        parts.sends = Some(row(top, theme::KNOB));
-        top += KNOB_ROW;
-    }
     if pan {
         parts.pan = Some(row(top, theme::KNOB));
         top += KNOB_ROW;
     }
-    let column = |top: f32, height: f32| {
-        Rect::from_min_size(Pos2::new(inner.left(), top), Vec2::new(FADER_COLUMN.min(inner.width()), height))
-    };
+    let centred = rect.width() <= theme::SCENE_COLUMN;
+    let group_left =
+        if rect.width() <= theme::SCENE_COLUMN { inner.center().x - FADER_COLUMN / 2.0 } else { inner.left() };
+    let column =
+        |top: f32, height: f32| Rect::from_min_size(Pos2::new(group_left, top), Vec2::new(FADER_COLUMN, height));
     // The readout spans the strip, so "-12.0" is never cut; it starts over the fader.
-    parts.readout = Some(row(top, READOUT));
+    parts.readout = Some(Rect::from_min_max(Pos2::new(group_left, top), Pos2::new(inner.right(), top + READOUT)));
     top += READOUT + UNDER_READOUT;
     let fader = column(top, fader.min(bottom - top).max(0.0));
-    parts.meter =
-        Some(Rect::from_min_size(Pos2::new(fader.right() + PAD, fader.top()), Vec2::new(meter::WIDTH, fader.height())));
+    parts.meter = Some(Rect::from_min_size(
+        Pos2::new(fader.right() + if centred { 0.0 } else { SCALE_WIDTH } + METER_GAP, fader.top()),
+        Vec2::new(METER_WIDTH, fader.height()),
+    ));
     parts.fader = Some(fader);
     parts
 }
@@ -236,6 +245,7 @@ pub fn show(
         0.16,
     );
     painter.fill_background(rect, 0.0, tint);
+    crate::kit::liquid::paint(painter, rect, tint, crate::kit::liquid::Surface::Track);
     // The strip's own background, under its controls: a double-click shows the track's devices.
     let strip = ui.interact(rect.intersect(painter.clip_rect()), id.with("strip"), Sense::click());
     strip.widget_info(|| {
@@ -333,6 +343,7 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
     // The name stands on the track's colour, as in the column's header.
     let fill = colour_picker::fill(column.color, column.mute);
     painter.fill_background(rect, 0.0, fill);
+    crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Track);
     let text = rect.shrink2(Vec2::new(4.0, 0.0));
     widgets::text_in(
         painter,
@@ -687,7 +698,7 @@ fn fader_column(
         label,
     );
     let db = volume_drag(ui, &response, column, state, actions);
-    paint_fader(ui, painter, readout, fader, db, &response);
+    paint_fader(ui, painter, readout, fader, db, &response, column.kind == ColumnKind::Return);
 }
 
 /// The main output's fader in the main column: as a track's, running `main.setVolume`.
@@ -728,22 +739,29 @@ pub fn main_fader(
         }
         Drag::None => {}
     }
-    paint_fader(ui, painter, readout, fader, db, &response);
+    paint_fader(ui, painter, readout, fader, db, &response, true);
 }
 
 /// Where a drag on the main fader is kept in [`SessionViewState::drag`]: no track has this id.
 pub const MAIN: TrackId = TrackId(u32::MAX);
 
 /// A fader's look: the dB value over it, the track, the level and the cap.
-fn paint_fader(ui: &Ui, painter: &egui::Painter, readout: Rect, fader: Rect, db: f64, response: &egui::Response) {
+fn paint_fader(
+    ui: &Ui,
+    painter: &egui::Painter,
+    readout: Rect,
+    fader: Rect,
+    db: f64,
+    response: &egui::Response,
+    centred: bool,
+) {
     let hover = widgets::hover(ui, response);
     let value_color = motion::mix(theme::text_value(), theme::text_primary(), hover);
-    widgets::text_in(
-        painter,
-        readout,
-        Align2::LEFT_CENTER,
-        &widgets::format_db(db),
-        theme::mono_font(theme::TEXT_SMALL),
+    painter.text(
+        Pos2::new(fader.center().x, readout.center().y),
+        Align2::CENTER_CENTER,
+        widgets::format_db(db),
+        theme::mono_font(9.0),
         value_color,
     );
     if fader.height() < CAP.y {
@@ -753,23 +771,31 @@ fn paint_fader(ui: &Ui, painter: &egui::Painter, readout: Rect, fader: Rect, db:
     let travel = egui::Rangef::new(fader.bottom() - CAP.y / 2.0, fader.top() + CAP.y / 2.0);
     let at = |position: f32| travel.min + (travel.max - travel.min) * position;
     let x = fader.center().x;
-    let track = Rect::from_center_size(Pos2::new(x, fader.center().y), Vec2::new(4.0, fader.height()));
-    painter.fill_background(track, 0.0, theme::control_background());
-    let level = at(crate::kit::widgets::volume_position(db));
-    painter.fill_background(
-        Rect::from_min_max(Pos2::new(track.left(), level), track.max),
-        0.0,
-        theme::control_playing(),
-    );
-    let unity = at(crate::kit::widgets::volume_position(0.0)).round() + 0.5;
-    painter.hline(
-        egui::Rangef::new(track.left() - 5.0, track.right() + 5.0),
-        unity,
-        theme::hairline(theme::text_hint()),
-    );
+    // An unfilled recessed rail: volume is the cap's position, not a bright background bar.
+    let rail = Rect::from_center_size(Pos2::new(x, fader.center().y), Vec2::new(5.0, fader.height()));
+    let recess = motion::mix(theme::control_background(), egui::Color32::BLACK, 0.65);
+    painter.fill_background(rail, 2.0, recess);
+    let mut last_label_y = f32::NEG_INFINITY;
+    for db in [0.0, -6.0, -12.0, -24.0, -70.0] {
+        let y = at(widgets::volume_position(db)).round() + 0.5;
+        if y - last_label_y >= 10.0 {
+            let label = if db == -70.0 { "−∞".to_owned() } else { format!("{db:.0}") };
+            painter.text(
+                Pos2::new(if centred { fader.left() - 2.0 } else { fader.right() + SCALE_WIDTH - 1.0 }, y),
+                Align2::RIGHT_CENTER,
+                label,
+                theme::mono_font(8.0),
+                theme::text_hint(),
+            );
+            last_label_y = y;
+        }
+        let length = if db == 0.0 { 5.0 } else { 3.0 };
+        let ink = theme::text_hint();
+        painter.hline(egui::Rangef::new(rail.right() + 2.0, rail.right() + length + 2.0), y, theme::hairline(ink));
+    }
+    let level = at(widgets::volume_position(db));
     let cap = Rect::from_center_size(Pos2::new(x, level), CAP);
-    painter.rect_filled(cap, 0.0, value_color);
-    painter.hline(cap.x_range(), cap.center().y.round() + 0.5, theme::hairline(theme::window_background()));
+    crate::kit::mixer_controls::fader_cap(painter, cap, hover);
 }
 
 /// The volume as a value across the strip, for heights too small for the fader: a field, or a
@@ -813,20 +839,20 @@ fn compact_volume(
     widgets::text_in(painter, text, Align2::RIGHT_CENTER, &widgets::format_db(db), font, theme::text_primary());
 }
 
-/// The pan knob with its value beside it; while a send is dragged its level stands there.
+/// The full-width pan field, sharing its face with Arrangement.
 #[allow(clippy::too_many_arguments)]
 fn pan_row(
     ui: &Ui,
     painter: &egui::Painter,
     row: Rect,
     column: &Column,
-    sending: Option<(String, f64)>,
+    _sending: Option<(String, f64)>,
     state: &mut SessionViewState,
     id: Id,
     actions: &mut Vec<Action>,
 ) {
     let track = column.track;
-    let knob_rect = Rect::from_min_size(row.min, Vec2::splat(theme::KNOB));
+    let knob_rect = row;
     state.value_areas.push(knob_rect);
     let pan_response = widgets::value_area(
         ui,
@@ -866,21 +892,10 @@ fn pan_row(
         Some((t, Control::Pan, v)) if t == track => v,
         _ => committed.unwrap_or(column.pan),
     };
-    widgets::knob(painter, knob_rect.center(), theme::KNOB, ((pan + 1.0) / 2.0) as f32, theme::text_primary());
-    let value =
-        sending.map_or_else(|| widgets::format_pan(pan), |(letter, db)| format!("{letter} {}", widgets::format_db(db)));
-    let text = Rect::from_min_max(Pos2::new(knob_rect.right() + PAD, row.top()), row.max);
-    widgets::text_in(
-        painter,
-        text,
-        Align2::LEFT_CENTER,
-        &value,
-        theme::mono_font(theme::TEXT_SMALL),
-        theme::text_secondary(),
-    );
+    crate::kit::mixer_controls::pan_field(painter, row, pan, widgets::hover(ui, &pan_response));
 }
 
-/// The send knobs, one per return from the left of `row`, as many as fit: dragged up or down for
+/// The labelled send fields, one per return from the left of `row`, as many as fit: dragged up or down for
 /// the level (`track.setSend`), double-click for none, right-click for before or after the fader
 /// (`track.setSendMode`). Returns the return's letter and the level while one is dragged.
 fn send_knobs(
@@ -893,13 +908,39 @@ fn send_knobs(
     actions: &mut Vec<Action>,
 ) -> Option<(String, f64)> {
     let track = column.track;
-    let step = theme::KNOB + SEND_GAP;
-    let fit = ((row.width() + SEND_GAP) / step).floor().max(0.0) as usize;
+    let clip = row.intersect(painter.clip_rect());
+    let painter = painter.with_clip_rect(clip);
+    state.scroll_areas.push(row);
+    let count = column.sends.len();
+    let width = (row.width() - SEND_GAP) / 2.0;
+    let pitch = width + SEND_GAP;
+    let most = (count as f32 * pitch - SEND_GAP - row.width()).max(0.0);
+    let mut scroll = state.send_scroll.get(&track).copied().unwrap_or(0.0);
+    if ui.rect_contains_pointer(clip) && !widgets::wheel_moves_value(ui) {
+        let delta = ui.input(|i| i.smooth_scroll_delta());
+        scroll -= if delta.x.abs() > delta.y.abs() { delta.x } else { delta.y };
+    }
+    scroll = scroll.clamp(0.0, most);
+    state.send_scroll.insert(track, scroll);
     let mut sending = None;
-    for (index, send) in column.sends.iter().take(fit).enumerate() {
-        let rect =
-            Rect::from_min_size(Pos2::new(row.left() + step * index as f32, row.top()), Vec2::splat(theme::KNOB));
-        state.value_areas.push(rect);
+    if most > 0.0 {
+        let width = (row.width() * row.width() / (row.width() + most)).max(8.0).min(row.width());
+        let x = row.left() + (row.width() - width) * scroll / most;
+        painter.rect_filled(
+            Rect::from_min_size(Pos2::new(x, row.bottom() - 1.0), Vec2::new(width, 1.0)),
+            1.0,
+            theme::text_hint(),
+        );
+    }
+    for (index, send) in column.sends.iter().enumerate() {
+        let rect = Rect::from_min_size(
+            Pos2::new(row.left() + pitch * index as f32 - scroll, row.top()),
+            Vec2::new(width, row.height() - 2.0),
+        );
+        if !rect.intersects(clip) {
+            continue;
+        }
+        state.value_areas.push(rect.intersect(clip));
         let letter = send.name.chars().next().map(String::from).unwrap_or_default();
         let control = Control::Send(send.target);
         let mode = if send.pre_fader { "pre" } else { "post" };
@@ -951,13 +992,7 @@ fn send_knobs(
         };
         let position = ((shown - VOLUME_RANGE.0) / (VOLUME_RANGE.1 - VOLUME_RANGE.0)) as f32;
         let pointer = motion::mix(theme::text_value(), theme::text_primary(), widgets::hover(ui, &response));
-        widgets::knob(painter, rect.center(), theme::KNOB, position, pointer);
-        // The return's letter in the knob, and a dot under it when the send is before the fader.
-        let font = theme::mono_font(theme::TEXT_SMALL - 2.0);
-        widgets::text_in(painter, rect, Align2::CENTER_CENTER, &letter, font, theme::text_hint());
-        if send.pre_fader {
-            painter.circle_filled(Pos2::new(rect.center().x, rect.bottom() + 1.5), 1.5, theme::text_value());
-        }
+        crate::kit::mixer_controls::send_field(&painter, rect, &letter, shown, send.pre_fader, pointer, position);
     }
     sending
 }
@@ -1068,12 +1103,16 @@ mod tests {
     fn parts_never_overlap_and_the_fader_is_never_shorter_than_its_least() {
         for height in (46..600).map(|h| h as f32) {
             let parts = strip(height);
-            let mut rows: Vec<Rect> =
-                [parts.name, parts.output, parts.devices, parts.sends, parts.pan, parts.readout, parts.fader]
-                    .into_iter()
-                    .flatten()
-                    .collect();
+            let mut rows: Vec<Rect> = [parts.name, parts.output, parts.devices, parts.pan, parts.readout, parts.fader]
+                .into_iter()
+                .flatten()
+                .collect();
             rows.push(parts.toggles);
+            if let Some(sends) = parts.sends {
+                rows.push(sends);
+                assert_eq!(sends.x_range(), parts.toggles.x_range());
+                assert!(sends.bottom() <= height - PAD + 0.01);
+            }
             for pair in rows.windows(2) {
                 assert!(pair[0].bottom() <= pair[1].top(), "{height}: {pair:?}");
             }
@@ -1081,11 +1120,36 @@ mod tests {
                 assert!(fader.height() >= LEAST_FADER, "{height}: {fader:?}");
                 let meter = parts.meter.unwrap_or(Rect::NOTHING);
                 assert_eq!(meter.y_range(), fader.y_range());
+                assert!(meter.left() >= fader.right() + METER_GAP);
+                assert_eq!(meter.width(), METER_WIDTH);
             }
             if let Some(list) = parts.devices {
                 assert!(list.height() >= LEAST_DEVICES * DEVICE_ROW, "{height}: {list:?}");
             }
             assert!(parts.toggles.bottom() <= height - PAD + 0.01);
+        }
+    }
+
+    #[test]
+    fn wide_meters_fit_track_return_and_main_strips() {
+        for width in [theme::RETURN_COLUMN, theme::SCENE_COLUMN, 116.0] {
+            for height in [FADER_AT, 166.0, 300.0, 700.0] {
+                let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(width, height));
+                for sends in [false, true] {
+                    let parts = layout(rect, sends, false);
+                    let fader = parts.fader.unwrap_or(Rect::NOTHING);
+                    let meter = parts.meter.unwrap_or(Rect::NOTHING);
+                    assert!(fader.width() >= CAP.x);
+                    assert!(meter.left() >= fader.right() + METER_GAP);
+                    assert!(meter.right() <= rect.right() - PAD);
+                    assert_eq!(meter.width(), METER_WIDTH);
+                    if width <= theme::SCENE_COLUMN {
+                        assert!((fader.center().x - rect.center().x).abs() < 0.01);
+                    } else {
+                        assert_eq!(fader.left(), rect.left() + PAD);
+                    }
+                }
+            }
         }
     }
 
@@ -1096,11 +1160,11 @@ mod tests {
         let taller = strip(700.0);
         assert_eq!(taller.fader.map(|f| f.height()), Some(TALLEST_FADER_WITH_DEVICES));
         assert!(taller.devices.map(|d| d.height()) > tall.devices.map(|d| d.height()));
-        // Without sends the fader takes their row.
+        // Without sends the footer stays reserved so faders remain aligned.
         let rect = Rect::from_min_size(Pos2::ZERO, Vec2::new(theme::RETURN_COLUMN, 200.0));
         let without = layout(rect, false, false);
         assert!(without.sends.is_none());
-        assert_eq!(without.fader.map(|f| f.height()), strip(200.0).fader.map(|f| f.height() + KNOB_ROW));
+        assert_eq!(without.fader.map(|f| f.height()), strip(200.0).fader.map(|f| f.height()));
     }
 
     #[test]

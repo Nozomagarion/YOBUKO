@@ -165,13 +165,15 @@ pub fn show(
     };
     painter.fill_background(light, 0.0, if level.clipped { theme::recording() } else { theme::window_background() });
     let hot_from = ((HOT_DB - RANGE.0) / (RANGE.1 - RANGE.0)) as f32;
+    let thickness = if upright { bars.width() } else { bars.height() };
+    let bar_width = ((thickness - GAP) / 2.0).max(0.0);
     for side in 0..2 {
-        let offset = side as f32 * (BAR + GAP);
+        let offset = side as f32 * (bar_width + GAP);
         // The bar's track, and a part of it from 0 to `to` (0 … 1).
         let bar = if upright {
-            Rect::from_min_size(Pos2::new(bars.left() + offset, bars.top()), Vec2::new(BAR, bars.height()))
+            Rect::from_min_size(Pos2::new(bars.left() + offset, bars.top()), Vec2::new(bar_width, bars.height()))
         } else {
-            Rect::from_min_size(Pos2::new(bars.left(), bars.top() + offset), Vec2::new(bars.width(), BAR))
+            Rect::from_min_size(Pos2::new(bars.left(), bars.top() + offset), Vec2::new(bars.width(), bar_width))
         };
         let part = |from: f32, to: f32| {
             if upright {

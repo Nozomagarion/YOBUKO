@@ -5,6 +5,7 @@
 //! (`docs/design/components.md` › Arrangement view). Track headers show more controls as a lane
 //! grows. Like the Session view it draws data and turns gestures into [`Action`]s.
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::HashMap;
 
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, StrokeKind, Ui, Vec2};
@@ -432,6 +433,7 @@ pub struct ArrangementViewState {
     /// Where the volume, pan and gain fields were drawn last frame: the wheel over one changes its
     /// value instead of scrolling the view, which has to know before they draw themselves again.
     value_areas: Vec<Rect>,
+    send_scroll_areas: Vec<Rect>,
     /// Volume and pan as knobs instead of fields (Settings › Session and mixer).
     pub knobs: bool,
     /// The track the user last worked on: the header they clicked, or the track of the clip they
@@ -536,6 +538,7 @@ impl Default for ArrangementViewState {
             track_anchor: None,
             folds: Folds::default(),
             value_areas: Vec::new(),
+            send_scroll_areas: Vec::new(),
             knobs: false,
             targeted: None,
             track_drag: None,
@@ -1155,7 +1158,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         return;
     }
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
 
     // The header column, on either side, and the timeline beside it.
     let max_header = (area.width() - 120.0).max(HEADER_COLUMN_RANGE.0);
@@ -1214,9 +1217,10 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     // wheel alone scrolls, over a value field too. Ctrl and the wheel over a value field are the
     // field's (`value_areas`), so the view leaves them alone.
     let fields = std::mem::take(&mut state.value_areas);
+    let sends = std::mem::take(&mut state.send_scroll_areas);
     if let Some(pointer) = widgets::pointer_over(ui, area) {
-        let over_field = fields.iter().any(|rect| rect.contains(pointer))
-            && (widgets::wheel_moves_value(ui) || ui.input(|i| i.modifiers.shift));
+        let over_field = (fields.iter().any(|rect| rect.contains(pointer)) && widgets::wheel_moves_value(ui))
+            || (sends.iter().any(|rect| rect.contains(pointer)) && ui.input(|i| i.modifiers.shift));
         let zoom = ui.input(|i| i.zoom_delta());
         if zoom != 1.0 && time.contains(pointer) && !over_field {
             let beat = (pointer.x - time.left() + state.scroll.x) / state.beat_width;
@@ -1233,7 +1237,12 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
                 state.zoom_lanes(&timeline.lanes, (steps * LANE_ZOOM_PER_POINT).exp(), pointer.y - lanes_area.top());
             }
         } else {
-            state.scroll -= wheel;
+            // Track controls have their own horizontal send navigation. Only the
+            // timeline owns horizontal arrangement scrolling; vertical lanes stay linked.
+            if time.contains(pointer) {
+                state.scroll.x -= wheel.x;
+            }
+            state.scroll.y -= wheel.y;
         }
     }
     // Free movement with the middle button held: the timeline follows the pointer both ways.
@@ -1271,7 +1280,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     let last_beat = f64::from((state.scroll.x + time.width()) / state.beat_width);
 
     // Ruler: bar numbers through the time-signature changes, a line at each labelled bar.
-    painter.rect_filled(ruler, 0.0, theme::panel_background());
+    painter.fill_background(ruler, 0.0, theme::panel_background());
     let meter = &timeline.meter;
     let bar_width = bar_beats as f32 * state.beat_width;
     let label_every = [1u32, 2, 4, 8, 16, 32, 64].into_iter().find(|n| *n as f32 * bar_width >= 40.0).unwrap_or(128);
@@ -1384,9 +1393,9 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         );
     }
     painter.hline(area.x_range(), ruler.bottom() + 0.5, theme::hairline(theme::border()));
-    painter.rect_filled(loop_row, 0.0, theme::panel_background());
+    painter.fill_background(loop_row, 0.0, theme::panel_background());
     painter.hline(area.x_range(), loop_row.bottom() + 0.5, theme::hairline(theme::border()));
-    painter.rect_filled(marker_row, 0.0, theme::panel_background());
+    painter.fill_background(marker_row, 0.0, theme::panel_background());
     painter.hline(area.x_range(), marker_row.bottom() + 0.5, theme::hairline(theme::border_strong()));
 
     // A click on the ruler moves the play start marker there, on the clip grid (Alt: free); while
@@ -1485,12 +1494,12 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             actions.push(Action::new("launcher.backToArrangement", json!({})));
         }
         let idle = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(
+        painter.fill_background(
             back,
             0.0,
             motion::mix(
                 idle,
-                theme::text_value(),
+                theme::control_selected(),
                 motion::toward(ui.ctx(), response.id.with("on"), false, motion::VALUE),
             ),
         );
@@ -1509,7 +1518,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
 
     // Header column top, beside the ruler: right-click moves the headers to the other side.
     let corner = Rect::from_x_y_ranges(headers, egui::Rangef::new(ruler.top(), marker_row.bottom()));
-    painter.rect_filled(corner, 0.0, theme::panel_background());
+    painter.fill_background(corner, 0.0, theme::panel_background());
     let corner_response = ui.interact(corner, Id::new("arrangement-header-corner"), Sense::click());
     corner_response.context_menu(|ui| {
         let text = if state.headers_left { "Track headers on the right" } else { "Track headers on the left" };
@@ -1637,7 +1646,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         .intersect(corner);
         let response = widgets::button_area(ui, button, Id::new("arrangement-returns-toggle"), label);
         let hover = widgets::hover(ui, &response);
-        painter.rect_filled(button, 2.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+        painter.fill_background(button, 2.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
         widgets::text_in(&painter, button, Align2::CENTER_CENTER, label, font, theme::text_secondary());
         if response.clicked() {
             state.returns_hidden = !state.returns_hidden;
@@ -1803,7 +1812,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         }
         // The track the piano roll edits, alone in the view: lit, so it is clear which it is.
         if focus == Some(lane.track) {
-            lanes_painter.rect_filled(row.time, 0.0, theme::panel_hover());
+            lanes_painter.fill_background(row.time, 0.0, theme::panel_hover());
             let edge = Rect::from_min_size(row.time.min, Vec2::new(2.0, row.time.height()));
             lanes_painter.rect_filled(edge, 0.0, theme::accent());
         }
@@ -1854,6 +1863,28 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
                     actions,
                 );
                 ghost = ghost.or(found);
+            }
+        }
+        for &(track, start, end) in &timeline.recording_spans {
+            if track == clips_lane.track {
+                let rect = Rect::from_min_max(
+                    Pos2::new(x_of(start), row.time.top()),
+                    Pos2::new(x_of(end).max(x_of(start) + 2.0), row.time.bottom()),
+                )
+                .intersect(row.time);
+                if rect.is_positive() {
+                    lanes_painter.rect_filled(rect, 0.0, theme::recording().gamma_multiply(0.35));
+                    lanes_painter.rect_stroke(rect, 0.0, theme::hairline(theme::recording()), egui::StrokeKind::Inside);
+                    widgets::text_in(
+                        &lanes_painter,
+                        rect.shrink(3.0),
+                        Align2::LEFT_TOP,
+                        "Recording…",
+                        theme::ui_font(theme::TEXT_SMALL),
+                        theme::text_primary(),
+                    );
+                }
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(33));
             }
         }
         // The insert marker: where a click in this lane put the play start, while it is there.
@@ -2093,7 +2124,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     if let Some(db) = main_volume_db {
         let y = fixed.bottom() - state.main_height;
         let header = Rect::from_x_y_ranges(headers, egui::Rangef::new(y, fixed.bottom()));
-        fixed_painter.rect_filled(header, 0.0, theme::panel_background());
+        fixed_painter.fill_background(header, 0.0, theme::panel_background());
         // The top edge resizes the row: the fixed rows sit along the bottom, so they grow upward.
         let edge = Rect::from_x_y_ranges(area.x_range(), egui::Rangef::new(y - 1.0, y + 3.0)).intersect(fixed);
         let response = ui
@@ -2283,7 +2314,7 @@ fn marker_flags(
         } else {
             theme::control_background()
         };
-        painter.rect_filled(tag, 0.0, fill);
+        painter.fill_background(tag, 0.0, fill);
         painter.vline(x, row.y_range(), theme::hairline(theme::text_secondary()));
         widgets::text_in(
             &painter,
@@ -2495,7 +2526,7 @@ fn loop_brace(
     } else {
         (theme::control_background(), theme::text_hint())
     };
-    painter.rect_filled(bar, 0.0, fill);
+    painter.fill_background(bar, 0.0, fill);
     painter.rect_stroke(bar, 0.0, theme::hairline(edge), StrokeKind::Inside);
 }
 
@@ -3220,7 +3251,7 @@ fn clip_box<'a>(
     if let Some((field, db, hover)) = gain_paint {
         let gain_painter = painter.with_clip_rect(row.clip);
         let fill = motion::mix(theme::control_background(), theme::control_hover(), hover);
-        gain_painter.rect_filled(field, 0.0, fill);
+        gain_painter.fill_background(field, 0.0, fill);
         let text = format!("{} dB", widgets::format_db(db));
         let font = theme::mono_font(theme::TEXT_TINY);
         widgets::text_in(
@@ -3359,12 +3390,12 @@ fn paint_clip(
     };
     let strength = if selected { strength.saturating_add(12).min(100) } else { strength };
     let body = colour_surface(theme::panel_background(), rgb(clip.color), strength, off);
-    painter.rect_filled(rect, 2.0, body);
+    painter.fill_background(rect, 2.0, body);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
         painter.rect_filled(bar.shrink2(Vec2::new(2.0, 0.0)), 0.0, motion::mix(body, ink_on(body), 0.045));
     } else {
-        painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, body);
+        painter.fill_background(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, body);
     }
     crate::kit::liquid::paint(painter, rect.shrink(1.0), body, crate::kit::liquid::Surface::Clip);
     let ink = ink_on(body);
@@ -3852,10 +3883,10 @@ fn track_header(
     let selected = state.selected_tracks.contains(&lane.track) || state.focus == Some(lane.track);
     // Preserve track identity when selected: a small brightness lift and outline, without
     // replacing the track colour with the global selection accent.
-    let surface =
-        colour_surface(theme::track_header_background(), rgb(lane.color), state.header_colour_strength, lane.mute);
+    let background = if selected { theme::track_header_selected() } else { theme::track_header_background() };
+    let surface = colour_surface(background, rgb(lane.color), state.header_colour_strength, lane.mute);
     let header_fill = if selected { motion::mix(surface, theme::text_primary(), 0.07) } else { surface };
-    painter.rect_filled(rect, 0.0, header_fill);
+    painter.fill_background(rect, 0.0, header_fill);
     crate::kit::liquid::paint(painter, rect, header_fill, crate::kit::liquid::Surface::Track);
     if selected {
         let outline = motion::mix(theme::border_strong(), saturated(rgb(lane.color)), 0.5);
@@ -3977,7 +4008,10 @@ fn track_header(
     let side = tall && beside_room >= LEAST_VOLUME;
     let stacked = tall && !side;
     let below_top = if name_first { inner.top() } else { row.bottom() + header_gap };
-    let below = Rect::from_min_max(Pos2::new(first_x, below_top), Pos2::new(inner.right(), below_top + field_height));
+    // In the stacked layout the level row also uses the space below automation.
+    let below_left = if stacked { automation_x } else { first_x };
+    let below =
+        Rect::from_min_max(Pos2::new(below_left, below_top), Pos2::new(inner.right(), below_top + field_height));
     // The automation button shows and hides the track's lanes.
     let lanes_button = if side {
         Rect::from_min_size(
@@ -4040,6 +4074,19 @@ fn track_header(
     } else {
         theme::text_on(header_fill)
     };
+    if lane.kind == ColumnKind::Track && (lane.plays_notes || lane.plays_audio) {
+        let type_rect = Rect::from_min_size(name.min, Vec2::new(16.0, name.height()));
+        crate::kit::mixer_controls::track_type(
+            ui,
+            painter,
+            type_rect,
+            id.with("track-type"),
+            &lane.name,
+            (lane.plays_notes, lane.plays_audio),
+            name_color,
+        );
+        name.min.x = (type_rect.right() + 3.0).min(name.right());
+    }
     widgets::text_in(
         painter,
         name,
@@ -4126,7 +4173,7 @@ fn track_header(
                 Pos2::new(sends_left, below.top()),
                 Pos2::new(sends_left + step * shown_sends as f32 + navigation - SEND_GAP, below.bottom()),
             );
-            state.value_areas.push(viewport.intersect(clip));
+            state.send_scroll_areas.push(viewport.intersect(clip));
             if ui.rect_contains_pointer(viewport.intersect(clip)) {
                 let scroll = ui.input_mut(|i| {
                     if i.modifiers.shift {
@@ -4301,28 +4348,8 @@ fn send_knob(
         let fill = theme::control_hover().gamma_multiply(amount.max(0.3));
         widgets::track_button_face(ui, painter, rect, &response, fill);
     }
-    // A labelled send tile with a small level rail, rather than a miniature rotary dial.
-    let rail = Rect::from_min_max(
-        Pos2::new(rect.left() + 4.0, rect.bottom() - 3.0),
-        Pos2::new(rect.right() - 4.0, rect.bottom() - 1.5),
-    );
-    painter.rect_filled(rail, 1.0, theme::border_strong());
-    let level = Rect::from_min_size(rail.min, Vec2::new(rail.width() * position.clamp(0.0, 1.0), rail.height()));
-    painter.rect_filled(level, 1.0, pointer);
-    // The destination stays legible; a dot denotes pre-fader mode.
     let letter = send.name.chars().next().map(String::from).unwrap_or_default();
-    let caption = format!("{letter} {}", widgets::format_db(shown));
-    widgets::text_in(
-        painter,
-        rect.translate(Vec2::new(0.0, -1.0)),
-        Align2::CENTER_CENTER,
-        &caption,
-        theme::mono_font(theme::TEXT_SMALL),
-        pointer,
-    );
-    if send.pre_fader {
-        painter.circle_filled(Pos2::new(rect.center().x, rect.bottom() + 1.5), 1.5, pointer);
-    }
+    crate::kit::mixer_controls::send_field(painter, rect, &letter, shown, send.pre_fader, pointer, position);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4414,7 +4441,7 @@ fn value_control(
         Control::Volume if state.knobs => volume_knob(painter, rect, shown, hover),
         Control::Volume => volume_field(painter, rect, shown, hover),
         Control::Pan if state.knobs => pan_knob(painter, rect, shown),
-        Control::Pan => pan_field(painter, rect, shown, hover),
+        Control::Pan => crate::kit::mixer_controls::pan_field(painter, rect, shown, hover),
     }
 }
 
@@ -4479,11 +4506,11 @@ fn value_action(control: Control, tracks: &[TrackId], from: f64, to: f64) -> Act
 fn volume_field(painter: &egui::Painter, rect: Rect, db: f64, hover: f32) {
     let fill = theme::control_selected();
     let radius = rect.height() * 0.5;
-    painter.rect_filled(rect, radius, motion::mix(theme::control_background(), theme::control_hover(), hover));
+    painter.fill_background(rect, radius, motion::mix(theme::control_background(), theme::control_hover(), hover));
     let x = rect.left() + rect.width() * volume_position(db);
     // Clip the filled capsule rather than introducing square corners at its left edge.
     let filled = Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom()));
-    painter.with_clip_rect(painter.clip_rect().intersect(filled)).rect_filled(rect, radius, fill);
+    painter.with_clip_rect(painter.clip_rect().intersect(filled)).fill_background(rect, radius, fill);
     let text = rect.shrink2(Vec2::new(8.0, 0.0));
     let unfilled = Rect::from_min_max(Pos2::new(x, rect.top()), rect.max);
     widgets::text_in(
@@ -4515,26 +4542,6 @@ fn volume_text(painter: &egui::Painter, rect: Rect, db: f64, hover: f32) {
         &widgets::format_db(db),
         theme::mono_font(theme::TEXT_SMALL),
         color,
-    );
-}
-
-/// A pan field: a bar along the bottom from the centre, a centre tick, the value in the middle.
-fn pan_field(painter: &egui::Painter, rect: Rect, pan: f64, hover: f32) {
-    painter.rect_filled(rect, 0.0, motion::mix(theme::pan_background(), theme::panel_hover(), hover));
-    let centre = rect.center().x.round() - 0.5;
-    painter.vline(centre, egui::Rangef::new(rect.top(), rect.top() + 2.0), theme::hairline(theme::pan_centre()));
-    painter.vline(centre, egui::Rangef::new(rect.bottom() - 2.0, rect.bottom()), theme::hairline(theme::pan_centre()));
-    let to = rect.center().x + rect.width() / 2.0 * pan.clamp(-1.0, 1.0) as f32;
-    let bar =
-        Rect::from_min_max(Pos2::new(centre.min(to), rect.bottom() - 2.0), Pos2::new(centre.max(to), rect.bottom()));
-    painter.rect_filled(bar, 0.0, theme::control_selected());
-    widgets::text_in(
-        painter,
-        rect,
-        Align2::CENTER_CENTER,
-        &widgets::format_pan(pan),
-        theme::mono_font(theme::TEXT_SMALL),
-        theme::text_primary(),
     );
 }
 

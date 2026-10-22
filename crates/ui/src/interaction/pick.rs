@@ -11,6 +11,8 @@ use std::path::PathBuf;
 /// The field a chosen path goes into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PickField {
+    /// User-owned background PNG; no desktop capture.
+    BackgroundImage,
     /// Settings › General › Projects folder.
     ProjectsFolder,
     /// Settings › General › Templates folder.
@@ -19,6 +21,10 @@ pub enum PickField {
     StartTemplate,
     /// The folder of the save prompt (File › Save as…).
     SaveFolder,
+    /// The audio file an export writes (File › Export…).
+    ExportFile,
+    /// A folder the person allows attached MCP agents to write in.
+    McpWriteFolder,
     /// A project to open (File › Open…, the start panel's Open…).
     OpenProject,
     /// A folder for the browser (+ Add folder).
@@ -32,16 +38,19 @@ pub enum PickField {
 impl PickField {
     /// Whether a folder is picked rather than a file.
     pub fn folder(self) -> bool {
-        !matches!(self, Self::StartTemplate | Self::OpenProject)
+        !matches!(self, Self::StartTemplate | Self::OpenProject | Self::ExportFile | Self::BackgroundImage)
     }
 
     /// The dialog's title.
     pub fn title(self) -> &'static str {
         match self {
+            Self::BackgroundImage => "Background image (PNG)",
             Self::ProjectsFolder => "Projects folder",
             Self::TemplatesFolder => "Templates folder",
             Self::StartTemplate => "Template to start from",
             Self::SaveFolder => "Folder to save in",
+            Self::ExportFile => "Export audio to",
+            Self::McpWriteFolder => "Allow MCP writes in",
             Self::OpenProject => "Open a project",
             Self::BrowserFolder => "Add a folder to the browser",
             Self::NamModelsFolder => "NAM models folder",
@@ -51,7 +60,21 @@ impl PickField {
 
     /// The file extensions a file dialog offers; none for a folder.
     pub fn extensions(self) -> &'static [&'static str] {
-        if self.folder() { &[] } else { &["suhina", "als"] }
+        match self {
+            Self::ExportFile => &["wav", "flac", "ogg"],
+            Self::BackgroundImage => &["png"],
+            field if field.folder() => &[],
+            _ => &["suhina", "als"],
+        }
+    }
+
+    /// The name the file dialog's filter carries.
+    pub fn filter_label(self) -> &'static str {
+        match self {
+            Self::ExportFile => "Audio",
+            Self::BackgroundImage => "PNG image",
+            _ => "Projects",
+        }
     }
 }
 

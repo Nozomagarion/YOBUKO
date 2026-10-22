@@ -3,9 +3,10 @@ description: The Settings window's pages and their headed sections, which settin
 read_when: Settings window, settings page, where a setting goes, adding a setting, settings scroll, settings search, settings table, settings_rows, page order, General page, Appearance page
 type: spec
 status: current
-last_verified: 2026-10-19
+last_verified: 2026-10-22
 covers:
   - crates/ui/src/settings/settings_view.rs
+  - crates/ui/src/settings/gradient_editor.rs
   - crates/ui/src/settings/settings_rows.rs
   - crates/ui/src/settings/track_sizes.rs
   - crates/ui/src/settings.rs
@@ -51,6 +52,7 @@ is on exactly one page, under one heading.
 | General | Agents | Let agents work on open projects (off by default; [ADR 0028](../decisions/0028-mcp-in-the-running-app.md)) |
 | General | Dropping files | Several files, Warp mode |
 | General | Updates | Check for updates, Channel (Test builds only in developer mode), Developer mode ([spec](updates.md)) |
+| Export | MCP write permissions | Allow the project's folder (on by default, with the active folder shown), MCP allowed write folders (Add folder… and Remove); all grants include subfolders |
 | Audio | Output | Driver, Device, Sample rate, Buffer size (or Engine block), Exclusive mode, Input |
 | Audio | Cue | Cue output, Cue volume |
 | Audio | Now | Output, Latency, Key to sound, Input now (read only), List devices again |
@@ -80,6 +82,12 @@ is on exactly one page, under one heading.
 Where a setting is shown never changes how it is saved: each keeps the key it has in
 `settings.json` (or `keymap.json` for keys and the mouse switches), so a settings file written
 before a setting moved loads with the same values.
+
+Export permissions apply to attached MCP writes only. The person adds a folder through the
+system folder picker or removes its grant; the project-folder grant can also be switched off.
+The settings persist across restarts. Missing folders grant no access, and each subsequent
+operation uses the current grants. File › Export still writes to the destination the person
+chooses. Agents cannot change these settings. Standalone MCP keeps its `--write-root` option.
 
 ## Theme gallery and colour editor
 
@@ -211,11 +219,18 @@ surfaces. Labels, controls, notes and
 waveforms are drawn afterward. The latter two are surface reflections, not per-clip blur.
 The renderer is described in [Glass rendering experiment](../design/glass-rendering.md).
 
-Controls are unavailable in a host without the GPU provider. Selecting GPU in Renderer
-requires restarting the app if it is currently running on OpenGL. Disabled animations or
+Controls remain editable and save their values even in a host without the GPU provider.
+The theme editor explains when preview is unavailable; global controls also show this
+explanation on hover. Selecting GPU in Renderer requires restarting the app if it is
+currently running on OpenGL. Disabled animations or
 the built-in high-contrast theme keep the material off without erasing saved strengths.
-The feature remains experimental: full playback performance qualification and refraction
-are not complete.
+The feature remains experimental: full playback performance qualification is not complete.
+
+The colour editor has a separate Browser text group: primary, secondary, hint and value.
+These change browser text without recolouring the rest of the interface. Text on coloured
+tracks, returns and clips uses `text.onColorLight` or `text.onColorDark`, whichever has
+greater contrast with the surface, rather than reusing the window background as text.
+Older theme files inherit these new roles from their previous text/background tokens.
 
 ### Surface gradients and content refraction
 
@@ -234,3 +249,42 @@ waveforms and controls are excluded from this capture and painted sharply afterw
 Only one content capture is made per frame, independently of the panel backdrop; no
 per-clip capture, previous-frame image or recursive sampling is allowed. Missing GPU
 sources keep the optical gradient/rim fallback.
+
+### Application bar and private background
+
+Appearance > Application bar keeps Suhina visible, with Left or Centre placement.
+Project name (including its unsaved marker) and project timing (tempo and time signature)
+are optional and share a separate Left/Centre position. Long names are clipped inside
+non-overlapping cells. On Windows this bar replaces native decorations; dragging, double-click
+maximise, minimise, close and all eight edge/corner resize directions remain available.
+Other platforms keep native decorations; the application bar retains its information but has no duplicate window buttons or drag/maximise handling.
+
+Appearance > Background accepts a user-owned PNG, limited to 32 MiB and 8192 pixels per
+axis. Loading and image blur run away from the UI thread; the displayed image is reduced
+to at most 1600 pixels per axis. The decoded image is cached separately from filtering. After a failed load, selecting the repaired file again with Browse retries it; ordinary frames do not retry failures.
+Only one image job runs at a time; obsolete results are discarded before publication.
+Background blur is measured in logical display pixels, converted to source pixels using
+the cover scale, so resizing and different image sizes retain the requested visual strength.
+Zero blur bypasses filtering. Background blur ranges from 0 to 40 pixels and Surface
+opacity from 0 to 100 percent. Clearing the path removes the image. High Contrast does
+not show it. The native window stays opaque: this feature never captures the desktop,
+its icons, or other application windows. Alpha blends neutral UI surfaces over the chosen
+image inside Suhina. It is not an operating-system backdrop.
+
+Colour and gradient editors retain unmultiplied RGB at zero opacity, including after
+saving and loading a theme. Returning opacity to 100 percent restores the original hue.
+
+Suhina Glass is a bundled, editable blue glass preset. Its JSON includes all colour tokens,
+subtle surface gradients and liquid overrides. A background image remains a local user
+choice, so sharing the theme does not share an image or a machine-specific file path.
+
+The background source, image processing and placement are separate internal modules.
+They do not introduce an extension protocol; future animated sources must follow ADR 0015.
+Settings uses its unattenuated theme surface as the liquid base, independently of the
+main background surface opacity, to avoid multiplying two transparency controls.
+
+Holding the Background blur slider keeps the Settings live preview active even while the pointer is stationary; the modal dimmer returns only on release, so individual value changes do not flash the surrounding view.
+
+Global liquid strength sliders are disabled while the active theme supplies liquid overrides. Their notes explain how to enable Use global liquid settings in the theme editor. Stored global values remain unchanged and become editable again when inheritance is restored.
+
+The gradient editor uses a single horizontal colour ramp with numbered draggable stops. Selecting a stop exposes only its colour, position and opacity; Add inserts and selects a midpoint in the largest gap, and Remove acts on the selected stop (at least two remain). Stops cannot cross their neighbours. Surface direction is a separate control below the stop editor. Colour-picker popups use an opaque readable surface even when Settings uses liquid transparency.

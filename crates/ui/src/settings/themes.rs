@@ -108,6 +108,7 @@ impl Themes {
         let shown = self.entries.iter().find(|e| same_id(&e.id, current)).map_or(BUILT_IN, |e| e.id.as_str());
         let theme = self.get(shown).cloned().unwrap_or_default();
         ThemesView {
+            transparent_rgb: theme.transparent_rgb,
             // The user's own themes first, then those that come with Suhina.
             list: self.entries[self.built_in..]
                 .iter()
@@ -133,11 +134,19 @@ impl Themes {
         let editable = self.get(current).is_some() && !theme::is_built_in(current);
         match request {
             ThemeRequest::Use(id) => self.get(&id).is_some().then_some(id),
-            ThemeRequest::ResetEdits { colors, liquid, gradients } => {
-                let switched = self.request(current, ThemeRequest::Edit(colors));
+            ThemeRequest::ResetEdits { colors, liquid, gradients, transparent_rgb } => {
+                let switched = self.request(current, ThemeRequest::EditRgba { colors, transparent_rgb });
                 let id = switched.as_deref().unwrap_or(current);
                 self.request(id, ThemeRequest::EditLiquid(liquid));
                 self.request(id, ThemeRequest::EditGradients(gradients));
+                switched
+            }
+            ThemeRequest::EditRgba { colors, transparent_rgb } => {
+                let switched = self.request(current, ThemeRequest::Edit(colors));
+                let id = switched.as_deref().unwrap_or(current);
+                if let Some(entry) = self.entries.iter_mut().find(|entry| entry.id == id) {
+                    entry.theme.transparent_rgb = transparent_rgb;
+                }
                 switched
             }
             ThemeRequest::Edit(colors) => {
@@ -312,7 +321,12 @@ mod tests {
         assert_eq!(themes.get(&copy).unwrap().gradients, gradients);
         themes.request(
             &id,
-            ThemeRequest::ResetEdits { colors: edited.colors, liquid: edited.liquid, gradients: Gradients::default() },
+            ThemeRequest::ResetEdits {
+                transparent_rgb: Default::default(),
+                colors: edited.colors,
+                liquid: edited.liquid,
+                gradients: Gradients::default(),
+            },
         );
         assert_eq!(themes.get(&id).unwrap().gradients, Gradients::default());
         assert_eq!(themes.get(&copy).unwrap().gradients, gradients);
@@ -323,7 +337,13 @@ mod tests {
         colors.accent = egui::Color32::from_rgb(1, 2, 3);
         ThemeEntry {
             id: "night".into(),
-            theme: Theme { name: "Night".into(), colors, liquid: None, gradients: Default::default() },
+            theme: Theme {
+                name: "Night".into(),
+                colors,
+                liquid: None,
+                gradients: Default::default(),
+                transparent_rgb: Default::default(),
+            },
         }
     }
 
@@ -437,7 +457,8 @@ mod tests {
                         name: "Deep Sea".into(),
                         colors: night().theme.colors,
                         liquid: None,
-                        gradients: Default::default()
+                        gradients: Default::default(),
+                        transparent_rgb: Default::default()
                     })
                 },
             ]

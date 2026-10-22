@@ -2,7 +2,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Clips' colours and names as their track's (`docs/spec/arrangement-editing.md` › Clip colours).
-#![allow(clippy::unwrap_used, clippy::panic)] // test helpers outside #[test] functions
+#![allow(clippy::unwrap_used, clippy::panic)] // test helpers outside test functions
+
+#[test]
+fn copied_and_consolidated_clips_do_not_take_creation_defaults() {
+    let mut session = Session::new(project());
+    session.set_track_type_colours(Rgb(240, 10, 20), Rgb(10, 20, 240));
+    let source = clips(&session, 1)[0].id;
+    run(&mut session, "clip.copy", json!({"clip":source.0})).unwrap();
+    run(&mut session, "clip.paste", json!({"track":1,"start":16.0})).unwrap();
+    assert!(clips(&session, 1).iter().all(|clip| clip.color.is_none()));
+    run(&mut session, "clip.consolidate", json!({"track":1,"start":16.0,"end":20.0})).unwrap();
+    assert!(clips(&session, 1).iter().all(|clip| clip.color.is_none()));
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert!(clips(&session, 1).iter().all(|clip| clip.color.is_none()));
+}
 
 use serde_json::{Value, json};
 use suhina_model::*;
@@ -33,6 +47,54 @@ fn project() -> Project {
 fn clips(session: &Session, track: u32) -> Vec<Clip> {
     let p = session.project();
     p.arrangement.lanes.iter().find(|l| l.track == Some(TrackId(track))).unwrap().clips.clone()
+}
+
+#[test]
+fn paste_replaces_only_the_named_destination_and_undo_restores_it() {
+    let mut session = Session::new(project());
+    let before = session.project().clone();
+    let target = clips(&session, 1)[1].id;
+    let source = clips(&session, 1)[0].id;
+    run(&mut session, "clip.copy", json!({"clip":source.0})).unwrap();
+    run(&mut session, "clip.paste", json!({"track":1,"start":8.0,"replace":target.0,"stack":true})).unwrap();
+    let after = clips(&session, 1);
+    assert_eq!(after.len(), 2);
+    assert!(after.iter().all(|clip| clip.id != target));
+    assert_eq!(after[1].start, 8.0);
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(session.project().arrangement, before.arrangement);
+    assert_eq!(session.project().contents, before.contents);
+    assert!(run(&mut session, "clip.paste", json!({"track":2,"start":8.0,"replace":target.0})).is_err());
+    assert_eq!(session.project().arrangement, before.arrangement);
+    assert_eq!(session.project().contents, before.contents);
+}
+
+#[test]
+fn paste_replacement_accepts_names_and_rejects_ambiguous_or_wrong_track_targets() {
+    let mut session = Session::new(project());
+    let before = session.project().clone();
+    let source = clips(&session, 1)[0].id;
+    let target = clips(&session, 1)[1].id;
+    run(&mut session, "clip.copy", json!({"clip":source.0})).unwrap();
+    run(&mut session, "clip.paste", json!({"track":1,"start":8.0,"replace":"clip 2","stack":true})).unwrap();
+    assert!(clips(&session, 1).iter().all(|clip| clip.id != target));
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(session.project().arrangement, before.arrangement);
+    for params in [
+        json!({"track":2,"start":8.0,"replace":"Clip 2"}),
+        json!({"track":1,"start":8.0,"replace":"missing"}),
+        json!({"track":1,"scene":1,"replace":"Clip 2"}),
+        json!({"track":1,"start":8.0,"replace":4294967296u64}),
+    ] {
+        assert!(run(&mut session, "clip.paste", params).is_err());
+        assert_eq!(session.project().arrangement, before.arrangement);
+        assert_eq!(session.project().contents, before.contents);
+    }
+    run(&mut session, "clip.paste", json!({"track":1,"start":16.0,"stack":true})).unwrap();
+    let before_ambiguous = session.project().clone();
+    assert!(run(&mut session, "clip.paste", json!({"track":1,"start":8.0,"replace":"Clip 1"})).is_err());
+    assert_eq!(session.project().arrangement, before_ambiguous.arrangement);
+    assert_eq!(session.project().contents, before_ambiguous.contents);
 }
 
 #[test]

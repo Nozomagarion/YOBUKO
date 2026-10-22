@@ -76,6 +76,12 @@ else in a new scene.
 
 ### Into the arrangement
 
+While a take is running, Arrangement shows a growing recording-coloured region on its
+track, from its start to the current transport beat. This preview does not create project
+clips or undo entries. The finished clip replaces it after recording ends; notes and
+waveforms are drawn from the finished take. New recorded clips receive the corresponding
+MIDI/audio creation colour without recolouring earlier clips.
+
 `transport.record` with `on: true` records every armed track into the arrangement:
 
 1. With the transport stopped, it starts after the count-in, and the take starts at the play

@@ -125,8 +125,10 @@ a theme file can change any of them (see Themes). Current values:
 | `text.secondary` | `#9A958C` | Labels and notes |
 | `text.hint` | `#66625B` | Inactive text, hints and section titles |
 | `text.value` | `#C9C4BB` | Clip names and values on fields |
-| `text.inverse` | `#1D1C1A` | Text on light or lit fills: a switch's chosen option, a lit button, a light track colour |
+| `text.inverse` | `#1D1C1A` | Text on lit fills: a switch's chosen option, a lit button |
 | `text.playing` | `#FFFFFF` | The name of a playing clip |
+| `text.onColorLight`, `text.onColorDark` | `#ECE8E1`, `#1D1C1A` | The contrast-selected text on coloured tracks, returns and clips |
+| `browser.text.primary`, `browser.text.secondary`, `browser.text.hint`, `browser.text.value` | `#ECE8E1`, `#9A958C`, `#66625B`, `#C9C4BB` | Independent browser names, labels, hints and values; older themes inherit the corresponding text tokens |
 | `accent` | `#A6A3FF` | The playhead, queued clips, a key being set |
 | `recording` | `#E5484D` | Recording and errors |
 | `recording.background` | `#3A2B2A` | Behind an armed track's arm button and a recording clip |
@@ -136,10 +138,10 @@ a theme file can change any of them (see Themes). Current values:
 | `track.mutedBackground` | `#34322F` | The fills of a muted track |
 | `pan.background` | `#232220` | Behind a track header's pan field |
 | `pan.centre` | `#55524C` | The centre mark of a pan field |
-| `track.1`–`track.8` | `#FF9A3C` `#F2D541` `#4FC3F7` `#B38BFF` `#7FDB5A` `#FF6FA8` `#5C8DFF` `#2FD9C4` | Vibrant, as Ableton Live's clip colours: the first four are the colours tracks without one of their own take in turn (also the browser's icons: effects, MIDI files, samples, instruments and presets); all eight are the palette, after which + picks any colour |
+| `track.1`–`track.8` | `#FF9A3C` `#F2D541` `#4FC3F7` `#B38BFF` `#7FDB5A` `#FF6FA8` `#5C8DFF` `#2FD9C4` | Eight colour-picker swatches, also used to resolve legacy uncoloured tracks once on opening. New tracks and clips use the MIDI/audio creation defaults; + picks any colour |
 | `track.5`–`track.8` | `#8FA87A` `#C27C8E` `#7F8FB0` `#B9B2A6` | The other colours of the track colour palette (track menu, colour areas, colour tags' menu) |
 | `kind.kick`, `kind.snare`, `kind.clap`, `kind.closedHat`, `kind.openHat`, `kind.hat`, `kind.rim`, `kind.tom`, `kind.crash`, `kind.ride`, `kind.cymbal`, `kind.percussion`, `kind.bass`, `kind.tonal`, `kind.vocal`, `kind.effect`, `kind.other` | `#D06E5E` `#73AAC0` `#5EC0B0` `#C6AC5E` `#D08F6E` `#D8C47A` `#8CA8E0` `#B074A4` `#E0A0C8` `#C8B8E8` `#A497CC` `#8FC06E` `#A84F4F` `#6EB0D0` `#E8D0A0` `#9CC49C` `#8A8680` | Sample-map points of each kind ([spec](../spec/sample-map.md)) |
-| type | 11 px UI, 10 px values, 9 px rulers | |
+| type | 12 px UI, 11 px values, 9 px rulers | |
 | row height | 20 px grid rows and fields, 15–16 px inline fields, 17 px browser rows (`theme::BROWSER_ROW`) | |
 | radius | 0 everywhere | |
 
@@ -153,9 +155,11 @@ A theme is a JSON file in the `themes` folder of Suhina's app-data folder, besid
 { "name": "Night", "colors": { "window.background": "#14161A", "accent": "#7FD1B9" } }
 ```
 
-Text and backgrounds never share a token: text on a light or lit fill is `text.inverse`, and the
-chosen option of a switch is filled with `control.selectedBackground`. A file from before these
-two tokens takes `window.background` (opaque) and `text.value` for them.
+Text and backgrounds never share a token: text on a lit fill is `text.inverse`, text on a track
+colour is `text.onColorLight` or `text.onColorDark`, and the chosen option of a switch is filled
+with `control.selectedBackground`. A file from before these tokens takes `window.background`
+(opaque) for `text.inverse` and `text.onColorDark`, and `text.value` for
+`control.selectedBackground`.
 
 A background token's alpha is how much of the desktop shows through the window there. A
 background (`window.background`, `panel.*`, `control.*Background`, `track.headerBackground`,
@@ -169,14 +173,18 @@ and with OpenGL, the window stays opaque and backgrounds blend. On macOS the win
 runs under the title bar, which takes `panel.background`.
 
 A token the file leaves out keeps Suhina Dark's colour, so a file needs only the colours it
-changes; an unknown token or a value that is not `#RRGGBB` or `#RRGGBBAA` is skipped with a warning. Files with
+changes; an unknown token or a value that is not `#RRGGBB` or `#RRGGBBAA` is skipped with a warning. Transparent RGB is preserved under canonical token names, including inherited text roles. Files with
 the first token names (`surface.0`, `line`, `text.tertiary` …) still read. Only colours belong to
-a theme: sizes, spacing and type stay the design's. A track's own colour comes from the project; tracks without one take the theme's
+a theme: sizes, spacing and type stay the design's. A track's own colour comes from the project; tracks without one take
 a numbered palette colour resolved once when opened. `clip.midiDefault` and
 `clip.audioDefault` are creation-only RGB defaults, copied to new tracks and clips;
 existing project colours never follow edits to those defaults. The theme editor
 offers these two defaults; numbered `track.1`–`track.8` remain legacy swatches for file
 compatibility and colour pickers, rather than a list of default track colours.
+
+Forest Amber is an original bundled woodland palette with warm amber accents, saved gradients
+and theme-specific liquid strengths. Its built-in id is `suhina-forest-amber`, leaving existing
+custom `forest-amber` files intact. Background images remain separately chosen local files.
 
 Themes that come with Suhina (`crates/ui/themes/`, read-only; editing one makes a copy):
 Suhina Dark (the default), Editor Dark (cool greys and blue, like a code editor), Suhina
@@ -218,7 +226,7 @@ If (2) fails, change colours, control shapes, typography and wording, not the la
 Studio Light and Studio Dark are opt-in themes using warm surfaces and gold accents.
 Arrangement headers keep their track-color edge band on neutral, theme-editable surfaces
 (`track.headerBackground`, `track.headerSelectedBackground`). Missing new tokens in older
-theme files fall back to the built-in palette. Header selection retains an outline.
+theme files fall back to the built-in palette. The selected token supplies the base of selected headers before track-colour strength and the selection highlight are applied; selection retains an outline.
 The larger transport and initial Arrangement dimensions are described in components.
 These initial dimensions are shared implementation constants, not yet user-configurable
 appearance metrics; the planned metrics settings remain follow-up work.

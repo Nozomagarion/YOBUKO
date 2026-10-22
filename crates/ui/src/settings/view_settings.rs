@@ -95,6 +95,20 @@ pub struct ViewSettings {
     pub menu_name_field: bool,
     /// Notes moved onto others of the same key and start replace them (on by default).
     pub notes_replace: bool,
+    /// Pasting onto a selected arrangement clip replaces that clip at its start.
+    pub replace_clip: bool,
+    /// Centre the always-visible application name in the application bar.
+    pub app_name_centered: bool,
+    /// Show the active project's name in the application bar.
+    pub bar_project_name: bool,
+    /// Show project tempo and meter in the application bar.
+    pub bar_project_timing: bool,
+    /// Centre project information; otherwise place it at the left.
+    pub bar_project_centered: bool,
+    /// Opacity of neutral surfaces above the private background image, 0..=100.
+    pub background_tint: u8,
+    /// Blur radius for the background image, in logical display pixels.
+    pub background_blur: u8,
     /// Ctrl+drag over a clip selects time; off (the default), a drag from a clip's upper half
     /// does.
     pub time_select_ctrl: bool,
@@ -137,6 +151,13 @@ impl Default for ViewSettings {
             double_click_clip: true,
             menu_name_field: false,
             notes_replace: true,
+            replace_clip: false,
+            app_name_centered: false,
+            bar_project_name: true,
+            bar_project_timing: false,
+            bar_project_centered: true,
+            background_tint: 70,
+            background_blur: 12,
             time_select_ctrl: false,
             clip_halves: false,
             grid_in_clips: true,
@@ -181,7 +202,13 @@ impl ViewSettings {
         ) + &format!(
             "liquid_panel_strength = {}\nliquid_track_strength = {}\nliquid_clip_strength = {}\n",
             self.liquid.panels, self.liquid.tracks, self.liquid.clips,
-        ) + &self.track_sizes.to_text()
+        ) + &format!("replace_clip = {}\n", if self.replace_clip { "on" } else { "off" })
+            + &format!(
+                "app_name_centered = {}\nbar_project_name = {}\nbar_project_timing = {}\nbar_project_centered = {}\n",
+                self.app_name_centered, self.bar_project_name, self.bar_project_timing, self.bar_project_centered
+            )
+            + &format!("background_tint = {}\nbackground_blur = {}\n", self.background_tint, self.background_blur)
+            + &self.track_sizes.to_text()
     }
 
     /// Reads one line of the settings file; `false` when the key and value are not one of these
@@ -191,6 +218,29 @@ impl ViewSettings {
             return true;
         }
         match (key, value) {
+            // Retired experimental native backdrop: accept old preferences without enabling it.
+            ("windows_mica", "on" | "off") => {}
+            ("background_tint" | "background_blur", value) => {
+                let Ok(value) = value.parse::<u8>() else { return false };
+                if key == "background_tint" {
+                    self.background_tint = value.min(100);
+                } else {
+                    self.background_blur = value.min(40);
+                }
+            }
+            (
+                "app_name_centered" | "bar_project_name" | "bar_project_timing" | "bar_project_centered",
+                "true" | "false",
+            ) => {
+                let on = value == "true";
+                match key {
+                    "app_name_centered" => self.app_name_centered = on,
+                    "bar_project_name" => self.bar_project_name = on,
+                    "bar_project_timing" => self.bar_project_timing = on,
+                    _ => self.bar_project_centered = on,
+                }
+            }
+            ("replace_clip", "on" | "off") => self.replace_clip = value == "on",
             ("liquid_panel_strength" | "liquid_track_strength" | "liquid_clip_strength", strength) => {
                 let Ok(strength) = strength.parse::<u32>() else { return false };
                 let strength = strength.min(100) as u8;
@@ -260,6 +310,13 @@ mod tests {
     use crate::settings::Settings;
 
     #[test]
+    fn retired_mica_preference_is_ignored_and_not_written_back() {
+        let (settings, warnings) = Settings::from_text("windows_mica = on\n");
+        assert!(warnings.is_empty());
+        assert!(!settings.to_text().contains("windows_mica"));
+    }
+
+    #[test]
     fn view_settings_survive_a_round_trip_through_the_settings_file() {
         let view = ViewSettings {
             liquid: crate::kit::liquid::Options { panels: 40, tracks: 60, clips: 80 },
@@ -286,6 +343,13 @@ mod tests {
             fixed_track_colour: true,
             recent_chips: true,
             returns_hidden: true,
+            replace_clip: true,
+            app_name_centered: true,
+            bar_project_name: false,
+            bar_project_timing: true,
+            bar_project_centered: false,
+            background_tint: 45,
+            background_blur: 20,
         };
         let settings = Settings { view, ..Settings::default() };
         let (read, warnings) = Settings::from_text(&settings.to_text());

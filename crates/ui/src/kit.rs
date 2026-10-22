@@ -9,6 +9,7 @@ pub mod gradient;
 pub mod liquid;
 pub mod logo;
 pub mod meter;
+pub mod mixer_controls;
 pub mod motion;
 pub mod surface;
 pub mod theme;

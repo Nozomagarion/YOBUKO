@@ -74,7 +74,7 @@ fn arrangement_header_surfaces_follow_custom_theme_tokens() {
                 &harness,
                 header,
                 suhina_ui::kit::motion::mix(
-                    suhina_ui::kit::motion::mix(custom.track_header_background, color, 0.82),
+                    suhina_ui::kit::motion::mix(custom.track_header_selected, color, 0.82),
                     theme::text_primary(),
                     0.07,
                 ),
@@ -85,6 +85,29 @@ fn arrangement_header_surfaces_follow_custom_theme_tokens() {
     theme::set_palette(&harness.ctx, previous);
     assert!(has_surface, "the header must tint the editable theme surface with its track color");
     assert!(neutral_volumes, "volume fills share the neutral theme colour regardless of track colour");
+}
+
+#[test]
+fn selected_header_uses_its_theme_surface_without_recolouring_the_track() {
+    let mut harness = arrangement();
+    let before = harness.state().session().unwrap().project().clone();
+    harness.get_by_label("Track Drums").click();
+    harness.run();
+    let previous = theme::palette();
+    let mut custom = previous;
+    custom.track_header_selected = Color32::from_rgb(180, 35, 110);
+    theme::set_palette(&harness.ctx, custom);
+    harness.run();
+    let header = harness.get_by_label("Track Drums").rect();
+    let expected = suhina_ui::kit::motion::mix(
+        suhina_ui::kit::motion::mix(custom.track_header_selected, default_drums(), 0.82),
+        custom.text_primary,
+        0.07,
+    );
+    let shown = filled_with(&harness, header, expected);
+    theme::set_palette(&harness.ctx, previous);
+    assert!(shown, "selected header must use track.headerSelectedBackground");
+    assert_eq!(harness.state().session().unwrap().project(), &before);
 }
 
 #[test]

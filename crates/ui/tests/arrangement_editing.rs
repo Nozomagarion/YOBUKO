@@ -104,3 +104,46 @@ fn ctrl_j_consolidates_the_selected_clip_and_undo_brings_it_back() {
     harness.run();
     assert_eq!(drums(&harness), before);
 }
+
+#[test]
+fn track_type_is_on_the_name_row_and_does_not_change_the_project() {
+    let mut project = demo_project();
+    project.tracks[0].content.notes = true;
+    project.tracks[0].content.audio = false;
+    project.tracks[1].content.notes = false;
+    project.tracks[1].content.audio = true;
+    project.tracks[2].content.notes = true;
+    project.tracks[2].content.audio = true;
+    let mut harness = arrangement(Session::new(project));
+    for (name, kind) in [("Drums", "MIDI track"), ("Bass", "Audio track"), ("Keys", "MIDI and audio track")] {
+        let marker = harness.get_by_label(&format!("{name}: {kind}")).rect();
+        let mute = harness.get_by_label(&format!("Turn {name} off")).rect();
+        assert!(marker.bottom() <= mute.top());
+    }
+    let before = harness.state().session().map(|s| s.project().clone());
+    let marker = harness.get_by_label("Drums: MIDI track").rect();
+    harness.hover_at(marker.center());
+    harness.run();
+    assert_eq!(harness.state().session().map(|s| s.project().clone()), before);
+}
+
+#[test]
+fn narrow_header_volume_starts_below_automation() {
+    let mut harness = arrangement(Session::new(demo_project()));
+    let ruler = harness.get_by_label("Ruler").rect();
+    let edge = egui::pos2(ruler.right(), ruler.bottom() + 30.0);
+    harness.hover_at(edge);
+    harness.run();
+    harness.drag_at(edge);
+    harness.hover_at(edge + egui::vec2(66.0, 0.0));
+    harness.run();
+    harness.drop_at(edge + egui::vec2(66.0, 0.0));
+    harness.run();
+    assert!(harness.state().arrangement().header_width < 300.0);
+    let automation = harness.get_by_label("Show automation of Drums").rect();
+    let volume = harness.get_by_label("Drums volume").rect();
+    let mute = harness.get_by_label("Turn Drums off").rect();
+    assert!(volume.top() >= automation.bottom());
+    assert!((volume.left() - automation.left()).abs() < 1.0);
+    assert!(volume.left() < mute.left());
+}

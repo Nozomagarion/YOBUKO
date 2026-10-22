@@ -17,7 +17,6 @@ suhina-device-sdk.workspace = true
 suhina-device-registry.workspace = true
 suhina-device-nam-amp-modeler.workspace = true
 suhina-device-nam-cab-loader.workspace = true
-suhina-device-bundle.workspace = true
 suhina-soundmap.workspace = true
 suhina-update.workspace = true
 serde_json.workspace = true
@@ -25,9 +24,9 @@ memory-stats.workspace = true
 egui = "0.36"  # MIT OR Apache-2.0
 # Draws the logo from its SVG paths; already in the tree through winit on Linux.
 tiny-skia = { version = "0.11", default-features = false, features = ["std"] }  # BSD-3-Clause
+image = { version = "0.25.10", default-features = false, features = ["png"] } # MIT OR Apache-2.0; bounded user background decoding
 
 [dev-dependencies]
-image = { version = "0.25.10", default-features = false, features = ["png"] } # MIT OR Apache-2.0; SDK artwork fixture
 egui_kittest = { version = "0.36", features = ["wgpu", "snapshot"] }  # MIT OR Apache-2.0
 hound.workspace = true
 suhina-output.workspace = true  # tests that preview through a real audio device

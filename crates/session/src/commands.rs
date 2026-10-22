@@ -60,6 +60,7 @@ impl ParamType {
             Self::Notes => "notes",
             Self::Numbers => "numbers",
             Self::Clips => "clips",
+            Self::Range => "range",
             Self::Clip => "clip",
             Self::DevicePath => "device path",
         }
@@ -107,6 +108,8 @@ pub enum ParamType {
     Numbers,
     /// A list of arrangement clips, each `{ "clip": id }` or (deprecated) `{ "track": …, "index": n }`.
     Clips,
+    /// A range of beats, `{start, end}` from the arrangement's start.
+    Range,
     /// A clip id (integer, from `project.clips` or `project.launcher`) or a clip name (string) that
     /// only one clip has.
     Clip,
@@ -293,6 +296,7 @@ impl<T> CommandSpec<T> {
                 ParamType::Bool => json!("boolean"),
                 ParamType::Track | ParamType::Clip | ParamType::DevicePath => json!(["integer", "string"]),
                 ParamType::Decibels => json!(["number", "string"]),
+                ParamType::Range => json!("object"),
                 ParamType::Text => json!("string"),
             };
             properties.insert(p.name.to_string(), json!({ "type": ty, "description": p.doc }));
@@ -748,6 +752,7 @@ static COMMANDS: &[CommandSpec] = &[
                 "instead of start: the scene, from 1, whose slot on the track takes the clip",
             ),
             optional("stack", ParamType::Bool, "with start, true leaves clips under it as they are"),
+            optional("replace", ParamType::Clip, "with track and start, remove this destination clip before pasting"),
         ],
         kind: CommandKind::Edit,
         run: paste_clip,
@@ -1609,6 +1614,41 @@ static COMMANDS: &[CommandSpec] = &[
         ],
         kind: CommandKind::Edit,
         run: files::add_track,
+    },
+    CommandSpec {
+        id: "project.export",
+        label: "Render the mix, or the named node of the track tree, to an audio file: wav (32-bit float or 16/24-bit PCM), flac or ogg, with sample rate, depth, range, tail, normalise and dither",
+        params: &[
+            optional(
+                "path",
+                ParamType::Text,
+                "the file to write (output is an alias); its extension decides the format when format is left out",
+            ),
+            optional("output", ParamType::Text, "the file to write; an alias of path"),
+            optional("format", ParamType::Text, "wav (default), flac or ogg"),
+            optional("sample_rate", ParamType::Integer, "hertz; 48000 by default"),
+            optional("bit_depth", ParamType::Text, "32f (the default for wav), 24 or 16"),
+            optional("overwrite", ParamType::Bool, "true replaces an existing file; it is never replaced without this"),
+            optional(
+                "range",
+                ParamType::Range,
+                "the beats to render, {start, end} from the arrangement's start; the whole arrangement when left out",
+            ),
+            optional("tail", ParamType::Number, "extra beats rendered after the range's end"),
+            optional("normalize", ParamType::Bool, "true scales the file's peak to -0.3 dBFS"),
+            optional(
+                "dither",
+                ParamType::Bool,
+                "triangular dither for a reduced depth; on there, off at 32f, by default",
+            ),
+            optional(
+                "source",
+                ParamType::Track,
+                "the track or group of the track tree to render, instead of the whole mix (id or name)",
+            ),
+        ],
+        kind: CommandKind::Read,
+        run: crate::export::export,
     },
     CommandSpec {
         id: "project.missingFiles",
@@ -3520,6 +3560,10 @@ fn paste_clip(session: &mut Session, params: &Value) -> Result<Value, CommandErr
         None => false,
         Some(v) => v.as_bool().ok_or("stack must be true or false")?,
     };
+    let replace = params.get("replace").map(|value| clip_param(&session.project, value)).transpose()?;
+    if replace.is_some() && (params.get("track").is_none() || !matches!(at, PasteAt::Beat(_))) {
+        return Err("replace requires an arrangement track and start".into());
+    }
     // No track: each copied clip goes back to the track it came from.
     if params.get("track").is_none()
         && let PasteAt::Beat(start) = at
@@ -3582,6 +3626,14 @@ fn paste_clip(session: &mut Session, params: &Value) -> Result<Value, CommandErr
             p.arrangement.lanes.len() - 1
         }
     };
+    if let Some(replace) = replace {
+        let clips = &mut p.arrangement.lanes.get_mut(lane).ok_or("the lane is missing")?.clips;
+        let index = clips
+            .iter()
+            .position(|clip| clip.id == replace)
+            .ok_or("the replacement clip is not on the destination track")?;
+        clips.remove(index);
+    }
     let mut placed: Vec<Value> = Vec::with_capacity(copied.len());
     for (clip, content) in copied {
         // The copy plays its own content, so editing one does not change the other.

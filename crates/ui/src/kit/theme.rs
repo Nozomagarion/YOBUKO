@@ -89,9 +89,21 @@ palette! {
     text_value, "text.value", 0xC9C4BB,
         "Clip names and values on fields";
     text_inverse, "text.inverse", 0x1D1C1A,
-        "Text on light or lit fills: a switch's chosen option, a lit button, a light track colour";
+        "Text on lit fills: a switch's chosen option, a lit button";
     text_playing, "text.playing", 0xFFFFFF,
         "The name of a playing clip";
+    text_on_color_light, "text.onColorLight", 0xECE8E1,
+        "Light text on dark coloured tracks, returns and clips; paired with text.onColorDark for contrast";
+    text_on_color_dark, "text.onColorDark", 0x1D1C1A,
+        "Dark text on bright coloured tracks, returns and clips; paired with text.onColorLight for contrast";
+    browser_text_primary, "browser.text.primary", 0xECE8E1,
+        "Browser selection, search input and highlighted names";
+    browser_text_secondary, "browser.text.secondary", 0x9A958C,
+        "Browser item names, categories and preview labels";
+    browser_text_hint, "browser.text.hint", 0x66625B,
+        "Browser section headings, search placeholder and hints";
+    browser_text_value, "browser.text.value", 0xC9C4BB,
+        "Browser values and active preview controls";
     accent, "accent", 0xA6A3FF,
         "The playhead, queued clips, a key being set";
     selection, "selection", 0xE3C86A,
@@ -238,7 +250,7 @@ pub const BUILT_IN: &str = "suhina-dark";
 /// The themes that come with Suhina besides Suhina Dark, as theme files: id and text.
 /// Dracula, Nord, Catppuccin and Solarized are popular open palettes (MIT, their licences in
 /// `themes/licenses/`), mapped onto Suhina's tokens.
-const BUILT_IN_FILES: [(&str, &str); 10] = [
+const BUILT_IN_FILES: [(&str, &str); 12] = [
     ("suhina-studio-dark", include_str!("../../themes/suhina-studio-dark.json")),
     ("suhina-studio-light", include_str!("../../themes/suhina-studio-light.json")),
     ("editor-dark", include_str!("../../themes/editor-dark.json")),
@@ -249,6 +261,8 @@ const BUILT_IN_FILES: [(&str, &str); 10] = [
     ("catppuccin-mocha", include_str!("../../themes/catppuccin-mocha.json")),
     ("catppuccin-latte", include_str!("../../themes/catppuccin-latte.json")),
     ("solarized-dark", include_str!("../../themes/solarized-dark.json")),
+    ("suhina-glass", include_str!("../../themes/suhina-glass.json")),
+    ("suhina-forest-amber", include_str!("../../themes/suhina-forest-amber.json")),
 ];
 
 /// The themes that come with Suhina, Suhina Dark first, with their ids. They do not change;
@@ -271,6 +285,7 @@ pub fn is_built_in(id: &str) -> bool {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Theme {
+    pub transparent_rgb: std::collections::BTreeMap<String, [u8; 3]>,
     pub name: String,
     pub colors: Palette,
     /// None inherits the application's global material strengths.
@@ -280,11 +295,27 @@ pub struct Theme {
 
 impl Default for Theme {
     fn default() -> Self {
-        Self { name: "Suhina Dark".into(), colors: Palette::DARK, liquid: None, gradients: Default::default() }
+        Self {
+            name: "Suhina Dark".into(),
+            colors: Palette::DARK,
+            liquid: None,
+            gradients: Default::default(),
+            transparent_rgb: Default::default(),
+        }
     }
 }
 
 impl Theme {
+    pub fn rgba(&self, key: &str, color: Color32) -> [u8; 4] {
+        let mut rgba = color.to_srgba_unmultiplied();
+        if color.a() == 0
+            && let Some(rgb) = self.transparent_rgb.get(key)
+        {
+            rgba[..3].copy_from_slice(rgb);
+        }
+        rgba
+    }
+
     /// Reads a theme file. Tokens it leaves out keep Suhina Dark's colour, so a file only needs
     /// the colours it changes; unknown tokens and values that are not `#RRGGBB` or `#RRGGBBAA` are skipped with
     /// a warning. A `"$schema"` or `"description"` is allowed and ignored.
@@ -304,9 +335,18 @@ impl Theme {
         match root.get("colors") {
             Some(Value::Object(colors)) => {
                 for (key, value) in colors {
+                    let canonical = RENAMED.iter().find(|(old, _)| *old == key).map_or(key.as_str(), |(_, new)| *new);
                     let parsed = value.as_str().and_then(parse_hex);
-                    match (theme.colors.token_mut(key), parsed) {
-                        (Some(slot), Some(color)) => *slot = color,
+                    match (theme.colors.token_mut(canonical), parsed) {
+                        (Some(slot), Some(color)) => {
+                            *slot = color;
+                            theme.transparent_rgb.remove(canonical);
+                            if let Some([r, g, b, 0]) = value.as_str().and_then(parse_rgba)
+                                && [r, g, b] != [0, 0, 0]
+                            {
+                                theme.transparent_rgb.insert(canonical.to_string(), [r, g, b]);
+                            }
+                        }
                         (None, _) => warnings.push(format!("{key} is not a colour token")),
                         (Some(_), None) => {
                             warnings.push(format!("{key}: {value} is not a #RRGGBB or #RRGGBBAA colour"))
@@ -323,10 +363,35 @@ impl Theme {
                 // Older files drew these with a background and a text colour.
                 if !colors.contains_key("text.inverse") {
                     let [r, g, b, _] = theme.colors.window_background.to_srgba_unmultiplied();
+                    let [r, g, b] = theme.transparent_rgb.get("window.background").copied().unwrap_or([r, g, b]);
                     theme.colors.text_inverse = Color32::from_rgb(r, g, b);
                 }
                 if !colors.contains_key("control.selectedBackground") {
                     theme.colors.control_selected = theme.colors.text_value;
+                }
+                // Keep old themes visually identical until these independent roles are edited.
+                for (key, source, value) in [
+                    ("browser.text.primary", "text.primary", theme.colors.text_primary),
+                    ("browser.text.secondary", "text.secondary", theme.colors.text_secondary),
+                    ("browser.text.hint", "text.hint", theme.colors.text_hint),
+                    ("browser.text.value", "text.value", theme.colors.text_value),
+                    ("text.onColorLight", "text.primary", theme.colors.text_primary),
+                    ("text.onColorDark", "window.background", theme.colors.window_background),
+                ] {
+                    if !colors.contains_key(key)
+                        && let Some(slot) = theme.colors.token_mut(key)
+                    {
+                        *slot = value;
+                        if let Some(rgb) = theme.transparent_rgb.get(source).copied() {
+                            theme.transparent_rgb.insert(key.to_string(), rgb);
+                        }
+                    }
+                }
+                // Text never takes a see-through background's alpha.
+                if !colors.contains_key("text.onColorDark") {
+                    let [r, g, b, _] = theme.colors.text_on_color_dark.to_srgba_unmultiplied();
+                    let [r, g, b] = theme.transparent_rgb.remove("text.onColorDark").unwrap_or([r, g, b]);
+                    theme.colors.text_on_color_dark = Color32::from_rgb(r, g, b);
                 }
             }
             Some(_) => warnings.push("the theme's colors are not an object".into()),
@@ -364,7 +429,7 @@ impl Theme {
             .colors
             .tokens()
             .into_iter()
-            .map(|(key, _, color)| (key.to_string(), Value::String(hex(color))))
+            .map(|(key, _, color)| (key.to_string(), Value::String(hex_rgba(self.rgba(key, color)))))
             .collect();
         let mut root = Map::new();
         root.insert("name".into(), Value::String(self.name.clone()));
@@ -442,28 +507,36 @@ An optional `liquid` object with `panels`, `tracks` and `clips` integers (0 to 1
 
 /// Opaque `#RRGGBB`, or `#RRGGBBAA` when opacity is present.
 pub fn hex(color: Color32) -> String {
-    let [r, g, b, a] = color.to_srgba_unmultiplied();
+    hex_rgba(color.to_srgba_unmultiplied())
+}
+
+pub fn hex_rgba([r, g, b, a]: [u8; 4]) -> String {
     if a == 255 { format!("#{r:02X}{g:02X}{b:02X}") } else { format!("#{r:02X}{g:02X}{b:02X}{a:02X}") }
 }
 
 /// Reads `#RRGGBB` or `#RRGGBBAA` (the `#` may be left out).
 pub fn parse_hex(text: &str) -> Option<Color32> {
+    let [r, g, b, a] = parse_rgba(text)?;
+    Some(Color32::from_rgba_unmultiplied(r, g, b, a))
+}
+
+pub fn parse_rgba(text: &str) -> Option<[u8; 4]> {
     let digits = text.trim().strip_prefix('#').unwrap_or(text.trim());
     if !matches!(digits.len(), 6 | 8) || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
     }
     let value = u32::from_str_radix(digits, 16).ok()?;
     Some(if digits.len() == 6 {
-        rgb(value)
+        [(value >> 16) as u8, (value >> 8) as u8, value as u8, 255]
     } else {
-        Color32::from_rgba_unmultiplied((value >> 24) as u8, (value >> 16) as u8, (value >> 8) as u8, value as u8)
+        [(value >> 24) as u8, (value >> 16) as u8, (value >> 8) as u8, value as u8]
     })
 }
 
-/// Text drawn on `fill`: `text.primary` or `text.inverse`, whichever stands out more from it, so
-/// a name stays readable on any track colour of any theme.
+/// Text drawn on `fill`: the independent light or dark coloured-surface text role, whichever stands out more from
+/// it, so a name stays readable on any track colour of any theme.
 pub fn text_on(fill: Color32) -> Color32 {
-    let (light, dark) = (text_primary(), text_inverse());
+    let (light, dark) = (text_on_color_light(), text_on_color_dark());
     if contrast(fill, light) >= contrast(fill, dark) { light } else { dark }
 }
 
@@ -609,6 +682,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn transparent_rgb_survives_theme_round_trip() {
+        let (theme, warnings) = Theme::from_json(r##"{"colors":{"text.primary":"#FF804000"}}"##);
+        assert!(warnings.is_empty());
+        assert_eq!(theme.rgba("text.primary", theme.colors.text_primary), [255, 128, 64, 0]);
+        let (restored, warnings) = Theme::from_json(&theme.to_json());
+        assert!(warnings.is_empty());
+        assert_eq!(restored, theme);
+    }
+
+    #[test]
+    fn legacy_and_inherited_transparent_colours_keep_rgb_when_saved() {
+        let (theme, warnings) =
+            Theme::from_json(r##"{"colors":{"surface.0":"#FF804000","text.primary":"#20A04000"}}"##);
+        assert!(warnings.is_empty());
+        let saved: Value = serde_json::from_str(&theme.to_json()).unwrap();
+        assert_eq!(saved["colors"]["window.background"], "#FF804000");
+        // Text inherits the background's colour but never its alpha: it would vanish.
+        assert_eq!(saved["colors"]["text.onColorDark"], "#FF8040");
+        for key in ["text.primary", "browser.text.primary", "text.onColorLight"] {
+            assert_eq!(saved["colors"][key], "#20A04000");
+        }
+        assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
+        let (theme, warnings) =
+            Theme::from_json(r##"{"colors":{"surface.0":"#FF804000","window.background":"#00000000"}}"##);
+        assert!(warnings.is_empty());
+        assert_eq!(theme.rgba("window.background", theme.colors.window_background), [0, 0, 0, 0]);
+    }
+
+    #[test]
     fn translucent_theme_colours_preserve_alpha_in_files() {
         for colour in [Color32::from_rgba_unmultiplied(100, 150, 200, 128), Color32::TRANSPARENT, rgb(0xAABBCC)] {
             assert_eq!(parse_hex(&hex(colour)), Some(colour));
@@ -681,8 +783,13 @@ mod tests {
 
     #[test]
     fn a_theme_survives_a_round_trip() {
-        let mut theme =
-            Theme { name: "Night".into(), colors: Palette::DARK, liquid: None, gradients: Default::default() };
+        let mut theme = Theme {
+            name: "Night".into(),
+            colors: Palette::DARK,
+            liquid: None,
+            gradients: Default::default(),
+            transparent_rgb: Default::default(),
+        };
         theme.colors.accent = rgb(0x12AB9F);
         theme.colors.window_background = rgb(0x000000);
         assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
@@ -834,6 +941,27 @@ mod tests {
         }
         assert_eq!(text_on(rgb(0x202020)), text_primary());
         assert!((contrast(rgb(0x000000), rgb(0xFFFFFF)) - 21.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn independent_text_roles_round_trip_and_old_themes_keep_their_colours() {
+        let (mut theme, warnings) = Theme::from_json(
+            r##"{"colors":{"text.primary":"#EEDDAA","text.secondary":"#998877","window.background":"#112233"}}"##,
+        );
+        assert!(warnings.is_empty());
+        assert_eq!(theme.colors.browser_text_primary, theme.colors.text_primary);
+        assert_eq!(theme.colors.browser_text_secondary, theme.colors.text_secondary);
+        assert_eq!(theme.colors.text_on_color_dark, theme.colors.window_background);
+        theme.colors.browser_text_primary = rgb(0x55AAFF);
+        theme.colors.text_on_color_dark = rgb(0x445566);
+        let (restored, warnings) = Theme::from_json(&theme.to_json());
+        assert!(warnings.is_empty());
+        assert_eq!(restored.colors, theme.colors);
+        let ctx = egui::Context::default();
+        set_palette(&ctx, restored.colors);
+        assert_eq!(text_on(rgb(0xFFFFFF)), rgb(0x445566));
+        assert_eq!(browser_text_primary(), rgb(0x55AAFF));
+        set_palette(&ctx, Palette::DARK);
     }
 
     #[test]

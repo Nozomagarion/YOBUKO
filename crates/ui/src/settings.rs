@@ -4,6 +4,7 @@
 //! The user's settings: what they are, their defaults, and the text file they are kept in
 //! (`key = value` lines, so a person can read and fix it). The app decides where the file lives.
 
+mod gradient_editor;
 pub mod keymap;
 pub mod plugin_manager;
 mod settings_rows;
@@ -258,6 +259,8 @@ pub const ZOOM_STEP: u32 = 10;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
+    /// User-owned PNG beneath translucent surfaces; never captures the desktop.
+    pub background_image: String,
     pub animations: bool,
     pub track_headers: Side,
     pub graphics: Graphics,
@@ -358,12 +361,17 @@ pub struct Settings {
     /// Agents may connect over MCP and work on the open projects (ADR 0028); off until the person
     /// turns it on.
     pub agents: bool,
+    /// Attached agents may write within the project folder, including subfolders.
+    pub mcp_project_folder: bool,
+    /// Additional write folders granted by the person, including subfolders.
+    pub mcp_write_folders: Vec<String>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
             animations: true,
+            background_image: String::new(),
             track_headers: Side::Right,
             graphics: Graphics::Gpu,
             sample_stacking: false,
@@ -414,6 +422,8 @@ impl Default for Settings {
             backup: suhina_session::backup::Interval::default(),
             backup_clean_up: true,
             agents: false,
+            mcp_project_folder: true,
+            mcp_write_folders: Vec::new(),
         }
     }
 }
@@ -560,7 +570,10 @@ impl Settings {
             },
             piano_toolbar = self.toolbar_size.param(),
         ) + &self.view.to_text()
+            + &format!("background_image = {}\n", self.background_image.replace(['\r', '\n'], ""))
             + &format!("agents = {}\n", if self.agents { "on" } else { "off" })
+            + &format!("mcp_project_folder = {}\n", if self.mcp_project_folder { "on" } else { "off" })
+            + &format!("mcp_write_folders = {}\n", serde_json::json!(self.mcp_write_folders))
             + &self.updates.to_text()
             + &self.midi_inputs_off.iter().map(|port| format!("midi_input_off = {port}\n")).collect::<String>()
     }
@@ -585,8 +598,16 @@ impl Settings {
             }
             match (key, value) {
                 ("animations", "on" | "off") => settings.animations = value == "on",
+                ("background_image", path) => settings.background_image = path.to_string(),
                 ("sample_stacking", "on" | "off") => settings.sample_stacking = value == "on",
                 ("agents", "on" | "off") => settings.agents = value == "on",
+                ("mcp_project_folder", "on" | "off") => settings.mcp_project_folder = value == "on",
+                ("mcp_write_folders", folders) => match serde_json::from_str::<Vec<String>>(folders) {
+                    Ok(folders) => settings.mcp_write_folders = folders,
+                    Err(_) => {
+                        warnings.push(format!("settings line {}: expected a list of MCP write folders", number + 1))
+                    }
+                },
                 ("midi_stacking", "on" | "off") => settings.midi_stacking = value == "on",
                 ("track_headers", "left") => settings.track_headers = Side::Left,
                 ("track_headers", "right") => settings.track_headers = Side::Right,
@@ -866,6 +887,7 @@ midi_input_off = Keys
             mixer_controls: MixerControls::Knob,
             plugin_editors: EditorPlacement::DeviceView,
             theme: "Night blue".into(),
+            background_image: "C:/Pictures/background.png".into(),
             projects_folder: "C:/Music/Songs = mine".into(),
             templates_folder: "/home/me/templates".into(),
             nam_models_folder: "/home/me/nam models".into(),
@@ -897,6 +919,8 @@ midi_input_off = Keys
             backup: suhina_session::backup::Interval::Minutes(240),
             backup_clean_up: false,
             agents: true,
+            mcp_project_folder: false,
+            mcp_write_folders: vec![r"C:\Music\Mixes = mine".into(), "/tmp/renders".into()],
         };
         assert_eq!(Settings::from_text(&settings.to_text()), (settings, Vec::new()));
         assert_eq!(Settings::from_text(&Settings::default().to_text()).0, Settings::default());

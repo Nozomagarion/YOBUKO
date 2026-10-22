@@ -12,6 +12,23 @@ use super::{motion, theme};
 pub struct Stop {
     pub position: u8,
     pub color: Color32,
+    pub transparent_rgb: Option<[u8; 3]>,
+}
+
+impl Stop {
+    pub fn rgba(&self) -> [u8; 4] {
+        let mut rgba = self.color.to_srgba_unmultiplied();
+        if rgba[3] == 0
+            && let Some(rgb) = self.transparent_rgb
+        {
+            rgba[..3].copy_from_slice(&rgb);
+        }
+        rgba
+    }
+    pub fn set_rgba(&mut self, [r, g, b, a]: [u8; 4]) {
+        self.transparent_rgb = (a == 0).then_some([r, g, b]);
+        self.color = Color32::from_rgba_unmultiplied(r, g, b, a);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -26,8 +43,8 @@ impl Default for Gradient {
         Self {
             angle: 90,
             stops: vec![
-                Stop { position: 0, color: Color32::from_white_alpha(48) },
-                Stop { position: 100, color: Color32::from_black_alpha(40) },
+                Stop { transparent_rgb: None, position: 0, color: Color32::from_white_alpha(48) },
+                Stop { transparent_rgb: None, position: 100, color: Color32::from_black_alpha(40) },
             ],
         }
     }
@@ -69,7 +86,7 @@ impl Gradients {
                 root.insert(
                     name.into(),
                     json!({"angle":value.angle,"stops":value.stops.iter().map(|stop|
-                    json!({"position":stop.position,"color":theme::hex(stop.color)})
+                    json!({"position":stop.position,"color":theme::hex_rgba(stop.rgba())})
                 ).collect::<Vec<_>>()}),
                 );
             }
@@ -84,7 +101,9 @@ impl Gradient {
         let values = value.get("stops")?.as_array().filter(|stops| (2..=8).contains(&stops.len()))?;
         let mut stops = Vec::with_capacity(values.len());
         for value in values {
+            let rgba = theme::parse_rgba(value.get("color")?.as_str()?)?;
             stops.push(Stop {
+                transparent_rgb: (rgba[3] == 0).then_some([rgba[0], rgba[1], rgba[2]]),
                 position: value.get("position")?.as_u64().filter(|position| *position <= 100)? as u8,
                 color: theme::parse_hex(value.get("color")?.as_str()?)?,
             });
@@ -107,8 +126,8 @@ impl Gradient {
             |point: egui::Pos2| ((point - rect.center()).dot(direction) / (2.0 * radius) + 0.5).clamp(0.0, 1.0);
         let first = stops[0].color;
         let last = stops[stops.len() - 1].color;
-        stops.insert(0, Stop { position: 0, color: first });
-        stops.push(Stop { position: 100, color: last });
+        stops.insert(0, Stop { transparent_rgb: None, position: 0, color: first });
+        stops.push(Stop { transparent_rgb: None, position: 100, color: last });
         for pair in stops.windows(2) {
             let low = f32::from(pair[0].position.min(100)) / 100.0;
             let high = f32::from(pair[1].position.min(100)) / 100.0;
@@ -152,13 +171,29 @@ mod tests {
     use egui::pos2;
 
     #[test]
+    fn transparent_stop_keeps_its_hue_on_disk_and_when_opacity_returns() {
+        let mut warnings = Vec::new();
+        let mut gradients = Gradients::from_json(
+            &json!({"panels":{"angle":90,"stops":[{"position":0,"color":"#FA802000"},{"position":100,"color":"#FFFFFF"}]}}),
+            &mut warnings,
+        );
+        assert!(warnings.is_empty());
+        assert_eq!(gradients.to_json()["panels"]["stops"][0]["color"], "#FA802000");
+        let stop = &mut gradients.panels.as_mut().unwrap().stops[0];
+        let mut rgba = stop.rgba();
+        rgba[3] = 255;
+        stop.set_rgba(rgba);
+        assert_eq!(stop.color, Color32::from_rgb(250, 128, 32));
+    }
+
+    #[test]
     fn diagonal_stops_keep_exact_colours_and_bounded_geometry() {
         let gradient = Gradient {
             angle: 37,
             stops: vec![
-                Stop { position: 0, color: Color32::RED },
-                Stop { position: 43, color: Color32::from_white_alpha(100) },
-                Stop { position: 100, color: Color32::BLUE },
+                Stop { transparent_rgb: None, position: 0, color: Color32::RED },
+                Stop { transparent_rgb: None, position: 43, color: Color32::from_white_alpha(100) },
+                Stop { transparent_rgb: None, position: 100, color: Color32::BLUE },
             ],
         };
         let rect = Rect::from_min_max(pos2(10.0, 20.0), pos2(310.0, 100.0));

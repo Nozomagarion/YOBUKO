@@ -58,6 +58,12 @@
     "track.headerBackground": "#0A0A0A",
     "track.headerSelectedBackground": "#3A3A3A",
     "grid.major": "#3B3B3B",
-    "grid.minor": "#1A1A1A"
+    "grid.minor": "#1A1A1A",
+    "browser.text.primary": "#FFFFFF",
+    "browser.text.secondary": "#E0E0E0",
+    "browser.text.hint": "#B0B0B0",
+    "browser.text.value": "#FFFFFF",
+    "text.onColorLight": "#FFFFFF",
+    "text.onColorDark": "#000000"
   }
 }

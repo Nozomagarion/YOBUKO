@@ -188,6 +188,27 @@ pub(crate) static ROWS: &[Entry] = &[
         &["developer_mode"],
         |cx, r| cx.on_off(r, |s| &mut s.updates.developer),
     ),
+    // Export.
+    row(
+        Page::Export,
+        "MCP write permissions",
+        "Allow the project's folder",
+        "Includes subfolders; turn off to revoke this default permission",
+        &["mcp_project_folder"],
+        |cx, r| {
+            let note = cx.about.mcp_project_folder.as_deref().unwrap_or("No saved project folder").to_string();
+            cx.note(format!("{note} (including subfolders)"));
+            cx.on_off(r, |s| &mut s.mcp_project_folder);
+        },
+    ),
+    block(
+        Page::Export,
+        "MCP write permissions",
+        "MCP allowed write folders",
+        "Add or remove folders; includes subfolders. Applies to MCP writes, not File > Export.",
+        &["mcp_write_folders"],
+        |cx, y| cx.mcp_write_folders(y),
+    ),
     // Audio.
     block(
         Page::Audio,
@@ -485,6 +506,14 @@ pub(crate) static ROWS: &[Entry] = &[
     ),
     // Session view and mixer.
     row(
+        Page::Arrangement,
+        "Pasting",
+        "Replace clip",
+        "Paste onto a selected clip at its start and remove that destination clip; off pastes after it",
+        &["replace_clip"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.replace_clip),
+    ),
+    row(
         Page::Session,
         "Launching",
         "Select on launch",
@@ -653,6 +682,64 @@ pub(crate) static ROWS: &[Entry] = &[
         cx.tag_limit(r, &options);
     }),
     // Appearance.
+    row(
+        Page::Appearance,
+        "Background",
+        "Background image",
+        "Choose your own PNG; desktop icons and other windows are never captured. Empty removes the image",
+        &["background_image"],
+        |cx, r| {
+            cx.folder(r, "No image", crate::interaction::pick::PickField::BackgroundImage, |s| &mut s.background_image)
+        },
+    ),
+    row(
+        Page::Appearance,
+        "Background",
+        "Surface opacity",
+        "Tint over the background image; 100% makes neutral panels solid",
+        &["background_tint"],
+        |cx, r| cx.colour_strength(r, |s| &mut s.view.background_tint),
+    ),
+    row(
+        Page::Appearance,
+        "Background",
+        "Background blur",
+        "Blur the chosen image; no live desktop capture",
+        &["background_blur"],
+        |cx, r| cx.background_blur(r),
+    ),
+    row(
+        Page::Appearance,
+        "Application bar",
+        "Application name position",
+        "Suhina is always shown",
+        &["app_name_centered"],
+        |cx, r| cx.choose(r, &[("Left", false), ("Centre", true)], |s| &mut s.view.app_name_centered),
+    ),
+    row(
+        Page::Appearance,
+        "Application bar",
+        "Show project name",
+        "Show the active project and its unsaved marker",
+        &["bar_project_name"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.bar_project_name),
+    ),
+    row(
+        Page::Appearance,
+        "Application bar",
+        "Show project timing",
+        "Show the active project's tempo and time signature",
+        &["bar_project_timing"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.bar_project_timing),
+    ),
+    row(
+        Page::Appearance,
+        "Application bar",
+        "Project information position",
+        "Fields sharing the same position appear together",
+        &["bar_project_centered"],
+        |cx, r| cx.choose(r, &[("Left", false), ("Centre", true)], |s| &mut s.view.bar_project_centered),
+    ),
     row(
         Page::Appearance,
         "Liquid (experimental)",

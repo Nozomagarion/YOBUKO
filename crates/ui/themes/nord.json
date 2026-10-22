@@ -58,6 +58,12 @@
     "track.headerBackground": "#3B4252",
     "track.headerSelectedBackground": "#4C566A",
     "grid.major": "#383F4E",
-    "grid.minor": "#333946"
+    "grid.minor": "#333946",
+    "browser.text.primary": "#ECEFF4",
+    "browser.text.secondary": "#D8DEE9",
+    "browser.text.hint": "#7B88A1",
+    "browser.text.value": "#E5E9F0",
+    "text.onColorLight": "#ECEFF4",
+    "text.onColorDark": "#2E3440"
   }
 }

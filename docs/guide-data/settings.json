@@ -402,6 +402,47 @@
       "workInProgress": false
     },
     {
+      "id": "Export/MCP write permissions/mcp_project_folder",
+      "page": "Export",
+      "section": "MCP write permissions",
+      "name": "Allow the project's folder",
+      "note": "Includes subfolders; turn off to revoke this default permission",
+      "keys": [
+        "mcp_project_folder"
+      ],
+      "sourceFingerprint": "30c921230b0703d21dfd0b270f2a1d20be0509af39997d58f693e0edde8b9e3a",
+      "helpStatus": "reviewed",
+      "description": "Allow attached agents to write in the folder of the project they act on, including its subfolders. This is on by default. Turn it off to require an explicitly added folder for writes. An unsaved project has no project folder. This does not restrict exports you choose yourself in File > Export.",
+      "options": [
+        {
+          "name": "On",
+          "description": "Allow writes in the project's folder and its subfolders."
+        },
+        {
+          "name": "Off",
+          "description": "Allow writes only in explicitly added folders."
+        }
+      ],
+      "whenToChange": "Turn this off when agents should write only to a separate export folder.",
+      "workInProgress": false
+    },
+    {
+      "id": "Export/MCP write permissions/mcp_write_folders",
+      "page": "Export",
+      "section": "MCP write permissions",
+      "name": "MCP allowed write folders",
+      "note": "Add or remove folders; includes subfolders. Applies to MCP writes, not File > Export.",
+      "keys": [
+        "mcp_write_folders"
+      ],
+      "sourceFingerprint": "45a8a72936ca1d790f8f8401e7783728baeed19cb5501dc650db86e4fc3d732b",
+      "helpStatus": "reviewed",
+      "description": "Choose the folders where attached agents may save projects and export audio. Add folder opens the system folder picker; Remove revokes that folder's grant. Each grant includes subfolders and is saved across restarts. Missing folders grant no access. Agents cannot change these permissions. Revocation applies to new operations and exports still gathering plug-in state, but does not cancel a render already running.",
+      "options": [],
+      "whenToChange": "Add a destination before asking an agent to export outside your project folder, or to export an unsaved project. Remove folders when access is no longer needed.",
+      "workInProgress": false
+    },
+    {
       "id": "Audio/Output/audio_host,audio_device,audio_sample_rate,audio_buffer,audio_exclusive,audio_input",
       "page": "Audio",
       "section": "Output",
@@ -1220,6 +1261,31 @@
       "workInProgress": false
     },
     {
+      "id": "Arrangement/Pasting/replace_clip",
+      "page": "Arrangement",
+      "section": "Pasting",
+      "name": "Replace clip",
+      "note": "Paste onto a selected clip at its start and remove that destination clip; off pastes after it",
+      "keys": [
+        "replace_clip"
+      ],
+      "sourceFingerprint": "87531b7ddf069b2f2000f2a957f0e8b71945ac8c68a7868d28d57d4d3c9caadb",
+      "helpStatus": "reviewed",
+      "description": "When enabled, pasting with one arrangement clip selected removes that destination and places the clipboard clips at its start. Off pastes after the selected clip. Clicking empty arrangement space chooses that track and beat instead. Undo restores the replaced clip.",
+      "options": [
+        {
+          "name": "Off",
+          "description": "Paste after the selected clip."
+        },
+        {
+          "name": "On",
+          "description": "Replace the selected destination at its start."
+        }
+      ],
+      "whenToChange": "Enable when replacing phrases in place; leave off to append after a selected clip.",
+      "workInProgress": false
+    },
+    {
       "id": "Session/Launching/select_on_launch",
       "page": "Session",
       "section": "Launching",
@@ -1716,6 +1782,154 @@
       "workInProgress": false
     },
     {
+      "id": "Appearance/Background/background_image",
+      "page": "Appearance",
+      "section": "Background",
+      "name": "Background image",
+      "note": "Choose your own PNG; desktop icons and other windows are never captured. Empty removes the image",
+      "keys": [
+        "background_image"
+      ],
+      "sourceFingerprint": "37fdef83b1d8ad95be653aaa87d53ea35171ee01364be50a33cd91bf3b7a67a9",
+      "helpStatus": "reviewed",
+      "description": "Choose a user-owned PNG or type its path. Clear the field to remove it. The native window remains opaque: no desktop icons or other windows are captured. Images are decoded away from the UI thread, limited to 32 MiB and 8192 pixels per axis, and displayed at up to 1600 pixels per axis. High Contrast suppresses the image. If loading fails, repair the PNG and choose it again with Browse to retry; failures are not retried continuously.",
+      "options": [],
+      "whenToChange": "Choose an image when you want a private decorative backdrop behind neutral panels.",
+      "workInProgress": false
+    },
+    {
+      "id": "Appearance/Background/background_tint",
+      "page": "Appearance",
+      "section": "Background",
+      "name": "Surface opacity",
+      "note": "Tint over the background image; 100% makes neutral panels solid",
+      "keys": [
+        "background_tint"
+      ],
+      "sourceFingerprint": "c3d42417d2389b0c19dc7d63bc3468a577f8e716c7d75f479ff8ceeecf40d63b",
+      "helpStatus": "reviewed",
+      "description": "Set neutral main-window surface opacity over the selected background image, from 0 to 100 percent. At 100 percent opaque theme surfaces cover the image; lower values reveal it. Settings uses its original theme surface with Panel liquid independently. Text, controls, track and clip colours are unchanged. Has no effect without a loaded image.",
+      "options": [],
+      "whenToChange": "Increase for stronger separation and readability, or decrease to reveal more of your image.",
+      "workInProgress": false
+    },
+    {
+      "id": "Appearance/Background/background_blur",
+      "page": "Appearance",
+      "section": "Background",
+      "name": "Background blur",
+      "note": "Blur the chosen image; no live desktop capture",
+      "keys": [
+        "background_blur"
+      ],
+      "sourceFingerprint": "46d40d4788a13c70f2c73e35e80ac483697a4ce4864fe305151c15b60bc0db41",
+      "helpStatus": "reviewed",
+      "description": "Blur the selected image by 0 to 40 logical display pixels. The source is decoded once and cached; filtering runs in one background worker and obsolete results are discarded. Zero bypasses blur. It never samples the desktop. Has no effect without a loaded image.",
+      "options": [],
+      "whenToChange": "Increase when background details distract from text and controls.",
+      "workInProgress": false
+    },
+    {
+      "id": "Appearance/Application bar/app_name_centered",
+      "page": "Appearance",
+      "section": "Application bar",
+      "name": "Application name position",
+      "note": "Suhina is always shown",
+      "keys": [
+        "app_name_centered"
+      ],
+      "sourceFingerprint": "2b2b70626478e0673196c8faf63662e552b926ccfe67ad052b4a88b88b882c09",
+      "helpStatus": "reviewed",
+      "description": "Place the always-visible Suhina name at the left or centre of the application bar. Project fields have their own position; fields sharing a position appear together. Long project names are clipped before they overlap controls. On Linux and macOS the bar shows information only; native decorations provide the window controls.",
+      "options": [
+        {
+          "name": "Left",
+          "description": "Show Suhina on the left."
+        },
+        {
+          "name": "Centre",
+          "description": "Show Suhina in the centre."
+        }
+      ],
+      "whenToChange": "Choose the location you find easiest to identify when switching windows.",
+      "workInProgress": false
+    },
+    {
+      "id": "Appearance/Application bar/bar_project_name",
+      "page": "Appearance",
+      "section": "Application bar",
+      "name": "Show project name",
+      "note": "Show the active project and its unsaved marker",
+      "keys": [
+        "bar_project_name"
+      ],
+      "sourceFingerprint": "003c64294aad7b15d786b805eeb2663876544e6c47ffd27b81758dfae406bf03",
+      "helpStatus": "reviewed",
+      "description": "Show the active project name and its unsaved marker in the application bar. This affects only the optional project information; Suhina remains visible.",
+      "options": [
+        {
+          "name": "Off",
+          "description": "Hide the project name."
+        },
+        {
+          "name": "On",
+          "description": "Show the project name and unsaved marker."
+        }
+      ],
+      "whenToChange": "Enable when working with multiple projects or disable for a quieter bar.",
+      "workInProgress": false
+    },
+    {
+      "id": "Appearance/Application bar/bar_project_timing",
+      "page": "Appearance",
+      "section": "Application bar",
+      "name": "Show project timing",
+      "note": "Show the active project's tempo and time signature",
+      "keys": [
+        "bar_project_timing"
+      ],
+      "sourceFingerprint": "8fed4a07ee774c4258a053dc5b36ca121180223fa493f05c758918d0861f5332",
+      "helpStatus": "reviewed",
+      "description": "Show the active project tempo in beats per minute and its time signature in the application bar. The fields use Project information position and are omitted when no project is open.",
+      "options": [
+        {
+          "name": "Off",
+          "description": "Hide project timing."
+        },
+        {
+          "name": "On",
+          "description": "Show tempo and time signature."
+        }
+      ],
+      "whenToChange": "Enable for a compact timing reference alongside the project name.",
+      "workInProgress": false
+    },
+    {
+      "id": "Appearance/Application bar/bar_project_centered",
+      "page": "Appearance",
+      "section": "Application bar",
+      "name": "Project information position",
+      "note": "Fields sharing the same position appear together",
+      "keys": [
+        "bar_project_centered"
+      ],
+      "sourceFingerprint": "b851f1fbf4c5f277d0fdecb1a3c7d0430a1a58d2257842ef7c218a6991a87ac8",
+      "helpStatus": "reviewed",
+      "description": "Place enabled project fields at the left or centre, independently of the application name. Fields placed together share a single group and long names are clipped inside it.",
+      "options": [
+        {
+          "name": "Left",
+          "description": "Show project fields on the left."
+        },
+        {
+          "name": "Centre",
+          "description": "Show project fields in the centre."
+        }
+      ],
+      "whenToChange": "Choose Centre to separate project information from a left-aligned Suhina name.",
+      "workInProgress": false
+    },
+    {
       "id": "Appearance/Liquid (experimental)/liquid_panel_strength",
       "page": "Appearance",
       "section": "Liquid (experimental)",
@@ -1726,7 +1940,7 @@
       ],
       "sourceFingerprint": "df96bf57b722303c2540782940662b9338374d32e518ed9682958b1b260c394c",
       "helpStatus": "reviewed",
-      "description": "Controls the transparency and edge refraction of the Settings backdrop through the theme tint. A detached Settings window keeps a solid background. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio.",
+      "description": "Controls the transparency and edge refraction of the Settings backdrop through the theme tint. A detached Settings window keeps a solid background. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio. Strength controls remain editable without the GPU renderer; values are saved for later. The material itself requires GPU rendering and Animations; switch renderer and restart to see it. These global sliders are disabled while the current theme supplies liquid overrides. Enable Use global liquid settings in the theme editor to edit and apply them again.",
       "options": [],
       "whenToChange": "Increase this to preview a translucent Settings surface. Keep 0% for a flat surface.",
       "workInProgress": false
@@ -1742,7 +1956,7 @@
       ],
       "sourceFingerprint": "c7edd51b686a09733fa1ef2b588d87f3a9be5aea74c676b02e19e0cf7149c284",
       "helpStatus": "reviewed",
-      "description": "Controls reflections and edge refraction on MIDI and audio track headers. Track labels and controls are painted sharply afterward. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio.",
+      "description": "Controls reflections and edge refraction on MIDI and audio track headers. Track labels and controls are painted sharply afterward. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio. Strength controls remain editable without the GPU renderer; values are saved for later. The material itself requires GPU rendering and Animations; switch renderer and restart to see it. These global sliders are disabled while the current theme supplies liquid overrides. Enable Use global liquid settings in the theme editor to edit and apply them again.",
       "options": [],
       "whenToChange": "Increase this to add a reflective coating to track headers. Keep 0% for a flat surface.",
       "workInProgress": false
@@ -1758,7 +1972,7 @@
       ],
       "sourceFingerprint": "9058ef0b5cfa46c0200f80c00e601abeddacbbda69503fe8a24c07362f777d0b",
       "helpStatus": "reviewed",
-      "description": "Controls reflections and edge refraction on clip bodies. Notes, waveforms and labels are painted sharply afterward. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio.",
+      "description": "Controls reflections and edge refraction on clip bodies. Notes, waveforms and labels are painted sharply afterward. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio. Strength controls remain editable without the GPU renderer; values are saved for later. The material itself requires GPU rendering and Animations; switch renderer and restart to see it. These global sliders are disabled while the current theme supplies liquid overrides. Enable Use global liquid settings in the theme editor to edit and apply them again. Clip reflections and rims use a gentler optical range than panels to keep dense arrangements readable, including at 100 percent.",
       "options": [],
       "whenToChange": "Increase this to add a reflective coating to clips. Keep 0% for a flat surface.",
       "workInProgress": false
@@ -1865,7 +2079,7 @@
       ],
       "sourceFingerprint": "e516b56c81ec152dca39879226b7cfbb3e891000dd35765817c1a2276f974d9c",
       "helpStatus": "reviewed",
-      "description": "Select a preview card to apply a theme immediately. The active theme has a larger preview. Existing tracks and clips keep their stored colours. Edit current theme opens grouped colour controls with opacity for surface colours; editing a built-in creates a personal copy and changes save live. Tracks & clips sets the MIDI and audio colours used for future creations. Surface gradients offers independent Panel, Track and Clip overlays, each with a toggle, direction and 2–8 colour/opacity stops. Gradients work without GPU liquid, but reduced effects and high contrast suppress materials. Liquid inherits the global strengths unless Use global liquid settings is turned off to save per-theme overrides; GPU and accessibility restrictions still apply. Save as new theme creates another copy; Reset changes restores the palette captured on entering the editor and its liquid inheritance. Restore built-in offers Save a copy & restore, Restore without a copy, or Cancel restore; existing custom files remain in the library. More provides Duplicate, Reload, Open folder, Back up and Export template. Dropping a theme file or a zip of themes onto Suhina adds it. Interface changes do not alter audio.",
+      "description": "Select a preview card to apply a theme immediately. The active theme has a larger preview. Existing tracks and clips keep their stored colours. Edit current theme opens grouped colour controls with opacity for surface colours; editing a built-in creates a personal copy and changes save live. Tracks & clips sets the MIDI and audio colours used for future creations. Surface gradients offers independent Panel, Track and Clip overlays, each with a toggle, direction and 2–8 colour/opacity stops. Gradients work without GPU liquid, but reduced effects and high contrast suppress materials. Liquid inherits the global strengths unless Use global liquid settings is turned off to save per-theme overrides; GPU and accessibility restrictions still apply. Save as new theme creates another copy; Reset changes restores the palette captured on entering the editor and its liquid inheritance. Restore built-in offers Save a copy & restore, Restore without a copy, or Cancel restore; existing custom files remain in the library. More provides Duplicate, Reload, Open folder, Back up and Export template. Dropping a theme file or a zip of themes onto Suhina adds it. Interface changes do not alter audio. Select a numbered stop on the shared colour ramp, or drag it to set its position. Only the selected stop shows colour, position and opacity controls. Add selects the new stop; Remove deletes the selected stop while retaining at least two. Direction is separate below. Colour popups have an opaque background for readability.",
       "options": [],
       "whenToChange": "Choose a comfortable theme, then use Edit current theme to tailor its colours, gradients and liquid settings. Save a copy before restoring if you want an additional version of your current work.",
       "workInProgress": false

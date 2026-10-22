@@ -17,6 +17,7 @@ mod commands;
 mod device_groups;
 mod devices;
 mod editing;
+mod export;
 mod files;
 mod follow;
 mod launch;
@@ -52,6 +53,7 @@ pub use ara::ClipNotes;
 pub use audio::{AudioSystem, InputChoice, LiveOutput, OutputChoice, OutputInfo, audio_commands};
 pub use blank::blank_project;
 pub use commands::{CommandKind, CommandSpec, Param, ParamType, Run, commands, parse_quantization};
+pub use export::{ExportData, ExportGather, export_from};
 pub use files::{MAX_FILES, file_tempo};
 pub use library::{Category, Found, file_info, library_commands, search_items};
 pub use mapping::{MAX_MAPPINGS, mapped_command, target_exists};
@@ -940,6 +942,15 @@ impl Session {
         self.plugins.report(key)
     }
 
+    /// Has the plug-in device at `path` on `track` list its parameters again in the background,
+    /// for its generated panel, when its list is a couple of seconds old
+    /// ([`rack::Rack::list_params`]).
+    pub fn list_plugin_params_at(&mut self, track: suhina_model::TrackId, path: &[usize]) {
+        if let Some(key) = plugin_key_at_path(&self.project, track, path) {
+            self.plugins.list_params(key);
+        }
+    }
+
     pub fn player(&self) -> Option<&Player> {
         self.player.as_ref()
     }
@@ -1103,7 +1114,7 @@ impl Session {
     }
 
     /// A copy of the project with `states` (by device key) in its plug-in devices.
-    fn with_states(&self, states: &std::collections::HashMap<u64, suhina_plugins::SavedState>) -> Project {
+    pub(crate) fn with_states(&self, states: &std::collections::HashMap<u64, suhina_plugins::SavedState>) -> Project {
         let mut project = self.project.clone();
         for device in suhina_engine::plugin_devices(&project) {
             let Some(state) = states.get(&device.key) else { continue };
@@ -1331,7 +1342,9 @@ impl Session {
                     // A lane, clip or scene the command added without an id gets one now.
                     self.project.assign_ids()?;
                     self.keep_track_colours(&before);
-                    self.colour_new_clips(&before);
+                    if matches!(id, "clip.create" | "clip.addFiles") {
+                        self.colour_new_clips(&before);
+                    }
                     Ok(value)
                 });
                 let result = result.and_then(|value| match self.project.validate() {

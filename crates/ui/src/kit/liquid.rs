@@ -10,6 +10,30 @@ use egui::{Color32, Context, Id, Painter, Rect, Stroke, StrokeKind, TextureId, p
 
 use super::{motion, theme};
 
+/// The theme panel colour before main-window background opacity is applied.
+pub fn set_panel_base(ctx: &Context, color: Color32) {
+    ctx.data_mut(|data| data.insert_temp(Id::new("liquid-panel-base"), color));
+}
+
+pub fn panel_base(ctx: &Context) -> Color32 {
+    ctx.data(|data| data.get_temp::<Color32>(Id::new("liquid-panel-base"))).unwrap_or_else(theme::window_background)
+}
+
+/// A bounded app-owned background image the host may include in its offscreen renderer.
+#[derive(Clone)]
+pub struct BackgroundImage {
+    pub id: TextureId,
+    pub pixels: Arc<egui::ColorImage>,
+}
+
+pub fn set_background_image(ctx: &Context, image: Option<BackgroundImage>) {
+    ctx.data_mut(|data| data.insert_temp(Id::new("liquid-background-image"), image));
+}
+
+pub fn background_image(ctx: &Context) -> Option<BackgroundImage> {
+    ctx.data(|data| data.get_temp::<Option<BackgroundImage>>(Id::new("liquid-background-image"))).flatten()
+}
+
 /// Surfaces can be enabled independently without changing a colour theme.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Options {
@@ -322,7 +346,9 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
         return;
     }
     let painter = painter.with_clip_rect(painter.clip_rect().intersect(rect));
-    let strength = f32::from(level.min(100)) / 100.0;
+    // Repeated clip edges must not turn a dense arrangement into a grid of raised buttons.
+    // Keep the full slider range, but give clips a gentler optical range than large panels.
+    let strength = f32::from(level.min(100)) / 100.0 * if surface == Surface::Clip { 0.35 } else { 1.0 };
     if surface == Surface::Panel {
         let backdrop = painter.ctx().data(|data| data.get_temp::<Backdrop>(Id::new(BACKDROP)));
         let Some(backdrop) = backdrop else {

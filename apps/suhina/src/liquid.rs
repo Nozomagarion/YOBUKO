@@ -679,9 +679,9 @@ mod tests {
                     let gradient = Gradient {
                         angle: 37,
                         stops: vec![
-                            Stop { position: 0, color: egui::Color32::RED },
-                            Stop { position: 40, color: egui::Color32::from_rgb(30, 200, 180) },
-                            Stop { position: 100, color: egui::Color32::BLUE },
+                            Stop { transparent_rgb: None, position: 0, color: egui::Color32::RED },
+                            Stop { transparent_rgb: None, position: 40, color: egui::Color32::from_rgb(30, 200, 180) },
+                            Stop { transparent_rgb: None, position: 100, color: egui::Color32::BLUE },
                         ],
                     };
                     material::begin_frame(
