@@ -140,7 +140,7 @@ impl Themes {
                 let id = switched.as_deref().unwrap_or(current);
                 self.request(id, ThemeRequest::EditLiquid(liquid));
                 self.request(id, ThemeRequest::EditGradients(gradients));
-                self.request(id, ThemeRequest::EditSkin(skin));
+                self.request(id, ThemeRequest::EditSkin(*skin));
                 switched
             }
             ThemeRequest::EditRgba { colors, transparent_rgb } => {

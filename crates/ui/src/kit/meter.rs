@@ -197,11 +197,7 @@ pub fn show(
                 (level.rms.get(side).copied().unwrap_or(0.0), 2.0),
             ] {
                 let value = fraction(value);
-                let to = if upright {
-                    egui::pos2(bar.left() + bar.width() * value, bar.bottom() - bar.height() * value)
-                } else {
-                    egui::pos2(bar.left() + bar.width() * value, bar.bottom() - bar.height() * value)
-                };
+                let to = egui::pos2(bar.left() + bar.width() * value, bar.bottom() - bar.height() * value);
                 let color = if value > hot_from { theme::meter_hot() } else { theme::meter_normal() };
                 painter.line_segment([origin, to], egui::Stroke::new(width, color));
             }

@@ -185,8 +185,8 @@ mod tests {
         background.worker = Some(receive);
         background.requested = Some(request.clone());
         ctx.run_ui(egui::RawInput::default(), |ui| {
-            assert!(background.paint(ui, "repaired.png", 5).is_err());
-            assert!(!background.paint(ui, "repaired.png", 5).unwrap());
+            assert!(background.paint(ui, "repaired.png".into(), 5).is_err());
+            assert!(!background.paint(ui, "repaired.png".into(), 5).unwrap());
         })
         .textures_delta
         .clear();
@@ -196,7 +196,7 @@ mod tests {
         // Supply cached decoded pixels to exercise retry publication without filesystem timing.
         background.source = Some(("repaired.png".into(), Arc::new(image::RgbaImage::new(1, 1))));
         ctx.run_ui(egui::RawInput::default(), |ui| {
-            assert!(!background.paint(ui, "repaired.png", 5).unwrap());
+            assert!(!background.paint(ui, "repaired.png".into(), 5).unwrap());
         })
         .textures_delta
         .clear();

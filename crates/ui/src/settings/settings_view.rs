@@ -199,7 +199,7 @@ pub enum ThemeRequest {
     EditSkin(crate::kit::skin::Skin),
     EditCss(String),
     ResetEdits {
-        skin: crate::kit::skin::Skin,
+        skin: Box<crate::kit::skin::Skin>,
         transparent_rgb: std::collections::BTreeMap<String, [u8; 3]>,
         colors: Palette,
         liquid: Option<crate::kit::liquid::Options>,
@@ -1206,7 +1206,7 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
             .clicked()
         {
             request = Some(ThemeRequest::ResetEdits {
-                skin: original_skin,
+                skin: Box::new(original_skin),
                 transparent_rgb: original_rgb,
                 colors: original,
                 liquid: original_liquid,
