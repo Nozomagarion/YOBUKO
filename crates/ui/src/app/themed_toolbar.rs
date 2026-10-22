@@ -45,6 +45,7 @@ impl App {
         if changed {
             self.save_toolbar_skin(theme_skin.clone());
         }
+        let default_layout = theme_skin.toolbar.is_none();
         let Some(mut toolbar) =
             theme_skin.toolbar.clone().or_else(|| theme_skin.css.as_ref().map(|_| Toolbar::default()))
         else {
@@ -58,34 +59,46 @@ impl App {
                 .map(|id| (id.clone(), self.toolbar_module_width(id)))
                 .collect();
             if let Some(modules) = crate::kit::native_css::toolbar(&modules, rect.size()) {
-                let mut hovered_switch = None;
-                for module in modules {
-                    let at = module.rect.translate(rect.min.to_vec2());
-                    if !at.intersects(ui.clip_rect()) {
-                        continue;
-                    }
-                    let painter = ui.painter().with_clip_rect(ui.clip_rect().intersect(at));
-                    painter.rect_filled(
-                        at,
-                        module.style.radius,
-                        module.style.background.gamma_multiply(module.style.opacity),
-                    );
-                    if let Some(grid) = grid {
-                        let mut module_ui =
-                            ui.new_child(egui::UiBuilder::new().id_salt(("css-toolbar", &module.name)).max_rect(at));
-                        module_ui.set_clip_rect(ui.clip_rect().intersect(at));
-                        self.toolbar_module(
-                            &mut module_ui,
-                            at,
-                            &module.name,
-                            grid,
-                            cpu,
-                            ram,
-                            actions,
-                            &mut hovered_switch,
-                        );
-                    }
+                if default_layout && !crate::kit::native_css::toolbar_layout_requested() {
+                    return false;
                 }
+                let mut hovered_switch = None;
+                let extent = modules.iter().map(|module| module.rect.right()).fold(rect.width(), f32::max);
+                egui::ScrollArea::horizontal().id_salt("custom-toolbar-scroll").auto_shrink([false, false]).show(
+                    ui,
+                    |ui| {
+                        let (_, content) = ui.allocate_space(Vec2::new(extent, rect.height()));
+                        for module in modules {
+                            let at = module.rect.translate(content.min.to_vec2());
+                            if !at.intersects(ui.clip_rect()) {
+                                continue;
+                            }
+                            let painter = ui.painter().with_clip_rect(ui.clip_rect().intersect(at));
+                            painter.rect_filled(
+                                at,
+                                module.style.radius,
+                                module.style.background.gamma_multiply(module.style.opacity),
+                            );
+                            crate::kit::native_css::background_with(&painter, at, &module.style);
+                            if let Some(grid) = grid {
+                                let mut module_ui = ui.new_child(
+                                    egui::UiBuilder::new().id_salt(("css-toolbar", &module.name)).max_rect(at),
+                                );
+                                module_ui.set_clip_rect(ui.clip_rect().intersect(at));
+                                self.toolbar_module(
+                                    &mut module_ui,
+                                    at,
+                                    &module.name,
+                                    grid,
+                                    cpu,
+                                    ram,
+                                    actions,
+                                    &mut hovered_switch,
+                                );
+                            }
+                        }
+                    },
+                );
                 self.hover_switch(ui.ctx(), hovered_switch);
                 return true;
             }
@@ -132,7 +145,10 @@ impl App {
                             color,
                         );
                         if let Some(from) = response.dnd_release_payload::<String>() {
-                            move_before = Some(((*from).clone(), module.clone()));
+                            let after = ui
+                                .input(|input| input.pointer.latest_pos())
+                                .is_some_and(|position| position.x > at.center().x);
+                            move_before = Some(((*from).clone(), module.clone(), after));
                         }
                         response.context_menu(|ui| {
                             if ui.button(if hidden { "Show module" } else { "Hide module" }).clicked() {
@@ -150,8 +166,12 @@ impl App {
             });
         });
         let before = toolbar.clone();
-        if let Some((from, to)) = move_before {
-            toolbar.move_before(&from, &to);
+        if let Some((from, to, after)) = move_before {
+            if after {
+                toolbar.move_after(&from, &to);
+            } else {
+                toolbar.move_before(&from, &to);
+            }
         }
         if let Some((module, hide)) = hidden_change {
             toolbar.hidden.retain(|s| *s != module);
@@ -202,6 +222,7 @@ impl App {
         actions: &mut Vec<Action>,
         hovered_switch: &mut Option<View>,
     ) {
+        let _module_style = crate::kit::style_class::enter_named("toolbar-module", module);
         let painter = ui.painter_at(rect);
         let middle = |index: f32, width: f32| {
             Rect::from_min_size(egui::pos2(rect.left() + index, rect.top()), Vec2::new(width, rect.height()))
@@ -376,5 +397,60 @@ impl App {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    struct Fixture {
+        app: App,
+        grid: Grid,
+        actions: Vec<Action>,
+    }
+
+    #[test]
+    fn css_toolbar_targets_keep_native_commands_with_svg_artwork() {
+        let mut app = App::new();
+        let layout = Toolbar {
+            hidden: skin::MODULES
+                .iter()
+                .filter(|id| !["tempo", "transport", "mapping"].contains(id))
+                .map(|id| (*id).into())
+                .collect(),
+            ..Default::default()
+        };
+        app.save_toolbar_skin(skin::Skin { assets:skin::example_assets(),toolbar:Some(layout),css:Some(std::sync::Arc::from(".toolbar { display:grid; grid-template-columns:80px 120px; gap:8px; } #tempo { grid-column:1; grid-row:1; width:auto; } #transport { grid-column:2; width:auto; } #mapping { display:none; }")),..Default::default() });
+        let fixture = Fixture { app, grid: Grid::build(&crate::demo::demo_project(), None), actions: Vec::new() };
+        let mut harness = Harness::builder().with_size((640.0, 56.0)).build_ui_state(
+            |ui, fixture: &mut Fixture| {
+                let skin = fixture
+                    .app
+                    .themes
+                    .get(&fixture.app.settings.theme)
+                    .map(|theme| theme.skin.clone())
+                    .unwrap_or_default();
+                skin::configure(&skin);
+                let _frame = crate::kit::native_css::frame(ui);
+                fixture.app.control_bar(ui, Some(&fixture.grid), None, None, &mut fixture.actions);
+            },
+            fixture,
+        );
+        theme::install(&harness.ctx);
+        harness.run();
+        let tempo = harness.get_by_label("Tempo").rect();
+        let play = harness.get_by_label("Play").rect();
+        assert!(play.left() > tempo.right());
+        assert!(harness.query_by_label("Map keys to slots and scenes").is_none());
+        harness.get_by_label("Play").click();
+        harness.run();
+        assert!(harness.state().actions.contains(&Action::new("transport.play", json!({}))));
+        harness.state_mut().actions.clear();
+        harness.get_by_label("Stop").click();
+        harness.run();
+        assert!(harness.state().actions.iter().any(|action| action.id == "transport.stop"));
+        skin::configure(&skin::Skin::default());
     }
 }

@@ -10,6 +10,8 @@ covers:
   - crates/ui/src/settings/skin_editor.rs
   - apps/suhina/src/theme_files.rs
   - crates/ui/src/kit/native_css.rs
+  - crates/ui/src/kit/native_css/paint.rs
+  - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
 ---
@@ -92,10 +94,24 @@ The advanced editor supplies a Flex example and calls the Stylo/Taffy adapter. S
 computes variables, layers, inheritance, CSS colours, value expressions and viewport
 media conditions for class scopes. Taffy computes Flex/Grid rectangles for the actual
 visible toolbar modules (`#tempo`, `#transport`, etc.); the same rectangles bound their
-native input targets. The host still defines toolbar height. The bounded retained scope tree exposes actual ancestry and siblings. Session mixer
-and track-header scopes carry stable `[data-object="track-N"]` identities. Controls
+native input targets. The host still defines toolbar height. A stylesheet without
+toolbar layout declarations leaves the ordinary toolbar arrangement intact; a customized
+bar scrolls horizontally when it exceeds the window. The bounded retained scope tree
+exposes actual ancestry and siblings. Session mixer and track-header scopes carry stable
+`[data-object="track-N"]` identities. Clip, scene and slot roles also expose their native
+project identities. Controls
 connected through native responses expose hover, active, disabled and focus states.
 Styles are computed after collecting a changed scope tree and repaint on the next pass.
-Remaining raw egui controls and project object roles still need integration. CSS
-painting of gradients, shadows, transforms, filters and animations remains unsupported.
-This integration is experimental, not a claim of universal CSS conformance.
+Only authored values override native defaults. Scoped colour, font size and radius also
+reach ordinary egui controls in connected panels; the style guard preserves widget ids
+and restores the caller's style. Remaining raw controls still need integration.
+
+Connected native surfaces paint linear and repeating linear gradients using Stylo's
+computed stops, CSS colour interpolation and premultiplied transparency. Up to four
+layers with 64 items each use bounded, cached 1024-pixel colour ramps. Radial/conic
+gradients, shadows, transforms, filters and animations are not painted. The editor
+reports source-line notices for known unsupported effect/font declarations while
+preserving them in the source. These notices are not a complete CSS validator.
+Token-level validation bounds input to 128 KiB and 64 nested blocks/functions, without
+treating quoted strings or comments as nesting. This integration is experimental, not
+a claim of universal CSS conformance.

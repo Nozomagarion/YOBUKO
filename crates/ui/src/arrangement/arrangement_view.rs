@@ -3377,7 +3377,7 @@ fn paint_clip(
     timeline: &Timeline,
     selected: bool,
 ) {
-    let _style_class = crate::kit::style_class::enter("clip");
+    let _style_class = crate::kit::style_class::enter_named("clip", &format!("clip-{}", clip.id.0));
     let view = painter.clip_rect();
     if !rect.intersects(view) {
         return;
@@ -4384,6 +4384,7 @@ fn value_control(
     };
     let shown = preview.unwrap_or(dragged);
     let mut hover = 0.0;
+    let mut control_response = None;
     let mut committed = None;
     if rect.intersects(clip) {
         // Where the field is, so the wheel over it moves the value instead of scrolling the view.
@@ -4393,6 +4394,7 @@ fn value_control(
             Control::Pan => (format!("{} pan", lane.name), widgets::format_pan(shown)),
         };
         let response = widgets::value_area(ui, rect.intersect(clip), id.with(label.as_str()), &label, text);
+        control_response = Some(response.clone());
         hover = widgets::hover(ui, &response);
         // One track hears every frame of a drag: each sets the value, and all but the first
         // continue its undo step, so the drag is one step. A selection of several moves together
@@ -4441,20 +4443,20 @@ fn value_control(
     };
     match control {
         Control::Volume if plain => volume_text(painter, rect, shown, hover),
-        Control::Volume if state.knobs => volume_knob(painter, rect, shown, hover),
+        Control::Volume if state.knobs => volume_knob(painter, rect, shown, hover, control_response.as_ref()),
         Control::Volume => volume_field(painter, rect, shown, hover),
-        Control::Pan if state.knobs => pan_knob(painter, rect, shown),
+        Control::Pan if state.knobs => pan_knob(painter, rect, shown, control_response.as_ref()),
         Control::Pan => crate::kit::mixer_controls::pan_field(painter, rect, shown, hover),
     }
 }
 
 /// A volume as a small knob with its value beside it, for Settings › Session and mixer ›
 /// Mixer controls: Knob.
-fn volume_knob(painter: &egui::Painter, rect: Rect, db: f64, hover: f32) {
+fn volume_knob(painter: &egui::Painter, rect: Rect, db: f64, hover: f32, response: Option<&egui::Response>) {
     let size = rect.height().min(theme::KNOB);
     let center = Pos2::new(rect.left() + size / 2.0 + 2.0, rect.center().y);
     let pointer = motion::mix(theme::text_value(), theme::text_primary(), hover);
-    widgets::knob(painter, center, size, volume_position(db), pointer);
+    widgets::knob(painter, center, size, volume_position(db), pointer, response);
     let text = Rect::from_min_max(Pos2::new(center.x + size / 2.0 + 4.0, rect.top()), rect.max);
     widgets::text_in(
         painter,
@@ -4467,10 +4469,10 @@ fn volume_knob(painter: &egui::Painter, rect: Rect, db: f64, hover: f32) {
 }
 
 /// A pan as a knob in the middle of its field, with the value at its right.
-fn pan_knob(painter: &egui::Painter, rect: Rect, pan: f64) {
+fn pan_knob(painter: &egui::Painter, rect: Rect, pan: f64, response: Option<&egui::Response>) {
     let size = rect.height().min(theme::KNOB);
     let center = Pos2::new(rect.left() + size / 2.0 + 2.0, rect.center().y);
-    widgets::knob(painter, center, size, ((pan + 1.0) / 2.0) as f32, theme::text_primary());
+    widgets::knob(painter, center, size, ((pan + 1.0) / 2.0) as f32, theme::text_primary(), response);
     let text = Rect::from_min_max(Pos2::new(center.x + size / 2.0 + 4.0, rect.top()), rect.max);
     widgets::text_in(
         painter,

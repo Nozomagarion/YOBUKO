@@ -3975,6 +3975,7 @@ impl App {
     fn tab_row(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
         let _style_class = crate::kit::style_class::enter("project-tabs");
         let bar = ui.max_rect();
+        crate::kit::native_css::background(ui.painter(), bar);
         ui.allocate_rect(bar, Sense::hover());
         let painter = ui.painter_at(bar);
         let active = self.projects.active();

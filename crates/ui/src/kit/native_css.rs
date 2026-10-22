@@ -17,6 +17,10 @@ use blitz_traits::shell::{ColorScheme, Viewport};
 use egui::{Color32, Rect, Vec2};
 
 use super::{skin, theme};
+mod diagnostics;
+mod paint;
+pub use diagnostics::{Notice, inspect};
+pub use paint::{background, background_rounded, background_with};
 
 const MAX_CONTEXTS: usize = 128;
 const MAX_DEPTH: usize = 16;
@@ -31,6 +35,20 @@ pub struct Computed {
     pub font_size: f32,
     pub radius: f32,
     pub opacity: f32,
+    pub visible: bool,
+    pub authored: Authored,
+    gradients: Arc<[paint::Gradient]>,
+}
+
+/// Only authored properties override native defaults. An unrelated CSS rule must not
+/// replace every label's native colour, size or corner radius with browser defaults.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Authored {
+    pub color: bool,
+    pub background: bool,
+    pub border: bool,
+    pub font_size: bool,
+    pub radius: bool,
 }
 
 #[derive(Default)]
@@ -41,6 +59,7 @@ struct Engine {
     dark: bool,
     contexts: HashMap<Vec<String>, Computed>,
     toolbar: Option<(String, Vec<Module>)>,
+    toolbar_layout: bool,
     collecting: bool,
     nodes: Vec<StyleNode>,
     parents: Vec<usize>,
@@ -129,6 +148,13 @@ pub fn leave() {
     });
 }
 
+fn html_id(node: &StyleNode) -> String {
+    if node.class == "toolbar-module" && node.name.as_deref().is_some_and(|name| skin::MODULES.contains(&name)) {
+        node.name.clone().unwrap_or_default()
+    } else {
+        format!("node-{}", node.key)
+    }
+}
 fn finish_tree() -> bool {
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
@@ -145,7 +171,7 @@ fn finish_tree() -> bool {
                 }
                 body.push_str("</div>");
             }
-            body.push_str(&format!("<div id=\"node-{}\" class=\"{}\"", node.key, node.class));
+            body.push_str(&format!("<div id=\"{}\" class=\"{}\"", html_id(node), node.class));
             if let Some(name) = &node.name {
                 body.push_str(&format!(" data-object=\"{name}\""));
             }
@@ -183,7 +209,7 @@ fn finish_tree() -> bool {
         let mut ids = Vec::new();
         for (index, node) in engine.nodes.iter().enumerate() {
             let state = states.get(index).copied().unwrap_or(0);
-            let Some(id) = doc.get_element_by_id(&format!("node-{}", node.key)) else {
+            let Some(id) = doc.get_element_by_id(&html_id(node)) else {
                 continue;
             };
             if let Some(target) = doc.get_node_mut(id) {
@@ -194,6 +220,10 @@ fn finish_tree() -> bool {
                     target.active();
                 }
                 if state & 4 != 0 {
+                    // Native scopes use neutral divs, whose HTML semantics cannot
+                    // be disabled. Supply the actual egui state to Stylo directly;
+                    // disable() still invalidates the node's ancestors.
+                    target.element_state_mut().insert(style_dom::ElementState::DISABLED);
                     target.disable();
                 }
                 if state & 8 != 0 {
@@ -241,7 +271,7 @@ pub fn begin_frame(ui: &egui::Ui) {
 
 fn document(engine: &Engine, body: &str, defaults: &str) -> Option<HtmlDocument> {
     let css = engine.source.as_ref()?;
-    if css.len() > super::theme_css::MAX_CSS {
+    if inspect(css).is_err() {
         return None;
     }
     // Stylesheets are supplied through the CSS API, never interpolated into HTML.
@@ -272,6 +302,42 @@ fn rgba(color: &style::color::AbsoluteColor) -> Color32 {
     Color32::from_rgba_unmultiplied(byte(channels[0]), byte(channels[1]), byte(channels[2]), byte(channels[3]))
 }
 
+fn authored_property(
+    doc: &HtmlDocument,
+    id: blitz_dom::NodeId,
+    property: style::properties::LonghandId,
+    inherited: bool,
+) -> bool {
+    use style::properties::PropertyDeclarationId;
+    use style::rule_tree::CascadeOrigin;
+    let guard = doc.guard().read();
+    let mut current = Some(id);
+    for _ in 0..MAX_DEPTH + 3 {
+        let Some(node) = current.and_then(|id| doc.get_node(id)) else {
+            break;
+        };
+        if let Some(values) = node.primary_styles()
+            && let Some(rules) = &values.rules
+        {
+            for rule in rules.self_and_ancestors() {
+                if rule.cascade_level().origin() != CascadeOrigin::Author {
+                    continue;
+                }
+                if let Some(source) = rule.style_source()
+                    && source.read(&guard).contains(PropertyDeclarationId::Longhand(property))
+                {
+                    return true;
+                }
+            }
+        }
+        if !inherited {
+            break;
+        }
+        current = node.parent;
+    }
+    false
+}
+
 fn computed(doc: &HtmlDocument, id: blitz_dom::NodeId) -> Option<Computed> {
     use style::properties::{LonghandId, PropertyDeclarationId};
     let node = doc.get_node(id)?;
@@ -287,7 +353,37 @@ fn computed(doc: &HtmlDocument, id: blitz_dom::NodeId) -> Option<Computed> {
         .and_then(|v| v.parse::<f32>().ok())
         .unwrap_or(0.0)
         .clamp(0.0, 128.0);
+    let serialized = values.computed_value_to_string(PropertyDeclarationId::Longhand(LonghandId::BackgroundImage));
+    let mut hash = std::hash::DefaultHasher::new();
+    serialized.hash(&mut hash);
+    rgba(&color).hash(&mut hash);
+    let key = hash.finish();
+    let gradients = values
+        .get_background()
+        .background_image
+        .0
+        .iter()
+        .take(4)
+        .enumerate()
+        .filter_map(|(index, image)| {
+            if let style::values::computed::Image::Gradient(gradient) = image {
+                paint::Gradient::from_css(gradient, &color, key.wrapping_add(index as u64))
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .into();
     Some(Computed {
+        gradients,
+        authored: Authored {
+            color: authored_property(doc, id, LonghandId::Color, true),
+            background: authored_property(doc, id, LonghandId::BackgroundColor, false),
+            border: authored_property(doc, id, LonghandId::BorderTopColor, false),
+            font_size: authored_property(doc, id, LonghandId::FontSize, true),
+            radius: authored_property(doc, id, LonghandId::BorderTopLeftRadius, false),
+        },
+        visible: values.computed_value_to_string(PropertyDeclarationId::Longhand(LonghandId::Visibility)) == "visible",
         color: rgba(&color),
         background: rgba(&background),
         border: rgba(&border),
@@ -353,6 +449,46 @@ pub struct Module {
     pub style: Computed,
 }
 
+pub fn toolbar_layout_requested() -> bool {
+    ENGINE.with(|engine| engine.borrow().toolbar_layout)
+}
+fn requests_layout(doc: &HtmlDocument, id: blitz_dom::NodeId) -> bool {
+    use style::properties::LonghandId::*;
+    [
+        Display,
+        Width,
+        Height,
+        Order,
+        FlexDirection,
+        FlexWrap,
+        FlexGrow,
+        FlexShrink,
+        FlexBasis,
+        JustifyContent,
+        AlignItems,
+        AlignSelf,
+        GridTemplateColumns,
+        GridTemplateRows,
+        GridColumnStart,
+        GridColumnEnd,
+        GridRowStart,
+        GridRowEnd,
+        ColumnGap,
+        RowGap,
+        MarginLeft,
+        MarginRight,
+        MarginTop,
+        MarginBottom,
+        PaddingLeft,
+        PaddingRight,
+        PaddingTop,
+        PaddingBottom,
+        Visibility,
+    ]
+    .into_iter()
+    .any(|property| authored_property(doc, id, property, false))
+}
+
 /// Flex/Grid layout for actual ordered, visible module ids. No theme-supplied markup.
 pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
     if order.len() > skin::MODULES.len() || order.iter().any(|(id, _)| !skin::MODULES.contains(&id.as_str())) {
@@ -363,8 +499,8 @@ pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
         engine.source.as_ref()?;
         if engine.source != skin::current().css { return None; }
         let key = format!("{order:?}:{size:?}");
-        if let Some((previous, modules)) = &engine.toolbar {
-            if previous == &key { return Some(modules.clone()); }
+        if let Some((previous, modules)) = &engine.toolbar && previous == &key {
+            return Some(modules.clone());
         }
         let mut body = String::from("<!doctype html><html><body class=\"window\"><div class=\"toolbar\" id=\"toolbar\">");
         let mut defaults = format!("html,body {{ margin:0; }} .toolbar {{ display:flex; width:{}px; height:{}px; gap:4px; align-items:center; }} .toolbar-module {{ flex-shrink:0; height:{}px; }}", size.x.max(1.0),size.y.max(1.0),size.y.max(24.0));
@@ -375,6 +511,8 @@ pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
         body.push_str("</div></body></html>");
         let mut doc = document(&engine, &body, &defaults)?;
         doc.resolve(0.0);
+        engine.toolbar_layout = doc.get_element_by_id("toolbar").is_some_and(|id| requests_layout(&doc,id))
+            || order.iter().any(|(name,_)| doc.get_element_by_id(name).is_some_and(|id| requests_layout(&doc,id)));
         let mut modules = Vec::new();
         for (name, _) in order {
             let id = doc.get_element_by_id(name)?;
@@ -384,7 +522,8 @@ pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
             let position = node.absolute_position(0.0,0.0);
             let rect = Rect::from_min_size(egui::pos2(position.x,position.y), Vec2::new(layout.size.width,layout.size.height));
             if !rect.is_finite() || rect.width() > 16384.0 || rect.height() > 16384.0 { return None; }
-            modules.push(Module { name:name.clone(),rect,style:computed(&doc,id)? });
+            let style=computed(&doc,id)?;
+            if style.visible { modules.push(Module { name:name.clone(),rect,style }); }
         }
         engine.toolbar = Some((key,modules.clone()));
         Some(modules)
@@ -398,13 +537,15 @@ mod tests {
         let ctx = egui::Context::default();
         let s = skin::Skin { css: Some(Arc::from(css)), ..Default::default() };
         skin::configure(&s);
-        let _ = ctx.run_ui(
+        ctx.run_ui(
             egui::RawInput {
                 screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width, 600.0))),
                 ..Default::default()
             },
             |ui| begin_frame(ui),
-        );
+        )
+        .textures_delta
+        .clear();
     }
     #[test]
     fn stylo_resolves_variables_layers_modern_colors_and_media() {
@@ -444,7 +585,7 @@ mod tests {
         let ctx = egui::Context::default();
         for pass in 0..4 {
             let order = if pass < 2 { [1, 2] } else { [2, 1] };
-            let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ctx.run_ui(egui::RawInput::default(), |ui| {
                 let _frame = frame(ui);
                 let _window = super::super::style_class::enter("window");
                 let _session = super::super::style_class::enter("session");
@@ -457,7 +598,9 @@ mod tests {
                         assert_eq!(theme::panel_background(), Color32::from_rgb(40, 50, 60));
                     }
                 }
-            });
+            })
+            .textures_delta
+            .clear();
         }
         skin::configure(&skin::Skin::default());
     }
@@ -467,7 +610,7 @@ mod tests {
         let ctx = egui::Context::default();
         let mut previous_id = None;
         for pass in 0..2 {
-            let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            ctx.run_ui(egui::RawInput::default(), |ui| {
                 let _frame = frame(ui);
                 let _window = super::super::style_class::enter("window");
                 let response = ui.add_enabled(false, egui::Button::new("Disabled"));
@@ -480,7 +623,53 @@ mod tests {
                 if pass == 1 {
                     assert_eq!(theme::control_background(), Color32::from_rgb(50, 60, 70));
                 }
-            });
+            })
+            .textures_delta
+            .clear();
+        }
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn computed_linear_gradients_publish_their_real_rgba_pixels_and_reuse_textures() {
+        prepare(".browser { background-image:linear-gradient(90deg in srgb, rgb(255 0 0 / 0), blue); }", 800.0);
+        let style = scoped(&["browser".into()]).unwrap();
+        assert_eq!(style.gradients.len(), 1);
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let rect = Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(200.0, 40.0));
+            assert!(background_with(ui.painter(), rect, &style));
+            assert!(background_with(ui.painter(), rect, &style));
+        });
+        let ramps: Vec<_> = output
+            .textures_delta
+            .set
+            .values()
+            .flat_map(|deltas| deltas.iter())
+            .filter(|delta| delta.image.size() == [1024, 1])
+            .collect();
+        assert_eq!(ramps.len(), 1);
+        let egui::ImageData::Color(image) = &ramps[0].image;
+        let midpoint = image.pixels[512].to_srgba_unmultiplied();
+        assert_eq!(midpoint[0], 0, "CSS alpha interpolation is premultiplied");
+        assert!(midpoint[2] > 250);
+        assert!((127..=129).contains(&midpoint[3]));
+        assert_eq!(image.pixels[1023], Color32::BLUE);
+        output.textures_delta.clear();
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn unrelated_css_preserves_native_colours_font_sizes_and_corner_defaults() {
+        prepare(".browser { color:rgb(10 20 30); }", 800.0);
+        let original = theme::palette();
+        {
+            let _mixer = super::super::style_class::enter("mixer");
+            assert_eq!(theme::palette(), original);
+            assert_eq!(super::super::style_class::font_size(9.0), 9.0);
+            assert_eq!(super::super::style_class::radius(4.0), 4.0);
+        }
+        {
+            let _browser = super::super::style_class::enter("browser");
+            assert_eq!(theme::text_primary(), Color32::from_rgb(10, 20, 30));
         }
         skin::configure(&skin::Skin::default());
     }

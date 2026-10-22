@@ -687,6 +687,7 @@ fn column_body(
     // A track's slots can be selected, copied, pasted into and dragged; a group's only launch.
     let editable = column.kind == ColumnKind::Track;
     let can_paste = state.can_paste;
+    let _column_style = crate::kit::style_class::enter_named("track-column", &format!("track-{}", column.track.0));
     let (top, scenes) = (bands.top, bands.scenes);
     let mapping = state.launch_keys.mode.on && column.kind != ColumnKind::Return;
     let label = |target: MappingTarget| bands.mapped.iter().find(|(t, _)| *t == target).map(|(_, l)| l.as_str());
@@ -699,6 +700,9 @@ fn column_body(
             continue;
         }
         let number = scene + 1;
+        let _slot_style = crate::kit::style_class::enter_named("slot", &format!("slot-{}-{number}", column.track.0));
+        let _clip_style = (!matches!(slot.state, SlotState::Empty | SlotState::EmptyStop))
+            .then(|| crate::kit::style_class::enter("clip"));
         let target = MappingTarget::Slot { track: column.track, scene };
         if mapping {
             // The mapping mode: a click picks the slot, empty or not, and launches nothing.
@@ -1009,7 +1013,7 @@ fn scene_column(
     keys: &mut crate::session::launch_keys::LaunchKeys,
     actions: &mut Vec<Action>,
 ) {
-    let _style_class = crate::kit::style_class::enter("scene");
+    let _style_class = crate::kit::style_class::enter("scene-column");
     let clip = painter.clip_rect();
     for scene in &grid.scenes {
         let y = top + (scene.number - 1) as f32 * PITCH;
@@ -1017,6 +1021,7 @@ fn scene_column(
         if !rect.intersects(clip) {
             continue;
         }
+        let _scene_style = crate::kit::style_class::enter_named("scene", &format!("scene-{}", scene.number));
         let label = if scene.name.is_empty() {
             format!("{} scene {}", if scene.playing { "Stop" } else { "Launch" }, scene.number)
         } else {

@@ -20,6 +20,9 @@ pub const CLASSES: &[&str] = &[
     "track-header",
     "clip",
     "scene",
+    "scene-column",
+    "track-column",
+    "slot",
     "detail",
     "clip-editor",
     "piano-roll",
@@ -113,12 +116,7 @@ fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response
     STACK.with(|s| s.borrow_mut().push(class.into()));
     let mut palette = saved;
     if let Some(color) = property("color").as_deref().and_then(theme::parse_hex) {
-        palette.text_primary = color;
-        palette.text_secondary = color;
-        palette.text_value = color;
-        palette.browser_text_primary = color;
-        palette.browser_text_secondary = color;
-        palette.browser_text_value = color;
+        set_foreground(&mut palette, color, class);
     }
     if let Some(color) = property("background-color").as_deref().and_then(theme::parse_hex) {
         palette.window_background = color;
@@ -130,12 +128,14 @@ fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response
         palette.border_strong = color;
     }
     if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow())) {
-        palette.text_primary = values.color;
-        palette.text_secondary = values.color;
-        palette.text_value = values.color;
-        palette.browser_text_primary = values.color;
-        palette.browser_text_secondary = values.color;
-        if values.background.a() > 0 {
+        if values.authored.color {
+            set_foreground(&mut palette, values.color, class);
+        }
+        if values.authored.border {
+            palette.border = values.border;
+            palette.border_strong = values.border;
+        }
+        if values.authored.background {
             palette.window_background = values.background;
             palette.panel_background = values.background;
             palette.control_background = values.background;
@@ -144,8 +144,35 @@ fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response
     theme::local_palette(palette);
     Scope { palette: saved, native }
 }
+fn set_foreground(palette: &mut theme::Palette, color: egui::Color32, class: &str) {
+    palette.text_primary = color;
+    palette.text_secondary = color;
+    palette.text_value = color;
+    palette.text_hint = color;
+    palette.browser_text_primary = color;
+    palette.browser_text_secondary = color;
+    palette.browser_text_value = color;
+    palette.text_on_color_dark = color;
+    palette.text_on_color_light = color;
+    if class == "meter" {
+        palette.meter_normal = color;
+    }
+}
+pub fn foreground(fallback: egui::Color32) -> egui::Color32 {
+    if let Some(style) = computed()
+        && style.authored.color
+    {
+        return style.color;
+    }
+    property("color").as_deref().and_then(theme::parse_hex).unwrap_or(fallback)
+}
+pub fn computed() -> Option<super::native_css::Computed> {
+    STACK.with(|stack| super::native_css::scoped(&stack.borrow()))
+}
 pub fn radius(fallback: f32) -> f32 {
-    if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow())) {
+    if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow()))
+        && values.authored.radius
+    {
         return values.radius;
     }
     property("border-radius")
@@ -153,7 +180,9 @@ pub fn radius(fallback: f32) -> f32 {
         .map_or(fallback, f32::from)
 }
 pub fn font_size(fallback: f32) -> f32 {
-    if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow())) {
+    if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow()))
+        && values.authored.font_size
+    {
         return values.font_size;
     }
     property("font-size")
@@ -164,16 +193,114 @@ pub fn font_size(fallback: f32) -> f32 {
 /// Background override for surfaces whose fallback colour is supplied by their caller.
 pub fn background(fallback: egui::Color32) -> egui::Color32 {
     if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow()))
-        && values.background.a() > 0
+        && values.authored.background
     {
         return values.background;
     }
     property("background-color").as_deref().and_then(theme::parse_hex).unwrap_or(fallback)
 }
 
+/// Applies authored values to ordinary egui widgets as well as native painters.
+/// The guard reborrows the same Ui: widget ids and layout are unchanged, and early
+/// returns restore the caller's style without unsafe pointers or a new child Ui.
+pub struct UiStyle<'a> {
+    ui: &'a mut egui::Ui,
+    previous: Option<std::sync::Arc<egui::Style>>,
+}
+impl std::ops::Deref for UiStyle<'_> {
+    type Target = egui::Ui;
+    fn deref(&self) -> &Self::Target {
+        &*self.ui
+    }
+}
+impl std::ops::DerefMut for UiStyle<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut *self.ui
+    }
+}
+impl Drop for UiStyle<'_> {
+    fn drop(&mut self) {
+        if let Some(previous) = self.previous.take() {
+            self.ui.set_style(previous);
+        }
+    }
+}
+pub fn ui(ui: &mut egui::Ui) -> UiStyle<'_> {
+    let values = computed();
+    let color = values
+        .as_ref()
+        .filter(|style| style.authored.color)
+        .map(|style| style.color)
+        .or_else(|| property("color").as_deref().and_then(theme::parse_hex));
+    let font = values
+        .as_ref()
+        .filter(|style| style.authored.font_size)
+        .map(|style| style.font_size)
+        .or_else(|| property("font-size").map(|_| font_size(theme::TEXT)));
+    let radius = values
+        .as_ref()
+        .filter(|style| style.authored.radius)
+        .map(|style| style.radius)
+        .or_else(|| property("border-radius").map(|_| self::radius(0.0)));
+    let previous = if color.is_some() || font.is_some() || radius.is_some() {
+        let previous = ui.style().clone();
+        let style = ui.style_mut();
+        if let Some(color) = color {
+            style.visuals.override_text_color = Some(color);
+        }
+        if let Some(size) = font {
+            for font in style.text_styles.values_mut() {
+                font.size = size;
+            }
+        }
+        if let Some(radius) = radius {
+            let radius = egui::CornerRadius::same(radius.clamp(0.0, 128.0) as u8);
+            for widget in [
+                &mut style.visuals.widgets.noninteractive,
+                &mut style.visuals.widgets.inactive,
+                &mut style.visuals.widgets.hovered,
+                &mut style.visuals.widgets.active,
+                &mut style.visuals.widgets.open,
+            ] {
+                widget.corner_radius = radius;
+            }
+        }
+        Some(previous)
+    } else {
+        None
+    };
+    UiStyle { ui, previous }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ordinary_widget_style_preserves_ui_identity_and_restores_caller() {
+        let mut skin = skin::Skin::default();
+        skin.styles.insert(
+            ".settings".into(),
+            [("color".into(), "#123456".into()), ("font-size".into(), "19px".into())].into(),
+        );
+        skin::configure(&skin);
+        let context = egui::Context::default();
+        context
+            .run_ui(egui::RawInput::default(), |ui| {
+                let original = ui.style().clone();
+                let id = ui.id();
+                {
+                    let _scope = enter("settings");
+                    let styled = self::ui(ui);
+                    assert_eq!(styled.id(), id);
+                    assert_eq!(styled.visuals().override_text_color, theme::parse_hex("#123456"));
+                    assert!(styled.style().text_styles.values().all(|font| font.size == 19.0));
+                }
+                assert!(std::sync::Arc::ptr_eq(ui.style(), &original));
+            })
+            .textures_delta
+            .clear();
+        skin::configure(&skin::Skin::default());
+    }
     #[test]
     fn descendant_styles_are_scoped_and_restore_palette() {
         let mut s = skin::Skin::default();

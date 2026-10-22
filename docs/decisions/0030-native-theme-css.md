@@ -6,6 +6,8 @@ status: draft
 last_verified: 2026-10-22
 covers:
   - crates/ui/src/kit/native_css.rs
+  - crates/ui/src/kit/native_css/paint.rs
+  - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
   - crates/ui/src/kit/skin.rs
@@ -122,12 +124,20 @@ Native scopes now collect a bounded retained tree (4096 nodes, depth 16), with s
 named Session track roles (`data-object`) and state from connected egui responses.
 Child/sibling matching uses this actual tree. A changed tree is styled as one snapshot;
 results are applied on the next repaint, preserving native command ids and targets.
-Identity remains stable for named track scopes when tracks move. Other project roles,
-raw egui controls and complete geometry/container-query integration are still missing.
-Full-layout control of panels, CSS effects, animation and per-property diagnostics remain
-implementation work. Parsed declarations
-that the painter does not consume do not imply support. Toolbar height remains the
-host's height. These limits are also visible in the advanced CSS editor. Before enabling that engine,
+Identity remains stable for named track scopes when tracks move. Clip, slot and scene
+roles expose native project identities too. Connected panels pass authored colour,
+font size and radius to ordinary egui widgets without creating new UI identities;
+unrelated CSS leaves native defaults intact. Some raw controls and complete
+geometry/container-query integration are still missing.
+
+Connected surfaces paint linear/repeating-linear gradients with bounded cached colour
+ramps and Stylo's colour interpolation. Token-level input budgets bound nesting and
+source size. Source-line notices identify known unsupported effect/font declarations
+without deleting authored source. Full-layout control of panels, radial/conic gradients,
+shadows, transforms, filters, animation and comprehensive computed-style diagnostics
+remain implementation work. Parsed declarations that the painter does not consume do
+not imply support. Toolbar height remains the host's height. These limits are also
+visible in the advanced CSS editor. Before enabling that engine,
 verify package licences, platform builds, interaction/accessibility parity, malformed
 inputs, large projects and both rendering backends. A full browser-CSS claim is out of
 scope unless an explicit support matrix and conformance evidence establish it.

@@ -99,6 +99,7 @@ pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Res
     let fill = super::style_class::background(fill);
     if !super::skin::paint(painter, rect, "button", super::skin::State::response(response, false), fill, 0.0) {
         painter.rect_filled(rect, radius, fill);
+        super::native_css::background_rounded(painter, rect, radius);
     }
     if response.has_focus() || response.hovered() {
         let edge = if response.has_focus() { theme::accent() } else { theme::border_strong() };
@@ -245,6 +246,8 @@ pub fn input_frame() -> egui::Frame {
 /// A text edit with the same transparent surface and focus underline in every view.
 pub fn text_input(ui: &mut Ui, edit: egui::TextEdit<'_>) -> Response {
     let _style_class = crate::kit::style_class::enter("text-input");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let response = ui.add(edit.frame(input_frame()));
     input_line(ui, &response);
     response
@@ -253,6 +256,8 @@ pub fn text_input(ui: &mut Ui, edit: egui::TextEdit<'_>) -> Response {
 /// The fixed-rectangle counterpart used by browser rows and project dialogs.
 pub fn text_input_at(ui: &mut Ui, rect: Rect, edit: egui::TextEdit<'_>) -> Response {
     let _style_class = crate::kit::style_class::enter("text-input");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let response = ui.put(rect, edit.frame(input_frame()));
     input_line(ui, &response);
     response
@@ -613,17 +618,22 @@ pub fn value_area(ui: &Ui, rect: Rect, id: egui::Id, label: impl ToString, value
 
 /// The knob: a small circle with a pointer from the centre, −135° … +135° of travel for
 /// `position` 0 … 1 (components › Mixer strip).
-pub fn knob(painter: &Painter, center: Pos2, size: f32, position: f32, pointer: Color32) {
-    let _style = crate::kit::style_class::enter("knob");
+pub fn knob(painter: &Painter, center: Pos2, size: f32, position: f32, pointer: Color32, response: Option<&Response>) {
+    let _style = response
+        .map(|response| crate::kit::style_class::enter_response("knob", response))
+        .unwrap_or_else(|| crate::kit::style_class::enter("knob"));
+    let state =
+        response.map(|response| super::skin::State::response(response, false)).unwrap_or(super::skin::State::Normal);
+    let pointer = super::style_class::foreground(pointer);
     let radius = size * 9.0 / 22.0;
     let rect = Rect::from_center_size(center, Vec2::splat(size));
-    if !super::skin::paint(painter, rect, "knob.body", super::skin::State::Normal, pointer, 0.0) {
+    if !super::skin::paint(painter, rect, "knob.body", state, pointer, 0.0) {
         painter.circle_filled(center, radius, theme::control_background());
         painter.circle_stroke(center, radius, theme::hairline(theme::text_hint()));
     }
     let angle = (-135.0 + 270.0 * position.clamp(0.0, 1.0)).to_radians();
     let tip = center + Vec2::new(angle.sin(), -angle.cos()) * (radius - 1.0);
-    if !super::skin::paint(painter, rect, "knob.pointer", super::skin::State::Normal, pointer, angle) {
+    if !super::skin::paint(painter, rect, "knob.pointer", state, pointer, angle) {
         painter.line_segment([center, tip], Stroke::new(1.5, pointer));
     }
 }

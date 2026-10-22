@@ -412,7 +412,12 @@ The UI kit owns static SVG rasterization, scoped theme values and an experimenta
 Stylo/Taffy adapter through Blitz's safe DOM API. The host supplies bounded role trees;
 themes supply CSS, never HTML or scripts. The adapter has no network or shell provider,
 uses sequential style traversal and caches computed class contexts on the UI thread.
-The toolbar consumes Taffy's rectangles for both native controls and input clipping.
+A retained scope tree carries project identities and native interaction states; changed
+snapshots publish computed values on the following repaint. Connected surfaces paint
+bounded cached linear-gradient ramps; scoped guards apply authored values to ordinary
+egui controls without changing widget identity. The toolbar consumes Taffy's rectangles
+for both native controls and input clipping. Token-level CSS validation bounds source
+size and nesting and reports known unsupported effects without deleting source.
 No theme work runs on the audio thread. The desktop theme-file service owns portable
 resources and CSS/JSON synchronization. Details and current adapter limits are in
 [ADR 0030](decisions/0030-native-theme-css.md) and the [skin spec](spec/theme-skins.md).

@@ -205,11 +205,12 @@ pub fn export(theme: &Theme) -> String {
         }
         css.push_str(" }\n");
     }
-    for role in theme.skin.assets.keys() {
+    for (role, asset) in &theme.skin.assets {
         // Package export writes each inline SVG under this stable relative name.
+        let path = if asset.trim_start().starts_with('<') { format!("assets/{role}.svg") } else { asset.clone() };
         css.push_str(&format!(
-            "{} {{ image: url(\"assets/{role}.svg\"); }}\n",
-            role.replace(".hover", ":hover").replace(".active", ":active").replace(".disabled", ":disabled")
+            "{} {{ image: url(\"{path}\"); }}\n",
+            role.replace(".hover", ":hover").replace(".active", ":active").replace(".disabled", ":disabled"),
         ));
     }
     css

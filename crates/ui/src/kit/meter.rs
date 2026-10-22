@@ -144,9 +144,9 @@ pub fn show(
     if rect.width() <= 0.0 || rect.height() <= 0.0 || !rect.intersects(painter.clip_rect()) {
         return;
     }
-    let _style = crate::kit::style_class::enter("meter");
     let id = Id::new(("meter", source));
     let response = ui.interact(rect.intersect(painter.clip_rect()), id, Sense::click());
+    let _style = crate::kit::style_class::enter_response("meter", &response);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, describe(name, level)));
     if response.clicked() && level.clipped {
         actions.push(match source {

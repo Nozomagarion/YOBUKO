@@ -12,6 +12,7 @@ pub struct State {
     svg: String,
     css: String,
     advanced: String,
+    notices: Vec<String>,
     error: String,
 }
 
@@ -101,20 +102,22 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
         });
         ui.collapsing("Advanced CSS (Stylo and Taffy)", |ui| {
             ui.label("Modern cascade, variables, CSS colours, calc() and viewport media queries style native classes. Flex/Grid lays out toolbar modules by id (#tempo, #transport, #views). Source is kept in JSON and advanced.css.");
-            ui.label("This adapter does not yet paint CSS gradients, shadows, transforms or animations. Registered scopes support siblings, named track objects and native response states; other controls are still being connected. Toolbar height remains the host's height.");
+            ui.label("Connected surfaces paint linear and repeating linear gradients. Radial/conic gradients, shadows, transforms, filters and animations are not painted. Registered scopes support siblings, named project objects and native response states; some raw controls still need integration. Toolbar height remains the host's height. Unsupported-effect notices appear when applying CSS.");
             if ui.button("Load current advanced CSS").clicked() { state.advanced = themes.skin.css.as_deref().unwrap_or_default().into(); }
             if ui.button("Load Flex/Grid example").clicked() {
                 state.advanced = ":root { --ink: rgb(180 220 240); }\n.browser { color: var(--ink); font-size: clamp(10px, 1vw, 14px); }\n.toolbar { display: flex; gap: 8px; }\n#transport { order: -1; }\n@media (max-width: 1000px) { #performance { display: none; } }\n".into();
             }
             ui.add(egui::TextEdit::multiline(&mut state.advanced).code_editor().desired_rows(10).desired_width(f32::INFINITY));
             if ui.button("Apply advanced CSS").clicked() {
-                if state.advanced.len() > theme_css::MAX_CSS { state.error = "Advanced CSS exceeds 128 KiB".into(); }
+                if let Err(error) = crate::kit::native_css::inspect(&state.advanced) { state.error=error; }
                 else {
                     let mut skin = themes.skin.clone();
                     skin.css = (!state.advanced.is_empty()).then(|| std::sync::Arc::from(state.advanced.as_str()));
                     request = Some(ThemeRequest::EditSkin(skin)); state.error.clear();
+                    state.notices=crate::kit::native_css::inspect(&state.advanced).unwrap_or_default().into_iter().map(|notice| format!("Line {}: {} is preserved, but this native painter does not render it yet.",notice.line,notice.property)).collect();
                 }
             }
+            for notice in &state.notices { ui.label(notice); }
         });
         if !state.error.is_empty() { ui.colored_label(crate::kit::theme::recording(), &state.error); }
     });

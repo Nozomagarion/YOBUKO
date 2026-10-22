@@ -69,6 +69,17 @@ impl Toolbar {
             }
         }
     }
+    pub fn move_after(&mut self, from: &str, to: &str) {
+        if from == to || !self.order.iter().any(|item| item == to) {
+            return;
+        }
+        if let Some(index) = self.order.iter().position(|item| item == from) {
+            let item = self.order.remove(index);
+            if let Some(index) = self.order.iter().position(|item| item == to) {
+                self.order.insert(index + 1, item);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -165,7 +176,10 @@ impl Skin {
         }
         if let Some(value) = root.get("css") {
             if let Some(css) = value.as_str().filter(|css| css.len() <= super::theme_css::MAX_CSS) {
-                skin.css = (!css.is_empty()).then(|| Arc::from(css));
+                match super::native_css::inspect(css) {
+                    Ok(_) => skin.css = (!css.is_empty()).then(|| Arc::from(css)),
+                    Err(error) => warnings.push(error),
+                }
             } else {
                 warnings.push("skin.css must be a stylesheet of at most 128 KiB".into());
             }
@@ -402,7 +416,7 @@ pub fn paint(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color
         if textures.images.len() >= 64 {
             textures.images.clear();
         }
-        let color = super::theme::hex(ink);
+        let color = super::theme::hex_rgba(ink.to_srgba_unmultiplied());
         let source = source.replace("currentColor", &color);
         let texture = parse_svg(&source).ok().and_then(|tree| {
             let mut pixels = resvg::tiny_skia::Pixmap::new(w, h)?;
@@ -464,7 +478,7 @@ mod tests {
         };
         configure(&skin);
         let ctx = egui::Context::default();
-        let frame = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let mut frame = ctx.run_ui(egui::RawInput::default(), |ui| {
             let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(16.0));
             assert!(paint(ui.painter(), rect, "button", State::Normal, Color32::WHITE, 0.0));
             assert!(paint(ui.painter(), rect, "button", State::Normal, Color32::WHITE, 0.0));
@@ -474,8 +488,8 @@ mod tests {
         let images: Vec<_> = frame
             .textures_delta
             .set
-            .iter()
-            .flat_map(|(_, deltas)| deltas.iter())
+            .values()
+            .flat_map(|deltas| deltas.iter())
             .filter(|delta| delta.image.size() == [16, 16])
             .collect();
         assert_eq!(images.len(), 2, "a repeated state should reuse its texture");
@@ -487,6 +501,7 @@ mod tests {
             .collect();
         assert!(pixels.contains(&Color32::RED));
         assert!(pixels.contains(&Color32::GREEN));
+        frame.textures_delta.clear();
         configure(&Skin::default());
     }
     #[test]
@@ -541,5 +556,8 @@ mod tests {
         toolbar.move_before("views", "views");
         toolbar.move_before("nope", "tempo");
         assert_eq!(toolbar, before);
+        toolbar.move_after("browser", "agents");
+        assert_eq!(toolbar.order.last().map(String::as_str), Some("browser"));
+        assert_eq!(toolbar.order.len(), MODULES.len());
     }
 }

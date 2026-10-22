@@ -805,7 +805,7 @@ fn paint_fader(
     }
     let level = at(widgets::volume_position(db));
     let cap = Rect::from_center_size(Pos2::new(x, level), CAP);
-    crate::kit::mixer_controls::fader_cap(painter, cap, hover);
+    crate::kit::mixer_controls::fader_cap(painter, cap, hover, crate::kit::skin::State::response(response, false));
 }
 
 /// The volume as a value across the strip, for heights too small for the fader: a field, or a
@@ -836,7 +836,14 @@ fn compact_volume(
     if state.knobs {
         let size = rect.height();
         let center = Pos2::new(rect.left() + size / 2.0, rect.center().y);
-        widgets::knob(painter, center, size, position, motion::mix(theme::text_value(), theme::text_primary(), hover));
+        widgets::knob(
+            painter,
+            center,
+            size,
+            position,
+            motion::mix(theme::text_value(), theme::text_primary(), hover),
+            Some(&response),
+        );
     } else {
         painter.rect_filled(rect, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
         let x = rect.left() + rect.width() * position;

@@ -82,15 +82,8 @@ pub fn send_field(
 }
 
 /// A tactile vertical fader cap. Its centre marker, rather than its edges, indicates the gain.
-pub fn fader_cap(painter: &egui::Painter, cap: Rect, hover: f32) {
-    if super::skin::paint(
-        painter,
-        cap,
-        "fader.cap",
-        if hover > 0.5 { super::skin::State::Hover } else { super::skin::State::Normal },
-        theme::text_value(),
-        0.0,
-    ) {
+pub fn fader_cap(painter: &egui::Painter, cap: Rect, hover: f32, state: super::skin::State) {
+    if super::skin::paint(painter, cap, "fader.cap", state, theme::text_value(), 0.0) {
         return;
     }
     let base = motion::mix(theme::control_background(), theme::control_hover(), hover);

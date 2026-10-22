@@ -399,6 +399,7 @@ fn resolve_theme(
             .filter(|p| safe_relative(p) && p.ends_with(".css"))
             .ok_or("advanced-stylesheet must name a relative CSS file")?;
         let css = String::from_utf8(resource(path, theme_css::MAX_CSS as u64)?).map_err(|e| e.to_string())?;
+        suhina_ui::kit::native_css::inspect(&css)?;
         theme.skin.css = (!css.is_empty()).then(|| std::sync::Arc::from(css));
     }
     if let Some(path) = root.get("stylesheet") {
@@ -442,6 +443,7 @@ fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, Stri
     root["stylesheet"] = serde_json::Value::String("style.css".into());
     let mut files = Vec::new();
     if let Some(css) = &theme.skin.css {
+        suhina_ui::kit::native_css::inspect(css)?;
         if css.len() > suhina_ui::kit::theme_css::MAX_CSS {
             return Err("advanced CSS exceeds 128 KiB".into());
         }
