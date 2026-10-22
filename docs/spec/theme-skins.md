@@ -223,14 +223,27 @@ The customization target includes every native control and text/name area, not j
 modules. `skin.controls` is a bounded map (256 semantic names) whose entries specify native
 anchor-relative `left`/`top` offsets, optional logical-point `width`/`height`, and a
 `direction` (`vertical` or `horizontal`). `bottom` anchors to the containing panel's
-bottom; `hidden` suppresses connected elements. The canonical CSS projection uses
+bottom; `hidden` suppresses connected elements. `height: 100%` (editor **Full height**)
+stretches between the panel's top plus `top` and bottom minus `bottom` (default zero).
+In this mode `top` is a panel inset, not a native-anchor offset. Insets are clamped to
+the panel; an exhausted height draws nothing. `height: auto` restores native height. Similarly `width: 100%` (**Full width**)
+uses `left` and `right` insets; `right` can also anchor a fixed-width control.
+`width: auto` restores native width.
+Arrangement meter placement uses the whole track header, never its visible intersection;
+scroll clipping affects painting and hit testing without changing the meter scale. The canonical CSS projection uses
 `.control-NAME { left: 8px; top: 0px; width: 80px; height: 20px;
 --suhina-direction: horizontal; }`. Offsets are bounded to ±16384, sizes to 1–4096.
 Each adapter must resolve the rectangle before interaction and paint, preserve the native
 widget ID/command, and contain it in its panel. Removing an override restores native geometry.
 These are explicit native relative offsets, not a claim of general CSS positioning support.
 Right-click the toolbar and choose **Edit interface** for measured native outlines and
-an 8-point grid. Drag an outline or select a semantic element and edit offsets, size,
+an 8-point grid. Normal dragging also snaps to nearby edges and centres of other
+controls in the same containing rectangle, with alignment guides. Shift-drag uses
+one logical pixel steps while retaining peer alignment; Alt+Shift-drag is free
+without grid or peer snapping.
+Fractional offsets survive CSS and JSON storage at 1/1024 logical pixel resolution.
+Alt alone retains normal snapping. Dragging creates no persistent peer anchor.
+Drag an outline or select a semantic element and edit offsets, size,
 bottom anchoring and direction. Matching instances share that theme rule. Done merges only
 edited entries into the latest theme; Cancel/Escape discards the draft. A theme switch cancels
 it. Entering/leaving without edits never forks a default theme. An input shield keeps the
@@ -377,8 +390,9 @@ reader. The advanced target and engine research are in
 Every edited theme has `<id>.json`, `<id>/style.css` and `<id>/assets/` in the themes
 folder. CSS and JSON changes are observed within the existing one-second poll interval.
 An editor change writes both; an external CSS change updates JSON; an external JSON
-change updates CSS. Current saves canonicalize CSS from the native model, so comments
-and formatting are not preserved. Independent field edits merge; conflicting changes to
+change updates CSS. Native editor saves patch only changed declarations, retaining
+unrelated comments and formatting. Installed package README files are not rewritten.
+Independent field edits merge; conflicting changes to
 one field preserve both files and report the field. A malformed stylesheet or missing
 resource does not overwrite the saved JSON or replace the currently loaded theme.
 
@@ -405,7 +419,38 @@ resolved when importing or reloading theme files. The SVG editor accepts vector 
 
 ## Advanced CSS adapter (experimental)
 
+Migration to [ADR 0031](../decisions/0031-style-sheets.md) is staged. Sheets using
+only the implemented native paint subset (colour, font size, uniform radius,
+opacity, box/text shadows, linear/repeating-linear sRGB gradients, supported selectors, variables and media conditions)
+now resolve through `suhina-style` without creating a Stylo document for those
+paint scopes. Authored-property markers preserve each native control's defaults.
+Unchanged scopes reuse their previous results. Unsupported syntax or substituted
+values keep the complete sheet on the compatibility adapter; features are not
+silently dropped to make a sheet eligible. Radial/conic gradients, interpolation
+spaces other than sRGB, interpolation hints, motion, CSS layers and the
+existing Flex/Grid adapters still use Stylo. Both paths feed the same bounded
+box/text shadow painters through Suhina's own resolved shadow data.
+
+Trace spans `style paint parse`, `style paint resolve` and `legacy CSS resolve`
+separate the new paint work from compatibility restyling. These are UI-thread
+boundaries; no audio callback is instrumented.
+
 ### Workspace layout contract
+
+Panel elements are absent when closed. Fixed tracks still reserve their size for
+absent elements; put sizes on the optional panels and use `auto` tracks instead:
+
+```css
+/* Wrong: leaves a browser-sized hole when the browser is closed. */
+#workspace { display:grid; grid-template-columns:248px minmax(0,1fr);
+             grid-template-rows:minmax(0,1fr) 200px; }
+/* Right: absent browser/detail panels have no fixed-size track. */
+#workspace { display:grid; grid-template-columns:auto minmax(0,1fr);
+             grid-template-rows:minmax(0,1fr) auto; }
+#panel-browser { grid-column:1; grid-row:1 / -1; width:248px; }
+#panel-main { grid-column:2; grid-row:1; }
+#panel-detail { grid-column:2; grid-row:2; height:200px; }
+```
 
 The native workspace exposes `.workspace` / `#workspace`, with `.workspace-panel`
 children `#panel-browser`, `#panel-main`, `#panel-detail`. They contain the browser,
@@ -416,6 +461,41 @@ In CSS layout mode, dimensions and placement come from the stylesheet, so browse
 splitters do not change CSS-owned sizes. Drawing, input clipping and drag/drop targets
 must use the same resolved rectangles. Removing those layout declarations restores the
 native arrangement and its saved sizes. Bars and floating windows remain host-managed.
+
+### Authoring opaque backgrounds and readable values
+
+The `background` shorthand resets an omitted `background-color` to transparent.
+That transparent computed colour is an authored native background override.
+On the see-through main window, `kit/surface.rs` writes a native fill's colour
+and alpha directly to window pixels, rather than blending with previous content.
+It can therefore reveal the desktop even when a separately painted gradient is opaque.
+Use an opaque base plus `background-image` on views, panels, bars and buttons:
+
+```css
+/* Wrong: the native base becomes transparent. */
+.browser { background:linear-gradient(#243A30, #101C17); }
+/* Right: opaque window pixels under the gradient. */
+.browser { background-color:#101C17;
+           background-image:linear-gradient(#243A30, #101C17); }
+```
+
+Use `background-image` alone for track-header/name overlays that retain their native
+fill. The shorthand is suitable for measured `.meter-level` overlays. Meadow's
+explicit transparency over its private background image is intentional and remains
+unchanged. Other intentionally translucent surfaces need the same explicit choice.
+
+Check `text.value` and `text.inverse` against `control.selectedBackground`, aiming
+for at least 4:1 contrast, as well as against unlit/panel backgrounds. Bright text
+that reads on a dark panel can disappear on a bright volume/pan field fill:
+
+```css
+/* Wrong: value text and lit fill have the same colour. */
+:root { --control-selectedBackground:#7CF0C4;
+        --text-value:#7CF0C4; --text-inverse:#7CF0C4; }
+/* Right: dark ink contrasts with the bright fill. */
+:root { --control-selectedBackground:#7CF0C4;
+        --text-value:#14212C; --text-inverse:#14212C; }
+```
 
 `skin.css` retains an authored modern stylesheet verbatim in JSON. Export and native
 storage additionally write `advanced.css`, referenced by `advanced-stylesheet`.
@@ -450,10 +530,20 @@ and start angle. Up to four layers with 64 items each use bounded cached 1024-pi
 colour ramps. Radial/conic images use cached 256-by-256 textures; at most 64 gradient
 textures are retained per egui context. Connected surfaces paint up to four inset/outset
 `box-shadow` layers with resolved `currentColor`, offsets, spread and blur. Native blur
-uses a Gaussian distance-field approximation on cached 256-by-256 textures (32 retained
+uses a Gaussian distance-field approximation on cached textures capped at 256-by-256 (32 retained
 per context), with blur capped at 256 px, offset at ±2048 px and spread at ±512 px.
-Shadows respect the host's existing paint clipping and uniform corner radius. Text
-shadows, transforms and filters are not painted.
+Shadows respect the host's existing paint clipping and uniform corner radius.
+Transforms and filters are not painted.
+
+Box shadows retain a bounded distance-field template for their edge regions.
+A nine-slice mesh stretches only the constant straight-edge centres, preserving
+corners, spread, offsets, blur width and exclusion of the caster. Changing a live
+meter's lit extent or resizing a long surface reuses that template rather than
+rasterizing another 256-by-256 image for each new height/width. Short surfaces keep
+their actual dimensions when opposite edge regions can interact. Their raster size follows
+the template bounds at four samples per physical pixel, capped at 256 per axis,
+rather than regenerating a full-size texture for every short meter level. Display
+scale is part of the texture key; geometry and blur distances remain in logical points.
 
 The style document persists while native scope structure stays unchanged. Native state
 changes snapshot the previous state and restyle that document, allowing Stylo transitions
@@ -472,3 +562,7 @@ preserving them in the source. These notices are not a complete CSS validator.
 Token-level validation bounds input to 128 KiB and 64 nested blocks/functions, without
 treating quoted strings or comments as nesting. This integration is experimental, not
 a claim of universal CSS conformance.
+
+SVG symbol roles (`play`, `stop`, `record`, `solo`, `arm`, `cue`, `track.midi`,
+`track.audio`, `knob.body`, `knob.pointer`) fit and centre their intrinsic aspect ratio
+inside the destination rectangle. Surface artwork continues stretching to its rectangle.

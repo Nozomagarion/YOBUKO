@@ -560,6 +560,7 @@ fn draw_column(
     state: &mut SessionViewState,
     actions: &mut Vec<Action>,
 ) {
+    let _work_trace = crate::kit::frame_trace::WorkSpan::new("session column");
     let id = Id::new(("session-column", column.track.0));
     let header = Rect::from_x_y_ranges(span, bands.header.y_range()).intersect(clip);
     column_header(ui, painter, header, column, bands, state, actions);

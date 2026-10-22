@@ -501,6 +501,84 @@ mod tests {
     use super::*;
     use egui_kittest::{Harness, kittest::Queryable};
 
+    #[test]
+    fn responsive_theme_survives_live_reload_and_resize() {
+        std::thread::Builder::new()
+            .name("native-window-stack".into())
+            .stack_size(1024 * 1024)
+            .spawn(|| {
+                let css = include_str!("../../tests/fixtures/responsive-theme.css");
+                let ctx = egui::Context::default();
+                let mut app = App::new();
+                app.set_session(suhina_session::Session::new(crate::demo::demo_project()), &[]);
+                app.open_project(
+                    suhina_session::Session::new(crate::demo::demo_project()),
+                    &[],
+                    crate::app::OpenAs::NewTab,
+                );
+                app.shown = View::Arrangement;
+                app.detail_open = true;
+                app.set_browser_open(false);
+                let mut theme = theme::Theme::default();
+                theme.skin.css = Some(std::sync::Arc::from(css));
+                app.set_themes(
+                    &ctx,
+                    vec![crate::settings::themes::ThemeEntry { id: "responsive".into(), theme }],
+                    None,
+                );
+                app.use_theme(&ctx, "responsive");
+                theme::install(&ctx);
+                for (browser_index, browser) in [false, true].into_iter().enumerate() {
+                    app.set_browser_open(browser);
+                    App::set_animations(&ctx, !browser);
+                    for (sample, size) in [
+                        Vec2::new(1138.0, 1032.0),
+                        Vec2::new(1000.0, 1032.0),
+                        Vec2::new(820.0, 1032.0),
+                        Vec2::new(800.0, 700.0),
+                        Vec2::splat(1.0),
+                        Vec2::ZERO,
+                        Vec2::new(1138.0, 1032.0),
+                    ]
+                    .into_iter()
+                    .cycle()
+                    .take(35)
+                    .enumerate()
+                    {
+                        if sample == 0 || sample == 2 {
+                            let mut replacement = theme::Theme::default();
+                            replacement.skin.css = Some(std::sync::Arc::from(if sample == 0 {
+                                ".window { background-color:#0A1120; }"
+                            } else {
+                                css
+                            }));
+                            app.put_theme(
+                                &ctx,
+                                crate::settings::themes::ThemeEntry { id: "responsive".into(), theme: replacement },
+                            );
+                        }
+                        ctx.run_ui(
+                            egui::RawInput {
+                                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, size)),
+                                time: Some((browser_index * 35 + sample) as f64 * 0.025),
+                                events: vec![egui::Event::PointerMoved(egui::pos2(
+                                    if sample % 2 == 0 { 532.0 } else { 560.0 },
+                                    69.0,
+                                ))],
+                                ..Default::default()
+                            },
+                            |ui| app.ui(ui),
+                        )
+                        .textures_delta
+                        .clear();
+                    }
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
     struct Fixture {
         app: App,
         grid: Grid,

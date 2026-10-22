@@ -5,9 +5,9 @@
 use std::sync::Arc;
 
 use egui::{Color32, Galley, Painter, Pos2, Rect, Vec2};
-use style::color::AbsoluteColor;
+use suhina_style::paint::ResolvedShadow;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub(super) struct Shadow {
     offset: Vec2,
     blur: f32,
@@ -15,14 +15,11 @@ pub(super) struct Shadow {
 }
 
 impl Shadow {
-    pub fn from_css(shadow: &style::values::computed::effects::SimpleShadow, foreground: &AbsoluteColor) -> Self {
+    pub fn from_native(shadow: &ResolvedShadow) -> Self {
         Self {
-            offset: Vec2::new(
-                bounded(shadow.horizontal.px(), -256.0, 256.0),
-                bounded(shadow.vertical.px(), -256.0, 256.0),
-            ),
-            blur: bounded(shadow.blur.0.px(), 0.0, 32.0),
-            color: super::rgba(&shadow.color.resolve_to_absolute(foreground)),
+            offset: Vec2::new(bounded(shadow.offset[0], -256.0, 256.0), bounded(shadow.offset[1], -256.0, 256.0)),
+            blur: bounded(shadow.blur, 0.0, 32.0),
+            color: Color32::from_rgba_unmultiplied(shadow.color[0], shadow.color[1], shadow.color[2], shadow.color[3]),
         }
     }
 

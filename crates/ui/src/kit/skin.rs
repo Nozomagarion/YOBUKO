@@ -558,7 +558,7 @@ struct Textures {
     sources: HashMap<String, u64>,
 }
 
-fn raster_artwork(source: &str, ink: Color32, width: u32, height: u32) -> Option<egui::ColorImage> {
+fn raster_artwork(source: &str, ink: Color32, width: u32, height: u32, contain: bool) -> Option<egui::ColorImage> {
     let (width, height) = (width.clamp(1, 1024), height.clamp(1, 1024));
     if png_artwork(source) {
         return super::artwork_png::raster(source, width, height);
@@ -567,10 +567,21 @@ fn raster_artwork(source: &str, ink: Color32, width: u32, height: u32) -> Option
     let source = source.replace("currentColor", &color);
     let tree = parse_svg(&source).ok()?;
     let mut pixels = resvg::tiny_skia::Pixmap::new(width, height)?;
-    let transform = resvg::tiny_skia::Transform::from_scale(
-        width as f32 / tree.size().width(),
-        height as f32 / tree.size().height(),
-    );
+    let sx = width as f32 / tree.size().width();
+    let sy = height as f32 / tree.size().height();
+    let transform = if contain {
+        let scale = sx.min(sy);
+        resvg::tiny_skia::Transform::from_row(
+            scale,
+            0.0,
+            0.0,
+            scale,
+            (width as f32 - tree.size().width() * scale) * 0.5,
+            (height as f32 - tree.size().height() * scale) * 0.5,
+        )
+    } else {
+        resvg::tiny_skia::Transform::from_scale(sx, sy)
+    };
     resvg::render(&tree, transform, &mut pixels.as_mut());
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);
     for pixel in pixels.pixels() {
@@ -715,14 +726,32 @@ fn paint_variant(
         hash
     };
     let mut hash = std::hash::DefaultHasher::new();
-    (source_hash, ink.to_array(), w, h).hash(&mut hash);
+    (source_hash, role, ink.to_array(), w, h).hash(&mut hash);
     let key = hash.finish();
     if !textures.images.contains_key(&key) {
         if textures.images.len() >= 64 {
             textures.images.clear();
         }
-        let texture = raster_artwork(source, ink, w, h)
-            .map(|image| painter.ctx().load_texture(format!("skin-{key}"), image, egui::TextureOptions::LINEAR));
+        let texture = raster_artwork(
+            source,
+            ink,
+            w,
+            h,
+            matches!(
+                role,
+                "play"
+                    | "stop"
+                    | "record"
+                    | "solo"
+                    | "arm"
+                    | "cue"
+                    | "track.midi"
+                    | "track.audio"
+                    | "knob.body"
+                    | "knob.pointer"
+            ),
+        )
+        .map(|image| painter.ctx().load_texture(format!("skin-{key}"), image, egui::TextureOptions::LINEAR));
         textures.images.insert(key, texture);
     }
     let Some(Some(texture)) = textures.images.get(&key) else {
@@ -783,6 +812,19 @@ pub fn example_assets() -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn svg_symbols_keep_aspect_ratio_while_surface_artwork_stretches() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#ffffff"/></svg>"##;
+        for (width, height) in [(32, 16), (16, 32)] {
+            let symbol = raster_artwork(svg, Color32::WHITE, width, height, true).unwrap();
+            let surface = raster_artwork(svg, Color32::WHITE, width, height, false).unwrap();
+            let lit = symbol.pixels.iter().filter(|p| p.a() > 0).count();
+            assert_eq!(lit, 16 * 16);
+            assert!(surface.pixels.iter().all(|p| p.a() == 255));
+            assert_eq!(symbol.pixels[0].a(), 0);
+        }
+    }
 
     #[test]
     fn png_roles_reuse_pixels_until_a_live_edit_changes_the_source() {

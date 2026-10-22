@@ -20,6 +20,38 @@ fn id() -> Id {
     Id::new("interface-edit-draft")
 }
 
+/// Grid placement with optional peer edge/centre alignment; Shift refines the grid; Alt+Shift bypasses snapping.
+fn drag_position(
+    desired: egui::Pos2,
+    entry: &Entry,
+    entries: &[Entry],
+    modifiers: egui::Modifiers,
+) -> (egui::Pos2, [Option<f32>; 2]) {
+    if modifiers.shift && modifiers.alt {
+        return (desired, [None; 2]);
+    }
+    let step = if modifiers.shift { 1.0 } else { 8.0 };
+    let mut position = egui::pos2((desired.x / step).round() * step, (desired.y / step).round() * step);
+    let mut guides = [None; 2];
+    let mut best = [4.0; 2];
+    for peer in entries.iter().filter(|p| p.name != entry.name && p.bounds == entry.bounds) {
+        for axis in 0..2 {
+            let extent = entry.at.size()[axis];
+            for source in [0.0, extent * 0.5, extent] {
+                for target in [peer.at.min[axis], peer.at.center()[axis], peer.at.max[axis]] {
+                    let delta = target - (desired[axis] + source);
+                    if delta.abs() < best[axis] {
+                        best[axis] = delta.abs();
+                        position[axis] = desired[axis] + delta;
+                        guides[axis] = Some(target);
+                    }
+                }
+            }
+        }
+    }
+    (position, guides)
+}
+
 impl App {
     pub(super) fn control_editor_theme_changed(&self, ctx: &egui::Context) {
         if ctx.data(|data| data.get_temp::<Draft>(id())).is_some_and(|draft| draft.theme != self.settings.theme) {
@@ -117,14 +149,22 @@ impl App {
                             .data(|data| data.get_temp::<egui::Pos2>(response.id.with("origin")))
                             .unwrap_or(entry.at.min);
                         let desired = origin + response.total_drag_delta().unwrap_or_default();
-                        let snapped = egui::pos2((desired.x / 8.0).round() * 8.0, (desired.y / 8.0).round() * 8.0);
+                        let (snapped, guides) = drag_position(desired, entry, entries, overlay.input(|i| i.modifiers));
+                        if let Some(x) = guides[0] {
+                            overlay.painter().vline(x, entry.bounds.y_range(), egui::Stroke::new(1.0, ink));
+                        }
+                        if let Some(y) = guides[1] {
+                            overlay.painter().hline(entry.bounds.x_range(), y, egui::Stroke::new(1.0, ink));
+                        }
                         let layout = draft.controls.entry(entry.name.clone()).or_default();
                         layout.bottom = None;
-                        layout.x = (snapped.x - entry.native.left()).round().clamp(-16384.0, 16384.0) as i32;
-                        layout.y = (snapped.y - entry.native.top()).round().clamp(-16384.0, 16384.0) as i32;
+                        layout.full_height = false;
+                        layout.full_width = false;
+                        layout.right = None;
+                        layout.set_offset(snapped - entry.native.min);
                         overlay.ctx().request_repaint();
                     }
-                    response.on_hover_text(format!("{} · drag to move · 8 point grid", entry.name));
+                    response.on_hover_text(format!("{} · drag to move · Shift: 1 px · Alt+Shift: free", entry.name));
                 }
             });
         egui::Window::new("Edit interface")
@@ -134,7 +174,7 @@ impl App {
             .resizable(false)
             .collapsible(false)
             .show(ui.ctx(), |tools| {
-                tools.label("Move outlined elements · 8 point snap grid");
+                tools.label("Drag: grid/alignment · Shift: 1 px · Alt+Shift: free");
                 tools.label("Matching elements share the theme layout.");
                 let names: std::collections::BTreeSet<_> =
                     entries.iter().map(|entry| entry.name.clone()).chain(draft.controls.keys().cloned()).collect();
@@ -153,14 +193,31 @@ impl App {
                 if !draft.selected.is_empty() && can_edit {
                     let mut layout = draft.controls.get(&draft.selected).copied().unwrap_or_default();
                     let before = layout;
+                    let mut offset = layout.offset();
                     tools.horizontal(|tools| {
                         tools.label("Offset X");
-                        tools.add(egui::DragValue::new(&mut layout.x).range(-16384..=16384));
+                        tools.add(egui::DragValue::new(&mut offset.x).range(-16384..=16384));
                         tools.label("Y");
-                        tools.add(egui::DragValue::new(&mut layout.y).range(-16384..=16384));
+                        tools.add(egui::DragValue::new(&mut offset.y).range(-16384..=16384));
                     });
+                    layout.set_offset(offset);
+                    if tools.checkbox(&mut layout.full_width, "Full width").changed() {
+                        layout.width = None;
+                    }
+                    if layout.full_width {
+                        tools.label("X is the left inset; Anchor to right sets the right inset.");
+                    }
+                    if tools.checkbox(&mut layout.full_height, "Full height").changed() {
+                        layout.height = None;
+                    }
+                    if layout.full_height {
+                        tools.label("Y is the top inset; Anchor to bottom sets the bottom inset.");
+                    }
                     tools.horizontal(|tools| {
                         for (name, dimension) in [("Width", &mut layout.width), ("Height", &mut layout.height)] {
+                            if (name == "Height" && layout.full_height) || (name == "Width" && layout.full_width) {
+                                continue;
+                            }
                             let mut custom = dimension.is_some();
                             if tools.checkbox(&mut custom, name).changed() {
                                 *dimension = custom.then_some(20);
@@ -168,6 +225,15 @@ impl App {
                             if let Some(value) = dimension {
                                 tools.add(egui::DragValue::new(value).range(1..=4096));
                             }
+                        }
+                    });
+                    tools.horizontal(|tools| {
+                        let mut right = layout.right.is_some();
+                        if tools.checkbox(&mut right, "Anchor to right").changed() {
+                            layout.right = right.then_some(0);
+                        }
+                        if let Some(value) = &mut layout.right {
+                            tools.add(egui::DragValue::new(value).range(-16384..=16384));
                         }
                     });
                     tools.horizontal(|tools| {
@@ -246,6 +312,38 @@ mod tests {
     fn start(harness: &mut Harness<'static, App>) {
         harness.state().start_control_editor(&harness.ctx);
         harness.run_steps(4);
+    }
+
+    #[test]
+    fn drag_modifiers_and_peer_alignment_are_distinct() {
+        let bounds = egui::Rect::from_min_size(egui::Pos2::ZERO, Vec2::splat(200.0));
+        let rect = egui::Rect::from_min_size(egui::pos2(16.0, 16.0), Vec2::new(20.0, 10.0));
+        let entry = Entry { name: "moving".into(), native: rect, at: rect, bounds };
+        let peer_rect = egui::Rect::from_min_size(egui::pos2(100.0, 31.0), rect.size());
+        let peer = Entry { name: "peer".into(), native: peer_rect, at: peer_rect, bounds };
+        let desired = egui::pos2(18.25, 30.25);
+        let (aligned, guides) = drag_position(desired, &entry, std::slice::from_ref(&peer), egui::Modifiers::NONE);
+        assert_eq!(aligned.y, 31.0);
+        assert_eq!(guides[1], Some(31.0));
+        let (aligned_shift, guides) =
+            drag_position(desired, &entry, std::slice::from_ref(&peer), egui::Modifiers::SHIFT);
+        assert_eq!(aligned_shift.y, 31.0);
+        assert_eq!(guides[1], Some(31.0));
+        let desired_x = egui::pos2(98.75, 60.25);
+        let (aligned_x, guides) = drag_position(desired_x, &entry, std::slice::from_ref(&peer), egui::Modifiers::SHIFT);
+        assert_eq!(aligned_x.x, 100.0);
+        assert_eq!(aligned_x.y, 60.0);
+        assert_eq!(guides[0], Some(100.0));
+        assert_eq!(
+            drag_position(desired, &entry, &[peer], egui::Modifiers { alt: true, shift: true, ..Default::default() }),
+            (desired, [None; 2])
+        );
+        let (fine, guides) = drag_position(desired, &entry, &[], egui::Modifiers::SHIFT);
+        assert_eq!(fine, egui::pos2(18.0, 30.0));
+        assert_eq!(guides, [None; 2]);
+        let free = egui::Modifiers { alt: true, shift: true, ..Default::default() };
+        assert_eq!(drag_position(desired, &entry, &[], free).0, desired);
+        assert_eq!(drag_position(desired, &entry, &[], egui::Modifiers::ALT).0, egui::pos2(16.0, 32.0));
     }
 
     #[test]

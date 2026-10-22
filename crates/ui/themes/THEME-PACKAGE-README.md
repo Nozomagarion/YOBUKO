@@ -217,12 +217,13 @@ Portable exports include inherited artwork so another machine receives the same 
 The advanced adapter uses Stylo for CSS and Taffy for connected layout. For example:
 
 ```css
-.browser { color: #D8E8DF; background: linear-gradient(135deg, #243A30, #101C17); }
-#workspace { display: grid; grid-template-columns: 240px minmax(0, 1fr);
-             grid-template-rows: minmax(0, 1fr) 180px; gap: 8px; }
-#panel-browser { grid-column: 1; grid-row: 1 / -1; }
+.browser { color: #D8E8DF; background-color: #101C17;
+           background-image: linear-gradient(135deg, #243A30, #101C17); }
+#workspace { display: grid; grid-template-columns: auto minmax(0, 1fr);
+             grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+#panel-browser { grid-column: 1; grid-row: 1 / -1; width: 240px; }
 #panel-main { grid-column: 2; grid-row: 1; }
-#panel-detail { grid-column: 2; grid-row: 2; }
+#panel-detail { grid-column: 2; grid-row: 2; height: 180px; }
 ```
 
 Workspace layout respects native panel visibility. CSS-owned sizes replace the
@@ -250,7 +251,67 @@ off and ignores artwork fps. Missing/invalid sequences use native continuous bar
 Colour/state-specific meter sequences follow the same precedence as other roles.
 The native clip light, accessible level description and click-to-reset remain active.
 
+## Backgrounds on the see-through window
+
+`background:` resets `background-color` to transparent when no colour is included.
+Suhina treats that computed transparent colour as authored. Native background fills
+write colour **and alpha** directly into the main window, so a transparent fill can
+expose the desktop even when its gradient is opaque. For an opaque surface, use an
+opaque base and a separate image. This applies to views, panels, bars and buttons.
+
+```css
+/* Wrong: resets the native base to transparent. */
+.browser { background: linear-gradient(#243A30, #101C17); }
+/* Right: opaque base and independently painted gradient. */
+.browser { background-color: #101C17;
+           background-image: linear-gradient(#243A30, #101C17); }
+```
+
+For overlays such as `.track-header` and `.track-name`, use `background-image` alone
+to preserve the native fill. The `.meter-level` measured overlay may use the
+shorthand. Meadow deliberately uses transparency over its private background PNG;
+do not make an intentionally translucent theme opaque as a blanket correction.
+
+## Closed-panel Grid tracks
+
+CSS cannot open a closed browser or detail panel: its element is absent. A fixed
+track still reserves space for that absent element. Put the dimensions on panels
+and use `auto` for their tracks, so they collapse when the panel is closed.
+
+```css
+/* Wrong: reserves 248px and 200px even when those panels are closed. */
+#workspace { display: grid; grid-template-columns: 248px minmax(0, 1fr);
+             grid-template-rows: minmax(0, 1fr) 200px; }
+/* Right: absent panels leave no fixed-size track. */
+#workspace { display: grid; grid-template-columns: auto minmax(0, 1fr);
+             grid-template-rows: minmax(0, 1fr) auto; }
+#panel-browser { grid-column: 1; grid-row: 1 / -1; width: 248px; }
+#panel-main { grid-column: 2; grid-row: 1; }
+#panel-detail { grid-column: 2; grid-row: 2; height: 200px; }
+```
+
+Check browser and detail both open and closed, separately, at narrow and wide sizes.
+
+## Value text on lit controls
+
+`text.value` and `text.inverse` must contrast with `control.selectedBackground`,
+not just the panel. Aim for at least **4:1** on the lit fill of volume/pan fields;
+also inspect the unlit part, disabled states and partially filled controls.
+
+```css
+/* Wrong: mint text disappears on a mint selected fill. */
+:root { --control-selectedBackground: #7CF0C4;
+        --text-value: #7CF0C4; --text-inverse: #7CF0C4; }
+/* Right: dark ink on that bright fill. */
+:root { --control-selectedBackground: #7CF0C4;
+        --text-value: #14212C; --text-inverse: #14212C; }
+```
+
 ## Limits: what an author or AI must not assume
+
+Follow the background, closed-panel Grid and lit-fill contrast rules above before
+copying a CSS example. A parsed stylesheet is not evidence that those checks passed.
+
 
 This is an experimental native adapter, not a browser. Stylo parsing a property
 does not mean egui paints it. Some raw widgets still need integration. Transforms,
@@ -277,6 +338,11 @@ Use `text.primary` contrast of at least 7:1 and hints of at least 3:1 where poss
 
 ## For AI-assisted edits
 
+Before editing, read the three authoring rules above: preserve an opaque native base
+with `background-color` plus `background-image`, collapse absent-panel Grid tracks,
+and contrast value/inverse text against selected fills. Report those checks explicitly.
+
+
 Describe the requested visual change and choose the smallest supported change.
 Preserve unrelated palette, assets, layout, project data and native behavior.
 Return a complete portable package and explain modified files, preview limitations
@@ -286,3 +352,26 @@ conflicting edits. Back up the user's theme before replacing it.
 Current specifications: https://github.com/suhina-daw/suhina-daw/blob/main/docs/spec/theme-skins.md
 and https://github.com/suhina-daw/suhina-daw/blob/main/docs/decisions/0030-native-theme-css.md
 (on a development branch, use that branch's corresponding documents).
+
+### Full-height controls and symbol proportions
+
+Use **Edit interface → Full height** to stretch a control with its containing panel.
+Y becomes the top inset; **Anchor to bottom** supplies the bottom inset (zero by default).
+For example, a meter with four-point margins uses:
+
+```css
+.control-arrangement-meter { height: 100%; top: 4px; bottom: 4px; }
+```
+
+`height: auto` restores native height. Arrangement meter geometry follows the whole
+track, so scrolling does not rescale its level. SVG symbol roles preserve their aspect
+ratio and are centred; surface artwork such as button and track backgrounds stretches.
+
+Interface dragging uses the 8-point grid and nearby peer edges/centres by default.
+Hold **Shift** for one logical pixel steps with peer alignment; **Alt+Shift** for free
+subpixel placement without snapping. Alt alone keeps normal snapping. Guides indicate alignment;
+aligning does not create a persistent dependency on another control.
+
+**Full width** uses `width: 100%`, with `left` and `right` as panel insets.
+For example `.control-mixer-name { width: 100%; left: 4px; right: 4px; }`.
+Fractional left/top offsets survive saving; existing integer offsets remain valid.

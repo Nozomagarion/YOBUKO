@@ -20,8 +20,8 @@
     color: #123e24;
   }
   .detail, .device-panel { background-color: #f3f7f4; color: #24372b; }
-  .track-header { background: linear-gradient(#ffffff55, #ffffff22); }
-  .track-name { background: linear-gradient(#ffffff77, #ffffff55); }
+  .track-header { background-image: linear-gradient(#ffffff55, #ffffff22); }
+  .track-name { background-image: linear-gradient(#ffffff77, #ffffff55); }
   .mixer { background-color: #f8faf8; box-shadow: inset -1px 0 0 #d4ddd6; }
   .button { color: #285b3c; background-color: #ffffff; border-color: #a7bdae; border-radius: 0px; }
   .button:hover { color: #185c37; background-color: #e2f0d9; border-color: #217346; }

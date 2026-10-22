@@ -52,6 +52,12 @@ source or artwork was copied into this change.
 
 ## Selected direction
 
+The staged replacement in [ADR 0031](0031-style-sheets.md) now handles complete
+sheets in the supported native paint subset. The integration described below
+remains the compatibility path for other sheets, including layout, radial/conic gradients,
+CSS layers and animation. Native box/text shadow painters no longer depend on
+Stylo value types; this adapter converts those types at its boundary.
+
 Use Stylo for CSS semantics and Taffy for layout, with egui retaining native controls
 and command dispatch. This direction was selected for the broad customization target.
 The initial adapter uses released `blitz-dom`, `blitz-html` and `blitz-traits`

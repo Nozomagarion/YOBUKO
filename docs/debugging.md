@@ -132,6 +132,16 @@ the controls' own work. `slow native CSS tree` measures the retained style tree'
 updates. In older builds, persistence ran synchronously after the drawing timer:
 a long gap between frames could be file work rather than GPU presentation.
 
+Nested UI measurements report `slow arrangement clip`, `slow arrangement track header`,
+`slow session column`, `slow mixer strip`, `slow mixer layout`, `slow waveform geometry`,
+`slow waveform paint` and `slow CSS gradient paint` when an individual call takes at least
+5 ms. These are inclusive measurements: a clip includes its waveform work, and a column
+includes its mixer. Do not add nested durations together. Many calls shorter than 5 ms
+can still make a slow frame; absence of these lines does not exclude that path.
+Slow Arrangement track headers also partition their time into style, interaction,
+background, meter/bands, layout/name, controls/routing and remaining work. Checkpoints
+use bounded storage and are printed together only when the enclosing call is slow.
+
 ### Audio dropouts
 
 A sample that sometimes does not sound, or sound that stutters, shows as `audio:` lines while it

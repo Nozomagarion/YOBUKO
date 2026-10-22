@@ -5,6 +5,7 @@ type: system
 status: current
 last_verified: 2026-10-22
 covers:
+  - crates/style/
   - apps/suhina/src/theme_io.rs
   - crates/session/src/record_writer.rs
   - Cargo.toml
@@ -90,6 +91,7 @@ allocation or locking.
 
 | Crate | Owns | Depends on |
 |---|---|---|
+| `style` | Toolkit-independent native style sheets ([ADR 0031](decisions/0031-style-sheets.md)): bounded selectors and device scopes, typed properties and shadow data, cascade and inherited variables, viewport conditions, Taffy rectangles and source-preserving edits. It takes text and element data, never a window, file or audio callback. The desktop uses the source editor and resolves supported paint-only sheets directly; sheets requiring remaining layout, gradient or animation features use the compatibility adapter during migration. | cssparser, taffy |
 | `model` | The DAW-neutral project: tracks, mixer channels, a pool of clip contents, clips that place them, the launcher grid ([ADR 0001](decisions/0001-daw-neutral-model.md)). Validation, with groups nested at most 16 deep and never inside themselves, and the one conversion from beats to time and bars through the tempo and time-signature changes (`TempoMap`, `Meter`; [spec](spec/tempo-map.md)), and which audio clips overlap on a track (`audio_overlaps`, [ADR 0028](decisions/0028-ara-hosting.md)). No behaviour beyond that. | nothing |
 | `stretch` | Time-stretching and pitch-shifting DSP for interleaved audio: a pure-Rust port of Signalsmith Stretch (MIT), behind every stretch mode except `Repitch` ([ADR 0003](decisions/0003-time-stretching.md)). | nothing (rustfft) |
 | `als` | Reading Live Sets into `model`, with warnings for what it skips ([spec](spec/als-format.md)). One crate per format later. | model |

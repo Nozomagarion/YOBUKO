@@ -5,6 +5,8 @@
 use super::{skin, theme::Theme};
 use serde_json::json;
 
+pub use suhina_style::edit as source;
+
 pub const MAX_CSS: usize = 128 * 1024;
 
 /// Apply declarations in source order. Unsupported selectors/properties are visible warnings.
@@ -247,13 +249,22 @@ pub fn export(theme: &Theme) -> String {
         }
     }
     for (name, placement) in &theme.skin.controls {
-        css.push_str(&format!(".control-{name} {{ left: {}px; top: {}px;", placement.x, placement.y));
+        css.push_str(&format!(".control-{name} {{ left: {}px; top: {}px;", placement.offset().x, placement.offset().y));
         css.push_str(&format!(
             " bottom: {}; display: {};",
             placement.bottom.map_or("auto".into(), |v| format!("{v}px")),
             if placement.hidden { "none" } else { "block" }
         ));
+        css.push_str(&format!(" right: {};", placement.right.map_or("auto".into(), |v| format!("{v}px"))));
         for (key, value) in [("width", placement.width), ("height", placement.height)] {
+            if key == "width" && placement.full_width {
+                css.push_str(" width: 100%;");
+                continue;
+            }
+            if key == "height" && placement.full_height {
+                css.push_str(" height: 100%;");
+                continue;
+            }
             css.push_str(&format!(" {key}: {};", value.map_or("auto".into(), |v| format!("{v}px"))));
         }
         css.push_str(&format!(
@@ -306,7 +317,7 @@ mod tests {
     #[test]
     fn control_geometry_round_trips_between_css_and_json_with_hostile_values_bounded() {
         let mut theme = Theme::default();
-        let css = ".control-mixer-volume { left: 8px; width: 90px; height: 20px; --suhina-direction: horizontal; } .control-mixer-name { bottom: 0px; } .control-mixer-color { display: none; }";
+        let css = ".control-mixer-volume { left: 8.25px; width: 90px; height: 20px; --suhina-direction: horizontal; } .control-mixer-name { bottom: 0px; } .control-mixer-color { display: none; }";
         assert!(apply(&mut theme, css).is_empty());
         assert_eq!(theme.skin.controls["mixer-volume"].direction, super::super::control_layout::Direction::Horizontal);
         assert_eq!(theme.skin.controls["mixer-name"].bottom, Some(0));

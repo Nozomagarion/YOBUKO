@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Native painting of computed CSS gradients. Stylo owns parsing and colour interpolation.
+//! Shared texture/mesh painting for native linear gradients and compatibility gradients.
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -29,12 +29,38 @@ struct Stop {
 pub(super) struct Gradient {
     key: u64,
     geometry: Geometry,
-    interpolation: ColorInterpolationMethod,
+    interpolation: Option<ColorInterpolationMethod>,
     repeating: bool,
     stops: Vec<Stop>,
+    native: Option<suhina_style::gradient::Linear>,
 }
 
 impl Gradient {
+    #[cfg(test)]
+    pub(super) fn pixel_samples(&self, basis: f32) -> Vec<Color32> {
+        let points = self.positions(basis);
+        (0..1024).map(|index| self.sample(&points, basis, index as f32 / 1023.0)).collect()
+    }
+    #[cfg(test)]
+    pub(super) fn geometry_samples(&self, size: Vec2) -> [f32; 5] {
+        let mapping = self.geometry.resolve(size);
+        [Vec2::ZERO, Vec2::new(size.x, 0.0), size, Vec2::new(0.0, size.y), size * 0.5]
+            .map(|point| mapping.position(point))
+    }
+    pub fn from_native(gradient: suhina_style::gradient::Linear) -> Self {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::hash::DefaultHasher::new();
+        "native-linear".hash(&mut hasher);
+        format!("{gradient:?}").hash(&mut hasher);
+        Self {
+            key: hasher.finish(),
+            geometry: Geometry::NativeLinear(gradient.direction),
+            interpolation: None,
+            repeating: gradient.repeating,
+            stops: Vec::new(),
+            native: Some(gradient),
+        }
+    }
     pub fn from_css(css: &CssGradient, foreground: &AbsoluteColor, key: u64) -> Option<Self> {
         let (geometry, interpolation, flags, stops) = match css {
             CssGradient::Linear { direction, color_interpolation_method, items, flags, .. } => (
@@ -61,7 +87,14 @@ impl Gradient {
                 })?,
             ),
         };
-        Some(Self { key, geometry, interpolation, repeating: flags.contains(GradientFlags::REPEATING), stops })
+        Some(Self {
+            key,
+            geometry,
+            interpolation: Some(interpolation),
+            repeating: flags.contains(GradientFlags::REPEATING),
+            stops,
+            native: None,
+        })
     }
 
     fn stops<T>(
@@ -91,6 +124,9 @@ impl Gradient {
     }
 
     fn positions(&self, basis: f32) -> Vec<f32> {
+        if let Some(native) = &self.native {
+            return native.positions(basis);
+        }
         let position = |value: &LengthPercentage| value.resolve(Length::new(basis)).px() / basis;
         let mut points: Vec<_> = self.stops.iter().map(|stop| stop.position.as_ref().map(position)).collect();
         let last = points.len().saturating_sub(1);
@@ -122,6 +158,10 @@ impl Gradient {
     }
 
     fn sample(&self, points: &[f32], basis: f32, position: f32) -> Color32 {
+        if let Some(native) = &self.native {
+            let [r, g, b, a] = native.sample(points, position);
+            return Color32::from_rgba_unmultiplied(r, g, b, a);
+        }
         let mut index = 0;
         for at in 1..points.len() {
             if position < points.get(at).copied().unwrap_or(1.0) {
@@ -148,8 +188,11 @@ impl Gradient {
                 weight.powf(0.5_f32.ln() / hint.ln())
             };
         }
+        let Some(interpolation) = self.interpolation else {
+            return Color32::TRANSPARENT;
+        };
         let color = mix_many(
-            self.interpolation,
+            interpolation,
             [ColorMixItem::new(left.color, 1.0 - weight), ColorMixItem::new(right.color, weight)],
             ColorMixFlags::empty(),
         );
@@ -167,6 +210,7 @@ struct Ramp {
 struct Textures(HashMap<(u64, u32, u32), Ramp>);
 
 fn draw(painter: &Painter, rect: Rect, gradient: &Gradient, radius: f32, opacity: f32) -> bool {
+    let _work_trace = crate::kit::frame_trace::WorkSpan::new("CSS gradient paint");
     if !rect.is_finite() || !rect.is_positive() {
         return false;
     }

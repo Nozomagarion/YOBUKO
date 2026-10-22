@@ -285,6 +285,54 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "manual performance comparison; run without a simultaneous interactive test"]
+    fn measure_short_moving_meter_glow() {
+        for glow in [false, true] {
+            let ctx = egui::Context::default();
+            theme::install(&ctx);
+            super::super::skin::configure(&super::super::skin::Skin {
+                css: Some(
+                    if glow {
+                        ".meter-level { box-shadow: 0 0 2px #83d82b55; }"
+                    } else {
+                        ".meter-level { color: #83d82b; }"
+                    }
+                    .into(),
+                ),
+                ..Default::default()
+            });
+            let mut times = Vec::new();
+            let mut uploads = 0;
+            for frame in 0..24 {
+                let started = std::time::Instant::now();
+                let mut output =
+                    ctx.run_ui(egui::RawInput { time: Some(frame as f64 * 0.02), ..Default::default() }, |ui| {
+                        let _frame = super::super::native_css::frame(ui);
+                        for track in 0..20 {
+                            let amplitude = 0.0004 + (frame * 20 + track) as f32 * 0.000001;
+                            show(
+                                ui,
+                                ui.painter(),
+                                Rect::from_min_size(Pos2::new(20.0 + track as f32 * 20.0, 20.0), Vec2::new(10.0, 38.0)),
+                                "test",
+                                Source::Track(TrackId(track)),
+                                &Level { peak: [amplitude; 2], rms: [amplitude * 0.5; 2], clipped: false },
+                                &mut Vec::new(),
+                            );
+                        }
+                    });
+                if frame > 3 {
+                    times.push(started.elapsed().as_secs_f64() * 1000.0);
+                    uploads += output.textures_delta.set.len();
+                }
+                output.textures_delta.clear();
+            }
+            times.sort_by(f64::total_cmp);
+            eprintln!("short moving meters glow={glow}: median {:.3} ms, uploads {uploads}", times[10]);
+        }
+    }
+
+    #[test]
     fn intensity_dims_native_ink_without_changing_geometry_or_clip_light() {
         use crate::kit::{native_css, skin};
         for meter in [skin::MeterStyle::Continuous, skin::MeterStyle::Segmented, skin::MeterStyle::Needle] {

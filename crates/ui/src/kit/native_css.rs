@@ -19,6 +19,7 @@ use egui::{Color32, Rect, Vec2};
 use super::{skin, theme};
 mod diagnostics;
 mod geometry;
+mod native;
 mod paint;
 mod shadows;
 mod text;
@@ -55,7 +56,7 @@ impl Computed {
 
 /// Only authored properties override native defaults. An unrelated CSS rule must not
 /// replace every label's native colour, size or corner radius with browser defaults.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Authored {
     pub color: bool,
     pub background: bool,
@@ -81,6 +82,7 @@ struct Engine {
     previous: Vec<StyleNode>,
     values: HashMap<u64, Computed>,
     document: Option<HtmlDocument>,
+    native: Option<native::Paint>,
     motion: bool,
     styles_changed: bool,
 }
@@ -219,9 +221,24 @@ fn finish_tree(now: f64) -> (bool, bool) {
         let changed = engine.nodes != engine.previous;
         let animating_before = engine.document.as_ref().is_some_and(|doc| doc.is_animating());
         if engine.source.is_none()
-            || (!changed && !engine.styles_changed && !animating_before && engine.document.is_some())
+            || (!changed
+                && !engine.styles_changed
+                && !animating_before
+                && (engine.document.is_some() || (engine.native.is_some() && !engine.values.is_empty())))
         {
             return (false, false);
+        }
+        if engine.native.is_some() {
+            if let Some(values) = suhina_plugins::trace::timed("style paint resolve", || native::retained(&engine)) {
+                engine.values = values.into_iter().collect();
+                engine.previous = engine.nodes.clone();
+                engine.styles_changed = false;
+                engine.document = None;
+                return (true, false);
+            }
+            // A substituted value may require an unsupported feature. Switch the
+            // entire sheet back, never publish a partly computed native snapshot.
+            engine.native = None;
         }
         let same_tree = engine.nodes.len() == engine.previous.len()
             && engine
@@ -299,7 +316,7 @@ fn finish_tree(now: f64) -> (bool, bool) {
             }
             ids.push((node.key, id));
         }
-        doc.resolve(now);
+        suhina_plugins::trace::timed("legacy CSS resolve", || doc.resolve(now));
         let values = ids.into_iter().filter_map(|(key, id)| computed(&doc, id).map(|values| (key, values))).collect();
         engine.values = values;
         engine.previous = engine.nodes.clone();
@@ -346,7 +363,10 @@ pub fn begin_frame(ui: &egui::Ui) {
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         if engine.source != source {
-            *engine = Engine { source, palette: variables, size, dark, ..Default::default() };
+            let native = suhina_plugins::trace::timed("style paint parse", || {
+                source.as_deref().and_then(|source| native::Paint::new(source, &variables))
+            });
+            *engine = Engine { source, palette: variables, size, dark, native, ..Default::default() };
         } else if engine.size != size || engine.dark != dark || engine.palette != variables {
             // Palette drags and native resizing do not change the scope tree or
             // authored CSS. Keep its document and last computed snapshot so that
@@ -369,6 +389,10 @@ pub fn begin_frame(ui: &egui::Ui) {
                 }
             }
             engine.palette = variables;
+            let palette = engine.palette.clone();
+            if engine.native.as_mut().is_some_and(|paint| paint.palette(&palette).is_none()) {
+                engine.native = None;
+            }
             engine.size = size;
             engine.dark = dark;
             engine.styles_changed = true;
@@ -409,10 +433,29 @@ fn document(engine: &Engine, body: &str, defaults: &str) -> Option<HtmlDocument>
 }
 
 fn rgba(color: &style::color::AbsoluteColor) -> Color32 {
+    let [r, g, b, a] = rgba_bytes(color);
+    Color32::from_rgba_unmultiplied(r, g, b, a)
+}
+
+fn rgba_bytes(color: &style::color::AbsoluteColor) -> [u8; 4] {
     let srgb = color.to_color_space(style::color::ColorSpace::Srgb);
     let channels = srgb.raw_components();
     let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    Color32::from_rgba_unmultiplied(byte(channels[0]), byte(channels[1]), byte(channels[2]), byte(channels[3]))
+    [byte(channels[0]), byte(channels[1]), byte(channels[2]), byte(channels[3])]
+}
+
+// Compatibility boundary only. Native painters have no Stylo types.
+fn legacy_shadow(
+    shadow: &style::values::computed::effects::SimpleShadow,
+    foreground: &style::color::AbsoluteColor,
+) -> suhina_style::paint::ResolvedShadow {
+    suhina_style::paint::ResolvedShadow {
+        offset: [shadow.horizontal.px(), shadow.vertical.px()],
+        blur: shadow.blur.0.px(),
+        spread: 0.0,
+        color: rgba_bytes(&shadow.color.resolve_to_absolute(foreground)),
+        inset: false,
+    }
 }
 
 fn authored_property(
@@ -497,7 +540,7 @@ fn computed(doc: &HtmlDocument, id: blitz_dom::NodeId) -> Option<Computed> {
             .0
             .iter()
             .take(4)
-            .map(|shadow| text::Shadow::from_css(shadow, &color))
+            .map(|shadow| text::Shadow::from_native(&legacy_shadow(shadow, &color)))
             .collect::<Vec<_>>()
             .into(),
         shadows: values
@@ -505,7 +548,12 @@ fn computed(doc: &HtmlDocument, id: blitz_dom::NodeId) -> Option<Computed> {
             .0
             .iter()
             .take(4)
-            .map(|shadow| shadows::Shadow::from_css(shadow, &color))
+            .map(|shadow| {
+                let mut value = legacy_shadow(&shadow.base, &color);
+                value.spread = shadow.spread.px();
+                value.inset = shadow.inset;
+                shadows::Shadow::from_native(&value)
+            })
             .collect::<Vec<_>>()
             .into(),
         authored: Authored {
@@ -550,6 +598,13 @@ pub fn scoped(stack: &[String]) -> Option<Computed> {
         }
         if engine.contexts.len() >= MAX_CONTEXTS {
             return None;
+        }
+        if engine.native.is_some() {
+            if let Some(values) = native::scoped(&engine, stack) {
+                engine.contexts.insert(stack.to_vec(), values.clone());
+                return Some(values);
+            }
+            engine.native = None;
         }
         let mut body = String::from("<!doctype html><html><body>");
         for (index, class) in stack.iter().enumerate() {
@@ -662,6 +717,229 @@ pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
 mod tests {
     use super::*;
     #[test]
+    fn native_linear_gradients_match_legacy_ramp_pixels() {
+        for image in [
+            "linear-gradient(red,blue)",
+            "linear-gradient(to right, red, transparent)",
+            "linear-gradient(145deg, #12345620, currentColor 70%, #000)",
+            "linear-gradient(to top right, white 0 45%, green 45% 100%)",
+            "repeating-linear-gradient(90deg, transparent 0 21px, #e5ece7 21px 22px)",
+            "linear-gradient(red, green, blue), linear-gradient(90deg, #fff3, #0008)",
+        ] {
+            let css = format!(".button {{color:#34789a; background-image:{image};}}");
+            prepare(&css, 800.0);
+            let stack = ["button".into()];
+            let native = scoped(&stack).unwrap();
+            ENGINE.with(|engine| {
+                let mut engine = engine.borrow_mut();
+                assert!(engine.native.is_some(), "{image}");
+                engine.native = None;
+                engine.contexts.clear();
+            });
+            let legacy = scoped(&stack).unwrap();
+            assert_eq!(native.gradients.len(), legacy.gradients.len());
+            assert!(!native.gradients.is_empty());
+            for (native, legacy) in native.gradients.iter().zip(legacy.gradients.iter()) {
+                for basis in [17.0, 100.0, 480.0] {
+                    let size = Vec2::new(basis, basis * 0.5);
+                    assert!(
+                        native
+                            .geometry_samples(size)
+                            .iter()
+                            .zip(legacy.geometry_samples(size))
+                            .all(|(a, b)| (a - b).abs() < 0.00001)
+                    );
+                    for (native, legacy) in native.pixel_samples(basis).iter().zip(legacy.pixel_samples(basis)) {
+                        assert!(
+                            native.to_array().iter().zip(legacy.to_array()).all(|(a, b)| a.abs_diff(b) <= 2),
+                            "{image}: {native:?} != {legacy:?}"
+                        );
+                    }
+                }
+            }
+        }
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn native_paint_matches_legacy_values_without_constructing_html() {
+        for css in [
+            ".button { color:#123456; background-color:#abcdef80; border-color:currentColor; border-radius:4px; opacity:.7; }",
+            ":root { --ink:#2468ac; } .toolbar { color:var(--ink); font-size:12px; } .button { font-size:1.5em; border-radius:.25em; box-shadow:inset 0 1px 2px -1px #fff4, 1px 2px 3px currentColor; text-shadow:0 1px 1px #000a; }",
+            ".toolbar { font-size:12px; color:rgba(12, 34, 56, .5); } @media (max-width:900px) { .button { color:#654321; } }",
+            ".button { box-shadow:0 0 2px; text-shadow:1px 2px; }",
+            ".toolbar { font-size:12px; text-shadow:1em 1em 1em currentColor; } .button { font-size:20px; color:red; }",
+        ] {
+            prepare(css, 800.0);
+            let stack = ["toolbar".into(), "button".into()];
+            let native = scoped(&stack).unwrap();
+            ENGINE.with(|engine| {
+                let mut engine = engine.borrow_mut();
+                assert!(engine.native.is_some(), "{css}");
+                assert!(engine.document.is_none());
+                engine.native = None;
+                engine.contexts.clear();
+            });
+            let legacy = scoped(&stack).unwrap();
+            assert_eq!(native.color, legacy.color, "{css}");
+            assert_eq!(native.background, legacy.background, "{css}");
+            assert_eq!(native.border, legacy.border, "{css}");
+            assert_eq!(native.radius, legacy.radius, "{css}");
+            assert_eq!(native.font_size, legacy.font_size, "{css}");
+            assert_eq!(native.opacity, legacy.opacity, "{css}");
+            assert_eq!(native.authored, legacy.authored, "{css}");
+            assert_eq!(native.shadows, legacy.shadows, "{css}");
+            assert_eq!(native.text_shadows, legacy.text_shadows, "{css}");
+        }
+        skin::configure(&skin::Skin::default());
+    }
+
+    #[test]
+    fn unsupported_native_expressions_keep_the_whole_legacy_style() {
+        for css in [
+            ".button { color:red; background-image:radial-gradient(blue,green); }",
+            ":root { --ink:color-mix(in srgb, red, blue); } .button { color:var(--ink); }",
+            ".button { color:blue; border-radius:4px 8px; }",
+        ] {
+            prepare(css, 800.0);
+            let actual = scoped(&["button".into()]).unwrap();
+            ENGINE.with(|engine| assert!(engine.borrow().native.is_none(), "{css}"));
+            assert!(actual.authored.color);
+            if css.contains("radial-gradient") {
+                assert!(actual.has_gradient());
+            }
+        }
+        skin::configure(&skin::Skin::default());
+    }
+
+    #[test]
+    fn native_states_live_reload_and_compatibility_switch_keep_stable_keys() {
+        let nodes = vec![
+            StyleNode { key: 1, parent: None, class: "toolbar".into(), name: None, state: 0 },
+            StyleNode { key: 2, parent: Some(0), class: "button".into(), name: Some("play".into()), state: 0 },
+        ];
+        prepare(
+            ".toolbar { color:#112233; } .toolbar:hover { color:#445566; } #control-play { box-shadow:0 1px; }",
+            800.0,
+        );
+        ENGINE.with(|engine| engine.borrow_mut().nodes = nodes.clone());
+        assert_eq!(finish_tree(0.0), (true, false));
+        ENGINE.with(|engine| assert_eq!(engine.borrow().values[&2].color, Color32::from_rgb(0x11, 0x22, 0x33)));
+        assert_eq!(finish_tree(0.1), (false, false), "unchanged scopes must use the retained result");
+        ENGINE.with(|engine| engine.borrow_mut().nodes[1].state = 1);
+        assert_eq!(finish_tree(0.2), (true, false));
+        ENGINE.with(|engine| {
+            let engine = engine.borrow();
+            assert_eq!(engine.values[&2].color, Color32::from_rgb(0x44, 0x55, 0x66));
+            assert!(engine.document.is_none());
+        });
+        for (source, native) in [
+            (".button { color:#abcdef; }", true),
+            (".button { color:#abcdef; background-image:radial-gradient(red,blue); }", false),
+            (".button { color:#abcdef; }", true),
+        ] {
+            prepare(source, 800.0);
+            ENGINE.with(|engine| engine.borrow_mut().nodes = nodes.clone());
+            assert_eq!(finish_tree(0.3), (true, false));
+            ENGINE.with(|engine| {
+                let engine = engine.borrow();
+                assert_eq!(engine.values[&2].color, Color32::from_rgb(0xab, 0xcd, 0xef));
+                assert_eq!(engine.native.is_some(), native);
+                assert_eq!(engine.document.is_some(), !native);
+                assert_eq!(engine.values.len(), 2);
+            });
+        }
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn workspace_example_collapses_closed_panels() {
+        prepare(theme::WORKSPACE_GRID_EXAMPLE, 800.0);
+        let open = workspace(Vec2::new(800.0, 600.0), Some(240.0), Some((false, 180.0))).unwrap();
+        assert_eq!(open.browser.unwrap().width(), 240.0);
+        assert_eq!(open.detail.unwrap().height(), 180.0);
+        let closed = workspace(Vec2::new(800.0, 600.0), None, None).unwrap();
+        assert!(closed.browser.is_none() && closed.detail.is_none());
+        assert!(
+            closed.main.width() > 780.0 && closed.main.height() > 580.0,
+            "closed panels reserved their fixed dimensions: {:?}",
+            closed.main
+        );
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn gloss_surfaces_have_opaque_bases_and_sheet_overlays_preserve_native_fills() {
+        prepare(theme::GLOSS_EXAMPLE, 1138.0);
+        for class in ["session", "arrangement", "browser", "detail", "device-panel", "mixer", "button"] {
+            let style = scoped(&[class.into()]).unwrap();
+            assert!(style.authored.background, "{class} has no explicit base");
+            assert_eq!(style.background.a(), 255, "{class} exposes the desktop");
+            assert!(style.has_gradient(), "{class} lost its gradient");
+        }
+        for css in [theme::GLOSS_EXAMPLE, include_str!("../../themes/suhina-sheet.css")] {
+            prepare(css, 1138.0);
+            for class in ["track-header", "track-name"] {
+                let style = scoped(&[class.into()]).unwrap();
+                assert!(!style.authored.background, "{class} overlay replaces the native fill");
+                assert!(style.has_gradient());
+            }
+        }
+        prepare(include_str!("../../themes/suhina-meadow.css"), 1138.0);
+        for class in ["window", "application-bar", "mixer", "track-header", "track-name"] {
+            assert_eq!(scoped(&[class.into()]).unwrap().background.a(), 0, "Meadow's deliberate transparency changed");
+        }
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn responsive_workspace_and_toolbar_survive_resize() {
+        let css = include_str!("../../tests/fixtures/responsive-theme.css");
+        prepare(css, 1138.0);
+        let ctx = egui::Context::default();
+        for size in
+            [Vec2::new(1138.0, 1032.0), Vec2::new(1138.0, 1032.0), Vec2::new(800.0, 700.0), Vec2::new(1138.0, 1032.0)]
+        {
+            ctx.run_ui(
+                egui::RawInput { screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, size)), ..Default::default() },
+                |ui| {
+                    let _frame = frame(ui);
+                    let _window = super::super::style_class::enter("window");
+                    {
+                        let _toolbar = super::super::style_class::enter("toolbar");
+                        for name in ["transport", "position", "performance", "mapping"] {
+                            let _module = super::super::style_class::enter_named("toolbar-module", name);
+                            let _button = super::super::style_class::enter("button");
+                        }
+                    }
+                    let modules = toolbar(
+                        &[
+                            ("transport".into(), 100.0),
+                            ("position".into(), 100.0),
+                            ("performance".into(), 80.0),
+                            ("mapping".into(), 60.0),
+                        ],
+                        Vec2::new(size.x, 56.0),
+                    )
+                    .unwrap();
+                    assert_eq!(modules.iter().any(|module| module.name == "performance"), size.x > 1000.0);
+                    assert_eq!(modules.iter().any(|module| module.name == "mapping"), size.x > 820.0);
+                    let layout = workspace(Vec2::new(size.x, size.y - 100.0), None, Some((false, 200.0))).unwrap();
+                    assert!(layout.browser.is_none());
+                    assert_eq!(layout.detail.unwrap().height(), if size.y <= 760.0 { 150.0 } else { 200.0 });
+                    let _workspace = super::super::style_class::enter_named("workspace", "workspace");
+                    {
+                        let _main = super::super::style_class::enter_named("workspace-panel", "panel-main");
+                        let _view = super::super::style_class::enter("arrangement");
+                    }
+                    {
+                        let _detail = super::super::style_class::enter_named("workspace-panel", "panel-detail");
+                        let _editor = super::super::style_class::enter("clip-editor");
+                    }
+                },
+            )
+            .textures_delta
+            .clear();
+        }
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
     fn palette_and_resize_restyle_retained_tree_and_preserve_author_colours() {
         let saved = theme::palette();
         prepare(
@@ -683,7 +961,7 @@ mod tests {
                     if pass > 0 {
                         ENGINE.with(|engine| {
                             let engine = engine.borrow();
-                            assert!(engine.document.is_some(), "live edit discarded the retained document");
+                            assert!(engine.native.is_some(), "live edit discarded the native style engine");
                             assert!(!engine.values.is_empty(), "live edit forced per-control fallback documents");
                         });
                     }
@@ -710,11 +988,7 @@ mod tests {
                 };
                 assert_eq!(engine.values[&browser.key].color, expected);
                 assert!(!engine.styles_changed);
-                assert_eq!(
-                    engine.document.as_ref().unwrap().useragent_stylesheets().count(),
-                    3,
-                    "palette samples accumulated stylesheets"
-                );
+                assert!(engine.document.is_none(), "native palette samples created a Stylo document");
             });
         }
         theme::local_palette(saved);
@@ -751,6 +1025,46 @@ mod tests {
         }
         samples.sort_by(f64::total_cmp);
         eprintln!("primary colour edit: median {:.3} ms, max {:.3} ms", samples[30], samples[59]);
+        theme::local_palette(saved);
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    #[ignore = "manual same-build comparison of staged native and legacy paint resolution"]
+    fn measure_native_paint_migration() {
+        let saved = theme::palette();
+        let css = ".window { color:var(--text-primary); } .button { background-color:#123456; border-radius:3px; box-shadow:0 1px 2px #0008; } .toolbar .button { text-shadow:0 1px #0008; }";
+        for native in [false, true] {
+            ENGINE.with(|engine| *engine.borrow_mut() = Engine::default());
+            prepare(css, 800.0);
+            if !native {
+                ENGINE.with(|engine| engine.borrow_mut().native = None);
+            }
+            let ctx = egui::Context::default();
+            let mut samples = Vec::new();
+            for sample in 0..62 {
+                let mut palette = saved;
+                palette.text_primary = Color32::from_rgba_unmultiplied(40, 60, 50, 100 + sample);
+                theme::local_palette(palette);
+                let start = std::time::Instant::now();
+                ctx.run_ui(egui::RawInput::default(), |ui| {
+                    let _frame = frame(ui);
+                    let _window = super::super::style_class::enter("window");
+                    for class in ["toolbar", "browser", "session", "mixer", "settings"] {
+                        let _scope = super::super::style_class::enter(class);
+                        for _ in 0..8 {
+                            let _button = super::super::style_class::enter("button");
+                        }
+                    }
+                })
+                .textures_delta
+                .clear();
+                if sample > 1 {
+                    samples.push(start.elapsed().as_secs_f64() * 1000.0);
+                }
+            }
+            samples.sort_by(f64::total_cmp);
+            eprintln!("native={native}: median {:.3} ms, max {:.3} ms", samples[30], samples[59]);
+        }
         theme::local_palette(saved);
         skin::configure(&skin::Skin::default());
     }
@@ -873,6 +1187,7 @@ mod tests {
     fn computed_linear_gradients_publish_their_real_rgba_pixels_and_reuse_textures() {
         prepare(".browser { background-image:linear-gradient(90deg in srgb, rgb(255 0 0 / 0), blue); }", 800.0);
         let style = scoped(&["browser".into()]).unwrap();
+        ENGINE.with(|engine| assert!(engine.borrow().native.is_some()));
         assert_eq!(style.gradients.len(), 1);
         let ctx = egui::Context::default();
         let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
@@ -1025,14 +1340,19 @@ mod tests {
         let images: Vec<_> = output
             .textures_delta
             .set
-            .values()
-            .flat_map(|d| d.iter())
-            .filter(|d| d.image.size() == [256, 256])
+            .iter()
+            .filter(|(id, _)| **id != egui::TextureId::default())
+            .flat_map(|(_, deltas)| deltas.iter())
+            .map(|d| d.image.clone())
             .collect();
+        output.textures_delta.clear();
         assert_eq!(images.len(), 1);
-        let egui::ImageData::Color(image) = &images[0].image;
-        assert_eq!(image.pixels[128 * 256 + 16], Color32::from_rgb(120, 30, 180));
-        assert_eq!(image.pixels[128 * 256 + 128].a(), 0);
+        let egui::ImageData::Color(image) = &images[0];
+        assert_eq!(
+            image.pixels[(image.size[1] / 2) * image.size[0] + image.size[0] / 16],
+            Color32::from_rgb(120, 30, 180)
+        );
+        assert_eq!(image.pixels[(image.size[1] / 2) * image.size[0] + image.size[0] / 2].a(), 0);
         output.textures_delta.clear();
         skin::configure(&skin::Skin::default());
     }

@@ -5734,6 +5734,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "suhina-style"
+version = "0.0.1"
+dependencies = [
+ "cssparser",
+ "taffy",
+]
+
+[[package]]
 name = "suhina-ui"
 version = "0.0.1"
 dependencies = [
@@ -5763,6 +5771,7 @@ dependencies = [
  "suhina-plugins",
  "suhina-session",
  "suhina-soundmap",
+ "suhina-style",
  "suhina-update",
  "tiny-skia",
 ]

@@ -3381,6 +3381,7 @@ fn paint_clip(
     timeline: &Timeline,
     selected: bool,
 ) {
+    let _work_trace = crate::kit::frame_trace::WorkSpan::new("arrangement clip");
     let _style_class = crate::kit::style_class::enter_named("clip", &format!("clip-{}", clip.id.0));
     let view = painter.clip_rect();
     if !rect.intersects(view) {
@@ -3811,7 +3812,9 @@ fn track_header(
     state: &mut ArrangementViewState,
     actions: &mut Vec<Action>,
 ) {
+    let mut work_trace = crate::kit::frame_trace::WorkSpan::new("arrangement track header");
     let _style_class = crate::kit::style_class::enter("track-header");
+    work_trace.mark("style");
     let _artwork = crate::kit::artwork::track_color(rgb(lane.color));
     let spacious = rect.height() >= 60.0;
     let tiny = rect.height() < 20.0;
@@ -3889,6 +3892,7 @@ fn track_header(
         };
         menus::track_menu(ui, &menu, actions);
     });
+    work_trace.mark("interaction");
     let selected = state.selected_tracks.contains(&lane.track) || state.focus == Some(lane.track);
     // Preserve track identity when selected: a small brightness lift and outline, without
     // replacing the track colour with the global selection accent.
@@ -3910,6 +3914,7 @@ fn track_header(
         let outline = motion::mix(theme::border_strong(), saturated(rgb(lane.color)), 0.5);
         painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, outline), StrokeKind::Inside);
     }
+    work_trace.mark("background");
     // A track inside groups has their colours down its indent, the outermost first, so a group and
     // its tracks read as one block: the group's colour runs from its header down all of them.
     let mut ancestors = Vec::new();
@@ -3955,11 +3960,20 @@ fn track_header(
         Pos2::new(meter_x + meter::WIDTH, meter_bottom.min(inner.bottom())),
     );
     let level = state.meters.track(lane.track);
-    let at = crate::kit::control_layout::place("arrangement-meter", at, clip);
+    let at = crate::kit::control_layout::place("arrangement-meter", at, rect);
     if !crate::kit::control_layout::placement("arrangement-meter").hidden {
-        meter::show(ui, painter, at.intersect(clip), &lane.name, meter::Source::Track(lane.track), &level, actions);
+        meter::show(
+            ui,
+            &painter.with_clip_rect(painter.clip_rect().intersect(clip)),
+            at,
+            &lane.name,
+            meter::Source::Track(lane.track),
+            &level,
+            actions,
+        );
     }
 
+    work_trace.mark("meter and bands");
     // Row 1: a group's fold triangle, track on, solo, cue, arm, name. Mixer controls act on the whole
     // selection while this track is part of one.
     let controlled: Vec<u32> = state.controlled_tracks(lane.track).iter().map(|t| t.0).collect();
@@ -4160,6 +4174,7 @@ fn track_header(
             name_color,
         );
     }
+    work_trace.mark("layout and name");
     // The name's place, for a rename in place (Ctrl+R, #696).
     drop(name_style);
     let pass = ui.ctx().cumulative_pass_nr();
@@ -4337,6 +4352,7 @@ fn track_header(
         }
     }
 
+    work_trace.mark("controls and routing");
     // The bottom edge resizes the lane; a return's top edge, as the fixed rows sit along the
     // bottom and grow upward.
     let upward = lane.kind == ColumnKind::Return;

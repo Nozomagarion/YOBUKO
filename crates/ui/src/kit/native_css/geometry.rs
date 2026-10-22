@@ -11,6 +11,7 @@ use style::values::specified::position::{HorizontalPositionKeyword as X, Vertica
 
 #[derive(Clone, Debug)]
 pub(super) enum Geometry {
+    NativeLinear(suhina_style::gradient::Direction),
     Linear(LineDirection),
     Radial(EndingShape, Position),
     Conic { angle: f32, position: Position },
@@ -51,6 +52,11 @@ fn extent(extent: ShapeExtent, size: Vec2, center: Vec2, circle: bool) -> Vec2 {
 impl Geometry {
     pub fn resolve(&self, size: Vec2) -> Mapping {
         match self {
+            Self::NativeLinear(direction) => {
+                let [x, y] = direction.axis([size.x, size.y]);
+                let axis = vec2(x, y);
+                Mapping::Linear { axis, basis: axis.x.abs() * size.x + axis.y.abs() * size.y, center: size * 0.5 }
+            }
             Self::Linear(direction) => {
                 let x = |value: X| if value == X::Left { -1.0 } else { 1.0 };
                 let y = |value: Y| if value == Y::Top { -1.0 } else { 1.0 };

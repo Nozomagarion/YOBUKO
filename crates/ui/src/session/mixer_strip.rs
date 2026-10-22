@@ -125,6 +125,7 @@ pub fn layout_main(rect: Rect, shared: Shared) -> Layout {
 }
 
 fn layout_native(rect: Rect, has_sends: bool, can_hear_input: bool, shared: Shared, main: bool) -> Layout {
+    let _work_trace = crate::kit::frame_trace::WorkSpan::new("mixer layout");
     let inner = rect.shrink(PAD);
     let height = rect.height();
     // Reserve the footer on all strips so returns and Main keep their controls aligned.
@@ -291,6 +292,7 @@ pub fn show(
     id: Id,
     actions: &mut Vec<Action>,
 ) -> egui::Response {
+    let _work_trace = crate::kit::frame_trace::WorkSpan::new("mixer strip");
     let clipped_painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
     let painter = &clipped_painter;
     let _artwork =

@@ -121,7 +121,7 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
                 state.advanced = ":root { --ink: rgb(180 220 240); }\n.browser { color: var(--ink); font-size: clamp(10px, 1vw, 14px); }\n.toolbar { display: flex; gap: 8px; }\n#transport { order: -1; }\n@media (max-width: 1000px) { #performance { display: none; } }\n".into();
             }
             if ui.button("Load workspace Grid example").clicked() {
-                state.advanced = "/* CSS owns panel geometry; removing these rules restores splitters. */\n#workspace { display:grid; grid-template-columns:minmax(0, 1fr) 240px; grid-template-rows:minmax(0, 1fr) 180px; gap:8px; }\n#panel-browser { grid-column:2; grid-row:1 / -1; }\n#panel-main { grid-column:1; grid-row:1; }\n#panel-detail { grid-column:1; grid-row:2; }\n".into();
+                state.advanced = crate::kit::theme::WORKSPACE_GRID_EXAMPLE.into();
             }
             ui.add(egui::TextEdit::multiline(&mut state.advanced).code_editor().desired_rows(10).desired_width(f32::INFINITY));
             if ui.button("Apply advanced CSS").clicked() {

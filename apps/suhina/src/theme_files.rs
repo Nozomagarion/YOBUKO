@@ -1013,6 +1013,21 @@ fn merge_themes(base: &Theme, json: &Theme, css: &Theme) -> Result<Theme, String
 
 fn persist_theme(folder: &Path, id: &str, theme: &Theme) -> Result<(), String> {
     let mut files = package_files(id, theme)?;
+    let css_name = format!("{id}/style.css");
+    if folder.join(&css_name).exists() {
+        use suhina_ui::kit::theme_css;
+        let source = String::from_utf8(read_resource(folder, &css_name, theme_css::MAX_CSS as u64)?)
+            .map_err(|e| e.to_string())?;
+        let mut previous = Theme::default();
+        let warnings = theme_css::apply(&mut previous, &source);
+        if !warnings.is_empty() {
+            return Err(format!("Native CSS was preserved: {}", warnings.join("; ")));
+        }
+        let updated = theme_css::source::update(&source, &theme_css::export(&previous), &theme_css::export(theme))?;
+        if let Some((_, bytes)) = files.iter_mut().find(|(name, _)| name == &css_name) {
+            *bytes = updated.into_bytes();
+        }
+    }
     let json_name = format!("{id}/{id}.json");
     for (name, data) in &mut files {
         if name == &json_name {
@@ -1046,6 +1061,11 @@ fn persist_theme(folder: &Path, id: &str, theme: &Theme) -> Result<(), String> {
             if std::fs::symlink_metadata(&current).is_ok_and(|m| m.file_type().is_symlink()) {
                 return Err("theme destination may not be a symlink".into());
             }
+        }
+        // Installed author guides belong to their package version. New packages
+        // get the current guide; editing a colour must not replace a user's copy.
+        if name.ends_with("/README.md") && path.is_file() {
+            continue;
         }
         // Keep unchanged artwork and documentation in place. In particular, forcing
         // dozens of identical SVGs to disk made each theme slider tick take 100+ ms.
@@ -1107,6 +1127,31 @@ fn fingerprint(path: &Path) -> Result<u64, String> {
 
 #[cfg(test)]
 mod skin_package_tests {
+    #[test]
+    fn editor_save_preserves_authored_css_comments_and_installed_guide() {
+        let root = folder("authored-css-preservation");
+        let mut files = ThemeFiles::new(Some(root.join("themes")));
+        let mut theme = Theme::default();
+        files.write("authored", &theme).unwrap();
+        let css_path = root.join("themes/authored/style.css");
+        let source = format!("/* Revontuli — keep my notes */\n{}", std::fs::read_to_string(&css_path).unwrap());
+        std::fs::write(&css_path, &source).unwrap();
+        let guide = root.join("themes/authored/README.md");
+        std::fs::write(&guide, "Author's own guide").unwrap();
+        let (_, warnings) = files.read_all();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(std::fs::read_to_string(&css_path).unwrap(), source);
+        let before = theme::hex_rgba(theme.rgba("accent", theme.colors.accent));
+        theme.colors.accent = eframe::egui::Color32::from_rgb(18, 52, 86);
+        files.write("authored", &theme).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&css_path).unwrap(),
+            source.replacen(&format!("--accent: {before}"), "--accent: #123456", 1)
+        );
+        assert_eq!(std::fs::read_to_string(&guide).unwrap(), "Author's own guide");
+        let _clean = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn palette_edits_do_not_rewrite_unchanged_package_resources() {
         let root = folder("palette-resources");
