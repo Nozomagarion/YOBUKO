@@ -149,21 +149,30 @@ impl ThemeFiles {
 
     /// Writes the theme `id` to its file.
     pub fn write(&mut self, id: &str, theme: &Theme) -> Result<(), String> {
+        suhina_plugins::trace::timed("theme save", || self.write_inner(id, theme))
+    }
+
+    fn write_inner(&mut self, id: &str, theme: &Theme) -> Result<(), String> {
         let folder = self.folder.as_ref().ok_or("there is no folder to keep themes in")?;
         if !is_theme_id(id) {
             return Err(format!("{id} cannot name a theme file"));
         }
         let path = folder.join(format!("{id}.json"));
         if let Some(snapshot) = self.snapshots.get(id) {
-            let (json, css, _, _) = read_versions(&path)?;
+            let (json, css) = suhina_plugins::trace::timed("theme save check", || read_sources(&path))?;
             if json != snapshot.json || css != snapshot.css {
                 return Err(format!(
                     "Theme {id} has external edits. Reload themes before saving; neither file was overwritten."
                 ));
             }
+            // Validate resources only after an external change. A palette slider must
+            // not decode every unchanged PNG/SVG twice on each mouse movement.
+            if self.seen.get(id).copied() != Some(fingerprint(&path)?) {
+                read_versions(&path)?;
+            }
         }
-        persist_theme(folder, id, theme)?;
-        let (json, css, _, _) = read_versions(&path)?;
+        suhina_plugins::trace::timed("theme package persist", || persist_theme(folder, id, theme))?;
+        let (json, css) = suhina_plugins::trace::timed("theme save readback", || read_sources(&path))?;
         self.snapshots.insert(id.into(), Snapshot { json, css, theme: theme.clone() });
         if let Ok(modified) = fingerprint(&path) {
             self.seen.insert(id.to_string(), modified);
@@ -899,6 +908,39 @@ mod tests {
 }
 
 /// Both representations are read before any write, so concurrent edits can be merged.
+fn read_sources(path: &Path) -> Result<(String, Option<String>), String> {
+    let text = String::from_utf8(read_bounded(path, MAX_FILE)?).map_err(|e| e.to_string())?;
+    let root: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    let mut sources = Vec::new();
+    for name in [root.get("stylesheet"), root.get("advanced-stylesheet")].into_iter().flatten() {
+        let name =
+            name.as_str().filter(|s| safe_relative(s) && s.ends_with(".css")).ok_or("invalid stylesheet path")?;
+        let css = String::from_utf8(read_resource(
+            path.parent().unwrap_or(Path::new(".")),
+            name,
+            suhina_ui::kit::theme_css::MAX_CSS as u64,
+        )?)
+        .map_err(|e| e.to_string())?;
+        sources.push((name.to_string(), css));
+    }
+    let css = if sources.is_empty() { None } else { Some(serde_json::to_string(&sources).map_err(|e| e.to_string())?) };
+    Ok((text, css))
+}
+
+fn read_resource(folder: &Path, relative: &str, max: u64) -> Result<Vec<u8>, String> {
+    if !safe_relative(relative) {
+        return Err("invalid relative theme path".to_string());
+    }
+    let mut path = folder.to_path_buf();
+    for part in relative.split('/') {
+        path.push(part);
+        if std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?.file_type().is_symlink() {
+            return Err("theme resources may not be symlinks".into());
+        }
+    }
+    read_bounded(&path, max)
+}
+
 fn read_versions(path: &Path) -> Result<(String, Option<String>, Theme, Theme), String> {
     let text = String::from_utf8(read_bounded(path, MAX_FILE)?).map_err(|e| e.to_string())?;
     let mut root: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
@@ -906,19 +948,7 @@ fn read_versions(path: &Path) -> Result<(String, Option<String>, Theme, Theme), 
     let stylesheet = object.remove("stylesheet");
     let advanced = object.remove("advanced-stylesheet");
     let folder = path.parent().unwrap_or(Path::new("."));
-    let resource = |relative: &str, max: u64| {
-        if !safe_relative(relative) {
-            return Err("invalid relative theme path".to_string());
-        }
-        let mut path = folder.to_path_buf();
-        for part in relative.split('/') {
-            path.push(part);
-            if std::fs::symlink_metadata(&path).map_err(|e| e.to_string())?.file_type().is_symlink() {
-                return Err("theme resources may not be symlinks".into());
-            }
-        }
-        read_bounded(&path, max)
-    };
+    let resource = |relative: &str, max: u64| read_resource(folder, relative, max);
     let (json_theme, _) = resolve_theme(&root.to_string(), resource)?;
     if stylesheet.is_none() && advanced.is_none() {
         return Ok((text, None, json_theme.clone(), json_theme));
@@ -1017,6 +1047,13 @@ fn persist_theme(folder: &Path, id: &str, theme: &Theme) -> Result<(), String> {
                 return Err("theme destination may not be a symlink".into());
             }
         }
+        // Keep unchanged artwork and documentation in place. In particular, forcing
+        // dozens of identical SVGs to disk made each theme slider tick take 100+ ms.
+        if std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_file() && meta.len() == data.len() as u64)
+            && read_bounded(&path, data.len() as u64).is_ok_and(|existing| existing == data)
+        {
+            continue;
+        }
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
@@ -1070,6 +1107,51 @@ fn fingerprint(path: &Path) -> Result<u64, String> {
 
 #[cfg(test)]
 mod skin_package_tests {
+    #[test]
+    fn palette_edits_do_not_rewrite_unchanged_package_resources() {
+        let root = folder("palette-resources");
+        let mut files = ThemeFiles::new(Some(root.join("themes")));
+        let mut theme = theme::built_in_themes().into_iter().find(|(id, _)| *id == "suhina-sheet").unwrap().1;
+        files.write("sheet", &theme).unwrap();
+        let paths = ["themes/sheet/assets/button.svg", "themes/sheet/README.md", "themes/sheet/advanced.css"];
+        let old = SystemTime::UNIX_EPOCH + Duration::from_secs(946_684_800);
+        for path in paths {
+            std::fs::File::options()
+                .write(true)
+                .open(root.join(path))
+                .unwrap()
+                .set_times(std::fs::FileTimes::new().set_modified(old))
+                .unwrap();
+        }
+        theme.colors.accent = eframe::egui::Color32::RED;
+        files.write("sheet", &theme).unwrap();
+        for path in paths {
+            assert_eq!(std::fs::metadata(root.join(path)).unwrap().modified().unwrap(), old, "rewrote {path}");
+        }
+        assert_eq!(files.read_all().0[0].theme.colors.accent, eframe::egui::Color32::RED);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    #[ignore = "manual disk and parsing timing for the theme slider reproduction"]
+    fn measure_theme_slider_saves() {
+        let root = folder("slider-timing");
+        let mut files = ThemeFiles::new(Some(root.join("themes")));
+        for (id, mut theme) in theme::built_in_themes()
+            .into_iter()
+            .filter(|(id, _)| ["suhina-dark", "suhina-sheet", "suhina-blocks", "suhina-meadow"].contains(id))
+        {
+            files.write(id, &theme).unwrap();
+            for value in 30..35 {
+                theme.colors.accent = eframe::egui::Color32::from_rgb(value, 60, 90);
+                let start = Instant::now();
+                files.write(id, &theme).unwrap();
+                eprintln!("slider-save {id} {value}: {:.3} ms", start.elapsed().as_secs_f64() * 1000.0);
+            }
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     const PNG: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQ6nD5DwADrAHuJHH6EQAAAABJRU5ErkJggg==";
 
     #[test]

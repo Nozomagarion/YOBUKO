@@ -5,8 +5,12 @@ type: howto
 status: current
 last_verified: 2026-10-21
 covers:
+  - apps/suhina/src/liquid.rs
+  - apps/suhina/src/main.rs
+  - apps/suhina/src/theme_io.rs
   - crates/plugins/src/trace.rs
   - crates/ui/src/kit/frame_trace.rs
+  - crates/ui/src/kit/native_css.rs
   - scripts/video_frames.py
   - scripts/trace-summary.py
   - .claude/skills/trace-debugging/SKILL.md
@@ -117,6 +121,16 @@ Once a second a `frames:` line sums up: how many frames, their drawing time on a
 longest, and the longest wait between two frames. A long wait with short drawing means the time
 went elsewhere: egui laying out and painting the shapes, the GPU, or the window at rest (it
 draws only when something changes, so a wait of seconds while nothing moves is normal).
+
+The desktop also measures `slow desktop UI` and `slow theme sync` outside the UI's
+frame summary. Theme synchronization schedules work and takes in replies after
+that summary's drawing timer. `slow theme file worker` measures background saves
+and file polling; its time must not be mistaken for a window-thread stall.
+`slow theme save`, `slow theme save check`,
+`slow theme package persist` and `slow theme save readback` separate persistence from
+the controls' own work. `slow native CSS tree` measures the retained style tree's
+updates. In older builds, persistence ran synchronously after the drawing timer:
+a long gap between frames could be file work rather than GPU presentation.
 
 ### Audio dropouts
 
@@ -229,6 +243,11 @@ Tips:
   action you can see in both (a click, a play).
 
 ## Settings and liquid surfaces
+
+`liquid resources` reports changes in the number of target sets, their estimated
+RGBA texture bytes and shared texture registrations, sampled at most once a second.
+It covers the liquid provider's resources, not total driver or process GPU memory;
+compare it with Windows GPU Process Memory counters when investigating growth.
 
 With liquid panels enabled, `liquid capture` reports each capture's size and how many draw
 jobs it left out (native callbacks, and textures it cannot bind); what is left out is not

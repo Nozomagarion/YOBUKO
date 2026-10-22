@@ -382,6 +382,18 @@ and formatting are not preserved. Independent field edits merge; conflicting cha
 one field preserve both files and report the field. A malformed stylesheet or missing
 resource does not overwrite the saved JSON or replace the currently loaded theme.
 
+Saving a theme retains byte-identical package files, including SVG/PNG artwork,
+examples and documentation. Palette and liquid edits update only changed files;
+unchanged resources keep their timestamps. Editor saves compare the JSON and CSS
+sources for conflicts without decoding the package's images again, and validate
+resources when the package fingerprint changes outside the editor.
+File operations and live-reload polling run on one background worker. While a save
+is in flight, later samples of the same slider replace queued saves; rename,
+reload, import and export retain their order. Preview changes remain immediate,
+errors return to the status bar, and normal exit drains the final queued edits.
+Native CSS caches depend on the palette variables the stylesheet references:
+an unrelated opacity edit does not rebuild its computed contexts.
+
 ZIP export places each JSON, style.css, SVG and background PNG together under its theme
 id. Import validates resources before writing any theme, and gives colliding ids a suffix.
 The in-app CSS editor accepts native values and styles; package-relative image URLs are

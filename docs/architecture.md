@@ -5,6 +5,7 @@ type: system
 status: current
 last_verified: 2026-10-22
 covers:
+  - apps/suhina/src/theme_io.rs
   - crates/session/src/record_writer.rs
   - Cargo.toml
   - crates/*/Cargo.toml
@@ -237,6 +238,7 @@ gesture id grouping both XY axes into one undo step. See [ADR 0021](decisions/00
 | Decode workers | Scoped threads in `media` while a project loads; in the window, a thread per drop (`suhina-drop`) that decodes its samples before `clip.addFiles` runs (ADR 0011). | yes |
 | Missing files and plug-in scans | In the window, `suhina-find-files` searches the index and folders for a project's missing files, and `suhina-plugin-scan` runs a plug-in scan, so the frame never waits. | yes |
 | Library | One thread in `library` (`suhina-library`): checks the browser's folders against their saved indexes, reads the ones that changed, and takes the file-system watcher's events (`notify`, its own threads) or polls (ADR 0012). Started by the desktop app and the MCP server only. | yes |
+| Theme files | One desktop thread (`suhina-theme-files`, `apps/suhina/src/theme_io.rs`) owns theme persistence, conflict checks, exports/imports and live-reload polling. At most one batch is in flight; the window coalesces later saves without crossing file-operation barriers, previews changes immediately and polls replies without waiting. Normal exit drains pending saves. | yes |
 | Backups | One thread in `session` (`suhina-backup`), started with the first backup: turns each project copy the window's thread made (`Projects::back_up`, which waits at most a second for the plug-ins' state, as a save does) into JSON, writes it through a temporary file, cleans up old ones and keeps the journal ([spec](spec/backups.md)). | yes |
 | Browser files | One thread in the window (`suhina-browser-files`): reads the length, tempo and key of the files the browser shows, and decodes the selected sample for its waveform and preview. | yes |
 | Sample analysis | `soundmap-analysis` threads, half the cores, while a `SoundMap` has files queued; they decode and analyse samples and send the results back. Started by the desktop app and the MCP server only. In the window, a `soundmap-layout` thread per new layout computes it (t-SNE) so the frame never waits. | yes |

@@ -100,7 +100,7 @@ thread_local! {
 pub struct Frame(egui::Context, f64);
 impl Drop for Frame {
     fn drop(&mut self) {
-        let (changed, animating) = finish_tree(self.1);
+        let (changed, animating) = suhina_plugins::trace::timed("native CSS tree", || finish_tree(self.1));
         if animating {
             self.0.request_repaint_after(std::time::Duration::from_millis(16));
         } else if changed {
@@ -327,7 +327,17 @@ pub fn begin_frame(ui: &egui::Ui) {
     let palette = theme::palette();
     let mut variables = String::from(":root {");
     for (key, _, color) in palette.tokens() {
-        variables.push_str(&format!("--{}:{};", key.replace('.', "-"), theme::hex(color)));
+        let variable = key.replace('.', "-");
+        // Only referenced palette variables affect this stylesheet. Resetting all
+        // style/layout caches for an unrelated opacity tick made native controls
+        // rebuild many complete Stylo documents during every drag frame.
+        // Escaped identifiers are conservatively treated as depending on all tokens.
+        if key != "text.primary"
+            && !source.as_deref().is_some_and(|css| css.contains('\\') || css.contains(&format!("--{variable}")))
+        {
+            continue;
+        }
+        variables.push_str(&format!("--{variable}:{};", theme::hex(color)));
     }
     variables.push_str("}\n");
     let dark = theme::contrast(palette.window_background, Color32::WHITE)
@@ -626,6 +636,25 @@ pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unreferenced_palette_edits_keep_computed_contexts_but_variables_invalidate() {
+        let saved = theme::palette();
+        prepare(".browser { color: var(--accent); background-color: white; }", 800.0);
+        let stack = ["browser".into()];
+        let original = scoped(&stack).unwrap();
+        let mut palette = saved;
+        palette.grid_major = Color32::from_rgba_unmultiplied(120, 120, 120, 90);
+        theme::local_palette(palette);
+        prepare(".browser { color: var(--accent); background-color: white; }", 800.0);
+        ENGINE.with(|engine| assert_eq!(engine.borrow().contexts.len(), 1, "unrelated opacity cleared style cache"));
+        assert_eq!(scoped(&stack).unwrap().color, original.color);
+        palette.accent = Color32::from_rgb(10, 30, 70);
+        theme::local_palette(palette);
+        prepare(".browser { color: var(--accent); background-color: white; }", 800.0);
+        assert_eq!(scoped(&stack).unwrap().color, palette.accent);
+        theme::local_palette(saved);
+        skin::configure(&skin::Skin::default());
+    }
     fn prepare(css: &str, width: f32) {
         let ctx = egui::Context::default();
         let s = skin::Skin { css: Some(Arc::from(css)), ..Default::default() };
