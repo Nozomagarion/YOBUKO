@@ -227,7 +227,9 @@ pub fn paint(painter: &Painter, rect: Rect, base: Color32, surface: Surface) {
         return;
     }
     let painter = painter.with_clip_rect(painter.clip_rect().intersect(rect));
-    let strength = f32::from(level.min(100)) / 100.0;
+    // Repeated clip edges must not turn a dense arrangement into a grid of raised buttons.
+    // Keep the full slider range, but give clips a gentler optical range than large panels.
+    let strength = f32::from(level.min(100)) / 100.0 * if surface == Surface::Clip { 0.35 } else { 1.0 };
     if surface == Surface::Panel {
         let backdrop = painter.ctx().data(|data| data.get_temp::<Backdrop>(Id::new(BACKDROP)));
         let Some(backdrop) = backdrop else {

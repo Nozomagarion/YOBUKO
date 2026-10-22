@@ -163,6 +163,10 @@ existing project colours never follow edits to those defaults. The theme editor
 offers these two defaults; numbered `track.1`–`track.8` remain legacy swatches for file
 compatibility and colour pickers, rather than a list of default track colours.
 
+Forest Amber is an original bundled woodland palette with warm amber accents, saved gradients
+and theme-specific liquid strengths. Its built-in id is `suhina-forest-amber`, leaving existing
+custom `forest-amber` files intact. Background images remain separately chosen local files.
+
 Themes that come with Suhina (`crates/ui/themes/`, read-only; editing one makes a copy):
 Suhina Dark (the default), Editor Dark (cool greys and blue, like a code editor), Suhina
 Light, High Contrast, and four popular open palettes mapped onto the tokens: Dracula, Nord,

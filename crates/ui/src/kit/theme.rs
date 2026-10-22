@@ -224,7 +224,7 @@ pub const BUILT_IN: &str = "suhina-dark";
 /// The themes that come with Suhina besides Suhina Dark, as theme files: id and text.
 /// Dracula, Nord, Catppuccin and Solarized are popular open palettes (MIT, their licences in
 /// `themes/licenses/`), mapped onto Suhina's tokens.
-const BUILT_IN_FILES: [(&str, &str); 11] = [
+const BUILT_IN_FILES: [(&str, &str); 12] = [
     ("suhina-studio-dark", include_str!("../../themes/suhina-studio-dark.json")),
     ("suhina-studio-light", include_str!("../../themes/suhina-studio-light.json")),
     ("editor-dark", include_str!("../../themes/editor-dark.json")),
@@ -236,6 +236,7 @@ const BUILT_IN_FILES: [(&str, &str); 11] = [
     ("catppuccin-latte", include_str!("../../themes/catppuccin-latte.json")),
     ("solarized-dark", include_str!("../../themes/solarized-dark.json")),
     ("suhina-glass", include_str!("../../themes/suhina-glass.json")),
+    ("suhina-forest-amber", include_str!("../../themes/suhina-forest-amber.json")),
 ];
 
 /// The themes that come with Suhina, Suhina Dark first, with their ids. They do not change;

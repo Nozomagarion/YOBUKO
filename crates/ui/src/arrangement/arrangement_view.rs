@@ -4007,7 +4007,10 @@ fn track_header(
     let side = tall && beside_room >= LEAST_VOLUME;
     let stacked = tall && !side;
     let below_top = if name_first { inner.top() } else { row.bottom() + header_gap };
-    let below = Rect::from_min_max(Pos2::new(first_x, below_top), Pos2::new(inner.right(), below_top + field_height));
+    // In the stacked layout the level row also uses the space below automation.
+    let below_left = if stacked { automation_x } else { first_x };
+    let below =
+        Rect::from_min_max(Pos2::new(below_left, below_top), Pos2::new(inner.right(), below_top + field_height));
     // The automation button shows and hides the track's lanes.
     let lanes_button = if side {
         Rect::from_min_size(
@@ -4070,6 +4073,19 @@ fn track_header(
     } else {
         theme::text_on(header_fill)
     };
+    if lane.kind == ColumnKind::Track && (lane.plays_notes || lane.plays_audio) {
+        let type_rect = Rect::from_min_size(name.min, Vec2::new(16.0, name.height()));
+        crate::kit::mixer_controls::track_type(
+            ui,
+            painter,
+            type_rect,
+            id.with("track-type"),
+            &lane.name,
+            (lane.plays_notes, lane.plays_audio),
+            name_color,
+        );
+        name.min.x = (type_rect.right() + 3.0).min(name.right());
+    }
     widgets::text_in(
         painter,
         name,
@@ -4331,28 +4347,8 @@ fn send_knob(
         let fill = theme::control_hover().gamma_multiply(amount.max(0.3));
         widgets::track_button_face(ui, painter, rect, &response, fill);
     }
-    // A labelled send tile with a small level rail, rather than a miniature rotary dial.
-    let rail = Rect::from_min_max(
-        Pos2::new(rect.left() + 4.0, rect.bottom() - 3.0),
-        Pos2::new(rect.right() - 4.0, rect.bottom() - 1.5),
-    );
-    painter.rect_filled(rail, 1.0, theme::border_strong());
-    let level = Rect::from_min_size(rail.min, Vec2::new(rail.width() * position.clamp(0.0, 1.0), rail.height()));
-    painter.rect_filled(level, 1.0, pointer);
-    // The destination stays legible; a dot denotes pre-fader mode.
     let letter = send.name.chars().next().map(String::from).unwrap_or_default();
-    let caption = format!("{letter} {}", widgets::format_db(shown));
-    widgets::text_in(
-        painter,
-        rect.translate(Vec2::new(0.0, -1.0)),
-        Align2::CENTER_CENTER,
-        &caption,
-        theme::mono_font(theme::TEXT_SMALL),
-        pointer,
-    );
-    if send.pre_fader {
-        painter.circle_filled(Pos2::new(rect.center().x, rect.bottom() + 1.5), 1.5, pointer);
-    }
+    crate::kit::mixer_controls::send_field(painter, rect, &letter, shown, send.pre_fader, pointer, position);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4444,7 +4440,7 @@ fn value_control(
         Control::Volume if state.knobs => volume_knob(painter, rect, shown, hover),
         Control::Volume => volume_field(painter, rect, shown, hover),
         Control::Pan if state.knobs => pan_knob(painter, rect, shown),
-        Control::Pan => pan_field(painter, rect, shown, hover),
+        Control::Pan => crate::kit::mixer_controls::pan_field(painter, rect, shown, hover),
     }
 }
 
@@ -4545,26 +4541,6 @@ fn volume_text(painter: &egui::Painter, rect: Rect, db: f64, hover: f32) {
         &widgets::format_db(db),
         theme::mono_font(theme::TEXT_SMALL),
         color,
-    );
-}
-
-/// A pan field: a bar along the bottom from the centre, a centre tick, the value in the middle.
-fn pan_field(painter: &egui::Painter, rect: Rect, pan: f64, hover: f32) {
-    painter.rect_filled(rect, 0.0, motion::mix(theme::pan_background(), theme::panel_hover(), hover));
-    let centre = rect.center().x.round() - 0.5;
-    painter.vline(centre, egui::Rangef::new(rect.top(), rect.top() + 2.0), theme::hairline(theme::pan_centre()));
-    painter.vline(centre, egui::Rangef::new(rect.bottom() - 2.0, rect.bottom()), theme::hairline(theme::pan_centre()));
-    let to = rect.center().x + rect.width() / 2.0 * pan.clamp(-1.0, 1.0) as f32;
-    let bar =
-        Rect::from_min_max(Pos2::new(centre.min(to), rect.bottom() - 2.0), Pos2::new(centre.max(to), rect.bottom()));
-    painter.rect_filled(bar, 0.0, theme::text_value());
-    widgets::text_in(
-        painter,
-        rect,
-        Align2::CENTER_CENTER,
-        &widgets::format_pan(pan),
-        theme::mono_font(theme::TEXT_SMALL),
-        theme::text_primary(),
     );
 }
 

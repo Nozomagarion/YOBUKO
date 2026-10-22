@@ -222,3 +222,5 @@ Sources:
 - [Mutter window geometry](https://gnome.pages.gitlab.gnome.org/mutter/meta/method.Window.get_frame_rect.html)
 - [XDG Wallpaper portal](https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.Wallpaper.html)
 - [Winit window positioning](https://docs.rs/winit/0.30.13/winit/window/struct.Window.html)
+
+Clip optical strength is limited to 35% of the full panel/track range, across body reflection, rim and refraction together. The 0–100% clip slider still spans its entire range; even at its maximum, repeated clip boundaries should remain subdued rather than resembling raised buttons. Explicit theme gradients remain independent.

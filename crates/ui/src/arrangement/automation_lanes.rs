@@ -1100,7 +1100,9 @@ fn heading_row(ui: &mut Ui, name: &str, count: usize, marked: bool, open: bool, 
 fn parameter_row(ui: &mut Ui, choice: &Param, current: &LaneKey, free: bool, scroll: bool) -> bool {
     let mark = if choice.points.is_empty() { "" } else { " •" };
     let selected = choice.key == *current;
-    let button = egui::Button::selectable(selected, format!("{}{mark}", choice.short_name()));
+    let text = egui::RichText::new(format!("{}{mark}", choice.short_name()));
+    let text = if selected { text.color(theme::text_on(ui.visuals().selection.bg_fill)) } else { text };
+    let button = egui::Button::selectable(selected, text);
     let response = ui.add_enabled(free, button);
     let label = choice.label();
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, free, selected, &label));
@@ -1117,7 +1119,9 @@ fn parameter_row(ui: &mut Ui, choice: &Param, current: &LaneKey, free: bool, scr
 fn automated_row(ui: &mut Ui, choice: &Param, current: &LaneKey, free: bool, scroll: bool) -> bool {
     let selected = choice.key == *current;
     let label = choice.label();
-    let response = ui.add_enabled(free, egui::Button::selectable(selected, &label));
+    let text = egui::RichText::new(&label);
+    let text = if selected { text.color(theme::text_on(ui.visuals().selection.bg_fill)) } else { text };
+    let response = ui.add_enabled(free, egui::Button::selectable(selected, text));
     let label = format!("{label} (automated)");
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, free, selected, &label));
     if scroll && selected {
@@ -1337,6 +1341,7 @@ fn lane_header(
                 .is_some_and(|p| last.is_some_and(|r| !r.contains(p)) && !response.rect.contains(p))
     });
     let menu = egui::Popup::menu(&response)
+        .frame(egui::Frame::popup(ui.style()).fill(theme::panel_background().to_opaque()))
         .align(align)
         .align_alternatives(&[])
         .close_behavior(egui::PopupCloseBehavior::IgnoreClicks);

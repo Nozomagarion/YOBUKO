@@ -17,7 +17,9 @@ covers:
 
 Every track, group and return track, and the main output, has a level meter: how loud it is
 now, per side, and whether it went over full scale. The engine measures; the window, the CLI and
-MCP read the same numbers.
+MCP read the same numbers. Session mixer meters use two 6 px bars with a 2 px gap;
+compact Arrangement meters retain two 4 px bars. The drawing fills the allocated width
+without changing the scale, ballistics or clip reset behaviour.
 
 ## What is measured
 

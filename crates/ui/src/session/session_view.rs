@@ -103,6 +103,8 @@ pub struct SessionViewState {
     pub(crate) reserve_input: bool,
     /// How far each strip's device list is scrolled.
     pub(crate) device_scroll: std::collections::BTreeMap<TrackId, f32>,
+    /// Independent horizontal scroll for each strip’s send row.
+    pub(crate) send_scroll: std::collections::BTreeMap<TrackId, f32>,
     /// The device row clicked last in a strip (track, device index): it stays lit.
     pub shown_device: Option<(TrackId, usize)>,
     /// The devices picked in the window (the strips' lists and the detail area's chain light the
@@ -404,6 +406,7 @@ pub fn show(
     );
     let main_mixer = Rect::from_x_y_ranges(scene_span, mixer.y_range());
     painter.rect_filled(main_mixer, 0.0, theme::panel_background());
+    crate::kit::liquid::paint(&painter, main_mixer, theme::panel_background(), crate::kit::liquid::Surface::Track);
     let level = state.meters.main;
     // The main meter stands where a track's does: beside the fader, or at the top of the strip
     // while the mixer is too low for a fader.
@@ -420,7 +423,7 @@ pub fn show(
     let at = parts.meter.unwrap_or_else(|| {
         Rect::from_min_size(
             main_mixer.min + Vec2::splat(PAD),
-            Vec2::new(meter::WIDTH, parts.toggles.top() - main_mixer.top() - PAD * 2.0),
+            Vec2::new(crate::session::mixer_strip::METER_WIDTH, parts.toggles.top() - main_mixer.top() - PAD * 2.0),
         )
     });
     meter::show(ui, &painter.with_clip_rect(main_mixer), at, "Main", meter::Source::Main, &level, actions);
@@ -644,6 +647,19 @@ fn column_header(
             nesting::fold_arrow(ui, painter, arrow, id, column.track, &column.name, color, &mut state.folded);
         }
         text.min.x = (text.min.x + FOLD_ARROW).min(text.max.x);
+    }
+    if column.kind == ColumnKind::Track && (column.plays_notes || column.plays_audio) {
+        let type_rect = Rect::from_min_size(text.min, Vec2::new(16.0, text.height()));
+        crate::kit::mixer_controls::track_type(
+            ui,
+            painter,
+            type_rect,
+            Id::new(("session-track-type", column.track.0)),
+            &column.name,
+            (column.plays_notes, column.plays_audio),
+            color,
+        );
+        text.min.x = (type_rect.right() + 3.0).min(text.right());
     }
     widgets::text_in(painter, text, Align2::LEFT_CENTER, &column.name, theme::ui_font(theme::TEXT), color);
     // The name's place, for a rename in place (Ctrl+R, #696).

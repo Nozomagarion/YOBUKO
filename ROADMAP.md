@@ -139,6 +139,8 @@ refused or suspended, never by losing its edits.
 
 ## What works now
 
+- Forest Amber is available as a built-in theme alongside the existing palettes.
+
 - Private image backgrounds use a cached source and display-scaled, alpha-correct blur; Settings keeps its own readable material. Native Mica has been removed.
 
 - Theme customization includes independent Browser/coloured-surface text, alpha-preserving gradients, editable liquid strengths, a private image backdrop and configurable application-bar identity/project information.

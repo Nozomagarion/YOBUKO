@@ -4,6 +4,7 @@
 //! The user's settings: what they are, their defaults, and the text file they are kept in
 //! (`key = value` lines, so a person can read and fix it). The app decides where the file lives.
 
+mod gradient_editor;
 pub mod keymap;
 pub mod plugin_manager;
 mod settings_rows;

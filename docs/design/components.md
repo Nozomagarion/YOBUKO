@@ -197,8 +197,8 @@ takes the pointer 3 px either side (a vertical resize cursor, labelled "Mixer he
 moves it, a double-click gives 166 px back.
 
 **Height steps.** Each part appears once the mixer is at least as tall as its step, and goes
-again below it. Top to bottom, the strip at its tallest: name, device list, sends row, pan row,
-volume readout, fader with the meter, toggles. Between the name and the device list: the output.
+again below it. Top to bottom, the strip at its tallest: name, device list, pan row,
+volume readout, fader with the meter, toggles, sends row. Between the name and the device list: the output.
 On an audio track, the input's block (Audio From and the monitor's In / Auto / Off) sits above
 the toggles from 236 px ([spec](../spec/ui-session-view.md) › I/O section). While any strip shows
 that block, every strip keeps its room (empty where a track has no input), so the sends, pan,
@@ -209,20 +209,20 @@ fader and toggles stay in line across the mixer.
 | 46 px (least) | Toggles; the compact volume above them | toggles 18 px; volume 12 px, 4 px above the toggles |
 | 96 px | The fader, the meter beside it and the dB readout over it, in place of the compact volume | readout 12 px, 2 px gap, fader at least 48 px, 4 px above the toggles |
 | 122 px | Pan row | 22 px and 4 px under it |
-| 148 px | Sends row | 22 px and 4 px under it (the pre dot sits in the gap) |
+| 148 px | Sends row | 22 px below the toggles with a 4 px gap; reserved on every strip to keep controls aligned |
 | 166 px (default) | Name row, at the top | 16 px and 2 px under it |
 | 192 px | Output row, under the name | 16 px and 4 px under it |
 | 236 px | On an audio track, the input's block above the toggles: the "Audio From" caption and the source's dropdown, then the monitor's In / Auto / Off buttons | caption 12 px, dropdown 16 px, buttons 18 px, 3 px between the parts; the fader loses their height first |
-| 260 px | Device list, under the output | at least four 16 px rows and 4 px under it; the fader takes the height up to 140 px, the list the rest. The list is as tall on every strip, the returns and Main included: it is worked out as if the strip had a sends row, and a strip without sends gives that row to its fader. Main lists the main channel's devices. A divider under the lists (6 px hit area, a 2 px `accent` line hovered or dragged) sets the fader's height for every strip at once: dragged down, the lists grow and the controls get lower, down to a 48 px fader; up, until one device row is left. A double-click makes the split automatic again. Settings keeps it (`session_strip_fader`, 0 is automatic) |
+| 260 px | Device list, under the output | at least four 16 px rows and 4 px under it; the fader takes the height up to 140 px, the list the rest. The list is as tall on every strip, the returns and Main included: every strip reserves the same 26 px send footer below its toggles. Main lists the main channel's devices. A divider under the lists (6 px hit area, a 2 px `accent` line hovered or dragged) sets the fader's height for every strip at once: dragged down, the lists grow and the controls get lower, down to a 48 px fader; up, until one device row is left. A double-click makes the split automatic again. Settings keeps it (`session_strip_fader`, 0 is automatic) |
 
 | Part | Spec |
 |---|---|
 | Compact volume | 12 px across the strip, as the Arrangement's volume field: `control.background` (`control.hoverBackground` hovered), filled up to the level in `control.playingBackground` with 0 dB at 85 %, the value right in 10 px mono `text.primary`. With Mixer controls on Knob, a 12 px knob at the left and the value right of it. Dragged up or down, the wheel, double-click for 0 dB |
-| Fader | A 22 px column at the strip's left: a 4 px `control.background` track centred in it, filled from the bottom up to the level in `control.playingBackground` (0 dB at 85 % of the travel, as the volume field), a 1 px `text.hint` tick 5 px either side of the track at 0 dB, and an 18 × 7 px cap in `text.value` (`text.primary` hovered or dragged) centred on the level, a 1 px `window.background` line across its middle. The column, readout included, takes the drag, the wheel and the double-click |
-| Readout | Over the fader, 12 px across the strip: the volume in 10 px mono `text.value` (`text.primary` hovered), "-inf" below −70 dB, starting at the fader column's left edge |
-| Meter | Two 4 px bars, as below, standing 6 px right of the fader column, from the top of the fader to its bottom; at the least height, where there is no fader, it is not drawn |
-| Pan row | The pan knob (22 px) at the left, its value right of it, 6 px apart, 10 px mono `text.secondary` ("C", "15L"). While a send is dragged, its letter and level stand there instead ("A -12.0") |
-| Sends row | One send knob per return, 4 px apart from the left, as many as fit (four in a track column) |
+| Fader | At the left on ordinary tracks; fader centred on returns and Main, with scale left and meter right. A 20 px column with a recessed dark 5 px rail, no level fill, quiet ticks at −∞, −24, −12, −6 and 0 dB with 8 px numeric labels to the right (labels that would collide at short heights are omitted) and a 20 × 26 px theme-tinted cap. A shadow, upper and lower bevels and a recessed 5 px centre grip distinguish the cap from the rail; hover uses `control.hoverBackground`. The column including its readout retains drag, wheel and double-click handling. |
+| Readout | Over the fader, 12 px across the strip: the volume in 10 px mono `text.value` (`text.primary` hovered), "-inf" below −70 dB, centred over the fader |
+| Meter | Two 6 px bars with a 2 px gap, standing beside the scale, 4 px right of the fader column, from the top of the fader to its bottom; at the least height, where there is no fader, it is not drawn |
+| Pan row | A full-width 22 px pan field using the same drawing as Arrangement: centre marks, a directional rail and a centred value ("C", "15L") |
+| Sends row | Labelled send fields using the same drawing as Arrangement, 4 px apart in a single row below the toggle buttons: two fields fit side by side, with further destinations continuing to the right. The area scrolls horizontally independently of the Session grid (horizontal wheel, Shift+wheel or ordinary wheel over the row). Column widths stay unchanged (tracks 116 px, returns 84 px). Compact sends put the letter above the numeric value |
 | Colour band | 5 px down the left edge, in the strip's padding, the strip's full height, the track colour (dimmed as the header while the track is off); a click opens the palette (Colour palette) |
 | Name | 16 px, filled with the track colour as the column's header: the track's name in 11 px in the text colour that reads on it, 4 px in, cut off at the strip's edge |
 | Output | 16 px across the strip: "→" (14 px, 10 px `text.hint`) and the output dropdown the rest of the row ("Main" or a group track, as the Arrangement header's; `track.setOutput`). Its menu lists Main and every group track but the track itself |
@@ -732,7 +732,8 @@ Shared solo, cue, arm, track-on and automation surfaces have a thin theme-colore
 a distinct focus outline and a small proportional corner radius. Arrangement buttons are
 22 px wide (track-on remains 30 px). At roomy widths, the name and sends occupy the top
 line and transport-related track controls, volume and pan sit below. Narrow headers retain
-the compact layout. Sends, meters, routing, selection and command identifiers are preserved.
+the compact layout: the volume row starts directly below the automation button, using
+its full available width before the sends and pan. Sends, meters, routing, selection and command identifiers are preserved.
 The radius is currently a shared drawing rule, not yet an exposed appearance setting.
 
 ### Header proportion refinement
@@ -846,3 +847,7 @@ Left or Centre. Optional project name/unsaved marker and tempo/time signature sh
 position. Single-line text truncates with an ellipsis inside separate cells before reaching
 the three 32 px window buttons. On Windows this replaces native decorations, supports dragging,
 double-click maximise and a 5 px resize edge/corner. Other platforms retain native decorations.
+
+Arrangement track headers and Session column headers show a non-interactive type marker immediately before the track name, on the name row: a miniature keyboard (two white keys with a shorter black key between them) for MIDI, a waveform for audio, and both for mixed-content tracks. The tooltip and accessibility label name the type. Groups and returns are not labelled as audio or MIDI tracks. The marker uses 16 px plus a 3 px gap within the name area, without shifting the mute, solo or other mixer buttons. It stays beside the name on compact headers.
+
+The automation parameter popup uses an opaque theme panel surface so lane hints cannot show through its search or menu rows. Selected parameter labels use contrasting text against the selection fill, including their duplicate entries in the Automated section.

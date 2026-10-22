@@ -481,15 +481,21 @@ impl Cx<'_> {
         let response =
             self.ui.put(rect, egui::Slider::new(&mut self.settings.view.background_blur, 0..=40).suffix(" px"));
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, self.name));
+        self.outcome.adjusting |= response.dragged() || response.is_pointer_button_down_on();
         self.outcome.changed |= response.changed();
     }
 
     /// Per-surface material strength; saved even without a GPU provider.
     pub fn liquid_strength(&mut self, row: Rect, field: impl FnOnce(&mut Settings) -> &mut u8) {
+        let inherited = self.themes.liquid.is_none();
+        if !inherited {
+            self.note("Theme override active. Themes > Edit current theme > Use global liquid settings");
+        }
         let value = field(self.settings);
         let rect = Rect::from_min_size(Pos2::new(row.right() - 190.0, row.top()), Vec2::new(190.0, SEGMENT));
-        let response = self.ui.put(rect, egui::Slider::new(value, 0..=100).suffix(" %"));
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, self.name));
+        let response =
+            self.ui.add_enabled_ui(inherited, |ui| ui.put(rect, egui::Slider::new(value, 0..=100).suffix(" %"))).inner;
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Slider, inherited, self.name));
         if !crate::kit::liquid::available(self.ui.ctx()) {
             response.clone().on_hover_text("Saved for later. To see liquid, select GPU in Appearance > Renderer, enable Animations and restart Suhina.");
         }
@@ -1099,117 +1105,6 @@ fn colour_group(key: &str) -> &'static str {
     }
 }
 
-fn gradient_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Option<ThemeRequest> {
-    use crate::kit::gradient::{Gradient, Stop};
-    let mut gradients = themes.gradients.clone();
-    ui.add_space(8.0);
-    ui.label(egui::RichText::new("Surface gradients").strong());
-    ui.add(
-        egui::Label::new("Colour overlays saved with this theme. Project track and clip colours stay unchanged.")
-            .wrap(),
-    );
-    for (name, slot) in
-        [("Panel", &mut gradients.panels), ("Track", &mut gradients.tracks), ("Clip", &mut gradients.clips)]
-    {
-        ui.push_id(("surface-gradient", name), |ui| {
-            ui.collapsing(format!("{name} gradient"), |ui| {
-                let mut enabled = slot.is_some();
-                if ui.checkbox(&mut enabled, format!("Enable {name} gradient")).changed() {
-                    *slot = enabled.then(Gradient::default);
-                }
-                let Some(gradient) = slot else { return };
-                if !(2..=8).contains(&gradient.stops.len()) {
-                    *gradient = Gradient::default();
-                }
-                for stop in &mut gradient.stops {
-                    stop.position = stop.position.min(100);
-                }
-                gradient.stops.sort_by_key(|stop| stop.position);
-                let direction = ui
-                    .add(egui::Slider::new(&mut gradient.angle, 0..=360).suffix("°").text(format!("{name} direction")));
-                state.theme_colour_held |= direction.dragged() || direction.is_pointer_button_down_on();
-                ui.label(egui::RichText::new("0° left → right · 90° top → bottom").small());
-                let (preview, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 32.0), egui::Sense::hover());
-                ui.painter().rect_filled(preview, 0.0, theme::panel_background());
-                ui.painter().add(gradient.mesh(preview));
-                let count = gradient.stops.len();
-                let mut remove = None;
-                for index in 0..count {
-                    let low = index.checked_sub(1).map_or(0, |previous| gradient.stops[previous].position);
-                    let high = gradient.stops.get(index + 1).map_or(100, |next| next.position);
-                    let stop = &mut gradient.stops[index];
-                    let mut rgba = stop.rgba();
-                    ui.push_id(index, |ui| {
-                        ui.horizontal_wrapped(|ui| {
-                            let popup = ui.auto_id_with("popup");
-                            let picker = edit_rgba(ui, &mut rgba, egui::color_picker::Alpha::OnlyBlend);
-                            picker.widget_info(|| {
-                                egui::WidgetInfo::labeled(
-                                    egui::WidgetType::ColorButton,
-                                    true,
-                                    format!("{name} stop {} colour", index + 1),
-                                )
-                            });
-                            state.theme_colour_held |= egui::Popup::is_id_open(ui.ctx(), popup)
-                                && ui.input(|input| input.pointer.primary_down());
-                            ui.label(theme::hex_rgba(rgba));
-                            if ui
-                                .add_enabled(count > 2, egui::Button::new(format!("Remove stop {}", index + 1)))
-                                .clicked()
-                            {
-                                remove = Some(index);
-                            }
-                        });
-                        let position = ui.add(
-                            egui::Slider::new(&mut stop.position, low..=high)
-                                .suffix(" %")
-                                .text(format!("{name} stop {} position", index + 1)),
-                        );
-                        let mut opacity = (f32::from(rgba[3]) * 100.0 / 255.0).round() as u8;
-                        let alpha = ui.add(
-                            egui::Slider::new(&mut opacity, 0..=100)
-                                .suffix(" %")
-                                .text(format!("{name} stop {} opacity", index + 1)),
-                        );
-                        state.theme_colour_held |= position.dragged()
-                            || position.is_pointer_button_down_on()
-                            || alpha.dragged()
-                            || alpha.is_pointer_button_down_on();
-                        if alpha.changed() {
-                            rgba[3] = (f32::from(opacity) * 2.55).round() as u8;
-                        }
-                    });
-                    stop.set_rgba(rgba);
-                }
-                if let Some(index) = remove {
-                    gradient.stops.remove(index);
-                }
-                if ui
-                    .add_enabled(gradient.stops.len() < 8, egui::Button::new(format!("Add {name} colour stop")))
-                    .clicked()
-                {
-                    let gap = gradient
-                        .stops
-                        .windows(2)
-                        .enumerate()
-                        .max_by_key(|(_, pair)| pair[1].position.saturating_sub(pair[0].position))
-                        .map(|(index, _)| index)
-                        .unwrap_or(0);
-                    let left = &gradient.stops[gap];
-                    let right = &gradient.stops[gap + 1];
-                    let stop = Stop {
-                        transparent_rgb: None,
-                        position: left.position + (right.position - left.position) / 2,
-                        color: crate::kit::motion::mix(left.color, right.color, 0.5),
-                    };
-                    gradient.stops.insert(gap + 1, stop);
-                }
-            });
-        });
-    }
-    (gradients != themes.gradients).then_some(ThemeRequest::EditGradients(gradients))
-}
-
 fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Option<ThemeRequest> {
     let mut request = None;
     if ui.button("Back to themes").clicked() {
@@ -1295,7 +1190,7 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
         ui.add(egui::Label::new("Liquid preview is unavailable. Values can be saved. Select GPU in Appearance > Renderer, enable Animations and restart Suhina to see the effect.").wrap());
     }
     ui.add(egui::Label::new(egui::RichText::new("Turn off inheritance to save independent panel, track and clip strengths with this theme. Requires the GPU renderer; reduced effects and high contrast still apply.").small().color(theme::text_secondary())).wrap());
-    if let Some(change) = gradient_editor(ui, themes, state) {
+    if let Some(change) = super::gradient_editor::show(ui, themes, state) {
         request = Some(change);
     }
     let mut edited = themes.colors;
@@ -2248,9 +2143,39 @@ fn segmented<T: Copy + PartialEq>(
 }
 
 /// Keep unmultiplied colour channels even at zero alpha.
-fn edit_rgba(ui: &mut Ui, rgba: &mut [u8; 4], alpha: egui::color_picker::Alpha) -> egui::Response {
+pub(super) fn edit_rgba(ui: &mut Ui, rgba: &mut [u8; 4], alpha: egui::color_picker::Alpha) -> egui::Response {
     let mut hsva = egui::ecolor::Hsva::from_srgba_unmultiplied(*rgba);
-    let response = egui::color_picker::color_edit_button_hsva(ui, &mut hsva, alpha);
+    let popup_id = ui.auto_id_with("popup");
+    let (rect, mut response) = ui.allocate_exact_size(Vec2::new(40.0, 18.0), Sense::click());
+    let swatch = egui::Color32::from_rgba_unmultiplied(rgba[0], rgba[1], rgba[2], rgba[3]);
+    for column in 0..8 {
+        for row in 0..4 {
+            let tile =
+                Rect::from_min_size(rect.min + Vec2::new(column as f32 * 5.0, row as f32 * 5.0), Vec2::splat(5.0))
+                    .intersect(rect);
+            ui.painter().rect_filled(
+                tile,
+                0.0,
+                egui::Color32::from_gray(if (column + row) % 2 == 0 { 180 } else { 100 }),
+            );
+        }
+    }
+    ui.painter().rect_filled(rect, 0.0, swatch);
+    ui.painter().rect_stroke(rect, 0.0, theme::hairline(theme::text_secondary()), egui::StrokeKind::Inside);
+    let background = theme::panel_background().to_opaque();
+    // Popup Areas resolve their own style; setting the parent Ui's fill does not set their frame.
+    egui::Popup::menu(&response)
+        .id(popup_id)
+        .frame(egui::Frame::popup(ui.style()).fill(background))
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            ui.spacing_mut().slider_width = 275.0;
+            ui.visuals_mut().override_text_color = Some(theme::text_on(background));
+            ui.visuals_mut().text_edit_bg_color = Some(background);
+            if egui::color_picker::color_picker_hsva_2d(ui, &mut hsva, alpha) {
+                response.mark_changed();
+            }
+        });
     if response.changed() {
         *rgba = hsva.to_srgba_unmultiplied();
     }

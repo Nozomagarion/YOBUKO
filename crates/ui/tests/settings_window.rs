@@ -6,7 +6,7 @@
 
 use egui::{Key, Modifiers, Pos2, Vec2};
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use suhina_session::Session;
 use suhina_ui::demo::demo_project;
 use suhina_ui::settings::settings_view::Page;
@@ -43,6 +43,21 @@ fn gradient_editor_enables_saves_and_resets_without_editing_the_project() {
     harness.run();
     let actions = harness.state_mut().take_theme_actions();
     assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.gradients.tracks.as_ref().is_some_and(|gradient| gradient.stops.len() == 3))));
+    assert!(harness.query_by_label("Track stop 1 position").is_none());
+    let stop = harness.get_by_label("Select Track stop 2").rect().center();
+    harness.drag_at(stop);
+    harness.hover_at(stop + Vec2::new(35.0, 0.0));
+    harness.run();
+    harness.drop_at(stop + Vec2::new(35.0, 0.0));
+    harness.run();
+    let actions = harness.state_mut().take_theme_actions();
+    assert!(actions.iter().any(|action| matches!(action, suhina_ui::settings::themes::FileAction::Save { theme, .. } if theme.gradients.tracks.as_ref().is_some_and(|gradient| gradient.stops.get(1).is_some_and(|stop| stop.position > 50)))));
+    harness.get_by_label("Select Track stop 1").click();
+    harness.run();
+    assert!(harness.query_by_label("Track stop 2 position").is_none());
+    assert!(harness.query_all_by_label("Track stop 1 position").next().is_some());
+    harness.get_by_label("Select Track stop 2").click();
+    harness.run();
     harness.get_by_label("Remove stop 2").focus();
     harness.run();
     harness.get_by_label("Remove stop 2").click();
@@ -132,6 +147,11 @@ fn render_themes_gallery_and_editor_for_review() {
     harness.remove_cursor();
     harness.run();
     harness.render().unwrap().save(folder.join("gradient-editor.png")).unwrap();
+    harness.get_by_label("Track stop 1 colour").click();
+    harness.run();
+    harness.remove_cursor();
+    harness.run();
+    harness.render().unwrap().save(folder.join("colour-popup.png")).unwrap();
 }
 
 #[test]
@@ -316,6 +336,13 @@ fn colour_picker_keeps_preview_clear_while_held_and_reset_restores_the_palette()
             _ => None,
         })
         .expect("the actual colour picker's saturation/value square");
+    assert!(
+        harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
+        egui::Shape::Rect(background) if background.fill.is_opaque()
+            && background.rect.contains_rect(square)
+            && background.rect.top() < square.top() - 20.0)),
+        "colour picker needs an opaque frame covering its header and colour square"
+    );
     let pointer = square.center();
     harness.hover_at(pointer);
     harness.step();
@@ -678,4 +705,67 @@ fn a_search_finds_shortcuts_and_the_shortcuts_page_filters_its_list() {
     settle(&mut harness);
     assert!(harness.query_by_label("Change keys of view.waveformZoomIn").is_some());
     assert!(harness.query_by_label("Change keys of file.save").is_none());
+}
+
+#[test]
+fn holding_background_blur_keeps_the_live_preview_visible() {
+    let mut harness = short_window();
+    harness.get_by_label("Search settings").focus();
+    settle(&mut harness);
+    harness.get_by_label("Search settings").type_text("Background blur");
+    settle(&mut harness);
+    let rect = harness.get_by_label("Background blur").rect();
+    let pointer = rect.center();
+    harness.hover_at(pointer);
+    harness.step();
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: pointer,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    for _ in 0..6 {
+        harness.step();
+    }
+    assert!(!dimmed(&harness), "held slider lost its preview");
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: pointer,
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.step();
+    assert!(dimmed(&harness), "dimmer must return on the release frame without a delay");
+}
+
+#[test]
+fn theme_override_disables_global_liquid_sliders_until_inheritance_returns() {
+    let mut harness = short_window();
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    harness.get_by_label("Edit current theme…").click();
+    settle(&mut harness);
+    harness.get_by_label("Use global liquid settings").click();
+    settle(&mut harness);
+    let global = harness.state().settings().view.liquid;
+    harness.get_by_label("Search settings").focus();
+    settle(&mut harness);
+    harness.get_by_label("Search settings").type_text("Panel liquid");
+    settle(&mut harness);
+    assert!(harness.get_by_label("Panel liquid").accesskit_node().is_disabled());
+    assert_eq!(harness.state().settings().view.liquid, global);
+    harness.get_by_label("Search settings").focus();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.key_press(Key::Backspace);
+    settle(&mut harness);
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    harness.get_by_label("Use global liquid settings").click();
+    settle(&mut harness);
+    harness.get_by_label("Search settings").focus();
+    settle(&mut harness);
+    harness.get_by_label("Search settings").type_text("Panel liquid");
+    settle(&mut harness);
+    assert!(!harness.get_by_label("Panel liquid").accesskit_node().is_disabled());
+    assert_eq!(harness.state().settings().view.liquid, global);
 }

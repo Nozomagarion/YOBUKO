@@ -6,6 +6,7 @@ status: current
 last_verified: 2026-10-19
 covers:
   - crates/ui/src/settings/settings_view.rs
+  - crates/ui/src/settings/gradient_editor.rs
   - crates/ui/src/settings/settings_rows.rs
   - crates/ui/src/settings/track_sizes.rs
   - crates/ui/src/settings.rs
@@ -274,3 +275,9 @@ The background source, image processing and placement are separate internal modu
 They do not introduce an extension protocol; future animated sources must follow ADR 0015.
 Settings uses its unattenuated theme surface as the liquid base, independently of the
 main background surface opacity, to avoid multiplying two transparency controls.
+
+Holding the Background blur slider keeps the Settings live preview active even while the pointer is stationary; the modal dimmer returns only on release, so individual value changes do not flash the surrounding view.
+
+Global liquid strength sliders are disabled while the active theme supplies liquid overrides. Their notes explain how to enable Use global liquid settings in the theme editor. Stored global values remain unchanged and become editable again when inheritance is restored.
+
+The gradient editor uses a single horizontal colour ramp with numbered draggable stops. Selecting a stop exposes only its colour, position and opacity; Add inserts and selects a midpoint in the largest gap, and Remove acts on the selected stop (at least two remain). Stops cannot cross their neighbours. Surface direction is a separate control below the stop editor. Colour-picker popups use an opaque readable surface even when Settings uses liquid transparency.
