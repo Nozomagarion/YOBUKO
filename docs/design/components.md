@@ -274,7 +274,7 @@ a lane between 20 and 26 px shows the first row clipped.
 | Track height | Shows |
 |---|---|
 | ≥ 26 px | Row 1, 15 px: track on (30 px, the track number in 10 px mono), solo (18 px, "S"), cue (18 px, "C"), arm (18 px, on a track that plays notes or audio), 2 px apart, the name in 11 px 6 px after them (on a group, a fold arrow first, 7 px, pointing down open and right folded); the colour is the band down the header's edge. The row steps in 8 px per group the track is inside |
-| ≥ 48 px | Row 2, 6 px under row 1: the volume field (the rest of the row) and the pan field (46 px), 4 px apart |
+| ≥ 48 px | Row 2, 6 px under row 1: the volume field (the rest of the row) and the pan field (40 px), 4 px apart |
 | ≥ 70 px | Routing, 4 px under row 2: "→" and the output dropdown ("Main" or a group track, `track.setOutput`); audio input and monitor In / Auto / Off (planned, with recording) |
 | ≥ 90 px | On a track that plays audio, 4 px under routing: "Audio" (28 px, 10 px `text.hint`) and the audio input dropdown ("No input", or "In 3" or "In 1/2" and " · Auto", " · Monitor in" or " · Monitor off"; `track.setAudioInput`); its menu, also under "Audio input: …" in the track's menu in both views, offers No input, each channel of the input device and each neighbouring pair (the first eight while no input device is open, saying so), then Monitor auto, in or off. On a track that plays notes, 4 px under routing: "MIDI" (28 px, 10 px `text.hint`) and the MIDI input dropdown, the rest of the row ("All ports", a port, or "No input", then " · Ch N" for one channel; `track.setMidiInput`). The track's menu, in both views, has the same choices under "MIDI input: …": every port, each port there is (one chosen but not connected says so), none; every channel, or Ch 1 to 16 in a grid of four |
 | ≥ 114 px | (planned) Send fields, one per return, labelled "Send A", "Send B", once the engine plays sends; routing then moves below them |
@@ -287,7 +287,7 @@ dragging, and a drag is one undo step.
 
 | Part | Volume | Pan | Send |
 |---|---|---|---|
-| Size | 16 px high, full width | 16 × 46 | 16 px, half width each |
+| Size | 16 px high, full width | 16 × 40 | 16 px, half width each |
 | Background | `control.background` | `#232220` | `control.background` |
 | Value shown as | Fill from the left, `#4A4843`, full height | 2 px bar along the bottom from the centre, `#C9C4BB` | Fill `#3E3C38` |
 | Marker | 1 px tick in `#C9C4BB`, only the top and bottom 2 px | 1 px centre tick `#55524C`, top and bottom 2 px | none |
@@ -846,7 +846,7 @@ The 28 px application bar precedes the menu. Suhina is always present; Appearanc
 Left or Centre. Optional project name/unsaved marker and tempo/time signature share their own
 position. Single-line text truncates with an ellipsis inside separate cells before reaching
 the three 32 px window buttons. On Windows this replaces native decorations, supports dragging,
-double-click maximise and a 5 px resize edge/corner. Other platforms retain native decorations.
+double-click maximise and a 5 px resize edge/corner. Other platforms retain native decorations and show only application/project information in this bar, without duplicate window controls or drag handling.
 
 Arrangement track headers and Session column headers show a non-interactive type marker immediately before the track name, on the name row: a miniature keyboard (two white keys with a shorter black key between them) for MIDI, a waveform for audio, and both for mixed-content tracks. The tooltip and accessibility label name the type. Groups and returns are not labelled as audio or MIDI tracks. The marker uses 16 px plus a 3 px gap within the name area, without shifting the mute, solo or other mixer buttons. It stays beside the name on compact headers.
 

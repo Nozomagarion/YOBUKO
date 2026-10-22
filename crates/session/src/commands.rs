@@ -3521,13 +3521,7 @@ fn paste_clip(session: &mut Session, params: &Value) -> Result<Value, CommandErr
         None => false,
         Some(v) => v.as_bool().ok_or("stack must be true or false")?,
     };
-    let replace = match params.get("replace") {
-        None => None,
-        Some(value) => Some(
-            u32::try_from(value.as_u64().ok_or("replace must be a clip id")?)
-                .map_err(|_| "replace clip id is too large")?,
-        ),
-    };
+    let replace = params.get("replace").map(|value| clip_param(&session.project, value)).transpose()?;
     if replace.is_some() && (params.get("track").is_none() || !matches!(at, PasteAt::Beat(_))) {
         return Err("replace requires an arrangement track and start".into());
     }
@@ -3597,7 +3591,7 @@ fn paste_clip(session: &mut Session, params: &Value) -> Result<Value, CommandErr
         let clips = &mut p.arrangement.lanes.get_mut(lane).ok_or("the lane is missing")?.clips;
         let index = clips
             .iter()
-            .position(|clip| clip.id.0 == replace)
+            .position(|clip| clip.id == replace)
             .ok_or("the replacement clip is not on the destination track")?;
         clips.remove(index);
     }

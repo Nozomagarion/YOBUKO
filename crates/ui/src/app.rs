@@ -1429,7 +1429,10 @@ impl App {
         let text = path.display().to_string();
         match field {
             PickField::ProjectsFolder => self.settings.projects_folder = text,
-            PickField::BackgroundImage => self.settings.background_image = text,
+            PickField::BackgroundImage => {
+                self.settings.background_image = text;
+                self.background.retry_failed();
+            }
             PickField::NamModelsFolder => self.settings.nam_models_folder = text,
             PickField::IrFolder => self.settings.irs_folder = text,
             PickField::TemplatesFolder => self.settings.templates_folder = text,

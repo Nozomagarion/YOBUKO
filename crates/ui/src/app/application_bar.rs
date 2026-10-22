@@ -9,14 +9,16 @@ use egui::{Align2, Rect, Sense, Ui, Vec2};
 
 pub(super) fn show(ui: &mut Ui, settings: ViewSettings, project: &str, timing: &str) {
     let row = ui.available_rect_before_wrap();
-    let controls = Rect::from_min_max(egui::pos2((row.right() - 96.0).max(row.left()), row.top()), row.max);
+    let custom_controls = cfg!(target_os = "windows");
+    let controls_width = if custom_controls { 96.0 } else { 0.0 };
+    let controls = Rect::from_min_max(egui::pos2((row.right() - controls_width).max(row.left()), row.top()), row.max);
     let body = Rect::from_min_max(row.min, egui::pos2(controls.left(), row.bottom()));
     let drag = ui.interact(body, ui.id().with("application-bar-drag"), Sense::click_and_drag());
     drag.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, "Suhina application bar"));
-    if drag.drag_started() {
+    if custom_controls && drag.drag_started() {
         ui.ctx().send_viewport_cmd(egui::ViewportCommand::StartDrag);
     }
-    if drag.double_clicked() {
+    if custom_controls && drag.double_clicked() {
         let maximized = ui.input(|input| input.viewport().maximized.unwrap_or(false));
         ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(!maximized));
     }
@@ -43,6 +45,9 @@ pub(super) fn show(ui: &mut Ui, settings: ViewSettings, project: &str, timing: &
     );
     group(ui, left_rect, Align2::LEFT_CENTER, left.join(" · "));
     group(ui, center_rect, Align2::CENTER_CENTER, center.join(" · "));
+    if !custom_controls {
+        return;
+    }
     for (index, (label, command)) in [
         ("Minimize", egui::ViewportCommand::Minimized(true)),
         ("Maximize", egui::ViewportCommand::Maximized(!ui.input(|input| input.viewport().maximized.unwrap_or(false)))),
@@ -103,6 +108,23 @@ pub(super) fn resize_edges(ui: &Ui) {
         ui.ctx().set_cursor_icon(cursor);
         if ui.input(|input| input.pointer.primary_pressed()) {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::BeginResize(direction));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::{Harness, kittest::Queryable};
+
+    #[test]
+    fn native_decorations_do_not_duplicate_window_buttons() {
+        let mut harness = Harness::builder().with_size((640.0, 28.0)).build_ui(|ui| {
+            show(ui, ViewSettings::default(), "Project", "120 BPM");
+        });
+        harness.run();
+        for label in ["Window Minimize", "Window Maximize", "Window Close"] {
+            assert_eq!(harness.query_by_label(label).is_some(), cfg!(target_os = "windows"));
         }
     }
 }

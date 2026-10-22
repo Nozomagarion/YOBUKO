@@ -309,14 +309,16 @@ impl Theme {
         match root.get("colors") {
             Some(Value::Object(colors)) => {
                 for (key, value) in colors {
+                    let canonical = RENAMED.iter().find(|(old, _)| *old == key).map_or(key.as_str(), |(_, new)| *new);
                     let parsed = value.as_str().and_then(parse_hex);
-                    match (theme.colors.token_mut(key), parsed) {
+                    match (theme.colors.token_mut(canonical), parsed) {
                         (Some(slot), Some(color)) => {
                             *slot = color;
+                            theme.transparent_rgb.remove(canonical);
                             if let Some([r, g, b, 0]) = value.as_str().and_then(parse_rgba)
                                 && [r, g, b] != [0, 0, 0]
                             {
-                                theme.transparent_rgb.insert(key.clone(), [r, g, b]);
+                                theme.transparent_rgb.insert(canonical.to_string(), [r, g, b]);
                             }
                         }
                         (None, _) => warnings.push(format!("{key} is not a colour token")),
@@ -333,18 +335,21 @@ impl Theme {
                     theme.colors.audio_clip_default = theme.colors.track_color_1;
                 }
                 // Keep old themes visually identical until these independent roles are edited.
-                for (key, value) in [
-                    ("browser.text.primary", theme.colors.text_primary),
-                    ("browser.text.secondary", theme.colors.text_secondary),
-                    ("browser.text.hint", theme.colors.text_hint),
-                    ("browser.text.value", theme.colors.text_value),
-                    ("text.onColorLight", theme.colors.text_primary),
-                    ("text.onColorDark", theme.colors.window_background),
+                for (key, source, value) in [
+                    ("browser.text.primary", "text.primary", theme.colors.text_primary),
+                    ("browser.text.secondary", "text.secondary", theme.colors.text_secondary),
+                    ("browser.text.hint", "text.hint", theme.colors.text_hint),
+                    ("browser.text.value", "text.value", theme.colors.text_value),
+                    ("text.onColorLight", "text.primary", theme.colors.text_primary),
+                    ("text.onColorDark", "window.background", theme.colors.window_background),
                 ] {
                     if !colors.contains_key(key)
                         && let Some(slot) = theme.colors.token_mut(key)
                     {
                         *slot = value;
+                        if let Some(rgb) = theme.transparent_rgb.get(source).copied() {
+                            theme.transparent_rgb.insert(key.to_string(), rgb);
+                        }
                     }
                 }
             }
@@ -642,6 +647,25 @@ mod tests {
         let (restored, warnings) = Theme::from_json(&theme.to_json());
         assert!(warnings.is_empty());
         assert_eq!(restored, theme);
+    }
+
+    #[test]
+    fn legacy_and_inherited_transparent_colours_keep_rgb_when_saved() {
+        let (theme, warnings) =
+            Theme::from_json(r##"{"colors":{"surface.0":"#FF804000","text.primary":"#20A04000"}}"##);
+        assert!(warnings.is_empty());
+        let saved: Value = serde_json::from_str(&theme.to_json()).unwrap();
+        for key in ["window.background", "text.onColorDark"] {
+            assert_eq!(saved["colors"][key], "#FF804000");
+        }
+        for key in ["text.primary", "browser.text.primary", "text.onColorLight"] {
+            assert_eq!(saved["colors"][key], "#20A04000");
+        }
+        assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
+        let (theme, warnings) =
+            Theme::from_json(r##"{"colors":{"surface.0":"#FF804000","window.background":"#00000000"}}"##);
+        assert!(warnings.is_empty());
+        assert_eq!(theme.rgba("window.background", theme.colors.window_background), [0, 0, 0, 0]);
     }
 
     #[test]

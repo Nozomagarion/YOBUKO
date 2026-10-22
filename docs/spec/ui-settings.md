@@ -250,11 +250,11 @@ Project name (including its unsaved marker) and project timing (tempo and time s
 are optional and share a separate Left/Centre position. Long names are clipped inside
 non-overlapping cells. On Windows this bar replaces native decorations; dragging, double-click
 maximise, minimise, close and all eight edge/corner resize directions remain available.
-Other platforms keep native decorations.
+Other platforms keep native decorations; the application bar retains its information but has no duplicate window buttons or drag/maximise handling.
 
 Appearance > Background accepts a user-owned PNG, limited to 32 MiB and 8192 pixels per
 axis. Loading and image blur run away from the UI thread; the displayed image is reduced
-to at most 1600 pixels per axis. The decoded image is cached separately from filtering.
+to at most 1600 pixels per axis. The decoded image is cached separately from filtering. After a failed load, selecting the repaired file again with Browse retries it; ordinary frames do not retry failures.
 Only one image job runs at a time; obsolete results are discarded before publication.
 Background blur is measured in logical display pixels, converted to source pixels using
 the cover scale, so resizing and different image sizes retain the requested visual strength.

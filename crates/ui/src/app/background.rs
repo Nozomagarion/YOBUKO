@@ -34,6 +34,13 @@ pub(super) struct Background {
 }
 
 impl Background {
+    /// An explicit picker action may retry a repaired file; frames never retry failed loads.
+    pub(super) fn retry_failed(&mut self) {
+        if self.worker.is_none() && self.texture.is_none() {
+            self.requested = None;
+        }
+    }
+
     pub(super) fn update(
         &mut self,
         ui: &Ui,
@@ -148,6 +155,41 @@ impl Background {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_load_retries_only_after_explicit_reselection() {
+        let ctx = egui::Context::default();
+        let mut background = Background::default();
+        let mut request = None;
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let rect = ui.max_rect();
+            request = Some(Request {
+                path: "repaired.png".into(),
+                blur: 5,
+                size: [rect.width().max(1.0) as u32, rect.height().max(1.0) as u32],
+            });
+        });
+        let request = request.unwrap();
+        let (send, receive) = mpsc::sync_channel(1);
+        send.send(Completed { request: request.clone(), result: Err("invalid PNG".into()) }).unwrap();
+        background.worker = Some(receive);
+        background.requested = Some(request.clone());
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            assert!(background.paint(ui, "repaired.png", 5).is_err());
+            assert!(!background.paint(ui, "repaired.png", 5).unwrap());
+        });
+        assert!(background.worker.is_none());
+        background.retry_failed();
+        assert!(background.requested.is_none());
+        // Supply cached decoded pixels to exercise retry publication without filesystem timing.
+        background.source = Some(("repaired.png".into(), Arc::new(image::RgbaImage::new(1, 1))));
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            assert!(!background.paint(ui, "repaired.png", 5).unwrap());
+        });
+        assert!(background.worker.is_some());
+        background.retry_failed();
+        assert!(background.requested.as_ref() == Some(&request), "never reset an in-flight request");
+    }
+
     #[test]
     fn obsolete_worker_result_cannot_restore_a_cleared_background() {
         let (send, receive) = mpsc::sync_channel(1);

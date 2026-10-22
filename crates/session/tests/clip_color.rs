@@ -70,6 +70,34 @@ fn paste_replaces_only_the_named_destination_and_undo_restores_it() {
 }
 
 #[test]
+fn paste_replacement_accepts_names_and_rejects_ambiguous_or_wrong_track_targets() {
+    let mut session = Session::new(project());
+    let before = session.project().clone();
+    let source = clips(&session, 1)[0].id;
+    let target = clips(&session, 1)[1].id;
+    run(&mut session, "clip.copy", json!({"clip":source.0})).unwrap();
+    run(&mut session, "clip.paste", json!({"track":1,"start":8.0,"replace":"clip 2","stack":true})).unwrap();
+    assert!(clips(&session, 1).iter().all(|clip| clip.id != target));
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(session.project().arrangement, before.arrangement);
+    for params in [
+        json!({"track":2,"start":8.0,"replace":"Clip 2"}),
+        json!({"track":1,"start":8.0,"replace":"missing"}),
+        json!({"track":1,"scene":1,"replace":"Clip 2"}),
+        json!({"track":1,"start":8.0,"replace":4294967296u64}),
+    ] {
+        assert!(run(&mut session, "clip.paste", params).is_err());
+        assert_eq!(session.project().arrangement, before.arrangement);
+        assert_eq!(session.project().contents, before.contents);
+    }
+    run(&mut session, "clip.paste", json!({"track":1,"start":16.0,"stack":true})).unwrap();
+    let before_ambiguous = session.project().clone();
+    assert!(run(&mut session, "clip.paste", json!({"track":1,"start":8.0,"replace":"Clip 1"})).is_err());
+    assert_eq!(session.project().arrangement, before_ambiguous.arrangement);
+    assert_eq!(session.project().contents, before_ambiguous.contents);
+}
+
+#[test]
 fn a_new_clip_shows_its_tracks_colour_and_a_moved_one_keeps_what_it_showed() {
     let mut session = Session::new(project());
     assert!(clips(&session, 1).iter().all(|c| c.color.is_none()), "a new clip follows its track");

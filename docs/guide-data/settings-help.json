@@ -1813,7 +1813,7 @@
   },
   "Appearance/Background/background_image": {
     "sourceFingerprint": "37fdef83b1d8ad95be653aaa87d53ea35171ee01364be50a33cd91bf3b7a67a9",
-    "description": "Choose a user-owned PNG or type its path. Clear the field to remove it. The native window remains opaque: no desktop icons or other windows are captured. Images are decoded away from the UI thread, limited to 32 MiB and 8192 pixels per axis, and displayed at up to 1600 pixels per axis. High Contrast suppresses the image.",
+    "description": "Choose a user-owned PNG or type its path. Clear the field to remove it. The native window remains opaque: no desktop icons or other windows are captured. Images are decoded away from the UI thread, limited to 32 MiB and 8192 pixels per axis, and displayed at up to 1600 pixels per axis. High Contrast suppresses the image. If loading fails, repair the PNG and choose it again with Browse to retry; failures are not retried continuously.",
     "whenToChange": "Choose an image when you want a private decorative backdrop behind neutral panels.",
     "options": [],
     "references": [
@@ -1846,7 +1846,7 @@
   },
   "Appearance/Application bar/app_name_centered": {
     "sourceFingerprint": "2b2b70626478e0673196c8faf63662e552b926ccfe67ad052b4a88b88b882c09",
-    "description": "Place the always-visible Suhina name at the left or centre of the application bar. Project fields have their own position; fields sharing a position appear together. Long project names are clipped before they overlap controls.",
+    "description": "Place the always-visible Suhina name at the left or centre of the application bar. Project fields have their own position; fields sharing a position appear together. Long project names are clipped before they overlap controls. On Linux and macOS the bar shows information only; native decorations provide the window controls.",
     "whenToChange": "Choose the location you find easiest to identify when switching windows.",
     "options": [
       {
