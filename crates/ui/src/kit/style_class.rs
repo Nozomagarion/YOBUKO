@@ -17,6 +17,8 @@ pub const CLASSES: &[&str] = &[
     "status-bar",
     "browser",
     "session",
+    "meter-vertical",
+    "meter-horizontal",
     "arrangement",
     "mixer",
     "track-header",
@@ -42,6 +44,8 @@ pub const CLASSES: &[&str] = &[
     "sample-map",
     "button",
     "fader",
+    "fader-scale",
+    "pan",
     "fader-cap",
     "knob",
     "meter",
@@ -60,6 +64,7 @@ pub fn valid_selector(selector: &str) -> bool {
 }
 pub fn valid_property(key: &str, value: &str) -> bool {
     match key {
+        "--suhina-appearance" => matches!(value, "native" | "knob" | "field"),
         "color" | "background-color" | "border-color" => theme::parse_hex(value).is_some(),
         "border-radius" => value.strip_suffix("px").and_then(|v| v.parse::<u8>().ok()).is_some_and(|v| v <= 32),
         "font-size" => {
@@ -191,6 +196,15 @@ pub fn foreground(fallback: egui::Color32) -> egui::Color32 {
     }
     property("color").as_deref().and_then(theme::parse_hex).unwrap_or(fallback)
 }
+
+/// Native widget presentation is portable theme data; absence preserves the user's preference.
+pub fn knob_preference(fallback: bool) -> bool {
+    match property("--suhina-appearance").as_deref() {
+        Some("knob") => true,
+        Some("field") => false,
+        _ => fallback,
+    }
+}
 pub fn computed() -> Option<super::native_css::Computed> {
     STACK.with(|stack| super::native_css::scoped(&stack.borrow()))
 }
@@ -314,6 +328,35 @@ pub fn ui(ui: &mut egui::Ui) -> UiStyle<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn portable_pan_appearance_survives_json_css_and_does_not_leak_out_of_its_scope() {
+        for (value, forced) in [("knob", Some(true)), ("field", Some(false)), ("native", None)] {
+            let mut source = theme::Theme::default();
+            assert!(
+                super::super::theme_css::apply(
+                    &mut source,
+                    &format!(".mixer .pan {{ --suhina-appearance: {value}; }}")
+                )
+                .is_empty()
+            );
+            let (restored, warnings) = theme::Theme::from_json(&source.to_json());
+            assert!(warnings.is_empty(), "{warnings:?}");
+            let mut css = theme::Theme::default();
+            assert!(super::super::theme_css::apply(&mut css, &super::super::theme_css::export(&restored)).is_empty());
+            assert_eq!(source, css);
+            skin::configure(&restored.skin);
+            let _mixer = enter("mixer");
+            {
+                let _pan = enter("pan");
+                for preference in [false, true] {
+                    assert_eq!(knob_preference(preference), forced.unwrap_or(preference));
+                }
+            }
+            assert!(!knob_preference(false));
+            assert!(knob_preference(true));
+        }
+        skin::configure(&skin::Skin::default());
+    }
     #[test]
     fn a_live_theme_change_survives_all_enclosing_style_scopes() {
         let original = theme::palette();

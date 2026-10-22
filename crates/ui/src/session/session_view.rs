@@ -24,7 +24,15 @@ use crate::kit::theme::{self, PAD, ROW};
 use crate::kit::widgets::{self, Action};
 
 /// One row: a slot and the line under it.
-const PITCH: f32 = ROW + 1.0;
+fn slot_height() -> f32 {
+    crate::kit::skin::current().session.slot_height.map_or(ROW, f32::from)
+}
+fn slot_pitch() -> f32 {
+    slot_height() + 1.0
+}
+fn header_height() -> f32 {
+    crate::kit::skin::current().session.header_height.map_or(ROW, f32::from)
+}
 /// Width of a group header's fold arrow.
 const FOLD_ARROW: f32 = 12.0;
 /// Mark sizes inside a slot.
@@ -176,7 +184,12 @@ pub(crate) enum Control {
 }
 
 fn column_width(column: &Column) -> f32 {
-    if column.kind == ColumnKind::Return { theme::RETURN_COLUMN } else { theme::TRACK_COLUMN }
+    let geometry = crate::kit::skin::current().session;
+    if column.kind == ColumnKind::Return {
+        geometry.return_width.map_or(theme::RETURN_COLUMN, f32::from)
+    } else {
+        geometry.track_width.map_or(theme::TRACK_COLUMN, f32::from)
+    }
 }
 
 fn rgb(color: suhina_engine::model::Rgb) -> Color32 {
@@ -206,13 +219,15 @@ pub fn show(
     crate::kit::native_css::background(&painter, area);
 
     // Fixed bands: header on top, mixer at the bottom, scene column on the right.
-    let header = Rect::from_min_size(area.min, Vec2::new(area.width(), ROW));
+    let header = Rect::from_min_size(area.min, Vec2::new(area.width(), header_height()));
     let mixer_height = mixer_height(state, area.height(), grid.scenes.len());
     let mixer =
         Rect::from_min_max(Pos2::new(area.left(), (area.bottom() - mixer_height).max(header.bottom())), area.max);
     let body =
         Rect::from_min_max(Pos2::new(area.left(), header.bottom() + 1.0), Pos2::new(area.right(), mixer.top() - 1.0));
-    let scenes_x = (area.right() - theme::SCENE_COLUMN).max(area.left());
+    let scenes_x = (area.right()
+        - crate::kit::skin::current().session.scene_width.map_or(theme::SCENE_COLUMN, f32::from))
+    .max(area.left());
     // Return tracks sit against the scene column; regular tracks fill the space left of them.
     let returns_width: f32 =
         grid.columns.iter().filter(|c| c.kind == ColumnKind::Return).map(|c| column_width(c) + 1.0).sum();
@@ -231,7 +246,7 @@ pub fn show(
         .filter(|c| c.kind != ColumnKind::Return && !hidden.contains(&c.track))
         .map(|c| column_width(c) + 1.0)
         .sum();
-    let content_height = (grid.scenes.len() as f32 + 1.0) * PITCH;
+    let content_height = (grid.scenes.len() as f32 + 1.0) * slot_pitch();
     let fields = std::mem::take(&mut state.value_areas);
     let lists = std::mem::take(&mut state.scroll_areas);
     if ui.rect_contains_pointer(area) {
@@ -311,7 +326,7 @@ pub fn show(
         empty_space(ui, &painter, empty, actions);
     }
     if let Some(probe) = state.drop.as_mut() {
-        let row_of = |y: f32| ((y - bands.top) / PITCH).floor().max(0.0) as usize;
+        let row_of = |y: f32| ((y - bands.top) / slot_pitch()).floor().max(0.0) as usize;
         if probe.devices && !probe.files && !probe.clip {
             for (column, span) in &return_spans {
                 let whole = Rect::from_x_y_ranges(*span, egui::Rangef::new(header.top(), mixer.bottom()));
@@ -340,8 +355,9 @@ pub fn show(
                 if probe.clip && scene >= grid.scenes.len() {
                     continue;
                 }
-                let top = bands.top + scene as f32 * PITCH;
-                let cell = Rect::from_x_y_ranges(*span, egui::Rangef::new(top, top + ROW)).intersect(column_body);
+                let top = bands.top + scene as f32 * slot_pitch();
+                let cell =
+                    Rect::from_x_y_ranges(*span, egui::Rangef::new(top, top + slot_height())).intersect(column_body);
                 // The slot under the pointer is the target, for a dropped file and for a dragged
                 // clip alike: a slot-to-slot drag moves the clip there (Ctrl: a copy).
                 probe.offer(
@@ -485,8 +501,8 @@ fn mixer_height(state: &SessionViewState, view_height: f32, scenes: usize) -> f3
     let wanted = state.mixer_dragged.unwrap_or(saved);
     // Up to just under the stop row under the last scene, and always up to the default height;
     // never over the header.
-    let under_slots = view_height - ROW - 1.0 - (scenes as f32 + 1.0) * PITCH - 1.0;
-    let most = under_slots.max(default).min(view_height - ROW - 1.0).max(least);
+    let under_slots = view_height - header_height() - 1.0 - (scenes as f32 + 1.0) * slot_pitch() - 1.0;
+    let most = under_slots.max(default).min(view_height - header_height() - 1.0).max(least);
     wanted.clamp(least, most)
 }
 
@@ -662,6 +678,7 @@ fn column_header(
         painter.fill_background(rect, 0.0, fill);
     }
     crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Track);
+    crate::kit::native_css::background(painter, rect);
     let _name_style =
         crate::kit::style_class::enter_named_response("track-name", &format!("track-{}", column.track.0), &response);
     crate::kit::native_css::background(painter, rect);
@@ -724,7 +741,7 @@ fn column_body(
     for (scene, slot) in column.slots.iter().enumerate() {
         let rect = Rect::from_x_y_ranges(
             span,
-            egui::Rangef::new(top + scene as f32 * PITCH, top + scene as f32 * PITCH + ROW),
+            egui::Rangef::new(top + scene as f32 * slot_pitch(), top + scene as f32 * slot_pitch() + slot_height()),
         );
         if !rect.intersects(clip) {
             continue;
@@ -906,13 +923,17 @@ fn column_body(
     if column.kind == ColumnKind::Return {
         // Returns have no slots, but the scene lines run through them.
         for scene in 0..scenes {
-            painter.hline(span, top + scene as f32 * PITCH + ROW + 0.5, theme::hairline(theme::border()));
+            painter.hline(
+                span,
+                top + scene as f32 * slot_pitch() + slot_height() + 0.5,
+                theme::hairline(theme::border()),
+            );
         }
         return;
     }
     // Under the last scene: the track's stop button.
-    let stop_top = top + scenes as f32 * PITCH;
-    let stop_rect = Rect::from_x_y_ranges(span, egui::Rangef::new(stop_top, stop_top + ROW));
+    let stop_top = top + scenes as f32 * slot_pitch();
+    let stop_rect = Rect::from_x_y_ranges(span, egui::Rangef::new(stop_top, stop_top + slot_height()));
     if !stop_rect.intersects(clip) {
         return;
     }
@@ -1046,8 +1067,8 @@ fn scene_column(
     let _style_class = crate::kit::style_class::enter("scene-column");
     let clip = painter.clip_rect();
     for scene in &grid.scenes {
-        let y = top + (scene.number - 1) as f32 * PITCH;
-        let rect = Rect::from_x_y_ranges(span, egui::Rangef::new(y, y + ROW));
+        let y = top + (scene.number - 1) as f32 * slot_pitch();
+        let rect = Rect::from_x_y_ranges(span, egui::Rangef::new(y, y + slot_height()));
         if !rect.intersects(clip) {
             continue;
         }
@@ -1130,8 +1151,8 @@ fn scene_column(
         }
         painter.hline(span, rect.bottom() + 0.5, theme::hairline(theme::border()));
     }
-    let stop_top = top + grid.scenes.len() as f32 * PITCH;
-    let rect = Rect::from_x_y_ranges(span, egui::Rangef::new(stop_top, stop_top + ROW));
+    let stop_top = top + grid.scenes.len() as f32 * slot_pitch();
+    let rect = Rect::from_x_y_ranges(span, egui::Rangef::new(stop_top, stop_top + slot_height()));
     if rect.intersects(clip) {
         let response = widgets::button_area(ui, rect.intersect(clip), Id::new("stop-all"), "Stop all clips");
         if response.clicked() {

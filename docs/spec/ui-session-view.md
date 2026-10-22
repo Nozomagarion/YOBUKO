@@ -31,6 +31,17 @@ Items marked **(to observe)** still need checking in Live.
 
 ## Window regions
 
+Session and Arrangement remain separate views. Optional theme-owned Session density
+sets track/return/scene widths and header/slot heights through `skin.session` and
+canonical native CSS; omitted values preserve the default sizes below. Painting,
+scrolling and clip/file drop targets share these dimensions. The existing mixer-height
+divider remains independent. See [theme skins](theme-skins.md#session-density-and-meter-materials).
+The existing knob/field preference applies to the Session pan face as well as compact
+volume: a knob uses the same native pan input area and command. A narrow themed pan
+area shows the dial alone; a wider one keeps the value beside it.
+Canonical `.pan { --suhina-appearance: knob; }` or `field` can override that preference
+as portable theme data in either view. `native` restores the global preference.
+
 From top to bottom:
 
 1. **Menu bar:** File, Edit, Create, View, Playback, Navigate, Options, Help. (Suhina has File,

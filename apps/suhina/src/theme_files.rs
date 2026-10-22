@@ -500,6 +500,7 @@ fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, Stri
     files.push((format!("{id}/style.css"), suhina_ui::kit::theme_css::export(theme).into_bytes()));
     files.push((format!("{id}/README.md"), theme::template_readme().into_bytes()));
     files.push((format!("{id}/examples/dark-gloss.css"), theme::GLOSS_EXAMPLE.as_bytes().to_vec()));
+    files.push((format!("{id}/examples/compact-session.css"), theme::COMPACT_SESSION_EXAMPLE.as_bytes().to_vec()));
     files.push((format!("{id}/{id}.json"), serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?));
     Ok(files)
 }

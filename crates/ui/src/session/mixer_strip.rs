@@ -297,11 +297,11 @@ pub fn show(
         crate::kit::artwork::track_color(egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2));
     let _style_class = crate::kit::style_class::enter_named("mixer", &format!("track-{}", column.track.0));
     // The strip in a shade of its track's colour, as the column above it.
-    let tint = motion::mix(
+    let tint = crate::kit::style_class::background(motion::mix(
         theme::panel_background(),
         egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2),
         0.16,
-    );
+    ));
     let strip = ui.interact(rect.intersect(painter.clip_rect()), id.with("strip"), Sense::click());
     if !crate::kit::skin::paint_colored(
         painter,
@@ -314,6 +314,7 @@ pub fn show(
         painter.fill_background(rect, 0.0, tint);
     }
     crate::kit::liquid::paint(painter, rect, tint, crate::kit::liquid::Surface::Track);
+    crate::kit::native_css::background(painter, rect);
     // The strip's own background, under its controls: a double-click shows the track's devices.
     strip.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("{} channel strip", column.name))
@@ -418,7 +419,15 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
         crate::kit::style_class::enter_named_response("track-name", &format!("track-{}", column.track.0), &response);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{} strip", column.name)));
     // The name stands on the track's colour, as in the column's header.
-    let fill = colour_picker::fill(column.color, column.mute);
+    let native_fill = colour_picker::fill(column.color, column.mute);
+    // An alpha material layers over the track colour. An explicitly authored
+    // transparent solid background can still remove that colour completely.
+    let fill =
+        if crate::kit::style_class::computed().is_some_and(|style| style.has_gradient() && style.background.a() == 0) {
+            native_fill
+        } else {
+            crate::kit::style_class::background(native_fill)
+        };
     if !crate::kit::skin::paint_colored(
         painter,
         rect,
@@ -430,6 +439,7 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
         painter.fill_background(rect, 0.0, fill);
     }
     crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Track);
+    crate::kit::native_css::background(painter, rect);
     let text = rect.shrink2(Vec2::new(4.0, 0.0));
     widgets::text_in(
         painter,
@@ -925,13 +935,24 @@ fn paint_fader(
     ) {
         painter.fill_background(rail, 2.0, recess);
     }
+    let _scale_style = crate::kit::style_class::enter("fader-scale");
+    let native_scale = Rect::from_min_size(
+        egui::pos2(if centred { fader.left() - SCALE_WIDTH - 2.0 } else { fader.right() }, fader.top()),
+        egui::vec2(SCALE_WIDTH, fader.height()),
+    );
+    let scale = control_layout::place("mixer-volume-scale", native_scale, painter.clip_rect());
     let mut last_label_y = f32::NEG_INFINITY;
-    for db in [0.0, -6.0, -12.0, -24.0, -70.0] {
-        let y = at(widgets::volume_position(db)).round() + 0.5;
+    for db in
+        [0.0, -6.0, -12.0, -24.0, -70.0].into_iter().filter(|_| !control_layout::placement("mixer-volume-scale").hidden)
+    {
+        let y = (scale.top()
+            + (at(widgets::volume_position(db)) - native_scale.top()) * scale.height() / native_scale.height())
+        .round()
+            + 0.5;
         if y - last_label_y >= 10.0 {
             let label = if db == -70.0 { "−∞".to_owned() } else { format!("{db:.0}") };
             painter.text(
-                Pos2::new(if centred { fader.left() - 2.0 } else { fader.right() + SCALE_WIDTH - 1.0 }, y),
+                Pos2::new(scale.right() - if centred { 0.0 } else { 1.0 }, y),
                 Align2::RIGHT_CENTER,
                 label,
                 theme::mono_font(8.0),
@@ -941,8 +962,14 @@ fn paint_fader(
         }
         let length = if db == 0.0 { 5.0 } else { 3.0 };
         let ink = theme::text_hint();
-        painter.hline(egui::Rangef::new(rail.right() + 2.0, rail.right() + length + 2.0), y, theme::hairline(ink));
+        let shift = scale.left() - native_scale.left();
+        painter.hline(
+            egui::Rangef::new(rail.right() + 2.0 + shift, rail.right() + length + 2.0 + shift),
+            y,
+            theme::hairline(ink),
+        );
     }
+    drop(_scale_style);
     let level = at(widgets::volume_position(db));
     let cap = Rect::from_center_size(Pos2::new(x, level), CAP);
     crate::kit::mixer_controls::fader_cap(painter, cap, hover, crate::kit::skin::State::response(response, false));
@@ -963,16 +990,22 @@ fn paint_horizontal_fader(painter: &egui::Painter, fader: Rect, db: f64, hover: 
         );
     }
     let mut previous = f32::NEG_INFINITY;
-    for value in [-70.0, -24.0, -12.0, -6.0, 0.0] {
-        let x = at(widgets::volume_position(value));
+    let native_scale = Rect::from_min_size(egui::pos2(fader.left(), fader.bottom()), egui::vec2(fader.width(), 12.0));
+    let scale = control_layout::place("mixer-volume-scale", native_scale, painter.clip_rect());
+    let _scale_style = crate::kit::style_class::enter("fader-scale");
+    for value in
+        [-70.0, -24.0, -12.0, -6.0, 0.0].into_iter().filter(|_| !control_layout::placement("mixer-volume-scale").hidden)
+    {
+        let x = scale.left()
+            + (at(widgets::volume_position(value)) - native_scale.left()) * scale.width() / native_scale.width();
         if x - previous < 18.0 {
             continue;
         }
         previous = x;
-        painter.vline(x, fader.bottom()..=fader.bottom() + 3.0, theme::hairline(theme::text_hint()));
+        painter.vline(x, scale.top()..=scale.top() + 3.0, theme::hairline(theme::text_hint()));
         widgets::text_in(
             painter,
-            Rect::from_center_size(egui::pos2(x, fader.bottom() + 7.0), Vec2::new(22.0, 8.0)),
+            Rect::from_center_size(egui::pos2(x, scale.top() + 7.0), Vec2::new(22.0, 8.0)),
             Align2::CENTER_CENTER,
             if value == -70.0 {
                 "−∞"
@@ -985,6 +1018,7 @@ fn paint_horizontal_fader(painter: &egui::Painter, fader: Rect, db: f64, hover: 
             theme::text_hint(),
         );
     }
+    drop(_scale_style);
     let centre = egui::pos2(at(widgets::volume_position(db)), fader.center().y);
     let cap = Rect::from_center_size(centre, Vec2::new(thickness, length));
     let _cap_style = crate::kit::style_class::enter("fader-cap");
@@ -1060,6 +1094,7 @@ fn pan_row(
     id: Id,
     actions: &mut Vec<Action>,
 ) {
+    let _style = crate::kit::style_class::enter("pan");
     let track = column.track;
     let knob_rect = row;
     state.value_areas.push(knob_rect);
@@ -1101,7 +1136,29 @@ fn pan_row(
         Some((t, Control::Pan, v)) if t == track => v,
         _ => committed.unwrap_or(column.pan),
     };
-    crate::kit::mixer_controls::pan_field(painter, row, pan, widgets::hover(ui, &pan_response));
+    if crate::kit::style_class::knob_preference(state.knobs) {
+        let size = row.height().min(row.width());
+        widgets::knob(
+            painter,
+            Pos2::new(row.left() + size / 2.0, row.center().y),
+            size,
+            ((pan.clamp(-1.0, 1.0) + 1.0) / 2.0) as f32,
+            theme::text_value(),
+            Some(&pan_response),
+        );
+        if row.width() >= size + 20.0 {
+            widgets::text_in(
+                painter,
+                Rect::from_min_max(egui::pos2(row.left() + size + 4.0, row.top()), row.max),
+                Align2::CENTER_CENTER,
+                &widgets::format_pan(pan),
+                theme::mono_font(theme::TEXT_SMALL),
+                theme::text_primary(),
+            );
+        }
+    } else {
+        crate::kit::mixer_controls::pan_field(painter, row, pan, widgets::hover(ui, &pan_response));
+    }
 }
 
 /// The labelled send fields, one per return from the left of `row`, as many as fit: dragged up or down for
@@ -1282,6 +1339,136 @@ fn toggles(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use egui::Color32;
+
+    #[test]
+    fn volume_scale_labels_move_independently_and_can_be_hidden_in_both_directions() {
+        use crate::kit::skin;
+        for horizontal in [false, true] {
+            for hidden in [false, true] {
+                let ctx = egui::Context::default();
+                theme::install(&ctx);
+                let mut skin = skin::Skin::default();
+                skin.controls.insert(
+                    "mixer-volume-scale".into(),
+                    control_layout::Placement { x: 10, y: 5, hidden, ..Default::default() },
+                );
+                if horizontal {
+                    skin.controls.insert(
+                        "mixer-volume".into(),
+                        control_layout::Placement {
+                            direction: control_layout::Direction::Horizontal,
+                            ..Default::default()
+                        },
+                    );
+                }
+                skin::configure(&skin);
+                let draw = || {
+                    ctx.run_ui(egui::RawInput::default(), |ui| {
+                        let fader = Rect::from_min_size(
+                            egui::pos2(40.0, 40.0),
+                            if horizontal { egui::vec2(120.0, 20.0) } else { egui::vec2(18.0, 120.0) },
+                        );
+                        let response = ui.interact(fader, Id::new("scale-test"), egui::Sense::hover());
+                        paint_fader(ui, ui.painter(), Rect::NOTHING, fader, -6.0, &response, false);
+                    })
+                };
+                let mut output = draw();
+                let text: Vec<_> = output
+                    .shapes
+                    .iter()
+                    .filter_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) => Some(text.pos),
+                        _ => None,
+                    })
+                    .collect();
+                output.textures_delta.clear();
+                assert_eq!(text.is_empty(), hidden);
+                if !hidden {
+                    skin.controls.remove("mixer-volume-scale");
+                    skin::configure(&skin);
+                    let mut baseline = draw();
+                    let native: Vec<_> = baseline
+                        .shapes
+                        .iter()
+                        .filter_map(|shape| match &shape.shape {
+                            egui::Shape::Text(text) => Some(text.pos),
+                            _ => None,
+                        })
+                        .collect();
+                    baseline.textures_delta.clear();
+                    assert_eq!(text.len(), native.len());
+                    for (moved, native) in text.iter().zip(native) {
+                        assert!(
+                            (*moved - native - egui::vec2(10.0, 5.0)).length() < 0.01,
+                            "{horizontal}: {moved:?} vs {native:?}"
+                        );
+                    }
+                }
+            }
+        }
+        skin::configure(&skin::Skin::default());
+    }
+
+    #[test]
+    fn mixer_and_name_css_materials_override_native_tint_and_paint_gradients() {
+        use crate::interaction::grid::Grid;
+        use crate::kit::{native_css, skin};
+        for (gradient, name_gradient) in [(false, false), (true, false), (false, true), (true, true)] {
+            let ctx = egui::Context::default();
+            theme::install(&ctx);
+            let body = if gradient { "linear-gradient(#102030, #304050)" } else { "#102030" };
+            let name = if name_gradient { "linear-gradient(#ffffff22, #00000044)" } else { "#203040" };
+            skin::configure(&skin::Skin {
+                css: Some(format!(".mixer {{ background: {body}; }} .track-name {{ background: {name}; }}").into()),
+                ..Default::default()
+            });
+            let grid = Grid::build(&crate::demo::demo_project(), None);
+            let name_fill = if name_gradient {
+                colour_picker::fill(grid.columns[0].color, false)
+            } else {
+                Color32::from_rgb(0x20, 0x30, 0x40)
+            };
+            let rect = Rect::from_min_size(Pos2::new(20.0, 20.0), Vec2::new(116.0, 340.0));
+            let mut state = SessionViewState::default();
+            for frame in 0..3 {
+                let mut output =
+                    ctx.run_ui(egui::RawInput { time: Some(frame as f64 * 0.01), ..Default::default() }, |ui| {
+                        let _frame = native_css::frame(ui);
+                        show(
+                            ui,
+                            ui.painter(),
+                            rect,
+                            &grid.columns[0],
+                            &[],
+                            1,
+                            0,
+                            &mut state,
+                            Id::new("material-strip"),
+                            &mut Vec::new(),
+                        );
+                    });
+                if frame == 2 {
+                    let body_painted = output.shapes.iter().any(|shape| match &shape.shape {
+                        egui::Shape::Mesh(mesh) if gradient => mesh.calc_bounds() == rect,
+                        egui::Shape::Rect(shape) if !gradient => {
+                            shape.rect == rect && shape.fill == Color32::from_rgb(0x10, 0x20, 0x30)
+                        }
+                        _ => false,
+                    });
+                    let name_painted = output
+                        .shapes
+                        .iter()
+                        .any(|shape| matches!(&shape.shape, egui::Shape::Rect(shape) if shape.fill == name_fill));
+                    output.textures_delta.clear();
+                    assert!(body_painted, "missing mixer material, gradient={gradient}");
+                    assert!(name_painted, "missing name material");
+                }
+                output.textures_delta.clear();
+            }
+        }
+        skin::configure(&skin::Skin::default());
+    }
 
     #[test]
     fn main_edit_handles_only_include_sections_the_main_strip_draws() {

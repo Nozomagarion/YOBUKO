@@ -92,7 +92,8 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
             }
         });
         ui.collapsing("Native CSS", |ui| {
-            ui.label("Supported: :root colours, meter style/segments, toolbar order/hidden, .control-NAME placement, artwork frame rate and image URLs. Right-click the toolbar > Edit interface to move connected elements. Export a theme package for editable artwork and style.css.");
+            ui.label("Supported: :root colours, Session density, meter style/segments, toolbar order/hidden, .control-NAME placement, artwork frame rate and image URLs. Right-click the toolbar > Edit interface to move connected elements. Export a theme package for editable artwork and style.css.");
+            if ui.button("Load compact Session geometry").clicked() { state.css = crate::kit::theme::COMPACT_SESSION_EXAMPLE.into(); }
             if ui.button("Load current style as CSS").clicked() {
                 let theme = crate::kit::theme::Theme { name: themes.name.clone(), colors: themes.colors, skin: themes.skin.clone(), transparent_rgb: themes.transparent_rgb.clone(), ..Default::default() };
                 state.css = theme_css::export(&theme);
@@ -104,7 +105,7 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
                 let mut theme = crate::kit::theme::Theme { colors: themes.colors, skin: themes.skin.clone(), transparent_rgb: themes.transparent_rgb.clone(), ..Default::default() };
                 let warnings = theme_css::apply(&mut theme, &state.css);
                 // Filesystem paths need a package loader, not the GUI thread.
-                if theme.skin.assets.values().any(|s| !s.trim_start().starts_with('<')) { state.error = "Import CSS image URLs in a theme ZIP package, or paste SVG in the SVG editor.".into(); }
+                if theme.skin.assets.values().any(|s| !s.trim_start().starts_with('<') && !skin::png_artwork(s)) { state.error = "Import CSS image URLs in a theme ZIP package, or paste SVG in the SVG editor.".into(); }
                 else if warnings.is_empty() { request = Some(ThemeRequest::EditCss(state.css.clone())); state.error.clear(); }
                 else { state.error = warnings.join("\n"); }
             }

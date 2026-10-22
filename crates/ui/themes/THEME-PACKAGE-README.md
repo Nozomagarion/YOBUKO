@@ -21,6 +21,7 @@ my-theme/
   background.png      # optional background image
   README.md           # this guide
   examples/dark-gloss.css  # optional paint-only example; not enabled automatically
+  examples/compact-session.css  # optional native Session density; not enabled automatically
 ```
 
 Installed themes keep `<id>.json` beside the `<id>/` resource directory instead.
@@ -66,6 +67,23 @@ It demonstrates original gradients, rounded SVG-backed buttons, box/text shadows
 and coloured transport controls while preserving native geometry. Back up your
 current CSS before replacing it with an example.
 
+Use **Load compact Session geometry** under Native CSS, then **Apply CSS**, or copy
+`examples/compact-session.css` into canonical `style.css`. It sets track/return/scene
+widths and header/slot heights. These are native properties mirrored to `skin.session`:
+widths are 64–512px, slot height 16–64px and header height 20–64px. Use `auto` to remove
+an override. The same geometry drives drawing, scrolling and drop/input targets.
+Mixer height keeps its existing native divider/preference. Session and Arrangement
+remain separate; this does not introduce the separately planned mixer view.
+The example also includes `.pan { --suhina-appearance: knob; }`, a portable native
+pan-face override for Session and Arrangement. `field` forces a number field, while
+`native` retains the global preference. Native parameter gestures remain unchanged.
+
+The gloss example gives `.mixer` and `.track-name` their own materials. Meter gradients
+under `.meter-vertical .meter-level` and `.meter-horizontal .meter-level` keep their
+colour stops anchored to the full dB range; peaks/RMS reveal the appropriate portion.
+Outset shadows form the glow around the lit region, without filling empty rails or
+segment gaps. This differs from a decorative gradient that stretches with the level.
+
 ## Native element placement and artwork variants
 
 Right-click the toolbar and choose **Edit interface**. The real controls remain visible
@@ -90,6 +108,9 @@ native positioning contract is separate from the advanced Stylo/Taffy stylesheet
 Placement overrides do not automatically resolve overlaps with neighbouring elements;
 when moving a name into the footer, arrange the toggles and sends to leave it room.
 Changing direction changes the native drag axis, rail, cap and scale together.
+The dB labels/ticks can also be moved, resized or hidden independently with
+`.control-mixer-volume-scale`; `.fader-scale` styles their ink. This keeps a swapped
+meter/fader layout from forcing the scale to remain on the fader's original side.
 Native compact-height thresholds remain in force. Placement coverage is still growing:
 toolbar modules/transport, the Session mixer sections, solo/cue/arm/type glyphs and
 Arrangement name/colour/volume/pan/meter are connected. Device SDK controls, captions,

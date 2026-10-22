@@ -50,6 +50,9 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
             let property = property.trim();
             let value = value.trim();
             let result = match selector {
+                "session" | ".session" if super::session_geometry::SessionGeometry::limits(property).is_some() => {
+                    theme.skin.session.set(property, value)
+                }
                 "artwork" if property == "fps" => match value.parse::<u8>().ok().filter(|fps| (1..=30).contains(fps)) {
                     Some(fps) => {
                         theme.skin.artwork_fps = fps;
@@ -224,6 +227,11 @@ pub fn export(theme: &Theme) -> String {
     }
     css.push_str(&format!("}}\nmeter {{ style: {}; segments: {}; }}\n", theme.skin.meter.name(), theme.skin.segments));
     css.push_str(&format!("artwork {{ fps: {}; }}\n", theme.skin.artwork_fps));
+    for (name, value) in theme.skin.session.entries() {
+        if let Some(value) = value {
+            css.push_str(&format!("session {{ {name}: {value}px; }}\n"));
+        }
+    }
     for (name, placement) in &theme.skin.controls {
         css.push_str(&format!(".control-{name} {{ left: {}px; top: {}px;", placement.x, placement.y));
         css.push_str(&format!(

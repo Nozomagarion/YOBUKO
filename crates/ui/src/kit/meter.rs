@@ -162,6 +162,7 @@ pub fn show(
     let hold = held(ui, id, level);
     let skin = super::skin::current();
     let upright = rect.height() > rect.width();
+    let _orientation = super::style_class::enter(if upright { "meter-vertical" } else { "meter-horizontal" });
     let (light, bars) = if upright {
         let light = Rect::from_min_size(rect.min, Vec2::new(rect.width(), CLIP));
         (light, Rect::from_min_max(Pos2::new(rect.left(), light.bottom() + 1.0), rect.max))
@@ -223,15 +224,23 @@ pub fn show(
         }
         let peak = fraction(level.peak.get(side).copied().unwrap_or(0.0));
         let rms = fraction(level.rms.get(side).copied().unwrap_or(0.0));
+        let _level = super::style_class::enter("meter-level");
         if peak > 0.0 {
-            let _level = super::style_class::enter("meter-level");
-            super::native_css::background(painter, part(0.0, peak));
+            super::native_css::level_glow(painter, part(0.0, peak));
         }
         // The peak dimmer, the RMS level in the full colour over it.
         for (to, alpha) in [(peak, 0.45), (rms, 1.0)] {
             if to <= 0.0 {
                 continue;
             }
+            let fill = |from: f32, to: f32, color: egui::Color32| {
+                let lit = part(from, to);
+                let mut clipped = painter.with_clip_rect(painter.clip_rect().intersect(lit));
+                clipped.multiply_opacity(alpha);
+                if !super::native_css::level_fill(&clipped, bar) {
+                    painter.rect_filled(lit, 0.0, color.gamma_multiply(alpha));
+                }
+            };
             if skin.meter == super::skin::MeterStyle::Segmented {
                 let count = skin.segments.clamp(4, 64);
                 for segment in 0..count {
@@ -241,12 +250,12 @@ pub fn show(
                     }
                     let end = ((f32::from(segment) + 0.8) / f32::from(count)).min(to);
                     let color = if from >= hot_from { theme::meter_hot() } else { theme::meter_normal() };
-                    painter.rect_filled(part(from, end), 0.0, color.gamma_multiply(alpha));
+                    fill(from, end, color);
                 }
             } else {
-                painter.rect_filled(part(0.0, to.min(hot_from)), 0.0, theme::meter_normal().gamma_multiply(alpha));
+                fill(0.0, to.min(hot_from), theme::meter_normal());
                 if to > hot_from {
-                    painter.rect_filled(part(hot_from, to), 0.0, theme::meter_hot().gamma_multiply(alpha));
+                    fill(hot_from, to, theme::meter_hot());
                 }
             }
         }
@@ -268,6 +277,53 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn css_meter_ramps_keep_the_full_scale_anchor_when_signal_and_orientation_change() {
+        use crate::kit::{native_css, skin};
+        for upright in [true, false] {
+            let ctx = egui::Context::default();
+            theme::install(&ctx);
+            skin::configure(&skin::Skin { css: Some(".meter-vertical .meter-level { background: linear-gradient(to top, #00ff00, #ffff00 80%, #ff0000); } .meter-horizontal .meter-level { background: linear-gradient(to right, #00ff00, #ffff00 80%, #ff0000); }".into()), ..Default::default() });
+            let mut observed = Vec::new();
+            for frame in 0..4 {
+                let peak = if frame == 3 { 1.0 } else { 0.1 };
+                let mut output =
+                    ctx.run_ui(egui::RawInput { time: Some(frame as f64 * 0.01), ..Default::default() }, |ui| {
+                        let _frame = native_css::frame(ui);
+                        let size = if upright { egui::vec2(12.0, 100.0) } else { egui::vec2(100.0, 12.0) };
+                        show(
+                            ui,
+                            ui.painter(),
+                            Rect::from_min_size(egui::pos2(20.0, 20.0), size),
+                            "Main",
+                            Source::Main,
+                            &Level { peak: [peak; 2], rms: [peak * 0.5; 2], ..Default::default() },
+                            &mut Vec::new(),
+                        );
+                    });
+                if frame >= 2 {
+                    observed.push(output.shapes.iter().find_map(|shape| match &shape.shape {
+                        egui::Shape::Mesh(mesh) => {
+                            Some((mesh.texture_id, mesh.calc_bounds(), shape.clip_rect, mesh.vertices[0].color.a()))
+                        }
+                        _ => None,
+                    }));
+                }
+                output.textures_delta.clear();
+            }
+            let low = observed[0].as_ref().expect("quiet gradient");
+            let high = observed[1].as_ref().expect("loud gradient");
+            assert_eq!((low.0, low.1), (high.0, high.1), "material must not move or stretch with signal");
+            assert!((110..=116).contains(&low.3), "native dim peak alpha is retained");
+            if upright {
+                assert!(high.2.top() < low.2.top());
+            } else {
+                assert!(high.2.right() > low.2.right());
+            }
+        }
+        skin::configure(&skin::Skin::default());
+    }
 
     #[test]
     fn custom_frames_follow_signal_and_keep_native_clip_reset() {

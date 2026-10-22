@@ -15,6 +15,7 @@ pub mod meter;
 pub mod mixer_controls;
 pub mod motion;
 pub mod native_css;
+pub mod session_geometry;
 pub mod skin;
 pub mod style_class;
 pub mod surface;

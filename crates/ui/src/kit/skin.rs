@@ -145,6 +145,7 @@ pub struct Skin {
     pub meter: MeterStyle,
     pub segments: u8,
     pub artwork_fps: u8,
+    pub session: super::session_geometry::SessionGeometry,
     /// None preserves the original centred control-bar layout.
     pub toolbar: Option<Toolbar>,
     /// Horizontal offsets from each module's native/CSS anchor, in logical points.
@@ -164,6 +165,7 @@ impl Default for Skin {
             meter: MeterStyle::Continuous,
             segments: 24,
             artwork_fps: 12,
+            session: Default::default(),
             toolbar: None,
             toolbar_offsets: BTreeMap::new(),
             controls: BTreeMap::new(),
@@ -266,6 +268,7 @@ impl Skin {
                     | "toolbar"
                     | "toolbar-offsets"
                     | "controls"
+                    | "session"
             ) {
                 warnings.push(format!("skin.{key} is unknown"));
             }
@@ -371,7 +374,7 @@ impl Skin {
                 Some("needle") => MeterStyle::Needle,
                 Some("frames") => MeterStyle::Frames,
                 _ => {
-                    warnings.push("skin.meter must be continuous, segmented or needle".into());
+                    warnings.push("skin.meter must be continuous, segmented, needle or frames".into());
                     MeterStyle::Continuous
                 }
             };
@@ -448,11 +451,17 @@ impl Skin {
                 warnings.push("skin.controls must be an object of at most 256 controls".into());
             }
         }
+        if let Some(value) = root.get("session") {
+            skin.session = super::session_geometry::SessionGeometry::from_json(value, warnings);
+        }
         skin
     }
 
     pub fn to_json(&self) -> Value {
         let mut value = json!({"styles":self.styles,"assets":self.assets,"meter":self.meter.name(),"segments":self.segments,"artwork-fps":self.artwork_fps});
+        if self.session != Default::default() {
+            value["session"] = self.session.to_json();
+        }
         if let Some(css) = &self.css {
             value["css"] = Value::String(css.to_string());
         }
@@ -924,6 +933,7 @@ mod tests {
             background_blur: 0,
             styles: Default::default(),
             assets: example_assets(),
+            session: Default::default(),
             meter: MeterStyle::Segmented,
             segments: 16,
             artwork_fps: 12,

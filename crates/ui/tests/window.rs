@@ -138,6 +138,60 @@ fn an_individually_placed_send_keeps_its_parameter_target_and_can_be_hidden() {
 }
 
 #[test]
+fn session_density_keeps_slot_launches_and_clip_drop_targets_on_the_drawn_cells() {
+    use suhina_ui::interaction::drop::{DropProbe, DropTarget};
+    use suhina_ui::kit::{skin, theme_css};
+    let mut harness = view();
+    let mut theme = theme::Theme::default();
+    assert!(theme_css::apply(&mut theme, "session { track-width: 80px; return-width: 72px; scene-width: 88px; header-height: 24px; slot-height: 18px; }").is_empty());
+    let (restored, warnings) = theme::Theme::from_json(&theme.to_json());
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(restored, theme);
+    let mut mirrored = theme::Theme::default();
+    assert!(theme_css::apply(&mut mirrored, &theme_css::export(&theme)).is_empty());
+    assert_eq!(mirrored.skin.session, theme.skin.session);
+    skin::configure(&theme.skin);
+    harness.run_steps(3);
+    let first = harness.get_by_label("Launch Root on Bass (scene 1)").rect();
+    let second = harness.get_by_label("Launch Walk on Bass (scene 2)").rect();
+    assert!((second.top() - first.top() - 19.0).abs() < 0.01);
+    assert!((first.height() - 18.0).abs() < 0.01);
+    assert_eq!(
+        clicked(&mut harness, "Launch Walk on Bass (scene 2)"),
+        [Action::new("clip.launch", json!({"track": 2, "scene": 2}))]
+    );
+    harness.state_mut().state.drop = Some(DropProbe::for_clip(second.center()));
+    harness.run_steps(2);
+    let probe = harness.state().state.drop.as_ref().unwrap();
+    assert_eq!(probe.target, Some(DropTarget::Slot { track: TrackId(2), scene: 1 }));
+    assert_eq!(probe.area.unwrap().top(), second.top());
+    skin::configure(&skin::Skin::default());
+}
+
+#[test]
+fn session_pan_knob_keeps_the_native_drag_command_and_value() {
+    use suhina_ui::kit::{skin, theme_css};
+    let mut harness = view();
+    assert!(!harness.state().state.knobs);
+    let mut theme = theme::Theme::default();
+    assert!(theme_css::apply(&mut theme, ".pan { --suhina-appearance: knob; }").is_empty());
+    skin::configure(&theme.skin);
+    harness.run_steps(3);
+    let start = harness.get_by_label("Bass pan").rect().center();
+    harness.hover_at(start);
+    harness.drag_at(start);
+    harness.run_steps(1);
+    harness.hover_at(start - Vec2::new(0.0, 20.0));
+    harness.run_steps(1);
+    harness.drop_at(start - Vec2::new(0.0, 20.0));
+    harness.run_steps(2);
+    assert!(harness.state().actions.iter().any(|action| action.id == "track.setPan"
+        && action.params["tracks"] == json!([2])
+        && action.params["pan"] == json!(0.2)));
+    skin::configure(&skin::Skin::default());
+}
+
+#[test]
 fn scenes_and_stop_buttons_send_their_commands() {
     let mut harness = view();
     assert_eq!(clicked(&mut harness, "Launch scene 3 Build"), [Action::new("scene.launch", json!({ "scene": 3 }))]);

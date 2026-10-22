@@ -24,7 +24,7 @@ mod shadows;
 mod text;
 mod workspace;
 pub use diagnostics::{Notice, inspect};
-pub use paint::{background, background_rounded, background_with};
+pub use paint::{background, background_rounded, background_with, level_fill, level_glow};
 pub use text::paint_text;
 pub use workspace::{Workspace, workspace};
 
@@ -46,6 +46,11 @@ pub struct Computed {
     gradients: Arc<[paint::Gradient]>,
     shadows: Arc<[shadows::Shadow]>,
     text_shadows: Arc<[text::Shadow]>,
+}
+impl Computed {
+    pub fn has_gradient(&self) -> bool {
+        !self.gradients.is_empty()
+    }
 }
 
 /// Only authored properties override native defaults. An unrelated CSS rule must not

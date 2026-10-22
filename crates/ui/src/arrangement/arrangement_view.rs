@@ -4462,6 +4462,7 @@ fn value_control(
     }
     let rect = crate::kit::control_layout::place(name, rect, clip);
     let _style = crate::kit::style_class::enter("value");
+    let _pan_style = matches!(control, Control::Pan).then(|| crate::kit::style_class::enter("pan"));
     let track = lane.track;
     let (value, per_point, per_tick, range, default) = match control {
         Control::Volume => (lane.volume_db, 0.25, 1.0, VOLUME_RANGE, 0.0),
@@ -4549,7 +4550,9 @@ fn value_control(
         Control::Volume if plain => volume_text(painter, rect, shown, hover),
         Control::Volume if state.knobs => volume_knob(painter, rect, shown, hover, control_response.as_ref()),
         Control::Volume => volume_field(painter, rect, shown, hover),
-        Control::Pan if state.knobs => pan_knob(painter, rect, shown, control_response.as_ref()),
+        Control::Pan if crate::kit::style_class::knob_preference(state.knobs) => {
+            pan_knob(painter, rect, shown, control_response.as_ref())
+        }
         Control::Pan => crate::kit::mixer_controls::pan_field(painter, rect, shown, hover),
     }
 }

@@ -5,13 +5,16 @@ type: spec
 status: draft
 last_verified: 2026-10-22
 covers:
+  - crates/ui/src/kit/session_geometry.rs
   - crates/ui/src/kit/artwork_png.rs
   - crates/ui/src/app/control_editor.rs
   - crates/ui/src/kit/artwork.rs
   - crates/ui/src/kit/control_layout.rs
   - assets/themes/default/*.svg
+  - assets/themes/examples/*.svg
   - crates/ui/themes/THEME-PACKAGE-README.md
   - crates/ui/themes/dark-gloss.css
+  - crates/ui/themes/compact-session.css
   - crates/ui/src/kit/skin.rs
   - crates/ui/src/app/themed_toolbar.rs
   - crates/ui/src/settings/skin_editor.rs
@@ -71,7 +74,68 @@ and explicit limits. Its palette reference is generated from the token registry.
 
 # Theme skins
 
+## Session density and meter materials
+
+Session and Arrangement remain separate views. Theme customization does not introduce
+a combined view or the separately planned mixer view.
+
+Optional `skin.session` dimensions change the native Session layout: `track-width`
+and `return-width` (64–512 points), `scene-width` (64–512), `slot-height` (16–64),
+`header-height` (20–64). Omitted values use native
+geometry/preferences. Canonical CSS mirrors these as `session { track-width: 80px; }`
+and the other named properties; `auto` removes an override. Mixer height continues
+to use its existing native preference and divider.
+Column widths affect scrolling, rendering, file/clip drop targets and hit testing
+together. Individual control placement remains relative to these native anchors.
+Canonical `.pan { --suhina-appearance: knob; }` stores a portable pan-face override
+in `skin.styles` for both Session and Arrangement. `field` forces a value field;
+`native` or no override retains the existing global preference. The compact example
+includes the knob override; themes do not need to change the user's preference.
+The fader's dB labels/ticks expose `mixer-volume-scale` separately from the rail/cap
+and readout, with `.fader-scale` paint styling. Moving/hiding this scale does not
+change the parameter or gesture. Horizontal faders retain a horizontal scale.
+
+Meter material scopes include `.meter-vertical` and `.meter-horizontal`, containing
+`.meter-level`. An authored level gradient is anchored to the full meter range,
+then clipped to each measured peak/RMS extent (and each segment). It must not stretch
+or change its signal thresholds as the measured level changes. Peak/RMS opacity
+remains native. Outset shadows form the glow around the lit extent, preserving
+empty rails, segment gaps and native clip/reset handling.
+
+Mixer bodies and strip-name surfaces consume their `.mixer` and `.track-name`
+background fills, gradients and shadows above fallback/SVG artwork. A solid CSS
+background replaces the native colour tint; an alpha gradient may retain underlying
+track artwork. Missing rules preserve the ordinary native colours.
+An original [metallic cap SVG](../../assets/themes/examples/metal-fader.svg) is supplied
+as optional authoring artwork; it does not replace the protected default. Reference it
+as `fader.cap` in a user theme to combine it with the gloss material example.
+
 ## Native acceptance captures
+
+The [compact gloss follow-up](../design/reference/theme-dark-gloss-compact.png) uses
+86-point track columns, 80-point returns, 18-point slots, the existing 320-point
+mixer height, a centred narrow pan knob, a separately positioned dB scale and the
+optional original metallic cap SVG. The meter sits left of the fader. It demonstrates
+the Session view alone; neither a combined Arrangement view nor a standalone mixer
+view is introduced. The screenshot is from actual demo playback on the same isolated
+Linux OpenGL/virtual-ALSA setup described below.
+
+Its additional placement overrides are:
+
+```css
+.control-mixer-meter { left: -48px; }
+.control-mixer-volume { left: 18px; }
+.control-mixer-volume-scale { left: -40px; }
+.control-mixer-volume-readout { left: -24px; width: 30px; }
+.control-mixer-pan { left: 25px; width: 24px; height: 24px; }
+.control-mixer-color { width: 2px; }
+```
+
+Load the compact native CSS and dark-gloss advanced CSS examples separately, then
+apply these placements and the cap override. The compact example carries its pan style.
+The capture keeps the global preference at Field and verifies the theme-owned Knob
+override, so that presentation does not depend on another user's settings.
+The images below retain the earlier, wider geometry and colour-keyed texture example.
 
 These are unretouched captures of the native Linux application (Mesa/OpenGL on an
 isolated test display), using original dark-gloss CSS and a small original colour-keyed

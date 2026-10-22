@@ -290,3 +290,26 @@ pub fn background_with(painter: &Painter, rect: Rect, style: &super::Computed) -
     }
     painted
 }
+
+/// Meter fills keep their material anchored to the entire scale. The caller clips
+/// the painter to the measured portion; shadows are drawn separately around it.
+pub fn level_fill(painter: &Painter, scale: Rect) -> bool {
+    let Some(style) = super::super::style_class::computed() else { return false };
+    let mut painted = false;
+    if style.authored.background && style.background.a() > 0 {
+        painter.rect_filled(scale, 0.0, style.background.gamma_multiply(style.opacity));
+        painted = true;
+    }
+    for gradient in style.gradients.iter().rev() {
+        painted |= draw(painter, scale, gradient, 0.0, style.opacity);
+    }
+    painted
+}
+
+pub fn level_glow(painter: &Painter, lit: Rect) {
+    if let Some(style) = super::super::style_class::computed() {
+        for shadow in style.shadows.iter().rev().filter(|shadow| !shadow.inset) {
+            shadow.paint(painter, lit, style.radius, style.opacity);
+        }
+    }
+}
