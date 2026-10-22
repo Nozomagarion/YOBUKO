@@ -49,18 +49,22 @@ jobs:
           cp Cargo.lock target/theme-verification/Cargo.lock
           cp docs/research/parity-live-12-by-area.png target/theme-verification/parent-parity.png
           python3 - <<'PY'
-          import hashlib, pathlib, tarfile
+          import hashlib, pathlib, tarfile, tomllib
           root = pathlib.Path.home() / '.cargo'
           destination = pathlib.Path('target/theme-verification')
-          # Only public crates.io sources and sparse index metadata; never Cargo config,
-          # credentials, build outputs or runner environment files.
-          archives = [tarfile.open(destination / f'registry-{n}.tar.xz', 'w:xz', preset=6) for n in range(4)]
+          # Only lockfile-selected public crates.io archives and sparse index metadata;
+          # never Cargo config, credentials, build outputs or runner environment files.
+          packages = tomllib.loads(pathlib.Path('Cargo.lock').read_text())['package']
+          selected = {f"{p['name']}-{p['version']}": p['checksum'] for p in packages if p.get('source', '').startswith('registry+')}
+          archives = [tarfile.open(destination / f'registry-{n}.tar.xz', 'w:xz', preset=1) for n in range(8)]
           try:
-              for source in sorted((root / 'registry/src').glob('index.crates.io-*/*')):
-                  group = hashlib.sha256(source.name.encode()).digest()[0] % 4
-                  archives[group].add(source, arcname=str(source.relative_to(root)))
               for archive in sorted((root / 'registry/cache').glob('index.crates.io-*/*.crate')):
-                  group = hashlib.sha256(archive.name.removesuffix('.crate').encode()).digest()[0] % 4
+                  package = archive.name.removesuffix('.crate')
+                  if package not in selected:
+                      continue
+                  if hashlib.sha256(archive.read_bytes()).hexdigest() != selected[package]:
+                      raise ValueError(f'Unexpected crate checksum: {package}')
+                  group = hashlib.sha256(package.encode()).digest()[0] % 8
                   archives[group].add(archive, arcname=str(archive.relative_to(root)))
               for index in sorted((root / 'registry/index').glob('index.crates.io-*')):
                   for name in ['config.json', '.cache']:
@@ -103,6 +107,30 @@ jobs:
         with:
           name: theme-public-registry-3
           path: target/theme-verification/registry-3.tar.xz
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: theme-public-registry-4
+          path: target/theme-verification/registry-4.tar.xz
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: theme-public-registry-5
+          path: target/theme-verification/registry-5.tar.xz
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: theme-public-registry-6
+          path: target/theme-verification/registry-6.tar.xz
+          retention-days: 1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: theme-public-registry-7
+          path: target/theme-verification/registry-7.tar.xz
           retention-days: 1
       - run: cargo test -p suhina-ui --lib kit::native_css
       - run: cargo test -p suhina theme_files
