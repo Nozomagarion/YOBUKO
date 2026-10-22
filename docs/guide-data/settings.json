@@ -402,6 +402,47 @@
       "workInProgress": false
     },
     {
+      "id": "Export/MCP write permissions/mcp_project_folder",
+      "page": "Export",
+      "section": "MCP write permissions",
+      "name": "Allow the project's folder",
+      "note": "Includes subfolders; turn off to revoke this default permission",
+      "keys": [
+        "mcp_project_folder"
+      ],
+      "sourceFingerprint": "30c921230b0703d21dfd0b270f2a1d20be0509af39997d58f693e0edde8b9e3a",
+      "helpStatus": "reviewed",
+      "description": "Allow attached agents to write in the folder of the project they act on, including its subfolders. This is on by default. Turn it off to require an explicitly added folder for writes. An unsaved project has no project folder. This does not restrict exports you choose yourself in File > Export.",
+      "options": [
+        {
+          "name": "On",
+          "description": "Allow writes in the project's folder and its subfolders."
+        },
+        {
+          "name": "Off",
+          "description": "Allow writes only in explicitly added folders."
+        }
+      ],
+      "whenToChange": "Turn this off when agents should write only to a separate export folder.",
+      "workInProgress": false
+    },
+    {
+      "id": "Export/MCP write permissions/mcp_write_folders",
+      "page": "Export",
+      "section": "MCP write permissions",
+      "name": "MCP allowed write folders",
+      "note": "Add or remove folders; includes subfolders. Applies to MCP writes, not File > Export.",
+      "keys": [
+        "mcp_write_folders"
+      ],
+      "sourceFingerprint": "45a8a72936ca1d790f8f8401e7783728baeed19cb5501dc650db86e4fc3d732b",
+      "helpStatus": "reviewed",
+      "description": "Choose the folders where attached agents may save projects and export audio. Add folder opens the system folder picker; Remove revokes that folder's grant. Each grant includes subfolders and is saved across restarts. Missing folders grant no access. Agents cannot change these permissions. Revocation applies to new operations and exports still gathering plug-in state, but does not cancel a render already running.",
+      "options": [],
+      "whenToChange": "Add a destination before asking an agent to export outside your project folder, or to export an unsaved project. Remove folders when access is no longer needed.",
+      "workInProgress": false
+    },
+    {
       "id": "Audio/Output/audio_host,audio_device,audio_sample_rate,audio_buffer,audio_exclusive,audio_input",
       "page": "Audio",
       "section": "Output",
@@ -1751,7 +1792,7 @@
       ],
       "sourceFingerprint": "37fdef83b1d8ad95be653aaa87d53ea35171ee01364be50a33cd91bf3b7a67a9",
       "helpStatus": "reviewed",
-      "description": "Choose a user-owned PNG or type its path. Clear the field to remove it. The native window remains opaque: no desktop icons or other windows are captured. Images are decoded away from the UI thread, limited to 32 MiB and 8192 pixels per axis, and displayed at up to 1600 pixels per axis. High Contrast suppresses the image.",
+      "description": "Choose a user-owned PNG or type its path. Clear the field to remove it. The native window remains opaque: no desktop icons or other windows are captured. Images are decoded away from the UI thread, limited to 32 MiB and 8192 pixels per axis, and displayed at up to 1600 pixels per axis. High Contrast suppresses the image. If loading fails, repair the PNG and choose it again with Browse to retry; failures are not retried continuously.",
       "options": [],
       "whenToChange": "Choose an image when you want a private decorative backdrop behind neutral panels.",
       "workInProgress": false
@@ -1799,7 +1840,7 @@
       ],
       "sourceFingerprint": "2b2b70626478e0673196c8faf63662e552b926ccfe67ad052b4a88b88b882c09",
       "helpStatus": "reviewed",
-      "description": "Place the always-visible Suhina name at the left or centre of the application bar. Project fields have their own position; fields sharing a position appear together. Long project names are clipped before they overlap controls.",
+      "description": "Place the always-visible Suhina name at the left or centre of the application bar. Project fields have their own position; fields sharing a position appear together. Long project names are clipped before they overlap controls. On Linux and macOS the bar shows information only; native decorations provide the window controls.",
       "options": [
         {
           "name": "Left",
@@ -2032,13 +2073,13 @@
       "page": "Theme",
       "section": "Theme",
       "name": "Theme",
-      "note": "Select a theme and edit or manage its interface colors.",
+      "note": "Select, edit and package interface themes, SVG controls, meters and toolbar layouts.",
       "keys": [
         "theme"
       ],
       "sourceFingerprint": "e516b56c81ec152dca39879226b7cfbb3e891000dd35765817c1a2276f974d9c",
       "helpStatus": "reviewed",
-      "description": "Select a preview card to apply a theme immediately. The active theme has a larger preview. Existing tracks and clips keep their stored colours. Edit current theme opens grouped colour controls with opacity for surface colours; editing a built-in creates a personal copy and changes save live. Tracks & clips sets the MIDI and audio colours used for future creations. Surface gradients offers independent Panel, Track and Clip overlays, each with a toggle, direction and 2–8 colour/opacity stops. Gradients work without GPU liquid, but reduced effects and high contrast suppress materials. Liquid inherits the global strengths unless Use global liquid settings is turned off to save per-theme overrides; GPU and accessibility restrictions still apply. Save as new theme creates another copy; Reset changes restores the palette captured on entering the editor and its liquid inheritance. Restore built-in offers Save a copy & restore, Restore without a copy, or Cancel restore; existing custom files remain in the library. More provides Duplicate, Reload, Open folder, Back up and Export template. Dropping a theme file or a zip of themes onto Suhina adds it. Interface changes do not alter audio. Select a numbered stop on the shared colour ramp, or drag it to set its position. Only the selected stop shows colour, position and opacity controls. Add selects the new stop; Remove deletes the selected stop while retaining at least two. Direction is separate below. Colour popups have an opaque background for readability.",
+      "description": "Select a preview card to apply a theme immediately. The active theme has a larger preview. Existing tracks and clips keep their stored colours. Edit current theme opens grouped colour controls with opacity for surface colours; editing a built-in creates a personal copy and changes save live. Tracks & clips sets the MIDI and audio colours used for future creations. Surface gradients offers independent Panel, Track and Clip overlays, each with a toggle, direction and 2–8 colour/opacity stops. Gradients work without GPU liquid, but reduced effects and high contrast suppress materials. Liquid inherits the global strengths unless Use global liquid settings is turned off to save per-theme overrides; GPU and accessibility restrictions still apply. Save as new theme creates another copy; Reset changes restores the palette captured on entering the editor and its liquid inheritance. Restore built-in offers Save a copy & restore, Restore without a copy, or Cancel restore; existing custom files remain in the library. More provides Duplicate, Reload, Open folder, Back up and Export template. Dropping a theme file or a zip of themes onto Suhina adds it. Interface changes do not alter audio. Select a numbered stop on the shared colour ramp, or drag it to set its position. Only the selected stop shows colour, position and opacity controls. Add selects the new stop; Remove deletes the selected stop while retaining at least two. Direction is separate below. Colour popups have an opaque background for readability. Controls, meters and toolbar adds continuous, segmented and needle meter appearances; the needle display uses existing dBFS measurements, not calibrated analogue VU. Use editable SVG controls installs original vector examples; Restore standard controls removes overrides. Custom toolbar layout stores order and visibility in the theme. Right-click the top control bar, choose Edit toolbar, drag labelled modules, then Done; the editor also has visibility checkboxes and move arrows. A customized bar scrolls horizontally when narrow. Edit an SVG control accepts self-contained vector markup and reports invalid artwork. Native CSS edits the documented native subset and reports unsupported declarations; this is not full browser CSS. Theme files include live-synchronized JSON and CSS plus SVG/PNG resources. Conflicting external edits preserve both files for correction. Reset changes also restores the skin captured on entering the editor. Backups and the template ZIP include artwork, CSS, layout and theme background images.",
       "options": [],
       "whenToChange": "Choose a comfortable theme, then use Edit current theme to tailor its colours, gradients and liquid settings. Save a copy before restoring if you want an additional version of your current work.",
       "workInProgress": false

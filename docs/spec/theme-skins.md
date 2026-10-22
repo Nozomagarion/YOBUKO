@@ -9,6 +9,8 @@ covers:
   - crates/ui/src/app/themed_toolbar.rs
   - crates/ui/src/settings/skin_editor.rs
   - apps/suhina/src/theme_files.rs
+  - crates/ui/src/kit/theme_css.rs
+  - crates/ui/src/kit/style_class.rs
 ---
 
 # Theme skins
@@ -48,3 +50,30 @@ Theme ZIP import validates the entire input before writing. Paths must be relati
 remain within the theme folder, contain no parent traversal or symlinks, and name
 supported assets. Reads, file counts, SVG sizes and total expanded data are bounded.
 Imports choose unused theme ids rather than overwriting existing themes.
+
+## Native CSS in this draft
+
+The initial reader supports `:root` palette variables (`--window-background` maps to
+`window.background`), class/descendant colour, background and border colours, integer
+pixel font sizes and corner radii. `.meter` accepts `style` and `segments`; `.toolbar`
+accepts comma-separated `order` and `hidden` module lists. Control `image` declarations
+name package-relative SVGs, including state suffixes. `.window` accepts a relative PNG
+`background-image`, `background-opacity` and `background-blur` (0–100).
+
+These are a bounded native subset, not complete CSS. Variables with `var()`, arbitrary
+modern selectors, queries, layout algorithms and animations are not implemented by this
+reader. The advanced target and engine research are in
+[ADR 0030](../decisions/0030-native-theme-css.md).
+
+Every edited theme has `<id>.json`, `<id>/style.css` and `<id>/assets/` in the themes
+folder. CSS and JSON changes are observed within the existing one-second poll interval.
+An editor change writes both; an external CSS change updates JSON; an external JSON
+change updates CSS. Current saves canonicalize CSS from the native model, so comments
+and formatting are not preserved. Independent field edits merge; conflicting changes to
+one field preserve both files and report the field. A malformed stylesheet or missing
+resource does not overwrite the saved JSON or replace the currently loaded theme.
+
+ZIP export places each JSON, style.css, SVG and background PNG together under its theme
+id. Import validates resources before writing any theme, and gives colliding ids a suffix.
+The in-app CSS editor accepts native values and styles; package-relative image URLs are
+resolved when importing or reloading theme files. The SVG editor accepts vector markup.

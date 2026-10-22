@@ -3,7 +3,7 @@ description: Measurements, states and tokens of every UI component, from the min
 read_when: widget sizes, marker row, clip slot states, value field, slider, knob, toggle, meter, track header levels, device panel, piano roll layout, audition button, velocity lane top edge, ghost menu, ghost notes look, Scale menu, scale rows, key column mark, folded rows
 type: spec
 status: draft
-last_verified: 2026-10-21
+last_verified: 2026-10-22
 covers:
   - crates/ui/src/kit/theme.rs
   - crates/ui/src/session/session_view.rs
@@ -104,7 +104,7 @@ the view with the detail area, status bar.
 | Drop overlay | While a project file is dragged over the window: `window.background` at 45 % over the view and "Drop to open" in 13 px `text.primary`, fading in and out with the animations |
 | Browser | 300 px wide by default, dragged from 200 px to half the window by a 4 px handle at its inner edge (`border`, `border.strong` under the pointer); left of the view, or right (Settings › Browser); Ctrl+B and View › Show browser hide and show it. See Browser below |
 | Detail splitter | 6 px, `control.background`, a 32 × 2 grip in `text.hint` in the middle; the cursor shows which way it moves |
-| Detail area | Under the view (and under the browser too with Settings › Detail area › Devices › **Detail area layout** on Full width, the browser then ending above it), 200 px by default, resizable from 80 px (120 px while it shows the piano roll) to all but 160 px of the view; dragged below half that it collapses to the splitter along the bottom, which is dragged up to open it again ([clip editor](../spec/ui-clip-editor.md) › Least height and closing), and at least as tall as the tallest open embedded plug-in editor; Shift+Tab hides and shows it. Shows the selected track's device chain; `AudioEffect` panels show visible signal-flow nodes and fitted parameter sliders; a selected clip (on the arrangement, or in a slot) shows its properties and, beside them, the chain of the track it is on: in a row (220 px per device), or stacked in a column beside the view (260 px by default, resizable), as Settings › Detail area sets. With nothing selected: "Select a track or a clip to see it here" in `text.hint` ("Select a track or a clip" in the stacked column) |
+| Detail area | Under the view (and under the browser too with Settings › Detail area › Devices › **Detail area layout** on Full width, the browser then ending above it), 200 px by default, resizable from 80 px (120 px while it shows the piano roll) to all but 160 px of the view; dragged below half that it collapses to the splitter along the bottom, which is dragged up to open it again ([clip editor](../spec/ui-clip-editor.md) › Least height and closing), and at least as tall as the tallest open embedded plug-in editor; Shift+Tab hides and shows it. Shows the selected track's device chain; `AudioEffect` panels show visible signal-flow nodes and fitted parameter sliders; a selected clip (on the arrangement, or in a slot) shows its properties and, beside them, the chain of the track it is on: in a row (220 px per device at least, 272 px for a generated parameter list), or stacked in a column beside the view (272 px by default, resizable), as Settings › Detail area sets. With nothing selected: "Select a track or a clip to see it here" in `text.hint` ("Select a track or a clip" in the stacked column) |
 | Status bar | 20 px, `panel.background`: the last message on the left (10 px, `text.secondary`, errors in the recording red), "N tracks · M scenes" on the right (10 px, `text.hint`), followed by " · backed up 14:05" once the active project has been backed up in this run. There is no separate info view |
 
 ## Browser
@@ -274,7 +274,7 @@ a lane between 20 and 26 px shows the first row clipped.
 | Track height | Shows |
 |---|---|
 | ≥ 26 px | Row 1, 15 px: track on (30 px, the track number in 10 px mono), solo (18 px, "S"), cue (18 px, "C"), arm (18 px, on a track that plays notes or audio), 2 px apart, the name in 11 px 6 px after them (on a group, a fold arrow first, 7 px, pointing down open and right folded); the colour is the band down the header's edge. The row steps in 8 px per group the track is inside |
-| ≥ 48 px | Row 2, 6 px under row 1: the volume field (the rest of the row) and the pan field (46 px), 4 px apart |
+| ≥ 48 px | Row 2, 6 px under row 1: the volume field (the rest of the row) and the pan field (40 px), 4 px apart |
 | ≥ 70 px | Routing, 4 px under row 2: "→" and the output dropdown ("Main" or a group track, `track.setOutput`); audio input and monitor In / Auto / Off (planned, with recording) |
 | ≥ 90 px | On a track that plays audio, 4 px under routing: "Audio" (28 px, 10 px `text.hint`) and the audio input dropdown ("No input", or "In 3" or "In 1/2" and " · Auto", " · Monitor in" or " · Monitor off"; `track.setAudioInput`); its menu, also under "Audio input: …" in the track's menu in both views, offers No input, each channel of the input device and each neighbouring pair (the first eight while no input device is open, saying so), then Monitor auto, in or off. On a track that plays notes, 4 px under routing: "MIDI" (28 px, 10 px `text.hint`) and the MIDI input dropdown, the rest of the row ("All ports", a port, or "No input", then " · Ch N" for one channel; `track.setMidiInput`). The track's menu, in both views, has the same choices under "MIDI input: …": every port, each port there is (one chosen but not connected says so), none; every channel, or Ch 1 to 16 in a grid of four |
 | ≥ 114 px | (planned) Send fields, one per return, labelled "Send A", "Send B", once the engine plays sends; routing then moves below them |
@@ -287,7 +287,7 @@ dragging, and a drag is one undo step.
 
 | Part | Volume | Pan | Send |
 |---|---|---|---|
-| Size | 16 px high, full width | 16 × 46 | 16 px, half width each |
+| Size | 16 px high, full width | 16 × 40 | 16 px, half width each |
 | Background | `control.background` | `#232220` | `control.background` |
 | Value shown as | Fill from the left, `#4A4843`, full height | 2 px bar along the bottom from the centre, `#C9C4BB` | Fill `#3E3C38` |
 | Marker | 1 px tick in `#C9C4BB`, only the top and bottom 2 px | 1 px centre tick `#55524C`, top and bottom 2 px | none |
@@ -312,6 +312,11 @@ unchanged. Custom routing dropdowns also retain only a contrast-aware underline.
 | Segmented | 15 px, equal parts 1 px apart (64 px each in Settings); selected `#C9C4BB` with `window.background` text, others `control.background` with `text.secondary`, 10 px text |
 
 ## Settings
+
+The Export page's MCP write permissions use the standard On/Off row for the project's folder,
+showing that folder in the note. Explicit allowed folders occupy separate rows with fitted
+path text and a Remove button on the right. Add folder… opens the system folder picker.
+The list scrolls with the page, and its note says that each grant includes subfolders.
 
 Options › Settings (Ctrl+,) opens a dialog over the window until it is closed (Close, Escape or
 Ctrl+, again): the view stays behind it, dimmed with `window.background` at 60 % and taking no
@@ -528,11 +533,12 @@ top. Files dropped anywhere on it open as on the rest of the window.
 | Panel | `panel.background`, panels 1 px apart, end of chain is empty `window.background` |
 | Header | 20 px, `control.background`, 6 px padding: on switch, name, and what it is on the right in 9 px `text.hint` (Suhina, CLAP, VST3, VST2, or "Not supported (<format>)" for a device of another DAW). A right-click anywhere on the panel opens its menu: **Remove device** (`device.remove`); the panel's hover says so. A click on the panel selects the device: a 1 px `selection` outline (yellow; one at a time), and the Delete key takes the selected one off the track |
 | On switch | 9 × 9 square, 1 px border; on: filled `text.primary`; off: outline `text.hint`, name `text.hint`. A click bypasses the device or enables it again (`device.setEnabled`): a bypassed **effect** passes the sound through untouched, and a bypassed **instrument**'s notes play the track's plain tones (as on a track without an instrument); either way its settings are kept. The switch's hover and label say which way a click goes: "Bypass <name>" / "Enable <name>" |
-| Parameter | A 16 px row: its id in 10 px `text.secondary` on the left, its value in 10 px mono `#C9C4BB` on the right. (planned, with parameter ranges) a 44 px column: 26 px knob (r 11, pointer to r 10), value 10 px mono, label 10 px `text.secondary`; 14 px between columns; pointer `accent` when the device is on |
+| Parameters | The compact panel, at most 168 px high under the header ([sdk-custom-ui.md](../spec/sdk-custom-ui.md) › Compact and expanded panels): a layout's canvas, or the generated list, 260 px wide, one 24 px row a parameter in its order (its name on the left, the stock `.sd` control, the value with its unit on the right), scrolling past 168 px. Built-in effects, instruments and MIDI effects, `.sd` devices and running plug-ins all have one; a change is `device.setParam` |
+| Expand | On a device with an expanded panel, a 12 px button left of what it is, two corners pointing out in `text.hint` (`text.primary` hovered or open): "Expand <name>". It opens the expanded panel over the main area: a 26 px title row in `control.background` with the name in 11 px and a 24 × 20 px close button ("Close expanded panel"), the canvas centred under it on `panel.background`, scrolling when the area is smaller. Escape, the close button or a second click closes it |
 | Plug-in | A 16 px row with where it stands, 10 px: the plug-in's name and vendor (and its latency in frames) in `text.secondary` while it runs; "Loading …", "Not running" (the project is not playing) or "Not installed; kept with its settings" in `text.hint`; "Crashed: …" or "Could not start: …" in `recording`. Under it a 96 × 18 px button, `control.background` (hover `control.hoverBackground`), 1 px `border.strong` border, 10 px `text.primary`: "Open editor" or "Close editor" while it runs, "Restart" after a crash; none otherwise. It runs `device.openEditor`, `device.closeEditor` or `device.restart`. With Settings › Plug-ins › Editors › Device view, an open editor sits under the button, 6 px in: in a row the device is as wide as the editor plus 12 px (at least 220 px) and the detail area at least as tall as the tallest open editor; stacked, the device is as tall as the editor needs; what does not fit is cut off at the panel's edge |
 | No parameters | Another DAW's device: "Kept so the chain keeps its shape"; a built-in effect or instrument without parameters: "No parameters" (10 px `text.hint`) |
 | Embedded editor | A plug-in's editor shown in its panel: the panel takes the detail area's whole height and the editor is fitted to the room under the panel's header when the plug-in allows resizing (a fixed-size editor keeps its size). The area opens tall enough for the editor once, as it opens; after that its height is the user's, set with the splitter, and is not held to the chain's panels (#689) |
-| Stacked | In a column, each device is as tall as its parameters (20 px header, 6 px padding, 16 px a parameter; a plug-in as tall as its state row and button, plus an open embedded editor), 1 px apart |
+| Stacked | In a column 272 px wide by default, each device is as tall as its compact panel (20 px header, 6 px padding, then its canvas or its list up to 168 px; a plug-in as tall as its state row and button, then its list or an open embedded editor), 1 px apart |
 | Menu | **Group** (Ctrl+G, `device.group`), **Duplicate device** (`device.duplicate`), **Remove device**; on a device group also **Ungroup** (Ctrl+Shift+G, only with one branch) and **Add branch** ([device groups](../spec/device-groups.md)) |
 
 ### Device group panel
@@ -846,7 +852,7 @@ The 28 px application bar precedes the menu. Suhina is always present; Appearanc
 Left or Centre. Optional project name/unsaved marker and tempo/time signature share their own
 position. Single-line text truncates with an ellipsis inside separate cells before reaching
 the three 32 px window buttons. On Windows this replaces native decorations, supports dragging,
-double-click maximise and a 5 px resize edge/corner. Other platforms retain native decorations.
+double-click maximise and a 5 px resize edge/corner. Other platforms retain native decorations and show only application/project information in this bar, without duplicate window controls or drag handling.
 
 Arrangement track headers and Session column headers show a non-interactive type marker immediately before the track name, on the name row: a miniature keyboard (two white keys with a shorter black key between them) for MIDI, a waveform for audio, and both for mixed-content tracks. The tooltip and accessibility label name the type. Groups and returns are not labelled as audio or MIDI tracks. The marker uses 16 px plus a 3 px gap within the name area, without shifting the mute, solo or other mixer buttons. It stays beside the name on compact headers.
 

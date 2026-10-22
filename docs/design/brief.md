@@ -154,7 +154,7 @@ A theme is a JSON file in the `themes` folder of Suhina's app-data folder, besid
 ```
 
 A token the file leaves out keeps Suhina Dark's colour, so a file needs only the colours it
-changes; an unknown token or a value that is not `#RRGGBB` or `#RRGGBBAA` is skipped with a warning. Files with
+changes; an unknown token or a value that is not `#RRGGBB` or `#RRGGBBAA` is skipped with a warning. Transparent RGB is preserved under canonical token names, including inherited text roles. Files with
 the first token names (`surface.0`, `line`, `text.tertiary` …) still read. Only colours belong to
 a theme: sizes, spacing and type stay the design's. A track's own colour comes from the project; tracks without one take
 a numbered palette colour resolved once when opened. `clip.midiDefault` and
@@ -207,7 +207,7 @@ If (2) fails, change colours, control shapes, typography and wording, not the la
 Studio Light and Studio Dark are opt-in themes using warm surfaces and gold accents.
 Arrangement headers keep their track-color edge band on neutral, theme-editable surfaces
 (`track.headerBackground`, `track.headerSelectedBackground`). Missing new tokens in older
-theme files fall back to the built-in palette. Header selection retains an outline.
+theme files fall back to the built-in palette. The selected token supplies the base of selected headers before track-colour strength and the selection highlight are applied; selection retains an outline.
 The larger transport and initial Arrangement dimensions are described in components.
 These initial dimensions are shared implementation constants, not yet user-configurable
 appearance metrics; the planned metrics settings remain follow-up work.
@@ -232,3 +232,14 @@ Manrope is the default proportional UI font, matching the website. The original 
 Semi Expanded asset and license remain embedded as a fallback and the named `encode-sans`
 font family. This does not yet add a user-facing font selector (#513). Number fields retain
 IBM Plex Mono. All bundled fonts load offline.
+
+
+### Theme skins and native CSS
+
+Themes also own SVG control artwork, continuous/segmented/needle meter presentation,
+and optional control-bar module order/visibility. These travel in a portable theme ZIP,
+including a theme's background PNG. The theme editor and the initial native CSS subset
+share the same model, with live CSS/JSON file synchronization. See
+[Theme skins](../spec/theme-skins.md) for supported declarations and failure handling.
+The broader modern CSS target and candidate engines are recorded separately in
+[ADR 0030](../decisions/0030-native-theme-css.md); this initial subset is not full CSS.

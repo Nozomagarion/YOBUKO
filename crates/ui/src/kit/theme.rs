@@ -315,14 +315,16 @@ impl Theme {
         match root.get("colors") {
             Some(Value::Object(colors)) => {
                 for (key, value) in colors {
+                    let canonical = RENAMED.iter().find(|(old, _)| *old == key).map_or(key.as_str(), |(_, new)| *new);
                     let parsed = value.as_str().and_then(parse_hex);
-                    match (theme.colors.token_mut(key), parsed) {
+                    match (theme.colors.token_mut(canonical), parsed) {
                         (Some(slot), Some(color)) => {
                             *slot = color;
+                            theme.transparent_rgb.remove(canonical);
                             if let Some([r, g, b, 0]) = value.as_str().and_then(parse_rgba)
                                 && [r, g, b] != [0, 0, 0]
                             {
-                                theme.transparent_rgb.insert(key.clone(), [r, g, b]);
+                                theme.transparent_rgb.insert(canonical.to_string(), [r, g, b]);
                             }
                         }
                         (None, _) => warnings.push(format!("{key} is not a colour token")),
@@ -339,18 +341,21 @@ impl Theme {
                     theme.colors.audio_clip_default = theme.colors.track_color_1;
                 }
                 // Keep old themes visually identical until these independent roles are edited.
-                for (key, value) in [
-                    ("browser.text.primary", theme.colors.text_primary),
-                    ("browser.text.secondary", theme.colors.text_secondary),
-                    ("browser.text.hint", theme.colors.text_hint),
-                    ("browser.text.value", theme.colors.text_value),
-                    ("text.onColorLight", theme.colors.text_primary),
-                    ("text.onColorDark", theme.colors.window_background),
+                for (key, source, value) in [
+                    ("browser.text.primary", "text.primary", theme.colors.text_primary),
+                    ("browser.text.secondary", "text.secondary", theme.colors.text_secondary),
+                    ("browser.text.hint", "text.hint", theme.colors.text_hint),
+                    ("browser.text.value", "text.value", theme.colors.text_value),
+                    ("text.onColorLight", "text.primary", theme.colors.text_primary),
+                    ("text.onColorDark", "window.background", theme.colors.window_background),
                 ] {
                     if !colors.contains_key(key)
                         && let Some(slot) = theme.colors.token_mut(key)
                     {
                         *slot = value;
+                        if let Some(rgb) = theme.transparent_rgb.get(source).copied() {
+                            theme.transparent_rgb.insert(key.to_string(), rgb);
+                        }
                     }
                 }
             }
@@ -421,7 +426,7 @@ pub fn template_readme() -> String {
     let mut text = String::from(
         "# Suhina theme template\n\
 \n\
-A Suhina theme is one JSON file. `template.json` beside this README is Suhina Dark with every\n\
+A Suhina theme starts with a JSON file. `template.json` beside this README is Suhina Dark with every\n\
 colour written out; copy it, give it a name and change the colours.\n\
 \n\
 ## The file\n\
@@ -434,7 +439,7 @@ colour written out; copy it, give it a name and change the colours.\n\
 - `colors`: token name to colour. Colours use `#RRGGBB` or `#RRGGBBAA` (alpha last; 00 transparent, FF opaque). Creation defaults store RGB.\n\
 - A token left out keeps Suhina Dark's colour, so a theme may list only what it changes.\n\
 - An unknown token or a colour that is not `#RRGGBB` or `#RRGGBBAA` is skipped, and Suhina shows a warning.\n\
-- Nothing else belongs in the file (`description` and `$schema` are allowed and ignored).\n\
+- Optional `skin` and `stylesheet` add controls, meters, layout and CSS. `description` and `$schema` are ignored.\n\
 \n\
 ## Installing it\n\
 \n\
@@ -460,6 +465,26 @@ Themes. While it is in use, every save of the file shows within a second.\n\
 \n\
 An optional `gradients` object sets surface overlays. Each of `panels`, `tracks`, `clips` takes an object with `angle` (0–360 clockwise) and 2–8 `stops`, each with `position` (0–100) and `color` (#RRGGBB or #RRGGBBAA). Missing surfaces have no overlay.\n\
 An optional `liquid` object with `panels`, `tracks` and `clips` integers (0 to 100) overrides global material strengths. Leave it out to inherit them.\n\
+\n\
+## Controls, CSS and artwork\n\
+\n\
+The importable `my-theme/` example contains JSON, `style.css` and self-contained SVG controls.\n\
+Drop the whole ZIP on Suhina to install it. Edit `style.css` or JSON in the themes folder: supported\n\
+declarations mirror into the other file within a second. Conflicting edits preserve both inputs\n\
+and show a warning. Saves normalize CSS, including comments and formatting.\n\
+\n\
+`skin.assets` maps roles (`fader.cap`, `fader.rail`, `knob.body`, `knob.pointer`, `button`,\n\
+`play`, `stop`, `record`, `solo`, `arm`, `cue`) to inline SVG or relative SVG paths. Optional\n\
+`.hover`, `.active`, `.disabled` suffixes select state artwork. Network resources and scripts\n\
+are never loaded. `skin.meter` is `continuous`, `segmented` or `needle`; `segments` is 4–64.\n\
+`skin.toolbar` contains ordered module ids and hidden modules. The theme editor supplies both.\n\
+`skin.background` accepts a relative PNG; exported packages carry that image with the theme.\n\
+\n\
+The current native CSS subset supports palette tokens on `:root`, class and descendant colours,\n\
+border colours/radii and font sizes; `.meter` style/segments; `.toolbar` order/hidden; control\n\
+image URLs; and `.window` background PNG/opacity/blur. It does not implement full browser CSS.\n\
+Unsupported declarations are reported. Do not rely on variables, queries, animations or CSS\n\
+layout until an engine integration and support matrix explicitly enable them.\n\
 \n\
 ## Tokens\n\
 \n\
@@ -656,6 +681,25 @@ mod tests {
         let (restored, warnings) = Theme::from_json(&theme.to_json());
         assert!(warnings.is_empty());
         assert_eq!(restored, theme);
+    }
+
+    #[test]
+    fn legacy_and_inherited_transparent_colours_keep_rgb_when_saved() {
+        let (theme, warnings) =
+            Theme::from_json(r##"{"colors":{"surface.0":"#FF804000","text.primary":"#20A04000"}}"##);
+        assert!(warnings.is_empty());
+        let saved: Value = serde_json::from_str(&theme.to_json()).unwrap();
+        for key in ["window.background", "text.onColorDark"] {
+            assert_eq!(saved["colors"][key], "#FF804000");
+        }
+        for key in ["text.primary", "browser.text.primary", "text.onColorLight"] {
+            assert_eq!(saved["colors"][key], "#20A04000");
+        }
+        assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
+        let (theme, warnings) =
+            Theme::from_json(r##"{"colors":{"surface.0":"#FF804000","window.background":"#00000000"}}"##);
+        assert!(warnings.is_empty());
+        assert_eq!(theme.rgba("window.background", theme.colors.window_background), [0, 0, 0, 0]);
     }
 
     #[test]

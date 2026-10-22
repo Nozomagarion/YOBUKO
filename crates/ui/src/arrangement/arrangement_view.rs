@@ -3886,8 +3886,8 @@ fn track_header(
     let selected = state.selected_tracks.contains(&lane.track) || state.focus == Some(lane.track);
     // Preserve track identity when selected: a small brightness lift and outline, without
     // replacing the track colour with the global selection accent.
-    let surface =
-        colour_surface(theme::track_header_background(), rgb(lane.color), state.header_colour_strength, lane.mute);
+    let background = if selected { theme::track_header_selected() } else { theme::track_header_background() };
+    let surface = colour_surface(background, rgb(lane.color), state.header_colour_strength, lane.mute);
     let header_fill = if selected { motion::mix(surface, theme::text_primary(), 0.07) } else { surface };
     painter.rect_filled(rect, 0.0, header_fill);
     crate::kit::liquid::paint(painter, rect, header_fill, crate::kit::liquid::Surface::Track);

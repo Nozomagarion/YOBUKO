@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 
 pub const MAX_SVG: usize = 128 * 1024;
 pub const MAX_ASSETS: usize = 64;
+pub const MAX_PNG: usize = 8 * 1024 * 1024;
 pub const MODULES: &[&str] = &[
     "browser",
     "tempo",
@@ -72,6 +73,10 @@ impl Toolbar {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Skin {
+    /// A portable PNG data URL, or a package-relative PNG path before resource resolution.
+    pub background: Option<Arc<str>>,
+    pub background_opacity: u8,
+    pub background_blur: u8,
     /// Inline SVG, or a relative path resolved by the desktop's theme file loader.
     pub assets: BTreeMap<String, String>,
     pub styles: BTreeMap<String, BTreeMap<String, String>>,
@@ -83,6 +88,9 @@ pub struct Skin {
 impl Default for Skin {
     fn default() -> Self {
         Self {
+            background: None,
+            background_opacity: 70,
+            background_blur: 0,
             assets: BTreeMap::new(),
             styles: BTreeMap::new(),
             meter: MeterStyle::Continuous,
@@ -137,8 +145,46 @@ impl Skin {
             return skin;
         };
         for key in root.keys() {
-            if !matches!(key.as_str(), "styles" | "assets" | "meter" | "segments" | "toolbar") {
+            if !matches!(
+                key.as_str(),
+                "background"
+                    | "background-opacity"
+                    | "background-blur"
+                    | "styles"
+                    | "assets"
+                    | "meter"
+                    | "segments"
+                    | "toolbar"
+            ) {
                 warnings.push(format!("skin.{key} is unknown"));
+            }
+        }
+        if let Some(value) = root.get("background") {
+            if let Some(source) = value.as_str() {
+                if source.starts_with("data:image/png;base64,") {
+                    if decode_png(source).is_ok() {
+                        skin.background = Some(Arc::from(source));
+                    } else {
+                        warnings.push("invalid embedded background PNG".into());
+                    }
+                } else if asset_path(&source.replace(".png", ".svg")) && source.ends_with(".png") {
+                    skin.background = Some(Arc::from(source));
+                } else {
+                    warnings.push("background must be a relative PNG path or embedded PNG".into());
+                }
+            } else {
+                warnings.push("background must be a PNG path".into());
+            }
+        }
+        for (key, slot) in
+            [("background-opacity", &mut skin.background_opacity), ("background-blur", &mut skin.background_blur)]
+        {
+            if let Some(value) = root.get(key) {
+                if let Some(n) = value.as_u64().filter(|n| *n <= 100) {
+                    *slot = n as u8;
+                } else {
+                    warnings.push(format!("skin.{key} must be 0..100"));
+                }
             }
         }
         if let Some(value) = root.get("styles") {
@@ -244,6 +290,11 @@ impl Skin {
         if let Some(toolbar) = &self.toolbar {
             value["toolbar"] = json!({"order": toolbar.order, "hidden": toolbar.hidden});
         }
+        if let Some(background) = &self.background {
+            value["background"] = Value::String(background.to_string());
+        }
+        value["background-opacity"] = json!(self.background_opacity);
+        value["background-blur"] = json!(self.background_blur);
         value
     }
 }
@@ -258,6 +309,26 @@ pub fn configure(skin: &Skin) {
 }
 pub fn current() -> Arc<Skin> {
     ACTIVE.with(|skin| Arc::clone(&skin.borrow()))
+}
+
+pub fn decode_png(source: &str) -> Result<Vec<u8>, String> {
+    use base64::Engine;
+    let data = source.strip_prefix("data:image/png;base64,").ok_or("not an embedded PNG")?;
+    if data.len() > MAX_PNG * 4 / 3 + 4 {
+        return Err("PNG exceeds 8 MiB".into());
+    }
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data).map_err(|e| e.to_string())?;
+    if bytes.len() > MAX_PNG || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err("invalid background PNG".into());
+    }
+    Ok(bytes)
+}
+pub fn encode_png(bytes: &[u8]) -> Result<Arc<str>, String> {
+    use base64::Engine;
+    if bytes.len() > MAX_PNG || !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+        return Err("invalid or oversized background PNG".into());
+    }
+    Ok(Arc::from(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -369,6 +440,9 @@ mod tests {
     #[test]
     fn skin_round_trip_and_old_defaults() {
         let skin = Skin {
+            background: None,
+            background_opacity: 70,
+            background_blur: 0,
             styles: Default::default(),
             assets: example_assets(),
             meter: MeterStyle::Segmented,

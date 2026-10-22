@@ -36,7 +36,7 @@ A click in an empty track lane sets the paste destination to that track and beat
 Settings > Arrangement > Replace clip defaults off (paste after the selected clip).
 When enabled, pasting onto a selected clip removes that whole destination clip and
 places the copy at its start, as one undoable `clip.paste` command with `replace` set
-to the destination clip id. Other clips follow the existing stacking setting.
+to the destination clip id. Command clients may also use an unambiguous clip name; missing, ambiguous or other-track targets fail without changing the project. Other clips follow the existing stacking setting.
 Creation-only theme colours never recolour pasted or consolidated clips.
 Horizontal scrolling over the track-control pane stays in that pane; only scrolling
 over the timeline moves the arrangement horizontally. Vertical lane scrolling stays linked.

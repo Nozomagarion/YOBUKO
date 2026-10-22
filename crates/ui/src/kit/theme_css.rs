@@ -64,6 +64,41 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
                         _ => Err("unknown colour token or invalid hex colour"),
                     }
                 }
+                ".window" | "window"
+                    if matches!(property, "background-image" | "background-opacity" | "background-blur") =>
+                {
+                    match property {
+                        "background-image" if value == "none" => {
+                            theme.skin.background = None;
+                            Ok(())
+                        }
+                        "background-image" => {
+                            if let Some(path) = value.strip_prefix("url(").and_then(|s| s.strip_suffix(')')) {
+                                let path = path.trim().trim_matches(['\'', '"']);
+                                if path.ends_with(".png") && skin::asset_path(&path.replace(".png", ".svg")) {
+                                    theme.skin.background = Some(std::sync::Arc::from(path));
+                                    Ok(())
+                                } else {
+                                    Err("background-image must name a relative PNG")
+                                }
+                            } else {
+                                Err("background-image requires url()")
+                            }
+                        }
+                        _ => {
+                            if let Some(n) = value.trim_end_matches('%').parse::<u8>().ok().filter(|n| *n <= 100) {
+                                if property == "background-opacity" {
+                                    theme.skin.background_opacity = n;
+                                } else {
+                                    theme.skin.background_blur = n;
+                                }
+                                Ok(())
+                            } else {
+                                Err("background opacity/blur must be 0..100")
+                            }
+                        }
+                    }
+                }
                 "meter" | ".meter" if matches!(property, "style" | "segments") => match property {
                     "style" => match value {
                         "continuous" => {
@@ -155,6 +190,12 @@ pub fn export(theme: &Theme) -> String {
             "toolbar {{ order: {}; hidden: {}; }}\n",
             toolbar.order.join(", "),
             if toolbar.hidden.is_empty() { "none".into() } else { toolbar.hidden.join(", ") }
+        ));
+    }
+    if theme.skin.background.is_some() {
+        css.push_str(&format!(
+            ".window {{ background-image: url(\"background.png\"); background-opacity: {}; background-blur: {}; }}\n",
+            theme.skin.background_opacity, theme.skin.background_blur
         ));
     }
     for (selector, properties) in &theme.skin.styles {

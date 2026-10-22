@@ -1,0 +1,110 @@
+---
+description: Advanced native CSS theming, the style and layout engines to evaluate, and preservation of authored rules in JSON
+read_when: modern CSS, Stylo, Taffy, Lightning CSS, Blitz, native CSS architecture, CSS JSON synchronization
+type: decision
+status: draft
+last_verified: 2026-10-22
+covers:
+  - crates/ui/src/kit/theme_css.rs
+  - crates/ui/src/kit/style_class.rs
+  - crates/ui/src/kit/skin.rs
+  - apps/suhina/src/theme_files.rs
+---
+
+# 0030: Native theme CSS
+
+## Goal
+
+A theme may control every UI section through stable classes, including advanced visual
+styles and layout. CSS and JSON are two editable representations of the same theme.
+This is an explicit product requirement, not satisfied by a palette importer that
+accepts a handful of declarations. The native UI and the audio engine remain separate.
+
+## Research, 22 October 2026
+
+Primary sources:
+
+- [Stylo](https://github.com/servo/stylo): browser-grade CSS parsing, selector matching,
+  cascading and computed styles. The downstream Servo implementation is MPL-2.0.
+- [Taffy](https://github.com/DioxusLabs/taffy): CSS Block, Flexbox and Grid layout, designed
+  for use inside other native UI libraries; MIT.
+- [egui_taffy](https://github.com/PPakalns/egui_taffy): an egui adapter for Taffy. Its
+  0.14.0 manifest names egui 0.36 and Taffy 0.9.2, matching the UI toolkit used here.
+- [Lightning CSS](https://lightningcss.dev/): a modern CSS parser, transformer and
+  serializer. Parsing a declaration is not an implementation of its runtime semantics,
+  layout, animation or painting. It cannot by itself provide full CSS styling.
+- [Blitz](https://github.com/DioxusLabs/blitz): integrates Stylo, Taffy and a text/paint
+  stack. Its own README describes it as beta with bugs and missing features. Its
+  [CSS support matrix](https://blitz.is/status/css) distinguishes implemented features,
+  renderer-specific support and exclusions. It is not evidence of universal CSS support.
+- [egui_css](https://docs.rs/crate/egui_css/0.1.1): targets egui 0.29 and explicitly lists
+  missing layout, media queries, working advanced pseudo-classes and animations. It is
+  not a suitable shortcut for this requirement.
+
+These sources describe capabilities, not measured performance in Suhina. No third-party
+source or artwork was copied into this change.
+
+## Selected direction
+
+Use Stylo for CSS semantics and Taffy for layout, with egui retaining native controls
+and command dispatch. This direction was selected for the broad customization target.
+A safe adapter such as Blitz DOM may avoid implementing Stylo's low-level DOM traits
+in Suhina, but still requires a dependency, maturity and renderer assessment. The
+engines have not yet been integrated by this draft decision. In particular, the small current CSS reader must
+not be presented as the final advanced style engine.
+
+A host-maintained style tree mirrors stable Suhina objects and UI roles. Identity must
+not depend on drawing order or a track's current index. Each node has a stable key,
+classes, ancestry, interactive state and an optional container. Styling must not change
+which project object a control edits. Layout produces rectangles used for both drawing
+and hit testing, including clipping, scrolling and transformed content. Every existing
+keyboard/accessibility/undo path remains supported.
+
+The style engine owns the cascade and computed values; the layout engine owns sizes
+and placement; the renderer owns gradients, shadows, transforms and compositing. The
+native UI owns interactions and dispatches existing commands. Nothing in these systems
+runs in the audio callback. Parse, resource decoding and expensive restyling are prepared
+outside interactive frame work, with stale-result rejection and explicit budgets.
+
+## Required capability groups
+
+| Group | Target |
+|---|---|
+| Selectors and cascade | Class, id, descendant/child selectors, state pseudo-classes, specificity, inheritance, `!important`, `:is()`/`:not()`, nesting and cascade layers |
+| Variables and values | Custom properties, scoped `var()` with fallbacks/cycle handling, CSS colours, lengths/percentages, `calc()`, `min()`, `max()`, `clamp()` |
+| Visuals | Background images, SVG assets and control states, linear/radial gradients, borders/radii, opacity, shadows, font roles and text styling |
+| Responsiveness | Viewport media conditions, reduced motion, light/dark preference, and container-size queries with real container geometry |
+| Layout | Flex/Grid for host-managed panel/module containers, spacing, alignment, constraints, visibility and overflow |
+| Motion | Transitions and keyframe animations with a host-supplied clock, reduced-motion behaviour and bounded repainting |
+| Effects | 2D transforms with matching input coordinates; filters/compositing only when the active renderer actually implements them |
+| Diagnostics | Source locations, unknown/unsupported property reporting, per-node computed-style inspection and a documented capability matrix |
+
+This is a product target, not a claim that the current branch implements this table.
+No property may be advertised as supported merely because a parser accepts it. A
+renderer-specific feature needs a visible fallback and tests for both paths.
+
+## Authored rules and JSON
+
+Advanced CSS cannot be flattened into one palette: state rules, variables, queries and
+animations would be lost. The durable JSON model must retain the authored rule structure,
+expressions, source order and resource references. Computed values are a projection for a
+particular viewport, state and time. They must not replace authored expressions when saved.
+
+Changing a simple colour in CSS updates the corresponding JSON representation and the
+editor. Changing it in the editor updates the appropriate authored declaration. Where
+several conditional declarations can supply a value, the editor must identify the target
+rule rather than silently destroying the other rules. Independently edited files merge
+by stable authored rule/declaration identities; conflicting edits preserve both inputs and
+produce a diagnostic. Round-trip tests cover variables, queries, states and animations,
+not just literal colours.
+
+## Current implementation and gate
+
+The branch supplies SVG resources, configurable meters, toolbar rearrangement, portable
+ZIP resources and a bounded native CSS subset with live CSS/JSON mirroring. It supplies
+an initial class registry and tests for literal-colour synchronization and conflicts.
+Those are reusable foundations. The full engine, broad capability groups above and
+lossless advanced-rule editing remain implementation work. Before enabling that engine,
+verify package licences, platform builds, interaction/accessibility parity, malformed
+inputs, large projects and both rendering backends. A full browser-CSS claim is out of
+scope unless an explicit support matrix and conformance evidence establish it.

@@ -6,6 +6,7 @@ use super::{skin, theme};
 use std::cell::RefCell;
 
 pub const CLASSES: &[&str] = &[
+    "window",
     "application-bar",
     "menu-bar",
     "project-tabs",
