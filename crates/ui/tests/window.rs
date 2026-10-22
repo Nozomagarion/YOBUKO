@@ -4,7 +4,7 @@
 //! The Session view and the window, driven like a user would: clicks become the commands the
 //! CLI and MCP run, and edits change the project through the session.
 
-use egui::{Key, Modifiers};
+use egui::{Key, Modifiers, Vec2};
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 use serde_json::json;
@@ -75,12 +75,66 @@ fn clicking_a_clip_launches_it() {
 }
 
 #[test]
+fn a_horizontal_session_fader_drags_on_its_drawn_axis_and_keeps_the_native_command() {
+    use suhina_ui::kit::{skin, theme_css};
+    let mut harness = view();
+    let mut theme = theme::Theme::default();
+    assert!(theme_css::apply(&mut theme, ".control-mixer-volume { --suhina-direction: horizontal; }").is_empty());
+    skin::configure(&theme.skin);
+    harness.run_steps(3);
+    let rect = harness.get_by_label("Drums volume").rect();
+    assert!(rect.width() > rect.height());
+    let start = rect.center();
+    harness.hover_at(start);
+    harness.drag_at(start);
+    harness.run_steps(1);
+    harness.hover_at(start - Vec2::new(24.0, 0.0));
+    harness.run_steps(2);
+    harness.drop_at(start - Vec2::new(24.0, 0.0));
+    harness.run_steps(2);
+    let changes: Vec<_> = harness.state().actions.iter().filter(|a| a.id == "track.setVolume").collect();
+    assert!(!changes.is_empty());
+    assert_eq!(changes.last().unwrap().params["tracks"], json!([1]));
+    assert_eq!(changes.last().unwrap().params["db"], json!(-6.0));
+    assert_eq!(changes.last().unwrap().params["continue"], json!(true));
+    skin::configure(&skin::Skin::default());
+}
+
+#[test]
 fn clicking_an_empty_slot_with_a_stop_button_stops_the_track() {
     let mut harness = view();
     assert_eq!(
         clicked(&mut harness, "Stop Keys (scene 1)"),
         [Action::new("clip.launch", json!({ "track": 3, "scene": 1 }))]
     );
+}
+
+#[test]
+fn an_individually_placed_send_keeps_its_parameter_target_and_can_be_hidden() {
+    use suhina_ui::kit::{skin, theme_css};
+    let mut harness = view();
+    let before = harness.get_by_label("Bass send to A Reverb").rect();
+    let mut theme = theme::Theme::default();
+    assert!(theme_css::apply(&mut theme, ".control-mixer-send-1 { left: 6px; width: 16px; }").is_empty());
+    skin::configure(&theme.skin);
+    harness.run_steps(3);
+    let moved = harness.get_by_label("Bass send to A Reverb").rect();
+    assert!((moved.left() - before.left() - 6.0).abs() < 0.01);
+    assert!((moved.width() - 16.0).abs() < 0.01);
+    let start = moved.center();
+    harness.hover_at(start);
+    harness.drag_at(start);
+    harness.run_steps(1);
+    harness.hover_at(start - Vec2::new(0.0, 10.0));
+    harness.run_steps(1);
+    harness.drop_at(start - Vec2::new(0.0, 10.0));
+    harness.run_steps(2);
+    assert!(harness.state().actions.iter().any(|a| a.id == "track.setSend" && a.params["track"] == 2));
+    theme.skin.controls.get_mut("mixer-send-1").unwrap().hidden = true;
+    skin::configure(&theme.skin);
+    harness.run_steps(3);
+    assert!(harness.query_by_label("Bass send to A Reverb").is_none());
+    skin::configure(&skin::Skin::default());
 }
 
 #[test]

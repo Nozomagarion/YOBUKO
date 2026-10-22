@@ -438,17 +438,34 @@ fn resolve_theme(
         let bytes = resource(background, skin::MAX_PNG as u64)?;
         theme.skin.background = Some(skin::encode_png(&bytes)?);
     }
+    let mut artwork_bytes = 0usize;
     for (role, source) in &mut theme.skin.assets {
-        if !source.trim_start().starts_with('<') {
-            let data = resource(source, skin::MAX_SVG as u64)?;
-            *source = String::from_utf8(data).map_err(|e| e.to_string())?;
+        if !source.trim_start().starts_with('<') && !skin::png_artwork(source) {
+            let png = skin::artwork_extension(source) == "png";
+            let data = resource(source, if png { skin::MAX_PNG as u64 } else { skin::MAX_SVG as u64 })?;
+            *source = if png {
+                skin::encode_png(&data)?.to_string()
+            } else {
+                String::from_utf8(data).map_err(|e| e.to_string())?
+            };
         }
-        skin::parse_svg(source).map_err(|e| format!("{role}: {e}"))?;
+        artwork_bytes = artwork_bytes
+            .checked_add(source.len())
+            .filter(|total| *total <= skin::MAX_ARTWORK_BYTES)
+            .ok_or("combined artwork exceeds 16 MiB")?;
+        skin::validate_artwork(source).map_err(|e| format!("{role}: {e}"))?;
     }
     Ok((theme, warnings))
 }
 
 fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, String> {
+    theme
+        .skin
+        .assets
+        .values()
+        .try_fold(0usize, |total, source| total.checked_add(source.len()))
+        .filter(|total| *total <= suhina_ui::kit::skin::MAX_ARTWORK_BYTES)
+        .ok_or("combined artwork exceeds 16 MiB")?;
     let mut root: serde_json::Value = serde_json::from_str(&theme.to_json()).map_err(|e| e.to_string())?;
     root["stylesheet"] = serde_json::Value::String("style.css".into());
     let mut files = Vec::new();
@@ -469,10 +486,16 @@ fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, Stri
         if !suhina_ui::kit::skin::valid_role(role) {
             return Err(format!("unknown SVG role {role}"));
         }
-        suhina_ui::kit::skin::parse_svg(source)?;
-        let relative = format!("assets/{role}.svg");
+        suhina_ui::kit::skin::validate_artwork(source)?;
+        let extension = suhina_ui::kit::skin::artwork_extension(source);
+        let relative = format!("assets/{role}.{extension}");
         root["skin"]["assets"][role] = serde_json::Value::String(relative.clone());
-        files.push((format!("{id}/{relative}"), source.as_bytes().to_vec()));
+        let data = if suhina_ui::kit::skin::png_artwork(source) {
+            suhina_ui::kit::skin::decode_png(source)?
+        } else {
+            source.as_bytes().to_vec()
+        };
+        files.push((format!("{id}/{relative}"), data));
     }
     files.push((format!("{id}/style.css"), suhina_ui::kit::theme_css::export(theme).into_bytes()));
     files.push((format!("{id}/README.md"), theme::template_readme().into_bytes()));
@@ -970,8 +993,9 @@ fn persist_theme(folder: &Path, id: &str, theme: &Theme) -> Result<(), String> {
             if theme.skin.background.is_some() {
                 root["skin"]["background"] = serde_json::json!(format!("{id}/background.png"));
             }
-            for role in theme.skin.assets.keys() {
-                root["skin"]["assets"][role] = serde_json::json!(format!("{id}/assets/{role}.svg"));
+            for (role, source) in &theme.skin.assets {
+                let extension = suhina_ui::kit::skin::artwork_extension(source);
+                root["skin"]["assets"][role] = serde_json::json!(format!("{id}/assets/{role}.{extension}"));
             }
             *data = serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?;
             *name = format!("{id}.json");
@@ -1024,7 +1048,10 @@ fn fingerprint(path: &Path) -> Result<u64, String> {
                 && let Ok(children) = std::fs::read_dir(entry.path())
             {
                 paths.extend(
-                    children.take(suhina_ui::kit::skin::MAX_ASSETS).filter_map(Result::ok).map(|child| child.path()),
+                    children
+                        .take(suhina_ui::kit::skin::MAX_PACKAGE_ASSETS)
+                        .filter_map(Result::ok)
+                        .map(|child| child.path()),
                 );
             }
         }
@@ -1042,6 +1069,58 @@ fn fingerprint(path: &Path) -> Result<u64, String> {
 
 #[cfg(test)]
 mod skin_package_tests {
+    const PNG: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQ6nD5DwADrAHuJHH6EQAAAABJRU5ErkJggg==";
+
+    #[test]
+    fn png_control_artwork_round_trips_and_live_corruption_preserves_saved_theme() {
+        let root = folder("png-artwork");
+        let mut theme = styled();
+        theme.skin.assets.insert("track.name.color-00ff00.frame-0".into(), PNG.into());
+        let mut files = ThemeFiles::new(Some(root.join("themes")));
+        files.write("portable", &theme).unwrap();
+        let png = root.join("themes/portable/assets/track.name.color-00ff00.frame-0.png");
+        assert_eq!(std::fs::read(&png).unwrap(), skin::decode_png(PNG).unwrap());
+        assert_eq!(files.read_all().0[0].theme, theme);
+        let package = portable_package_files("portable", &theme).unwrap();
+        assert!(package.iter().any(|(name, _)| name.ends_with("frame-0.png")));
+        let zip = root.join("portable.zip");
+        write_zip(&zip, &package).unwrap();
+        let mut imported = ThemeFiles::new(Some(root.join("imported")));
+        imported.import(&zip).unwrap();
+        assert_eq!(imported.read_all().0[0].theme.skin.assets["track.name.color-00ff00.frame-0"], PNG);
+        let replacement = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4H6r0HwAGQwJ299oQdAAAAABJRU5ErkJggg==";
+        std::fs::write(&png, skin::decode_png(replacement).unwrap()).unwrap();
+        files.checked = None;
+        let (changed, warnings) = files.changed();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(changed[0].theme.skin.assets["track.name.color-00ff00.frame-0"], replacement);
+        let json = root.join("themes/portable.json");
+        let saved = std::fs::read(&json).unwrap();
+        std::fs::write(&png, b"\x89PNG\r\n\x1fcorrupt").unwrap();
+        files.checked = None;
+        let (changed, warnings) = files.changed();
+        assert!(changed.is_empty());
+        assert!(!warnings.is_empty());
+        assert_eq!(std::fs::read(json).unwrap(), saved);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn portable_animation_assets_leave_room_for_inherited_base_roles() {
+        use super::*;
+        let mut theme = Theme::default();
+        let source = suhina_ui::kit::skin::default_assets()["button"].clone();
+        for role in ["track.name", "track.body"] {
+            for frame in 0..32 {
+                theme.skin.assets.insert(format!("{role}.frame-{frame}"), source.clone());
+            }
+        }
+        let files = portable_package_files("frames", &theme).unwrap();
+        let (_, json) = files.iter().find(|(name, _)| name == "frames/frames.json").unwrap();
+        let (restored, warnings) = Theme::from_json(std::str::from_utf8(json).unwrap());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(restored.skin.assets.len(), suhina_ui::kit::skin::MAX_PACKAGE_ASSETS);
+    }
     use super::*;
     use suhina_ui::kit::{skin, theme_css};
     fn folder(name: &str) -> PathBuf {

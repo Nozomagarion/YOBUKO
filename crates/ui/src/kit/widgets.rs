@@ -4,6 +4,7 @@
 //! Small drawing helpers and the controls the views share: text that fits a cell, the value
 //! field drag, the knob.
 
+use crate::kit::surface::Backgrounds as _;
 use std::sync::Arc;
 
 use egui::text::{LayoutJob, TextWrapping};
@@ -113,7 +114,7 @@ pub fn button_surface(painter: &Painter, rect: Rect, response: &Response, on: bo
     let fill = super::style_class::background(fill);
     let radius = super::style_class::radius(radius);
     if !super::skin::button(painter, rect, super::skin::State::response(response, on), fill, radius) {
-        painter.rect_filled(rect, radius, fill);
+        painter.fill_background(rect, radius, fill);
     }
     super::native_css::background_rounded(painter, rect, radius);
 }
@@ -124,8 +125,8 @@ pub fn toggle_colors(ui: &Ui, response: &Response, on: bool) -> (Color32, Color3
     let lit = motion::toward(ui.ctx(), response.id.with("on"), on, motion::VALUE);
     let off_fill = motion::mix(theme::control_background(), theme::control_hover(), hover);
     let off_text = motion::mix(theme::text_hint(), theme::text_secondary(), hover);
-    let on_fill = motion::mix(theme::text_value(), theme::text_primary(), hover);
-    (motion::mix(off_fill, on_fill, lit), motion::mix(off_text, theme::text_on(on_fill), lit))
+    let on_fill = motion::mix(theme::control_selected(), Color32::WHITE, 0.2 * hover);
+    (motion::mix(off_fill, on_fill, lit), motion::mix(off_text, theme::text_inverse(), lit))
 }
 
 /// A track's solo button: draws it in `rect` and returns the command a click asks for. A click
@@ -140,13 +141,17 @@ pub fn solo_button(
     name: &str,
     solo: bool,
 ) -> Option<Action> {
+    if super::control_layout::placement("solo").hidden {
+        return None;
+    }
+    let rect = super::control_layout::place("solo", rect, painter.clip_rect());
     let label = if solo { format!("End solo on {name}") } else { format!("Solo {name}") };
     let response = button_area(ui, rect, id, label);
     let _style = super::style_class::enter_response("button", &response);
     let lit = motion::toward(ui.ctx(), response.id.with("on"), solo, motion::VALUE);
     let off = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
     track_button_face(ui, painter, rect, &response, motion::mix(off, theme::accent(), lit));
-    let text = super::style_class::foreground(motion::mix(theme::text_secondary(), theme::window_background(), lit));
+    let text = super::style_class::foreground(motion::mix(theme::text_secondary(), theme::text_inverse(), lit));
     if !super::skin::paint(painter, rect, "solo", super::skin::State::response(&response, solo), text, 0.0) {
         text_in(painter, rect, Align2::CENTER_CENTER, "S", theme::ui_font(theme::TEXT_SMALL), text);
     }
@@ -172,6 +177,10 @@ pub fn cue_button(
     name: &str,
     cue: bool,
 ) -> Option<Action> {
+    if super::control_layout::placement("cue").hidden {
+        return None;
+    }
+    let rect = super::control_layout::place("cue", rect, painter.clip_rect());
     let label = if cue { format!("Stop cueing {name}") } else { format!("Cue {name} on the headphones") };
     let response = button_area(ui, rect, id, label);
     let _style = super::style_class::enter_response("button", &response);
@@ -219,6 +228,10 @@ pub fn arm_button(
     armed: bool,
     notes: bool,
 ) -> Option<Action> {
+    if super::control_layout::placement("arm").hidden {
+        return None;
+    }
+    let rect = super::control_layout::place("arm", rect, painter.clip_rect());
     let label = match (armed, notes) {
         (true, _) => format!("Disarm {name}"),
         (false, true) => format!("Arm {name} to play it from a MIDI controller"),
@@ -549,7 +562,7 @@ fn value_keys(ui: &Ui, response: &Response) -> (i32, bool, Option<String>) {
     let radius = if response.rect.width() > response.rect.height() * 4.0 { response.rect.height() * 0.5 } else { 4.0 };
     painter.rect_stroke(response.rect, radius, Stroke::new(1.0, theme::text_secondary()), egui::StrokeKind::Outside);
     if !typed.is_empty() {
-        painter.rect_filled(response.rect.shrink(1.0), 0.0, theme::control_active());
+        painter.fill_background(response.rect.shrink(1.0), 0.0, theme::control_active());
         painter.text(
             response.rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -575,6 +588,22 @@ pub fn drag_value(
     per_tick: f64,
     range: (f64, f64),
     default: f64,
+) -> Drag {
+    drag_value_axis(ui, response, preview, value, per_point, per_tick, range, default, false)
+}
+
+/// The same keyboard, wheel, reset and undo protocol with an explicit drag axis.
+#[allow(clippy::too_many_arguments)]
+pub fn drag_value_axis(
+    ui: &Ui,
+    response: &Response,
+    preview: &mut Option<f64>,
+    value: f64,
+    per_point: f64,
+    per_tick: f64,
+    range: (f64, f64),
+    default: f64,
+    horizontal: bool,
 ) -> Drag {
     let _style_class = crate::kit::style_class::enter_response("value", response);
     // Keys to the control clicked last: the arrows step it, Enter sets what was typed.
@@ -615,7 +644,8 @@ pub fn drag_value(
     if response.dragged_by(egui::PointerButton::Primary) {
         let fine = if ui.input(|i| i.modifiers.shift) { 0.1 } else { 1.0 };
         let start = preview.unwrap_or(value);
-        let next = (start - f64::from(response.drag_delta().y) * per_point * fine).clamp(range.0, range.1);
+        let delta = if horizontal { response.drag_delta().x } else { -response.drag_delta().y };
+        let next = (start + f64::from(delta) * per_point * fine).clamp(range.0, range.1);
         *preview = Some(next);
         return Drag::Moving(next);
     }
@@ -655,6 +685,7 @@ pub fn knob(painter: &Painter, center: Pos2, size: f32, position: f32, pointer: 
         painter.circle_filled(center, radius, theme::control_background());
         painter.circle_stroke(center, radius, theme::hairline(theme::text_hint()));
     }
+    super::native_css::background_rounded(painter, rect, size * 0.5);
     let angle = (-135.0 + 270.0 * position.clamp(0.0, 1.0)).to_radians();
     let tip = center + Vec2::new(angle.sin(), -angle.cos()) * (radius - 1.0);
     if !super::skin::paint(painter, rect, "knob.pointer", state, pointer, angle) {

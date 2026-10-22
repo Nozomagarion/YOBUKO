@@ -68,7 +68,8 @@ not disable its commands or shortcuts.
 
 Editable panel, track and clip gradient overlays and GPU liquid/refraction are implemented.
 Theme strengths can override global settings. A private user-supplied background image can
-sit beneath tinted UI surfaces; the window stays opaque and does not capture the desktop.
+sit beneath tinted UI surfaces, which blend over it. Without that image, supported GPU hosts
+can show the desktop through theme backgrounds; this uses compositor alpha, not desktop capture.
 Playback performance, fallback and high-DPI qualification remain verification work.
 
 - Describe materials through appearance tokens, independently of layout and interaction.

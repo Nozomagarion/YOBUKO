@@ -49,6 +49,7 @@ pub(super) fn place(ui: &Ui, module: &str, base: Rect) -> Rect {
         .map(|d| &d.skin)
         .map_or_else(|| skin::active_toolbar_offset(module), |s| s.toolbar_offsets.get(module).copied().unwrap_or(0));
     let at = base.translate(Vec2::new(offset as f32, 0.0));
+    let at = crate::kit::control_layout::place(&format!("toolbar-{module}"), at, ui.max_rect());
     ui.ctx().data_mut(|d| {
         let rects = d.get_temp_mut_or_default::<Vec<(String, Rect, Rect)>>(rects_id());
         if let Some(item) = rects.iter_mut().find(|item| item.0 == module) {
@@ -80,32 +81,37 @@ impl App {
             }
         });
         let editing = ui.ctx().data(|d| d.get_temp::<EditDraft>(edit_id())).is_some();
-        let mut theme_skin = self.themes.get(&self.settings.theme).map(|t| t.skin.clone()).unwrap_or_default();
+        let mut theme_skin = skin::current();
         let mut changed = false;
         response.context_menu(|ui| {
+            if ui.button("Edit interface").clicked() {
+                self.start_control_editor(ui.ctx());
+                ui.ctx().data_mut(|data| data.remove::<EditDraft>(edit_id()));
+                ui.close();
+            }
             if !editing && ui.button("Edit toolbar").clicked() {
                 ui.ctx().data_mut(|d| {
                     d.insert_temp(
                         edit_id(),
                         EditDraft {
                             theme_id: self.settings.theme.clone(),
-                            original: theme_skin.clone(),
-                            skin: theme_skin.clone(),
+                            original: theme_skin.as_ref().clone(),
+                            skin: theme_skin.as_ref().clone(),
                         },
                     )
                 });
                 ui.close();
             }
             if ui.button("Restore default toolbar").clicked() {
-                theme_skin.toolbar = None;
-                theme_skin.toolbar_offsets.clear();
+                std::sync::Arc::make_mut(&mut theme_skin).toolbar = None;
+                std::sync::Arc::make_mut(&mut theme_skin).toolbar_offsets.clear();
                 changed = true;
                 ui.ctx().data_mut(|d| d.remove::<EditDraft>(edit_id()));
                 ui.close();
             }
         });
         if changed {
-            self.save_toolbar_skin(theme_skin.clone());
+            self.save_toolbar_skin(theme_skin.as_ref().clone());
         }
         if editing {
             ui.ctx().memory_mut(|memory| {
@@ -394,7 +400,11 @@ impl App {
             }
             "transport" => {
                 for (index, role, label, on) in [(0, "play", "Play", grid.running), (1, "stop", "Stop", false)] {
+                    if crate::kit::control_layout::placement(&format!("transport-{role}")).hidden {
+                        continue;
+                    }
                     let at = middle(index as f32 * 29.0, 28.0);
+                    let at = crate::kit::control_layout::place(&format!("transport-{role}"), at, ui.max_rect());
                     let response = widgets::button_area(ui, at, Id::new(role), label);
                     let _style = crate::kit::style_class::enter_named_response("button", role, &response);
                     if response.clicked() {

@@ -63,7 +63,7 @@ fn arrangement_header_surfaces_follow_custom_theme_tokens() {
     let mut custom = previous;
     custom.track_header_background = Color32::from_rgb(31, 45, 53);
     custom.track_header_selected = Color32::from_rgb(65, 72, 84);
-    custom.text_value = Color32::from_rgb(233, 229, 222);
+    custom.control_selected = Color32::from_rgb(233, 229, 222);
     theme::set_palette(&harness.ctx, custom);
     harness.run();
     let header = harness.get_by_label("Track Drums").rect();
@@ -81,7 +81,7 @@ fn arrangement_header_surfaces_follow_custom_theme_tokens() {
             );
     let neutral_volumes = ["Drums volume", "Bass volume", "A Reverb volume"]
         .into_iter()
-        .all(|label| filled_with(&harness, harness.get_by_label(label).rect(), custom.text_value));
+        .all(|label| filled_with(&harness, harness.get_by_label(label).rect(), custom.control_selected));
     theme::set_palette(&harness.ctx, previous);
     assert!(has_surface, "the header must tint the editable theme surface with its track color");
     assert!(neutral_volumes, "volume fills share the neutral theme colour regardless of track colour");

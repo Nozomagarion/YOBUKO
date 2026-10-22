@@ -50,6 +50,30 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
             let property = property.trim();
             let value = value.trim();
             let result = match selector {
+                "artwork" if property == "fps" => match value.parse::<u8>().ok().filter(|fps| (1..=30).contains(fps)) {
+                    Some(fps) => {
+                        theme.skin.artwork_fps = fps;
+                        Ok(())
+                    }
+                    None => Err("artwork fps must be 1..30"),
+                },
+                _ if selector.starts_with(".control-") => {
+                    let name = selector.trim_start_matches(".control-");
+                    if !super::control_layout::valid_name(name)
+                        || (!theme.skin.controls.contains_key(name) && theme.skin.controls.len() >= 256)
+                    {
+                        Err("invalid or excessive native control placement")
+                    } else {
+                        let mut next = theme.skin.controls.get(name).copied().unwrap_or_default();
+                        match next.set(property, value) {
+                            Ok(()) => {
+                                theme.skin.controls.insert(name.into(), next);
+                                Ok(())
+                            }
+                            Err(error) => Err(error),
+                        }
+                    }
+                }
                 ":root" if property.starts_with("--") => {
                     let key = property.trim_start_matches("--").replace('-', ".");
                     match (theme.colors.token_mut(&key), super::theme::parse_rgba(value)) {
@@ -111,6 +135,10 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
                         }
                         "needle" => {
                             theme.skin.meter = skin::MeterStyle::Needle;
+                            Ok(())
+                        }
+                        "frames" => {
+                            theme.skin.meter = skin::MeterStyle::Frames;
                             Ok(())
                         }
                         _ => Err("unknown meter style"),
@@ -195,6 +223,22 @@ pub fn export(theme: &Theme) -> String {
         css.push_str(&format!("  --{}: {};\n", key.replace('.', "-"), super::theme::hex_rgba(theme.rgba(key, color))));
     }
     css.push_str(&format!("}}\nmeter {{ style: {}; segments: {}; }}\n", theme.skin.meter.name(), theme.skin.segments));
+    css.push_str(&format!("artwork {{ fps: {}; }}\n", theme.skin.artwork_fps));
+    for (name, placement) in &theme.skin.controls {
+        css.push_str(&format!(".control-{name} {{ left: {}px; top: {}px;", placement.x, placement.y));
+        css.push_str(&format!(
+            " bottom: {}; display: {};",
+            placement.bottom.map_or("auto".into(), |v| format!("{v}px")),
+            if placement.hidden { "none" } else { "block" }
+        ));
+        for (key, value) in [("width", placement.width), ("height", placement.height)] {
+            css.push_str(&format!(" {key}: {};", value.map_or("auto".into(), |v| format!("{v}px"))));
+        }
+        css.push_str(&format!(
+            " --suhina-direction: {}; }}\n",
+            if placement.direction == super::control_layout::Direction::Horizontal { "horizontal" } else { "vertical" }
+        ));
+    }
     if let Some(toolbar) = &theme.skin.toolbar {
         css.push_str(&format!(
             "toolbar {{ order: {}; hidden: {}; }}\n",
@@ -220,7 +264,11 @@ pub fn export(theme: &Theme) -> String {
     }
     for (role, asset) in &theme.skin.assets {
         // Package export writes each inline SVG under this stable relative name.
-        let path = if asset.trim_start().starts_with('<') { format!("assets/{role}.svg") } else { asset.clone() };
+        let path = if asset.trim_start().starts_with('<') || skin::png_artwork(asset) {
+            format!("assets/{role}.{}", skin::artwork_extension(asset))
+        } else {
+            asset.clone()
+        };
         css.push_str(&format!(
             "{} {{ image: url(\"{path}\"); }}\n",
             role.replace(".hover", ":hover").replace(".active", ":active").replace(".disabled", ":disabled"),
@@ -232,6 +280,29 @@ pub fn export(theme: &Theme) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn control_geometry_round_trips_between_css_and_json_with_hostile_values_bounded() {
+        let mut theme = Theme::default();
+        let css = ".control-mixer-volume { left: 8px; width: 90px; height: 20px; --suhina-direction: horizontal; } .control-mixer-name { bottom: 0px; } .control-mixer-color { display: none; }";
+        assert!(apply(&mut theme, css).is_empty());
+        assert_eq!(theme.skin.controls["mixer-volume"].direction, super::super::control_layout::Direction::Horizontal);
+        assert_eq!(theme.skin.controls["mixer-name"].bottom, Some(0));
+        assert!(theme.skin.controls["mixer-color"].hidden);
+        let mut restored = Theme::default();
+        assert!(apply(&mut restored, &export(&theme)).is_empty());
+        assert_eq!(restored, theme);
+        let mut warnings = Vec::new();
+        assert_eq!(skin::Skin::from_json(&theme.skin.to_json(), &mut warnings), theme.skin);
+        assert!(warnings.is_empty());
+        let before = theme.skin.controls.clone();
+        assert_eq!(
+            apply(&mut theme, ".control-mixer-volume { width: 999999px; top: NaNpx; --suhina-direction: sideways; }")
+                .len(),
+            3
+        );
+        assert_eq!(theme.skin.controls, before);
+    }
     #[test]
     fn toolbar_offsets_mirror_without_replacing_the_native_layout() {
         let mut theme = Theme::default();
@@ -245,6 +316,18 @@ mod tests {
             !apply(&mut restored, "toolbar { offset-transport: NaN; offset-views: 999999px; offset-bogus: 1px; }")
                 .is_empty()
         );
+    }
+    #[test]
+    fn measured_meter_frames_mirror_css_and_json_without_changing_artwork_paths() {
+        let mut theme = Theme::default();
+        assert!(apply(&mut theme, "meter { style: frames; } meter.frame-0 { image: url('assets/silent.png'); } meter.frame-1 { image: url('assets/loud.svg'); }").is_empty());
+        assert_eq!(theme.skin.meter, skin::MeterStyle::Frames);
+        let (json, warnings) = Theme::from_json(&theme.to_json());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(json, theme);
+        let mut restored = Theme::default();
+        assert!(apply(&mut restored, &export(&theme)).is_empty());
+        assert_eq!(restored, theme);
     }
     #[test]
     fn css_changes_native_model_and_reports_unsupported_rules() {

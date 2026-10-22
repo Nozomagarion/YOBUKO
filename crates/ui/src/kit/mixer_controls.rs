@@ -3,17 +3,18 @@
 
 //! Shared Session and Arrangement channel control faces; interaction belongs to each view.
 use super::{motion, theme, widgets};
+use crate::kit::surface::Backgrounds as _;
 use egui::{Align2, Color32, Pos2, Rect, Vec2};
 
 pub fn pan_field(painter: &egui::Painter, rect: Rect, pan: f64, hover: f32) {
-    painter.rect_filled(rect, 0.0, motion::mix(theme::pan_background(), theme::panel_hover(), hover));
+    painter.fill_background(rect, 0.0, motion::mix(theme::pan_background(), theme::panel_hover(), hover));
     let centre = rect.center().x.round() - 0.5;
     painter.vline(centre, egui::Rangef::new(rect.top(), rect.top() + 2.0), theme::hairline(theme::pan_centre()));
     painter.vline(centre, egui::Rangef::new(rect.bottom() - 2.0, rect.bottom()), theme::hairline(theme::pan_centre()));
     let to = rect.center().x + rect.width() / 2.0 * pan.clamp(-1.0, 1.0) as f32;
     let bar =
         Rect::from_min_max(Pos2::new(centre.min(to), rect.bottom() - 2.0), Pos2::new(centre.max(to), rect.bottom()));
-    painter.rect_filled(bar, 0.0, theme::text_value());
+    painter.rect_filled(bar, 0.0, theme::control_selected());
     widgets::text_in(
         painter,
         rect,
@@ -39,7 +40,7 @@ pub fn send_field(
         Pos2::new(rect.right() - 4.0, rect.bottom() - 1.5),
     );
     let quiet = motion::mix(theme::control_background(), pointer, 0.25);
-    painter.rect_filled(rail, 1.0, quiet);
+    painter.fill_background(rail, 1.0, quiet);
     let level = Rect::from_min_size(rail.min, Vec2::new(rail.width() * position.clamp(0.0, 1.0), rail.height()));
     painter.rect_filled(level, 1.0, motion::mix(quiet, pointer, 0.4));
     // The destination stays legible; a dot denotes pre-fader mode.
@@ -83,6 +84,8 @@ pub fn send_field(
 
 /// A tactile vertical fader cap. Its centre marker, rather than its edges, indicates the gain.
 pub fn fader_cap(painter: &egui::Painter, cap: Rect, hover: f32, state: super::skin::State) {
+    let _style = super::style_class::enter("fader-cap");
+    super::native_css::background_rounded(painter, cap, 2.0);
     if super::skin::paint(painter, cap, "fader.cap", state, theme::text_value(), 0.0) {
         return;
     }
@@ -136,6 +139,10 @@ pub fn track_type(
     color: Color32,
 ) {
     let (notes, audio) = content;
+    if super::control_layout::placement("track-type").hidden {
+        return;
+    }
+    let rect = super::control_layout::place("track-type", rect, painter.clip_rect());
     let label = match content {
         (true, true) => "MIDI and audio track",
         (true, false) => "MIDI track",
@@ -144,21 +151,26 @@ pub fn track_type(
     };
     let response = ui.interact(rect.intersect(painter.clip_rect()), id, egui::Sense::hover());
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("{name}: {label}")));
+    let state = super::skin::State::response(&response, false);
     response.on_hover_text(label);
     let center = rect.center();
     let stroke = egui::Stroke::new(1.2, color);
     if notes {
         let x = center.x - if audio { 4.0 } else { 0.0 };
-        let keys = Rect::from_center_size(Pos2::new(x, center.y), Vec2::new(if audio { 8.0 } else { 12.0 }, 10.0));
-        painter.rect_filled(keys, 1.0, Color32::from_gray(240));
-        painter.rect_stroke(keys, 1.0, egui::Stroke::new(1.0, Color32::from_gray(30)), egui::StrokeKind::Inside);
-        painter.vline(x, keys.y_range(), egui::Stroke::new(1.0, Color32::from_gray(30)));
-        let black_key = Rect::from_min_size(Pos2::new(x - 1.5, keys.top()), Vec2::new(3.0, 6.0));
-        painter.rect_filled(black_key, 0.5, Color32::from_gray(30));
+        let icon = Rect::from_center_size(Pos2::new(x, center.y), Vec2::splat(if audio { 10.0 } else { 14.0 }));
+        if !super::skin::paint(painter, icon, "track.midi", state, color, 0.0) {
+            // A compact note remains readable if a custom renderer has no SVG texture.
+            painter.line_segment([Pos2::new(x + 2.0, center.y - 5.0), Pos2::new(x + 2.0, center.y + 3.0)], stroke);
+            painter.circle_filled(Pos2::new(x, center.y + 3.0), 2.0, color);
+        }
     }
     if audio {
         let x = center.x + if notes { 5.0 } else { 0.0 };
         let scale = if notes { 0.6 } else { 1.0 };
+        let icon = Rect::from_center_size(Pos2::new(x, center.y), Vec2::splat(if notes { 10.0 } else { 14.0 }));
+        if super::skin::paint(painter, icon, "track.audio", state, color, 0.0) {
+            return;
+        }
         for (dx, height) in [(-4.0, 2.0), (-2.0, 4.0), (0.0, 5.0), (2.0, 3.0), (4.0, 1.5)] {
             painter.line_segment(
                 [Pos2::new(x + dx * scale, center.y - height), Pos2::new(x + dx * scale, center.y + height)],

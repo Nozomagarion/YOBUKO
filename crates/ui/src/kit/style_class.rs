@@ -20,6 +20,7 @@ pub const CLASSES: &[&str] = &[
     "arrangement",
     "mixer",
     "track-header",
+    "track-name",
     "clip",
     "scene",
     "scene-column",
@@ -41,8 +42,10 @@ pub const CLASSES: &[&str] = &[
     "sample-map",
     "button",
     "fader",
+    "fader-cap",
     "knob",
     "meter",
+    "meter-level",
     "value",
     "dropdown",
     "text-input",
@@ -167,6 +170,7 @@ fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response
 }
 fn set_foreground(palette: &mut theme::Palette, color: egui::Color32, class: &str) {
     palette.text_primary = color;
+    palette.text_inverse = color;
     palette.text_secondary = color;
     palette.text_value = color;
     palette.text_hint = color;

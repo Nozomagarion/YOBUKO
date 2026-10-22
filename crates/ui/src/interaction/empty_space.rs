@@ -3,6 +3,7 @@
 
 //! The empty space after the last track, in the Session view and the Arrangement view alike.
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Align2, Id, Pos2, Rect, Ui, Vec2};
 use serde_json::json;
 
@@ -31,7 +32,7 @@ pub(crate) fn empty_space(ui: &Ui, painter: &egui::Painter, area: Rect, actions:
         }
         let response = widgets::button_area(ui, rect, Id::new(("add-track", kind, area.min.x as i32)), label);
         let fill = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(rect, 0.0, fill);
+        painter.fill_background(rect, 0.0, fill);
         widgets::text_in(painter, rect, Align2::CENTER_CENTER, label, font.clone(), theme::text_secondary());
         if response.clicked() {
             if kind == "return" {

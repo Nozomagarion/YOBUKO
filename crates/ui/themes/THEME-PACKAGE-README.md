@@ -3,7 +3,7 @@
 
 ## What this package is
 
-A theme changes Suhina's native egui interface through colours, SVG control artwork,
+A theme changes Suhina's native egui interface through colours, SVG/PNG control artwork,
 meter appearance, background images, and connected CSS styles and layouts. It contains
 data, not executable plug-ins. Audio, parameter gestures and commands remain native.
 Use this guide when creating, editing, explaining or sharing a theme, including when
@@ -16,7 +16,8 @@ my-theme/
   my-theme.json       # identity, palette, skin, layout and resource references
   style.css           # canonical native properties mirrored with JSON
   advanced.css        # optional preserved modern CSS source
-  assets/*.svg        # control artwork
+  assets/*.svg        # vector control artwork
+  assets/*.png        # optional raster artwork and sequence frames
   background.png      # optional background image
   README.md           # this guide
   examples/dark-gloss.css  # optional paint-only example; not enabled automatically
@@ -46,7 +47,7 @@ the importable example is `my-theme/`.
    `#RRGGBB` or `#RRGGBBAA`, alpha last. Missing palette tokens inherit Suhina Dark.
 4. For conditional styles, selectors, variables, effects or connected Flex/Grid
    layout, edit `advanced.css`. JSON `skin.css` mirrors this source losslessly.
-5. For a new control silhouette, edit an SVG and reference it in `skin.assets`.
+5. For a new control silhouette, edit an SVG or PNG and reference it in `skin.assets`.
    For layout positions, the toolbar's right-click → Edit toolbar mode is usually
    easier: drag the actual controls on the 8-point grid. Done saves; Cancel or
    Escape discards. Entering/leaving edit mode alone preserves the layout.
@@ -65,10 +66,70 @@ It demonstrates original gradients, rounded SVG-backed buttons, box/text shadows
 and coloured transport controls while preserving native geometry. Back up your
 current CSS before replacing it with an example.
 
+## Native element placement and artwork variants
+
+Right-click the toolbar and choose **Edit interface**. The real controls remain visible
+under outlines and an 8-point grid. Drag an outline, or select its semantic name in the
+tools window to change offsets, dimensions, bottom anchoring and volume direction.
+Matching instances share the rule. **Done** saves; **Cancel** or Escape discards it.
+Entering and leaving without changes preserves the theme. The editor suppresses normal
+control commands while placing them. The containing panel bounds each element.
+
+These same settings mirror between JSON `skin.controls` and canonical `style.css`:
+
+```css
+.control-mixer-name { bottom: 0px; }
+.control-mixer-color { display: none; }
+.control-mixer-volume { width: 100px; height: 20px; --suhina-direction: horizontal; }
+.control-mixer-meter { width: 80px; height: 10px; left: 0px; top: 0px; }
+```
+
+Offsets are relative to the native anchor, in logical points, bounded to ±16384;
+sizes are `auto` or 1–4096px. `bottom` anchors to the containing panel. This explicit
+native positioning contract is separate from the advanced Stylo/Taffy stylesheet.
+Placement overrides do not automatically resolve overlaps with neighbouring elements;
+when moving a name into the footer, arrange the toggles and sends to leave it room.
+Changing direction changes the native drag axis, rail, cap and scale together.
+Native compact-height thresholds remain in force. Placement coverage is still growing:
+toolbar modules/transport, the Session mixer sections, solo/cue/arm/type glyphs and
+Arrangement name/colour/volume/pan/meter are connected. Device SDK controls, captions,
+panels and other typed elements use `device-<control-id>` names; moving/resizing them
+keeps their existing parameter commands and hit targets. Long/non-ASCII ids get a stable
+bounded slug/hash name, visible in the editor. Knobs preserve their circular aspect;
+other drawing coordinates scale with the control. Raw widgets, clip/scene cells,
+browser elements and floating-window geometry still need adapters.
+Arrangement fold, enable, automation, output/input routing and send navigation are
+also connected (`arrangement-fold`, `arrangement-enable`, `arrangement-automation`,
+`arrangement-output`, `arrangement-input`, `arrangement-sends-previous/next`).
+Individual send slots use `mixer-send-1` and `arrangement-send-1`, then `-2`, etc.,
+following native return order. Session sends stay inside their movable sends region.
+
+Supply `track.name` and `track.body` SVGs or PNGs for name and strip backgrounds. Exact raw
+track colours choose variants independently of selection/mute tint:
+
+```css
+track.name { image: url("assets/name.svg"); }
+track.name.color-00ff00 { image: url("assets/green-name.svg"); }
+track.name.color-00ff00.hover { image: url("assets/green-name-hover.svg"); }
+artwork { fps: 12; }
+```
+
+For an image sequence, supply contiguous `.frame-0`, `.frame-1`, … keys for that
+variant (at most 32 frames), e.g. `track.name.color-00ff00.hover.frame-0`.
+Frame rate is 1–30 fps, mirrored as `skin.artwork-fps`. With native animations off,
+the first frame stays visible without continuous repainting. Colour/state defaults
+fall back to the role's normal artwork and then Suhina's embedded original.
+PNG artwork retains authored colours and transparency rather than applying `currentColor`.
+Each PNG is limited to 8 MiB compressed, 4096 pixels per axis and 4 million pixels;
+combined inline artwork is limited to 16 MiB. Rendered control textures are bounded
+to 1024 pixels per axis. SVG remains self-contained: embedding images or external
+resources inside an SVG is not supported. Use separate PNG role files instead.
+
 ## SVG inheritance and safe defaults
 
 Supported roles are `fader.cap`, `fader.rail`, `knob.body`, `knob.pointer`, `button`,
-`play`, `stop`, `record`, `solo`, `arm` and `cue`. State variants append `.hover`,
+`play`, `stop`, `record`, `solo`, `arm`, `cue`, `track.midi`, `track.audio`,
+`track.name`, `track.body` and `meter`. State variants append `.hover`,
 `.active` or `.disabled`. Example JSON override:
 
 ```json
@@ -96,8 +157,8 @@ Portable exports include inherited artwork so another machine receives the same 
 | Area | Supported customization |
 |---|---|
 | Palette | JSON/native CSS tokens, transparency, project-safe creation defaults |
-| Artwork | SVG roles and states, moving faders and rotating knob pointers |
-| Meters | `continuous`, `segmented` (4–64 segments), `needle`; signal remains dBFS |
+| Artwork | SVG/PNG roles, colour/state variants and frame sequences, moving faders and rotating knob pointers |
+| Meters | `continuous`, `segmented` (4–64 segments), `needle`, signal-driven `frames`; signal remains dBFS |
 | Materials | Optional bounded PNG background, opacity/blur; panel/track/clip gradient and liquid settings |
 | Toolbar | Native layout plus anchored offsets, explicit order/visibility, connected Flex/Grid |
 | Workspace | CSS layout of `#panel-browser`, `#panel-main`, `#panel-detail` under `#workspace` |
@@ -130,6 +191,17 @@ SVG body artwork, below glyphs and labels; CSS corner radius also clips that art
 Class coverage and host integration are still expanding: inspect the current spec
 and test the actual target instead of inventing selectors.
 
+## Signal-driven meter artwork
+
+For a fully authored meter, use `meter { style: frames; }` in canonical `style.css`
+and supply contiguous `meter.frame-0`, `meter.frame-1`, … SVG/PNG roles, up to 32.
+The louder channel's measured peak selects the frame along the native -70 to +6 dBFS
+range. Frame zero represents silence; the last frame represents the top of the range.
+Unlike decorative image sequences, this display remains signal-driven with animations
+off and ignores artwork fps. Missing/invalid sequences use native continuous bars.
+Colour/state-specific meter sequences follow the same precedence as other roles.
+The native clip light, accessible level description and click-to-reset remain active.
+
 ## Limits: what an author or AI must not assume
 
 This is an experimental native adapter, not a browser. Stylo parsing a property
@@ -141,7 +213,7 @@ or container-query support. Notices are useful but are not a complete CSS valida
 Use the editor's Flex/Grid examples and check the current support specification.
 
 Stylesheets are limited to 128 KiB, bounded nesting and native scope budgets.
-SVGs are limited to 128 KiB each and 64 assets per theme. External/network images,
+SVGs are limited to 128 KiB each, the base roles and 64 additional variants per theme. External/network images,
 scripts, HTML, shell commands and SVG external resources are not loaded. Resource
 paths must stay relative inside the package. SVG controls and effect textures are
 cached with bounded resolution/counts. Box-shadow blur is an approximation.

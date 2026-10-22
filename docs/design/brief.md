@@ -117,13 +117,15 @@ a theme file can change any of them (see Themes). Current values:
 | `control.background` | `#2E2D2A` | Fields, buttons and stopped clips |
 | `control.hoverBackground` | `#34332F` | A field, button or clip under the pointer |
 | `control.activeBackground` | `#45433F` | Selected or pressed: a selected clip or track, a dragged field |
-| `control.playingBackground` | `#4A4843` | A playing clip or scene, the fill of a volume field |
+| `control.playingBackground` | `#4A4843` | A playing clip or scene |
+| `control.selectedBackground` | `#C9C4BB` | The chosen option of a switch, a lit toggle, the level of a volume or pan field |
 | `border` | `#383733` | Hairlines between regions and rows |
 | `border.strong` | `#45433F` | Session columns and arrangement track lines |
 | `text.primary` | `#ECE8E1` | Names and values |
 | `text.secondary` | `#9A958C` | Labels and notes |
 | `text.hint` | `#66625B` | Inactive text, hints and section titles |
-| `text.value` | `#C9C4BB` | Clip names, values on fields, the chosen option of a switch |
+| `text.value` | `#C9C4BB` | Clip names and values on fields |
+| `text.inverse` | `#1D1C1A` | Text on lit fills: a switch's chosen option, a lit button |
 | `text.playing` | `#FFFFFF` | The name of a playing clip |
 | `text.onColorLight`, `text.onColorDark` | `#ECE8E1`, `#1D1C1A` | The contrast-selected text on coloured tracks, returns and clips |
 | `browser.text.primary`, `browser.text.secondary`, `browser.text.hint`, `browser.text.value` | `#ECE8E1`, `#9A958C`, `#66625B`, `#C9C4BB` | Independent browser names, labels, hints and values; older themes inherit the corresponding text tokens |
@@ -152,6 +154,34 @@ A theme is a JSON file in the `themes` folder of Suhina's app-data folder, besid
 ```json
 { "name": "Night", "colors": { "window.background": "#14161A", "accent": "#7FD1B9" } }
 ```
+
+Text and backgrounds never share a token: text on a lit fill is `text.inverse`, text on a track
+colour is `text.onColorLight` or `text.onColorDark`, and the chosen option of a switch is filled
+with `control.selectedBackground`. A file from before these tokens takes `window.background`
+(opaque) for `text.inverse` and `text.onColorDark`, and `text.value` for
+`control.selectedBackground`.
+
+A background token's alpha is how much of the desktop shows through the window there. A
+background (`window.background`, `panel.*`, `control.*Background`, `track.headerBackground`,
+`track.headerSelectedBackground`, `track.mutedBackground`, `pan.background`,
+`recording.background`, and colours mixed from them) sets the colour and alpha of the pixels it
+covers rather than blending with what is under it; text, lines, marks and overlays blend. While a
+background has alpha, the system blurs what is behind the window. Dialogs, menus and floating
+panels blend with the window behind them, and menus (the menu bar's, right-click menus and
+dropdowns) blur the window's content under them, with the GPU renderer and effects on.
+
+The window is see-through with the GPU renderer where its swapchain hands alpha to the system's
+compositor, which Suhina asks the GPU on the first frame: on macOS always, on Windows with DX12
+(its swapchain is made from a DirectComposition visual), and on Linux where the GPU offers
+premultiplied or postmultiplied alpha (usually Wayland; X11 usually not). Elsewhere, and with
+OpenGL, the window stays opaque and backgrounds blend. The blur behind the window is the
+system's: macOS's, DWM's acrylic on Windows, and the compositor's on Wayland where it offers one
+(KDE); other Linux desktops show the desktop through unblurred. On macOS the window's content
+runs under the title bar, which takes `panel.background`; Windows draws its own title bar (the
+application bar), and Linux keeps the system's.
+
+A displayed private background image takes precedence over desktop transparency: background
+fills blend over that image. Clearing the image restores the host's transparent fill path.
 
 A token the file leaves out keeps Suhina Dark's colour, so a file needs only the colours it
 changes; an unknown token or a value that is not `#RRGGBB` or `#RRGGBBAA` is skipped with a warning. Transparent RGB is preserved under canonical token names, including inherited text roles. Files with

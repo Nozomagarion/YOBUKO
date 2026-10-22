@@ -4,6 +4,7 @@
 //! Experimental, current-frame modal backdrop. Appearance strengths default to zero.
 //! Own offscreen renderer and targets: never sample the swapchain or a previous UI frame.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use eframe::{egui, egui_wgpu, wgpu};
@@ -16,6 +17,8 @@ pub struct Liquid {
     gpu: egui_wgpu::RenderState,
     state: Mutex<State>,
     surface_state: Mutex<Option<State>>,
+    /// The menus' backdrop: targets of its own, so a menu and a dialog never share an image.
+    menu_state: Mutex<Option<State>>,
 }
 
 struct State {
@@ -25,7 +28,17 @@ struct State {
     vertical: wgpu::RenderPipeline,
     sampler: wgpu::Sampler,
     font: Option<egui::ColorImage>,
-    background: Option<egui::TextureId>,
+    /// Textures drawn elsewhere, bound in this renderer: the main renderer's id, this renderer's
+    /// id, and what it was bound from (rebound when that changes).
+    shared: HashMap<egui::TextureId, (egui::TextureId, Source)>,
+}
+
+/// Where a shared texture comes from: one of egui's in the main renderer, or another capture's
+/// image as the main renderer shows it.
+#[derive(Clone, PartialEq)]
+enum Source {
+    Texture(wgpu::Texture),
+    View(wgpu::TextureView),
 }
 
 struct Targets {
@@ -85,15 +98,64 @@ impl State {
                 ..Default::default()
             }),
             font: None,
-            background: None,
+            shared: HashMap::new(),
         }
     }
+
+    /// This renderer's id for the texture `id` of the main renderer, binding it the first time
+    /// (or again when it changed). `None` when it cannot be drawn here: a native texture nobody
+    /// here made, or this capture's own target.
+    fn share(
+        &mut self,
+        device: &wgpu::Device,
+        main: &egui_wgpu::Renderer,
+        own: &[(egui::TextureId, wgpu::TextureView)],
+        id: egui::TextureId,
+    ) -> Option<egui::TextureId> {
+        let source = match own.iter().find(|(own, _)| *own == id) {
+            Some((_, view)) => Source::View(view.clone()),
+            None => Source::Texture(main.texture(&id)?.texture.clone()?),
+        };
+        if let Some((shared, bound)) = self.shared.get(&id)
+            && *bound == source
+        {
+            return Some(*shared);
+        }
+        let view = match &source {
+            Source::View(view) => view.clone(),
+            Source::Texture(texture) => texture.create_view(&Default::default()),
+        };
+        let shared = match self.shared.get(&id) {
+            Some((shared, _)) => {
+                self.renderer.update_egui_texture_from_wgpu_texture(device, &view, wgpu::FilterMode::Linear, *shared);
+                *shared
+            }
+            None => self.renderer.register_native_texture(device, &view, wgpu::FilterMode::Linear),
+        };
+        self.shared.insert(id, (shared, source));
+        Some(shared)
+    }
+}
+
+/// A capture's images as the main renderer shows them, for another capture to draw.
+fn images(targets: Option<&Targets>) -> Vec<(egui::TextureId, wgpu::TextureView)> {
+    let Some(targets) = targets else { return Vec::new() };
+    vec![
+        (targets.image, targets.output.create_view(&Default::default())),
+        (
+            targets.sharp_image,
+            targets.source.create_view(&wgpu::TextureViewDescriptor {
+                format: Some(wgpu::TextureFormat::Rgba8Unorm),
+                ..Default::default()
+            }),
+        ),
+    ]
 }
 
 impl Liquid {
     pub fn new(gpu: egui_wgpu::RenderState) -> Self {
         let state = Mutex::new(State::new(&gpu));
-        Self { gpu, state, surface_state: Mutex::new(None) }
+        Self { gpu, state, surface_state: Mutex::new(None), menu_state: Mutex::new(None) }
     }
 }
 
@@ -190,11 +252,34 @@ impl Provider for Liquid {
 
     fn capture_surfaces(&self, ctx: &egui::Context, shapes: Vec<egui::epaint::ClippedShape>) -> Option<Backdrop> {
         suhina_plugins::trace::timed("liquid content substrate", || {
+            let own = self.images_except(Which::Surfaces);
             let mut state = self.surface_state.lock().ok()?;
             let state = state.get_or_insert_with(|| State::new(&self.gpu));
-            self.render_frame(ctx, state, shapes, false)
+            self.render_frame(ctx, state, shapes, false, false, &own)
         })
     }
+
+    fn capture_behind(
+        &self,
+        ctx: &egui::Context,
+        shapes: Vec<egui::epaint::ClippedShape>,
+        see_through: bool,
+    ) -> Option<Backdrop> {
+        suhina_plugins::trace::timed("liquid menu backdrop", || {
+            let own = self.images_except(Which::Menus);
+            let mut state = self.menu_state.lock().ok()?;
+            let state = state.get_or_insert_with(|| State::new(&self.gpu));
+            self.render_frame(ctx, state, shapes, true, see_through, &own)
+        })
+    }
+}
+
+/// The three captures, each drawing into targets of its own.
+#[derive(Clone, Copy, PartialEq)]
+enum Which {
+    Dialog,
+    Surfaces,
+    Menus,
 }
 
 impl Liquid {
@@ -205,8 +290,27 @@ impl Liquid {
         let transforms =
             order.iter().filter_map(|layer| ctx.layer_transform_to_global(*layer).map(|t| (*layer, t))).collect();
         let shapes = ctx.graphics(|layers| layers.clone().drain(&order, &transforms));
+        let own = self.images_except(Which::Dialog);
         let mut state = self.state.lock().ok()?;
-        self.render_frame(ctx, &mut state, shapes, true)
+        self.render_frame(ctx, &mut state, shapes, true, false, &own)
+    }
+
+    /// The images of the captures other than `except`, which is being drawn into.
+    fn images_except(&self, except: Which) -> Vec<(egui::TextureId, wgpu::TextureView)> {
+        let mut all = Vec::new();
+        if except != Which::Dialog
+            && let Ok(state) = self.state.try_lock()
+        {
+            all.extend(images(state.targets.as_ref()));
+        }
+        for (which, state) in [(Which::Surfaces, &self.surface_state), (Which::Menus, &self.menu_state)] {
+            if which != except
+                && let Ok(state) = state.try_lock()
+            {
+                all.extend(images(state.as_ref().and_then(|state| state.targets.as_ref())));
+            }
+        }
+        all
     }
 
     fn render_frame(
@@ -215,6 +319,9 @@ impl Liquid {
         state: &mut State,
         shapes: Vec<egui::epaint::ClippedShape>,
         blur: bool,
+        // Nothing under the shapes, so the image keeps the window's alpha.
+        see_through: bool,
+        own: &[(egui::TextureId, wgpu::TextureView)],
     ) -> Option<Backdrop> {
         let screen = ctx.content_rect();
         let size = target_size(screen, ctx.pixels_per_point())?;
@@ -235,41 +342,42 @@ impl Liquid {
             );
             state.font = Some(font);
         }
-        let background = suhina_ui::kit::liquid::background_image(ctx);
-        let background_id = background.as_ref().map(|image| image.id);
-        if state.background != background_id {
-            if let Some(old) = state.background.take() {
-                state.renderer.free_texture(&old);
-            }
-            if let Some(image) = background {
-                state.renderer.update_texture(
-                    device,
-                    queue,
-                    image.id,
-                    &egui::epaint::ImageDelta::full(image.pixels, Default::default()),
-                );
-                state.background = Some(image.id);
-            }
+        // Text uses the atlas uploaded above; every other texture is bound from where it is drawn
+        // (egui's in the main renderer, another capture's image). What cannot be drawn here (a
+        // native callback, a texture nobody here can bind) is left out; the rest still draws.
+        let before = jobs.len();
+        let mut used = HashSet::new();
+        {
+            let main = self.gpu.renderer.read();
+            jobs.retain_mut(|job| match &mut job.primitive {
+                egui::epaint::Primitive::Callback(_) => false,
+                egui::epaint::Primitive::Mesh(mesh) if mesh.texture_id == egui::TextureId::Managed(0) => true,
+                egui::epaint::Primitive::Mesh(mesh) => match state.share(device, &main, own, mesh.texture_id) {
+                    Some(id) => {
+                        used.insert(mesh.texture_id);
+                        mesh.texture_id = id;
+                        true
+                    }
+                    None => false,
+                },
+            });
         }
-        // The UI's atlas covers text and vector meshes. An unsupported image/callback forces
-        // a solid fallback instead of silently dropping live content from the backdrop.
-        if let Some(job) = jobs.iter().find(|job| match &job.primitive {
-            egui::epaint::Primitive::Mesh(mesh) => {
-                mesh.texture_id != egui::TextureId::Managed(0) && Some(mesh.texture_id) != background_id
+        // Registrations own GPU views as well as the source handles in `shared`. A new
+        // background has a new ID, so retaining past captures would keep every old image alive.
+        state.shared.retain(|id, (registered, _)| {
+            if used.contains(id) {
+                true
+            } else {
+                state.renderer.free_texture(registered);
+                false
             }
-            egui::epaint::Primitive::Callback(_) => true,
-        }) {
-            if suhina_plugins::trace::on() {
-                let reason = match &job.primitive {
-                    egui::epaint::Primitive::Mesh(mesh) => format!("solid: unsupported texture {:?}", mesh.texture_id),
-                    egui::epaint::Primitive::Callback(_) => "solid: foreign callback".into(),
-                };
-                suhina_plugins::trace::state("liquid capture", reason);
-            }
-            return None;
-        }
+        });
         if suhina_plugins::trace::on() {
-            suhina_plugins::trace::state("liquid capture", format!("live {}x{}", size[0], size[1]));
+            let left_out = before - jobs.len();
+            suhina_plugins::trace::state(
+                "liquid capture",
+                format!("live {}x{}, {left_out} left out", size[0], size[1]),
+            );
         }
         let scale = size[0] as f32 / screen.width();
         // Content rect coordinates are in points; translate to the offscreen origin.
@@ -289,12 +397,14 @@ impl Liquid {
             let view = targets.source.create_view(&Default::default());
             let background = egui::Rgba::from(suhina_ui::kit::theme::window_background()).to_array();
             let mut color = attachment(&view);
-            color.ops.load = wgpu::LoadOp::Clear(wgpu::Color {
-                r: f64::from(background[0]),
-                g: f64::from(background[1]),
-                b: f64::from(background[2]),
-                a: 1.0,
-            });
+            if !see_through {
+                color.ops.load = wgpu::LoadOp::Clear(wgpu::Color {
+                    r: f64::from(background[0]),
+                    g: f64::from(background[1]),
+                    b: f64::from(background[2]),
+                    a: 1.0,
+                });
+            }
             let mut pass = encoder
                 .begin_render_pass(&wgpu::RenderPassDescriptor {
                     label: Some("liquid live UI"),
@@ -337,6 +447,54 @@ fn attachment(view: &wgpu::TextureView) -> wgpu::RenderPassColorAttachment<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires a native GPU; run explicitly for rendering changes"]
+    fn replacing_backgrounds_releases_old_capture_registrations() {
+        let instance = wgpu::Instance::default();
+        let gpu =
+            wait(egui_wgpu::RenderState::create(&Default::default(), &instance, None, Default::default())).unwrap();
+        let liquid = Liquid::new(gpu.clone());
+        let ctx = egui::Context::default();
+        let area = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(64.0, 64.0));
+        let mut previous = None;
+        for index in 1..=20 {
+            let id = egui::TextureId::Managed(index);
+            gpu.renderer.write().update_texture(
+                &gpu.device,
+                &gpu.queue,
+                id,
+                &egui::epaint::ImageDelta::full(
+                    egui::ColorImage::filled([8, 8], egui::Color32::RED),
+                    Default::default(),
+                ),
+            );
+            let mut output = ctx.run_ui(egui::RawInput { screen_rect: Some(area), ..Default::default() }, |ui| {
+                ui.painter().image(
+                    id,
+                    area,
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
+                assert!(liquid.capture(ui.ctx()).is_some());
+            });
+            output.textures_delta.clear();
+            let state = liquid.state.lock().unwrap();
+            assert_eq!(state.shared.len(), 1, "superseded background retained");
+            if let Some(old) = previous {
+                assert!(state.renderer.texture(&old).is_none(), "old renderer registration retained");
+            }
+            previous = Some(state.shared[&id].0);
+            gpu.renderer.write().free_texture(&id);
+        }
+        let mut output = ctx.run_ui(egui::RawInput { screen_rect: Some(area), ..Default::default() }, |ui| {
+            assert!(liquid.capture(ui.ctx()).is_some());
+        });
+        output.textures_delta.clear();
+        let state = liquid.state.lock().unwrap();
+        assert!(state.shared.is_empty(), "removing the background must release its capture");
+        assert!(state.renderer.texture(&previous.unwrap()).is_none());
+    }
 
     #[test]
     #[ignore = "requires a native GPU; run explicitly for rendering changes"]

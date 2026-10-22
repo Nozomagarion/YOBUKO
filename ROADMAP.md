@@ -139,13 +139,14 @@ refused or suspended, never by losing its edits.
 
 ## What works now
 
-- Theme skins: editable SVG controls, configurable level-meter presentation, theme-owned toolbar layouts, and portable CSS/JSON/SVG/PNG packages with live literal-value synchronization. The experimental Stylo/Taffy adapter adds a retained native style tree, modern scoped styles, linear/radial/conic gradients, bounded box shadows, paint transitions/keyframes and Flex/Grid toolbar/workspace panel layout. Bar/window geometry, remaining raw controls and further CSS effects still need integration.
+- Theme skins: editable SVG/PNG controls with colour/state variants and image sequences, configurable level-meter presentation including signal-driven artwork frames, theme-owned toolbar layouts and native element placement, and portable CSS/JSON/SVG/PNG packages with live literal-value synchronization. The experimental Stylo/Taffy adapter adds a retained native style tree, modern scoped styles, linear/radial/conic gradients, bounded box shadows, paint transitions/keyframes and Flex/Grid toolbar/workspace panel layout. Bar/window geometry, remaining raw controls and further CSS effects still need integration.
 
 - Forest Amber is available as a built-in theme alongside the existing palettes.
 
 - Private image backgrounds use a cached source and display-scaled, alpha-correct blur; Settings keeps its own readable material. Native Mica has been removed.
 
 - Theme customization includes independent Browser/coloured-surface text, alpha-preserving gradients, editable liquid strengths, a private image backdrop and configurable application-bar identity/project information.
+- Private image backgrounds retain image compositing on transparent GPU windows; narrow Arrangement headers keep names, recording controls and meters separate.
 
 - **Device SDK authoring:** checked Rust graph handles, parameter-source helpers and standard
   panel-control constructors produce the same data-only `.sd` devices and use the existing runtime.

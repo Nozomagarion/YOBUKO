@@ -12,7 +12,10 @@ use serde_json::{Value, json};
 
 pub const MAX_SVG: usize = 128 * 1024;
 pub const MAX_ASSETS: usize = 64;
+/// Base roles plus bounded variants; portable exports can always add missing base artwork.
+pub const MAX_PACKAGE_ASSETS: usize = MAX_ASSETS + ROLES.len();
 pub const MAX_PNG: usize = 8 * 1024 * 1024;
+pub const MAX_ARTWORK_BYTES: usize = 16 * 1024 * 1024;
 pub const MODULES: &[&str] = &[
     "browser",
     "tempo",
@@ -27,8 +30,24 @@ pub const MODULES: &[&str] = &[
     "views",
     "agents",
 ];
-pub const ROLES: &[&str] =
-    &["fader.cap", "fader.rail", "knob.body", "knob.pointer", "button", "play", "stop", "record", "solo", "arm", "cue"];
+pub const ROLES: &[&str] = &[
+    "fader.cap",
+    "fader.rail",
+    "knob.body",
+    "knob.pointer",
+    "button",
+    "play",
+    "stop",
+    "record",
+    "solo",
+    "arm",
+    "cue",
+    "track.midi",
+    "track.audio",
+    "track.name",
+    "track.body",
+    "meter",
+];
 
 /// The very same original SVG sources are embedded and distributed as editable files.
 pub const DEFAULT_SVGS: &[(&str, &str)] = &[
@@ -43,6 +62,11 @@ pub const DEFAULT_SVGS: &[(&str, &str)] = &[
     ("solo", include_str!("../../../../assets/themes/default/solo.svg")),
     ("arm", include_str!("../../../../assets/themes/default/arm.svg")),
     ("cue", include_str!("../../../../assets/themes/default/cue.svg")),
+    ("track.midi", include_str!("../../../../assets/themes/default/track.midi.svg")),
+    ("track.audio", include_str!("../../../../assets/themes/default/track.audio.svg")),
+    ("track.name", include_str!("../../../../assets/themes/default/track.name.svg")),
+    ("track.body", include_str!("../../../../assets/themes/default/track.body.svg")),
+    ("meter", include_str!("../../../../assets/themes/default/meter.svg")),
 ];
 
 pub fn default_assets() -> BTreeMap<String, String> {
@@ -59,6 +83,7 @@ pub enum MeterStyle {
     Continuous,
     Segmented,
     Needle,
+    Frames,
 }
 impl MeterStyle {
     pub fn name(self) -> &'static str {
@@ -66,6 +91,7 @@ impl MeterStyle {
             Self::Continuous => "continuous",
             Self::Segmented => "segmented",
             Self::Needle => "needle",
+            Self::Frames => "frames",
         }
     }
 }
@@ -113,15 +139,18 @@ pub struct Skin {
     pub background: Option<Arc<str>>,
     pub background_opacity: u8,
     pub background_blur: u8,
-    /// Inline SVG, or a relative path resolved by the desktop's theme file loader.
+    /// Inline SVG/PNG data, or a relative image path resolved by the theme file loader.
     pub assets: BTreeMap<String, String>,
     pub styles: BTreeMap<String, BTreeMap<String, String>>,
     pub meter: MeterStyle,
     pub segments: u8,
+    pub artwork_fps: u8,
     /// None preserves the original centred control-bar layout.
     pub toolbar: Option<Toolbar>,
     /// Horizontal offsets from each module's native/CSS anchor, in logical points.
     pub toolbar_offsets: BTreeMap<String, i32>,
+    /// Semantic native controls; offsets and sizes are shared by paint and hit testing.
+    pub controls: BTreeMap<String, super::control_layout::Placement>,
 }
 impl Default for Skin {
     fn default() -> Self {
@@ -134,16 +163,44 @@ impl Default for Skin {
             styles: BTreeMap::new(),
             meter: MeterStyle::Continuous,
             segments: 24,
+            artwork_fps: 12,
             toolbar: None,
             toolbar_offsets: BTreeMap::new(),
+            controls: BTreeMap::new(),
         }
     }
 }
 
 pub fn valid_role(role: &str) -> bool {
-    ROLES
-        .iter()
-        .any(|base| role == *base || ["hover", "active", "disabled"].iter().any(|s| role == format!("{base}.{s}")))
+    ROLES.iter().any(|base| {
+        if role == *base {
+            return true;
+        }
+        let Some(rest) = role.strip_prefix(&format!("{base}.")) else {
+            return false;
+        };
+        let mut parts = rest.split('.').peekable();
+        if parts.peek().is_some_and(|part| part.starts_with("color-")) {
+            let Some(color) = parts.next().and_then(|part| part.strip_prefix("color-")) else {
+                return false;
+            };
+            if color.len() != 6 || !color.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+                return false;
+            }
+        }
+        if parts.peek().is_some_and(|part| matches!(*part, "hover" | "active" | "disabled")) {
+            parts.next();
+        }
+        if let Some(frame) = parts.next() {
+            let Some(number) = frame.strip_prefix("frame-").and_then(|v| v.parse::<u8>().ok()) else {
+                return false;
+            };
+            if number >= 32 || frame != format!("frame-{number}") {
+                return false;
+            }
+        }
+        parts.next().is_none()
+    })
 }
 
 /// A lexical portable path; filesystem readers also reject symlinks component by component.
@@ -152,7 +209,17 @@ pub fn asset_path(path: &str) -> bool {
         && path.len() <= 240
         && !path.contains(['\\', ':', '\0'])
         && path.split('/').all(|p| !p.is_empty() && p != "." && p != "..")
-        && path.ends_with(".svg")
+        && (path.ends_with(".svg") || path.ends_with(".png"))
+}
+
+pub fn png_artwork(source: &str) -> bool {
+    source.starts_with("data:image/png;base64,")
+}
+pub fn artwork_extension(source: &str) -> &'static str {
+    if png_artwork(source) || source.ends_with(".png") { "png" } else { "svg" }
+}
+pub fn validate_artwork(source: &str) -> Result<(), String> {
+    if png_artwork(source) { super::artwork_png::decode(source).map(|_| ()) } else { parse_svg(source).map(|_| ()) }
 }
 
 pub fn parse_svg(source: &str) -> Result<resvg::usvg::Tree, String> {
@@ -195,8 +262,10 @@ impl Skin {
                     | "assets"
                     | "meter"
                     | "segments"
+                    | "artwork-fps"
                     | "toolbar"
                     | "toolbar-offsets"
+                    | "controls"
             ) {
                 warnings.push(format!("skin.{key} is unknown"));
             }
@@ -263,29 +332,36 @@ impl Skin {
             }
         }
         if let Some(value) = root.get("assets") {
-            if let Some(assets) = value.as_object().filter(|a| a.len() <= MAX_ASSETS) {
+            if let Some(assets) = value.as_object().filter(|a| {
+                a.len() <= MAX_PACKAGE_ASSETS
+                    && a.keys().filter(|role| !ROLES.contains(&role.as_str())).count() <= MAX_ASSETS
+                    && a.values()
+                        .filter_map(Value::as_str)
+                        .try_fold(0usize, |total, value| total.checked_add(value.len()))
+                        .is_some_and(|total| total <= MAX_ARTWORK_BYTES)
+            }) {
                 for (role, value) in assets {
                     let Some(source) = value.as_str() else {
-                        warnings.push(format!("skin.assets.{role} must be SVG or a path"));
+                        warnings.push(format!("skin.assets.{role} must be SVG, PNG data or an image path"));
                         continue;
                     };
                     if !valid_role(role) {
                         warnings.push(format!("unknown skin asset {role}"));
                         continue;
                     }
-                    if source.trim_start().starts_with('<') {
-                        if let Err(e) = parse_svg(source) {
+                    if source.trim_start().starts_with('<') || png_artwork(source) {
+                        if let Err(e) = validate_artwork(source) {
                             warnings.push(format!("{role}: {e}"));
                             continue;
                         }
                     } else if !asset_path(source) {
-                        warnings.push(format!("{role}: invalid relative SVG path"));
+                        warnings.push(format!("{role}: invalid relative image path"));
                         continue;
                     }
                     skin.assets.insert(role.clone(), source.to_string());
                 }
             } else {
-                warnings.push("skin.assets must be an object of at most 64 SVGs".into());
+                warnings.push("skin.assets must contain base image roles and at most 64 variants within 16 MiB".into());
             }
         }
         if let Some(style) = root.get("meter") {
@@ -293,6 +369,7 @@ impl Skin {
                 Some("continuous") => MeterStyle::Continuous,
                 Some("segmented") => MeterStyle::Segmented,
                 Some("needle") => MeterStyle::Needle,
+                Some("frames") => MeterStyle::Frames,
                 _ => {
                     warnings.push("skin.meter must be continuous, segmented or needle".into());
                     MeterStyle::Continuous
@@ -304,6 +381,13 @@ impl Skin {
                 skin.segments = n as u8;
             } else {
                 warnings.push("skin.segments must be an integer from 4 to 64".into());
+            }
+        }
+        if let Some(value) = root.get("artwork-fps") {
+            if let Some(fps) = value.as_u64().filter(|fps| (1..=30).contains(fps)) {
+                skin.artwork_fps = fps as u8;
+            } else {
+                warnings.push("skin.artwork-fps must be an integer from 1 to 30".into());
             }
         }
         if let Some(value) = root.get("toolbar") {
@@ -350,12 +434,25 @@ impl Skin {
                 warnings.push("skin.toolbar-offsets must be a bounded object".into());
             }
         }
+        if let Some(value) = root.get("controls") {
+            if let Some(controls) = value.as_object().filter(|v| v.len() <= 256) {
+                for (name, value) in controls {
+                    if super::control_layout::valid_name(name) {
+                        skin.controls
+                            .insert(name.clone(), super::control_layout::Placement::from_json(value, warnings));
+                    } else {
+                        warnings.push(format!("invalid control name {name}"));
+                    }
+                }
+            } else {
+                warnings.push("skin.controls must be an object of at most 256 controls".into());
+            }
+        }
         skin
     }
 
     pub fn to_json(&self) -> Value {
-        let mut value =
-            json!({"styles":self.styles,"assets":self.assets,"meter":self.meter.name(),"segments":self.segments});
+        let mut value = json!({"styles":self.styles,"assets":self.assets,"meter":self.meter.name(),"segments":self.segments,"artwork-fps":self.artwork_fps});
         if let Some(css) = &self.css {
             value["css"] = Value::String(css.to_string());
         }
@@ -364,6 +461,9 @@ impl Skin {
         }
         if !self.toolbar_offsets.is_empty() {
             value["toolbar-offsets"] = json!(self.toolbar_offsets);
+        }
+        if !self.controls.is_empty() {
+            value["controls"] = self.controls.iter().map(|(name, p)| (name.clone(), p.to_json())).collect();
         }
         if let Some(background) = &self.background {
             value["background"] = Value::String(background.to_string());
@@ -374,7 +474,9 @@ impl Skin {
     }
 }
 
-thread_local! { static ACTIVE: RefCell<Arc<Skin>> = RefCell::new(Arc::new(Skin::default())); }
+thread_local! {
+    static ACTIVE: RefCell<Arc<Skin>> = RefCell::new(Arc::new(Skin::default()));
+}
 pub fn configure(skin: &Skin) {
     ACTIVE.with(|active| {
         if active.borrow().as_ref() != skin {
@@ -433,9 +535,33 @@ impl State {
 #[derive(Default)]
 struct Textures {
     images: HashMap<u64, Option<egui::TextureHandle>>,
+    source_owner: Option<Arc<Skin>>,
+    sources: HashMap<String, u64>,
 }
 
-/// Cached static vector artwork. Rotation affects only the final mesh, not the cached image.
+fn raster_artwork(source: &str, ink: Color32, width: u32, height: u32) -> Option<egui::ColorImage> {
+    let (width, height) = (width.clamp(1, 1024), height.clamp(1, 1024));
+    if png_artwork(source) {
+        return super::artwork_png::raster(source, width, height);
+    }
+    let color = super::theme::hex_rgba(ink.to_srgba_unmultiplied());
+    let source = source.replace("currentColor", &color);
+    let tree = parse_svg(&source).ok()?;
+    let mut pixels = resvg::tiny_skia::Pixmap::new(width, height)?;
+    let transform = resvg::tiny_skia::Transform::from_scale(
+        width as f32 / tree.size().width(),
+        height as f32 / tree.size().height(),
+    );
+    resvg::render(&tree, transform, &mut pixels.as_mut());
+    let mut rgba = Vec::with_capacity((width * height * 4) as usize);
+    for pixel in pixels.pixels() {
+        let p = pixel.demultiply();
+        rgba.extend_from_slice(&[p.red(), p.green(), p.blue(), p.alpha()]);
+    }
+    Some(egui::ColorImage::from_rgba_unmultiplied([width as usize, height as usize], &rgba))
+}
+
+/// Cached vector/raster artwork. Rotation affects only the final mesh, not the cached image.
 pub fn paint(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color32, angle: f32) -> bool {
     paint_inner(painter, rect, role, state, ink, angle, 0.0)
 }
@@ -445,7 +571,39 @@ pub fn button(painter: &Painter, rect: Rect, state: State, fill: Color32, radius
 }
 
 fn paint_inner(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color32, angle: f32, radius: f32) -> bool {
-    if !rect.is_positive() || !rect.is_finite() {
+    paint_variant(painter, rect, role, state, ink, angle, radius, super::artwork::current_color(), None)
+}
+
+/// Raw track colour chooses artwork independently of the muted/selected paint tint.
+pub fn paint_colored(
+    painter: &Painter,
+    rect: Rect,
+    role: &str,
+    state: State,
+    ink: Color32,
+    track_color: Color32,
+) -> bool {
+    paint_variant(painter, rect, role, state, ink, 0.0, 0.0, Some(track_color), None)
+}
+
+/// A missing or invalid signal-driven sequence lets the native meter draw normally.
+pub fn meter_frame(painter: &Painter, rect: Rect, state: State, level: f32) -> bool {
+    paint_variant(painter, rect, "meter", state, Color32::WHITE, 0.0, 0.0, super::artwork::current_color(), Some(level))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn paint_variant(
+    painter: &Painter,
+    rect: Rect,
+    role: &str,
+    state: State,
+    ink: Color32,
+    angle: f32,
+    radius: f32,
+    track_color: Option<Color32>,
+    level: Option<f32>,
+) -> bool {
+    if !rect.is_positive() || !rect.is_finite() || !angle.is_finite() {
         return false;
     }
     let skin = current();
@@ -458,12 +616,41 @@ fn paint_inner(painter: &Painter, rect: Rect, role: &str, state: State, ink: Col
     static DEFAULTS: std::sync::OnceLock<BTreeMap<String, String>> = std::sync::OnceLock::new();
     let defaults = DEFAULTS.get_or_init(default_assets);
     let key = format!("{role}{suffix}");
-    let own = skin.assets.get(&key).or_else(|| skin.assets.get(role));
+    let variant = if let Some(level) = level {
+        let variant = super::artwork::level_variant(&skin, state, track_color, level);
+        if variant.is_none() {
+            return false;
+        }
+        variant
+    } else {
+        super::artwork::variant(
+            &skin,
+            role,
+            state,
+            track_color,
+            painter.ctx().input(|input| input.time),
+            super::motion::enabled(painter.ctx()),
+        )
+    };
+    if variant.as_ref().is_some_and(|(_, animated)| *animated) {
+        painter
+            .ctx()
+            .request_repaint_after(std::time::Duration::from_secs_f64(1.0 / f64::from(skin.artwork_fps.clamp(1, 30))));
+    }
+    let own = variant.as_ref().and_then(|(key, _)| skin.assets.get(key));
     let Some(source) = own.or_else(|| defaults.get(&key)).or_else(|| defaults.get(role)) else {
         return false;
     };
+    // Plain inherited track surfaces use the native fill and avoid filling the SVG
+    // texture cache with a separate rectangle for every colour and strip height.
+    if matches!(role, "track.name" | "track.body") && defaults.get(role) == Some(source) {
+        return false;
+    }
     // Semantic ink travels with the SVG, so exported inherited artwork retains its colour.
-    let ink = if source.contains(&format!("data-suhina-ink=\"{role}\"")) {
+    let png = png_artwork(source);
+    let ink = if png {
+        Color32::WHITE
+    } else if source.contains(&format!("data-suhina-ink=\"{role}\"")) {
         match role {
             "knob.body" => super::theme::control_background(),
             "fader.rail" => super::motion::mix(super::theme::control_background(), Color32::BLACK, 0.65),
@@ -484,9 +671,6 @@ fn paint_inner(painter: &Painter, rect: Rect, role: &str, state: State, ink: Col
     let scale = painter.ctx().pixels_per_point();
     let w = (rect.width() * scale).ceil().clamp(1.0, 1024.0) as u32;
     let h = (rect.height() * scale).ceil().clamp(1.0, 1024.0) as u32;
-    let mut hash = std::hash::DefaultHasher::new();
-    (source, ink.to_array(), w, h).hash(&mut hash);
-    let key = hash.finish();
     let cache_id = egui::Id::new("skin-textures");
     let cache = painter
         .ctx()
@@ -494,32 +678,55 @@ fn paint_inner(painter: &Painter, rect: Rect, role: &str, state: State, ink: Col
     let Ok(mut textures) = cache.lock() else {
         return false;
     };
+    if textures.source_owner.as_ref().is_none_or(|owner| !Arc::ptr_eq(owner, &skin)) {
+        textures.sources.clear();
+        textures.source_owner = Some(Arc::clone(&skin));
+    }
+    let source_key = variant.as_ref().map_or_else(|| key.clone(), |(key, _)| key.clone());
+    let source_hash = if let Some(hash) = textures.sources.get(&source_key) {
+        *hash
+    } else {
+        let mut hash = std::hash::DefaultHasher::new();
+        source.hash(&mut hash);
+        let hash = hash.finish();
+        if textures.sources.len() >= 256 {
+            textures.sources.clear();
+        }
+        textures.sources.insert(source_key, hash);
+        hash
+    };
+    let mut hash = std::hash::DefaultHasher::new();
+    (source_hash, ink.to_array(), w, h).hash(&mut hash);
+    let key = hash.finish();
     if !textures.images.contains_key(&key) {
         if textures.images.len() >= 64 {
             textures.images.clear();
         }
-        let color = super::theme::hex_rgba(ink.to_srgba_unmultiplied());
-        let source = source.replace("currentColor", &color);
-        let texture = parse_svg(&source).ok().and_then(|tree| {
-            let mut pixels = resvg::tiny_skia::Pixmap::new(w, h)?;
-            let transform = resvg::tiny_skia::Transform::from_scale(
-                w as f32 / tree.size().width(),
-                h as f32 / tree.size().height(),
-            );
-            resvg::render(&tree, transform, &mut pixels.as_mut());
-            let mut rgba = Vec::with_capacity((w * h * 4) as usize);
-            for p in pixels.pixels() {
-                let p = p.demultiply();
-                rgba.extend_from_slice(&[p.red(), p.green(), p.blue(), p.alpha()]);
-            }
-            let image = egui::ColorImage::from_rgba_unmultiplied([w as usize, h as usize], &rgba);
-            Some(painter.ctx().load_texture(format!("skin-{key}"), image, egui::TextureOptions::LINEAR))
-        });
+        let texture = raster_artwork(source, ink, w, h)
+            .map(|image| painter.ctx().load_texture(format!("skin-{key}"), image, egui::TextureOptions::LINEAR));
         textures.images.insert(key, texture);
     }
     let Some(Some(texture)) = textures.images.get(&key) else {
         return false;
     };
+    // The native see-through host writes a background's alpha rather than blending
+    // it twice. Clear the covered background before compositing its artwork; private
+    // image backdrops and the opaque/OpenGL path keep ordinary blending.
+    if matches!(role, "button" | "fader.rail" | "fader.cap" | "track.name" | "track.body")
+        && super::surface::available(painter.ctx())
+    {
+        let (sin, cos) = angle.sin_cos();
+        let size = egui::vec2(
+            rect.width() * cos.abs() + rect.height() * sin.abs(),
+            rect.width() * sin.abs() + rect.height() * cos.abs(),
+        );
+        super::surface::Backgrounds::fill_background(
+            painter,
+            Rect::from_center_size(rect.center(), size),
+            radius,
+            Color32::TRANSPARENT,
+        );
+    }
     if role == "button" {
         painter.add(
             egui::epaint::RectShape::filled(rect, super::style_class::radius(radius), Color32::WHITE)
@@ -537,7 +744,8 @@ fn paint_inner(painter: &Painter, rect: Rect, role: &str, state: State, ink: Col
 
 /// Original editable artwork supplied with the theme template.
 pub fn example_assets() -> BTreeMap<String, String> {
-    [
+    let mut assets = default_assets();
+    assets.extend([
         ("fader.cap", r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 26"><rect x="1" y="1" width="16" height="24" rx="3" fill="#555b62" stroke="currentColor"/><path d="M3 13h12" stroke="currentColor" stroke-width="2"/></svg>"##),
         ("fader.rail", r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5 100"><rect width="5" height="100" rx="2" fill="#11151a"/></svg>"##),
         ("knob.body", r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#30363d" stroke="currentColor"/></svg>"##),
@@ -549,12 +757,94 @@ pub fn example_assets() -> BTreeMap<String, String> {
         ("solo", r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H10a3 3 0 0 0 0 6h4a3 3 0 0 1 0 6H7" fill="none" stroke="currentColor" stroke-width="2"/></svg>"##),
         ("arm", r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="none" stroke="currentColor" stroke-width="2"/></svg>"##),
         ("cue", r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 14v-3a7 7 0 0 1 14 0v3M5 13v6M19 13v6" fill="none" stroke="currentColor" stroke-width="3"/></svg>"##),
-    ].into_iter().map(|(k,v)| (k.to_string(), v.to_string())).collect()
+    ].into_iter().map(|(k,v)| (k.to_string(), v.to_string())));
+    assets
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn png_roles_reuse_pixels_until_a_live_edit_changes_the_source() {
+        let png = super::super::artwork_png::fixture(2, 2, [20, 80, 160, 255]);
+        let mut skin = Skin { assets: BTreeMap::from([("button".into(), png)]), ..Default::default() };
+        let mut warnings = Vec::new();
+        assert_eq!(Skin::from_json(&skin.to_json(), &mut warnings), skin);
+        assert!(warnings.is_empty());
+        let ctx = egui::Context::default();
+        for frame in 0..3 {
+            if frame == 2 {
+                skin.assets.insert("button".into(), super::super::artwork_png::fixture(2, 2, [40, 160, 80, 255]));
+            }
+            configure(&skin);
+            let mut output = ctx.run_ui(Default::default(), |ui| {
+                assert!(button(
+                    ui.painter(),
+                    Rect::from_min_size(egui::pos2(10.0, 10.0), egui::Vec2::splat(20.0)),
+                    State::Normal,
+                    Color32::RED,
+                    0.0
+                ));
+            });
+            let expected = if frame == 2 { Color32::from_rgb(40, 160, 80) } else { Color32::from_rgb(20, 80, 160) };
+            let found = output.textures_delta.set.values().flat_map(|d| d.iter()).any(|delta| match &delta.image {
+                egui::ImageData::Color(image) => image.pixels.iter().all(|pixel| *pixel == expected),
+            });
+            output.textures_delta.clear();
+            assert_eq!(found, frame != 1, "warm draws reuse the same PNG; live edits publish new pixels");
+        }
+        configure(&Skin::default());
+        let huge = json!({"assets":{"button": "x".repeat(MAX_ARTWORK_BYTES + 1)}});
+        assert!(Skin::from_json(&huge, &mut warnings).assets.is_empty());
+        assert!(!warnings.is_empty());
+    }
+
+    #[test]
+    fn svg_backgrounds_clear_native_alpha_once_and_keep_private_images_underneath() {
+        struct Mark;
+        impl super::super::surface::Provider for Mark {
+            fn shape(&self, rect: Rect, _: egui::CornerRadius, color: Color32) -> egui::Shape {
+                assert_eq!(color, Color32::TRANSPARENT);
+                egui::Shape::circle_filled(rect.center(), 1.0, Color32::BLUE)
+            }
+        }
+        configure(&Skin::default());
+        let ctx = egui::Context::default();
+        super::super::surface::install(&ctx, Arc::new(Mark));
+        for private_image in [false, true] {
+            super::super::liquid::set_background_image(
+                &ctx,
+                private_image.then(|| super::super::liquid::BackgroundImage {
+                    id: egui::TextureId::Managed(42),
+                    pixels: Arc::new(egui::ColorImage::filled([2, 2], Color32::RED)),
+                }),
+            );
+            let mut output = ctx.run_ui(Default::default(), |ui| {
+                super::super::surface::begin_frame(ui.ctx());
+                let painter = ui.ctx().layer_painter(egui::LayerId::background());
+                assert!(button(
+                    &painter,
+                    Rect::from_min_size(egui::pos2(10.0, 10.0), egui::Vec2::splat(30.0)),
+                    State::Normal,
+                    Color32::from_rgba_unmultiplied(50, 60, 70, 128),
+                    3.0
+                ));
+                super::super::surface::finish_frame(ui.ctx());
+            });
+            output.textures_delta.clear();
+            assert_eq!(
+                output.shapes.iter().filter(|shape| matches!(shape.shape, egui::Shape::Circle(_))).count(),
+                usize::from(!private_image)
+            );
+            assert!(
+                output
+                    .shapes
+                    .iter()
+                    .any(|shape| matches!(&shape.shape, egui::Shape::Rect(rect) if rect.brush.is_some()))
+            );
+        }
+    }
     #[test]
     fn inherited_svg_renders_missing_roles_while_theme_artwork_overrides_one_role() {
         assert_eq!(DEFAULT_SVGS.len(), ROLES.len());
@@ -636,8 +926,10 @@ mod tests {
             assets: example_assets(),
             meter: MeterStyle::Segmented,
             segments: 16,
+            artwork_fps: 12,
             toolbar: Some(Toolbar::default()),
             toolbar_offsets: BTreeMap::from([("transport".into(), 80)]),
+            controls: BTreeMap::new(),
         };
         let mut warnings = Vec::new();
         assert_eq!(Skin::from_json(&skin.to_json(), &mut warnings), skin);

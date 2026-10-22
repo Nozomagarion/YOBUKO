@@ -6,6 +6,7 @@
 //! on the volume control's dB scale, with the highest peak of the last moments held as a line
 //! and a clip light that a click turns off (`mixer.resetClip`).
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Id, Pos2, Rect, Sense, Ui, Vec2};
 use serde_json::json;
 use suhina_engine::model::TrackId;
@@ -150,6 +151,7 @@ pub fn show(
     // A surrounding CSS gradient has a transparent background-color. The empty
     // rails must retain their native ink unless the meter itself overrides it.
     let background = crate::kit::style_class::background(ui.visuals().extreme_bg_color);
+    super::native_css::background(painter, rect);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, describe(name, level)));
     if response.clicked() && level.clipped {
         actions.push(match source {
@@ -167,7 +169,20 @@ pub fn show(
         let light = Rect::from_min_max(Pos2::new(rect.right() - CLIP, rect.top()), rect.max);
         (light, Rect::from_min_max(rect.min, Pos2::new(light.left() - 1.0, rect.bottom())))
     };
-    painter.rect_filled(light, 0.0, if level.clipped { theme::recording() } else { background });
+    painter.fill_background(light, 0.0, if level.clipped { theme::recording() } else { background });
+    if skin.meter == super::skin::MeterStyle::Frames {
+        let peak = fraction(level.peak.iter().copied().fold(0.0, f32::max));
+        let state = if response.is_pointer_button_down_on() {
+            super::skin::State::Active
+        } else if response.hovered() {
+            super::skin::State::Hover
+        } else {
+            super::skin::State::Normal
+        };
+        if super::skin::meter_frame(painter, bars, state, peak) {
+            return;
+        }
+    }
     let hot_from = ((HOT_DB - RANGE.0) / (RANGE.1 - RANGE.0)) as f32;
     let thickness = if upright { bars.width() } else { bars.height() };
     let bar_width = ((thickness - GAP) / 2.0).max(0.0);
@@ -192,7 +207,7 @@ pub fn show(
                 )
             }
         };
-        painter.rect_filled(bar, 0.0, background);
+        painter.fill_background(bar, 0.0, background);
         if skin.meter == super::skin::MeterStyle::Needle {
             let origin = if upright { bar.center_bottom() } else { bar.left_center() };
             for (value, width) in [
@@ -208,6 +223,10 @@ pub fn show(
         }
         let peak = fraction(level.peak.get(side).copied().unwrap_or(0.0));
         let rms = fraction(level.rms.get(side).copied().unwrap_or(0.0));
+        if peak > 0.0 {
+            let _level = super::style_class::enter("meter-level");
+            super::native_css::background(painter, part(0.0, peak));
+        }
         // The peak dimmer, the RMS level in the full colour over it.
         for (to, alpha) in [(peak, 0.45), (rms, 1.0)] {
             if to <= 0.0 {
@@ -249,6 +268,55 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_frames_follow_signal_and_keep_native_clip_reset() {
+        let ctx = egui::Context::default();
+        theme::install(&ctx);
+        let mut skin = super::super::skin::Skin { meter: super::super::skin::MeterStyle::Frames, ..Default::default() };
+        for (index, color) in [(0, "#ff0000"), (1, "#00ff00")] {
+            skin.assets.insert(format!("meter.frame-{index}"), format!(r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="{color}"/></svg>"##));
+        }
+        super::super::skin::configure(&skin);
+        let pos = egui::pos2(30.0, 30.0);
+        let mut actions = Vec::new();
+        for frame in 0..4 {
+            let events = match frame {
+                2 | 3 => vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: frame == 2,
+                    modifiers: egui::Modifiers::default(),
+                }],
+                _ => vec![egui::Event::PointerMoved(pos)],
+            };
+            let mut output =
+                ctx.run_ui(egui::RawInput { events, time: Some(frame as f64 * 0.1), ..Default::default() }, |ui| {
+                    show(
+                        ui,
+                        ui.painter(),
+                        Rect::from_min_size(egui::pos2(20.0, 20.0), egui::vec2(100.0, 40.0)),
+                        "Main",
+                        Source::Main,
+                        &Level {
+                            peak: if frame == 0 { [0.0, 0.0] } else { [0.0, 4.0] },
+                            clipped: true,
+                            ..Default::default()
+                        },
+                        &mut actions,
+                    );
+                });
+            if frame < 2 {
+                let expected = if frame == 0 { egui::Color32::RED } else { egui::Color32::GREEN };
+                let found = output.textures_delta.set.values().flatten().any(|delta| match &delta.image {
+                    egui::ImageData::Color(image) => image.pixels.iter().all(|pixel| *pixel == expected),
+                });
+                output.textures_delta.clear();
+                assert!(found, "missing signal frame {frame}");
+            }
+        }
+        assert_eq!(actions, vec![Action::new("mixer.resetClip", json!({"main": true}))]);
+    }
 
     #[test]
     fn silent_rails_survive_parent_gradients_and_accept_their_own_background() {

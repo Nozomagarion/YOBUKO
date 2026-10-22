@@ -4,6 +4,7 @@
 //! Missing files (`docs/spec/missing-files.md`): the bar that says a project's audio files are
 //! missing, and the panel that finds them by name and relinks them.
 
+use crate::kit::surface::Backgrounds as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -220,7 +221,7 @@ impl MissingFiles {
     /// Draws the bar that says files are missing in `rect`, while it should show.
     pub fn bar(&mut self, ui: &mut Ui, rect: Rect) {
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, theme::panel_background());
+        painter.fill_background(rect, 0.0, theme::panel_background());
         let count = self.rows.len();
         ui.scope_builder(egui::UiBuilder::new().max_rect(rect.shrink2(Vec2::new(PAD, 6.0))), |ui| {
             ui.horizontal_centered(|ui| {
@@ -267,10 +268,11 @@ impl MissingFiles {
         let height = ROW + PAD * 4.0 + LINE * 3.0 + self.rows.len() as f32 * ROW_HEIGHT + BUTTON.y;
         let size = Vec2::new(WIDTH.min(area.width() - 2.0 * PAD), height.min(area.height() - 2.0 * PAD));
         let rect = Rect::from_center_size(area.center(), size);
-        painter.rect_filled(rect, 0.0, theme::panel_background());
+        crate::kit::liquid::backdrop(&painter, rect);
+        painter.fill_background(rect, 0.0, theme::panel_background());
         painter.rect_stroke(rect, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
         let bar = Rect::from_min_size(rect.min, Vec2::new(rect.width(), ROW));
-        painter.rect_filled(bar, 0.0, theme::control_background());
+        painter.fill_background(bar, 0.0, theme::control_background());
         widgets::text_in(
             &painter,
             bar.shrink2(Vec2::new(PAD, 0.0)),

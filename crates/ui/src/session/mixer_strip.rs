@@ -6,6 +6,7 @@
 //! `docs/design/components.md` › Mixer strip). [`layout`] says where each part goes for a height;
 //! [`show`] draws a column's strip and turns what is done there into [`Action`]s.
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Align2, Id, Pos2, Rect, Sense, Ui, Vec2};
 use serde_json::json;
 use suhina_engine::model::{InputChannels, Monitor, TrackId};
@@ -13,6 +14,7 @@ use suhina_engine::model::{InputChannels, Monitor, TrackId};
 use crate::interaction::colour_picker;
 use crate::interaction::grid::{Column, ColumnKind};
 use crate::interaction::menus;
+use crate::kit::control_layout::{self, Direction};
 use crate::kit::meter;
 use crate::kit::motion;
 use crate::kit::theme::{self, PAD};
@@ -115,6 +117,14 @@ pub fn layout(rect: Rect, has_sends: bool, can_hear_input: bool) -> Layout {
 
 /// [`layout`], with what the mixer's strips share: the input block's room and the divider.
 pub fn layout_shared(rect: Rect, has_sends: bool, can_hear_input: bool, shared: Shared) -> Layout {
+    layout_native(rect, has_sends, can_hear_input, shared, false)
+}
+
+pub fn layout_main(rect: Rect, shared: Shared) -> Layout {
+    layout_native(rect, false, false, shared, true)
+}
+
+fn layout_native(rect: Rect, has_sends: bool, can_hear_input: bool, shared: Shared, main: bool) -> Layout {
     let inner = rect.shrink(PAD);
     let height = rect.height();
     // Reserve the footer on all strips so returns and Main keep their controls aligned.
@@ -164,7 +174,7 @@ pub fn layout_shared(rect: Rect, has_sends: bool, can_hear_input: bool, shared: 
     if height < FADER_AT {
         let top = (bottom - COMPACT).max(inner.top());
         parts.compact = Some(row(top, bottom - top)).filter(|r| r.height() > 0.0);
-        return parts;
+        return place_parts(parts, inner, main);
     }
     let mut top = inner.top();
     if height >= NAME_AT {
@@ -219,6 +229,50 @@ pub fn layout_shared(rect: Rect, has_sends: bool, can_hear_input: bool, shared: 
         Vec2::new(METER_WIDTH, fader.height()),
     ));
     parts.fader = Some(fader);
+    place_parts(parts, inner, main)
+}
+
+fn horizontal_volume() -> bool {
+    control_layout::placement("mixer-volume").direction == Direction::Horizontal
+}
+
+fn place_parts(mut parts: Layout, bounds: Rect, main: bool) -> Layout {
+    if horizontal_volume()
+        && let Some(fader) = parts.fader
+    {
+        let horizontal = Rect::from_min_size(
+            egui::pos2(bounds.left(), fader.top()),
+            Vec2::new(bounds.width(), 20.0_f32.min(fader.height())),
+        );
+        parts.fader = Some(horizontal);
+        parts.meter = Some(Rect::from_min_size(
+            egui::pos2(bounds.left(), horizontal.bottom() + 12.0),
+            Vec2::new(bounds.width(), 10.0),
+        ));
+    }
+    for (name, part) in [
+        ("mixer-name", &mut parts.name),
+        ("mixer-output", &mut parts.output),
+        ("mixer-input-caption", &mut parts.audio_caption),
+        ("mixer-input", &mut parts.audio_source),
+        ("mixer-monitor", &mut parts.audio_monitor),
+        ("mixer-devices", &mut parts.devices),
+        ("mixer-sends", &mut parts.sends),
+        ("mixer-pan", &mut parts.pan),
+        ("mixer-volume-readout", &mut parts.readout),
+        ("mixer-volume", &mut parts.fader),
+        ("mixer-meter", &mut parts.meter),
+        ("mixer-compact-volume", &mut parts.compact),
+    ] {
+        *part = part.filter(|_| !control_layout::placement(name).hidden).map(|rect| {
+            if main && !matches!(name, "mixer-devices" | "mixer-volume-readout" | "mixer-volume" | "mixer-meter") {
+                control_layout::resolve(name, rect, bounds)
+            } else {
+                control_layout::place(name, rect, bounds)
+            }
+        });
+    }
+    parts.toggles = control_layout::place("mixer-toggles", parts.toggles, bounds);
     parts
 }
 
@@ -237,6 +291,10 @@ pub fn show(
     id: Id,
     actions: &mut Vec<Action>,
 ) -> egui::Response {
+    let clipped_painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
+    let painter = &clipped_painter;
+    let _artwork =
+        crate::kit::artwork::track_color(egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2));
     let _style_class = crate::kit::style_class::enter_named("mixer", &format!("track-{}", column.track.0));
     // The strip in a shade of its track's colour, as the column above it.
     let tint = motion::mix(
@@ -244,10 +302,19 @@ pub fn show(
         egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2),
         0.16,
     );
-    painter.rect_filled(rect, 0.0, tint);
+    let strip = ui.interact(rect.intersect(painter.clip_rect()), id.with("strip"), Sense::click());
+    if !crate::kit::skin::paint_colored(
+        painter,
+        rect,
+        "track.body",
+        crate::kit::skin::State::response(&strip, state.selected == Some(column.track)),
+        tint,
+        egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2),
+    ) {
+        painter.fill_background(rect, 0.0, tint);
+    }
     crate::kit::liquid::paint(painter, rect, tint, crate::kit::liquid::Surface::Track);
     // The strip's own background, under its controls: a double-click shows the track's devices.
-    let strip = ui.interact(rect.intersect(painter.clip_rect()), id.with("strip"), Sense::click());
     strip.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("{} channel strip", column.name))
     });
@@ -262,17 +329,23 @@ pub fn show(
         }
     }
     // The track's colour down the left edge, at every height; a click opens the palette.
-    let band = Rect::from_min_size(rect.min, Vec2::new(COLOUR_BAND, rect.height()));
-    painter.rect_filled(band, 0.0, colour_picker::fill(column.color, column.mute));
+    let band = control_layout::place(
+        "mixer-color",
+        Rect::from_min_size(rect.min, Vec2::new(COLOUR_BAND, rect.height())),
+        rect,
+    );
+    if !control_layout::placement("mixer-color").hidden {
+        painter.fill_background(band, 0.0, colour_picker::fill(column.color, column.mute));
+    }
     let band_hit = band.intersect(painter.clip_rect());
-    if band_hit.is_positive() {
+    if band_hit.is_positive() && !control_layout::placement("mixer-color").hidden {
         let colour_id = id.with("strip-colour");
         colour_picker::area(ui, band_hit, colour_id, column.track, &column.name, column.color, actions);
     }
     let shared = Shared { reserve_input: state.reserve_input, fader: state.strip_fader_shown() };
     let parts = layout_shared(rect, !column.sends.is_empty(), column.plays_audio, shared);
     if let Some(name) = parts.name {
-        name_row(ui, painter, name, column, id);
+        name_row(ui, painter, name, column, id, state.selected == Some(column.track));
     }
     if let Some(row) = parts.output {
         output_row(ui, painter, row, column, groups, id, actions);
@@ -294,8 +367,8 @@ pub fn show(
     if let Some(row) = parts.pan {
         pan_row(ui, painter, row, column, sending, state, id, actions);
     }
-    if let (Some(readout), Some(fader)) = (parts.readout, parts.fader) {
-        fader_column(ui, painter, readout, fader, column, state, id, actions);
+    if let Some(fader) = parts.fader {
+        fader_column(ui, painter, parts.readout.unwrap_or(Rect::NOTHING), fader, column, state, id, actions);
     }
     if let Some(compact) = parts.compact {
         compact_volume(ui, painter, compact, column, state, id, actions);
@@ -304,7 +377,9 @@ pub fn show(
         let level = state.meters.track(column.track);
         meter::show(ui, painter, at, &column.name, meter::Source::Track(column.track), &level, actions);
     }
-    toggles(ui, painter, parts.toggles, column, track_number, id, actions);
+    if !control_layout::placement("mixer-toggles").hidden {
+        toggles(ui, painter, parts.toggles, column, track_number, id, actions);
+    }
     strip
 }
 
@@ -337,12 +412,23 @@ fn divider(ui: &Ui, painter: &egui::Painter, strip: Rect, list: Rect, fader: f32
 }
 
 /// The track's name at the top of a tall strip; screen readers and tests find it as a label.
-fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: Id) {
+fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: Id, selected: bool) {
     let response = ui.interact(rect.intersect(painter.clip_rect()), id.with("strip-name"), Sense::hover());
+    let _name_style =
+        crate::kit::style_class::enter_named_response("track-name", &format!("track-{}", column.track.0), &response);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{} strip", column.name)));
     // The name stands on the track's colour, as in the column's header.
     let fill = colour_picker::fill(column.color, column.mute);
-    painter.rect_filled(rect, 0.0, fill);
+    if !crate::kit::skin::paint_colored(
+        painter,
+        rect,
+        "track.name",
+        crate::kit::skin::State::response(&response, selected),
+        fill,
+        egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2),
+    ) {
+        painter.fill_background(rect, 0.0, fill);
+    }
     crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Track);
     let text = rect.shrink2(Vec2::new(4.0, 0.0));
     widgets::text_in(
@@ -397,7 +483,7 @@ fn output_row(
 
 /// The main channel's devices in its strip, at the same height as every track's list (#683).
 pub fn main_devices(painter: &egui::Painter, rect: Rect, devices: &[crate::interaction::grid::StripDevice]) {
-    painter.rect_filled(rect, 0.0, theme::window_background());
+    painter.fill_background(rect, 0.0, theme::window_background());
     let list_painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
     if devices.is_empty() {
         widgets::text_in(
@@ -430,7 +516,7 @@ pub fn main_devices(painter: &egui::Painter, rect: Rect, devices: &[crate::inter
 /// The track's devices and plug-ins, one row each; the wheel scrolls them, a click shows the
 /// track's chain in the detail area.
 fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state: &mut SessionViewState, id: Id) {
-    painter.rect_filled(rect, 0.0, theme::window_background());
+    painter.fill_background(rect, 0.0, theme::window_background());
     let track = column.track;
     if column.devices.is_empty() {
         widgets::text_in(
@@ -489,7 +575,7 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
         } else {
             motion::mix(theme::window_background(), theme::control_hover(), widgets::hover(ui, &response))
         };
-        list_painter.rect_filled(row, 0.0, fill);
+        list_painter.fill_background(row, 0.0, fill);
         let text = row.shrink2(Vec2::new(4.0, 0.0));
         let color = if device.enabled { theme::text_secondary() } else { theme::text_hint() };
         let tag = match device.group {
@@ -592,6 +678,11 @@ fn audio_block(
             Pos2::new(monitor.left() + index as f32 * (width + 2.0), monitor.top()),
             Vec2::new(width, monitor.height()),
         );
+        let name = format!("mixer-monitor-{value}");
+        if control_layout::placement(&name).hidden {
+            continue;
+        }
+        let area = control_layout::place(&name, area, painter.clip_rect());
         let on = column.audio_input.monitor == monitor_state;
         let response = widgets::button_area(
             ui,
@@ -604,7 +695,7 @@ fn audio_block(
         } else {
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response))
         };
-        painter.rect_filled(area, 0.0, fill);
+        painter.fill_background(area, 0.0, fill);
         widgets::text_in(
             painter,
             area.shrink2(Vec2::new(3.0, 0.0)),
@@ -656,7 +747,17 @@ fn volume_drag(
     };
     let continued = preview.is_some();
     let mut committed = None;
-    match widgets::drag_value(ui, response, &mut preview, column.volume_db, 0.25, 1.0, VOLUME_RANGE, 0.0) {
+    match widgets::drag_value_axis(
+        ui,
+        response,
+        &mut preview,
+        column.volume_db,
+        0.25,
+        1.0,
+        VOLUME_RANGE,
+        0.0,
+        horizontal_volume(),
+    ) {
         Drag::Moving(v) => {
             state.drag = Some((track, Control::Volume, v));
             actions.push(set_volume(track.0, v, continued));
@@ -687,18 +788,43 @@ fn fader_column(
     actions: &mut Vec<Action>,
 ) {
     // The fader column takes the pointer, up to the readout's top; the meter beside it stays its own.
-    let area = Rect::from_min_max(Pos2::new(fader.left(), readout.top()), fader.max);
-    state.value_areas.push(area);
+    state.value_areas.extend([readout, fader].into_iter().filter(Rect::is_positive));
     let label = widgets::format_db(shown(state, column, Control::Volume, column.volume_db));
-    let response = widgets::value_area(
-        ui,
-        area.intersect(painter.clip_rect()),
-        id.with("volume"),
-        format!("{} volume", column.name),
-        label,
-    );
+    let response =
+        volume_response(ui, painter, readout, fader, id.with("volume"), &format!("{} volume", column.name), &label);
     let db = volume_drag(ui, &response, column, state, actions);
     paint_fader(ui, painter, readout, fader, db, &response, column.kind == ColumnKind::Return);
+}
+
+/// Separate hit rectangles keep a displaced readout from capturing controls in the gap.
+fn volume_response(
+    ui: &Ui,
+    painter: &egui::Painter,
+    readout: Rect,
+    fader: Rect,
+    id: Id,
+    name: &str,
+    value: &str,
+) -> egui::Response {
+    let slider = widgets::value_area(ui, fader.intersect(painter.clip_rect()), id, name, value);
+    if !readout.is_positive() {
+        return slider;
+    }
+    let field = widgets::value_area(
+        ui,
+        readout.intersect(painter.clip_rect()),
+        id.with("readout"),
+        format!("{name} readout"),
+        value,
+    );
+    if slider.dragged() || slider.drag_stopped() || slider.clicked() || slider.hovered() {
+        return slider;
+    }
+    if field.dragged() || field.drag_stopped() || field.clicked() || field.hovered() || field.has_focus() {
+        field
+    } else {
+        slider
+    }
 }
 
 /// The main output's fader in the main column: as a track's, running `main.setVolume`.
@@ -711,22 +837,30 @@ pub fn main_fader(
     state: &mut SessionViewState,
     actions: &mut Vec<Action>,
 ) {
-    let area = Rect::from_min_max(Pos2::new(fader.left(), readout.top()), fader.max);
-    state.value_areas.push(area);
+    state.value_areas.extend([readout, fader].into_iter().filter(Rect::is_positive));
     let mut preview = match state.drag {
         Some((t, Control::Volume, v)) if t == MAIN => Some(v),
         _ => None,
     };
     let label = widgets::format_db(preview.unwrap_or(volume_db));
-    let response =
-        widgets::value_area(ui, area.intersect(painter.clip_rect()), Id::new("main-volume"), "Main volume", label);
+    let response = volume_response(ui, painter, readout, fader, Id::new("main-volume"), "Main volume", &label);
     let continued = preview.is_some();
     let send = |v: f64, continued: bool| {
         let db = if v <= VOLUME_RANGE.0 { json!("-inf") } else { json!((v * 10.0).round() / 10.0) };
         Action::new("main.setVolume", json!({ "db": db, "continue": continued }))
     };
     let mut db = volume_db;
-    match widgets::drag_value(ui, &response, &mut preview, volume_db, 0.25, 1.0, VOLUME_RANGE, 0.0) {
+    match widgets::drag_value_axis(
+        ui,
+        &response,
+        &mut preview,
+        volume_db,
+        0.25,
+        1.0,
+        VOLUME_RANGE,
+        0.0,
+        horizontal_volume(),
+    ) {
         Drag::Moving(v) => {
             state.drag = Some((MAIN, Control::Volume, v));
             actions.push(send(v, continued));
@@ -756,15 +890,21 @@ fn paint_fader(
     centred: bool,
 ) {
     let _style = crate::kit::style_class::enter_response("fader", response);
+    crate::kit::native_css::background(painter, fader);
     let hover = widgets::hover(ui, response);
     let value_color = motion::mix(theme::text_value(), theme::text_primary(), hover);
-    painter.text(
-        Pos2::new(fader.center().x, readout.center().y),
-        Align2::CENTER_CENTER,
-        widgets::format_db(db),
-        theme::mono_font(9.0),
-        value_color,
-    );
+    if readout.is_positive() {
+        let centre = if horizontal_volume() || control_layout::placement("mixer-volume-readout") != Default::default() {
+            readout.center()
+        } else {
+            Pos2::new(readout.left() + FADER_COLUMN / 2.0, readout.center().y)
+        };
+        painter.text(centre, Align2::CENTER_CENTER, widgets::format_db(db), theme::mono_font(9.0), value_color);
+    }
+    if horizontal_volume() {
+        paint_horizontal_fader(painter, fader, db, hover, response);
+        return;
+    }
     if fader.height() < CAP.y {
         return;
     }
@@ -783,7 +923,7 @@ fn paint_fader(
         theme::text_value(),
         0.0,
     ) {
-        painter.rect_filled(rail, 2.0, recess);
+        painter.fill_background(rail, 2.0, recess);
     }
     let mut last_label_y = f32::NEG_INFINITY;
     for db in [0.0, -6.0, -12.0, -24.0, -70.0] {
@@ -806,6 +946,58 @@ fn paint_fader(
     let level = at(widgets::volume_position(db));
     let cap = Rect::from_center_size(Pos2::new(x, level), CAP);
     crate::kit::mixer_controls::fader_cap(painter, cap, hover, crate::kit::skin::State::response(response, false));
+}
+
+fn paint_horizontal_fader(painter: &egui::Painter, fader: Rect, db: f64, hover: f32, response: &egui::Response) {
+    let length = CAP.y.min(fader.width());
+    let thickness = CAP.x.min(fader.height());
+    let at = |position: f32| fader.left() + length / 2.0 + (fader.width() - length) * position;
+    let state = crate::kit::skin::State::response(response, false);
+    // Rasterize the same vertical artwork, then rotate its geometry and texture together.
+    let rail = Rect::from_center_size(fader.center(), Vec2::new(5.0, fader.width()));
+    if !crate::kit::skin::paint(painter, rail, "fader.rail", state, theme::text_value(), std::f32::consts::FRAC_PI_2) {
+        painter.fill_background(
+            Rect::from_center_size(fader.center(), Vec2::new(fader.width(), 5.0)),
+            2.0,
+            theme::control_background(),
+        );
+    }
+    let mut previous = f32::NEG_INFINITY;
+    for value in [-70.0, -24.0, -12.0, -6.0, 0.0] {
+        let x = at(widgets::volume_position(value));
+        if x - previous < 18.0 {
+            continue;
+        }
+        previous = x;
+        painter.vline(x, fader.bottom()..=fader.bottom() + 3.0, theme::hairline(theme::text_hint()));
+        widgets::text_in(
+            painter,
+            Rect::from_center_size(egui::pos2(x, fader.bottom() + 7.0), Vec2::new(22.0, 8.0)),
+            Align2::CENTER_CENTER,
+            if value == -70.0 {
+                "−∞"
+            } else if value == 0.0 {
+                "0"
+            } else {
+                continue;
+            },
+            theme::mono_font(8.0),
+            theme::text_hint(),
+        );
+    }
+    let centre = egui::pos2(at(widgets::volume_position(db)), fader.center().y);
+    let cap = Rect::from_center_size(centre, Vec2::new(thickness, length));
+    let _cap_style = crate::kit::style_class::enter("fader-cap");
+    crate::kit::native_css::background_rounded(
+        painter,
+        Rect::from_center_size(centre, Vec2::new(length, thickness)),
+        2.0,
+    );
+    if !crate::kit::skin::paint(painter, cap, "fader.cap", state, theme::text_value(), std::f32::consts::FRAC_PI_2) {
+        let cap = Rect::from_center_size(centre, Vec2::new(length, thickness));
+        painter.fill_background(cap, 2.0, motion::mix(theme::control_background(), theme::text_value(), hover * 0.3));
+        painter.vline(centre.x, cap.shrink(2.0).y_range(), theme::hairline(theme::text_value()));
+    }
 }
 
 /// The volume as a value across the strip, for heights too small for the fader: a field, or a
@@ -845,9 +1037,13 @@ fn compact_volume(
             Some(&response),
         );
     } else {
-        painter.rect_filled(rect, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+        painter.fill_background(rect, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
         let x = rect.left() + rect.width() * position;
-        painter.rect_filled(Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom())), 0.0, theme::control_playing());
+        painter.fill_background(
+            Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom())),
+            0.0,
+            theme::control_playing(),
+        );
     }
     widgets::text_in(painter, text, Align2::RIGHT_CENTER, &widgets::format_db(db), font, theme::text_primary());
 }
@@ -950,6 +1146,11 @@ fn send_knobs(
             Pos2::new(row.left() + pitch * index as f32 - scroll, row.top()),
             Vec2::new(width, row.height() - 2.0),
         );
+        let name = format!("mixer-send-{}", index + 1);
+        if control_layout::placement(&name).hidden {
+            continue;
+        }
+        let rect = control_layout::place(&name, rect, clip);
         if !rect.intersects(clip) {
             continue;
         }
@@ -1058,6 +1259,10 @@ fn toggles(
     if let Some(action) = widgets::cue_button(ui, painter, cue, id.with("cue"), track.0, &column.name, column.cue) {
         actions.push(action);
     }
+    if control_layout::placement("mixer-enable").hidden {
+        return;
+    }
+    let toggle = control_layout::place("mixer-enable", toggle, painter.clip_rect());
     let response = widgets::button_area(ui, toggle, id.with("on"), label);
     let _style = crate::kit::style_class::enter_response("button", &response);
     if response.clicked() {
@@ -1077,6 +1282,42 @@ fn toggles(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn main_edit_handles_only_include_sections_the_main_strip_draws() {
+        let ctx = egui::Context::default();
+        let capture = control_layout::Capture::begin(&ctx);
+        control_layout::draft(&ctx, Some(Default::default()));
+        layout_main(Rect::from_min_size(Pos2::ZERO, Vec2::new(theme::SCENE_COLUMN, 340.0)), Shared::default());
+        let entries = capture.entries();
+        assert!(entries.iter().any(|entry| entry.name == "mixer-volume"));
+        assert!(entries.iter().any(|entry| entry.name == "mixer-meter"));
+        assert!(
+            !entries.iter().any(|entry| matches!(entry.name.as_str(), "mixer-name" | "mixer-pan" | "mixer-output"))
+        );
+        control_layout::draft(&ctx, None);
+    }
+
+    #[test]
+    fn theme_repositions_name_pan_and_meter_and_rotates_the_volume_layout() {
+        use crate::kit::{skin, theme_css};
+        let bounds = Rect::from_min_size(Pos2::ZERO, Vec2::new(theme::TRACK_COLUMN, 340.0));
+        let original = layout(bounds, true, false);
+        let mut theme = theme::Theme::default();
+        assert!(theme_css::apply(&mut theme, ".control-mixer-volume { --suhina-direction: horizontal; } .control-mixer-name { bottom: 0px; } .control-mixer-meter { width: 80px; height: 10px; } .control-mixer-pan { left: 5px; width: 80px; }").is_empty());
+        skin::configure(&theme.skin);
+        let moved = layout(bounds, true, false);
+        let fader = moved.fader.unwrap();
+        assert!(fader.width() > fader.height());
+        assert_eq!(moved.name.unwrap().bottom(), bounds.bottom() - PAD);
+        assert_eq!(moved.meter.unwrap().size(), Vec2::new(80.0, 10.0));
+        assert_eq!(moved.pan.unwrap().left(), original.pan.unwrap().left() + 5.0);
+        for rect in [moved.name, moved.pan, moved.fader, moved.meter].into_iter().flatten() {
+            assert!(bounds.contains_rect(rect));
+        }
+        skin::configure(&skin::Skin::default());
+        assert_eq!(layout(bounds, true, false), original);
+    }
 
     fn strip(height: f32) -> Layout {
         layout(Rect::from_min_size(Pos2::ZERO, Vec2::new(theme::TRACK_COLUMN, height)), true, false)

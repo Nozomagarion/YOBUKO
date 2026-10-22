@@ -52,6 +52,15 @@ one module restores the previous palette/font before drawing its sibling. These
 overrides preserve native response ids, commands and layout unless CSS explicitly
 requests layout changes; see [theme skins](../spec/theme-skins.md).
 
+**Edit interface** overlays measured native elements with an 8-point grid, preserving the
+underlying controls. Supported adapters use one resolved rectangle for paint and input;
+theme offsets/sizes can place the mixer name at the bottom, turn its side colour into a
+top stripe, resize meters and render/drag volume faders horizontally. Done merges edited
+entries; Cancel/Escape and theme changes discard the draft. Matching instances share a rule.
+Type glyphs use replaceable `track.midi`/`track.audio` SVGs (notes and waveform). Track name
+and strip artwork can select raw-colour/state variants and bounded frame sequences.
+`.meter-level`, `.fader-cap` and `.knob` expose native CSS box shadows for level/cap/dial glow.
+
 Track on/off surfaces share that CSS/SVG path while retaining track-number labels
 and mute commands. Selected toggle ink uses the contrasting text role for its fill,
 not the panel's background colour: a transparent/gradient panel must not make an
@@ -110,7 +119,7 @@ the view with the detail area, status bar.
 
 | Region | Size |
 |---|---|
-| Menu bar | 20 px, `panel.background`, items 14 px apart in `text.secondary`: File (New or open…, Open…, Open recent › the recent projects newest first, up to 10, by name with the path as the tooltip, each opened as Open… opens a file, greyed out while there are none, a file that is gone saying so in the status bar; Save, Save as…, Save as template…, Quit), Edit, View, Projects, Options, Help (About Suhina, [spec](../spec/about.md)); Create, Playback and Navigate (planned) |
+| Menu bar | 20 px, `panel.background`, items 14 px apart in `text.secondary`: File (New or open…, Open…, Open recent › the recent projects newest first, up to 10, by name with the path as the tooltip, each opened as Open… opens a file, greyed out while there are none, a file that is gone saying so in the status bar; Save, Save as…, Save as template…, Quit), Edit, View, Projects, Options, Help (About Suhina, [spec](../spec/about.md)); Create, Playback and Navigate (planned). Shown unless Appearance › Menu bar in the window is off, which it is by default on macOS. The menus are one description (`app/menus.rs`): on macOS the menu bar at the top of the screen has the same menus and items after the application menu (About, Services, Hide, Quit), their labels and greyed-out items kept in step, without keys of their own |
 | Tab row | 22 px, `window.background`, shown while two or more projects are open (ADR 0007): one tab per project, name (with " •" while it has unsaved changes, as the window title has) and a 12 px × to close; the active tab `panel.background` with `text.primary`, others `text.secondary`; Ctrl+Tab and Ctrl+Shift+Tab move between them |
 | Control bar | 40 px, `panel.background`, a 1 px `border` under it. Left: the browser's show/hide button (20 × 20, `control.background`, a 14 × 11 panel outline whose left part is filled in `text.primary` while the browser shows; "Hide browser" / "Show browser", the same as Ctrl+B), 4 px on, then 6 px apart: tempo (56 × 20 value field, `control.background`, 11 px mono right-aligned, dragged up or down), time signature (40 px, 11 px mono `text.secondary`, "4 / 4"), the grid and launch quantisation (64 px dropdown, 11 px mono, its list tall enough for every value; the tooltip says it also sets the Arrangement grid). Centre: play and stop (28 × 20 each, 1 px apart), the position (64 × 20 on `window.background`, 11 px mono, "bar.beat.sixteenth", bars through the time-signature changes). Right: the CPU load (56 × 20 on `window.background`, only while an engine plays: "CPU" in 9 px `text.hint` left and the smoothed percentage in 10 px mono `text.secondary` right, over a 2 px-tall bar of the load, `meter.normal` fill, `meter.hot` from 80 %, in a `control.background` track; the audio thread's share of wall time inside the engine's render call, per mille smoothed over 0.2 s windows, published as an atomic), then the view switch at the right edge, 6 px from it. Left of the CPU load, 6 px apart, the RAM (76 × 20 on `window.background`, always shown: "RAM" in 9 px `text.hint` left, the program's resident memory in 10 px mono `text.secondary` right, "512 MB", "2.3 GB"). Right, left to right: RAM, CPU load, view switch; a block that would come within 6 px of the position is left out, the RAM first. (planned): metronome, record, loop |
 | Transport button | 28 × 20, `control.background`; play shows `control.activeBackground` while playing, its glyph in `accent`; stop is an 8 × 8 square in `text.primary`; record (planned) a 1.5 px red ring |
@@ -130,7 +139,7 @@ from top to bottom:
 | Part | Spec |
 |---|---|
 | Search | 26 px, `window.background`, 11 px search icon (a ring and a handle in `text.hint`), placeholder "Search", shortcut hint right in 9 px mono `text.hint` |
-| Category filters | Wrapping row of buttons, 16 px high, 7 px side padding, 2 px gaps, 10 px text; selected `text.value` with `window.background` text, others `control.background` (hover `control.hoverBackground`) with `text.secondary` |
+| Category filters | Wrapping row of buttons, 16 px high, 7 px side padding, 2 px gaps, 10 px text; selected `control.selectedBackground` with `text.inverse` text, others `control.background` (hover `control.hoverBackground`) with `text.secondary` |
 | Sidebar | 104 px, a 1 px `border` on its right; section titles (Pinned, Recent, Folders) 10 px `text.hint` with 8 px top padding; items 17 px, 10 px `text.secondary` (`text.primary` when selected); selected item `control.activeBackground`, hover `panel.hoverBackground`; a folder's state at its right in 9 px mono `text.hint` ("…" scanning, "poll", "gone"); "+ Add folder" in `text.hint` opens a path field in its place |
 | Tree row | 17 px; indent 12 px per level; 10 px lead (a chevron in `text.hint` for what opens, a play triangle for a selected or hovered sample or MIDI file), 12 px type icon, 5 px, name 10 px `text.value` (`text.primary` selected), tag dots, meta right in 9 px mono `text.hint` (length, "plug-in", "MIDI effect", the folder a search found it in); selected row `control.activeBackground`, hover `panel.hoverBackground`; a 2 px `border.strong` bar at the right edge shows the scroll position |
 | Type icons | Our own strokes, 1.1 px, 12 px: folder and heading `text.secondary`; MIDI note `track.2` (ochre); audio wave `track.3` (steel blue); instrument and preset `track.4`; effect `track.1`; MIDI effect the effect's box in `track.2`; project page `text.secondary` |
@@ -180,9 +189,9 @@ The colour areas, each a button named "<track> colour" that opens the popup on a
 | Arrangement track header, return row | A 6 px band down the header's left edge, the header's full height |
 | Session channel strip | A 5 px band down the strip's left edge, in its padding, the strip's full height at every mixer height |
 
-Text on a track colour (the Session header, the strip's name row) is `text.primary` or
-`window.background`, whichever has the higher contrast ratio with the fill; on the default
-colours it is `window.background`.
+Text on a track colour (the Session header, the strip's name row) is `text.onColorLight` or
+`text.onColorDark`, whichever has the higher contrast ratio with the fill; on the default
+colours it is `text.onColorDark`.
 
 ### Clip slot
 
@@ -282,6 +291,11 @@ track along the bottom edge.
 | Header meter | The track's meter (Session view › Meter) standing at the header's right edge, 6 px in, its rows 6 px clear of it; from the top of row 1 to the bottom of row 2 once row 2 shows, row 1's height before |
 
 ### Track header levels
+
+Narrow Arrangement headers with two rows keep the name and automation button on the first row.
+The second uses 24 px track-on and 18 px solo/cue/arm buttons, followed by a draggable volume
+field; pan and sends wait until the column is wider. Group bands compress to reserve at least
+114 px of inner width, keeping these controls separate from the right-edge meter at 160 px.
 
 The header reveals groups as the track grows. Thresholds are the heights at which a group fits;
 a lane between 20 and 26 px shows the first row clipped.
@@ -867,7 +881,7 @@ The 28 px application bar precedes the menu. Suhina is always present; Appearanc
 Left or Centre. Optional project name/unsaved marker and tempo/time signature share their own
 position. Single-line text truncates with an ellipsis inside separate cells before reaching
 the three 32 px window buttons. On Windows this replaces native decorations, supports dragging,
-double-click maximise and a 5 px resize edge/corner. Other platforms retain native decorations and show only application/project information in this bar, without duplicate window controls or drag handling.
+double-click maximise and a 5 px resize edge/corner. Other platforms keep the system's title bar, which names the window, and show no application bar.
 
 Arrangement track headers and Session column headers show a non-interactive type marker immediately before the track name, on the name row: a miniature keyboard (two white keys with a shorter black key between them) for MIDI, a waveform for audio, and both for mixed-content tracks. The tooltip and accessibility label name the type. Groups and returns are not labelled as audio or MIDI tracks. The marker uses 16 px plus a 3 px gap within the name area, without shifting the mute, solo or other mixer buttons. It stays beside the name on compact headers.
 

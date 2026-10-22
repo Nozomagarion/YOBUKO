@@ -71,8 +71,16 @@ excluding labels, notes, waveforms and controls. Deferred edge meshes are insert
 foreground at the original paint positions. One substrate serves all visible track and
 clip lenses. It has independent targets/texture IDs from the modal capture and skips the
 Gaussian passes: content lenses use the sharp encoded source. There are no per-clip
-captures. Temporarily hiding content lenses during modal replay prevents recursive
-texture sampling and unsupported-texture fallback; the lenses are restored afterward.
+captures. Temporarily hiding content lenses during modal replay keeps the dialog's backdrop free of
+glass drawn from another capture; the lenses are restored afterward. Each capture renderer
+binds the textures it meets from where they already are, without copying them: egui's
+textures (images, icons) from eframe's main renderer, and another capture's image from that
+capture's targets. A capture never samples its own target, and what it cannot bind (a native
+callback, a texture only the main renderer can draw) is left out while the rest still draws.
+Menus (the menu bar's, right-click menus and dropdowns) get a third capture: once the frame is
+painted, the window's own layers are drawn and blurred into targets of the menus' own and
+placed under each popup's frame, fading in with it; in a see-through window the pixels under
+the menu are cleared first, so the image keeps the window's alpha.
 Surfaces smaller than 12 logical pixels stay solid. The three strengths are independently
 saved percentages: 0 is off, 100 is the strongest supported material. Panels interpolate
 from opaque to a 55% theme tint at full strength; track and clip rims keep the source
@@ -177,6 +185,10 @@ Private background image decoding, filtering and placement live in separate modu
 changes. One bounded worker owns filtering; only the current request may publish a texture.
 Blur uses premultiplied alpha and is converted from logical display pixels to texture pixels.
 Settings uses its original theme base, not the main-window opacity-scaled colour.
+While a private image is displayed, surfaces use ordinary blending over the image rather than
+replacing its pixels with desktop transparency. Removing the image restores replacement fills
+on an alpha-capable host. Each liquid capture keeps only the shared textures used by its current
+render; superseded sources and their renderer registrations are released together.
 The removed experimental Mica key is accepted and ignored when reading old preferences.
 
 ## Desktop-aligned wallpaper: platform investigation (not implemented)

@@ -147,3 +147,59 @@ fn narrow_header_volume_starts_below_automation() {
     assert!((volume.left() - automation.left()).abs() < 1.0);
     assert!(volume.left() < mute.left());
 }
+
+#[test]
+fn minimum_width_headers_keep_names_controls_and_meters_separate() {
+    for depth in [0, 1, 8] {
+        let mut session = Session::new(demo_project());
+        for index in 0..depth {
+            session
+                .execute("track.group", &serde_json::json!({"tracks": [1], "name": format!("Group {index}")}))
+                .unwrap();
+        }
+        let mut harness = arrangement(session);
+        // Keep all eight group rows and the child visible above the detail area.
+        harness.set_size(egui::vec2(1600.0, 1200.0));
+        harness.run();
+        let ruler = harness.get_by_label("Ruler").rect();
+        let edge = egui::pos2(ruler.right(), ruler.bottom() + 30.0);
+        harness.hover_at(edge);
+        harness.run();
+        harness.drag_at(edge);
+        harness.hover_at(edge + egui::vec2(300.0, 0.0));
+        harness.run();
+        harness.drop_at(edge + egui::vec2(300.0, 0.0));
+        harness.run();
+        assert_eq!(harness.state().arrangement().header_width, 160.0);
+        let header = harness.get_by_label("Track Drums").rect();
+        let controls = [
+            harness.get_by_label("Turn Drums off").rect(),
+            harness.get_by_label("Solo Drums").rect(),
+            harness.get_by_label_contains("Cue Drums").rect(),
+            harness.get_by_label_contains("Arm Drums").rect(),
+            harness.get_by_label("Drums volume").rect(),
+            harness.get_by_label("Show automation of Drums").rect(),
+            harness.get_by_label_contains("Drums level:").rect(),
+        ];
+        for (index, control) in controls.iter().enumerate() {
+            assert!(
+                control.is_positive() && header.contains_rect(*control),
+                "depth {depth}: {control:?} outside {header:?}"
+            );
+            for other in &controls[index + 1..] {
+                assert!(!control.intersects(*other), "depth {depth}: {control:?} overlaps {other:?}");
+            }
+        }
+        let (name, _) = harness
+            .ctx
+            .data(|data| data.get_temp::<(egui::Rect, u64)>(egui::Id::new(("track-name-rect", 1_u64))))
+            .unwrap();
+        assert!(name.width() >= 48.0 && header.contains_rect(name), "unusable name: {name:?}");
+        for control in controls {
+            assert!(!name.intersects(control), "name overlaps {control:?}");
+        }
+        harness.get_by_label_contains("Arm Drums").click();
+        harness.run();
+        assert!(harness.state().session().unwrap().is_armed(suhina_engine::model::TrackId(1)));
+    }
+}

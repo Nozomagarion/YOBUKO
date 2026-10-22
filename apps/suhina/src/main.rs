@@ -12,6 +12,7 @@ mod liquid;
 mod mac_menu;
 mod recent;
 mod save_error;
+mod surface;
 mod theme_files;
 
 use std::path::{Path, PathBuf};
@@ -146,6 +147,14 @@ fn main() -> ExitCode {
         eframe::Renderer::Glow => Graphics::OpenGl,
         eframe::Renderer::Wgpu => Graphics::Gpu,
     };
+    // The window shows the desktop through its backgrounds' alpha where the GPU renderer sets the
+    // pixels directly and the system composites the window's alpha. It is asked for with the GPU
+    // renderer; whether the swapchain hands the alpha on is known on the first frame
+    // (`surface::composites_alpha`), and until then, or without it, the window stays opaque and
+    // backgrounds blend as before. On macOS it always does, and the content runs under the title
+    // bar, which has to be chosen before the window opens.
+    let see_through_asked = renderer == eframe::Renderer::Wgpu;
+    let under_title_bar = cfg!(target_os = "macos") && see_through_asked;
     let mut themes = theme_files::ThemeFiles::new(eframe::storage_dir(app_id()).map(|d| d.join(THEMES_FOLDER)));
     let (theme_list, theme_warnings) = themes.read_all();
     settings_warnings.extend(theme_warnings);
@@ -155,6 +164,8 @@ fn main() -> ExitCode {
         agents,
         graphics_now,
         editors_embeddable: false,
+        see_through: if see_through_asked { None } else { Some(false) },
+        blurred: false,
         themes,
         recent,
         #[cfg(target_os = "macos")]
@@ -167,6 +178,10 @@ fn main() -> ExitCode {
         }),
     };
     // The audio devices, and the output the settings choose (Settings › Audio, `audio.*`).
+    if under_title_bar {
+        let (title_bar, corner) = mac_window_frame();
+        window.app.set_window_frame(title_bar, corner);
+    }
     window.app.projects_mut().set_audio_system(std::sync::Arc::new(suhina_output::DeviceOutput::new()));
     window.app.projects_mut().set_output_choice(settings.output_choice());
     // The MIDI controllers, every port on but the ones the settings turn off (Settings › MIDI,
@@ -194,11 +209,16 @@ fn main() -> ExitCode {
         viewport: eframe::egui::ViewportBuilder::default()
             .with_title("Suhina")
             .with_decorations(!cfg!(target_os = "windows"))
-            .with_transparent(false)
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([640.0, 400.0])
-            .with_drag_and_drop(true),
+            .with_drag_and_drop(true)
+            .with_transparent(see_through_asked)
+            // A see-through window's title bar would show the desktop bare: the content goes under
+            // it instead, and the app gives it the window's background.
+            .with_fullsize_content_view(under_title_bar)
+            .with_titlebar_shown(!under_title_bar),
         renderer,
+        wgpu_options: wgpu_options(),
         event_loop_builder: x11_first(),
         ..Default::default()
     };
@@ -228,7 +248,9 @@ fn main() -> ExitCode {
             window.share_about();
             #[cfg(target_os = "macos")]
             {
-                window.mac_menu = mac_menu::install(&suhina_ui::settings::keymap::actions(), cc.egui_ctx.clone());
+                window.mac_menu = mac_menu::install(&window.app.menus(), cc.egui_ctx.clone());
+                // The bar's Open recent shows without the File menu being opened first.
+                window.app.want_project_lists();
             }
             Ok(Box::new(window))
         }),
@@ -294,6 +316,11 @@ struct Window {
     graphics_now: Graphics,
     /// The main window is a Win32 or X11 one, which plug-in editors can be embedded in.
     editors_embeddable: bool,
+    /// The window shows the desktop through its backgrounds' alpha; `None` until the first frame
+    /// has asked the GPU whether it can.
+    see_through: Option<bool>,
+    /// The system blurs what shows through: on while the theme has a see-through background.
+    blurred: bool,
     themes: theme_files::ThemeFiles,
     /// The projects opened and saved lately, for the project dialog.
     recent: recent::Recent,
@@ -313,7 +340,48 @@ struct StartUp {
 }
 
 impl eframe::App for Window {
-    fn ui(&mut self, ui: &mut eframe::egui::Ui, _frame: &mut eframe::Frame) {
+    /// Nothing behind the backgrounds: where none is painted, the desktop shows.
+    fn clear_color(&self, visuals: &eframe::egui::Visuals) -> [f32; 4] {
+        if self.see_through == Some(true) { [0.0; 4] } else { visuals.panel_fill.to_normalized_gamma_f32() }
+    }
+
+    fn ui(&mut self, ui: &mut eframe::egui::Ui, frame: &mut eframe::Frame) {
+        // Asked once the GPU and the window are both there, which can be a frame or two in.
+        if self.see_through.is_none()
+            && let (Some(gpu), Some(window)) = (frame.wgpu_render_state(), frame.winit_window())
+        {
+            let see_through = surface::composites_alpha(gpu, window.clone());
+            if see_through {
+                suhina_ui::kit::surface::install(ui.ctx(), surface::provider(gpu));
+            }
+            if suhina_plugins::trace::on() {
+                suhina_plugins::trace::state("see-through window", see_through.to_string());
+            }
+            self.see_through = Some(see_through);
+        }
+        self.draw(ui);
+        suhina_ui::kit::liquid::finish_backdrops(ui.ctx());
+        suhina_ui::kit::surface::finish_frame(ui.ctx());
+        self.blur(frame);
+    }
+
+    /// Quitting: backups that quitting calls for are written, and the journal says nothing is
+    /// left to offer next time.
+    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        let _finished_in_time = self.app.finish_backups();
+        let _let_go_in_time = self.app.let_go_of_projects();
+        // Restart now, after an update: the new build starts as this one closes.
+        if self.app.restart_wanted()
+            && let Err(e) = suhina_update::relaunch()
+        {
+            eprintln!("error: {e}");
+        }
+    }
+}
+
+impl Window {
+    /// One frame of the window: the splash while starting, then the app and what it asked for.
+    fn draw(&mut self, ui: &mut eframe::egui::Ui) {
         if let Some(splash) = self.splash.as_mut()
             && splash.take_start(ui.ctx())
             && let Some(start_up) = self.start_up.take()
@@ -332,10 +400,14 @@ impl eframe::App for Window {
         #[cfg(target_os = "macos")]
         if let Some(menu) = &self.mac_menu {
             for id in menu.take() {
-                self.app.queue_action(&id);
+                self.app.queue_menu_item(&id);
             }
         }
         self.app.ui(ui);
+        #[cfg(target_os = "macos")]
+        if let Some(menu) = &mut self.mac_menu {
+            menu.sync(&self.app.menus());
+        }
         self.answer_agents();
         if let Some((path, how)) = self.app.take_open_request() {
             self.open(&path, how);
@@ -408,21 +480,31 @@ impl eframe::App for Window {
         }
     }
 
-    /// Quitting: backups that quitting calls for are written, and the journal says nothing is
-    /// left to offer next time.
-    fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        let _finished_in_time = self.app.finish_backups();
-        let _let_go_in_time = self.app.let_go_of_projects();
-        // Restart now, after an update: the new build starts as this one closes.
-        if self.app.restart_wanted()
-            && let Err(e) = suhina_update::relaunch()
+    /// Turns the system's blur behind the window on while the theme has a see-through background.
+    fn blur(&mut self, frame: &eframe::Frame) {
+        let wanted = self.see_through == Some(true) && suhina_ui::kit::theme::see_through();
+        if wanted == self.blurred {
+            return;
+        }
+        let Some(window) = frame.winit_window() else { return };
+        self.blurred = wanted;
+        // The window server blurs what is behind the whole window, under everything drawn: on
+        // macOS and on Wayland compositors that offer it (winit does nothing elsewhere).
+        window.set_blur(wanted);
+        // Windows has no such call in winit: DWM's acrylic, under the window's content.
+        #[cfg(target_os = "windows")]
         {
-            eprintln!("error: {e}");
+            let result = if wanted {
+                window_vibrancy::apply_acrylic(&**window, None)
+            } else {
+                window_vibrancy::clear_acrylic(&**window)
+            };
+            if let Err(e) = result {
+                self.app.set_status(Status::Error(format!("could not blur behind the window: {e}")));
+            }
         }
     }
-}
 
-impl Window {
     /// Before drawing (ADR 0028): opens the projects later starts of this build handed over,
     /// passes on what agents ask, and runs their work on the open projects, so this frame shows
     /// it.
@@ -550,6 +632,10 @@ impl Window {
             self.app.set_status(Status::Error(e));
         }
         self.app.record_project(path);
+        // The system's menu bar shows Open recent without the File menu being opened.
+        if cfg!(target_os = "macos") {
+            self.app.want_project_lists();
+        }
     }
 
     /// Does what Settings asked of the theme files (write, rename, read again, back up, export
@@ -731,19 +817,51 @@ fn native_window(cc: &eframe::CreationContext<'_>) -> Option<u64> {
     }
 }
 
+/// eframe's wgpu settings: on Windows the DX12 swapchain is made from a DirectComposition visual,
+/// the kind that hands the window's alpha to the compositor.
+fn wgpu_options() -> eframe::egui_wgpu::WgpuConfiguration {
+    #[allow(unused_mut)]
+    let mut options = eframe::egui_wgpu::WgpuConfiguration::default();
+    #[cfg(target_os = "windows")]
+    if let eframe::egui_wgpu::WgpuSetup::CreateNew(create) = &mut options.wgpu_setup {
+        create.instance_descriptor.backend_options.dx12.presentation_system =
+            eframe::wgpu::Dx12SwapchainKind::DxgiFromVisual;
+    }
+    options
+}
+
+/// The height of macOS's title bar and the radius of a window's corners, in points: 32 and 16
+/// from macOS 26 on, 28 and 10 before it.
+fn mac_window_frame() -> (f32, u8) {
+    let version = std::process::Command::new("sw_vers").arg("-productVersion").output().ok();
+    let major = version
+        .and_then(|out| String::from_utf8(out.stdout).ok())
+        .and_then(|text| text.trim().split('.').next().and_then(|n| n.parse::<u32>().ok()));
+    if major.is_some_and(|major| major >= 26) { (32.0, 16) } else { (28.0, 10) }
+}
+
 fn settings_path() -> Option<PathBuf> {
     eframe::storage_dir(app_id()).map(|dir| dir.join(SETTINGS_FILE))
 }
 
 /// The saved settings, or the defaults when there are none yet.
 fn load_settings() -> (Settings, Vec<String>) {
-    match settings_path().map(std::fs::read_to_string) {
-        Some(Ok(text)) => Settings::from_text(&text),
+    let text = match settings_path().map(std::fs::read_to_string) {
+        Some(Ok(text)) => Some(text),
         Some(Err(e)) if e.kind() != std::io::ErrorKind::NotFound => {
-            (Settings::default(), vec![format!("could not read the settings: {e}")])
+            return (Settings::default(), vec![format!("could not read the settings: {e}")]);
         }
-        _ => (Settings::default(), Vec::new()),
+        _ => None,
+    };
+    let (mut settings, warnings) =
+        text.as_deref().map_or_else(|| (Settings::default(), Vec::new()), Settings::from_text);
+    // On macOS the bar at the top of the screen has the window's menus: the window's own bar is
+    // off until the settings say otherwise.
+    let said = text.as_deref().is_some_and(|text| text.lines().any(|line| line.trim_start().starts_with("menu_bar")));
+    if cfg!(target_os = "macos") && !said {
+        settings.view.menu_bar = false;
     }
+    (settings, warnings)
 }
 
 fn save_settings(settings: &Settings) -> Result<(), String> {

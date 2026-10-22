@@ -5,6 +5,7 @@
 //! note tools, each one `note.*` command over the selection or the whole clip
 //! (`docs/spec/ui-clip-editor.md` › Other note tools).
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::BTreeSet;
 
 use egui::{Align2, Pos2, Rect, Ui, Vec2};
@@ -149,7 +150,7 @@ pub fn show(ui: &mut Ui, area: Rect, tools: &Tools<'_>, state: &mut PianoRollSta
     let column = Rect::from_min_max(area.min, Pos2::new(area.left() + TOOLS_WIDTH, area.bottom()));
     ui.allocate_rect(column, egui::Sense::hover());
     let painter = ui.painter_at(column);
-    painter.rect_filled(column, 0.0, theme::panel_background());
+    painter.fill_background(column, 0.0, theme::panel_background());
     painter.line_segment(
         [Pos2::new(column.right() - 0.5, column.top()), Pos2::new(column.right() - 0.5, column.bottom())],
         egui::Stroke::new(1.0, theme::border()),

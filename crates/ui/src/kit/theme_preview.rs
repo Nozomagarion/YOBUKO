@@ -3,6 +3,7 @@
 
 //! The same tiny musical scene in each palette. No theme installation or project loading.
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Painter, Rect, Stroke, pos2, vec2};
 
 use super::theme::Palette;
@@ -47,14 +48,14 @@ pub fn paint(painter: &Painter, rect: Rect, palette: &Palette, scene: &Scene) {
             vec2(rect.width() * w, rect.height() * h),
         )
     };
-    painter.rect_filled(rect, 2.0, palette.window_background);
-    painter.rect_filled(cell(0.0, 0.0, 1.0, 0.15), 0.0, palette.panel_background);
-    painter.rect_filled(cell(0.0, 0.15, 0.2, 0.85), 0.0, palette.panel_background);
+    painter.fill_background(rect, 2.0, palette.window_background);
+    painter.fill_background(cell(0.0, 0.0, 1.0, 0.15), 0.0, palette.panel_background);
+    painter.fill_background(cell(0.0, 0.15, 0.2, 0.85), 0.0, palette.panel_background);
     for row in 0..5 {
         painter.rect_filled(cell(0.025, 0.22 + row as f32 * 0.11, 0.13, 0.018), 0.0, palette.text_secondary);
     }
     for button in 0..4 {
-        painter.rect_filled(
+        painter.fill_background(
             cell(0.025 + button as f32 * 0.06, 0.04, 0.04, 0.065),
             1.0,
             if button == 0 { palette.accent } else { palette.control_background },
@@ -71,7 +72,7 @@ pub fn paint(painter: &Painter, rect: Rect, palette: &Palette, scene: &Scene) {
         let colour = super::motion::mix(palette.panel_background, colour, 0.82);
         let top = 0.23 + row as f32 * 0.18;
         let clip = cell(0.25 + row as f32 * 0.05, top, 0.55 - row as f32 * 0.04, 0.14);
-        painter.rect_filled(clip, 2.0, colour);
+        painter.fill_background(clip, 2.0, colour);
         let ink = if super::theme::contrast(colour, palette.text_primary)
             > super::theme::contrast(colour, palette.window_background)
         {

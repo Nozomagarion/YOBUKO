@@ -6,6 +6,7 @@
 //! (`transport.setCountIn`), and the record button an armed track's empty slots show
 //! (`clip.record`; a click on a slot that records ends its take with `clip.launch`).
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Align2, Id, Painter, Pos2, Rect, Stroke, Ui, Vec2};
 use serde_json::json;
 
@@ -20,6 +21,10 @@ const COUNT_INS: [(u8, &str); 4] = [(0, "Off"), (1, "1 bar"), (2, "2 bars"), (4,
 /// The control bar's record button in `rect`: lit while the arrangement records; a click
 /// starts or ends recording into the arrangement.
 pub fn record_button(ui: &Ui, painter: &Painter, rect: Rect, recording: bool, actions: &mut Vec<Action>) {
+    if crate::kit::control_layout::placement("transport-record").hidden {
+        return;
+    }
+    let rect = crate::kit::control_layout::place("transport-record", rect, ui.max_rect());
     let label = if recording { "Stop recording" } else { "Record into the arrangement" };
     let response = widgets::button_area(ui, rect, Id::new("record"), label);
     let _style = crate::kit::style_class::enter_named_response("button", "record", &response);
@@ -66,6 +71,10 @@ pub fn metronome_button(
     (on, db, sound): (bool, f64, suhina_engine::ClickSound),
     actions: &mut Vec<Action>,
 ) {
+    if crate::kit::control_layout::placement("transport-metronome").hidden {
+        return;
+    }
+    let rect = crate::kit::control_layout::place("transport-metronome", rect, ui.max_rect());
     let label = if on { "Metronome off" } else { "Metronome on" };
     let response = ui.interact(rect, Id::new("metronome"), egui::Sense::click_and_drag()).on_hover_text(
         "Metronome: a click on every beat while playing. Hold and drag up or down: its level. Right-click: its sound",
@@ -143,12 +152,12 @@ pub fn metronome_level(
         }
     }
     let over = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, response.id.with("level")));
-    over.rect_filled(slider, 0.0, theme::panel_background());
+    over.fill_background(slider, 0.0, theme::panel_background());
     over.rect_stroke(slider, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
-    over.rect_filled(track, 0.0, theme::control_background());
+    over.fill_background(track, 0.0, theme::control_background());
     let position = ((level - low) / (high - low)) as f32;
     let y = track.bottom() - track.height() * position;
-    over.rect_filled(Rect::from_min_max(Pos2::new(track.left(), y), track.max), 0.0, theme::control_playing());
+    over.fill_background(Rect::from_min_max(Pos2::new(track.left(), y), track.max), 0.0, theme::control_playing());
     over.rect_filled(
         Rect::from_center_size(Pos2::new(track.center().x, y), Vec2::new(18.0, 5.0)),
         0.0,
@@ -227,7 +236,7 @@ pub fn slot_record(
     }
     let pulse = if recording { motion::pulse(ui.ctx()) } else { 1.0 };
     if recording {
-        painter.rect_filled(rect, 0.0, theme::recording_background());
+        painter.fill_background(rect, 0.0, theme::recording_background());
         widgets::text_in(
             painter,
             rect.shrink2(Vec2::new(width, 0.0)),

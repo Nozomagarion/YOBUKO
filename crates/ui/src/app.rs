@@ -9,8 +9,10 @@
 mod application_bar;
 mod background;
 pub mod closing_dialog;
+mod control_editor;
 pub mod export_dialog;
 pub mod loading_dialog;
+pub mod menus;
 pub mod missing_files;
 pub mod project_dialog;
 pub mod splash;
@@ -18,6 +20,7 @@ pub mod start_panel;
 mod themed_toolbar;
 pub mod updates;
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -354,6 +357,8 @@ pub struct App {
     device_picks: Vec<(TrackId, usize)>,
     /// Actions picked outside the window (the macOS menu bar), run at the start of the next frame.
     queued: Vec<String>,
+    /// Items picked from the system's menu bar, run with the next frame (`run_menu_item`).
+    queued_menu_items: Vec<String>,
     /// A device removal awaiting its undo or redo: the track, the index it left, how long the
     /// chain was, and where the selection pointed before it followed the removal. Window state.
     pending_device_remove: Option<(TrackId, usize, usize, usize)>,
@@ -386,6 +391,12 @@ pub struct App {
     /// The app's own window (`set_editor_owner`): a press on its controls takes the keyboard
     /// back from an embedded plug-in editor (`kit::keyboard`).
     window: Option<u64>,
+    /// The height of the system's title bar drawn over the top of the window (macOS, when the
+    /// window is see-through), kept free and given a background; 0 when it is outside the window.
+    title_bar: f32,
+    /// The radius of the window's rounded corners, which a see-through window does not clip to:
+    /// the bars at the top and bottom round theirs to match. 0 when the system clips them.
+    window_corner: u8,
     /// The detail area was closed as an editor (the splitter dragged down, the toolbar's ×, View ›
     /// Hide editor): selecting a clip opens it again. And the clip shown last frame, to tell when
     /// another is selected (`docs/spec/ui-clip-editor.md` › Least height and closing).
@@ -553,6 +564,7 @@ impl App {
             device_focus: false,
             device_picks: Vec::new(),
             queued: Vec::new(),
+            queued_menu_items: Vec::new(),
             pending_device_remove: None,
             detail_open: true,
             detail_height: DETAIL_HEIGHT,
@@ -566,6 +578,8 @@ impl App {
             detail_max: false,
             detail_drag: None,
             window: None,
+            title_bar: 0.0,
+            window_corner: 0,
             editor_closed: false,
             last_clip: None,
             piano_grid: crate::detail::piano_roll_grid::PianoGrid::default(),
@@ -808,6 +822,13 @@ impl App {
     pub fn set_editor_owner(&mut self, owner: Option<u64>) {
         self.window = owner;
         self.projects.set_editor_owner(owner);
+    }
+
+    /// The height of the system's title bar over the top of the window (0 when it is not in it)
+    /// and the radius of the window's corners, when the window does not clip to them.
+    pub fn set_window_frame(&mut self, title_bar: f32, corner: u8) {
+        self.title_bar = title_bar.max(0.0);
+        self.window_corner = corner;
     }
 
     /// The open projects.
@@ -2490,8 +2511,19 @@ impl App {
 
     /// Draws the window into `ui` and runs what the user asked for.
     pub fn ui(&mut self, ui: &mut Ui) {
+        self.control_editor_theme_changed(ui.ctx());
+        let capture = crate::kit::control_layout::Capture::begin(ui.ctx());
+        self.ui_content(ui);
+        self.control_editor(ui, &capture.entries());
+    }
+
+    fn ui_content(&mut self, ui: &mut Ui) {
         application_bar::resize_edges(ui);
-        crate::kit::skin::configure(&self.themes.get(&self.settings.theme).map(|t| t.skin.clone()).unwrap_or_default());
+        if let Some(theme) = self.themes.get(&self.settings.theme) {
+            crate::kit::skin::configure(&theme.skin);
+        } else {
+            crate::kit::skin::configure(&crate::kit::skin::Skin::default());
+        }
         let _css_frame = crate::kit::native_css::frame_with_motion(
             ui,
             self.settings.animations && self.settings.theme != "high-contrast",
@@ -2505,6 +2537,7 @@ impl App {
         let liquid =
             self.themes.get(&self.settings.theme).and_then(|theme| theme.liquid).unwrap_or(self.settings.view.liquid);
         crate::kit::liquid::configure(ui.ctx(), liquid);
+        crate::kit::surface::begin_frame(ui.ctx());
         crate::kit::liquid::begin_frame(
             ui.ctx(),
             self.themes.get(&self.settings.theme).map(|theme| theme.gradients.clone()).unwrap_or_default(),
@@ -2563,12 +2596,20 @@ impl App {
         suhina_plugins::trace::timed("sample map analysis poll", || self.projects.poll_sound_map());
         self.frame_trace.mark("sample map analysis");
         let dropped = self.dropped_files(ui);
-        keys_for_shortcuts(ui.ctx());
-        self.launch_keys(ui, &mut actions);
+        let placing = crate::kit::control_layout::editing(ui.ctx());
+        if !placing {
+            keys_for_shortcuts(ui.ctx());
+            self.launch_keys(ui, &mut actions);
+        }
         for id in std::mem::take(&mut self.queued) {
             self.do_action(&id, &mut actions);
         }
-        self.shortcuts(ui, &mut actions);
+        for id in std::mem::take(&mut self.queued_menu_items) {
+            self.run_menu_item(&id, ui.ctx(), &mut actions);
+        }
+        if !placing {
+            self.shortcuts(ui, &mut actions);
+        }
         self.apply_zoom(ui.ctx());
         self.frame_trace.mark("keys");
         self.sample_map_window(ui.ctx(), &mut actions);
@@ -2640,6 +2681,16 @@ impl App {
         }
         self.frame_trace.mark("plug-in requests");
 
+        // Under the system's title bar: the window's background, as behind the bars below it.
+        // Full screen hides the title bar, and the room with it.
+        let full_screen = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
+        let corner = if full_screen { 0 } else { self.window_corner };
+        if self.title_bar > 0.0 && !full_screen {
+            egui::Panel::top("title-bar").exact_size(self.title_bar).frame(egui::Frame::NONE).show(ui, |ui| {
+                let top = egui::CornerRadius { nw: corner, ne: corner, sw: 0, se: 0 };
+                ui.painter().fill_background(ui.max_rect(), top, theme::panel_background());
+            });
+        }
         let project_info = self
             .projects
             .active()
@@ -2659,30 +2710,46 @@ impl App {
                 )
             })
             .unwrap_or_default();
-        egui::Panel::top("application-bar")
-            .exact_size(28.0)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()))
-            .show(ui, |ui| application_bar::show(ui, self.settings.view, &project_info, &timing));
-        egui::Panel::top("menu-bar")
-            .exact_size(theme::MENU_BAR)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()).inner_margin(egui::Margin::symmetric(4, 0)))
-            .show(ui, |ui| self.menu_bar(ui, &mut actions));
+        // The application bar is the window's title bar where Suhina draws its own (Windows); where
+        // the system draws one, it would be a second.
+        if cfg!(target_os = "windows") {
+            egui::Panel::top("application-bar").exact_size(28.0).frame(egui::Frame::NONE).show(ui, |ui| {
+                ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
+                application_bar::show(ui, self.settings.view, &project_info, &timing)
+            });
+        }
+        // The window's own menu bar, unless Settings turns it off (by default on macOS, whose bar
+        // at the top of the screen has the same menus).
+        if self.settings.view.menu_bar {
+            egui::Panel::top("menu-bar")
+                .exact_size(theme::MENU_BAR)
+                .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 0)))
+                .show(ui, |ui| {
+                    ui.painter().fill_background(
+                        ui.max_rect().expand2(Vec2::new(4.0, 0.0)),
+                        0.0,
+                        theme::panel_background(),
+                    );
+                    self.menu_bar(ui, &mut actions)
+                });
+        }
         self.frame_trace.mark("menu bar");
         if self.projects.len() >= 2 {
-            egui::Panel::top("tabs")
-                .exact_size(TABS)
-                .frame(egui::Frame::NONE.fill(theme::window_background()))
-                .show(ui, |ui| self.tab_row(ui, &mut actions));
+            egui::Panel::top("tabs").exact_size(TABS).frame(egui::Frame::NONE).show(ui, |ui| {
+                ui.painter().fill_background(ui.max_rect(), 0.0, theme::window_background());
+                self.tab_row(ui, &mut actions)
+            });
         }
-        egui::Panel::top("control-bar")
-            .exact_size(theme::CONTROL_BAR)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()))
-            .show(ui, |ui| self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions));
+        egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+            ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
+            self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions)
+        });
         self.frame_trace.mark("control bar");
-        egui::Panel::bottom("status-bar")
-            .exact_size(theme::STATUS_BAR)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()))
-            .show(ui, |ui| self.status_bar(ui, grid.as_ref()));
+        egui::Panel::bottom("status-bar").exact_size(theme::STATUS_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+            let bottom = egui::CornerRadius { nw: 0, ne: 0, sw: corner, se: corner };
+            ui.painter().fill_background(ui.max_rect(), bottom, theme::panel_background());
+            self.status_bar(ui, grid.as_ref())
+        });
         self.frame_trace.mark("bars");
         // Samples and MIDI files from the system: dropped this frame, or still over the window.
         let system = match (self.browser.drag.is_some(), dropped.is_empty()) {
@@ -2860,7 +2927,7 @@ impl App {
                     .on_hover_text("Close the sample map (Esc)");
                 let fill =
                     motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-                over.rect_filled(close, 0.0, fill);
+                over.fill_background(close, 0.0, fill);
                 let ink = theme::text_primary();
                 for (from, to) in
                     [(Vec2::new(-4.0, -4.0), Vec2::new(4.0, 4.0)), (Vec2::new(-4.0, 4.0), Vec2::new(4.0, -4.0))]
@@ -3221,31 +3288,6 @@ impl App {
             ui.ctx().request_repaint();
         }
         self.frame_trace.finish();
-    }
-
-    /// File › Open recent: the recent projects the project dialog lists, newest first, each opened
-    /// as File › Open… opens a file. The list is read again each time the File menu opens.
-    fn open_recent_menu(&mut self, ui: &mut Ui, was_open: bool) {
-        self.file_menu_open = true;
-        if !was_open {
-            self.lists_wanted = true;
-        }
-        let recent: Vec<PathBuf> = self.project_lists.recent.iter().take(RECENT_IN_MENU).cloned().collect();
-        ui.add_enabled_ui(!recent.is_empty(), |ui| {
-            ui.menu_button("Open recent", |ui| {
-                for path in recent {
-                    let name =
-                        path.file_stem().map_or_else(|| path.display().to_string(), |s| s.to_string_lossy().into());
-                    if ui.button(name).on_hover_text(path.display().to_string()).clicked() {
-                        if path.is_file() {
-                            self.request_open(path);
-                        } else {
-                            self.status = Status::Error(format!("{} is no longer there", path.display()));
-                        }
-                    }
-                }
-            });
-        });
     }
 
     /// What the Session view asked for this frame that the window keeps: the mixer's height,
@@ -3625,7 +3667,7 @@ impl App {
                 self.detail_drag = None;
             }
             let painter = ui.painter_at(splitter);
-            painter.rect_filled(splitter, 0.0, theme::control_background());
+            painter.fill_background(splitter, 0.0, theme::control_background());
             let grip = if stacked { Vec2::new(2.0, 32.0) } else { Vec2::new(32.0, 2.0) };
             painter.rect_filled(Rect::from_center_size(splitter.center(), grip), 0.0, theme::text_hint());
         }
@@ -3858,7 +3900,7 @@ impl App {
             self.detail_drag = None;
         }
         let painter = ui.painter_at(splitter);
-        painter.rect_filled(splitter, 0.0, theme::control_background());
+        painter.fill_background(splitter, 0.0, theme::control_background());
         painter.rect_filled(Rect::from_center_size(splitter.center(), Vec2::new(32.0, 2.0)), 0.0, theme::text_hint());
         Rect::from_min_max(area.min, Pos2::new(area.right(), splitter.top()))
     }
@@ -4053,7 +4095,7 @@ impl App {
             }
             let lit = motion::toward(ui.ctx(), response.id.with("active"), Some(id) == active, motion::VALUE);
             let idle = motion::mix(theme::window_background(), theme::panel_hover(), widgets::hover(ui, &response));
-            painter.rect_filled(tab, 0.0, motion::mix(idle, theme::panel_background(), lit));
+            painter.fill_background(tab, 0.0, motion::mix(idle, theme::panel_background(), lit));
             let text = motion::mix(theme::text_secondary(), theme::text_primary(), lit);
             widgets::paint_text(
                 &painter,
@@ -4074,7 +4116,7 @@ impl App {
     fn open_prompt_bar(&mut self, ui: &mut Ui) {
         let Some(path) = self.open_prompt.clone() else { return };
         let bar = ui.max_rect();
-        ui.painter().rect_filled(bar, 0.0, theme::panel_background());
+        ui.painter().fill_background(bar, 0.0, theme::panel_background());
         let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().to_string());
         let current = self.projects.active().and_then(|id| self.projects.name(id)).unwrap_or("the project").to_string();
         let mut choice = None;
@@ -4619,177 +4661,199 @@ impl App {
         let _style_class = crate::kit::style_class::enter("menu-bar");
         let mut styled_ui = crate::kit::style_class::ui(ui);
         let ui = &mut *styled_ui;
+        // Whether the File menu showed last frame, so its recent list is read once as it opens.
+        let file_menu_was_open = std::mem::take(&mut self.file_menu_open);
+        let shown = menus::show(ui, &self.menus());
+        if shown.open.contains(&"File") {
+            self.file_menu_open = true;
+            if !file_menu_was_open {
+                self.lists_wanted = true;
+            }
+        }
+        if let Some(id) = shown.picked {
+            self.run_menu_item(&id, ui.ctx(), actions);
+        }
+    }
+
+    /// The menu bar as it is now: what the window's bar draws and the macOS bar is built from.
+    pub fn menus(&self) -> Vec<menus::Menu> {
+        use menus::{Entry, Item, Menu};
         let has_project = self.session().is_some();
         let (can_undo, can_redo) = self.session().map_or((false, false), |s| (s.can_undo(), s.can_redo()));
         let several = self.projects.len() >= 2;
-        let keymap = self.keymap.clone();
-        let keys = move |action: &str| keymap.label(action).unwrap_or_default();
-        ui.style_mut().visuals.widgets.inactive.fg_stroke = theme::hairline(theme::text_secondary());
-        // Whether the File menu showed last frame, so its recent list is read once as it opens.
-        let file_menu_was_open = std::mem::take(&mut self.file_menu_open);
-        egui::MenuBar::new().ui(ui, |ui| {
-            bar_menu(ui, "File", |ui| {
-                // The start panel already offers new and open; the dialog would only cover it.
-                if ui.add(egui::Button::new("New or open…").shortcut_text(keys("file.new"))).clicked()
-                    && !self.start_panel_open()
-                {
-                    self.open_project_dialog(false);
-                }
-                if ui.add(egui::Button::new("Open…").shortcut_text(keys("file.open"))).clicked() {
-                    self.open_project_dialog(true);
-                }
-                self.open_recent_menu(ui, file_menu_was_open);
-                ui.separator();
-                if ui.add_enabled(has_project, egui::Button::new("Save").shortcut_text(keys("file.save"))).clicked() {
-                    self.save_active(false);
-                }
-                if ui
-                    .add_enabled(has_project, egui::Button::new("Save as…").shortcut_text(keys("file.saveAs")))
-                    .clicked()
-                {
-                    self.save_active(true);
-                }
-                if ui
-                    .add_enabled(has_project, egui::Button::new("Collect and save"))
-                    .on_hover_text("Copy the audio the project plays from other folders into its own folder, then save")
-                    .clicked()
-                {
-                    self.collect_and_save();
-                }
-                if ui
-                    .add_enabled(
-                        has_project,
-                        egui::Button::new("Save as template…").shortcut_text(keys("file.saveTemplate")),
-                    )
-                    .clicked()
-                {
-                    self.save_template();
-                }
-                if ui.add_enabled(has_project, egui::Button::new("Export…")).clicked() {
-                    self.open_export();
-                }
-                ui.separator();
-                if ui.button("Quit").clicked() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-            });
-            bar_menu(ui, "Edit", |ui| {
-                if ui.add_enabled(can_undo, egui::Button::new("Undo").shortcut_text(keys("edit.undo"))).clicked() {
-                    actions.push(Action::new("edit.undo", json!({})));
-                }
-                if ui.add_enabled(can_redo, egui::Button::new("Redo").shortcut_text(keys("edit.redo"))).clicked() {
-                    actions.push(Action::new("edit.redo", json!({})));
-                }
-            });
-            bar_menu(ui, "View", |ui| {
-                if ui
-                    .add_enabled(has_project, egui::Button::new("Session").shortcut_text(keys("view.session")))
-                    .clicked()
-                {
-                    self.shown = View::Session;
-                    self.settings_open = false;
-                }
-                if ui
-                    .add_enabled(has_project, egui::Button::new("Arrangement").shortcut_text(keys("view.arrangement")))
-                    .clicked()
-                {
-                    self.shown = View::Arrangement;
-                    self.settings_open = false;
-                }
-                let label = if self.sample_map.view.window { "Dock sample map" } else { "Sample map in a window" };
-                if ui.add(egui::Button::new(label).shortcut_text(keys("view.sampleMapWindow"))).clicked() {
-                    self.toggle_map_window();
-                }
-                let label = if self.sample_map.view.large { "Hide sample map" } else { "Sample map" };
-                if ui.add(egui::Button::new(label).shortcut_text(keys("view.sampleMap"))).clicked() {
-                    self.settings_open = false;
-                    self.toggle_large_map();
-                }
-                let missing = self.missing.rows.len();
-                let label =
-                    if missing == 0 { "Missing files…".to_string() } else { format!("Missing files ({missing})…") };
-                if ui.add_enabled(missing > 0, egui::Button::new(label)).clicked() {
-                    self.missing.open = true;
-                    self.settings_open = false;
-                }
-                let label = if self.settings.browser_open { "Hide browser" } else { "Show browser" };
-                if ui.add(egui::Button::new(label).shortcut_text(keys("view.browser"))).clicked() {
-                    self.toggle_browser();
-                }
-                let label = if self.detail_open { "Hide detail area" } else { "Show detail area" };
-                if ui.add_enabled(has_project, egui::Button::new(label).shortcut_text(keys("view.detail"))).clicked() {
-                    self.detail_open = !self.detail_open;
-                    self.editor_closed = false;
-                }
-                // The selected clip's editor (› Least height and closing in ui-clip-editor.md).
-                let label = if self.detail_open { "Hide editor" } else { "Show editor" };
-                let clip = has_project && self.shown_clip().is_some();
-                if ui.add_enabled(clip, egui::Button::new(label).shortcut_text(keys("view.editor"))).clicked() {
-                    self.toggle_editor();
-                }
-                // The detail area's Clip / Devices switch, for a clip with an editor.
-                let devices = self.detail_open && self.detail_showing == detail_view::Showing::Devices;
-                let label = if devices { "Show clip" } else { "Show devices" };
-                let editor = has_project && self.piano_clip(self.shown_clip()).is_some();
-                if ui.add_enabled(editor, egui::Button::new(label).shortcut_text(keys("view.devices"))).clicked() {
-                    self.toggle_devices();
-                }
-                ui.separator();
-                let (zoom, limits) = (self.settings.zoom, crate::settings::ZOOMS);
-                if ui
-                    .add_enabled(zoom < limits.1, egui::Button::new("Zoom in").shortcut_text(keys("view.zoomIn")))
-                    .clicked()
-                {
-                    self.step_zoom(1);
-                }
-                if ui
-                    .add_enabled(zoom > limits.0, egui::Button::new("Zoom out").shortcut_text(keys("view.zoomOut")))
-                    .clicked()
-                {
-                    self.step_zoom(-1);
-                }
-                let reset = egui::Button::new(format!("Actual size ({zoom} %)")).shortcut_text(keys("view.zoomReset"));
-                if ui.add_enabled(zoom != crate::settings::ZOOM, reset).clicked() {
-                    self.settings.zoom = crate::settings::ZOOM;
-                    self.settings_changed = true;
-                }
-            });
-            bar_menu(ui, "Projects", |ui| {
-                if ui
-                    .add_enabled(several, egui::Button::new("Next project").shortcut_text(keys("projects.next")))
-                    .clicked()
-                {
-                    actions.push(Action::new("projects.next", json!({})));
-                }
-                if ui
-                    .add_enabled(
-                        several,
-                        egui::Button::new("Previous project").shortcut_text(keys("projects.previous")),
-                    )
-                    .clicked()
-                {
-                    actions.push(Action::new("projects.previous", json!({})));
-                }
-                if let Some(active) = self.projects.active()
-                    && ui.button("Close project").clicked()
-                {
+        let keys = |action: &str| self.keymap.label(action).unwrap_or_default();
+        let item = |id: &str, label: &str| Item::new(id, label).keys(keys(id));
+        let recent: Vec<Entry> = self
+            .project_lists
+            .recent
+            .iter()
+            .take(RECENT_IN_MENU)
+            .enumerate()
+            .map(|(index, path)| {
+                let name = path.file_stem().map_or_else(|| path.display().to_string(), |s| s.to_string_lossy().into());
+                Item::new(format!("menu.recent.{index}"), name).hint(path.display().to_string()).into()
+            })
+            .collect();
+        let file = vec![
+            item("file.new", "New or open…").into(),
+            item("file.open", "Open…").into(),
+            Entry::Submenu { label: "Open recent".into(), enabled: !recent.is_empty(), entries: recent },
+            Entry::Separator,
+            item("file.save", "Save").enabled(has_project).into(),
+            item("file.saveAs", "Save as…").enabled(has_project).into(),
+            Item::new("menu.collectAndSave", "Collect and save")
+                .enabled(has_project)
+                .hint("Copy the audio the project plays from other folders into its own folder, then save")
+                .into(),
+            item("file.saveTemplate", "Save as template…").enabled(has_project).into(),
+            Item::new("menu.export", "Export…").enabled(has_project).into(),
+            Entry::Separator,
+            Item::new("menu.quit", "Quit").into(),
+        ];
+        let edit = vec![
+            item("edit.undo", "Undo").enabled(can_undo).into(),
+            item("edit.redo", "Redo").enabled(can_redo).into(),
+        ];
+        let missing = self.missing.rows.len();
+        let devices = self.detail_open && self.detail_showing == detail_view::Showing::Devices;
+        let (zoom, limits) = (self.settings.zoom, crate::settings::ZOOMS);
+        let view = vec![
+            item("view.session", "Session").enabled(has_project).into(),
+            item("view.arrangement", "Arrangement").enabled(has_project).into(),
+            item(
+                "view.sampleMapWindow",
+                if self.sample_map.view.window { "Dock sample map" } else { "Sample map in a window" },
+            )
+            .into(),
+            item("view.sampleMap", if self.sample_map.view.large { "Hide sample map" } else { "Sample map" }).into(),
+            Item::new(
+                "menu.missingFiles",
+                if missing == 0 { "Missing files…".to_string() } else { format!("Missing files ({missing})…") },
+            )
+            .enabled(missing > 0)
+            .into(),
+            item("view.browser", if self.settings.browser_open { "Hide browser" } else { "Show browser" }).into(),
+            item("view.detail", if self.detail_open { "Hide detail area" } else { "Show detail area" })
+                .enabled(has_project)
+                .into(),
+            // The selected clip's editor (› Least height and closing in ui-clip-editor.md).
+            item("view.editor", if self.detail_open { "Hide editor" } else { "Show editor" })
+                .enabled(has_project && self.shown_clip().is_some())
+                .into(),
+            // The detail area's Clip / Devices switch, for a clip with an editor.
+            item("view.devices", if devices { "Show clip" } else { "Show devices" })
+                .enabled(has_project && self.piano_clip(self.shown_clip()).is_some())
+                .into(),
+            Entry::Separator,
+            item("view.zoomIn", "Zoom in").enabled(zoom < limits.1).into(),
+            item("view.zoomOut", "Zoom out").enabled(zoom > limits.0).into(),
+            Item::new("menu.actualSize", format!("Actual size ({zoom} %)"))
+                .keys(keys("view.zoomReset"))
+                .enabled(zoom != crate::settings::ZOOM)
+                .into(),
+        ];
+        let mut projects = vec![
+            item("projects.next", "Next project").enabled(several).into(),
+            item("projects.previous", "Previous project").enabled(several).into(),
+        ];
+        if self.projects.active().is_some() {
+            projects.push(Item::new("menu.closeProject", "Close project").into());
+        }
+        vec![
+            Menu { title: "File", entries: file },
+            Menu { title: "Edit", entries: edit },
+            Menu { title: "View", entries: view },
+            Menu { title: "Projects", entries: projects },
+            Menu { title: "Options", entries: vec![item("settings.open", "Settings").into()] },
+            Menu {
+                title: "Help",
+                entries: vec![
+                    Item::new("menu.checkUpdates", "Check for updates…").into(),
+                    item("help.about", "About Suhina").into(),
+                ],
+            },
+        ]
+    }
+
+    /// Runs the menu item `id` (`menus`), picked from the window's bar or the system's.
+    pub fn run_menu_item(&mut self, id: &str, ctx: &egui::Context, actions: &mut Vec<Action>) {
+        let has_project = self.session().is_some();
+        match id {
+            // The start panel already offers new and open; the dialog would only cover it.
+            "file.new" if !self.start_panel_open() => self.open_project_dialog(false),
+            "file.new" => {}
+            "file.open" => self.open_project_dialog(true),
+            "file.save" if has_project => self.save_active(false),
+            "file.saveAs" if has_project => self.save_active(true),
+            "menu.collectAndSave" if has_project => self.collect_and_save(),
+            "file.saveTemplate" if has_project => self.save_template(),
+            "menu.export" if has_project => self.open_export(),
+            "menu.quit" => ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            "edit.undo" => actions.push(Action::new("edit.undo", json!({}))),
+            "edit.redo" => actions.push(Action::new("edit.redo", json!({}))),
+            "projects.next" => actions.push(Action::new("projects.next", json!({}))),
+            "projects.previous" => actions.push(Action::new("projects.previous", json!({}))),
+            "view.session" if has_project => {
+                self.shown = View::Session;
+                self.settings_open = false;
+            }
+            "view.arrangement" if has_project => {
+                self.shown = View::Arrangement;
+                self.settings_open = false;
+            }
+            "view.sampleMapWindow" => self.toggle_map_window(),
+            "view.sampleMap" => {
+                self.settings_open = false;
+                self.toggle_large_map();
+            }
+            "menu.missingFiles" if !self.missing.rows.is_empty() => {
+                self.missing.open = true;
+                self.settings_open = false;
+            }
+            "view.browser" => self.toggle_browser(),
+            "view.detail" if has_project => {
+                self.detail_open = !self.detail_open;
+                self.editor_closed = false;
+            }
+            "view.editor" => self.toggle_editor(),
+            "view.devices" => self.toggle_devices(),
+            "view.zoomIn" => self.step_zoom(1),
+            "view.zoomOut" => self.step_zoom(-1),
+            "menu.actualSize" => {
+                self.settings.zoom = crate::settings::ZOOM;
+                self.settings_changed = true;
+            }
+            "menu.closeProject" => {
+                if let Some(active) = self.projects.active() {
                     actions.push(Action::new("projects.close", json!({ "project": active.0 })));
                 }
-            });
-            bar_menu(ui, "Options", |ui| {
-                if ui.add(egui::Button::new("Settings").shortcut_text(keys("settings.open"))).clicked() {
-                    self.settings_open = true;
+            }
+            "settings.open" => self.settings_open = true,
+            "menu.checkUpdates" => self.updates.open_dialog(),
+            "help.about" => self.about_open = true,
+            recent if recent.starts_with("menu.recent.") => {
+                let index = recent.trim_start_matches("menu.recent.").parse::<usize>().ok();
+                if let Some(path) = index.and_then(|index| self.project_lists.recent.get(index)).cloned() {
+                    if path.is_file() {
+                        self.request_open(path);
+                    } else {
+                        self.status = Status::Error(format!("{} is no longer there", path.display()));
+                    }
                 }
-            });
-            bar_menu(ui, "Help", |ui| {
-                if ui.button("Check for updates…").clicked() {
-                    self.updates.open_dialog();
-                }
-                if ui.add(egui::Button::new("About Suhina").shortcut_text(keys("help.about"))).clicked() {
-                    self.about_open = true;
-                }
-            });
-        });
+            }
+            _ => {}
+        }
+    }
+
+    /// A pick from the system's menu bar, run with the next frame.
+    pub fn queue_menu_item(&mut self, id: &str) {
+        self.queued_menu_items.push(id.to_owned());
+    }
+
+    /// Asks for the recent projects and templates to be read again, for a menu that shows them
+    /// without being opened first (the macOS bar).
+    pub fn want_project_lists(&mut self) {
+        self.lists_wanted = true;
     }
 
     /// Handles files dropped from the system: folders, themes and projects here; the samples and
@@ -5894,7 +5958,7 @@ impl App {
                 ui.max_rect()
             };
             ui.allocate_rect(rect, egui::Sense::hover());
-            ui.painter().rect_filled(rect, 0.0, theme::window_background());
+            ui.painter().fill_background(rect, 0.0, theme::window_background());
             let changed = panel.show(ui, rect, browser, projects, &mut settings, revision);
             // The window has its own keyboard: its keys run the same actions as the main window's,
             // unless a field in it is being typed in. Embedded, the main window reads them.
@@ -6163,7 +6227,7 @@ impl App {
         let font = theme::ui_font(theme::TEXT_SMALL);
         let galley = widgets::fitted(&painter, &text, font, theme::text_primary(), 280.0);
         let rect = Rect::from_min_size(pointer + Vec2::new(14.0, 10.0), galley.size() + Vec2::new(PAD * 2.0, 6.0));
-        painter.rect_filled(rect, 0.0, theme::control_active());
+        painter.fill_background(rect, 0.0, theme::control_active());
         painter.rect_stroke(
             rect,
             0.0,
@@ -6695,7 +6759,7 @@ impl App {
             }
             Drag::Moving(_) | Drag::None => {}
         }
-        painter.rect_filled(
+        painter.fill_background(
             tempo_rect,
             0.0,
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
@@ -6800,70 +6864,81 @@ impl App {
         let transport_offset = transport.left() - x;
         let position_base = row(x + 86.0 + PAD, 64.0);
         x += transport_offset;
-        let play = row(x, 28.0);
-        let response = widgets::button_area(ui, play, Id::new("play"), "Play");
-        let play_style = crate::kit::style_class::enter_named_response("button", "play", &response);
-        if response.clicked() {
-            actions.push(self.play_action(false));
-        }
-        let running = motion::toward(ui.ctx(), response.id.with("running"), grid.running, motion::VALUE);
-        let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        widgets::button_surface(
-            &painter,
-            play,
-            &response,
-            grid.running,
-            motion::mix(hover, theme::control_active(), running),
-            0.0,
-        );
-        let glyph = crate::kit::style_class::foreground(motion::mix(theme::text_primary(), theme::accent(), running));
-        let c = play.center();
-        if !crate::kit::skin::paint(
-            &painter,
-            play,
-            "play",
-            crate::kit::skin::State::response(&response, grid.running),
-            glyph,
-            0.0,
-        ) {
-            painter.add(egui::Shape::convex_polygon(
-                vec![c + Vec2::new(-3.5, -5.0), c + Vec2::new(5.0, 0.0), c + Vec2::new(-3.5, 5.0)],
+        let play_base = row(x, 28.0);
+        let play = crate::kit::control_layout::place("transport-play", play_base, bar);
+        if !crate::kit::control_layout::placement("transport-play").hidden {
+            let response = widgets::button_area(ui, play, Id::new("play"), "Play");
+            let play_style = crate::kit::style_class::enter_named_response("button", "play", &response);
+            if response.clicked() {
+                actions.push(self.play_action(false));
+            }
+            let running = motion::toward(ui.ctx(), response.id.with("running"), grid.running, motion::VALUE);
+            let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
+            widgets::button_surface(
+                &painter,
+                play,
+                &response,
+                grid.running,
+                motion::mix(hover, theme::control_active(), running),
+                0.0,
+            );
+            let glyph =
+                crate::kit::style_class::foreground(motion::mix(theme::text_primary(), theme::accent(), running));
+            let c = play.center();
+            if !crate::kit::skin::paint(
+                &painter,
+                play,
+                "play",
+                crate::kit::skin::State::response(&response, grid.running),
                 glyph,
-                egui::Stroke::NONE,
-            ));
+                0.0,
+            ) {
+                painter.add(egui::Shape::convex_polygon(
+                    vec![c + Vec2::new(-3.5, -5.0), c + Vec2::new(5.0, 0.0), c + Vec2::new(-3.5, 5.0)],
+                    glyph,
+                    egui::Stroke::NONE,
+                ));
+            }
+            drop(play_style);
         }
-        drop(play_style);
-        x = play.right() + 1.0;
-        let stop = row(x, 28.0);
-        let response = widgets::button_area(ui, stop, Id::new("stop"), "Stop");
-        let stop_style = crate::kit::style_class::enter_named_response("button", "stop", &response);
-        if response.clicked() {
-            actions.push(self.stop_action());
+        x = play_base.right() + 1.0;
+        let stop_base = row(x, 28.0);
+        let stop = crate::kit::control_layout::place("transport-stop", stop_base, bar);
+        if !crate::kit::control_layout::placement("transport-stop").hidden {
+            let response = widgets::button_area(ui, stop, Id::new("stop"), "Stop");
+            let stop_style = crate::kit::style_class::enter_named_response("button", "stop", &response);
+            if response.clicked() {
+                actions.push(self.stop_action());
+            }
+            widgets::button_surface(
+                &painter,
+                stop,
+                &response,
+                false,
+                motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
+                0.0,
+            );
+            if !crate::kit::skin::paint(
+                &painter,
+                stop,
+                "stop",
+                crate::kit::skin::State::response(&response, false),
+                theme::text_primary(),
+                0.0,
+            ) {
+                painter.rect_filled(
+                    Rect::from_center_size(stop.center(), Vec2::splat(8.0)),
+                    0.0,
+                    theme::text_primary(),
+                );
+            }
+            drop(stop_style);
         }
-        widgets::button_surface(
-            &painter,
-            stop,
-            &response,
-            false,
-            motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
-            0.0,
-        );
-        if !crate::kit::skin::paint(
-            &painter,
-            stop,
-            "stop",
-            crate::kit::skin::State::response(&response, false),
-            theme::text_primary(),
-            0.0,
-        ) {
-            painter.rect_filled(Rect::from_center_size(stop.center(), Vec2::splat(8.0)), 0.0, theme::text_primary());
-        }
-        drop(stop_style);
-        let record = row(stop.right() + 1.0, 28.0);
+        let record = row(stop_base.right() + 1.0, 28.0);
         let recording = self.session().is_some_and(|s| s.records_arrangement());
         crate::session::record_controls::record_button(ui, &painter, record, recording, actions);
         let position = native_styles.place(ui, "position", position_base);
-        painter.rect_filled(position, 0.0, theme::window_background());
+        painter.fill_background(position, 0.0, theme::window_background());
         widgets::text_in(
             &painter,
             position.shrink2(Vec2::new(PAD, 0.0)),
@@ -6916,7 +6991,7 @@ impl App {
             right = rect.left() - PAD;
             let rect = native_styles.place(ui, "performance", rect);
             let percent = f64::from(milli.min(1000)) / 10.0;
-            painter.rect_filled(rect, 0.0, theme::window_background());
+            painter.fill_background(rect, 0.0, theme::window_background());
             let inner = rect.shrink2(Vec2::new(PAD - 2.0, 0.0));
             widgets::text_in(
                 &painter,
@@ -6938,7 +7013,7 @@ impl App {
                 Pos2::new(rect.left() + 1.0, rect.bottom() - 3.0),
                 Pos2::new(rect.right() - 1.0, rect.bottom() - 1.0),
             );
-            painter.rect_filled(track, 0.0, theme::control_background());
+            painter.fill_background(track, 0.0, theme::control_background());
             let fill = track.width() * milli.min(1000) as f32 / 1000.0;
             let full = Rect::from_min_max(track.min, Pos2::new(track.left() + fill, track.bottom()));
             let color = if milli >= 800 { theme::meter_hot() } else { theme::meter_normal() };
@@ -6953,7 +7028,7 @@ impl App {
             let rect = row(right - 76.0, 76.0);
             right = rect.left() - PAD;
             let rect = native_styles.place(ui, "performance", rect);
-            painter.rect_filled(rect, 0.0, theme::window_background());
+            painter.fill_background(rect, 0.0, theme::window_background());
             let inner = rect.shrink2(Vec2::new(PAD - 2.0, 0.0));
             widgets::text_in(
                 &painter,
@@ -7161,7 +7236,7 @@ fn drag_label(ctx: &egui::Context, pointer: Pos2, text: &str, lands: bool) {
     let font = theme::ui_font(theme::TEXT_SMALL);
     let galley = widgets::fitted(&painter, text, font, theme::text_primary(), 280.0);
     let rect = Rect::from_min_size(pointer + Vec2::new(14.0, 10.0), galley.size() + Vec2::new(PAD * 2.0, 6.0));
-    painter.rect_filled(rect, 0.0, theme::control_active());
+    painter.fill_background(rect, 0.0, theme::control_active());
     painter.rect_stroke(
         rect,
         0.0,
@@ -7238,17 +7313,6 @@ pub(crate) const NAME_RECT_CLIP: &str = "clip-name-rect";
 pub(crate) const NAME_RECT_SLOT: &str = "slot-name-rect";
 /// Where a track's name is drawn in its header, by track id, in the view shown (#696).
 pub(crate) const NAME_RECT_TRACK: &str = "track-name-rect";
-
-/// One menu of the menu bar. While another of the bar's menus is open, the pointer over this
-/// one's title opens it, as system menu bars do.
-fn bar_menu<R>(ui: &mut Ui, title: &str, content: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<Option<R>> {
-    let shown = ui.menu_button(title, content);
-    let id = egui::Popup::default_response_id(&shown.response);
-    if shown.response.hovered() && !egui::Popup::is_id_open(ui.ctx(), id) && egui::Popup::is_any_open(ui.ctx()) {
-        egui::Popup::open_id(ui.ctx(), id);
-    }
-    shown
-}
 
 #[cfg(test)]
 mod tests {

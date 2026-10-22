@@ -45,5 +45,9 @@
   #control-record { color: #f18d75; }
   .knob { color: #c4d5d8; background-color: #28383f; }
   .meter { color: #7ed66c; background-color: #081014; }
+  .meter-level { box-shadow: 0 0 4px #7ed66c88; }
+  .fader-cap { box-shadow: 0 0 4px #b3cfd655; }
+  .knob { box-shadow: 0 0 3px #b3cfd633; }
+  .track-header .value { color: #829a9d; background-color: #17252a; }
   #tempo, #position { color: #dfdcae; text-shadow: 0 0 2px #d0bb5733; }
 }

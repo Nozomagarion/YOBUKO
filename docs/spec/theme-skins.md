@@ -5,6 +5,10 @@ type: spec
 status: draft
 last_verified: 2026-10-22
 covers:
+  - crates/ui/src/kit/artwork_png.rs
+  - crates/ui/src/app/control_editor.rs
+  - crates/ui/src/kit/artwork.rs
+  - crates/ui/src/kit/control_layout.rs
   - assets/themes/default/*.svg
   - crates/ui/themes/THEME-PACKAGE-README.md
   - crates/ui/themes/dark-gloss.css
@@ -67,17 +71,107 @@ and explicit limits. Its palette reference is generated from the token registry.
 
 # Theme skins
 
+## Native acceptance captures
+
+These are unretouched captures of the native Linux application (Mesa/OpenGL on an
+isolated test display), using original dark-gloss CSS and a small original colour-keyed
+name texture. The detail panel is hidden and the existing native mixer/track resizing
+is used to expose controls. They demonstrate implemented adapters, not complete
+browser CSS support or a finished appearance for every theme.
+
+- [Session, tall mixer and live vertical meters](../design/reference/theme-dark-gloss.png).
+- [Horizontal faders/meters, names at the bottom and top-only colour stripes](../design/reference/theme-dark-gloss-horizontal.png).
+- [Edit interface: actual controls beneath outlines and an 8-point grid](../design/reference/theme-interface-editor.png).
+- [Arrangement, large native track rows and replaceable note glyphs](../design/reference/theme-dark-gloss-arrangement.png).
+
+The Session meter captures use actual demo playback through a paced virtual ALSA
+sink. They do not verify physical audio latency or supported desktop transparency;
+the native GPU transparency regression has separate automated coverage. Theme
+changes were made through external JSON/CSS files while the app remained open.
+Colour-dependent texture contrast is authored with named scopes, e.g.
+`.track-name[data-object=track-1] { color: #edf6e9; }`; arbitrary named track scopes
+use `data-object`, while toolbar/workspace ids have their documented literal ids.
+
+## Native element placement contract
+
+The customization target includes every native control and text/name area, not just toolbar
+modules. `skin.controls` is a bounded map (256 semantic names) whose entries specify native
+anchor-relative `left`/`top` offsets, optional logical-point `width`/`height`, and a
+`direction` (`vertical` or `horizontal`). `bottom` anchors to the containing panel's
+bottom; `hidden` suppresses connected elements. The canonical CSS projection uses
+`.control-NAME { left: 8px; top: 0px; width: 80px; height: 20px;
+--suhina-direction: horizontal; }`. Offsets are bounded to ±16384, sizes to 1–4096.
+Each adapter must resolve the rectangle before interaction and paint, preserve the native
+widget ID/command, and contain it in its panel. Removing an override restores native geometry.
+These are explicit native relative offsets, not a claim of general CSS positioning support.
+Right-click the toolbar and choose **Edit interface** for measured native outlines and
+an 8-point grid. Drag an outline or select a semantic element and edit offsets, size,
+bottom anchoring and direction. Matching instances share that theme rule. Done merges only
+edited entries into the latest theme; Cancel/Escape discards the draft. A theme switch cancels
+it. Entering/leaving without edits never forks a default theme. An input shield keeps the
+underlying transport/mixer commands idle while placing controls; the editor window remains
+above the shield. Native widget IDs remain unchanged.
+The direction property applies to controls with an axis; horizontal volume dragging increases
+to the right, while vertical dragging increases upwards. Keyboard, wheel, reset and undo keep
+their existing semantics. Layout entry support is incremental and documented per adapter.
+
+Artwork can choose an exact raw track colour and interaction state before palette tinting:
+`track.name.color-00ff00.hover` overrides the default `track.name`. The most specific own
+colour/state variant wins, then own colour, own state, own default, then embedded fallback.
+`track.body` covers the strip background. A contiguous sequence of `.frame-0` through
+`.frame-31` asset keys animates that variant at `skin.artwork-fps` (1–30, default 12).
+Native animation-off freezes it at frame zero without a repaint loop. Assets allow the
+base roles plus 64 variants; SVG parse, cache and package budgets still apply. MIDI/audio type glyphs have
+their own SVG roles (`track.midi` and `track.audio`); MIDI defaults to a note symbol.
+
+Arrangement headers also expose `arrangement-fold`, `arrangement-enable`,
+`arrangement-automation`, `arrangement-output`, `arrangement-input`,
+`arrangement-send-1` (and subsequent return slots), and previous/next send buttons.
+Session send controls expose `mixer-send-1` and subsequent slots within the movable
+sends region. Slot numbers follow native return order, independent of project ids.
+
+Connected placement adapters currently include native/custom toolbar modules (`toolbar-NAME`),
+transport play/stop/record/metronome, Session strip name, output/input/monitor block, devices,
+sends, pan, volume/readout, meter, compact volume and toggle row (`mixer-NAME`), solo/cue/arm,
+track-type glyphs, and Arrangement name, colour band, volume/pan and meter. `mixer-color` can
+hide the side band or make it a top stripe; `mixer-name { bottom: 0px; }` relocates the name.
+Compact native height thresholds remain authoritative. Full raw-widget, clip/scene, browser
+and floating-window geometry coverage remains necessary for the all-elements target.
+
+SDK device controls use `device-<control-id>` placement names. Their drawing coordinates,
+hit rectangles and parameter gestures move together. Explicit dimensions scale rectangles,
+paths, curves and textures on both axes; text/strokes use the smaller scale and knobs retain
+their circular shape. Invalid/long identifier characters get a bounded stable slug/hash name.
+The native device panel remains the containing clip and each control keeps its existing ID,
+parameter bindings and visibility condition. Disabled/hidden device controls do not dispatch
+parameter actions. The native volume-direction property does not reinterpret SDK bindings.
+
+On the native see-through surface host, SVG background roles clear their covered region
+before compositing the texture so a background's alpha is written once. The opaque/OpenGL
+path, floating layers and an active private background image retain normal blending. Native
+fallback fills use the shared `Backgrounds` path. Scoped authored foregrounds also cover the
+independent `text.inverse` role; selected fills use `control.selectedBackground`.
+
+Artwork roles and frames also accept package-relative PNGs or embedded PNG data URLs.
+PNG decoding is off the audio callback and bounded to 8 MiB per file, 4096 pixels per
+dimension, four million pixels and 16 MiB of decoded allocation. The combined inline
+artwork payload is bounded to 16 MiB, checked progressively as package resources resolve.
+SVG remains strictly self-contained vector markup. Portable packages retain each image's
+format; missing roles still inherit the original SVG. A revision/role source-hash cache
+avoids hashing large PNG data on every repaint; rendered textures retain the existing
+64-entry/1024-square budget and invalidate when a live resource changes.
+
 A theme owns its control artwork, level-meter appearance and control-bar layout.
 Changing a bundled theme creates an editable copy. Duplicating, renaming, resetting,
 exporting and importing preserve the complete theme. Old colour-only themes retain
 Suhina's existing layout and controls.
 
 The optional `skin` object in theme JSON contains `assets`, `meter`, and `toolbar`.
-SVG assets may be inline SVG strings in JSON or relative `.svg` file paths beside
+Artwork may be inline SVG strings or PNG data URIs in JSON, or relative `.svg`/`.png` file paths beside
 that JSON. Portable ZIPs put each theme and its artwork in a separate folder.
 Artwork changes presentation only: command dispatch, keyboard access, value ranges,
 gestures and undo remain owned by the application. Missing or invalid artwork uses
-Suhina's normal drawing. External images, network resources and SVG scripts are not
+Suhina's normal drawing. Network resources, embedded SVG images and SVG scripts are not
 loaded. SVGs are parsed and rasterized once per asset, scale and palette, never on
 the audio thread; texture cache size and raster dimensions are bounded.
 
@@ -91,7 +185,14 @@ play/stop/record/solo/arm/cue icons. State suffixes `.hover`, `.active`, `.disab
 optionally override a base role. `currentColor` uses the control's foreground.
 The fader cap moves along the rail; the knob pointer rotates with its value.
 
-Meter styles are continuous, segmented and needle. They use the existing stereo
+Meter styles are continuous, segmented, needle and frames. The `frames` style selects
+contiguous `meter.frame-0` through `meter.frame-31` SVG/PNG artwork by the louder
+channel's normalized dBFS peak, from silence to the top of the existing meter range.
+It is signal-driven, independent of animation settings and artwork fps. Missing or
+invalid frame sequences fall back to the continuous stereo meter. The native clip
+indicator, click-to-reset command and accessible measurement remain intact. Exact
+track-colour and interaction-state sequences follow normal artwork precedence.
+Other styles use the existing stereo
 peak/RMS monitor; presentation never changes measurement or sound. The clip light
 and click-to-reset work with every style. Segment count is bounded. Needle displays
 use peak for the thin pointer and RMS for the heavier pointer. These are dBFS level
@@ -134,7 +235,7 @@ The initial reader supports `:root` palette variables (`--window-background` map
 `window.background`), class/descendant colour, background and border colours, integer
 pixel font sizes and corner radii. `.meter` accepts `style` and `segments`; `.toolbar`
 accepts comma-separated `order` and `hidden` module lists. Control `image` declarations
-name package-relative SVGs, including state suffixes. `.window` accepts a relative PNG
+name package-relative SVG/PNG artwork, including state suffixes. `.window` accepts a relative PNG
 `background-image`, `background-opacity` and `background-blur` (0–100).
 
 These are a bounded native subset, not complete CSS. Variables with `var()`, arbitrary

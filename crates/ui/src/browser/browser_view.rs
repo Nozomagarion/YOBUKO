@@ -7,6 +7,7 @@
 //! their commands (`library.*`, `preview.*`); adding to the project is left to the window,
 //! which knows the selected track.
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -170,7 +171,7 @@ pub fn show(ui: &mut Ui, area: Rect, state: &mut BrowserState, cx: Context<'_>) 
     let Context { projects, settings, selected_track, search_key, other_results } = cx;
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::panel_background());
+    painter.fill_background(area, 0.0, theme::panel_background());
     crate::kit::native_css::background(&painter, area);
     state.poll();
     suhina_plugins::trace::timed("library poll", || projects.file_library_mut().poll());
@@ -239,12 +240,12 @@ pub fn show(ui: &mut Ui, area: Rect, state: &mut BrowserState, cx: Context<'_>) 
             rect,
             &response,
             chosen,
-            motion::mix(idle, theme::browser_text_value(), lit),
+            motion::mix(idle, theme::control_selected(), lit),
             0.0,
         );
         let text = crate::kit::style_class::foreground(motion::mix(
             theme::browser_text_secondary(),
-            theme::text_on(theme::browser_text_value()),
+            theme::text_inverse(),
             lit,
         ));
         widgets::text_in(&painter, rect, Align2::CENTER_CENTER, title, theme::ui_font(theme::TEXT_SMALL), text);
@@ -338,7 +339,7 @@ pub fn show(ui: &mut Ui, area: Rect, state: &mut BrowserState, cx: Context<'_>) 
 
 fn search_field(ui: &mut Ui, rect: Rect, state: &mut BrowserState, key: &str, out: &mut BrowserOut) {
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, theme::window_background());
+    painter.fill_background(rect, 0.0, theme::window_background());
     let glass = Pos2::new(rect.left() + PAD + 5.0, rect.center().y);
     painter.circle_stroke(glass + Vec2::new(-1.0, -1.0), 3.5, Stroke::new(1.1, theme::browser_text_hint()));
     painter.line_segment(
@@ -505,7 +506,7 @@ fn sidebar_view(
                     } else {
                         motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response))
                     };
-                    painter.rect_filled(rect.intersect(area), 0.0, fill);
+                    painter.fill_background(rect.intersect(area), 0.0, fill);
                     let text = Rect::from_min_max(rect.min + Vec2::new(PAD + 2.0, 0.0), rect.max - Vec2::new(PAD, 0.0));
                     let color = if chosen { theme::browser_text_primary() } else { theme::browser_text_secondary() };
                     widgets::text_in(&painter, text, Align2::LEFT_CENTER, label, item_font.clone(), color);
@@ -519,7 +520,7 @@ fn sidebar_view(
             motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response))
         };
         if rect.intersects(area) {
-            painter.rect_filled(rect.intersect(area), 0.0, fill);
+            painter.fill_background(rect.intersect(area), 0.0, fill);
             let text = Rect::from_min_max(rect.min + Vec2::new(PAD + 2.0, 0.0), rect.max - Vec2::new(PAD, 0.0));
             let color = if chosen { theme::browser_text_primary() } else { theme::browser_text_secondary() };
             widgets::text_in(&painter, text, Align2::LEFT_CENTER, label, item_font.clone(), color);
@@ -680,7 +681,7 @@ fn results_view(
     out: &mut BrowserOut,
 ) {
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::panel_background());
+    painter.fill_background(area, 0.0, theme::panel_background());
     // The Plug-ins category's Instruments | Effects switch takes the results' top, then its
     // list's column headings, unless a place or a search lists other rows.
     let plugins_view = projects.file_library_mut().plugins_view();
@@ -754,7 +755,7 @@ fn results_view(
         } else {
             motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response))
         };
-        painter.rect_filled(shown, 0.0, fill);
+        painter.fill_background(shown, 0.0, fill);
         let mut x = rect.left() + 4.0 + row.depth as f32 * INDENT;
         let lead = Rect::from_min_size(Pos2::new(x, rect.top()), Vec2::new(10.0, ROW));
         let previewable = matches!(row.item.kind, ItemKind::Sample | ItemKind::Midi);
@@ -1139,11 +1140,11 @@ fn plugins_view_switch(
             rect,
             &response,
             chosen == view,
-            if chosen == view { theme::browser_text_value() } else { idle },
+            if chosen == view { theme::control_selected() } else { idle },
             0.0,
         );
         let text = crate::kit::style_class::foreground(if chosen == view {
-            theme::text_on(theme::browser_text_value())
+            theme::text_inverse()
         } else {
             theme::browser_text_secondary()
         });
@@ -1202,7 +1203,7 @@ fn columns_header(ui: &mut Ui, area: Rect, state: &mut BrowserState) {
             if chosen { format!("{name} {}", if descending { "▼" } else { "▲" }) } else { name.to_string() };
         let color = if chosen { theme::browser_text_primary() } else { theme::browser_text_hint() };
         let hover = motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response));
-        painter.rect_filled(rect, 0.0, hover);
+        painter.fill_background(rect, 0.0, hover);
         let align = if index == 0 { Align2::LEFT_CENTER } else { Align2::RIGHT_CENTER };
         widgets::text_in(&painter, rect, align, &label, small.clone(), color);
     }
@@ -1262,7 +1263,7 @@ fn preview_strip(
     out: &mut BrowserOut,
 ) {
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
     painter.hline(area.x_range(), area.top() + 0.5, theme::hairline(theme::border()));
     // The Auto switch at the top right: a selected sample plays by itself while it is lit
     // (Settings › Browser › the same setting).
@@ -1459,7 +1460,7 @@ fn preview_strip(
 /// ([browser](browser.md) › Colour tags).
 fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut Projects, out: &mut BrowserOut) {
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
     painter.rect_stroke(area, 1.0, theme::hairline(theme::border()), egui::StrokeKind::Inside);
     // How many items carry each tag, counted when the editor opened and after every change
     // made in it.
@@ -1495,7 +1496,7 @@ fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut 
         } else {
             motion::mix(theme::window_background(), theme::panel_hover(), widgets::hover(ui, &row))
         };
-        painter.rect_filled(rect, 0.0, fill);
+        painter.fill_background(rect, 0.0, fill);
         // Its checkbox: with items selected, it tags them (ticked while every selected item
         // carries the tag); with none, it filters the results by the tag, as the footer's
         // dots do.
@@ -1523,9 +1524,13 @@ fn tag_editor(ui: &mut Ui, area: Rect, state: &mut BrowserState, projects: &mut 
                 },
             )
         });
-        painter.rect_filled(box_rect, 3.0, if on { theme::browser_text_value() } else { theme::control_background() });
+        painter.fill_background(
+            box_rect,
+            3.0,
+            if on { theme::control_selected() } else { theme::control_background() },
+        );
         if on {
-            painter.rect_filled(box_rect.shrink(4.0), 0.0, theme::window_background());
+            painter.rect_filled(box_rect.shrink(4.0), 0.0, theme::text_inverse());
         }
         if check.clicked() {
             if selection.is_empty() {
@@ -1706,7 +1711,7 @@ fn footer_view(
     out: &mut BrowserOut,
 ) -> Rect {
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::panel_background());
+    painter.fill_background(area, 0.0, theme::panel_background());
     painter.hline(area.x_range(), area.top() + 0.5, theme::hairline(theme::border()));
     // The Edit tags button's room, so the dots stop before it.
     let edit_width = widgets::text_width(ui, "Edit tags", theme::ui_font(theme::TEXT_SMALL)) + FILTER_PAD * 2.0;
@@ -1805,12 +1810,12 @@ fn footer_view(
             rect,
             &response,
             state.tag_editor,
-            motion::mix(idle, theme::browser_text_value(), lit),
+            motion::mix(idle, theme::control_selected(), lit),
             0.0,
         );
         let text = crate::kit::style_class::foreground(motion::mix(
             theme::browser_text_secondary(),
-            theme::text_on(theme::browser_text_value()),
+            theme::text_inverse(),
             lit,
         ));
         widgets::text_in(&painter, rect, Align2::CENTER_CENTER, "Edit tags", theme::ui_font(theme::TEXT_SMALL), text);

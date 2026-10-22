@@ -250,6 +250,13 @@ Only one content capture is made per frame, independently of the panel backdrop;
 per-clip capture, previous-frame image or recursive sampling is allowed. Missing GPU
 sources keep the optical gradient/rim fallback.
 
+### Menu bar
+
+Appearance > Menu bar in the window shows File, Edit, View, Projects, Options and Help under the
+title bar. It is off by default on macOS, whose menu bar at the top of the screen has the same
+menus and items, and on by default on Windows and Linux, where it is the only one. Keys work
+whether it shows or not.
+
 ### Application bar and private background
 
 Appearance > Application bar keeps Suhina visible, with Left or Centre placement.
@@ -257,7 +264,7 @@ Project name (including its unsaved marker) and project timing (tempo and time s
 are optional and share a separate Left/Centre position. Long names are clipped inside
 non-overlapping cells. On Windows this bar replaces native decorations; dragging, double-click
 maximise, minimise, close and all eight edge/corner resize directions remain available.
-Other platforms keep native decorations; the application bar retains its information but has no duplicate window buttons or drag/maximise handling.
+Other platforms keep the system's title bar and show no application bar, so these settings change nothing there.
 
 Appearance > Background accepts a user-owned PNG, limited to 32 MiB and 8192 pixels per
 axis. Loading and image blur run away from the UI thread; the displayed image is reduced
@@ -267,9 +274,11 @@ Background blur is measured in logical display pixels, converted to source pixel
 the cover scale, so resizing and different image sizes retain the requested visual strength.
 Zero blur bypasses filtering. Background blur ranges from 0 to 40 pixels and Surface
 opacity from 0 to 100 percent. Clearing the path removes the image. High Contrast does
-not show it. The native window stays opaque: this feature never captures the desktop,
-its icons, or other application windows. Alpha blends neutral UI surfaces over the chosen
-image inside Suhina. It is not an operating-system backdrop.
+not show it. While the image is displayed, neutral UI surfaces blend over it, including
+on hosts that support desktop transparency. Surface opacity reveals the chosen image,
+not other windows. Clearing the image restores the theme's desktop transparency on a
+supported GPU host; OpenGL and unsupported compositors keep ordinary opaque rendering.
+The image feature does not capture the desktop or discover its wallpaper.
 
 Colour and gradient editors retain unmultiplied RGB at zero opacity, including after
 saving and loading a theme. Returning opacity to 100 percent restores the original hue.

@@ -30,11 +30,12 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
         let mut skin = themes.skin.clone();
         ui.horizontal(|ui| {
             ui.label("Meter style");
-            for style in [skin::MeterStyle::Continuous, skin::MeterStyle::Segmented, skin::MeterStyle::Needle] {
+            for style in [skin::MeterStyle::Continuous, skin::MeterStyle::Segmented, skin::MeterStyle::Needle, skin::MeterStyle::Frames] {
                 ui.selectable_value(&mut skin.meter, style, style.name());
             }
         });
         if skin.meter == skin::MeterStyle::Segmented { ui.add(egui::Slider::new(&mut skin.segments, 4..=64).text("Meter segments")); }
+        if skin.meter == skin::MeterStyle::Frames { ui.label("Supply meter.frame-0, meter.frame-1, … artwork in this theme. The measured peak chooses a frame; missing sequences use the continuous meter."); }
         if ui.button("Customize default SVG controls").clicked() { skin.assets = skin::inherited_assets(); }
         if ui.button("Inherit default SVG controls").clicked() { skin.assets.clear(); }
         ui.label("Missing artwork inherits themes/_defaults/assets/. This theme stores only its overrides.");
@@ -70,8 +71,14 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
                     let role = format!("{role}{suffix}"); ui.selectable_value(&mut state.role, role.clone(), role);
                 } }
             });
-            if old != state.role { state.svg = themes.skin.assets.get(&state.role).cloned().unwrap_or_default(); state.error.clear(); }
+            if old != state.role {
+                state.svg = themes.skin.assets.get(&state.role).filter(|source| !skin::png_artwork(source)).cloned().unwrap_or_default();
+                state.error.clear();
+            }
             if !state.role.is_empty() {
+                if themes.skin.assets.get(&state.role).is_some_and(|source| skin::png_artwork(source)) {
+                    ui.label("This role uses PNG artwork. Edit its package file externally, or paste SVG below to replace it.");
+                }
                 ui.add(egui::TextEdit::multiline(&mut state.svg).code_editor().desired_rows(5).desired_width(f32::INFINITY));
                 if ui.button("Apply SVG").clicked() {
                     match skin::parse_svg(&state.svg) {
@@ -79,13 +86,13 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
                         Err(error) => state.error = error,
                     }
                 }
-                if ui.button("Remove SVG override").clicked() {
+                if ui.button("Remove artwork override").clicked() {
                     let mut skin = themes.skin.clone(); skin.assets.remove(&state.role); state.svg.clear(); request = Some(ThemeRequest::EditSkin(skin));
                 }
             }
         });
         ui.collapsing("Native CSS", |ui| {
-            ui.label("Supported: :root colour variables, meter style/segments, toolbar order/hidden, control image URLs. Export a theme package for editable SVG files and style.css.");
+            ui.label("Supported: :root colours, meter style/segments, toolbar order/hidden, .control-NAME placement, artwork frame rate and image URLs. Right-click the toolbar > Edit interface to move connected elements. Export a theme package for editable artwork and style.css.");
             if ui.button("Load current style as CSS").clicked() {
                 let theme = crate::kit::theme::Theme { name: themes.name.clone(), colors: themes.colors, skin: themes.skin.clone(), transparent_rgb: themes.transparent_rgb.clone(), ..Default::default() };
                 state.css = theme_css::export(&theme);
