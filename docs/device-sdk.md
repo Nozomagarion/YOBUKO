@@ -391,7 +391,7 @@ root. The example constructs a Sampler source, multiplies its stereo output by
 a graph parameter, binds a generated one-second sine sample off the audio thread,
 and renders timestamped note events. It prints 48000 frames and a nonzero peak.
 See [Sampler](spec/sampler.md#composable-sample-source-first-stage) for the
-first-stage limits; embedded stock Sampler definitions continue using their native wrapper.
+source-binding contract. The built-in Sampler remains native code with an SDK panel.
 
 ## Trusted native graph effects
 

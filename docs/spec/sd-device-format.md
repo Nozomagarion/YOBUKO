@@ -351,6 +351,6 @@ readers instead of being silently dropped. Existing stock Sampler ids/revisions 
 independently, then expanded preparation caps nesting at four, nodes at 4096, voice capacity at 128,
 grain capacity at 256 and aggregate delay storage at 2,000,000 frames. Binding targets are validated
 against the prepared child. Sample PCM is not duplicated per instance. The resource key survives a
-round-trip; the host supplies the corresponding PreparedSamples map after relocation. Current track
-loading has no UI for supplying that map: these resource-bound compositions use the Rust host API;
-plain Sampler sources and registered native effects keep their existing loading behavior.
+round-trip; the host supplies the corresponding PreparedSamples map after relocation. Project commands bind one source named `sample` through `device.addSd` or `track.add`;
+`device.loadSample` replaces it while preserving graph state. The desktop has no resource-map
+editor. Custom Rust hosts can supply several named bindings.

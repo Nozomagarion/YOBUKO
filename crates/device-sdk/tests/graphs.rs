@@ -70,10 +70,7 @@ fn midi_transpose_parameter_updates_without_recompiling() {
 fn every_catalog_node_round_trips_resets_and_ignores_host_block_size() {
     let mut kinds = NODE_CATALOG
         .iter()
-        // Native wrappers require the registry factory; bundle tests cover their contracts.
-        .filter(|info| {
-            !matches!(info.kind, "audio_input" | "audio_output" | "midi_input" | "midi_output" | "native_device")
-        })
+        .filter(|info| !matches!(info.kind, "audio_input" | "audio_output" | "midi_input" | "midi_output"))
         // Resource nodes need typed asset/region wires; resource_nodes.rs covers them together.
         .filter(|info| {
             let kind = serde_json::from_str::<K>(info.example).unwrap();

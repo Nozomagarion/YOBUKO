@@ -77,7 +77,7 @@ pub(crate) fn prepare(kind: &NodeKind, rate: f64) -> Result<Option<Box<dyn Nativ
 impl crate::DeviceGraph {
     /// Prepare an audio graph with trusted host kernels. The resolver runs only here, off-thread;
     /// it must return a fresh, sample-rate-prepared kernel or reject an unknown identifier.
-    /// This API does not load plug-ins or change the whole-device native wrapper contract.
+    /// This API does not load plug-ins or accept legacy whole-device wrappers.
     pub fn compile_with_native_at(
         &self,
         sample_rate: f64,

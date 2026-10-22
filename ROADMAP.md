@@ -139,10 +139,12 @@ refused or suspended, never by losing its edits.
 
 ## What works now
 
+- SDK sampler graphs can bind a sample while being added to a track; project saving,
+  relocation and missing-file relinking retain the graph and its source separately.
+
 - **Sampler graph building blocks:** typed sample resources, routed events, private voice/grain
   graphs, envelopes, loops, slicing, deterministic modulation, native stretch, versioned components
   and editable sampler/granular templates are executable through the Rust SDK host API.
-
 
 - **Composable SDK sample source:** Rust-authored instrument graphs can bind PCM to
   independent polyphonic `sampler` nodes and process their audio with ordinary SDK nodes.
@@ -924,6 +926,3 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 - Project-open audio references stay inside the project folder; external files require explicit relinking.
 
 - Sampler Loop playback uses Fade in and Fade out for its edges, without a separate Loop fade field or a shortened loop.
-
-- SDK sampler graphs can bind a sample while being added to a track; project saving,
-  relocation and missing-file relinking retain the graph and its source separately.

@@ -93,8 +93,8 @@ authoring fields are accepted.
 - The graph runs in offline and real-time chains without loading community Rust code.
 - Instrument graphs may also compose polyphonic `sampler` sources whose PCM and controls
   are bound through the prepared Rust API off the audio thread. Source assets are not embedded
-  in `.sd` yet; the stock instrument retains its native wrapper.
-- Executable custom DSP, general graph-level polyphonic voice allocation, spectral processing, oversampling and
+  in `.sd` yet; the stock instrument remains native code with an SDK panel.
+- Executable custom DSP, spectral processing, oversampling and
   graph editing remain outside this data-only effect implementation. Delay memory and node
   counts are bounded, but graph admission is not a hardware CPU deadline guarantee.
 

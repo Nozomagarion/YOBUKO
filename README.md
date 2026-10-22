@@ -221,9 +221,6 @@ SDK effect panels can include custom vector controls, XY pads, gradients and emb
 icons, photos and repeating backgrounds. Artwork and bindings travel inside the single `.sd`;
 see the [custom panel guide](docs/device-sdk.md#custom-panels-images-and-controls).
 
-Application builds generate stock device definitions in the build script's `OUT_DIR/devices/`
-as `.sd` files and embed them in the executable for immediate startup availability.
-
 
 The Rust SDK also offers prepared sample resources, private polyphonic voice/grain graphs,
 slicing, native stretch and editable sampler/granular templates. Run the
