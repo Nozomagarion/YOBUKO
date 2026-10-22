@@ -30,6 +30,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - run: cargo fetch --locked
       - run: cargo check -p suhina-ui --all-targets
       - name: Resolved lockfile for review
         if: always()
@@ -58,6 +59,9 @@ jobs:
               for source in sorted((root / 'registry/src').glob('index.crates.io-*/*')):
                   group = hashlib.sha256(source.name.encode()).digest()[0] % 4
                   archives[group].add(source, arcname=str(source.relative_to(root)))
+              for archive in sorted((root / 'registry/cache').glob('index.crates.io-*/*.crate')):
+                  group = hashlib.sha256(archive.name.removesuffix('.crate').encode()).digest()[0] % 4
+                  archives[group].add(archive, arcname=str(archive.relative_to(root)))
               for index in sorted((root / 'registry/index').glob('index.crates.io-*')):
                   for name in ['config.json', '.cache']:
                       source = index / name
