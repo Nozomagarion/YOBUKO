@@ -26,6 +26,7 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
     }
     let mut request = None;
     ui.collapsing("Controls, meters and toolbar", |ui| {
+        ui.label("To move the current toolbar without changing its layout, right-click it and choose Edit toolbar. Outlined controls snap to an 8 point grid; Done saves, Cancel discards.");
         let mut skin = themes.skin.clone();
         ui.horizontal(|ui| {
             ui.label("Meter style");
@@ -43,7 +44,7 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
             skin.toolbar = custom.then(Default::default);
         }
         if let Some(toolbar) = skin.toolbar.as_mut() {
-            ui.label("Right-click the top control bar and choose Edit toolbar, then drag its labelled blocks. You can also reorder them here.");
+            ui.label("Right-click the top control bar and choose Edit toolbar. Drag the outlined real controls on the snap grid; Done saves and Cancel discards. You can also reorder modules here.");
             let mut movement = None;
             for (index, module) in toolbar.order.clone().iter().enumerate() {
                 ui.horizontal(|ui| {

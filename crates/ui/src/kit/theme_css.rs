@@ -124,6 +124,16 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
                     },
                     _ => Err("unsupported meter property"),
                 },
+                "toolbar" | ".toolbar" if property.starts_with("offset-") => {
+                    let module = property.trim_start_matches("offset-");
+                    match value.trim_end_matches("px").parse::<i32>() {
+                        Ok(offset) if skin::MODULES.contains(&module) && (-16384..=16384).contains(&offset) => {
+                            theme.skin.toolbar_offsets.insert(module.into(), offset);
+                            Ok(())
+                        }
+                        _ => Err("expected a known module offset from -16384 to 16384"),
+                    }
+                }
                 "toolbar" | ".toolbar" if matches!(property, "order" | "hidden") => {
                     let list: Vec<_> =
                         value.split(',').map(str::trim).filter(|s| !s.is_empty() && *s != "none").collect();
@@ -192,6 +202,9 @@ pub fn export(theme: &Theme) -> String {
             if toolbar.hidden.is_empty() { "none".into() } else { toolbar.hidden.join(", ") }
         ));
     }
+    for (module, offset) in &theme.skin.toolbar_offsets {
+        css.push_str(&format!("toolbar {{ offset-{module}: {offset}px; }}\n"));
+    }
     if theme.skin.background.is_some() {
         css.push_str(&format!(
             ".window {{ background-image: url(\"background.png\"); background-opacity: {}; background-blur: {}; }}\n",
@@ -219,6 +232,20 @@ pub fn export(theme: &Theme) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn toolbar_offsets_mirror_without_replacing_the_native_layout() {
+        let mut theme = Theme::default();
+        assert!(apply(&mut theme, "toolbar { offset-transport: 80px; offset-views: -16px; }").is_empty());
+        assert!(theme.skin.toolbar.is_none());
+        assert_eq!(theme.skin.toolbar_offsets.get("transport"), Some(&80));
+        let mut restored = Theme::default();
+        assert!(apply(&mut restored, &export(&theme)).is_empty());
+        assert_eq!(restored.skin.toolbar_offsets, theme.skin.toolbar_offsets);
+        assert!(
+            !apply(&mut restored, "toolbar { offset-transport: NaN; offset-views: 999999px; offset-bogus: 1px; }")
+                .is_empty()
+        );
+    }
     #[test]
     fn css_changes_native_model_and_reports_unsupported_rules() {
         let mut theme = Theme::default();

@@ -303,22 +303,22 @@ mod tests {
     use super::*;
     #[test]
     fn a_live_theme_change_survives_all_enclosing_style_scopes() {
-        let original=theme::palette();
-        let mut skin=skin::Skin::default();
-        skin.styles.insert(".browser".into(),[("color".into(),"#123456".into())].into());
+        let original = theme::palette();
+        let mut skin = skin::Skin::default();
+        skin.styles.insert(".browser".into(), [("color".into(), "#123456".into())].into());
         skin::configure(&skin);
-        let mut changed=original;
-        changed.text_primary=egui::Color32::from_rgb(40,50,60);
-        changed.grid_major=egui::Color32::from_rgba_unmultiplied(80,90,100,120);
-        let ctx=egui::Context::default();
+        let mut changed = original;
+        changed.text_primary = egui::Color32::from_rgb(40, 50, 60);
+        changed.grid_major = egui::Color32::from_rgba_unmultiplied(80, 90, 100, 120);
+        let ctx = egui::Context::default();
         {
-            let _window=enter("window");
-            let _browser=enter("browser");
-            assert_eq!(theme::text_primary(),theme::parse_hex("#123456").unwrap());
-            theme::set_palette(&ctx,changed);
+            let _window = enter("window");
+            let _browser = enter("browser");
+            assert_eq!(theme::text_primary(), theme::parse_hex("#123456").unwrap());
+            theme::set_palette(&ctx, changed);
         }
-        assert_eq!(theme::palette(),changed);
-        theme::set_palette(&ctx,original);
+        assert_eq!(theme::palette(), changed);
+        theme::set_palette(&ctx, original);
         skin::configure(&skin::Skin::default());
     }
     #[test]

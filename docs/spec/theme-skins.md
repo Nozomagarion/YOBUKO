@@ -19,6 +19,37 @@ covers:
   - crates/ui/src/kit/style_class.rs
 ---
 
+Toolbar editing keeps the real native controls and their layout visible. Entering or
+leaving the editor without a change must not create a toolbar layout or change the
+theme. An overlay outlines draggable modules over an 8-point snap grid; dragging
+changes a horizontal offset from the existing native or CSS anchor. Native centre
+and right anchors therefore keep responding to window resizing. Done commits the
+draft to the theme; Cancel or Escape discards it. The controls cannot issue commands
+while the overlay is active. `skin.toolbar-offsets` stores bounded integer offsets
+by module id independently of the optional ordered toolbar layout.
+
+The interaction reference requested by the user is World of Warcraft's Edit Mode:
+edit the visible interface through selection outlines and alignment guides rather
+than replacing it with abstract layout blocks. This is an independent Suhina
+interaction specification based on the supplied screenshots and the public
+[EditModeExpanded description](https://github.com/teelolws/EditModeExpanded/blob/main/README.md)
+(read 2026-10-22), which describes moving visible frames and saving their positions.
+That description is an add-on author's account, not official documentation of
+Blizzard's grid implementation. No third-party source or artwork is reused.
+Canonical native CSS mirrors offsets as `toolbar { offset-transport: 80px; }`.
+
+SVG inheritance resolves each control role in this order: theme state artwork,
+theme base artwork, shared default state artwork, shared default base artwork.
+Suhina ships original default SVG files under `assets/themes/default/`, embeds
+the same files for reliable startup, and creates editable copies under
+`themes/_defaults/assets/` beside the user's theme folders. Missing files are
+created without overwriting existing edits. The shared library is watched with
+the theme files; malformed or oversized edits report a warning and use the
+embedded default. Themes store only their explicit artwork overrides. Portable
+exports include inherited artwork so they keep their appearance on another machine.
+The current theme's palette supplies `currentColor`; inheritance does not force
+the default theme's colours. Deleting an override restores inheritance.
+
 # Theme skins
 
 A theme owns its control artwork, level-meter appearance and control-bar layout.
@@ -34,6 +65,11 @@ gestures and undo remain owned by the application. Missing or invalid artwork us
 Suhina's normal drawing. External images, network resources and SVG scripts are not
 loaded. SVGs are parsed and rasterized once per asset, scale and palette, never on
 the audio thread; texture cache size and raster dimensions are bounded.
+
+Typed SDK device-panel knobs/dials and buttons consume the same SVG roles. Their
+labels, readouts, parameter angles and native response/command paths remain in the
+SDK host. Named `.device-panel` and `.device-control` scopes expose semantic widget
+classes and scoped palette/text styling; see [custom panels](sdk-custom-ui.md#host-theme-css-and-svg-controls).
 
 Asset roles include fader cap and rail, knob body and pointer, button surface and
 play/stop/record/solo/arm/cue icons. State suffixes `.hover`, `.active`, `.disabled`
@@ -120,6 +156,8 @@ Styles are computed after collecting a changed scope tree and repaint on the nex
 Only authored values override native defaults. Scoped colour, font size and radius also
 reach ordinary egui controls in connected panels; the style guard preserves widget ids
 and restores the caller's style. Remaining raw controls still need integration.
+Palette scopes track real theme revisions: a theme switch or live colour/opacity edit
+made during rendering survives enclosing scope cleanup instead of restoring stale colours.
 
 Connected native surfaces paint linear, radial and conic gradients, including repeating
 forms, using Stylo's computed stops, CSS colour interpolation and premultiplied

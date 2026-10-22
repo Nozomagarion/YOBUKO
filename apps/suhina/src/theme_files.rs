@@ -880,6 +880,7 @@ mod skin_package_tests {
         let mut theme = Theme { name: "Portable".into(), ..Default::default() };
         theme.skin.assets = skin::example_assets();
         theme.skin.toolbar = Some(skin::Toolbar::default());
+        theme.skin.toolbar_offsets.insert("transport".into(), 80);
         theme.skin.meter = skin::MeterStyle::Segmented;
         assert!(theme_css::apply(&mut theme, ".browser { color: #123456; background-color: #111222; }").is_empty());
         theme
@@ -923,7 +924,10 @@ mod skin_package_tests {
         files.write("portable", &original).unwrap();
         let json = root.join("themes/portable.json");
         let css = root.join("themes/portable/style.css");
-        let css_text = std::fs::read_to_string(&css).unwrap().replace("--accent: #A6A3FF;", "--accent: #12AB34;");
+        let css_text = std::fs::read_to_string(&css)
+            .unwrap()
+            .replace("--accent: #A6A3FF;", "--accent: #12AB34;")
+            .replace("offset-transport: 80px", "offset-transport: 96px");
         assert!(css_text.contains("--accent: #12AB34;"));
         std::fs::write(&css, css_text).unwrap();
         files.checked = None;
@@ -933,16 +937,19 @@ mod skin_package_tests {
         assert_eq!(changed[0].theme.colors.accent, theme::parse_hex("#12AB34").unwrap());
         let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&json).unwrap()).unwrap();
         assert_eq!(saved["colors"]["accent"], "#12AB34");
+        assert_eq!(saved["skin"]["toolbar-offsets"]["transport"], 96);
         files.checked = None;
         assert!(files.changed().0.is_empty(), "sync must not trigger its own reload");
         let mut updated = saved;
         updated["colors"]["accent"] = serde_json::json!("#AB12CD");
+        updated["skin"]["toolbar-offsets"]["transport"] = serde_json::json!(112);
         std::fs::write(&json, serde_json::to_vec_pretty(&updated).unwrap()).unwrap();
         files.checked = None;
         let (changed, warnings) = files.changed();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(changed[0].theme.colors.accent, theme::parse_hex("#AB12CD").unwrap());
         assert!(std::fs::read_to_string(&css).unwrap().contains("--accent: #AB12CD;"));
+        assert!(std::fs::read_to_string(&css).unwrap().contains("offset-transport: 112px"));
         let mut edited = changed[0].theme.clone();
         edited.colors.accent = theme::parse_hex("#112233").unwrap();
         files.write("portable", &edited).unwrap();

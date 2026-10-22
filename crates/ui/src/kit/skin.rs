@@ -97,6 +97,8 @@ pub struct Skin {
     pub segments: u8,
     /// None preserves the original centred control-bar layout.
     pub toolbar: Option<Toolbar>,
+    /// Horizontal offsets from each module's native/CSS anchor, in logical points.
+    pub toolbar_offsets: BTreeMap<String, i32>,
 }
 impl Default for Skin {
     fn default() -> Self {
@@ -110,6 +112,7 @@ impl Default for Skin {
             meter: MeterStyle::Continuous,
             segments: 24,
             toolbar: None,
+            toolbar_offsets: BTreeMap::new(),
         }
     }
 }
@@ -170,6 +173,7 @@ impl Skin {
                     | "meter"
                     | "segments"
                     | "toolbar"
+                    | "toolbar-offsets"
             ) {
                 warnings.push(format!("skin.{key} is unknown"));
             }
@@ -306,6 +310,23 @@ impl Skin {
                 warnings.push("skin.toolbar must be an object".into());
             }
         }
+        if let Some(value) = root.get("toolbar-offsets") {
+            if let Some(offsets) = value.as_object().filter(|v| v.len() <= MODULES.len()) {
+                for (name, value) in offsets {
+                    if let Some(offset) =
+                        value.as_i64().filter(|n| MODULES.contains(&name.as_str()) && (-16384..=16384).contains(n))
+                    {
+                        skin.toolbar_offsets.insert(name.clone(), offset as i32);
+                    } else {
+                        warnings.push(format!(
+                            "skin.toolbar-offsets.{name}: expected a known module and integer from -16384 to 16384"
+                        ));
+                    }
+                }
+            } else {
+                warnings.push("skin.toolbar-offsets must be a bounded object".into());
+            }
+        }
         skin
     }
 
@@ -317,6 +338,9 @@ impl Skin {
         }
         if let Some(toolbar) = &self.toolbar {
             value["toolbar"] = json!({"order": toolbar.order, "hidden": toolbar.hidden});
+        }
+        if !self.toolbar_offsets.is_empty() {
+            value["toolbar-offsets"] = json!(self.toolbar_offsets);
         }
         if let Some(background) = &self.background {
             value["background"] = Value::String(background.to_string());
@@ -334,6 +358,10 @@ pub fn configure(skin: &Skin) {
             *active.borrow_mut() = Arc::new(skin.clone());
         }
     });
+}
+
+pub fn active_toolbar_offset(module: &str) -> i32 {
+    ACTIVE.with(|skin| skin.borrow().toolbar_offsets.get(module).copied().unwrap_or(0))
 }
 pub fn current() -> Arc<Skin> {
     ACTIVE.with(|skin| Arc::clone(&skin.borrow()))
@@ -516,6 +544,7 @@ mod tests {
             meter: MeterStyle::Segmented,
             segments: 16,
             toolbar: Some(Toolbar::default()),
+            toolbar_offsets: BTreeMap::from([("transport".into(), 80)]),
         };
         let mut warnings = Vec::new();
         assert_eq!(Skin::from_json(&skin.to_json(), &mut warnings), skin);
@@ -545,6 +574,18 @@ mod tests {
         for svg in ["<!DOCTYPE svg><svg/>", "<svg><image href=\"file:///tmp/x\"/></svg>"] {
             assert!(parse_svg(svg).is_err());
         }
+    }
+
+    #[test]
+    fn toolbar_offsets_reject_unknown_modules_and_non_integer_or_unbounded_values() {
+        let mut warnings = Vec::new();
+        let skin = Skin::from_json(
+            &json!({"toolbar-offsets":{"transport":80,"tempo":0.5,"views":16385,"bogus":4}}),
+            &mut warnings,
+        );
+        assert_eq!(skin.toolbar_offsets, BTreeMap::from([("transport".into(), 80)]));
+        assert_eq!(warnings.len(), 3);
+        assert!(skin.toolbar.is_none());
     }
     #[test]
     fn moving_module_preserves_all_others() {

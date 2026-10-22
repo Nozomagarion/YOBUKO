@@ -10,6 +10,37 @@ fn edit_id() -> Id {
     Id::new("edit-theme-toolbar")
 }
 
+#[derive(Clone, Default)]
+struct EditDraft {
+    theme_id: String,
+    original: skin::Skin,
+    skin: skin::Skin,
+}
+
+fn rects_id() -> Id {
+    Id::new("toolbar-edit-rects")
+}
+
+/// A module's offset is relative to its existing responsive anchor, never a new layout.
+pub(super) fn place(ui: &Ui, module: &str, base: Rect) -> Rect {
+    let draft = ui.ctx().data(|d| d.get_temp::<EditDraft>(edit_id()));
+    let offset = draft
+        .as_ref()
+        .map(|d| &d.skin)
+        .map_or_else(|| skin::active_toolbar_offset(module), |s| s.toolbar_offsets.get(module).copied().unwrap_or(0));
+    let at = base.translate(Vec2::new(offset as f32, 0.0));
+    ui.ctx().data_mut(|d| {
+        let rects = d.get_temp_mut_or_default::<Vec<(String, Rect, Rect)>>(rects_id());
+        if let Some(item) = rects.iter_mut().find(|item| item.0 == module) {
+            item.1 = item.1.union(base);
+            item.2 = item.2.union(at);
+        } else {
+            rects.push((module.to_owned(), base, at));
+        }
+    });
+    at
+}
+
 impl App {
     /// Returns true when the custom layout has rendered the bar.
     pub(super) fn themed_toolbar(
@@ -22,36 +53,53 @@ impl App {
     ) -> bool {
         let rect = ui.max_rect();
         let response = ui.interact(rect, Id::new("toolbar-context"), Sense::click());
-        let mut editing = ui.ctx().data(|d| d.get_temp::<bool>(edit_id())).unwrap_or(false);
+        ui.ctx().data_mut(|d| d.insert_temp(rects_id(), Vec::<(String, Rect, Rect)>::new()));
+        ui.ctx().data_mut(|d| {
+            if d.get_temp::<EditDraft>(edit_id()).is_some_and(|draft| draft.theme_id != self.settings.theme) {
+                d.remove::<EditDraft>(edit_id());
+            }
+        });
+        let editing = ui.ctx().data(|d| d.get_temp::<EditDraft>(edit_id())).is_some();
         let mut theme_skin = self.themes.get(&self.settings.theme).map(|t| t.skin.clone()).unwrap_or_default();
         let mut changed = false;
         response.context_menu(|ui| {
-            if ui.button(if editing { "Finish editing toolbar" } else { "Edit toolbar" }).clicked() {
-                editing = !editing;
-                if theme_skin.toolbar.is_none() {
-                    theme_skin.toolbar = Some(Toolbar::default());
-                    changed = true;
-                }
+            if !editing && ui.button("Edit toolbar").clicked() {
+                ui.ctx().data_mut(|d| {
+                    d.insert_temp(
+                        edit_id(),
+                        EditDraft {
+                            theme_id: self.settings.theme.clone(),
+                            original: theme_skin.clone(),
+                            skin: theme_skin.clone(),
+                        },
+                    )
+                });
                 ui.close();
             }
             if ui.button("Restore default toolbar").clicked() {
                 theme_skin.toolbar = None;
+                theme_skin.toolbar_offsets.clear();
                 changed = true;
-                editing = false;
+                ui.ctx().data_mut(|d| d.remove::<EditDraft>(edit_id()));
                 ui.close();
             }
         });
-        ui.ctx().data_mut(|d| d.insert_temp(edit_id(), editing));
         if changed {
             self.save_toolbar_skin(theme_skin.clone());
         }
+        if editing {
+            ui.ctx().memory_mut(|memory| {
+                if let Some(focused) = memory.focused() {
+                    memory.surrender_focus(focused);
+                }
+            });
+        }
         let default_layout = theme_skin.toolbar.is_none();
-        let Some(mut toolbar) =
-            theme_skin.toolbar.clone().or_else(|| theme_skin.css.as_ref().map(|_| Toolbar::default()))
+        let Some(toolbar) = theme_skin.toolbar.clone().or_else(|| theme_skin.css.as_ref().map(|_| Toolbar::default()))
         else {
             return false;
         };
-        if !editing {
+        {
             let modules: Vec<_> = toolbar
                 .order
                 .iter()
@@ -69,7 +117,7 @@ impl App {
                     |ui| {
                         let (_, content) = ui.allocate_space(Vec2::new(extent, rect.height()));
                         for module in modules {
-                            let at = module.rect.translate(content.min.to_vec2());
+                            let at = place(ui, &module.name, module.rect.translate(content.min.to_vec2()));
                             if !at.intersects(ui.clip_rect()) {
                                 continue;
                             }
@@ -100,91 +148,106 @@ impl App {
                     },
                 );
                 self.hover_switch(ui.ctx(), hovered_switch);
+                self.toolbar_edit_overlay(ui, rect);
                 return true;
             }
         }
-        if ui.input(|i| i.key_pressed(Key::Escape)) {
-            egui::DragAndDrop::clear_payload(ui.ctx());
-        }
-        let mut move_before = None;
-        let mut hidden_change = None;
         let mut hovered_switch = None;
         egui::ScrollArea::horizontal().id_salt("custom-toolbar-scroll").auto_shrink([false, false]).show(ui, |ui| {
             ui.set_min_height(rect.height());
             ui.horizontal(|ui| {
                 for module in &toolbar.order {
                     let hidden = toolbar.hidden.contains(module);
-                    if hidden && !editing {
+                    if hidden {
                         continue;
                     }
-                    let width = if editing {
-                        (module.len() as f32 * 8.0 + 20.0).max(70.0)
-                    } else {
-                        self.toolbar_module_width(module)
-                    };
+                    let width = self.toolbar_module_width(module);
                     let (_, at) = ui.allocate_space(Vec2::new(width, (rect.height() - 4.0).max(24.0)));
-                    if editing {
-                        let response = ui.interact(at, Id::new(("move-toolbar", module)), Sense::click_and_drag());
-                        response.widget_info(|| {
-                            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Move toolbar {module}"))
-                        });
-                        response.dnd_set_drag_payload(module.clone());
-                        let over = response.dnd_hover_payload::<String>().is_some();
-                        let color = if hidden { theme::text_hint() } else { theme::text_primary() };
-                        ui.painter().rect_filled(
-                            at,
-                            3.0,
-                            if over { theme::control_active() } else { theme::control_background() },
-                        );
-                        widgets::text_in(
-                            ui.painter(),
-                            at,
-                            Align2::CENTER_CENTER,
-                            module,
-                            theme::ui_font(theme::TEXT_SMALL),
-                            color,
-                        );
-                        if let Some(from) = response.dnd_release_payload::<String>() {
-                            let after = ui
-                                .input(|input| input.pointer.latest_pos())
-                                .is_some_and(|position| position.x > at.center().x);
-                            move_before = Some(((*from).clone(), module.clone(), after));
-                        }
-                        response.context_menu(|ui| {
-                            if ui.button(if hidden { "Show module" } else { "Hide module" }).clicked() {
-                                hidden_change = Some((module.clone(), !hidden));
-                                ui.close();
-                            }
-                        });
-                    } else if let Some(grid) = grid {
+                    let at = place(ui, module, at);
+                    if let Some(grid) = grid {
                         self.toolbar_module(ui, at, module, grid, cpu, ram, actions, &mut hovered_switch);
                     }
                 }
-                if editing && ui.button("Done").clicked() {
-                    ui.ctx().data_mut(|d| d.insert_temp(edit_id(), false));
-                }
             });
         });
-        let before = toolbar.clone();
-        if let Some((from, to, after)) = move_before {
-            if after {
-                toolbar.move_after(&from, &to);
-            } else {
-                toolbar.move_before(&from, &to);
-            }
-        }
-        if let Some((module, hide)) = hidden_change {
-            toolbar.hidden.retain(|s| *s != module);
-            if hide {
-                toolbar.hidden.push(module);
-            }
-        }
-        if toolbar != before {
-            theme_skin.toolbar = Some(toolbar);
-            self.save_toolbar_skin(theme_skin);
-        }
         self.hover_switch(ui.ctx(), hovered_switch);
+        self.toolbar_edit_overlay(ui, rect);
         true
+    }
+
+    pub(super) fn toolbar_edit_overlay(&mut self, ui: &Ui, bar: Rect) {
+        let Some(mut draft) = ui.ctx().data(|d| d.get_temp::<EditDraft>(edit_id())) else {
+            return;
+        };
+        let rects = ui.ctx().data(|d| d.get_temp::<Vec<(String, Rect, Rect)>>(rects_id())).unwrap_or_default();
+        let mut done = false;
+        let mut cancel = ui.input(|i| i.key_pressed(Key::Escape));
+        egui::Area::new(Id::new("toolbar-edit-overlay"))
+            .order(egui::Order::Foreground)
+            .movable(false)
+            .fixed_pos(bar.min)
+            .show(ui.ctx(), |overlay| {
+                overlay.set_min_size(bar.size());
+                overlay.set_clip_rect(bar);
+                let painter = overlay.painter();
+                let ink = theme::accent();
+                for x in (0..=(bar.width().min(16384.0) / 8.0) as usize).map(|n| bar.left() + n as f32 * 8.0) {
+                    painter.vline(x, bar.y_range(), egui::Stroke::new(0.5, ink.gamma_multiply(0.18)));
+                }
+                for y in (0..=(bar.height().min(1024.0) / 8.0) as usize).map(|n| bar.top() + n as f32 * 8.0) {
+                    painter.hline(bar.x_range(), y, egui::Stroke::new(0.5, ink.gamma_multiply(0.18)));
+                }
+                for (name, base, at) in &rects {
+                    let response = overlay.interact(*at, Id::new(("move-toolbar", name)), Sense::click_and_drag());
+                    response.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Move toolbar {name}"))
+                    });
+                    overlay.painter().rect_stroke(*at, 2.0, egui::Stroke::new(1.0, ink), egui::StrokeKind::Inside);
+                    if response.drag_started() {
+                        overlay.ctx().data_mut(|d| d.insert_temp(response.id.with("origin"), at.left()));
+                    }
+                    if response.dragged() {
+                        let origin =
+                            overlay.ctx().data(|d| d.get_temp::<f32>(response.id.with("origin"))).unwrap_or(at.left());
+                        let left = ((origin + response.total_drag_delta().unwrap_or_default().x - bar.left()) / 8.0)
+                            .round()
+                            * 8.0
+                            + bar.left();
+                        let left = left.clamp(bar.left(), (bar.right() - at.width()).max(bar.left()));
+                        draft
+                            .skin
+                            .toolbar_offsets
+                            .insert(name.clone(), (left - base.left()).round().clamp(-16384.0, 16384.0) as i32);
+                        overlay.ctx().request_repaint();
+                    }
+                    response.on_hover_text(format!("Drag {name} · snaps to 8 point grid"));
+                }
+            });
+        egui::Window::new("Edit toolbar")
+            .id(Id::new("toolbar-edit-tools"))
+            .default_pos(bar.left_bottom() + Vec2::new(8.0, 8.0))
+            .resizable(false)
+            .collapsible(false)
+            .show(ui.ctx(), |tools| {
+                tools.label("Drag the outlined controls · 8 point snap grid");
+                tools.horizontal(|tools| {
+                    done = tools.button("Done").clicked();
+                    cancel |= tools.button("Cancel").clicked();
+                    if tools.button("Reset positions").clicked() {
+                        draft.skin.toolbar_offsets.clear();
+                    }
+                });
+            });
+        if done || cancel {
+            ui.ctx().data_mut(|d| d.remove::<EditDraft>(edit_id()));
+            if done && draft.skin.toolbar_offsets != draft.original.toolbar_offsets {
+                let mut current = self.themes.get(&self.settings.theme).map(|t| t.skin.clone()).unwrap_or_default();
+                current.toolbar_offsets = draft.skin.toolbar_offsets;
+                self.save_toolbar_skin(current);
+            }
+        } else {
+            ui.ctx().data_mut(|d| d.insert_temp(edit_id(), draft));
+        }
     }
 
     fn toolbar_module_width(&self, module: &str) -> f32 {
@@ -409,6 +472,130 @@ mod tests {
         app: App,
         grid: Grid,
         actions: Vec<Action>,
+    }
+
+    fn native_bar() -> Harness<'static, Fixture> {
+        let fixture =
+            Fixture { app: App::new(), grid: Grid::build(&crate::demo::demo_project(), None), actions: Vec::new() };
+        let mut harness = Harness::builder().with_size((1920.0, 240.0)).build_ui_state(
+            |ui, fixture: &mut Fixture| {
+                let skin =
+                    fixture.app.themes.get(&fixture.app.settings.theme).map(|t| t.skin.clone()).unwrap_or_default();
+                skin::configure(&skin);
+                let _frame = crate::kit::native_css::frame(ui);
+                let rect = Rect::from_min_size(ui.max_rect().min, Vec2::new(ui.available_width(), 56.0));
+                ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
+                    fixture.app.control_bar(ui, Some(&fixture.grid), Some(10), Some(1024), &mut fixture.actions);
+                });
+            },
+            fixture,
+        );
+        theme::install(&harness.ctx);
+        harness.run();
+        harness
+    }
+
+    fn start_edit(harness: &mut Harness<'static, Fixture>) {
+        let skin = harness
+            .state()
+            .app
+            .themes
+            .get(&harness.state().app.settings.theme)
+            .map(|t| t.skin.clone())
+            .unwrap_or_default();
+        let theme_id = harness.state().app.settings.theme.clone();
+        harness.ctx.data_mut(|d| d.insert_temp(edit_id(), EditDraft { theme_id, original: skin.clone(), skin }));
+        harness.run();
+    }
+
+    #[test]
+    fn editing_keeps_real_controls_and_done_without_changes_preserves_native_layout() {
+        let mut harness = native_bar();
+        let play = harness.get_by_label("Play").rect();
+        let tempo = harness.get_by_label("Tempo").rect();
+        let theme_id = harness.state().app.settings.theme.clone();
+        start_edit(&mut harness);
+        assert_eq!(play, harness.get_by_label("Play").rect());
+        assert_eq!(tempo, harness.get_by_label("Tempo").rect());
+        harness.get_by_label("Move toolbar transport").click();
+        harness.run();
+        assert!(harness.state().actions.is_empty(), "editing must not play audio");
+        harness.get_by_label("Done").click();
+        harness.run();
+        assert_eq!(harness.state().app.settings.theme, theme_id);
+        assert_eq!(play, harness.get_by_label("Play").rect());
+        assert_eq!(tempo, harness.get_by_label("Tempo").rect());
+        assert!(harness.state().app.themes.get(&theme_id).unwrap().skin.toolbar.is_none());
+        skin::configure(&skin::Skin::default());
+    }
+
+    #[test]
+    fn edit_overlay_preserves_css_grid_geometry_without_writing_a_layout() {
+        let mut harness = native_bar();
+        harness.state_mut().app.save_toolbar_skin(skin::Skin {
+            css: Some(std::sync::Arc::from(".toolbar {display:grid;grid-template-columns:100px 120px 90px;gap:8px;} #tempo {grid-column:1;grid-row:1;} #transport {grid-column:2;grid-row:1;} #position {grid-column:3;grid-row:1;} #browser,#signature,#grid,#count-in,#metronome,#mapping,#performance,#views,#agents {display:none;}")),
+            ..Default::default()
+        });
+        harness.run();
+        let play = harness.get_by_label("Play").rect();
+        let tempo = harness.get_by_label("Tempo").rect();
+        let theme_id = harness.state().app.settings.theme.clone();
+        start_edit(&mut harness);
+        assert_eq!(play, harness.get_by_label("Play").rect());
+        assert_eq!(tempo, harness.get_by_label("Tempo").rect());
+        harness.get_by_label("Done").click();
+        harness.run();
+        assert_eq!(play, harness.get_by_label("Play").rect());
+        assert_eq!(harness.state().app.settings.theme, theme_id);
+        assert!(harness.state().app.themes.get(&theme_id).unwrap().skin.toolbar.is_none());
+        skin::configure(&skin::Skin::default());
+    }
+
+    #[test]
+    fn dragging_real_transport_snaps_and_saves_only_on_done_and_cancel_discards() {
+        let mut harness = native_bar();
+        let original = harness.get_by_label("Play").rect();
+        start_edit(&mut harness);
+        let from = harness.get_by_label("Move toolbar transport").rect().center();
+        harness.hover_at(from);
+        harness.step();
+        harness.drag_at(from);
+        harness.step();
+        let to = from + Vec2::new(53.0, 0.0);
+        harness.hover_at(to);
+        harness.step();
+        harness.drop_at(to);
+        harness.run();
+        let moved = harness.get_by_label("Play").rect();
+        let bar_left = 8.0; // egui-kittest's default central-panel margin.
+        assert!((moved.left() - original.left()).abs() > 40.0);
+        assert!(((moved.left() - bar_left) / 8.0).fract().abs() < 0.001);
+        assert!(harness.state().actions.is_empty());
+        harness.get_by_label("Done").click();
+        harness.run();
+        assert_eq!(harness.get_by_label("Play").rect(), moved);
+        let saved = harness.state().app.themes.get(&harness.state().app.settings.theme).unwrap().skin.clone();
+        assert!(saved.toolbar.is_none(), "moving native modules must preserve native layout");
+        assert!(saved.toolbar_offsets.contains_key("transport"));
+        harness.set_size(Vec2::new(1600.0, 240.0));
+        harness.run();
+        assert!(
+            (harness.get_by_label("Play").rect().left() - (moved.left() - 160.0)).abs() < 0.01,
+            "transport keeps its centre anchor when the window narrows"
+        );
+        harness.set_size(Vec2::new(1920.0, 240.0));
+        harness.run();
+        start_edit(&mut harness);
+        harness.get_by_label("Reset positions").click();
+        harness.run();
+        assert_eq!(harness.get_by_label("Play").rect(), original);
+        harness.get_by_label("Cancel").click();
+        harness.run();
+        assert_eq!(harness.get_by_label("Play").rect(), moved);
+        harness.get_by_label("Play").click();
+        harness.run();
+        assert!(harness.state().actions.iter().any(|a| a.id == "transport.play"));
+        skin::configure(&skin::Skin::default());
     }
 
     #[test]
