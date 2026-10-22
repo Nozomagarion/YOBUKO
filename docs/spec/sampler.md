@@ -318,3 +318,15 @@ preallocated voices, and passes the advancing transport beat to each source.
 The stock Sampler definition retains its implementation. Prepared SampleAsset resources,
 private voice graphs and smaller playback/envelope/granular nodes are specified in the
 [SDK node reference](sdk-nodes.md); they do not imply an equivalent expansion of the stock device.
+
+## SDK graphs in projects
+
+`device.addSd` accepts an optional `sample` audio path for the stable resource key `sample`.
+`track.add` forwards the same option when `sd` is given. The host decodes off-thread and
+prepares immutable shared PCM before insertion. The graph JSON stays in device state; an SDK
+device's sample reference uses the `suhina/sample_reference` extension with the existing
+`suhina-sample-v1` reference encoding. Built-in sampler state and parameter ids are unchanged.
+Save/open, relative-path rebasing, missing-file warnings and relinking use the same reference
+accessors for both device kinds. A prepared graph keeps its source alive when a replacement
+is prepared; the host swaps and retires whole graphs off-thread. The project command binds
+one source named `sample`; Rust hosts may bind several named sources.

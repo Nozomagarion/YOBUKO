@@ -39,10 +39,6 @@ pub enum FilterMode {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NodeKind {
-    /// A whole-device wrapper resolved only through the host's registered factory.
-    NativeDevice {
-        device: String,
-    },
     /// Polyphonic sample source; resources are bound off the audio thread.
     Sampler,
     SamplerAsset {
@@ -159,14 +155,24 @@ pub enum NodeKind {
     AudioOutput,
     MidiInput,
     MidiOutput,
-    MidiTranspose { semitones: i8 },
-    MidiTransposeParameter { parameter: String },
+    MidiTranspose {
+        semitones: i8,
+    },
+    MidiTransposeParameter {
+        parameter: String,
+    },
     MidiKey,
     MidiVelocity,
     MidiGate,
-    Gain { parameter: String },
-    Constant { value: f64 },
-    Parameter { parameter: String },
+    Gain {
+        parameter: String,
+    },
+    Constant {
+        value: f64,
+    },
+    Parameter {
+        parameter: String,
+    },
     Add,
     Subtract,
     Multiply,
@@ -197,15 +203,27 @@ pub enum NodeKind {
     MidSideEncode,
     MidSideDecode,
     Pan,
-    Oscillator { shape: Waveform },
-    SyncedLfo { shape: Waveform },
-    Noise { seed: u32 },
+    Oscillator {
+        shape: Waveform,
+    },
+    SyncedLfo {
+        shape: Waveform,
+    },
+    Noise {
+        seed: u32,
+    },
     Smooth,
-    Envelope { rms: bool },
+    Envelope {
+        rms: bool,
+    },
     SampleHold,
-    Filter { mode: FilterMode },
+    Filter {
+        mode: FilterMode,
+    },
     SampleDelay,
-    Delay { max_seconds: f64 },
+    Delay {
+        max_seconds: f64,
+    },
     Tempo,
     LfoRate,
     Beat,
@@ -309,7 +327,6 @@ pub(crate) mod templates;
 mod transport;
 pub(crate) mod voice;
 pub static NODE_CATALOG: &[NodeInfo] = &[
-    native::NATIVE_DEVICE,
     native::NATIVE_EFFECT,
     sample::SAMPLER,
     sample::SAMPLER_ASSET,
@@ -481,7 +498,6 @@ impl NodeKind {
             Self::GrainWindow => &granular::GRAIN_WINDOW,
 
             Self::NativeEffect { .. } => &native::NATIVE_EFFECT,
-            Self::NativeDevice { .. } => &native::NATIVE_DEVICE,
             Self::AudioInput => &io::AUDIO_INPUT,
             Self::AudioOutput => &io::AUDIO_OUTPUT,
             Self::Gain { .. } => &io::GAIN,

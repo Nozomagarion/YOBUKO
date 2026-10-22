@@ -50,7 +50,7 @@ A `native_effect` node names a trusted host kernel by `effect`. Its fixed ports 
 has the same interleaved stereo length as the output. Kernels must overwrite their output;
 sources ignore inputs. `compile_with_native_at` resolves fresh, sample-rate-prepared kernels
 off-thread; ordinary compilation rejects unresolved kernels. File data never loads code.
-The existing `native_device` whole-device restriction remains unchanged.
+Legacy `native_device` wrappers are rejected, as on main.
 
 ## File and device versions
 
@@ -329,11 +329,6 @@ pair is copied to the later one. The complete edit shares one undo snapshot and 
 reach the attached player; undo, redo and project saving preserve the pair.
 
 ## Built-in devices are not `.sd` files
-
-A `native_device` node names a trusted registered implementation with `device`.
-It is restricted to a whole-device wrapper and requires `prepare_native_at` with
-a host factory. Parameters must match the native order and ranges, have valid
-native defaults and zero SDK smoothing. See [stock bundles](stock-device-bundle.md).
 
 Registered built-in audio effects resolve automatically when a `.sd` graph is added and
 when track or group chains are prepared. The registry adapter supplies the `in` audio

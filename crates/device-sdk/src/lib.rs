@@ -19,7 +19,6 @@ pub mod editor;
 mod graph;
 mod midi;
 mod modulation;
-mod native;
 pub mod native_node;
 mod nodes;
 mod runtime;

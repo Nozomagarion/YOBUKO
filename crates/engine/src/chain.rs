@@ -210,10 +210,26 @@ impl Chain {
                     if !stored.enabled {
                         continue;
                     }
+                    let mut samples = suhina_device_sdk::sample_resource::PreparedSamples::default();
+                    if let Some(source) = stored.sample_file().and_then(|file| audio.files.get(file)) {
+                        let Ok(asset) = suhina_device_sdk::sample_resource::SampleAsset::new(
+                            source.clone(),
+                            source.sample_rate,
+                            source.channels,
+                        ) else {
+                            continue;
+                        };
+                        if samples.insert("sample", std::sync::Arc::new(asset)).is_err() {
+                            continue;
+                        }
+                    }
                     let mut slot = match graph.role {
                         suhina_device_sdk::DeviceRole::Effect => {
-                            let Ok(effect) = suhina_device_registry::compile_graph(&graph, f64::from(sample_rate))
-                            else {
+                            let Ok(effect) = suhina_device_registry::compile_graph_with_samples(
+                                &graph,
+                                f64::from(sample_rate),
+                                &samples,
+                            ) else {
                                 continue;
                             };
                             Slot::Sd(effect)
@@ -223,8 +239,11 @@ impl Chain {
                             Slot::MidiSd(effect)
                         }
                         suhina_device_sdk::DeviceRole::Instrument => {
-                            let Ok(instrument) = suhina_device_registry::compile_graph(&graph, f64::from(sample_rate))
-                            else {
+                            let Ok(instrument) = suhina_device_registry::compile_graph_with_samples(
+                                &graph,
+                                f64::from(sample_rate),
+                                &samples,
+                            ) else {
                                 continue;
                             };
                             Slot::InstrumentSd(instrument)

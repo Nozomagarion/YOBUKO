@@ -249,7 +249,16 @@ pub fn compile_graph(
     graph: &suhina_device_sdk::DeviceGraph,
     rate: f64,
 ) -> Result<suhina_device_sdk::PreparedEffect, suhina_device_sdk::DeviceSdkError> {
-    graph.compile_with_native_at(rate, |id, rate| {
+    compile_graph_with_samples(graph, rate, &Default::default())
+}
+
+/// Prepare graph resources supplied by the host; decoding and retirement stay off-thread.
+pub fn compile_graph_with_samples(
+    graph: &suhina_device_sdk::DeviceGraph,
+    rate: f64,
+    samples: &suhina_device_sdk::sample_resource::PreparedSamples,
+) -> Result<suhina_device_sdk::PreparedEffect, suhina_device_sdk::DeviceSdkError> {
+    graph.compile_with_samples_and_native_at(rate, samples, |id, rate| {
         let mut device =
             create(id).ok_or_else(|| suhina_device_sdk::DeviceSdkError(format!("unknown graph effect {id:?}")))?;
         if device.info().role != suhina_device_api::Role::Effect {

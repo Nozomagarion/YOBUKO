@@ -420,3 +420,9 @@ VoiceGroup, GrainPool and versioned Component definitions contain private precom
 by nesting and aggregate state budgets. Their states are never constructed or freed during rendering.
 Shared envelope stages, RNG, grain windows/scheduling, source analysis and stretch processing serve
 both the existing sampler and graph nodes. Existing Delay and Reverb implementations are unchanged.
+
+SDK sampler graphs receive decoded immutable `SampleAsset` resources from the host while
+track chains are prepared. The engine maps an SDK device's model sample reference to binding
+`sample`; it does not decode files. Graph state and source references persist independently,
+so relocation and relinking do not rewrite graph definitions. `device.addSd` checks the same
+resources before insertion, and MCP confines both graph and source paths.

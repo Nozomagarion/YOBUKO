@@ -149,11 +149,6 @@ impl PreparedEffect {
         sample_rate: f64,
         prepare: &mut impl FnMut(&NodeKind, f64) -> Result<Option<Box<dyn NativeNode>>, DeviceSdkError>,
     ) -> Result<Self, DeviceSdkError> {
-        if graph.nodes.iter().any(|n| matches!(n.kind, NodeKind::NativeDevice { .. })) {
-            return Err(DeviceSdkError(
-                "native_device requires prepare_native_at and a registered host factory".into(),
-            ));
-        }
         if !sample_rate.is_finite() || !(8_000.0..=384_000.0).contains(&sample_rate) {
             return Err(DeviceSdkError("sample rate must be finite and 8000..384000 Hz".into()));
         }

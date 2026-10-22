@@ -116,7 +116,13 @@ fn composed_cpu_measurement() {
     let mut coarse = DeviceGraph::new("org.test.coarse-bench", "Native sampler", DeviceRole::Instrument);
     coarse.nodes = vec![N::new("player", K::SamplerAsset { sample: "sample".into() }), N::audio_output("out")];
     coarse.connections = vec![C::new("player", "out")];
-    for mut graph in [coarse, sampler_template("sample", 8).unwrap(), granular_template("sample", 4, 16, 42).unwrap()] {
+    for mut graph in [
+        coarse,
+        sampler_template("sample", 1).unwrap(),
+        sampler_template("sample", 4).unwrap(),
+        sampler_template("sample", 8).unwrap(),
+        granular_template("sample", 4, 16, 42).unwrap(),
+    ] {
         for parameter in &mut graph.parameters {
             if parameter.id == "playback" {
                 parameter.default = 2.;
@@ -134,6 +140,15 @@ fn composed_cpu_measurement() {
         for _ in 0..750 {
             p.process_instrument_context(&ProcessContext::default(), &[], std::hint::black_box(&mut b));
         }
-        println!("{}: one second audio rendered in {:?}", graph.name, start.elapsed());
+        println!(
+            "{} {:?}: one second audio rendered in {:?}",
+            graph.name,
+            graph.nodes.first().map(|n| &n.kind).and_then(|kind| if let K::VoiceGroup { voices, .. } = kind {
+                Some(*voices)
+            } else {
+                None
+            }),
+            start.elapsed()
+        );
     }
 }

@@ -153,14 +153,6 @@ impl DeviceGraph {
                         return Err(fail("native effect id must be 1..128 bytes"));
                     }
                 }
-                NodeKind::NativeDevice { device } => {
-                    if device.is_empty() || device.len() > MAX_TEXT_BYTES {
-                        return Err(fail("native device id must be 1..128 bytes"));
-                    }
-                    if instrument {
-                        midi_sources += 1;
-                    }
-                }
                 NodeKind::AudioInput if !instrument => inputs += 1,
                 NodeKind::AudioInput => return Err(fail("instrument graphs have no audio_input")),
                 NodeKind::AudioOutput => outputs += 1,
