@@ -136,10 +136,17 @@ with bounded cached colour ramps/spatial textures and Stylo's colour interpolati
 Native surface dimensions resolve the gradient's centre, extent and radii. Token-level input budgets bound nesting and
 source size. Source-line notices identify known unsupported effect/font declarations
 without deleting authored source. Full-layout control of panels, shadows, transforms,
-filters, animation and comprehensive computed-style diagnostics
+filters and comprehensive computed-style diagnostics
 remain implementation work. Parsed declarations that the painter does not consume do
 not imply support. Toolbar height remains the host's height. These limits are also
 visible in the advanced CSS editor. Before enabling that engine,
 verify package licences, platform builds, interaction/accessibility parity, malformed
 inputs, large projects and both rendering backends. A full browser-CSS claim is out of
 scope unless an explicit support matrix and conformance evidence establish it.
+
+The retained document now persists across native state changes; pre-mutation snapshots
+let Stylo run transitions rather than restarting them. The egui frame clock advances
+keyframes/transitions for connected paint properties, with bounded repaint scheduling
+and a final repaint after completion. The global animation setting and high contrast
+force CSS motion off. Geometry animation and a real reduced-motion media feature remain
+unconnected; structural scope changes rebuild the document and restart animations.

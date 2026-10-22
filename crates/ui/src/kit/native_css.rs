@@ -67,6 +67,8 @@ struct Engine {
     occurrences: HashMap<(u64, String), usize>,
     previous: Vec<StyleNode>,
     values: HashMap<u64, Computed>,
+    document: Option<HtmlDocument>,
+    motion: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -82,25 +84,39 @@ thread_local! {
 }
 
 /// Finishes the style snapshot even on an early return from the native frame.
-pub struct Frame(egui::Context);
+pub struct Frame(egui::Context, f64);
 impl Drop for Frame {
     fn drop(&mut self) {
-        if finish_tree() {
+        let (changed, animating) = finish_tree(self.1);
+        if animating {
+            self.0.request_repaint_after(std::time::Duration::from_millis(16));
+        } else if changed {
             self.0.request_repaint();
         }
     }
 }
 
 pub fn frame(ui: &egui::Ui) -> Frame {
+    frame_with_motion(ui, true)
+}
+
+/// Disabling motion suppresses CSS transitions/keyframes as well as extra ticks.
+pub fn frame_with_motion(ui: &egui::Ui, motion: bool) -> Frame {
     begin_frame(ui);
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
+        if engine.motion != motion {
+            engine.motion = motion;
+            engine.document = None;
+            engine.previous.clear();
+            engine.values.clear();
+        }
         engine.collecting = engine.source.is_some();
         engine.nodes.clear();
         engine.parents.clear();
         engine.occurrences.clear();
     });
-    Frame(ui.ctx().clone())
+    Frame(ui.ctx().clone(), ui.input(|input| input.time))
 }
 
 /// Register an actual native scope. Named project roles retain identity when reordered.
@@ -156,40 +172,66 @@ fn html_id(node: &StyleNode) -> String {
         format!("node-{}", node.key)
     }
 }
-fn finish_tree() -> bool {
+
+fn native_state(state: u8) -> style_dom::ElementState {
+    use style_dom::ElementState as S;
+    let mut result = if state & 4 != 0 { S::DISABLED } else { S::ENABLED };
+    for (bit, value) in [(1, S::HOVER), (2, S::ACTIVE), (8, S::FOCUS | S::FOCUSRING)] {
+        if state & bit != 0 {
+            result.insert(value);
+        }
+    }
+    result
+}
+
+fn finish_tree(now: f64) -> (bool, bool) {
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         engine.collecting = false;
-        if engine.source.is_none() || engine.nodes == engine.previous {
-            return false;
+        let changed = engine.nodes != engine.previous;
+        let animating_before = engine.document.as_ref().is_some_and(|doc| doc.is_animating());
+        if engine.source.is_none() || (!changed && !animating_before && engine.document.is_some()) {
+            return (false, false);
         }
-        let mut body = String::from("<!doctype html><html><body>");
-        let mut open = Vec::new();
-        for (index, node) in engine.nodes.iter().enumerate() {
-            while open.last().copied() != node.parent {
-                if open.pop().is_none() {
-                    break;
+        let same_tree = engine.nodes.len() == engine.previous.len()
+            && engine
+                .nodes
+                .iter()
+                .zip(&engine.previous)
+                .all(|(a, b)| a.key == b.key && a.parent == b.parent && a.class == b.class && a.name == b.name);
+        let retained = if same_tree { engine.document.take() } else { None };
+        let mut doc = if let Some(doc) = retained {
+            doc
+        } else {
+            let mut body = String::from("<!doctype html><html><body>");
+            let mut open = Vec::new();
+            for (index, node) in engine.nodes.iter().enumerate() {
+                while open.last().copied() != node.parent {
+                    if open.pop().is_none() {
+                        break;
+                    }
+                    body.push_str("</div>");
                 }
+                body.push_str(&format!("<div id=\"{}\" class=\"{}\"", html_id(node), node.class));
+                if let Some(name) = &node.name {
+                    body.push_str(&format!(" data-object=\"{name}\""));
+                }
+                body.push('>');
+                open.push(index);
+            }
+            for _ in open {
                 body.push_str("</div>");
             }
-            body.push_str(&format!("<div id=\"{}\" class=\"{}\"", html_id(node), node.class));
-            if let Some(name) = &node.name {
-                body.push_str(&format!(" data-object=\"{name}\""));
-            }
-            body.push('>');
-            open.push(index);
-        }
-        for _ in open {
-            body.push_str("</div>");
-        }
-        body.push_str("</body></html>");
-        let defaults = format!(
-            "html,body {{ margin:0; color:{}; font-size:{}px; }}",
-            theme::hex(theme::palette().text_primary),
-            theme::TEXT
-        );
-        let Some(mut doc) = document(&engine, &body, &defaults) else {
-            return false;
+            body.push_str("</body></html>");
+            let defaults = format!(
+                "html,body {{ margin:0; color:{}; font-size:{}px; }}",
+                theme::hex(theme::palette().text_primary),
+                theme::TEXT
+            );
+            let Some(doc) = document(&engine, &body, &defaults) else {
+                return (false, false);
+            };
+            doc
         };
         let mut states: Vec<_> = engine.nodes.iter().map(|node| node.state).collect();
         for node in &engine.nodes {
@@ -213,31 +255,32 @@ fn finish_tree() -> bool {
             let Some(id) = doc.get_element_by_id(&html_id(node)) else {
                 continue;
             };
-            if let Some(target) = doc.get_node_mut(id) {
-                if state & 1 != 0 {
-                    target.hover();
-                }
-                if state & 2 != 0 {
-                    target.active();
-                }
-                if state & 4 != 0 {
-                    // Native scopes use neutral divs, whose HTML semantics cannot
-                    // be disabled. Supply the actual egui state to Stylo directly;
-                    // disable() still invalidates the node's ancestors.
-                    target.element_state_mut().insert(style_dom::ElementState::DISABLED);
-                    target.disable();
-                }
-                if state & 8 != 0 {
-                    target.focus(Arc::new(blitz_traits::shell::DummyShellProvider));
+            let desired = native_state(state);
+            let mask = style_dom::ElementState::HOVER
+                | style_dom::ElementState::ACTIVE
+                | style_dom::ElementState::DISABLED
+                | style_dom::ElementState::ENABLED
+                | style_dom::ElementState::FOCUS
+                | style_dom::ElementState::FOCUSRING;
+            if doc.get_node(id).is_some_and(|target| target.element_state().intersection(mask) != desired) {
+                doc.snapshot_node_state_only(id);
+                if let Some(target) = doc.get_node_mut(id) {
+                    target.element_state_mut().remove(mask);
+                    target.element_state_mut().insert(desired);
+                    target.mark_ancestors_dirty();
                 }
             }
             ids.push((node.key, id));
         }
-        doc.resolve(0.0);
+        doc.resolve(now);
         let values = ids.into_iter().filter_map(|(key, id)| computed(&doc, id).map(|values| (key, values))).collect();
         engine.values = values;
         engine.previous = engine.nodes.clone();
-        true
+        let animating = engine.motion && doc.is_animating();
+        engine.document = Some(doc);
+        // Publish the final sample too: once the animation stops, the preceding
+        // frame still painted its penultimate values.
+        (changed || animating || animating_before, animating)
     })
 }
 
@@ -290,6 +333,9 @@ fn document(engine: &Engine, body: &str, defaults: &str) -> Option<HtmlDocument>
     let mut doc = HtmlDocument::from_html(body, config);
     doc.add_user_agent_stylesheet(defaults);
     doc.add_user_agent_stylesheet(&engine.palette);
+    if !engine.motion {
+        doc.add_user_agent_stylesheet("* { animation:none !important; transition:none !important; }");
+    }
     let sheet = doc.make_stylesheet(css.as_ref(), style::stylesheets::Origin::Author);
     let root = doc.try_root_element()?.id;
     doc.add_stylesheet_for_node(sheet, root);
@@ -321,7 +367,10 @@ fn authored_property(
             && let Some(rules) = &values.rules
         {
             for rule in rules.self_and_ancestors() {
-                if rule.cascade_level().origin() != CascadeOrigin::Author {
+                if !matches!(
+                    rule.cascade_level().origin(),
+                    CascadeOrigin::Author | CascadeOrigin::Animations | CascadeOrigin::Transitions
+                ) {
                     continue;
                 }
                 if let Some(source) = rule.style_source()
@@ -699,6 +748,77 @@ mod tests {
             assert_eq!(image.pixels[blue.1 * 256 + blue.0], Color32::BLUE, "{css}");
             output.textures_delta.clear();
         }
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn retained_document_advances_keyframes_and_motion_setting_suppresses_them() {
+        let css = ".browser { color:red; animation:ink 1s linear forwards; } @keyframes ink { from {color:red;} to {color:blue;} }";
+        for motion in [true, false] {
+            prepare(css, 800.0);
+            let ctx = egui::Context::default();
+            let mut colors = Vec::new();
+            for time in [0.0, 0.5, 1.1] {
+                ctx.run_ui(
+                    egui::RawInput {
+                        time: Some(time),
+                        screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(800.0, 600.0))),
+                        ..Default::default()
+                    },
+                    |ui| {
+                        let _frame = frame_with_motion(ui, motion);
+                        let _browser = super::super::style_class::enter("browser");
+                    },
+                )
+                .textures_delta
+                .clear();
+                colors.push(ENGINE.with(|engine| {
+                    let engine = engine.borrow();
+                    let key = engine.nodes.iter().find(|n| n.class == "browser").unwrap().key;
+                    engine.values[&key].color
+                }));
+            }
+            if motion {
+                assert!(colors[1].r() > 20 && colors[1].b() > 20, "{colors:?}");
+                assert_eq!(colors[2], Color32::BLUE);
+            } else {
+                assert_eq!(colors, [Color32::RED; 3]);
+                assert!(!ENGINE.with(|engine| engine.borrow().document.as_ref().unwrap().is_animating()));
+            }
+        }
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn native_state_change_starts_a_transition_instead_of_restarting_the_document() {
+        prepare(
+            ".button { background-color:red; transition:background-color 1s linear; } .button:disabled { background-color:blue; }",
+            800.0,
+        );
+        let ctx = egui::Context::default();
+        let mut colors = Vec::new();
+        for (index, time) in [0.0, 0.1, 0.6, 1.2].into_iter().enumerate() {
+            ctx.run_ui(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(800.0, 600.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let _frame = frame(ui);
+                    let response = ui.add_enabled(index == 0, egui::Button::new("Native state"));
+                    let _scope = super::super::style_class::enter_response("button", &response);
+                },
+            )
+            .textures_delta
+            .clear();
+            colors.push(ENGINE.with(|engine| {
+                let engine = engine.borrow();
+                let key = engine.nodes.iter().find(|n| n.class == "button").unwrap().key;
+                engine.values[&key].background
+            }));
+        }
+        assert_eq!(colors[0], Color32::RED);
+        assert!(colors[2].r() > 20 && colors[2].b() > 20, "{colors:?}");
+        assert_eq!(colors[3], Color32::BLUE);
         skin::configure(&skin::Skin::default());
     }
     #[test]

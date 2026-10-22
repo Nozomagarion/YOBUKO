@@ -2492,7 +2492,10 @@ impl App {
     pub fn ui(&mut self, ui: &mut Ui) {
         application_bar::resize_edges(ui);
         crate::kit::skin::configure(&self.themes.get(&self.settings.theme).map(|t| t.skin.clone()).unwrap_or_default());
-        let _css_frame = crate::kit::native_css::frame(ui);
+        let _css_frame = crate::kit::native_css::frame_with_motion(
+            ui,
+            self.settings.animations && self.settings.theme != "high-contrast",
+        );
         let _window_style = crate::kit::style_class::enter("window");
         let mut styled_ui = crate::kit::style_class::ui(ui);
         let ui = &mut *styled_ui;

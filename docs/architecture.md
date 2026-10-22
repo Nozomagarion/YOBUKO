@@ -418,6 +418,10 @@ bounded cached linear-gradient ramps; scoped guards apply authored values to ord
 egui controls without changing widget identity. The toolbar consumes Taffy's rectangles
 for both native controls and input clipping. Token-level CSS validation bounds source
 size and nesting and reports known unsupported effects without deleting source.
+The document persists for an unchanged scope structure. State snapshots and egui's
+clock drive Stylo transitions/keyframes for connected paint properties. Active motion
+requests repainting at 16 ms and respects the global animation/high-contrast settings;
+geometry animation is not yet consumed by native panel layout.
 No theme work runs on the audio thread. The desktop theme-file service owns portable
 resources and CSS/JSON synchronization. Details and current adapter limits are in
 [ADR 0030](decisions/0030-native-theme-css.md) and the [skin spec](spec/theme-skins.md).

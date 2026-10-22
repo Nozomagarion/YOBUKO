@@ -14,9 +14,7 @@ pub struct Notice {
 }
 
 fn not_painted(name: &str) -> bool {
-    name.starts_with("animation")
-        || name.starts_with("transition")
-        || name.starts_with("transform")
+    name.starts_with("transform")
         || matches!(
             name,
             "box-shadow"

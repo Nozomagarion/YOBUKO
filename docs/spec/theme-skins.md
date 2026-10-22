@@ -113,8 +113,20 @@ transparency. Radial geometry resolves circle/ellipse radii, extent keywords and
 authored centre against the real surface; conic geometry resolves the authored centre
 and start angle. Up to four layers with 64 items each use bounded cached 1024-pixel
 colour ramps. Radial/conic images use cached 256-by-256 textures; at most 64 gradient
-textures are retained per egui context. Shadows, transforms, filters and animations are
-not painted. The editor
+textures are retained per egui context. Shadows, transforms and filters are not painted.
+
+The style document persists while native scope structure stays unchanged. Native state
+changes snapshot the previous state and restyle that document, allowing Stylo transitions
+and keyframes to advance using egui's monotonic frame clock. Connected computed paint
+properties (colours, opacity, font sizes, radii and gradients where CSS defines their
+interpolation) consume these samples. Active animations schedule repainting at 16 ms;
+the final sample also triggers a repaint. Disabling animations or selecting high contrast
+suppresses CSS motion, including authors' important animation declarations. Geometry
+animation is not connected to native layout; changing the scope structure rebuilds the
+document and restarts animations. The adapter does not yet supply the global motion
+setting to `prefers-reduced-motion` queries.
+
+The editor
 reports source-line notices for known unsupported effect/font declarations while
 preserving them in the source. These notices are not a complete CSS validator.
 Token-level validation bounds input to 128 KiB and 64 nested blocks/functions, without
