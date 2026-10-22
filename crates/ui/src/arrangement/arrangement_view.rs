@@ -3821,8 +3821,6 @@ fn track_header(
     } else {
         HEADER_PAD_Y
     };
-    let solo_width = if rect.height() < SHOWS_MIXER { 18.0 } else { SOLO };
-    let on_width = if rect.height() < SHOWS_MIXER { 24.0 } else { ON_TOGGLE };
     let header_gap = if rect.height() < 48.0 {
         4.0
     } else if spacious {
@@ -3902,13 +3900,17 @@ fn track_header(
         parent = group_lane.parent;
     }
     let mut band_left = rect.left();
+    // Deep groups must not consume the controls' entire width in a narrow column.
+    let indent = (0..ancestors.len()).map(|level| nesting_band_width(level) + 2.0).sum::<f32>();
+    let indent_room = (rect.width() - COLOUR_BAND - 3.0 * PAD - meter::WIDTH - 114.0).max(0.0);
+    let indent_scale = if indent > 0.0 { (indent_room / indent).min(1.0) } else { 1.0 };
     for (level, color) in ancestors.iter().rev().enumerate() {
-        let width = nesting_band_width(level);
+        let width = nesting_band_width(level) * indent_scale;
         let strip = Rect::from_min_size(Pos2::new(band_left, rect.top()), Vec2::new(width, rect.height()));
         if strip.intersects(clip) {
             painter.rect_filled(strip.intersect(clip), 0.0, rgb(*color));
         }
-        band_left += width + 2.0;
+        band_left += width + 2.0 * indent_scale;
     }
     // The track's own band follows its ancestors and opens its colour palette.
     let band_rect = Rect::from_min_max(Pos2::new(band_left, rect.top()), rect.max);
@@ -3919,6 +3921,10 @@ fn track_header(
         Pos2::new(band.right() + PAD, rect.top() + header_pad),
         Pos2::new(meter_x - PAD, rect.bottom() - header_pad),
     );
+    let narrow = rect.height() >= SHOWS_MIXER
+        && inner.width() < FOLD + 2.0 + SOLO + PAD + ON_TOGGLE + 3.0 * (SOLO + 2.0) + PAD + LEAST_NAME;
+    let solo_width = if narrow || rect.height() < SHOWS_MIXER { 18.0 } else { SOLO };
+    let on_width = if narrow || rect.height() < SHOWS_MIXER { 24.0 } else { ON_TOGGLE };
     let meter_bottom = if rect.height() >= SHOWS_MIXER {
         inner.top() + header_row + header_gap + field_height
     } else {
@@ -3986,8 +3992,14 @@ fn track_header(
     let name_first = rect.height() >= SHOWS_MIXER
         && inner.width() - FOLD - 2.0 - on_width - 3.0 * (solo_width + 2.0) - PAD - PAN_FIELD - 4.0 >= LEAST_VOLUME;
     let automation_x = first_x;
-    let first_x = if name_first { first_x } else { first_x + solo_width + PAD };
-    let row_top = if name_first { inner.top() + header_row + header_gap } else { inner.top() };
+    let first_x = if narrow {
+        inner.left()
+    } else if name_first {
+        first_x
+    } else {
+        first_x + solo_width + PAD
+    };
+    let row_top = if name_first || narrow { inner.top() + header_row + header_gap } else { inner.top() };
     let row = Rect::from_min_max(Pos2::new(first_x, row_top), Pos2::new(inner.right(), row_top + header_row));
     let toggle = Rect::from_min_size(row.min, Vec2::new(on_width, header_row));
     let solo = Rect::from_min_size(Pos2::new(toggle.right() + 2.0, row.top()), Vec2::new(solo_width, header_row));
@@ -4007,13 +4019,15 @@ fn track_header(
     let beside_room = row.right() - PAN_FIELD - 4.0 - (arm.unwrap_or(cue).right() + PAD);
     let side = tall && beside_room >= LEAST_VOLUME;
     let stacked = tall && !side;
-    let below_top = if name_first { inner.top() } else { row.bottom() + header_gap };
+    let below_top = if name_first || narrow { inner.top() } else { row.bottom() + header_gap };
     // In the stacked layout the level row also uses the space below automation.
     let below_left = if stacked { automation_x } else { first_x };
     let below =
         Rect::from_min_max(Pos2::new(below_left, below_top), Pos2::new(inner.right(), below_top + field_height));
     // The automation button shows and hides the track's lanes.
-    let lanes_button = if side {
+    let lanes_button = if narrow {
+        Rect::from_min_size(Pos2::new(inner.right() - solo_width, inner.top()), Vec2::new(solo_width, header_row))
+    } else if side {
         Rect::from_min_size(
             Pos2::new(below.left() + (on_width - solo_width) / 2.0, below.top()),
             Vec2::new(solo_width, header_row),
@@ -4051,7 +4065,12 @@ fn track_header(
     } else {
         below.right() - step * shown_sends as f32 - navigation + SEND_GAP
     };
-    let mut name = if side {
+    let mut name = if narrow {
+        Rect::from_min_max(
+            Pos2::new(automation_x, inner.top()),
+            Pos2::new(lanes_button.left() - PAD, inner.top() + header_row),
+        )
+    } else if side {
         Rect::from_min_max(
             Pos2::new(lanes_button.right() + PAD, below.top()),
             Pos2::new(sends_left - SEND_GAP - 4.0, below.top() + header_row),
@@ -4151,9 +4170,16 @@ fn track_header(
         value_control(ui, painter, volume, clip, lane, Control::Volume, false, id, state, actions);
     }
 
+    if narrow {
+        // Name and automation are above; the second row keeps the four track controls
+        // and a draggable volume field. Pan and sends return when the column is widened.
+        let volume = Rect::from_min_max(Pos2::new(arm.unwrap_or(cue).right() + PAD, row.top()), row.right_bottom());
+        value_control(ui, painter, volume, clip, lane, Control::Volume, false, id, state, actions);
+    }
+
     // Two rows: volume and pan beside the buttons, the sends after the name below; or, narrow,
     // the volume, the sends and the pan across the second row.
-    if tall {
+    if tall && !narrow {
         let (volume, pan) = if side {
             let left = arm.unwrap_or(cue).right() + PAD;
             let pan =

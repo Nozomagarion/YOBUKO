@@ -185,6 +185,10 @@ Private background image decoding, filtering and placement live in separate modu
 changes. One bounded worker owns filtering; only the current request may publish a texture.
 Blur uses premultiplied alpha and is converted from logical display pixels to texture pixels.
 Settings uses its original theme base, not the main-window opacity-scaled colour.
+While a private image is displayed, surfaces use ordinary blending over the image rather than
+replacing its pixels with desktop transparency. Removing the image restores replacement fills
+on an alpha-capable host. Each liquid capture keeps only the shared textures used by its current
+render; superseded sources and their renderer registrations are released together.
 The removed experimental Mica key is accepted and ignored when reading old preferences.
 
 ## Desktop-aligned wallpaper: platform investigation (not implemented)

@@ -180,6 +180,9 @@ system's: macOS's, DWM's acrylic on Windows, and the compositor's on Wayland whe
 runs under the title bar, which takes `panel.background`; Windows draws its own title bar (the
 application bar), and Linux keeps the system's.
 
+A displayed private background image takes precedence over desktop transparency: background
+fills blend over that image. Clearing the image restores the host's transparent fill path.
+
 A token the file leaves out keeps Suhina Dark's colour, so a file needs only the colours it
 changes; an unknown token or a value that is not `#RRGGBB` or `#RRGGBBAA` is skipped with a warning. Transparent RGB is preserved under canonical token names, including inherited text roles. Files with
 the first token names (`surface.0`, `line`, `text.tertiary` …) still read. Only colours belong to

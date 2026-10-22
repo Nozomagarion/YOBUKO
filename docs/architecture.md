@@ -406,3 +406,7 @@ and map it into display coordinates. Cached source pixels survive effect changes
 Obsolete workers cannot publish into a newer request. Main-window surface opacity is
 separate from the Settings panel material; neither changes text opacity. This is an
 internal boundary, not an extension host or a new dependency of the audio engine.
+
+An active private image keeps background fills in ordinary blend mode, including on hosts
+capable of desktop transparency. Liquid captures release shared texture handles and renderer
+registrations when the next capture no longer uses them, bounding retained image history.

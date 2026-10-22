@@ -1813,7 +1813,7 @@
   },
   "Appearance/Background/background_image": {
     "sourceFingerprint": "37fdef83b1d8ad95be653aaa87d53ea35171ee01364be50a33cd91bf3b7a67a9",
-    "description": "Choose a user-owned PNG or type its path. Clear the field to remove it. The image is drawn over an opaque fill, so the desktop does not show through it, and nothing is captured from the screen. Images are decoded away from the UI thread, limited to 32 MiB and 8192 pixels per axis, and displayed at up to 1600 pixels per axis. High Contrast suppresses the image. If loading fails, repair the PNG and choose it again with Browse to retry; failures are not retried continuously.",
+    "description": "Choose a user-owned PNG or type its path. Clear the field to remove it and restore desktop transparency where the GPU host supports it. While displayed, surfaces blend over the image even on transparent hosts. The image is drawn over an opaque fill, so the desktop does not show through it, and nothing is captured from the screen. Images are decoded away from the UI thread, limited to 32 MiB and 8192 pixels per axis, and displayed at up to 1600 pixels per axis. High Contrast suppresses the image. If loading fails, repair the PNG and choose it again with Browse to retry; failures are not retried continuously.",
     "whenToChange": "Choose an image when you want a private decorative backdrop behind neutral panels.",
     "options": [],
     "references": [
@@ -1824,7 +1824,7 @@
   },
   "Appearance/Background/background_tint": {
     "sourceFingerprint": "c3d42417d2389b0c19dc7d63bc3468a577f8e716c7d75f479ff8ceeecf40d63b",
-    "description": "Set neutral main-window surface opacity over the selected background image, from 0 to 100 percent. At 100 percent opaque theme surfaces cover the image; lower values reveal it. Settings uses its original theme surface with Panel liquid independently. Text, controls, track and clip colours are unchanged. Has no effect without a loaded image.",
+    "description": "Set neutral main-window surface opacity over the selected background image, from 0 to 100 percent. At 100 percent opaque theme surfaces cover the image; lower values reveal the selected image rather than the desktop, including on transparent GPU hosts. Settings uses its original theme surface with Panel liquid independently. Text, controls, track and clip colours are unchanged. Has no effect without a loaded image.",
     "whenToChange": "Increase for stronger separation and readability, or decrease to reveal more of your image.",
     "options": [],
     "references": [
@@ -1835,7 +1835,7 @@
   },
   "Appearance/Background/background_blur": {
     "sourceFingerprint": "46d40d4788a13c70f2c73e35e80ac483697a4ce4864fe305151c15b60bc0db41",
-    "description": "Blur the selected image by 0 to 40 logical display pixels. The source is decoded once and cached; filtering runs in one background worker and obsolete results are discarded. Zero bypasses blur. It never samples the desktop. Has no effect without a loaded image.",
+    "description": "Blur the selected image by 0 to 40 logical display pixels. The source is decoded once and cached; filtering runs in one background worker and obsolete results are discarded. Liquid captures release obsolete GPU texture registrations rather than retaining earlier background versions. Zero bypasses blur. It never samples the desktop. Has no effect without a loaded image.",
     "whenToChange": "Increase when background details distract from text and controls.",
     "options": [],
     "references": [

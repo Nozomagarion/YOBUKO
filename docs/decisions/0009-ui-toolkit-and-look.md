@@ -83,8 +83,10 @@ What the law protects decides how close the UI may get (summary, not legal advic
 ([ADR 0021](0021-device-graph-files.md)).
 
 Appearance materials remain inside the native renderer: user-owned PNG backgrounds are decoded
-with the GPL-compatible `image` crate on a bounded background worker, and the native window stays
-opaque. Theme alpha, gradients and optional GPU refraction never expose the desktop or other apps.
+with the GPL-compatible `image` crate on a bounded background worker. While a private image is
+displayed, surface alpha blends over that image. Without one, alpha-capable GPU hosts can expose
+the desktop through theme backgrounds, with system blur where available; OpenGL and unsupported
+compositors keep opaque rendering. The renderer does not capture desktop pixels.
 Windows uses an egui application identity bar with configurable project information and native
 move/resize commands; other platforms retain their native decorations.
 

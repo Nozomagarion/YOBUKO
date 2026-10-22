@@ -37,14 +37,18 @@ pub fn install(ctx: &Context, provider: Arc<dyn Provider>) {
     ctx.data_mut(|data| data.insert_temp(Id::new(HOST), Host(provider)));
 }
 
-/// Whether backgrounds set the window's pixels in this window.
+/// Whether backgrounds set the window's pixels in this window. A private image needs normal
+/// blending, so its pixels remain under the theme surfaces instead of exposing the desktop.
 pub fn available(ctx: &Context) -> bool {
-    ctx.data(|data| data.get_temp::<Host>(Id::new(HOST))).is_some()
+    ctx.data(|data| data.get_temp::<Host>(Id::new(HOST))).is_some() && super::liquid::background_image(ctx).is_none()
 }
 
 /// A shape that clears `rect` to see-through, for something painted over the window's content
 /// that must not blend with it; `None` when backgrounds blend.
 pub fn clear(ctx: &Context, rect: Rect) -> Option<Shape> {
+    if !available(ctx) {
+        return None;
+    }
     let host = ctx.data(|data| data.get_temp::<Host>(Id::new(HOST)))?;
     Some(host.0.shape(rect, CornerRadius::ZERO, Color32::TRANSPARENT))
 }
@@ -162,6 +166,29 @@ mod tests {
         });
         assert!(shapes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == Color32::from_rgb(9, 9, 9))));
         assert!(!shapes.iter().any(|s| matches!(s, Shape::Circle(_))));
+    }
+
+    #[test]
+    fn private_image_keeps_surface_blending_and_removal_restores_transparency() {
+        let ctx = Context::default();
+        install(&ctx, Arc::new(Marking));
+        for private_image in [true, false, true] {
+            super::super::liquid::set_background_image(
+                &ctx,
+                private_image.then(|| super::super::liquid::BackgroundImage {
+                    id: egui::TextureId::Managed(42),
+                    pixels: Arc::new(egui::ColorImage::filled([2, 2], Color32::RED)),
+                }),
+            );
+            for alpha in [0, 128, 255] {
+                let color = Color32::from_rgba_unmultiplied(20, 90, 130, alpha);
+                let shapes = painted(&ctx, |ctx| {
+                    ctx.layer_painter(LayerId::background()).fill_background(rect(), 0.0, color);
+                });
+                assert_eq!(shapes.iter().any(|s| matches!(s, Shape::Circle(_))), !private_image);
+                assert_eq!(clear(&ctx, rect()).is_none(), private_image);
+            }
+        }
     }
 
     #[test]

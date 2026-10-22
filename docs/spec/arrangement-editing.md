@@ -671,6 +671,11 @@ while playing; offline it plays without a gap.
 
 ## Tracks
 
+At narrow header widths, lanes at least 40 px tall place the name and automation button above
+compact track-on, solo, cue, arm and volume controls. The meter stays separate at the right edge.
+Pan and sends reappear when the header is widened. Group indentation compresses when necessary
+to keep those controls usable, including at the 160 px minimum header width.
+
 | Command | Does |
 |---|---|
 | `track.group {tracks, name?}` | A new group track takes the place of the first track; the tracks (with what is inside them) follow it, play into it, and it plays where they played. They must all be in the same group, or in none. Grouping tracks already in a group nests the new group inside it. |

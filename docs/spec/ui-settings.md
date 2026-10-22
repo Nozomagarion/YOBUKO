@@ -274,9 +274,11 @@ Background blur is measured in logical display pixels, converted to source pixel
 the cover scale, so resizing and different image sizes retain the requested visual strength.
 Zero blur bypasses filtering. Background blur ranges from 0 to 40 pixels and Surface
 opacity from 0 to 100 percent. Clearing the path removes the image. High Contrast does
-not show it. The native window stays opaque: this feature never captures the desktop,
-its icons, or other application windows. Alpha blends neutral UI surfaces over the chosen
-image inside Suhina. It is not an operating-system backdrop.
+not show it. While the image is displayed, neutral UI surfaces blend over it, including
+on hosts that support desktop transparency. Surface opacity reveals the chosen image,
+not other windows. Clearing the image restores the theme's desktop transparency on a
+supported GPU host; OpenGL and unsupported compositors keep ordinary opaque rendering.
+The image feature does not capture the desktop or discover its wallpaper.
 
 Colour and gradient editors retain unmultiplied RGB at zero opacity, including after
 saving and loading a theme. Returning opacity to 100 percent restores the original hue.

@@ -4,7 +4,7 @@
 //! Experimental, current-frame modal backdrop. Appearance strengths default to zero.
 //! Own offscreen renderer and targets: never sample the swapchain or a previous UI frame.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
 use eframe::{egui, egui_wgpu, wgpu};
@@ -346,6 +346,7 @@ impl Liquid {
         // (egui's in the main renderer, another capture's image). What cannot be drawn here (a
         // native callback, a texture nobody here can bind) is left out; the rest still draws.
         let before = jobs.len();
+        let mut used = HashSet::new();
         {
             let main = self.gpu.renderer.read();
             jobs.retain_mut(|job| match &mut job.primitive {
@@ -353,6 +354,7 @@ impl Liquid {
                 egui::epaint::Primitive::Mesh(mesh) if mesh.texture_id == egui::TextureId::Managed(0) => true,
                 egui::epaint::Primitive::Mesh(mesh) => match state.share(device, &main, own, mesh.texture_id) {
                     Some(id) => {
+                        used.insert(mesh.texture_id);
                         mesh.texture_id = id;
                         true
                     }
@@ -360,6 +362,16 @@ impl Liquid {
                 },
             });
         }
+        // Registrations own GPU views as well as the source handles in `shared`. A new
+        // background has a new ID, so retaining past captures would keep every old image alive.
+        state.shared.retain(|id, (registered, _)| {
+            if used.contains(id) {
+                true
+            } else {
+                state.renderer.free_texture(registered);
+                false
+            }
+        });
         if suhina_plugins::trace::on() {
             let left_out = before - jobs.len();
             suhina_plugins::trace::state(
@@ -435,6 +447,54 @@ fn attachment(view: &wgpu::TextureView) -> wgpu::RenderPassColorAttachment<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires a native GPU; run explicitly for rendering changes"]
+    fn replacing_backgrounds_releases_old_capture_registrations() {
+        let instance = wgpu::Instance::default();
+        let gpu =
+            wait(egui_wgpu::RenderState::create(&Default::default(), &instance, None, Default::default())).unwrap();
+        let liquid = Liquid::new(gpu.clone());
+        let ctx = egui::Context::default();
+        let area = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(64.0, 64.0));
+        let mut previous = None;
+        for index in 1..=20 {
+            let id = egui::TextureId::Managed(index);
+            gpu.renderer.write().update_texture(
+                &gpu.device,
+                &gpu.queue,
+                id,
+                &egui::epaint::ImageDelta::full(
+                    egui::ColorImage::filled([8, 8], egui::Color32::RED),
+                    Default::default(),
+                ),
+            );
+            let mut output = ctx.run_ui(egui::RawInput { screen_rect: Some(area), ..Default::default() }, |ui| {
+                ui.painter().image(
+                    id,
+                    area,
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
+                assert!(liquid.capture(ui.ctx()).is_some());
+            });
+            output.textures_delta.clear();
+            let state = liquid.state.lock().unwrap();
+            assert_eq!(state.shared.len(), 1, "superseded background retained");
+            if let Some(old) = previous {
+                assert!(state.renderer.texture(&old).is_none(), "old renderer registration retained");
+            }
+            previous = Some(state.shared[&id].0);
+            gpu.renderer.write().free_texture(&id);
+        }
+        let mut output = ctx.run_ui(egui::RawInput { screen_rect: Some(area), ..Default::default() }, |ui| {
+            assert!(liquid.capture(ui.ctx()).is_some());
+        });
+        output.textures_delta.clear();
+        let state = liquid.state.lock().unwrap();
+        assert!(state.shared.is_empty(), "removing the background must release its capture");
+        assert!(state.renderer.texture(&previous.unwrap()).is_none());
+    }
 
     #[test]
     #[ignore = "requires a native GPU; run explicitly for rendering changes"]

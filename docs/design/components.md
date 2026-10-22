@@ -268,6 +268,11 @@ track along the bottom edge.
 
 ### Track header levels
 
+Narrow Arrangement headers with two rows keep the name and automation button on the first row.
+The second uses 24 px track-on and 18 px solo/cue/arm buttons, followed by a draggable volume
+field; pan and sends wait until the column is wider. Group bands compress to reserve at least
+114 px of inner width, keeping these controls separate from the right-edge meter at 160 px.
+
 The header reveals groups as the track grows. Thresholds are the heights at which a group fits;
 a lane between 20 and 26 px shows the first row clipped.
 
