@@ -393,6 +393,10 @@ reload, import and export retain their order. Preview changes remain immediate,
 errors return to the status bar, and normal exit drains the final queued edits.
 Native CSS caches depend on the palette variables the stylesheet references:
 an unrelated opacity edit does not rebuild its computed contexts.
+Referenced palette changes, including `text.primary`, restyle the retained scope
+document instead of discarding it and rebuilding a fallback document per control.
+Viewport changes also retain the scope tree while updating media conditions and
+viewport-dependent values. The next repaint consumes the refreshed style snapshot.
 
 ZIP export places each JSON, style.css, SVG and background PNG together under its theme
 id. Import validates resources before writing any theme, and gives colliding ids a suffix.

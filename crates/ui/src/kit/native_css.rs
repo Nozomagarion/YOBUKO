@@ -82,6 +82,7 @@ struct Engine {
     values: HashMap<u64, Computed>,
     document: Option<HtmlDocument>,
     motion: bool,
+    styles_changed: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -217,7 +218,9 @@ fn finish_tree(now: f64) -> (bool, bool) {
         engine.collecting = false;
         let changed = engine.nodes != engine.previous;
         let animating_before = engine.document.as_ref().is_some_and(|doc| doc.is_animating());
-        if engine.source.is_none() || (!changed && !animating_before && engine.document.is_some()) {
+        if engine.source.is_none()
+            || (!changed && !engine.styles_changed && !animating_before && engine.document.is_some())
+        {
             return (false, false);
         }
         let same_tree = engine.nodes.len() == engine.previous.len()
@@ -226,6 +229,7 @@ fn finish_tree(now: f64) -> (bool, bool) {
                 .iter()
                 .zip(&engine.previous)
                 .all(|(a, b)| a.key == b.key && a.parent == b.parent && a.class == b.class && a.name == b.name);
+        let styles_changed = engine.styles_changed;
         let retained = if same_tree { engine.document.take() } else { None };
         let mut doc = if let Some(doc) = retained {
             doc
@@ -250,11 +254,7 @@ fn finish_tree(now: f64) -> (bool, bool) {
                 body.push_str("</div>");
             }
             body.push_str("</body></html>");
-            let defaults = format!(
-                "html,body {{ margin:0; color:{}; font-size:{}px; }}",
-                theme::hex(theme::palette().text_primary),
-                theme::TEXT
-            );
+            let defaults = format!("html,body {{ margin:0; color:var(--text-primary); font-size:{}px; }}", theme::TEXT);
             let Some(doc) = document(&engine, &body, &defaults) else {
                 return (false, false);
             };
@@ -305,9 +305,10 @@ fn finish_tree(now: f64) -> (bool, bool) {
         engine.previous = engine.nodes.clone();
         let animating = engine.motion && doc.is_animating();
         engine.document = Some(doc);
+        engine.styles_changed = false;
         // Publish the final sample too: once the animation stops, the preceding
         // frame still painted its penultimate values.
-        (changed || animating || animating_before, animating)
+        (changed || styles_changed || animating || animating_before, animating)
     })
 }
 
@@ -344,8 +345,36 @@ pub fn begin_frame(ui: &egui::Ui) {
         > theme::contrast(palette.window_background, Color32::BLACK);
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
-        if engine.source != source || engine.size != size || engine.dark != dark || engine.palette != variables {
+        if engine.source != source {
             *engine = Engine { source, palette: variables, size, dark, ..Default::default() };
+        } else if engine.size != size || engine.dark != dark || engine.palette != variables {
+            // Palette drags and native resizing do not change the scope tree or
+            // authored CSS. Keep its document and last computed snapshot so that
+            // every control does not fall back to building its own Stylo document.
+            // The retained document resolves the new inputs at the end of this pass.
+            let previous_palette = engine.palette.clone();
+            let viewport_changed = engine.size != size || engine.dark != dark;
+            if let Some(doc) = engine.document.as_mut() {
+                if previous_palette != variables {
+                    doc.remove_user_agent_stylesheet(&previous_palette);
+                    doc.add_user_agent_stylesheet(&variables);
+                }
+                if viewport_changed {
+                    doc.set_viewport(Viewport::new(
+                        size[0],
+                        size[1],
+                        1.0,
+                        if dark { ColorScheme::Dark } else { ColorScheme::Light },
+                    ));
+                }
+            }
+            engine.palette = variables;
+            engine.size = size;
+            engine.dark = dark;
+            engine.styles_changed = true;
+            engine.contexts.clear();
+            engine.toolbar = None;
+            engine.workspace = None;
         }
     });
 }
@@ -530,11 +559,7 @@ pub fn scoped(stack: &[String]) -> Option<Computed> {
             body.push_str("</div>");
         }
         body.push_str("</body></html>");
-        let defaults = format!(
-            "html,body {{ margin:0; color:{}; font-size:{}px; }}",
-            theme::hex(theme::text_primary()),
-            theme::TEXT
-        );
+        let defaults = format!("html,body {{ margin:0; color:var(--text-primary); font-size:{}px; }}", theme::TEXT);
         let mut doc = document(&engine, &body, &defaults)?;
         doc.resolve(0.0);
         let id = doc.get_element_by_id(&format!("scope-{}", stack.len() - 1))?;
@@ -636,6 +661,99 @@ pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn palette_and_resize_restyle_retained_tree_and_preserve_author_colours() {
+        let saved = theme::palette();
+        prepare(
+            ".button { background-color:currentColor; } .browser { color:#123456; } @media (max-width:600px) { .browser { color:#654321; } }",
+            800.0,
+        );
+        let ctx = egui::Context::default();
+        for (pass, width) in [(0, 800.0), (1, 800.0), (2, 500.0)] {
+            let mut palette = saved;
+            palette.text_primary = Color32::from_rgba_unmultiplied(24, 48, 72, 80 + pass * 40);
+            theme::local_palette(palette);
+            ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(width, 600.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let _frame = frame(ui);
+                    if pass > 0 {
+                        ENGINE.with(|engine| {
+                            let engine = engine.borrow();
+                            assert!(engine.document.is_some(), "live edit discarded the retained document");
+                            assert!(!engine.values.is_empty(), "live edit forced per-control fallback documents");
+                        });
+                    }
+                    let _window = super::super::style_class::enter("window");
+                    {
+                        let _button = super::super::style_class::enter("button");
+                    }
+                    {
+                        let _browser = super::super::style_class::enter("browser");
+                    }
+                },
+            )
+            .textures_delta
+            .clear();
+            ENGINE.with(|engine| {
+                let engine = engine.borrow();
+                let button = engine.nodes.iter().find(|node| node.class == "button").unwrap();
+                assert_eq!(engine.values[&button.key].background, palette.text_primary);
+                let browser = engine.nodes.iter().find(|node| node.class == "browser").unwrap();
+                let expected = if width > 600.0 {
+                    Color32::from_rgb(0x12, 0x34, 0x56)
+                } else {
+                    Color32::from_rgb(0x65, 0x43, 0x21)
+                };
+                assert_eq!(engine.values[&browser.key].color, expected);
+                assert!(!engine.styles_changed);
+                assert_eq!(
+                    engine.document.as_ref().unwrap().useragent_stylesheets().count(),
+                    3,
+                    "palette samples accumulated stylesheets"
+                );
+            });
+        }
+        theme::local_palette(saved);
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    #[ignore = "manual timing comparison for live palette edits"]
+    fn measure_primary_colour_edits() {
+        let saved = theme::palette();
+        let css = include_str!("../../themes/suhina-sheet.css");
+        prepare(css, 800.0);
+        let ctx = egui::Context::default();
+        let mut samples = Vec::new();
+        for sample in 0..62 {
+            let mut palette = saved;
+            palette.text_primary = Color32::from_rgba_unmultiplied(40, 60, 50, 100 + sample);
+            theme::local_palette(palette);
+            let start = std::time::Instant::now();
+            ctx.run_ui(egui::RawInput::default(), |ui| {
+                let _frame = frame(ui);
+                let _window = super::super::style_class::enter("window");
+                for class in ["toolbar", "browser", "session", "mixer", "settings"] {
+                    let _scope = super::super::style_class::enter(class);
+                    for _ in 0..8 {
+                        let _button = super::super::style_class::enter("button");
+                    }
+                }
+            })
+            .textures_delta
+            .clear();
+            if sample > 1 {
+                samples.push(start.elapsed().as_secs_f64() * 1000.0);
+            }
+        }
+        samples.sort_by(f64::total_cmp);
+        eprintln!("primary colour edit: median {:.3} ms, max {:.3} ms", samples[30], samples[59]);
+        theme::local_palette(saved);
+        skin::configure(&skin::Skin::default());
+    }
     #[test]
     fn unreferenced_palette_edits_keep_computed_contexts_but_variables_invalidate() {
         let saved = theme::palette();
