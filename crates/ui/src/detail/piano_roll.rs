@@ -1330,6 +1330,7 @@ pub fn show(
     cx: Context<'_>,
     actions: &mut Vec<Action>,
 ) {
+    let _style_class = crate::kit::style_class::enter("piano-roll");
     let Context { options, keymap, copied, playhead } = cx;
     let scale = options.toolbar_size.scale();
     let fresh = state.shown.as_ref() != Some(&clip.address);

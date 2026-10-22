@@ -1127,6 +1127,8 @@ fn rgb(color: suhina_engine::model::Rgb) -> Color32 {
 /// Draws the Arrangement view in the space left in `ui` and adds what the user asked for to
 /// `actions`.
 pub fn show(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState, actions: &mut Vec<Action>) {
+    let _style = crate::kit::style_class::enter("arrangement");
+
     // A released edge whose trim never came (refused, undone at once) is let go of in a while.
     if let Some(released) = state.edge_released.as_mut() {
         released.3 = released.3.saturating_sub(1);
@@ -3375,6 +3377,7 @@ fn paint_clip(
     timeline: &Timeline,
     selected: bool,
 ) {
+    let _style_class = crate::kit::style_class::enter("clip");
     let view = painter.clip_rect();
     if !rect.intersects(view) {
         return;
@@ -3801,6 +3804,7 @@ fn track_header(
     state: &mut ArrangementViewState,
     actions: &mut Vec<Action>,
 ) {
+    let _style_class = crate::kit::style_class::enter("track-header");
     let spacious = rect.height() >= 60.0;
     let tiny = rect.height() < 20.0;
     let header_row = if tiny {

@@ -160,6 +160,7 @@ pub enum PluginRequest {
 /// The themes as the page shows them.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ThemesView {
+    pub skin: crate::kit::skin::Skin,
     pub transparent_rgb: std::collections::BTreeMap<String, [u8; 3]>,
     /// Each theme's id, name and whether it comes with Suhina: the user's own first.
     pub list: Vec<(String, String, bool)>,
@@ -192,7 +193,10 @@ pub enum ThemeRequest {
     },
     EditLiquid(Option<crate::kit::liquid::Options>),
     EditGradients(crate::kit::gradient::Gradients),
+    EditSkin(crate::kit::skin::Skin),
+    EditCss(String),
     ResetEdits {
+        skin: crate::kit::skin::Skin,
         transparent_rgb: std::collections::BTreeMap<String, [u8; 3]>,
         colors: Palette,
         liquid: Option<crate::kit::liquid::Options>,
@@ -275,6 +279,8 @@ pub struct PageState {
     /// The colour editor is a child view of Themes, not another sidebar page.
     pub theme_editor: bool,
     pub theme_restore: Option<(String, String)>,
+    pub theme_original_skin: Option<crate::kit::skin::Skin>,
+    pub skin_editor: super::skin_editor::State,
     pub theme_original_liquid: Option<Option<crate::kit::liquid::Options>>,
     pub theme_original_gradients: Option<crate::kit::gradient::Gradients>,
     pub theme_original: Option<Palette>,
@@ -636,6 +642,7 @@ pub(crate) fn input_style(ui: &mut Ui) {
 
 /// Draws the page into the space left in `ui`.
 pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &mut PageState) -> Outcome {
+    let _style_class = crate::kit::style_class::enter("settings");
     let mut outcome = Outcome::default();
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
@@ -724,6 +731,7 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
         state.theme_original_rgb = None;
         state.theme_original_liquid = None;
         state.theme_original_gradients = None;
+        state.theme_original_skin = None;
         state.theme_restore = None;
         state.search.clear();
         state.capture = None;
@@ -981,6 +989,7 @@ fn theme_page(
                     state.theme_original_rgb = Some(themes.transparent_rgb.clone());
                     state.theme_original_liquid = Some(themes.liquid);
                     state.theme_original_gradients = Some(themes.gradients.clone());
+                    state.theme_original_skin = Some(themes.skin.clone());
                     state.scrolled = None;
                 }
                 ui.menu_button("More", |ui| {
@@ -1146,9 +1155,11 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
         let original_rgb = state.theme_original_rgb.get_or_insert_with(|| themes.transparent_rgb.clone()).clone();
         let original_liquid = *state.theme_original_liquid.get_or_insert(themes.liquid);
         let original_gradients = state.theme_original_gradients.get_or_insert_with(|| themes.gradients.clone()).clone();
+        let original_skin = state.theme_original_skin.get_or_insert_with(|| themes.skin.clone()).clone();
         if ui
             .add_enabled(
-                original != themes.colors
+                original_skin != themes.skin
+                    || original != themes.colors
                     || original_rgb != themes.transparent_rgb
                     || original_liquid != themes.liquid
                     || original_gradients != themes.gradients,
@@ -1157,6 +1168,7 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
             .clicked()
         {
             request = Some(ThemeRequest::ResetEdits {
+                skin: original_skin,
                 transparent_rgb: original_rgb,
                 colors: original,
                 liquid: original_liquid,
@@ -1165,6 +1177,9 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
         }
     });
     ui.add_space(8.0);
+    if let Some(edit) = super::skin_editor::show(ui, themes, &mut state.skin_editor) {
+        request = Some(edit);
+    }
     ui.label(egui::RichText::new("Liquid (experimental)").strong());
     let mut inherit = themes.liquid.is_none();
     if ui.checkbox(&mut inherit, "Use global liquid settings").changed() {

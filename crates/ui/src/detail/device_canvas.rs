@@ -902,6 +902,7 @@ pub(crate) fn show(
     at: &crate::detail::detail_view::DeviceAt,
     actions: &mut Vec<Action>,
 ) {
+    let _style_class = crate::kit::style_class::enter("device-panel");
     // The Sampler's own commands name a device on the track by its index (#600); a device inside
     // a group (#672) is named by its last step.
     let device = at.0.last().copied().unwrap_or(0);

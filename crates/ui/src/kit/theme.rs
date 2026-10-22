@@ -211,6 +211,10 @@ pub fn palette() -> Palette {
     PALETTE.with(Cell::get)
 }
 
+pub(crate) fn local_palette(palette: Palette) {
+    PALETTE.with(|p| p.set(palette));
+}
+
 /// Draws with `palette` from the next frame on: the tokens and egui's own visuals.
 pub fn set_palette(ctx: &egui::Context, palette: Palette) {
     PALETTE.with(|p| p.set(palette));
@@ -259,6 +263,7 @@ pub fn is_built_in(id: &str) -> bool {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Theme {
+    pub skin: super::skin::Skin,
     pub transparent_rgb: std::collections::BTreeMap<String, [u8; 3]>,
     pub name: String,
     pub colors: Palette,
@@ -275,6 +280,7 @@ impl Default for Theme {
             liquid: None,
             gradients: Default::default(),
             transparent_rgb: Default::default(),
+            skin: Default::default(),
         }
     }
 }
@@ -370,7 +376,12 @@ impl Theme {
         if let Some(value) = root.get("gradients") {
             theme.gradients = super::gradient::Gradients::from_json(value, &mut warnings);
         }
-        let known = |k: &str| matches!(k, "name" | "colors" | "liquid" | "gradients" | "description" | "$schema");
+        if let Some(value) = root.get("skin") {
+            theme.skin = super::skin::Skin::from_json(value, &mut warnings);
+        }
+        let known = |k: &str| {
+            matches!(k, "stylesheet" | "skin" | "name" | "colors" | "liquid" | "gradients" | "description" | "$schema")
+        };
         for key in root.keys().filter(|k| !known(k)) {
             warnings.push(format!("{key} is not part of a theme"));
         }
@@ -386,6 +397,9 @@ impl Theme {
             .map(|(key, _, color)| (key.to_string(), Value::String(hex_rgba(self.rgba(key, color)))))
             .collect();
         let mut root = Map::new();
+        if self.skin != super::skin::Skin::default() {
+            root.insert("skin".into(), self.skin.to_json());
+        }
         root.insert("name".into(), Value::String(self.name.clone()));
         root.insert("colors".into(), Value::Object(colors));
         if self.gradients != super::gradient::Gradients::default() {
@@ -528,12 +542,12 @@ pub const TEXT_SMALL: f32 = 11.0;
 pub const TEXT_TINY: f32 = 9.0;
 
 pub fn ui_font(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Proportional)
+    FontId::new(super::style_class::font_size(size), FontFamily::Proportional)
 }
 
 /// Every number, time and position is monospaced.
 pub fn mono_font(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Monospace)
+    FontId::new(super::style_class::font_size(size), FontFamily::Monospace)
 }
 
 pub fn hairline(color: Color32) -> Stroke {
@@ -723,6 +737,7 @@ mod tests {
             liquid: None,
             gradients: Default::default(),
             transparent_rgb: Default::default(),
+            skin: Default::default(),
         };
         theme.colors.accent = rgb(0x12AB9F);
         theme.colors.window_background = rgb(0x000000);

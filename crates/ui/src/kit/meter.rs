@@ -144,6 +144,7 @@ pub fn show(
     if rect.width() <= 0.0 || rect.height() <= 0.0 || !rect.intersects(painter.clip_rect()) {
         return;
     }
+    let _style = crate::kit::style_class::enter("meter");
     let id = Id::new(("meter", source));
     let response = ui.interact(rect.intersect(painter.clip_rect()), id, Sense::click());
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, describe(name, level)));
@@ -154,6 +155,7 @@ pub fn show(
         });
     }
     let hold = held(ui, id, level);
+    let skin = super::skin::current();
     let upright = rect.height() > rect.width();
     let (light, bars) = if upright {
         let light = Rect::from_min_size(rect.min, Vec2::new(rect.width(), CLIP));
@@ -188,6 +190,23 @@ pub fn show(
             }
         };
         painter.rect_filled(bar, 0.0, theme::window_background());
+        if skin.meter == super::skin::MeterStyle::Needle {
+            let origin = if upright { bar.center_bottom() } else { bar.left_center() };
+            for (value, width) in [
+                (level.peak.get(side).copied().unwrap_or(0.0), 1.0),
+                (level.rms.get(side).copied().unwrap_or(0.0), 2.0),
+            ] {
+                let value = fraction(value);
+                let to = if upright {
+                    egui::pos2(bar.left() + bar.width() * value, bar.bottom() - bar.height() * value)
+                } else {
+                    egui::pos2(bar.left() + bar.width() * value, bar.bottom() - bar.height() * value)
+                };
+                let color = if value > hot_from { theme::meter_hot() } else { theme::meter_normal() };
+                painter.line_segment([origin, to], egui::Stroke::new(width, color));
+            }
+            continue;
+        }
         let peak = fraction(level.peak.get(side).copied().unwrap_or(0.0));
         let rms = fraction(level.rms.get(side).copied().unwrap_or(0.0));
         // The peak dimmer, the RMS level in the full colour over it.
@@ -195,9 +214,22 @@ pub fn show(
             if to <= 0.0 {
                 continue;
             }
-            painter.rect_filled(part(0.0, to.min(hot_from)), 0.0, theme::meter_normal().gamma_multiply(alpha));
-            if to > hot_from {
-                painter.rect_filled(part(hot_from, to), 0.0, theme::meter_hot().gamma_multiply(alpha));
+            if skin.meter == super::skin::MeterStyle::Segmented {
+                let count = skin.segments.clamp(4, 64);
+                for segment in 0..count {
+                    let from = f32::from(segment) / f32::from(count);
+                    if from >= to {
+                        break;
+                    }
+                    let end = ((f32::from(segment) + 0.8) / f32::from(count)).min(to);
+                    let color = if from >= hot_from { theme::meter_hot() } else { theme::meter_normal() };
+                    painter.rect_filled(part(from, end), 0.0, color.gamma_multiply(alpha));
+                }
+            } else {
+                painter.rect_filled(part(0.0, to.min(hot_from)), 0.0, theme::meter_normal().gamma_multiply(alpha));
+                if to > hot_from {
+                    painter.rect_filled(part(hot_from, to), 0.0, theme::meter_hot().gamma_multiply(alpha));
+                }
             }
         }
         let hold = fraction(hold.get(side).copied().unwrap_or(0.0));

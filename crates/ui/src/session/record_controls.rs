@@ -29,6 +29,16 @@ pub fn record_button(ui: &Ui, painter: &Painter, rect: Rect, recording: bool, ac
     let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
     painter.rect_filled(rect, 0.0, motion::mix(hover, theme::recording_background(), lit));
     let ring = motion::mix(theme::text_primary(), theme::recording(), lit);
+    if crate::kit::skin::paint(
+        painter,
+        rect,
+        "record",
+        crate::kit::skin::State::response(&response, recording),
+        theme::recording(),
+        0.0,
+    ) {
+        return;
+    }
     painter.circle_stroke(rect.center(), 4.5, Stroke::new(1.2, ring));
     painter.circle_filled(rect.center(), 4.5, theme::recording().gamma_multiply(0.35 + 0.65 * lit));
 }

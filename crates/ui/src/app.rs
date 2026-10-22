@@ -14,6 +14,7 @@ pub mod missing_files;
 pub mod project_dialog;
 pub mod splash;
 pub mod start_panel;
+mod themed_toolbar;
 pub mod updates;
 
 use std::collections::HashMap;
@@ -2259,6 +2260,7 @@ impl App {
     /// Draws the window into `ui` and runs what the user asked for.
     pub fn ui(&mut self, ui: &mut Ui) {
         application_bar::resize_edges(ui);
+        crate::kit::skin::configure(&self.themes.get(&self.settings.theme).map(|t| t.skin.clone()).unwrap_or_default());
         if let Err(error) = self.background.update(ui, &self.settings, self.themes.palette(&self.settings.theme)) {
             self.status = Status::Error(error);
         }
@@ -3727,6 +3729,7 @@ impl App {
 
     /// The tab row: one tab per open project, the active one lit; a tab's × closes it.
     fn tab_row(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
+        let _style_class = crate::kit::style_class::enter("project-tabs");
         let bar = ui.max_rect();
         ui.allocate_rect(bar, Sense::hover());
         let painter = ui.painter_at(bar);
@@ -4298,6 +4301,8 @@ impl App {
                     crate::settings::settings_view::ThemeRequest::Edit(_)
                         | crate::settings::settings_view::ThemeRequest::EditRgba { .. }
                         | crate::settings::settings_view::ThemeRequest::EditLiquid(_)
+                        | crate::settings::settings_view::ThemeRequest::EditSkin(_)
+                        | crate::settings::settings_view::ThemeRequest::EditCss(_)
                         | crate::settings::settings_view::ThemeRequest::EditGradients(_)
                 )
             })
@@ -4305,6 +4310,7 @@ impl App {
 
     /// The menu bar: the same actions as the shortcuts and the views' controls.
     fn menu_bar(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
+        let _style_class = crate::kit::style_class::enter("menu-bar");
         let has_project = self.session().is_some();
         let (can_undo, can_redo) = self.session().map_or((false, false), |s| (s.can_undo(), s.can_redo()));
         let several = self.projects.len() >= 2;
@@ -6299,6 +6305,10 @@ impl App {
         ram: Option<u64>,
         actions: &mut Vec<Action>,
     ) {
+        let _style_class = crate::kit::style_class::enter("toolbar");
+        if self.themed_toolbar(ui, grid, cpu, ram, actions) {
+            return;
+        }
         let bar = ui.max_rect();
         ui.allocate_rect(bar, Sense::hover());
         let painter = ui.painter_at(bar);
@@ -6623,6 +6633,7 @@ impl App {
     }
 
     fn status_bar(&self, ui: &mut Ui, grid: Option<&Grid>) {
+        let _style_class = crate::kit::style_class::enter("status-bar");
         let bar = ui.max_rect();
         let painter = ui.painter_at(bar);
         let (text, color) = match &self.status {

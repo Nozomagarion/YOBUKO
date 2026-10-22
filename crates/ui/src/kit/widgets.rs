@@ -94,8 +94,11 @@ pub fn hover(ui: &Ui, response: &Response) -> f32 {
 /// Shared track-button surface. Colors and focus outlines follow the active theme.
 /// Geometry stays inside the caller's hit target, including compact mixer strips.
 pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Response, fill: Color32) {
-    let radius = (rect.height() * 0.25).min(5.0);
-    painter.rect_filled(rect, radius, fill);
+    let _style = crate::kit::style_class::enter("button");
+    let radius = super::style_class::radius((rect.height() * 0.25).min(5.0));
+    if !super::skin::paint(painter, rect, "button", super::skin::State::response(response, false), fill, 0.0) {
+        painter.rect_filled(rect, radius, fill);
+    }
     if response.has_focus() || response.hovered() {
         let edge = if response.has_focus() { theme::accent() } else { theme::border_strong() };
         painter.rect_stroke(rect, radius, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
@@ -130,7 +133,9 @@ pub fn solo_button(
     let off = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
     track_button_face(ui, painter, rect, &response, motion::mix(off, theme::accent(), lit));
     let text = motion::mix(theme::text_secondary(), theme::window_background(), lit);
-    text_in(painter, rect, Align2::CENTER_CENTER, "S", theme::ui_font(theme::TEXT_SMALL), text);
+    if !super::skin::paint(painter, rect, "solo", super::skin::State::response(&response, solo), text, 0.0) {
+        text_in(painter, rect, Align2::CENTER_CENTER, "S", theme::ui_font(theme::TEXT_SMALL), text);
+    }
     if !response.clicked() {
         return None;
     }
@@ -157,7 +162,9 @@ pub fn cue_button(
     let response = button_area(ui, rect, id, label);
     let (fill, text) = toggle_colors(ui, &response, cue);
     track_button_face(ui, painter, rect, &response, fill);
-    headphones(painter, rect, text);
+    if !super::skin::paint(painter, rect, "cue", super::skin::State::response(&response, cue), text, 0.0) {
+        headphones(painter, rect, text);
+    }
     response.clicked().then(|| Action::new("track.setCue", serde_json::json!({ "track": track, "cue": !cue })))
 }
 
@@ -207,9 +214,11 @@ pub fn arm_button(
     track_button_face(ui, painter, rect, &response, motion::mix(off, theme::recording_background(), lit));
     let radius = (rect.height().min(rect.width()) * 0.22).clamp(2.5, 4.0);
     let ring = motion::mix(theme::text_secondary(), theme::recording(), lit);
-    painter.circle_stroke(rect.center(), radius, Stroke::new(1.2, ring));
-    if lit > 0.0 {
-        painter.circle_filled(rect.center(), radius, theme::recording().gamma_multiply(lit));
+    if !super::skin::paint(painter, rect, "arm", super::skin::State::response(&response, armed), ring, 0.0) {
+        painter.circle_stroke(rect.center(), radius, Stroke::new(1.2, ring));
+        if lit > 0.0 {
+            painter.circle_filled(rect.center(), radius, theme::recording().gamma_multiply(lit));
+        }
     }
     if !response.clicked() {
         return None;
@@ -234,6 +243,7 @@ pub fn input_frame() -> egui::Frame {
 
 /// A text edit with the same transparent surface and focus underline in every view.
 pub fn text_input(ui: &mut Ui, edit: egui::TextEdit<'_>) -> Response {
+    let _style_class = crate::kit::style_class::enter("text-input");
     let response = ui.add(edit.frame(input_frame()));
     input_line(ui, &response);
     response
@@ -241,6 +251,7 @@ pub fn text_input(ui: &mut Ui, edit: egui::TextEdit<'_>) -> Response {
 
 /// The fixed-rectangle counterpart used by browser rows and project dialogs.
 pub fn text_input_at(ui: &mut Ui, rect: Rect, edit: egui::TextEdit<'_>) -> Response {
+    let _style_class = crate::kit::style_class::enter("text-input");
     let response = ui.put(rect, edit.frame(input_frame()));
     input_line(ui, &response);
     response
@@ -313,6 +324,7 @@ pub fn input_line(ui: &Ui, response: &Response) {
 
 /// A form field whose surrounding surface shows through, with only an underline.
 pub fn form_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str) {
+    let _style_class = crate::kit::style_class::enter("dropdown");
     let hover = hover(ui, response);
     let border = if response.has_focus() {
         theme::accent()
@@ -534,6 +546,7 @@ pub fn drag_value(
     range: (f64, f64),
     default: f64,
 ) -> Drag {
+    let _style_class = crate::kit::style_class::enter("value");
     // Keys to the control clicked last: the arrows step it, Enter sets what was typed.
     let (steps, fine, typed) = value_keys(ui, response);
     if let Some(typed) = typed
@@ -600,12 +613,18 @@ pub fn value_area(ui: &Ui, rect: Rect, id: egui::Id, label: impl ToString, value
 /// The knob: a small circle with a pointer from the centre, −135° … +135° of travel for
 /// `position` 0 … 1 (components › Mixer strip).
 pub fn knob(painter: &Painter, center: Pos2, size: f32, position: f32, pointer: Color32) {
+    let _style = crate::kit::style_class::enter("knob");
     let radius = size * 9.0 / 22.0;
-    painter.circle_filled(center, radius, theme::control_background());
-    painter.circle_stroke(center, radius, theme::hairline(theme::text_hint()));
+    let rect = Rect::from_center_size(center, Vec2::splat(size));
+    if !super::skin::paint(painter, rect, "knob.body", super::skin::State::Normal, pointer, 0.0) {
+        painter.circle_filled(center, radius, theme::control_background());
+        painter.circle_stroke(center, radius, theme::hairline(theme::text_hint()));
+    }
     let angle = (-135.0 + 270.0 * position.clamp(0.0, 1.0)).to_radians();
     let tip = center + Vec2::new(angle.sin(), -angle.cos()) * (radius - 1.0);
-    painter.line_segment([center, tip], Stroke::new(1.5, pointer));
+    if !super::skin::paint(painter, rect, "knob.pointer", super::skin::State::Normal, pointer, angle) {
+        painter.line_segment([center, tip], Stroke::new(1.5, pointer));
+    }
 }
 
 /// A volume in dB as the mixer shows it.

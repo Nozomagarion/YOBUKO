@@ -17,7 +17,8 @@ use suhina_ui::settings::is_theme_id;
 use suhina_ui::settings::themes::{ThemeEntry, slug};
 
 /// Larger files are not themes; they are skipped instead of read.
-const MAX_FILE: u64 = 256 * 1024;
+const MAX_FILE: u64 = 2 * 1024 * 1024;
+const MAX_EXPANDED: u64 = 32 * 1024 * 1024;
 /// A zip with more files than this is not a set of themes.
 const MAX_ZIP_FILES: usize = 512;
 /// How often the folder is looked at for changed files.
@@ -135,8 +136,8 @@ impl ThemeFiles {
         }
         let mut contents = Vec::new();
         for (id, path, _) in files {
-            let text = std::fs::read(&path).map_err(|e| format!("could not read {id}.json: {e}"))?;
-            contents.push((format!("{id}.json"), text));
+            let (theme, _) = read_loose(&path)?;
+            contents.extend(package_files(&id, &theme)?);
         }
         let name = format!("suhina-themes-{}.zip", date(SystemTime::now()));
         write_zip(&self.exports()?.join(name), &contents)
@@ -146,7 +147,9 @@ impl ThemeFiles {
     /// colour written out), `README.md` on the format, and the built-in themes in `examples/`.
     /// Returns its path.
     pub fn export_template(&self) -> Result<PathBuf, String> {
-        let template = Theme { name: "My theme".into(), ..Theme::default() };
+        let mut template = Theme { name: "My theme".into(), ..Theme::default() };
+        template.skin.assets = suhina_ui::kit::skin::example_assets();
+        template.skin.toolbar = Some(Default::default());
         let mut contents = vec![
             ("README.md".to_string(), theme::template_readme().into_bytes()),
             (TEMPLATE.to_string(), template.to_json().into_bytes()),
@@ -154,6 +157,7 @@ impl ThemeFiles {
         for (id, theme) in theme::built_in_themes() {
             contents.push((format!("{EXAMPLES}{id}.json"), theme.to_json().into_bytes()));
         }
+        contents.extend(package_files("my-theme", &template)?);
         write_zip(&self.exports()?.join("suhina-theme-template.zip"), &contents)
     }
 
@@ -165,8 +169,7 @@ impl ThemeFiles {
         let mut found = Vec::new();
         let mut warnings = Vec::new();
         if is_zip {
-            for (name, text) in read_zip(path)? {
-                let (theme, problems) = Theme::from_json(&text);
+            for (name, theme, problems) in read_zip(path)? {
                 warnings.extend(problems.into_iter().map(|p| format!("{name}: {p}")));
                 found.push((stem(&name), theme));
             }
@@ -175,8 +178,7 @@ impl ThemeFiles {
             if std::fs::metadata(path).map_err(|e| format!("{name}: {e}"))?.len() > MAX_FILE {
                 return Err(format!("{name} is larger than a theme can be"));
             }
-            let text = std::fs::read_to_string(path).map_err(|e| format!("{name}: {e}"))?;
-            let (theme, problems) = Theme::from_json(&text);
+            let (theme, problems) = read_loose(path)?;
             if problems.iter().any(|p| p.contains("not JSON") || p.contains("JSON object")) {
                 return Err(format!("{name} is not a theme: {}", problems.join("; ")));
             }
@@ -274,9 +276,8 @@ fn read(id: &str, path: &Path, warnings: &mut Vec<String>) -> Option<ThemeEntry>
             return None;
         }
     }
-    match std::fs::read_to_string(path) {
-        Ok(text) => {
-            let (theme, problems) = Theme::from_json(&text);
+    match read_loose(path) {
+        Ok((theme, problems)) => {
             warnings.extend(problems.into_iter().map(|p| format!("{name}: {p}")));
             Some(ThemeEntry { id: id.to_string(), theme })
         }
@@ -311,33 +312,152 @@ fn write_zip(path: &Path, contents: &[(String, Vec<u8>)]) -> Result<PathBuf, Str
 
 /// The theme files in a zip, as names and text: every `.json` but the template's own, each at
 /// most [`MAX_FILE`] long.
-fn read_zip(path: &Path) -> Result<Vec<(String, String)>, String> {
-    let name = path.display();
-    let file = std::fs::File::open(path).map_err(|e| format!("could not open {name}: {e}"))?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("{name} is not a zip: {e}"))?;
-    if archive.len() > MAX_ZIP_FILES {
-        return Err(format!("{name} has more files than a set of themes"));
+type LoadedTheme = (String, Theme, Vec<String>);
+
+fn safe_relative(path: &str) -> bool {
+    !path.is_empty()
+        && path.len() <= 240
+        && !path.contains(['\\', ':', '\0'])
+        && path.split('/').all(|part| !part.is_empty() && part != "." && part != "..")
+}
+
+fn read_bounded(path: &Path, max: u64) -> Result<Vec<u8>, String> {
+    let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if file.metadata().map_err(|e| e.to_string())?.len() > max {
+        return Err(format!("{} exceeds its theme size limit", path.display()));
     }
-    let mut themes = Vec::new();
+    let mut bytes = Vec::new();
+    file.take(max + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > max {
+        return Err("theme file grew beyond its size limit".into());
+    }
+    Ok(bytes)
+}
+
+fn read_loose(path: &Path) -> Result<(Theme, Vec<String>), String> {
+    let text = String::from_utf8(read_bounded(path, MAX_FILE)?).map_err(|e| e.to_string())?;
+    let root = path.parent().unwrap_or(Path::new("."));
+    resolve_theme(&text, |relative, max| {
+        if !safe_relative(relative) {
+            return Err("invalid relative theme resource path".into());
+        }
+        let mut file = root.to_path_buf();
+        for part in relative.split('/') {
+            file.push(part);
+            let meta = std::fs::symlink_metadata(&file).map_err(|e| format!("{relative}: {e}"))?;
+            if meta.file_type().is_symlink() {
+                return Err("theme resources may not be symlinks".into());
+            }
+        }
+        read_bounded(&file, max)
+    })
+}
+
+fn resolve_theme(
+    text: &str,
+    mut resource: impl FnMut(&str, u64) -> Result<Vec<u8>, String>,
+) -> Result<(Theme, Vec<String>), String> {
+    use suhina_ui::kit::{skin, theme_css};
+    let root: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("invalid theme JSON: {e}"))?;
+    if !root.is_object() {
+        return Err("a theme must be a JSON object".into());
+    }
+    let (mut theme, mut warnings) = Theme::from_json(text);
+    if let Some(path) = root.get("stylesheet") {
+        let path = path
+            .as_str()
+            .filter(|p| safe_relative(p) && p.ends_with(".css"))
+            .ok_or("stylesheet must name a relative CSS file")?;
+        let css = String::from_utf8(resource(path, theme_css::MAX_CSS as u64)?).map_err(|e| e.to_string())?;
+        warnings.extend(theme_css::apply(&mut theme, &css));
+    }
+    for (role, source) in &mut theme.skin.assets {
+        if !source.trim_start().starts_with('<') {
+            let data = resource(source, skin::MAX_SVG as u64)?;
+            *source = String::from_utf8(data).map_err(|e| e.to_string())?;
+        }
+        skin::parse_svg(source).map_err(|e| format!("{role}: {e}"))?;
+    }
+    Ok((theme, warnings))
+}
+
+fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, String> {
+    let mut root: serde_json::Value = serde_json::from_str(&theme.to_json()).map_err(|e| e.to_string())?;
+    root["stylesheet"] = serde_json::Value::String("style.css".into());
+    let mut files = Vec::new();
+    for (role, source) in &theme.skin.assets {
+        if !suhina_ui::kit::skin::valid_role(role) {
+            return Err(format!("unknown SVG role {role}"));
+        }
+        suhina_ui::kit::skin::parse_svg(source)?;
+        let relative = format!("assets/{role}.svg");
+        root["skin"]["assets"][role] = serde_json::Value::String(relative.clone());
+        files.push((format!("{id}/{relative}"), source.as_bytes().to_vec()));
+    }
+    files.push((format!("{id}/style.css"), suhina_ui::kit::theme_css::export(theme).into_bytes()));
+    files.push((format!("{id}/{id}.json"), serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?));
+    Ok(files)
+}
+
+fn read_zip(path: &Path) -> Result<Vec<LoadedTheme>, String> {
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|e| e.to_string())?;
+    if archive.len() > MAX_ZIP_FILES {
+        return Err("too many theme package files".into());
+    }
+    let mut files = std::collections::BTreeMap::new();
+    let mut total = 0u64;
     for index in 0..archive.len() {
-        let mut entry = archive.by_index(index).map_err(|e| format!("{name}: {e}"))?;
-        let inside = entry.name().map_err(|e| format!("{name}: {e}"))?.replace('\\', "/");
-        let wanted = entry.is_file()
-            && inside.to_ascii_lowercase().ends_with(".json")
-            && inside != TEMPLATE
-            && !inside.starts_with(EXAMPLES);
-        if !wanted {
+        let mut entry = archive.by_index(index).map_err(|e| e.to_string())?;
+        if entry.is_dir() {
             continue;
         }
-        if entry.size() > MAX_FILE {
-            return Err(format!("{inside} in {name} is larger than a theme can be"));
+        let name = entry.name().map_err(|e| e.to_string())?.to_string();
+        if !safe_relative(&name) || entry.unix_mode().is_some_and(|m| m & 0o170000 == 0o120000) {
+            return Err(format!("unsafe theme package path {name}"));
         }
-        let mut text = String::new();
-        (&mut entry).take(MAX_FILE).read_to_string(&mut text).map_err(|e| format!("{inside} in {name}: {e}"))?;
-        themes.push((inside, text));
+        let limit = if name.ends_with(".svg") {
+            suhina_ui::kit::skin::MAX_SVG as u64
+        } else if name.ends_with(".css") {
+            suhina_ui::kit::theme_css::MAX_CSS as u64
+        } else {
+            MAX_FILE
+        };
+        total = total.checked_add(entry.size()).ok_or("theme package size overflow")?;
+        if entry.size() > limit || total > MAX_EXPANDED {
+            return Err("theme package exceeds expanded size limit".into());
+        }
+        let mut bytes = Vec::new();
+        (&mut entry).take(limit + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+        if bytes.len() as u64 > limit {
+            return Err("theme package entry exceeds size limit".into());
+        }
+        if files.insert(name, bytes).is_some() {
+            return Err("duplicate theme package path".into());
+        }
+    }
+    let mut themes = Vec::new();
+    for (name, bytes) in &files {
+        if !name.ends_with(".json") || name == TEMPLATE || name.starts_with(EXAMPLES) {
+            continue;
+        }
+        let text = std::str::from_utf8(bytes).map_err(|e| e.to_string())?;
+        let folder = name.rsplit_once('/').map_or("", |(folder, _)| folder);
+        let (theme, warnings) = resolve_theme(text, |relative, max| {
+            if !safe_relative(relative) {
+                return Err("invalid relative resource path".into());
+            }
+            let path = if folder.is_empty() { relative.to_string() } else { format!("{folder}/{relative}") };
+            let data = files.get(&path).ok_or_else(|| format!("missing theme resource {path}"))?;
+            if data.len() as u64 > max {
+                return Err(format!("{path} exceeds resource size limit"));
+            }
+            Ok(data.clone())
+        })?;
+        themes.push((name.clone(), theme, warnings));
     }
     if themes.is_empty() {
-        return Err(format!("there are no themes in {name}"));
+        return Err("there are no themes in this package".into());
     }
     Ok(themes)
 }

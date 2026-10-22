@@ -237,6 +237,7 @@ pub fn show(
     id: Id,
     actions: &mut Vec<Action>,
 ) -> egui::Response {
+    let _style_class = crate::kit::style_class::enter("mixer");
     // The strip in a shade of its track's colour, as the column above it.
     let tint = motion::mix(
         theme::panel_background(),
@@ -754,6 +755,7 @@ fn paint_fader(
     response: &egui::Response,
     centred: bool,
 ) {
+    let _style = crate::kit::style_class::enter("fader");
     let hover = widgets::hover(ui, response);
     let value_color = motion::mix(theme::text_value(), theme::text_primary(), hover);
     painter.text(
@@ -773,7 +775,16 @@ fn paint_fader(
     // An unfilled recessed rail: volume is the cap's position, not a bright background bar.
     let rail = Rect::from_center_size(Pos2::new(x, fader.center().y), Vec2::new(5.0, fader.height()));
     let recess = motion::mix(theme::control_background(), egui::Color32::BLACK, 0.65);
-    painter.rect_filled(rail, 2.0, recess);
+    if !crate::kit::skin::paint(
+        painter,
+        rail,
+        "fader.rail",
+        crate::kit::skin::State::response(response, false),
+        theme::text_value(),
+        0.0,
+    ) {
+        painter.rect_filled(rail, 2.0, recess);
+    }
     let mut last_label_y = f32::NEG_INFINITY;
     for db in [0.0, -6.0, -12.0, -24.0, -70.0] {
         let y = at(widgets::volume_position(db)).round() + 0.5;

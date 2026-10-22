@@ -162,6 +162,8 @@ fn run(projects: &mut Projects, id: &str, params: serde_json::Value, out: &mut B
 
 /// Draws the browser in `area`.
 pub fn show(ui: &mut Ui, area: Rect, state: &mut BrowserState, cx: Context<'_>) -> BrowserOut {
+    let _style = crate::kit::style_class::enter("browser");
+
     let mut out = BrowserOut::default();
     let Context { projects, settings, selected_track, search_key, other_results } = cx;
     ui.allocate_rect(area, Sense::hover());

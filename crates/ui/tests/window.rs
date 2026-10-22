@@ -943,6 +943,7 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
             liquid: None,
             gradients: Default::default(),
             transparent_rgb: Default::default(),
+            skin: Default::default(),
         },
     };
     let ctx = harness.ctx.clone();
@@ -999,6 +1000,7 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
             liquid: None,
             gradients: Default::default(),
             transparent_rgb: Default::default(),
+            skin: Default::default(),
         },
     };
     harness.state_mut().put_theme(&ctx, edited);

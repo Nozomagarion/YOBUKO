@@ -195,6 +195,7 @@ pub fn show(
     state: &mut SessionViewState,
     actions: &mut Vec<Action>,
 ) {
+    let _style_class = crate::kit::style_class::enter("session");
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
@@ -602,6 +603,7 @@ fn column_header(
     state: &mut SessionViewState,
     actions: &mut Vec<Action>,
 ) {
+    let _style_class = crate::kit::style_class::enter("track-header");
     if rect.width() <= 0.0 {
         return;
     }
