@@ -58,7 +58,7 @@ impl Gradient {
         }
         Some(Self {
             key,
-            direction: direction.clone(),
+            direction: *direction,
             interpolation: *color_interpolation_method,
             repeating: flags.contains(GradientFlags::REPEATING),
             stops,
@@ -138,7 +138,7 @@ impl Gradient {
         }
         let color = mix_many(
             self.interpolation,
-            [ColorMixItem::new(left.color.clone(), 1.0 - weight), ColorMixItem::new(right.color.clone(), weight)],
+            [ColorMixItem::new(left.color, 1.0 - weight), ColorMixItem::new(right.color, weight)],
             ColorMixFlags::empty(),
         );
         super::rgba(&color)
