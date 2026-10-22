@@ -207,7 +207,7 @@ If (2) fails, change colours, control shapes, typography and wording, not the la
 Studio Light and Studio Dark are opt-in themes using warm surfaces and gold accents.
 Arrangement headers keep their track-color edge band on neutral, theme-editable surfaces
 (`track.headerBackground`, `track.headerSelectedBackground`). Missing new tokens in older
-theme files fall back to the built-in palette. Header selection retains an outline.
+theme files fall back to the built-in palette. The selected token supplies the base of selected headers before track-colour strength and the selection highlight are applied; selection retains an outline.
 The larger transport and initial Arrangement dimensions are described in components.
 These initial dimensions are shared implementation constants, not yet user-configurable
 appearance metrics; the planned metrics settings remain follow-up work.
