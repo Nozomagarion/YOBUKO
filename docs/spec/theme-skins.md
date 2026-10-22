@@ -5,6 +5,8 @@ type: spec
 status: draft
 last_verified: 2026-10-22
 covers:
+  - assets/themes/default/*.svg
+  - crates/ui/themes/THEME-PACKAGE-README.md
   - crates/ui/src/kit/skin.rs
   - crates/ui/src/app/themed_toolbar.rs
   - crates/ui/src/settings/skin_editor.rs
@@ -41,14 +43,25 @@ Canonical native CSS mirrors offsets as `toolbar { offset-transport: 80px; }`.
 SVG inheritance resolves each control role in this order: theme state artwork,
 theme base artwork, shared default state artwork, shared default base artwork.
 Suhina ships original default SVG files under `assets/themes/default/`, embeds
-the same files for reliable startup, and creates editable copies under
-`themes/_defaults/assets/` beside the user's theme folders. Missing files are
-created without overwriting existing edits. The shared library is watched with
-the theme files; malformed or oversized edits report a warning and use the
-embedded default. Themes store only their explicit artwork overrides. Portable
+the same files for reliable startup, and creates a protected reference library under
+`themes/_defaults/assets/` plus an importable `themes/_defaults/suhina-default.zip`.
+Missing files are recreated from the embedded sources, including when the ZIP is
+also missing. A changed or corrupt backup ZIP is preserved separately before
+rebuilding the pristine archive. Editing default artwork first creates a complete numbered user theme
+named `Suhina Default (modified N)`; only after that copy commits are the reference
+files restored. The new theme appears in the gallery without changing another
+theme's selected identity. Malformed bounded edits are archived in an exports
+recovery ZIP before restoration. Oversized or inaccessible files are left untouched
+with a warning; the renderer always uses its embedded default. Themes store only their explicit artwork overrides. Portable
 exports include inherited artwork so they keep their appearance on another machine.
 The current theme's palette supplies `currentColor`; inheritance does not force
 the default theme's colours. Deleting an override restores inheritance.
+
+Every theme package contains a generated `README.md` for human and AI-assisted
+authors, shared with the template export. Multi-theme backups also carry it at
+the archive root. The guide explains what/why/how/when, current possibilities,
+file ownership, examples, SVG inheritance and recovery, supported CSS integration
+and explicit limits. Its palette reference is generated from the token registry.
 
 # Theme skins
 

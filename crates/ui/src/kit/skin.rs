@@ -30,6 +30,29 @@ pub const MODULES: &[&str] = &[
 pub const ROLES: &[&str] =
     &["fader.cap", "fader.rail", "knob.body", "knob.pointer", "button", "play", "stop", "record", "solo", "arm", "cue"];
 
+/// The very same original SVG sources are embedded and distributed as editable files.
+pub const DEFAULT_SVGS: &[(&str, &str)] = &[
+    ("fader.cap", include_str!("../../../../assets/themes/default/fader.cap.svg")),
+    ("fader.rail", include_str!("../../../../assets/themes/default/fader.rail.svg")),
+    ("knob.body", include_str!("../../../../assets/themes/default/knob.body.svg")),
+    ("knob.pointer", include_str!("../../../../assets/themes/default/knob.pointer.svg")),
+    ("button", include_str!("../../../../assets/themes/default/button.svg")),
+    ("play", include_str!("../../../../assets/themes/default/play.svg")),
+    ("stop", include_str!("../../../../assets/themes/default/stop.svg")),
+    ("record", include_str!("../../../../assets/themes/default/record.svg")),
+    ("solo", include_str!("../../../../assets/themes/default/solo.svg")),
+    ("arm", include_str!("../../../../assets/themes/default/arm.svg")),
+    ("cue", include_str!("../../../../assets/themes/default/cue.svg")),
+];
+
+pub fn default_assets() -> BTreeMap<String, String> {
+    DEFAULT_SVGS.iter().map(|(role, svg)| ((*role).into(), (*svg).into())).collect()
+}
+
+pub fn inherited_assets() -> BTreeMap<String, String> {
+    default_assets()
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum MeterStyle {
     #[default]
@@ -424,8 +447,31 @@ pub fn paint(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color
         State::Active => ".active",
         State::Disabled => ".disabled",
     };
-    let Some(source) = skin.assets.get(&format!("{role}{suffix}")).or_else(|| skin.assets.get(role)) else {
+    static DEFAULTS: std::sync::OnceLock<BTreeMap<String, String>> = std::sync::OnceLock::new();
+    let defaults = DEFAULTS.get_or_init(default_assets);
+    let key = format!("{role}{suffix}");
+    let own = skin.assets.get(&key).or_else(|| skin.assets.get(role));
+    let Some(source) = own.or_else(|| defaults.get(&key)).or_else(|| defaults.get(role)) else {
         return false;
+    };
+    // Semantic ink travels with the SVG, so exported inherited artwork retains its colour.
+    let ink = if source.contains(&format!("data-suhina-ink=\"{role}\"")) {
+        match role {
+            "knob.body" => super::theme::control_background(),
+            "fader.rail" => super::motion::mix(super::theme::control_background(), Color32::BLACK, 0.65),
+            "fader.cap" => super::motion::mix(
+                if matches!(state, State::Hover | State::Active) {
+                    super::theme::control_hover()
+                } else {
+                    super::theme::control_background()
+                },
+                ink,
+                0.28,
+            ),
+            _ => ink,
+        }
+    } else {
+        ink
     };
     let scale = painter.ctx().pixels_per_point();
     let w = (rect.width() * scale).ceil().clamp(1.0, 1024.0) as u32;
@@ -493,6 +539,37 @@ pub fn example_assets() -> BTreeMap<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn inherited_svg_renders_missing_roles_while_theme_artwork_overrides_one_role() {
+        assert_eq!(DEFAULT_SVGS.len(), ROLES.len());
+        for (role, svg) in DEFAULT_SVGS {
+            assert!(parse_svg(svg).is_ok(), "{role}");
+        }
+        let skin = Skin {assets:BTreeMap::from([("play".into(), "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"28\" height=\"28\"><rect width=\"28\" height=\"28\" fill=\"#00ff00\"/></svg>".into())]), ..Default::default()};
+        configure(&skin);
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let rect = Rect::from_min_size(egui::Pos2::ZERO, egui::Vec2::splat(28.0));
+            assert!(paint(ui.painter(), rect, "button", State::Normal, Color32::BLUE, 0.0));
+            assert!(paint(ui.painter(), rect, "play", State::Normal, Color32::RED, 0.0));
+            assert!(paint(ui.painter(), rect, "stop", State::Normal, Color32::RED, 0.0));
+        });
+        let pixels: Vec<_> = output
+            .textures_delta
+            .set
+            .values()
+            .flat_map(|deltas| deltas.iter())
+            .map(|delta| match &delta.image {
+                egui::ImageData::Color(image) => image.pixels[14 * 28 + 14],
+            })
+            .collect();
+        for color in [Color32::BLUE, Color32::GREEN, Color32::RED] {
+            assert!(pixels.contains(&color));
+        }
+        assert_eq!(skin.assets.len(), 1, "inheritance must not populate the theme's overrides");
+        output.textures_delta.clear();
+        configure(&Skin::default());
+    }
     #[test]
     fn svg_states_publish_distinct_pixels_and_reuse_cached_textures() {
         let artwork = |color: &str| {

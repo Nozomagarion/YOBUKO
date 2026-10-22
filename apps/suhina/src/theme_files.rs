@@ -48,6 +48,14 @@ impl ThemeFiles {
         Self { folder, seen: HashMap::new(), checked: None, snapshots: HashMap::new() }
     }
 
+    fn refresh_default_assets(&self, warnings: &mut Vec<String>) {
+        if let Some(folder) = &self.folder
+            && let Err(error) = read_default_assets(folder, warnings)
+        {
+            warnings.push(format!("Default SVG library: {error}"));
+        }
+    }
+
     fn load_synced(&mut self, id: &str, path: &Path, warnings: &mut Vec<String>) -> Option<ThemeEntry> {
         let result = (|| -> Result<Theme, String> {
             let (json, css, json_theme, css_theme) = read_versions(path)?;
@@ -107,6 +115,7 @@ impl ThemeFiles {
         self.seen.clear();
         let mut entries = Vec::new();
         let mut warnings = Vec::new();
+        self.refresh_default_assets(&mut warnings);
         for (id, path, modified) in self.list() {
             if let Some(entry) = self.load_synced(&id, &path, &mut warnings) {
                 entries.push(entry);
@@ -125,6 +134,7 @@ impl ThemeFiles {
         self.checked = Some(now);
         let mut entries = Vec::new();
         let mut warnings = Vec::new();
+        self.refresh_default_assets(&mut warnings);
         for (id, path, modified) in self.list() {
             if self.seen.get(&id) == Some(&modified) {
                 continue;
@@ -190,10 +200,10 @@ impl ThemeFiles {
         if files.is_empty() {
             return Err("there are no theme files to back up yet".into());
         }
-        let mut contents = Vec::new();
+        let mut contents = vec![("README.md".into(), theme::template_readme().into_bytes())];
         for (id, path, _) in files {
             let (theme, _) = read_loose(&path)?;
-            contents.extend(package_files(&id, &theme)?);
+            contents.extend(portable_package_files(&id, &theme)?);
         }
         let name = format!("suhina-themes-{}.zip", date(SystemTime::now()));
         write_zip(&self.exports()?.join(name), &contents)
@@ -204,7 +214,7 @@ impl ThemeFiles {
     /// Returns its path.
     pub fn export_template(&self) -> Result<PathBuf, String> {
         let mut template = Theme { name: "My theme".into(), ..Theme::default() };
-        template.skin.assets = suhina_ui::kit::skin::example_assets();
+        template.skin.assets = suhina_ui::kit::skin::inherited_assets();
         template.skin.toolbar = Some(Default::default());
         let mut contents = vec![
             ("README.md".to_string(), theme::template_readme().into_bytes()),
@@ -213,7 +223,7 @@ impl ThemeFiles {
         for (id, theme) in theme::built_in_themes() {
             contents.push((format!("{EXAMPLES}{id}.json"), theme.to_json().into_bytes()));
         }
-        contents.extend(package_files("my-theme", &template)?);
+        contents.extend(portable_package_files("my-theme", &template)?);
         write_zip(&self.exports()?.join("suhina-theme-template.zip"), &contents)
     }
 
@@ -465,8 +475,168 @@ fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, Stri
         files.push((format!("{id}/{relative}"), source.as_bytes().to_vec()));
     }
     files.push((format!("{id}/style.css"), suhina_ui::kit::theme_css::export(theme).into_bytes()));
+    files.push((format!("{id}/README.md"), theme::template_readme().into_bytes()));
     files.push((format!("{id}/{id}.json"), serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?));
     Ok(files)
+}
+
+/// A portable theme carries its effective artwork; local files retain sparse overrides.
+fn portable_package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, String> {
+    let mut portable = theme.clone();
+    let mut assets = suhina_ui::kit::skin::inherited_assets();
+    for role in suhina_ui::kit::skin::ROLES {
+        if theme.skin.assets.contains_key(*role) {
+            for suffix in [".hover", ".active", ".disabled"] {
+                assets.remove(&format!("{role}{suffix}"));
+            }
+        }
+    }
+    assets.extend(theme.skin.assets.clone());
+    portable.skin.assets = assets;
+    package_files(id, &portable)
+}
+
+fn read_default_assets(folder: &Path, warnings: &mut Vec<String>) -> Result<(), String> {
+    use suhina_ui::kit::skin;
+    let mut assets = skin::default_assets();
+    let mut edited = Vec::new();
+    let mut invalid = Vec::new();
+    let mut directory = folder.to_path_buf();
+    for component in ["_defaults", "assets"] {
+        directory.push(component);
+        if std::fs::symlink_metadata(&directory).is_ok_and(|meta| meta.file_type().is_symlink() || !meta.is_dir()) {
+            return Err("default SVG directories must be ordinary directories".into());
+        }
+    }
+    std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    let backup = folder.join("_defaults/suhina-default.zip");
+    let mut pristine = Theme { name: "Suhina Default".into(), ..Default::default() };
+    pristine.skin.assets = assets.clone();
+    match std::fs::symlink_metadata(&backup) {
+        Ok(meta) if !meta.file_type().is_file() => return Err("default backup must be an ordinary file".into()),
+        Ok(_) => {
+            if !read_zip(&backup).is_ok_and(|entries| entries.len() == 1 && entries[0].1 == pristine) {
+                let saved = (1..=9999)
+                    .map(|n| folder.join(format!("_defaults/suhina-default-backup-recovery-{n}.zip")))
+                    .find(|p| std::fs::symlink_metadata(p).is_err())
+                    .ok_or("too many backup recovery files")?;
+                std::fs::rename(&backup, &saved).map_err(|e| e.to_string())?;
+                write_zip(&backup, &package_files("suhina-default", &pristine)?)?;
+                warnings
+                    .push(format!("Changed default backup preserved in {}; pristine backup restored", saved.display()));
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            write_zip(&backup, &package_files("suhina-default", &pristine)?)?;
+        }
+        Err(error) => return Err(error.to_string()),
+    }
+    for (role, source) in skin::DEFAULT_SVGS {
+        let path = directory.join(format!("{role}.svg"));
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => file.write_all(source.as_bytes()).map_err(|e| e.to_string())?,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    for role in skin::ROLES {
+        for suffix in ["", ".hover", ".active", ".disabled"] {
+            let key = format!("{role}{suffix}");
+            let path = directory.join(format!("{key}.svg"));
+            let metadata = match std::fs::symlink_metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(error) => {
+                    warnings.push(format!("{}: {error}", path.display()));
+                    continue;
+                }
+            };
+            let result: Result<String, String> = (|| {
+                if !metadata.file_type().is_file() {
+                    return Err("default SVG must be an ordinary file".into());
+                }
+                let source =
+                    String::from_utf8(read_bounded(&path, skin::MAX_SVG as u64)?).map_err(|e| e.to_string())?;
+                skin::parse_svg(&source)?;
+                Ok(source)
+            })();
+            match result {
+                Ok(source) => {
+                    if assets.get(&key) != Some(&source) {
+                        edited.push((key.clone(), path, source.clone()));
+                        assets.insert(key, source);
+                    }
+                }
+                Err(error) => {
+                    warnings.push(format!("{}: {error}; using embedded default", path.display()));
+                    if metadata.file_type().is_file()
+                        && let Ok(bytes) = read_bounded(&path, skin::MAX_SVG as u64)
+                    {
+                        invalid.push((key, path, bytes));
+                    }
+                }
+            }
+        }
+    }
+    if !invalid.is_empty() {
+        let exports = folder.parent().ok_or("no theme recovery folder")?.join("exports");
+        let recovery = (1..=9999)
+            .map(|n| exports.join(format!("suhina-default-recovery-{n}.zip")))
+            .find(|p| std::fs::symlink_metadata(p).is_err())
+            .ok_or("too many default recovery archives")?;
+        let contents: Vec<_> =
+            invalid.iter().map(|(key, _, bytes)| (format!("assets/{key}.svg"), bytes.clone())).collect();
+        write_zip(&recovery, &contents)?;
+        for (key, path, bytes) in invalid {
+            if !restore_default_asset(&path, &key, &bytes)? {
+                warnings.push("Default SVG changed again during recovery; newer edit was kept".into());
+            }
+        }
+        warnings
+            .push(format!("Malformed default SVG edits preserved in {} before restoring defaults", recovery.display()));
+    }
+    if !edited.is_empty() {
+        let number = (1..=9999)
+            .find(|number| {
+                let id = format!("suhina-default-modified-{number}");
+                std::fs::symlink_metadata(folder.join(format!("{id}.json"))).is_err()
+                    && std::fs::symlink_metadata(folder.join(&id)).is_err()
+            })
+            .ok_or("too many modified default themes")?;
+        let id = format!("suhina-default-modified-{number}");
+        let mut modified = Theme { name: format!("Suhina Default (modified {number})"), ..Default::default() };
+        modified.skin.assets = assets;
+        // Commit the user's copy first. A failure leaves every edited original intact.
+        persist_theme(folder, &id, &modified)?;
+        for (key, path, source) in edited {
+            if !restore_default_asset(&path, &key, source.as_bytes())? {
+                warnings.push("Default SVG changed again during recovery; newer edit was kept".into());
+            }
+        }
+        warnings.push(format!("Default SVG edits saved as {} ({id}); original defaults restored", modified.name));
+    }
+    Ok(())
+}
+
+fn restore_default_asset(path: &Path, key: &str, expected: &[u8]) -> Result<bool, String> {
+    use suhina_ui::kit::skin;
+    if !std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_file()) {
+        return Ok(false);
+    }
+    if read_bounded(path, skin::MAX_SVG as u64)? != expected {
+        return Ok(false);
+    }
+    if let Some((_, original)) = skin::DEFAULT_SVGS.iter().find(|(role, _)| *role == key) {
+        let temporary = path.with_extension(format!("restore-{}", std::process::id()));
+        let mut file =
+            std::fs::OpenOptions::new().write(true).create_new(true).open(&temporary).map_err(|e| e.to_string())?;
+        file.write_all(original.as_bytes()).map_err(|e| e.to_string())?;
+        drop(file);
+        std::fs::rename(temporary, path).map_err(|e| e.to_string())?;
+    } else {
+        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+    }
+    Ok(true)
 }
 
 fn read_zip(path: &Path) -> Result<Vec<LoadedTheme>, String> {
@@ -615,10 +785,12 @@ mod tests {
         let backup = files.backup().unwrap_or_default();
         assert!(backup.starts_with(dir.join("exports")), "{}", backup.display());
 
-        // Into an empty folder: written as they were.
+        // Portable backups materialize inherited artwork so another machine looks the same.
         let mut other = ThemeFiles::new(Some(dir.join("other")));
         assert_eq!(other.import(&backup), Ok((vec!["night".to_string()], Vec::new())));
-        assert_eq!(other.read_all().0, vec![ThemeEntry { id: "night".into(), theme: night() }]);
+        let mut restored = night();
+        restored.skin.assets = suhina_ui::kit::skin::default_assets();
+        assert_eq!(other.read_all().0, vec![ThemeEntry { id: "night".into(), theme: restored }]);
         // The same themes again are not doubled; a different one with a taken id gets its own.
         assert_eq!(other.import(&backup), Ok((Vec::new(), Vec::new())));
         let changed = Theme { name: "Night 2".into(), ..night() };
@@ -884,6 +1056,100 @@ mod skin_package_tests {
         theme.skin.meter = skin::MeterStyle::Segmented;
         assert!(theme_css::apply(&mut theme, ".browser { color: #123456; background-color: #111222; }").is_empty());
         theme
+    }
+    #[test]
+    fn deleted_default_library_and_backup_are_recreated_from_embedded_svg() {
+        let root = folder("default-delete");
+        let mut files = ThemeFiles::new(Some(root.join("themes")));
+        assert_eq!(files.read_all(), (Vec::new(), Vec::new()));
+        let library = root.join("themes/_defaults");
+        assert!(library.join("assets/fader.cap.svg").is_file());
+        let backup = read_zip(&library.join("suhina-default.zip")).unwrap();
+        assert_eq!(backup.len(), 1);
+        assert_eq!(backup[0].1.skin.assets, skin::default_assets());
+        std::fs::remove_dir_all(&library).unwrap();
+        assert_eq!(files.read_all(), (Vec::new(), Vec::new()));
+        assert!(library.join("suhina-default.zip").is_file());
+        assert_eq!(std::fs::read_to_string(library.join("assets/play.svg")).unwrap(), skin::default_assets()["play"]);
+        std::fs::write(library.join("suhina-default.zip"), "damaged backup").unwrap();
+        let (_, warnings) = files.read_all();
+        assert!(warnings.iter().any(|w| w.contains("pristine backup restored")));
+        assert_eq!(std::fs::read(library.join("suhina-default-backup-recovery-1.zip")).unwrap(), b"damaged backup");
+        assert_eq!(read_zip(&library.join("suhina-default.zip")).unwrap()[0].1.skin.assets, skin::default_assets());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn default_edits_fork_numbered_themes_before_restoring_original_artwork() {
+        let root = folder("default-fork");
+        let mut files = ThemeFiles::new(Some(root.join("themes")));
+        files.read_all();
+        let play = root.join("themes/_defaults/assets/play.svg");
+        let svg = |color| {
+            format!(
+                "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"><rect width=\"20\" height=\"20\" fill=\"{color}\"/></svg>"
+            )
+        };
+        for (number, color) in [(1, "#123456"), (2, "#abcdef")] {
+            std::fs::write(&play, svg(color)).unwrap();
+            files.checked = None;
+            let (entries, warnings) = files.changed();
+            assert_eq!(entries.len(), 1, "{warnings:?}");
+            assert_eq!(entries[0].id, format!("suhina-default-modified-{number}"));
+            assert_eq!(entries[0].theme.name, format!("Suhina Default (modified {number})"));
+            assert_eq!(entries[0].theme.skin.assets["play"], svg(color));
+            assert_eq!(std::fs::read_to_string(&play).unwrap(), skin::default_assets()["play"]);
+            assert!(warnings.iter().any(|w| w.contains("original defaults restored")));
+        }
+        files.checked = None;
+        assert!(files.changed().0.is_empty(), "restoration must not create reload loops");
+        assert_eq!(files.read_all().0.len(), 2);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn invalid_default_svg_is_backed_up_before_restoring_the_embedded_source() {
+        let root = folder("default-invalid");
+        let mut files = ThemeFiles::new(Some(root.join("themes")));
+        files.read_all();
+        let play = root.join("themes/_defaults/assets/play.svg");
+        std::fs::write(&play, "unfinished SVG artwork").unwrap();
+        files.checked = None;
+        let (entries, warnings) = files.changed();
+        assert!(entries.is_empty());
+        assert!(warnings.iter().any(|w| w.contains("preserved in")));
+        let mut archive =
+            zip::ZipArchive::new(std::fs::File::open(root.join("exports/suhina-default-recovery-1.zip")).unwrap())
+                .unwrap();
+        let mut saved = String::new();
+        archive.by_name("assets/play.svg").unwrap().read_to_string(&mut saved).unwrap();
+        assert_eq!(saved, "unfinished SVG artwork");
+        assert_eq!(std::fs::read_to_string(play).unwrap(), skin::default_assets()["play"]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn portable_packages_include_the_shared_ai_author_guide_and_effective_svg() {
+        let theme = Theme::default();
+        let files = portable_package_files("plain", &theme).unwrap();
+        let guide = files.iter().find(|(name, _)| name == "plain/README.md").unwrap();
+        assert_eq!(guide.1, theme::template_readme().as_bytes());
+        let text = std::str::from_utf8(&guide.1).unwrap();
+        for heading in [
+            "What this package is",
+            "why they are separate",
+            "How and when",
+            "What's possible now",
+            "Limits",
+            "For AI-assisted edits",
+        ] {
+            assert!(text.contains(heading), "{heading}");
+        }
+        assert!(files.iter().any(|(name, _)| name == "plain/assets/fader.cap.svg"));
+        assert!(theme.skin.assets.is_empty(), "export must not modify sparse local overrides");
+        let json = files.iter().find(|(name, _)| name == "plain/plain.json").unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&json.1).unwrap();
+        assert_eq!(value["skin"]["assets"]["play"], "assets/play.svg");
     }
     #[test]
     fn advanced_css_source_mirrors_losslessly_and_survives_packages() {

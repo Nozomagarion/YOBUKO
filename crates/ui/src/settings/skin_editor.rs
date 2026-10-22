@@ -35,8 +35,9 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
             }
         });
         if skin.meter == skin::MeterStyle::Segmented { ui.add(egui::Slider::new(&mut skin.segments, 4..=64).text("Meter segments")); }
-        if ui.button("Use editable SVG controls").clicked() { skin.assets = skin::example_assets(); }
-        if ui.button("Restore standard controls").clicked() { skin.assets.clear(); }
+        if ui.button("Customize default SVG controls").clicked() { skin.assets = skin::inherited_assets(); }
+        if ui.button("Inherit default SVG controls").clicked() { skin.assets.clear(); }
+        ui.label("Missing artwork inherits themes/_defaults/assets/. This theme stores only its overrides.");
         ui.label("SVGs affect appearance; control gestures and shortcuts stay the same.");
         ui.separator();
         let mut custom = skin.toolbar.is_some();

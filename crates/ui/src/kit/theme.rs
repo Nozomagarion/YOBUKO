@@ -441,74 +441,8 @@ impl Theme {
 /// The README that goes with the theme template: the file format and every token, written so a
 /// person or an AI agent can make a theme from it alone.
 pub fn template_readme() -> String {
-    let mut text = String::from(
-        "# Suhina theme template\n\
-\n\
-A Suhina theme starts with a JSON file. `template.json` beside this README is Suhina Dark with every\n\
-colour written out; copy it, give it a name and change the colours.\n\
-\n\
-## The file\n\
-\n\
-```json\n\
-{\n  \"name\": \"Night Blue\",\n  \"colors\": {\n    \"window.background\": \"#14161A\",\n    \"accent\": \"#7FD1B9\"\n  }\n}\n\
-```\n\
-\n\
-- `name`: what Settings shows. Any text.\n\
-- `colors`: token name to colour. Colours use `#RRGGBB` or `#RRGGBBAA` (alpha last; 00 transparent, FF opaque). Creation defaults store RGB.\n\
-- A token left out keeps Suhina Dark's colour, so a theme may list only what it changes.\n\
-- An unknown token or a colour that is not `#RRGGBB` or `#RRGGBBAA` is skipped, and Suhina shows a warning.\n\
-- Optional `skin` and `stylesheet` add controls, meters, layout and CSS. `description` and `$schema` are ignored.\n\
-\n\
-## Installing it\n\
-\n\
-Save it as `<id>.json` in Suhina's `themes` folder (Settings › Appearance › Themes › More › Open the themes folder\n\
-shows it), or drop the file on Suhina's window. The file name without `.json` is the theme's\n\
-id: letters, digits and `-`, for example `night-blue.json`. Pick it in Settings › Appearance ›\n\
-Themes. While it is in use, every save of the file shows within a second.\n\
-\n\
-## Making a good theme\n\
-\n\
-- The backgrounds go in steps: `window.background` (furthest back), then `panel.background`,\n\
-  `control.background`, `control.activeBackground` and `control.playingBackground`. Keep each a\n\
-  little lighter than the one before in a dark theme, a little darker in a light one.\n\
-- Each `*.hoverBackground` is one small step from the background it hovers over.\n\
-- `text.primary` must read well on every background; `text.secondary` a little less, `text.hint`\n\
-  least (it is for hints and inactive text). Keep `text.primary` on `window.background` at a\n\
-  contrast of at least 7:1 and `text.hint` at 3:1.\n\
-- `text.value` is drawn on `control.background` and is the fill of the chosen option of a switch,\n\
-  whose label is then drawn in `window.background`: the two must contrast.\n\
-- `accent` marks the playhead, queued clips and a key being set; it should stand out from every\n\
-  background. `recording` is also used for errors.\n\
-- Track and clip colours come from the project. clip.midiDefault/clip.audioDefault are copied only when creating new tracks and clips.\n\
-\n\
-An optional `gradients` object sets surface overlays. Each of `panels`, `tracks`, `clips` takes an object with `angle` (0–360 clockwise) and 2–8 `stops`, each with `position` (0–100) and `color` (#RRGGBB or #RRGGBBAA). Missing surfaces have no overlay.\n\
-An optional `liquid` object with `panels`, `tracks` and `clips` integers (0 to 100) overrides global material strengths. Leave it out to inherit them.\n\
-\n\
-## Controls, CSS and artwork\n\
-\n\
-The importable `my-theme/` example contains JSON, `style.css` and self-contained SVG controls.\n\
-Drop the whole ZIP on Suhina to install it. Edit `style.css` or JSON in the themes folder: supported\n\
-declarations mirror into the other file within a second. Conflicting edits preserve both inputs\n\
-and show a warning. Saves normalize CSS, including comments and formatting.\n\
-\n\
-`skin.assets` maps roles (`fader.cap`, `fader.rail`, `knob.body`, `knob.pointer`, `button`,\n\
-`play`, `stop`, `record`, `solo`, `arm`, `cue`) to inline SVG or relative SVG paths. Optional\n\
-`.hover`, `.active`, `.disabled` suffixes select state artwork. Network resources and scripts\n\
-are never loaded. `skin.meter` is `continuous`, `segmented` or `needle`; `segments` is 4–64.\n\
-`skin.toolbar` contains ordered module ids and hidden modules. The theme editor supplies both.\n\
-`skin.background` accepts a relative PNG; exported packages carry that image with the theme.\n\
-\n\
-The current native CSS subset supports palette tokens on `:root`, class and descendant colours,\n\
-border colours/radii and font sizes; `.meter` style/segments; `.toolbar` order/hidden; control\n\
-image URLs; and `.window` background PNG/opacity/blur. It does not implement full browser CSS.\n\
-Unsupported declarations are reported. Do not rely on variables, queries, animations or CSS\n\
-layout until an engine integration and support matrix explicitly enable them.\n\
-\n\
-## Tokens\n\
-\n\
-| Token | Suhina Dark | Used for |\n\
-|---|---|---|\n",
-    );
+    let mut text = String::from(include_str!("../../themes/THEME-PACKAGE-README.md"));
+    text.push_str("\n\n## Palette token reference\n\n| Token | Suhina Dark | Used for |\n|---|---|---|\n");
     for (key, purpose, color) in Palette::DARK.tokens() {
         text.push_str(&format!("| `{key}` | `{}` | {purpose} |\n", hex(color)));
     }
