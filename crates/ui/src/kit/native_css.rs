@@ -7,6 +7,7 @@
 //! No resource provider is installed. This module is UI-thread-only.
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use blitz_dom::{DocumentConfig, StyleThreading};
@@ -19,6 +20,7 @@ use super::{skin, theme};
 
 const MAX_CONTEXTS: usize = 128;
 const MAX_DEPTH: usize = 16;
+const MAX_NODES: usize = 4096;
 
 /// Styles exposed by native painters. Parsed CSS support is broader than this paint adapter.
 #[derive(Clone, Debug)]
@@ -39,9 +41,173 @@ struct Engine {
     dark: bool,
     contexts: HashMap<Vec<String>, Computed>,
     toolbar: Option<(String, Vec<Module>)>,
+    collecting: bool,
+    nodes: Vec<StyleNode>,
+    parents: Vec<usize>,
+    occurrences: HashMap<(u64, String), usize>,
+    previous: Vec<StyleNode>,
+    values: HashMap<u64, Computed>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct StyleNode {
+    key: u64,
+    parent: Option<usize>,
+    class: String,
+    name: Option<String>,
+    state: u8,
 }
 thread_local! {
     static ENGINE: RefCell<Engine> = RefCell::new(Engine::default());
+}
+
+/// Finishes the style snapshot even on an early return from the native frame.
+pub struct Frame(egui::Context);
+impl Drop for Frame {
+    fn drop(&mut self) {
+        if finish_tree() {
+            self.0.request_repaint();
+        }
+    }
+}
+
+pub fn frame(ui: &egui::Ui) -> Frame {
+    begin_frame(ui);
+    ENGINE.with(|engine| {
+        let mut engine = engine.borrow_mut();
+        engine.collecting = engine.source.is_some();
+        engine.nodes.clear();
+        engine.parents.clear();
+        engine.occurrences.clear();
+    });
+    Frame(ui.ctx().clone())
+}
+
+/// Register an actual native scope. Named project roles retain identity when reordered.
+pub fn enter(class: &str, name: Option<&str>, response: Option<&egui::Response>) -> bool {
+    ENGINE.with(|engine| {
+        let mut engine = engine.borrow_mut();
+        if !engine.collecting || engine.nodes.len() >= MAX_NODES || engine.parents.len() >= MAX_DEPTH {
+            return false;
+        }
+        if !super::style_class::CLASSES.contains(&class) {
+            return false;
+        }
+        let name = name.filter(|name| {
+            name.len() <= 96 && name.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+        });
+        let parent = engine.parents.last().copied();
+        let parent_key = parent.and_then(|p| engine.nodes.get(p)).map_or(0, |n| n.key);
+        let occurrence = engine.occurrences.entry((parent_key, class.into())).or_default();
+        let index = *occurrence;
+        *occurrence += 1;
+        let mut hash = std::hash::DefaultHasher::new();
+        (parent_key, class, name).hash(&mut hash);
+        if let Some(response) = response {
+            response.id.hash(&mut hash);
+        } else if name.is_none() {
+            index.hash(&mut hash);
+        }
+        let key = hash.finish();
+        let state = response.map_or(0, |r| {
+            u8::from(r.hovered())
+                | u8::from(r.is_pointer_button_down_on()) << 1
+                | u8::from(!r.enabled()) << 2
+                | u8::from(r.has_focus()) << 3
+        });
+        let node = StyleNode { key, parent, class: class.into(), name: name.map(str::to_owned), state };
+        let index = engine.nodes.len();
+        engine.nodes.push(node);
+        engine.parents.push(index);
+        true
+    })
+}
+
+pub fn leave() {
+    ENGINE.with(|engine| {
+        engine.borrow_mut().parents.pop();
+    });
+}
+
+fn finish_tree() -> bool {
+    ENGINE.with(|engine| {
+        let mut engine = engine.borrow_mut();
+        engine.collecting = false;
+        if engine.source.is_none() || engine.nodes == engine.previous {
+            return false;
+        }
+        let mut body = String::from("<!doctype html><html><body>");
+        let mut open = Vec::new();
+        for (index, node) in engine.nodes.iter().enumerate() {
+            while open.last().copied() != node.parent {
+                if open.pop().is_none() {
+                    break;
+                }
+                body.push_str("</div>");
+            }
+            body.push_str(&format!("<div id=\"node-{}\" class=\"{}\"", node.key, node.class));
+            if let Some(name) = &node.name {
+                body.push_str(&format!(" data-object=\"{name}\""));
+            }
+            body.push('>');
+            open.push(index);
+        }
+        for _ in open {
+            body.push_str("</div>");
+        }
+        body.push_str("</body></html>");
+        let defaults = format!(
+            "html,body {{ margin:0; color:{}; font-size:{}px; }}",
+            theme::hex(theme::palette().text_primary),
+            theme::TEXT
+        );
+        let Some(mut doc) = document(&engine, &body, &defaults) else {
+            return false;
+        };
+        let mut states: Vec<_> = engine.nodes.iter().map(|node| node.state).collect();
+        for node in &engine.nodes {
+            if node.state & 1 == 0 {
+                continue;
+            }
+            let mut parent = node.parent;
+            while let Some(index) = parent {
+                let Some(node) = engine.nodes.get(index) else {
+                    break;
+                };
+                if let Some(state) = states.get_mut(index) {
+                    *state |= 1;
+                }
+                parent = node.parent;
+            }
+        }
+        let mut ids = Vec::new();
+        for (index, node) in engine.nodes.iter().enumerate() {
+            let state = states.get(index).copied().unwrap_or(0);
+            let Some(id) = doc.get_element_by_id(&format!("node-{}", node.key)) else {
+                continue;
+            };
+            if let Some(target) = doc.get_node_mut(id) {
+                if state & 1 != 0 {
+                    target.hover();
+                }
+                if state & 2 != 0 {
+                    target.active();
+                }
+                if state & 4 != 0 {
+                    target.disable();
+                }
+                if state & 8 != 0 {
+                    target.focus(Arc::new(blitz_traits::shell::DummyShellProvider));
+                }
+            }
+            ids.push((node.key, id));
+        }
+        doc.resolve(0.0);
+        let values = ids.into_iter().filter_map(|(key, id)| computed(&doc, id).map(|values| (key, values))).collect();
+        engine.values = values;
+        engine.previous = engine.nodes.clone();
+        true
+    })
 }
 
 /// Refresh only when the authored CSS, palette or viewport changes.
@@ -145,6 +311,11 @@ pub fn scoped(stack: &[String]) -> Option<Computed> {
         engine.source.as_ref()?;
         if engine.source != skin::current().css {
             return None;
+        }
+        if let Some(values) =
+            engine.parents.last().and_then(|at| engine.nodes.get(*at)).and_then(|node| engine.values.get(&node.key))
+        {
+            return Some(values.clone());
         }
         if let Some(values) = engine.contexts.get(stack) {
             return Some(values.clone());
@@ -262,6 +433,55 @@ mod tests {
         assert_eq!(modules.len(), 2);
         assert!((modules[0].rect.width() - 80.0).abs() < 0.1);
         assert!((modules[1].rect.left() - 90.0).abs() < 0.1);
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn retained_scopes_match_siblings_and_keep_named_track_identity() {
+        prepare(
+            ".mixer[data-object=track-2] { color:rgb(10 20 30); } .mixer + .mixer { background-color:rgb(40 50 60); }",
+            800.0,
+        );
+        let ctx = egui::Context::default();
+        for pass in 0..4 {
+            let order = if pass < 2 { [1, 2] } else { [2, 1] };
+            let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let _frame = frame(ui);
+                let _window = super::super::style_class::enter("window");
+                let _session = super::super::style_class::enter("session");
+                for (index, track) in order.iter().enumerate() {
+                    let _track = super::super::style_class::enter_named("mixer", &format!("track-{track}"));
+                    if pass > 0 && *track == 2 {
+                        assert_eq!(theme::text_primary(), Color32::from_rgb(10, 20, 30));
+                    }
+                    if (pass == 1 || pass == 3) && index == 1 {
+                        assert_eq!(theme::panel_background(), Color32::from_rgb(40, 50, 60));
+                    }
+                }
+            });
+        }
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn disabled_state_uses_the_native_response_without_changing_its_id() {
+        prepare(".button:disabled { background-color:rgb(50 60 70); }", 800.0);
+        let ctx = egui::Context::default();
+        let mut previous_id = None;
+        for pass in 0..2 {
+            let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+                let _frame = frame(ui);
+                let _window = super::super::style_class::enter("window");
+                let response = ui.add_enabled(false, egui::Button::new("Disabled"));
+                let _button = super::super::style_class::enter_response("button", &response);
+                if let Some(id) = previous_id {
+                    assert_eq!(response.id, id);
+                }
+                previous_id = Some(response.id);
+                assert!(!response.enabled());
+                if pass == 1 {
+                    assert_eq!(theme::control_background(), Color32::from_rgb(50, 60, 70));
+                }
+            });
+        }
         skin::configure(&skin::Skin::default());
     }
 }

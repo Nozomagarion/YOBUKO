@@ -101,7 +101,7 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
         });
         ui.collapsing("Advanced CSS (Stylo and Taffy)", |ui| {
             ui.label("Modern cascade, variables, CSS colours, calc() and viewport media queries style native classes. Flex/Grid lays out toolbar modules by id (#tempo, #transport, #views). Source is kept in JSON and advanced.css.");
-            ui.label("This adapter does not yet paint CSS gradients, shadows, transforms or animations. Scoped classes do not yet expose project-object ids, siblings or state pseudo-classes. Toolbar height remains the host's height.");
+            ui.label("This adapter does not yet paint CSS gradients, shadows, transforms or animations. Registered scopes support siblings, named track objects and native response states; other controls are still being connected. Toolbar height remains the host's height.");
             if ui.button("Load current advanced CSS").clicked() { state.advanced = themes.skin.css.as_deref().unwrap_or_default().into(); }
             if ui.button("Load Flex/Grid example").clicked() {
                 state.advanced = ":root { --ink: rgb(180 220 240); }\n.browser { color: var(--ink); font-size: clamp(10px, 1vw, 14px); }\n.toolbar { display: flex; gap: 8px; }\n#transport { order: -1; }\n@media (max-width: 1000px) { #performance { display: none; } }\n".into();

@@ -471,12 +471,17 @@ mod tests {
             assert!(paint(ui.painter(), rect, "button", State::Active, Color32::WHITE, 0.0));
             assert!(!paint(ui.painter(), rect, "absent", State::Normal, Color32::WHITE, 0.0));
         });
-        let images: Vec<_> =
-            frame.textures_delta.set.iter().filter(|(_, delta)| delta.image.size() == [16, 16]).collect();
+        let images: Vec<_> = frame
+            .textures_delta
+            .set
+            .iter()
+            .flat_map(|(_, deltas)| deltas.iter())
+            .filter(|delta| delta.image.size() == [16, 16])
+            .collect();
         assert_eq!(images.len(), 2, "a repeated state should reuse its texture");
         let pixels: Vec<_> = images
             .iter()
-            .map(|(_, delta)| match &delta.image {
+            .map(|delta| match &delta.image {
                 egui::ImageData::Color(image) => image.pixels[8 * 16 + 8],
             })
             .collect();

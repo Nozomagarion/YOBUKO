@@ -92,7 +92,10 @@ The advanced editor supplies a Flex example and calls the Stylo/Taffy adapter. S
 computes variables, layers, inheritance, CSS colours, value expressions and viewport
 media conditions for class scopes. Taffy computes Flex/Grid rectangles for the actual
 visible toolbar modules (`#tempo`, `#transport`, etc.); the same rectangles bound their
-native input targets. The host still defines toolbar height. Scoped class trees do not
-yet expose real project objects, siblings or interactive pseudo-class states. CSS
+native input targets. The host still defines toolbar height. The bounded retained scope tree exposes actual ancestry and siblings. Session mixer
+and track-header scopes carry stable `[data-object="track-N"]` identities. Controls
+connected through native responses expose hover, active, disabled and focus states.
+Styles are computed after collecting a changed scope tree and repaint on the next pass.
+Remaining raw egui controls and project object roles still need integration. CSS
 painting of gradients, shadows, transforms, filters and animations remains unsupported.
 This integration is experimental, not a claim of universal CSS conformance.

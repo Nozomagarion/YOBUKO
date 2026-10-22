@@ -237,7 +237,7 @@ pub fn show(
     id: Id,
     actions: &mut Vec<Action>,
 ) -> egui::Response {
-    let _style_class = crate::kit::style_class::enter("mixer");
+    let _style_class = crate::kit::style_class::enter_named("mixer", &format!("track-{}", column.track.0));
     // The strip in a shade of its track's colour, as the column above it.
     let tint = motion::mix(
         theme::panel_background(),
@@ -755,7 +755,7 @@ fn paint_fader(
     response: &egui::Response,
     centred: bool,
 ) {
-    let _style = crate::kit::style_class::enter("fader");
+    let _style = crate::kit::style_class::enter_response("fader", response);
     let hover = widgets::hover(ui, response);
     let value_color = motion::mix(theme::text_value(), theme::text_primary(), hover);
     painter.text(

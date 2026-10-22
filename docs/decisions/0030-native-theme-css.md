@@ -118,9 +118,14 @@ hit targets use those same rectangles. Advanced authored CSS is stored verbatim 
 mirror between those two representations. Conditional rules are not flattened into
 unconditional palette values.
 
-This is not yet the complete retained component tree: project-object identity,
-sibling selectors, state pseudo-classes, full-layout control of panels, CSS effects,
-animation and per-property diagnostics remain implementation work. Parsed declarations
+Native scopes now collect a bounded retained tree (4096 nodes, depth 16), with stable
+named Session track roles (`data-object`) and state from connected egui responses.
+Child/sibling matching uses this actual tree. A changed tree is styled as one snapshot;
+results are applied on the next repaint, preserving native command ids and targets.
+Identity remains stable for named track scopes when tracks move. Other project roles,
+raw egui controls and complete geometry/container-query integration are still missing.
+Full-layout control of panels, CSS effects, animation and per-property diagnostics remain
+implementation work. Parsed declarations
 that the painter does not consume do not imply support. Toolbar height remains the
 host's height. These limits are also visible in the advanced CSS editor. Before enabling that engine,
 verify package licences, platform builds, interaction/accessibility parity, malformed

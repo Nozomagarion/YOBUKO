@@ -85,16 +85,30 @@ pub fn property(key: &str) -> Option<String> {
 
 pub struct Scope {
     palette: theme::Palette,
+    native: bool,
 }
 impl Drop for Scope {
     fn drop(&mut self) {
         theme::local_palette(self.palette);
+        if self.native {
+            super::native_css::leave();
+        }
         STACK.with(|s| {
             s.borrow_mut().pop();
         });
     }
 }
 pub fn enter(class: &str) -> Scope {
+    enter_inner(class, None, None)
+}
+pub fn enter_named(class: &str, name: &str) -> Scope {
+    enter_inner(class, Some(name), None)
+}
+pub fn enter_response(class: &str, response: &egui::Response) -> Scope {
+    enter_inner(class, None, Some(response))
+}
+fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response>) -> Scope {
+    let native = super::native_css::enter(class, name, response);
     let saved = theme::palette();
     STACK.with(|s| s.borrow_mut().push(class.into()));
     let mut palette = saved;
@@ -128,7 +142,7 @@ pub fn enter(class: &str) -> Scope {
         }
     }
     theme::local_palette(palette);
-    Scope { palette: saved }
+    Scope { palette: saved, native }
 }
 pub fn radius(fallback: f32) -> f32 {
     if let Some(values) = STACK.with(|stack| super::native_css::scoped(&stack.borrow())) {

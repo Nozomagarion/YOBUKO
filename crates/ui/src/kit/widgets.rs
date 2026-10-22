@@ -94,7 +94,7 @@ pub fn hover(ui: &Ui, response: &Response) -> f32 {
 /// Shared track-button surface. Colors and focus outlines follow the active theme.
 /// Geometry stays inside the caller's hit target, including compact mixer strips.
 pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Response, fill: Color32) {
-    let _style = crate::kit::style_class::enter("button");
+    let _style = crate::kit::style_class::enter_response("button", response);
     let radius = super::style_class::radius((rect.height() * 0.25).min(5.0));
     let fill = super::style_class::background(fill);
     if !super::skin::paint(painter, rect, "button", super::skin::State::response(response, false), fill, 0.0) {
@@ -325,7 +325,7 @@ pub fn input_line(ui: &Ui, response: &Response) {
 
 /// A form field whose surrounding surface shows through, with only an underline.
 pub fn form_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response, text: &str) {
-    let _style_class = crate::kit::style_class::enter("dropdown");
+    let _style_class = crate::kit::style_class::enter_response("dropdown", response);
     let hover = hover(ui, response);
     let border = if response.has_focus() {
         theme::accent()
@@ -547,7 +547,7 @@ pub fn drag_value(
     range: (f64, f64),
     default: f64,
 ) -> Drag {
-    let _style_class = crate::kit::style_class::enter("value");
+    let _style_class = crate::kit::style_class::enter_response("value", response);
     // Keys to the control clicked last: the arrows step it, Enter sets what was typed.
     let (steps, fine, typed) = value_keys(ui, response);
     if let Some(typed) = typed

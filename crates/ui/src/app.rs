@@ -2492,7 +2492,7 @@ impl App {
     pub fn ui(&mut self, ui: &mut Ui) {
         application_bar::resize_edges(ui);
         crate::kit::skin::configure(&self.themes.get(&self.settings.theme).map(|t| t.skin.clone()).unwrap_or_default());
-        crate::kit::native_css::begin_frame(ui);
+        let _css_frame = crate::kit::native_css::frame(ui);
         let _window_style = crate::kit::style_class::enter("window");
         if let Err(error) = self.background.update(ui, &self.settings, self.themes.palette(&self.settings.theme)) {
             self.status = Status::Error(error);

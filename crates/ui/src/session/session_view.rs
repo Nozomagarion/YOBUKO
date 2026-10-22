@@ -603,7 +603,7 @@ fn column_header(
     state: &mut SessionViewState,
     actions: &mut Vec<Action>,
 ) {
-    let _style_class = crate::kit::style_class::enter("track-header");
+    let _style_class = crate::kit::style_class::enter_named("track-header", &format!("track-{}", column.track.0));
     if rect.width() <= 0.0 {
         return;
     }
