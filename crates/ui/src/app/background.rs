@@ -160,31 +160,37 @@ mod tests {
         let ctx = egui::Context::default();
         let mut background = Background::default();
         let mut request = None;
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             let rect = ui.max_rect();
             request = Some(Request {
                 path: "repaired.png".into(),
                 blur: 5,
                 size: [rect.width().max(1.0) as u32, rect.height().max(1.0) as u32],
             });
-        });
+        })
+        .textures_delta
+        .clear();
         let request = request.unwrap();
         let (send, receive) = mpsc::sync_channel(1);
         send.send(Completed { request: request.clone(), result: Err("invalid PNG".into()) }).unwrap();
         background.worker = Some(receive);
         background.requested = Some(request.clone());
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             assert!(background.paint(ui, "repaired.png", 5).is_err());
             assert!(!background.paint(ui, "repaired.png", 5).unwrap());
-        });
+        })
+        .textures_delta
+        .clear();
         assert!(background.worker.is_none());
         background.retry_failed();
         assert!(background.requested.is_none());
         // Supply cached decoded pixels to exercise retry publication without filesystem timing.
         background.source = Some(("repaired.png".into(), Arc::new(image::RgbaImage::new(1, 1))));
-        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+        ctx.run_ui(egui::RawInput::default(), |ui| {
             assert!(!background.paint(ui, "repaired.png", 5).unwrap());
-        });
+        })
+        .textures_delta
+        .clear();
         assert!(background.worker.is_some());
         background.retry_failed();
         assert!(background.requested.as_ref() == Some(&request), "never reset an in-flight request");
