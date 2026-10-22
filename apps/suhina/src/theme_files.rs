@@ -476,6 +476,7 @@ fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, Stri
     }
     files.push((format!("{id}/style.css"), suhina_ui::kit::theme_css::export(theme).into_bytes()));
     files.push((format!("{id}/README.md"), theme::template_readme().into_bytes()));
+    files.push((format!("{id}/examples/dark-gloss.css"), theme::GLOSS_EXAMPLE.as_bytes().to_vec()));
     files.push((format!("{id}/{id}.json"), serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?));
     Ok(files)
 }
@@ -1146,6 +1147,11 @@ mod skin_package_tests {
             assert!(text.contains(heading), "{heading}");
         }
         assert!(files.iter().any(|(name, _)| name == "plain/assets/fader.cap.svg"));
+        assert!(
+            files
+                .iter()
+                .any(|(name, data)| name == "plain/examples/dark-gloss.css" && data == theme::GLOSS_EXAMPLE.as_bytes())
+        );
         assert!(theme.skin.assets.is_empty(), "export must not modify sparse local overrides");
         let json = files.iter().find(|(name, _)| name == "plain/plain.json").unwrap();
         let value: serde_json::Value = serde_json::from_slice(&json.1).unwrap();

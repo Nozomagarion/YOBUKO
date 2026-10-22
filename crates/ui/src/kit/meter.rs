@@ -147,6 +147,9 @@ pub fn show(
     let id = Id::new(("meter", source));
     let response = ui.interact(rect.intersect(painter.clip_rect()), id, Sense::click());
     let _style = crate::kit::style_class::enter_response("meter", &response);
+    // A surrounding CSS gradient has a transparent background-color. The empty
+    // rails must retain their native ink unless the meter itself overrides it.
+    let background = crate::kit::style_class::background(ui.visuals().extreme_bg_color);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, describe(name, level)));
     if response.clicked() && level.clipped {
         actions.push(match source {
@@ -164,7 +167,7 @@ pub fn show(
         let light = Rect::from_min_max(Pos2::new(rect.right() - CLIP, rect.top()), rect.max);
         (light, Rect::from_min_max(rect.min, Pos2::new(light.left() - 1.0, rect.bottom())))
     };
-    painter.rect_filled(light, 0.0, if level.clipped { theme::recording() } else { theme::window_background() });
+    painter.rect_filled(light, 0.0, if level.clipped { theme::recording() } else { background });
     let hot_from = ((HOT_DB - RANGE.0) / (RANGE.1 - RANGE.0)) as f32;
     let thickness = if upright { bars.width() } else { bars.height() };
     let bar_width = ((thickness - GAP) / 2.0).max(0.0);
@@ -189,7 +192,7 @@ pub fn show(
                 )
             }
         };
-        painter.rect_filled(bar, 0.0, theme::window_background());
+        painter.rect_filled(bar, 0.0, background);
         if skin.meter == super::skin::MeterStyle::Needle {
             let origin = if upright { bar.center_bottom() } else { bar.left_center() };
             for (value, width) in [
@@ -246,6 +249,47 @@ pub fn show(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn silent_rails_survive_parent_gradients_and_accept_their_own_background() {
+        use crate::kit::{native_css, skin, style_class};
+        for override_color in [None, Some("#081014")] {
+            let ctx = egui::Context::default();
+            theme::install(&ctx);
+            let native = theme::palette().window_background;
+            let css = format!(
+                ".session {{ background: linear-gradient(red, blue); }} {}",
+                override_color.map_or(String::new(), |color| format!(".meter {{ background-color: {color}; }}"))
+            );
+            skin::configure(&skin::Skin { css: Some(css.into()), ..Default::default() });
+            for frame in 0..3 {
+                let mut output =
+                    ctx.run_ui(egui::RawInput { time: Some(frame as f64 * 0.01), ..Default::default() }, |ui| {
+                        let _frame = native_css::frame(ui);
+                        let _parent = style_class::enter("session");
+                        show(
+                            ui,
+                            ui.painter(),
+                            Rect::from_min_size(Pos2::new(20.0, 20.0), Vec2::new(WIDTH, 100.0)),
+                            "Main",
+                            Source::Main,
+                            &Level::default(),
+                            &mut Vec::new(),
+                        );
+                    });
+                if frame == 2 {
+                    let expected = override_color.and_then(theme::parse_hex).unwrap_or(native);
+                    let rails = output
+                        .shapes
+                        .iter()
+                        .filter(|shape| matches!(&shape.shape, egui::Shape::Rect(rect) if rect.fill == expected));
+                    assert_eq!(rails.count(), 3, "two silent rails and the unlit clip light");
+                }
+                output.textures_delta.clear();
+            }
+            skin::configure(&skin::Skin::default());
+        }
+    }
 
     #[test]
     fn the_scale_is_the_volume_controls() {

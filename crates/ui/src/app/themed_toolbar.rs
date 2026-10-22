@@ -573,6 +573,26 @@ mod tests {
     }
 
     #[test]
+    fn dark_gloss_example_keeps_native_layout_and_transport_commands() {
+        assert!(crate::kit::native_css::inspect(theme::GLOSS_EXAMPLE).unwrap().is_empty());
+        let mut harness = native_bar();
+        let play = harness.get_by_label("Play").rect();
+        let tempo = harness.get_by_label("Tempo").rect();
+        harness.state_mut().app.save_toolbar_skin(skin::Skin {
+            css: Some(std::sync::Arc::from(theme::GLOSS_EXAMPLE)),
+            ..Default::default()
+        });
+        harness.run();
+        assert_eq!(play, harness.get_by_label("Play").rect());
+        assert_eq!(tempo, harness.get_by_label("Tempo").rect());
+        assert!(!crate::kit::native_css::toolbar_layout_requested());
+        harness.get_by_label("Play").click();
+        harness.run();
+        assert!(harness.state().actions.iter().any(|action| action.id == "transport.play"));
+        skin::configure(&skin::Skin::default());
+    }
+
+    #[test]
     fn editing_keeps_real_controls_and_done_without_changes_preserves_native_layout() {
         let mut harness = native_bar();
         let play = harness.get_by_label("Play").rect();

@@ -1059,11 +1059,13 @@ fn toggles(
         actions.push(action);
     }
     let response = widgets::button_area(ui, toggle, id.with("on"), label);
+    let _style = crate::kit::style_class::enter_response("button", &response);
     if response.clicked() {
         actions.push(Action::new("track.setMute", json!({ "tracks": [track.0], "mute": !column.mute })));
     }
     let (fill, text) = widgets::toggle_colors(ui, &response, !column.mute);
-    painter.rect_filled(toggle, 0.0, fill);
+    widgets::button_surface(painter, toggle, &response, !column.mute, fill, 0.0);
+    let text = crate::kit::style_class::foreground(text);
     let number = if column.kind == ColumnKind::Return {
         column.name.chars().next().map(String::from).unwrap_or_default()
     } else {

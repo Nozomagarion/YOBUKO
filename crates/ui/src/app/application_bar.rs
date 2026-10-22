@@ -3,7 +3,7 @@
 
 //! Application identity and optional project information in independently positioned groups.
 
-use crate::kit::theme;
+use crate::kit::{theme, widgets};
 use crate::settings::view_settings::ViewSettings;
 use egui::{Align2, Rect, Sense, Ui, Vec2};
 
@@ -78,7 +78,7 @@ fn group(ui: &Ui, rect: Rect, align: Align2, text: String) {
     job.wrap.overflow_character = Some('…');
     let galley = ui.painter().layout_job(job);
     let position = align.align_size_within_rect(galley.size(), rect).min;
-    ui.painter().with_clip_rect(rect).galley(position, galley, theme::text_primary());
+    widgets::paint_text(&ui.painter().with_clip_rect(rect), position, galley, theme::text_primary());
 }
 
 /// The Windows custom title bar keeps all eight native resize directions.

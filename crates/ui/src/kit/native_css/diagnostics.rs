@@ -17,8 +17,7 @@ fn not_painted(name: &str) -> bool {
     name.starts_with("transform")
         || matches!(
             name,
-            "text-shadow"
-                | "filter"
+            "filter"
                 | "backdrop-filter"
                 | "mix-blend-mode"
                 | "background-blend-mode"
@@ -121,7 +120,7 @@ mod tests {
     #[test]
     fn notices_skip_selector_colons_comments_and_value_strings() {
         let notices=inspect("/* transform: none */ .button:hover { color:rgb(1 2 3); text-shadow:1px 2px black; } @media (width > 1px) { .browser { font-family:'a:b;c'; } }").unwrap();
-        assert_eq!(notices.iter().map(|n| n.property.as_str()).collect::<Vec<_>>(), ["text-shadow", "font-family"]);
+        assert_eq!(notices.iter().map(|n| n.property.as_str()).collect::<Vec<_>>(), ["font-family"]);
     }
     #[test]
     fn nested_css_is_bounded_without_rejecting_quoted_braces() {

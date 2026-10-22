@@ -438,8 +438,10 @@ impl Theme {
     }
 }
 
-/// The README that goes with the theme template: the file format and every token, written so a
-/// person or an AI agent can make a theme from it alone.
+/// Original paint-only example, shared by the editor and portable packages.
+pub const GLOSS_EXAMPLE: &str = include_str!("../../themes/dark-gloss.css");
+
+/// The README shipped with themes: the format, capabilities and generated palette reference.
 pub fn template_readme() -> String {
     let mut text = String::from(include_str!("../../themes/THEME-PACKAGE-README.md"));
     text.push_str("\n\n## Palette token reference\n\n| Token | Suhina Dark | Used for |\n|---|---|---|\n");

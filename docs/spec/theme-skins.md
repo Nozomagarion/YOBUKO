@@ -7,6 +7,7 @@ last_verified: 2026-10-22
 covers:
   - assets/themes/default/*.svg
   - crates/ui/themes/THEME-PACKAGE-README.md
+  - crates/ui/themes/dark-gloss.css
   - crates/ui/src/kit/skin.rs
   - crates/ui/src/app/themed_toolbar.rs
   - crates/ui/src/settings/skin_editor.rs
@@ -15,6 +16,7 @@ covers:
   - crates/ui/src/kit/native_css/paint.rs
   - crates/ui/src/kit/native_css/geometry.rs
   - crates/ui/src/kit/native_css/shadows.rs
+  - crates/ui/src/kit/native_css/text.rs
   - crates/ui/src/kit/native_css/workspace.rs
   - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
@@ -116,6 +118,17 @@ their SVG body, foreground glyph and label. Button CSS gradients/shadows are
 painted above the body artwork and below glyphs/text; SVG button bodies respect
 the resolved corner radius. A default SVG must not bypass the CSS background.
 Native hit rectangles, ids, commands and default geometry remain unchanged.
+
+Connected native text helpers support computed CSS `text-shadow`, including lists,
+inherited/currentColor colours and animated offsets/colours. Up to four layers
+paint behind the original galley without changing its layout, wrapping, labels or
+hit geometry. Offset shadows use one draw; blurred shadows use a fixed nine-tap
+weighted approximation on the cached native glyphs, bounded to 32 points of blur
+and offsets of ±256 points. This is not a full image convolution. Native clipping
+still applies. Ordinary egui text that bypasses the shared/native helper is not
+covered yet. The editor includes an original dark gloss CSS example demonstrating
+gradients, rounded SVG-backed buttons and bounded text/box shadows without changing
+the native toolbar/workspace layout.
 
 The initial reader supports `:root` palette variables (`--window-background` maps to
 `window.background`), class/descendant colour, background and border colours, integer

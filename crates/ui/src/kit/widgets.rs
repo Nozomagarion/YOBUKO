@@ -75,7 +75,11 @@ pub fn text_width(ui: &Ui, text: &str, font: FontId) -> f32 {
 pub fn text_in(painter: &Painter, rect: Rect, align: Align2, text: &str, font: FontId, color: Color32) {
     let galley = fitted(painter, text, font, color, rect.width());
     let pos = align.align_size_within_rect(galley.size(), rect).min;
-    painter.galley(pos, galley, color);
+    paint_text(painter, pos, galley, color);
+}
+
+pub fn paint_text(painter: &Painter, pos: Pos2, galley: Arc<Galley>, color: Color32) {
+    super::native_css::paint_text(painter, pos, galley, color);
 }
 
 /// Makes `rect` clickable, with a label for screen readers and tests.
@@ -121,7 +125,7 @@ pub fn toggle_colors(ui: &Ui, response: &Response, on: bool) -> (Color32, Color3
     let off_fill = motion::mix(theme::control_background(), theme::control_hover(), hover);
     let off_text = motion::mix(theme::text_hint(), theme::text_secondary(), hover);
     let on_fill = motion::mix(theme::text_value(), theme::text_primary(), hover);
-    (motion::mix(off_fill, on_fill, lit), motion::mix(off_text, theme::window_background(), lit))
+    (motion::mix(off_fill, on_fill, lit), motion::mix(off_text, theme::text_on(on_fill), lit))
 }
 
 /// A track's solo button: draws it in `rect` and returns the command a click asks for. A click
@@ -719,6 +723,26 @@ pub(crate) fn button(ui: &Ui, painter: &egui::Painter, rect: Rect, text: &str, l
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn active_toggle_text_stays_visible_over_transparent_or_gradient_panels() {
+        let original = theme::palette();
+        let mut palette = original;
+        palette.window_background = Color32::TRANSPARENT;
+        palette.text_value = Color32::from_rgb(220, 230, 220);
+        let ctx = egui::Context::default();
+        theme::set_palette(&ctx, palette);
+        motion::set_enabled(&ctx, false);
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            let rect = Rect::from_min_size(Pos2::new(10.0, 10.0), Vec2::splat(24.0));
+            let response = button_area(ui, rect, Id::new("transparent-toggle"), "Track on");
+            let (fill, text) = toggle_colors(ui, &response, true);
+            assert_eq!(text.a(), 255);
+            assert!(theme::contrast(fill, text) >= 4.5);
+        });
+        output.textures_delta.clear();
+        theme::set_palette(&ctx, original);
+    }
 
     #[test]
     fn shared_form_controls_keep_surfaces_transparent_and_do_not_restyle_buttons() {

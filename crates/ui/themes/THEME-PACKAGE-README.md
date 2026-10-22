@@ -19,6 +19,7 @@ my-theme/
   assets/*.svg        # control artwork
   background.png      # optional background image
   README.md           # this guide
+  examples/dark-gloss.css  # optional paint-only example; not enabled automatically
 ```
 
 Installed themes keep `<id>.json` beside the `<id>/` resource directory instead.
@@ -58,6 +59,12 @@ the importable example is `my-theme/`.
 7. Test normal, hover, active and disabled states, narrow/wide windows, interaction,
    clipping and contrast. Export and reimport the ZIP to check portability.
 
+To try the supplied dark metallic look, use **Load dark gloss example** in the
+advanced editor and then Apply, or copy `examples/dark-gloss.css` into `advanced.css`.
+It demonstrates original gradients, rounded SVG-backed buttons, box/text shadows
+and coloured transport controls while preserving native geometry. Back up your
+current CSS before replacing it with an example.
+
 ## SVG inheritance and safe defaults
 
 Supported roles are `fader.cap`, `fader.rail`, `knob.body`, `knob.pointer`, `button`,
@@ -94,7 +101,7 @@ Portable exports include inherited artwork so another machine receives the same 
 | Materials | Optional bounded PNG background, opacity/blur; panel/track/clip gradient and liquid settings |
 | Toolbar | Native layout plus anchored offsets, explicit order/visibility, connected Flex/Grid |
 | Workspace | CSS layout of `#panel-browser`, `#panel-main`, `#panel-detail` under `#workspace` |
-| Styles | Connected foreground/font size/radius, linear/radial/conic and repeating gradients, bounded inset/outset box shadows |
+| Styles | Connected foreground/font size/radius, linear/radial/conic and repeating gradients, bounded inset/outset box shadows and shared native text shadows |
 | Motion | Connected paint transitions/keyframes; native animation-off/high-contrast settings suppress motion |
 | Selectors | Retained native class tree, child/sibling matching, connected hover/active/disabled/focus states, named object identities |
 
@@ -127,7 +134,7 @@ and test the actual target instead of inventing selectors.
 
 This is an experimental native adapter, not a browser. Stylo parsing a property
 does not mean egui paints it. Some raw widgets still need integration. Transforms,
-filters, text shadows, downloadable fonts, full typography, geometry animation and
+filters, downloadable fonts, full typography, geometry animation and
 the reduced-motion media feature are not connected. Bars and floating windows stay
 host-managed; the toolbar's height stays native. Do not claim universal browser CSS
 or container-query support. Notices are useful but are not a complete CSS validator.
@@ -138,6 +145,10 @@ SVGs are limited to 128 KiB each and 64 assets per theme. External/network image
 scripts, HTML, shell commands and SVG external resources are not loaded. Resource
 paths must stay relative inside the package. SVG controls and effect textures are
 cached with bounded resolution/counts. Box-shadow blur is an approximation.
+Text shadows affect shared native text and SDK vector labels; ordinary egui labels
+that bypass that helper are not covered. Up to four text-shadow layers use offsets
+within ±256 points and at most 32 points of blur. Blur uses a fixed nine-tap weighted
+approximation on cached glyphs, not an image convolution.
 Keep assets small, use readable contrast, and retain useful native labels.
 
 Track/clip colours belong to the project. `clip.midiDefault` and `clip.audioDefault`

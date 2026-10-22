@@ -4055,7 +4055,12 @@ impl App {
             let idle = motion::mix(theme::window_background(), theme::panel_hover(), widgets::hover(ui, &response));
             painter.rect_filled(tab, 0.0, motion::mix(idle, theme::panel_background(), lit));
             let text = motion::mix(theme::text_secondary(), theme::text_primary(), lit);
-            painter.galley(Pos2::new(tab.left() + PAD, tab.center().y - galley.size().y / 2.0), galley, text);
+            widgets::paint_text(
+                &painter,
+                Pos2::new(tab.left() + PAD, tab.center().y - galley.size().y / 2.0),
+                galley,
+                text,
+            );
             let cross = motion::mix(theme::text_hint(), theme::text_primary(), widgets::hover(ui, &close_response));
             let c = close.center();
             for (a, b) in [(Vec2::new(-3.0, -3.0), Vec2::new(3.0, 3.0)), (Vec2::new(-3.0, 3.0), Vec2::new(3.0, -3.0))] {
@@ -6165,7 +6170,7 @@ impl App {
             theme::hairline(if label.is_some() { theme::accent() } else { theme::border_strong() }),
             egui::StrokeKind::Inside,
         );
-        painter.galley(rect.min + Vec2::new(PAD, 3.0), galley, theme::text_primary());
+        widgets::paint_text(&painter, rect.min + Vec2::new(PAD, 3.0), galley, theme::text_primary());
         ui.ctx().request_repaint();
     }
 
@@ -6900,7 +6905,7 @@ impl App {
             }
             let color = motion::mix(color, theme::text_primary(), widgets::hover(ui, &response));
             let pos = Pos2::new(rect.left(), rect.center().y - size.y / 2.0);
-            painter.galley(pos, galley, color);
+            widgets::paint_text(&painter, pos, galley, color);
             if self.shown == view {
                 underline_at = Some((pos.x, pos.y + size.y + 1.0, size.x, theme::text_primary()));
             }
@@ -6987,7 +6992,7 @@ impl App {
                     self.toggle_mapping_mode();
                 }
                 let color = motion::mix(color, theme::text_primary(), widgets::hover(ui, &response));
-                painter.galley(Pos2::new(rect.left(), rect.center().y - size.y / 2.0), galley, color);
+                widgets::paint_text(&painter, Pos2::new(rect.left(), rect.center().y - size.y / 2.0), galley, color);
             }
         }
         // Left of that, each agent the person let in (ADR 0028), lit; a click disconnects it.
@@ -7008,7 +7013,7 @@ impl App {
                 self.status = Status::Done(format!("Disconnected {client}"));
             }
             let color = motion::mix(theme::accent(), theme::text_primary(), widgets::hover(ui, &response));
-            painter.galley(Pos2::new(rect.left(), rect.center().y - size.y / 2.0), galley, color);
+            widgets::paint_text(&painter, Pos2::new(rect.left(), rect.center().y - size.y / 2.0), galley, color);
         }
         drop(native_styles);
         self.hover_switch(ui.ctx(), hovered_switch);
@@ -7163,7 +7168,7 @@ fn drag_label(ctx: &egui::Context, pointer: Pos2, text: &str, lands: bool) {
         theme::hairline(if lands { theme::accent() } else { theme::border_strong() }),
         egui::StrokeKind::Inside,
     );
-    painter.galley(rect.min + Vec2::new(PAD, 3.0), galley, theme::text_primary());
+    widgets::paint_text(&painter, rect.min + Vec2::new(PAD, 3.0), galley, theme::text_primary());
     ctx.request_repaint();
 }
 

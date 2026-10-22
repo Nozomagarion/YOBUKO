@@ -853,7 +853,7 @@ fn paint(painter: &egui::Painter, drawings: &[Draw], origin: Pos2, parameters: &
                     }
                 }
                 let offset = if *align == TextAlign::Center { Vec2::new(galley.size().x / 2., 0.) } else { Vec2::ZERO };
-                painter.galley(position - offset, galley, ink);
+                crate::kit::widgets::paint_text(painter, position - offset, galley, ink);
             }
             Draw::Gradient { rect, colors } => {
                 let r = rectangle(rect);

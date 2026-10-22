@@ -52,6 +52,13 @@ one module restores the previous palette/font before drawing its sibling. These
 overrides preserve native response ids, commands and layout unless CSS explicitly
 requests layout changes; see [theme skins](../spec/theme-skins.md).
 
+Track on/off surfaces share that CSS/SVG path while retaining track-number labels
+and mute commands. Selected toggle ink uses the contrasting text role for its fill,
+not the panel's background colour: a transparent/gradient panel must not make an
+active control's number transparent. Shared native text supports bounded text
+shadows without changing glyph layout; ordinary egui labels remain a separate
+integration target.
+
 - Radius 0 everywhere. No shadows, gradients or cards.
 - Regions are separated by 1 px gaps that show `border` beneath them.
 - **One frame after an edit.** The window draws a view from the state at the start of the frame, and

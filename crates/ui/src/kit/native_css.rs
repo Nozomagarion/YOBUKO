@@ -21,9 +21,11 @@ mod diagnostics;
 mod geometry;
 mod paint;
 mod shadows;
+mod text;
 mod workspace;
 pub use diagnostics::{Notice, inspect};
 pub use paint::{background, background_rounded, background_with};
+pub use text::paint_text;
 pub use workspace::{Workspace, workspace};
 
 const MAX_CONTEXTS: usize = 128;
@@ -43,6 +45,7 @@ pub struct Computed {
     pub authored: Authored,
     gradients: Arc<[paint::Gradient]>,
     shadows: Arc<[shadows::Shadow]>,
+    text_shadows: Arc<[text::Shadow]>,
 }
 
 /// Only authored properties override native defaults. An unrelated CSS rule must not
@@ -445,6 +448,14 @@ fn computed(doc: &HtmlDocument, id: blitz_dom::NodeId) -> Option<Computed> {
         .into();
     Some(Computed {
         gradients,
+        text_shadows: values
+            .clone_text_shadow()
+            .0
+            .iter()
+            .take(4)
+            .map(|shadow| text::Shadow::from_css(shadow, &color))
+            .collect::<Vec<_>>()
+            .into(),
         shadows: values
             .clone_box_shadow()
             .0
