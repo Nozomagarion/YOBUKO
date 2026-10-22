@@ -20,6 +20,7 @@ use super::{skin, theme};
 mod diagnostics;
 mod geometry;
 mod paint;
+mod shadows;
 pub use diagnostics::{Notice, inspect};
 pub use paint::{background, background_rounded, background_with};
 
@@ -39,6 +40,7 @@ pub struct Computed {
     pub visible: bool,
     pub authored: Authored,
     gradients: Arc<[paint::Gradient]>,
+    shadows: Arc<[shadows::Shadow]>,
 }
 
 /// Only authored properties override native defaults. An unrelated CSS rule must not
@@ -426,6 +428,14 @@ fn computed(doc: &HtmlDocument, id: blitz_dom::NodeId) -> Option<Computed> {
         .into();
     Some(Computed {
         gradients,
+        shadows: values
+            .clone_box_shadow()
+            .0
+            .iter()
+            .take(4)
+            .map(|shadow| shadows::Shadow::from_css(shadow, &color))
+            .collect::<Vec<_>>()
+            .into(),
         authored: Authored {
             color: authored_property(doc, id, LonghandId::Color, true),
             background: authored_property(doc, id, LonghandId::BackgroundColor, false),
@@ -819,6 +829,61 @@ mod tests {
         assert_eq!(colors[0], Color32::RED);
         assert!(colors[2].r() > 20 && colors[2].b() > 20, "{colors:?}");
         assert_eq!(colors[3], Color32::BLUE);
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn computed_inset_shadow_uses_current_color_and_reuses_its_texture() {
+        prepare(".browser { color:rgb(120 30 180); box-shadow:inset 8px 0 0 0 currentColor; }", 800.0);
+        let style = scoped(&["browser".into()]).unwrap();
+        assert_eq!(style.shadows.len(), 1);
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let rect = Rect::from_min_size(egui::Pos2::ZERO, Vec2::splat(40.0));
+            assert!(background_with(ui.painter(), rect, &style));
+            assert!(background_with(ui.painter(), rect, &style));
+        });
+        let images: Vec<_> = output
+            .textures_delta
+            .set
+            .values()
+            .flat_map(|d| d.iter())
+            .filter(|d| d.image.size() == [256, 256])
+            .collect();
+        assert_eq!(images.len(), 1);
+        let egui::ImageData::Color(image) = &images[0].image;
+        assert_eq!(image.pixels[128 * 256 + 16], Color32::from_rgb(120, 30, 180));
+        assert_eq!(image.pixels[128 * 256 + 128].a(), 0);
+        output.textures_delta.clear();
+        skin::configure(&skin::Skin::default());
+    }
+    #[test]
+    fn keyframe_only_properties_are_applied_without_a_static_declaration() {
+        prepare(
+            ".browser { animation:ink 1s linear forwards; } @keyframes ink { from {color:red;} to {color:blue;} }",
+            800.0,
+        );
+        let ctx = egui::Context::default();
+        for time in [0.0, 1.1] {
+            ctx.run_ui(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(800.0, 600.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    let _frame = frame(ui);
+                    let _scope = super::super::style_class::enter("browser");
+                },
+            )
+            .textures_delta
+            .clear();
+        }
+        ENGINE.with(|engine| {
+            let engine = engine.borrow();
+            let key = engine.nodes.iter().find(|n| n.class == "browser").unwrap().key;
+            assert!(engine.values[&key].authored.color);
+            assert_eq!(engine.values[&key].color, Color32::BLUE);
+        });
         skin::configure(&skin::Skin::default());
     }
     #[test]

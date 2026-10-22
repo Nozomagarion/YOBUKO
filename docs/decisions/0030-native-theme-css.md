@@ -8,6 +8,7 @@ covers:
   - crates/ui/src/kit/native_css.rs
   - crates/ui/src/kit/native_css/paint.rs
   - crates/ui/src/kit/native_css/geometry.rs
+  - crates/ui/src/kit/native_css/shadows.rs
   - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
@@ -135,7 +136,9 @@ Connected surfaces paint linear, radial and conic gradients, including repeating
 with bounded cached colour ramps/spatial textures and Stylo's colour interpolation.
 Native surface dimensions resolve the gradient's centre, extent and radii. Token-level input budgets bound nesting and
 source size. Source-line notices identify known unsupported effect/font declarations
-without deleting authored source. Full-layout control of panels, shadows, transforms,
+without deleting authored source. Connected surfaces also paint bounded inset/outset
+box shadows using cached distance-field textures; blur is an approximation and follows
+native clipping. Full-layout control of panels, text shadows, transforms,
 filters and comprehensive computed-style diagnostics
 remain implementation work. Parsed declarations that the painter does not consume do
 not imply support. Toolbar height remains the host's height. These limits are also

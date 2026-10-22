@@ -279,8 +279,14 @@ pub fn background_rounded(painter: &Painter, rect: Rect, radius: f32) -> bool {
 
 pub fn background_with(painter: &Painter, rect: Rect, style: &super::Computed) -> bool {
     let mut painted = false;
+    for shadow in style.shadows.iter().rev().filter(|s| !s.inset) {
+        painted |= shadow.paint(painter, rect, style.radius, style.opacity);
+    }
     for gradient in style.gradients.iter().rev() {
         painted |= draw(painter, rect, gradient, style.radius, style.opacity);
+    }
+    for shadow in style.shadows.iter().rev().filter(|s| s.inset) {
+        painted |= shadow.paint(painter, rect, style.radius, style.opacity);
     }
     painted
 }

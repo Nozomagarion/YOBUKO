@@ -12,6 +12,7 @@ covers:
   - crates/ui/src/kit/native_css.rs
   - crates/ui/src/kit/native_css/paint.rs
   - crates/ui/src/kit/native_css/geometry.rs
+  - crates/ui/src/kit/native_css/shadows.rs
   - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
   - crates/ui/src/kit/style_class.rs
@@ -113,7 +114,12 @@ transparency. Radial geometry resolves circle/ellipse radii, extent keywords and
 authored centre against the real surface; conic geometry resolves the authored centre
 and start angle. Up to four layers with 64 items each use bounded cached 1024-pixel
 colour ramps. Radial/conic images use cached 256-by-256 textures; at most 64 gradient
-textures are retained per egui context. Shadows, transforms and filters are not painted.
+textures are retained per egui context. Connected surfaces paint up to four inset/outset
+`box-shadow` layers with resolved `currentColor`, offsets, spread and blur. Native blur
+uses a Gaussian distance-field approximation on cached 256-by-256 textures (32 retained
+per context), with blur capped at 256 px, offset at ±2048 px and spread at ±512 px.
+Shadows respect the host's existing paint clipping and uniform corner radius. Text
+shadows, transforms and filters are not painted.
 
 The style document persists while native scope structure stays unchanged. Native state
 changes snapshot the previous state and restyle that document, allowing Stylo transitions
