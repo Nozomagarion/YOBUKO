@@ -1,10 +1,11 @@
 ---
-description: Version 4 of the data-only Suhina device graph format, SDK, track loading, and device revision migrations
+description: Version 5 of the data-only Suhina device graph format, SDK, track loading, and device revision migrations
 read_when: .sd, Suhina device, device graph, device SDK, community effect, visual node, device UI
 type: spec
 status: current
-last_verified: 2026-10-21
+last_verified: 2026-10-22
 covers:
+  - crates/device-sdk/src/builtin.rs
   - crates/device-sdk/Cargo.toml
   - crates/device-sdk/src/lib.rs
   - crates/device-sdk/src/editor.rs
@@ -33,8 +34,8 @@ validation. Parameter/UI constructors likewise configure the existing fields. Us
 helpers alone changes neither the file schema version nor the device revision. See the
 [authoring guide](../device-sdk.md#checked-rust-authoring).
 
-An `.sd` file describes a device as data. It contains no Rust source, executable code or external
-assets. The Rust SDK builds and validates the graph, writes the JSON file and can prepare the
+An `.sd` file describes a device as data. It contains no Rust source, executable code or embedded audio assets. Stable sample binding keys
+refer to immutable resources prepared by the host. The Rust SDK builds and validates the graph, writes the JSON file and can prepare the
 supported graph for audio processing.
 
 Native stereo source and effect graph nodes implement a device-neutral `NativeNode` lifecycle: preparation and
@@ -53,10 +54,12 @@ The existing `native_device` whole-device restriction remains unchanged.
 
 ## File and device versions
 
-The top-level object contains `format: "suhina-device"`, `version: 4`, a `device` object,
+The top-level object contains `format: "suhina-device"`, `version`, a `device` object,
 `nodes`, `connections` and optional `editor` metadata. The reader accepts file versions 1 through
-4; writing canonical JSON upgrades them to version 4 without changing their sound. Older readers
-reject version 4, preventing silent loss of authoring metadata when saving. File version describes
+5. Writing canonical JSON gives version 5 when the device has an expanded panel
+(`device.expanded`) and version 4 otherwise, without changing its sound; a version 4 or older file
+with `device.expanded` is rejected. Older readers reject the version they do not know, preventing
+silent loss of authoring metadata when saving. File version describes
 the JSON schema; `device.version` describes revisions of a device's identity and parameter
 contract. Files without `device.version` are revision 1. Device `id` remains stable across
 revisions. The device also has a name, role and parameters (`id`, `name`, `min`, `max`, `default`,
@@ -309,6 +312,11 @@ and custom parameter controls. Canvas `size` defaults to `[640,240]`; optional `
 gesture and resource limit. Graphics are evaluated on the UI thread and are stored in the same
 `.sd` as the audio graph. They do not change its DSP execution contract.
 
+`device.ui` is the compact panel, drawn in the device chain. Optional `device.expanded`
+(version 5) is a second, larger canvas with the same fields and limits, validated against the same
+parameters; the device's header then has a button that opens it over the main area
+([sdk-custom-ui.md](sdk-custom-ui.md) › Compact and expanded panels).
+
 ## Linked parameter edits
 
 A parameter's `ui.link` may contain `enabled_by` (a declared 0..1 Toggle id) and `peer`
@@ -320,7 +328,7 @@ updates both stored values. When enabling the toggle, the earlier parameter in e
 pair is copied to the later one. The complete edit shares one undo snapshot and all messages
 reach the attached player; undo, redo and project saving preserve the pair.
 
-## Registered native devices
+## Built-in devices are not `.sd` files
 
 A `native_device` node names a trusted registered implementation with `device`.
 It is restricted to a whole-device wrapper and requires `prepare_native_at` with
@@ -333,3 +341,21 @@ signal at the effect defaults; additional control connections are rejected by th
 adapter until parameter bindings are specified. Custom Rust hosts can still supply their own input-aware kernels. Unknown ids,
 non-effect devices and effects reporting nonzero latency are rejected before insertion;
 latency compensation between graph paths is not implemented. This never loads plug-in code.
+
+
+## Sample composition and embedded private graphs
+
+The node reference defines prepared resources, event routes, polyphonic voices, granular playback,
+and versioned components. Node `bindings` is an optional list of `{parameter,target}` objects:
+the parent parameter id maps to a private/native parameter id. Empty lists are omitted. Unknown
+parent/target ids and duplicate targets are rejected; default values are installed before rendering.
+Old files without bindings behave unchanged. New node kinds and fields are rejected by older strict
+readers instead of being silently dropped. Existing stock Sampler ids/revisions are unchanged.
+
+`Component`, `VoiceGroup` and `GrainPool` store their complete child `.sd` text. Every child validates
+independently, then expanded preparation caps nesting at four, nodes at 4096, voice capacity at 128,
+grain capacity at 256 and aggregate delay storage at 2,000,000 frames. Binding targets are validated
+against the prepared child. Sample PCM is not duplicated per instance. The resource key survives a
+round-trip; the host supplies the corresponding PreparedSamples map after relocation. Current track
+loading has no UI for supplying that map: these resource-bound compositions use the Rust host API;
+plain Sampler sources and registered native effects keep their existing loading behavior.

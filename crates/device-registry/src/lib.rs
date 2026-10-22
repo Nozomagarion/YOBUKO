@@ -5,10 +5,11 @@
 //! `DeviceKind::Builtin(id)` turns into a running device here. The engine builds device chains
 //! through this crate; front ends list what can be added.
 
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use suhina_device_api::{Device, DeviceInfo};
-pub mod stock;
+use suhina_device_sdk::DeviceSdkError;
+use suhina_device_sdk::builtin::{self, Layout, Panel};
 
 /// The built-in effects, instruments and MIDI effects, in the order a device browser lists them.
 pub const DEVICES: [&DeviceInfo; 14] = [
@@ -33,9 +34,39 @@ pub fn info(id: &str) -> Option<&'static DeviceInfo> {
     DEVICES.iter().copied().find(|info| info.id == id)
 }
 
-/// Native instruments can author their panel with the same SDK widgets as .sd graphs.
-pub fn panel(id: &str) -> Option<(suhina_device_sdk::ui::DeviceUi, Vec<suhina_device_sdk::Parameter>)> {
-    (id == "sampler").then(|| (suhina_device_sampler::panel(), suhina_device_sampler::parameters()))
+/// The layout of the device with this id, when it has one (ADR 0021 › Amendment: device panels
+/// for built-in devices): the `.sd` UI part only, its parameters named by id. A device crate
+/// gives it in Rust, or as `devices/<name>/panel.json` listed in [`LAYOUT_FILES`].
+pub fn layout(id: &str) -> Option<Result<Layout, DeviceSdkError>> {
+    if id == "sampler" {
+        return Some(Ok(suhina_device_sampler::layout()));
+    }
+    LAYOUT_FILES.iter().find(|(file_id, _)| *file_id == id).map(|(_, text)| Layout::from_json(text))
+}
+
+/// The layouts kept as JSON next to a device crate, by device id.
+pub const LAYOUT_FILES: &[(&str, &str)] = &[];
+
+/// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
+/// layout, or the generated parameter list when it has none or its layout does not load.
+/// Made once per id while Suhina runs, off the audio thread. `None` for an unknown id.
+pub fn panel(id: &str) -> Option<&'static Panel> {
+    /// Every device's panel, in the order of [`DEVICES`].
+    static PANELS: OnceLock<Vec<Panel>> = OnceLock::new();
+    let index = DEVICES.iter().position(|info| info.id == id)?;
+    PANELS
+        .get_or_init(|| {
+            DEVICES
+                .iter()
+                .map(|info| {
+                    layout(info.id)
+                        .and_then(Result::ok)
+                        .and_then(|layout| layout.panel(info).ok())
+                        .unwrap_or_else(|| builtin::generated(info))
+                })
+                .collect()
+        })
+        .get(index)
 }
 
 /// A new device with this id at its defaults, prepared for 48 kHz, or `None` for an unknown
@@ -165,6 +196,41 @@ mod tests {
     }
 
     #[test]
+    fn every_layout_loads_and_names_only_its_devices_parameters() {
+        // A layout that names a parameter id its device lacks fails here, rather than falling
+        // back to the generated list unnoticed.
+        for info in DEVICES {
+            if let Some(layout) = layout(info.id) {
+                let panel = layout.and_then(|l| l.panel(info)).unwrap_or_else(|e| panic!("{}: {e}", info.id));
+                assert_eq!(panel_ids(&panel), info.params.iter().map(|p| p.id).collect::<Vec<_>>());
+            }
+        }
+        for (id, _) in LAYOUT_FILES {
+            assert!(super::info(id).is_some(), "panel.json for unknown device {id}");
+        }
+        assert!(layout("sampler").is_some(), "the sampler has its own layout");
+    }
+
+    #[test]
+    fn every_device_has_a_panel_with_its_parameters() {
+        for info in DEVICES {
+            let panel = panel(info.id).unwrap_or_else(|| panic!("{} has no panel", info.id));
+            assert_eq!(panel_ids(panel), info.params.iter().map(|p| p.id).collect::<Vec<_>>(), "{}", info.id);
+            for (parameter, native) in panel.parameters.iter().zip(info.params) {
+                assert_eq!((parameter.min, parameter.max, parameter.default), (native.min, native.max, native.default));
+            }
+        }
+        // MIDI effects get one too: the generated list.
+        assert!(panel("pitch").is_some_and(|p| p.ui.is_none()));
+        assert!(panel("sampler").is_some_and(|p| p.ui.is_some()));
+        assert!(panel("no-such-device").is_none());
+    }
+
+    fn panel_ids(panel: &Panel) -> Vec<&str> {
+        panel.parameters.iter().map(|p| p.id.as_str()).collect()
+    }
+
+    #[test]
     fn every_listed_device_can_be_made_and_ids_are_unique() {
         for (i, info) in DEVICES.iter().enumerate() {
             let device = create(info.id).unwrap_or_else(|| panic!("{} cannot be made", info.id));
@@ -183,15 +249,6 @@ pub fn compile_graph(
     graph: &suhina_device_sdk::DeviceGraph,
     rate: f64,
 ) -> Result<suhina_device_sdk::PreparedEffect, suhina_device_sdk::DeviceSdkError> {
-    for node in &graph.nodes {
-        if matches!(node.kind, suhina_device_sdk::NodeKind::NativeEffect { .. })
-            && graph.connections.iter().any(|edge| edge.to == node.id && edge.to_port != "in")
-        {
-            return Err(suhina_device_sdk::DeviceSdkError(
-                "registered effect control bindings are not implemented".into(),
-            ));
-        }
-    }
     graph.compile_with_native_at(rate, |id, rate| {
         let mut device =
             create(id).ok_or_else(|| suhina_device_sdk::DeviceSdkError(format!("unknown graph effect {id:?}")))?;
@@ -223,6 +280,22 @@ impl suhina_device_sdk::native_node::NativeNode for GraphEffect {
         self.device.process(&self.context, output);
         if self.context.playing {
             self.context.beat += (output.len() / 2) as f64 * self.context.tempo / (60.0 * self.rate);
+        }
+    }
+    fn connected_inputs(&mut self, mask: [bool; 5]) -> Result<(), suhina_device_sdk::DeviceSdkError> {
+        if mask[1..].iter().any(|&v| v) {
+            return Err(suhina_device_sdk::DeviceSdkError(
+                "registered effect control bindings are not implemented".into(),
+            ));
+        }
+        Ok(())
+    }
+    fn parameter_range(&self, id: &str) -> Option<(f64, f64)> {
+        self.device.info().params.iter().find(|p| p.id == id).map(|p| (p.min, p.max))
+    }
+    fn set_parameter(&mut self, id: &str, value: f64) {
+        if let Some(index) = self.device.info().param_index(id) {
+            self.device.set_param(index, value);
         }
     }
     fn event(&mut self, event: suhina_device_api::NoteEvent) {
@@ -258,6 +331,18 @@ mod graph_kernel_tests {
         let mut controlled = graph.clone();
         controlled.connections.push(Connection::ports("in", "out", "fx", "control1"));
         assert!(compile_graph(&controlled, 48000.).is_err());
+        let mut nested = DeviceGraph::new("org.test.nested", "Nested", DeviceRole::Effect);
+        nested.nodes = vec![
+            Node::audio_input("in"),
+            Node::new(
+                "child",
+                NodeKind::Component { name: "Hidden effect".into(), version: 1, graph: controlled.to_sd().unwrap() },
+            ),
+            Node::audio_output("out"),
+        ];
+        nested.connections = vec![Connection::new("in", "child"), Connection::new("child", "out")];
+        assert!(compile_graph(&nested, 48000.).is_err());
+
         for id in ["missing", "sampler", "limiter"] {
             let mut invalid = graph.clone();
             invalid.nodes[1].kind = NodeKind::NativeEffect { effect: id.into() };

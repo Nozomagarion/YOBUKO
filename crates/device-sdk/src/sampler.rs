@@ -6,8 +6,7 @@ use std::sync::Arc;
 use suhina_device_api::{Device, DeviceError, DeviceInfo, NoteEvent, ParamInfo, ProcessContext, Role, Scale, Unit};
 use suhina_dsp::{Biquad, Coefficients};
 
-#[path = "sampler_warp.rs"]
-mod warp;
+use crate::nodes::stretch as warp;
 
 const fn continuous(id: &'static str, name: &'static str, min: f64, max: f64, default: f64, unit: Unit) -> ParamInfo {
     ParamInfo::continuous(id, name, (min, max), default, unit, Scale::Linear)
@@ -202,7 +201,7 @@ impl Default for Sampler {
 impl Sampler {
     pub fn new() -> Self {
         Self {
-            window: std::array::from_fn(|i| 0.5 - 0.5 * (std::f64::consts::TAU * i as f64 / 2048.).cos()),
+            window: std::array::from_fn(|i| crate::nodes::granular::hann(i as f64 / 2048.)),
             values: std::array::from_fn(|i| PARAMS[i].default),
             analysis: Arc::new(SliceAnalysis::default()),
             manual_slices: None,
@@ -251,8 +250,7 @@ fn source_fade(position: f64, start: f64, end: f64, fade_in: f64, fade_out: f64,
     fade(position - start, fade_in) * fade(end - 1. - position, fade_out)
 }
 fn random(seed: &mut u32) -> f64 {
-    *seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
-    f64::from(*seed) / f64::from(u32::MAX) * 2. - 1.
+    crate::nodes::random::bipolar(seed)
 }
 impl Device for Sampler {
     fn sample_position(&self) -> Option<f32> {
@@ -496,93 +494,7 @@ fn shared_analysis(source: &SharedPcm, channels: u16, rate: u32) -> Arc<SliceAna
     analysis
 }
 
-/// Source analysis happens on loading, never on the audio thread.
-#[derive(Clone)]
-pub struct SliceAnalysis {
-    attacks: [(f64, f64); 127],
-}
-impl Default for SliceAnalysis {
-    fn default() -> Self {
-        Self { attacks: [(1., 0.); 127] }
-    }
-}
-impl SliceAnalysis {
-    pub fn new(source: &[f32], channels: usize, rate: f64) -> Self {
-        let mut result = Self::default();
-        let channels = channels.max(1);
-        let frames = source.len() / channels;
-        let window = (rate * 0.005).max(1.) as usize;
-        let mut previous = 0.;
-        for (i, block) in source.chunks(window.saturating_mul(channels).max(1)).enumerate() {
-            let peak = block.iter().filter(|v| v.is_finite()).fold(0f64, |p, v| p.max(f64::from(v.abs())));
-            let rise = (peak - previous).max(0.);
-            previous = peak;
-            if i == 0 || rise <= 0. {
-                continue;
-            }
-            if let Some(slot) = result.attacks.iter_mut().min_by(|a, b| a.1.total_cmp(&b.1))
-                && rise > slot.1
-            {
-                *slot = ((i.saturating_mul(window)) as f64 / frames.max(1) as f64, rise);
-            }
-        }
-        result
-    }
-    pub fn points(&self, p: &[f64], frames: usize, rate: f64, tempo: f64) -> [f64; 129] {
-        let value = |i: usize, default| p.get(i).copied().unwrap_or(default);
-        let start = value(1, 0.);
-        let end = value(2, 1.);
-        let sensitivity = value(59, 0.5).clamp(0., 1.);
-        let mut points = [end; 129];
-        points[0] = start;
-        let mut n = 1;
-        let mut add = |point: f64| {
-            if point > start && point < end && n < 128 {
-                points[n] = point;
-                n += 1;
-            }
-        };
-        match value(60, 0.) as u8 {
-            0 => {
-                let maximum = self.attacks.iter().fold(0f64, |v, a| v.max(a.1));
-                for &(point, strength) in &self.attacks {
-                    if strength > maximum * (1. - sensitivity) && strength > 0. {
-                        add(point);
-                    }
-                }
-            }
-            1 => {
-                let beats = [4., 2., 1., 0.5, 0.25, 0.125];
-                let beat = beats.get((sensitivity * 5.).round() as usize).copied().unwrap_or(1.);
-                let step = beat * 60. / tempo.max(1.) * rate / frames.max(1) as f64;
-                for i in 1..128 {
-                    add(start + i as f64 * step);
-                }
-            }
-            2 => {
-                let count = 1 + (sensitivity * 31.).round() as usize;
-                for i in 1..count {
-                    add(start + (end - start) * i as f64 / count as f64);
-                }
-            }
-            _ => {
-                for i in 61..77 {
-                    add(value(i, 1.));
-                }
-            }
-        }
-        points.sort_unstable_by(f64::total_cmp);
-        let mut unique = [end; 129];
-        let mut count = 0;
-        for point in points {
-            if count == 0 || unique[count - 1] != point {
-                unique[count] = point;
-                count += 1;
-            }
-        }
-        unique
-    }
-}
+pub use crate::nodes::slicing::SliceAnalysis;
 
 fn manual_slice(points: &[f64], start: f64, end: f64, index: usize) -> Option<(f64, f64)> {
     if end <= start {
@@ -796,27 +708,15 @@ impl Sampler {
                 }
                 let slices = p[0] == 0. && p[8] == 3.;
                 let (start, end) = if slices { (v.slice_start * total, v.slice_end * total) } else { (start, end) };
-                match v.stage {
-                    0 => {
-                        v.env = (v.env + 1. / (p[11] * self.rate).max(1.)).min(1.);
-                        if v.env >= 1. {
-                            v.stage = 1;
-                        }
-                    }
-                    1 => {
-                        v.env = (v.env - (1. - p[13]) / (p[12] * self.rate).max(1.)).max(p[13]);
-                        if v.env <= p[13] {
-                            v.stage = 2;
-                        }
-                    }
-                    3 => {
-                        v.env = (v.env - v.released.max(1e-12) / (p[14] * self.rate).max(1.)).max(0.);
-                        if v.env <= 0. {
-                            v.active = false;
-                            continue;
-                        }
-                    }
-                    _ => {}
+                if !crate::nodes::envelopes::step(
+                    &mut v.env,
+                    &mut v.stage,
+                    v.released,
+                    [p[11], p[12], p[13], p[14]],
+                    self.rate,
+                ) {
+                    v.active = false;
+                    continue;
                 }
                 let pitch_env = if v.age < p[42] {
                     v.age / p[42]
@@ -899,24 +799,22 @@ impl Sampler {
                     if p[26] == 0. {
                         v.scan += p[21] * self.source_rate / self.rate;
                     }
-                    v.next_grain -= 1.;
-                    if v.next_grain <= 0. {
-                        v.next_grain += self.rate / p[23];
-                        if let Some(g) = v.grains.iter_mut().take(grain_limit).find(|g| g.age >= g.length) {
-                            let length = (p[22] * self.rate / 1000.).max(2.) as usize;
-                            *g = Grain {
-                                window_step: 2048. / (length - 1) as f64,
-                                position: start
-                                    + ((p[20] * (end - start)
-                                        + v.scan
-                                        + random(&mut self.seed) * p[24] * (end - start) * 0.5)
-                                        .rem_euclid(end - start)),
-                                age: 0,
-                                length,
-                                step: v.step * v.direction,
-                                pan: random(&mut self.seed) * p[25],
-                            };
-                        }
+                    if crate::nodes::granular::tick(&mut v.next_grain, self.rate / p[23])
+                        && let Some(g) = v.grains.iter_mut().take(grain_limit).find(|g| g.age >= g.length)
+                    {
+                        let length = (p[22] * self.rate / 1000.).max(2.) as usize;
+                        *g = Grain {
+                            window_step: 2048. / (length - 1) as f64,
+                            position: start
+                                + ((p[20] * (end - start)
+                                    + v.scan
+                                    + random(&mut self.seed) * p[24] * (end - start) * 0.5)
+                                    .rem_euclid(end - start)),
+                            age: 0,
+                            length,
+                            step: v.step * v.direction,
+                            pan: random(&mut self.seed) * p[25],
+                        };
                     }
                     for g in v.grains.iter_mut().take(grain_limit) {
                         if g.age >= g.length {

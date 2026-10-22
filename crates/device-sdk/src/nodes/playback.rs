@@ -86,16 +86,24 @@ struct Kernel {
     position: [f64; 2],
     trigger: [bool; 2],
     note: bool,
+    finished: [[f32; 2]; 64],
 }
 pub(crate) fn prepare(kind: &NodeKind) -> Option<Box<dyn NativeNode>> {
     match kind {
-        NodeKind::PlaybackPosition
+        NodeKind::ScanPosition
+        | NodeKind::PositionReset
+        | NodeKind::PlaybackFinished
+        | NodeKind::PlaybackPosition
         | NodeKind::PlaybackBounds
         | NodeKind::LoopPosition
         | NodeKind::PlaybackRate
-        | NodeKind::RegionFade => {
-            Some(Box::new(Kernel { kind: kind.clone(), position: [0.; 2], trigger: [false; 2], note: false }))
-        }
+        | NodeKind::RegionFade => Some(Box::new(Kernel {
+            kind: kind.clone(),
+            position: [0.; 2],
+            trigger: [false; 2],
+            note: false,
+            finished: [[0.; 2]; 64],
+        })),
         _ => None,
     }
 }
@@ -109,7 +117,7 @@ impl NativeNode for Kernel {
                     if value.is_finite() { f64::from(value) } else { 0. }
                 });
                 let value = match self.kind {
-                    NodeKind::PlaybackPosition => {
+                    NodeKind::PlaybackPosition | NodeKind::ScanPosition => {
                         let trigger = x[2] > 0.;
                         if self.note || (trigger && !self.trigger[channel]) {
                             self.position[channel] = x[1];
@@ -123,6 +131,19 @@ impl NativeNode for Kernel {
                             self.position[channel] = 0.;
                         }
                         position
+                    }
+                    NodeKind::PositionReset => {
+                        let trigger = x[1] > 0.;
+                        let value = if self.note || (trigger && !self.trigger[channel]) { x[2] } else { x[0] };
+                        self.trigger[channel] = trigger;
+                        value
+                    }
+                    NodeKind::PlaybackFinished => {
+                        let active = x[3] > 0. && x[0] >= x[1] && x[0] < x[2];
+                        let pulse = self.trigger[channel] && !active;
+                        self.trigger[channel] = active;
+                        self.finished[frame][channel] = f32::from(!active);
+                        f64::from(pulse)
                     }
                     NodeKind::PlaybackBounds => {
                         if x[3] > 0. && x[0] >= x[1] && x[0] < x[2] {
@@ -166,6 +187,9 @@ impl NativeNode for Kernel {
             self.note = false;
         }
     }
+    fn output(&self, _: usize, frame: usize) -> [f32; 2] {
+        self.finished.get(frame).copied().unwrap_or([0.; 2])
+    }
     fn event(&mut self, event: NoteEvent) {
         if matches!(event, NoteEvent::On { key: 0..=127, velocity } if velocity.is_finite() && velocity > 0.) {
             self.note = true;
@@ -175,17 +199,50 @@ impl NativeNode for Kernel {
         self.position = [0.; 2];
         self.trigger = [false; 2];
         self.note = false;
+        self.finished.fill([0.; 2]);
     }
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
 }
 
+pub(crate) const SCAN_POSITION: NodeInfo = NodeInfo {
+    kind: "scan_position",
+    name: "ScanPosition",
+    rust_variant: "ScanPosition",
+    example: r#"{"kind":"scan_position"}"#,
+    ..PLAYBACK_POSITION
+};
+pub(crate) const POSITION_RESET: NodeInfo = NodeInfo {
+    kind: "position_reset",
+    name: "PositionReset",
+    rust_variant: "PositionReset",
+    inputs: &[
+        PortInfo { name: "position", default: Some(0.), unit: "frames" },
+        PortInfo { name: "trigger", default: Some(0.), unit: "signal" },
+        PortInfo { name: "target", default: Some(0.), unit: "frames" },
+        PortInfo { name: "events", default: Some(0.), unit: "midi" },
+    ],
+    outputs: &["out", "left", "right"],
+    description: "Event-timed or rising-trigger position replacement.",
+    configuration: "none",
+    example: r#"{"kind":"position_reset"}"#,
+};
+pub(crate) const PLAYBACK_FINISHED: NodeInfo = NodeInfo {
+    kind: "playback_finished",
+    name: "PlaybackFinished",
+    rust_variant: "PlaybackFinished",
+    outputs: &["out", "left", "right", "finished"],
+    description: "One-frame completion pulse and inactive level when leaving playback bounds.",
+    example: r#"{"kind":"playback_finished"}"#,
+    ..PLAYBACK_BOUNDS
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
     fn run(kind: NodeKind, values: [f32; 5]) -> [f32; 2] {
-        let mut kernel = crate::nodes::prepare(&kind).unwrap();
+        let mut kernel = crate::nodes::prepare(&kind, 48000.).unwrap();
         let inputs = values.map(|v| [v; 2]);
         let mut output = [0.; 2];
         kernel.process(inputs.each_ref().map(|v| v.as_slice()), &mut output);

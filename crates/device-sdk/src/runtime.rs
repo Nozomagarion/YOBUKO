@@ -11,6 +11,7 @@ use suhina_dsp::{Biquad, Coefficients};
 struct Wire {
     source: usize,
     channel: Option<usize>,
+    port: usize,
 }
 struct Op {
     id: String,
@@ -19,6 +20,9 @@ struct Op {
     defaults: [f64; 5],
     parameter: Option<usize>,
     state: State,
+    auxiliary_count: usize,
+    event_source: Option<usize>,
+    event_output: bool,
 }
 struct Island {
     nodes: Vec<usize>,
@@ -53,6 +57,8 @@ pub struct PreparedEffect {
     nodes: Vec<Op>,
     order: Vec<usize>,
     values: Vec<[f64; 2]>,
+    auxiliary: Vec<Vec<[f64; 2]>>,
+    block_auxiliary: Vec<Vec<[[f64; 2]; 64]>>,
     parameters: Vec<Parameter>,
     parameter_values: Vec<f64>,
     targets: Vec<f64>,
@@ -65,13 +71,17 @@ pub struct PreparedEffect {
     block_parameters: Vec<[f64; 64]>,
     block_safe: bool,
     islands: Vec<Island>,
+    event_buffers: Vec<Vec<suhina_device_api::NoteEvent>>,
+    event_counts: Vec<usize>,
+    event_overflows: u64,
+    binding_targets: Vec<Vec<(usize, String)>>,
 }
 
 fn finite(value: f64) -> f64 {
     if value.is_finite() { value.clamp(-(f32::MAX as f64), f32::MAX as f64) } else { 0.0 }
 }
 fn coefficient(seconds: f64, rate: f64) -> f64 {
-    if seconds <= 0.0 { 0.0 } else { (-1.0 / (seconds.min(60.0) * rate)).exp() }
+    crate::modulation::coefficient(seconds, rate)
 }
 
 fn feedback_islands(nodes: &[Op], order: &[usize]) -> Vec<Island> {
@@ -131,9 +141,7 @@ impl PreparedEffect {
         sample_rate: f64,
         resolve: &mut impl FnMut(&str, f64) -> Result<Box<dyn NativeNode>, DeviceSdkError>,
     ) -> Result<Self, DeviceSdkError> {
-        Self::new_with_factory(graph, sample_rate, &mut |kind, rate| {
-            crate::native_node::prepare_with(kind, rate, resolve)
-        })
+        crate::native_node::compile_graph(graph, sample_rate, None, resolve)
     }
 
     pub(crate) fn new_with_factory(
@@ -174,7 +182,11 @@ impl PreparedEffect {
                         _ => None,
                     };
                     if let Some(input) = inputs.get_mut(i) {
-                        *input = Some(Wire { source, channel });
+                        *input = Some(Wire {
+                            source,
+                            channel,
+                            port: graph.nodes[source].kind.output_index(&edge.from_port),
+                        });
                     }
                 }
             }
@@ -185,7 +197,26 @@ impl PreparedEffect {
                 _ => None,
             };
             let prepared_native = prepare(&node.kind, sample_rate)?;
-            let state = if let Some(native) = prepared_native {
+            let state = if let Some(mut native) = prepared_native {
+                native.connected_inputs(inputs.map(|p| p.is_some()))?;
+                for binding in &node.bindings {
+                    if native.parameter_range(&binding.target).is_none() {
+                        return Err(DeviceSdkError(format!("unknown native parameter {:?}", binding.target)));
+                    }
+                    if native
+                        .parameter_input(&binding.target)
+                        .is_some_and(|port| inputs.get(port).is_some_and(Option::is_some))
+                    {
+                        return Err(DeviceSdkError("a parameter cannot be bound and signal-driven at once".into()));
+                    }
+                    let value = graph
+                        .parameters
+                        .iter()
+                        .find(|p| p.id == binding.parameter)
+                        .ok_or_else(|| DeviceSdkError("unknown parent parameter".into()))?
+                        .default;
+                    native.set_parameter(&binding.target, value);
+                }
                 State::Native(native)
             } else {
                 match node.kind {
@@ -215,7 +246,27 @@ impl PreparedEffect {
                     _ => State::None,
                 }
             };
-            nodes.push(Op { id: node.id.clone(), kind: node.kind.clone(), inputs, defaults, parameter, state });
+            if !node.bindings.is_empty() && !matches!(state, State::Native(_)) {
+                return Err(DeviceSdkError("parameter bindings require a native kernel".into()));
+            }
+            nodes.push(Op {
+                id: node.id.clone(),
+                kind: node.kind.clone(),
+                inputs,
+                defaults,
+                parameter,
+                state,
+                auxiliary_count: node.kind.auxiliary_count(),
+                event_source: graph
+                    .connections
+                    .iter()
+                    .find(|edge| {
+                        edge.to == node.id
+                            && node.kind.info().inputs.iter().any(|p| p.name == edge.to_port && p.unit == "midi")
+                    })
+                    .and_then(|edge| graph.nodes.iter().position(|n| n.id == edge.from)),
+                event_output: node.kind.resource_output() == Some("midi"),
+            });
         }
         let output = graph
             .nodes
@@ -237,6 +288,38 @@ impl PreparedEffect {
             output,
             sample_rate,
             values: vec![[0.0; 2]; graph.nodes.len()],
+            event_buffers: graph
+                .nodes
+                .iter()
+                .map(|n| {
+                    if n.kind.resource_output() == Some("midi") {
+                        vec![suhina_device_api::NoteEvent::AllNotesOff; 256]
+                    } else {
+                        vec![]
+                    }
+                })
+                .collect(),
+            event_counts: vec![0; graph.nodes.len()],
+            event_overflows: 0,
+            binding_targets: graph
+                .parameters
+                .iter()
+                .map(|parameter| {
+                    graph
+                        .nodes
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(index, node)| {
+                            node.bindings
+                                .iter()
+                                .filter(|b| b.parameter == parameter.id)
+                                .map(move |binding| (index, binding.target.clone()))
+                        })
+                        .collect()
+                })
+                .collect(),
+            auxiliary: graph.nodes.iter().map(|n| vec![[0.; 2]; n.kind.auxiliary_count()]).collect(),
+            block_auxiliary: graph.nodes.iter().map(|n| vec![[[0.; 2]; 64]; n.kind.auxiliary_count()]).collect(),
             parameters: graph.parameters.clone(),
             parameter_values: graph.parameters.iter().map(|p| p.default).collect(),
             targets: graph.parameters.iter().map(|p| p.default).collect(),
@@ -284,6 +367,13 @@ impl PreparedEffect {
                 }
                 *slot = target;
             }
+            if let Some(targets) = self.binding_targets.get(index) {
+                for (node, target_id) in targets {
+                    if let Some(Op { state: State::Native(native), .. }) = self.nodes.get_mut(*node) {
+                        native.set_parameter(target_id, target);
+                    }
+                }
+            }
             let frames = if self.started && !discrete {
                 (spec.smoothing_ms * 0.001 * self.sample_rate).round() as usize
             } else {
@@ -300,9 +390,20 @@ impl PreparedEffect {
         }
     }
 
+    pub(crate) fn parameter_range(&self, id: &str) -> Option<(f64, f64)> {
+        self.parameters.iter().find(|p| p.id == id).map(|p| (p.min, p.max))
+    }
+    pub(crate) fn set_named_parameter(&mut self, id: &str, value: f64) {
+        if let Some(index) = self.parameters.iter().position(|p| p.id == id) {
+            self.set_parameter(index, value);
+        }
+    }
     /// Clear DSP history without changing parameters or allocating.
     pub fn reset(&mut self) {
         self.values.fill([0.0; 2]);
+        for outputs in &mut self.auxiliary {
+            outputs.fill([0.; 2]);
+        }
         self.midi = [0.0; 3];
         self.parameter_values.copy_from_slice(&self.targets);
         self.remaining.fill(0);
@@ -345,6 +446,10 @@ impl PreparedEffect {
     }
 
     pub fn process_context(&mut self, context: &ProcessContext, buffer: &mut [f32]) {
+        self.begin_span(context);
+        self.process_prepared_context(context, buffer);
+    }
+    pub(crate) fn process_prepared_context(&mut self, context: &ProcessContext, buffer: &mut [f32]) {
         if self.block_safe {
             self.process_blocks(context, buffer);
             return;
@@ -352,11 +457,6 @@ impl PreparedEffect {
         let tempo = if context.tempo.is_finite() { context.tempo.clamp(1.0, 1000.0) } else { 120.0 };
         let mut beat = finite(context.beat);
         let beat_step = if context.playing { tempo / (60.0 * self.sample_rate) } else { 0.0 };
-        for op in &mut self.nodes {
-            if let State::Native(native) = &mut op.state {
-                native.prepare_block(context);
-            }
-        }
         let (chunks, remainder) = buffer.as_chunks_mut::<2>();
         for frame in chunks {
             self.started = true;
@@ -376,6 +476,7 @@ impl PreparedEffect {
                 evaluate(
                     &mut self.nodes,
                     &mut self.values,
+                    &mut self.auxiliary,
                     &self.parameter_values,
                     self.midi,
                     self.sample_rate,
@@ -391,9 +492,12 @@ impl PreparedEffect {
                 if let State::Delay { history, cursor, .. } = &mut op.state {
                     let input = op.inputs[0]
                         .and_then(|wire| {
-                            self.values
-                                .get(wire.source)
-                                .map(|v| wire.channel.and_then(|c| v.get(c)).map_or(*v, |value| [*value; 2]))
+                            (if wire.port == 0 {
+                                self.values.get(wire.source)
+                            } else {
+                                self.auxiliary.get(wire.source).and_then(|ports| ports.get(wire.port - 1))
+                            })
+                            .map(|v| wire.channel.and_then(|c| v.get(c)).map_or(*v, |value| [*value; 2]))
                         })
                         .unwrap_or([0.0; 2]);
                     if let Some(slot) = history.get_mut(*cursor) {
@@ -414,11 +518,6 @@ impl PreparedEffect {
         let tempo = if context.tempo.is_finite() { context.tempo.clamp(1.0, 1000.0) } else { 120.0 };
         let mut beat = finite(context.beat);
         let step = if context.playing { tempo / (60.0 * self.sample_rate) } else { 0.0 };
-        for op in &mut self.nodes {
-            if let State::Native(native) = &mut op.state {
-                native.prepare_block(context);
-            }
-        }
         let (frames, remainder) = buffer.as_chunks_mut::<2>();
         for block in frames.chunks_mut(64) {
             let mut beats = [0.0; 64];
@@ -445,6 +544,9 @@ impl PreparedEffect {
                     for (frame, input) in block.iter().enumerate() {
                         for &source in &island.sources {
                             self.values[source] = self.block_values[source][frame];
+                            for port in 0..self.nodes[source].auxiliary_count {
+                                self.auxiliary[source][port] = self.block_auxiliary[source][port][frame];
+                            }
                         }
                         for &node in &island.nodes {
                             if let Some(parameter) = self.nodes[node].parameter {
@@ -453,6 +555,7 @@ impl PreparedEffect {
                             evaluate(
                                 &mut self.nodes,
                                 &mut self.values,
+                                &mut self.auxiliary,
                                 &self.parameter_values,
                                 self.midi,
                                 self.sample_rate,
@@ -463,15 +566,21 @@ impl PreparedEffect {
                                 context,
                             );
                             self.block_values[node][frame] = self.values[node];
+                            for port in 0..self.nodes[node].auxiliary_count {
+                                self.block_auxiliary[node][port][frame] = self.auxiliary[node][port];
+                            }
                         }
                         for &node in &island.nodes {
                             let op = &mut self.nodes[node];
                             if let State::Delay { history, cursor, .. } = &mut op.state {
                                 let input = op.inputs[0]
                                     .and_then(|wire| {
-                                        self.values.get(wire.source).map(|v| {
-                                            wire.channel.and_then(|c| v.get(c)).map_or(*v, |value| [*value; 2])
+                                        (if wire.port == 0 {
+                                            self.values.get(wire.source)
+                                        } else {
+                                            self.auxiliary.get(wire.source).and_then(|ports| ports.get(wire.port - 1))
                                         })
+                                        .map(|v| wire.channel.and_then(|c| v.get(c)).map_or(*v, |value| [*value; 2]))
                                     })
                                     .unwrap_or([0.0; 2]);
                                 if let Some(slot) = history.get_mut(*cursor) {
@@ -489,13 +598,18 @@ impl PreparedEffect {
                     for (port, samples) in native_inputs.iter_mut().enumerate() {
                         for (frame, pair) in samples.as_chunks_mut::<2>().0.iter_mut().take(block.len()).enumerate() {
                             let value = op.inputs[port].map_or([op.defaults[port]; 2], |wire| {
-                                let value = self.block_values[wire.source][frame];
+                                let value = if wire.port == 0 {
+                                    self.block_values[wire.source][frame]
+                                } else {
+                                    self.block_auxiliary[wire.source][wire.port - 1][frame]
+                                };
                                 wire.channel.map_or(value, |channel| [value[channel]; 2])
                             });
                             *pair = value.map(|v| v as f32);
                         }
                     }
                 }
+                let auxiliary_count = self.nodes[index].auxiliary_count;
                 if let State::Native(native) = &mut self.nodes[index].state {
                     let mut audio = [0.0; 128];
                     native.process(
@@ -504,6 +618,10 @@ impl PreparedEffect {
                     );
                     for (frame, pair) in audio.as_chunks::<2>().0.iter().take(block.len()).enumerate() {
                         self.block_values[index][frame] = [finite(f64::from(pair[0])), finite(f64::from(pair[1]))];
+                        for port in 0..auxiliary_count {
+                            self.block_auxiliary[index][port][frame] =
+                                native.output(port, frame).map(|v| finite(f64::from(v)));
+                        }
                     }
                     continue;
                 }
@@ -514,7 +632,11 @@ impl PreparedEffect {
                         for (frame, input) in block.iter().enumerate() {
                             let read = |port: usize| match op.inputs[port] {
                                 Some(wire) => {
-                                    let value = self.block_values[wire.source][frame];
+                                    let value = if wire.port == 0 {
+                                        self.block_values[wire.source][frame]
+                                    } else {
+                                        self.block_auxiliary[wire.source][wire.port - 1][frame]
+                                    };
                                     wire.channel.map_or(value, |channel| [value[channel]; 2])
                                 }
                                 None => [op.defaults[port]; 2],
@@ -538,7 +660,12 @@ impl PreparedEffect {
                 }
                 for (frame, input) in block.iter().enumerate() {
                     for wire in self.nodes[index].inputs.iter().flatten() {
-                        self.values[wire.source] = self.block_values[wire.source][frame];
+                        if wire.port == 0 {
+                            self.values[wire.source] = self.block_values[wire.source][frame];
+                        } else {
+                            self.auxiliary[wire.source][wire.port - 1] =
+                                self.block_auxiliary[wire.source][wire.port - 1][frame];
+                        }
                     }
                     if let Some(parameter) = self.nodes[index].parameter {
                         self.parameter_values[parameter] = self.block_parameters[parameter][frame];
@@ -546,6 +673,7 @@ impl PreparedEffect {
                     evaluate(
                         &mut self.nodes,
                         &mut self.values,
+                        &mut self.auxiliary,
                         &self.parameter_values,
                         self.midi,
                         self.sample_rate,
@@ -556,6 +684,9 @@ impl PreparedEffect {
                         context,
                     );
                     self.block_values[index][frame] = self.values[index];
+                    for port in 0..self.nodes[index].auxiliary_count {
+                        self.block_auxiliary[index][port][frame] = self.auxiliary[index][port];
+                    }
                 }
             }
             for (frame, output) in block.iter_mut().enumerate() {
@@ -563,6 +694,80 @@ impl PreparedEffect {
             }
         }
         remainder.fill(0.0);
+    }
+
+    pub(crate) fn apply_event(&mut self, event: suhina_device_api::NoteEvent) {
+        self.dispatch_event(event);
+        match event {
+            suhina_device_api::NoteEvent::On { key, velocity }
+                if key <= 127 && velocity.is_finite() && velocity > 0.0 =>
+            {
+                self.midi = [f64::from(key), f64::from(velocity.clamp(0.0, 1.0)), 1.0];
+            }
+            suhina_device_api::NoteEvent::On { .. } => self.midi[2] = 0.0,
+            suhina_device_api::NoteEvent::Off { key, .. } if f64::from(key) == self.midi[0] => self.midi[2] = 0.0,
+            suhina_device_api::NoteEvent::AllNotesOff => self.midi[2] = 0.0,
+            _ => {}
+        }
+    }
+    pub(crate) fn set_external_inputs(&mut self, inputs: [&[f32]; 5]) {
+        for node in &mut self.nodes {
+            if let State::Native(native) = &mut node.state {
+                native.set_external_inputs(inputs);
+            }
+        }
+    }
+    pub(crate) fn begin_span(&mut self, context: &ProcessContext) {
+        for node in &mut self.nodes {
+            if let State::Native(native) = &mut node.state {
+                native.prepare_block(context);
+            }
+        }
+    }
+
+    pub fn event_overflows(&self) -> u64 {
+        self.event_overflows
+    }
+
+    pub fn voice_finished(&self) -> Option<bool> {
+        let mut seen = false;
+        let mut finished = true;
+        for node in &self.nodes {
+            if let State::Native(native) = &node.state
+                && let Some(done) = native.voice_finished()
+            {
+                seen = true;
+                finished &= done;
+            }
+        }
+        seen.then_some(finished)
+    }
+
+    pub(crate) fn dispatch_event(&mut self, event: suhina_device_api::NoteEvent) {
+        self.event_counts.fill(0);
+        let mut routed = [suhina_device_api::NoteEvent::AllNotesOff; 256];
+        for &index in &self.order {
+            let source = self.nodes[index].event_source;
+            let count = source.map_or(1, |s| self.event_counts[s]);
+            for at in 0..count {
+                let incoming = source.map_or(event, |s| self.event_buffers[s][at]);
+                let produced = if let State::Native(native) = &mut self.nodes[index].state {
+                    native.route_event(incoming, &mut routed).min(routed.len())
+                } else {
+                    routed[0] = incoming;
+                    1
+                };
+                if self.nodes[index].event_output {
+                    let offset = self.event_counts[index];
+                    let copied = produced.min(self.event_buffers[index].len().saturating_sub(offset));
+                    self.event_buffers[index][offset..offset + copied].copy_from_slice(&routed[..copied]);
+                    self.event_counts[index] += copied;
+                    if copied < produced {
+                        self.event_overflows = self.event_overflows.saturating_add(1);
+                    }
+                }
+            }
+        }
     }
 
     /// Render an instrument graph from timestamped MIDI events into its audio buffer.
@@ -583,22 +788,7 @@ impl PreparedEffect {
                 }
                 self.process_context(&span_context, span);
             }
-            for op in &mut self.nodes {
-                if let State::Native(native) = &mut op.state {
-                    native.event(event);
-                }
-            }
-            match event {
-                suhina_device_api::NoteEvent::On { key, velocity }
-                    if key <= 127 && velocity.is_finite() && velocity > 0.0 =>
-                {
-                    self.midi = [f64::from(key), f64::from(velocity.clamp(0.0, 1.0)), 1.0];
-                }
-                suhina_device_api::NoteEvent::On { .. } => self.midi[2] = 0.0,
-                suhina_device_api::NoteEvent::Off { key, .. } if f64::from(key) == self.midi[0] => self.midi[2] = 0.0,
-                suhina_device_api::NoteEvent::AllNotesOff => self.midi[2] = 0.0,
-                _ => {}
-            }
+            self.apply_event(event);
             offset = at;
         }
         if let Some(span) = buffer.get_mut(offset * 2..frames * 2) {
@@ -615,6 +805,7 @@ impl PreparedEffect {
 fn evaluate(
     nodes: &mut [Op],
     values: &mut [[f64; 2]],
+    auxiliary: &mut [Vec<[f64; 2]>],
     parameter_values: &[f64],
     midi: [f64; 3],
     sample_rate: f64,
@@ -626,8 +817,13 @@ fn evaluate(
 ) {
     let Some(op) = nodes.get_mut(index) else { return };
     let x = std::array::from_fn::<_, 5, _>(|i| match op.inputs[i] {
-        Some(Wire { source, channel }) => {
-            let value = values.get(source).copied().unwrap_or([0.0; 2]);
+        Some(Wire { source, channel, port }) => {
+            let value = if port == 0 {
+                values.get(source).copied()
+            } else {
+                auxiliary.get(source).and_then(|ports| ports.get(port - 1)).copied()
+            }
+            .unwrap_or([0.; 2]);
             channel.and_then(|i| value.get(i).copied()).map_or(value, |v| [v; 2])
         }
         None => [op.defaults[i]; 2],
@@ -641,6 +837,11 @@ fn evaluate(
             let inputs = x.map(|pair| pair.map(|v| v as f32));
             native.process(inputs.each_ref().map(|v| v.as_slice()), &mut audio);
             output = audio.map(f64::from);
+            for port in 0..op.auxiliary_count {
+                if let Some(slot) = auxiliary.get_mut(index).and_then(|ports| ports.get_mut(port)) {
+                    *slot = native.output(port, 0).map(|v| finite(f64::from(v)));
+                }
+            }
         }
         (AudioInput, _) => output = input,
         (AudioOutput, _) => output = x[0],

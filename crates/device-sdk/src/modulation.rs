@@ -13,3 +13,7 @@ pub(crate) fn lfo_hz(rate: f64, time: f64, division: f64, mode: f64, tempo: f64)
         _ => bpm / (15. * division),
     }
 }
+
+pub(crate) fn coefficient(seconds: f64, rate: f64) -> f64 {
+    if seconds <= 0. { 0. } else { (-1. / (seconds.min(60.) * rate)).exp() }
+}

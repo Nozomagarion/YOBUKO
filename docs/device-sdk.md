@@ -3,7 +3,7 @@ description: Author data-only effects, MIDI effects and instruments in Rust or w
 read_when: make an effect, MIDI effect or instrument, SDK tutorial, .sd example, node discovery
 type: howto
 status: current
-last_verified: 2026-10-19
+last_verified: 2026-10-21
 covers:
   - crates/device-sdk/src/author.rs
   - crates/device-sdk/src/ui/widgets.rs
@@ -13,6 +13,7 @@ covers:
   - crates/device-sdk/examples/distortion.rs
   - crates/device-sdk/examples/delay.rs
   - crates/device-sdk/examples/compressor.rs
+  - crates/device-sdk/examples/sampler_composition.rs
   - crates/device-sdk/examples/catalog.rs
   - crates/device-sdk/examples/validate.rs
   - crates/device-sdk/examples/ui_controls.rs
@@ -365,13 +366,16 @@ in order: sine, triangle, rising ramp, falling ramp, square, sample-and-hold and
 colour, alignment, border, prefix and suffix. The widget contains no device-specific
 parameter names. Custom drawings remain available for artwork and specialised controls.
 
-## Stock device packaging
+## Layouts for built-in devices
 
-Application builds generate registered `devices/` packages as `.sd` files in
-the build script's `OUT_DIR/devices/` and embed them for startup. Native DSP uses the explicit
-`native_device` whole-device wrapper, prepared through `DeviceGraph::prepare_native_at`
-and the registry factory. Primitive graphs still use `compile_at`. See the
-[stock bundle specification](spec/stock-device-bundle.md).
+A built-in device (`devices/<name>`) is native Rust, not a `.sd` graph. Its panel uses this
+SDK's UI part only: `suhina_device_sdk::builtin::Layout` holds a compact canvas (`ui`), an
+optional expanded one and how each parameter is presented, by parameter id. Parameters come
+from the device's `DeviceInfo`; a layout cannot declare one. A device crate gives its layout in
+Rust (the Sampler's `layout()`) or as `devices/<name>/panel.json`, listed in
+`suhina_device_registry::LAYOUT_FILES`; `suhina_device_registry::panel(id)` loads it by id, and
+a test fails when it names a parameter its device lacks. A device without a layout gets the
+generated list. See [sdk-custom-ui.md](spec/sdk-custom-ui.md) › Layouts for built-in devices.
 
 Use `Widget::Panel { label }` for themed, non-interactive groups behind controls.
 `UiGesture::Tab(value)` on a Button selects a positive value in a zero-based
@@ -403,6 +407,30 @@ unresolved effects. MIDI events and reset use the same lifecycle as native sourc
 Registered built-in audio effects resolve automatically when a `.sd` graph is added and
 when track or group chains are prepared. The registry adapter supplies the `in` audio
 signal at the effect defaults; additional control connections are rejected by this
-adapter until parameter bindings are specified. Custom Rust hosts can still supply their own input-aware kernels. Unknown ids,
+adapter; named `Node::bind(parent, target)` parameter bindings are supported. Custom Rust hosts can still supply their own input-aware kernels. Unknown ids,
 non-effect devices and effects reporting nonzero latency are rejected before insertion;
 latency compensation between graph paths is not implemented. This never loads plug-in code.
+
+
+## Compose editable samplers
+
+Run from the repository root:
+
+```sh
+cargo run -p suhina-device-sdk --example sampler_composition -- target/sampler-composition
+```
+
+The example writes five `.sd` files and five audible `.wav` renders: loops, reverse, slices,
+granular and tempo. Each definition round-trips and runs with the same deterministic source bound
+as `sample`. `sampler_template` and `granular_template` return editable DeviceGraph values with
+standard parameter panels; their private voices use the same public node catalogue. To use real
+samples, decode them off-thread in your host, make SampleAsset values, insert stable binding names
+into PreparedSamples, and call `compile_with_samples_at`. For registered/custom native effects,
+use `compile_with_samples_and_native_at` with a trusted resolver. A missing binding is an error;
+a prepared graph retains its original resource after replacing the host map. Retire it off-thread.
+The desktop `device.addSd` path does not yet provide a resource-map editor for these compositions.
+
+`NodeInfo::output_type` and the JSON catalogue's `output_types` describe event/resource/signal
+ports identically to validation. Named outputs include per-voice gate/trigger/release, envelope
+completion, read positions and grain overflow. Components store their name, version, child graph,
+parameters and optional panel as data, with independent state for every prepared instance.

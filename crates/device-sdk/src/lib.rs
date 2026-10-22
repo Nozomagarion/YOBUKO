@@ -3,9 +3,9 @@
 
 //! Build, validate, save, and run data-only Suhina device graphs (`.sd`).
 //!
-//! Version 4 separates device revisions from the file format version.
-//! A validated graph compiles off the audio thread into a processor whose `process`
-//! method performs no allocation. File versions 1 through 4 remain readable.
+//! Version 4 separates device revisions from the file format version; version 5 adds an
+//! optional expanded panel. A validated graph compiles off the audio thread into a processor
+//! whose `process` method performs no allocation. File versions 1 through 5 remain readable.
 
 use std::fmt;
 use std::io::Read;
@@ -14,6 +14,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 pub mod author;
+pub mod builtin;
 pub mod editor;
 mod graph;
 mod midi;
@@ -26,13 +27,21 @@ pub mod sample_resource;
 pub mod sampler;
 pub mod ui;
 pub use midi::PreparedMidiEffect;
-pub use nodes::{FilterMode, NODE_CATALOG, NodeInfo, NodeKind, PortInfo, Waveform, node_reference_markdown};
+pub use nodes::granular::{grain_template, template as granular_template};
+pub use nodes::templates::sampler_template;
+pub use nodes::{
+    FilterMode, NODE_CATALOG, NodeInfo, NodeKind, PortInfo, SampleInfoField, Waveform, node_reference_markdown,
+};
 pub use runtime::PreparedEffect;
 pub use suhina_device_api::ProcessContext;
 
 pub const EXTENSION: &str = "sd";
 pub const FORMAT: &str = "suhina-device";
-pub const VERSION: u32 = 4;
+/// The newest file version this crate reads. A file is written as version 4 unless it needs
+/// version 5 (an expanded panel), so an older Suhina still opens it.
+pub const VERSION: u32 = 5;
+/// The version a file without an expanded panel is written as.
+const COMPACT_VERSION: u32 = 4;
 pub const MAX_FILE_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_NODES: usize = 128;
 pub const MAX_CONNECTIONS: usize = MAX_NODES * 5;
@@ -53,7 +62,10 @@ pub struct DeviceGraph {
     pub parameters: Vec<Parameter>,
     pub nodes: Vec<Node>,
     pub connections: Vec<Connection>,
+    /// The compact panel, drawn in the device chain.
     pub ui: Option<ui::DeviceUi>,
+    /// An optional larger panel, opened from a button in the device's header (version 5).
+    pub expanded: Option<ui::DeviceUi>,
     pub editor: Option<editor::Editor>,
 }
 
@@ -196,9 +208,17 @@ fn default_smoothing_ms() -> f64 {
     20.0
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ParameterBinding {
+    pub parameter: String,
+    pub target: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Node {
     pub id: String,
+    pub bindings: Vec<ParameterBinding>,
     pub kind: NodeKind,
     pub visible: bool,
 }
@@ -243,6 +263,7 @@ impl DeviceGraph {
             nodes: Vec::new(),
             connections: Vec::new(),
             ui: None,
+            expanded: None,
             editor: None,
         }
     }
@@ -270,96 +291,8 @@ impl DeviceGraph {
             return Err(DeviceSdkError(format!("a graph may have at most {MAX_PARAMETERS} parameters")));
         }
 
-        let mut param_ids = std::collections::HashSet::new();
-        for parameter in &self.parameters {
-            if parameter.id.is_empty()
-                || parameter.id.len() > MAX_TEXT_BYTES
-                || parameter.name.is_empty()
-                || parameter.name.len() > MAX_TEXT_BYTES
-                || !param_ids.insert(parameter.id.as_str())
-            {
-                return Err(DeviceSdkError(
-                    "parameter ids and names must be unique, non-empty, and at most 128 bytes".into(),
-                ));
-            }
-            if !parameter.min.is_finite()
-                || !parameter.max.is_finite()
-                || !parameter.default.is_finite()
-                || parameter.min < -(f32::MAX as f64)
-                || parameter.max > f32::MAX as f64
-                || parameter.min > parameter.max
-                || !(parameter.min..=parameter.max).contains(&parameter.default)
-            {
-                return Err(DeviceSdkError(format!("parameter {:?} has an invalid range or default", parameter.id)));
-            }
-            if parameter.unit.len() > MAX_TEXT_BYTES {
-                return Err(DeviceSdkError(format!("parameter {:?}: unit exceeds 128 bytes", parameter.id)));
-            }
-            let ui = &parameter.ui;
-            if let Some(link) = &ui.link {
-                let peer = self.parameters.iter().find(|p| p.id == link.peer);
-                let gate = self.parameters.iter().find(|p| p.id == link.enabled_by);
-                if !peer.is_some_and(|p| {
-                    p.id != parameter.id
-                        && p.min == parameter.min
-                        && p.max == parameter.max
-                        && p.control == parameter.control
-                        && p.unit == parameter.unit
-                }) || !gate.is_some_and(|p| p.control == ParameterControl::Toggle && p.min == 0.0 && p.max == 1.0)
-                {
-                    return Err(DeviceSdkError("parameter link needs a matching peer and a 0..1 toggle".into()));
-                }
-            }
-            let minimum_height =
-                ui.font_size + 16.0 + if ui.label_position == LabelPosition::Top { ui.font_size + 4.0 } else { 0.0 };
-            if ui.size.is_some_and(|[w, h]| {
-                !w.is_finite()
-                    || !h.is_finite()
-                    || !(24.0..=4096.0).contains(&w)
-                    || !(minimum_height..=4096.0).contains(&h)
-            }) || ui.position.is_some_and(|p| p.iter().any(|v| !v.is_finite() || !(0.0..=8192.0).contains(v)))
-                || !ui.font_size.is_finite()
-                || !(8.0..=48.0).contains(&ui.font_size)
-                || !ui.corner_radius.is_finite()
-                || !(0.0..=128.0).contains(&ui.corner_radius)
-            {
-                return Err(DeviceSdkError(format!("parameter {:?}: invalid UI geometry or font", parameter.id)));
-            }
-            if !parameter.smoothing_ms.is_finite()
-                || !(0.0..=1000.0).contains(&parameter.smoothing_ms)
-                || !parameter.ui.step.is_finite()
-                || parameter.ui.step < 0.0
-                || parameter.ui.decimals > 8
-                || parameter.ui.tooltip.len() > 1024
-                || parameter.ui.group.len() > 128
-                || parameter.ui.options.len() > 128
-                || parameter.ui.options.iter().any(|s| s.is_empty() || s.len() > 128)
-            {
-                return Err(DeviceSdkError(format!("parameter {:?}: invalid UI or smoothing settings", parameter.id)));
-            }
-            if matches!(parameter.control, ParameterControl::Choice | ParameterControl::Radio)
-                && (parameter.ui.options.is_empty()
-                    || parameter.min != 0.0
-                    || parameter.max != (parameter.ui.options.len() - 1) as f64)
-            {
-                return Err(DeviceSdkError(format!(
-                    "parameter {:?}: choices require range 0..options.len()-1",
-                    parameter.id
-                )));
-            }
-            let discrete = parameter.control.is_stepped();
-            if (discrete && [parameter.min, parameter.max, parameter.default].iter().any(|v| v.fract() != 0.0))
-                || (matches!(parameter.control, ParameterControl::Toggle | ParameterControl::Button)
-                    && (parameter.min != 0.0 || parameter.max != 1.0))
-                || (matches!(parameter.control, ParameterControl::LogSlider | ParameterControl::LogKnob)
-                    && parameter.min <= 0.0)
-            {
-                return Err(DeviceSdkError(format!(
-                    "parameter {:?}: range/default incompatible with control",
-                    parameter.id
-                )));
-            }
-        }
+        validate_parameters(&self.parameters)?;
+        let param_ids: std::collections::HashSet<&str> = self.parameters.iter().map(|p| p.id.as_str()).collect();
 
         let mut migration_versions = std::collections::HashSet::new();
         for migration in &self.migrations {
@@ -395,7 +328,7 @@ impl DeviceGraph {
             ));
         }
 
-        if let Some(ui) = &self.ui {
+        for ui in [&self.ui, &self.expanded].into_iter().flatten() {
             ui.validate(&self.parameters)?;
         }
         self.validate_nodes()?;
@@ -496,6 +429,9 @@ impl DeviceGraph {
         }
         if file.version < 3 && file.editor.is_some() {
             return Err(DeviceSdkError("editor metadata requires .sd version 3".into()));
+        }
+        if file.version < 5 && file.device.expanded.is_some() {
+            return Err(DeviceSdkError("an expanded panel requires .sd version 5".into()));
         }
         if file.version == 1
             && (file
@@ -627,17 +563,27 @@ impl Parameter {
 }
 
 impl Node {
+    pub fn bind(mut self, parameter: impl Into<String>, target: impl Into<String>) -> Self {
+        self.bindings.push(ParameterBinding { parameter: parameter.into(), target: target.into() });
+        self
+    }
+
     pub fn new(id: impl Into<String>, kind: NodeKind) -> Self {
-        Self { id: id.into(), kind, visible: true }
+        Self { id: id.into(), kind, visible: true, bindings: Vec::new() }
     }
     pub fn audio_input(id: impl Into<String>) -> Self {
-        Self { id: id.into(), kind: NodeKind::AudioInput, visible: true }
+        Self { id: id.into(), kind: NodeKind::AudioInput, visible: true, bindings: Vec::new() }
     }
     pub fn gain(id: impl Into<String>, parameter: impl Into<String>) -> Self {
-        Self { id: id.into(), kind: NodeKind::Gain { parameter: parameter.into() }, visible: true }
+        Self {
+            id: id.into(),
+            kind: NodeKind::Gain { parameter: parameter.into() },
+            visible: true,
+            bindings: Vec::new(),
+        }
     }
     pub fn audio_output(id: impl Into<String>) -> Self {
-        Self { id: id.into(), kind: NodeKind::AudioOutput, visible: true }
+        Self { id: id.into(), kind: NodeKind::AudioOutput, visible: true, bindings: Vec::new() }
     }
 }
 
@@ -670,6 +616,8 @@ struct FileV1 {
 struct DeviceV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ui: Option<ui::DeviceUi>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    expanded: Option<ui::DeviceUi>,
     id: String,
     #[serde(default = "initial_device_version")]
     version: u32,
@@ -704,6 +652,8 @@ struct ParameterV1 {
 #[derive(Serialize, Deserialize)]
 struct NodeV1 {
     id: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    bindings: Vec<ParameterBinding>,
     #[serde(default = "default_visible", skip_serializing_if = "is_visible")]
     visible: bool,
     #[serde(flatten)]
@@ -723,13 +673,19 @@ impl From<&DeviceGraph> for FileV1 {
         let nodes = graph
             .nodes
             .iter()
-            .map(|node| NodeV1 { id: node.id.clone(), visible: node.visible, kind: node.kind.clone() })
+            .map(|node| NodeV1 {
+                id: node.id.clone(),
+                visible: node.visible,
+                kind: node.kind.clone(),
+                bindings: node.bindings.clone(),
+            })
             .collect();
         Self {
             format: FORMAT.into(),
-            version: VERSION,
+            version: if graph.expanded.is_some() { VERSION } else { COMPACT_VERSION },
             device: DeviceV1 {
                 ui: graph.ui.clone(),
+                expanded: graph.expanded.clone(),
                 id: graph.id.clone(),
                 version: graph.device_version,
                 migrations: graph.migrations.clone(),
@@ -762,6 +718,7 @@ impl From<FileV1> for DeviceGraph {
     fn from(file: FileV1) -> Self {
         Self {
             ui: file.device.ui,
+            expanded: file.device.expanded,
             editor: file.editor,
             id: file.device.id,
             device_version: file.device.version,
@@ -787,11 +744,104 @@ impl From<FileV1> for DeviceGraph {
             nodes: file
                 .nodes
                 .into_iter()
-                .map(|node| Node { id: node.id, visible: node.visible, kind: node.kind })
+                .map(|node| Node { id: node.id, visible: node.visible, kind: node.kind, bindings: node.bindings })
                 .collect(),
             connections: file.connections,
         }
     }
+}
+
+/// Checks a parameter list as a `.sd` file declares it: ids, ranges, controls and their look.
+/// A built-in device's panel runs its parameters through it too ([`builtin`]).
+pub(crate) fn validate_parameters(parameters: &[Parameter]) -> Result<(), DeviceSdkError> {
+    let mut param_ids = std::collections::HashSet::new();
+    for parameter in parameters {
+        if parameter.id.is_empty()
+            || parameter.id.len() > MAX_TEXT_BYTES
+            || parameter.name.is_empty()
+            || parameter.name.len() > MAX_TEXT_BYTES
+            || !param_ids.insert(parameter.id.as_str())
+        {
+            return Err(DeviceSdkError(
+                "parameter ids and names must be unique, non-empty, and at most 128 bytes".into(),
+            ));
+        }
+        if !parameter.min.is_finite()
+            || !parameter.max.is_finite()
+            || !parameter.default.is_finite()
+            || parameter.min < -(f32::MAX as f64)
+            || parameter.max > f32::MAX as f64
+            || parameter.min > parameter.max
+            || !(parameter.min..=parameter.max).contains(&parameter.default)
+        {
+            return Err(DeviceSdkError(format!("parameter {:?} has an invalid range or default", parameter.id)));
+        }
+        if parameter.unit.len() > MAX_TEXT_BYTES {
+            return Err(DeviceSdkError(format!("parameter {:?}: unit exceeds 128 bytes", parameter.id)));
+        }
+        let ui = &parameter.ui;
+        if let Some(link) = &ui.link {
+            let peer = parameters.iter().find(|p| p.id == link.peer);
+            let gate = parameters.iter().find(|p| p.id == link.enabled_by);
+            if !peer.is_some_and(|p| {
+                p.id != parameter.id
+                    && p.min == parameter.min
+                    && p.max == parameter.max
+                    && p.control == parameter.control
+                    && p.unit == parameter.unit
+            }) || !gate.is_some_and(|p| p.control == ParameterControl::Toggle && p.min == 0.0 && p.max == 1.0)
+            {
+                return Err(DeviceSdkError("parameter link needs a matching peer and a 0..1 toggle".into()));
+            }
+        }
+        let minimum_height =
+            ui.font_size + 16.0 + if ui.label_position == LabelPosition::Top { ui.font_size + 4.0 } else { 0.0 };
+        if ui.size.is_some_and(|[w, h]| {
+            !w.is_finite() || !h.is_finite() || !(24.0..=4096.0).contains(&w) || !(minimum_height..=4096.0).contains(&h)
+        }) || ui.position.is_some_and(|p| p.iter().any(|v| !v.is_finite() || !(0.0..=8192.0).contains(v)))
+            || !ui.font_size.is_finite()
+            || !(8.0..=48.0).contains(&ui.font_size)
+            || !ui.corner_radius.is_finite()
+            || !(0.0..=128.0).contains(&ui.corner_radius)
+        {
+            return Err(DeviceSdkError(format!("parameter {:?}: invalid UI geometry or font", parameter.id)));
+        }
+        if !parameter.smoothing_ms.is_finite()
+            || !(0.0..=1000.0).contains(&parameter.smoothing_ms)
+            || !parameter.ui.step.is_finite()
+            || parameter.ui.step < 0.0
+            || parameter.ui.decimals > 8
+            || parameter.ui.tooltip.len() > 1024
+            || parameter.ui.group.len() > 128
+            || parameter.ui.options.len() > 128
+            || parameter.ui.options.iter().any(|s| s.is_empty() || s.len() > 128)
+        {
+            return Err(DeviceSdkError(format!("parameter {:?}: invalid UI or smoothing settings", parameter.id)));
+        }
+        if matches!(parameter.control, ParameterControl::Choice | ParameterControl::Radio)
+            && (parameter.ui.options.is_empty()
+                || parameter.min != 0.0
+                || parameter.max != (parameter.ui.options.len() - 1) as f64)
+        {
+            return Err(DeviceSdkError(format!(
+                "parameter {:?}: choices require range 0..options.len()-1",
+                parameter.id
+            )));
+        }
+        let discrete = parameter.control.is_stepped();
+        if (discrete && [parameter.min, parameter.max, parameter.default].iter().any(|v| v.fract() != 0.0))
+            || (matches!(parameter.control, ParameterControl::Toggle | ParameterControl::Button)
+                && (parameter.min != 0.0 || parameter.max != 1.0))
+            || (matches!(parameter.control, ParameterControl::LogSlider | ParameterControl::LogKnob)
+                && parameter.min <= 0.0)
+        {
+            return Err(DeviceSdkError(format!(
+                "parameter {:?}: range/default incompatible with control",
+                parameter.id
+            )));
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -829,9 +879,26 @@ mod tests {
         assert_eq!(old.device_version, 1);
         let encoded = old.to_sd().expect("legacy graph upgrades to current format");
         let json: serde_json::Value = serde_json::from_str(&encoded).expect("valid JSON");
-        assert_eq!(json["version"], VERSION);
+        assert_eq!(json["version"], 4, "a file without an expanded panel stays version 4");
         assert_eq!(json["device"]["version"], 1);
         assert_eq!(DeviceGraph::from_sd(&encoded), Ok(old));
+    }
+
+    #[test]
+    fn an_expanded_panel_round_trips_as_version_5_and_older_versions_refuse_it() {
+        let mut graph = gain_graph();
+        graph.ui = Some(ui::DeviceUi { size: [260., 168.], ..ui::DeviceUi::default() });
+        graph.expanded = Some(ui::DeviceUi { size: [720., 400.], ..ui::DeviceUi::default() });
+        let encoded = graph.to_sd().unwrap();
+        let json: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(json["version"], 5);
+        assert_eq!(json["device"]["expanded"]["size"], serde_json::json!([720.0, 400.0]));
+        assert_eq!(DeviceGraph::from_sd(&encoded), Ok(graph.clone()));
+        assert!(DeviceGraph::from_sd(&encoded.replace("\"version\": 5", "\"version\": 4")).is_err());
+        // The expanded panel is checked against the parameters like the compact one.
+        let mut bad = graph;
+        bad.expanded = Some(ui::DeviceUi { hidden_parameters: vec!["missing".into()], ..ui::DeviceUi::default() });
+        assert!(bad.validate().is_err());
     }
 
     #[test]

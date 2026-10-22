@@ -3,11 +3,11 @@ description: Suhina's sample and granular instrument, sample loading and SDK pan
 read_when: sampler, granular instrument, sample recording, sample drop
 type: spec
 status: draft
-last_verified: 2026-10-19
+last_verified: 2026-10-21
 covers:
   - devices/sampler/**
   - crates/device-sdk/src/sampler.rs
-  - crates/device-sdk/src/sampler_warp.rs
+  - crates/device-sdk/src/nodes/stretch.rs
   - crates/ui/src/detail/device_canvas.rs
   - crates/ui/src/detail/detail_view.rs
 ---
@@ -49,13 +49,13 @@ Reverse and Retrigger). Section surfaces, headings and borders use the active
 host theme and do not intercept pointer or keyboard input. The Grain row retains
 position, scan, size, density, jitter, spread and Freeze without a cloud preview.
 
-Definition revision 12 preserves existing sound parameters and migrations from
-revisions 1 through 11. New LFO destinations and source fades default to zero;
-LFO shape defaults to Sine. `panel_view` persists Controls (0), Envelopes (1) or LFO (2); new devices
-default to Controls. Legacy `grain_env` and `envelope_tab` remain readable but no
-longer select an editor. Existing embedded definitions update explicitly through
-device.updateSd. Native wrappers without the appended page selector still prepare
-with its default; audio parameter order and ranges remain strictly validated.
+The Sampler is a built-in device: a project stores it by its id with its parameter values by id,
+and its panel is its layout, loaded by id from the running Suhina
+([ADR 0021](../decisions/0021-device-graph-files.md) › Amendment: device panels). A parameter a
+project does not store takes its default, so the LFO destinations and source fades added later
+start at zero and LFO shape at Sine. `panel_view` persists Controls (0), Envelopes (1) or LFO (2);
+new devices default to Controls. Legacy `grain_env` and `envelope_tab` remain readable but no
+longer select an editor.
 Numeric values drag vertically, Shift gives precision, and double-click resets.
 All edits use the shared device parameter command, persistence and undo.
 
@@ -276,8 +276,8 @@ the voice at its current source position. Changing Warp or its mode keeps active
 Switches between Repitch/direct reading and the stretcher use a 5 ms transition
 from the voice's last output. The five modes sharing Signalsmith keep the existing
 stretcher state unchanged when switched, with sample-identical output. Parameters persist and undo through the
-existing device parameter commands. Revision 8 wrappers remain playable with Warp
-off; updating their definition adds the new controls.
+existing device parameter commands. A project saved before Warp existed plays with Warp off, its
+default.
 
 LFO rhythmic modes use the same rate conversion as the SDK LfoRate node. Beat,
 Triplet and Dotted select a note divisor from 1 to 64; 16th selects a count of
@@ -305,8 +305,8 @@ voice budget changes; it does not share the master gain ramp.
 An instrument graph may contain `{"kind":"sampler"}` sources. Each owns the
 shared polyphonic Sampler kernel and exposes `out`, `left` and `right` audio
 outputs, so filtering, gain, mixing and feedback can use ordinary SDK nodes.
-Every source receives the graph's timestamped note events. Sources have no
-signal inputs in this stage. Effect and MIDI-effect graphs reject them.
+Sources receive routed timestamped note events, or global events when unconnected.
+Signal inputs expose pitch/cutoff/pan/position modulation. Effect and MIDI-effect graphs reject them.
 
 Compile with `compile_instrument_at`, then bind PCM and configure each source
 through `PreparedEffect::sampler_mut(node_id)` and the existing `Device` API.
@@ -315,6 +315,6 @@ Missing ids return `None`. Unbound sources are silent; reset clears voices while
 retaining PCM and controls. Processing uses fixed stack stereo buffers and
 preallocated voices, and passes the advancing transport beat to each source.
 
-This stage does not migrate the stock Sampler definition. Typed resource/event
-edges, graph-controlled sample parameters, smaller playback/envelope/granular
-nodes and authored sample bindings remain subsequent stages of issue #733.
+The stock Sampler definition retains its implementation. Prepared SampleAsset resources,
+private voice graphs and smaller playback/envelope/granular nodes are specified in the
+[SDK node reference](sdk-nodes.md); they do not imply an equivalent expansion of the stock device.

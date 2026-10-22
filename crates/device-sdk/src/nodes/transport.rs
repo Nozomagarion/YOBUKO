@@ -95,3 +95,30 @@ pub(crate) fn prepare(kind: &super::NodeKind) -> Option<Box<dyn crate::native_no
         _ => None,
     }
 }
+
+pub(crate) const SAMPLE_RATE: NodeInfo = NodeInfo {
+    kind: "sample_rate",
+    name: "SampleRate",
+    rust_variant: "SampleRate",
+    inputs: &[],
+    outputs: &["out", "left", "right"],
+    description: "Current graph processing sample rate in Hz.",
+    configuration: "none",
+    example: r#"{"kind":"sample_rate"}"#,
+};
+struct Rate(f32);
+pub(crate) fn prepare_rate(kind: &super::NodeKind, rate: f64) -> Option<Box<dyn crate::native_node::NativeNode>> {
+    matches!(kind, super::NodeKind::SampleRate)
+        .then(|| Box::new(Rate(rate as f32)) as Box<dyn crate::native_node::NativeNode>)
+}
+impl crate::native_node::NativeNode for Rate {
+    fn prepare_block(&mut self, _: &crate::ProcessContext) {}
+    fn process(&mut self, _: [&[f32]; 5], output: &mut [f32]) {
+        output.fill(self.0);
+    }
+    fn event(&mut self, _: suhina_device_api::NoteEvent) {}
+    fn reset(&mut self) {}
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}

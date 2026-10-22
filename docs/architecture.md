@@ -3,7 +3,7 @@ description: How the crates, threads and commands fit together, from a file to t
 read_when: adding a crate or feature, where does code go, threads, audio thread, data flow, layers, player, controller
 type: system
 status: current
-last_verified: 2026-10-19
+last_verified: 2026-10-22
 covers:
   - crates/session/src/record_writer.rs
   - Cargo.toml
@@ -109,10 +109,9 @@ reads the program's RAM for the control bar and the plug-in hosts' reports their
 | `suhina-cli` | The command line: render, play, mcp (with `--audio`, the MIDI inputs too). | all of the above |
 | `suhina` | The desktop app: opens a project (argument, a dropped `.suhina` or `.als`, or the project dialog), makes new ones (blank or from a template), keeps the recent projects, decodes its audio into the session, plays it stopped through `output` and runs `ui` in an eframe window; starts the browser's library (`browser.json` and its indexes in the app-data folder) and records opened projects among its recent ones; folders dropped on the window join the browser, and samples and MIDI files dropped on it land like a drag from the browser; shows the system's file and folder dialogs (`rfd`) that the window's **Browse…** buttons ask for and hands back the path chosen, and forgets a recent project the start panel takes off the list; loads and saves the settings, keymap and theme files (a theme file saved elsewhere is read again; theme backups and the theme template are zips in `exports/`, and theme files or zips dropped on the window are added); opens the MIDI inputs the settings leave on. Starting, it reads the settings, keymap and themes, opens the window and shows the splash ([components](design/components.md#splash)); only once the splash is on screen does it start the library and the sample map and open the project asked for, so nothing slow runs before the window. Once the window is up it checks for updates (Settings › General › Updates), and after *Restart now* starts the updated build as it closes. | engine, session, media, library, plugins, output, midi, ui, update |
 | `dsp` | Signal-processing blocks for devices: dB conversions, parameter smoothing, biquad filters, a DC blocker, Linkwitz-Riley crossovers (24 and 48 dB/octave), LFO waveforms (with a smoothly wandering random one), waveshapers, a 2× oversampler, first-order filters and shelves, delay lines with linear and cubic interpolation and a Schroeder allpass, a trim delay that moves smoothly while running, a windowed-sinc polyphase resampler and IR convolution (uniform-partitioned, `fft-convolver`) with its `Ir`. Real-time safe, panic-free on any input. | nothing |
-| `device-bundle` | Generates and validates stock `.sd` files, embeds them for startup and browser discovery, and exports them beside the app. See [stock bundles](spec/stock-device-bundle.md). | model, device-sdk; build: device-registry |
-| `device-registry` | Every built-in effect, instrument or MIDI effect by its stable id: makes the device a project's `DeviceKind::Builtin` names, and lists them. | device-api, devices/* |
+| `device-registry` | Every built-in effect, instrument or MIDI effect by its stable id: makes the device a project's `DeviceKind::Builtin` names, lists them, and gives its panel (`panel`: its parameters from `DeviceInfo` and its layout, or the generated list; ADR 0021 › Amendment: device panels). | device-api, device-sdk, devices/* |
 | `device-api` | The `Device` trait, `DeviceInfo` (an effect, an instrument or a MIDI effect) and `ParamInfo` (plain values in their unit, conversion to knob travel), `NoteEvent` for instruments and MIDI effects (with the clip's `MusicalScale`), and the contract tests every device runs (`conformance::check`, with note checks for instruments and event checks for MIDI effects). | nothing |
-| `device-sdk` | Builds, validates, serializes and prepares data-only `.sd` audio-effect, MIDI-effect and instrument graphs; stereo DSP graphs support branching, modulation and delayed feedback, MIDI effects preserve event frame offsets, and monophonic instruments turn MIDI controls into audio, with a shared node catalog, generated parameter UI and embedded custom canvases. Audio graphs execute acyclic regions node by node over bounded 64-frame buffers allocated at preparation. Feedback components preserve frame-by-frame evaluation and delayed commits; graphs whose only acyclic nodes are input and output retain the original frame schedule to avoid unnecessary buffer copies. Parameter timelines and MIDI span boundaries preserve sample timing. It contains no executable Rust in `.sd` files. | dsp, device-api, serde, serde_json, base64, image (PNG/JPEG) |
+| `device-sdk` | Builds, validates, serializes and prepares data-only `.sd` audio-effect, MIDI-effect and instrument graphs; stereo DSP graphs support branching, modulation and delayed feedback, MIDI effects preserve event frame offsets, and private polyphonic voice/grain graphs turn routed MIDI controls into audio, with a shared node catalog, generated parameter UI and embedded custom canvases. Audio graphs execute acyclic regions node by node over bounded 64-frame buffers allocated at preparation. Feedback components preserve frame-by-frame evaluation and delayed commits; graphs whose only acyclic nodes are input and output retain the original frame schedule to avoid unnecessary buffer copies. Parameter timelines and MIDI span boundaries preserve sample timing. It contains no executable Rust in `.sd` files. | dsp, stretch, device-api, serde, serde_json, base64, image (PNG/JPEG) |
 | `ipc` | Audio blocks between the engine and a plug-in host process ([ADR 0006](decisions/0006-plug-in-hosting.md)): a shared-memory region with each block's notes and controllers (`Event`, up to 1024 a block) and the instances of the host process that run the block after the link's own (up to 63, `Link::send_joint`), one block in flight, a doorbell per direction (a futex on Linux, events with a high-resolution timer on Windows, yielding elsewhere for now) and a deadline; a crashed or hung host costs missed blocks, never a stall. `AudioSource`: a file's decoded samples in a region of their own, written once and mapped read only by the host, for an ARA plug-in to read ([ADR 0028](decisions/0028-ara-hosting.md)). One of the two crates allowed `unsafe`. Linked into the engine's process through `plugins`. | nothing |
 | `realtime` | Real-time priority for the threads that make sound, the render thread and the plug-in hosts' audio threads (`RealTime::join`): MMCSS "Pro Audio" on Windows; on Linux `SCHED_FIFO` where the user has real-time rights, otherwise rtkit over the system D-Bus (`zbus`, pure Rust, so no libdbus), otherwise the highest normal priority; the highest priority elsewhere. Says what it got, and why real-time scheduling was refused; never fails. Under rtkit, whose grant ends the process when a thread runs `RLIMIT_RTTIME` without waiting, it paces a rendering thread (`waited`, `worked`): a short rest before the limit, and normal priority after a block that takes a quarter of it. No `unsafe`. | nothing |
 | `plugins` | The engine's side of plug-in hosting: `Plugin::start` loads an instance into a `suhina-plugin-host` process (the one its group shares, `Launch::group`, or one of its own) and returns a control half (health, ping, state, parameters, restart) and an audio half (`PluginAudio::process`, real-time safe). Control messages are JSON lines over a local socket (`protocol`; the host also reports its process's resident memory once a second, unasked, and `host_memory` reads the running hosts' reports for the control bar). A host that exits is *crashed*; one that leaves 32 blocks in a row unanswered is *hung*; `restart` brings it back with its last saved state. `scan` and `scan_pool` find installed CLAP and VST3 plug-ins (standard folders, `CLAP_PATH`, folders the user adds), read VST3 bundles' `moduleinfo.json` without loading them and load the rest in a few long-lived `--scan-worker` processes with per-file timeouts, into a catalog that can be saved. `PluginAudio::process_with_events` sends an instrument its notes. `offline::render` runs audio (and `render_with_events` notes) through a plug-in without a deadline (`suhina-cli plugin run`, `plugin run-device`). The session starts a project's plug-ins with it and hands their audio halves to the engine. | ipc |
@@ -277,6 +276,13 @@ The main thread and the audio thread share nothing mutable. They talk in two dir
 
 ## Commands
 
+Export preparation is bounded work across window frames. Attached MCP jobs can remain pending
+between frames; a pending job is advanced only once per frame, and cancelled requests release
+their preparation state. `project.export` then renders and encodes on a worker without holding
+`Projects` or a session lock. The desktop uses the same preparation and render functions. The
+host supplies MCP write-folder preferences to `Projects`; no command changes them, and the
+automation layer applies its existing canonical-path validation to every allowed write root.
+
 Every user-visible action is a command in `session` with an id, typed parameters and a kind
 ([ADR 0002](decisions/0002-commands.md)). The CLI, the MCP server and the UI all call
 `Session::execute(id, params)`, or `Projects::execute` when several projects are open (it runs
@@ -333,6 +339,15 @@ latency compensation, and so does a latency it reports while it runs (the host t
 unasked). A plug-in that is not installed is *missing*: it has no slot and its
 state stays in the project untouched. Offline renders start the plug-ins first and run the same
 renderer without a deadline.
+
+Before quitting, the window advances `Session::poll_plugin_edits` each frame for every open
+project together. Two background state reads cover processing and MIDI changes without an
+editor or dirty notification. Each project's check shares one second across both rounds;
+the window keeps handling events while hosts work, then uses the last known states on timeout.
+Periodic background reads refresh closed-editor plug-ins too, for backups; an open ARA editor's
+expensive archive waits until the editor closes. Confirmed state changes have a revision of
+their own for deciding when another backup is due, and the last completed state stays available
+while a control worker is busy.
 
 ## Where new code goes
 
@@ -392,3 +407,16 @@ Registered zero-latency audio effects used as `native_effect` graph kernels reso
 the session validates it before insertion. The SDK interpreter knows only `NativeNode`.
 Prepared sample PCM and checked read regions are independent SDK resource data; file loading,
 decoding, binding and retirement remain host responsibilities outside the render thread.
+
+
+### Prepared sample and component nodes
+
+SDK implementations are grouped by type under `device-sdk/src/nodes/`; the scheduler owns only
+generic NativeNode input/output, event, parameter and completion interfaces. Sample resources are
+immutable Arc-backed PCM supplied by the host off-thread. Resource keys persist in .sd and resolve
+through PreparedSamples; the SDK does no file decoding. Missing keys fail preparation. Replacing a
+binding prepares a new graph; existing voices retain their old Arc until graph retirement off-thread.
+VoiceGroup, GrainPool and versioned Component definitions contain private precompiled graphs, bounded
+by nesting and aggregate state budgets. Their states are never constructed or freed during rendering.
+Shared envelope stages, RNG, grain windows/scheduling, source analysis and stretch processing serve
+both the existing sampler and graph nodes. Existing Delay and Reverb implementations are unchanged.

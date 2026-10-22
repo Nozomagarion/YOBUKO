@@ -74,6 +74,11 @@ fn every_catalog_node_round_trips_resets_and_ignores_host_block_size() {
         .filter(|info| {
             !matches!(info.kind, "audio_input" | "audio_output" | "midi_input" | "midi_output" | "native_device")
         })
+        // Resource nodes need typed asset/region wires; resource_nodes.rs covers them together.
+        .filter(|info| {
+            let kind = serde_json::from_str::<K>(info.example).unwrap();
+            !kind.requires_samples() && !kind.is_instrument_event_node()
+        })
         .map(|info| serde_json::from_str::<K>(info.example).unwrap())
         .collect::<Vec<_>>();
     kinds.extend([
@@ -222,10 +227,7 @@ fn version_one_gain_example_remains_readable_and_new_nodes_require_version_two()
     let mut out = [1.0, -1.0];
     g.compile().unwrap().process(&mut out);
     assert_eq!(out, [1.0, -1.0]);
-    let text = graph(K::Tanh)
-        .to_sd()
-        .unwrap()
-        .replace(&format!("\"version\": {}", suhina_device_sdk::VERSION), "\"version\": 1");
+    let text = graph(K::Tanh).to_sd().unwrap().replace("\"version\": 4", "\"version\": 1");
     assert!(DeviceGraph::from_sd(&text).is_err());
     assert!(g.compile_at(f64::NAN).is_err());
     assert!(g.compile_at(1e9).is_err());
@@ -921,4 +923,17 @@ impl suhina_device_sdk::native_node::NativeNode for CatalogNative {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
+}
+
+/// The fixture a pull request's check steps add to a track: version 5 with an expanded panel
+/// whose control turns the Power toggle.
+#[test]
+fn the_expanded_panel_fixture_reads_and_round_trips() {
+    let text = include_str!("fixtures/expanded-panel.sd");
+    let g = DeviceGraph::from_sd(text).unwrap();
+    let expanded = g.expanded.as_ref().unwrap();
+    assert_eq!(expanded.controls[0].name, "Big power switch");
+    assert!(g.ui.is_none());
+    // A Windows checkout may have turned the fixture's line ends into CRLF; `to_sd` writes LF.
+    assert_eq!(g.to_sd().unwrap(), text.replace("\r\n", "\n"));
 }
