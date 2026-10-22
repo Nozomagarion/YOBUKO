@@ -352,7 +352,10 @@ Interactive drawing roles take hover/active/disabled/focus from the existing nat
 response. SDK bounds, parameter normalization, keyboard gestures, accessible names and
 `device.setParam` dispatch are unchanged.
 
-Typed widget colours are resolved against the scoped palette at render time. Authored
+Typed widget colours are resolved against the scoped palette at render time. SVG
+button backgrounds and corner radii compose with authored CSS: body artwork is
+painted once, followed by CSS gradient/shadow layers, then native foreground labels.
+The body uses control/active colours rather than the foreground text colour.
 CSS foreground/font rules reach vector text, and background/radius/effect rules reach
 rectangle surfaces. Without CSS overrides, authored vector colours stay literal.
 The theme's SVG `knob.body` / `knob.pointer` and `button` roles also style typed SDK

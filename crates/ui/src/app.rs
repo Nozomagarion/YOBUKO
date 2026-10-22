@@ -6644,20 +6644,25 @@ impl App {
         };
 
         // Left: the browser's show/hide button, tempo, time signature, launch quantisation.
+        let mut native_styles = themed_toolbar::NativeStyles::default();
         let mut x = bar.left() + PAD;
         let browser_rect = row(x, theme::ROW);
         x = browser_rect.right() + 4.0;
-        let browser_rect = themed_toolbar::place(ui, "browser", browser_rect);
+        let browser_rect = native_styles.place(ui, "browser", browser_rect);
         let label = if self.settings.browser_open { "Hide browser" } else { "Show browser" };
         let response = widgets::button_area(ui, browser_rect, Id::new("browser-toggle"), label);
         let response = match self.keymap.binding_text("view.browser") {
             Some(keys) => response.on_hover_text(format!("{label} ({keys})")),
             None => response.on_hover_text(label),
         };
-        painter.rect_filled(
+        let browser_style = crate::kit::style_class::enter_named_response("button", "browser-toggle", &response);
+        widgets::button_surface(
+            &painter,
             browser_rect,
-            0.0,
+            &response,
+            self.settings.browser_open,
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
+            0.0,
         );
         // A panel with its left part filled while the browser shows.
         let icon = Rect::from_center_size(browser_rect.center(), Vec2::new(14.0, 11.0));
@@ -6672,9 +6677,10 @@ impl App {
         if response.clicked() {
             self.toggle_browser();
         }
+        drop(browser_style);
         let tempo_rect = row(x, 56.0);
         x = tempo_rect.right() + PAD;
-        let tempo_rect = themed_toolbar::place(ui, "tempo", tempo_rect);
+        let tempo_rect = native_styles.place(ui, "tempo", tempo_rect);
         ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("sampler-tempo"), grid.tempo_bpm));
         let tempo_shown = self.tempo_drag.unwrap_or(grid.tempo_bpm);
         let response = widgets::value_area(ui, tempo_rect, Id::new("tempo"), "Tempo", format!("{tempo_shown:.2}"));
@@ -6704,21 +6710,35 @@ impl App {
             if self.session().is_some() { format!("{} / {}", ts.numerator, ts.denominator) } else { String::new() };
         let ts_rect = row(x, 40.0);
         x = ts_rect.right() + PAD;
-        let ts_rect = themed_toolbar::place(ui, "signature", ts_rect);
-        widgets::text_in(&painter, ts_rect, Align2::CENTER_CENTER, &signature, mono.clone(), theme::text_secondary());
-        let small = theme::ui_font(theme::TEXT_SMALL);
+        let ts_rect = native_styles.place(ui, "signature", ts_rect);
+        widgets::text_in(
+            &painter,
+            ts_rect,
+            Align2::CENTER_CENTER,
+            &signature,
+            theme::mono_font(theme::TEXT),
+            theme::text_secondary(),
+        );
         // At narrow widths the captions go, then the count-in and the metronome (the main strip
         // has one too), so nothing runs under the transport in the middle.
         let transport_left = bar.center().x - (28.0 * 3.0 + 2.0 + PAD + 64.0) / 2.0 - PAD;
         let captions = x + 26.0 + 64.0 + PAD + 50.0 + 64.0 + PAD + 28.0 <= transport_left;
         let grid_caption = row(x, if captions { 26.0 } else { 0.0 });
         if captions {
-            let grid_caption = themed_toolbar::place(ui, "grid", grid_caption);
-            widgets::text_in(&painter, grid_caption, Align2::LEFT_CENTER, "Grid", small.clone(), theme::text_hint());
+            let grid_caption = native_styles.place(ui, "grid", grid_caption);
+            widgets::text_in(
+                &painter,
+                grid_caption,
+                Align2::LEFT_CENTER,
+                "Grid",
+                theme::ui_font(theme::TEXT_SMALL),
+                theme::text_hint(),
+            );
         }
         let quant_rect = row(grid_caption.right(), 64.0);
         let quant_base = quant_rect;
-        let quant_rect = themed_toolbar::place(ui, "grid", quant_rect);
+        let quant_rect = native_styles.place(ui, "grid", quant_rect);
+        let mono = theme::mono_font(theme::TEXT);
         // One value for both: when launched clips start, and the Arrangement view's grid.
         let current = self.session().map_or(DEFAULT_QUANTIZATION, |s| quantization_label(s.quantization()));
         let mut chosen = current;
@@ -6748,44 +6768,50 @@ impl App {
         }
         let count_caption = row(quant_base.right() + PAD, if captions { 50.0 } else { 0.0 });
         if captions {
-            let count_caption = themed_toolbar::place(ui, "count-in", count_caption);
-            widgets::text_in(&painter, count_caption, Align2::LEFT_CENTER, "Count-in", small, theme::text_hint());
+            let count_caption = native_styles.place(ui, "count-in", count_caption);
+            widgets::text_in(
+                &painter,
+                count_caption,
+                Align2::LEFT_CENTER,
+                "Count-in",
+                theme::ui_font(theme::TEXT_SMALL),
+                theme::text_hint(),
+            );
         }
         let count_in = row(count_caption.right(), 64.0);
         let metronome = row(count_in.right() + PAD, 28.0);
         if metronome.right() <= transport_left {
-            let count_in = themed_toolbar::place(ui, "count-in", count_in);
-            let metronome = themed_toolbar::place(ui, "metronome", metronome);
+            let count_in = native_styles.place(ui, "count-in", count_in);
             let bars = self.session().map_or(0, |s| s.count_in_bars());
             crate::session::record_controls::count_in_menu(ui, count_in, bars, actions);
+            let metronome = native_styles.place(ui, "metronome", metronome);
             crate::session::record_controls::metronome_button(ui, &painter, metronome, grid.metronome, actions);
         }
 
         // Centre: play, stop, record, position.
         let transport_width = 28.0 * 3.0 + 2.0 + PAD + 64.0;
         let mut x = bar.center().x - transport_width / 2.0;
-        let transport = themed_toolbar::place(ui, "transport", row(x, 86.0));
+        let transport = native_styles.place(ui, "transport", row(x, 86.0));
         let transport_offset = transport.left() - x;
         let position_base = row(x + 86.0 + PAD, 64.0);
         x += transport_offset;
         let play = row(x, 28.0);
         let response = widgets::button_area(ui, play, Id::new("play"), "Play");
+        let play_style = crate::kit::style_class::enter_named_response("button", "play", &response);
         if response.clicked() {
             actions.push(self.play_action(false));
         }
         let running = motion::toward(ui.ctx(), response.id.with("running"), grid.running, motion::VALUE);
         let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        if !crate::kit::skin::paint(
+        widgets::button_surface(
             &painter,
             play,
-            "button",
-            crate::kit::skin::State::response(&response, grid.running),
-            theme::control_background(),
+            &response,
+            grid.running,
+            motion::mix(hover, theme::control_active(), running),
             0.0,
-        ) {
-            painter.rect_filled(play, 0.0, motion::mix(hover, theme::control_active(), running));
-        }
-        let glyph = motion::mix(theme::text_primary(), theme::accent(), running);
+        );
+        let glyph = crate::kit::style_class::foreground(motion::mix(theme::text_primary(), theme::accent(), running));
         let c = play.center();
         if !crate::kit::skin::paint(
             &painter,
@@ -6801,16 +6827,21 @@ impl App {
                 egui::Stroke::NONE,
             ));
         }
+        drop(play_style);
         x = play.right() + 1.0;
         let stop = row(x, 28.0);
         let response = widgets::button_area(ui, stop, Id::new("stop"), "Stop");
+        let stop_style = crate::kit::style_class::enter_named_response("button", "stop", &response);
         if response.clicked() {
             actions.push(self.stop_action());
         }
-        painter.rect_filled(
+        widgets::button_surface(
+            &painter,
             stop,
-            0.0,
+            &response,
+            false,
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
+            0.0,
         );
         if !crate::kit::skin::paint(
             &painter,
@@ -6822,17 +6853,18 @@ impl App {
         ) {
             painter.rect_filled(Rect::from_center_size(stop.center(), Vec2::splat(8.0)), 0.0, theme::text_primary());
         }
+        drop(stop_style);
         let record = row(stop.right() + 1.0, 28.0);
         let recording = self.session().is_some_and(|s| s.records_arrangement());
         crate::session::record_controls::record_button(ui, &painter, record, recording, actions);
-        let position = themed_toolbar::place(ui, "position", position_base);
+        let position = native_styles.place(ui, "position", position_base);
         painter.rect_filled(position, 0.0, theme::window_background());
         widgets::text_in(
             &painter,
             position.shrink2(Vec2::new(PAD, 0.0)),
             Align2::LEFT_CENTER,
             &grid.position(),
-            mono,
+            theme::mono_font(theme::TEXT),
             theme::text_primary(),
         );
 
@@ -6851,12 +6883,13 @@ impl App {
         let pointer = ui.ctx().pointer_latest_pos();
         let mut hovered_switch = None;
         for (view, name) in [(View::Arrangement, "Arrangement"), (View::Session, "Session")] {
+            native_styles.enter("views");
             let color = if self.shown == view { theme::text_primary() } else { theme::text_secondary() };
             let galley = widgets::fitted(&painter, name, theme::ui_font(theme::TEXT), color, 120.0);
             let size = galley.size();
             let rect = Rect::from_min_max(Pos2::new(right - size.x, bar.top()), Pos2::new(right, bar.bottom()));
             right = rect.left() - 12.0;
-            let rect = themed_toolbar::place(ui, "views", rect);
+            let rect = native_styles.place(ui, "views", rect);
             let response = widgets::button_area(ui, rect, Id::new(("view", name)), format!("{name} view"));
             if response.clicked() {
                 self.shown = view;
@@ -6869,14 +6902,14 @@ impl App {
             let pos = Pos2::new(rect.left(), rect.center().y - size.y / 2.0);
             painter.galley(pos, galley, color);
             if self.shown == view {
-                underline_at = Some((pos.x, pos.y + size.y + 1.0, size.x));
+                underline_at = Some((pos.x, pos.y + size.y + 1.0, size.x, theme::text_primary()));
             }
         }
         right += 12.0 - PAD;
         if let Some(milli) = cpu.filter(|_| fits(right, 56.0)) {
             let rect = row(right - 56.0, 56.0);
             right = rect.left() - PAD;
-            let rect = themed_toolbar::place(ui, "performance", rect);
+            let rect = native_styles.place(ui, "performance", rect);
             let percent = f64::from(milli.min(1000)) / 10.0;
             painter.rect_filled(rect, 0.0, theme::window_background());
             let inner = rect.shrink2(Vec2::new(PAD - 2.0, 0.0));
@@ -6914,7 +6947,7 @@ impl App {
         if let Some(bytes) = ram.filter(|_| fits(right, 76.0)) {
             let rect = row(right - 76.0, 76.0);
             right = rect.left() - PAD;
-            let rect = themed_toolbar::place(ui, "performance", rect);
+            let rect = native_styles.place(ui, "performance", rect);
             painter.rect_filled(rect, 0.0, theme::window_background());
             let inner = rect.shrink2(Vec2::new(PAD - 2.0, 0.0));
             widgets::text_in(
@@ -6940,6 +6973,7 @@ impl App {
         }
         // Left of that, the mapping mode's button, lit while the mode is on.
         if !self.projects.is_empty() {
+            native_styles.enter("mapping");
             let on = self.view.launch_keys.mode.on;
             let color = if on { theme::accent() } else { theme::text_secondary() };
             let galley = widgets::fitted(&painter, "Map keys", theme::ui_font(theme::TEXT), color, 80.0);
@@ -6947,7 +6981,7 @@ impl App {
             if fits(right, size.x) {
                 let rect = Rect::from_min_max(Pos2::new(right - size.x, bar.top()), Pos2::new(right, bar.bottom()));
                 right = rect.left() - PAD;
-                let rect = themed_toolbar::place(ui, "mapping", rect);
+                let rect = native_styles.place(ui, "mapping", rect);
                 let response = widgets::button_area(ui, rect, Id::new("map-keys"), "Map keys to slots and scenes");
                 if response.clicked() {
                     self.toggle_mapping_mode();
@@ -6958,6 +6992,7 @@ impl App {
         }
         // Left of that, each agent the person let in (ADR 0028), lit; a click disconnects it.
         for (connection, client) in self.agents.clone() {
+            native_styles.enter("agents");
             let text = format!("Disconnect {client}");
             let galley = widgets::fitted(&painter, &text, theme::ui_font(theme::TEXT), theme::accent(), 200.0);
             let size = galley.size();
@@ -6966,7 +7001,7 @@ impl App {
             }
             let rect = Rect::from_min_max(Pos2::new(right - size.x, bar.top()), Pos2::new(right, bar.bottom()));
             right = rect.left() - PAD;
-            let rect = themed_toolbar::place(ui, "agents", rect);
+            let rect = native_styles.place(ui, "agents", rect);
             let response = widgets::button_area(ui, rect, Id::new(("agent", connection)), text.clone());
             if response.clicked() {
                 self.agent_disconnects.push(connection);
@@ -6975,17 +7010,14 @@ impl App {
             let color = motion::mix(theme::accent(), theme::text_primary(), widgets::hover(ui, &response));
             painter.galley(Pos2::new(rect.left(), rect.center().y - size.y / 2.0), galley, color);
         }
+        drop(native_styles);
         self.hover_switch(ui.ctx(), hovered_switch);
         // The underline slides to the view that was picked.
-        if let Some((x, y, width)) = underline_at {
+        if let Some((x, y, width, color)) = underline_at {
             let ctx = ui.ctx();
             let x = motion::value(ctx, Id::new("view-underline-x"), x, motion::SLIDE);
             let width = motion::value(ctx, Id::new("view-underline-width"), width, motion::SLIDE);
-            painter.rect_filled(
-                Rect::from_min_size(Pos2::new(x, y), Vec2::new(width, 1.0)),
-                0.0,
-                theme::text_primary(),
-            );
+            painter.rect_filled(Rect::from_min_size(Pos2::new(x, y), Vec2::new(width, 1.0)), 0.0, color);
         }
         painter.hline(bar.x_range(), bar.bottom() - 0.5, theme::hairline(theme::border()));
         self.toolbar_edit_overlay(ui, bar);

@@ -44,6 +44,14 @@ replaces them.
 
 ## Global rules
 
+Theme overrides can replace shared button bodies with SVG, then overlay computed
+CSS gradients/shadows before painting the foreground glyph/label. The resolved
+corner radius clips textured SVG button bodies as well as native fallback fills.
+The native centred toolbar and custom layouts share named module scopes; styling
+one module restores the previous palette/font before drawing its sibling. These
+overrides preserve native response ids, commands and layout unless CSS explicitly
+requests layout changes; see [theme skins](../spec/theme-skins.md).
+
 - Radius 0 everywhere. No shadows, gradients or cards.
 - Regions are separated by 1 px gaps that show `border` beneath them.
 - **One frame after an edit.** The window draws a view from the state at the start of the frame, and

@@ -21,6 +21,26 @@ fn rects_id() -> Id {
     Id::new("toolbar-edit-rects")
 }
 
+/// Restores each sibling module before entering the next one; geometry remains native.
+#[derive(Default)]
+pub(super) struct NativeStyles {
+    module: String,
+    scope: Option<crate::kit::style_class::Scope>,
+}
+impl NativeStyles {
+    pub(super) fn enter(&mut self, module: &str) {
+        if self.module != module {
+            self.scope.take();
+            self.module = module.into();
+            self.scope = Some(crate::kit::style_class::enter_named("toolbar-module", module));
+        }
+    }
+    pub(super) fn place(&mut self, ui: &Ui, module: &str, base: Rect) -> Rect {
+        self.enter(module);
+        place(ui, module, base)
+    }
+}
+
 /// A module's offset is relative to its existing responsive anchor, never a new layout.
 pub(super) fn place(ui: &Ui, module: &str, base: Rect) -> Rect {
     let draft = ui.ctx().data(|d| d.get_temp::<EditDraft>(edit_id()));
@@ -376,18 +396,21 @@ impl App {
                 for (index, role, label, on) in [(0, "play", "Play", grid.running), (1, "stop", "Stop", false)] {
                     let at = middle(index as f32 * 29.0, 28.0);
                     let response = widgets::button_area(ui, at, Id::new(role), label);
+                    let _style = crate::kit::style_class::enter_named_response("button", role, &response);
                     if response.clicked() {
                         actions.push(if index == 0 { self.play_action(false) } else { self.stop_action() });
                     }
                     let state = State::response(&response, on);
-                    let ink = if on { theme::accent() } else { theme::text_primary() };
-                    if !skin::paint(&painter, at, "button", state, theme::control_background(), 0.0) {
-                        painter.rect_filled(
-                            at,
-                            0.0,
-                            if on { theme::control_active() } else { theme::control_background() },
-                        );
-                    }
+                    let ink =
+                        crate::kit::style_class::foreground(if on { theme::accent() } else { theme::text_primary() });
+                    widgets::button_surface(
+                        &painter,
+                        at,
+                        &response,
+                        on,
+                        if on { theme::control_active() } else { theme::control_background() },
+                        0.0,
+                    );
                     if !skin::paint(&painter, at, role, state, ink, 0.0) {
                         if index == 0 {
                             widgets::play_glyph(&painter, at.center(), false, ink, 10.0);
@@ -506,6 +529,47 @@ mod tests {
         let theme_id = harness.state().app.settings.theme.clone();
         harness.ctx.data_mut(|d| d.insert_temp(edit_id(), EditDraft { theme_id, original: skin.clone(), skin }));
         harness.run();
+    }
+
+    #[test]
+    fn native_toolbar_css_styles_modules_and_buttons_without_reflow_or_sibling_leaks() {
+        let mut harness = native_bar();
+        let play = harness.get_by_label("Play").rect();
+        let tempo = harness.get_by_label("Tempo").rect();
+        harness.state_mut().app.save_toolbar_skin(skin::Skin {
+            css:Some(std::sync::Arc::from("#tempo {color:rgb(12 34 56);font-size:18px;} #transport > #control-play {color:rgb(120 40 180);background:linear-gradient(90deg,red,blue);border-radius:7px;}")),
+            ..Default::default()
+        });
+        harness.run();
+        assert_eq!(harness.get_by_label("Play").rect(), play);
+        assert_eq!(harness.get_by_label("Tempo").rect(), tempo);
+        let tempo_text = format!("{:.2}", harness.state().grid.tempo_bpm);
+        let position_text = harness.state().grid.position();
+        let text = |label: &str| {
+            harness
+                .output()
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.text() == label => Some(&text.galley.job.sections[0].format),
+                    _ => None,
+                })
+                .unwrap()
+        };
+        assert_eq!(text(&tempo_text).color, egui::Color32::from_rgb(12, 34, 56));
+        assert_eq!(text(&tempo_text).font_id.size, 18.0);
+        assert_eq!(text(&position_text).font_id.size, theme::TEXT, "font must not leak into the next module");
+        assert!(harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Rect(rect) if rect.rect == play && rect.brush.is_some() && rect.corner_radius.nw == 7)));
+        assert!(
+            harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Mesh(mesh) if mesh.calc_bounds() == play && mesh.vertices.len() > 4)),
+            "gradient must remain visible above the inherited SVG body"
+        );
+        harness.get_by_label("Play").click();
+        harness.run();
+        assert!(harness.state().actions.iter().any(|action| action.id == "transport.play"));
+        skin::configure(&skin::Skin::default());
     }
 
     #[test]

@@ -986,10 +986,24 @@ fn paint_control(
             }
         }
         if matches!(control.widget, Some(Widget::Button { .. }))
-            && matches!(draw, Draw::Rect { .. })
-            && crate::kit::skin::paint(painter, bounds, "button", state, ink, 0.0)
+            && let Draw::Rect { radius, .. } = draw
         {
-            continue;
+            let replaced = *body.get_or_insert_with(|| {
+                let fill = crate::kit::style_class::background(if on {
+                    crate::kit::theme::control_active()
+                } else {
+                    crate::kit::theme::control_background()
+                });
+                let radius = crate::kit::style_class::radius(*radius);
+                let painted = crate::kit::skin::button(painter, bounds, state, fill, radius);
+                if painted {
+                    crate::kit::native_css::background_rounded(painter, bounds, radius);
+                }
+                painted
+            });
+            if replaced {
+                continue;
+            }
         }
         paint(painter, std::slice::from_ref(draw), bounds.min, parameters, loaded);
     }
@@ -1429,7 +1443,9 @@ mod tests {
         };
         let skin = crate::kit::skin::Skin {
             assets: [("knob.body".into(), svg("#12AB34")), ("button".into(), svg("#AB1234"))].into(),
-            css: Some(Arc::from(".device-panel .knob { color:rgb(120 40 180); font-size:17px; }")),
+            css: Some(Arc::from(
+                ".device-panel .knob { color:rgb(120 40 180); font-size:17px; } .device-panel .button {background:linear-gradient(90deg,red,blue);border-radius:6px;}",
+            )),
             ..Default::default()
         };
         crate::kit::skin::configure(&skin);
@@ -1458,6 +1474,11 @@ mod tests {
             .collect();
         assert!(colors.contains(&Color32::from_rgb(0x12, 0xAB, 0x34)));
         assert!(colors.contains(&Color32::from_rgb(0xAB, 0x12, 0x34)));
+        let button = Rect::from_min_size(Pos2::new(50.0, 0.0), Vec2::splat(40.0));
+        assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Rect(rect) if rect.rect == button && rect.brush.is_some() && rect.corner_radius.nw == 6)));
+        assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Mesh(mesh) if mesh.calc_bounds() == button && mesh.vertices.len() > 4)));
         assert!(actions.is_empty(), "painting artwork must not edit parameters");
         let label = output
             .shapes

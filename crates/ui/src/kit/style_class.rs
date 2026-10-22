@@ -122,6 +122,15 @@ pub fn enter_named(class: &str, name: &str) -> Scope {
 pub fn enter_response(class: &str, response: &egui::Response) -> Scope {
     enter_inner(class, None, Some(response))
 }
+pub fn enter_named_response(class: &str, name: &str, response: &egui::Response) -> Scope {
+    enter_inner(class, Some(name), Some(response))
+}
+
+/// A shared surface may be called inside a complete control scope or on its own.
+pub fn control(class: &str, response: &egui::Response) -> Option<Scope> {
+    (!STACK.with(|stack| stack.borrow().last().is_some_and(|current| current == class)))
+        .then(|| enter_response(class, response))
+}
 fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response>) -> Scope {
     let native = super::native_css::enter(class, name, response);
     let saved = theme::palette();

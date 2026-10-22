@@ -171,6 +171,14 @@ pub fn leave() {
 }
 
 fn html_id(node: &StyleNode) -> String {
+    if node.class == "button"
+        && let Some(name) = node
+            .name
+            .as_deref()
+            .filter(|name| ["play", "stop", "record", "browser-toggle", "metronome-toggle"].contains(name))
+    {
+        return format!("control-{name}");
+    }
     if (node.class == "workspace" && node.name.as_deref() == Some("workspace"))
         || (node.class == "workspace-panel"
             && node.name.as_deref().is_some_and(|name| ["panel-browser", "panel-main", "panel-detail"].contains(&name)))

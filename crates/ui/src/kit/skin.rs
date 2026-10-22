@@ -437,6 +437,14 @@ struct Textures {
 
 /// Cached static vector artwork. Rotation affects only the final mesh, not the cached image.
 pub fn paint(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color32, angle: f32) -> bool {
+    paint_inner(painter, rect, role, state, ink, angle, 0.0)
+}
+
+pub fn button(painter: &Painter, rect: Rect, state: State, fill: Color32, radius: f32) -> bool {
+    paint_inner(painter, rect, "button", state, fill, 0.0, radius)
+}
+
+fn paint_inner(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color32, angle: f32, radius: f32) -> bool {
     if !rect.is_positive() || !rect.is_finite() {
         return false;
     }
@@ -512,6 +520,14 @@ pub fn paint(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color
     let Some(Some(texture)) = textures.images.get(&key) else {
         return false;
     };
+    if role == "button" {
+        painter.add(
+            egui::epaint::RectShape::filled(rect, super::style_class::radius(radius), Color32::WHITE)
+                .with_texture(texture.id(), Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)))
+                .with_angle(angle),
+        );
+        return true;
+    }
     let mut mesh = egui::Mesh::with_texture(texture.id());
     mesh.add_rect_with_uv(rect, Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::WHITE);
     mesh.rotate(egui::emath::Rot2::from_angle(angle), rect.center());

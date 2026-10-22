@@ -108,6 +108,15 @@ Imports choose unused theme ids rather than overwriting existing themes.
 
 ## Native CSS in this draft
 
+The native centred toolbar exposes the same `.toolbar-module` ids as the custom
+layout, without opting into new geometry for colour/paint-only rules. Module
+scopes are siblings rather than nested controls; their palette/style changes
+must be restored before painting another module. Shared button scopes encompass
+their SVG body, foreground glyph and label. Button CSS gradients/shadows are
+painted above the body artwork and below glyphs/text; SVG button bodies respect
+the resolved corner radius. A default SVG must not bypass the CSS background.
+Native hit rectangles, ids, commands and default geometry remain unchanged.
+
 The initial reader supports `:root` palette variables (`--window-background` maps to
 `window.background`), class/descendant colour, background and border colours, integer
 pixel font sizes and corner radii. `.meter` accepts `style` and `segments`; `.toolbar`

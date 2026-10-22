@@ -94,17 +94,24 @@ pub fn hover(ui: &Ui, response: &Response) -> f32 {
 /// Shared track-button surface. Colors and focus outlines follow the active theme.
 /// Geometry stays inside the caller's hit target, including compact mixer strips.
 pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Response, fill: Color32) {
-    let _style = crate::kit::style_class::enter_response("button", response);
+    let _style = crate::kit::style_class::control("button", response);
     let radius = super::style_class::radius((rect.height() * 0.25).min(5.0));
-    let fill = super::style_class::background(fill);
-    if !super::skin::paint(painter, rect, "button", super::skin::State::response(response, false), fill, 0.0) {
-        painter.rect_filled(rect, radius, fill);
-        super::native_css::background_rounded(painter, rect, radius);
-    }
+    button_surface(painter, rect, response, false, fill, radius);
     if response.has_focus() || response.hovered() {
         let edge = if response.has_focus() { theme::accent() } else { theme::border_strong() };
         painter.rect_stroke(rect, radius, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
     }
+}
+
+/// CSS paint remains above the SVG body, below the control's glyph and label.
+pub fn button_surface(painter: &Painter, rect: Rect, response: &Response, on: bool, fill: Color32, radius: f32) {
+    let _style = super::style_class::control("button", response);
+    let fill = super::style_class::background(fill);
+    let radius = super::style_class::radius(radius);
+    if !super::skin::button(painter, rect, super::skin::State::response(response, on), fill, radius) {
+        painter.rect_filled(rect, radius, fill);
+    }
+    super::native_css::background_rounded(painter, rect, radius);
 }
 
 /// Fill and text of a track-on toggle: light when on, dark when off, a step brighter hovered.
@@ -131,10 +138,11 @@ pub fn solo_button(
 ) -> Option<Action> {
     let label = if solo { format!("End solo on {name}") } else { format!("Solo {name}") };
     let response = button_area(ui, rect, id, label);
+    let _style = super::style_class::enter_response("button", &response);
     let lit = motion::toward(ui.ctx(), response.id.with("on"), solo, motion::VALUE);
     let off = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
     track_button_face(ui, painter, rect, &response, motion::mix(off, theme::accent(), lit));
-    let text = motion::mix(theme::text_secondary(), theme::window_background(), lit);
+    let text = super::style_class::foreground(motion::mix(theme::text_secondary(), theme::window_background(), lit));
     if !super::skin::paint(painter, rect, "solo", super::skin::State::response(&response, solo), text, 0.0) {
         text_in(painter, rect, Align2::CENTER_CENTER, "S", theme::ui_font(theme::TEXT_SMALL), text);
     }
@@ -162,7 +170,9 @@ pub fn cue_button(
 ) -> Option<Action> {
     let label = if cue { format!("Stop cueing {name}") } else { format!("Cue {name} on the headphones") };
     let response = button_area(ui, rect, id, label);
+    let _style = super::style_class::enter_response("button", &response);
     let (fill, text) = toggle_colors(ui, &response, cue);
+    let text = super::style_class::foreground(text);
     track_button_face(ui, painter, rect, &response, fill);
     if !super::skin::paint(painter, rect, "cue", super::skin::State::response(&response, cue), text, 0.0) {
         headphones(painter, rect, text);
@@ -211,11 +221,12 @@ pub fn arm_button(
         (false, false) => format!("Arm {name} to hear its audio input"),
     };
     let response = button_area(ui, rect, id, label);
+    let _style = super::style_class::enter_response("button", &response);
     let lit = motion::toward(ui.ctx(), response.id.with("on"), armed, motion::VALUE);
     let off = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
     track_button_face(ui, painter, rect, &response, motion::mix(off, theme::recording_background(), lit));
     let radius = (rect.height().min(rect.width()) * 0.22).clamp(2.5, 4.0);
-    let ring = motion::mix(theme::text_secondary(), theme::recording(), lit);
+    let ring = super::style_class::foreground(motion::mix(theme::text_secondary(), theme::recording(), lit));
     if !super::skin::paint(painter, rect, "arm", super::skin::State::response(&response, armed), ring, 0.0) {
         painter.circle_stroke(rect.center(), radius, Stroke::new(1.2, ring));
         if lit > 0.0 {
@@ -697,12 +708,8 @@ pub(crate) fn button(ui: &Ui, painter: &egui::Painter, rect: Rect, text: &str, l
     let response = button_area(ui, rect, Id::new(("dialog-button", label)), label);
     let _style = super::style_class::enter_response("button", &response);
     let fill = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
-    let fill = super::style_class::background(fill);
     let radius = super::style_class::radius(0.0);
-    if !super::skin::paint(painter, rect, "button", super::skin::State::response(&response, false), fill, 0.0) {
-        painter.rect_filled(rect, radius, fill);
-        super::native_css::background_rounded(painter, rect, radius);
-    }
+    button_surface(painter, rect, &response, false, fill, radius);
     painter.rect_stroke(rect, radius, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
     let small = theme::ui_font(theme::TEXT_SMALL);
     text_in(painter, rect, Align2::CENTER_CENTER, text, small, theme::text_primary());

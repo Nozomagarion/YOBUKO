@@ -22,19 +22,27 @@ const COUNT_INS: [(u8, &str); 4] = [(0, "Off"), (1, "1 bar"), (2, "2 bars"), (4,
 pub fn record_button(ui: &Ui, painter: &Painter, rect: Rect, recording: bool, actions: &mut Vec<Action>) {
     let label = if recording { "Stop recording" } else { "Record into the arrangement" };
     let response = widgets::button_area(ui, rect, Id::new("record"), label);
+    let _style = crate::kit::style_class::enter_named_response("button", "record", &response);
     if response.clicked() {
         actions.push(Action::new("transport.record", json!({ "on": !recording })));
     }
     let lit = motion::toward(ui.ctx(), response.id.with("on"), recording, motion::VALUE);
     let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-    painter.rect_filled(rect, 0.0, motion::mix(hover, theme::recording_background(), lit));
+    widgets::button_surface(
+        painter,
+        rect,
+        &response,
+        recording,
+        motion::mix(hover, theme::recording_background(), lit),
+        0.0,
+    );
     let ring = motion::mix(theme::text_primary(), theme::recording(), lit);
     if crate::kit::skin::paint(
         painter,
         rect,
         "record",
         crate::kit::skin::State::response(&response, recording),
-        theme::recording(),
+        crate::kit::style_class::foreground(theme::recording()),
         0.0,
     ) {
         return;
@@ -63,6 +71,7 @@ pub fn metronome_button(
         "Metronome: a click on every beat while playing. Hold and drag up or down: its level. Right-click: its sound",
     );
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
+    let _style = crate::kit::style_class::enter_named_response("button", "metronome-toggle", &response);
     if response.clicked() {
         actions.push(Action::new("transport.setMetronome", json!({ "on": !on })));
     }
@@ -82,8 +91,12 @@ pub fn metronome_button(
     });
     let lit = motion::toward(ui.ctx(), response.id.with("on"), on, motion::VALUE);
     let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-    painter.rect_filled(rect, 0.0, motion::mix(hover, theme::control_active(), lit));
-    metronome_glyph(painter, rect, motion::mix(theme::text_primary(), theme::accent(), lit));
+    widgets::button_surface(painter, rect, &response, on, motion::mix(hover, theme::control_active(), lit), 0.0);
+    metronome_glyph(
+        painter,
+        rect,
+        crate::kit::style_class::foreground(motion::mix(theme::text_primary(), theme::accent(), lit)),
+    );
 }
 
 /// While the metronome's button (`response`, in `button`) is held: its level's slider beside it,
