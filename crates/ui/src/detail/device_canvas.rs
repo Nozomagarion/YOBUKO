@@ -2533,7 +2533,6 @@ mod tests {
             peaks.peaks.iter().filter(|p| **p > 0.1).count() > 500,
             "zoomed samples fill the viewport instead of leaving empty bins"
         );
-        drop(frame);
         assert_eq!(edits.len(), 3, "navigation must not emit project edits; line drag commits once on release");
         assert_eq!(edits[0].params["continue"], false);
         assert!(edits.iter().all(|a| a.params["continue"] == false));
