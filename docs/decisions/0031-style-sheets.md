@@ -58,6 +58,12 @@ earlier version is migrated once, only after the written CSS reads back as exact
 theme; its JSON and old `style.css` are kept in the theme's `legacy/` folder. The built-in
 themes are still compiled from JSON at this stage.
 
+Device panels use the tiers: `.sd` version 6 adds an optional panel `style`, applied in the
+Device tier bounded to its panel; `#id` selects a control by its id; `user.css` in the themes
+folder is the User tier for every view. Panel layout from CSS (a group/layout tree in the SDK)
+is not yet connected: panel sheets style colours, ink, accents and the other painted
+properties.
+
 ## Device panels use the same style engine
 
 The `.sd` device remains JSON data: DSP nodes, connections, parameters, stable

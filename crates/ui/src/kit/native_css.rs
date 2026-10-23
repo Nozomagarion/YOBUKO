@@ -45,6 +45,8 @@ pub struct Computed {
     pub radius: f32,
     pub opacity: f32,
     pub visible: bool,
+    /// `accent-color`: a control's accent, such as a knob's arc.
+    pub accent: Color32,
     pub authored: Authored,
     gradients: Arc<[paint::Gradient]>,
     shadows: Arc<[shadows::Shadow]>,
@@ -149,6 +151,7 @@ pub struct Authored {
     pub border: bool,
     pub font_size: bool,
     pub radius: bool,
+    pub accent: bool,
 }
 
 /// One running transition of one property of one element.
@@ -193,6 +196,10 @@ struct Engine {
     native: Option<native::Paint>,
     motion: bool,
     styles_changed: bool,
+    /// The user's own sheet (`user.css`), above every theme and device sheet.
+    user: Option<(Arc<str>, Arc<suhina_style::sheet::Sheet>)>,
+    /// Parsed device panel sheets by the hash of their text, bounded.
+    device_sheets: HashMap<u64, Arc<suhina_style::sheet::Sheet>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -202,9 +209,54 @@ struct StyleNode {
     class: String,
     name: Option<String>,
     state: u8,
+    /// The device sheet this node is the root of (its hash), or 0.
+    sheet: u64,
 }
 thread_local! {
     static ENGINE: RefCell<Engine> = RefCell::new(Engine::default());
+    static USER_SHEET: RefCell<Option<Arc<str>>> = const { RefCell::new(None) };
+    /// Whether a device panel asked for its sheet since the last frame began, so the engine
+    /// runs even when the theme has no style sheet of its own.
+    static DEVICE_WANTED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Most device panel sheets kept parsed at once.
+const MAX_DEVICE_SHEETS: usize = 32;
+
+/// Sets the user's own style sheet (`user.css`), which applies over every theme and device
+/// sheet and stays when the theme changes. `None` removes it. Read at the next frame.
+pub fn set_user_sheet(source: Option<Arc<str>>) {
+    USER_SHEET.with(|sheet| *sheet.borrow_mut() = source);
+}
+
+/// Gives the device panel scope just entered its own style sheet: it applies only inside that
+/// panel, above the application theme and below `user.css`. Unchanged text is parsed once; a
+/// sheet that does not parse is ignored and the panel keeps the theme.
+pub fn device_sheet(ctx: &egui::Context, source: Option<&str>) {
+    let Some(source) = source.filter(|s| !s.trim().is_empty() && s.len() <= 64 * 1024) else { return };
+    if !DEVICE_WANTED.with(|wanted| wanted.replace(true)) && !ENGINE.with(|engine| engine.borrow().collecting) {
+        // The engine was idle: start it on the next frame.
+        ctx.request_repaint();
+    }
+    let mut hash = std::hash::DefaultHasher::new();
+    source.hash(&mut hash);
+    let key = hash.finish().max(1);
+    ENGINE.with(|engine| {
+        let mut engine = engine.borrow_mut();
+        if !engine.collecting {
+            return;
+        }
+        if !engine.device_sheets.contains_key(&key) {
+            let Ok(sheet) = suhina_style::sheet::Sheet::parse(source) else { return };
+            if engine.device_sheets.len() >= MAX_DEVICE_SHEETS {
+                engine.device_sheets.clear();
+            }
+            engine.device_sheets.insert(key, Arc::new(sheet));
+        }
+        if let Some(node) = engine.parents.last().copied().and_then(|at| engine.nodes.get_mut(at)) {
+            node.sheet = key;
+        }
+    });
 }
 
 /// Finishes the style snapshot even on an early return from the native frame.
@@ -274,7 +326,7 @@ pub fn enter(class: &str, name: Option<&str>, response: Option<&egui::Response>)
                 | u8::from(!r.enabled()) << 2
                 | u8::from(r.has_focus()) << 3
         });
-        let node = StyleNode { key, parent, class: class.into(), name: name.map(str::to_owned), state };
+        let node = StyleNode { key, parent, class: class.into(), name: name.map(str::to_owned), state, sheet: 0 };
         let index = engine.nodes.len();
         engine.nodes.push(node);
         engine.parents.push(index);
@@ -304,6 +356,12 @@ fn element_id(node: &StyleNode) -> String {
             && node.name.as_deref().is_some_and(|name| ["panel-browser", "panel-main", "panel-detail"].contains(&name)))
     {
         return node.name.clone().unwrap_or_default();
+    }
+    // A device panel's control is selected by its id (`#cutoff`), as the panel sheet names it.
+    if node.class == "device-control"
+        && let Some(name) = &node.name
+    {
+        return name.clone();
     }
     if node.class == "toolbar-module" && node.name.as_deref().is_some_and(|name| skin::MODULES.contains(&name)) {
         node.name.clone().unwrap_or_default()
@@ -449,7 +507,10 @@ fn finish_tree(now: f64) -> (bool, bool) {
 
 /// Refresh only when the authored CSS, palette or viewport changes.
 pub fn begin_frame(ui: &egui::Ui) {
-    let source = skin::current().css.clone();
+    let user_present = USER_SHEET.with(|sheet| sheet.borrow().is_some());
+    let device_wanted = DEVICE_WANTED.with(|wanted| wanted.replace(false));
+    // Without a theme sheet the engine still runs for user.css and device panel sheets.
+    let source = skin::current().css.clone().or_else(|| (user_present || device_wanted).then(|| Arc::from("")));
     if source.is_none() {
         ENGINE.with(|engine| {
             if engine.borrow().source.is_some() {
@@ -478,8 +539,24 @@ pub fn begin_frame(ui: &egui::Ui) {
     variables.push_str("}\n");
     let dark = theme::contrast(palette.window_background, Color32::WHITE)
         > theme::contrast(palette.window_background, Color32::BLACK);
+    let user = USER_SHEET.with(|sheet| sheet.borrow().clone());
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
+        if engine.user.as_ref().map(|(text, _)| text) != user.as_ref() {
+            // A user sheet that does not parse keeps the last working one.
+            match user {
+                Some(text) => {
+                    if let Ok(sheet) = suhina_style::sheet::Sheet::parse(&text) {
+                        engine.user = Some((text, Arc::new(sheet)));
+                    }
+                }
+                None => engine.user = None,
+            }
+            engine.styles_changed = true;
+            engine.contexts.clear();
+            engine.toolbar = None;
+            engine.workspace = None;
+        }
         if engine.source != source {
             let native = suhina_plugins::trace::timed("style paint parse", || {
                 source.as_deref().and_then(|source| native::Paint::new(source, &variables))
@@ -487,6 +564,8 @@ pub fn begin_frame(ui: &egui::Ui) {
             match native {
                 Some(native) => {
                     let motion = engine.motion;
+                    let user = engine.user.take();
+                    let device_sheets = std::mem::take(&mut engine.device_sheets);
                     *engine = Engine {
                         source,
                         palette: variables,
@@ -494,6 +573,8 @@ pub fn begin_frame(ui: &egui::Ui) {
                         dark,
                         native: Some(native),
                         motion,
+                        user,
+                        device_sheets,
                         ..Default::default()
                     };
                 }
@@ -522,6 +603,16 @@ pub fn begin_frame(ui: &egui::Ui) {
     });
 }
 
+/// Whether the engine's sheet is the active theme's (an empty one stands in for none).
+fn same_source(engine: Option<&Arc<str>>) -> bool {
+    let current = skin::current().css.clone();
+    match (engine, current.as_ref()) {
+        (Some(a), Some(b)) => a == b,
+        (Some(a), None) => a.is_empty(),
+        _ => false,
+    }
+}
+
 /// Compute inherited colours and native typography for the active class ancestry.
 /// Sibling/object selectors require the host's complete retained component tree.
 pub fn scoped(stack: &[String]) -> Option<Computed> {
@@ -534,7 +625,7 @@ pub fn scoped(stack: &[String]) -> Option<Computed> {
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         engine.source.as_ref()?;
-        if engine.source != skin::current().css {
+        if !same_source(engine.source.as_ref()) {
             return None;
         }
         if let Some(values) =
@@ -577,7 +668,7 @@ pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         engine.source.as_ref()?;
-        if engine.source != skin::current().css {
+        if !same_source(engine.source.as_ref()) {
             return None;
         }
         let key = format!("{order:?}:{size:?}");
@@ -684,7 +775,7 @@ mod tests {
         assert!((style.opacity - 0.7).abs() < 1e-6);
         assert_eq!(
             style.authored,
-            Authored { color: true, background: true, border: true, font_size: false, radius: true }
+            Authored { color: true, background: true, border: true, font_size: false, radius: true, accent: false }
         );
         prepare(
             ":root { --ink:#2468ac; } .toolbar { color:var(--ink); font-size:12px; } .button { font-size:1.5em; border-radius:.25em; box-shadow:inset 0 1px 2px -1px #fff4, 1px 2px 3px currentColor; text-shadow:0 1px 1px #000a; }",
@@ -739,8 +830,15 @@ mod tests {
     #[test]
     fn native_states_live_reload_and_compatibility_switch_keep_stable_keys() {
         let nodes = vec![
-            StyleNode { key: 1, parent: None, class: "toolbar".into(), name: None, state: 0 },
-            StyleNode { key: 2, parent: Some(0), class: "button".into(), name: Some("play".into()), state: 0 },
+            StyleNode { key: 1, parent: None, class: "toolbar".into(), name: None, state: 0, sheet: 0 },
+            StyleNode {
+                key: 2,
+                parent: Some(0),
+                class: "button".into(),
+                name: Some("play".into()),
+                state: 0,
+                sheet: 0,
+            },
         ];
         prepare(
             ".toolbar { color:#112233; } .toolbar:hover { color:#445566; } #control-play { box-shadow:0 1px; }",
@@ -773,6 +871,70 @@ mod tests {
         }
         skin::configure(&skin::Skin::default());
     }
+    /// Styles of the `device-control` scopes named `cutoff` in two device panels, with the
+    /// first panel given `device` as its own sheet.
+    fn device_controls(theme: &str, device: &str, user: Option<&str>) -> (Computed, Computed, Computed) {
+        prepare(theme, 800.0);
+        set_user_sheet(user.map(Arc::from));
+        let ctx = egui::Context::default();
+        let mut styles = None;
+        for _ in 0..3 {
+            ctx.run_ui(egui::RawInput::default(), |ui| {
+                let _frame = frame(ui);
+                let _window = super::super::style_class::enter("window");
+                let mut found = Vec::new();
+                for panel in ["track-1-device-0", "track-1-device-1"] {
+                    let _panel = super::super::style_class::enter_named("device-panel", panel);
+                    if panel.ends_with('0') {
+                        device_sheet(ui.ctx(), Some(device));
+                    }
+                    let _control = super::super::style_class::enter_named("device-control", "cutoff");
+                    found.push(super::super::style_class::computed().unwrap());
+                }
+                let _browser = super::super::style_class::enter("browser");
+                found.push(super::super::style_class::computed().unwrap());
+                if let [a, b, browser] = found.as_slice() {
+                    styles = Some((a.clone(), b.clone(), browser.clone()));
+                }
+            })
+            .textures_delta
+            .clear();
+        }
+        set_user_sheet(None);
+        skin::configure(&skin::Skin::default());
+        styles.unwrap()
+    }
+
+    #[test]
+    fn a_device_sheet_styles_its_own_panel_by_control_id_and_never_leaks() {
+        let (styled, other, browser) = device_controls(
+            ".device-control { color: #102030; }",
+            "#cutoff { color: #ff0000; accent-color: #0000ff; } .browser { color: #00ff00; }",
+            None,
+        );
+        assert_eq!(styled.color, Color32::from_rgb(255, 0, 0), "the device sheet wins over the theme");
+        assert!(styled.authored.accent);
+        assert_eq!(styled.accent, Color32::from_rgb(0, 0, 255));
+        assert_eq!(other.color, Color32::from_rgb(0x10, 0x20, 0x30), "another device keeps the theme");
+        assert!(!other.authored.accent);
+        assert_ne!(browser.color, Color32::from_rgb(0, 255, 0), "a device sheet stays inside its panel");
+    }
+
+    #[test]
+    fn the_user_sheet_wins_over_device_and_theme_and_runs_without_a_theme_sheet() {
+        let (styled, other, _) = device_controls(
+            ".device-control { color: #102030; }",
+            "#cutoff { color: #ff0000 !important; }",
+            Some("#cutoff { color: #abcdef; }"),
+        );
+        assert_eq!(styled.color, Color32::from_rgb(0xab, 0xcd, 0xef), "user beats even device !important");
+        assert_eq!(other.color, Color32::from_rgb(0xab, 0xcd, 0xef));
+        // No theme sheet at all: device and user sheets still apply.
+        let (styled, other, _) = device_controls("", "#cutoff { color: #ff0000; }", None);
+        assert_eq!(styled.color, Color32::from_rgb(255, 0, 0));
+        assert!(!other.authored.color, "unstyled parts keep the application theme");
+    }
+
     #[test]
     fn workspace_example_collapses_closed_panels() {
         prepare(theme::WORKSPACE_GRID_EXAMPLE, 800.0);

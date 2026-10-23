@@ -659,6 +659,10 @@ impl Window {
             self.themes.queue(action);
         }
         if let Some(reply) = self.themes.tick(ctx) {
+            if let Some(css) = reply.user_css {
+                suhina_ui::kit::native_css::set_user_sheet(css);
+                ctx.request_repaint();
+            }
             if reply.replace {
                 self.app.set_themes(ctx, reply.entries, reply.folder);
             } else {

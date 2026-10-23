@@ -475,6 +475,14 @@ deeply nested, unbalanced) keeps the last working styles. Not implemented: trans
 filters, other gradient interpolation spaces and hints, font families and weights,
 container queries and geometry animation.
 
+**Tiers.** Every style resolves through four tiers: Suhina's defaults, the theme's sheet,
+device panel sheets (`.sd` version 6 `style`, bounded to their panel; `#id` selects a control
+by its id) and the user's own `user.css` in the themes folder. A higher tier wins even over
+`!important` in a lower one. `user.css` is read like a theme file (watched, at most 128 KiB, a
+sheet that does not parse is reported and the last working one stays) and stays when the theme
+changes. The engine runs whenever any of these sheets exists, also for a theme without one.
+See [sd-device-format.md](sd-device-format.md) › Panel style sheets.
+
 Trace spans `style paint parse` and `style paint resolve` mark the engine's UI-thread
 work; no audio callback is instrumented.
 

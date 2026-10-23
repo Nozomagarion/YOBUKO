@@ -711,6 +711,52 @@ fn widget_palette() -> WidgetPalette {
         accent_text: accent_text(colors.accent),
     }
 }
+/// The widget palette of the control whose style scope is open: colours its CSS writes
+/// (`color`, `background-color`, `border-color`, `accent-color`) replace the theme's.
+fn styled_palette(mut palette: WidgetPalette) -> WidgetPalette {
+    let Some(style) = crate::kit::style_class::computed() else { return palette };
+    if style.authored.color {
+        palette.text = rgba(style.color);
+    }
+    if style.authored.background {
+        palette.control = rgba(style.background);
+    }
+    if style.authored.border {
+        palette.border = rgba(style.border);
+    }
+    if style.authored.accent {
+        palette.accent = rgba(style.accent);
+        palette.accent_text = accent_text(style.accent);
+    }
+    palette
+}
+
+/// A control's drawings in a palette other than the panel's, kept so a styled control is not
+/// rebuilt every frame. Bounded; cleared when full.
+fn styled_drawings(
+    ctx: &egui::Context,
+    loaded: &Loaded,
+    control: &CustomControl,
+    palette: WidgetPalette,
+) -> Arc<[Draw]> {
+    type Cache = std::collections::HashMap<(usize, usize, [[u8; 4]; 6]), Arc<[Draw]>>;
+    let key = egui::Id::new("sd-styled-drawings");
+    let index = loaded.source.controls.iter().position(|c| std::ptr::eq(c, control)).unwrap_or(usize::MAX);
+    let colors = [palette.text, palette.panel, palette.control, palette.border, palette.accent, palette.accent_text];
+    let cache_key = (Arc::as_ptr(&loaded.source) as usize, index, colors);
+    let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<Arc<std::sync::Mutex<Cache>>>(key).clone());
+    let Ok(mut cache) = cache.lock() else { return control.drawings_with_palette(&palette).into_owned().into() };
+    if let Some(found) = cache.get(&cache_key) {
+        return found.clone();
+    }
+    let drawings: Arc<[Draw]> = control.drawings_with_palette(&palette).into_owned().into();
+    if cache.len() >= 512 {
+        cache.clear();
+    }
+    cache.insert(cache_key, drawings.clone());
+    drawings
+}
+
 fn images(ctx: &egui::Context, source: &Arc<DeviceUi>) -> Arc<Loaded> {
     let palette = widget_palette();
     let key = egui::Id::new("sd-image-cache");
@@ -960,11 +1006,13 @@ fn paint_control(
     let _scope = response
         .map(|r| crate::kit::style_class::enter_response(class, r))
         .unwrap_or_else(|| crate::kit::style_class::enter(class));
-    let palette = widget_palette();
-    let drawings = if palette != loaded.palette {
-        control.drawings_with_palette(&palette)
+    let palette = styled_palette(widget_palette());
+    let restyled;
+    let drawings: &[Draw] = if palette != loaded.palette {
+        restyled = styled_drawings(painter.ctx(), loaded, control, palette);
+        &restyled
     } else {
-        std::borrow::Cow::Borrowed(drawings)
+        drawings
     };
     let value = |v: &UiValue| {
         v.evaluate(&|id, norm, log| {
@@ -1068,6 +1116,8 @@ pub(crate) fn show(
     let address = at.0.iter().map(usize::to_string).collect::<Vec<_>>().join("-");
     let _style_class =
         crate::kit::style_class::enter_named("device-panel", &format!("track-{}-device-{address}", track.0));
+    // The panel's own sheet applies inside this scope only, over the application theme.
+    crate::kit::native_css::device_sheet(ui.ctx(), canvas.style.as_deref());
     let mut styled_ui = crate::kit::style_class::ui(ui);
     let ui = &mut *styled_ui;
     // The Sampler's own commands name a device on the track by its index (#600); a device inside

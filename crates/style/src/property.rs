@@ -70,6 +70,7 @@ properties! {
     BackgroundImage, "background-image", Gradients, Value::Gradients(Vec::new()), false, "Native linear and repeating linear gradient layers.";
     Color, "color", Color, Value::Color(Color::Rgba([255; 4])), true, "Foreground ink; inherited by child controls.";
     BackgroundColor, "background-color", Color, Value::Color(Color::Rgba([0; 4])), false, "Surface colour. Desktop opacity is a separate material property.";
+    AccentColor, "accent-color", Color, Value::Color(Color::Current), true, "Accent of controls: a knob's arc, a switched-on button; inherited.";
     BorderColor, "border-color", Color, Value::Color(Color::Current), false, "Border ink, defaulting to the current foreground.";
     Radius, "radius", Length, Value::Length(Length::Px(0.0)), false, "Corner radius.";
     FontSize, "font-size", Length, Value::Length(Length::Px(11.0)), true, "Inherited text size.";

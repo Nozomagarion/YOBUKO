@@ -35,12 +35,27 @@ impl Paint {
         Some(())
     }
 
-    fn styles(&self, tree: &Tree, viewport: Viewport, extra: Option<&Sheet>) -> Option<Vec<ComputedStyle>> {
+    /// The cascade of host defaults, the theme, device panel sheets (each bounded to its
+    /// panel's element) and the user's sheet, in that order of precedence.
+    fn styles(
+        &self,
+        tree: &Tree,
+        viewport: Viewport,
+        extra: Option<&Sheet>,
+        devices: &[(&Sheet, usize)],
+        user: Option<&Sheet>,
+    ) -> Option<Vec<ComputedStyle>> {
         let mut sheets = vec![AppliedSheet { sheet: &self.defaults, layer: Layer::Default, root: None }];
         if let Some(extra) = extra {
             sheets.push(AppliedSheet { sheet: extra, layer: Layer::Default, root: None });
         }
         sheets.push(AppliedSheet { sheet: &self.sheet, layer: Layer::Theme, root: None });
+        for (sheet, root) in devices.iter().take(16) {
+            sheets.push(AppliedSheet { sheet, layer: Layer::Device, root: Some(*root) });
+        }
+        if let Some(user) = user {
+            sheets.push(AppliedSheet { sheet: user, layer: Layer::User, root: None });
+        }
         cascade::compute(tree, viewport, &sheets).ok()
     }
 }
@@ -108,7 +123,15 @@ pub(super) fn retained(engine: &Engine) -> Option<Vec<(u64, Computed)>> {
         }
     }
     let tree = Tree::new(elements).ok()?;
-    let values = paint.styles(&tree, viewport(engine), None)?;
+    let devices: Vec<(&Sheet, usize)> = engine
+        .nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, node)| node.sheet != 0)
+        .filter_map(|(index, node)| engine.device_sheets.get(&node.sheet).map(|sheet| (sheet.as_ref(), index + 2)))
+        .collect();
+    let user = engine.user.as_ref().map(|(_, sheet)| sheet.as_ref());
+    let values = paint.styles(&tree, viewport(engine), None, &devices, user)?;
     Some(engine.nodes.iter().zip(values.iter().skip(2)).map(|(node, value)| (node.key, computed(value))).collect())
 }
 
@@ -118,7 +141,8 @@ pub(super) fn scoped(engine: &Engine, stack: &[String]) -> Option<Computed> {
         elements.push(element(class, Some(&format!("scope-{index}")), None, Some(index + 1)));
     }
     let tree = Tree::new(elements).ok()?;
-    engine.native.as_ref()?.styles(&tree, viewport(engine), None)?.last().map(computed)
+    let user = engine.user.as_ref().map(|(_, sheet)| sheet.as_ref());
+    engine.native.as_ref()?.styles(&tree, viewport(engine), None, &[], user)?.last().map(computed)
 }
 
 /// Properties that ask for theme layout when a theme writes them on a laid-out element.
@@ -180,7 +204,8 @@ pub(super) fn layout(engine: &Engine, elements: Vec<Element>, defaults: &str, si
     all.extend(elements);
     let tree = Tree::new(all).ok()?;
     let defaults = Sheet::parse(defaults).ok()?;
-    let styles = paint.styles(&tree, viewport(engine), Some(&defaults))?;
+    let user = engine.user.as_ref().map(|(_, sheet)| sheet.as_ref());
+    let styles = paint.styles(&tree, viewport(engine), Some(&defaults), &[], user)?;
     let size = [size[0].clamp(0.0, 16384.0), size[1].clamp(0.0, 16384.0)];
     let rectangles = suhina_style::layout::compute(&tree, &styles, size).ok()?;
     let requested = styles.iter().skip(2).any(|style| LAYOUT.iter().any(|property| style.authored(*property)));
@@ -241,12 +266,14 @@ pub(super) fn computed(style: &ComputedStyle) -> Computed {
         },
         visible: style.get(Property::Visibility) == Value::Keyword("visible")
             && style.get(Property::Visible) != Value::Bool(false),
+        accent: ink(Property::AccentColor),
         authored: Authored {
             color: style.authored(Property::Color),
             background: style.authored(Property::BackgroundColor),
             border: style.authored(Property::BorderColor),
             font_size: style.authored(Property::FontSize),
             radius: style.authored(Property::Radius),
+            accent: style.authored(Property::AccentColor),
         },
         gradients: match style.get(Property::BackgroundImage) {
             Value::Gradients(values) => values

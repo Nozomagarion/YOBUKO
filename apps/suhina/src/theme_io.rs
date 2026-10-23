@@ -24,6 +24,8 @@ pub struct Reply {
     pub folder: Option<String>,
     pub select: Option<String>,
     pub notices: Vec<Result<String, String>>,
+    /// The user's style sheet when it changed: `Some(None)` once it is removed.
+    pub user_css: Option<Option<std::sync::Arc<str>>>,
 }
 
 pub struct ThemeIo {
@@ -226,6 +228,11 @@ fn execute(files: &mut ThemeFiles, actions: Vec<FileAction>) -> Reply {
     }
     reply.entries = entries;
     reply.notices.extend(warnings.into_iter().map(Err));
+    match files.user_css(reply.replace) {
+        Some(Ok(css)) => reply.user_css = Some(css.map(std::sync::Arc::from)),
+        Some(Err(error)) => reply.notices.push(Err(error)),
+        None => {}
+    }
     reply
 }
 

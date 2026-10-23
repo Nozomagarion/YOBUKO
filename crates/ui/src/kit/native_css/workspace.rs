@@ -29,7 +29,7 @@ pub fn workspace(size: Vec2, browser: Option<f32>, detail: Option<(bool, f32)>) 
     super::ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         engine.source.as_ref()?;
-        if engine.source != super::skin::current().css {
+        if !super::same_source(engine.source.as_ref()) {
             return None;
         }
         let key = format!("{size:?}:{browser:?}:{detail:?}");

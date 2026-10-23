@@ -48,11 +48,13 @@ pub struct ThemeFiles {
     seen: HashMap<String, u64>,
     checked: Option<Instant>,
     snapshots: HashMap<String, Snapshot>,
+    /// When `user.css` last changed, as last read (`Some(0)` when it was not there).
+    user_seen: Option<u64>,
 }
 
 impl ThemeFiles {
     pub fn new(folder: Option<PathBuf>) -> Self {
-        Self { folder, seen: HashMap::new(), checked: None, snapshots: HashMap::new() }
+        Self { folder, seen: HashMap::new(), checked: None, snapshots: HashMap::new(), user_seen: None }
     }
 
     fn refresh_default_assets(&self, warnings: &mut Vec<String>) {
@@ -93,6 +95,29 @@ impl ThemeFiles {
                 None
             }
         }
+    }
+
+    /// The user's own style sheet, `user.css` in the themes folder, when it changed since last
+    /// asked (or always with `again`): `Ok(None)` once it is removed. It applies over every theme
+    /// and stays when the theme changes. A sheet that does not parse is an error, and the one
+    /// in use stays.
+    pub fn user_css(&mut self, again: bool) -> Option<Result<Option<String>, String>> {
+        use suhina_ui::kit::theme_css;
+        let path = self.folder.as_ref()?.join("user.css");
+        let present = std::fs::symlink_metadata(&path).is_ok_and(|m| m.is_file());
+        let modified = if present { fingerprint(&path).unwrap_or(1).max(1) } else { 0 };
+        if !again && self.user_seen == Some(modified) {
+            return None;
+        }
+        self.user_seen = Some(modified);
+        if !present {
+            return Some(Ok(None));
+        }
+        Some((|| {
+            let css = String::from_utf8(read_bounded(&path, theme_css::MAX_CSS as u64)?).map_err(|e| e.to_string())?;
+            suhina_ui::kit::native_css::inspect(&css).map_err(|e| format!("user.css: {e}"))?;
+            Ok(Some(css))
+        })())
     }
 
     /// The folder as the Settings page shows it.
@@ -1558,6 +1583,28 @@ mod skin_package_tests {
         let (again, warnings) = ThemeFiles::new(Some(themes.clone())).read_all();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(again[0].theme, theme);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn the_user_sheet_is_read_when_it_changes_and_a_broken_one_is_an_error() {
+        let root = folder("user-css");
+        let themes = root.join("themes");
+        std::fs::create_dir_all(&themes).unwrap();
+        let mut files = ThemeFiles::new(Some(themes.clone()));
+        assert_eq!(files.user_css(false), Some(Ok(None)), "no user.css yet");
+        assert_eq!(files.user_css(false), None, "unchanged");
+        std::fs::write(themes.join("user.css"), "#cutoff { color: red; }").unwrap();
+        assert_eq!(files.user_css(false), Some(Ok(Some("#cutoff { color: red; }".into()))));
+        assert_eq!(files.user_css(false), None);
+        assert!(files.user_css(true).is_some(), "a full reload reads it again");
+        std::fs::write(
+            themes.join("user.css"),
+            format!("{}a{{}}{}", "@media (min-width:1px) {".repeat(70), "}".repeat(70)),
+        )
+        .unwrap();
+        assert!(matches!(files.user_css(false), Some(Err(_))));
+        std::fs::remove_file(themes.join("user.css")).unwrap();
+        assert_eq!(files.user_css(false), Some(Ok(None)));
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]

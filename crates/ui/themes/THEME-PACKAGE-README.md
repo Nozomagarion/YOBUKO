@@ -32,6 +32,19 @@ Open the themes folder from that page to edit the installed files.
 The template ZIP also has the built-in themes as reference folders in `examples/`;
 the importable example is `my-theme/`.
 
+### Your own overrides and device panels
+
+`user.css` in the themes folder (beside the theme folders, not inside one) is yours: it
+applies over every theme and device panel and stays when you switch themes. A device's own
+panel style (in its `.sd` file) applies only inside that panel, over the theme. Each control
+of a device panel is `#its-id`, for example:
+
+```css
+/* user.css */
+#cutoff { accent-color: #ff8a00; }
+.device-panel .knob:hover { color: #ffffff; }
+```
+
 ## How and when to edit each file
 
 1. Duplicate a bundled theme in the editor or start with the supplied example.
