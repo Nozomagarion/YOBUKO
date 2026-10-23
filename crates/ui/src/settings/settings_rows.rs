@@ -421,7 +421,11 @@ pub(crate) static ROWS: &[Entry] = &[
         "Track headers",
         "Which side of the timeline they are on",
         &["track_headers"],
-        |cx, r| cx.choose(r, &[("Left", Side::Left), ("Right", Side::Right)], |s| &mut s.track_headers),
+        |cx, r| {
+            cx.choose(r, &[("Theme", None), ("Left", Some(Side::Left)), ("Right", Some(Side::Right))], |s| {
+                &mut s.track_headers
+            })
+        },
     ),
     row(
         Page::Arrangement,

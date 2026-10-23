@@ -1165,7 +1165,7 @@ impl App {
     pub fn set_settings(&mut self, ctx: &egui::Context, settings: Settings) {
         self.projects.set_backup_settings(settings.backup, settings.backup_clean_up);
         motion::set_enabled(ctx, settings.animations);
-        self.arrangement.headers_left = settings.track_headers == Side::Left;
+        self.arrangement.headers_left = headers_left(settings.track_headers);
         self.arrangement.returns_hidden = settings.view.returns_hidden;
         self.arrangement.waveform_zoom = settings.view.waveform_zoom as f32 / 100.0;
         self.arrangement.waveform_appearance = settings.view.waveform;
@@ -2543,6 +2543,10 @@ impl App {
     /// Draws the window into `ui` and runs what the user asked for.
     pub fn ui(&mut self, ui: &mut Ui) {
         self.control_editor_theme_changed(ui.ctx());
+        // Following the theme, the headers move when the theme does.
+        if self.settings.track_headers.is_none() {
+            self.arrangement.headers_left = headers_left(None);
+        }
         let capture = crate::kit::control_layout::Capture::begin(ui.ctx());
         self.ui_content(ui);
         self.control_editor(ui, &capture.entries());
@@ -2840,7 +2844,9 @@ impl App {
             self.frame_trace.mark("bars");
             let inner = if let Some(layout) = &css_workspace {
                 if let Some(panel) = layout.browser {
-                    self.browser_panel(ui, inner, Some((panel, layout.main)));
+                    over_view(ui, "panel-browser", panel, layout.main, |ui| {
+                        self.browser_panel(ui, inner, Some((panel, layout.main)));
+                    });
                 }
                 inner
             } else if browser_shown && !full_width {
@@ -2880,7 +2886,12 @@ impl App {
             {
                 let geometry =
                     css_workspace.as_ref().and_then(|layout| layout.detail.map(|detail| (layout.main, detail)));
-                self.detail_area(ui, inner, &mut actions, geometry)
+                match geometry {
+                    Some((main, detail)) => over_view(ui, "panel-detail", detail, main, |ui| {
+                        self.detail_area(ui, inner, &mut actions, geometry)
+                    }),
+                    None => self.detail_area(ui, inner, &mut actions, geometry),
+                }
             } else {
                 self.place_editors(&[]);
                 // A hidden piano roll does not keep the keyboard, nor the view to one track, and
@@ -3173,9 +3184,10 @@ impl App {
                             self.devices_asked();
                             self.timeline = Some((self.revision, self.arrangement.folds.clone(), timeline));
                             // The headers can be moved from the view itself; that is the setting too.
-                            let side = if self.arrangement.headers_left { Side::Left } else { Side::Right };
-                            if side != self.settings.track_headers {
-                                self.settings.track_headers = side;
+                            // Moved there by hand: the user's side from now on, not the theme's.
+                            if self.arrangement.headers_left != headers_left(self.settings.track_headers) {
+                                let side = if self.arrangement.headers_left { Side::Left } else { Side::Right };
+                                self.settings.track_headers = Some(side);
                                 self.settings_changed = true;
                             }
                             if self.arrangement.returns_hidden != self.settings.view.returns_hidden {
@@ -4677,7 +4689,7 @@ impl App {
         if outcome.changed {
             self.projects.set_backup_settings(self.settings.backup, self.settings.backup_clean_up);
             motion::set_enabled(ui.ctx(), self.settings.animations);
-            self.arrangement.headers_left = self.settings.track_headers == Side::Left;
+            self.arrangement.headers_left = headers_left(self.settings.track_headers);
             self.arrangement.returns_hidden = self.settings.view.returns_hidden;
             self.arrangement.waveform_zoom = self.settings.view.waveform_zoom as f32 / 100.0;
             self.arrangement.waveform_appearance = self.settings.view.waveform;
@@ -7376,9 +7388,63 @@ pub(crate) const NAME_RECT_SLOT: &str = "slot-name-rect";
 /// Where a track's name is drawn in its header, by track id, in the view shown (#696).
 pub(crate) const NAME_RECT_TRACK: &str = "track-name-rect";
 
+/// Draws a workspace panel with `draw`; when the theme's grid lays `panel` over the `main` view
+/// (both in the same cells), on a layer above the view, so it shows and takes the pointer there.
+fn over_view<R>(ui: &mut Ui, name: &str, panel: Rect, main: Rect, draw: impl FnOnce(&mut Ui) -> R) -> R {
+    if panel.intersect(main).is_positive() {
+        let layer = egui::LayerId::new(egui::Order::Middle, Id::new(("workspace-overlay", name)));
+        ui.scope_builder(egui::UiBuilder::new().layer_id(layer), draw).inner
+    } else {
+        draw(ui)
+    }
+}
+
+/// Whether the track headers are on the left: on the user's side, or else on the theme's, or else
+/// on the right.
+fn headers_left(side: Option<Side>) -> bool {
+    match side {
+        Some(side) => side == Side::Left,
+        None => crate::kit::style_class::theme_track_headers_left().unwrap_or(false),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_panel_the_theme_lays_over_the_view_is_drawn_above_it() {
+        let ctx = egui::Context::default();
+        let mut app = App::new();
+        app.set_session(Session::new(crate::demo::demo_project()), &[]);
+        app.settings.animations = false;
+        app.settings.browser_open = true;
+        app.use_test_skin(crate::kit::skin::Skin {
+            css: Some(std::sync::Arc::from(
+                "#workspace { display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr); } \
+                 #panel-main { grid-column: 1; grid-row: 1; } \
+                 #panel-browser { grid-column: 1; grid-row: 1; width: 260px; justify-self: start; }",
+            )),
+            ..Default::default()
+        });
+        let layer = egui::LayerId::new(egui::Order::Middle, Id::new(("workspace-overlay", "panel-browser")));
+        let mut drawn = false;
+        for _ in 0..4 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| {
+                    app.ui(ui);
+                    drawn = ui.ctx().graphics(|layers| layers.get(layer).is_some_and(|list| !list.is_empty()));
+                },
+            );
+            output.textures_delta.clear();
+        }
+        app.use_test_skin(crate::kit::skin::Skin::default());
+        assert!(drawn, "the browser is drawn on its own layer over the view");
+    }
 
     #[test]
     fn a_rename_in_place_covers_the_name_drawn_under_it() {

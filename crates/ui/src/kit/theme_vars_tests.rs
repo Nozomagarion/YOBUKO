@@ -149,3 +149,13 @@ fn a_variant_may_set_a_helper_variable_the_theme_sets_in_root() {
     assert_eq!(chosen.colors.accent, parse_hex("#FAFAFA").unwrap());
     assert!(chosen.skin.variant.as_deref().unwrap().contains("--well: #FAFAFA"));
 }
+
+#[test]
+fn a_theme_may_put_the_track_headers_on_a_side() {
+    let mut theme = Theme::default();
+    assert!(theme_css::read_host_rules(&mut theme, ".arrangement { --suhina-track-headers: left; }").is_empty());
+    crate::kit::skin::configure(&theme.skin);
+    assert_eq!(crate::kit::style_class::theme_track_headers_left(), Some(true));
+    crate::kit::skin::configure(&crate::kit::skin::Skin::default());
+    assert_eq!(crate::kit::style_class::theme_track_headers_left(), None);
+}

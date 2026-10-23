@@ -67,6 +67,7 @@ pub fn valid_property(key: &str, value: &str) -> bool {
     match key {
         "--suhina-track-artwork" => matches!(value, "on" | "off"),
         "--suhina-appearance" => matches!(value, "native" | "knob" | "field"),
+        "--suhina-track-headers" => matches!(value, "left" | "right"),
         "color" | "background-color" | "border-color" => theme::parse_hex(value).is_some(),
         "border-radius" => value.strip_suffix("px").and_then(|v| v.parse::<u8>().ok()).is_some_and(|v| v <= 32),
         "font-size" => {
@@ -232,6 +233,19 @@ pub fn foreground(fallback: egui::Color32) -> egui::Color32 {
 }
 
 /// Native widget presentation is portable theme data; absence preserves the user's preference.
+/// The side the theme puts the Arrangement view's track headers on (`.arrangement {
+/// --suhina-track-headers: left }`), when it says one: `Some(true)` for the left.
+pub fn theme_track_headers_left() -> Option<bool> {
+    let skin = skin::current();
+    skin.styles.iter().filter(|(selector, _)| selector.as_str() == ".arrangement").find_map(|(_, properties)| {
+        match properties.get("--suhina-track-headers").map(String::as_str) {
+            Some("left") => Some(true),
+            Some("right") => Some(false),
+            _ => None,
+        }
+    })
+}
+
 pub fn knob_preference(fallback: bool) -> bool {
     match property("--suhina-appearance").as_deref() {
         Some("knob") => true,
