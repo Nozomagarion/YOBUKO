@@ -34,6 +34,8 @@ pub struct ComputedStyle {
     values: BTreeMap<Property, Value>,
     variables: Arc<BTreeMap<String, String>>,
     authored: BTreeSet<Property>,
+    /// The element's `animation` items with their keyframes resolved for it.
+    keyframes: Vec<(crate::motion::Animation, Arc<crate::motion::Frames>)>,
 }
 
 impl Default for ComputedStyle {
@@ -42,6 +44,7 @@ impl Default for ComputedStyle {
             values: Property::ALL.iter().map(|p| (*p, p.initial())).collect(),
             variables: Arc::default(),
             authored: BTreeSet::new(),
+            keyframes: Vec::new(),
         }
     }
 }
@@ -57,6 +60,10 @@ impl ComputedStyle {
     /// authored properties retain this marker across the component tree.
     pub fn authored(&self, property: Property) -> bool {
         self.authored.contains(&property)
+    }
+    /// Keyframe animations that apply, each with its frames resolved for this element.
+    pub fn animations(&self) -> &[(crate::motion::Animation, Arc<crate::motion::Frames>)] {
+        &self.keyframes
     }
 }
 
@@ -198,6 +205,43 @@ fn compute_inner(
             computed.values.insert(property, value);
             if priority.0 > Layer::Default as u8 {
                 computed.authored.insert(property);
+            }
+        }
+        if let Value::Animations(animations) = computed.get(Property::Animation) {
+            for animation in animations {
+                // The last keyframes rule of that name in the sheets that reach this element.
+                let rule = sheets
+                    .iter()
+                    .rev()
+                    .filter(|applied| applied.root.is_none_or(|root| tree.contains(node, root)))
+                    .find_map(|applied| applied.sheet.keyframes.iter().rev().find(|(name, _)| *name == animation.name));
+                let Some((_, frames)) = rule else { continue };
+                let mut resolved: crate::motion::Frames = Vec::with_capacity(frames.len());
+                for (offset, declarations) in frames {
+                    let mut values = Vec::new();
+                    for declaration in declarations.iter().filter(|d| !d.important) {
+                        work = work.checked_sub(1).ok_or("Style cascade exceeded its work budget")?;
+                        let Some(property) = Property::from_name(&declaration.name) else { continue };
+                        let value = crate::variables::substitute(&declaration.value, &computed.variables)
+                            .and_then(|value| match declaration.shorthand {
+                                Some(shorthand) => shorthand.part(property, &value),
+                                None => Ok(value),
+                            })
+                            .and_then(|value| property.parse(&value));
+                        match value {
+                            Ok(value) => values.push((property, value)),
+                            Err(error) if checked => return Err(error),
+                            Err(_) => {}
+                        }
+                    }
+                    resolved.push((*offset, values));
+                }
+                for (_, values) in &resolved {
+                    for (property, _) in values {
+                        computed.authored.insert(*property);
+                    }
+                }
+                computed.keyframes.push((animation, Arc::new(resolved)));
             }
         }
         // Inherited font size is a computed size, not an em expression to apply
@@ -404,5 +448,26 @@ mod tests {
         // Background longhands written later still win over the shorthand.
         let (_, knob) = style("knob { background: red; background-color: blue; }");
         assert_eq!(knob.get(Property::BackgroundColor), Value::Color(Color::Rgba([0, 0, 255, 255])));
+    }
+
+    #[test]
+    fn keyframes_resolve_for_each_element_with_its_variables() {
+        let css = ":root { --to: blue; } knob { animation: ink 1s linear forwards; } \
+                   @keyframes ink { from { color: red; } 50%, to { color: var(--to); opacity: .5; } }";
+        let sheet = Sheet::parse(css).unwrap_or_else(|e| panic!("{e}"));
+        assert!(sheet.notices.is_empty(), "{:?}", sheet.notices);
+        let styles =
+            compute(&tree(), viewport(800.0), &[AppliedSheet { sheet: &sheet, layer: Layer::Theme, root: None }])
+                .unwrap_or_else(|e| panic!("{e}"));
+        let animations = styles[2].animations();
+        assert_eq!(animations.len(), 1);
+        let frames = &animations[0].1;
+        assert_eq!(frames.iter().map(|f| f.0).collect::<Vec<_>>(), [0.0, 0.5, 1.0]);
+        assert_eq!(frames[2].1[0], (Property::Color, Value::Color(Color::Rgba([0, 0, 255, 255]))));
+        assert!(styles[2].authored(Property::Opacity), "a keyframe-only property counts as written");
+        assert!(styles[1].animations().is_empty());
+        // An unknown name animates nothing; a bad offset is a notice.
+        let sheet = Sheet::parse("knob { animation: missing 1s; } @keyframes x { 200% { color: red; } }").unwrap();
+        assert_eq!(sheet.notices.len(), 1);
     }
 }

@@ -185,7 +185,12 @@ pub struct Sheet {
     pub notices: Vec<Notice>,
     /// Cascade layer names in the order they were first named, nested ones dotted (`a.b`).
     pub(crate) layers: Vec<String>,
+    /// `@keyframes` rules by name: offsets from 0 to 1 and their declarations.
+    pub(crate) keyframes: Vec<(String, KeyframeRule)>,
 }
+
+/// The frames of one `@keyframes` rule: offsets from 0 to 1 and their declarations.
+pub(crate) type KeyframeRule = Vec<(f32, Vec<Declaration>)>;
 
 impl Sheet {
     /// True only when this whole sheet can use the staged native paint adapter.
@@ -372,7 +377,22 @@ fn rules(
                     .strip_prefix("@layer")
                     .filter(|s| s.is_empty() || s.starts_with(char::is_whitespace))
                     .map(str::trim);
-                if let Some(name) = layer {
+                let keyframes =
+                    header.strip_prefix("@keyframes").filter(|s| s.starts_with(char::is_whitespace)).map(str::trim);
+                if let Some(name) = keyframes {
+                    if !crate::motion::valid_name(name) {
+                        sheet.notice(location, "Invalid keyframes name".into());
+                        nested(parser, consume)?;
+                    } else {
+                        let frames = nested(parser, |parser| frames(parser, source, sheet))?;
+                        if sheet.keyframes.len() >= crate::motion::MAX_KEYFRAMES {
+                            return Err("Style sheet exceeds 64 keyframes rules".into());
+                        }
+                        // A later rule of the same name replaces an earlier one.
+                        sheet.keyframes.retain(|(existing, _)| existing != name);
+                        sheet.keyframes.push((name.to_owned(), frames));
+                    }
+                } else if let Some(name) = layer {
                     // An anonymous layer gets a name no author can write.
                     let own = if name.is_empty() {
                         Some(format!("{}", sheet.layers.len()))
@@ -450,6 +470,58 @@ fn rules(
         sheet.notice(location, "Incomplete style rule".into());
     }
     Ok(())
+}
+
+/// The inside of `@keyframes`: offset lists (`from`, `to`, percentages) and declarations.
+fn frames(
+    parser: &mut Parser<'_, '_>,
+    source: &str,
+    sheet: &mut Sheet,
+) -> Result<Vec<(f32, Vec<Declaration>)>, String> {
+    let mut result: Vec<(f32, Vec<Declaration>)> = Vec::new();
+    let mut start = None;
+    while !parser.is_exhausted() {
+        let at = parser.position().byte_index();
+        let location = parser.current_source_location();
+        let token = parser.next_including_whitespace_and_comments().map_err(|e| format!("Keyframes: {e:?}"))?.clone();
+        match token {
+            Token::WhiteSpace(_) | Token::Comment(_) if start.is_none() => {}
+            Token::CurlyBracketBlock => {
+                let header = source.get(start.unwrap_or(at)..at).ok_or("Invalid keyframe span")?.trim().to_owned();
+                start = None;
+                let declarations = nested(parser, |parser| declarations(parser, source, sheet))?;
+                let mut offsets = Vec::new();
+                for offset in header.split(',').map(str::trim) {
+                    let value = match offset {
+                        "from" => Some(0.0),
+                        "to" => Some(1.0),
+                        percent => percent
+                            .strip_suffix('%')
+                            .and_then(|n| n.trim().parse::<f32>().ok())
+                            .filter(|n| n.is_finite() && (0.0..=100.0).contains(n))
+                            .map(|n| n / 100.0),
+                    };
+                    match value {
+                        Some(value) => offsets.push(value),
+                        None => sheet.notice(location, format!("Invalid keyframe offset {offset}")),
+                    }
+                }
+                for offset in offsets {
+                    if result.len() >= crate::motion::MAX_FRAMES {
+                        return Err("Keyframes exceed 32 frames".into());
+                    }
+                    result.push((offset, declarations.clone()));
+                }
+            }
+            _ => {
+                if start.is_none() {
+                    start = Some(at);
+                }
+            }
+        }
+    }
+    result.sort_by(|a, b| a.0.total_cmp(&b.0));
+    Ok(result)
 }
 
 fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) -> Result<Vec<Declaration>, String> {

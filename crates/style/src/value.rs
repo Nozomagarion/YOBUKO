@@ -263,10 +263,144 @@ pub enum Length {
     Auto,
 }
 
+/// A bounded `calc()` operand: an amount with one unit, or a plain number.
+#[derive(Clone, Copy, PartialEq)]
+enum Unit {
+    Number,
+    Px,
+    Em,
+    Percent,
+}
+
+fn math_function(
+    parser: &mut Parser<'_, '_>,
+    name: &str,
+    depth: usize,
+    work: &mut usize,
+) -> Result<(f32, Unit), String> {
+    match name {
+        "calc" => crate::sheet::nested(parser, |p| sum(p, depth + 1, work)),
+        "min" | "max" | "clamp" => crate::sheet::nested(parser, |p| {
+            let mut values = vec![sum(p, depth + 1, work)?];
+            while !p.is_exhausted() {
+                p.expect_comma().map_err(|_| "Expected a comma")?;
+                values.push(sum(p, depth + 1, work)?);
+                if values.len() > 16 {
+                    return Err("Too many math arguments".into());
+                }
+            }
+            let unit = values.first().map(|v| v.1).ok_or("Empty math function")?;
+            if values.iter().any(|v| v.1 != unit) {
+                return Err("Math arguments mix units".into());
+            }
+            let amounts: Vec<f32> = values.iter().map(|v| v.0).collect();
+            let amount = match (name, amounts.as_slice()) {
+                ("min", _) => amounts.iter().copied().fold(f32::INFINITY, f32::min),
+                ("max", _) => amounts.iter().copied().fold(f32::NEG_INFINITY, f32::max),
+                ("clamp", [low, value, high]) => value.min(*high).max(*low),
+                _ => return Err("clamp() takes three values".into()),
+            };
+            Ok((amount, unit))
+        }),
+        _ => Err("Unknown math function".into()),
+    }
+}
+
+fn operand(parser: &mut Parser<'_, '_>, depth: usize, work: &mut usize) -> Result<(f32, Unit), String> {
+    if depth > 16 {
+        return Err("calc() nests too deeply".into());
+    }
+    *work = work.checked_sub(1).ok_or("calc() is too long")?;
+    let token = parser.next().map_err(|_| "Expected a calc() value")?.clone();
+    match token {
+        Token::Number { value, .. } => Ok((value, Unit::Number)),
+        Token::Percentage { unit_value, .. } => Ok((unit_value, Unit::Percent)),
+        Token::Dimension { value, unit, .. } => match unit.as_ref() {
+            "px" => Ok((value, Unit::Px)),
+            "em" => Ok((value, Unit::Em)),
+            _ => Err("Unsupported calc() unit".into()),
+        },
+        Token::ParenthesisBlock => crate::sheet::nested(parser, |p| sum(p, depth + 1, work)),
+        Token::Function(name) => {
+            let name = name.to_ascii_lowercase();
+            math_function(parser, &name, depth, work)
+        }
+        _ => Err("Unexpected calc() token".into()),
+    }
+}
+
+fn product(parser: &mut Parser<'_, '_>, depth: usize, work: &mut usize) -> Result<(f32, Unit), String> {
+    let mut left = operand(parser, depth, work)?;
+    loop {
+        let state = parser.state();
+        match parser.next() {
+            Ok(Token::Delim('*')) => {
+                let right = operand(parser, depth, work)?;
+                left = match (left.1, right.1) {
+                    (Unit::Number, unit) => (left.0 * right.0, unit),
+                    (unit, Unit::Number) => (left.0 * right.0, unit),
+                    _ => return Err("calc() multiplies by a number only".into()),
+                };
+            }
+            Ok(Token::Delim('/')) => {
+                let right = operand(parser, depth, work)?;
+                if right.1 != Unit::Number || right.0 == 0.0 {
+                    return Err("calc() divides by a nonzero number only".into());
+                }
+                left.0 /= right.0;
+            }
+            _ => {
+                parser.reset(&state);
+                return Ok(left);
+            }
+        }
+    }
+}
+
+fn sum(parser: &mut Parser<'_, '_>, depth: usize, work: &mut usize) -> Result<(f32, Unit), String> {
+    let mut left = product(parser, depth, work)?;
+    loop {
+        let state = parser.state();
+        let sign = match parser.next() {
+            Ok(Token::Delim('+')) => 1.0,
+            Ok(Token::Delim('-')) => -1.0,
+            _ => {
+                parser.reset(&state);
+                return Ok(left);
+            }
+        };
+        let right = product(parser, depth, work)?;
+        // Zero lengths mix with any unit, as `0` does in CSS.
+        let unit = match (left.1, right.1) {
+            (a, b) if a == b => a,
+            (a, _) if right.0 == 0.0 => a,
+            (_, b) if left.0 == 0.0 => b,
+            _ => return Err("calc() mixes units that only resolve at layout".into()),
+        };
+        left = (left.0 + sign * right.0, unit);
+    }
+}
+
 impl Length {
     pub fn parse(source: &str) -> Result<Self, String> {
         let mut input = ParserInput::new(source);
         let mut parser = Parser::new(&mut input);
+        let lowered = source.trim_start().to_ascii_lowercase();
+        if ["calc(", "min(", "max(", "clamp("].iter().any(|name| lowered.starts_with(name)) {
+            let mut work = 256;
+            let (amount, unit) = operand(&mut parser, 0, &mut work)?;
+            parser.expect_exhausted().map_err(|_| "Unexpected length suffix")?;
+            if !amount.is_finite() || amount.abs() > 16384.0 {
+                return Err("Invalid or excessive length".into());
+            }
+            return match unit {
+                Unit::Px => Ok(Self::Px(amount)),
+                Unit::Em => Ok(Self::Em(amount)),
+                Unit::Percent => Ok(Self::Percent(amount)),
+                Unit::Number if amount == 0.0 => Ok(Self::Px(0.0)),
+                Unit::Number => Err("calc() of a length needs a unit".into()),
+            };
+        }
         let length = match parser.next().map_err(|_| "Expected length")? {
             Token::Number { value, .. } if *value == 0.0 => Self::Px(0.0),
             Token::Dimension { value, unit, .. } if value.is_finite() && value.abs() <= 16384.0 => {
@@ -314,6 +448,7 @@ pub enum Value {
     TrackList(Vec<crate::layout::Track>),
     Placement([crate::layout::GridLine; 2]),
     Transitions(Vec<crate::motion::Transition>),
+    Animations(Vec<crate::motion::Animation>),
 }
 
 #[cfg(test)]
@@ -328,6 +463,29 @@ mod tests {
             assert!(Length::parse(bad).is_err(), "{bad}");
         }
         assert!(Color::parse("rgb(1, 2 3)").is_err());
+    }
+
+    #[test]
+    fn math_functions_resolve_lengths_of_one_unit() {
+        assert_eq!(Length::parse("calc(10px + 2px)"), Ok(Length::Px(12.0)));
+        assert_eq!(Length::parse("calc((1em + 0.5em) * 2)"), Ok(Length::Em(3.0)));
+        assert_eq!(Length::parse("calc(100% / 4)"), Ok(Length::Percent(0.25)));
+        assert_eq!(Length::parse("max(4px, 2px * 3)"), Ok(Length::Px(6.0)));
+        assert_eq!(Length::parse("clamp(2px, 10px, 8px)"), Ok(Length::Px(8.0)));
+        assert_eq!(Length::parse("calc(0 + 3px)"), Ok(Length::Px(3.0)));
+        for bad in [
+            "calc(10px + 1em)",
+            "calc(10px * 2px)",
+            "calc(10px / 0)",
+            "calc(1e30px * 1e30)",
+            "calc(2)",
+            "clamp(1px, 2px)",
+            "calc(10deg)",
+        ] {
+            assert!(Length::parse(bad).is_err(), "{bad}");
+        }
+        let deep = format!("{}1px{}", "calc(".repeat(40), ")".repeat(40));
+        assert!(Length::parse(&deep).is_err());
     }
 
     #[test]

@@ -34,6 +34,8 @@ pub enum Kind {
     Placement,
     /// `transition` items.
     Transitions,
+    /// `animation` items naming `@keyframes`.
+    Animations,
     Color,
     Length,
     Number,
@@ -103,6 +105,7 @@ properties! {
     GridColumn, "grid-column", Placement, Value::Placement([crate::layout::GridLine::Auto; 2]), false, "Grid column lines: a line, a negative line from the end, or span n, and an optional / end.";
     GridRow, "grid-row", Placement, Value::Placement([crate::layout::GridLine::Auto; 2]), false, "Grid row lines, as grid-column.";
     Transition, "transition", Transitions, Value::Transitions(Vec::new()), false, "Colours, opacity, radius and font size change smoothly: property, duration, easing, delay.";
+    Animation, "animation", Animations, Value::Animations(Vec::new()), false, "Keyframe animations: name, duration, easing, delay, count, direction, fill.";
     Visibility, "visibility", Keyword(VISIBILITY), Value::Keyword("visible"), true, "hidden keeps the element's space but neither draws it nor lets it take input.";
     Layout, "layout", Layout, Value::Layout(Layout::Column), false, "Native row, column, grid or stack.";
     Order, "order", Integer, Value::Integer(0), false, "Visual order within the same parent; bindings do not change.";
@@ -150,6 +153,7 @@ impl Property {
             Kind::TrackList => Value::TrackList(crate::layout::track_list(source)?),
             Kind::Placement => Value::Placement(crate::layout::placement(source)?),
             Kind::Transitions => Value::Transitions(crate::motion::parse(source)?),
+            Kind::Animations => Value::Animations(crate::motion::parse_animations(source)?),
             Kind::Gradients => Value::Gradients(crate::gradient::parse(source)?),
             Kind::BoxShadows => Value::Shadows(crate::paint::shadows(source, false)?),
             Kind::TextShadows => Value::Shadows(crate::paint::shadows(source, true)?),
