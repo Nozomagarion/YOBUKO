@@ -118,6 +118,11 @@ impl Themes {
                 values
             },
             variant: theme.vars.variant_name.clone(),
+            kept: self
+                .entries
+                .iter()
+                .filter_map(|e| e.theme.vars.kept.as_ref().map(|why| (e.id.clone(), why.to_string())))
+                .collect(),
             variants: self
                 .entries
                 .iter()

@@ -204,15 +204,17 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
                 else { state.error = warnings.join("\n"); }
             }
         });
-        ui.collapsing("Theme style sheet", |ui| {
+        // The notices are worked out before the heading, so a closed section still says it has some.
+        let sheet = themes.skin.css.as_deref().unwrap_or_default();
+        if state.advanced != sheet {
+            state.advanced = sheet.into();
+            state.notices = crate::kit::native_css::inspect(sheet).unwrap_or_default().into_iter().map(|notice| format!("Line {}, column {}: {}. The rest of the sheet still applies.", notice.line, notice.column, notice.message)).collect();
+        }
+        let heading = match state.notices.len() { 0 => "Theme style sheet".to_string(), 1 => "Theme style sheet (1 notice)".to_string(), n => format!("Theme style sheet ({n} notices)") };
+        egui::CollapsingHeader::new(heading).id_salt("theme-style-sheet").show(ui, |ui| {
             ui.label("The theme's look is its style sheet, theme.css, in the theme's folder: variables, selectors, @media, gradients, shadows, transitions, Flex and Grid. Edit it in any text editor; Suhina reads it again within a second and never writes it. Settings changed here are saved in a variant (variants/NAME.json), and moved controls in layout.css. A built-in theme's sheet is read-only: Duplicate it to change its CSS.");
             ui.label("A theme offers its own settings with @property, for example: @property --glow { syntax: \"<number>\"; initial-value: 0.6; label: \"Glow\"; range: 0 1; }. They appear under Theme settings.");
             if ui.button("Open the themes folder").clicked() { request = Some(ThemeRequest::OpenFolder); }
-            let sheet = themes.skin.css.as_deref().unwrap_or_default();
-            if state.advanced != sheet {
-                state.advanced = sheet.into();
-                state.notices = crate::kit::native_css::inspect(sheet).unwrap_or_default().into_iter().map(|notice| format!("Line {}, column {}: {}. The rest of the sheet still applies.", notice.line, notice.column, notice.message)).collect();
-            }
             if state.notices.is_empty() { ui.label("The sheet reads without notices."); }
             for notice in &state.notices { ui.label(notice); }
         });

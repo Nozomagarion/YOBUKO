@@ -42,6 +42,8 @@ pub struct Vars {
     pub variant_name: Option<String>,
     /// Whether the chosen variant says it is light (`Some(true)`) or dark.
     pub light: Option<bool>,
+    /// Why the theme is still in an earlier file format, when its migration was refused.
+    pub kept: Option<Arc<str>>,
 }
 
 /// A setting's smallest and largest value.
@@ -293,25 +295,31 @@ fn gradient(value: &str) -> Option<Option<super::gradient::Gradient>> {
 /// property's value at the root from the sheet alone (its `:root` rules over the initial values, as a
 /// 1280 by 800 dark window sees them), and the sheet's notices.
 pub fn read(text: &str) -> Result<SheetValues, String> {
+    let sheet = Sheet::parse(text)?;
+    let declared: Vec<Registered> = sheet.properties.iter().filter(|p| !is_core(&p.name)).cloned().collect();
+    // Every variable the root sees, so a variant's value may refer to the theme's own.
+    let base = root_variables(&sheet, None)?;
+    let notices = sheet.notices.iter().map(|n| format!("line {}:{}: {}", n.line, n.column, n.message)).collect();
+    Ok((declared, base, notices))
+}
+
+/// Every custom property's value at the root from `sheet`, with `variant`'s sheet above it, as a
+/// 1280 by 800 dark window sees them.
+fn root_variables(sheet: &Sheet, variant: Option<&Sheet>) -> Result<BTreeMap<String, String>, String> {
     use suhina_style::cascade::{AppliedSheet, Layer, compute};
     use suhina_style::selector::{Element, Tree};
-    let sheet = Sheet::parse(text)?;
     let core = core_parsed().ok_or("the core theme properties do not parse")?;
     let tree = Tree::new(vec![Element::new("html", None)])?;
     let viewport = suhina_style::media::Viewport { width: 1280.0, height: 800.0, dark: true, reduced_motion: false };
-    let styles = compute(
-        &tree,
-        viewport,
-        &[
-            AppliedSheet { sheet: core, layer: Layer::Default, root: None },
-            AppliedSheet { sheet: &sheet, layer: Layer::Theme, root: None },
-        ],
-    )?;
-    let declared: Vec<Registered> = sheet.properties.iter().filter(|p| !is_core(&p.name)).cloned().collect();
-    // Every variable the root sees, so a variant's value may refer to the theme's own.
-    let base = styles.first().map(|style| style.variables().clone()).unwrap_or_default();
-    let notices = sheet.notices.iter().map(|n| format!("line {}:{}: {}", n.line, n.column, n.message)).collect();
-    Ok((declared, base, notices))
+    let mut sheets = vec![
+        AppliedSheet { sheet: core, layer: Layer::Default, root: None },
+        AppliedSheet { sheet, layer: Layer::Theme, root: None },
+    ];
+    if let Some(variant) = variant {
+        sheets.push(AppliedSheet { sheet: variant, layer: Layer::Variant, root: None });
+    }
+    let styles = compute(&tree, viewport, &sheets)?;
+    Ok(styles.first().map(|style| style.variables().clone()).unwrap_or_default())
 }
 
 /// The registered property `name`: a core one or one `theme` declares.
@@ -326,7 +334,8 @@ pub fn resolve(theme: &mut Theme) -> Vec<String> {
     let mut merged = (*theme.vars.base).clone();
     let mut chosen = BTreeMap::new();
     for (name, value) in &theme.vars.values {
-        if registered(theme, name).is_none() {
+        // A registered property, or a variable the theme's own `:root` sets (a helper colour).
+        if registered(theme, name).is_none() && !theme.vars.base.contains_key(name) {
             warnings.push(format!("{name}: the theme declares no such property"));
             continue;
         }
@@ -344,16 +353,24 @@ pub fn resolve(theme: &mut Theme) -> Vec<String> {
     for name in chosen.keys().cloned().collect::<Vec<_>>() {
         let name = &name;
         let value = resolved.get(name).cloned().unwrap_or_default();
-        if registered(theme, name).is_some_and(|p| p.accepts(&value)) {
+        if registered(theme, name).map_or(!value.trim().is_empty(), |p| p.accepts(&value)) {
             values.insert(name.clone(), value);
         } else {
             warnings.push(format!("{name}: {value} does not match the property's syntax"));
             chosen.remove(name);
         }
     }
-    warnings.extend(apply_core(theme, &values));
     theme.vars.values.retain(|name, _| chosen.contains_key(name));
     theme.skin.variant = variant_sheet(&theme.vars.values);
+    // The theme's own variables that refer to a value the variant changes follow it, as they do
+    // in the painted sheet.
+    if let (Some(css), Some(variant)) = (theme.skin.css.as_deref(), theme.skin.variant.as_deref())
+        && let (Ok(sheet), Ok(variant)) = (Sheet::parse(css), Sheet::parse(variant))
+        && let Ok(full) = root_variables(&sheet, Some(&variant))
+    {
+        values = full;
+    }
+    warnings.extend(apply_core(theme, &values));
     warnings
 }
 

@@ -139,3 +139,13 @@ fn host_rules_are_read_from_a_sheet_and_the_rest_is_left_to_the_engine() {
     assert!(!theme.skin.controls["mixer-pan"].hidden, "a rule in @media is not a placement");
     assert_eq!(theme.skin.styles[".pan"].len(), 1, "only --suhina-* styles are the app's");
 }
+
+#[test]
+fn a_variant_may_set_a_helper_variable_the_theme_sets_in_root() {
+    let (theme, _) = from_sheet(":root { --well: #101010; --accent: var(--well); }");
+    let (variant, _) = Variant::from_json("day", r##"{ "name": "Day", "values": { "--well": "#FAFAFA" } }"##).unwrap();
+    let (chosen, warnings) = with_variant(&theme, Some(&variant));
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(chosen.colors.accent, parse_hex("#FAFAFA").unwrap());
+    assert!(chosen.skin.variant.as_deref().unwrap().contains("--well: #FAFAFA"));
+}

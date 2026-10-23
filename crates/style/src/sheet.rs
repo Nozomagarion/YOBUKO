@@ -191,9 +191,11 @@ pub struct Sheet {
     pub properties: Vec<crate::registered::Registered>,
 }
 
-/// Properties the host application reads from a theme's rules itself (artwork, the theme's name
-/// and the window's background image); the engine leaves them alone without a notice.
-pub const HOST_PROPERTIES: &[&str] = &["image", "name", "background-opacity", "background-blur"];
+/// Properties the host application reads from a theme's rules itself; the engine leaves them
+/// alone without a notice. Read by the app, not the engine: artwork, the name, the background material, and the
+/// placement offsets `layout.css` writes (`left`, `top`, `right`, `bottom`).
+pub const HOST_PROPERTIES: &[&str] =
+    &["image", "name", "background-opacity", "background-blur", "left", "top", "right", "bottom"];
 
 /// The frames of one `@keyframes` rule: offsets from 0 to 1 and their declarations.
 pub(crate) type KeyframeRule = Vec<(f32, Vec<Declaration>)>;

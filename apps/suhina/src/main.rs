@@ -174,6 +174,7 @@ fn main() -> ExitCode {
         see_through: if see_through_asked { None } else { Some(false) },
         blurred: false,
         themes,
+        theme_error: None,
         recent,
         #[cfg(target_os = "macos")]
         mac_menu: None,
@@ -334,6 +335,8 @@ struct Window {
     /// The system blurs what shows through: on while the theme has a see-through background.
     blurred: bool,
     themes: theme_io::ThemeIo,
+    /// The theme files' last error in the status bar, cleared once they read without one.
+    theme_error: Option<String>,
     /// The projects opened and saved lately, for the project dialog.
     recent: recent::Recent,
     /// The macOS menu bar, once installed (#650).
@@ -673,10 +676,17 @@ impl Window {
             if let Some(id) = reply.select {
                 self.app.use_theme(ctx, &id);
             }
+            let clean = reply.notices.iter().all(Result::is_ok);
+            if clean && let Some(error) = self.theme_error.take() {
+                self.app.clear_error(&error);
+            }
             for notice in reply.notices {
                 self.app.set_status(match notice {
                     Ok(message) => Status::Done(message),
-                    Err(error) => Status::Error(error),
+                    Err(error) => {
+                        self.theme_error = Some(error.clone());
+                        Status::Error(error)
+                    }
                 });
             }
         }

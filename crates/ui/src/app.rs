@@ -2156,6 +2156,13 @@ impl App {
         self.status = status;
     }
 
+    /// Takes `error` off the status bar if it is still what it shows.
+    pub fn clear_error(&mut self, error: &str) {
+        if matches!(&self.status, Status::Error(shown) if shown == error) {
+            self.status = Status::Hint(String::new());
+        }
+    }
+
     /// The devices picked now: the picks on the selected device's track, or that device alone.
     fn device_picks(&self) -> Vec<(TrackId, usize)> {
         let Some(primary) = self.selected_device else { return Vec::new() };

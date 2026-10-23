@@ -113,6 +113,8 @@ impl ThemeFiles {
                 // Rules it could not read would be lost in the new form, so it stays as it is.
                 warnings.extend(problems.into_iter().map(|p| format!("{id}: {p}")));
                 warnings.push(format!("{id}: kept in its earlier form, not migrated, until it reads without warnings"));
+                let mut theme = theme;
+                theme.vars.kept = Some("Not converted to theme.css: it reads with warnings".into());
                 return Ok((theme, Vec::new()));
             }
             match migrate(&folder, id, &theme, previous) {
@@ -123,6 +125,8 @@ impl ThemeFiles {
                 }
                 Err(error) => {
                     warnings.push(format!("{id}: kept in its earlier form, not migrated: {error}"));
+                    let mut theme = theme;
+                    theme.vars.kept = Some(format!("Not converted to theme.css: {error}").into());
                     Ok((theme, Vec::new()))
                 }
             }

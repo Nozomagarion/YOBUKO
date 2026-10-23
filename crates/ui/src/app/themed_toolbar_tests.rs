@@ -301,3 +301,25 @@ fn css_toolbar_targets_keep_native_commands_with_svg_artwork() {
     assert!(harness.state().actions.iter().any(|action| action.id == "transport.stop"));
     skin::configure(&skin::Skin::default());
 }
+
+#[test]
+fn toolbar_module_backgrounds_follow_the_sheet() {
+    let mut harness = native_bar();
+    let tempo = harness.get_by_label("Tempo").rect();
+    harness.state_mut().app.use_test_skin(skin::Skin {
+        css: Some(std::sync::Arc::from(":root { --well: #102030; } #tempo, #position { background-color: var(--well); } #performance { background-color: transparent; }")),
+        ..Default::default()
+    });
+    harness.run();
+    let fills: Vec<_> = harness
+        .output()
+        .shapes
+        .iter()
+        .filter_map(|shape| match &shape.shape {
+            egui::Shape::Rect(rect) if rect.rect.intersects(tempo) => Some((rect.rect, rect.fill)),
+            _ => None,
+        })
+        .collect();
+    skin::configure(&skin::Skin::default());
+    assert!(fills.iter().any(|(_, fill)| *fill == egui::Color32::from_rgb(0x10, 0x20, 0x30)), "{fills:?}");
+}

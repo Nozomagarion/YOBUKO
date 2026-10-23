@@ -184,6 +184,8 @@ pub struct ThemesView {
     pub folder: Option<String>,
     /// Every theme variant: its entry's id (`<theme>@<variant>`) and its name.
     pub variants: Vec<(String, String)>,
+    /// Themes left in an earlier file format, by id, and why they were not converted.
+    pub kept: Vec<(String, String)>,
     /// The name of the variant in use, when one is.
     pub variant: Option<String>,
     /// The settings the theme in use declares itself (`@property` with a label), in its order.
@@ -297,7 +299,8 @@ pub struct PageState {
     pub window: bool,
     pub capture: Option<String>,
     /// The name being typed for a theme, with the theme's id.
-    pub theme_name: Option<(String, String)>,
+    /// The theme id, the name it had on disk, and the text being edited.
+    pub theme_name: Option<(String, String, String)>,
     /// The colour editor is a child view of Themes, not another sidebar page.
     pub theme_editor: bool,
     pub theme_restore: Option<(String, String)>,
@@ -308,6 +311,8 @@ pub struct PageState {
     pub theme_original: Option<Palette>,
     pub theme_original_rgb: Option<std::collections::BTreeMap<String, [u8; 3]>>,
     pub theme_rename_focus: bool,
+    /// What the theme list is filtered by: part of a theme's or a variant's name, or its id.
+    pub theme_search: String,
     /// A colour picker is open while its primary pointer button is held.
     pub theme_colour_held: bool,
     /// The audio devices were listed since the Audio page was opened.
@@ -1079,8 +1084,27 @@ fn theme_page(
                 }
                 ui.add_space(gap);
             }
-            ui.label("Other themes");
-            let mut others = themes.list.iter().filter(|(id, _, _)| id != current);
+            ui.horizontal(|ui| {
+                ui.label("Other themes");
+                let search = ui.add(
+                    egui::TextEdit::singleline(&mut state.theme_search)
+                        .hint_text("Search themes")
+                        .frame(widgets::input_frame())
+                        .desired_width(200.0),
+                );
+                search.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Search themes"));
+                widgets::input_line(ui, &search);
+            });
+            let query = state.theme_search.trim().to_lowercase();
+            let mut others = themes
+                .list
+                .iter()
+                .filter(|(id, _, _)| id != current)
+                .filter(|(id, name, _)| theme_matches(&query, id, name, &themes.variants))
+                .peekable();
+            if others.peek().is_none() && !query.is_empty() {
+                ui.label(egui::RichText::new("No themes match").color(theme::text_hint()));
+            }
             while let Some(first) = others.next() {
                 let second = others.next();
                 ui.horizontal(|ui| {
@@ -1102,6 +1126,17 @@ fn theme_page(
         *at = ui.min_rect().bottom();
     });
     request
+}
+
+/// Whether a theme shows for `query` (lower case): an empty query, or part of its name, its id or
+/// the name of one of its variants.
+fn theme_matches(query: &str, id: &str, name: &str, variants: &[(String, String)]) -> bool {
+    query.is_empty()
+        || name.to_lowercase().contains(query)
+        || id.to_lowercase().contains(query)
+        || variants.iter().any(|(entry, variant)| {
+            crate::kit::theme_vars::split_id(entry).0 == id && variant.to_lowercase().contains(query)
+        })
 }
 
 /// The current palette is featured once; every other palette stays in the compact grid. A theme
@@ -1134,6 +1169,7 @@ fn theme_card(
         ui.interact(card, Id::new(("theme", base)), if active { Sense::click_and_drag() } else { Sense::click() });
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Theme: {name}")));
     let mut chosen = None;
+    let kept = themes.kept.iter().find(|(kept, _)| kept == base).map(|(_, why)| why.as_str());
     let label = match themes.variants.iter().find(|(variant, _)| variant == id) {
         Some((_, variant)) if active => format!("{name} · {variant}"),
         _ => name.to_string(),
@@ -1170,6 +1206,8 @@ fn theme_card(
                 "Active"
             } else if built_in {
                 "Built-in"
+            } else if kept.is_some() {
+                "Not converted"
             } else {
                 "Custom"
             },
@@ -1177,6 +1215,10 @@ fn theme_card(
             if active { theme::accent() } else { theme::text_secondary() },
         );
     }
+    let response = match kept {
+        Some(why) => response.on_hover_text(why),
+        None => response,
+    };
     if swatches > 0.0 {
         let in_use = if active { themes.current.as_str() } else { "" };
         for (index, (variant, variant_name)) in variants.iter().enumerate() {
@@ -1259,10 +1301,11 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
         Some(variant) => (variant.clone(), true, "Variant name"),
         None => (themes.name.clone(), !themes.built_in, "Theme name"),
     };
-    if state.theme_name.as_ref().is_none_or(|(id, _)| *id != themes.current) {
-        state.theme_name = Some((themes.current.clone(), shown.clone()));
+    // A name changed on disk (the theme's own sheet, reloaded) replaces the field's text too.
+    if state.theme_name.as_ref().is_none_or(|(id, source, _)| *id != themes.current || *source != shown) {
+        state.theme_name = Some((themes.current.clone(), shown.clone(), shown.clone()));
     }
-    if let Some((_, name)) = state.theme_name.as_mut() {
+    if let Some((_, _, name)) = state.theme_name.as_mut() {
         let edit = ui.add_enabled(
             renamable,
             egui::TextEdit::singleline(name).frame(widgets::input_frame()).desired_width(260.0),
@@ -2334,6 +2377,16 @@ pub(super) fn edit_rgba(ui: &mut Ui, rgba: &mut [u8; 4], alpha: egui::color_pick
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_theme_search_matches_names_ids_and_variant_names() {
+        let variants = vec![("nord@frost".to_string(), "Frost".to_string())];
+        assert!(theme_matches("", "nord", "Nord", &variants));
+        assert!(theme_matches("nor", "nord", "Nord", &variants));
+        assert!(theme_matches("frost", "nord", "Nord", &variants));
+        assert!(!theme_matches("frost", "dracula", "Dracula", &variants));
+        assert!(theme_matches("test-new", "test-new-theme", "Kajo", &[]));
+    }
 
     #[test]
     fn settings_tree_does_not_cover_the_material_with_opaque_rows() {
