@@ -179,10 +179,11 @@ fn warp_turned_on_for_a_clip_whose_content_plays_at_another_tempo_elsewhere_gets
     ));
     let before = p.clone();
     let mut session = Session::new(p);
-    let region = |session: &Session, content: ContentId| match &session.project().content(content).unwrap().lanes[0].data {
-        LaneData::Audio(region) => region.clone(),
-        LaneData::Notes(_) => panic!("not audio"),
-    };
+    let region =
+        |session: &Session, content: ContentId| match &session.project().content(content).unwrap().lanes[0].data {
+            LaneData::Audio(region) => region.clone(),
+            LaneData::Notes(_) => panic!("not audio"),
+        };
     let clips = |session: &Session| {
         session.project().arrangement.lanes.iter().find(|l| l.track == Some(TrackId(3))).unwrap().clips.clone()
     };

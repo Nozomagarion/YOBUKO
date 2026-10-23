@@ -4,6 +4,7 @@
 //! A temporary folder for one test: its name is unique to the run (the process id, the time
 //! and a counter), so a run never finds a file an earlier run with the same process id left,
 //! and it is removed when dropped, which also happens while a failed test unwinds (#875).
+#![allow(clippy::panic)] // a test helper outside #[test] functions
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
