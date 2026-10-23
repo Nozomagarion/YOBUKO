@@ -181,3 +181,11 @@ fn a_toggle_that_is_on_has_artwork_of_its_own_or_the_pressed_one() {
     assert_eq!(pick("solo").as_deref(), Some("solo.on"));
     assert_eq!(pick("arm").as_deref(), Some("arm.active"), "without .on, the pressed artwork");
 }
+
+#[test]
+fn track_artwork_of_one_view_is_a_role_of_its_own() {
+    for role in ["track.name.mixer", "track.name.session", "track.body.arrangement", "track.name.mixer.hover"] {
+        assert!(crate::kit::skin::valid_role(role), "{role}");
+    }
+    assert!(!crate::kit::skin::valid_role("track.name.browser"));
+}

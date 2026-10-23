@@ -298,6 +298,10 @@ pub fn show(
     let _artwork =
         crate::kit::artwork::track_color(egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2));
     let _style_class = crate::kit::style_class::enter_named("mixer", &format!("track-{}", column.track.0));
+    crate::kit::native_css::set_variable(
+        "--track-colour",
+        crate::kit::native_css::hex(egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2)),
+    );
     crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, state.selected == Some(column.track));
     crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, column.mute);
     // The strip in a shade of its track's colour, as the column above it.
@@ -421,6 +425,10 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
     let response = ui.interact(rect.intersect(painter.clip_rect()), id.with("strip-name"), Sense::hover());
     let _name_style =
         crate::kit::style_class::enter_named_response("track-name", &format!("track-{}", column.track.0), &response);
+    crate::kit::native_css::set_variable(
+        "--track-fill",
+        crate::kit::native_css::hex(colour_picker::fill(column.color, column.mute)),
+    );
     crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, selected);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{} strip", column.name)));
     // The name stands on the track's colour, as in the column's header.
@@ -452,7 +460,8 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
         Align2::LEFT_CENTER,
         &column.name,
         theme::ui_font(theme::TEXT),
-        theme::text_on(fill),
+        // Ink that reads on the fill, unless the sheet gives the name a colour.
+        crate::kit::style_class::foreground(theme::text_on(fill)),
     );
 }
 

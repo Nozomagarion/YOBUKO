@@ -3679,6 +3679,7 @@ fn track_header(
 ) {
     let mut work_trace = crate::kit::frame_trace::WorkSpan::new("arrangement track header");
     let _style_class = crate::kit::style_class::enter_named("track-header", &format!("track-{}", lane.track.0));
+    crate::kit::native_css::set_variable("--track-colour", crate::kit::native_css::hex(rgb(lane.color)));
     crate::kit::native_css::mark(
         crate::kit::native_css::HostState::Selected,
         state.selected_tracks.contains(&lane.track),
@@ -4009,6 +4010,7 @@ fn track_header(
     name = crate::kit::control_layout::place("arrangement-name", name, clip);
     let name_visible = !crate::kit::control_layout::placement("arrangement-name").hidden;
     let name_style = crate::kit::style_class::enter_named("track-name", &format!("track-{}", lane.track.0));
+    crate::kit::native_css::set_variable("--track-fill", crate::kit::native_css::hex(header_fill));
     if name_visible {
         crate::kit::skin::paint_colored(
             painter,
@@ -4019,11 +4021,12 @@ fn track_header(
             rgb(lane.color),
         );
     }
-    let name_color = if lane.mute {
+    // Ink that reads on the fill, unless the sheet gives the name a colour.
+    let name_color = crate::kit::style_class::foreground(if lane.mute {
         motion::mix(header_fill, theme::text_on(header_fill), 0.75)
     } else {
         theme::text_on(header_fill)
-    };
+    });
     if name_visible && lane.kind == ColumnKind::Track && (lane.plays_notes || lane.plays_audio) {
         let type_rect = Rect::from_min_size(name.min, Vec2::new(16.0, name.height()));
         crate::kit::mixer_controls::track_type(

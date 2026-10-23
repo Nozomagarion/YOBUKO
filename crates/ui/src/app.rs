@@ -2753,24 +2753,28 @@ impl App {
         // The application bar is the window's title bar where Suhina draws its own (Windows); where
         // the system draws one, it would be a second.
         if cfg!(target_os = "windows") {
-            egui::Panel::top("application-bar")
-                .exact_size(28.0)
-                .frame(egui::Frame::NONE)
-                .show(ui, |ui| application_bar::show(ui, self.settings.view, &project_info, &timing));
+            with_bar_line(ui, "application-bar", |ui| {
+                egui::Panel::top("application-bar")
+                    .exact_size(28.0)
+                    .frame(egui::Frame::NONE)
+                    .show(ui, |ui| application_bar::show(ui, self.settings.view, &project_info, &timing))
+            });
         }
         // The window's own menu bar, unless Settings turns it off (by default on macOS, whose bar
         // at the top of the screen has the same menus).
         if self.settings.view.menu_bar {
-            egui::Panel::top("menu-bar")
-                .exact_size(theme::MENU_BAR)
-                .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 0)))
-                .show(ui, |ui| {
-                    let _style_class = crate::kit::style_class::enter("menu-bar");
-                    let bar = ui.max_rect().expand2(Vec2::new(4.0, 0.0));
-                    ui.painter().fill_background(bar, 0.0, theme::panel_background());
-                    crate::kit::native_css::background(ui.painter(), bar);
-                    self.menu_bar(ui, &mut actions)
-                });
+            with_bar_line(ui, "menu-bar", |ui| {
+                egui::Panel::top("menu-bar")
+                    .exact_size(theme::MENU_BAR)
+                    .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 0)))
+                    .show(ui, |ui| {
+                        let _style_class = crate::kit::style_class::enter("menu-bar");
+                        let bar = ui.max_rect().expand2(Vec2::new(4.0, 0.0));
+                        ui.painter().fill_background(bar, 0.0, theme::panel_background());
+                        crate::kit::native_css::background(ui.painter(), bar);
+                        self.menu_bar(ui, &mut actions)
+                    })
+            });
         }
         self.frame_trace.mark("menu bar");
         if self.projects.len() >= 2 {
@@ -2779,11 +2783,13 @@ impl App {
                 self.tab_row(ui, &mut actions)
             });
         }
-        egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
-            let _style_class = crate::kit::style_class::enter("toolbar");
-            ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
-            crate::kit::native_css::background(ui.painter(), ui.max_rect());
-            self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions)
+        with_bar_line(ui, "toolbar", |ui| {
+            egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+                let _style_class = crate::kit::style_class::enter("toolbar");
+                ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
+                crate::kit::native_css::background(ui.painter(), ui.max_rect());
+                self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions)
+            })
         });
         self.frame_trace.mark("control bar");
         egui::Panel::bottom("status-bar").exact_size(theme::STATUS_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
@@ -2803,6 +2809,8 @@ impl App {
         let workspace_base = if crate::kit::liquid::background_image(ui.ctx()).is_some() {
             egui::Color32::TRANSPARENT
         } else {
+            // `#workspace { border-color }` is this line's own colour.
+            let _workspace = crate::kit::style_class::enter_named("workspace", "workspace");
             theme::border()
         };
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(workspace_base)).show(ui, |ui| {
@@ -6751,6 +6759,44 @@ impl App {
         (span > 0.0).then(|| ((beat - from) / span).clamp(0.0, 1.0) as f32)
     }
 
+    /// The toolbar's button that shows or hides the browser (`#control-browser-toggle`), the same
+    /// in the native toolbar and in one a theme lays out.
+    pub(crate) fn browser_toggle(&mut self, ui: &Ui, painter: &egui::Painter, browser_rect: Rect) {
+        let label = if self.settings.browser_open { "Hide browser" } else { "Show browser" };
+        let response = widgets::button_area(ui, browser_rect, Id::new("browser-toggle"), label);
+        let response = match self.keymap.binding_text("view.browser") {
+            Some(keys) => response.on_hover_text(format!("{label} ({keys})")),
+            None => response.on_hover_text(label),
+        };
+        let browser_style = crate::kit::style_class::enter_named_response("button", "browser-toggle", &response);
+        widgets::button_surface(
+            painter,
+            browser_rect,
+            &response,
+            self.settings.browser_open,
+            motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
+            0.0,
+        );
+        // A panel with its left part filled while the browser shows.
+        let icon = Rect::from_center_size(browser_rect.center(), Vec2::new(14.0, 11.0));
+        let ink = crate::kit::style_class::foreground(if self.settings.browser_open {
+            theme::text_primary()
+        } else {
+            theme::text_secondary()
+        });
+        painter.rect_stroke(icon, 0.0, theme::hairline(ink), egui::StrokeKind::Inside);
+        let side = Rect::from_min_size(icon.min, Vec2::new(5.0, icon.height()));
+        if self.settings.browser_open {
+            painter.rect_filled(side, 0.0, ink);
+        } else {
+            painter.vline(side.right() + 0.5, icon.y_range(), theme::hairline(ink));
+        }
+        if response.clicked() {
+            self.toggle_browser();
+        }
+        drop(browser_style);
+    }
+
     fn control_bar(
         &mut self,
         ui: &mut Ui,
@@ -6791,35 +6837,7 @@ impl App {
         let browser_rect = row(x, theme::ROW);
         x = browser_rect.right() + 4.0;
         let browser_rect = native_styles.place(ui, "browser", browser_rect);
-        let label = if self.settings.browser_open { "Hide browser" } else { "Show browser" };
-        let response = widgets::button_area(ui, browser_rect, Id::new("browser-toggle"), label);
-        let response = match self.keymap.binding_text("view.browser") {
-            Some(keys) => response.on_hover_text(format!("{label} ({keys})")),
-            None => response.on_hover_text(label),
-        };
-        let browser_style = crate::kit::style_class::enter_named_response("button", "browser-toggle", &response);
-        widgets::button_surface(
-            &painter,
-            browser_rect,
-            &response,
-            self.settings.browser_open,
-            motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
-            0.0,
-        );
-        // A panel with its left part filled while the browser shows.
-        let icon = Rect::from_center_size(browser_rect.center(), Vec2::new(14.0, 11.0));
-        let ink = if self.settings.browser_open { theme::text_primary() } else { theme::text_secondary() };
-        painter.rect_stroke(icon, 0.0, theme::hairline(ink), egui::StrokeKind::Inside);
-        let side = Rect::from_min_size(icon.min, Vec2::new(5.0, icon.height()));
-        if self.settings.browser_open {
-            painter.rect_filled(side, 0.0, ink);
-        } else {
-            painter.vline(side.right() + 0.5, icon.y_range(), theme::hairline(ink));
-        }
-        if response.clicked() {
-            self.toggle_browser();
-        }
-        drop(browser_style);
+        self.browser_toggle(ui, &painter, browser_rect);
         let tempo_rect = row(x, 56.0);
         x = tempo_rect.right() + PAD;
         let tempo_rect = native_styles.place(ui, "tempo", tempo_rect);
@@ -7389,6 +7407,20 @@ pub(crate) const NAME_RECT_SLOT: &str = "slot-name-rect";
 /// Where a track's name is drawn in its header, by track id, in the view shown (#696).
 pub(crate) const NAME_RECT_TRACK: &str = "track-name-rect";
 
+/// Shows a bar with `show`, its separator line in the bar's own `border-color` (`.toolbar {
+/// border-color }`), else the theme's border.
+fn with_bar_line<R>(ui: &mut Ui, class: &str, show: impl FnOnce(&mut Ui) -> R) -> R {
+    let line = {
+        let _bar = crate::kit::style_class::enter(class);
+        theme::border()
+    };
+    let saved = ui.visuals().widgets.noninteractive.bg_stroke;
+    ui.visuals_mut().widgets.noninteractive.bg_stroke.color = line;
+    let shown = show(ui);
+    ui.visuals_mut().widgets.noninteractive.bg_stroke = saved;
+    shown
+}
+
 /// Draws a workspace panel with `draw`; when the theme's grid lays `panel` over the `main` view
 /// (both in the same cells), on a layer above the view, so it shows and takes the pointer there.
 fn over_view<R>(ui: &mut Ui, name: &str, panel: Rect, main: Rect, draw: impl FnOnce(&mut Ui) -> R) -> R {
@@ -7445,6 +7477,40 @@ mod tests {
         }
         app.use_test_skin(crate::kit::skin::Skin::default());
         assert!(drawn, "the browser is drawn on its own layer over the view");
+    }
+
+    #[test]
+    fn a_bar_draws_its_separator_in_its_own_border_colour() {
+        let ctx = egui::Context::default();
+        let mut app = App::new();
+        app.set_session(Session::new(crate::demo::demo_project()), &[]);
+        app.settings.animations = false;
+        app.use_test_skin(crate::kit::skin::Skin {
+            css: Some(std::sync::Arc::from(".menu-bar { border-color: #FF0000; }")),
+            ..Default::default()
+        });
+        let red = egui::Color32::from_rgb(0xFF, 0, 0);
+        let mut found = false;
+        for _ in 0..4 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| app.ui(ui),
+            );
+            output.textures_delta.clear();
+            // The separator runs the window's whole width; the toolbar's own lines are short.
+            found = output.shapes.iter().any(|shape| match &shape.shape {
+                egui::Shape::LineSegment { points, stroke } => {
+                    stroke.color == red && (points[1].x - points[0].x).abs() > 1000.0
+                }
+                egui::Shape::Rect(rect) => rect.fill == red && rect.rect.width() > 1000.0 && rect.rect.height() <= 2.0,
+                _ => false,
+            });
+        }
+        app.use_test_skin(crate::kit::skin::Skin::default());
+        assert!(found, "the line under the menu bar is red");
     }
 
     #[test]

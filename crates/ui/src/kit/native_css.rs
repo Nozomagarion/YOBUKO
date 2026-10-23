@@ -217,6 +217,8 @@ struct StyleNode {
     name: Option<String>,
     /// Pointer states (hover 1, active 2, disabled 4, focus 8) and the host's ([`mark`]).
     state: u16,
+    /// Custom properties the host gives the element ([`set_variable`]).
+    variables: Vec<(String, String)>,
     /// The device sheet this node is the root of (its hash), or 0.
     sheet: u64,
 }
@@ -334,7 +336,15 @@ pub fn enter(class: &str, name: Option<&str>, response: Option<&egui::Response>)
                 | u16::from(!r.enabled()) << 2
                 | u16::from(r.has_focus()) << 3
         });
-        let node = StyleNode { key, parent, class: class.into(), name: name.map(str::to_owned), state, sheet: 0 };
+        let node = StyleNode {
+            key,
+            parent,
+            class: class.into(),
+            name: name.map(str::to_owned),
+            state,
+            variables: Vec::new(),
+            sheet: 0,
+        };
         let index = engine.nodes.len();
         engine.nodes.push(node);
         engine.parents.push(index);
@@ -362,6 +372,26 @@ pub enum HostState {
 /// The host states and the selector names they match.
 pub(crate) const HOST_STATES: [(u16, &str); 6] =
     [(16, "checked"), (32, "selected"), (64, "playing"), (128, "recording"), (256, "armed"), (512, "muted")];
+
+/// Gives the element now in scope the custom property `name` (`--track-colour`) as `value`, which
+/// it and its descendants see below every rule of the sheet.
+pub fn set_variable(name: &str, value: String) {
+    ENGINE.with(|engine| {
+        let mut engine = engine.borrow_mut();
+        if let Some(&at) = engine.parents.last()
+            && let Some(node) = engine.nodes.get_mut(at)
+            && node.variables.len() < 16
+        {
+            node.variables.push((name.to_owned(), value));
+        }
+    });
+}
+
+/// `color` as `#RRGGBB` or `#RRGGBBAA`, for a value given to the sheet.
+pub fn hex(color: Color32) -> String {
+    let [r, g, b, a] = color.to_srgba_unmultiplied();
+    if a == 255 { format!("#{r:02x}{g:02x}{b:02x}") } else { format!("#{r:02x}{g:02x}{b:02x}{a:02x}") }
+}
 
 /// Marks the element now in scope with `state` when `on`, so the sheet's `:checked`,
 /// `:selected` and the others match it from the next frame.
@@ -411,6 +441,11 @@ fn element_id(node: &StyleNode) -> String {
         && let Some(name) = &node.name
     {
         return name.clone();
+    }
+    if node.class == "popup"
+        && let Some(name) = node.name.as_deref().filter(|name| *name == "metronome-level")
+    {
+        return name.to_owned();
     }
     // The level fields of the track headers and the mixer, by the names Edit interface gives them.
     if matches!(node.class.as_str(), "value" | "pan" | "fader")

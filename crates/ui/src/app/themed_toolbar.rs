@@ -41,6 +41,13 @@ impl NativeStyles {
     }
 }
 
+/// A module's caption at its left, `width` wide when it fits beside a usable control, and the rest.
+fn captioned(rect: Rect, width: f32) -> (Rect, Rect) {
+    let width = if rect.width() - width >= 48.0 { width } else { 0.0 };
+    let caption = Rect::from_min_size(rect.min, Vec2::new(width, rect.height()));
+    (caption, Rect::from_min_max(egui::pos2(caption.right(), rect.top()), rect.max))
+}
+
 /// A module's offset is relative to its existing responsive anchor, never a new layout.
 pub(super) fn place(ui: &Ui, module: &str, base: Rect) -> Rect {
     let draft = ui.ctx().data(|d| d.get_temp::<EditDraft>(edit_id()));
@@ -281,7 +288,9 @@ impl App {
             "browser" | "metronome" => 28.0,
             "tempo" => 62.0,
             "signature" => 45.0,
-            "grid" | "count-in" => 70.0,
+            // A caption, as in the native toolbar, and the menu.
+            "grid" => 26.0 + 70.0,
+            "count-in" => 50.0 + 70.0,
             "transport" => 86.0,
             "position" => 78.0,
             "mapping" => 64.0,
@@ -326,17 +335,7 @@ impl App {
             Rect::from_min_size(egui::pos2(rect.left() + index, rect.top()), Vec2::new(width, rect.height()))
         };
         match module {
-            "browser" => {
-                if widgets::button(
-                    ui,
-                    &painter,
-                    rect,
-                    "☰",
-                    if self.settings.browser_open { "Hide browser" } else { "Show browser" },
-                ) {
-                    self.toggle_browser();
-                }
-            }
+            "browser" => self.browser_toggle(ui, &painter, rect),
             "tempo" => {
                 ui.ctx().data_mut(|d| d.insert_temp(Id::new("sampler-tempo"), grid.tempo_bpm));
                 let shown = self.tempo_drag.unwrap_or(grid.tempo_bpm);
@@ -374,6 +373,15 @@ impl App {
                 );
             }
             "grid" => {
+                let (caption, rect) = captioned(rect, 26.0);
+                widgets::text_in(
+                    &painter,
+                    caption,
+                    Align2::LEFT_CENTER,
+                    "Grid",
+                    theme::ui_font(theme::TEXT_SMALL),
+                    theme::text_hint(),
+                );
                 let current = self.session().map_or(DEFAULT_QUANTIZATION, |s| quantization_label(s.quantization()));
                 let mut chosen = current;
                 ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
@@ -398,12 +406,23 @@ impl App {
                     actions.push(Action::new("launcher.setQuantization", json!({"value":chosen})));
                 }
             }
-            "count-in" => crate::session::record_controls::count_in_menu(
-                ui,
-                rect,
-                self.session().map_or(0, |s| s.count_in_bars()),
-                actions,
-            ),
+            "count-in" => {
+                let (caption, rect) = captioned(rect, 50.0);
+                widgets::text_in(
+                    &painter,
+                    caption,
+                    Align2::LEFT_CENTER,
+                    "Count-in",
+                    theme::ui_font(theme::TEXT_SMALL),
+                    theme::text_hint(),
+                );
+                crate::session::record_controls::count_in_menu(
+                    ui,
+                    rect,
+                    self.session().map_or(0, |s| s.count_in_bars()),
+                    actions,
+                );
+            }
             "metronome" => {
                 crate::session::record_controls::metronome_button(ui, &painter, rect, grid.metronome, actions)
             }

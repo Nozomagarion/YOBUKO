@@ -52,6 +52,8 @@ pub const CLASSES: &[&str] = &[
     "meter-level",
     "value",
     "value-fill",
+    "menu",
+    "popup",
     "dropdown",
     "text-input",
 ];
@@ -253,6 +255,15 @@ pub fn knob_preference(fallback: bool) -> bool {
         _ => fallback,
     }
 }
+/// The view being drawn, for artwork of one view: `mixer` (a strip, in any view), `session` or
+/// `arrangement`.
+pub fn view() -> Option<&'static str> {
+    STACK.with(|stack| {
+        let stack = stack.borrow();
+        ["mixer", "session", "arrangement"].into_iter().find(|view| stack.iter().any(|class| class == view))
+    })
+}
+
 pub fn computed() -> Option<super::native_css::Computed> {
     STACK.with(|stack| super::native_css::scoped(&stack.borrow()))
 }

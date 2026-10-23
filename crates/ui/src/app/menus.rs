@@ -119,7 +119,13 @@ fn entries(ui: &mut Ui, entries: &[Entry], picked: &mut Option<String>) {
 
 /// A menu of the bar that opens when the pointer moves onto it while another is open.
 fn bar_menu<R>(ui: &mut Ui, title: &str, content: impl FnOnce(&mut Ui) -> R) -> egui::InnerResponse<Option<R>> {
-    let shown = ui.menu_button(title, content);
+    let shown = ui.menu_button(title, |ui| {
+        // `.menu` styles the open menu: its background, text colour, corner radius and font size.
+        let _menu = crate::kit::style_class::enter("menu");
+        crate::kit::native_css::surface(ui.painter(), ui.clip_rect(), 0.0, egui::Color32::TRANSPARENT);
+        let mut styled = crate::kit::style_class::ui(ui);
+        content(&mut styled)
+    });
     let id = egui::Popup::default_response_id(&shown.response);
     if shown.response.hovered() && !egui::Popup::is_id_open(ui.ctx(), id) && egui::Popup::is_any_open(ui.ctx()) {
         egui::Popup::open_id(ui.ctx(), id);

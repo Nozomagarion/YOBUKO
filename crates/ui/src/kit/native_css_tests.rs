@@ -126,8 +126,24 @@ fn unsupported_declarations_are_skipped_and_the_rest_of_the_sheet_applies() {
 #[test]
 fn native_states_live_reload_and_compatibility_switch_keep_stable_keys() {
     let nodes = vec![
-        StyleNode { key: 1, parent: None, class: "toolbar".into(), name: None, state: 0, sheet: 0 },
-        StyleNode { key: 2, parent: Some(0), class: "button".into(), name: Some("play".into()), state: 0, sheet: 0 },
+        StyleNode {
+            key: 1,
+            parent: None,
+            class: "toolbar".into(),
+            name: None,
+            state: 0,
+            variables: Vec::new(),
+            sheet: 0,
+        },
+        StyleNode {
+            key: 2,
+            parent: Some(0),
+            class: "button".into(),
+            name: Some("play".into()),
+            state: 0,
+            variables: Vec::new(),
+            sheet: 0,
+        },
     ];
     prepare(".toolbar { color:#112233; } .toolbar:hover { color:#445566; } #control-play { box-shadow:0 1px; }", 800.0);
     ENGINE.with(|engine| engine.borrow_mut().nodes = nodes.clone());
@@ -919,4 +935,20 @@ fn checked_and_selected_states_reach_the_sheet() {
             "the header's fill only when selected"
         );
     }
+}
+
+#[test]
+fn a_track_gives_its_colour_to_the_sheet_and_each_view_is_known() {
+    let mut seen = None;
+    painted(".mixer .track-name { background-color: var(--track-colour); }", |_| {
+        let _session = super::super::style_class::enter("session");
+        let _strip = super::super::style_class::enter_named("mixer", "track-1");
+        set_variable("--track-colour", hex(egui::Color32::from_rgb(0xE8, 0x91, 0x3A)));
+        let _name = super::super::style_class::enter_named("track-name", "track-1");
+        seen = Some((theme::window_background(), super::super::style_class::view()));
+    });
+    let (fill, view) = seen.unwrap();
+    assert_eq!(fill, egui::Color32::from_rgb(0xE8, 0x91, 0x3A));
+    assert_eq!(view, Some("mixer"), "a strip in the Session view is the mixer's");
+    assert_eq!(hex(egui::Color32::from_rgba_unmultiplied(255, 0, 0, 128)), "#ff000080");
 }

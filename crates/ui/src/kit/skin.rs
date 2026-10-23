@@ -51,7 +51,18 @@ pub const ROLES: &[&str] = &[
 
 /// Roles only a theme's own artwork fills: without it the control is drawn natively, so Suhina
 /// ships none for them.
-pub const OWN_ROLES: &[&str] = &["volume.track", "volume.fill", "pan.track", "pan.fill"];
+pub const OWN_ROLES: &[&str] = &[
+    "volume.track",
+    "volume.fill",
+    "pan.track",
+    "pan.fill",
+    // A track's artwork in one view only, over `track.name` and `track.body`.
+    "track.name.session",
+    "track.name.mixer",
+    "track.name.arrangement",
+    "track.body.session",
+    "track.body.arrangement",
+];
 
 /// The very same original SVG sources are embedded and distributed as editable files.
 pub const DEFAULT_SVGS: &[(&str, &str)] = &[
@@ -633,6 +644,9 @@ pub fn paint_colored(
     ink: Color32,
     track_color: Color32,
 ) -> bool {
+    // The view's own artwork for the role, when the theme has one (`track.name.mixer`).
+    let view = super::style_class::view().map(|view| format!("{role}.{view}"));
+    let role = view.as_deref().filter(|role| has_own(role)).unwrap_or(role);
     paint_variant(painter, rect, role, state, ink, 0.0, 0.0, Some(track_color), None)
 }
 
