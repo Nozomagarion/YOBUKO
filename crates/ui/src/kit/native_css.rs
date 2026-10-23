@@ -198,6 +198,8 @@ struct Engine {
     styles_changed: bool,
     /// The user's own sheet (`user.css`), above every theme and device sheet.
     user: Option<(Arc<str>, Arc<suhina_style::sheet::Sheet>)>,
+    /// The chosen theme variant's values, above the theme's sheet.
+    variant: Option<(Arc<str>, Arc<suhina_style::sheet::Sheet>)>,
     /// Parsed device panel sheets by the hash of their text, bounded.
     device_sheets: HashMap<u64, Arc<suhina_style::sheet::Sheet>>,
 }
@@ -540,8 +542,17 @@ pub fn begin_frame(ui: &egui::Ui) {
     let dark = theme::contrast(palette.window_background, Color32::WHITE)
         > theme::contrast(palette.window_background, Color32::BLACK);
     let user = USER_SHEET.with(|sheet| sheet.borrow().clone());
+    let variant = skin::current().variant.clone();
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
+        if engine.variant.as_ref().map(|(text, _)| text) != variant.as_ref() {
+            engine.variant = variant
+                .and_then(|text| Some((Arc::clone(&text), Arc::new(suhina_style::sheet::Sheet::parse(&text).ok()?))));
+            engine.styles_changed = true;
+            engine.contexts.clear();
+            engine.toolbar = None;
+            engine.workspace = None;
+        }
         if engine.user.as_ref().map(|(text, _)| text) != user.as_ref() {
             // A user sheet that does not parse keeps the last working one.
             match user {
@@ -565,6 +576,7 @@ pub fn begin_frame(ui: &egui::Ui) {
                 Some(native) => {
                     let motion = engine.motion;
                     let user = engine.user.take();
+                    let variant = engine.variant.take();
                     let device_sheets = std::mem::take(&mut engine.device_sheets);
                     *engine = Engine {
                         source,
@@ -574,6 +586,7 @@ pub fn begin_frame(ui: &egui::Ui) {
                         native: Some(native),
                         motion,
                         user,
+                        variant,
                         device_sheets,
                         ..Default::default()
                     };

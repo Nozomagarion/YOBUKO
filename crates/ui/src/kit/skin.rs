@@ -133,8 +133,10 @@ impl Toolbar {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Skin {
-    /// Authored modern CSS, preserved losslessly alongside the native JSON projection.
+    /// The theme's style sheet (`theme.css`), as its author wrote it.
     pub css: Option<Arc<str>>,
+    /// The chosen variant's values as a `:root` rule, applied above the theme's sheet.
+    pub variant: Option<Arc<str>>,
     /// A portable PNG data URL, or a package-relative PNG path before resource resolution.
     pub background: Option<Arc<str>>,
     pub background_opacity: u8,
@@ -158,6 +160,7 @@ impl Default for Skin {
     fn default() -> Self {
         Self {
             css: None,
+            variant: None,
             background: None,
             background_opacity: 70,
             background_blur: 0,

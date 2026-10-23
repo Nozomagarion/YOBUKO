@@ -11,6 +11,7 @@ pub mod media;
 pub mod motion;
 pub mod paint;
 pub mod property;
+pub mod registered;
 pub mod resolver;
 pub mod selector;
 pub mod sheet;
@@ -22,3 +23,11 @@ mod variables;
 pub const MAX_SOURCE_BYTES: usize = 128 * 1024;
 /// Maximum nesting of blocks and functions, including values of custom properties.
 pub const MAX_NESTING: usize = 64;
+
+/// Resolves `var()` references among `raw` custom properties, as an element does: a property in
+/// a cycle or referring to a missing one without a fallback is left out.
+pub fn resolve_variables(
+    raw: &std::collections::BTreeMap<String, String>,
+) -> Result<std::collections::BTreeMap<String, String>, String> {
+    variables::resolve(raw)
+}

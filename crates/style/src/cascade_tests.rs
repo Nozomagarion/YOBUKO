@@ -167,3 +167,47 @@ fn keyframes_resolve_for_each_element_with_its_variables() {
     let sheet = Sheet::parse("knob { animation: missing 1s; } @keyframes x { 200% { color: red; } }").unwrap();
     assert_eq!(sheet.notices.len(), 1);
 }
+
+#[test]
+fn registered_properties_give_their_initial_value_and_a_variant_wins_over_the_theme() {
+    let theme = Sheet::parse(
+        "@property --glow { syntax: \"<number>\"; initial-value: 0.6; label: \"Glow\"; }\n\
+         @property --accent { syntax: \"<color>\"; initial-value: #112233; }\n\
+         :root { --accent: #445566; }\n\
+         @media (width < 10px) { :root { --accent: #000000; } }",
+    )
+    .unwrap();
+    assert_eq!(theme.properties.len(), 2);
+    let variant = Sheet::parse(":root { --accent: #abcdef; --glow: bright; }").unwrap();
+    let tree = Tree::new(vec![Element::new("html", None), Element::new("body", Some(0))]).unwrap();
+    let viewport = Viewport { width: 800.0, height: 600.0, dark: true, reduced_motion: false };
+    let alone = compute(&tree, viewport, &[AppliedSheet { sheet: &theme, layer: Layer::Theme, root: None }]).unwrap();
+    assert_eq!(alone[1].variable("--glow"), Some("0.6"));
+    assert_eq!(alone[1].variable("--accent"), Some("#445566"));
+    let both = compute(
+        &tree,
+        viewport,
+        &[
+            AppliedSheet { sheet: &theme, layer: Layer::Theme, root: None },
+            AppliedSheet { sheet: &variant, layer: Layer::Variant, root: None },
+        ],
+    )
+    .unwrap();
+    assert_eq!(both[1].variable("--accent"), Some("#abcdef"));
+    // A value that does not match the registered syntax gives the initial value.
+    assert_eq!(both[1].variable("--glow"), Some("0.6"));
+}
+
+#[test]
+fn host_properties_and_bad_property_rules_do_not_break_a_sheet() {
+    let sheet = Sheet::parse(
+        ".knob { image: url(\"assets/knob.svg\"); color: red; }\n\
+         .window { background-opacity: 70; }\n\
+         @property --x { syntax: \"<color>\"; }\n\
+         @property --y { syntax: \"<integer>\"; initial-value: 4; range: 1 8; }",
+    )
+    .unwrap();
+    assert_eq!(sheet.notices.len(), 1, "{:?}", sheet.notices);
+    assert!(sheet.notices[0].message.contains("initial-value"));
+    assert_eq!(sheet.properties.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["--y"]);
+}

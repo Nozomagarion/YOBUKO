@@ -187,7 +187,13 @@ pub struct Sheet {
     pub(crate) layers: Vec<String>,
     /// `@keyframes` rules by name: offsets from 0 to 1 and their declarations.
     pub(crate) keyframes: Vec<(String, KeyframeRule)>,
+    /// `@property` rules in source order; a later rule for the same name replaces an earlier one.
+    pub properties: Vec<crate::registered::Registered>,
 }
+
+/// Properties the host application reads from a theme's rules itself (artwork, the theme's name
+/// and the window's background image); the engine leaves them alone without a notice.
+pub const HOST_PROPERTIES: &[&str] = &["image", "name", "background-opacity", "background-blur"];
 
 /// The frames of one `@keyframes` rule: offsets from 0 to 1 and their declarations.
 pub(crate) type KeyframeRule = Vec<(f32, Vec<Declaration>)>;
@@ -379,7 +385,37 @@ fn rules(
                     .map(str::trim);
                 let keyframes =
                     header.strip_prefix("@keyframes").filter(|s| s.starts_with(char::is_whitespace)).map(str::trim);
-                if let Some(name) = keyframes {
+                let property =
+                    header.strip_prefix("@property").filter(|s| s.starts_with(char::is_whitespace)).map(str::trim);
+                if let Some(name) = property {
+                    let body = nested(parser, |inner| {
+                        let start = inner.position().byte_index();
+                        consume(inner)?;
+                        Ok(source.get(start..inner.position().byte_index()).unwrap_or_default().to_owned())
+                    })?;
+                    let mut text = String::new();
+                    let mut rest = body.as_str();
+                    while let Some(open) = rest.find("/*") {
+                        text.push_str(&rest[..open]);
+                        rest = rest[open..].find("*/").map_or("", |close| &rest[open + close + 2..]);
+                    }
+                    text.push_str(rest);
+                    let descriptors: Vec<(String, String)> = text
+                        .split(';')
+                        .filter_map(|d| d.split_once(':'))
+                        .map(|(d, v)| (d.trim().to_ascii_lowercase(), v.trim().to_owned()))
+                        .collect();
+                    match crate::registered::Registered::from_descriptors(name, &descriptors) {
+                        Ok(registered) => {
+                            sheet.properties.retain(|p| p.name != registered.name);
+                            if sheet.properties.len() >= crate::registered::MAX_REGISTERED {
+                                return Err("Style sheet exceeds 256 @property rules".into());
+                            }
+                            sheet.properties.push(registered);
+                        }
+                        Err(message) => sheet.notice(location, message),
+                    }
+                } else if let Some(name) = keyframes {
                     if !crate::motion::valid_name(name) {
                         sheet.notice(location, "Invalid keyframes name".into());
                         nested(parser, consume)?;
@@ -599,6 +635,9 @@ fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) ->
         }
         if name.len() > 128 {
             sheet.notice(at, "Property name exceeds 128 bytes".into());
+            continue;
+        }
+        if HOST_PROPERTIES.contains(&name.as_str()) {
             continue;
         }
         if !name.starts_with("--") && Property::from_name(&name).is_none() {

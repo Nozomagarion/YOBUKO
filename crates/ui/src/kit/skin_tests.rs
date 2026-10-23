@@ -167,6 +167,7 @@ fn svg_states_publish_distinct_pixels_and_reuse_cached_textures() {
 fn skin_round_trip_and_old_defaults() {
     let skin = Skin {
         css: Some(Arc::from("/* preserved */ @layer test { .browser { color:var(--ink); } }")),
+        variant: None,
         background: None,
         background_opacity: 70,
         background_blur: 0,

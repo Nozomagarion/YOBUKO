@@ -35,13 +35,14 @@ impl Paint {
         Some(())
     }
 
-    /// The cascade of host defaults, the theme, device panel sheets (each bounded to its
+    /// The cascade of host defaults, the theme, the chosen variant's values, device panel sheets (each bounded to its
     /// panel's element) and the user's sheet, in that order of precedence.
     fn styles(
         &self,
         tree: &Tree,
         viewport: Viewport,
         extra: Option<&Sheet>,
+        variant: Option<&Sheet>,
         devices: &[(&Sheet, usize)],
         user: Option<&Sheet>,
     ) -> Option<Vec<ComputedStyle>> {
@@ -50,6 +51,9 @@ impl Paint {
             sheets.push(AppliedSheet { sheet: extra, layer: Layer::Default, root: None });
         }
         sheets.push(AppliedSheet { sheet: &self.sheet, layer: Layer::Theme, root: None });
+        if let Some(variant) = variant {
+            sheets.push(AppliedSheet { sheet: variant, layer: Layer::Variant, root: None });
+        }
         for (sheet, root) in devices.iter().take(16) {
             sheets.push(AppliedSheet { sheet, layer: Layer::Device, root: Some(*root) });
         }
@@ -72,6 +76,10 @@ fn viewport(engine: &Engine) -> Viewport {
         dark: engine.dark,
         reduced_motion: !engine.motion,
     }
+}
+
+fn variant(engine: &Engine) -> Option<&Sheet> {
+    engine.variant.as_ref().map(|(_, sheet)| sheet.as_ref())
 }
 
 fn roots(window: bool) -> Vec<Element> {
@@ -131,7 +139,7 @@ pub(super) fn retained(engine: &Engine) -> Option<Vec<(u64, Computed)>> {
         .filter_map(|(index, node)| engine.device_sheets.get(&node.sheet).map(|sheet| (sheet.as_ref(), index + 2)))
         .collect();
     let user = engine.user.as_ref().map(|(_, sheet)| sheet.as_ref());
-    let values = paint.styles(&tree, viewport(engine), None, &devices, user)?;
+    let values = paint.styles(&tree, viewport(engine), None, variant(engine), &devices, user)?;
     Some(engine.nodes.iter().zip(values.iter().skip(2)).map(|(node, value)| (node.key, computed(value))).collect())
 }
 
@@ -142,7 +150,7 @@ pub(super) fn scoped(engine: &Engine, stack: &[String]) -> Option<Computed> {
     }
     let tree = Tree::new(elements).ok()?;
     let user = engine.user.as_ref().map(|(_, sheet)| sheet.as_ref());
-    engine.native.as_ref()?.styles(&tree, viewport(engine), None, &[], user)?.last().map(computed)
+    engine.native.as_ref()?.styles(&tree, viewport(engine), None, variant(engine), &[], user)?.last().map(computed)
 }
 
 /// Properties that ask for theme layout when a theme writes them on a laid-out element.
@@ -205,7 +213,7 @@ pub(super) fn layout(engine: &Engine, elements: Vec<Element>, defaults: &str, si
     let tree = Tree::new(all).ok()?;
     let defaults = Sheet::parse(defaults).ok()?;
     let user = engine.user.as_ref().map(|(_, sheet)| sheet.as_ref());
-    let styles = paint.styles(&tree, viewport(engine), Some(&defaults), &[], user)?;
+    let styles = paint.styles(&tree, viewport(engine), Some(&defaults), variant(engine), &[], user)?;
     let size = [size[0].clamp(0.0, 16384.0), size[1].clamp(0.0, 16384.0)];
     let rectangles = suhina_style::layout::compute(&tree, &styles, size).ok()?;
     let requested = styles.iter().skip(2).any(|style| LAYOUT.iter().any(|property| style.authored(*property)));

@@ -19,6 +19,8 @@ use std::{
 pub enum Layer {
     Default,
     Theme,
+    /// A theme variant's chosen values, above the theme's own rules.
+    Variant,
     Device,
     User,
 }
@@ -53,6 +55,11 @@ impl ComputedStyle {
     pub fn get(&self, property: Property) -> Value {
         self.values.get(&property).cloned().unwrap_or_else(|| property.initial())
     }
+    /// Every custom property the element sees, resolved.
+    pub fn variables(&self) -> &BTreeMap<String, String> {
+        &self.variables
+    }
+
     pub fn variable(&self, name: &str) -> Option<&str> {
         self.variables.get(name).map(String::as_str)
     }
@@ -119,6 +126,16 @@ fn compute_inner(
                 }
             }
             computed.variables = Arc::clone(&parent.variables);
+        } else {
+            // A registered property's initial value is what the root sees until a rule sets it.
+            let initial: BTreeMap<String, String> = sheets
+                .iter()
+                .flat_map(|applied| applied.sheet.properties.iter())
+                .filter_map(|registered| Some((registered.name.clone(), registered.initial.clone()?)))
+                .collect();
+            if !initial.is_empty() {
+                computed.variables = Arc::new(initial);
+            }
         }
         let mut winners: BTreeMap<&str, (Priority, &Declaration)> = BTreeMap::new();
         let mut order = 0usize;
@@ -160,7 +177,16 @@ fn compute_inner(
             for (name, (_, declaration)) in winners.iter().filter(|(name, _)| name.starts_with("--")) {
                 match declaration.value.trim() {
                     "initial" => {
-                        variables.remove(*name);
+                        match sheets
+                            .iter()
+                            .rev()
+                            .flat_map(|applied| applied.sheet.properties.iter())
+                            .find(|registered| registered.name == *name)
+                            .and_then(|registered| registered.initial.clone())
+                        {
+                            Some(initial) => variables.insert((*name).into(), initial),
+                            None => variables.remove(*name),
+                        };
                     }
                     "inherit" | "unset" => {}
                     _ => {
@@ -168,7 +194,19 @@ fn compute_inner(
                     }
                 }
             }
-            let resolved = crate::variables::resolve(&variables)?;
+            let mut resolved = crate::variables::resolve(&variables)?;
+            // A registered property's value that does not match its syntax is invalid at
+            // computed-value time: the property takes its initial value.
+            for registered in sheets.iter().flat_map(|applied| applied.sheet.properties.iter()) {
+                if let Some(value) = resolved.get(&registered.name)
+                    && !registered.syntax.accepts(value)
+                {
+                    match &registered.initial {
+                        Some(initial) => resolved.insert(registered.name.clone(), initial.clone()),
+                        None => resolved.remove(&registered.name),
+                    };
+                }
+            }
             variable_bytes = variable_bytes
                 .checked_add(resolved.values().map(String::len).sum::<usize>())
                 .filter(|bytes| *bytes <= 16 * 1024 * 1024)

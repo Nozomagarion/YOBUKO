@@ -23,5 +23,6 @@ pub mod surface;
 pub mod theme;
 pub mod theme_css;
 pub mod theme_preview;
+pub mod theme_vars;
 pub mod waveform;
 pub mod widgets;

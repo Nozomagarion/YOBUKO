@@ -460,6 +460,156 @@ pub fn export(theme: &Theme) -> String {
     css
 }
 
+/// A theme's own style sheet (`theme.css`) written from the model, for a theme that has none
+/// yet (one migrated from an earlier version, or a copy of Suhina Dark): its core property values
+/// in a `:root` rule, its name, its artwork, then `advanced`, the free-form CSS it carried.
+pub fn sheet(theme: &Theme, advanced: Option<&str>) -> String {
+    let mut css = String::from("/* Suhina theme. Settings are custom properties; see README.md. */\n:root {\n");
+    let defaults = super::theme_vars::core_values(&Theme::default());
+    for (name, value) in super::theme_vars::core_values(theme) {
+        // Palette tokens are always written, so a theme shows every colour it uses.
+        let palette = theme.colors.tokens().iter().any(|(key, _, _)| super::theme_vars::token_property(key) == name);
+        if palette || defaults.get(&name) != Some(&value) {
+            css.push_str(&format!("  {name}: {value};\n"));
+        }
+    }
+    css.push_str(&format!("}}\ntheme {{ name: \"{}\"; }}\n", theme.name.replace(['"', '\\'], "")));
+    for (role, asset) in &theme.skin.assets {
+        css.push_str(&artwork_rule(role, asset));
+    }
+    if let Some(advanced) = advanced.map(str::trim).filter(|a| !a.is_empty()) {
+        css.push('\n');
+        css.push_str(advanced);
+        css.push('\n');
+    }
+    css
+}
+
+fn artwork_rule(role: &str, asset: &str) -> String {
+    // Package export writes each inline SVG under this stable relative name.
+    let path = if asset.trim_start().starts_with('<') || skin::png_artwork(asset) {
+        format!("assets/{role}.{}", skin::artwork_extension(asset))
+    } else {
+        asset.to_owned()
+    };
+    format!(
+        "{} {{ image: url(\"{path}\"); }}\n",
+        role.replace(".hover", ":hover").replace(".active", ":active").replace(".disabled", ":disabled"),
+    )
+}
+
+/// What Suhina's own editors set beyond settings, as `layout.css`: control placements and
+/// anchors, the toolbar, styles, artwork and the name. Empty when there is nothing to write.
+pub fn layout(theme: &Theme, sheet_theme: &Theme) -> String {
+    let full = export(theme);
+    let mut css = String::new();
+    if theme.name != sheet_theme.name {
+        css.push_str(&format!("theme {{ name: \"{}\"; }}\n", theme.name.replace(['"', '\\'], "")));
+    }
+    // Artwork is compared by where it is kept: an edited image keeps its file, so only artwork
+    // the sheet does not name needs a rule here.
+    let paths = |theme: &Theme| -> std::collections::BTreeMap<String, String> {
+        theme.skin.assets.iter().map(|(role, asset)| (role.clone(), artwork_rule(role, asset))).collect()
+    };
+    if paths(theme) != paths(sheet_theme) {
+        for rule in paths(theme).values() {
+            css.push_str(rule);
+        }
+        // Artwork the sheet names that the theme no longer has.
+        for role in sheet_theme.skin.assets.keys().filter(|role| !theme.skin.assets.contains_key(*role)) {
+            css.push_str(&artwork_rule(role, "none").replace("url(\"none\")", "none"));
+        }
+    }
+    let structure = |text: &str| -> Vec<String> {
+        text.lines()
+            .filter(|line| line.starts_with(".control-") || line.starts_with("toolbar ") || is_style_line(line))
+            .map(str::to_owned)
+            .collect()
+    };
+    let ours = structure(&full);
+    if ours != structure(&export(sheet_theme)) {
+        for line in ours {
+            css.push_str(&line);
+            css.push('\n');
+        }
+    }
+    css
+}
+
+fn is_style_line(line: &str) -> bool {
+    line.split_once(" {").is_some_and(|(selector, rest)| {
+        !rest.contains("image:") && super::style_class::valid_selector(selector) && !selector.starts_with(".control-")
+    }) && !line.starts_with(":root")
+        && !line.starts_with("meter ")
+        && !line.starts_with("artwork ")
+        && !line.starts_with("theme ")
+        && !line.starts_with("liquid ")
+        && !line.starts_with("gradient-")
+        && !line.starts_with("session ")
+        && !line.starts_with(".window ")
+}
+
+/// Reads the rules of a theme's own sheet that Suhina reads itself (its name, artwork, control
+/// placements, the toolbar and `--suhina-*` styles); everything else is for the style engine
+/// and is left alone. Nested groups (`@media`, `@layer`) are skipped.
+pub fn read_host_rules(theme: &mut Theme, css: &str) -> Vec<String> {
+    let mut host = String::new();
+    let mut rest = css;
+    let mut rules = 0;
+    while let Some(start) = rest.find(|c: char| !c.is_whitespace()) {
+        rest = &rest[start..];
+        if let Some(comment) = rest.strip_prefix("/*") {
+            rest = comment.find("*/").map_or("", |end| &comment[end + 2..]);
+            continue;
+        }
+        let brace = rest.find('{');
+        let semicolon = rest.find(';');
+        if rest.starts_with('@') && semicolon.is_some_and(|s| brace.is_none_or(|b| s < b)) {
+            rest = semicolon.map_or("", |s| &rest[s + 1..]);
+            continue;
+        }
+        let Some(open) = brace else { break };
+        let mut depth = 0usize;
+        let mut close = None;
+        for (index, c) in rest[open..].char_indices() {
+            match c {
+                '{' => depth += 1,
+                '}' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        close = Some(open + index);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(close) = close else { break };
+        let selector = rest[..open].trim();
+        let body = &rest[open + 1..close];
+        rest = &rest[close + 1..];
+        rules += 1;
+        if rules > 1024 || selector.starts_with('@') || body.contains('{') {
+            continue;
+        }
+        for declaration in body.split(';').filter(|d| !d.trim().is_empty()) {
+            let Some((property, _)) = declaration.split_once(':') else { continue };
+            let property = property.trim();
+            let wanted = property == "image"
+                || match selector {
+                    "theme" => property == "name",
+                    "toolbar" => true,
+                    _ if selector.starts_with(".control-") => true,
+                    _ => super::style_class::valid_selector(selector) && property.starts_with("--suhina-"),
+                };
+            if wanted {
+                host.push_str(&format!("{selector} {{ {declaration}; }}\n"));
+            }
+        }
+    }
+    apply(theme, &host)
+}
+
 #[cfg(test)]
 #[path = "theme_css_tests.rs"]
 mod tests;

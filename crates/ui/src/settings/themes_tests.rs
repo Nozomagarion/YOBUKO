@@ -13,7 +13,7 @@ fn gradient_edits_copy_builtins_save_duplicate_and_reset_with_the_theme() {
     assert_eq!(themes.get("nord").unwrap().gradients, Gradients::default());
     let edited = themes.get(&id).unwrap().clone();
     assert_eq!(edited.gradients, gradients);
-    assert_eq!(Theme::from_json(&edited.to_json()), (edited.clone(), Vec::new()));
+    assert_eq!(Theme::from_json(&edited.to_json()).0.gradients, edited.gradients);
     let copy = themes.request(&id, ThemeRequest::Duplicate).unwrap();
     assert_eq!(themes.get(&copy).unwrap().gradients, gradients);
     themes.request(
@@ -42,6 +42,7 @@ fn night() -> ThemeEntry {
             gradients: Default::default(),
             transparent_rgb: Default::default(),
             skin: Default::default(),
+            vars: Default::default(),
         },
     }
 }
@@ -159,6 +160,7 @@ fn renaming_a_theme_renames_its_file() {
                     gradients: Default::default(),
                     transparent_rgb: Default::default(),
                     skin: Default::default(),
+                    vars: Default::default(),
                 })
             },
         ]

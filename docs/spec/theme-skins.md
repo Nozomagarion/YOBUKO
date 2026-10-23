@@ -20,11 +20,11 @@ covers:
   - crates/ui/themes/dark-gloss.css
   - crates/ui/themes/compact-session.css
   - crates/ui/themes/suhina-sheet.theme.css
-  - crates/ui/themes/suhina-sheet.css
+  - crates/ui/themes/suhina-sheet.layout.css
   - crates/ui/themes/suhina-meadow.theme.css
-  - crates/ui/themes/suhina-meadow.css
+  - crates/ui/themes/suhina-meadow.layout.css
   - crates/ui/themes/suhina-blocks.theme.css
-  - crates/ui/themes/suhina-blocks.css
+  - crates/ui/themes/suhina-blocks.layout.css
   - crates/ui/src/kit/skin.rs
   - crates/ui/src/app/themed_toolbar.rs
   - crates/ui/src/settings/skin_editor.rs

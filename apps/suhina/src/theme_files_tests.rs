@@ -31,8 +31,9 @@ fn themes_are_written_read_and_seen_when_they_change() {
     let (entries, warnings) = files.read_all();
     let ids: Vec<_> = entries.iter().map(|e| e.id.as_str()).collect();
     assert_eq!(ids, ["b-bad", "night"]);
-    assert_eq!(entries.get(1).map(|e| &e.theme), Some(&night()));
-    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert!(entries.get(1).is_some_and(|e| same_look(&e.theme, &night())));
+    // The theme with a colour it cannot read, and that it stays JSON until it reads whole.
+    assert_eq!(warnings.len(), 2, "{warnings:?}");
 
     files.checked = None;
     std::fs::write(themes.join("c-new.json"), "{ \"name\": \"New\" }").unwrap_or_default();
@@ -64,12 +65,12 @@ fn a_backup_brings_the_themes_back() {
     let backup = files.backup().unwrap_or_default();
     assert!(backup.starts_with(dir.join("exports")), "{}", backup.display());
 
-    // Portable backups materialize inherited artwork so another machine looks the same.
+    // A backup holds each theme's folder as it is.
     let mut other = ThemeFiles::new(Some(dir.join("other")));
     assert_eq!(other.import(&backup), Ok((vec!["night".to_string()], Vec::new())));
-    let mut restored = night();
-    restored.skin.assets = suhina_ui::kit::skin::default_assets();
-    assert_eq!(other.read_all().0, vec![ThemeEntry { id: "night".into(), theme: restored }]);
+    let (restored, _) = other.read_all();
+    assert_eq!(restored.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["night"]);
+    assert!(same_look(&restored[0].theme, &night()));
     // The same themes again are not doubled; a different one with a taken id gets its own.
     assert_eq!(other.import(&backup), Ok((Vec::new(), Vec::new())));
     let changed = Theme { name: "Night 2".into(), ..night() };
@@ -88,20 +89,25 @@ fn the_template_holds_a_theme_a_readme_and_examples() {
     let mut archive = zip::ZipArchive::new(file).unwrap_or_else(|e| panic!("{e}"));
     let mut names: Vec<String> = archive.file_names().filter_map(Result::ok).map(|n| n.to_string()).collect();
     names.sort();
-    assert!(names.contains(&"README.md".to_string()) && names.contains(&TEMPLATE.to_string()));
-    assert!(names.contains(&"examples/nord/theme.css".to_string()), "{names:?}");
+    for name in ["README.md", "my-theme/theme.css", "my-theme/variants/warm.json", "examples/nord/theme.css"] {
+        assert!(names.contains(&name.to_string()), "{name}: {names:?}");
+    }
+    assert!(!names.iter().any(|n| n.ends_with(".json") && !n.contains("/variants/")), "{names:?}");
     let mut template = String::new();
     archive
-        .by_name(TEMPLATE)
+        .by_name("my-theme/theme.css")
         .unwrap_or_else(|e| panic!("{e}"))
         .read_to_string(&mut template)
         .unwrap_or_else(|e| panic!("{e}"));
-    assert_eq!(Theme::from_json(&template).1, Vec::<String>::new());
+    assert_eq!(theme::from_sheet(&template, "").1, Vec::<String>::new());
     // The editable example is importable; reference palettes remain examples only.
     let mut into = ThemeFiles::new(Some(dir.join("into")));
     let (ids, warnings) = into.import(&zip).unwrap();
     assert_eq!(ids, ["my-theme"]);
     assert!(warnings.is_empty());
+    let (entries, warnings) = into.read_all();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(entries.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["my-theme", "my-theme@warm"]);
     let _clean = std::fs::remove_dir_all(&dir);
 }
 

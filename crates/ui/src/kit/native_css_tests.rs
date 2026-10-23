@@ -237,7 +237,7 @@ fn gloss_surfaces_have_opaque_bases_and_sheet_overlays_preserve_native_fills() {
         assert_eq!(style.background.a(), 255, "{class} exposes the desktop");
         assert!(style.has_gradient(), "{class} lost its gradient");
     }
-    for css in [theme::GLOSS_EXAMPLE, include_str!("../../themes/suhina-sheet.css")] {
+    for css in [theme::GLOSS_EXAMPLE, include_str!("../../themes/suhina-sheet.theme.css")] {
         prepare(css, 1138.0);
         for class in ["track-header", "track-name"] {
             let style = scoped(&[class.into()]).unwrap();
@@ -245,7 +245,7 @@ fn gloss_surfaces_have_opaque_bases_and_sheet_overlays_preserve_native_fills() {
             assert!(style.has_gradient());
         }
     }
-    prepare(include_str!("../../themes/suhina-meadow.css"), 1138.0);
+    prepare(include_str!("../../themes/suhina-meadow.theme.css"), 1138.0);
     for class in ["window", "application-bar", "mixer", "track-header", "track-name"] {
         assert_eq!(scoped(&[class.into()]).unwrap().background.a(), 0, "Meadow's deliberate transparency changed");
     }
@@ -357,7 +357,7 @@ fn palette_and_resize_restyle_retained_tree_and_preserve_author_colours() {
 #[ignore = "manual timing comparison for live palette edits"]
 fn measure_primary_colour_edits() {
     let saved = theme::palette();
-    let css = include_str!("../../themes/suhina-sheet.css");
+    let css = include_str!("../../themes/suhina-sheet.theme.css");
     prepare(css, 800.0);
     let ctx = egui::Context::default();
     let mut samples = Vec::new();
