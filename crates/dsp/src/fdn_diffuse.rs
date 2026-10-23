@@ -1,0 +1,148 @@
+// Copyright (C) 2026 The Suhina contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! Experimental diffusion/early-reflection wrapper; see the reverb prototype spec.
+
+use crate::fdn::{Fdn, Settings, SettingsError};
+use crate::{Allpass, DelayLine, FirstOrder, FirstOrderCoefficients};
+
+/// Construct off-thread; no live parameter mutation in this research core.
+#[derive(Debug, Clone, Copy)]
+pub struct DiffuseSettings {
+    pub core: Settings,
+    pub predelay_ms: f64,
+    pub diffusion: f32,
+    pub early_level: f32,
+    pub width: f32,
+    pub low_cut_hz: f64,
+    pub high_cut_hz: f64,
+}
+
+impl Default for DiffuseSettings {
+    fn default() -> Self {
+        Self {
+            core: Settings::default(),
+            predelay_ms: 2.5,
+            diffusion: 0.3,
+            early_level: 0.15,
+            width: 0.82,
+            low_cut_hz: 120.,
+            high_cut_hz: 14_000.,
+        }
+    }
+}
+
+/// Native shared blocks only; no captured reference samples or runtime I/O.
+#[derive(Debug)]
+pub struct DiffusedFdn {
+    core: Fdn,
+    predelay: DelayLine,
+    pre_frames: usize,
+    early: DelayLine,
+    taps: [usize; 8],
+    diffusers: [(Allpass, f64); 4],
+    highpass: [FirstOrder; 2],
+    lowpass: [FirstOrder; 2],
+    settings: DiffuseSettings,
+}
+
+impl DiffusedFdn {
+    /// Allocates bounded history. All input settings are checked before allocation.
+    pub fn new(s: DiffuseSettings) -> Result<Self, SettingsError> {
+        let rate = f64::from(s.core.sample_rate);
+        if !(0. ..=100.).contains(&s.predelay_ms)
+            || !(0. ..=0.8).contains(&s.diffusion)
+            || !(0. ..=2.).contains(&s.early_level)
+            || !(0. ..=1.).contains(&s.width)
+            || !(20. ..=1000.).contains(&s.low_cut_hz)
+            || !(1000. ..=rate * 0.45).contains(&s.high_cut_hz)
+        {
+            return Err(SettingsError);
+        }
+        let core = Fdn::new(s.core)?;
+        let pre_frames = (s.predelay_ms * rate / 1000.).round() as usize;
+        let taps = [0., 3.7, 7.9, 12.7, 18.1, 25.3, 34.9, 46.7]
+            .map(|ms| (ms * rate * s.core.room_scale / 1000.).round() as usize);
+        let diffusers = [127., 193., 307., 421.].map(|base| {
+            let frames = (base * rate / 48_000. * s.core.room_scale).round().max(2.);
+            (Allpass::for_seconds(frames / rate, rate), frames)
+        });
+        Ok(Self {
+            core,
+            predelay: DelayLine::new(pre_frames),
+            pre_frames,
+            early: DelayLine::new(taps[7]),
+            taps,
+            diffusers,
+            highpass: [FirstOrder::new(FirstOrderCoefficients::highpass(rate, s.low_cut_hz)); 2],
+            lowpass: [FirstOrder::new(FirstOrderCoefficients::lowpass(rate, s.high_cut_hz)); 2],
+            settings: s,
+        })
+    }
+
+    /// Delay history only; includes core, early path, predelay and all allpasses.
+    pub fn history_bytes(&self) -> usize {
+        self.core.history_bytes()
+            + [&self.predelay, &self.early]
+                .iter()
+                .map(|line| (line.capacity() as usize + 3) * size_of::<f32>())
+                .sum::<usize>()
+            + self.diffusers.iter().map(|(ap, _)| ap.history_bytes()).sum::<usize>()
+    }
+
+    /// Clears all state without allocation or freeing history.
+    pub fn reset(&mut self) {
+        self.core.reset();
+        self.predelay.clear();
+        self.early.clear();
+        for (ap, _) in &mut self.diffusers {
+            ap.clear();
+        }
+        for filter in self.highpass.iter_mut().chain(&mut self.lowpass) {
+            filter.reset();
+        }
+    }
+
+    /// Wet-only stereo; invalid input is silenced before entering any recursive state.
+    pub fn process_frame(&mut self, input: [f32; 2]) -> [f32; 2] {
+        let clean = input.map(|x| if x.is_finite() { x.clamp(-4., 4.) } else { 0. });
+        let mono = (clean[0] + clean[1]) * 0.5;
+        let delayed = if self.pre_frames == 0 { mono } else { self.predelay.read(self.pre_frames) };
+        self.predelay.push(mono);
+        let mut early = [0.; 2];
+        // Independent sparse early pattern; the first tap is the current predelayed sample.
+        for (i, frames) in self.taps.iter().enumerate() {
+            let x = if *frames == 0 { delayed } else { self.early.read(*frames) };
+            let gain = [0.16, 0.6, 0.5, 0.43, 0.36, 0.31, 0.25, 0.2][i];
+            early[0] += x * gain * if i % 3 == 1 { -1. } else { 1. };
+            early[1] += x * gain * if i % 3 == 2 { -1. } else { 1. };
+        }
+        self.early.push(delayed);
+        let mut diffuse = delayed;
+        if self.settings.diffusion > 0. {
+            for (ap, frames) in &mut self.diffusers {
+                diffuse = ap.process(diffuse, *frames, self.settings.diffusion);
+            }
+        }
+        let mut output = self.core.process_frame([diffuse; 2]);
+        for i in 0..2 {
+            let x = output[i] + self.settings.early_level * early[i];
+            output[i] = self.lowpass[i].process(self.highpass[i].process(f64::from(x))) as f32;
+        }
+        let mid = (output[0] + output[1]) * 0.5;
+        let side = (output[0] - output[1]) * 0.5 * self.settings.width;
+        [mid + side, mid - side]
+    }
+
+    /// Stereo interleaved frames; leaves an incomplete final frame unchanged.
+    pub fn process(&mut self, samples: &mut [f32]) {
+        for frame in samples.as_chunks_mut::<2>().0 {
+            *frame = self.process_frame(*frame);
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+#[path = "fdn_diffuse_tests.rs"]
+mod tests;

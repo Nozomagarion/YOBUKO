@@ -7,7 +7,10 @@ last_verified: 2026-10-23
 covers:
   - crates/dsp/src/fdn.rs
   - crates/dsp/src/fdn_tests.rs
+  - crates/dsp/src/fdn_diffuse.rs
+  - crates/dsp/src/fdn_diffuse_tests.rs
   - crates/dsp/examples/fdn_probe.rs
+  - crates/dsp/examples/fdn_probe/**
   - scripts/reverb/**
 ---
 
@@ -109,6 +112,64 @@ Rust or application dependencies. Tests use analytical exponential decays, silen
 and truncated responses and malformed input. REW/API cross-checking is a later
 part of #897; the first probe must work without REW installed.
 
+## Second research iteration: onset, density and tone
+
+The `fdn_diffuse` wrapper retains the first core as a reproducible baseline. Before
+implementation, local self-authored impulse observations identified a roughly
+30 ms onset, sparse initial response, low channel correlation and excessive top
+octave energy as useful hypotheses to test. The external captures have a much
+earlier onset, denser initial response and a different spectral envelope. These
+observations are descriptive, not proof of an underlying proprietary topology.
+Raw captures and derived per-product reports stay outside the repository.
+
+The original design for the next experiment adds a bounded predelay, a small
+stereo multitap early-reflection path, four serial Schroeder input allpasses,
+first-order output high/low-pass filters and mid/side width. The allpasses reuse
+the shared `Allpass` block. They remain outside the FDN feedback loop so that
+their phase delay does not require changing its per-loop attenuation formula.
+Early-reflection delays and signs are independent design choices, not copied
+impulse samples or a recovered topology. No reference IR is embedded or convolved.
+No modulation is added in this experiment, to isolate changes in initial density.
+
+The wrapper accepts finite predelay 0..100 ms, diffusion coefficient 0..0.8,
+early-reflection level 0..2, width 0..1, low cut 20..1000 Hz and high cut
+1000 Hz..45% of sample rate. It shares the core's construction validation,
+bounded history, off-thread construction and allocation-free processing/reset.
+Tone controls change the output spectrum without changing frequency-dependent
+feedback loss. Decay and density still require measured verification.
+
+The developer probe's `--diffused` mode renders and benchmarks this wrapper;
+`--settings <json>` supplies optional local per-render settings, with explicit
+measured decay targets and all wrapper settings recorded in its manifest.
+`--render-only` skips CPU timing during parameter searches. An accepted candidate
+must receive a fresh release CPU run after the search. The structural comparison
+uses onset relative to the known stimulus, channel energy, crest factor,
+time-windowed density, stereo correlation, normalized octave energy and decay.
+It reports each metric separately: no aggregate score establishes sound quality.
+Listening copies may receive one fixed gain per file to equalize full-tail energy;
+original responses stay unchanged and gains are recorded. Equal energy is not
+perceptual loudness matching, and no onset shift is applied to conceal timing.
+
+Use `--impulse-only` to limit parameter searches to impulse files. Local settings
+JSON has `short`, `baseline`, `long` objects (and an optional `benchmark` object),
+with keys `decay_seconds`, `room_scale`, `high_decay_ratio`, `predelay_ms`,
+`diffusion`, `early_level`, `width`, `low_cut_hz`, `high_cut_hz`.
+Unknown setting keys and nonnumeric values are refused. Settings files are bounded
+to 64 KiB. Do not infer a control mapping from three independently fitted captures.
+
+```powershell
+cargo run --release -p suhina-dsp --example fdn_probe -- target/reverb-diffused --flat-decay --diffused
+python scripts/reverb/compare_ir.py reference.wav target/reverb-diffused/baseline-impulse-wet.wav --previous target/reverb-prototype/baseline-impulse-wet.wav --output target/reverb-comparison
+python scripts/reverb/plot_comparison.py target/reverb-comparison/comparison.json --output target/reverb-comparison/diagnostics.png
+```
+
+The comparison requires identical sample rates and recording dimensions and assumes
+the same known excitation and common input-impulse time (`--stimulus-onset`, default
+one second). It refuses silent responses and existing output directories. Reports
+use source names and hashes, without absolute machine paths. JSON includes curves
+and bandwise data; CSV contains the scalar diagnostics. Matplotlib is a development
+dependency for static plots. None of these tools performs a subjective listening test.
+
 ## Cost gate
 
 CPU timing begins with the first runnable core. The probe reports repeated release
@@ -140,3 +201,8 @@ Original implementation of published methods; no upstream code or paper text cop
   coloration and temporal density together; validate perceptually.
 - Välimäki, Prawda and Schlecht (2024), *Two-Stage Attenuation Filter for Artificial
   Reverberation*, DOI: 10.1109/LSP.2024.3352510: candidate future damping design.
+- Dattorro (1997), *Effect Design, Part 1: Reverberator and Other Filters*: input
+  diffusion and tone control as independent parts of a reverberator.
+- Dal Santo et al. (2024), *RIR2FDN: An improved room impulse response analysis
+  and synthesis*, DAFx24: evaluate energy decay, density and spectral shape together;
+  matching measured responses remains an analysis and listening problem.

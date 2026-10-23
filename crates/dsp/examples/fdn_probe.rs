@@ -5,44 +5,49 @@
 
 use serde_json::{Value, json};
 use std::{error::Error, hint::black_box, path::Path, time::Instant};
-use suhina_dsp::fdn::{Fdn, Settings};
+use suhina_dsp::fdn::Settings;
+#[path = "fdn_probe/core.rs"]
+mod probe_core;
+use probe_core::{Core, Options};
 
 const RATE: u32 = 48_000;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let output = std::env::args_os().nth(1).ok_or("usage: fdn_probe <output-directory>")?;
     let output = Path::new(&output);
-    let flat_decay = match std::env::args_os().nth(2) {
-        None => false,
-        Some(arg) if arg == "--flat-decay" => true,
-        Some(_) => return Err("unknown option; expected --flat-decay".into()),
-    };
+    let options = Options::read()?;
     if output.exists() {
         return Err("output directory already exists; choose a new run directory to preserve results".into());
     }
     std::fs::create_dir_all(output)?;
     let mut renders = Vec::new();
     for (name, decay, scale, ratio) in [("short", 0.5, 0.7, 1.), ("baseline", 2., 1., 1.), ("long", 6., 1.5, 0.5)] {
-        let (scale, ratio) = if flat_decay { (1., 1.) } else { (scale, ratio) };
+        let (scale, ratio) = if options.flat_decay { (1., 1.) } else { (scale, ratio) };
         let settings =
             Settings { decay_seconds: decay, room_scale: scale, high_decay_ratio: ratio, ..Settings::default() };
+        let developed = options.settings(name, settings)?;
+        let settings = developed.core;
         for stimulus in ["impulse", "percussion", "tone"] {
+            if options.impulse_only && stimulus != "impulse" {
+                continue;
+            }
             let dry = signal(stimulus, RATE, 20);
             let mut wet = dry.clone();
-            let mut core = Fdn::new(settings)?;
+            let mut core = Core::new(developed, options.diffused)?;
             core.process(&mut wet);
             write_wav(&output.join(format!("{name}-{stimulus}-dry.wav")), &dry)?;
             write_wav(&output.join(format!("{name}-{stimulus}-wet.wav")), &wet)?;
             let mixed: Vec<f32> = dry.iter().zip(&wet).map(|(a, b)| 0.8 * a + 0.2 * b).collect();
             write_wav(&output.join(format!("{name}-{stimulus}-mix.wav")), &mixed)?;
             renders.push(json!({"name": name, "stimulus": stimulus, "sample_rate": RATE,
-                "decay_seconds": decay, "room_scale": scale, "high_decay_ratio": ratio,
+                "decay_seconds": settings.decay_seconds, "room_scale": settings.room_scale, "high_decay_ratio": settings.high_decay_ratio,
                 "damping_hz": settings.damping_hz, "history_bytes": core.history_bytes(),
+                "diffused": options.diffused, "wrapper_settings": probe_core::describe(developed),
                 "input_peak": dry.iter().map(|v| v.abs()).fold(0_f32, f32::max), "onset_seconds": 1., "duration_seconds": 20,
                 "mix": {"dry": 0.8, "wet": 0.2}, "normalized": false}));
         }
     }
-    let metadata = json!({"schema": 1, "prototype": "eight-line-fdn", "build_profile": if cfg!(debug_assertions) {"debug"} else {"release"},
+    let metadata = json!({"schema": 1, "prototype": if options.diffused { "diffused-eight-line-fdn" } else { "eight-line-fdn" }, "build_profile": if cfg!(debug_assertions) {"debug"} else {"release"},
         "commit": command("git", &["rev-parse", "HEAD"]), "rustc": command("rustc", &["--version"]),
         "source_dirty": command("git", &["status", "--porcelain"]).map(|s| !s.is_empty()),
         "os": std::env::consts::OS, "arch": std::env::consts::ARCH,
@@ -50,12 +55,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         "cpu_override": std::env::var("SUHINA_PROBE_CPU").ok(),
         "renders": renders, "listening_level_matched": false});
     std::fs::write(output.join("manifest.json"), serde_json::to_vec_pretty(&metadata)?)?;
+    if options.render_only {
+        println!("Wrote render-only probe to {}", output.display());
+        return Ok(());
+    }
     let mut timings = Vec::new();
     for rate in [48_000, 96_000] {
         for block in [64, 128] {
             for instances in [1, 8, 16] {
                 for scenario in ["active", "silence", "tail"] {
-                    timings.push(benchmark(rate, block, instances, scenario)?);
+                    timings.push(benchmark(rate, block, instances, scenario, &options)?);
                 }
             }
         }
@@ -128,7 +137,13 @@ fn write_wav(path: &Path, samples: &[f32]) -> Result<(), hound::Error> {
     writer.finalize()
 }
 
-fn benchmark(rate: u32, block: usize, instances: usize, scenario: &str) -> Result<Value, Box<dyn Error>> {
+fn benchmark(
+    rate: u32,
+    block: usize,
+    instances: usize,
+    scenario: &str,
+    options: &Options,
+) -> Result<Value, Box<dyn Error>> {
     // The tail case also exercises a larger room with stronger damping.
     let settings = Settings {
         sample_rate: rate,
@@ -137,14 +152,17 @@ fn benchmark(rate: u32, block: usize, instances: usize, scenario: &str) -> Resul
         high_decay_ratio: if scenario == "tail" { 0.4 } else { 1. },
         ..Settings::default()
     };
+    let developed = options.settings("benchmark", settings)?;
+    let settings = developed.core;
     let mut times = Vec::new();
     let blocks = (rate as usize).div_ceil(block);
     let mut trial_percent = Vec::new();
     let mut history_bytes = 0;
     for _ in 0..3 {
-        let mut cores = (0..instances).map(|_| Fdn::new(settings)).collect::<Result<Vec<_>, _>>()?;
+        let mut cores =
+            (0..instances).map(|_| Core::new(developed, options.diffused)).collect::<Result<Vec<_>, _>>()?;
         let mut buffers = vec![vec![0.; block * 2]; instances];
-        history_bytes = cores.first().map_or(0, Fdn::history_bytes);
+        history_bytes = cores.first().map_or(0, Core::history_bytes);
         for core in &mut cores {
             if scenario == "tail" {
                 core.process_frame([0.25; 2]);
@@ -189,6 +207,7 @@ fn benchmark(rate: u32, block: usize, instances: usize, scenario: &str) -> Resul
         "decay_seconds": settings.decay_seconds, "room_scale": settings.room_scale,
         "high_decay_ratio": settings.high_decay_ratio, "damping_hz": settings.damping_hz,
         "history_bytes_per_instance": history_bytes, "trial_group_percent_one_core": trial_percent,
+        "diffused": options.diffused, "wrapper_settings": probe_core::describe(developed),
         "group_percent_one_core": group_percent, "per_instance_percent_one_core": group_percent / instances as f64,
         "median_trial_per_instance_percent_one_core": trial_median / instances as f64,
         "real_time_factor": group_percent / 100., "block_deadline_us": deadline * 1e6,
