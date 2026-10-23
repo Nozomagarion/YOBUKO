@@ -3763,7 +3763,7 @@ fn track_header(
             format!("MIDI monitoring of {}: {text}", lane.name),
         )
         .on_hover_text(format!(
-            "Input monitoring · {text}\n{}\nClick to choose when you hear your MIDI keyboard.",
+            "Input monitoring · {text}\n{}\nAuto: hear MIDI while the track is ready to record. On: always hear it. Off: never hear live MIDI.\nClick to choose when you hear your MIDI keyboard.",
             menus::midi_monitor_explanation(mode)
         ));
         let active = mode == suhina_engine::model::Monitor::In;

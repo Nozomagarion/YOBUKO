@@ -187,7 +187,7 @@ pub fn arm_button(
 ) -> Option<Action> {
     let label = if armed { format!("Disarm {name}") } else { format!("Arm {name} for recording") };
     let response = button_area(ui, rect, id, label).on_hover_text(if notes {
-        "Play this track. Recording starts separately."
+        "Make this track ready to record. Recording starts separately. With Auto MIDI monitoring, you hear your MIDI keyboard while this button is on; with On you hear it either way, with Off never."
     } else {
         "Make this track ready to record. Recording starts separately. With Automatic input monitoring, you hear the audio input while this button is on."
     });
