@@ -78,3 +78,41 @@ fn zero_width_folds_all_paths_to_mono() {
         assert_eq!(y[0], y[1]);
     }
 }
+
+#[test]
+fn early_tilt_redistributes_reflections_without_changing_the_late_path() {
+    for bad in [f64::NAN, f64::INFINITY, -12.1, 12.1] {
+        assert!(DiffusedFdn::new(DiffuseSettings { early_tilt_db: bad, ..DiffuseSettings::default() }).is_err());
+    }
+    let mut flat = DiffusedFdn::new(DiffuseSettings { early_level: 1., ..DiffuseSettings::default() }).unwrap();
+    let mut tilted =
+        DiffusedFdn::new(DiffuseSettings { early_level: 1., early_tilt_db: 6., ..DiffuseSettings::default() }).unwrap();
+    let mut tail = DiffusedFdn::new(DiffuseSettings { early_level: 0., ..DiffuseSettings::default() }).unwrap();
+    let mut tilted_tail =
+        DiffusedFdn::new(DiffuseSettings { early_level: 0., early_tilt_db: 6., ..DiffuseSettings::default() }).unwrap();
+    let mut energy = [[0_f64; 2]; 2];
+    for frame in 0..48_000 {
+        let input = if frame == 0 { [0.25; 2] } else { [0.; 2] };
+        let plain = flat.process_frame(input);
+        let shaped = tilted.process_frame(input);
+        let late = tail.process_frame(input);
+        assert_eq!(late, tilted_tail.process_frame(input));
+        if frame == 120 {
+            assert_eq!(plain, shaped);
+        }
+        let window = if frame < 720 {
+            Some(0)
+        } else if (960..2640).contains(&frame) {
+            Some(1)
+        } else {
+            None
+        };
+        if let Some(window) = window {
+            for channel in 0..2 {
+                energy[0][window] += f64::from(plain[channel] - late[channel]).powi(2);
+                energy[1][window] += f64::from(shaped[channel] - late[channel]).powi(2);
+            }
+        }
+    }
+    assert!(energy[1][1] / energy[1][0] > 1.5 * energy[0][1] / energy[0][0]);
+}

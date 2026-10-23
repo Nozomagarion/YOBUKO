@@ -18,12 +18,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("report", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--previous-label", default="Prototype v1")
+    parser.add_argument("--candidate-label", default="Prototype v2")
     args = parser.parse_args()
     report = json.loads(args.report.read_text(encoding="utf-8"))
     if args.output.exists():
         parser.error("plot already exists; choose a fresh output")
     responses = report["responses"]
-    names = {"reference": "Reference", "previous": "Prototype v1", "candidate": "Prototype v2"}
+    names = {"reference": "Reference", "previous": args.previous_label, "candidate": args.candidate_label}
     colors = {"reference": "#3d7b85", "previous": "#999999", "candidate": "#d05824"}
     fig, axes = plt.subplots(2, 2, figsize=(13, 8), layout="constrained")
     common_peak = max(max(v["structure"]["envelope_1ms_rms"]) * v["listening_gain"] for v in responses.values())

@@ -40,11 +40,16 @@ def structure(samples, rate, stimulus_onset):
     early = power[:round(rate * .1)]
     early_peak_fraction = float(np.max(early) / max(np.sum(early), 1e-30))
     remaining = np.cumsum(power[::-1])[::-1] / total
+    cumulative = np.cumsum(power) / total
+    arrival = {str(percent): float(np.searchsorted(cumulative, percent / 100) / rate * 1000)
+               for percent in (10, 50, 90)}
+    centroid = float(np.dot(np.arange(len(power), dtype=float) / rate * 1000, power) / total)
     energy_curve = [{"ms": ms, "db": float(10 * np.log10(max(remaining[min(round(ms * rate / 1000), len(remaining)-1)], 1e-12)))}
                     for ms in range(0, 8001, 5)]
     step = max(1, rate // 1000)
     envelope = [float(np.sqrt(np.mean(power[i:i+step]))) for i in range(0, min(len(power), rate), step)]
     return {"onset_ms": float(onset[0] / rate * 1000) if len(onset) else None,
+            "energy_arrival_ms": arrival, "energy_centroid_ms": centroid,
             "energy_before_ms": {str(ms): float(np.sum(power[:round(ms * rate / 1000)]) / total) for ms in (10, 20, 50, 100, 200)},
             "early_peak_energy_fraction": early_peak_fraction,
             "early_crest_db": float(10*np.log10(max(np.max(early) / max(np.mean(early), 1e-30), 1e-30))),
@@ -125,6 +130,9 @@ def main():
                 writer.writerow([label, key, record["structure"][key]])
             writer.writerow([label, "t30_seconds", record["analysis"]["broadband"]["t30"]["seconds"]])
             writer.writerow([label, "stereo_correlation", record["analysis"]["stereo_correlation"]])
+            writer.writerow([label, "energy_centroid_ms", record["structure"]["energy_centroid_ms"]])
+            for percent,value in record["structure"]["energy_arrival_ms"].items():
+                writer.writerow([label, f"energy_arrival_{percent}_ms", value])
             for key,value in record.get("difference_from_reference", {}).items():
                 if not isinstance(value, dict): writer.writerow([label, key, value])
     print(f"Wrote {args.output}")

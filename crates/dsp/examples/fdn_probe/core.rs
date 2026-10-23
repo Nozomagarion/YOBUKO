@@ -57,6 +57,7 @@ impl Options {
                     "predelay_ms" => s.predelay_ms = number,
                     "diffusion" => s.diffusion = number as f32,
                     "early_level" => s.early_level = number as f32,
+                    "early_tilt_db" => s.early_tilt_db = number,
                     "width" => s.width = number as f32,
                     "low_cut_hz" => s.low_cut_hz = number,
                     "high_cut_hz" => s.high_cut_hz = number,
@@ -104,5 +105,6 @@ impl Core {
 
 pub fn describe(s: DiffuseSettings) -> Value {
     json!({"predelay_ms": s.predelay_ms, "diffusion": s.diffusion, "early_level": s.early_level,
+        "early_tilt_db": s.early_tilt_db,
         "width": s.width, "low_cut_hz": s.low_cut_hz, "high_cut_hz": s.high_cut_hz})
 }

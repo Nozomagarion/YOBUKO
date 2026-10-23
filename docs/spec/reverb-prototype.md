@@ -153,7 +153,7 @@ perceptual loudness matching, and no onset shift is applied to conceal timing.
 Use `--impulse-only` to limit parameter searches to impulse files. Local settings
 JSON has `short`, `baseline`, `long` objects (and an optional `benchmark` object),
 with keys `decay_seconds`, `room_scale`, `high_decay_ratio`, `predelay_ms`,
-`diffusion`, `early_level`, `width`, `low_cut_hz`, `high_cut_hz`.
+`diffusion`, `early_level`, `early_tilt_db`, `width`, `low_cut_hz`, `high_cut_hz`.
 Unknown setting keys and nonnumeric values are refused. Settings files are bounded
 to 64 KiB. Do not infer a control mapping from three independently fitted captures.
 
@@ -169,6 +169,43 @@ one second). It refuses silent responses and existing output directories. Report
 use source names and hashes, without absolute machine paths. JSON includes curves
 and bandwise data; CSV contains the scalar diagnostics. Matplotlib is a development
 dependency for static plots. None of these tools performs a subjective listening test.
+
+## Third iteration: short-response energy timing
+
+Listening feedback on the short response described a trailing onset envelope.
+Local measurements separate the full decay time from cumulative energy in the
+first 10/20/50/100/200 ms. A matching T30 does not guarantee matching energy timing;
+the initial fitted response retained too much energy for the late part of its tail.
+
+Before implementation, the next design keeps the same FDN and diffusion and adds
+`early_tilt_db` (-12..12 dB, default 0). It applies a gain ramp over the independent
+early-reflection pattern: tap gain is multiplied by
+`10^(early_tilt_db * tap_position / 20)`, with position 0 at the first tap and 1
+at the last. Coefficients are prepared off-thread; processing still uses eight
+fixed tap gains. A zero tilt reproduces the second iteration. Early level sets
+the early/late balance, while tilt controls the distribution within the early
+pattern. Width and decay are rechecked after fitting; other listening settings
+remain unchanged unless new evidence calls for a change.
+
+Development-only fitting uses independently rendered native early/late bases and
+bounded optimization of cumulative-energy fractions and channel correlation.
+It matches separate diagnostics, not waveform samples or a perceptual score.
+Final files must be rendered by the native core and compared against the basis
+prediction. Fitted reference-specific settings and raw captures remain local.
+Quantile arrival times (10/50/90% of total channel energy) and the energy centroid
+supplement the existing decay/density diagnostics. They retain the original input
+clock and are distinct from reverberation decay-time estimates.
+
+`scripts/reverb/fit_early.py` takes a reference IR, a native `early_level=0` render
+and a native `early_level=1` render with otherwise identical settings, including
+the stated nonzero `--basis-width`. It requires matched stereo sample rates and
+dimensions, rejects silent/missing bases and unidentifiable parameters, and fits
+early level 0..2 plus width 0.05..1. The finite-tilt search is performed by making
+new unit-early native renders, not by altering a reference recording. Its output
+records individual energy/correlation residuals and source hashes. The generated
+settings are local experiment inputs, not built-in presets.
+Plot labels can identify successive rounds using `--previous-label` and
+`--candidate-label`, without changing the reported source identities.
 
 ## Cost gate
 

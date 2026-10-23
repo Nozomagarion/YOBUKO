@@ -13,6 +13,8 @@ pub struct DiffuseSettings {
     pub predelay_ms: f64,
     pub diffusion: f32,
     pub early_level: f32,
+    /// Gain tilt in dB from the first to the last early reflection.
+    pub early_tilt_db: f64,
     pub width: f32,
     pub low_cut_hz: f64,
     pub high_cut_hz: f64,
@@ -25,6 +27,7 @@ impl Default for DiffuseSettings {
             predelay_ms: 2.5,
             diffusion: 0.3,
             early_level: 0.15,
+            early_tilt_db: 0.,
             width: 0.82,
             low_cut_hz: 120.,
             high_cut_hz: 14_000.,
@@ -40,6 +43,7 @@ pub struct DiffusedFdn {
     pre_frames: usize,
     early: DelayLine,
     taps: [usize; 8],
+    early_gains: [f32; 8],
     diffusers: [(Allpass, f64); 4],
     highpass: [FirstOrder; 2],
     lowpass: [FirstOrder; 2],
@@ -53,6 +57,7 @@ impl DiffusedFdn {
         if !(0. ..=100.).contains(&s.predelay_ms)
             || !(0. ..=0.8).contains(&s.diffusion)
             || !(0. ..=2.).contains(&s.early_level)
+            || !(-12. ..=12.).contains(&s.early_tilt_db)
             || !(0. ..=1.).contains(&s.width)
             || !(20. ..=1000.).contains(&s.low_cut_hz)
             || !(1000. ..=rate * 0.45).contains(&s.high_cut_hz)
@@ -61,8 +66,11 @@ impl DiffusedFdn {
         }
         let core = Fdn::new(s.core)?;
         let pre_frames = (s.predelay_ms * rate / 1000.).round() as usize;
-        let taps = [0., 3.7, 7.9, 12.7, 18.1, 25.3, 34.9, 46.7]
-            .map(|ms| (ms * rate * s.core.room_scale / 1000.).round() as usize);
+        let tap_ms = [0., 3.7, 7.9, 12.7, 18.1, 25.3, 34.9, 46.7];
+        let taps = tap_ms.map(|ms| (ms * rate * s.core.room_scale / 1000.).round() as usize);
+        let base_gains = [0.16_f32, 0.6, 0.5, 0.43, 0.36, 0.31, 0.25, 0.2];
+        let early_gains =
+            std::array::from_fn(|i| base_gains[i] * 10_f64.powf(s.early_tilt_db * tap_ms[i] / 46.7 / 20.) as f32);
         let diffusers = [127., 193., 307., 421.].map(|base| {
             let frames = (base * rate / 48_000. * s.core.room_scale).round().max(2.);
             (Allpass::for_seconds(frames / rate, rate), frames)
@@ -73,6 +81,7 @@ impl DiffusedFdn {
             pre_frames,
             early: DelayLine::new(taps[7]),
             taps,
+            early_gains,
             diffusers,
             highpass: [FirstOrder::new(FirstOrderCoefficients::highpass(rate, s.low_cut_hz)); 2],
             lowpass: [FirstOrder::new(FirstOrderCoefficients::lowpass(rate, s.high_cut_hz)); 2],
@@ -113,7 +122,7 @@ impl DiffusedFdn {
         // Independent sparse early pattern; the first tap is the current predelayed sample.
         for (i, frames) in self.taps.iter().enumerate() {
             let x = if *frames == 0 { delayed } else { self.early.read(*frames) };
-            let gain = [0.16, 0.6, 0.5, 0.43, 0.36, 0.31, 0.25, 0.2][i];
+            let gain = self.early_gains[i];
             early[0] += x * gain * if i % 3 == 1 { -1. } else { 1. };
             early[1] += x * gain * if i % 3 == 2 { -1. } else { 1. };
         }
