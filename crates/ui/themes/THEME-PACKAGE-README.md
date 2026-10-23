@@ -35,6 +35,14 @@ or a `theme.css` that imports `advanced.css`) is converted once; its original fi
 `legacy/` inside the theme's folder.
 Drop the ZIP on Suhina to import it, then select it in Settings → Appearance → Themes.
 Open the themes folder from that page to edit the installed files.
+
+A folder in the themes folder is a theme when it holds a file named exactly `theme.css` (on
+Windows, check that it is not `theme.css.txt` with the extension hidden). Suhina finds a new
+folder within about a second, or at once with **More › Reload themes**; a folder that is not a
+theme is named in the status bar with what it is missing. The folder's name is the theme's id:
+it stays when the theme is renamed. Two themes with the same name show their folder names on
+their cards. **Duplicate theme** copies the whole theme, its `layout.css` placements included;
+delete the copy's `layout.css` to start from Suhina's own placements.
 The template ZIP also has the built-in themes as reference folders in `examples/`;
 the importable example is `my-theme/`, with an example variant.
 
@@ -327,6 +335,7 @@ Classes, each the native element it styles:
 | `.waveform`, `.envelope` | what a clip shows |
 | `.device-panel`, `.device-section`, `.device-control`, `.xy-control` | device panels; `#id` selects a device control |
 | `.button`, `.value`, `.value-fill`, `.dropdown`, `.text-input` | buttons, value fields, the lit part of a level field, menus and text fields |
+| `.menu`, `.popup` | an open menu of the menu bar; a control's popup (`#metronome-level`, the metronome's level) |
 | `.knob`, `.fader`, `.fader-cap`, `.fader-scale`, `.pan` | mixer and device controls |
 | `.meter`, `.meter-level`, `.meter-vertical`, `.meter-horizontal` | level meters and their lit part |
 | `.label`, `.separator`, `.settings`, `.dialog` | labels, rules, the Settings page and dialogs |
@@ -337,6 +346,7 @@ Ids:
 |---|---|
 | `#browser`, `#tempo`, `#signature`, `#grid`, `#count-in`, `#metronome`, `#transport`, `#position`, `#views`, `#performance` (RAM and CPU), `#mapping`, `#agents` | the toolbar's areas (`.toolbar-module`) |
 | `#control-play`, `#control-stop`, `#control-record`, `#control-browser-toggle`, `#control-metronome-toggle` | the toolbar's main buttons |
+| `#control-solo`, `#control-cue`, `#control-arm`, `#control-track-on` | a track's solo, cue, arm and on (the track number in the mixer) buttons |
 | `#arrangement-volume`, `#arrangement-pan` | a track header's volume and pan fields |
 | `#mixer-volume`, `#mixer-pan` | a mixer strip's fader and pan |
 | `#workspace`, `#panel-browser`, `#panel-main`, `#panel-detail` | the workspace and its panels |
@@ -365,6 +375,72 @@ segment is:
 ```
 
 Artwork of your own replaces either: `volume.track`, `volume.fill`, `pan.track` and `pan.fill`.
+`color: transparent` on the field hides its value text.
+
+### States
+
+Besides `:hover`, `:active` (pressed), `:focus` and `:disabled`, Suhina tells the sheet:
+
+| State | On |
+|---|---|
+| `:checked` | a toggle that is on: solo, cue, arm, the metronome, the browser toggle, play while playing |
+| `:playing`, `:recording` | `#control-play` while the transport runs, `#control-record` while it records |
+| `:selected` | the selected track's `.track-header`, `.track-column`, `.mixer` strip and `.track-name` |
+| `:armed`, `:muted` | an armed track's arm button and header; a muted track's header and strip |
+
+```css
+#control-metronome-toggle:checked { background-color: var(--accent); color: #000; box-shadow: 0 0 6px var(--accent); }
+.track-header:selected .track-name { color: #FFFFFF; }
+```
+
+A button's glyph takes the button's `color`, in every state. Artwork has an on state of its own,
+`solo:on { image: url("assets/solo.on.svg"); }`, which falls back to `:active` artwork.
+
+### Tracks
+
+A track's header, Session column and mixer strip give the sheet `--track-colour`, the track's
+colour, and its name `--track-fill`, the fill Suhina draws there (the colour at the user's header
+colour strength). Use them to style each view on its own, whatever that setting is:
+
+```css
+.session .track-header .track-name { background-color: var(--track-colour); color: #101214; }
+.arrangement .track-name { background-color: #2A2C2E; border-width: 1px; border-color: var(--track-colour); color: #E6E6E6; }
+.mixer .track-name { background-color: color-mix(in srgb, var(--track-colour) 40%, #1E2023); }
+```
+
+A name's `color` sets its text; without one it is worked out from the fill. `.mixer` is a strip,
+also in the Session view, so `.mixer .track-name` is the strip's name and
+`.track-header .track-name` the column's. Artwork for one view only: `track.name.session`,
+`track.name.mixer`, `track.name.arrangement`, `track.body.session` and
+`track.body.arrangement`, over `track.name` and `track.body`.
+
+### Bars and lines
+
+The line under each bar is that bar's `border-color` (`.menu-bar`, `.application-bar`,
+`.toolbar`), and the line above the view `#workspace`'s, so a theme can join the bars into one
+surface without losing the lines elsewhere. `--border` is every other line: rulers, the
+browser's edges and the piano roll's keys and rows.
+
+### Placement names
+
+Edit interface shows each control's name; a placement rule is `.control-NAME`, and a list of
+them (`.control-a, .control-b`) places each. The Arrangement header has `arrangement-name`,
+`arrangement-volume`, `arrangement-pan`, `arrangement-send-1`, `arrangement-send-2`,
+`arrangement-sends-previous`, `arrangement-sends-next`, `arrangement-meter`,
+`arrangement-input`, `arrangement-output`, `arrangement-automation`, `arrangement-color`,
+`arrangement-enable`, `arrangement-fold`, `solo`, `cue`, `arm` and `track-type`; a mixer strip
+`mixer-name`, `mixer-color`, `mixer-enable` (the track number), `mixer-toggles`,
+`mixer-devices`, `mixer-input`, `mixer-input-caption`, `mixer-monitor`, `mixer-output`,
+`mixer-sends` (all of a strip's sends), `mixer-pan`, `mixer-volume`, `mixer-volume-readout`,
+`mixer-volume-scale`, `mixer-compact-volume`, `mixer-meter` and `mixer-metronome`; the toolbar
+`transport-play`, `transport-stop`, `transport-record`, `transport-metronome` and
+`toolbar-MODULE`.
+
+The Arrangement header changes its layout as its column narrows (about 315, 280, 240 and 160
+points: names move to the lower row, the pan and then names are dropped, the volume moves).
+Placements made at one width do not hold at another. Keep the column as wide as your
+placements need with `.arrangement { --suhina-header-min-width: 330px; }` (160 to 520). A
+control with no room left is not drawn, without a notice: check narrow tracks and strips too.
 
 ## What a theme cannot set
 
@@ -372,9 +448,8 @@ Artwork of your own replaces either: `volume.track`, `volume.fill`, `pan.track` 
   strengths, the waveform and note colours, and knobs or fields for the mixer (apart from
   `.pan { --suhina-appearance: knob | field; }`) are the user's. A shared theme can look
   different on another computer because of them. Only the track headers' side follows a theme.
-- **A track's text colour:** worked out from the header's fill (the track's colour at the
-  header colour strength), not from your `track.body` artwork. Over a dark body with a bright
-  track colour, keep the body light enough for that text.
+- **Variants change variables only:** a colour written directly in a rule is the same in every
+  variant. Write colours you want a variant to change as variables.
 - **Artwork per variant:** an SVG is the same in every variant and cannot read your variables;
   colours fixed in it do not follow a light variant. Use `currentColor` where you can.
 - **Buttons in dialogs and on the Settings page:** ordinary widgets, which `:hover` and

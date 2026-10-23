@@ -404,6 +404,29 @@ artwork leaves a pixel uncovered.
 the side of the Arrangement view's track headers while the user's Track headers setting
 is *Theme* (the default); Left and Right are the user's own and win.
 
+**Host states and variables.** The host marks elements with states the sheet matches
+(`native_css::mark`): `:checked` on a toggle that is on, `:playing` and `:recording` on the
+transport's buttons, `:selected` on the selected track's header, column, strip and name,
+`:armed` and `:muted`. It gives elements custom properties below every rule
+(`native_css::set_variable`): a track's header, column and strip `--track-colour`, its name
+`--track-fill`. A track name's text takes the sheet's `color` when one applies. Artwork has an
+`.on` state (`solo:on`), falling back to `.active`, and per-view track roles
+(`track.name.mixer` and the others) over `track.name` and `track.body`.
+
+**Classes for menus and popups.** An open menu of the menu bar is `.menu`; the metronome's level
+slider is `.popup#metronome-level`, outside the toggle's scope.
+
+**Bar lines.** The separator under a bar uses that bar's `border-color`, and the line above the
+view `#workspace`'s; `--border` stays every other line.
+
+**Header width.** `.arrangement { --suhina-header-min-width }` (160 to 520 points) is the least
+width of the Arrangement header column, so the header's narrower layouts do not break a theme's
+placements.
+
+**Theme folders.** A folder is a theme when it holds `theme.css`; one without it is named in the
+warnings. Renaming a theme keeps its folder (its id). Two themes with one name are named in the
+warnings and show their folder names. Placement rules accept selector lists.
+
 **Workspace overlays.** A browser or detail panel that the `#workspace` grid places in
 the same cells as `#panel-main` is drawn on a layer above the view, so it shows and takes
 the pointer there.

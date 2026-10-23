@@ -703,6 +703,11 @@ the controls' shapes fixed in code: the CSS reached their colours only. So:
 - **Track headers' side.** `--suhina-track-headers` on `.arrangement` is used while the user's
   setting is *Theme*, the new default; the user's Left or Right wins.
 
+A second theme made by hand (2026-10-23, round 2) added: host states (`:checked`, `:selected`,
+`:playing`, `:recording`, `:armed`, `:muted`) and host variables (`--track-colour`,
+`--track-fill`) in the cascade, per-view track artwork, a bar's own separator colour, `.menu` and
+`.popup` classes and a least header width a theme may set.
+
 **Proposed: presentation defaults from the theme.** The Settings page's other presentation
 choices (header and clip colour strength, waveform and note colours, mixer knobs or fields)
 would work the same way: the theme gives a default as a `--suhina-*` property, the setting gains
