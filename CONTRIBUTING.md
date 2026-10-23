@@ -8,7 +8,8 @@
   non-commercial licences are not. CI checks every dependency's licence with `cargo-deny`
   (see [Dependencies](#dependencies)).
 - **Never crash:** non-test code must not panic and must not use `unsafe` (the only exceptions
-  are the plug-in hosting crates `ipc` and `plugin-host`, ADR 0006). Errors go through `Result`
+  are the plug-in hosting crates `ipc` and `plugin-host`, ADR 0006, and the MP3 encoder crate
+  `mp3`, ADR 0029). Errors go through `Result`
   and `?`; input-derived indices and sizes are checked. See `AGENTS.md`.
 - **Real-time safety:** code that runs on the audio thread never allocates, locks or does I/O. It
   blocks only to wait for a plug-in host's answer within the block's deadline (ADR 0006 › 4).
@@ -57,10 +58,10 @@
   (`engine`, `ui`, `formats`, `browser`, `audio-io`, `plug-ins`, `devices`, `presets`, `tests`),
   plus `windows`, `macos` or `linux` when it concerns one platform. The forms set the type, and
   `.github/workflows/issue-labels.yml` adds area and platform labels from the form's answers.
-- **Pull request labels:** `.github/workflows/pr-labels.yml` adds them as `.github/labeler.yml` maps
+- **Pull request labels:** `.github/workflows/pr-labels.yml` keeps them as `.github/labeler.yml` maps
   them: the kind from the branch name (`feature/` `enhancement`, `fix/` `bug`, `docs/`
   `documentation`, `chore/` `chore`; also `documentation` when every file changed is a document)
-  and the areas from the paths changed. It only adds labels; add a platform label by hand.
+  and the areas from the paths changed. At every push it also takes off the ones that no longer match, so a rebased pull request loses the areas it no longer touches; labels it does not map (a platform, `test-build`, `ready to merge`) are left alone, and a platform label is added by hand.
 - **CodeRabbit:** reviews every pull request that is not a draft against AGENTS.md
   (`.coderabbit.yaml`) and shows a **CodeRabbit** check beside CI. Its comments are suggestions, not requirements: answer or resolve
   them, and leave DSP and real-time behaviour to the tests and renders. The check is never red and

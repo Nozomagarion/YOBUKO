@@ -1414,12 +1414,12 @@ fn arming_is_exclusive_unless_ctrl_is_held_and_changes_no_project() {
     let armed = |h: &Harness<'static, App>| {
         h.state().session().map(|s| s.project().tracks.iter().take(4).map(|t| s.is_armed(t.id)).collect::<Vec<_>>())
     };
-    harness.get_by_label("Arm Drums to play it from a MIDI controller").click();
+    harness.get_by_label("Arm Drums for recording").click();
     harness.run();
-    harness.get_by_label("Arm Keys to play it from a MIDI controller").click();
+    harness.get_by_label("Arm Keys for recording").click();
     harness.run();
     assert_eq!(armed(&harness), Some(vec![false, false, true, false]));
-    harness.get_by_label("Arm Vox to play it from a MIDI controller").click_modifiers(Modifiers::COMMAND);
+    harness.get_by_label("Arm Vox for recording").click_modifiers(Modifiers::COMMAND);
     harness.run();
     assert_eq!(armed(&harness), Some(vec![false, false, true, true]));
     assert!(!harness.state().session().is_some_and(Session::can_undo), "arming is not an edit");
@@ -1432,7 +1432,7 @@ fn arming_is_exclusive_unless_ctrl_is_held_and_changes_no_project() {
     assert_eq!(armed(&harness), Some(vec![false, false, false, true]));
     assert!(harness.query_by_label("Disarm Vox").is_some());
     // Return tracks play no notes: nothing to arm.
-    assert!(harness.query_by_label("Arm A Reverb to play it from a MIDI controller").is_none());
+    assert!(harness.query_by_label("Arm A Reverb for recording").is_none());
 }
 
 /// MIDI ports by name that open into nothing.
@@ -1469,7 +1469,10 @@ fn a_tracks_menu_chooses_the_midi_port_and_channel_it_hears() {
     harness.run();
     harness.get_by_label("Pads In").click();
     harness.run();
-    assert_eq!(input(&harness), Some(MidiInput { port: MidiPort::Named("Pads In".into()), channel: None }));
+    assert_eq!(
+        input(&harness),
+        Some(MidiInput { port: MidiPort::Named("Pads In".into()), channel: None, ..Default::default() })
+    );
 
     harness.get_by_label("Track Keys").click_secondary();
     harness.run();
@@ -1477,7 +1480,10 @@ fn a_tracks_menu_chooses_the_midi_port_and_channel_it_hears() {
     harness.run();
     harness.get_by_label("Ch 10").click();
     harness.run();
-    assert_eq!(input(&harness), Some(MidiInput { port: MidiPort::Named("Pads In".into()), channel: Some(10) }));
+    assert_eq!(
+        input(&harness),
+        Some(MidiInput { port: MidiPort::Named("Pads In".into()), channel: Some(10), ..Default::default() })
+    );
     assert!(harness.state().session().is_some_and(Session::can_undo), "an edit, saved with the project");
 }
 
@@ -1490,7 +1496,7 @@ fn an_audio_track_is_armed_to_hear_its_input_and_its_menu_chooses_the_channels()
     let mut app = App::new();
     app.set_session(Session::new(project), &[]);
     let mut harness = window(app);
-    harness.get_by_label(&format!("Arm {name} to hear its audio input")).click();
+    harness.get_by_label(&format!("Arm {name} for recording")).click();
     harness.run();
     assert!(harness.state().session().is_some_and(|s| s.is_armed(suhina_engine::model::TrackId(1))));
 
@@ -5630,6 +5636,46 @@ fn the_export_dialog_writes_the_wav_the_demo_names() {
         "{:?}",
         harness.state().status()
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_file_named_mp3_shows_the_mp3_rate_and_exports_an_mp3() {
+    let mut harness = window(demo_app());
+    let dir = std::env::temp_dir().join(format!("suhina-export-mp3-dialog-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join("Demo mix.mp3");
+
+    harness.get_by_label("File").click();
+    harness.run();
+    harness.get_by_label("Export…").click();
+    harness.run();
+    // A wav name shows no mp3 rate.
+    assert!(harness.query_by_label_contains("MP3 rate").is_none());
+
+    // From the file name: an .mp3 name is an mp3, its rate row shows, and 48 000 stays.
+    harness.get_by_label("File to export to").click();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.get_by_label("File to export to").type_text(path.display().to_string().as_str());
+    harness.run();
+    assert!(harness.query_by_label("Sample rate 48000 Hz").is_some(), "48 000 is kept for mp3");
+    harness.get_by_label("MP3 rate 320 kbps").click();
+    harness.run();
+    harness.get_by_label("VBR V2").click();
+    harness.run();
+    assert!(harness.query_by_label("MP3 rate VBR V2").is_some(), "the rate row took the choice");
+
+    harness.get_by_label("Export the mix to the file").click();
+    waits_for_export(&mut harness);
+    assert!(
+        matches!(harness.state().status(), Status::Done(text) if text.contains("Exported")),
+        "{:?}",
+        harness.state().status()
+    );
+    // An mp3: the demo was never saved, so no ID3 header; the stream starts at a frame's sync.
+    let bytes = std::fs::read(&path).unwrap();
+    assert_eq!(bytes[0], 0xFF);
+    assert_eq!(bytes[1] & 0xE0, 0xE0);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

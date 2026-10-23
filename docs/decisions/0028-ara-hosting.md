@@ -3,7 +3,7 @@ description: How ARA plug-ins (audio editors such as pitch editors) are hosted o
 read_when: ARA, ARA2, Melodyne, pitch editor, audio random access, playback region, audio source, audio modification, region sequence, document controller, overlapping audio clips, audio overlap, arrangement.audioOverlaps, stacked clips and ARA
 type: decision
 status: draft
-last_verified: 2026-10-22
+last_verified: 2026-10-23
 covers:
   - crates/model/src/overlap.rs
   - crates/session/src/commands.rs
@@ -115,6 +115,11 @@ protocol (`crates/plugins/src/protocol.rs`).
    silence. A source whose audio changes (relinked, re-recorded) gets a new region, and the host
    disables sample access on the old one before it goes, as ARA prescribes. Nothing new reaches the
    audio callback.
+   The source's memory is freed by the operating system once the session and the host have both
+   let go of it, also after a crash (ADR 0006 › The boundary, #805). A restarted host opens the
+   same sources again by their addresses, so on macOS, where a source is a file, the file keeps
+   its name until the session drops the source; one a crash leaves is removed by the next Suhina
+   process that makes a link or a source.
 
 5. **The model maps onto the document like this:**
 

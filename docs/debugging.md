@@ -3,7 +3,7 @@ description: How to find out what the running app does around a bug: the trace l
 read_when: debugging, bug hunting, trace, SUHINA_TRACE, --trace, diagnostic log, live debugging, UI lag, slow frame, frame time, stutter, plug-in host log, ARA, Melodyne, playhead jumps, flicker, timing, latency, screen recording, video frames, contact sheet, tester, hang, freeze, working a bug through
 type: howto
 status: current
-last_verified: 2026-10-22
+last_verified: 2026-10-23
 covers:
   - apps/suhina/src/liquid.rs
   - apps/suhina/src/main.rs
@@ -62,7 +62,8 @@ host process have their own id, so `grep "\[12345\]"` shows one process. To foll
 
 | Line starts with | Written by | When |
 |---|---|---|
-| `action <command> <params>` | app (`App::run`) | every command the window runs, with its parameters |
+| `action <command> <params>` | app (`App::run`) | every command the window runs, with its parameters; the `projects.*` ones (switching and closing tabs) too |
+| `project opened <id> "<name>" in a new tab` / `… in place of <id>` | app (`App::open_project`) | a project opened, created or recovered, in a tab of its own or in place of the one it closed; opening is no command (ADR 0007), so it has no `action` line |
 | `detail: …` | app | the detail area's state when it changes: the ARA editor shown, pulled to the top, focus |
 | `rack starts / started / stops / rebinds key …` | app (`session/src/rack.rs`) | a plug-in starting, its result, stopping, loaded again with an ARA document |
 | `host process started / connected after …` | app (`plugins/src/lib.rs`) | a host process starting and how long until it answers |

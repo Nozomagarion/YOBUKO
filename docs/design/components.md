@@ -3,7 +3,7 @@ description: Measurements, states and tokens of every UI component, from the min
 read_when: widget sizes, marker row, clip slot states, value field, slider, knob, toggle, meter, track header levels, device panel, piano roll layout, audition button, velocity lane top edge, ghost menu, ghost notes look, Scale menu, scale rows, key column mark, folded rows
 type: spec
 status: draft
-last_verified: 2026-10-22
+last_verified: 2026-10-23
 covers:
   - crates/ui/src/kit/theme.rs
   - crates/ui/src/session/session_view.rs
@@ -886,3 +886,10 @@ double-click maximise and a 5 px resize edge/corner. Other platforms keep the sy
 Arrangement track headers and Session column headers show a non-interactive type marker immediately before the track name, on the name row: a miniature keyboard (two white keys with a shorter black key between them) for MIDI, a waveform for audio, and both for mixed-content tracks. The tooltip and accessibility label name the type. Groups and returns are not labelled as audio or MIDI tracks. The marker uses 16 px plus a 3 px gap within the name area, without shifting the mute, solo or other mixer buttons. It stays beside the name on compact headers.
 
 The automation parameter popup uses an opaque theme panel surface so lane hints cannot show through its search or menu rows. Selected parameter labels use contrasting text against the selection fill, including their duplicate entries in the Automated section.
+
+A note-playing Arrangement header has a neutral Auto / On / Off chip after record arm.
+It is 24 px wide on a compact row and 32 px on an expanded row. The popup explains
+what input monitoring means, offers Auto, Always on and Off, and shows a contextual
+footer for the current or hovered choice. MIDI monitoring is independent of record
+arm and headphone cue. Only record arm uses red; the MIDI input menu has the same
+choices. Header layout reserves this chip's width before names and level controls.

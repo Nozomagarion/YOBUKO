@@ -1176,7 +1176,7 @@ static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "track.setMidiInput",
-        label: "Choose which MIDI controllers a track hears while armed: every port, one port by name (from midi.inputs), or none, and every channel or one; saved with the project",
+        label: "Choose a track's MIDI input port, channel and monitoring: auto (while armed), in (always) or off (recording only); saved with the project",
         params: &[
             TRACK,
             optional(
@@ -1185,6 +1185,7 @@ static COMMANDS: &[CommandSpec] = &[
                 "\"all\" (the default), \"none\", or a port's name; left out keeps the port",
             ),
             optional("channel", ParamType::Integer, "1 to 16, or 0 for every channel; left out keeps the channel"),
+            optional("monitor", ParamType::Text, "auto, in or off; left out keeps the mode"),
         ],
         kind: CommandKind::Edit,
         run: set_midi_input,
@@ -1206,7 +1207,7 @@ static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "track.setArm",
-        label: "Arm a track or disarm it: an armed track's instrument plays what the MIDI inputs play (midi.inputs), whether the transport runs or not. Arming is not an edit: it is not undone and not saved",
+        label: "Arm a track for recording or disarm it. Auto input monitoring follows arm; In and Off are independent. Arming is not an edit: it is not undone and not saved",
         params: &[
             TRACK,
             param("armed", ParamType::Bool, "true arms the track"),
@@ -1617,7 +1618,7 @@ static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "project.export",
-        label: "Render the mix, or the named node of the track tree, to an audio file: wav (32-bit float or 16/24-bit PCM), flac or ogg, with sample rate, depth, range, tail, normalise and dither",
+        label: "Render the mix, or the named node of the track tree, to an audio file: wav (32-bit float or 16/24-bit PCM), flac, ogg or mp3, with sample rate, depth, mp3 rate, range, tail, normalise and dither",
         params: &[
             optional(
                 "path",
@@ -1625,9 +1626,14 @@ static COMMANDS: &[CommandSpec] = &[
                 "the file to write (output is an alias); its extension decides the format when format is left out",
             ),
             optional("output", ParamType::Text, "the file to write; an alias of path"),
-            optional("format", ParamType::Text, "wav (default), flac or ogg"),
-            optional("sample_rate", ParamType::Integer, "hertz; 48000 by default"),
-            optional("bit_depth", ParamType::Text, "32f (the default for wav), 24 or 16"),
+            optional("format", ParamType::Text, "wav (default), flac, ogg or mp3"),
+            optional("sample_rate", ParamType::Integer, "hertz; 48000 by default; with mp3, 32, 44.1 or 48 kHz"),
+            optional("bit_depth", ParamType::Text, "32f (the default for wav), 24 or 16; an error with ogg or mp3"),
+            optional(
+                "mp3_rate",
+                ParamType::Text,
+                "the mp3's rate: 320 (default), 256, 192 or 128 kbps, or the variable qualities v0 and v2",
+            ),
             optional("overwrite", ParamType::Bool, "true replaces an existing file; it is never replaced without this"),
             optional(
                 "range",
@@ -3963,12 +3969,24 @@ fn set_midi_input(session: &mut Session, params: &Value) -> Result<Value, Comman
             _ => return Err("channel must be 0 (every channel) or 1 to 16".into()),
         },
     };
+    let monitor = match params.get("monitor") {
+        None => None,
+        Some(v) => Some(match v.as_str() {
+            Some("auto") => suhina_model::Monitor::Auto,
+            Some("in") => suhina_model::Monitor::In,
+            Some("off") => suhina_model::Monitor::Off,
+            _ => return Err("monitor must be auto, in or off".into()),
+        }),
+    };
     let track = session.project.tracks.iter_mut().find(|t| t.id == id).ok_or("the track is missing")?;
     if let Some(port) = port {
         track.midi_input.port = port;
     }
     if let Some(channel) = channel {
         track.midi_input.channel = channel;
+    }
+    if let Some(monitor) = monitor {
+        track.midi_input.monitor = monitor;
     }
     Ok(json!({ "midi_input": midi_input_json(&track.midi_input) }))
 }
@@ -4039,7 +4057,12 @@ pub(crate) fn midi_input_json(input: &suhina_model::MidiInput) -> Value {
         MidiPort::Nothing => "none",
         MidiPort::Named(name) => name.as_str(),
     };
-    json!({ "port": port, "channel": input.channel })
+    let monitor = match input.monitor {
+        suhina_model::Monitor::Auto => "auto",
+        suhina_model::Monitor::In => "in",
+        suhina_model::Monitor::Off => "off",
+    };
+    json!({ "port": port, "channel": input.channel, "monitor": monitor })
 }
 
 fn set_arm(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
