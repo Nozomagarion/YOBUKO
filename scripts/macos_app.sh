@@ -12,6 +12,8 @@
 # whose parts are signed together opens after the usual warning about an unidentified developer
 # instead of being called damaged. Real signing and notarisation come with M8 (ROADMAP).
 #
+# The app's icon is made from assets/brand/suhina-icon.png at each size macOS asks for.
+#
 # Usage: scripts/macos_app.sh <package-folder> <version>
 set -euo pipefail
 
@@ -32,6 +34,17 @@ for bin in suhina suhina-cli suhina-plugin-host; do
   mv "$package/$bin" "$app/Contents/MacOS/$bin"
 done
 
+icon="$(dirname "$0")/../assets/brand/suhina-icon.png"
+iconset=$(mktemp -d)/Suhina.iconset
+mkdir -p "$iconset"
+for size in 16 32 128 256 512; do
+  sips -s format png -z "$size" "$size" "$icon" --out "$iconset/icon_${size}x${size}.png" > /dev/null
+  double=$((size * 2))
+  sips -s format png -z "$double" "$double" "$icon" --out "$iconset/icon_${size}x${size}@2x.png" > /dev/null
+done
+iconutil --convert icns --output "$app/Contents/Resources/Suhina.icns" "$iconset"
+rm -rf "$(dirname "$iconset")"
+
 cat > "$app/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -43,6 +56,8 @@ cat > "$app/Contents/Info.plist" <<EOF
 	<string>Suhina</string>
 	<key>CFBundleExecutable</key>
 	<string>suhina</string>
+	<key>CFBundleIconFile</key>
+	<string>Suhina</string>
 	<key>CFBundleIdentifier</key>
 	<string>io.github.suhina-daw.suhina</string>
 	<key>CFBundleInfoDictionaryVersion</key>
