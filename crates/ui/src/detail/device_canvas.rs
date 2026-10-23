@@ -2182,7 +2182,11 @@ mod tests {
             }
         }
         snapshot(&mut harness, "delay-panel.png");
-        let nord = crate::kit::theme::Theme::from_json(include_str!("../../themes/nord.json")).0;
+        let nord = crate::kit::theme::built_in_themes()
+            .into_iter()
+            .find(|(id, _)| *id == "nord")
+            .map(|(_, theme)| theme)
+            .unwrap();
         crate::kit::theme::set_palette(&harness.ctx, nord.colors);
         harness.run();
         snapshot(&mut harness, "delay-panel-nord.png");

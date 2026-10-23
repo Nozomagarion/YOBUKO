@@ -258,25 +258,26 @@ pub fn set_palette(ctx: &egui::Context, palette: Palette) {
 /// The id of the default theme, Suhina Dark, in the settings file.
 pub const BUILT_IN: &str = "suhina-dark";
 
-/// The themes that come with Suhina besides Suhina Dark, as theme files: id and text.
+/// The themes that come with Suhina besides Suhina Dark, as theme CSS: id and text. Their
+/// artwork, advanced stylesheets and Meadow's background are attached by `built_in_themes`.
 /// Dracula, Nord, Catppuccin and Solarized are popular open palettes (MIT, their licences in
 /// `themes/licenses/`), mapped onto Suhina's tokens.
 const BUILT_IN_FILES: [(&str, &str); 15] = [
-    ("suhina-studio-dark", include_str!("../../themes/suhina-studio-dark.json")),
-    ("suhina-studio-light", include_str!("../../themes/suhina-studio-light.json")),
-    ("editor-dark", include_str!("../../themes/editor-dark.json")),
-    ("suhina-light", include_str!("../../themes/suhina-light.json")),
-    ("high-contrast", include_str!("../../themes/high-contrast.json")),
-    ("dracula", include_str!("../../themes/dracula.json")),
-    ("nord", include_str!("../../themes/nord.json")),
-    ("catppuccin-mocha", include_str!("../../themes/catppuccin-mocha.json")),
-    ("catppuccin-latte", include_str!("../../themes/catppuccin-latte.json")),
-    ("solarized-dark", include_str!("../../themes/solarized-dark.json")),
-    ("suhina-glass", include_str!("../../themes/suhina-glass.json")),
-    ("suhina-forest-amber", include_str!("../../themes/suhina-forest-amber.json")),
-    ("suhina-sheet", include_str!("../../themes/suhina-sheet.json")),
-    ("suhina-meadow", include_str!("../../themes/suhina-meadow.json")),
-    ("suhina-blocks", include_str!("../../themes/suhina-blocks.json")),
+    ("suhina-studio-dark", include_str!("../../themes/suhina-studio-dark.theme.css")),
+    ("suhina-studio-light", include_str!("../../themes/suhina-studio-light.theme.css")),
+    ("editor-dark", include_str!("../../themes/editor-dark.theme.css")),
+    ("suhina-light", include_str!("../../themes/suhina-light.theme.css")),
+    ("high-contrast", include_str!("../../themes/high-contrast.theme.css")),
+    ("dracula", include_str!("../../themes/dracula.theme.css")),
+    ("nord", include_str!("../../themes/nord.theme.css")),
+    ("catppuccin-mocha", include_str!("../../themes/catppuccin-mocha.theme.css")),
+    ("catppuccin-latte", include_str!("../../themes/catppuccin-latte.theme.css")),
+    ("solarized-dark", include_str!("../../themes/solarized-dark.theme.css")),
+    ("suhina-glass", include_str!("../../themes/suhina-glass.theme.css")),
+    ("suhina-forest-amber", include_str!("../../themes/suhina-forest-amber.theme.css")),
+    ("suhina-sheet", include_str!("../../themes/suhina-sheet.theme.css")),
+    ("suhina-meadow", include_str!("../../themes/suhina-meadow.theme.css")),
+    ("suhina-blocks", include_str!("../../themes/suhina-blocks.theme.css")),
 ];
 
 const SHEET_SVGS: &[(&str, &str)] = &[
@@ -340,7 +341,10 @@ fn meadow_background() -> Option<std::sync::Arc<str>> {
 pub fn built_in_themes() -> Vec<(&'static str, Theme)> {
     let mut themes = vec![(BUILT_IN, Theme::default())];
     themes.extend(BUILT_IN_FILES.iter().map(|(id, text)| {
-        let mut theme = Theme::from_json(text).0;
+        let mut theme = Theme::default();
+        super::theme_css::apply(&mut theme, text);
+        // `url("background.png")` names the background this build embeds.
+        theme.skin.background = None;
         if matches!(*id, "suhina-sheet" | "suhina-meadow" | "suhina-blocks") {
             theme.skin.assets = SHEET_SVGS.iter().map(|(role, svg)| ((*role).into(), (*svg).into())).collect();
             if *id == "suhina-meadow" {
@@ -845,22 +849,6 @@ mod tests {
     }
 
     #[test]
-    fn every_theme_that_comes_with_suhina_sets_every_token() {
-        let tokens: Vec<&str> = Palette::DARK.tokens().iter().map(|(key, _, _)| *key).collect();
-        for (id, text) in BUILT_IN_FILES {
-            let (_, warnings) = Theme::from_json(text);
-            assert!(warnings.is_empty(), "{id}: {warnings:?}");
-            let colors = match serde_json::from_str::<Value>(text) {
-                Ok(Value::Object(root)) => root.get("colors").and_then(Value::as_object).cloned().unwrap_or_default(),
-                _ => Map::new(),
-            };
-            for token in &tokens {
-                assert!(colors.contains_key(*token), "{id} leaves out {token}");
-            }
-        }
-    }
-
-    #[test]
     fn track_and_kind_colours_keep_their_values_in_suhina_dark() {
         let dark = Palette::DARK;
         let tracks = [
@@ -950,11 +938,17 @@ mod tests {
         let themes = built_in_themes();
         assert_eq!(themes.first().map(|(id, _)| *id), Some(BUILT_IN));
         for (id, text) in BUILT_IN_FILES {
-            let (theme, warnings) = Theme::from_json(text);
+            let mut theme = Theme::default();
+            let warnings = super::super::theme_css::apply(&mut theme, text);
             assert!(warnings.is_empty(), "{id}: {warnings:?}");
             // Every colour is written out, so none falls back to Suhina Dark by mistake.
-            let listed = serde_json::from_str::<Value>(text).ok().and_then(|v| v.get("colors").cloned());
-            assert_eq!(listed.and_then(|c| c.as_object().map(Map::len)), Some(Palette::DARK.tokens().len()), "{id}");
+            for (key, _, _) in Palette::DARK.tokens() {
+                assert!(text.contains(&format!("  --{}: ", key.replace('.', "-"))), "{id} leaves out {key}");
+            }
+            // The file is what the editor would write: exporting it reads back the same theme.
+            let mut again = Theme::default();
+            assert!(super::super::theme_css::apply(&mut again, &super::super::theme_css::export(&theme)).is_empty());
+            assert_eq!(again, theme, "{id}");
             assert!(is_built_in(id));
             assert_ne!(theme.name, Theme::default().name);
         }

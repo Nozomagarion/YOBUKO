@@ -1,0 +1,83 @@
+/* Original brown plank surfaces, colour-keyed pixel textures and stone controls. No landscape wallpaper. */
+/* Suhina native theme CSS. See README.md for supported properties. */
+:root {
+  --grid-major: #665238;
+  --grid-minor: #3B2C1D;
+  --track-headerBackground: #403220;
+  --track-headerSelectedBackground: #675436;
+  --window-background: #2B1C12;
+  --panel-background: #3D3022;
+  --panel-hoverBackground: #54432C;
+  --control-background: #55452E;
+  --control-hoverBackground: #6B583B;
+  --control-activeBackground: #786842;
+  --control-playingBackground: #4C6C31;
+  --control-selectedBackground: #A8B55A;
+  --border: #261B12;
+  --border-strong: #7A6A4C;
+  --text-primary: #F0E5C9;
+  --text-secondary: #C5B693;
+  --text-hint: #968367;
+  --text-value: #E6D4A7;
+  --text-inverse: #241C11;
+  --text-playing: #FFF6C9;
+  --text-onColorLight: #F6EBC8;
+  --text-onColorDark: #211B12;
+  --browser-text-primary: #E8DABD;
+  --browser-text-secondary: #C5B693;
+  --browser-text-hint: #968367;
+  --browser-text-value: #DFCF9F;
+  --accent: #A6D34F;
+  --selection: #D6B159;
+  --recording: #D65139;
+  --recording-background: #5A2E22;
+  --meter-normal: #66DF19;
+  --meter-hot: #D9D52E;
+  --slot-empty: #998365;
+  --track-mutedBackground: #30291E;
+  --pan-background: #302719;
+  --pan-centre: #887755;
+  --clip-midiDefault: #83A9B4;
+  --clip-audioDefault: #C99070;
+  --track-1: #FF9A3C;
+  --track-2: #7FDB5A;
+  --track-3: #4FC3F7;
+  --track-4: #B38BFF;
+  --track-5: #F2D541;
+  --track-6: #E5484D;
+  --track-7: #80ADA1;
+  --track-8: #A84F4F;
+  --kind-kick: #D06E5E;
+  --kind-snare: #73AAC0;
+  --kind-clap: #5EC0B0;
+  --kind-closedHat: #C6AC5E;
+  --kind-openHat: #D08F6E;
+  --kind-hat: #D8C47A;
+  --kind-rim: #8CA8E0;
+  --kind-tom: #B074A4;
+  --kind-crash: #E0A0C8;
+  --kind-ride: #C8B8E8;
+  --kind-cymbal: #A497CC;
+  --kind-percussion: #8FC06E;
+  --kind-bass: #A84F4F;
+  --kind-tonal: #6EB0D0;
+  --kind-vocal: #E8D0A0;
+  --kind-effect: #9CC49C;
+  --kind-other: #8A8680;
+}
+meter { style: segmented; segments: 32; intensity: 100%; }
+artwork { fps: 12; }
+theme { name: "Suhina Blocks"; }
+session { track-width: 92px; }
+session { return-width: 80px; }
+session { scene-width: 84px; }
+session { slot-height: 24px; }
+session { header-height: 24px; }
+.control-mixer-color { left: 0px; top: 0px; bottom: auto; display: none; right: auto; width: auto; height: auto; --suhina-direction: vertical; }
+.control-mixer-meter { left: -48px; top: 0px; bottom: auto; display: block; right: auto; width: auto; height: auto; --suhina-direction: vertical; }
+.control-mixer-pan { left: 25px; top: 0px; bottom: auto; display: block; right: auto; width: 24px; height: 24px; --suhina-direction: vertical; }
+.control-mixer-volume { left: 18px; top: 0px; bottom: auto; display: block; right: auto; width: auto; height: auto; --suhina-direction: vertical; }
+.control-mixer-volume-readout { left: -24px; top: 0px; bottom: auto; display: block; right: auto; width: 30px; height: auto; --suhina-direction: vertical; }
+.control-mixer-volume-scale { left: -40px; top: 0px; bottom: auto; display: block; right: auto; width: auto; height: auto; --suhina-direction: vertical; }
+.pan { --suhina-appearance: knob; }
+.track-column { --suhina-track-artwork: on; }

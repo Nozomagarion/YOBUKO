@@ -56,7 +56,8 @@ Theme storage is CSS: a theme is a folder whose `theme.css` holds every theme va
 imports `advanced.css`; no JSON is written and nothing is mirrored. A JSON theme from an
 earlier version is migrated once, only after the written CSS reads back as exactly the same
 theme; its JSON and old `style.css` are kept in the theme's `legacy/` folder. The built-in
-themes are still compiled from JSON at this stage.
+themes are `.css` too (`crates/ui/themes/<id>.theme.css`), in the same form the editor writes;
+their artwork, advanced sheets and Meadow's background stay embedded beside them.
 
 Device panels use the tiers: `.sd` version 6 adds an optional panel `style`, applied in the
 Device tier bounded to its panel; `#id` selects a control by its id; `user.css` in the themes

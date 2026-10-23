@@ -1,0 +1,74 @@
+/*  */
+/* Suhina native theme CSS. See README.md for supported properties. */
+:root {
+  --grid-major: #B4B48E;
+  --grid-minor: #964646E4;
+  --track-headerBackground: #2D4030;
+  --track-headerSelectedBackground: #4A6042;
+  --window-background: #17271F;
+  --panel-background: #27372AEF;
+  --panel-hoverBackground: #3C4C37;
+  --control-background: #354631;
+  --control-hoverBackground: #495B40;
+  --control-activeBackground: #D5B778;
+  --control-playingBackground: #A5C589;
+  --control-selectedBackground: #FFF3D7;
+  --border: #B1BC8E48;
+  --border-strong: #D5C79A9C;
+  --text-primary: #F4EFDF;
+  --text-secondary: #D5D6BF;
+  --text-hint: #B4C1A8;
+  --text-value: #FFF3D7;
+  --text-inverse: #17271F;
+  --text-playing: #FFF8E9;
+  --text-onColorLight: #FFF5E0;
+  --text-onColorDark: #17271F;
+  --browser-text-primary: #F2EEDA;
+  --browser-text-secondary: #D5DFC3;
+  --browser-text-hint: #B5C5A5;
+  --browser-text-value: #F6DBA3;
+  --accent: #DFC080;
+  --selection: #F0D8A3;
+  --recording: #E68B79;
+  --recording-background: #613A32;
+  --meter-normal: #A7C987;
+  --meter-hot: #E7BD6B;
+  --slot-empty: #8D9B79;
+  --track-mutedBackground: #384334;
+  --pan-background: #243323;
+  --pan-centre: #D0BE8C;
+  --clip-midiDefault: #A7BC86;
+  --clip-audioDefault: #D5B277;
+  --track-1: #D19B7B;
+  --track-2: #D6BD7B;
+  --track-3: #9EBB91;
+  --track-4: #B4A0B5;
+  --track-5: #A8AF70;
+  --track-6: #C99D9A;
+  --track-7: #8FAEB0;
+  --track-8: #8FB49D;
+  --kind-kick: #C28A6A;
+  --kind-snare: #9FB8AD;
+  --kind-clap: #88B19D;
+  --kind-closedHat: #C6B679;
+  --kind-openHat: #D4A578;
+  --kind-hat: #D8C58E;
+  --kind-rim: #A5B5BE;
+  --kind-tom: #B59AA5;
+  --kind-crash: #D1B69B;
+  --kind-ride: #BCB2C2;
+  --kind-cymbal: #B6AD8C;
+  --kind-percussion: #A9BD82;
+  --kind-bass: #B98770;
+  --kind-tonal: #9ABCB4;
+  --kind-vocal: #E3CE9F;
+  --kind-effect: #ABBDA0;
+  --kind-other: #9CA28C;
+}
+meter { style: continuous; segments: 24; intensity: 100%; }
+artwork { fps: 12; }
+theme { name: "Forest Amber"; }
+liquid { panels: 100; tracks: 56; clips: 25; }
+gradient-panels { angle: 360; stops: #060606C7 1%, #D5D5AA06 35%, #0924121C 100%; }
+gradient-tracks { angle: 90; stops: #B5B5B530 25%, #8A8A8A6D 85%; }
+gradient-clips { angle: 90; stops: #F1E3AF36 39%, #4D804D0A 100%; }

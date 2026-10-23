@@ -19,11 +19,11 @@ covers:
   - crates/ui/themes/THEME-PACKAGE-README.md
   - crates/ui/themes/dark-gloss.css
   - crates/ui/themes/compact-session.css
-  - crates/ui/themes/suhina-sheet.json
+  - crates/ui/themes/suhina-sheet.theme.css
   - crates/ui/themes/suhina-sheet.css
-  - crates/ui/themes/suhina-meadow.json
+  - crates/ui/themes/suhina-meadow.theme.css
   - crates/ui/themes/suhina-meadow.css
-  - crates/ui/themes/suhina-blocks.json
+  - crates/ui/themes/suhina-blocks.theme.css
   - crates/ui/themes/suhina-blocks.css
   - crates/ui/src/kit/skin.rs
   - crates/ui/src/app/themed_toolbar.rs
