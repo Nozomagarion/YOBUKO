@@ -17,6 +17,76 @@ pub(crate) struct Declaration {
     pub name: String,
     pub value: String,
     pub important: bool,
+    /// Written as the `background` shorthand: `value` is the whole shorthand, and this longhand
+    /// takes its part once variables are substituted.
+    pub from_background: bool,
+}
+
+/// The part of a `background` shorthand that sets `property` (`background-color` or
+/// `background-image`). Like CSS, an omitted colour is transparent and omitted images are none.
+/// Positions, sizes, repeats and URLs are not drawn natively and are an error.
+pub(crate) fn background_part(property: Property, value: &str) -> Result<String, String> {
+    crate::syntax::validate(value)?;
+    let mut input = ParserInput::new(value);
+    let mut parser = Parser::new(&mut input);
+    let mut images: Vec<String> = Vec::new();
+    let mut color: Option<String> = None;
+    let mut layer_has_image = false;
+    let mut layers = 1usize;
+    while !parser.is_exhausted() {
+        let start = parser.position();
+        let token = parser.next().map_err(|_| "Invalid background")?.clone();
+        match token {
+            Token::Comma => {
+                if color.is_some() {
+                    return Err("A background colour belongs to the last layer only".into());
+                }
+                if !layer_has_image {
+                    images.push("none".into());
+                }
+                layer_has_image = false;
+                layers += 1;
+                if layers > 4 {
+                    return Err("At most four background layers are supported".into());
+                }
+            }
+            Token::Function(name) if name.to_ascii_lowercase().ends_with("-gradient") => {
+                nested(&mut parser, consume)?;
+                if layer_has_image {
+                    return Err("One image per background layer".into());
+                }
+                images.push(parser.slice_from(start).trim().to_owned());
+                layer_has_image = true;
+            }
+            Token::Ident(name) if name.eq_ignore_ascii_case("none") && !layer_has_image => {
+                images.push("none".into());
+                layer_has_image = true;
+            }
+            Token::Function(_) | Token::Hash(_) | Token::IDHash(_) | Token::Ident(_) => {
+                if matches!(token, Token::Function(_)) {
+                    nested(&mut parser, consume)?;
+                }
+                let text = parser.slice_from(start).trim();
+                if color.is_some() || crate::value::Color::parse(text).is_err() {
+                    return Err("Only colours and gradients are drawn from the background shorthand".into());
+                }
+                color = Some(text.to_owned());
+            }
+            _ => return Err("Only colours and gradients are drawn from the background shorthand".into()),
+        }
+    }
+    match property {
+        Property::BackgroundColor => Ok(color.unwrap_or_else(|| "transparent".into())),
+        Property::BackgroundImage => {
+            let drawn: Vec<&String> = images.iter().filter(|image| *image != "none").collect();
+            Ok(if drawn.is_empty() {
+                "none".into()
+            } else {
+                drawn.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            })
+        }
+        _ => Err("Not a background longhand".into()),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -347,6 +417,31 @@ fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) ->
         if !name.starts_with("--") {
             name.make_ascii_lowercase();
         }
+        if name == "background" {
+            let raw = source.get(value_start..value_end).ok_or("Invalid value span")?.trim();
+            let (value, important) = raw.strip_suffix("!important").map_or((raw, false), |s| (s.trim_end(), true));
+            if !value.contains("var(") {
+                let checked = [Property::BackgroundColor, Property::BackgroundImage].map(|property| {
+                    background_part(property, value).and_then(|part| property.parse(&part).map(|_| ()))
+                });
+                if let Some(Err(message)) = checked.into_iter().find(Result::is_err) {
+                    sheet.notice(at, format!("background: {message}"));
+                    continue;
+                }
+            }
+            if declarations.len() + 2 > 256 {
+                return Err("Style rule exceeds 256 declarations".into());
+            }
+            for longhand in ["background-color", "background-image"] {
+                declarations.push(Declaration {
+                    name: longhand.into(),
+                    value: value.into(),
+                    important,
+                    from_background: true,
+                });
+            }
+            continue;
+        }
         if name.len() > 128 {
             sheet.notice(at, "Property name exceeds 128 bytes".into());
             continue;
@@ -369,7 +464,7 @@ fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) ->
             sheet.notice(at, format!("{name}: {message}"));
             continue;
         }
-        declarations.push(Declaration { name, value: value.into(), important });
+        declarations.push(Declaration { name, value: value.into(), important, from_background: false });
     }
     Ok(declarations)
 }

@@ -50,11 +50,11 @@ impl Gradient {
     pub fn from_native(gradient: suhina_style::gradient::Linear) -> Self {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::hash::DefaultHasher::new();
-        "native-linear".hash(&mut hasher);
+        "native-gradient".hash(&mut hasher);
         format!("{gradient:?}").hash(&mut hasher);
         Self {
             key: hasher.finish(),
-            geometry: Geometry::NativeLinear(gradient.direction),
+            geometry: Geometry::Native(gradient.direction, gradient.shape),
             interpolation: None,
             repeating: gradient.repeating,
             stops: Vec::new(),

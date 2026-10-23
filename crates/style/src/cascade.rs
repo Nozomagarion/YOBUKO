@@ -172,7 +172,9 @@ fn compute_inner(
             let Some(property) = Property::from_name(name) else {
                 continue;
             };
-            let value = match crate::variables::substitute(&declaration.value, &computed.variables) {
+            let value = match crate::variables::substitute(&declaration.value, &computed.variables).and_then(|value| {
+                if declaration.from_background { crate::sheet::background_part(property, &value) } else { Ok(value) }
+            }) {
                 Ok(value) => value,
                 Err(error) if checked => return Err(error),
                 Err(_) => continue,
@@ -368,5 +370,36 @@ mod tests {
         assert_eq!(sheet.notices.len(), 1);
         let many: String = (0..80).map(|i| format!("@layer l{i} {{ knob {{ color: red; }} }}")).collect();
         assert!(Sheet::parse(&many).is_err());
+    }
+
+    #[test]
+    fn background_shorthand_sets_colour_and_images_and_resets_an_omitted_colour() {
+        let style = |css: &str| {
+            let sheet = Sheet::parse(css).unwrap_or_else(|e| panic!("{e}"));
+            let styles =
+                compute(&tree(), viewport(800.0), &[AppliedSheet { sheet: &sheet, layer: Layer::Theme, root: None }])
+                    .unwrap_or_else(|e| panic!("{e}"));
+            (sheet.notices.len(), styles[2].clone())
+        };
+        let (notices, knob) = style("knob { background-color: red; background: linear-gradient(red, blue); }");
+        assert_eq!(notices, 0);
+        // As in CSS, the shorthand resets the colour it omits: the native fill becomes transparent.
+        assert_eq!(knob.get(Property::BackgroundColor), Value::Color(Color::Rgba([0; 4])));
+        assert!(knob.authored(Property::BackgroundColor));
+        assert!(matches!(knob.get(Property::BackgroundImage), Value::Gradients(g) if g.len() == 1));
+        let (_, knob) =
+            style(":root { --base: #102030; } knob { background: linear-gradient(red, blue), var(--base); }");
+        assert_eq!(knob.get(Property::BackgroundColor), Value::Color(Color::Rgba([16, 32, 48, 255])));
+        let (_, knob) = style("knob { background: none; }");
+        assert_eq!(knob.get(Property::BackgroundImage), Value::Gradients(Vec::new()));
+        for bad in
+            ["url(a.png)", "red center / cover", "red, blue", "linear-gradient(red, blue) linear-gradient(red, blue)"]
+        {
+            let (notices, _) = style(&format!("knob {{ background: {bad}; }}"));
+            assert_eq!(notices, 1, "{bad}");
+        }
+        // Background longhands written later still win over the shorthand.
+        let (_, knob) = style("knob { background: red; background-color: blue; }");
+        assert_eq!(knob.get(Property::BackgroundColor), Value::Color(Color::Rgba([0, 0, 255, 255])));
     }
 }

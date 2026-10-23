@@ -61,6 +61,20 @@ properties! {
 
 impl Property {
     pub fn parse(self, source: &str) -> Result<Value, String> {
+        // Corner radii: the top-left horizontal radius is the one native boxes draw, as the
+        // compatibility adapter does; the remaining values are validated and kept in the source.
+        if self == Self::Radius && source.trim().contains([' ', '/']) {
+            let mut parts = source.split(['/', ' ']).filter(|part| !part.trim().is_empty());
+            let first = parts.next().ok_or("Missing radius")?;
+            let rest: Vec<&str> = parts.collect();
+            if rest.len() > 7 {
+                return Err("At most four radii on each axis".into());
+            }
+            for part in &rest {
+                Length::parse(part)?;
+            }
+            return self.parse(first);
+        }
         let value = match self.kind() {
             Kind::Gradients => Value::Gradients(crate::gradient::parse(source)?),
             Kind::BoxShadows => Value::Shadows(crate::paint::shadows(source, false)?),

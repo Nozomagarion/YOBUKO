@@ -725,6 +725,13 @@ mod tests {
             "linear-gradient(to top right, white 0 45%, green 45% 100%)",
             "repeating-linear-gradient(90deg, transparent 0 21px, #e5ece7 21px 22px)",
             "linear-gradient(red, green, blue), linear-gradient(90deg, #fff3, #0008)",
+            "radial-gradient(ellipse at 65% 45%, #29424280, transparent 70%)",
+            "radial-gradient(circle 10px at left top, red, blue)",
+            "radial-gradient(closest-side, red, blue 50%, green)",
+            "radial-gradient(circle farthest-side at 20% 80%, red, blue)",
+            "repeating-radial-gradient(red 0 4px, blue 4px 8px)",
+            "conic-gradient(from 90deg at 25% 75%, red, blue 0.25turn, green 50%)",
+            "repeating-conic-gradient(red 0 10%, blue 10% 20%)",
         ] {
             let css = format!(".button {{color:#34789a; background-image:{image};}}");
             prepare(&css, 800.0);
@@ -796,9 +803,9 @@ mod tests {
     #[test]
     fn unsupported_native_expressions_keep_the_whole_legacy_style() {
         for css in [
-            ".button { color:red; background-image:radial-gradient(blue,green); }",
-            ":root { --ink:color-mix(in srgb, red, blue); } .button { color:var(--ink); }",
-            ".button { color:blue; border-radius:4px 8px; }",
+            ".button { color:red; background-image:radial-gradient(in oklch, blue, green); }",
+            ":root { --ink:color-mix(in hsl, red, blue); } .button { color:var(--ink); }",
+            ".button { color:blue; border-radius:calc(2px + 2px); }",
         ] {
             prepare(css, 800.0);
             let actual = scoped(&["button".into()]).unwrap();
@@ -834,7 +841,7 @@ mod tests {
         });
         for (source, native) in [
             (".button { color:#abcdef; }", true),
-            (".button { color:#abcdef; background-image:radial-gradient(red,blue); }", false),
+            (".button { color:#abcdef; background-image:radial-gradient(in oklch, red, blue); }", false),
             (".button { color:#abcdef; }", true),
         ] {
             prepare(source, 800.0);

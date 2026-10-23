@@ -11,7 +11,7 @@ use style::values::specified::position::{HorizontalPositionKeyword as X, Vertica
 
 #[derive(Clone, Debug)]
 pub(super) enum Geometry {
-    NativeLinear(suhina_style::gradient::Direction),
+    Native(suhina_style::gradient::Direction, suhina_style::gradient::Shape),
     Linear(LineDirection),
     Radial(EndingShape, Position),
     Conic { angle: f32, position: Position },
@@ -28,8 +28,30 @@ fn center(position: &Position, size: Vec2) -> Vec2 {
 }
 
 fn extent(extent: ShapeExtent, size: Vec2, center: Vec2, circle: bool) -> Vec2 {
+    use suhina_style::gradient::Extent as E;
+    let native = match extent {
+        ShapeExtent::ClosestSide | ShapeExtent::Contain => E::ClosestSide,
+        ShapeExtent::ClosestCorner => E::ClosestCorner,
+        ShapeExtent::FarthestSide => E::FarthestSide,
+        ShapeExtent::FarthestCorner | ShapeExtent::Cover => E::FarthestCorner,
+    };
+    native_extent(native, size, center, circle)
+}
+
+/// A length of the box's `size` on one axis, in points.
+fn resolve_length(length: suhina_style::value::Length, size: f32) -> f32 {
+    use suhina_style::value::Length as L;
+    match length {
+        L::Px(value) | L::Em(value) => value,
+        L::Percent(value) => value * size,
+        L::Fr(_) | L::Auto => size * 0.5,
+    }
+}
+
+fn native_extent(extent: suhina_style::gradient::Extent, size: Vec2, center: Vec2, circle: bool) -> Vec2 {
+    use suhina_style::gradient::Extent as E;
     let sides = [center.x.abs(), (size.x - center.x).abs(), center.y.abs(), (size.y - center.y).abs()];
-    let close = matches!(extent, ShapeExtent::ClosestSide | ShapeExtent::ClosestCorner | ShapeExtent::Contain);
+    let close = matches!(extent, E::ClosestSide | E::ClosestCorner);
     let combine = |a: f32, b: f32| if close { a.min(b) } else { a.max(b) };
     let mut radii = vec2(combine(sides[0], sides[1]), combine(sides[2], sides[3]));
     let corners = [vec2(0.0, 0.0), vec2(size.x, 0.0), size, vec2(0.0, size.y)].map(|p| p - center);
@@ -37,7 +59,7 @@ fn extent(extent: ShapeExtent, size: Vec2, center: Vec2, circle: bool) -> Vec2 {
         .into_iter()
         .reduce(|a, b| if (a.length_sq() <= b.length_sq()) == close { a } else { b })
         .unwrap_or(Vec2::ZERO);
-    let to_corner = matches!(extent, ShapeExtent::ClosestCorner | ShapeExtent::FarthestCorner | ShapeExtent::Cover);
+    let to_corner = matches!(extent, E::ClosestCorner | E::FarthestCorner);
     if circle {
         Vec2::splat(if to_corner { corner.length() } else { combine(radii.x, radii.y) })
     } else {
@@ -52,10 +74,31 @@ fn extent(extent: ShapeExtent, size: Vec2, center: Vec2, circle: bool) -> Vec2 {
 impl Geometry {
     pub fn resolve(&self, size: Vec2) -> Mapping {
         match self {
-            Self::NativeLinear(direction) => {
-                let [x, y] = direction.axis([size.x, size.y]);
-                let axis = vec2(x, y);
-                Mapping::Linear { axis, basis: axis.x.abs() * size.x + axis.y.abs() * size.y, center: size * 0.5 }
+            Self::Native(direction, shape) => {
+                use suhina_style::gradient::{RadialSize, Shape};
+                let at = |at: &[suhina_style::value::Length; 2]| {
+                    vec2(resolve_length(at[0], size.x), resolve_length(at[1], size.y))
+                };
+                match shape {
+                    Shape::Linear => {
+                        let [x, y] = direction.axis([size.x, size.y]);
+                        let axis = vec2(x, y);
+                        Mapping::Linear {
+                            axis,
+                            basis: axis.x.abs() * size.x + axis.y.abs() * size.y,
+                            center: size * 0.5,
+                        }
+                    }
+                    Shape::Radial { circle, size: radius, at: position } => {
+                        let center = at(position);
+                        let radii = match radius {
+                            RadialSize::Extent(value) => native_extent(*value, size, center, *circle),
+                            RadialSize::Radii(x, y) => vec2(resolve_length(*x, size.x), resolve_length(*y, size.y)),
+                        };
+                        Mapping::Radial { center, radii: radii.max(Vec2::splat(f32::EPSILON)) }
+                    }
+                    Shape::Conic { from, at: position } => Mapping::Conic { center: at(position), angle: *from },
+                }
             }
             Self::Linear(direction) => {
                 let x = |value: X| if value == X::Left { -1.0 } else { 1.0 };
