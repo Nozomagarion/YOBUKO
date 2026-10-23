@@ -460,6 +460,7 @@ impl Skin {
             } else {
                 warnings.push("skin.controls must be an object of at most 256 controls".into());
             }
+            super::control_layout::validate_anchors(&mut skin.controls, warnings);
         }
         if let Some(value) = root.get("session") {
             skin.session = super::session_geometry::SessionGeometry::from_json(value, warnings);

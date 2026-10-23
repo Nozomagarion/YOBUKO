@@ -372,6 +372,34 @@ Hold **Shift** for one logical pixel steps with peer alignment; **Alt+Shift** fo
 subpixel placement without snapping. Alt alone keeps normal snapping. Guides indicate alignment;
 aligning does not create a persistent dependency on another control.
 
+### Anchoring one control to another
+
+A persistent anchor makes one edge of a control follow an edge of another control in
+the same container, with a gap. It is kept in the theme, unlike alignment while
+dragging. The value is `<control> <edge> [<gap>px]`; the target's edge must lie on the
+same axis (left/right, or top/bottom). For example, a meter that fills the track's
+height but ends four points above the volume control under it:
+
+```css
+.control-arrangement-meter {
+  height: 100%; top: 4px;
+  --suhina-anchor-bottom: arrangement-volume top 4px;
+}
+```
+
+Opposite edges keep the gap between the two controls (a bottom edge above a top edge);
+matching edges inset by it (a top edge 4 points below another top edge). With one edge
+anchored, a full-width or full-height control keeps its other edge and stretches;
+otherwise it moves and keeps its size. Anchoring both edges of an axis sets both.
+`--suhina-anchor-bottom: none` removes an anchor. In **Edit interface**, select a control
+and choose another control under **Follow another element**, its edge and the gap.
+
+When the target is hidden, absent, or in another container, the anchored edge keeps the
+control's own placement. Anchors that form a cycle (including a control anchored to
+itself) or a chain longer than eight links are ignored with a warning; the editor
+refuses them. A control never leaves its container, and an anchor that leaves no room
+draws nothing.
+
 **Full width** uses `width: 100%`, with `left` and `right` as panel insets.
 For example `.control-mixer-name { width: 100%; left: 4px; right: 4px; }`.
 Fractional left/top offsets survive saving; existing integer offsets remain valid.

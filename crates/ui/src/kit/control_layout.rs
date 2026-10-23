@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use suhina_style::anchor::{Anchor, Anchors, Edge, Name};
 
 pub type Placements = BTreeMap<String, Placement>;
 pub const MAX_CONTROLS: usize = 256;
@@ -42,6 +43,60 @@ struct Runtime {
 }
 thread_local! { static RUNTIME: RefCell<Option<Runtime>> = const { RefCell::new(None) }; }
 
+/// Most anchor sources and targets remembered per frame.
+const MAX_PLACED: usize = 4096;
+
+/// Where an element that takes part in an anchor was placed, and in which container.
+#[derive(Clone, Copy)]
+struct Placed {
+    name: Name,
+    bounds: Rect,
+    at: Rect,
+}
+
+/// An anchored edge resolved from the previous frame's target: checked when the frame ends.
+#[derive(Clone, Copy)]
+struct Borrowed {
+    target: Name,
+    bounds: Rect,
+    used: Rect,
+}
+
+/// This frame's and the previous frame's anchor sources and targets. Elements are drawn in
+/// immediate mode, so a target drawn after its source is taken from the previous frame, moved
+/// as far as the source's container moved (scrolling), and the frame repaints once if the
+/// target has since changed. Only active between [`Capture::begin`] and its drop.
+#[derive(Default)]
+struct Frames {
+    active: bool,
+    current: Vec<Placed>,
+    previous: Vec<Placed>,
+    borrowed: Vec<Borrowed>,
+    /// Names of anchor targets and anchored elements, for the placements kept alive beside them
+    /// (so their address cannot be reused by other placements).
+    names: Option<(Source, Arc<std::collections::BTreeSet<Name>>)>,
+}
+thread_local! { static FRAMES: RefCell<Frames> = RefCell::new(Frames::default()); }
+
+fn overlap(a: Rect, b: Rect) -> f32 {
+    let both = a.intersect(b);
+    if both.is_positive() { both.area() } else { 0.0 }
+}
+
+/// The record named `name` whose container overlaps `bounds` the most.
+fn best(records: &[Placed], name: Name, bounds: Rect) -> Option<Placed> {
+    records
+        .iter()
+        .filter(|p| p.name == name)
+        .map(|p| (overlap(p.bounds, bounds), p))
+        .filter(|(area, _)| *area > 0.0)
+        .fold(None, |best: Option<(f32, &Placed)>, next| match best {
+            Some(b) if b.0 >= next.0 => Some(b),
+            _ => Some(next),
+        })
+        .map(|(_, p)| *p)
+}
+
 fn draft_id() -> egui::Id {
     egui::Id::new("native-control-layout-draft")
 }
@@ -62,6 +117,12 @@ pub fn draft(ctx: &egui::Context, placements: Option<Placements>) {
 pub struct Capture(Option<Runtime>);
 impl Capture {
     pub fn begin(ctx: &egui::Context) -> Self {
+        FRAMES.with(|frames| {
+            let mut frames = frames.borrow_mut();
+            frames.previous = std::mem::take(&mut frames.current);
+            frames.borrowed.clear();
+            frames.active = true;
+        });
         Self(RUNTIME.with(|runtime| runtime.replace(Some(Runtime { ctx: ctx.clone(), entries: Vec::new() }))))
     }
     pub fn entries(&self) -> Vec<Entry> {
@@ -70,7 +131,22 @@ impl Capture {
 }
 impl Drop for Capture {
     fn drop(&mut self) {
-        RUNTIME.with(|runtime| runtime.replace(self.0.take()));
+        let changed = FRAMES.with(|frames| {
+            let mut frames = frames.borrow_mut();
+            frames.active = false;
+            // A target taken from the last frame that has moved since: one more frame settles it.
+            frames.borrowed.iter().any(|b| {
+                best(&frames.current, b.target, b.bounds).is_some_and(|now| {
+                    (now.at.min - b.used.min).length() > 0.01 || (now.at.max - b.used.max).length() > 0.01
+                })
+            })
+        });
+        RUNTIME.with(|runtime| {
+            if changed && let Some(runtime) = runtime.borrow().as_ref() {
+                runtime.ctx.request_repaint();
+            }
+            runtime.replace(self.0.take())
+        });
     }
 }
 
@@ -96,12 +172,34 @@ pub struct Placement {
     pub full_height: bool,
     pub full_width: bool,
     pub direction: Direction,
+    /// Edges that follow an edge of another element in the same container.
+    pub anchors: Anchors,
 }
 
 pub fn valid_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= 64
-        && name.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'-')
+    suhina_style::anchor::valid_name(name)
+}
+
+/// The CSS property that anchors `edge`.
+pub fn anchor_property(edge: Edge) -> &'static str {
+    match edge {
+        Edge::Left => "--suhina-anchor-left",
+        Edge::Top => "--suhina-anchor-top",
+        Edge::Right => "--suhina-anchor-right",
+        Edge::Bottom => "--suhina-anchor-bottom",
+    }
+}
+
+/// Drops the anchors that would form a cycle or a chain longer than eight links, with a warning
+/// for each element. Every theme and editor draft passes through this before it is used.
+pub fn validate_anchors(controls: &mut Placements, warnings: &mut Vec<String>) {
+    let rejected = suhina_style::anchor::rejected(controls.iter().map(|(name, p)| (name.as_str(), p.anchors)));
+    for (name, reason) in rejected {
+        if let Some(placement) = controls.get_mut(&name) {
+            placement.anchors = Anchors::default();
+            warnings.push(format!("control {name}: anchors ignored, {reason}"));
+        }
+    }
 }
 
 impl Placement {
@@ -152,6 +250,11 @@ impl Placement {
     }
 
     pub fn set(&mut self, key: &str, value: &str) -> Result<(), &'static str> {
+        if let Some(edge) = key.strip_prefix("--suhina-anchor-").and_then(Edge::parse) {
+            let anchor = if value == "none" { None } else { Some(Anchor::parse(edge, value)?) };
+            self.anchors.set(edge, anchor);
+            return Ok(());
+        }
         match key {
             "left" | "top" | "bottom" | "right" => {
                 if matches!(key, "bottom" | "right") && value == "auto" {
@@ -239,17 +342,42 @@ impl Placement {
     }
 
     pub fn to_json(self) -> Value {
+        let mut value = self.to_json_without_anchors();
+        if !self.anchors.is_empty()
+            && let Some(object) = value.as_object_mut()
+        {
+            let anchors: serde_json::Map<String, Value> =
+                self.anchors.iter().map(|(edge, anchor)| (edge.name().to_owned(), json!(anchor.to_string()))).collect();
+            object.insert("anchors".into(), Value::Object(anchors));
+        }
+        value
+    }
+
+    fn to_json_without_anchors(self) -> Value {
         json!({"left": self.offset().x, "top": self.offset().y, "bottom": self.bottom, "right": self.right, "hidden": self.hidden, "width": if self.full_width { json!("100%") } else { json!(self.width) }, "height": if self.full_height { json!("100%") } else { json!(self.height) },
             "direction": if self.direction == Direction::Horizontal { "horizontal" } else { "vertical" }})
     }
 
     pub fn from_json(value: &Value, warnings: &mut Vec<String>) -> Self {
         let mut result = Self::default();
-        let Some(properties) = value.as_object().filter(|p| p.len() <= 8) else {
-            warnings.push("control placement must be an object of at most eight properties".into());
+        let Some(properties) = value.as_object().filter(|p| p.len() <= 9) else {
+            warnings.push("control placement must be an object of at most nine properties".into());
             return result;
         };
         for (key, value) in properties {
+            if key == "anchors" {
+                let Some(anchors) = value.as_object().filter(|a| a.len() <= 4) else {
+                    warnings.push("control anchors must be an object of at most four edges".into());
+                    continue;
+                };
+                for (edge, anchor) in anchors {
+                    let property = format!("--suhina-anchor-{edge}");
+                    if let Err(error) = result.set(&property, anchor.as_str().unwrap_or("")) {
+                        warnings.push(format!("control anchors.{edge}: {error}"));
+                    }
+                }
+                continue;
+            }
             if matches!(key.as_str(), "width" | "height" | "bottom" | "right") && value.is_null() {
                 continue;
             }
@@ -299,7 +427,145 @@ pub fn place(name: &str, native: Rect, bounds: Rect) -> Rect {
 /// Resolve geometry without registering an edit handle for a part a renderer does not draw.
 pub fn resolve(name: &str, native: Rect, bounds: Rect) -> Rect {
     let layout = placement(name);
-    if layout == Placement::default() { native } else { layout.apply(native, bounds) }
+    let mut at = if layout == Placement::default() { native } else { layout.apply(native, bounds) };
+    if !layout.anchors.is_empty() && !layout.hidden {
+        at = anchored(name, layout, at, bounds);
+    }
+    remember(name, bounds, at);
+    at
+}
+
+/// The placements in effect: the editor's draft while editing, else the theme's.
+#[derive(Clone)]
+enum Source {
+    Draft(Arc<Placements>),
+    Skin(Arc<super::skin::Skin>),
+}
+
+impl Source {
+    fn current() -> Self {
+        let draft = RUNTIME.with(|runtime| {
+            runtime
+                .borrow()
+                .as_ref()
+                .and_then(|runtime| runtime.ctx.data(|data| data.get_temp::<Arc<Placements>>(draft_id())))
+        });
+        draft.map_or_else(|| Self::Skin(super::skin::current()), Self::Draft)
+    }
+    fn placements(&self) -> &Placements {
+        match self {
+            Self::Draft(draft) => draft,
+            Self::Skin(skin) => &skin.controls,
+        }
+    }
+    fn same(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Draft(a), Self::Draft(b)) => Arc::ptr_eq(a, b),
+            (Self::Skin(a), Self::Skin(b)) => Arc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+}
+
+/// Names of every anchored element and anchor target, computed once per placement map.
+fn anchor_names() -> Arc<std::collections::BTreeSet<Name>> {
+    let source = Source::current();
+    if let Some(names) = FRAMES.with(|frames| {
+        frames.borrow().names.as_ref().filter(|(cached, _)| cached.same(&source)).map(|(_, names)| Arc::clone(names))
+    }) {
+        return names;
+    }
+    let names: std::collections::BTreeSet<Name> = source
+        .placements()
+        .iter()
+        .filter(|(_, p)| !p.anchors.is_empty())
+        .flat_map(|(name, p)| Name::new(name).into_iter().chain(p.anchors.iter().map(|(_, a)| a.target)))
+        .collect();
+    let names = Arc::new(names);
+    FRAMES.with(|frames| frames.borrow_mut().names = Some((source, Arc::clone(&names))));
+    names
+}
+
+fn remember(name: &str, bounds: Rect, at: Rect) {
+    let Some(name) = Name::new(name) else { return };
+    if !bounds.is_finite() || !at.is_finite() || !anchor_names().contains(&name) {
+        return;
+    }
+    FRAMES.with(|frames| {
+        let mut frames = frames.borrow_mut();
+        if frames.active && frames.current.len() < MAX_PLACED {
+            frames.current.push(Placed { name, bounds, at });
+        }
+    });
+}
+
+/// Where `target` is in the container `bounds` of an element named `source`: drawn earlier this
+/// frame, or last frame moved as far as the source's container moved. `None` when the target is
+/// hidden, missing or in another container: the anchored edge then keeps its own placement.
+fn target_rect(source: Name, target: Name, bounds: Rect) -> Option<Rect> {
+    if placement(target.as_str()).hidden {
+        return None;
+    }
+    FRAMES.with(|frames| {
+        let mut frames = frames.borrow_mut();
+        if !frames.active {
+            return None;
+        }
+        if let Some(now) = best(&frames.current, target, bounds) {
+            return Some(now.at);
+        }
+        // The same source last frame: the record of the same size nearest to its container now.
+        let before = frames
+            .previous
+            .iter()
+            .filter(|p| p.name == source && (p.bounds.size() - bounds.size()).length() < 0.5)
+            .min_by(|a, b| {
+                let da = (a.bounds.min - bounds.min).length();
+                let db = (b.bounds.min - bounds.min).length();
+                da.total_cmp(&db)
+            })
+            .copied()?;
+        let then = best(&frames.previous, target, before.bounds)?;
+        let used = then.at.translate(bounds.min - before.bounds.min);
+        if frames.borrowed.len() < MAX_PLACED {
+            frames.borrowed.push(Borrowed { target, bounds, used });
+        }
+        Some(used)
+    })
+}
+
+/// `at` with its anchored edges moved to their targets, inside `bounds`.
+fn anchored(name: &str, layout: Placement, at: Rect, bounds: Rect) -> Rect {
+    let Some(source) = Name::new(name) else { return at };
+    if !bounds.is_finite() || !bounds.is_positive() {
+        return at;
+    }
+    let edge_of = |edge: Edge| -> Option<f32> {
+        let anchor = layout.anchors.get(edge)?;
+        let target = target_rect(source, anchor.target, bounds)?;
+        let value = match anchor.edge {
+            Edge::Left => target.left(),
+            Edge::Top => target.top(),
+            Edge::Right => target.right(),
+            Edge::Bottom => target.bottom(),
+        };
+        Some(anchor.place(edge, value))
+    };
+    let (x0, x1) = suhina_style::anchor::resolve_axis(
+        (at.left(), at.right()),
+        edge_of(Edge::Left),
+        edge_of(Edge::Right),
+        layout.full_width,
+        (bounds.left(), bounds.right()),
+    );
+    let (y0, y1) = suhina_style::anchor::resolve_axis(
+        (at.top(), at.bottom()),
+        edge_of(Edge::Top),
+        edge_of(Edge::Bottom),
+        layout.full_height,
+        (bounds.top(), bounds.bottom()),
+    );
+    Rect::from_min_max(egui::pos2(x0, y0), egui::pos2(x1, y1))
 }
 
 fn register(name: &str, native: Rect, at: Rect, bounds: Rect) {
@@ -372,6 +638,131 @@ mod tests {
         p.set("height", "auto").unwrap();
         assert!(!p.full_height);
         assert!(p.set("height", "200%").is_err());
+    }
+
+    fn anchored_skin(entries: &[(&str, &[(&str, &str)])]) -> super::super::skin::Skin {
+        let mut skin = super::super::skin::Skin::default();
+        for (name, properties) in entries {
+            let mut p = Placement::default();
+            for (key, value) in *properties {
+                p.set(key, value).unwrap_or_else(|e| panic!("{key}: {e}"));
+            }
+            skin.controls.insert((*name).into(), p);
+        }
+        skin
+    }
+
+    fn rect(x: f32, y: f32, w: f32, h: f32) -> Rect {
+        Rect::from_min_size(egui::pos2(x, y), Vec2::new(w, h))
+    }
+
+    #[test]
+    fn anchors_round_trip_through_css_properties_and_json() {
+        let mut p = Placement::default();
+        p.set("height", "100%").unwrap();
+        p.set("--suhina-anchor-bottom", "arrangement-volume top 4px").unwrap();
+        p.set("--suhina-anchor-left", "arrangement-name right").unwrap();
+        let mut warnings = Vec::new();
+        assert_eq!(Placement::from_json(&p.to_json(), &mut warnings), p);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(p.to_json()["anchors"]["bottom"], "arrangement-volume top 4px");
+        assert!(p.set("--suhina-anchor-bottom", "arrangement-volume left").is_err(), "axis must match");
+        assert!(p.set("--suhina-anchor-middle", "arrangement-volume top").is_err());
+        p.set("--suhina-anchor-bottom", "none").unwrap();
+        p.set("--suhina-anchor-left", "none").unwrap();
+        assert!(p.anchors.is_empty());
+        assert!(Placement::default().to_json().get("anchors").is_none(), "no anchors, no key");
+    }
+
+    #[test]
+    fn a_full_height_meter_ends_above_the_control_under_it_in_the_same_frame() {
+        super::super::skin::configure(&anchored_skin(&[(
+            "meter",
+            &[("height", "100%"), ("top", "2px"), ("--suhina-anchor-bottom", "volume top 4px")],
+        )]));
+        let ctx = egui::Context::default();
+        let header = rect(0.0, 100.0, 200.0, 60.0);
+        let capture = Capture::begin(&ctx);
+        let volume = place("volume", rect(150.0, 140.0, 40.0, 16.0), header);
+        let meter = place("meter", rect(190.0, 100.0, 6.0, 60.0), header);
+        drop(capture);
+        assert_eq!(meter.top(), 102.0);
+        assert_eq!(meter.bottom(), volume.top() - 4.0);
+        assert_eq!(meter.width(), 6.0);
+    }
+
+    #[test]
+    fn a_target_drawn_later_comes_from_the_last_frame_moved_with_the_container() {
+        super::super::skin::configure(&anchored_skin(&[(
+            "meter",
+            &[("height", "100%"), ("--suhina-anchor-bottom", "volume top 4px")],
+        )]));
+        let ctx = egui::Context::default();
+        let frame = |y: f32| {
+            let header = rect(0.0, y, 200.0, 60.0);
+            let _capture = Capture::begin(&ctx);
+            let meter = place("meter", rect(190.0, y, 6.0, 60.0), header);
+            let volume = place("volume", rect(150.0, y + 40.0, 40.0, 16.0), header);
+            (meter, volume)
+        };
+        // First frame: nothing known yet, the meter keeps its own placement.
+        let (meter, _) = frame(100.0);
+        assert_eq!(meter.bottom(), 160.0);
+        let (meter, volume) = frame(100.0);
+        assert_eq!(meter.bottom(), volume.top() - 4.0);
+        // Scrolled by 25 points: the last frame's target moves with the header.
+        let (meter, volume) = frame(75.0);
+        assert_eq!(meter.bottom(), volume.top() - 4.0);
+    }
+
+    #[test]
+    fn hidden_missing_and_foreign_targets_fall_back_to_the_own_placement() {
+        let ctx = egui::Context::default();
+        let header = rect(0.0, 0.0, 200.0, 60.0);
+        let native = rect(190.0, 0.0, 6.0, 60.0);
+        for (volume_hidden, volume_bounds) in [(true, header), (false, rect(0.0, 300.0, 200.0, 60.0))] {
+            let mut entries: Vec<(&str, &[(&str, &str)])> =
+                vec![("meter", &[("height", "100%"), ("--suhina-anchor-bottom", "volume top 4px")])];
+            if volume_hidden {
+                entries.push(("volume", &[("display", "none")]));
+            }
+            super::super::skin::configure(&anchored_skin(&entries));
+            // An empty frame: nothing from the previous case is remembered.
+            drop(Capture::begin(&ctx));
+            for _ in 0..2 {
+                let _capture = Capture::begin(&ctx);
+                place("volume", rect(150.0, volume_bounds.top() + 40.0, 40.0, 16.0), volume_bounds);
+                assert_eq!(place("meter", native, header), native);
+            }
+        }
+        // A target that is never drawn at all.
+        super::super::skin::configure(&anchored_skin(&[("meter", &[("--suhina-anchor-bottom", "nowhere top")])]));
+        let _capture = Capture::begin(&ctx);
+        assert_eq!(place("meter", native, header), native);
+    }
+
+    #[test]
+    fn anchors_outside_a_frame_capture_are_inert() {
+        super::super::skin::configure(&anchored_skin(&[("meter", &[("--suhina-anchor-bottom", "volume top")])]));
+        let header = rect(0.0, 0.0, 200.0, 60.0);
+        let native = rect(190.0, 0.0, 6.0, 20.0);
+        place("volume", rect(150.0, 40.0, 40.0, 16.0), header);
+        assert_eq!(place("meter", native, header), native);
+    }
+
+    #[test]
+    fn cyclic_anchors_are_dropped_with_a_warning() {
+        let mut controls = anchored_skin(&[
+            ("a", &[("--suhina-anchor-left", "b right")]),
+            ("b", &[("--suhina-anchor-left", "a right")]),
+            ("c", &[("--suhina-anchor-top", "a bottom 2px")]),
+        ])
+        .controls;
+        let mut warnings = Vec::new();
+        validate_anchors(&mut controls, &mut warnings);
+        assert!(controls["a"].anchors.is_empty() && controls["b"].anchors.is_empty());
+        assert!(!controls["c"].anchors.is_empty());
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
     }
 
     #[test]

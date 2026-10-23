@@ -227,6 +227,7 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
             }
         }
     }
+    super::control_layout::validate_anchors(&mut theme.skin.controls, &mut warnings);
     warnings
 }
 
@@ -268,9 +269,13 @@ pub fn export(theme: &Theme) -> String {
             css.push_str(&format!(" {key}: {};", value.map_or("auto".into(), |v| format!("{v}px"))));
         }
         css.push_str(&format!(
-            " --suhina-direction: {}; }}\n",
+            " --suhina-direction: {};",
             if placement.direction == super::control_layout::Direction::Horizontal { "horizontal" } else { "vertical" }
         ));
+        for (edge, anchor) in placement.anchors.iter() {
+            css.push_str(&format!(" {}: {anchor};", super::control_layout::anchor_property(edge)));
+        }
+        css.push_str(" }\n");
     }
     if let Some(toolbar) = &theme.skin.toolbar {
         css.push_str(&format!(
@@ -313,6 +318,26 @@ pub fn export(theme: &Theme) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn control_anchors_round_trip_through_css_and_cycles_warn() {
+        let mut theme = Theme::default();
+        let warnings = apply(
+            &mut theme,
+            ".control-arrangement-meter { height: 100%; --suhina-anchor-bottom: arrangement-volume top 4px; }",
+        );
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let css = export(&theme);
+        assert!(css.contains("--suhina-anchor-bottom: arrangement-volume top 4px;"), "{css}");
+        let mut again = Theme::default();
+        assert!(apply(&mut again, &css).is_empty());
+        assert_eq!(again.skin.controls, theme.skin.controls);
+        let warnings =
+            apply(&mut theme, ".control-arrangement-volume { --suhina-anchor-top: arrangement-meter bottom; }");
+        assert!(warnings.iter().any(|w| w.contains("cycle")), "{warnings:?}");
+        assert!(theme.skin.controls["arrangement-volume"].anchors.is_empty());
+        assert!(theme.skin.controls["arrangement-meter"].anchors.is_empty());
+    }
 
     #[test]
     fn control_geometry_round_trips_between_css_and_json_with_hostile_values_bounded() {

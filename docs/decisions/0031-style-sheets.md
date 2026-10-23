@@ -48,6 +48,11 @@ tests compare both colour ramps and geometry with the compatibility path. This
 temporary compatibility path is not an additional author-facing theme format;
 it will be removed after equivalent native adapters and tests exist. Tests compare
 native and compatibility paint values and exercise live switching between them.
+Persistent component anchors (`suhina_style::anchor`: an edge follows another element's
+edge in the same container with a gap; cycle and chain-length validation; missing or
+hidden targets fall back) are connected to the native placement adapter and the Edit
+interface. They are part of the layout model, not of the `skin.controls` offsets, and move
+with it to `position: overlay` and component layout.
 Theme storage is still the legacy format during this stage;
 no installed theme is automatically converted or rewritten on this account.
 

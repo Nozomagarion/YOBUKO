@@ -243,6 +243,18 @@ one logical pixel steps while retaining peer alignment; Alt+Shift-drag is free
 without grid or peer snapping.
 Fractional offsets survive CSS and JSON storage at 1/1024 logical pixel resolution.
 Alt alone retains normal snapping. Dragging creates no persistent peer anchor.
+A persistent anchor is explicit: `--suhina-anchor-left|top|right|bottom:
+<control> <edge> [<gap>px]` (JSON `anchors: { "bottom": "arrangement-volume top 4px" }`)
+makes that edge follow the target's edge on the same axis. Opposite edges keep the gap
+between the controls; matching edges inset by it. With one anchored edge a full-width or
+full-height control keeps its other edge, otherwise it moves at its size; two anchored
+edges set both. The target is resolved in the same container: drawn earlier in the frame,
+or the previous frame's rectangle moved as far as the container moved (scrolling), with
+one repaint when it has since changed. A hidden, absent or foreign target leaves the edge
+at the control's own placement. Cycles, self-anchors and chains of more than eight links
+are dropped with a warning when a theme loads and refused by the editor. Gaps are whole
+points within ±16384; the result stays inside the container. The toolkit-independent
+parts (names, parsing, validation, axis arithmetic) are `suhina_style::anchor`.
 Drag an outline or select a semantic element and edit offsets, size,
 bottom anchoring and direction. Matching instances share that theme rule. Done merges only
 edited entries into the latest theme; Cancel/Escape discards the draft. A theme switch cancels

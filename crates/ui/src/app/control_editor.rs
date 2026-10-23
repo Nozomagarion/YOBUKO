@@ -52,6 +52,59 @@ fn drag_position(
     (position, guides)
 }
 
+/// The fields that make one edge of `selected` follow an edge of another element in the same
+/// container, with a gap: a persistent anchor written to the theme, unlike alignment while dragging.
+fn anchor_fields(ui: &mut egui::Ui, selected: &str, layout: &mut control_layout::Placement, entries: &[Entry]) {
+    use suhina_style::anchor::{Anchor, Edge, Name};
+    let containers: Vec<egui::Rect> = entries.iter().filter(|e| e.name == selected).map(|e| e.bounds).collect();
+    let peers: std::collections::BTreeSet<String> = entries
+        .iter()
+        .filter(|e| e.name != selected && containers.iter().any(|b| b.intersects(e.bounds)))
+        .map(|e| e.name.clone())
+        .chain(layout.anchors.iter().map(|(_, a)| a.target.as_str().to_owned()))
+        .collect();
+    ui.label("Follow another element (kept in the theme):");
+    for own in Edge::ALL {
+        let mut anchor = layout.anchors.get(own);
+        ui.horizontal(|ui| {
+            ui.label(format!("{} edge", own.name()));
+            let current = anchor.map_or_else(|| "none".to_owned(), |a| a.target.as_str().to_owned());
+            egui::ComboBox::from_id_salt(("interface-anchor-target", own.name())).selected_text(&current).show_ui(
+                ui,
+                |ui| {
+                    if ui.selectable_label(anchor.is_none(), "none").clicked() {
+                        anchor = None;
+                    }
+                    for peer in &peers {
+                        let chosen = anchor.is_some_and(|a| a.target.as_str() == peer);
+                        if ui.selectable_label(chosen, peer).clicked()
+                            && let Some(target) = Name::new(peer)
+                        {
+                            // A new target starts at the opposite edge: next to it, not over it.
+                            let edge = match own {
+                                Edge::Left => Edge::Right,
+                                Edge::Right => Edge::Left,
+                                Edge::Top => Edge::Bottom,
+                                Edge::Bottom => Edge::Top,
+                            };
+                            anchor = Some(Anchor { target, edge, gap: anchor.map_or(0, |a| a.gap) });
+                        }
+                    }
+                },
+            );
+            if let Some(a) = &mut anchor {
+                let options = if own.axis() == 0 { [Edge::Left, Edge::Right] } else { [Edge::Top, Edge::Bottom] };
+                for edge in options {
+                    ui.selectable_value(&mut a.edge, edge, edge.name());
+                }
+                ui.label("gap");
+                ui.add(egui::DragValue::new(&mut a.gap).range(-16384..=16384).suffix(" px"));
+            }
+        });
+        layout.anchors.set(own, anchor);
+    }
+}
+
 impl App {
     pub(super) fn control_editor_theme_changed(&self, ctx: &egui::Context) {
         if ctx.data(|data| data.get_temp::<Draft>(id())).is_some_and(|draft| draft.theme != self.settings.theme) {
@@ -249,6 +302,7 @@ impl App {
                             egui::Checkbox::new(&mut layout.hidden, "Hidden"),
                         );
                     });
+                    anchor_fields(tools, &draft.selected, &mut layout, entries);
                     if matches!(draft.selected.as_str(), "mixer-volume" | "arrangement-volume") {
                         tools.horizontal(|tools| {
                             tools.selectable_value(&mut layout.direction, Direction::Vertical, "Vertical");
@@ -256,7 +310,28 @@ impl App {
                         });
                     }
                     if layout != before {
-                        draft.controls.insert(draft.selected.clone(), layout);
+                        let mut next = draft.controls.clone();
+                        next.insert(draft.selected.clone(), layout);
+                        let mut problems = Vec::new();
+                        control_layout::validate_anchors(&mut next, &mut problems);
+                        if problems.is_empty() {
+                            draft.controls = next;
+                            tools
+                                .ctx()
+                                .data_mut(|data| data.remove::<Vec<String>>(Id::new("interface-anchor-problem")));
+                        } else {
+                            // A cycle or an overlong chain is never drafted: the change is refused.
+                            tools
+                                .ctx()
+                                .data_mut(|data| data.insert_temp(Id::new("interface-anchor-problem"), problems));
+                        }
+                    }
+                    if let Some(problems) =
+                        tools.ctx().data(|data| data.get_temp::<Vec<String>>(Id::new("interface-anchor-problem")))
+                    {
+                        for problem in problems {
+                            tools.colored_label(theme::recording(), problem);
+                        }
                     }
                     if tools.button("Reset selected element").clicked() {
                         draft.controls.remove(&draft.selected);
