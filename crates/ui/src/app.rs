@@ -7514,6 +7514,34 @@ mod tests {
     }
 
     #[test]
+    fn a_theme_keeps_the_header_column_at_its_least_width() {
+        let ctx = egui::Context::default();
+        let mut app = App::new();
+        app.set_session(Session::new(crate::demo::demo_project()), &[]);
+        app.settings.animations = false;
+        app.shown = View::Arrangement;
+        // As a theme file is read: the sheet's --suhina-* values are the app's.
+        let css = ".arrangement { --suhina-header-min-width: 330px; }";
+        let mut theme = crate::kit::theme::Theme::default();
+        assert!(crate::kit::theme_css::read_host_rules(&mut theme, css).is_empty());
+        theme.skin.css = Some(std::sync::Arc::from(css));
+        app.use_test_skin(theme.skin);
+        app.arrangement.header_width = 200.0;
+        for _ in 0..3 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| app.ui(ui),
+            );
+            output.textures_delta.clear();
+        }
+        app.use_test_skin(crate::kit::skin::Skin::default());
+        assert_eq!(app.arrangement.header_width, 330.0);
+    }
+
+    #[test]
     fn a_rename_in_place_covers_the_name_drawn_under_it() {
         use egui_kittest::kittest::Queryable;
         let mut app = App::new();

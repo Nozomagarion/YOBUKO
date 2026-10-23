@@ -189,3 +189,19 @@ fn track_artwork_of_one_view_is_a_role_of_its_own() {
     }
     assert!(!crate::kit::skin::valid_role("track.name.browser"));
 }
+
+#[test]
+fn a_theme_may_keep_the_header_column_wide_enough_for_its_placements() {
+    let mut theme = Theme::default();
+    let css = ".arrangement { --suhina-header-min-width: 330px; }";
+    assert!(theme_css::read_host_rules(&mut theme, css).is_empty());
+    crate::kit::skin::configure(&theme.skin);
+    assert_eq!(crate::kit::style_class::theme_header_min_width(), Some(330.0));
+    let mut out_of_range = Theme::default();
+    assert!(
+        !theme_css::read_host_rules(&mut out_of_range, ".arrangement { --suhina-header-min-width: 9000px; }")
+            .is_empty()
+    );
+    crate::kit::skin::configure(&crate::kit::skin::Skin::default());
+    assert_eq!(crate::kit::style_class::theme_header_min_width(), None);
+}

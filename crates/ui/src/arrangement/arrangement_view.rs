@@ -31,6 +31,15 @@ use crate::settings::track_sizes::{TrackSize, TrackSizes};
 /// Width of the track header column: the default and how far it can be dragged.
 pub const HEADER_COLUMN: f32 = 336.0;
 const HEADER_COLUMN_RANGE: (f32, f32) = (160.0, 520.0);
+
+/// The narrowest the header column may be: Suhina's least, or the theme's when it gives one, never
+/// past `max_header`, what the view leaves for it.
+fn header_least(max_header: f32) -> f32 {
+    crate::kit::style_class::theme_header_min_width()
+        .unwrap_or(HEADER_COLUMN_RANGE.0)
+        .clamp(HEADER_COLUMN_RANGE.0, HEADER_COLUMN_RANGE.1)
+        .min(HEADER_COLUMN_RANGE.1.min(max_header))
+}
 const RULER: f32 = ROW;
 #[cfg(test)]
 const DEFAULT_LANE: f32 = 40.0;
@@ -1030,7 +1039,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
 
     // The header column, on either side, and the timeline beside it.
     let max_header = (area.width() - 120.0).max(HEADER_COLUMN_RANGE.0);
-    state.header_width = state.header_width.clamp(HEADER_COLUMN_RANGE.0, HEADER_COLUMN_RANGE.1.min(max_header));
+    state.header_width = state.header_width.clamp(header_least(max_header), HEADER_COLUMN_RANGE.1.min(max_header));
     let (headers, time_x) = if state.headers_left {
         let headers = egui::Rangef::new(area.left(), area.left() + state.header_width);
         (headers, egui::Rangef::new(headers.max + 1.0, area.right()))
@@ -2125,7 +2134,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     if response.dragged_by(egui::PointerButton::Primary) {
         let dx = response.drag_delta().x;
         let width = if state.headers_left { state.header_width + dx } else { state.header_width - dx };
-        state.header_width = width.clamp(HEADER_COLUMN_RANGE.0, HEADER_COLUMN_RANGE.1.min(max_header));
+        state.header_width = width.clamp(header_least(max_header), HEADER_COLUMN_RANGE.1.min(max_header));
     }
 
     // Playhead through ruler and lanes.

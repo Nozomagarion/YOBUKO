@@ -70,6 +70,10 @@ pub fn valid_property(key: &str, value: &str) -> bool {
         "--suhina-track-artwork" => matches!(value, "on" | "off"),
         "--suhina-appearance" => matches!(value, "native" | "knob" | "field"),
         "--suhina-track-headers" => matches!(value, "left" | "right"),
+        "--suhina-header-min-width" => value
+            .strip_suffix("px")
+            .and_then(|v| v.trim().parse::<u16>().ok())
+            .is_some_and(|v| (160..=520).contains(&v)),
         "color" | "background-color" | "border-color" => theme::parse_hex(value).is_some(),
         "border-radius" => value.strip_suffix("px").and_then(|v| v.parse::<u8>().ok()).is_some_and(|v| v <= 32),
         "font-size" => {
@@ -246,6 +250,14 @@ pub fn theme_track_headers_left() -> Option<bool> {
             _ => None,
         }
     })
+}
+
+/// The narrowest the theme lets the Arrangement view's header column be (`.arrangement {
+/// --suhina-header-min-width: 330px }`): the width its placements were made for, which the
+/// header's narrower layouts would break.
+pub fn theme_header_min_width() -> Option<f32> {
+    let skin = skin::current();
+    skin.styles.get(".arrangement")?.get("--suhina-header-min-width")?.strip_suffix("px")?.trim().parse::<f32>().ok()
 }
 
 pub fn knob_preference(fallback: bool) -> bool {
