@@ -814,7 +814,7 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Theme,
         "Theme",
         "Theme",
-        "The themes to pick from, the theme in use and its colours",
+        "The themes to pick from, their variants, the theme in use and its settings",
         &["theme"],
         crate::settings::settings_view::theme_block,
     ),

@@ -115,19 +115,51 @@ fn a_missing_theme_draws_with_suhina_dark() {
 }
 
 #[test]
-fn editing_a_built_in_theme_makes_a_copy() {
+fn editing_a_built_in_themes_colours_makes_a_variant_and_its_layout_a_copy() {
     let mut themes = Themes::default();
     let mut colors = themes.palette("nord");
     colors.border = egui::Color32::from_rgb(9, 9, 9);
-    assert_eq!(themes.request("nord", ThemeRequest::Edit(colors)), Some("nord-custom".into()));
+    assert_eq!(themes.request("nord", ThemeRequest::Edit(colors)), Some("nord@custom".into()));
     assert_ne!(themes.palette("nord"), colors);
-    assert_eq!(themes.palette("nord-custom"), colors);
-    // A second edit changes the copy, not another one.
+    assert_eq!(themes.palette("nord@custom"), colors);
+    let custom = themes.get("nord@custom").unwrap();
+    assert_eq!(custom.vars.variant_name.as_deref(), Some("Custom"));
+    assert_eq!(custom.vars.values.keys().map(String::as_str).collect::<Vec<_>>(), ["--border"]);
+    // A second edit changes the variant, not another one.
     colors.border = egui::Color32::from_rgb(8, 8, 8);
-    assert_eq!(themes.request("nord-custom", ThemeRequest::Edit(colors)), None);
-    assert_eq!(saved(&mut themes), [("nord-custom".into(), "Nord (custom)".into())]);
-    assert_eq!(themes.palette("nord-custom"), colors);
+    assert_eq!(themes.request("nord@custom", ThemeRequest::Edit(colors)), None);
+    assert_eq!(saved(&mut themes), [("nord@custom".into(), "Nord".into())]);
+    assert_eq!(themes.palette("nord@custom"), colors);
     assert!(themes.take_actions().is_empty());
+    // The variant is by Nord's card, not a theme of its own.
+    let view = themes.view("nord@custom");
+    assert!(!view.list.iter().any(|(id, _, _)| id.contains('@')));
+    assert_eq!(view.variants, [("nord@custom".to_string(), "Custom".to_string())]);
+    assert_eq!(view.variant.as_deref(), Some("Custom"));
+    // Moving a control is not a setting: the built-in theme is copied.
+    let mut skin = themes.get("nord@custom").unwrap().skin.clone();
+    skin.toolbar_offsets.insert("transport".into(), 40);
+    assert_eq!(themes.request("nord@custom", ThemeRequest::EditSkin(skin)), Some("nord-custom".into()));
+    assert_eq!(themes.palette("nord-custom"), colors, "the copy keeps the variant's colours");
+}
+
+#[test]
+fn a_declared_setting_is_set_in_the_variant_and_checked_against_its_type() {
+    let sheet = "@property --glow { syntax: \"<number>\"; initial-value: 0.5; label: \"Glow\"; range: 0 1; }\n:root { --accent: #123456; }";
+    let (theme, warnings) = crate::kit::theme::from_sheet(sheet, "");
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let mut themes = Themes::default();
+    themes.set(vec![ThemeEntry { id: "ink".into(), theme }], None);
+    assert_eq!(themes.view("ink").declared.len(), 1);
+    assert_eq!(themes.view("ink").values.get("--glow").map(String::as_str), Some("0.5"));
+    let set = |value: &str| ThemeRequest::EditValue { name: "--glow".into(), value: value.into() };
+    assert_eq!(themes.request("ink", set("2")), None, "outside its range");
+    assert_eq!(themes.request("ink", set("0.2")), Some("ink@custom".into()));
+    assert_eq!(themes.view("ink@custom").values.get("--glow").map(String::as_str), Some("0.2"));
+    assert_eq!(themes.get("ink@custom").unwrap().skin.variant.as_deref(), Some(":root { --glow: 0.2; }"));
+    assert_eq!(themes.request("ink@custom", ThemeRequest::NewVariant("Bright".into())), Some("ink@bright".into()));
+    assert_eq!(themes.request("ink@bright", ThemeRequest::Rename("Brighter".into())), None);
+    assert_eq!(themes.view("ink@bright").variant.as_deref(), Some("Brighter"));
 }
 
 #[test]

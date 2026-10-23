@@ -454,7 +454,9 @@ the lanes retain the open project's colour overrides, falling back to the candid
 with clip colours mixed at 82% over its panel surface, as in the Arrangement;
 a 10 px gap separates cards. Preview painting takes explicit palette snapshots and does
 not install a theme. The active card has an accent border and Active label, and clicking
-another card applies it immediately. The header contains the active theme name,
+another card applies it immediately. A theme with variants has a row of 14 px swatches 22 px
+apart under its name (the variant's window background with its accent inside; the variant in
+use has a 2 px accent ring); the card grows by 22 px for them. The header contains the active theme name,
 Edit current theme and a More menu for file actions.
 Holding the active card clears the backdrop until the primary button is released.
 Restore built-in is available in both gallery and editor: choosing an original palette
@@ -467,7 +469,7 @@ then independent panel, track and clip sliders save into the theme. The live col
 clips, Controls, Meters and Sample map. Each entry puts swatch, hex and a wrapping token
 above an Opacity slider for theme surfaces and the full wrapping purpose, with 6 px between entries; no truncated second column.
 The built-in name field reserves the same height as an editable custom name so the
-picker does not move when its first edit creates a custom copy. An open picker keeps
+picker does not move when its first edit creates a variant or a custom copy. An open picker keeps
 the background undimmed while the primary button is held, even when stationary;
 release restores dimming immediately. Reset restores the editor-entry palette.
 See [brief](brief.md) › Themes.

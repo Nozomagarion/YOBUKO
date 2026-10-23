@@ -1284,6 +1284,58 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
 }
 
 #[test]
+fn a_variant_swatch_in_settings_uses_that_variant_and_new_variant_makes_one() {
+    let mut harness = window(demo_app());
+    let sheet = "@property --glow { syntax: \"<number>\"; initial-value: 0.5; label: \"Glow\"; range: 0 1; }\n\
+                 :root { --accent: #123456; }\ntheme { name: \"Ink\"; }";
+    let (ink, warnings) = theme::from_sheet(sheet, "");
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let dim = suhina_ui::kit::theme_vars::Variant {
+        id: "dim".into(),
+        name: "Dim".into(),
+        light: Some(false),
+        values: [("--accent".to_string(), "#ABCDEF".to_string())].into(),
+    };
+    let (ink_dim, warnings) = suhina_ui::kit::theme_vars::with_variant(&ink, Some(&dim));
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let entries = vec![
+        suhina_ui::settings::themes::ThemeEntry { id: "ink".into(), theme: ink },
+        suhina_ui::settings::themes::ThemeEntry { id: "ink@dim".into(), theme: ink_dim },
+    ];
+    let ctx = harness.ctx.clone();
+    harness.state_mut().set_themes(&ctx, entries, Some("themes".into()));
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    harness.run();
+    harness.get_by_label("Settings page: Themes").click();
+    harness.run();
+    // One card for the theme, with a swatch for its own values and one for the variant.
+    assert!(harness.query_by_label("Theme: Ink").is_some());
+    harness.get_by_label("Variant: Dim").click();
+    harness.run();
+    assert_eq!(theme::accent(), egui::Color32::from_rgb(0xAB, 0xCD, 0xEF));
+    assert_eq!(harness.state_mut().take_changed_settings().map(|s| s.theme), Some("ink@dim".into()));
+    harness.get_by_label("Variant: Theme's own").click();
+    harness.run();
+    assert_eq!(theme::accent(), egui::Color32::from_rgb(0x12, 0x34, 0x56));
+    // A new variant starts from the values in use and is handed out to be written.
+    harness.get_by_label("More").click();
+    harness.run();
+    harness.get_by_label("New variant").click();
+    harness.run();
+    let saved: Vec<_> = harness
+        .state_mut()
+        .take_theme_actions()
+        .into_iter()
+        .filter_map(|a| match a {
+            FileAction::Save { id, .. } => Some(id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(saved, ["ink@variant"]);
+    assert_eq!(harness.state().settings().theme, "ink@variant");
+}
+
+#[test]
 fn tab_only_switches_the_view() {
     let mut harness = window(demo_app());
     harness.run();

@@ -117,7 +117,7 @@ fn native_toolbar_css_styles_modules_and_buttons_without_reflow_or_sibling_leaks
     let mut harness = native_bar();
     let play = harness.get_by_label("Play").rect();
     let tempo = harness.get_by_label("Tempo").rect();
-    harness.state_mut().app.save_toolbar_skin(skin::Skin {
+    harness.state_mut().app.use_test_skin(skin::Skin {
             css:Some(std::sync::Arc::from("#tempo {color:rgb(12 34 56);font-size:18px;} #transport > #control-play {color:rgb(120 40 180);background:linear-gradient(90deg,red,blue);border-radius:7px;}")),
             ..Default::default()
         });
@@ -162,7 +162,7 @@ fn dark_gloss_example_keeps_native_layout_and_transport_commands() {
     harness
         .state_mut()
         .app
-        .save_toolbar_skin(skin::Skin { css: Some(std::sync::Arc::from(theme::GLOSS_EXAMPLE)), ..Default::default() });
+        .use_test_skin(skin::Skin { css: Some(std::sync::Arc::from(theme::GLOSS_EXAMPLE)), ..Default::default() });
     harness.run();
     assert_eq!(play, harness.get_by_label("Play").rect());
     assert_eq!(tempo, harness.get_by_label("Tempo").rect());
@@ -197,7 +197,7 @@ fn editing_keeps_real_controls_and_done_without_changes_preserves_native_layout(
 #[test]
 fn edit_overlay_preserves_css_grid_geometry_without_writing_a_layout() {
     let mut harness = native_bar();
-    harness.state_mut().app.save_toolbar_skin(skin::Skin {
+    harness.state_mut().app.use_test_skin(skin::Skin {
             css: Some(std::sync::Arc::from(".toolbar {display:grid;grid-template-columns:100px 120px 90px;gap:8px;} #tempo {grid-column:1;grid-row:1;} #transport {grid-column:2;grid-row:1;} #position {grid-column:3;grid-row:1;} #browser,#signature,#grid,#count-in,#metronome,#mapping,#performance,#views,#agents {display:none;}")),
             ..Default::default()
         });
@@ -274,7 +274,7 @@ fn css_toolbar_targets_keep_native_commands_with_svg_artwork() {
             .collect(),
         ..Default::default()
     };
-    app.save_toolbar_skin(skin::Skin { assets:skin::example_assets(),toolbar:Some(layout),css:Some(std::sync::Arc::from(".toolbar { display:grid; grid-template-columns:80px 120px; gap:8px; } #tempo { grid-column:1; grid-row:1; width:auto; } #transport { grid-column:2; width:auto; } #mapping { display:none; }")),..Default::default() });
+    app.use_test_skin(skin::Skin { assets:skin::example_assets(),toolbar:Some(layout),css:Some(std::sync::Arc::from(".toolbar { display:grid; grid-template-columns:80px 120px; gap:8px; } #tempo { grid-column:1; grid-row:1; width:auto; } #transport { grid-column:2; width:auto; } #mapping { display:none; }")),..Default::default() });
     let fixture = Fixture { app, grid: Grid::build(&crate::demo::demo_project(), None), actions: Vec::new() };
     let mut harness = Harness::builder().with_size((640.0, 56.0)).build_ui_state(
         |ui, fixture: &mut Fixture| {

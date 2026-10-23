@@ -421,6 +421,29 @@ fn prepare(css: &str, width: f32) {
     .clear();
 }
 #[test]
+fn a_variant_s_values_paint_over_the_theme_s_own_and_registered_defaults_apply() {
+    let css = "@property --ink { syntax: \"<color>\"; initial-value: #010203; }\n\
+               :root { --edge: #445566; } .browser { color: var(--ink); border-color: var(--edge); }";
+    let ctx = egui::Context::default();
+    let run = |variant: Option<&str>| {
+        skin::configure(&skin::Skin {
+            css: Some(Arc::from(css)),
+            variant: variant.map(Arc::from),
+            ..Default::default()
+        });
+        ctx.run_ui(Default::default(), |ui| begin_frame(ui)).textures_delta.clear();
+        scoped(&["window".into(), "browser".into()]).unwrap()
+    };
+    let own = run(None);
+    assert_eq!(own.color, Color32::from_rgb(1, 2, 3), "the registered initial value");
+    assert_eq!(own.border, Color32::from_rgb(0x44, 0x55, 0x66));
+    let chosen = run(Some(":root { --ink: #ABCDEF; --edge: #102030; }"));
+    assert_eq!(chosen.color, Color32::from_rgb(0xAB, 0xCD, 0xEF));
+    assert_eq!(chosen.border, Color32::from_rgb(0x10, 0x20, 0x30), "the variant wins over the theme's :root");
+    skin::configure(&skin::Skin::default());
+}
+
+#[test]
 fn native_engine_resolves_variables_layers_calc_and_media() {
     prepare(
         "@layer base,custom; @layer base { .browser { color:red; }} @layer custom { :root { --ink:rgb(10 20 30); } .browser { color:var(--ink); font-size:calc(10px + 2px); }} @media (max-width:500px) { .browser { color:rgb(30 40 50); }}",

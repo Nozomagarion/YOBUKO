@@ -16,7 +16,7 @@
 pub const MAX_REGISTERED: usize = 256;
 
 /// One part of a `syntax` descriptor.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Component {
     Color,
     Number,
@@ -31,7 +31,7 @@ pub enum Component {
 }
 
 /// A `syntax` descriptor: `*`, or alternatives joined by `|`, each optionally repeated (`+`).
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Syntax {
     Any,
     Alternatives(Vec<(Component, bool)>),
@@ -150,6 +150,9 @@ pub struct Registered {
     pub range: Option<(f32, f32)>,
     pub step: Option<f32>,
 }
+
+// `range` and `step` are finite numbers (the parser refuses others), so equality is total.
+impl Eq for Registered {}
 
 impl Registered {
     /// Reads the descriptors of `@property <name> { ... }`, given as `(descriptor, value)` pairs.

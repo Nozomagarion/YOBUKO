@@ -7379,13 +7379,13 @@ mod tests {
         // Let the normal first-frame project/theme initialization finish before
         // checking that changing presentation does not edit the project.
         let before = harness.state().session().unwrap().project().clone();
-        harness.state_mut().save_toolbar_skin(crate::kit::skin::Skin {css:Some(std::sync::Arc::from("#workspace {display:grid;grid-template-columns:minmax(0,1fr) 240px;grid-template-rows:minmax(0,1fr) 160px;gap:8px;} #panel-browser {grid-column:2;grid-row:1 / -1;} #panel-main {grid-column:1;grid-row:1;} #panel-detail {grid-column:1;grid-row:2;}")),..Default::default()});
+        harness.state_mut().use_test_skin(crate::kit::skin::Skin {css:Some(std::sync::Arc::from("#workspace {display:grid;grid-template-columns:minmax(0,1fr) 240px;grid-template-rows:minmax(0,1fr) 160px;gap:8px;} #panel-browser {grid-column:2;grid-row:1 / -1;} #panel-main {grid-column:1;grid-row:1;} #panel-detail {grid-column:1;grid-row:2;}")),..Default::default()});
         harness.run();
         let slot = harness.get_by_label("Stop Keys (scene 1)").rect();
         assert!(slot.right() < 1032.0, "native slot uses CSS main rectangle: {slot:?}");
         assert!(harness.query_by_label("Detail area splitter").is_none());
         assert_eq!(harness.state().session().unwrap().project(), &before);
-        harness.state_mut().save_toolbar_skin(crate::kit::skin::Skin::default());
+        harness.state_mut().use_test_skin(crate::kit::skin::Skin::default());
         harness.run();
         let native_slot = harness.get_by_label("Stop Keys (scene 1)").rect();
         assert!(

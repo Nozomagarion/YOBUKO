@@ -440,6 +440,9 @@ animations for connected paint properties. Active motion
 requests repainting at 16 ms and respects the global animation/high-contrast settings;
 geometry animation is not yet consumed by native panel layout.
 No theme work runs on the audio thread. The desktop theme-file service owns portable
-resources: one CSS folder per theme (`theme.css` importing `advanced.css`), with the
-one-time, validated migration of JSON themes. Details and current adapter limits are in
-[ADR 0030](decisions/0030-native-theme-css.md) and the [skin spec](spec/theme-skins.md).
+resources: one folder per theme with its author's `theme.css` (read, never written),
+`variants/*.json` (values for its settings, written by the settings editors) and Suhina's
+`layout.css`, with the one-time, validated migration of earlier themes. Settings are registered
+custom properties (`kit/theme_vars.rs`); a variant's values apply in their own cascade tier,
+between the theme and device panel sheets. Details and current adapter limits are in
+[ADR 0031](decisions/0031-style-sheets.md) and the [skin spec](spec/theme-skins.md).

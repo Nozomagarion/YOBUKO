@@ -10,6 +10,7 @@ covers:
   - crates/ui/src/kit/widgets.rs
   - crates/ui/src/app.rs
   - apps/suhina/src/main.rs
+  - crates/ui/src/kit/theme_vars.rs
 ---
 
 # 0031: Style sheets for the whole UI
@@ -52,12 +53,15 @@ edge in the same container with a gap; cycle and chain-length validation; missin
 hidden targets fall back) are connected to the native placement adapter and the Edit
 interface. They are part of the layout model, not of the `skin.controls` offsets, and move
 with it to `position: overlay` and component layout.
-Theme storage is CSS: a theme is a folder whose `theme.css` holds every theme value and
-imports `advanced.css`; no JSON is written and nothing is mirrored. A JSON theme from an
-earlier version is migrated once, only after the written CSS reads back as exactly the same
-theme; its JSON and old `style.css` are kept in the theme's `legacy/` folder. The built-in
-themes are `.css` too (`crates/ui/themes/<id>.theme.css`), in the same form the editor writes;
-their artwork, advanced sheets and Meadow's background stay embedded beside them.
+Theme storage follows *Amendment: theme settings and variants*: a theme's folder holds its
+`theme.css` (the author's sheet, never rewritten), `variants/*.json` (values for its settings,
+written by the settings editors) and `layout.css` (what the Edit interface sets); no JSON theme
+is written. Settings are registered custom properties (`@property`, `suhina_style::registered`):
+the core set in `crates/ui/src/kit/theme_vars.rs` and any a theme declares. A theme of an
+earlier version (JSON, or a `theme.css` importing `advanced.css`) is migrated once, only after
+the new files read back as the same theme; its old files are kept in `legacy/`. The built-in
+themes are in the same form (`crates/ui/themes/<id>.theme.css` and `<id>.layout.css`); their
+artwork and Meadow's background stay embedded beside them.
 
 Device panels use the tiers: `.sd` version 6 adds an optional panel `style`, applied in the
 Device tier bounded to its panel; `#id` selects a control by its id; `user.css` in the themes
@@ -173,12 +177,13 @@ The language is CSS's core, everything in it that does not depend on HTML:
 - `@import "file.css"`, `@font-face`, and `@media` (section 3).
 
 The built-in default style sheet reproduces Suhina Dark exactly, so the move changes nothing on
-screen until a theme does. **JSON themes are retired:** built-in themes are rewritten as `.css`. Existing user themes are converted only after a validated round trip, with their original files and artwork preserved. Legacy JSON remains readable during the staged migration. The style sheet is the only source of the theme: nothing is mirrored into another
-file, and Suhina writes to a style sheet only when the person edits it in Suhina (the colour editor,
-the Edit interface), keeping the file's comments and formatting outside the rule it changes.
+screen until a theme does. **JSON themes are retired:** built-in themes are rewritten as `.css`. Existing user themes are converted only after a validated round trip, with their original files and artwork preserved. Legacy JSON remains readable during the staged migration. The style sheet is the theme's own source and Suhina never
+writes it: the settings a person changes in Suhina are values in a variant of the theme, and the
+Edit interface writes the theme's `layout.css`.
+*Amended 2026-10-23, see Amendment: theme settings and variants.*
 
-Settings › Appearance keeps choosing, duplicating, reloading, importing and exporting themes; its
-colour editor changes the variables in the theme's `window` rule.
+Settings › Appearance keeps choosing, duplicating, reloading, importing and exporting themes, and
+chooses a theme's variant; its colour editor changes the variant's values.
 
 **Packages.** A theme exports as a ZIP of its folder, with its images and fonts and the generated
 README (section 8). Built-in themes and the default artwork are embedded in the app; editing one
@@ -661,3 +666,22 @@ handling into steps 1 and 4, its painters into step 2. PR 809's glass work is in
 4. **Artwork by file name:** should a theme that is only a folder of images (`knob.body.svg`,
    `fader.cap.hover.svg`, as in PR 841) still work, with the names read as rules, so artists can
    theme without writing CSS?
+
+## Amendment: theme settings and variants (2026-10-23)
+
+[PR 880](https://github.com/suhina-daw/suhina-daw/pull/880). A theme is one style sheet,
+`theme.css`, as its author wrote it; Suhina reads it and never writes it. What a person can change
+in Suhina are **registered custom properties**: a core set every theme has (the palette tokens and
+the former model fields: meter style, segments and intensity, artwork frame rate, liquid
+materials, surface gradients, background strength, Session geometry), registered with Suhina
+Dark's values, and any a theme declares with `@property` (`syntax`, `initial-value`, and Suhina's
+`label`, `group`, `range`, `step` for the settings panel). A **variant** is a JSON file in the
+theme's `variants/` folder with values for those properties, a name and an optional `appearance`
+(light or dark); its values apply in a Variant tier above the theme's rules. The settings editors
+write only variants: an edit to a theme's own values makes a variant, *Custom*, so a built-in
+theme needs no copy for it (its variants are kept in a folder of its id without its CSS).
+`layout.css`, written by Suhina only, holds what the Edit interface and editors set beyond
+settings: placements and anchors, the toolbar, artwork and the name. A change of layout or
+artwork to a built-in theme still copies it. The picker shows one card per theme with a swatch
+per variant. Open: rendered thumbnails per variant, and following the system's appearance with
+the variant's `appearance`.

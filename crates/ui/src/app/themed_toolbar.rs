@@ -292,6 +292,15 @@ impl App {
         }
     }
 
+    /// Uses a theme with `skin`, its sheet included, at once, as one read from its files is.
+    #[cfg(test)]
+    pub(super) fn use_test_skin(&mut self, skin: skin::Skin) {
+        let theme = crate::kit::theme::Theme { name: "Test skin".into(), skin, ..Default::default() };
+        self.themes.put(crate::settings::themes::ThemeEntry { id: "test-skin".into(), theme });
+        self.settings.theme = "test-skin".into();
+        self.settings_changed = true;
+    }
+
     pub(super) fn save_toolbar_skin(&mut self, skin: skin::Skin) {
         if let Some(id) = self.themes.request(&self.settings.theme, ThemeRequest::EditSkin(skin)) {
             self.settings.theme = id;

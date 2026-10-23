@@ -28,7 +28,7 @@ pub const MAX_VALUES: usize = 256;
 pub const MAX_VALUE_BYTES: usize = 1024;
 
 /// A theme's properties: those it declares and their values, and the chosen variant's values.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Vars {
     /// The theme's own `@property` rules beyond the core set, in source order.
     pub declared: Arc<Vec<Registered>>,
@@ -43,9 +43,6 @@ pub struct Vars {
     /// Whether the chosen variant says it is light (`Some(true)`) or dark.
     pub light: Option<bool>,
 }
-
-// Ranges in `declared` are finite numbers, so equality is total.
-impl Eq for Vars {}
 
 /// A setting's smallest and largest value.
 type Range = Option<(f32, f32)>;

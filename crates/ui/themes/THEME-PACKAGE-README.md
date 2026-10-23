@@ -13,8 +13,9 @@ asking an AI assistant to modify one. Inspect the supplied files before making c
 
 ```text
 my-theme/
-  theme.css           # the theme: name, palette, skin, layout, artwork; imports advanced.css
-  advanced.css        # optional selectors, effects, Flex/Grid and motion; kept as written
+  theme.css           # the theme's style sheet: its look and the values of its settings
+  variants/*.json     # optional variants: other values for the same settings
+  layout.css          # written by Suhina: placements, toolbar, artwork and name set in the app
   assets/*.svg        # vector control artwork
   assets/*.png        # optional raster artwork and sequence frames
   background.png      # optional background image
@@ -23,14 +24,58 @@ my-theme/
   examples/compact-session.css  # optional native Session density; not enabled automatically
 ```
 
-Installed themes are the same folders, named by their id. Relative image and stylesheet
-paths in `theme.css` are authoritative; keep the whole folder together. A theme saved by
-an earlier Suhina version as JSON is converted once; its original files are kept in
+`theme.css` is yours: Suhina reads it and never writes it. What a user changes in Suhina's
+theme editor (colours, meter, liquid, gradients and any setting your theme offers) is saved in a
+variant file, and what they move with Edit interface in `layout.css`. So you edit CSS, users
+edit variants, and no file is written by both.
+
+Installed themes are the same folders, named by their id. Relative image paths in the sheets are
+authoritative; keep the whole folder together. A theme saved by an earlier Suhina version (JSON,
+or a `theme.css` that imports `advanced.css`) is converted once; its original files are kept in
 `legacy/` inside the theme's folder.
 Drop the ZIP on Suhina to import it, then select it in Settings → Appearance → Themes.
 Open the themes folder from that page to edit the installed files.
 The template ZIP also has the built-in themes as reference folders in `examples/`;
-the importable example is `my-theme/`.
+the importable example is `my-theme/`, with an example variant.
+
+### Settings and variants
+
+A theme's settings are custom properties. Every theme has the core set: each palette token
+(`--accent`, `--window-background`, `--track-headerBackground`: the palette keys with hyphens),
+`--meter-style` (`continuous`, `segmented`, `needle`, `frames`), `--meter-segments` (4–64),
+`--meter-intensity` (0–100), `--artwork-fps` (1–30), `--liquid` (`auto` or three strengths
+0–100 for panels, tracks and clips), `--gradient-panels`, `--gradient-tracks`,
+`--gradient-clips` (`none` or `90deg, #RRGGBBAA 0%, #RRGGBBAA 100%`, 2–8 stops),
+`--background-image` (`none` or `url("background.png")`), `--background-opacity` and
+`--background-blur` (0–100), and `--session-track-width`, `--session-return-width`,
+`--session-scene-width`, `--session-slot-height`, `--session-header-height` (`auto` or pixels).
+Set them in `:root`; what you leave out keeps Suhina Dark's value.
+
+Offer your own settings with `@property`. A property with a `label` appears under **Theme
+settings** in the editor, with a control for its type:
+
+```css
+@property --glow { syntax: "<number>"; initial-value: 0.6; label: "Glow"; group: "Effects"; range: 0 1; step: 0.05; }
+@property --edge { syntax: "solid | dashed"; initial-value: solid; label: "Edges"; }
+:root { --accent: #7FD1B9; --accent-hover: color-mix(in oklch, var(--accent), white 20%); }
+.button:hover { background-color: var(--accent-hover); opacity: var(--glow); }
+```
+
+Supported syntaxes: `<color>`, `<number>`, `<integer>`, `<length>`, `<percentage>`,
+`<length-percentage>`, `<angle>`, `<string>`, `<image>`, keywords joined by `|`, `+` for a
+space-separated list, and `*`. A value that does not match its syntax uses the initial value.
+
+A variant is a JSON file in `variants/`; its file name is its id and it lists only the values
+that differ from the theme's:
+
+```json
+{ "name": "Frost", "appearance": "light", "values": { "--accent": "#88C0D0", "--window-background": "var(--nord-snow)" } }
+```
+
+Values are CSS text and may refer to the theme's own variables. A variant's values win over the
+theme's rules for the same property, including ones inside `@media`. The editor shows a theme's
+variants as swatches under its card. A built-in theme's variants are kept in a folder of its id
+holding only `variants/`, without a copy of its CSS.
 
 ### Your own overrides and device panels
 
@@ -49,42 +94,38 @@ of a device panel is `#its-id`, for example:
 
 1. Duplicate a bundled theme in the editor or start with the supplied example.
 2. Set `theme { name: "My theme"; }` in `theme.css`. Theme folder ids use letters, digits and `-`.
-3. For palette changes, edit the `theme.css` tokens. For example:
+3. For palette and other settings, set the core properties in `theme.css`'s `:root`. For example:
 
    ```css
-   :root { --accent: #7FD1B9; --window-background: #14161A; }
-   meter { style: segmented; segments: 24; }
-   toolbar { offset-transport: 48px; }
+   :root { --accent: #7FD1B9; --window-background: #14161A; --meter-style: segmented; --meter-segments: 24; }
    ```
 
-   Token names are the palette keys with hyphens (`window.background` is
-   `--window-background`). Colours use `#RRGGBB` or `#RRGGBBAA`, alpha last. Missing
-   palette tokens inherit Suhina Dark.
+   Colours may be any CSS colour the engine reads (`#RRGGBB`, `#RRGGBBAA`, `rgb()`, `hsl()`,
+   `color-mix()`, names), and `var()` of your own variables.
 4. For conditional styles, selectors, variables, effects, motion or connected Flex/Grid
-   layout, edit `advanced.css`. It is kept exactly as you write it.
+   layout, write them in `theme.css` too. It is kept exactly as you write it.
 5. For a new control silhouette, edit an SVG or PNG and name it in `theme.css`, e.g.
    `play { image: url("assets/play.svg"); }`.
    For layout positions, the toolbar's right-click → Edit toolbar mode is usually
-   easier: drag the actual controls on the 8-point grid. Done saves; Cancel or
+   easier: drag the actual controls on the 8-point grid. Done saves to `layout.css`; Cancel or
    Escape discards. Entering/leaving edit mode alone preserves the layout.
-6. Save one source at a time and inspect Suhina's warnings and the actual interface.
-   Files are watched approximately once a second. Saving in Suhina changes only the
-   declarations it edits in `theme.css` and keeps your comments and formatting there.
-   A save over an edit you made outside Suhina since it last read the theme is refused;
-   your file is kept. `advanced.css` is never rewritten by the editors.
+6. Save one file at a time and inspect Suhina's warnings and the actual interface.
+   Files are watched approximately once a second. Suhina never writes `theme.css`; a save of
+   a variant over an edit you made to that variant's file outside Suhina is refused and your
+   file is kept.
 7. Test normal, hover, active and disabled states, narrow/wide windows, interaction,
-   clipping and contrast. Export and reimport the ZIP to check portability.
+   clipping and contrast, with each variant. Export and reimport the ZIP to check portability.
 
-To try the supplied dark metallic look, use **Load dark gloss example** in the
-advanced editor and then Apply, or copy `examples/dark-gloss.css` into `advanced.css`.
+To try the supplied dark metallic look, copy `examples/dark-gloss.css` to the end of your
+`theme.css`.
 It demonstrates original gradients, rounded SVG-backed buttons, box/text shadows
 and coloured transport controls while preserving native geometry. Back up your
 current CSS before replacing it with an example.
 
-Use **Load compact Session geometry** under Native CSS, then **Apply CSS**, or copy
-`examples/compact-session.css` into canonical `style.css`. It sets track/return/scene
-widths and header/slot heights. These are native properties mirrored to `skin.session`:
-widths are 64–512px, slot height 16–64px and header height 20–64px. Use `auto` to remove
+Use **Load compact Session geometry** under Native CSS, then **Apply CSS**, which saves it in
+the variant in use. It sets track/return/scene widths and header/slot heights (in `theme.css`,
+the `--session-*` settings): widths are 64–512px, slot height 16–64px and header height
+20–64px. Use `auto` to remove
 an override. The same geometry drives drawing, scrolling and drop/input targets.
 Mixer height keeps its existing native divider/preference. Session and Arrangement
 remain separate; this does not introduce the separately planned mixer view.
@@ -99,7 +140,7 @@ Outset shadows form the glow around the lit region, without filling empty rails 
 segment gaps. This differs from a decorative gradient that stretches with the level.
 
 **Meter intensity** in the theme editor dims measured ink and glow from 0–100%.
-Canonical `meter { intensity: 65%; }` mirrors to JSON `skin.meter-intensity: 65`.
+In `theme.css` it is `--meter-intensity: 65;`.
 It also affects needles, hold marks and signal-driven artwork frames, while keeping
 the native clip warning visible and native bar rails unchanged. Frame artwork dims
 as a whole, including any background baked into its image. This changes visual opacity, not audio
@@ -112,7 +153,7 @@ Generic CSS `filter: brightness()` / `saturate()` is not connected to native pai
 
 The built-in **Suhina Sheet** is a complete green-and-white worksheet-style example
 with original SVG artwork for all 16 base roles. Select it in Themes, duplicate it
-to edit, or export it to obtain its JSON, CSS and editable SVG files together.
+to edit its CSS, or export it to obtain its CSS and editable SVG files together.
 **Suhina Meadow** demonstrates classic paper controls and translucent glass panels over a private
 background image. Its original generated meadow exports as `background.png`,
 alongside the effective SVG artwork and blue/cream CSS. Its transparent empty
@@ -134,7 +175,7 @@ Matching instances share the rule. **Done** saves; **Cancel** or Escape discards
 Entering and leaving without changes preserves the theme. The editor suppresses normal
 control commands while placing them. The containing panel bounds each element.
 
-These same settings mirror between JSON `skin.controls` and canonical `style.css`:
+Done saves these rules in the theme's `layout.css`; you may also write them in `theme.css`:
 
 ```css
 .control-mixer-name { bottom: 0px; }
@@ -173,12 +214,12 @@ track colours choose variants independently of selection/mute tint:
 track.name { image: url("assets/name.svg"); }
 track.name.color-00ff00 { image: url("assets/green-name.svg"); }
 track.name.color-00ff00.hover { image: url("assets/green-name-hover.svg"); }
-artwork { fps: 12; }
+:root { --artwork-fps: 12; }
 ```
 
 For an image sequence, supply contiguous `.frame-0`, `.frame-1`, … keys for that
 variant (at most 32 frames), e.g. `track.name.color-00ff00.hover.frame-0`.
-Frame rate is 1–30 fps, mirrored as `skin.artwork-fps`. With native animations off,
+Frame rate is 1–30 fps (`--artwork-fps: 12;` in `theme.css`). With native animations off,
 the first frame stays visible without continuous repainting. Colour/state defaults
 fall back to the role's normal artwork and then Suhina's embedded original.
 PNG artwork retains authored colours and transparency rather than applying `currentColor`.
@@ -192,10 +233,11 @@ resources inside an SVG is not supported. Use separate PNG role files instead.
 Supported roles are `fader.cap`, `fader.rail`, `knob.body`, `knob.pointer`, `button`,
 `play`, `stop`, `record`, `solo`, `arm`, `cue`, `track.midi`, `track.audio`,
 `track.name`, `track.body` and `meter`. State variants append `.hover`,
-`.active` or `.disabled`. Example JSON override:
+`.active` or `.disabled`. Example overrides:
 
-```json
-{"skin":{"assets":{"play":"assets/play.svg","button.hover":"assets/button.hover.svg"}}}
+```css
+play { image: url("assets/play.svg"); }
+button:hover { image: url("assets/button.hover.svg"); }
 ```
 
 Lookup uses the theme's state SVG, then its base SVG, then Suhina's default SVG.
@@ -218,7 +260,8 @@ Portable exports include inherited artwork so another machine receives the same 
 
 | Area | Supported customization |
 |---|---|
-| Palette | JSON/native CSS tokens, transparency, project-safe creation defaults |
+| Palette | Core colour properties, transparency, project-safe creation defaults |
+| Settings | The core settings, your own `@property` settings in the editor, variants (light, dark and others) |
 | Artwork | SVG/PNG roles, colour/state variants and frame sequences, moving faders and rotating knob pointers |
 | Meters | `continuous`, `segmented` (4–64 segments), `needle`, signal-driven `frames`; signal remains dBFS |
 | Materials | Optional bounded PNG background, opacity/blur; panel/track/clip gradient and liquid settings |
@@ -256,7 +299,7 @@ and test the actual target instead of inventing selectors.
 
 ## Signal-driven meter artwork
 
-For a fully authored meter, use `meter { style: frames; }` in canonical `style.css`
+For a fully authored meter, set `--meter-style: frames;` in `theme.css`
 and supply contiguous `meter.frame-0`, `meter.frame-1`, … SVG/PNG roles, up to 32.
 The louder channel's measured peak selects the frame along the native -70 to +6 dBFS
 range. Frame zero represents silence; the last frame represents the top of the range.

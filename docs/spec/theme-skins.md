@@ -37,6 +37,8 @@ covers:
   - crates/ui/src/kit/native_css/workspace.rs
   - crates/ui/src/kit/native_css/diagnostics.rs
   - crates/ui/src/kit/theme_css.rs
+  - crates/ui/src/kit/theme_vars.rs
+  - crates/style/src/registered.rs
   - crates/ui/src/kit/style_class.rs
 ---
 
@@ -399,30 +401,58 @@ modern selectors, queries, layout algorithms and animations are not implemented 
 reader. The advanced target and engine research are in
 [ADR 0030](../decisions/0030-native-theme-css.md).
 
-### Theme storage: CSS is the one source
+### Theme storage: one sheet, variants and layout
 
-A theme is a folder `<id>/` in the themes folder: `theme.css` holds the whole theme
-(palette tokens, `theme { name }`, `liquid`, `gradient-panels|tracks|clips`, meter,
-artwork, placements and anchors, toolbar, Session geometry, background) and imports at
-most one advanced stylesheet with `@import "advanced.css";` before its first rule. The
-folder also holds `assets/`, `background.png`, `README.md` and `examples/`. No JSON is
-written and nothing is mirrored.
+A theme is a folder `<id>/` in the themes folder ([ADR 0031](../decisions/0031-style-sheets.md),
+amendment *Theme settings and variants*):
 
-Changes to any file of the folder are noticed within the one-second poll. Editor saves
-patch only changed declarations of `theme.css`, keeping comments and formatting, and
-write only files whose bytes changed. A save over an edit made outside Suhina since the
-theme was last read is refused and leaves the files as they are; reading the themes again
-makes the edit the theme. A malformed stylesheet or missing resource does not replace the
-loaded theme. Installed package README files are not rewritten.
+- `theme.css`: the theme's style sheet as its author wrote it, the whole look (rules,
+  variables, `@media`, gradients, artwork `image` rules, `theme { name }`). Suhina reads it and
+  never writes it once it is there.
+- `variants/<variant>.json`: values for the theme's settings,
+  `{ "name": "Frost", "appearance": "light", "values": { "--accent": "#88C0D0" } }`. The file's
+  name is the variant's id; `name` is its label; values are CSS text checked against each
+  property's syntax (`var()` may refer to the theme's own variables). At most 64 variants of
+  64 KiB each, 256 values of 1 KiB each.
+- `layout.css`: written by Suhina only, for what the Edit interface and editors set beyond
+  settings: `.control-NAME` placements and anchors, `toolbar` order and offsets, `--suhina-*`
+  styles, artwork chosen in the app and the name. Removed when the sheet says the same.
+- `assets/`, `background.png`, `README.md` and `examples/`.
 
-**Migration of JSON themes.** A theme written by earlier versions (`<id>.json` beside
-`<id>/style.css`) is read as before and migrated once: `theme.css` is written from the
-old `style.css`, keeping its comments, with the import of `advanced.css`; it is read back
-and must give exactly the same theme with no warnings. Only then are `<id>.json` and the
-old `style.css` moved into `<id>/legacy/` (never deleted; a later copy gets a numbered
-name). Otherwise the new `theme.css` is removed, the JSON stays in use, and a warning
-says why. ZIP packages and dropped files from earlier versions are read the same way and
-saved as CSS themes.
+**Settings are custom properties.** The core set every theme has is registered with
+`@property` and Suhina Dark's values (`crates/ui/src/kit/theme_vars.rs`): each palette token
+(`--accent`, `--track-headerBackground`), `--meter-style`, `--meter-segments`,
+`--meter-intensity`, `--artwork-fps`, `--liquid` (`auto` or three strengths),
+`--gradient-panels|tracks|clips` (`none` or `<angle>deg, <colour> <position>%, ...`),
+`--background-image` (`none` or `url("background.png")`), `--background-opacity`,
+`--background-blur` and `--session-track-width|return-width|scene-width|slot-height|header-height`
+(`auto` or a length). A theme sets them in `:root` and may declare its own with `@property`
+(`syntax`, `initial-value`, and Suhina's `label`, `group`, `range`, `step`); a declared property
+with a label is listed under *Theme settings* with a control for its type. The theme's values
+are read at the root of a 1280 by 800 dark window. A variant's values apply in the Variant tier,
+above the theme's rules, including its conditional ones.
+
+**Editing.** A setting changed in Suhina is written to the variant in use; on a theme's own values
+a variant named *Custom* is made first. A built-in theme's variants are kept in a folder of its
+id holding only `variants/`, without a copy of its CSS. Moving controls or changing artwork
+edits the theme's `layout.css`; for a built-in theme it copies the theme first. *New variant*
+starts one from the values in use; with a variant in use, the name field renames it. The picker
+shows one card per theme and a swatch per variant, the theme's own values first.
+
+Changes to any file of the folder are noticed within the one-second poll, and only files whose
+bytes changed are written. A save over an edit of a variant file made outside Suhina since it was
+last read is refused and leaves the file as it is; reading the themes again makes the edit the
+variant. A malformed sheet or missing resource does not replace the loaded theme. Installed
+package README files are not rewritten.
+
+**Migration of earlier themes.** A theme of an earlier version, `<id>.json` beside
+`<id>/style.css`, or a `theme.css` of the earlier form (rules such as `meter { style: ... }` and
+an `@import "advanced.css";`), is read as before and migrated once. The new `theme.css` (the
+comments at the top of the old sheet, the values as custom properties, then the free-form CSS it
+carried) and `layout.css` are read back and must give the same theme with no warnings; only then
+are the old files kept in `<id>/legacy/` (never deleted; a later copy gets a numbered name). A
+theme that does not read without warnings stays as it is, with a warning, so no rule is lost.
+ZIP packages and dropped files from earlier versions are read the same way.
 File operations and live-reload polling run on one background worker. While a save
 is in flight, later samples of the same slider replace queued saves; rename,
 reload, import and export retain their order. Preview changes remain immediate,
@@ -434,10 +464,13 @@ document instead of discarding it and rebuilding a fallback document per control
 Viewport changes also retain the scope tree while updating media conditions and
 viewport-dependent values. The next repaint consumes the refreshed style snapshot.
 
-ZIP export places each theme's `theme.css`, `advanced.css`, SVG/PNG artwork and
-background together under its theme id. Import validates resources before writing any theme, and gives colliding ids a suffix.
-The in-app CSS editor accepts native values and styles; package-relative image URLs are
-resolved when importing or reloading theme files. The SVG editor accepts vector markup.
+A backup holds each theme folder as it is, variants and `layout.css` included; a package
+exported from a theme's values holds its `theme.css`, `layout.css`, SVG/PNG artwork and
+background under its theme id. Import validates resources before writing any theme, copies a
+theme folder's files as they are, and gives colliding ids a suffix. The in-app *Native CSS* box
+accepts settings and layout in the earlier form (they go to the variant and `layout.css`);
+package-relative image URLs are resolved when importing or reloading theme files. The SVG editor
+accepts vector markup.
 
 ## Advanced CSS adapter (experimental)
 
@@ -548,11 +581,11 @@ that reads on a dark panel can disappear on a bright volume/pan field fill:
         --text-value:#14212C; --text-inverse:#14212C; }
 ```
 
-`advanced.css` is the authored advanced stylesheet, kept byte for byte; `theme.css`
-imports it. Its rules are separate from `theme.css`'s canonical values, which the editors
-change. The same byte limit and package path restrictions apply to both stylesheets.
+The theme's `theme.css` is kept byte for byte; Suhina's own settings and layout live in its
+variants and `layout.css`. The same byte limit and package path restrictions apply to every
+stylesheet. The *Theme style sheet* section of the editor lists the sheet's notices.
 
-The advanced editor supplies a Flex example and calls the native engine, which
+The native engine
 computes variables, layers, inheritance, colours, value expressions and viewport
 media conditions for class scopes. Taffy computes Flex/Grid rectangles for the actual
 visible toolbar modules (`#tempo`, `#transport`, etc.); the same rectangles bound their

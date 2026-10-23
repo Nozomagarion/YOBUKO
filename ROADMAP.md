@@ -146,6 +146,7 @@ refused or suspended, never by losing its edits.
 
 - Private image backgrounds use a cached source and display-scaled, alpha-correct blur; Settings keeps its own readable material. Native Mica has been removed.
 
+- Theme variants: a theme's settings are CSS custom properties, the core set every theme has and any it declares with `@property` (shown under Theme settings with a control for its type). A variant (`variants/<id>.json`) holds other values for them, such as a light and a dark version of one theme; the picker shows a swatch per variant, and editing a theme's settings saves a variant, so built-in themes need no copy for it.
 - Theme customization includes independent Browser/coloured-surface text, alpha-preserving gradients, editable liquid strengths, a private image backdrop and configurable application-bar identity/project information.
 - Private image backgrounds retain image compositing on transparent GPU windows; narrow Arrangement headers keep names, recording controls and meters separate.
 
@@ -595,8 +596,8 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   100 %; View › Zoom in and Settings › Appearance › Zoom), and the zoom is kept for the next run
   ([spec](docs/spec/window-zoom.md)).
 - **Themes**: every colour comes from the theme in use, a folder with a `theme.css` in the
-  `themes` folder (`theme { name: …; } :root { --accent: #A6A3FF; … }`); JSON themes from earlier
-  versions are converted once, keeping the originals; track colours and the sample map's
+  `themes` folder (`theme { name: …; } :root { --accent: #A6A3FF; … }`), which Suhina never
+  rewrites; themes from earlier versions are converted once, keeping the originals; track colours and the sample map's
   kind colours are theme tokens too (`track.1`–`track.8`, `kind.*`). Nine come with Suhina (Suhina
   Dark and Light, Editor Dark, High Contrast, Dracula, Nord, Catppuccin Mocha and Latte, Solarized
   Dark). Settings › Appearance › Theme picks one, changes its colours, renames, duplicates, reads
