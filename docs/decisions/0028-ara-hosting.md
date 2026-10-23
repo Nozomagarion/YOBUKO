@@ -3,7 +3,7 @@ description: How ARA plug-ins (audio editors such as pitch editors) are hosted o
 read_when: ARA, ARA2, Melodyne, pitch editor, audio random access, playback region, audio source, audio modification, region sequence, document controller, overlapping audio clips, audio overlap, arrangement.audioOverlaps, stacked clips and ARA
 type: decision
 status: draft
-last_verified: 2026-10-20
+last_verified: 2026-10-22
 covers:
   - crates/model/src/overlap.rs
   - crates/session/src/commands.rs
@@ -215,7 +215,7 @@ the list below, in a first form). Where it differs from the decisions above it i
   the request goes to the engine and back, and the plug-in otherwise drew the old position from the
   next block, its playhead flickering back for a moment. The loop (cycle) requests
   are not followed; the loop region is set in the ruler. A click on a clip in the arrangement
-  moves the play position there, so the editor follows the clip it shows (#717) The rules that play
+  moves the play position there, so the editor follows the clip it shows (#717). The rules that play
   from a selected clip's start (Settings › Play from, and a clip picked while stopped) give way
   on a track with an ARA plug-in, always: there the editor's timeline and a click set where
   play starts.

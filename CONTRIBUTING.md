@@ -130,15 +130,22 @@ claim. A trusted contributor, named in the repository variable `TRUSTED_CONTRIBU
 feature in `Backlog` without waiting, or move it to `Ready` with `/ready` so others can claim it ([`docs/claim-bot.md`](docs/claim-bot.md) › Who is who). A bug in `Backlog` is free. `Do not start yet` means the order is deliberate: the issue and
 its comments say what the work waits for, so ask there instead of starting.
 
-**Claim it** in a comment on the issue before you write code:
+**Bugs and small changes need no issue and no claim.** Open a pull request that says what it
+fixes. The *Overlap* notice ([`.github/workflows/overlap.yml`](.github/workflows/overlap.yml))
+comments on it when another open pull request or a claim changes the same files, and keeps the
+comment up to date with each push; it never fails. A fix you find along the way that is small and
+in the same code goes in the same pull request, under *Also fixed* in its description; one that is
+larger, elsewhere, or in code someone else is changing gets a pull request or an issue of its own.
+
+**Claim a feature or a piece of an epic** in a comment on the issue before you write code:
 
 > /claim Plan: … When: …
 > Touches: crates/ui/src/detail, crates/session
 
 The claim bot ([`docs/claim-bot.md`](docs/claim-bot.md)) moves the card to `In progress` and
 assigns you, and refuses the claim when the work is not free or another issue it is *Blocked by*
-is still open. The `Touches:` line names the paths you will change; it is optional, and with it the
-bot's answer lists the open pull requests and other claims that touch the same code. Without the bot, a plain comment
+is still open. The `Touches:` line names the paths you will change: give it, because the
+bot's answer and the *Overlap* notice on other people's pull requests find your claim by those paths. Without the bot, a plain comment
 ("I'd like to take this. Plan: …") is the claim, and the first one wins: a bot that is down never
 means the issue is free. Hold at most five claims without a pull request at a time; the bot refuses
 the sixth until a draft pull request or an `/unclaim` frees one.
@@ -194,14 +201,35 @@ is the bot's comment and not that person's; it is a comment, not a GitHub review
 blocks nothing (`AGENTS.md` › Tasks has the commands). The rules in
 [AI-assisted contributions](#ai-assisted-contributions) apply to what the agent wrote.
 
+**No elevated access just to post.** These bot workflows require existing repository write
+access, not admin access. Without it, an agent uses the user's authenticated account to post
+ordinary issues and PR comments, within the user's authorization, and identifies agent-written
+feedback as AI-assisted. Trusted contributors may use the comment commands below. Agents must
+not request admin/write access, broader token scopes or App secrets to follow the bot posting
+convention. Connector restrictions still apply: if no authorized posting route is available,
+explain the limit and give the user the prepared text.
+
+**Trusted bot actions.** Contributors listed in `TRUSTED_CONTRIBUTORS` may ask `suhina-bot`
+to create issues with `/open-issue`, close/reopen issues with `/close` and `/reopen`, and request
+a PR test build with `/test-build`. Each action records **On behalf of @login**, taken from
+the authenticated commenter. See [Trusted bot requests](docs/claim-bot.md#trusted-bot-requests)
+for the issue JSON and limits. The list grants neither repository write access nor merge approval.
+
+The repository variable `MAINTAINERS` controls the maintainer role across all bot workflows,
+including merge authorization. Both lists use comma/whitespace-separated GitHub logins, ignore
+case and accept an optional `@`. There is no hardcoded maintainer fallback when the variable
+is empty. Maintain the lists in Settings → Secrets and variables → Actions → Variables.
+For fork PR test builds, maintainers also use `/test-build`: fork runs may lack repository
+variables and therefore cannot identify a maintainer from a direct label alone.
+
 ## Trying a pull request
 
 A pull request can be tried without building it: GitHub Actions builds packages of it for
 Windows, macOS and Linux ([`docs/releasing.md` › Test builds](docs/releasing.md#test-builds)) and
 links the downloads from the pull request in a comment, updated with every new build. A maintainer's own pull requests are
 built on every push. A contributor's pull request is built once a maintainer has read the diff and
-added the `test-build` label; a later push takes the label off, and the new commits are built when
-the label is added again.
+added the `test-build` label, or a trusted contributor requests it with `/test-build`; a later
+push takes the label off, and the new commits need a new request.
 
 ## Merging many pull requests
 
@@ -290,7 +318,10 @@ Signed-off-by: Your Name <you@example.com>
 change or have the right to submit it under the project's licence. For Suhina this includes
 the clean-room rules above: the change does not come from disassembled, decompiled or leaked
 material, from notes based on such material, or from content of a proprietary product, and no
-agent that wrote it was given such material. CI checks the sign-off on pull requests from forks.
+agent that wrote it was given such material. CI checks the sign-off on pull requests from forks,
+on the commits that are not on a branch of this repository already (a pull request built on
+another one's branch here does not answer for that branch's commits). GitHub's temporary pull
+request merge refs do not count as repository branches: the fork's own commits still need sign-off.
 
 ## Reporting a rights problem
 

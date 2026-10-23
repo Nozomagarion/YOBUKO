@@ -434,6 +434,9 @@ pub struct ArrangementViewState {
     /// value instead of scrolling the view, which has to know before they draw themselves again.
     value_areas: Vec<Rect>,
     send_scroll_areas: Vec<Rect>,
+    /// Where the waveform zoom slider was drawn last frame: the wheel over it steps the zoom
+    /// and leaves the view where it is.
+    zoom_area: Option<Rect>,
     /// Volume and pan as knobs instead of fields (Settings › Session and mixer).
     pub knobs: bool,
     /// The track the user last worked on: the header they clicked, or the track of the clip they
@@ -539,6 +542,7 @@ impl Default for ArrangementViewState {
             folds: Folds::default(),
             value_areas: Vec::new(),
             send_scroll_areas: Vec::new(),
+            zoom_area: None,
             knobs: false,
             targeted: None,
             track_drag: None,
@@ -1225,7 +1229,8 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     let sends = std::mem::take(&mut state.send_scroll_areas);
     if let Some(pointer) = widgets::pointer_over(ui, area) {
         let over_field = (fields.iter().any(|rect| rect.contains(pointer)) && widgets::wheel_moves_value(ui))
-            || (sends.iter().any(|rect| rect.contains(pointer)) && ui.input(|i| i.modifiers.shift));
+            || (sends.iter().any(|rect| rect.contains(pointer)) && ui.input(|i| i.modifiers.shift))
+            || state.zoom_area.is_some_and(|rect| rect.contains(pointer));
         let zoom = ui.input(|i| i.zoom_delta());
         if zoom != 1.0 && time.contains(pointer) && !over_field {
             let beat = (pointer.x - time.left() + state.scroll.x) / state.beat_width;
@@ -1576,6 +1581,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             Sense::click_and_drag(),
         );
         response.widget_info(|| egui::WidgetInfo::slider(true, f64::from(state.waveform_zoom), "Waveform zoom"));
+        state.zoom_area = Some(response.rect);
         if response.double_clicked() {
             state.waveform_zoom = 1.0;
         } else if (response.clicked() || response.dragged())

@@ -3,7 +3,7 @@ description: How the sample map behaves: samples laid out by how they sound, col
 read_when: sample map, similarity, sound map, browse by sound, t-SNE, UMAP, point cloud, grid layout, similar samples, kick snare hat categories, audio features, MFCC, NKS, preset previews, soundmap commands
 type: spec
 status: draft
-last_verified: 2026-10-20
+last_verified: 2026-10-21
 covers:
   - crates/soundmap/**
   - crates/session/src/soundmap.rs
@@ -58,7 +58,7 @@ Both play a sample as soon as the pointer is over it.
 - **Map:** the plane with one **point** per item. An item is a sample file from the library or
   an NKS preset with a preview (see *NKS presets*).
 - **Scope:** the items a map holds: those of the place selected in the browser (a folder, Pinned,
-  a Recent group), or of every folder when no place is selected.
+  a Recent group or every recent item), or of every folder when no place is selected.
 - **Features:** numbers computed from an item's audio that describe its sound
   ([ADR 0013](../decisions/0013-sample-map-analysis.md) lists them). Two items are **similar**
   when their features are close.
