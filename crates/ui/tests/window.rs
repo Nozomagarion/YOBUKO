@@ -1196,7 +1196,7 @@ fn settings_change_right_away_and_are_handed_out_to_be_saved() {
     harness.run();
     let saved = harness.state_mut().take_changed_settings();
     assert_eq!(saved.as_ref().map(|s| s.animations), Some(false));
-    assert_eq!(saved.map(|s| s.track_headers), Some(suhina_ui::settings::Side::Left));
+    assert_eq!(saved.map(|s| s.track_headers), Some(Some(suhina_ui::settings::Side::Left)));
     assert!(!suhina_ui::kit::motion::enabled(&harness.ctx));
     assert_eq!(harness.state_mut().take_changed_settings(), None);
     harness.get_by_label("Close settings").click();

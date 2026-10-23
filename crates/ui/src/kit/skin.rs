@@ -47,11 +47,11 @@ pub const ROLES: &[&str] = &[
     "track.name",
     "track.body",
     "meter",
-    "volume.track",
-    "volume.fill",
-    "pan.track",
-    "pan.fill",
 ];
+
+/// Roles only a theme's own artwork fills: without it the control is drawn natively, so Suhina
+/// ships none for them.
+pub const OWN_ROLES: &[&str] = &["volume.track", "volume.fill", "pan.track", "pan.fill"];
 
 /// The very same original SVG sources are embedded and distributed as editable files.
 pub const DEFAULT_SVGS: &[(&str, &str)] = &[
@@ -183,7 +183,7 @@ impl Default for Skin {
 }
 
 pub fn valid_role(role: &str) -> bool {
-    ROLES.iter().any(|base| {
+    ROLES.iter().chain(OWN_ROLES).any(|base| {
         if role == *base {
             return true;
         }
