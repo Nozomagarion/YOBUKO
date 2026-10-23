@@ -774,9 +774,12 @@ fn paint_variant(
     };
     // The native see-through host writes a background's alpha rather than blending
     // it twice. Clear the covered background before compositing its artwork; private
-    // image backdrops and the opaque/OpenGL path keep ordinary blending.
+    // image backdrops and the opaque/OpenGL path keep ordinary blending. Only a theme whose
+    // surfaces show the desktop needs it: over an opaque one, clearing would let the desktop
+    // show through wherever the artwork leaves a pixel uncovered (rounded corners, edges).
     if matches!(role, "button" | "fader.rail" | "fader.cap" | "track.name" | "track.body")
         && super::surface::available(painter.ctx())
+        && super::theme::see_through()
     {
         let (sin, cos) = angle.sin_cos();
         let size = egui::vec2(

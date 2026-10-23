@@ -1910,6 +1910,9 @@ impl App {
                         .order(egui::Order::Foreground)
                         .fixed_pos(rect.min)
                         .show(ui.ctx(), |ui| {
+                            // An opaque back, so the name the view drew under the field does not
+                            // show through it (its font and place differ from the field's).
+                            let back = ui.painter().add(egui::Shape::Noop);
                             let field = crate::kit::widgets::text_input(
                                 ui,
                                 egui::TextEdit::singleline(&mut draft)
@@ -1918,6 +1921,11 @@ impl App {
                                     .desired_width(rect.width().max(120.0)),
                             );
                             field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, what));
+                            let covered = field.rect.union(rect);
+                            ui.painter().set(
+                                back,
+                                egui::Shape::rect_filled(covered, 2.0, theme::control_background().to_opaque()),
+                            );
                             if !focused {
                                 field.request_focus();
                             }
@@ -7371,6 +7379,29 @@ pub(crate) const NAME_RECT_TRACK: &str = "track-name-rect";
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_rename_in_place_covers_the_name_drawn_under_it() {
+        use egui_kittest::kittest::Queryable;
+        let mut app = App::new();
+        app.set_session(Session::new(crate::demo::demo_project()), &[]);
+        app.settings.animations = false;
+        app.shown = View::Arrangement;
+        let track = app.session().unwrap().project().tracks[0].id.0;
+        let mut harness = egui_kittest::Harness::builder()
+            .with_size((1280.0, 800.0))
+            .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+        harness.run();
+        harness.state_mut().rename = Some((json!({ "rename_track": track }), "Renamed".into(), false));
+        harness.run();
+        let field = harness.get_by_label("Track name").rect();
+        let back = theme::control_background().to_opaque();
+        assert!(
+            harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
+                egui::Shape::Rect(rect) if rect.fill == back && rect.rect.contains_rect(field))),
+            "an opaque back under the field"
+        );
+    }
 
     #[test]
     fn css_workspace_moves_native_controls_and_preserves_project_state() {

@@ -768,7 +768,7 @@ fn unrelated_css_preserves_native_colours_font_sizes_and_corner_defaults() {
 
 /// Runs `paint` inside the window for a few frames with `css`, so element ids resolve, and
 /// returns the last frame's shapes.
-fn painted(css: &str, paint: impl Fn(&egui::Ui)) -> Vec<egui::epaint::ClippedShape> {
+fn painted(css: &str, mut paint: impl FnMut(&egui::Ui)) -> Vec<egui::epaint::ClippedShape> {
     prepare(css, 800.0);
     let ctx = egui::Context::default();
     let mut shapes = Vec::new();
@@ -846,4 +846,17 @@ fn a_transparent_control_background_paints_nothing() {
         surface(ui.painter(), field, 0.0, theme::window_background());
     });
     assert!(!rects(&shapes).iter().any(|r| r.rect == field), "{shapes:?}");
+}
+
+#[test]
+fn a_view_background_leaves_the_controls_on_it_their_own_fill() {
+    let control = theme::control_background();
+    let mut seen = None;
+    painted(".arrangement { background-color: #102030; }", |_| {
+        let _view = super::super::style_class::enter("arrangement");
+        seen = Some((theme::window_background(), theme::control_background()));
+    });
+    let (window, inside) = seen.unwrap();
+    assert_eq!(window, egui::Color32::from_rgb(0x10, 0x20, 0x30));
+    assert_eq!(inside, control, "the add-track buttons keep the theme's control fill");
 }

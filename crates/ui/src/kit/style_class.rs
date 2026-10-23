@@ -154,9 +154,7 @@ fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response
         set_foreground(&mut palette, color, class);
     }
     if let Some(color) = property("background-color").as_deref().and_then(theme::parse_hex) {
-        palette.window_background = color;
-        palette.panel_background = color;
-        palette.control_background = color;
+        set_background(&mut palette, color, class);
     }
     if let Some(color) = property("border-color").as_deref().and_then(theme::parse_hex) {
         palette.border = color;
@@ -171,14 +169,44 @@ fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response
             palette.border_strong = values.border;
         }
         if values.authored.background {
-            palette.window_background = values.background;
-            palette.panel_background = values.background;
-            palette.control_background = values.background;
+            set_background(&mut palette, values.background, class);
         }
     }
     theme::local_palette(palette);
     Scope { palette: saved, revision: theme::palette_revision(), native }
 }
+/// Views and bars: their background is the surface behind their controls, not the controls' own.
+const SURFACES: &[&str] = &[
+    "window",
+    "workspace",
+    "workspace-panel",
+    "application-bar",
+    "menu-bar",
+    "project-tabs",
+    "toolbar",
+    "status-bar",
+    "browser",
+    "session",
+    "arrangement",
+    "mixer",
+    "detail",
+    "clip-editor",
+    "piano-roll",
+    "settings",
+    "dialog",
+    "sample-map",
+];
+
+/// A background for `class`: a view's sets the surfaces inside it, and a control's its own fill
+/// too. So a view's background never repaints the buttons drawn on it.
+fn set_background(palette: &mut theme::Palette, color: egui::Color32, class: &str) {
+    palette.window_background = color;
+    palette.panel_background = color;
+    if !SURFACES.contains(&class) {
+        palette.control_background = color;
+    }
+}
+
 fn set_foreground(palette: &mut theme::Palette, color: egui::Color32, class: &str) {
     palette.text_primary = color;
     palette.text_inverse = color;

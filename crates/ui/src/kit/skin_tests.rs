@@ -63,6 +63,11 @@ fn svg_backgrounds_clear_native_alpha_once_and_keep_private_images_underneath() 
     configure(&Skin::default());
     let ctx = egui::Context::default();
     super::super::surface::install(&ctx, Arc::new(Mark));
+    // Only a theme whose surfaces show the desktop clears under its artwork.
+    let saved = super::super::theme::palette();
+    let mut see_through = saved;
+    see_through.window_background = Color32::from_rgba_unmultiplied(20, 20, 20, 160);
+    super::super::theme::set_palette(&ctx, see_through);
     for private_image in [false, true] {
         super::super::liquid::set_background_image(
             &ctx,
@@ -92,6 +97,18 @@ fn svg_backgrounds_clear_native_alpha_once_and_keep_private_images_underneath() 
             output.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Rect(rect) if rect.brush.is_some()))
         );
     }
+    // Over opaque surfaces nothing is cleared: the desktop never shows at the artwork's edges.
+    super::super::theme::set_palette(&ctx, saved);
+    super::super::liquid::set_background_image(&ctx, None);
+    let mut output = ctx.run_ui(Default::default(), |ui| {
+        super::super::surface::begin_frame(ui.ctx());
+        let painter = ui.ctx().layer_painter(egui::LayerId::background());
+        let rect = Rect::from_min_size(egui::pos2(10.0, 10.0), egui::Vec2::splat(30.0));
+        assert!(button(&painter, rect, State::Normal, Color32::from_rgb(50, 60, 70), 3.0));
+        super::super::surface::finish_frame(ui.ctx());
+    });
+    output.textures_delta.clear();
+    assert!(!output.shapes.iter().any(|shape| matches!(shape.shape, egui::Shape::Circle(_))));
 }
 #[test]
 fn inherited_svg_renders_missing_roles_while_theme_artwork_overrides_one_role() {
