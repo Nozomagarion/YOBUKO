@@ -375,10 +375,14 @@ writes its `Info.plist` (the bundle id `io.github.suhina-daw.suhina`, the versio
 suffix, macOS 11, and the text macOS shows when Suhina first asks for the microphone, for the
 tracks' audio inputs), signs the bundle ad hoc, and puts a `suhina-cli` link in the package
 folder, so `./suhina-cli` still works from it. The app's icon, `Suhina.icns`, is made from
-[`assets/brand/suhina-icon.png`](../assets/brand/suhina-icon.png) with `sips` and `iconutil`. The ad hoc signature names no developer; it is
+[`assets/brand/suhina-icon.png`](../assets/brand/suhina-icon.png) with `sips` and `iconutil`. While
+the app runs, eframe would put its own icon in the Dock over it, so on macOS the desktop app tells
+eframe to leave the Dock alone (`apps/suhina/src/main.rs`, `app_icon`): the Dock keeps the bundle's
+icon, which macOS draws with rounded corners, where an image set at run time is drawn square. On
+the other platforms the app gives its window the same PNG. The ad hoc signature names no developer; it is
 there because Apple silicon runs only signed code and because macOS calls an unsigned downloaded
-bundle damaged rather than offering to open it. The Windows and Linux icons and the
-`.suhina` file type's icon are still to come ([#607](https://github.com/suhina-daw/suhina-daw/issues/607)). The smoke test runs the VST3 test plug-in built into the host through the
+bundle damaged rather than offering to open it. The icon of the Windows executable file,
+the Linux desktop entry and the `.suhina` file type are still to come ([#607](https://github.com/suhina-daw/suhina-daw/issues/607)). The smoke test runs the VST3 test plug-in built into the host through the
 packaged CLI; the desktop app needs a window, so only its libraries are checked. Each archive also holds
 `LICENSE`, `NOTICE`, `README.md`, `ATTRIBUTION.md` and the licences of the ported code,
 `LICENSE-APACHE` (the FM synth) and `LICENSE-signalsmith.txt` (the time stretcher).
