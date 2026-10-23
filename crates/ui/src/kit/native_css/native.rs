@@ -109,7 +109,9 @@ pub(super) fn retained(engine: &Engine) -> Option<Vec<(u64, Computed)>> {
         element.object = node.name.clone();
         element.classes.push(node.class.clone());
         element.states.push(if node.state & 4 != 0 { "disabled" } else { "enabled" }.into());
-        for (bit, state) in [(1, "hover"), (2, "active"), (8, "focus"), (8, "focus-visible")] {
+        for (bit, state) in
+            [(1, "hover"), (2, "active"), (8, "focus"), (8, "focus-visible")].into_iter().chain(super::HOST_STATES)
+        {
             if node.state & bit != 0 {
                 element.states.push(state.into());
             }

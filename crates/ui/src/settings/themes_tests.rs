@@ -173,35 +173,16 @@ fn duplicates_get_their_own_ids() {
 }
 
 #[test]
-fn renaming_a_theme_renames_its_file() {
+fn renaming_a_theme_keeps_its_folder() {
     let mut themes = Themes::default();
     themes.set(vec![night()], None);
     assert_eq!(themes.request(BUILT_IN, ThemeRequest::Rename("Mine".into())), None);
     assert!(themes.take_actions().is_empty());
-    assert_eq!(themes.request("night", ThemeRequest::Rename(" Deep Sea ".into())), Some("deep-sea".into()));
-    assert_eq!(
-        themes.take_actions(),
-        [
-            FileAction::Rename { from: "night".into(), to: "deep-sea".into() },
-            FileAction::Save {
-                id: "deep-sea".into(),
-                theme: Box::new(Theme {
-                    name: "Deep Sea".into(),
-                    colors: night().theme.colors,
-                    liquid: None,
-                    gradients: Default::default(),
-                    transparent_rgb: Default::default(),
-                    skin: Default::default(),
-                    vars: Default::default(),
-                })
-            },
-        ]
-    );
-    // A name that makes the same id keeps the file.
-    assert_eq!(themes.request("deep-sea", ThemeRequest::Rename("Deep  sea!".into())), None);
-    assert_eq!(saved(&mut themes), [("deep-sea".into(), "Deep  sea!".into())]);
-    // A built-in theme's id is not taken.
-    assert_eq!(themes.request("deep-sea", ThemeRequest::Rename("Nord".into())), Some("nord-2".into()));
+    // Even a name whose id another theme has: the folder is the id and stays.
+    assert_eq!(themes.request("night", ThemeRequest::Rename(" Nord ".into())), None);
+    assert_eq!(saved(&mut themes), [("night".into(), "Nord".into())]);
+    assert_eq!(themes.get("night").map(|t| t.name.as_str()), Some("Nord"));
+    assert!(themes.get("nord").is_some_and(|t| t.name == "Nord"), "the built-in Nord is untouched");
 }
 
 #[test]

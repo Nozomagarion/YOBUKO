@@ -159,3 +159,25 @@ fn a_theme_may_put_the_track_headers_on_a_side() {
     crate::kit::skin::configure(&crate::kit::skin::Skin::default());
     assert_eq!(crate::kit::style_class::theme_track_headers_left(), None);
 }
+
+#[test]
+fn a_list_of_placement_selectors_places_each_control() {
+    let mut theme = Theme::default();
+    let css = ".control-arrangement-send-1, .control-arrangement-send-2 { display: none; }";
+    assert!(theme_css::read_host_rules(&mut theme, css).is_empty());
+    assert!(theme.skin.controls["arrangement-send-1"].hidden);
+    assert!(theme.skin.controls["arrangement-send-2"].hidden);
+}
+
+#[test]
+fn a_toggle_that_is_on_has_artwork_of_its_own_or_the_pressed_one() {
+    let mut theme = Theme::default();
+    let css = "solo:on { image: url(\"assets/solo.on.svg\"); } arm:active { image: url(\"assets/arm.active.svg\"); }";
+    assert!(theme_css::read_host_rules(&mut theme, css).is_empty());
+    assert_eq!(theme.skin.assets.get("solo.on").map(String::as_str), Some("assets/solo.on.svg"));
+    let pick = |role: &str| {
+        crate::kit::artwork::variant(&theme.skin, role, crate::kit::skin::State::On, None, 0.0, false).map(|v| v.0)
+    };
+    assert_eq!(pick("solo").as_deref(), Some("solo.on"));
+    assert_eq!(pick("arm").as_deref(), Some("arm.active"), "without .on, the pressed artwork");
+}

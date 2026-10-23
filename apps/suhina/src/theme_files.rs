@@ -199,7 +199,43 @@ impl ThemeFiles {
             let path = self.current_path(&id, path);
             self.seen.insert(id, fingerprint(&path).unwrap_or(modified));
         }
+        warnings.extend(self.not_themes());
+        warnings.extend(same_names(&entries));
         (entries, warnings)
+    }
+
+    /// Folders in the themes folder that are not themes because they have no `theme.css`
+    /// (`theme.css.txt`, a sheet under another name, or one folder too deep), so a theme made
+    /// by hand that does not appear says why.
+    fn not_themes(&self) -> Vec<String> {
+        let Some(Ok(dir)) = self.folder.as_ref().map(std::fs::read_dir) else { return Vec::new() };
+        dir.filter_map(Result::ok)
+            .take(4096)
+            .filter(|entry| entry.file_type().is_ok_and(|t| t.is_dir()))
+            .filter_map(|entry| {
+                let name = entry.file_name().to_str()?.to_owned();
+                // Suhina's own folders, and a built-in theme's folder of variants.
+                if name.starts_with('_') || name.starts_with('.') || theme::is_built_in(&name) || name == "exports" {
+                    return None;
+                }
+                let path = entry.path();
+                if path.join(THEME_CSS).is_file() {
+                    return None;
+                }
+                let looks_like = std::fs::read_dir(&path)
+                    .ok()?
+                    .filter_map(Result::ok)
+                    .take(256)
+                    .filter_map(|e| e.file_name().to_str().map(str::to_owned))
+                    .find(|file| {
+                        file.to_ascii_lowercase().ends_with(".css") || file.eq_ignore_ascii_case("theme.css.txt")
+                    });
+                Some(match looks_like {
+                    Some(file) => format!("{name}: not a theme, it has {file} but no theme.css"),
+                    None => format!("{name}: not a theme, it has no theme.css"),
+                })
+            })
+            .collect()
     }
 
     /// Where the theme `id` is now: its `theme.css` once a JSON theme has been migrated.
@@ -530,6 +566,22 @@ fn previous_format(text: &str) -> bool {
             .iter()
             .any(|rule| line.starts_with(rule) && !line.contains("image:"))
         })
+}
+
+/// Two themes with the same name, which the picker could not tell apart.
+fn same_names(entries: &[ThemeEntry]) -> Vec<String> {
+    let mut seen: Vec<(&str, &str)> = Vec::new();
+    let mut warnings = Vec::new();
+    for entry in entries.iter().filter(|e| !e.id.contains('@')) {
+        match seen.iter().find(|(_, name)| name.eq_ignore_ascii_case(&entry.theme.name)) {
+            Some((first, name)) => warnings.push(format!(
+                "{} and {}: two themes are named {name}; their cards show their folder names",
+                first, entry.id
+            )),
+            None => seen.push((&entry.id, &entry.theme.name)),
+        }
+    }
+    warnings
 }
 
 /// A `theme.css` on disk with the `layout.css` beside it, artwork relative to its folder.

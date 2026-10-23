@@ -860,3 +860,63 @@ fn a_view_background_leaves_the_controls_on_it_their_own_fill() {
     assert_eq!(window, egui::Color32::from_rgb(0x10, 0x20, 0x30));
     assert_eq!(inside, control, "the add-track buttons keep the theme's control fill");
 }
+
+#[test]
+fn a_level_bar_or_surface_squeezed_below_a_point_draws_nothing_and_never_panics() {
+    let css = "#arrangement-volume { height: 4px; border-radius: 3px; box-shadow: 0 1px 2px #000; }";
+    for field in [
+        Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, 0.968)),
+        Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(0.5, 20.0)),
+        Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, -3.0)),
+        Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, f32::NAN)),
+    ] {
+        painted(css, |ui| {
+            let _value = super::super::style_class::enter_named("value", "arrangement-volume");
+            crate::kit::mixer_controls::level_bar(
+                ui.painter(),
+                field,
+                "volume",
+                (0.0, 0.5),
+                0.0,
+                "0.0",
+                egui::Align2::RIGHT_CENTER,
+            );
+            surface(ui.painter(), field, 4.0, theme::control_background());
+        });
+    }
+}
+
+#[test]
+fn checked_and_selected_states_reach_the_sheet() {
+    let css = "#control-solo:checked { background-color: #FF8800; } \
+               .track-header:selected { background-color: #102030; }";
+    let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(20.0, 16.0));
+    for on in [false, true] {
+        let mut header = None;
+        let shapes = painted(css, |ui| {
+            let response = ui.interact(field, egui::Id::new("solo-test"), egui::Sense::click());
+            {
+                let _solo = super::super::style_class::enter_named_response("button", "solo", &response);
+                mark(HostState::Checked, on);
+                crate::kit::widgets::button_surface(
+                    ui.painter(),
+                    field,
+                    &response,
+                    on,
+                    theme::control_background(),
+                    0.0,
+                );
+            }
+            let _header = super::super::style_class::enter_named("track-header", "track-1");
+            mark(HostState::Selected, on);
+            header = Some(theme::window_background());
+        });
+        let orange = rects(&shapes).iter().any(|r| r.rect == field && r.fill == egui::Color32::from_rgb(0xFF, 0x88, 0));
+        assert_eq!(orange, on, "the solo button is orange only when on");
+        assert_eq!(
+            header == Some(egui::Color32::from_rgb(0x10, 0x20, 0x30)),
+            on,
+            "the header's fill only when selected"
+        );
+    }
+}

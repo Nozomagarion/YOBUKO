@@ -454,7 +454,10 @@ pub fn export(theme: &Theme) -> String {
         };
         css.push_str(&format!(
             "{} {{ image: url(\"{path}\"); }}\n",
-            role.replace(".hover", ":hover").replace(".active", ":active").replace(".disabled", ":disabled"),
+            role.replace(".hover", ":hover")
+                .replace(".active", ":active")
+                .replace(".disabled", ":disabled")
+                .replace(".on", ":on"),
         ));
     }
     css
@@ -494,7 +497,10 @@ fn artwork_rule(role: &str, asset: &str) -> String {
     };
     format!(
         "{} {{ image: url(\"{path}\"); }}\n",
-        role.replace(".hover", ":hover").replace(".active", ":active").replace(".disabled", ":disabled"),
+        role.replace(".hover", ":hover")
+            .replace(".active", ":active")
+            .replace(".disabled", ":disabled")
+            .replace(".on", ":on"),
     )
 }
 
@@ -592,18 +598,21 @@ pub fn read_host_rules(theme: &mut Theme, css: &str) -> Vec<String> {
         if rules > 1024 || selector.starts_with('@') || body.contains('{') {
             continue;
         }
-        for declaration in body.split(';').filter(|d| !d.trim().is_empty()) {
-            let Some((property, _)) = declaration.split_once(':') else { continue };
-            let property = property.trim();
-            let wanted = property == "image"
-                || match selector {
-                    "theme" => property == "name",
-                    "toolbar" => true,
-                    _ if selector.starts_with(".control-") => true,
-                    _ => super::style_class::valid_selector(selector) && property.starts_with("--suhina-"),
-                };
-            if wanted {
-                host.push_str(&format!("{selector} {{ {declaration}; }}\n"));
+        // A list of selectors (`.control-a, .control-b`) is each of them.
+        for selector in selector.split(',').map(str::trim).filter(|s| !s.is_empty()).take(64) {
+            for declaration in body.split(';').filter(|d| !d.trim().is_empty()) {
+                let Some((property, _)) = declaration.split_once(':') else { continue };
+                let property = property.trim();
+                let wanted = property == "image"
+                    || match selector {
+                        "theme" => property == "name",
+                        "toolbar" => true,
+                        _ if selector.starts_with(".control-") => true,
+                        _ => super::style_class::valid_selector(selector) && property.starts_with("--suhina-"),
+                    };
+                if wanted {
+                    host.push_str(&format!("{selector} {{ {declaration}; }}\n"));
+                }
             }
         }
     }

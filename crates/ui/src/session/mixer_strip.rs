@@ -298,6 +298,8 @@ pub fn show(
     let _artwork =
         crate::kit::artwork::track_color(egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2));
     let _style_class = crate::kit::style_class::enter_named("mixer", &format!("track-{}", column.track.0));
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, state.selected == Some(column.track));
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, column.mute);
     // The strip in a shade of its track's colour, as the column above it.
     let tint = crate::kit::style_class::background(motion::mix(
         theme::panel_background(),
@@ -419,6 +421,7 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
     let response = ui.interact(rect.intersect(painter.clip_rect()), id.with("strip-name"), Sense::hover());
     let _name_style =
         crate::kit::style_class::enter_named_response("track-name", &format!("track-{}", column.track.0), &response);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, selected);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{} strip", column.name)));
     // The name stands on the track's colour, as in the column's header.
     let native_fill = colour_picker::fill(column.color, column.mute);
@@ -1323,7 +1326,8 @@ fn toggles(
     }
     let toggle = control_layout::place("mixer-enable", toggle, painter.clip_rect());
     let response = widgets::button_area(ui, toggle, id.with("on"), label);
-    let _style = crate::kit::style_class::enter_response("button", &response);
+    let _style = crate::kit::style_class::enter_named_response("button", "track-on", &response);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, column.mute);
     if response.clicked() {
         actions.push(Action::new("track.setMute", json!({ "tracks": [track.0], "mute": !column.mute })));
     }

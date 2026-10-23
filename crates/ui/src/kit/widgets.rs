@@ -111,6 +111,7 @@ pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Res
 /// CSS paint remains above the SVG body, below the control's glyph and label.
 pub fn button_surface(painter: &Painter, rect: Rect, response: &Response, on: bool, fill: Color32, radius: f32) {
     let _style = super::style_class::control("button", response);
+    super::native_css::mark(super::native_css::HostState::Checked, on);
     // A shape the sheet gives the button wins over the artwork Suhina ships, not over the theme's own.
     let shaped = super::style_class::computed()
         .is_some_and(|style| style.authored.background || style.authored.radius || style.authored.border_width);
@@ -153,7 +154,8 @@ pub fn solo_button(
     let rect = super::control_layout::place("solo", rect, painter.clip_rect());
     let label = if solo { format!("End solo on {name}") } else { format!("Solo {name}") };
     let response = button_area(ui, rect, id, label);
-    let _style = super::style_class::enter_response("button", &response);
+    let _style = super::style_class::enter_named_response("button", "solo", &response);
+    super::native_css::mark(super::native_css::HostState::Checked, solo);
     let lit = motion::toward(ui.ctx(), response.id.with("on"), solo, motion::VALUE);
     let off = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
     track_button_face(ui, painter, rect, &response, motion::mix(off, theme::accent(), lit));
@@ -189,7 +191,8 @@ pub fn cue_button(
     let rect = super::control_layout::place("cue", rect, painter.clip_rect());
     let label = if cue { format!("Stop cueing {name}") } else { format!("Cue {name} on the headphones") };
     let response = button_area(ui, rect, id, label);
-    let _style = super::style_class::enter_response("button", &response);
+    let _style = super::style_class::enter_named_response("button", "cue", &response);
+    super::native_css::mark(super::native_css::HostState::Checked, cue);
     let (fill, text) = toggle_colors(ui, &response, cue);
     let text = super::style_class::foreground(text);
     track_button_face(ui, painter, rect, &response, fill);
@@ -244,7 +247,9 @@ pub fn arm_button(
     } else {
         "Make this track ready to record. Recording starts separately. With Automatic input monitoring, you hear the audio input while this button is on."
     });
-    let _style = super::style_class::enter_response("button", &response);
+    let _style = super::style_class::enter_named_response("button", "arm", &response);
+    super::native_css::mark(super::native_css::HostState::Checked, armed);
+    super::native_css::mark(super::native_css::HostState::Armed, armed);
     let lit = motion::toward(ui.ctx(), response.id.with("on"), armed, motion::VALUE);
     let off = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
     track_button_face(ui, painter, rect, &response, motion::mix(off, theme::recording_background(), lit));

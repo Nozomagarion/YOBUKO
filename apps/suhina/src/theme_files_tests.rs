@@ -156,3 +156,25 @@ fn dates_are_written_year_first() {
     assert_eq!(day(11_016), "2000-02-29");
     assert_eq!(day(20_738), "2026-10-12");
 }
+
+#[test]
+fn a_folder_without_theme_css_and_two_themes_with_one_name_are_named() {
+    let dir = folder("not-themes");
+    let themes = dir.join("themes");
+    for (id, file, text) in [
+        ("hidden-extension", "theme.css.txt", "theme { name: \"Mine\"; }"),
+        ("first", "theme.css", "theme { name: \"Twin\"; }"),
+        ("second", "theme.css", "theme { name: \"twin\"; }"),
+    ] {
+        std::fs::create_dir_all(themes.join(id)).unwrap();
+        std::fs::write(themes.join(id).join(file), text).unwrap();
+    }
+    let mut files = ThemeFiles::new(Some(themes));
+    let (entries, warnings) = files.read_all();
+    let mut ids: Vec<_> = entries.iter().map(|e| e.id.as_str()).collect();
+    ids.sort_unstable();
+    assert_eq!(ids, ["first", "second"]);
+    assert!(warnings.iter().any(|w| w.contains("hidden-extension") && w.contains("theme.css.txt")), "{warnings:?}");
+    assert!(warnings.iter().any(|w| w.contains("two themes are named")), "{warnings:?}");
+    let _clean = std::fs::remove_dir_all(&dir);
+}

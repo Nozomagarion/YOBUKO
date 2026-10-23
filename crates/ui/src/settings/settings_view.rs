@@ -1170,9 +1170,12 @@ fn theme_card(
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Theme: {name}")));
     let mut chosen = None;
     let kept = themes.kept.iter().find(|(kept, _)| kept == base).map(|(_, why)| why.as_str());
+    // Two themes with one name: the folder tells them apart.
+    let twin = themes.list.iter().any(|(other, other_name, _)| other != base && other_name.eq_ignore_ascii_case(name));
+    let name = if twin { format!("{name} ({base})") } else { name.to_string() };
     let label = match themes.variants.iter().find(|(variant, _)| variant == id) {
         Some((_, variant)) if active => format!("{name} · {variant}"),
-        _ => name.to_string(),
+        _ => name.clone(),
     };
     if ui.is_rect_visible(rect) {
         let palette = themes.previews.iter().find(|(key, _)| key == id).map_or(&themes.colors, |(_, p)| p);

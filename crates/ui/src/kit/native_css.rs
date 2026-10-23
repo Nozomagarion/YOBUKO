@@ -215,7 +215,8 @@ struct StyleNode {
     parent: Option<usize>,
     class: String,
     name: Option<String>,
-    state: u8,
+    /// Pointer states (hover 1, active 2, disabled 4, focus 8) and the host's ([`mark`]).
+    state: u16,
     /// The device sheet this node is the root of (its hash), or 0.
     sheet: u64,
 }
@@ -328,10 +329,10 @@ pub fn enter(class: &str, name: Option<&str>, response: Option<&egui::Response>)
         }
         let key = hash.finish();
         let state = response.map_or(0, |r| {
-            u8::from(r.hovered())
-                | u8::from(r.is_pointer_button_down_on()) << 1
-                | u8::from(!r.enabled()) << 2
-                | u8::from(r.has_focus()) << 3
+            u16::from(r.hovered())
+                | u16::from(r.is_pointer_button_down_on()) << 1
+                | u16::from(!r.enabled()) << 2
+                | u16::from(r.has_focus()) << 3
         });
         let node = StyleNode { key, parent, class: class.into(), name: name.map(str::to_owned), state, sheet: 0 };
         let index = engine.nodes.len();
@@ -341,11 +342,52 @@ pub fn enter(class: &str, name: Option<&str>, response: Option<&egui::Response>)
     })
 }
 
+/// A state of a control or a track that only the host knows, for selectors such as `:checked`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostState {
+    /// A toggle that is on: a switched-on button, a soloed or armed track's button.
+    Checked = 16,
+    /// The selected track (its header, column or mixer strip).
+    Selected = 32,
+    /// Playing: the play button while the transport runs, a playing clip.
+    Playing = 64,
+    /// Recording: the record button while it records.
+    Recording = 128,
+    /// A track armed for recording.
+    Armed = 256,
+    /// A muted track.
+    Muted = 512,
+}
+
+/// The host states and the selector names they match.
+pub(crate) const HOST_STATES: [(u16, &str); 6] =
+    [(16, "checked"), (32, "selected"), (64, "playing"), (128, "recording"), (256, "armed"), (512, "muted")];
+
+/// Marks the element now in scope with `state` when `on`, so the sheet's `:checked`,
+/// `:selected` and the others match it from the next frame.
+pub fn mark(state: HostState, on: bool) {
+    if !on {
+        return;
+    }
+    ENGINE.with(|engine| {
+        let mut engine = engine.borrow_mut();
+        if let Some(&at) = engine.parents.last()
+            && let Some(node) = engine.nodes.get_mut(at)
+        {
+            node.state |= state as u16;
+        }
+    });
+}
+
 pub fn leave() {
     ENGINE.with(|engine| {
         engine.borrow_mut().parents.pop();
     });
 }
+
+/// Buttons a theme selects by id, as `#control-NAME`: the toolbar's and a track's.
+pub const CONTROL_IDS: &[&str] =
+    &["play", "stop", "record", "browser-toggle", "metronome-toggle", "solo", "cue", "arm", "track-on"];
 
 /// Level fields a theme selects by id (`#arrangement-volume`).
 pub const LEVEL_FIELDS: &[&str] = &["arrangement-volume", "arrangement-pan", "mixer-volume", "mixer-pan"];
@@ -354,10 +396,7 @@ pub const LEVEL_FIELDS: &[&str] = &["arrangement-volume", "arrangement-pan", "mi
 /// literal ids; others get one derived from their key.
 fn element_id(node: &StyleNode) -> String {
     if node.class == "button"
-        && let Some(name) = node
-            .name
-            .as_deref()
-            .filter(|name| ["play", "stop", "record", "browser-toggle", "metronome-toggle"].contains(name))
+        && let Some(name) = node.name.as_deref().filter(|name| CONTROL_IDS.contains(name))
     {
         return format!("control-{name}");
     }

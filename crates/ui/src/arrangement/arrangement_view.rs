@@ -3678,7 +3678,13 @@ fn track_header(
     actions: &mut Vec<Action>,
 ) {
     let mut work_trace = crate::kit::frame_trace::WorkSpan::new("arrangement track header");
-    let _style_class = crate::kit::style_class::enter("track-header");
+    let _style_class = crate::kit::style_class::enter_named("track-header", &format!("track-{}", lane.track.0));
+    crate::kit::native_css::mark(
+        crate::kit::native_css::HostState::Selected,
+        state.selected_tracks.contains(&lane.track),
+    );
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, lane.mute);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Armed, lane.armed);
     work_trace.mark("style");
     let _artwork = crate::kit::artwork::track_color(rgb(lane.color));
     let spacious = rect.height() >= 60.0;

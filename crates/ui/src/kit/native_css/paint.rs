@@ -142,7 +142,7 @@ fn draw(painter: &Painter, rect: Rect, gradient: &Gradient, radius: f32, opacity
     };
     let color = Color32::WHITE.gamma_multiply(opacity);
     mesh.vertices.push(egui::epaint::Vertex { pos: rect.center(), uv: uv(rect.center()), color });
-    let radius = radius.clamp(0.0, rect.width().min(rect.height()) * 0.5);
+    let radius = radius.clamp(0.0, (rect.width().min(rect.height()) * 0.5).max(0.0));
     let corners = [
         (rect.left_top() + Vec2::splat(radius), std::f32::consts::PI),
         (rect.right_top() + Vec2::new(-radius, radius), -std::f32::consts::FRAC_PI_2),
@@ -169,6 +169,9 @@ fn draw(painter: &Painter, rect: Rect, gradient: &Gradient, radius: f32, opacity
 /// background paints nothing, rather than a see-through hole in the window. Returns the radius
 /// used, for what the control draws on top.
 pub fn surface(painter: &Painter, rect: Rect, radius: f32, fill: egui::Color32) -> f32 {
+    if !rect.is_positive() || !rect.is_finite() {
+        return 0.0;
+    }
     let style = super::super::style_class::computed();
     let radius = style.as_ref().filter(|s| s.authored.radius).map_or(radius, |s| s.radius);
     let radius = radius.min(rect.height().min(rect.width()) / 2.0).max(0.0);

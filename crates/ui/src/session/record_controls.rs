@@ -28,6 +28,7 @@ pub fn record_button(ui: &Ui, painter: &Painter, rect: Rect, recording: bool, ac
     let label = if recording { "Stop recording" } else { "Record into the arrangement" };
     let response = widgets::button_area(ui, rect, Id::new("record"), label);
     let _style = crate::kit::style_class::enter_named_response("button", "record", &response);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Recording, recording);
     if response.clicked() {
         actions.push(Action::new("transport.record", json!({ "on": !recording })));
     }

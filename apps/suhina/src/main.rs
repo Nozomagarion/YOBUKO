@@ -7,6 +7,7 @@
 // Release builds on Windows start without a console window.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod crash_log;
 mod liquid;
 #[cfg(target_os = "macos")]
 mod mac_menu;
@@ -125,6 +126,10 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // A crash leaves a file in <data>/crashes/, which a start from the desktop otherwise loses.
+    if let Some(folder) = eframe::storage_dir(app_id()) {
+        crash_log::install(folder.join("crashes"));
+    }
     // One app per build: a second start hands its project to the first and exits.
     let repaint = std::sync::Arc::new(std::sync::OnceLock::new());
     let Ok(agents) = endpoints(&args, &repaint) else { return ExitCode::SUCCESS };
@@ -361,6 +366,7 @@ impl eframe::App for Window {
     }
 
     fn ui(&mut self, ui: &mut eframe::egui::Ui, frame: &mut eframe::Frame) {
+        crash_log::set_theme(&self.app.settings().theme);
         // Asked once the GPU and the window are both there, which can be a frame or two in.
         if self.see_through.is_none()
             && let (Some(gpu), Some(window)) = (frame.wgpu_render_state(), frame.winit_window())
@@ -869,7 +875,20 @@ fn load_keymap() -> (Keymap, Vec<String>) {
 fn save_file(name: &str, text: &str) -> Result<(), String> {
     let dir = eframe::storage_dir(app_id()).ok_or("there is no folder to keep settings in")?;
     std::fs::create_dir_all(&dir).map_err(|e| save_error::message(name, &e))?;
-    std::fs::write(dir.join(name), text).map_err(|e| save_error::message(name, &e))
+    write_whole(&dir.join(name), text).map_err(|e| save_error::message(name, &e))
+}
+
+/// Writes `text` to `path` whole or not at all: into a file beside it, then renamed over it, so a
+/// crash or a full disk while writing never leaves the settings half written (they would then be
+/// read as defaults).
+fn write_whole(path: &Path, text: &str) -> std::io::Result<()> {
+    let mut temporary = path.as_os_str().to_owned();
+    temporary.push(".tmp");
+    let temporary = PathBuf::from(temporary);
+    std::fs::write(&temporary, text)?;
+    std::fs::rename(&temporary, path).inspect_err(|_| {
+        let _removed = std::fs::remove_file(&temporary);
+    })
 }
 
 #[cfg(test)]
@@ -878,6 +897,18 @@ mod tests {
 
     fn parse(v: &[&str]) -> Result<Option<Args>, String> {
         parse_args(&v.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn settings_are_written_whole_over_the_old_file() {
+        let dir = std::env::temp_dir().join(format!("suhina-write-whole-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("settings.txt");
+        std::fs::write(&path, "old").unwrap();
+        write_whole(&path, "animations = off\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "animations = off\n");
+        assert!(!dir.join("settings.txt.tmp").exists());
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

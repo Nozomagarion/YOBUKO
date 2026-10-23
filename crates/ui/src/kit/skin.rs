@@ -199,7 +199,7 @@ pub fn valid_role(role: &str) -> bool {
                 return false;
             }
         }
-        if parts.peek().is_some_and(|part| matches!(*part, "hover" | "active" | "disabled")) {
+        if parts.peek().is_some_and(|part| matches!(*part, "hover" | "active" | "disabled" | "on")) {
             parts.next();
         }
         if let Some(frame) = parts.next() {
@@ -543,15 +543,20 @@ pub fn encode_png(bytes: &[u8]) -> Result<Arc<str>, String> {
 pub enum State {
     Normal,
     Hover,
+    /// Pressed.
     Active,
     Disabled,
+    /// A toggle that is on and not pressed: artwork `ROLE.on`, else `ROLE.active`.
+    On,
 }
 impl State {
     pub fn response(response: &egui::Response, on: bool) -> Self {
         if !response.enabled() {
             Self::Disabled
-        } else if on || response.is_pointer_button_down_on() {
+        } else if response.is_pointer_button_down_on() {
             Self::Active
+        } else if on {
+            Self::On
         } else if response.hovered() {
             Self::Hover
         } else {
@@ -655,7 +660,7 @@ fn paint_variant(
     let suffix = match state {
         State::Normal => "",
         State::Hover => ".hover",
-        State::Active => ".active",
+        State::Active | State::On => ".active",
         State::Disabled => ".disabled",
     };
     static DEFAULTS: std::sync::OnceLock<BTreeMap<String, String>> = std::sync::OnceLock::new();
@@ -700,7 +705,7 @@ fn paint_variant(
             "knob.body" => super::theme::control_background(),
             "fader.rail" => super::motion::mix(super::theme::control_background(), Color32::BLACK, 0.65),
             "fader.cap" => super::motion::mix(
-                if matches!(state, State::Hover | State::Active) {
+                if matches!(state, State::Hover | State::Active | State::On) {
                     super::theme::control_hover()
                 } else {
                     super::theme::control_background()

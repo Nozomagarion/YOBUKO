@@ -54,6 +54,11 @@ pub fn level_bar(
     align: Align2,
 ) {
     use crate::kit::skin::{self, State};
+    // A field squeezed below a point (a track being resized, a panel opening) draws nothing:
+    // clamping to a range whose top is under its bottom would panic.
+    if !rect.is_finite() || rect.height() < 1.0 || rect.width() < 1.0 {
+        return;
+    }
     let state = if hover > 0.5 { State::Hover } else { State::Normal };
     let height = crate::kit::native_css::thickness(rect.height()).clamp(1.0, rect.height());
     let track = Rect::from_center_size(rect.center(), Vec2::new(rect.width(), height));

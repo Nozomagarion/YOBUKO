@@ -250,16 +250,13 @@ impl Themes {
                 if theme::is_built_in(base) {
                     return None;
                 }
-                let new = if same_id(&slug(&name), &old) { old.clone() } else { self.free_id(&name) };
+                // The folder keeps its name: it is the theme's id, which the settings and its
+                // variants refer to, and another folder may already have the name's id.
                 for entry in self.entries.iter_mut().filter(|e| crate::kit::theme_vars::split_id(&e.id).0 == old) {
                     entry.theme.name = name.clone();
-                    entry.id = entry.id.replacen(&old, &new, 1);
                 }
-                if new != old {
-                    self.actions.push(Pending::Other(Box::new(FileAction::Rename { from: old, to: new.clone() })));
-                }
-                self.actions.push(Pending::Save(new.clone()));
-                (!same_id(&new, current)).then_some(new)
+                self.actions.push(Pending::Save(old));
+                None
             }
             ThemeRequest::Duplicate => {
                 let name = format!("{} copy", self.get(current).map_or("Suhina Dark", |t| t.name.as_str()));

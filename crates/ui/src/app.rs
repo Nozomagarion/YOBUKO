@@ -6943,6 +6943,7 @@ impl App {
         if !crate::kit::control_layout::placement("transport-play").hidden {
             let response = widgets::button_area(ui, play, Id::new("play"), "Play");
             let play_style = crate::kit::style_class::enter_named_response("button", "play", &response);
+            crate::kit::native_css::mark(crate::kit::native_css::HostState::Playing, grid.running);
             if response.clicked() {
                 actions.push(self.play_action(false));
             }

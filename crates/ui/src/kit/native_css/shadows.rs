@@ -25,7 +25,7 @@ fn distance(point: Pos2, rect: Rect, radius: f32) -> f32 {
     if !rect.is_positive() {
         return f32::INFINITY;
     }
-    let radius = radius.clamp(0.0, rect.width().min(rect.height()) * 0.5);
+    let radius = radius.clamp(0.0, (rect.width().min(rect.height()) * 0.5).max(0.0));
     let q = (point - rect.center()).abs() - rect.size() * 0.5 + Vec2::splat(radius);
     q.max(Vec2::ZERO).length() + q.x.max(q.y).min(0.0) - radius
 }
