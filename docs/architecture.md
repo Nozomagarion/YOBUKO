@@ -417,10 +417,11 @@ registrations when the next capture no longer uses them, bounding retained image
 
 ## Native theme styles
 
-The UI kit owns static SVG rasterization, scoped theme values and an experimental
-Stylo/Taffy adapter through Blitz's safe DOM API. The host supplies bounded role trees;
-themes supply CSS, never HTML or scripts. The adapter has no network or shell provider,
-uses sequential style traversal and caches computed class contexts on the UI thread.
+The UI kit owns static SVG rasterization, scoped theme values and the native style
+adapter over `suhina-style` (ADR 0031): Suhina's own parser, selectors, cascade layers,
+variables, media queries, Taffy layout and motion, with no browser engine. The host
+supplies bounded role trees; themes supply CSS, never markup or scripts. The adapter has
+no network or file access and caches computed class contexts on the UI thread.
 A retained scope tree carries project identities and native interaction states; changed
 snapshots publish computed values on the following repaint. Connected surfaces paint
 bounded cached gradient ramps/spatial textures and inset/outset shadow textures; scoped
@@ -429,8 +430,9 @@ The toolbar and optional workspace panel layout consume Taffy's rectangles for b
 native controls and input clipping. CSS-owned browser/detail sizes bypass native
 splitters while preserving saved native sizes. Token-level CSS validation bounds source
 size and nesting and reports known unsupported effects without deleting source.
-The document persists for an unchanged scope structure. State snapshots and egui's
-clock drive Stylo transitions/keyframes for connected paint properties. Active motion
+Computed targets persist for an unchanged scope structure. State changes start native
+transitions from the painted value, and egui's clock samples transitions and keyframe
+animations for connected paint properties. Active motion
 requests repainting at 16 ms and respects the global animation/high-contrast settings;
 geometry animation is not yet consumed by native panel layout.
 No theme work runs on the audio thread. The desktop theme-file service owns portable

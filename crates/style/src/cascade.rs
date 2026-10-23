@@ -196,7 +196,7 @@ fn compute_inner(
                     parent.map_or_else(|| property.initial(), |parent| parent.get(property))
                 }
                 "unset" => property.initial(),
-                other => match property.parse(other) {
+                other => match property.parse(&crate::value::viewport_units(other, viewport.width, viewport.height)) {
                     Ok(value) => value,
                     Err(error) if checked => return Err(error),
                     Err(_) => continue,
@@ -227,7 +227,9 @@ fn compute_inner(
                                 Some(shorthand) => shorthand.part(property, &value),
                                 None => Ok(value),
                             })
-                            .and_then(|value| property.parse(&value));
+                            .and_then(|value| {
+                                property.parse(&crate::value::viewport_units(&value, viewport.width, viewport.height))
+                            });
                         match value {
                             Ok(value) => values.push((property, value)),
                             Err(error) if checked => return Err(error),

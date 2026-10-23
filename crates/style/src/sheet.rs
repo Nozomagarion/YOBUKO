@@ -572,7 +572,12 @@ fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) ->
             let (value, important) = raw.strip_suffix("!important").map_or((raw, false), |s| (s.trim_end(), true));
             if !value.contains("var(") && !matches!(value, "inherit" | "initial" | "unset") {
                 let failure = shorthand.longhands().iter().find_map(|property| {
-                    shorthand.part(*property, value).and_then(|part| property.parse(&part).map(|_| ())).err()
+                    shorthand
+                        .part(*property, value)
+                        .and_then(|part| {
+                            property.parse(&crate::value::viewport_units(&part, 1000.0, 1000.0)).map(|_| ())
+                        })
+                        .err()
                 });
                 if let Some(message) = failure {
                     sheet.notice(at, format!("{name}: {message}"));
@@ -609,7 +614,7 @@ fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) ->
             && !value.contains("var(")
             && !matches!(value, "inherit" | "initial" | "unset")
             && let Some(property) = Property::from_name(&name)
-            && let Err(message) = property.parse(value)
+            && let Err(message) = property.parse(&crate::value::viewport_units(value, 1000.0, 1000.0))
         {
             sheet.notice(at, format!("{name}: {message}"));
             continue;

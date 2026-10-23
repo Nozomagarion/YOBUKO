@@ -109,6 +109,38 @@ enum Space {
     Srgb,
     SrgbLinear,
     Oklab,
+    /// Polar spaces: their hue (degrees) is interpolated along the shorter arc.
+    Hsl,
+    Oklch,
+}
+
+fn rgb_to_hsl([r, g, b]: [f32; 3]) -> [f32; 3] {
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let lightness = (max + min) / 2.0;
+    let delta = max - min;
+    if delta <= f32::EPSILON {
+        return [f32::NAN, 0.0, lightness];
+    }
+    let saturation = delta / (1.0 - (2.0 * lightness - 1.0).abs()).max(f32::EPSILON);
+    let hue = if max == r {
+        ((g - b) / delta).rem_euclid(6.0)
+    } else if max == g {
+        (b - r) / delta + 2.0
+    } else {
+        (r - g) / delta + 4.0
+    } * 60.0;
+    [hue, saturation, lightness]
+}
+
+fn hsl_to_rgb([hue, saturation, lightness]: [f32; 3]) -> [f32; 3] {
+    let hue = if hue.is_finite() { hue.rem_euclid(360.0) / 30.0 } else { 0.0 };
+    let a = saturation * lightness.min(1.0 - lightness);
+    let channel = |n: f32| {
+        let k = (n + hue) % 12.0;
+        lightness - a * (k - 3.0).min(9.0 - k).clamp(-1.0, 1.0)
+    };
+    [channel(0.0), channel(8.0), channel(4.0)]
 }
 
 fn linear(channel: f32) -> f32 {
@@ -135,6 +167,22 @@ impl Space {
                     0.025_904_037 * l + 0.782_771_77 * m - 0.808_675_77 * s,
                 ]
             }
+            Self::Hsl => rgb_to_hsl([r, g, b]),
+            Self::Oklch => {
+                let [l, a, b] = Self::Oklab.to([r, g, b]);
+                let chroma = a.hypot(b);
+                let hue = if chroma < 1e-4 { f32::NAN } else { b.atan2(a).to_degrees().rem_euclid(360.0) };
+                [l, chroma, hue]
+            }
+        }
+    }
+
+    /// The index of the hue component in a polar space.
+    fn hue(self) -> Option<usize> {
+        match self {
+            Self::Hsl => Some(0),
+            Self::Oklch => Some(2),
+            _ => None,
         }
     }
 
@@ -152,6 +200,11 @@ impl Space {
                     gamma(-0.004_196_086_3 * l - 0.703_418_6 * m + 1.707_614_7 * s),
                 ]
             }
+            Self::Hsl => hsl_to_rgb([x, y, z]),
+            Self::Oklch => {
+                let hue = if z.is_finite() { z.to_radians() } else { 0.0 };
+                Self::Oklab.from([x, y * hue.cos(), y * hue.sin()])
+            }
         }
     }
 }
@@ -163,7 +216,9 @@ fn mix(parser: &mut Parser<'_, '_>) -> Result<[u8; 4], String> {
         "srgb" => Space::Srgb,
         "srgb-linear" => Space::SrgbLinear,
         "oklab" => Space::Oklab,
-        _ => return Err("color-mix supports srgb, srgb-linear and oklab".into()),
+        "hsl" => Space::Hsl,
+        "oklch" => Space::Oklch,
+        _ => return Err("color-mix supports srgb, srgb-linear, oklab, hsl and oklch".into()),
     };
     let mut items = Vec::new();
     for _ in 0..2 {
@@ -213,6 +268,24 @@ fn mix(parser: &mut Parser<'_, '_>) -> Result<[u8; 4], String> {
     let mixed_alpha = alpha(a) * (1.0 - weight) + alpha(b) * weight;
     let mut out = [0.0f32; 3];
     for i in 0..3 {
+        if Some(i) == space.hue() {
+            // Hue is not premultiplied; a missing (powerless) hue takes the other's; the
+            // shorter arc is taken.
+            let (h1, h2) = match (ca[i].is_finite(), cb[i].is_finite()) {
+                (true, true) => (ca[i], cb[i]),
+                (true, false) => (ca[i], ca[i]),
+                (false, true) => (cb[i], cb[i]),
+                (false, false) => (0.0, 0.0),
+            };
+            let mut delta = h2 - h1;
+            if delta > 180.0 {
+                delta -= 360.0;
+            } else if delta < -180.0 {
+                delta += 360.0;
+            }
+            out[i] = (h1 + delta * weight).rem_euclid(360.0);
+            continue;
+        }
         let premultiplied = ca[i] * alpha(a) * (1.0 - weight) + cb[i] * alpha(b) * weight;
         out[i] = if mixed_alpha > 0.0 { premultiplied / mixed_alpha } else { 0.0 };
     }
@@ -261,6 +334,53 @@ pub enum Length {
     Percent(f32),
     Fr(f32),
     Auto,
+}
+
+/// `source` with viewport units (`vw`, `vh`, `vmin`, `vmax`) written as points of a
+/// `width` by `height` window, so lengths stay single-unit. Other text is kept as written.
+pub fn viewport_units(source: &str, width: f32, height: f32) -> String {
+    if !source.contains("vw") && !source.contains("vh") && !source.contains("vmin") && !source.contains("vmax") {
+        return source.to_owned();
+    }
+    fn walk(parser: &mut Parser<'_, '_>, out: &mut String, width: f32, height: f32, depth: usize) {
+        while let Ok(token) = parser.next_including_whitespace_and_comments().cloned() {
+            match token {
+                Token::Dimension { value, ref unit, .. }
+                    if matches!(unit.to_ascii_lowercase().as_str(), "vw" | "vh" | "vmin" | "vmax") =>
+                {
+                    let basis = match unit.to_ascii_lowercase().as_str() {
+                        "vw" => width,
+                        "vh" => height,
+                        "vmin" => width.min(height),
+                        _ => width.max(height),
+                    };
+                    out.push_str(&format!("{}px", value * basis / 100.0));
+                }
+                Token::Function(_) | Token::ParenthesisBlock | Token::SquareBracketBlock | Token::CurlyBracketBlock
+                    if depth < 32 =>
+                {
+                    let (open, close) = match &token {
+                        Token::Function(name) => (format!("{name}("), ')'),
+                        Token::SquareBracketBlock => ("[".into(), ']'),
+                        Token::CurlyBracketBlock => ("{".into(), '}'),
+                        _ => ("(".into(), ')'),
+                    };
+                    out.push_str(&open);
+                    let _ = parser.parse_nested_block(|inner| {
+                        walk(inner, out, width, height, depth + 1);
+                        Ok::<(), cssparser::ParseError<'_, ()>>(())
+                    });
+                    out.push(close);
+                }
+                other => out.push_str(&cssparser::ToCss::to_css_string(&other)),
+            }
+        }
+    }
+    let mut input = ParserInput::new(source);
+    let mut parser = Parser::new(&mut input);
+    let mut out = String::with_capacity(source.len());
+    walk(&mut parser, &mut out, width, height, 0);
+    out
 }
 
 /// A bounded `calc()` operand: an amount with one unit, or a plain number.
@@ -466,6 +586,14 @@ mod tests {
     }
 
     #[test]
+    fn viewport_units_become_points_of_the_window() {
+        assert_eq!(viewport_units("clamp(10px, 1vw, 14px)", 1200.0, 800.0), "clamp(10px, 12px, 14px)");
+        assert_eq!(Length::parse(&viewport_units("clamp(10px, 1vw, 14px)", 600.0, 800.0)), Ok(Length::Px(10.0)));
+        assert_eq!(viewport_units("50vh", 100.0, 300.0), "150px");
+        assert_eq!(viewport_units("10px red", 1.0, 1.0), "10px red");
+    }
+
+    #[test]
     fn math_functions_resolve_lengths_of_one_unit() {
         assert_eq!(Length::parse("calc(10px + 2px)"), Ok(Length::Px(12.0)));
         assert_eq!(Length::parse("calc((1em + 0.5em) * 2)"), Ok(Length::Em(3.0)));
@@ -502,8 +630,14 @@ mod tests {
             panic!("oklab mix")
         };
         assert!(mixed[1] > 0x34 && mixed[1] < 0xf0, "{mixed:?}");
+        // Hue spaces take the shorter arc: red and blue meet at magenta, not green.
+        let Ok(Color::Rgba(hsl)) = Color::parse("color-mix(in hsl, red, blue)") else { panic!("hsl") };
+        assert_eq!(hsl, [255, 0, 255, 255]);
+        let Ok(Color::Rgba(oklch)) = Color::parse("color-mix(in oklch, red, blue)") else { panic!("oklch") };
+        assert!(oklch[0] > 100 && oklch[2] > 100 && oklch[1] < 100, "{oklch:?}");
+        assert_eq!(Color::parse("color-mix(in hsl, white, white)"), Ok(Color::Rgba([255, 255, 255, 255])));
         for bad in [
-            "color-mix(in hsl, red, blue)",
+            "color-mix(in lab, red, blue)",
             "color-mix(red, blue)",
             "color-mix(in srgb, currentColor, blue)",
             "color-mix(in srgb, red)",

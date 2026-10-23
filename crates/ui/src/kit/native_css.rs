@@ -1,20 +1,22 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Stylo computed styles and Taffy layout, consumed by native egui controls.
+//! Native computed styles, Taffy layout and motion, consumed by native egui controls.
 //!
-//! The host supplies a bounded tree; themes never supply HTML or executable code.
-//! No resource provider is installed. This module is UI-thread-only.
+//! The host supplies a bounded tree; themes never supply markup or executable code.
+//! Everything resolves through `suhina-style`; there is no browser engine. A sheet that does
+//! not parse keeps the last working one. This module is UI-thread-only.
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use blitz_dom::{DocumentConfig, StyleThreading};
-use blitz_html::HtmlDocument;
-use blitz_traits::net::DummyNetProvider;
-use blitz_traits::shell::{ColorScheme, Viewport};
 use egui::{Color32, Rect, Vec2};
+use suhina_style::{
+    motion::{self, Animation, Frames, Transition},
+    property::Property,
+    value::Value,
+};
 
 use super::{skin, theme};
 mod diagnostics;
@@ -33,7 +35,7 @@ const MAX_CONTEXTS: usize = 128;
 const MAX_DEPTH: usize = 16;
 const MAX_NODES: usize = 4096;
 
-/// Styles exposed by native painters. Parsed CSS support is broader than this paint adapter.
+/// Styles exposed by native painters. Only properties a painter draws are here.
 #[derive(Clone, Debug)]
 pub struct Computed {
     pub color: Color32,
@@ -47,15 +49,99 @@ pub struct Computed {
     gradients: Arc<[paint::Gradient]>,
     shadows: Arc<[shadows::Shadow]>,
     text_shadows: Arc<[text::Shadow]>,
+    transitions: Arc<[Transition]>,
+    animations: Arc<[(Animation, Arc<Frames>)]>,
 }
 impl Computed {
     pub fn has_gradient(&self) -> bool {
         !self.gradients.is_empty()
     }
+
+    /// The value a transition or keyframe animation interpolates for `property`.
+    fn animated(&self, property: Property) -> Option<Value> {
+        use suhina_style::value::{Color, Length};
+        let color = |c: Color32| Value::Color(Color::Rgba(c.to_srgba_unmultiplied()));
+        Some(match property {
+            Property::Color => color(self.color),
+            Property::BackgroundColor => color(self.background),
+            Property::BorderColor => color(self.border),
+            Property::Opacity => Value::Number(self.opacity),
+            Property::FontSize => Value::Length(Length::Px(self.font_size)),
+            Property::Radius => Value::Length(Length::Px(self.radius)),
+            _ => return None,
+        })
+    }
+
+    fn set_animated(&mut self, property: Property, value: &Value) {
+        use suhina_style::value::{Color, Length};
+        let color = |v: &Value| match v {
+            Value::Color(Color::Rgba([r, g, b, a])) => Some(Color32::from_rgba_unmultiplied(*r, *g, *b, *a)),
+            _ => None,
+        };
+        let px = |v: &Value| match v {
+            Value::Length(Length::Px(n)) if n.is_finite() => Some(*n),
+            _ => None,
+        };
+        match property {
+            Property::Color => {
+                if let Some(c) = color(value) {
+                    self.color = c;
+                    self.authored.color = true;
+                }
+            }
+            Property::BackgroundColor => {
+                if let Some(c) = color(value) {
+                    self.background = c;
+                    self.authored.background = true;
+                }
+            }
+            Property::BorderColor => {
+                if let Some(c) = color(value) {
+                    self.border = c;
+                    self.authored.border = true;
+                }
+            }
+            Property::Opacity => {
+                if let Value::Number(n) = value
+                    && n.is_finite()
+                {
+                    self.opacity = n.clamp(0.0, 1.0);
+                }
+            }
+            Property::FontSize => {
+                if let Some(n) = px(value) {
+                    self.font_size = n.clamp(7.0, 96.0);
+                    self.authored.font_size = true;
+                }
+            }
+            Property::Radius => {
+                if let Some(n) = px(value) {
+                    self.radius = n.clamp(0.0, 128.0);
+                    self.authored.radius = true;
+                }
+            }
+            Property::TextShadow | Property::BoxShadow => {
+                if let Value::Shadows(list) = value {
+                    let foreground = self.color.to_srgba_unmultiplied();
+                    let resolved: Vec<_> = list
+                        .iter()
+                        .take(suhina_style::paint::DRAWN_SHADOW_LAYERS)
+                        .map(|shadow| shadow.resolve(self.font_size, foreground))
+                        .collect();
+                    if property == Property::TextShadow {
+                        self.text_shadows = resolved.iter().map(text::Shadow::from_native).collect::<Vec<_>>().into();
+                    } else {
+                        self.shadows = resolved.iter().map(shadows::Shadow::from_native).collect::<Vec<_>>().into();
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Only authored properties override native defaults. An unrelated CSS rule must not
-/// replace every label's native colour, size or corner radius with browser defaults.
+/// replace every label's native colour, size or corner radius with defaults.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Authored {
     pub color: bool,
@@ -63,6 +149,25 @@ pub struct Authored {
     pub border: bool,
     pub font_size: bool,
     pub radius: bool,
+}
+
+/// One running transition of one property of one element.
+#[derive(Clone, Debug)]
+struct Running {
+    property: Property,
+    from: Value,
+    to: Value,
+    start: f64,
+    transition: Transition,
+}
+
+/// Motion state of one element, kept while its key exists.
+#[derive(Clone, Debug, Default)]
+struct Motion {
+    /// When its current animation list started, and the names that identify the list.
+    started: f64,
+    names: Vec<String>,
+    running: Vec<Running>,
 }
 
 #[derive(Default)]
@@ -80,8 +185,11 @@ struct Engine {
     parents: Vec<usize>,
     occurrences: HashMap<(u64, String), usize>,
     previous: Vec<StyleNode>,
+    /// Resolved styles before motion, by element key.
+    targets: HashMap<u64, Computed>,
+    /// What painters read: the targets with transitions and animations applied.
     values: HashMap<u64, Computed>,
-    document: Option<HtmlDocument>,
+    motions: HashMap<u64, Motion>,
     native: Option<native::Paint>,
     motion: bool,
     styles_changed: bool,
@@ -123,9 +231,8 @@ pub fn frame_with_motion(ui: &egui::Ui, motion: bool) -> Frame {
         let mut engine = engine.borrow_mut();
         if engine.motion != motion {
             engine.motion = motion;
-            engine.document = None;
-            engine.previous.clear();
-            engine.values.clear();
+            engine.motions.clear();
+            engine.styles_changed = true;
         }
         engine.collecting = engine.source.is_some();
         engine.nodes.clear();
@@ -181,7 +288,9 @@ pub fn leave() {
     });
 }
 
-fn html_id(node: &StyleNode) -> String {
+/// The element id a theme selects a scope by: documented controls and panels keep their
+/// literal ids; others get one derived from their key.
+fn element_id(node: &StyleNode) -> String {
     if node.class == "button"
         && let Some(name) = node
             .name
@@ -203,15 +312,80 @@ fn html_id(node: &StyleNode) -> String {
     }
 }
 
-fn native_state(state: u8) -> style_dom::ElementState {
-    use style_dom::ElementState as S;
-    let mut result = if state & 4 != 0 { S::DISABLED } else { S::ENABLED };
-    for (bit, value) in [(1, S::HOVER), (2, S::ACTIVE), (8, S::FOCUS | S::FOCUSRING)] {
-        if state & bit != 0 {
-            result.insert(value);
+/// Applies running transitions and keyframe animations to `target` at time `now`; returns
+/// the painted values and whether anything is still moving.
+fn animate(motion: &mut Motion, target: &Computed, now: f64) -> (Computed, bool) {
+    let mut value = target.clone();
+    let mut moving = false;
+    if !target.animations.is_empty() {
+        let names: Vec<String> = target.animations.iter().map(|(a, _)| a.name.clone()).collect();
+        if motion.names != names {
+            motion.names = names;
+            motion.started = now;
         }
+        let elapsed = (now - motion.started) as f32;
+        for (animation, frames) in target.animations.iter() {
+            moving |= motion::running(animation, elapsed);
+            let Some(progress) = motion::progress(animation, elapsed) else { continue };
+            let base = |property: Property| target.animated(property).unwrap_or(Value::Keyword(""));
+            for (property, sampled) in motion::sample(frames, progress, animation.easing, base) {
+                value.set_animated(property, &sampled);
+            }
+        }
+    } else {
+        motion.names.clear();
     }
-    result
+    motion.running.retain(|running| {
+        let duration = f64::from(running.transition.duration.max(f32::EPSILON));
+        let t = ((now - running.start) / duration) as f32;
+        if t >= 1.0 {
+            return false;
+        }
+        let eased = running.transition.easing.apply(t.max(0.0));
+        let sampled = motion::sample(
+            &vec![
+                (0.0, vec![(running.property, running.from.clone())]),
+                (1.0, vec![(running.property, running.to.clone())]),
+            ],
+            eased,
+            motion::Easing::Linear,
+            |_| running.to.clone(),
+        );
+        for (property, sampled) in sampled {
+            value.set_animated(property, &sampled);
+        }
+        moving = true;
+        true
+    });
+    (value, moving)
+}
+
+/// Starts transitions for the animatable properties that changed from `old` to `new`, from the
+/// value currently painted.
+fn start_transitions(motion: &mut Motion, old: &Computed, new: &Computed, painted: &Computed, now: f64) {
+    for property in [
+        Property::Color,
+        Property::BackgroundColor,
+        Property::BorderColor,
+        Property::Opacity,
+        Property::FontSize,
+        Property::Radius,
+    ] {
+        let (Some(before), Some(after)) = (old.animated(property), new.animated(property)) else { continue };
+        if before == after {
+            continue;
+        }
+        let Some(transition) = motion::find(&new.transitions, property) else { continue };
+        let from = painted.animated(property).unwrap_or(before);
+        motion.running.retain(|running| running.property != property);
+        motion.running.push(Running {
+            property,
+            from,
+            to: after,
+            start: now + f64::from(transition.delay),
+            transition,
+        });
+    }
 }
 
 fn finish_tree(now: f64) -> (bool, bool) {
@@ -219,113 +393,57 @@ fn finish_tree(now: f64) -> (bool, bool) {
         let mut engine = engine.borrow_mut();
         engine.collecting = false;
         let changed = engine.nodes != engine.previous;
-        let animating_before = engine.document.as_ref().is_some_and(|doc| doc.is_animating());
+        let moving_before = !engine.motions.values().all(|m| m.running.is_empty() && m.names.is_empty());
         if engine.source.is_none()
-            || (!changed
-                && !engine.styles_changed
-                && !animating_before
-                && (engine.document.is_some() || (engine.native.is_some() && !engine.values.is_empty())))
+            || engine.native.is_none()
+            || (!changed && !engine.styles_changed && !moving_before && !engine.targets.is_empty())
         {
             return (false, false);
         }
-        if engine.native.is_some() {
-            if let Some(values) = suhina_plugins::trace::timed("style paint resolve", || native::retained(&engine)) {
-                engine.values = values.into_iter().collect();
+        if changed || engine.styles_changed || engine.targets.is_empty() {
+            let Some(resolved) = suhina_plugins::trace::timed("style paint resolve", || native::retained(&engine))
+            else {
+                // A tree the engine cannot resolve keeps the last painted values.
                 engine.previous = engine.nodes.clone();
                 engine.styles_changed = false;
-                engine.document = None;
-                return (true, false);
-            }
-            // A substituted value may require an unsupported feature. Switch the
-            // entire sheet back, never publish a partly computed native snapshot.
-            engine.native = None;
-        }
-        let same_tree = engine.nodes.len() == engine.previous.len()
-            && engine
-                .nodes
-                .iter()
-                .zip(&engine.previous)
-                .all(|(a, b)| a.key == b.key && a.parent == b.parent && a.class == b.class && a.name == b.name);
-        let styles_changed = engine.styles_changed;
-        let retained = if same_tree { engine.document.take() } else { None };
-        let mut doc = if let Some(doc) = retained {
-            doc
-        } else {
-            let mut body = String::from("<!doctype html><html><body>");
-            let mut open = Vec::new();
-            for (index, node) in engine.nodes.iter().enumerate() {
-                while open.last().copied() != node.parent {
-                    if open.pop().is_none() {
-                        break;
-                    }
-                    body.push_str("</div>");
-                }
-                body.push_str(&format!("<div id=\"{}\" class=\"{}\"", html_id(node), node.class));
-                if let Some(name) = &node.name {
-                    body.push_str(&format!(" data-object=\"{name}\""));
-                }
-                body.push('>');
-                open.push(index);
-            }
-            for _ in open {
-                body.push_str("</div>");
-            }
-            body.push_str("</body></html>");
-            let defaults = format!("html,body {{ margin:0; color:var(--text-primary); font-size:{}px; }}", theme::TEXT);
-            let Some(doc) = document(&engine, &body, &defaults) else {
                 return (false, false);
             };
-            doc
-        };
-        let mut states: Vec<_> = engine.nodes.iter().map(|node| node.state).collect();
-        for node in &engine.nodes {
-            if node.state & 1 == 0 {
-                continue;
-            }
-            let mut parent = node.parent;
-            while let Some(index) = parent {
-                let Some(node) = engine.nodes.get(index) else {
-                    break;
-                };
-                if let Some(state) = states.get_mut(index) {
-                    *state |= 1;
-                }
-                parent = node.parent;
-            }
-        }
-        let mut ids = Vec::new();
-        for (index, node) in engine.nodes.iter().enumerate() {
-            let state = states.get(index).copied().unwrap_or(0);
-            let Some(id) = doc.get_element_by_id(&html_id(node)) else {
-                continue;
-            };
-            let desired = native_state(state);
-            let mask = style_dom::ElementState::HOVER
-                | style_dom::ElementState::ACTIVE
-                | style_dom::ElementState::DISABLED
-                | style_dom::ElementState::ENABLED
-                | style_dom::ElementState::FOCUS
-                | style_dom::ElementState::FOCUSRING;
-            if doc.get_node(id).is_some_and(|target| target.element_state().intersection(mask) != desired) {
-                doc.snapshot_node_state_only(id);
-                if let Some(target) = doc.get_node_mut(id) {
-                    target.element_state_mut().remove(mask);
-                    target.element_state_mut().insert(desired);
-                    target.mark_ancestors_dirty();
+            let targets: HashMap<u64, Computed> = resolved.into_iter().collect();
+            if engine.motion {
+                let Engine { motions, values, targets: old, .. } = &mut *engine;
+                for (key, new) in &targets {
+                    if let (Some(old), Some(painted)) = (old.get(key), values.get(key)) {
+                        start_transitions(motions.entry(*key).or_default(), old, new, painted, now);
+                    }
                 }
             }
-            ids.push((node.key, id));
+            engine.motions.retain(|key, _| targets.contains_key(key));
+            engine.targets = targets;
+            engine.previous = engine.nodes.clone();
         }
-        suhina_plugins::trace::timed("legacy CSS resolve", || doc.resolve(now));
-        let values = ids.into_iter().filter_map(|(key, id)| computed(&doc, id).map(|values| (key, values))).collect();
+        let styles_changed = std::mem::take(&mut engine.styles_changed);
+        let mut moving = false;
+        let mut values = HashMap::with_capacity(engine.targets.len());
+        let motion_enabled = engine.motion;
+        let Engine { targets, motions, .. } = &mut *engine;
+        for (key, target) in targets.iter() {
+            if motion_enabled
+                && (!target.animations.is_empty() || motions.get(key).is_some_and(|m| !m.running.is_empty()))
+            {
+                let (value, still) = animate(motions.entry(*key).or_default(), target, now);
+                moving |= still;
+                values.insert(*key, value);
+            } else {
+                values.insert(*key, target.clone());
+            }
+        }
+        if !moving {
+            engine.motions.retain(|_, m| !m.running.is_empty() || !m.names.is_empty());
+        }
         engine.values = values;
-        engine.previous = engine.nodes.clone();
-        let animating = engine.motion && doc.is_animating();
-        engine.document = Some(doc);
-        engine.styles_changed = false;
-        // Publish the final sample too: once the animation stops, the preceding
-        // frame still painted its penultimate values.
-        (changed || styles_changed || animating || animating_before, animating)
+        // Publish the final sample too: once motion stops, the preceding frame still
+        // painted its penultimate values.
+        (changed || styles_changed || moving || moving_before, moving)
     })
 }
 
@@ -347,8 +465,8 @@ pub fn begin_frame(ui: &egui::Ui) {
     for (key, _, color) in palette.tokens() {
         let variable = key.replace('.', "-");
         // Only referenced palette variables affect this stylesheet. Resetting all
-        // style/layout caches for an unrelated opacity tick made native controls
-        // rebuild many complete Stylo documents during every drag frame.
+        // style/layout caches for an unrelated opacity tick rebuilt every control's
+        // style during every drag frame.
         // Escaped identifiers are conservatively treated as depending on all tokens.
         if key != "text.primary"
             && !source.as_deref().is_some_and(|css| css.contains('\\') || css.contains(&format!("--{variable}")))
@@ -366,32 +484,33 @@ pub fn begin_frame(ui: &egui::Ui) {
             let native = suhina_plugins::trace::timed("style paint parse", || {
                 source.as_deref().and_then(|source| native::Paint::new(source, &variables))
             });
-            *engine = Engine { source, palette: variables, size, dark, native, ..Default::default() };
-        } else if engine.size != size || engine.dark != dark || engine.palette != variables {
-            // Palette drags and native resizing do not change the scope tree or
-            // authored CSS. Keep its document and last computed snapshot so that
-            // every control does not fall back to building its own Stylo document.
-            // The retained document resolves the new inputs at the end of this pass.
-            let previous_palette = engine.palette.clone();
-            let viewport_changed = engine.size != size || engine.dark != dark;
-            if let Some(doc) = engine.document.as_mut() {
-                if previous_palette != variables {
-                    doc.remove_user_agent_stylesheet(&previous_palette);
-                    doc.add_user_agent_stylesheet(&variables);
+            match native {
+                Some(native) => {
+                    let motion = engine.motion;
+                    *engine = Engine {
+                        source,
+                        palette: variables,
+                        size,
+                        dark,
+                        native: Some(native),
+                        motion,
+                        ..Default::default()
+                    };
                 }
-                if viewport_changed {
-                    doc.set_viewport(Viewport::new(
-                        size[0],
-                        size[1],
-                        1.0,
-                        if dark { ColorScheme::Dark } else { ColorScheme::Light },
-                    ));
+                None => {
+                    // A sheet that does not parse (a half-saved file) keeps the last
+                    // working styles; its error is shown by the theme editor.
+                    engine.source = source;
                 }
             }
+        } else if engine.size != size || engine.dark != dark || engine.palette != variables {
+            // Palette drags and native resizing do not change the scope tree or
+            // authored CSS. Keep the last computed snapshot and resolve the new inputs
+            // once at the end of this pass.
             engine.palette = variables;
             let palette = engine.palette.clone();
-            if engine.native.as_mut().is_some_and(|paint| paint.palette(&palette).is_none()) {
-                engine.native = None;
+            if let Some(paint) = engine.native.as_mut() {
+                let _ = paint.palette(&palette);
             }
             engine.size = size;
             engine.dark = dark;
@@ -401,176 +520,6 @@ pub fn begin_frame(ui: &egui::Ui) {
             engine.workspace = None;
         }
     });
-}
-
-fn document(engine: &Engine, body: &str, defaults: &str) -> Option<HtmlDocument> {
-    let css = engine.source.as_ref()?;
-    if inspect(css).is_err() {
-        return None;
-    }
-    // Stylesheets are supplied through the CSS API, never interpolated into HTML.
-    let config = DocumentConfig {
-        viewport: Some(Viewport::new(
-            engine.size[0],
-            engine.size[1],
-            1.0,
-            if engine.dark { ColorScheme::Dark } else { ColorScheme::Light },
-        )),
-        net_provider: Some(Arc::new(DummyNetProvider)),
-        style_threading: StyleThreading::Sequential,
-        ..Default::default()
-    };
-    let mut doc = HtmlDocument::from_html(body, config);
-    doc.add_user_agent_stylesheet(defaults);
-    doc.add_user_agent_stylesheet(&engine.palette);
-    if !engine.motion {
-        doc.add_user_agent_stylesheet("* { animation:none !important; transition:none !important; }");
-    }
-    let sheet = doc.make_stylesheet(css.as_ref(), style::stylesheets::Origin::Author);
-    let root = doc.try_root_element()?.id;
-    doc.add_stylesheet_for_node(sheet, root);
-    Some(doc)
-}
-
-fn rgba(color: &style::color::AbsoluteColor) -> Color32 {
-    let [r, g, b, a] = rgba_bytes(color);
-    Color32::from_rgba_unmultiplied(r, g, b, a)
-}
-
-fn rgba_bytes(color: &style::color::AbsoluteColor) -> [u8; 4] {
-    let srgb = color.to_color_space(style::color::ColorSpace::Srgb);
-    let channels = srgb.raw_components();
-    let byte = |v: f32| (v.clamp(0.0, 1.0) * 255.0).round() as u8;
-    [byte(channels[0]), byte(channels[1]), byte(channels[2]), byte(channels[3])]
-}
-
-// Compatibility boundary only. Native painters have no Stylo types.
-fn legacy_shadow(
-    shadow: &style::values::computed::effects::SimpleShadow,
-    foreground: &style::color::AbsoluteColor,
-) -> suhina_style::paint::ResolvedShadow {
-    suhina_style::paint::ResolvedShadow {
-        offset: [shadow.horizontal.px(), shadow.vertical.px()],
-        blur: shadow.blur.0.px(),
-        spread: 0.0,
-        color: rgba_bytes(&shadow.color.resolve_to_absolute(foreground)),
-        inset: false,
-    }
-}
-
-fn authored_property(
-    doc: &HtmlDocument,
-    id: blitz_dom::NodeId,
-    property: style::properties::LonghandId,
-    inherited: bool,
-) -> bool {
-    use style::properties::PropertyDeclarationId;
-    use style::rule_tree::CascadeOrigin;
-    let guard = doc.guard().read();
-    let mut current = Some(id);
-    for _ in 0..MAX_DEPTH + 3 {
-        let Some(node) = current.and_then(|id| doc.get_node(id)) else {
-            break;
-        };
-        if let Some(values) = node.primary_styles()
-            && let Some(rules) = &values.rules
-        {
-            for rule in rules.self_and_ancestors() {
-                if !matches!(
-                    rule.cascade_level().origin(),
-                    CascadeOrigin::Author | CascadeOrigin::Animations | CascadeOrigin::Transitions
-                ) {
-                    continue;
-                }
-                if let Some(source) = rule.style_source()
-                    && source.read(&guard).contains(PropertyDeclarationId::Longhand(property))
-                {
-                    return true;
-                }
-            }
-        }
-        if !inherited {
-            break;
-        }
-        current = node.parent;
-    }
-    false
-}
-
-fn computed(doc: &HtmlDocument, id: blitz_dom::NodeId) -> Option<Computed> {
-    use style::properties::{LonghandId, PropertyDeclarationId};
-    let node = doc.get_node(id)?;
-    let values = node.primary_styles()?;
-    let color = values.clone_color();
-    let background = values.clone_background_color().resolve_to_absolute(&color);
-    let border = values.clone_border_top_color().resolve_to_absolute(&color);
-    let radius = values.computed_value_to_string(PropertyDeclarationId::Longhand(LonghandId::BorderTopLeftRadius));
-    let radius = radius
-        .split_whitespace()
-        .next()
-        .and_then(|v| v.strip_suffix("px"))
-        .and_then(|v| v.parse::<f32>().ok())
-        .unwrap_or(0.0)
-        .clamp(0.0, 128.0);
-    let serialized = values.computed_value_to_string(PropertyDeclarationId::Longhand(LonghandId::BackgroundImage));
-    let mut hash = std::hash::DefaultHasher::new();
-    serialized.hash(&mut hash);
-    rgba(&color).hash(&mut hash);
-    let key = hash.finish();
-    let gradients = values
-        .get_background()
-        .background_image
-        .0
-        .iter()
-        .take(4)
-        .enumerate()
-        .filter_map(|(index, image)| {
-            if let style::values::computed::Image::Gradient(gradient) = image {
-                paint::Gradient::from_css(gradient, &color, key.wrapping_add(index as u64))
-            } else {
-                None
-            }
-        })
-        .collect::<Vec<_>>()
-        .into();
-    Some(Computed {
-        gradients,
-        text_shadows: values
-            .clone_text_shadow()
-            .0
-            .iter()
-            .take(4)
-            .map(|shadow| text::Shadow::from_native(&legacy_shadow(shadow, &color)))
-            .collect::<Vec<_>>()
-            .into(),
-        shadows: values
-            .clone_box_shadow()
-            .0
-            .iter()
-            .take(4)
-            .map(|shadow| {
-                let mut value = legacy_shadow(&shadow.base, &color);
-                value.spread = shadow.spread.px();
-                value.inset = shadow.inset;
-                shadows::Shadow::from_native(&value)
-            })
-            .collect::<Vec<_>>()
-            .into(),
-        authored: Authored {
-            color: authored_property(doc, id, LonghandId::Color, true),
-            background: authored_property(doc, id, LonghandId::BackgroundColor, false),
-            border: authored_property(doc, id, LonghandId::BorderTopColor, false),
-            font_size: authored_property(doc, id, LonghandId::FontSize, true),
-            radius: authored_property(doc, id, LonghandId::BorderTopLeftRadius, false),
-        },
-        visible: values.computed_value_to_string(PropertyDeclarationId::Longhand(LonghandId::Visibility)) == "visible",
-        color: rgba(&color),
-        background: rgba(&background),
-        border: rgba(&border),
-        font_size: values.clone_font_size().computed_size().px().clamp(7.0, 96.0),
-        radius,
-        opacity: values.clone_opacity().clamp(0.0, 1.0),
-    })
 }
 
 /// Compute inherited colours and native typography for the active class ancestry.
@@ -599,26 +548,7 @@ pub fn scoped(stack: &[String]) -> Option<Computed> {
         if engine.contexts.len() >= MAX_CONTEXTS {
             return None;
         }
-        if engine.native.is_some() {
-            if let Some(values) = native::scoped(&engine, stack) {
-                engine.contexts.insert(stack.to_vec(), values.clone());
-                return Some(values);
-            }
-            engine.native = None;
-        }
-        let mut body = String::from("<!doctype html><html><body>");
-        for (index, class) in stack.iter().enumerate() {
-            body.push_str(&format!("<div class=\"{class}\" id=\"scope-{index}\">"));
-        }
-        for _ in stack {
-            body.push_str("</div>");
-        }
-        body.push_str("</body></html>");
-        let defaults = format!("html,body {{ margin:0; color:var(--text-primary); font-size:{}px; }}", theme::TEXT);
-        let mut doc = document(&engine, &body, &defaults)?;
-        doc.resolve(0.0);
-        let id = doc.get_element_by_id(&format!("scope-{}", stack.len() - 1))?;
-        let values = computed(&doc, id)?;
+        let values = native::scoped(&engine, stack)?;
         engine.contexts.insert(stack.to_vec(), values.clone());
         Some(values)
     })
@@ -635,80 +565,52 @@ pub struct Module {
 pub fn toolbar_layout_requested() -> bool {
     ENGINE.with(|engine| engine.borrow().toolbar_layout)
 }
-fn requests_layout(doc: &HtmlDocument, id: blitz_dom::NodeId) -> bool {
-    use style::properties::LonghandId::*;
-    [
-        Display,
-        Width,
-        Height,
-        Order,
-        FlexDirection,
-        FlexWrap,
-        FlexGrow,
-        FlexShrink,
-        FlexBasis,
-        JustifyContent,
-        AlignItems,
-        AlignSelf,
-        GridTemplateColumns,
-        GridTemplateRows,
-        GridColumnStart,
-        GridColumnEnd,
-        GridRowStart,
-        GridRowEnd,
-        ColumnGap,
-        RowGap,
-        MarginLeft,
-        MarginRight,
-        MarginTop,
-        MarginBottom,
-        PaddingLeft,
-        PaddingRight,
-        PaddingTop,
-        PaddingBottom,
-        Visibility,
-    ]
-    .into_iter()
-    .any(|property| authored_property(doc, id, property, false))
-}
 
 /// Flex/Grid layout for actual ordered, visible module ids. No theme-supplied markup.
 pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
-    if order.len() > skin::MODULES.len() || order.iter().any(|(id, _)| !skin::MODULES.contains(&id.as_str())) {
+    if order.len() > skin::MODULES.len()
+        || order.iter().any(|(id, _)| !skin::MODULES.contains(&id.as_str()))
+        || !size.is_finite()
+    {
         return None;
     }
     ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
         engine.source.as_ref()?;
-        if engine.source != skin::current().css { return None; }
+        if engine.source != skin::current().css {
+            return None;
+        }
         let key = format!("{order:?}:{size:?}");
-        if let Some((previous, modules)) = &engine.toolbar && previous == &key {
+        if let Some((previous, modules)) = &engine.toolbar
+            && previous == &key
+        {
             return Some(modules.clone());
         }
-        let mut body = String::from("<!doctype html><html><body class=\"window\"><div class=\"toolbar\" id=\"toolbar\">");
-        let mut defaults = format!("html,body {{ margin:0; }} .toolbar {{ display:flex; width:{}px; height:{}px; gap:4px; align-items:center; }} .toolbar-module {{ flex-shrink:0; height:{}px; }}", size.x.max(1.0),size.y.max(1.0),size.y.max(24.0));
+        let mut defaults = format!(
+            ".toolbar {{ display:flex; width:{}px; height:{}px; gap:4px; align-items:center; }} .toolbar-module {{ flex-shrink:0; height:{}px; }}",
+            size.x.clamp(1.0, 16384.0),
+            size.y.clamp(1.0, 16384.0),
+            size.y.clamp(24.0, 16384.0)
+        );
         for (id, width) in order {
-            body.push_str(&format!("<div class=\"toolbar-module {id}\" id=\"{id}\"></div>"));
-            defaults.push_str(&format!("#{id} {{ width:{}px; }}",width.clamp(1.0,4096.0)));
+            defaults.push_str(&format!("#{id} {{ width:{}px; }}", width.clamp(1.0, 4096.0)));
         }
-        body.push_str("</div></body></html>");
-        let mut doc = document(&engine, &body, &defaults)?;
-        doc.resolve(0.0);
-        engine.toolbar_layout = doc.get_element_by_id("toolbar").is_some_and(|id| requests_layout(&doc,id))
-            || order.iter().any(|(name,_)| doc.get_element_by_id(name).is_some_and(|id| requests_layout(&doc,id)));
+        let mut elements = vec![native::element("toolbar", Some("toolbar"), None, Some(1))];
+        for (id, _) in order {
+            let mut module = native::element("toolbar-module", Some(id), None, Some(2));
+            module.classes.push(id.clone());
+            elements.push(module);
+        }
+        let laid = native::layout(&engine, elements, &defaults, [size.x, size.y])?;
+        engine.toolbar_layout = laid.requested;
         let mut modules = Vec::new();
-        for (name, _) in order {
-            let id = doc.get_element_by_id(name)?;
-            let node = doc.get_node(id)?;
-            let layout = node.final_layout();
-            if !node.has_boxes() { continue; }
-            let position = node.absolute_position(0.0,0.0);
-            let rect = Rect::from_min_size(egui::pos2(position.x,position.y), Vec2::new(layout.size.width,layout.size.height));
-            if !rect.is_finite() || rect.width() > 16384.0 || rect.height() > 16384.0 { return None; }
-            let style=computed(&doc,id)?;
-            if style.visible { modules.push(Module { name:name.clone(),rect,style }); }
+        for ((name, _), (rect, style)) in order.iter().zip(laid.items.into_iter().skip(1)) {
+            let Some(rect) = rect else { continue };
+            if style.visible {
+                modules.push(Module { name: name.clone(), rect, style });
+            }
         }
-        engine.toolbar = Some((key,modules.clone()));
+        engine.toolbar = Some((key, modules.clone()));
         Some(modules)
     })
 }
@@ -717,104 +619,120 @@ pub fn toolbar(order: &[(String, f32)], size: Vec2) -> Option<Vec<Module>> {
 mod tests {
     use super::*;
     #[test]
-    fn native_linear_gradients_match_legacy_ramp_pixels() {
-        for image in [
-            "linear-gradient(red,blue)",
-            "linear-gradient(to right, red, transparent)",
-            "linear-gradient(145deg, #12345620, currentColor 70%, #000)",
-            "linear-gradient(to top right, white 0 45%, green 45% 100%)",
-            "repeating-linear-gradient(90deg, transparent 0 21px, #e5ece7 21px 22px)",
-            "linear-gradient(red, green, blue), linear-gradient(90deg, #fff3, #0008)",
-            "radial-gradient(ellipse at 65% 45%, #29424280, transparent 70%)",
-            "radial-gradient(circle 10px at left top, red, blue)",
-            "radial-gradient(closest-side, red, blue 50%, green)",
-            "radial-gradient(circle farthest-side at 20% 80%, red, blue)",
-            "repeating-radial-gradient(red 0 4px, blue 4px 8px)",
-            "conic-gradient(from 90deg at 25% 75%, red, blue 0.25turn, green 50%)",
-            "repeating-conic-gradient(red 0 10%, blue 10% 20%)",
+    fn native_gradients_publish_every_layer_and_their_end_colours() {
+        for (image, layers, first, last) in [
+            ("linear-gradient(red,blue)", 1, Color32::RED, Color32::BLUE),
+            ("linear-gradient(to right, red, transparent)", 1, Color32::RED, Color32::TRANSPARENT),
+            (
+                "linear-gradient(to top right, white 0 45%, green 45% 100%)",
+                1,
+                Color32::WHITE,
+                Color32::from_rgb(0, 128, 0),
+            ),
+            (
+                "repeating-linear-gradient(90deg, transparent 0 21px, #e5ece7 21px 22px)",
+                1,
+                Color32::TRANSPARENT,
+                Color32::from_rgb(0xe5, 0xec, 0xe7),
+            ),
+            ("linear-gradient(red, green, blue), linear-gradient(90deg, #fff3, #0008)", 2, Color32::RED, Color32::BLUE),
+            (
+                "radial-gradient(ellipse at 65% 45%, #29424280, transparent 70%)",
+                1,
+                Color32::from_rgba_unmultiplied(0x29, 0x42, 0x42, 0x80),
+                Color32::TRANSPARENT,
+            ),
+            ("radial-gradient(circle 10px at left top, red, blue)", 1, Color32::RED, Color32::BLUE),
+            (
+                "conic-gradient(from 90deg at 25% 75%, red, blue 0.25turn, green 50%)",
+                1,
+                Color32::RED,
+                Color32::from_rgb(0, 128, 0),
+            ),
+            ("repeating-conic-gradient(red 0 10%, blue 10% 20%)", 1, Color32::RED, Color32::BLUE),
         ] {
             let css = format!(".button {{color:#34789a; background-image:{image};}}");
             prepare(&css, 800.0);
-            let stack = ["button".into()];
-            let native = scoped(&stack).unwrap();
-            ENGINE.with(|engine| {
-                let mut engine = engine.borrow_mut();
-                assert!(engine.native.is_some(), "{image}");
-                engine.native = None;
-                engine.contexts.clear();
-            });
-            let legacy = scoped(&stack).unwrap();
-            assert_eq!(native.gradients.len(), legacy.gradients.len());
-            assert!(!native.gradients.is_empty());
-            for (native, legacy) in native.gradients.iter().zip(legacy.gradients.iter()) {
-                for basis in [17.0, 100.0, 480.0] {
-                    let size = Vec2::new(basis, basis * 0.5);
-                    assert!(
-                        native
-                            .geometry_samples(size)
-                            .iter()
-                            .zip(legacy.geometry_samples(size))
-                            .all(|(a, b)| (a - b).abs() < 0.00001)
-                    );
-                    for (native, legacy) in native.pixel_samples(basis).iter().zip(legacy.pixel_samples(basis)) {
-                        assert!(
-                            native.to_array().iter().zip(legacy.to_array()).all(|(a, b)| a.abs_diff(b) <= 2),
-                            "{image}: {native:?} != {legacy:?}"
-                        );
-                    }
-                }
+            let style = scoped(&["button".into()]).unwrap();
+            assert_eq!(style.gradients.len(), layers, "{image}");
+            let gradient = &style.gradients[0];
+            let samples = gradient.pixel_samples(100.0);
+            let close = |a: Color32, b: Color32| a.to_array().iter().zip(b.to_array()).all(|(x, y)| x.abs_diff(y) <= 2);
+            assert!(close(samples[0], first), "{image}: {:?}", samples[0]);
+            if !image.starts_with("repeating") {
+                assert!(close(samples[1023], last), "{image}: {:?}", samples[1023]);
+            } else {
+                assert!(samples.iter().any(|s| close(*s, last)), "{image}");
             }
+            let geometry = gradient.geometry_samples(Vec2::new(100.0, 50.0));
+            assert!(geometry.iter().all(|v| v.is_finite()), "{image}");
         }
         skin::configure(&skin::Skin::default());
     }
     #[test]
-    fn native_paint_matches_legacy_values_without_constructing_html() {
-        for css in [
+    fn native_paint_values_resolve_variables_currentcolor_em_and_media() {
+        let rgba = Color32::from_rgba_unmultiplied;
+        prepare(
             ".button { color:#123456; background-color:#abcdef80; border-color:currentColor; border-radius:4px; opacity:.7; }",
+            800.0,
+        );
+        let style = scoped(&["toolbar".into(), "button".into()]).unwrap();
+        assert_eq!(style.color, Color32::from_rgb(0x12, 0x34, 0x56));
+        assert_eq!(style.background, rgba(0xab, 0xcd, 0xef, 0x80));
+        assert_eq!(style.border, Color32::from_rgb(0x12, 0x34, 0x56));
+        assert_eq!(style.radius, 4.0);
+        assert!((style.opacity - 0.7).abs() < 1e-6);
+        assert_eq!(
+            style.authored,
+            Authored { color: true, background: true, border: true, font_size: false, radius: true }
+        );
+        prepare(
             ":root { --ink:#2468ac; } .toolbar { color:var(--ink); font-size:12px; } .button { font-size:1.5em; border-radius:.25em; box-shadow:inset 0 1px 2px -1px #fff4, 1px 2px 3px currentColor; text-shadow:0 1px 1px #000a; }",
-            ".toolbar { font-size:12px; color:rgba(12, 34, 56, .5); } @media (max-width:900px) { .button { color:#654321; } }",
-            ".button { box-shadow:0 0 2px; text-shadow:1px 2px; }",
-            ".toolbar { font-size:12px; text-shadow:1em 1em 1em currentColor; } .button { font-size:20px; color:red; }",
-        ] {
-            prepare(css, 800.0);
-            let stack = ["toolbar".into(), "button".into()];
-            let native = scoped(&stack).unwrap();
-            ENGINE.with(|engine| {
-                let mut engine = engine.borrow_mut();
-                assert!(engine.native.is_some(), "{css}");
-                assert!(engine.document.is_none());
-                engine.native = None;
-                engine.contexts.clear();
-            });
-            let legacy = scoped(&stack).unwrap();
-            assert_eq!(native.color, legacy.color, "{css}");
-            assert_eq!(native.background, legacy.background, "{css}");
-            assert_eq!(native.border, legacy.border, "{css}");
-            assert_eq!(native.radius, legacy.radius, "{css}");
-            assert_eq!(native.font_size, legacy.font_size, "{css}");
-            assert_eq!(native.opacity, legacy.opacity, "{css}");
-            assert_eq!(native.authored, legacy.authored, "{css}");
-            assert_eq!(native.shadows, legacy.shadows, "{css}");
-            assert_eq!(native.text_shadows, legacy.text_shadows, "{css}");
+            800.0,
+        );
+        let style = scoped(&["toolbar".into(), "button".into()]).unwrap();
+        assert_eq!(style.color, Color32::from_rgb(0x24, 0x68, 0xac));
+        assert_eq!(style.font_size, 18.0);
+        assert_eq!(style.radius, 4.5);
+        assert_eq!(style.shadows.len(), 2);
+        assert_eq!(style.text_shadows.len(), 1);
+        assert!(style.authored.color && style.authored.font_size);
+        for (width, expected) in
+            [(800.0, Color32::from_rgb(0x0c, 0x22, 0x38)), (600.0, Color32::from_rgb(0x65, 0x43, 0x21))]
+        {
+            prepare(
+                ".toolbar { font-size:12px; color:rgba(12, 34, 56, .5); } @media (max-width:700px) { .button { color:#654321; } }",
+                width,
+            );
+            let style = scoped(&["toolbar".into(), "button".into()]).unwrap();
+            assert_eq!(style.color.to_srgba_unmultiplied()[..3], expected.to_srgba_unmultiplied()[..3], "{width}");
         }
         skin::configure(&skin::Skin::default());
     }
 
     #[test]
-    fn unsupported_native_expressions_keep_the_whole_legacy_style() {
+    fn unsupported_declarations_are_skipped_and_the_rest_of_the_sheet_applies() {
         for css in [
             ".button { color:red; background-image:radial-gradient(in oklch, blue, green); }",
-            ":root { --ink:color-mix(in hsl, red, blue); } .button { color:var(--ink); }",
-            ".button { color:blue; border-radius:calc(2px + 2px); }",
+            ".button { color:red; filter:blur(2px); }",
         ] {
             prepare(css, 800.0);
             let actual = scoped(&["button".into()]).unwrap();
-            ENGINE.with(|engine| assert!(engine.borrow().native.is_none(), "{css}"));
-            assert!(actual.authored.color);
-            if css.contains("radial-gradient") {
-                assert!(actual.has_gradient());
-            }
+            assert!(actual.authored.color, "{css}");
+            assert_eq!(actual.color, Color32::RED, "{css}");
+            assert!(!actual.has_gradient(), "{css}");
+            assert!(!inspect(css).unwrap().is_empty(), "{css}");
         }
+        // A variable that does not make a valid colour makes the property unset, as in CSS:
+        // the colour is inherited, not the earlier declaration's.
+        prepare(":root { --ink:color-mix(in lab, red, blue); } .button { color:red; color:var(--ink); }", 800.0);
+        assert_ne!(scoped(&["button".into()]).unwrap().color, Color32::RED);
+        // A sheet that cannot be parsed at all keeps the last working styles.
+        prepare(".button { color:blue; }", 800.0);
+        let _ = scoped(&["button".into()]);
+        let deep = format!(".button {{ color:red; }} {}", "@media (min-width:1px) {".repeat(20));
+        prepare(&deep, 800.0);
+        ENGINE.with(|engine| assert!(engine.borrow().native.is_some(), "the previous sheet stays"));
         skin::configure(&skin::Skin::default());
     }
 
@@ -837,21 +755,19 @@ mod tests {
         ENGINE.with(|engine| {
             let engine = engine.borrow();
             assert_eq!(engine.values[&2].color, Color32::from_rgb(0x44, 0x55, 0x66));
-            assert!(engine.document.is_none());
         });
-        for (source, native) in [
-            (".button { color:#abcdef; }", true),
-            (".button { color:#abcdef; background-image:radial-gradient(in oklch, red, blue); }", false),
-            (".button { color:#abcdef; }", true),
+        for source in [
+            ".button { color:#abcdef; }",
+            ".button { color:#abcdef; background-image:radial-gradient(in oklch, red, blue); }",
+            ".button { color:#abcdef; }",
         ] {
             prepare(source, 800.0);
             ENGINE.with(|engine| engine.borrow_mut().nodes = nodes.clone());
             assert_eq!(finish_tree(0.3), (true, false));
             ENGINE.with(|engine| {
                 let engine = engine.borrow();
-                assert_eq!(engine.values[&2].color, Color32::from_rgb(0xab, 0xcd, 0xef));
-                assert_eq!(engine.native.is_some(), native);
-                assert_eq!(engine.document.is_some(), !native);
+                assert_eq!(engine.values[&2].color, Color32::from_rgb(0xab, 0xcd, 0xef), "{source}");
+                assert!(engine.native.is_some());
                 assert_eq!(engine.values.len(), 2);
             });
         }
@@ -995,7 +911,6 @@ mod tests {
                 };
                 assert_eq!(engine.values[&browser.key].color, expected);
                 assert!(!engine.styles_changed);
-                assert!(engine.document.is_none(), "native palette samples created a Stylo document");
             });
         }
         theme::local_palette(saved);
@@ -1036,46 +951,6 @@ mod tests {
         skin::configure(&skin::Skin::default());
     }
     #[test]
-    #[ignore = "manual same-build comparison of staged native and legacy paint resolution"]
-    fn measure_native_paint_migration() {
-        let saved = theme::palette();
-        let css = ".window { color:var(--text-primary); } .button { background-color:#123456; border-radius:3px; box-shadow:0 1px 2px #0008; } .toolbar .button { text-shadow:0 1px #0008; }";
-        for native in [false, true] {
-            ENGINE.with(|engine| *engine.borrow_mut() = Engine::default());
-            prepare(css, 800.0);
-            if !native {
-                ENGINE.with(|engine| engine.borrow_mut().native = None);
-            }
-            let ctx = egui::Context::default();
-            let mut samples = Vec::new();
-            for sample in 0..62 {
-                let mut palette = saved;
-                palette.text_primary = Color32::from_rgba_unmultiplied(40, 60, 50, 100 + sample);
-                theme::local_palette(palette);
-                let start = std::time::Instant::now();
-                ctx.run_ui(egui::RawInput::default(), |ui| {
-                    let _frame = frame(ui);
-                    let _window = super::super::style_class::enter("window");
-                    for class in ["toolbar", "browser", "session", "mixer", "settings"] {
-                        let _scope = super::super::style_class::enter(class);
-                        for _ in 0..8 {
-                            let _button = super::super::style_class::enter("button");
-                        }
-                    }
-                })
-                .textures_delta
-                .clear();
-                if sample > 1 {
-                    samples.push(start.elapsed().as_secs_f64() * 1000.0);
-                }
-            }
-            samples.sort_by(f64::total_cmp);
-            eprintln!("native={native}: median {:.3} ms, max {:.3} ms", samples[30], samples[59]);
-        }
-        theme::local_palette(saved);
-        skin::configure(&skin::Skin::default());
-    }
-    #[test]
     fn unreferenced_palette_edits_keep_computed_contexts_but_variables_invalidate() {
         let saved = theme::palette();
         prepare(".browser { color: var(--accent); background-color: white; }", 800.0);
@@ -1109,7 +984,7 @@ mod tests {
         .clear();
     }
     #[test]
-    fn stylo_resolves_variables_layers_modern_colors_and_media() {
+    fn native_engine_resolves_variables_layers_calc_and_media() {
         prepare(
             "@layer base,custom; @layer base { .browser { color:red; }} @layer custom { :root { --ink:rgb(10 20 30); } .browser { color:var(--ink); font-size:calc(10px + 2px); }} @media (max-width:500px) { .browser { color:rgb(30 40 50); }}",
             800.0,
@@ -1263,7 +1138,7 @@ mod tests {
         skin::configure(&skin::Skin::default());
     }
     #[test]
-    fn retained_document_advances_keyframes_and_motion_setting_suppresses_them() {
+    fn keyframes_advance_with_the_clock_and_the_motion_setting_suppresses_them() {
         let css = ".browser { color:red; animation:ink 1s linear forwards; } @keyframes ink { from {color:red;} to {color:blue;} }";
         for motion in [true, false] {
             prepare(css, 800.0);
@@ -1294,13 +1169,13 @@ mod tests {
                 assert_eq!(colors[2], Color32::BLUE);
             } else {
                 assert_eq!(colors, [Color32::RED; 3]);
-                assert!(!ENGINE.with(|engine| engine.borrow().document.as_ref().unwrap().is_animating()));
+                assert!(ENGINE.with(|engine| engine.borrow().motions.values().all(|m| m.running.is_empty())));
             }
         }
         skin::configure(&skin::Skin::default());
     }
     #[test]
-    fn native_state_change_starts_a_transition_instead_of_restarting_the_document() {
+    fn native_state_change_starts_a_transition() {
         prepare(
             ".button { background-color:red; transition:background-color 1s linear; } .button:disabled { background-color:blue; }",
             800.0,

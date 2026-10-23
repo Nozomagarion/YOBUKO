@@ -3,39 +3,16 @@
 
 //! Resolve computed CSS gradient geometry against the native surface's real size.
 use egui::{Vec2, vec2};
-use style::values::computed::Length;
-use style::values::computed::image::{EndingShape, LineDirection};
-use style::values::computed::position::Position;
-use style::values::generics::image::{Circle, Ellipse, ShapeExtent};
-use style::values::specified::position::{HorizontalPositionKeyword as X, VerticalPositionKeyword as Y};
 
 #[derive(Clone, Debug)]
 pub(super) enum Geometry {
     Native(suhina_style::gradient::Direction, suhina_style::gradient::Shape),
-    Linear(LineDirection),
-    Radial(EndingShape, Position),
-    Conic { angle: f32, position: Position },
 }
 
 pub(super) enum Mapping {
     Linear { axis: Vec2, basis: f32, center: Vec2 },
     Radial { center: Vec2, radii: Vec2 },
     Conic { center: Vec2, angle: f32 },
-}
-
-fn center(position: &Position, size: Vec2) -> Vec2 {
-    vec2(position.horizontal.resolve(Length::new(size.x)).px(), position.vertical.resolve(Length::new(size.y)).px())
-}
-
-fn extent(extent: ShapeExtent, size: Vec2, center: Vec2, circle: bool) -> Vec2 {
-    use suhina_style::gradient::Extent as E;
-    let native = match extent {
-        ShapeExtent::ClosestSide | ShapeExtent::Contain => E::ClosestSide,
-        ShapeExtent::ClosestCorner => E::ClosestCorner,
-        ShapeExtent::FarthestSide => E::FarthestSide,
-        ShapeExtent::FarthestCorner | ShapeExtent::Cover => E::FarthestCorner,
-    };
-    native_extent(native, size, center, circle)
 }
 
 /// A length of the box's `size` on one axis, in points.
@@ -100,32 +77,6 @@ impl Geometry {
                     Shape::Conic { from, at: position } => Mapping::Conic { center: at(position), angle: *from },
                 }
             }
-            Self::Linear(direction) => {
-                let x = |value: X| if value == X::Left { -1.0 } else { 1.0 };
-                let y = |value: Y| if value == Y::Top { -1.0 } else { 1.0 };
-                let axis = match direction {
-                    LineDirection::Angle(angle) => vec2(angle.radians().sin(), -angle.radians().cos()),
-                    LineDirection::Horizontal(value) => vec2(x(*value), 0.0),
-                    LineDirection::Vertical(value) => vec2(0.0, y(*value)),
-                    LineDirection::Corner(horizontal, vertical) => {
-                        vec2(x(*horizontal) * size.y, y(*vertical) * size.x).normalized()
-                    }
-                };
-                Mapping::Linear { axis, basis: axis.x.abs() * size.x + axis.y.abs() * size.y, center: size * 0.5 }
-            }
-            Self::Radial(shape, position) => {
-                let center = center(position, size);
-                let radii = match shape {
-                    EndingShape::Circle(Circle::Radius(radius)) => Vec2::splat(radius.0.px()),
-                    EndingShape::Circle(Circle::Extent(value)) => extent(*value, size, center, true),
-                    EndingShape::Ellipse(Ellipse::Radii(x, y)) => {
-                        vec2(x.0.resolve(Length::new(size.x)).px(), y.0.resolve(Length::new(size.y)).px())
-                    }
-                    EndingShape::Ellipse(Ellipse::Extent(value)) => extent(*value, size, center, false),
-                };
-                Mapping::Radial { center, radii: radii.max(Vec2::splat(f32::EPSILON)) }
-            }
-            Self::Conic { angle, position } => Mapping::Conic { center: center(position, size), angle: *angle },
         }
     }
 }

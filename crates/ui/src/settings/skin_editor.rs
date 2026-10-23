@@ -130,7 +130,7 @@ pub fn show(ui: &mut egui::Ui, themes: &ThemesView, state: &mut State) -> Option
                     let mut skin = themes.skin.clone();
                     skin.css = (!state.advanced.is_empty()).then(|| std::sync::Arc::from(state.advanced.as_str()));
                     request = Some(ThemeRequest::EditSkin(skin)); state.error.clear();
-                    state.notices=crate::kit::native_css::inspect(&state.advanced).unwrap_or_default().into_iter().map(|notice| format!("Line {}: {} is preserved, but this native painter does not render it yet.",notice.line,notice.property)).collect();
+                    state.notices=crate::kit::native_css::inspect(&state.advanced).unwrap_or_default().into_iter().map(|notice| format!("Line {}, column {}: {}. The rest of the sheet still applies.",notice.line,notice.column,notice.message)).collect();
                 }
             }
             for notice in &state.notices { ui.label(notice); }

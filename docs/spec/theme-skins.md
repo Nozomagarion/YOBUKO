@@ -431,21 +431,42 @@ resolved when importing or reloading theme files. The SVG editor accepts vector 
 
 ## Advanced CSS adapter (experimental)
 
-Migration to [ADR 0031](../decisions/0031-style-sheets.md) is staged. Sheets using
-only the implemented native paint subset (colour, font size, uniform radius,
-opacity, box/text shadows, linear/repeating-linear sRGB gradients, supported selectors, variables and media conditions)
-now resolve through `suhina-style` without creating a Stylo document for those
-paint scopes. Authored-property markers preserve each native control's defaults.
-Unchanged scopes reuse their previous results. Unsupported syntax or substituted
-values keep the complete sheet on the compatibility adapter; features are not
-silently dropped to make a sheet eligible. Radial/conic gradients, interpolation
-spaces other than sRGB, interpolation hints, motion, CSS layers and the
-existing Flex/Grid adapters still use Stylo. Both paths feed the same bounded
-box/text shadow painters through Suhina's own resolved shadow data.
+Advanced CSS runs on `suhina-style` alone ([ADR 0031](../decisions/0031-style-sheets.md));
+the Stylo/Blitz compatibility engine and its generated HTML are gone. The native engine
+implements what the bundled themes and the editor's examples use:
 
-Trace spans `style paint parse`, `style paint resolve` and `legacy CSS resolve`
-separate the new paint work from compatibility restyling. These are UI-thread
-boundaries; no audio callback is instrumented.
+- **Syntax and cascade:** `@layer` (named, anonymous, nested, order statements; later
+  layers win, unlayered rules win over layers, `!important` reverses), `@media` with
+  `min-`/`max-` and range forms (`(400px <= width <= 800px)`), `orientation`,
+  `prefers-color-scheme` and `prefers-reduced-motion`, custom properties with fallbacks,
+  `inherit`/`initial`/`unset`, specificity and source order.
+- **Selectors:** type, `#id`, `.class`, `*`, descendant, `>`, `+`, `~`, `:is()`, `:not()`,
+  `:where()`, structural pseudo-classes, the native states, and `[data-object]` /
+  `[data-object=name]` for named project objects.
+- **Values:** hex, `rgb()`, `hsl()`, named colours, `color-mix()` in srgb, srgb-linear,
+  oklab, hsl and oklch (shorter hue arc); `calc()`, `min()`, `max()`, `clamp()` of one
+  unit; `px`, `em`, `%`, `fr` and viewport units (`vw`, `vh`, `vmin`, `vmax`).
+- **Paint:** colours, opacity, radii (the top-left radius is drawn), the `background`
+  shorthand, linear/radial/conic and repeating gradients in sRGB, up to 32 parsed and 4
+  drawn box/text shadow layers.
+- **Layout:** `display` (flex, grid, block, none), flex direction/wrap/grow/shrink/basis,
+  justify/align, `grid-template-columns`/`-rows` with `minmax()` and `repeat()`,
+  `grid-column`/`grid-row` lines and spans, sizes with min/max, margins (auto, negative),
+  padding, gaps and `visibility`; `gap`, `padding`, `margin` and `flex` are shorthands.
+- **Motion:** `transition` (colours, opacity, radius and font size; durations, easing
+  keywords, `cubic-bezier()`, `steps()`, delays) and `@keyframes` with `animation`
+  (count, direction, fill, play state), interpolating colours, numbers, lengths and
+  shadow lists.
+
+A declaration the engine does not know is skipped with a notice giving its line and
+column, and the rest of the sheet applies, as in CSS. A variable that does not produce a
+valid value makes the property unset. A sheet that does not parse at all (too large, too
+deeply nested, unbalanced) keeps the last working styles. Not implemented: transforms,
+filters, other gradient interpolation spaces and hints, font families and weights,
+container queries and geometry animation.
+
+Trace spans `style paint parse` and `style paint resolve` mark the engine's UI-thread
+work; no audio callback is instrumented.
 
 ### Workspace layout contract
 
@@ -516,8 +537,8 @@ formatting. Conflicting source edits preserve both files. This source remains se
 from canonical `style.css`, which maps literal palette and skin values into native JSON.
 The same byte limit and package path restrictions apply to both stylesheets.
 
-The advanced editor supplies a Flex example and calls the Stylo/Taffy adapter. Stylo
-computes variables, layers, inheritance, CSS colours, value expressions and viewport
+The advanced editor supplies a Flex example and calls the native engine, which
+computes variables, layers, inheritance, colours, value expressions and viewport
 media conditions for class scopes. Taffy computes Flex/Grid rectangles for the actual
 visible toolbar modules (`#tempo`, `#transport`, etc.); the same rectangles bound their
 native input targets. The host still defines toolbar height. A stylesheet without
@@ -535,7 +556,7 @@ Palette scopes track real theme revisions: a theme switch or live colour/opacity
 made during rendering survives enclosing scope cleanup instead of restoring stale colours.
 
 Connected native surfaces paint linear, radial and conic gradients, including repeating
-forms, using Stylo's computed stops, CSS colour interpolation and premultiplied
+forms, using the native computed stops, sRGB interpolation and premultiplied
 transparency. Radial geometry resolves circle/ellipse radii, extent keywords and the
 authored centre against the real surface; conic geometry resolves the authored centre
 and start angle. Up to four layers with 64 items each use bounded cached 1024-pixel
@@ -557,16 +578,15 @@ the template bounds at four samples per physical pixel, capped at 256 per axis,
 rather than regenerating a full-size texture for every short meter level. Display
 scale is part of the texture key; geometry and blur distances remain in logical points.
 
-The style document persists while native scope structure stays unchanged. Native state
-changes snapshot the previous state and restyle that document, allowing Stylo transitions
-and keyframes to advance using egui's monotonic frame clock. Connected computed paint
-properties (colours, opacity, font sizes, radii and gradients where CSS defines their
-interpolation) consume these samples. Active animations schedule repainting at 16 ms;
-the final sample also triggers a repaint. Disabling animations or selecting high contrast
-suppresses CSS motion, including authors' important animation declarations. Geometry
-animation is not connected to native layout; changing the scope structure rebuilds the
-document and restarts animations. The adapter does not yet supply the global motion
-setting to `prefers-reduced-motion` queries.
+Computed targets persist while native scope structure stays unchanged. A native state
+change that changes a transitioned property starts a transition from the value being
+painted; keyframe animations run from when an element's animation list first applies.
+Both advance with egui's monotonic frame clock. Connected paint properties (colours,
+opacity, font sizes, radii, and shadow lists in keyframes) consume these samples. Active
+motion schedules repainting at 16 ms; the final sample also triggers a repaint. Disabling
+animations or selecting high contrast suppresses CSS motion and makes
+`prefers-reduced-motion: reduce` match. Geometry animation is not connected to native
+layout.
 
 The editor
 reports source-line notices for known unsupported effect/font declarations while

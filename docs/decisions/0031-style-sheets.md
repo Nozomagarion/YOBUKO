@@ -39,15 +39,14 @@ retains the computed snapshot until state, source, palette or viewport changes.
 Box and text shadow painters consume toolkit-independent `ResolvedShadow` values.
 The compatibility adapter converts Stylo values only at its boundary.
 
-The complete sheet remains on Stylo/Blitz if it needs unsupported syntax or a
-substituted expression that the native engine cannot resolve. This includes
-radial/conic gradients, other interpolation spaces and hints, animations, CSS layers
-and legacy Flex/Grid at this stage. Native linear gradients use bounded stops,
-premultiplied transparency and the existing texture cache/mesh painter; regression
-tests compare both colour ramps and geometry with the compatibility path. This
-temporary compatibility path is not an additional author-facing theme format;
-it will be removed after equivalent native adapters and tests exist. Tests compare
-native and compatibility paint values and exercise live switching between them.
+The Stylo/Blitz compatibility engine has been removed. `suhina-style` now covers what
+themes used it for: cascade layers, `calc()`, `color-mix()`, media ranges, viewport
+units, `[data-object]` selectors, radial/conic gradients, the `background` and layout
+shorthands, standard Flex/Grid properties on Taffy for the toolbar and workspace, and
+transitions and keyframe animations. Before removal, tests compared native and Stylo
+gradient pixels and geometry, paint values and authored markers; every bundled theme
+parses without a notice. Unknown declarations are skipped with a notice and the rest of
+the sheet applies; a sheet that does not parse keeps the last working one.
 Persistent component anchors (`suhina_style::anchor`: an edge follows another element's
 edge in the same container with a gap; cycle and chain-length validation; missing or
 hidden targets fall back) are connected to the native placement adapter and the Edit

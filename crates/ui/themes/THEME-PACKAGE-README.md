@@ -131,7 +131,7 @@ These same settings mirror between JSON `skin.controls` and canonical `style.css
 
 Offsets are relative to the native anchor, in logical points, bounded to ±16384;
 sizes are `auto` or 1–4096px. `bottom` anchors to the containing panel. This explicit
-native positioning contract is separate from the advanced Stylo/Taffy stylesheet.
+native positioning contract is separate from the advanced stylesheet's Flex/Grid layout.
 Placement overrides do not automatically resolve overlaps with neighbouring elements;
 when moving a name into the footer, arrange the toggles and sends to leave it room.
 Changing direction changes the native drag axis, rail, cap and scale together.
@@ -214,7 +214,7 @@ Portable exports include inherited artwork so another machine receives the same 
 | Motion | Connected paint transitions/keyframes; native animation-off/high-contrast settings suppress motion |
 | Selectors | Retained native class tree, child/sibling matching, connected hover/active/disabled/focus states, named object identities |
 
-The advanced adapter uses Stylo for CSS and Taffy for connected layout. For example:
+The advanced stylesheet runs on Suhina's own style engine, with Taffy for connected layout. For example:
 
 ```css
 .browser { color: #D8E8DF; background-color: #101C17;
@@ -313,8 +313,9 @@ Follow the background, closed-panel Grid and lit-fill contrast rules above befor
 copying a CSS example. A parsed stylesheet is not evidence that those checks passed.
 
 
-This is an experimental native adapter, not a browser. Stylo parsing a property
-does not mean egui paints it. Some raw widgets still need integration. Transforms,
+This is Suhina's own style engine, not a browser. A declaration it does not know is
+skipped with a notice (line and column) and the rest of the sheet applies; a sheet that
+does not parse at all keeps the last working one. Some raw widgets still need integration. Transforms,
 filters, downloadable fonts, full typography, geometry animation and
 the reduced-motion media feature are not connected. Bars and floating windows stay
 host-managed; the toolbar's height stays native. Do not claim universal browser CSS

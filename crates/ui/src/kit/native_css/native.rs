@@ -1,9 +1,9 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Staged native paint adapter. A sheet is accepted as a whole, never partially.
-use super::{Authored, Computed, Engine, html_id, shadows, text};
-use egui::Color32;
+//! The native style engine's adapter: sheets in, `Computed` paint values and rectangles out.
+use super::{Authored, Computed, Engine, element_id, shadows, text};
+use egui::{Color32, Rect, Vec2};
 use suhina_style::{
     cascade::{self, AppliedSheet, ComputedStyle, Layer},
     media::Viewport,
@@ -20,11 +20,10 @@ pub(super) struct Paint {
 }
 
 impl Paint {
+    /// `None` when the sheet does not parse at all. Declarations the engine does not know are
+    /// skipped with a notice, as CSS does, and the rest applies.
     pub fn new(source: &str, palette: &str) -> Option<Self> {
         let sheet = Sheet::parse(source).ok()?;
-        if !sheet.supports_native_paint() {
-            return None;
-        }
         Some(Self { sheet, defaults: defaults(palette)?, palette: palette.into() })
     }
 
@@ -36,17 +35,13 @@ impl Paint {
         Some(())
     }
 
-    fn resolve(&self, tree: &Tree, viewport: Viewport) -> Option<Vec<Computed>> {
-        cascade::compute_checked(
-            tree,
-            viewport,
-            &[
-                AppliedSheet { sheet: &self.defaults, layer: Layer::Default, root: None },
-                AppliedSheet { sheet: &self.sheet, layer: Layer::Theme, root: None },
-            ],
-        )
-        .ok()
-        .map(|styles| styles.iter().map(computed).collect())
+    fn styles(&self, tree: &Tree, viewport: Viewport, extra: Option<&Sheet>) -> Option<Vec<ComputedStyle>> {
+        let mut sheets = vec![AppliedSheet { sheet: &self.defaults, layer: Layer::Default, root: None }];
+        if let Some(extra) = extra {
+            sheets.push(AppliedSheet { sheet: extra, layer: Layer::Default, root: None });
+        }
+        sheets.push(AppliedSheet { sheet: &self.sheet, layer: Layer::Theme, root: None });
+        cascade::compute(tree, viewport, &sheets).ok()
     }
 }
 
@@ -64,15 +59,31 @@ fn viewport(engine: &Engine) -> Viewport {
     }
 }
 
-fn roots() -> Vec<Element> {
-    vec![Element::new("html", None), Element::new("body", Some(0))]
+fn roots(window: bool) -> Vec<Element> {
+    let mut body = Element::new("body", Some(0));
+    if window {
+        body.classes.push("window".into());
+    }
+    vec![Element::new("html", None), body]
+}
+
+/// A host element: a `div` with one class, an optional id and project object.
+pub(super) fn element(class: &str, id: Option<&str>, object: Option<&str>, parent: Option<usize>) -> Element {
+    let mut element = Element::new("div", parent);
+    element.id = id.map(str::to_owned);
+    element.object = object.map(str::to_owned);
+    element.classes.push(class.into());
+    element.states.push("enabled".into());
+    element
 }
 
 pub(super) fn retained(engine: &Engine) -> Option<Vec<(u64, Computed)>> {
     let paint = engine.native.as_ref()?;
-    let mut elements = roots();
+    let mut elements = roots(false);
     for node in &engine.nodes {
-        let mut element = Element::new("div", Some(node.parent.map_or(1, |parent| parent + 2))).with_id(&html_id(node));
+        let mut element = Element::new("div", Some(node.parent.map_or(1, |parent| parent + 2)));
+        element.id = Some(element_id(node));
+        element.object = node.name.clone();
         element.classes.push(node.class.clone());
         element.states.push(if node.state & 4 != 0 { "disabled" } else { "enabled" }.into());
         for (bit, state) in [(1, "hover"), (2, "active"), (8, "focus"), (8, "focus-visible")] {
@@ -97,23 +108,98 @@ pub(super) fn retained(engine: &Engine) -> Option<Vec<(u64, Computed)>> {
         }
     }
     let tree = Tree::new(elements).ok()?;
-    let values = paint.resolve(&tree, viewport(engine))?;
-    Some(engine.nodes.iter().zip(values.into_iter().skip(2)).map(|(node, value)| (node.key, value)).collect())
+    let values = paint.styles(&tree, viewport(engine), None)?;
+    Some(engine.nodes.iter().zip(values.iter().skip(2)).map(|(node, value)| (node.key, computed(value))).collect())
 }
 
 pub(super) fn scoped(engine: &Engine, stack: &[String]) -> Option<Computed> {
-    let mut elements = roots();
+    let mut elements = roots(false);
     for (index, class) in stack.iter().enumerate() {
-        let mut element = Element::new("div", Some(index + 1)).with_id(&format!("scope-{index}"));
-        element.classes.push(class.clone());
-        element.states.push("enabled".into());
-        elements.push(element);
+        elements.push(element(class, Some(&format!("scope-{index}")), None, Some(index + 1)));
     }
     let tree = Tree::new(elements).ok()?;
-    engine.native.as_ref()?.resolve(&tree, viewport(engine))?.pop()
+    engine.native.as_ref()?.styles(&tree, viewport(engine), None)?.last().map(computed)
 }
 
-fn computed(style: &ComputedStyle) -> Computed {
+/// Properties that ask for theme layout when a theme writes them on a laid-out element.
+const LAYOUT: &[Property] = &[
+    Property::Display,
+    Property::Width,
+    Property::Height,
+    Property::MinWidth,
+    Property::MinHeight,
+    Property::MaxWidth,
+    Property::MaxHeight,
+    Property::Order,
+    Property::FlexDirection,
+    Property::FlexWrap,
+    Property::FlexGrow,
+    Property::FlexShrink,
+    Property::FlexBasis,
+    Property::JustifyContent,
+    Property::AlignItems,
+    Property::AlignSelf,
+    Property::AlignContent,
+    Property::GridTemplateColumns,
+    Property::GridTemplateRows,
+    Property::GridColumn,
+    Property::GridRow,
+    Property::ColumnGap,
+    Property::RowGap,
+    Property::MarginTop,
+    Property::MarginRight,
+    Property::MarginBottom,
+    Property::MarginLeft,
+    Property::PaddingTop,
+    Property::PaddingRight,
+    Property::PaddingBottom,
+    Property::PaddingLeft,
+    Property::Visibility,
+    Property::Layout,
+    Property::Columns,
+    Property::Rows,
+    Property::Areas,
+    Property::Area,
+    Property::Visible,
+];
+
+/// Rectangles and styles of host elements laid out by the theme.
+pub(super) struct Laid {
+    /// Whether the theme wrote any layout property on these elements.
+    pub requested: bool,
+    /// For each given element: its rectangle (none when not displayed) and style.
+    pub items: Vec<(Option<Rect>, Computed)>,
+}
+
+/// Lays out `elements` (parents index the full list, after `html` and `body.window`) in a
+/// box of `size`, with host `defaults` under the theme.
+pub(super) fn layout(engine: &Engine, elements: Vec<Element>, defaults: &str, size: [f32; 2]) -> Option<Laid> {
+    let paint = engine.native.as_ref()?;
+    let count = elements.len();
+    let mut all = roots(true);
+    all.extend(elements);
+    let tree = Tree::new(all).ok()?;
+    let defaults = Sheet::parse(defaults).ok()?;
+    let styles = paint.styles(&tree, viewport(engine), Some(&defaults))?;
+    let size = [size[0].clamp(0.0, 16384.0), size[1].clamp(0.0, 16384.0)];
+    let rectangles = suhina_style::layout::compute(&tree, &styles, size).ok()?;
+    let requested = styles.iter().skip(2).any(|style| LAYOUT.iter().any(|property| style.authored(*property)));
+    let items = rectangles
+        .iter()
+        .zip(&styles)
+        .skip(2)
+        .take(count)
+        .map(|(rect, style)| {
+            let rect = rect.map(|r| Rect::from_min_size(egui::pos2(r.x, r.y), Vec2::new(r.width, r.height)));
+            let rect = rect
+                .filter(|r| r.is_finite() && [r.min.x, r.min.y, r.max.x, r.max.y].iter().all(|v| v.abs() <= 16384.0));
+            (rect, computed(style))
+        })
+        .collect();
+    Some(Laid { requested, items })
+}
+
+pub(super) fn computed(style: &ComputedStyle) -> Computed {
     let color = |property| match style.get(property) {
         Value::Color(Color::Rgba([r, g, b, a])) => Color32::from_rgba_unmultiplied(r, g, b, a),
         _ => Color32::TRANSPARENT,
@@ -131,21 +217,30 @@ fn computed(style: &ComputedStyle) -> Computed {
         Value::Color(Color::Rgba(value)) => value,
         _ => [255; 4],
     };
+    // currentColor in other colours resolves to the foreground.
+    let ink = |property| match style.get(property) {
+        Value::Color(Color::Current) => {
+            let [r, g, b, a] = foreground;
+            Color32::from_rgba_unmultiplied(r, g, b, a)
+        }
+        _ => color(property),
+    };
     let resolved_shadows = |property| match style.get(property) {
         Value::Shadows(values) => values.iter().map(|shadow| shadow.resolve(font, foreground)).collect::<Vec<_>>(),
         _ => Vec::new(),
     };
     Computed {
         color: color(Property::Color),
-        background: color(Property::BackgroundColor),
-        border: color(Property::BorderColor),
+        background: ink(Property::BackgroundColor),
+        border: ink(Property::BorderColor),
         font_size: font.clamp(7.0, 96.0),
         radius: radius.clamp(0.0, 128.0),
         opacity: match style.get(Property::Opacity) {
             Value::Number(value) => value,
             _ => 1.0,
         },
-        visible: true,
+        visible: style.get(Property::Visibility) == Value::Keyword("visible")
+            && style.get(Property::Visible) != Value::Bool(false),
         authored: Authored {
             color: style.authored(Property::Color),
             background: style.authored(Property::BackgroundColor),
@@ -171,5 +266,10 @@ fn computed(style: &ComputedStyle) -> Computed {
             .map(text::Shadow::from_native)
             .collect::<Vec<_>>()
             .into(),
+        transitions: match style.get(Property::Transition) {
+            Value::Transitions(list) => list.into(),
+            _ => Vec::new().into(),
+        },
+        animations: style.animations().to_vec().into(),
     }
 }

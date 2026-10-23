@@ -455,6 +455,34 @@ fn mix(a: &crate::value::Value, b: &crate::value::Value, t: f32) -> crate::value
             Value::Color(Color::Rgba(result))
         }
         (Value::Number(a), Value::Number(b)) => Value::Number(a + (b - a) * t),
+        (Value::Shadows(first), Value::Shadows(second))
+            if first.len() == second.len() && first.iter().zip(second).all(|(a, b)| a.inset == b.inset) =>
+        {
+            let length = |a: Length, b: Length| match (a, b) {
+                (Length::Px(a), Length::Px(b)) => Some(Length::Px(a + (b - a) * t)),
+                (Length::Em(a), Length::Em(b)) => Some(Length::Em(a + (b - a) * t)),
+                _ => None,
+            };
+            let mut shadows = Vec::with_capacity(first.len());
+            for (a, b) in first.iter().zip(second) {
+                let color = match mix(&Value::Color(a.color), &Value::Color(b.color), t) {
+                    Value::Color(color) => color,
+                    _ => b.color,
+                };
+                let lengths = (
+                    length(a.offset[0], b.offset[0]),
+                    length(a.offset[1], b.offset[1]),
+                    length(a.blur, b.blur),
+                    length(a.spread, b.spread),
+                );
+                let (Some(x), Some(y), Some(blur), Some(spread)) = lengths else {
+                    // Lengths of different units switch halfway, as other discrete values do.
+                    return if t < 0.5 { Value::Shadows(first.clone()) } else { Value::Shadows(second.clone()) };
+                };
+                shadows.push(crate::paint::Shadow { offset: [x, y], blur, spread, color, inset: a.inset });
+            }
+            Value::Shadows(shadows)
+        }
         (Value::Length(Length::Px(a)), Value::Length(Length::Px(b))) => Value::Length(Length::Px(a + (b - a) * t)),
         (Value::Length(Length::Em(a)), Value::Length(Length::Em(b))) => Value::Length(Length::Em(a + (b - a) * t)),
         _ => {
