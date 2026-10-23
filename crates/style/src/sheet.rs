@@ -24,12 +24,19 @@ pub(crate) struct Rule {
     pub selectors: Vec<Selector>,
     pub declarations: Vec<Declaration>,
     pub media: Vec<Media>,
+    /// The cascade layer (`@layer`), by its index in [`Sheet::layers`]; `None` is unlayered.
+    pub layer: Option<u16>,
 }
+
+/// Most named cascade layers in one sheet.
+pub const MAX_LAYERS: usize = 64;
 
 #[derive(Clone, Debug, Default)]
 pub struct Sheet {
     pub(crate) rules: Vec<Rule>,
     pub notices: Vec<Notice>,
+    /// Cascade layer names in the order they were first named, nested ones dotted (`a.b`).
+    pub(crate) layers: Vec<String>,
 }
 
 impl Sheet {
@@ -61,8 +68,65 @@ impl Sheet {
         crate::syntax::validate(source)?;
         let mut input = ParserInput::new(source);
         let mut sheet = Self::default();
-        rules(&mut Parser::new(&mut input), source, &[], &mut sheet, 0)?;
+        rules(&mut Parser::new(&mut input), source, &Scope::default(), &mut sheet, 0)?;
+        sheet.rank_layers();
         Ok(sheet)
+    }
+
+    /// The index of layer `name`, naming it if it is new.
+    fn layer(&mut self, name: &str) -> Result<u16, String> {
+        // `@layer a.b;` names `a` first, as nesting would.
+        if let Some((parent, _)) = name.rsplit_once('.') {
+            self.layer(parent)?;
+        }
+        if let Some(index) = self.layers.iter().position(|layer| layer == name) {
+            return u16::try_from(index).map_err(|_| "Too many cascade layers".into());
+        }
+        if self.layers.len() >= MAX_LAYERS {
+            return Err("Style sheet exceeds 64 cascade layers".into());
+        }
+        self.layers.push(name.into());
+        u16::try_from(self.layers.len() - 1).map_err(|_| "Too many cascade layers".into())
+    }
+
+    /// Replaces each rule's layer index by its rank: siblings in the order they were first
+    /// named, and a layer's nested layers before the layer itself, whose own rules win over them.
+    fn rank_layers(&mut self) {
+        fn visit(prefix: &str, layers: &[String], ranks: &mut Vec<(usize, u16)>) {
+            for (index, name) in layers.iter().enumerate() {
+                let Some(rest) = (if prefix.is_empty() {
+                    Some(name.as_str())
+                } else {
+                    name.strip_prefix(prefix).and_then(|r| r.strip_prefix('.'))
+                }) else {
+                    continue;
+                };
+                if rest.contains('.') {
+                    continue;
+                }
+                visit(name, layers, ranks);
+                let rank = u16::try_from(ranks.len()).unwrap_or(u16::MAX - 2);
+                ranks.push((index, rank));
+            }
+        }
+        let mut ranks = Vec::with_capacity(self.layers.len());
+        visit("", &self.layers, &mut ranks);
+        for rule in &mut self.rules {
+            rule.layer = rule
+                .layer
+                .and_then(|index| ranks.iter().find(|(i, _)| *i == usize::from(index)).map(|(_, rank)| *rank));
+        }
+    }
+
+    /// The rank of a layer in the cascade for a declaration: unlayered normal declarations win
+    /// over every layer and later layers over earlier ones; for `!important` the order reverses.
+    pub(crate) fn layer_rank(layer: Option<u16>, important: bool) -> u16 {
+        match (layer, important) {
+            (None, false) => u16::MAX,
+            (Some(index), false) => index,
+            (None, true) => 0,
+            (Some(index), true) => u16::MAX - 1 - index.min(u16::MAX - 2),
+        }
     }
 
     fn notice(&mut self, at: cssparser::SourceLocation, message: String) {
@@ -99,13 +163,34 @@ pub(crate) fn consume(parser: &mut Parser<'_, '_>) -> Result<(), String> {
     Ok(())
 }
 
+/// The conditions a nested group puts on its rules: media queries and the cascade layer.
+#[derive(Clone, Default)]
+struct Scope {
+    media: Vec<Media>,
+    layer: Option<(String, u16)>,
+}
+
+/// A layer name: identifiers joined by dots.
+fn layer_name(text: &str) -> Option<&str> {
+    let text = text.trim();
+    (!text.is_empty()
+        && text.len() <= 128
+        && text.split('.').all(|part| {
+            !part.is_empty()
+                && part.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                && !part.starts_with(|c: char| c.is_ascii_digit())
+        }))
+    .then_some(text)
+}
+
 fn rules(
     parser: &mut Parser<'_, '_>,
     source: &str,
-    media: &[Media],
+    scope: &Scope,
     sheet: &mut Sheet,
     depth: usize,
 ) -> Result<(), String> {
+    let media = scope.media.as_slice();
     if depth > 16 {
         return Err("Style rules exceed sixteen nested groups".into());
     }
@@ -117,19 +202,59 @@ fn rules(
         match token {
             Token::WhiteSpace(_) | Token::Comment(_) if start.is_none() => {}
             Token::Semicolon => {
-                sheet.notice(location, "Unsupported statement; imports are not loaded by the style engine".into());
+                let header = source.get(start.unwrap_or(at)..at).unwrap_or_default().trim();
+                if let Some(names) = header.strip_prefix("@layer").filter(|s| s.starts_with(char::is_whitespace)) {
+                    // `@layer a, b;` fixes the order of layers before their rules appear.
+                    for name in names.split(',') {
+                        let Some(name) = layer_name(name) else {
+                            sheet.notice(location, "Invalid cascade layer name".into());
+                            continue;
+                        };
+                        let full = scope.layer.as_ref().map_or_else(|| name.to_owned(), |(p, _)| format!("{p}.{name}"));
+                        sheet.layer(&full)?;
+                    }
+                } else {
+                    sheet.notice(location, "Unsupported statement; imports are not loaded by the style engine".into());
+                }
                 start = None;
             }
             Token::CurlyBracketBlock => {
                 let header = source.get(start.unwrap_or(at)..at).ok_or("Invalid rule span")?.trim();
-                if let Some(condition) =
+                let layer = header
+                    .strip_prefix("@layer")
+                    .filter(|s| s.is_empty() || s.starts_with(char::is_whitespace))
+                    .map(str::trim);
+                if let Some(name) = layer {
+                    // An anonymous layer gets a name no author can write.
+                    let own = if name.is_empty() {
+                        Some(format!("{}", sheet.layers.len()))
+                    } else {
+                        layer_name(name).map(str::to_owned)
+                    };
+                    match own {
+                        Some(own) => {
+                            let full = scope
+                                .layer
+                                .as_ref()
+                                .map_or_else(|| own.clone(), |(parent, _)| format!("{parent}.{own}"));
+                            let index = sheet.layer(&full)?;
+                            let inner = Scope { media: media.to_vec(), layer: Some((full, index)) };
+                            nested(parser, |parser| rules(parser, source, &inner, sheet, depth + 1))?;
+                        }
+                        None => {
+                            sheet.notice(location, "Invalid cascade layer name".into());
+                            nested(parser, consume)?;
+                        }
+                    }
+                } else if let Some(condition) =
                     header.strip_prefix("@media").filter(|s| s.starts_with(char::is_whitespace) || s.starts_with('('))
                 {
                     match Media::parse(condition.trim()) {
                         Ok(condition) => {
                             let mut conditions = media.to_vec();
                             conditions.push(condition);
-                            nested(parser, |parser| rules(parser, source, &conditions, sheet, depth + 1))?;
+                            let inner = Scope { media: conditions, layer: scope.layer.clone() };
+                            nested(parser, |parser| rules(parser, source, &inner, sheet, depth + 1))?;
                         }
                         Err(message) => {
                             sheet.notice(location, message);
@@ -143,7 +268,12 @@ fn rules(
                             if sheet.rules.len() >= 1024 {
                                 return Err("Style sheet exceeds 1024 rules".into());
                             }
-                            sheet.rules.push(Rule { selectors, declarations, media: media.to_vec() });
+                            sheet.rules.push(Rule {
+                                selectors,
+                                declarations,
+                                media: media.to_vec(),
+                                layer: scope.layer.as_ref().map(|(_, index)| *index),
+                            });
                         }
                         Err(message) => {
                             sheet.notice(location, message);

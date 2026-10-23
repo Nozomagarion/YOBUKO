@@ -61,13 +61,13 @@ impl ComputedStyle {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-struct Priority(u8, u8, Specificity, usize);
+struct Priority(u8, u8, u16, Specificity, usize);
 
-fn priority(layer: Layer, important: bool, specificity: Specificity, order: usize) -> Priority {
+fn priority(layer: Layer, important: bool, cascade: Option<u16>, specificity: Specificity, order: usize) -> Priority {
     // Native layers deliberately guarantee that a user's override wins over
     // device/theme sheets, including author !important. Within a layer normal
-    // CSS importance, specificity and source order apply.
-    Priority(layer as u8, u8::from(important), specificity, order)
+    // CSS importance, `@layer` order, specificity and source order apply.
+    Priority(layer as u8, u8::from(important), Sheet::layer_rank(cascade, important), specificity, order)
 }
 
 /// Compute a bounded immutable snapshot. The host calls this on relevant changes,
@@ -141,7 +141,7 @@ fn compute_inner(
                     continue;
                 };
                 for declaration in &rule.declarations {
-                    let priority = priority(applied.layer, declaration.important, specificity, order);
+                    let priority = priority(applied.layer, declaration.important, rule.layer, specificity, order);
                     if winners.get(declaration.name.as_str()).is_none_or(|(previous, _)| *previous <= priority) {
                         winners.insert(&declaration.name, (priority, declaration));
                     }
@@ -323,5 +323,50 @@ mod tests {
                 .unwrap();
         assert_eq!(styles[1].get(Property::FontSize), Value::Length(Length::Px(20.0)));
         assert_eq!(styles[2].get(Property::FontSize), Value::Length(Length::Px(20.0)));
+    }
+
+    #[test]
+    fn cascade_layers_order_normal_and_reverse_important_declarations() {
+        let color = |css: &str| {
+            let sheet = Sheet::parse(css).unwrap_or_else(|e| panic!("{e}"));
+            assert!(sheet.notices.is_empty(), "{:?}", sheet.notices);
+            let styles =
+                compute(&tree(), viewport(800.0), &[AppliedSheet { sheet: &sheet, layer: Layer::Theme, root: None }])
+                    .unwrap_or_else(|e| panic!("{e}"));
+            styles[2].get(Property::Color)
+        };
+        let red = Value::Color(Color::Rgba([255, 0, 0, 255]));
+        let blue = Value::Color(Color::Rgba([0, 0, 255, 255]));
+        // A later layer wins over an earlier one whatever the specificity.
+        assert_eq!(color("@layer a { #cutoff { color: red; } } @layer b { knob { color: blue; } }"), blue);
+        // The order statement decides, not where the rules appear.
+        assert_eq!(color("@layer b, a; @layer a { knob { color: red; } } @layer b { knob { color: blue; } }"), red);
+        // Unlayered rules win over layered ones.
+        assert_eq!(color("knob { color: blue; } @layer a { #cutoff { color: red; } }"), blue);
+        // !important reverses: the earliest layer's important wins, unlayered important loses.
+        assert_eq!(
+            color("@layer a { knob { color: red !important; } } @layer b { knob { color: blue !important; } }"),
+            red
+        );
+        assert_eq!(color("knob { color: blue !important; } @layer a { knob { color: red !important; } }"), red);
+        // A layer's own rules win over its nested layers.
+        assert_eq!(color("@layer a { knob { color: red; } @layer b { knob { color: blue; } } }"), red);
+        assert_eq!(
+            color("@layer a.b; @layer a { @layer b { knob { color: blue; } } } @layer c { knob { color: red; } }"),
+            red
+        );
+        // Media inside a layer keeps the layer.
+        assert_eq!(
+            color("@layer a { @media (max-width: 900px) { knob { color: red; } } } @layer b { knob { color: blue; } }"),
+            blue
+        );
+    }
+
+    #[test]
+    fn invalid_or_excessive_layers_are_notices_not_crashes() {
+        let sheet = Sheet::parse("@layer 1bad { knob { color: red; } } knob { color: blue; }").unwrap_or_default();
+        assert_eq!(sheet.notices.len(), 1);
+        let many: String = (0..80).map(|i| format!("@layer l{i} {{ knob {{ color: red; }} }}")).collect();
+        assert!(Sheet::parse(&many).is_err());
     }
 }
