@@ -173,7 +173,10 @@ fn compute_inner(
                 continue;
             };
             let value = match crate::variables::substitute(&declaration.value, &computed.variables).and_then(|value| {
-                if declaration.from_background { crate::sheet::background_part(property, &value) } else { Ok(value) }
+                match declaration.shorthand {
+                    Some(shorthand) => shorthand.part(property, &value),
+                    None => Ok(value),
+                }
             }) {
                 Ok(value) => value,
                 Err(error) if checked => return Err(error),

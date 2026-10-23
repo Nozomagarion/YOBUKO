@@ -309,6 +309,11 @@ pub enum Value {
     Name(String),
     Shadows(Vec<crate::paint::Shadow>),
     Gradients(Vec<crate::gradient::Linear>),
+    /// One keyword of a property's fixed list; empty when the property was never written.
+    Keyword(&'static str),
+    TrackList(Vec<crate::layout::Track>),
+    Placement([crate::layout::GridLine; 2]),
+    Transitions(Vec<crate::motion::Transition>),
 }
 
 #[cfg(test)]

@@ -17,9 +17,87 @@ pub(crate) struct Declaration {
     pub name: String,
     pub value: String,
     pub important: bool,
-    /// Written as the `background` shorthand: `value` is the whole shorthand, and this longhand
-    /// takes its part once variables are substituted.
-    pub from_background: bool,
+    /// Written as a shorthand: `value` is the whole shorthand, and this longhand takes its part
+    /// once variables are substituted.
+    pub shorthand: Option<Shorthand>,
+}
+
+/// Shorthands the native engine expands into its longhands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Shorthand {
+    Background,
+    Gap,
+    Padding,
+    Margin,
+    Flex,
+}
+
+impl Shorthand {
+    fn from_name(name: &str) -> Option<Self> {
+        Some(match name {
+            "background" => Self::Background,
+            "gap" => Self::Gap,
+            "padding" => Self::Padding,
+            "margin" => Self::Margin,
+            "flex" => Self::Flex,
+            _ => return None,
+        })
+    }
+
+    fn longhands(self) -> &'static [Property] {
+        match self {
+            Self::Background => &[Property::BackgroundColor, Property::BackgroundImage],
+            Self::Gap => &[Property::RowGap, Property::ColumnGap],
+            Self::Padding => {
+                &[Property::PaddingTop, Property::PaddingRight, Property::PaddingBottom, Property::PaddingLeft]
+            }
+            Self::Margin => &[Property::MarginTop, Property::MarginRight, Property::MarginBottom, Property::MarginLeft],
+            Self::Flex => &[Property::FlexGrow, Property::FlexShrink, Property::FlexBasis],
+        }
+    }
+
+    /// The text of `property`'s part of the shorthand `value`.
+    pub(crate) fn part(self, property: Property, value: &str) -> Result<String, String> {
+        if self == Self::Background {
+            return background_part(property, value);
+        }
+        let words: Vec<&str> = value.split_whitespace().collect();
+        let index = self.longhands().iter().position(|p| *p == property).ok_or("Not a longhand of this shorthand")?;
+        let pick = |order: &[usize]| order.get(index).and_then(|i| words.get(*i)).map(|w| (*w).to_owned());
+        let text = match (self, words.len()) {
+            (Self::Gap, 1) => pick(&[0, 0]),
+            (Self::Gap, 2) => pick(&[0, 1]),
+            (Self::Padding | Self::Margin, 1) => pick(&[0, 0, 0, 0]),
+            (Self::Padding | Self::Margin, 2) => pick(&[0, 1, 0, 1]),
+            (Self::Padding | Self::Margin, 3) => pick(&[0, 1, 2, 1]),
+            (Self::Padding | Self::Margin, 4) => pick(&[0, 1, 2, 3]),
+            (Self::Flex, 1) => match words.first().copied() {
+                Some("none") => Some(["0", "0", "auto"][index].to_owned()),
+                Some("auto") => Some(["1", "1", "auto"][index].to_owned()),
+                Some(word) if word.parse::<f32>().is_ok() => Some([word, "1", "0px"][index].to_owned()),
+                Some(word) => Some(["1", "1", word][index].to_owned()),
+                None => None,
+            },
+            (Self::Flex, 2) => match words.as_slice() {
+                [grow, other] if other.parse::<f32>().is_ok() => Some([*grow, *other, "0px"][index].to_owned()),
+                [grow, basis] => Some([*grow, "1", *basis][index].to_owned()),
+                _ => None,
+            },
+            (Self::Flex, 3) => pick(&[0, 1, 2]),
+            _ => None,
+        };
+        text.ok_or_else(|| format!("Invalid {} shorthand", self.name()))
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Background => "background",
+            Self::Gap => "gap",
+            Self::Padding => "padding",
+            Self::Margin => "margin",
+            Self::Flex => "flex",
+        }
+    }
 }
 
 /// The part of a `background` shorthand that sets `property` (`background-color` or
@@ -417,27 +495,27 @@ fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) ->
         if !name.starts_with("--") {
             name.make_ascii_lowercase();
         }
-        if name == "background" {
+        if let Some(shorthand) = Shorthand::from_name(&name) {
             let raw = source.get(value_start..value_end).ok_or("Invalid value span")?.trim();
             let (value, important) = raw.strip_suffix("!important").map_or((raw, false), |s| (s.trim_end(), true));
-            if !value.contains("var(") {
-                let checked = [Property::BackgroundColor, Property::BackgroundImage].map(|property| {
-                    background_part(property, value).and_then(|part| property.parse(&part).map(|_| ()))
+            if !value.contains("var(") && !matches!(value, "inherit" | "initial" | "unset") {
+                let failure = shorthand.longhands().iter().find_map(|property| {
+                    shorthand.part(*property, value).and_then(|part| property.parse(&part).map(|_| ())).err()
                 });
-                if let Some(Err(message)) = checked.into_iter().find(Result::is_err) {
-                    sheet.notice(at, format!("background: {message}"));
+                if let Some(message) = failure {
+                    sheet.notice(at, format!("{name}: {message}"));
                     continue;
                 }
             }
-            if declarations.len() + 2 > 256 {
+            if declarations.len() + shorthand.longhands().len() > 256 {
                 return Err("Style rule exceeds 256 declarations".into());
             }
-            for longhand in ["background-color", "background-image"] {
+            for longhand in shorthand.longhands() {
                 declarations.push(Declaration {
-                    name: longhand.into(),
+                    name: longhand.name().into(),
                     value: value.into(),
                     important,
-                    from_background: true,
+                    shorthand: (!matches!(value, "inherit" | "initial" | "unset")).then_some(shorthand),
                 });
             }
             continue;
@@ -464,7 +542,7 @@ fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) ->
             sheet.notice(at, format!("{name}: {message}"));
             continue;
         }
-        declarations.push(Declaration { name, value: value.into(), important, from_background: false });
+        declarations.push(Declaration { name, value: value.into(), important, shorthand: None });
     }
     Ok(declarations)
 }

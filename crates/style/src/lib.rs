@@ -8,6 +8,7 @@ pub mod edit;
 pub mod gradient;
 pub mod layout;
 pub mod media;
+pub mod motion;
 pub mod paint;
 pub mod property;
 pub mod resolver;
