@@ -901,7 +901,7 @@ fn paint_fader(
     response: &egui::Response,
     centred: bool,
 ) {
-    let _style = crate::kit::style_class::enter_response("fader", response);
+    let _style = crate::kit::style_class::enter_named_response("fader", "mixer-volume", response);
     crate::kit::native_css::background(painter, fader);
     let hover = widgets::hover(ui, response);
     let value_color = motion::mix(theme::text_value(), theme::text_primary(), hover);
@@ -1096,7 +1096,7 @@ fn pan_row(
     id: Id,
     actions: &mut Vec<Action>,
 ) {
-    let _style = crate::kit::style_class::enter("pan");
+    let _style = crate::kit::style_class::enter_named("pan", "mixer-pan");
     let track = column.track;
     let knob_rect = row;
     state.value_areas.push(knob_rect);

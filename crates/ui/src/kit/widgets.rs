@@ -111,12 +111,18 @@ pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Res
 /// CSS paint remains above the SVG body, below the control's glyph and label.
 pub fn button_surface(painter: &Painter, rect: Rect, response: &Response, on: bool, fill: Color32, radius: f32) {
     let _style = super::style_class::control("button", response);
-    let fill = super::style_class::background(fill);
-    let radius = super::style_class::radius(radius);
-    if !super::skin::button(painter, rect, super::skin::State::response(response, on), fill, radius) {
-        painter.fill_background(rect, radius, fill);
+    // A shape the sheet gives the button wins over the artwork Suhina ships, not over the theme's own.
+    let shaped = super::style_class::computed()
+        .is_some_and(|style| style.authored.background || style.authored.radius || style.authored.border_width);
+    if !shaped || super::skin::has_own("button") {
+        let fill = super::style_class::background(fill);
+        let radius = super::style_class::radius(radius);
+        if super::skin::button(painter, rect, super::skin::State::response(response, on), fill, radius) {
+            super::native_css::background_rounded(painter, rect, radius);
+            return;
+        }
     }
-    super::native_css::background_rounded(painter, rect, radius);
+    super::native_css::surface(painter, rect, radius, fill);
 }
 
 /// Fill and text of a track-on toggle: light when on, dark when off, a step brighter hovered.

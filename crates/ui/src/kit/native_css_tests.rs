@@ -63,7 +63,15 @@ fn native_paint_values_resolve_variables_currentcolor_em_and_media() {
     assert!((style.opacity - 0.7).abs() < 1e-6);
     assert_eq!(
         style.authored,
-        Authored { color: true, background: true, border: true, font_size: false, radius: true, accent: false }
+        Authored {
+            color: true,
+            background: true,
+            border: true,
+            font_size: false,
+            radius: true,
+            accent: false,
+            border_width: false
+        }
     );
     prepare(
         ":root { --ink:#2468ac; } .toolbar { color:var(--ink); font-size:12px; } .button { font-size:1.5em; border-radius:.25em; box-shadow:inset 0 1px 2px -1px #fff4, 1px 2px 3px currentColor; text-shadow:0 1px 1px #000a; }",
@@ -756,4 +764,86 @@ fn unrelated_css_preserves_native_colours_font_sizes_and_corner_defaults() {
         assert_eq!(theme::text_primary(), Color32::from_rgb(10, 20, 30));
     }
     skin::configure(&skin::Skin::default());
+}
+
+/// Runs `paint` inside the window for a few frames with `css`, so element ids resolve, and
+/// returns the last frame's shapes.
+fn painted(css: &str, paint: impl Fn(&egui::Ui)) -> Vec<egui::epaint::ClippedShape> {
+    prepare(css, 800.0);
+    let ctx = egui::Context::default();
+    let mut shapes = Vec::new();
+    for _ in 0..3 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, Vec2::new(800.0, 600.0))),
+                ..Default::default()
+            },
+            |ui| {
+                let _frame = frame(ui);
+                let _window = super::super::style_class::enter("window");
+                paint(ui);
+            },
+        );
+        output.textures_delta.clear();
+        shapes = std::mem::take(&mut output.shapes);
+    }
+    skin::configure(&skin::Skin::default());
+    shapes
+}
+
+fn rects(shapes: &[egui::epaint::ClippedShape]) -> Vec<egui::epaint::RectShape> {
+    shapes
+        .iter()
+        .filter_map(|shape| match &shape.shape {
+            egui::Shape::Rect(rect) => Some(rect.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn a_level_bar_takes_its_shape_and_thickness_from_the_sheet() {
+    let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, 20.0));
+    let draw = |ui: &egui::Ui| {
+        let _value = super::super::style_class::enter_named("value", "arrangement-volume");
+        crate::kit::mixer_controls::level_bar(
+            ui.painter(),
+            field,
+            "volume",
+            (0.0, 0.5),
+            0.0,
+            "0.0",
+            egui::Align2::RIGHT_CENTER,
+        );
+    };
+    // Natively a capsule as tall as the field.
+    let native = rects(&painted("", draw));
+    assert!(native.iter().any(|r| r.rect == field && r.corner_radius.nw == 10), "{native:?}");
+    let css = "#arrangement-volume { height: 4px; border-radius: 0; background-color: #202020; \
+               border-width: 1px; border-color: #FFFFFF; } \
+               #arrangement-volume .value-fill { background-color: #FF0000; height: 4px; }";
+    let shaped = rects(&painted(css, draw));
+    let track = Rect::from_center_size(field.center(), Vec2::new(200.0, 4.0));
+    assert!(
+        shaped
+            .iter()
+            .any(|r| r.rect == track && r.fill == egui::Color32::from_rgb(0x20, 0x20, 0x20) && r.corner_radius.nw == 0),
+        "{shaped:?}"
+    );
+    assert!(shaped.iter().any(|r| r.rect == track && r.stroke.width == 1.0), "the border: {shaped:?}");
+    assert!(
+        shaped.iter().any(|r| r.fill == egui::Color32::from_rgb(0xFF, 0, 0) && r.rect.height() == 4.0),
+        "{shaped:?}"
+    );
+}
+
+#[test]
+fn a_transparent_control_background_paints_nothing() {
+    let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(60.0, 20.0));
+    let shapes = painted("#tempo { background-color: transparent; }", |ui| {
+        let _toolbar = super::super::style_class::enter("toolbar");
+        let _module = super::super::style_class::enter_named("toolbar-module", "tempo");
+        surface(ui.painter(), field, 0.0, theme::window_background());
+    });
+    assert!(!rects(&shapes).iter().any(|r| r.rect == field), "{shapes:?}");
 }

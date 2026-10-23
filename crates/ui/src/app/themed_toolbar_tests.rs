@@ -140,12 +140,14 @@ fn native_toolbar_css_styles_modules_and_buttons_without_reflow_or_sibling_leaks
     assert_eq!(text(&tempo_text).color, egui::Color32::from_rgb(12, 34, 56));
     assert_eq!(text(&tempo_text).font_id.size, 18.0);
     assert_eq!(text(&position_text).font_id.size, theme::TEXT, "font must not leak into the next module");
-    assert!(harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
-            egui::Shape::Rect(rect) if rect.rect == play && rect.brush.is_some() && rect.corner_radius.nw == 7)));
+    // `background` sets the colour too (transparent), so the gradient is the button's only fill:
+    // Suhina's own button artwork is not drawn under it.
+    assert!(!harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Rect(rect) if rect.rect == play && rect.brush.is_some())));
     assert!(
         harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
             egui::Shape::Mesh(mesh) if mesh.calc_bounds() == play && mesh.vertices.len() > 4)),
-        "gradient must remain visible above the inherited SVG body"
+        "gradient must remain visible above the button's surface"
     );
     harness.get_by_label("Play").click();
     harness.run();

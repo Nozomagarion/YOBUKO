@@ -268,6 +268,14 @@ pub(super) fn computed(style: &ComputedStyle) -> Computed {
         border: ink(Property::BorderColor),
         font_size: font.clamp(7.0, 96.0),
         radius: radius.clamp(0.0, 128.0),
+        border_width: match style.get(Property::BorderWidth) {
+            Value::Length(Length::Px(value)) => value.clamp(0.0, 16.0),
+            _ => 0.0,
+        },
+        height: match style.get(Property::Height) {
+            Value::Length(Length::Px(value)) if style.authored(Property::Height) => Some(value.clamp(0.0, 512.0)),
+            _ => None,
+        },
         opacity: match style.get(Property::Opacity) {
             Value::Number(value) => value,
             _ => 1.0,
@@ -282,6 +290,7 @@ pub(super) fn computed(style: &ComputedStyle) -> Computed {
             font_size: style.authored(Property::FontSize),
             radius: style.authored(Property::Radius),
             accent: style.authored(Property::AccentColor),
+            border_width: style.authored(Property::BorderWidth),
         },
         gradients: match style.get(Property::BackgroundImage) {
             Value::Gradients(values) => values

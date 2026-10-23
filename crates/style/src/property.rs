@@ -73,6 +73,7 @@ properties! {
     AccentColor, "accent-color", Color, Value::Color(Color::Current), true, "Accent of controls: a knob's arc, a switched-on button; inherited.";
     BorderColor, "border-color", Color, Value::Color(Color::Current), false, "Border ink, defaulting to the current foreground.";
     Radius, "radius", Length, Value::Length(Length::Px(0.0)), false, "Corner radius.";
+    BorderWidth, "border-width", Length, Value::Length(Length::Px(0.0)), false, "Width of a control's border; none is drawn at 0.";
     FontSize, "font-size", Length, Value::Length(Length::Px(11.0)), true, "Inherited text size.";
     Opacity, "opacity", Number, Value::Number(1.0), false, "Paint opacity from zero to one.";
     Width, "width", Length, Value::Length(Length::Auto), false, "Preferred element width.";

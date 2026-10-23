@@ -4377,7 +4377,8 @@ fn value_control(
         return;
     }
     let rect = crate::kit::control_layout::place(name, rect, clip);
-    let _style = crate::kit::style_class::enter("value");
+    // Named as Edit interface names them, so a theme selects one by id (`#arrangement-volume`).
+    let _style = crate::kit::style_class::enter_named("value", name);
     let _pan_style = matches!(control, Control::Pan).then(|| crate::kit::style_class::enter("pan"));
     let track = lane.track;
     let (value, per_point, per_tick, range, default) = match control {
@@ -4530,33 +4531,19 @@ fn value_action(control: Control, tracks: &[TrackId], from: f64, to: f64) -> Act
     }
 }
 
-/// A volume field: fill from the left up to the level, a tick at its end, the value on the right.
+/// A volume field: fill from the left up to the level, the value on the right. Its track and fill
+/// take their shape from the sheet (`#arrangement-volume` and its `.value-fill`: background,
+/// border, radius, `height` for the thickness) or from `volume.track` and `volume.fill` artwork;
+/// without either it is the native capsule.
 fn volume_field(painter: &egui::Painter, rect: Rect, db: f64, hover: f32) {
-    let fill = theme::control_selected();
-    let radius = rect.height() * 0.5;
-    painter.fill_background(rect, radius, motion::mix(theme::control_background(), theme::control_hover(), hover));
-    let x = rect.left() + rect.width() * volume_position(db);
-    // Clip the filled capsule rather than introducing square corners at its left edge.
-    let filled = Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom()));
-    painter.with_clip_rect(painter.clip_rect().intersect(filled)).fill_background(rect, radius, fill);
-    let text = rect.shrink2(Vec2::new(8.0, 0.0));
-    let unfilled = Rect::from_min_max(Pos2::new(x, rect.top()), rect.max);
-    widgets::text_in(
-        &painter.with_clip_rect(painter.clip_rect().intersect(unfilled)),
-        text,
-        Align2::RIGHT_CENTER,
+    crate::kit::mixer_controls::level_bar(
+        painter,
+        rect,
+        "volume",
+        (0.0, volume_position(db)),
+        hover,
         &widgets::format_db(db),
-        theme::mono_font(theme::TEXT_SMALL),
-        theme::text_primary(),
-    );
-    // The value can cross the fill boundary; keep both portions readable.
-    widgets::text_in(
-        &painter.with_clip_rect(painter.clip_rect().intersect(filled)),
-        text,
         Align2::RIGHT_CENTER,
-        &widgets::format_db(db),
-        theme::mono_font(theme::TEXT_SMALL),
-        theme::text_on(fill),
     );
 }
 

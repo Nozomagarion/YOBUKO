@@ -47,6 +47,10 @@ pub const ROLES: &[&str] = &[
     "track.name",
     "track.body",
     "meter",
+    "volume.track",
+    "volume.fill",
+    "pan.track",
+    "pan.fill",
 ];
 
 /// The very same original SVG sources are embedded and distributed as editable files.
@@ -596,6 +600,13 @@ fn raster_artwork(source: &str, ink: Color32, width: u32, height: u32, contain: 
 }
 
 /// Cached vector/raster artwork. Rotation affects only the final mesh, not the cached image.
+/// Whether the theme in use has artwork of its own for `role`, not the artwork Suhina ships.
+pub fn has_own(role: &str) -> bool {
+    let skin = current();
+    let Some(own) = skin.assets.get(role) else { return false };
+    !DEFAULT_SVGS.iter().any(|(default, svg)| *default == role && *svg == own.as_str())
+}
+
 pub fn paint(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color32, angle: f32) -> bool {
     paint_inner(painter, rect, role, state, ink, angle, 0.0)
 }

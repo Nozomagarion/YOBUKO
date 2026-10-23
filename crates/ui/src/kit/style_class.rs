@@ -51,6 +51,7 @@ pub const CLASSES: &[&str] = &[
     "meter",
     "meter-level",
     "value",
+    "value-fill",
     "dropdown",
     "text-input",
 ];

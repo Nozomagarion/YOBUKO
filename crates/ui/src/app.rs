@@ -6812,7 +6812,8 @@ impl App {
             }
             Drag::Moving(_) | Drag::None => {}
         }
-        painter.fill_background(
+        crate::kit::native_css::surface(
+            &painter,
             tempo_rect,
             0.0,
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
@@ -6991,7 +6992,7 @@ impl App {
         let recording = self.session().is_some_and(|s| s.records_arrangement());
         crate::session::record_controls::record_button(ui, &painter, record, recording, actions);
         let position = native_styles.place(ui, "position", position_base);
-        painter.fill_background(position, 0.0, theme::window_background());
+        crate::kit::native_css::surface(&painter, position, 0.0, theme::window_background());
         widgets::text_in(
             &painter,
             position.shrink2(Vec2::new(PAD, 0.0)),
@@ -7044,7 +7045,7 @@ impl App {
             right = rect.left() - PAD;
             let rect = native_styles.place(ui, "performance", rect);
             let percent = f64::from(milli.min(1000)) / 10.0;
-            painter.fill_background(rect, 0.0, theme::window_background());
+            crate::kit::native_css::surface(&painter, rect, 0.0, theme::window_background());
             let inner = rect.shrink2(Vec2::new(PAD - 2.0, 0.0));
             widgets::text_in(
                 &painter,
@@ -7081,7 +7082,7 @@ impl App {
             let rect = row(right - 76.0, 76.0);
             right = rect.left() - PAD;
             let rect = native_styles.place(ui, "performance", rect);
-            painter.fill_background(rect, 0.0, theme::window_background());
+            crate::kit::native_css::surface(&painter, rect, 0.0, theme::window_background());
             let inner = rect.shrink2(Vec2::new(PAD - 2.0, 0.0));
             widgets::text_in(
                 &painter,

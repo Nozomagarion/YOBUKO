@@ -27,7 +27,7 @@ mod shadows;
 mod text;
 mod workspace;
 pub use diagnostics::{Notice, inspect};
-pub use paint::{background, background_rounded, background_with, level_fill, level_glow};
+pub use paint::{background, background_rounded, background_with, level_fill, level_glow, surface, thickness};
 pub use text::paint_text;
 pub use workspace::{Workspace, workspace};
 
@@ -43,6 +43,10 @@ pub struct Computed {
     pub border: Color32,
     pub font_size: f32,
     pub radius: f32,
+    /// `border-width`; a control draws a border only when the sheet sets one.
+    pub border_width: f32,
+    /// `height` in pixels, when the sheet sets one: the thickness of a bar such as a volume field's.
+    pub height: Option<f32>,
     pub opacity: f32,
     pub visible: bool,
     /// `accent-color`: a control's accent, such as a knob's arc.
@@ -152,6 +156,7 @@ pub struct Authored {
     pub font_size: bool,
     pub radius: bool,
     pub accent: bool,
+    pub border_width: bool,
 }
 
 /// One running transition of one property of one element.
@@ -342,6 +347,9 @@ pub fn leave() {
     });
 }
 
+/// Level fields a theme selects by id (`#arrangement-volume`).
+pub const LEVEL_FIELDS: &[&str] = &["arrangement-volume", "arrangement-pan", "mixer-volume", "mixer-pan"];
+
 /// The element id a theme selects a scope by: documented controls and panels keep their
 /// literal ids; others get one derived from their key.
 fn element_id(node: &StyleNode) -> String {
@@ -364,6 +372,12 @@ fn element_id(node: &StyleNode) -> String {
         && let Some(name) = &node.name
     {
         return name.clone();
+    }
+    // The level fields of the track headers and the mixer, by the names Edit interface gives them.
+    if matches!(node.class.as_str(), "value" | "pan" | "fader")
+        && let Some(name) = node.name.as_deref().filter(|name| LEVEL_FIELDS.contains(name))
+    {
+        return name.to_owned();
     }
     if node.class == "toolbar-module" && node.name.as_deref().is_some_and(|name| skin::MODULES.contains(&name)) {
         node.name.clone().unwrap_or_default()

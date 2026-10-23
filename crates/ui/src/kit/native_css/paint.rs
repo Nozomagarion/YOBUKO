@@ -164,6 +164,35 @@ fn draw(painter: &Painter, rect: Rect, gradient: &Gradient, radius: f32, opacity
     true
 }
 
+/// A control's own surface in `rect`: its background, border, corner radius and shadows from the
+/// element in scope, the caller's `radius` and `fill` where the sheet sets none. A transparent
+/// background paints nothing, rather than a see-through hole in the window. Returns the radius
+/// used, for what the control draws on top.
+pub fn surface(painter: &Painter, rect: Rect, radius: f32, fill: egui::Color32) -> f32 {
+    let style = super::super::style_class::computed();
+    let radius = style.as_ref().filter(|s| s.authored.radius).map_or(radius, |s| s.radius);
+    let radius = radius.min(rect.height().min(rect.width()) / 2.0).max(0.0);
+    let fill = style.as_ref().filter(|s| s.authored.background).map_or(fill, |s| s.background);
+    if fill.a() > 0 {
+        use super::super::surface::Backgrounds;
+        painter.fill_background(rect, radius, fill);
+    }
+    if let Some(mut style) = style {
+        style.radius = radius;
+        background_with(painter, rect, &style);
+        if style.border_width > 0.0 && style.border.a() > 0 {
+            let stroke = egui::Stroke::new(style.border_width, style.border.gamma_multiply(style.opacity));
+            painter.rect_stroke(rect, radius, stroke, egui::StrokeKind::Inside);
+        }
+    }
+    radius
+}
+
+/// The thickness the sheet gives the element in scope (`height`), or `fallback`.
+pub fn thickness(fallback: f32) -> f32 {
+    super::super::style_class::computed().and_then(|style| style.height).unwrap_or(fallback)
+}
+
 pub fn background(painter: &Painter, rect: Rect) -> bool {
     background_rounded(painter, rect, 0.0)
 }
