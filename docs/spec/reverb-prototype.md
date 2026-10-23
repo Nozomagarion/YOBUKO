@@ -88,6 +88,13 @@ are 32-bit float, stereo, at 48 kHz, without peak normalization. Stimulus amplit
 settings, history bytes, build identity and analysis settings accompany results.
 Listen quietly: wet levels differ, and listening files are not loudness matched.
 
+For a controlled decay sweep, append `--flat-decay` to the probe command and use
+a fresh output directory. This keeps room scale at 1 and high-decay ratio at 1
+for all three decay targets (0.5, 2 and 6 seconds). Only decay time changes;
+the ordinary listening presets above remain available. Compare wet-only responses
+to captures made with frequency-dependent damping disabled. Matching numerical
+controls does not establish equivalent algorithms or perceptual quality.
+
 The analyzer also accepts a stereo or mono WAV path, including an impulse captured
 by a recorder after an effect in a DAW. Explicitly select IR analysis only for an
 actual impulse response: arbitrary music cannot establish the decay time of the

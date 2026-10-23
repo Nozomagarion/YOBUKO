@@ -12,12 +12,18 @@ const RATE: u32 = 48_000;
 fn main() -> Result<(), Box<dyn Error>> {
     let output = std::env::args_os().nth(1).ok_or("usage: fdn_probe <output-directory>")?;
     let output = Path::new(&output);
+    let flat_decay = match std::env::args_os().nth(2) {
+        None => false,
+        Some(arg) if arg == "--flat-decay" => true,
+        Some(_) => return Err("unknown option; expected --flat-decay".into()),
+    };
     if output.exists() {
         return Err("output directory already exists; choose a new run directory to preserve results".into());
     }
     std::fs::create_dir_all(output)?;
     let mut renders = Vec::new();
     for (name, decay, scale, ratio) in [("short", 0.5, 0.7, 1.), ("baseline", 2., 1., 1.), ("long", 6., 1.5, 0.5)] {
+        let (scale, ratio) = if flat_decay { (1., 1.) } else { (scale, ratio) };
         let settings =
             Settings { decay_seconds: decay, room_scale: scale, high_decay_ratio: ratio, ..Settings::default() };
         for stimulus in ["impulse", "percussion", "tone"] {
