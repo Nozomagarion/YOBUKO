@@ -436,5 +436,6 @@ animations for connected paint properties. Active motion
 requests repainting at 16 ms and respects the global animation/high-contrast settings;
 geometry animation is not yet consumed by native panel layout.
 No theme work runs on the audio thread. The desktop theme-file service owns portable
-resources and CSS/JSON synchronization. Details and current adapter limits are in
+resources: one CSS folder per theme (`theme.css` importing `advanced.css`), with the
+one-time, validated migration of JSON themes. Details and current adapter limits are in
 [ADR 0030](decisions/0030-native-theme-css.md) and the [skin spec](spec/theme-skins.md).

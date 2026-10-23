@@ -9,6 +9,49 @@ pub use suhina_style::edit as source;
 
 pub const MAX_CSS: usize = 128 * 1024;
 
+/// The file an `@import "name.css"` statement names, when it is a relative `.css` path
+/// inside the theme's folder; no URLs, absolute paths or `..`.
+pub fn import(statement: &str) -> Option<String> {
+    let rest = statement.trim().strip_prefix("@import")?.trim().trim_end_matches(';').trim();
+    let rest = rest.strip_prefix("url(").and_then(|r| r.strip_suffix(')')).unwrap_or(rest).trim();
+    let path = rest
+        .strip_prefix('"')
+        .and_then(|r| r.strip_suffix('"'))
+        .or_else(|| rest.strip_prefix('\'').and_then(|r| r.strip_suffix('\'')))?;
+    (path.ends_with(".css")
+        && path.len() <= 128
+        && !path.contains(['\\', ':', '\0'])
+        && path.split('/').all(|p| !p.is_empty() && p != "." && p != ".."))
+    .then(|| path.to_owned())
+}
+
+/// The relative stylesheets `css` imports before its first rule, in order.
+pub fn imports(css: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut rest = css;
+    loop {
+        let trimmed = rest.trim_start();
+        if let Some(comment) = trimmed.strip_prefix("/*") {
+            let Some(end) = comment.find("*/") else { break };
+            rest = &comment[end + 2..];
+            continue;
+        }
+        let Some(statement) = trimmed.strip_prefix('@') else { break };
+        let (Some(end), brace) = (statement.find(';'), statement.find('{')) else { break };
+        if brace.is_some_and(|brace| brace < end) {
+            break;
+        }
+        if let Some(path) = import(&format!("@{}", &statement[..end])) {
+            result.push(path);
+        }
+        rest = &statement[end + 1..];
+        if result.len() > 8 {
+            break;
+        }
+    }
+    result
+}
+
 /// Apply declarations in source order. Unsupported selectors/properties are visible warnings.
 pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
     let mut warnings = Vec::new();
@@ -25,7 +68,18 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
         rest = &rest[start + 2 + end + 2..];
     }
     source.push_str(rest);
+    // `@import "advanced.css";` and other statements are read by the theme loader, not here.
     let mut rest = source.as_str();
+    while let Some(statement) = rest.trim_start().strip_prefix('@') {
+        let (Some(end), brace) = (statement.find(';'), statement.find('{')) else { break };
+        if brace.is_some_and(|brace| brace < end) {
+            break;
+        }
+        if import(&format!("@{}", &statement[..end])).is_none() {
+            warnings.push(format!("@{}: only @import of a .css file in the theme's folder is read", &statement[..end]));
+        }
+        rest = &statement[end + 1..];
+    }
     let mut rules = 0;
     while !rest.trim().is_empty() {
         rules += 1;
@@ -54,6 +108,78 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
             let result = match selector {
                 "session" | ".session" if super::session_geometry::SessionGeometry::limits(property).is_some() => {
                     theme.skin.session.set(property, value)
+                }
+                "theme" if property == "name" => {
+                    let name = value.trim_matches(['"', '\'']);
+                    if name.is_empty() || name.chars().count() > 64 || name.chars().any(char::is_control) {
+                        Err("theme name must be 1..64 characters")
+                    } else {
+                        theme.name = name.into();
+                        Ok(())
+                    }
+                }
+                "liquid" if matches!(property, "panels" | "tracks" | "clips") => {
+                    match value.trim_end_matches('%').parse::<u8>().ok().filter(|n| *n <= 100) {
+                        Some(n) => {
+                            let options =
+                                theme.liquid.get_or_insert(super::liquid::Options { panels: 0, tracks: 0, clips: 0 });
+                            match property {
+                                "panels" => options.panels = n,
+                                "tracks" => options.tracks = n,
+                                _ => options.clips = n,
+                            }
+                            Ok(())
+                        }
+                        None => Err("liquid strength must be 0..100"),
+                    }
+                }
+                "gradient-panels" | "gradient-tracks" | "gradient-clips" if matches!(property, "angle" | "stops") => {
+                    let slot = match selector {
+                        "gradient-panels" => &mut theme.gradients.panels,
+                        "gradient-tracks" => &mut theme.gradients.tracks,
+                        _ => &mut theme.gradients.clips,
+                    };
+                    let mut gradient = slot.clone().unwrap_or_default();
+                    let result = if property == "angle" {
+                        match value.trim_end_matches("deg").parse::<u16>().ok().filter(|a| *a <= 360) {
+                            Some(angle) => {
+                                gradient.angle = angle;
+                                Ok(())
+                            }
+                            None => Err("gradient angle must be 0..360"),
+                        }
+                    } else {
+                        let mut stops = Vec::new();
+                        let mut valid = true;
+                        for item in value.split(',') {
+                            let mut words = item.split_whitespace();
+                            let (Some(color), Some(position), None) = (words.next(), words.next(), words.next()) else {
+                                valid = false;
+                                break;
+                            };
+                            let rgba = super::theme::parse_rgba(color);
+                            let position = position.trim_end_matches('%').parse::<u8>().ok().filter(|p| *p <= 100);
+                            let (Some(rgba), Some(position)) = (rgba, position) else {
+                                valid = false;
+                                break;
+                            };
+                            stops.push(super::gradient::Stop {
+                                position,
+                                color: egui::Color32::from_rgba_unmultiplied(rgba[0], rgba[1], rgba[2], rgba[3]),
+                                transparent_rgb: (rgba[3] == 0).then_some([rgba[0], rgba[1], rgba[2]]),
+                            });
+                        }
+                        if valid && (2..=8).contains(&stops.len()) {
+                            gradient.stops = stops;
+                            Ok(())
+                        } else {
+                            Err("gradient stops are 2..8 of `#colour position%`")
+                        }
+                    };
+                    if result.is_ok() {
+                        *slot = Some(gradient);
+                    }
+                    result
                 }
                 "artwork" if property == "fps" => match value.parse::<u8>().ok().filter(|fps| (1..=30).contains(fps)) {
                     Some(fps) => {
@@ -244,6 +370,25 @@ pub fn export(theme: &Theme) -> String {
         theme.skin.meter_intensity
     ));
     css.push_str(&format!("artwork {{ fps: {}; }}\n", theme.skin.artwork_fps));
+    css.push_str(&format!("theme {{ name: \"{}\"; }}\n", theme.name.replace(['"', '\\'], "")));
+    if let Some(liquid) = theme.liquid {
+        css.push_str(&format!(
+            "liquid {{ panels: {}; tracks: {}; clips: {}; }}\n",
+            liquid.panels, liquid.tracks, liquid.clips
+        ));
+    }
+    for (name, gradient) in
+        [("panels", &theme.gradients.panels), ("tracks", &theme.gradients.tracks), ("clips", &theme.gradients.clips)]
+    {
+        if let Some(gradient) = gradient {
+            let stops: Vec<String> = gradient
+                .stops
+                .iter()
+                .map(|stop| format!("{} {}%", super::theme::hex_rgba(stop.rgba()), stop.position))
+                .collect();
+            css.push_str(&format!("gradient-{name} {{ angle: {}; stops: {}; }}\n", gradient.angle, stops.join(", ")));
+        }
+    }
     for (name, value) in theme.skin.session.entries() {
         if let Some(value) = value {
             css.push_str(&format!("session {{ {name}: {value}px; }}\n"));
@@ -318,6 +463,41 @@ pub fn export(theme: &Theme) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn name_liquid_and_surface_gradients_round_trip_through_canonical_css() {
+        let mut theme = Theme { name: "Revontuli \"night\"".into(), ..Theme::default() };
+        theme.liquid = Some(super::super::liquid::Options { panels: 40, tracks: 0, clips: 100 });
+        theme.gradients.tracks = Some(super::super::gradient::Gradient {
+            angle: 135,
+            stops: vec![
+                super::super::gradient::Stop {
+                    position: 0,
+                    color: egui::Color32::TRANSPARENT,
+                    transparent_rgb: Some([10, 20, 30]),
+                },
+                super::super::gradient::Stop {
+                    position: 100,
+                    color: egui::Color32::from_rgba_unmultiplied(200, 100, 50, 128),
+                    transparent_rgb: None,
+                },
+            ],
+        });
+        let css = format!("@import \"advanced.css\";\n{}", export(&theme));
+        let mut restored = Theme::default();
+        let warnings = apply(&mut restored, &css);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(restored.name, "Revontuli night");
+        assert_eq!(restored.liquid, theme.liquid);
+        assert_eq!(restored.gradients, theme.gradients);
+        assert_eq!(restored.colors, theme.colors);
+        let mut bad = Theme::default();
+        let warnings =
+            apply(&mut bad, "liquid { panels: 101; } gradient-clips { stops: red 0%; } theme { name: \"\"; }");
+        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        assert_eq!(bad.liquid, None);
+        assert_eq!(bad.gradients.clips, None);
+    }
 
     #[test]
     fn control_anchors_round_trip_through_css_and_cycles_warn() {
@@ -428,6 +608,18 @@ mod tests {
         assert!(apply(&mut restored, &export(&theme)).is_empty());
         assert_eq!(restored, theme);
     }
+    #[test]
+    fn only_relative_css_imports_are_read() {
+        assert_eq!(
+            imports("/* notes */ @import \"advanced.css\"; @import url('more/b.css'); :root {}"),
+            ["advanced.css", "more/b.css"]
+        );
+        for bad in ["@import 'https://x.test/a.css'", "@import '../a.css'", "@import '/etc/a.css'", "@import 'a.svg'"] {
+            assert_eq!(import(bad), None, "{bad}");
+        }
+        assert!(apply(&mut Theme::default(), "@import \"advanced.css\"; meter { segments: 8; }").is_empty());
+    }
+
     #[test]
     fn malformed_css_does_not_panic_or_load_resources() {
         for css in [

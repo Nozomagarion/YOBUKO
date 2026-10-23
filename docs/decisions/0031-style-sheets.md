@@ -52,8 +52,11 @@ edge in the same container with a gap; cycle and chain-length validation; missin
 hidden targets fall back) are connected to the native placement adapter and the Edit
 interface. They are part of the layout model, not of the `skin.controls` offsets, and move
 with it to `position: overlay` and component layout.
-Theme storage is still the legacy format during this stage;
-no installed theme is automatically converted or rewritten on this account.
+Theme storage is CSS: a theme is a folder whose `theme.css` holds every theme value and
+imports `advanced.css`; no JSON is written and nothing is mirrored. A JSON theme from an
+earlier version is migrated once, only after the written CSS reads back as exactly the same
+theme; its JSON and old `style.css` are kept in the theme's `legacy/` folder. The built-in
+themes are still compiled from JSON at this stage.
 
 ## Device panels use the same style engine
 

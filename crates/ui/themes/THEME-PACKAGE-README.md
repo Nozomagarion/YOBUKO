@@ -13,9 +13,8 @@ asking an AI assistant to modify one. Inspect the supplied files before making c
 
 ```text
 my-theme/
-  my-theme.json       # identity, palette, skin, layout and resource references
-  style.css           # canonical native properties mirrored with JSON
-  advanced.css        # optional preserved modern CSS source
+  theme.css           # the theme: name, palette, skin, layout, artwork; imports advanced.css
+  advanced.css        # optional selectors, effects, Flex/Grid and motion; kept as written
   assets/*.svg        # vector control artwork
   assets/*.png        # optional raster artwork and sequence frames
   background.png      # optional background image
@@ -24,19 +23,20 @@ my-theme/
   examples/compact-session.css  # optional native Session density; not enabled automatically
 ```
 
-Installed themes keep `<id>.json` beside the `<id>/` resource directory instead.
-Relative image and stylesheet paths in JSON are authoritative. Keep the whole
-package together; do not move only the JSON when it references external resources.
+Installed themes are the same folders, named by their id. Relative image and stylesheet
+paths in `theme.css` are authoritative; keep the whole folder together. A theme saved by
+an earlier Suhina version as JSON is converted once; its original files are kept in
+`legacy/` inside the theme's folder.
 Drop the ZIP on Suhina to import it, then select it in Settings → Appearance → Themes.
 Open the themes folder from that page to edit the installed files.
-The template ZIP also has `template.json` and reference palettes in `examples/`;
+The template ZIP also has the built-in themes as reference folders in `examples/`;
 the importable example is `my-theme/`.
 
 ## How and when to edit each file
 
 1. Duplicate a bundled theme in the editor or start with the supplied example.
-2. Set the JSON `name` to a descriptive name. Theme file ids use letters, digits and `-`.
-3. For palette changes, edit JSON `colors` or native `style.css` tokens. For example:
+2. Set `theme { name: "My theme"; }` in `theme.css`. Theme folder ids use letters, digits and `-`.
+3. For palette changes, edit the `theme.css` tokens. For example:
 
    ```css
    :root { --accent: #7FD1B9; --window-background: #14161A; }
@@ -44,20 +44,21 @@ the importable example is `my-theme/`.
    toolbar { offset-transport: 48px; }
    ```
 
-   Native CSS token names replace JSON token dots with hyphens. JSON colours use
-   `#RRGGBB` or `#RRGGBBAA`, alpha last. Missing palette tokens inherit Suhina Dark.
-4. For conditional styles, selectors, variables, effects or connected Flex/Grid
-   layout, edit `advanced.css`. JSON `skin.css` mirrors this source losslessly.
-5. For a new control silhouette, edit an SVG or PNG and reference it in `skin.assets`.
+   Token names are the palette keys with hyphens (`window.background` is
+   `--window-background`). Colours use `#RRGGBB` or `#RRGGBBAA`, alpha last. Missing
+   palette tokens inherit Suhina Dark.
+4. For conditional styles, selectors, variables, effects, motion or connected Flex/Grid
+   layout, edit `advanced.css`. It is kept exactly as you write it.
+5. For a new control silhouette, edit an SVG or PNG and name it in `theme.css`, e.g.
+   `play { image: url("assets/play.svg"); }`.
    For layout positions, the toolbar's right-click → Edit toolbar mode is usually
    easier: drag the actual controls on the 8-point grid. Done saves; Cancel or
    Escape discards. Entering/leaving edit mode alone preserves the layout.
 6. Save one source at a time and inspect Suhina's warnings and the actual interface.
-   Files are watched approximately once a second. Independent JSON/CSS edits merge;
-   conflicting values preserve both files and require correction before saving.
-   Canonical `style.css` is normalized; its comments/formatting are not preserved.
-   `advanced.css` retains authored source. Conditional CSS is not flattened into
-   unconditional JSON palette tokens.
+   Files are watched approximately once a second. Saving in Suhina changes only the
+   declarations it edits in `theme.css` and keeps your comments and formatting there.
+   A save over an edit you made outside Suhina since it last read the theme is refused;
+   your file is kept. `advanced.css` is never rewritten by the editors.
 7. Test normal, hover, active and disabled states, narrow/wide windows, interaction,
    clipping and contrast. Export and reimport the ZIP to check portability.
 

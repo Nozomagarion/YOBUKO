@@ -1,11 +1,14 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Theme files: one JSON file per theme in the `themes` folder beside the settings file, named
-//! by the theme's id (`night-blue.json`). A file saved while Suhina runs is read again within a
-//! second, so a theme can be edited in any text editor and seen right away. Backups and the theme
-//! template are zips written to the `exports` folder beside it; theme files and zips dropped on
-//! the window are brought in.
+//! Theme files: one folder per theme in the `themes` folder beside the settings file, named by the
+//! theme's id, holding `theme.css` (the whole theme as CSS; ADR 0031), an imported `advanced.css`,
+//! its artwork and README. A file saved while Suhina runs is read again within a second, so a
+//! theme can be edited in any text editor and seen right away. An older theme written as JSON
+//! (`night-blue.json` beside a folder of CSS and artwork) is migrated once: the CSS is written,
+//! read back and compared, and only then are the JSON and its old `style.css` moved into the
+//! theme's `legacy/` folder; nothing is deleted. Backups and the theme template are zips written to
+//! the `exports` folder; theme files and zips dropped on the window are brought in.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -25,14 +28,18 @@ const MAX_ZIP_FILES: usize = 512;
 const CHECK_EVERY: Duration = Duration::from_secs(1);
 /// The theme template's name in its zip; it is not brought in when the zip is dropped.
 const TEMPLATE: &str = "template.json";
+/// A theme's one source: `<id>/theme.css`.
+const THEME_CSS: &str = "theme.css";
+/// Where a migrated theme keeps its JSON and old canonical CSS.
+const LEGACY: &str = "legacy";
 /// The folder of the template zip that holds the built-in themes as examples.
 const EXAMPLES: &str = "examples/";
 
+/// A theme's source text (theme.css and what it imports) as last read or written, so a save
+/// never overwrites an edit made outside Suhina since.
 #[derive(Clone)]
 struct Snapshot {
-    json: String,
-    css: Option<String>,
-    theme: Theme,
+    sources: String,
 }
 
 pub struct ThemeFiles {
@@ -56,33 +63,26 @@ impl ThemeFiles {
         }
     }
 
+    /// Reads the theme `id` at `path`: its `theme.css`, or a JSON theme, which is migrated.
     fn load_synced(&mut self, id: &str, path: &Path, warnings: &mut Vec<String>) -> Option<ThemeEntry> {
         let result = (|| -> Result<Theme, String> {
-            let (json, css, json_theme, css_theme) = read_versions(path)?;
-            warnings.extend(Theme::from_json(&json).1.into_iter().map(|p| format!("{id}: {p}")));
-            let theme = if let Some(previous) = self.snapshots.get(id) {
-                let json_changed = json != previous.json || json_theme != previous.theme;
-                let css_changed = css != previous.css;
-                if !json_changed && !css_changed {
-                    return Ok(previous.theme.clone());
-                }
-                match (json_changed, css_changed) {
-                    (true, true) => merge_themes(&previous.theme, &json_theme, &css_theme)?,
-                    (true, false) => json_theme,
-                    (_, true) => css_theme,
-                    _ => css_theme,
-                }
-            } else {
-                css_theme
-            };
+            if is_css_theme(path) {
+                // Called when the folder changed: its CSS, or only its artwork.
+                let sources = read_sources(path)?;
+                let (theme, problems) = read_css_theme(path)?;
+                warnings.extend(problems.into_iter().map(|p| format!("{id}: {p}")));
+                self.snapshots.insert(id.into(), Snapshot { sources });
+                return Ok(theme);
+            }
+            let (theme, problems) = read_loose(path)?;
+            warnings.extend(problems.into_iter().map(|p| format!("{id}: {p}")));
             let folder = self.folder.as_ref().ok_or("no themes folder")?;
-            // Legacy files without CSS stay untouched until the user edits them in Suhina.
-            if css.is_some() {
-                persist_theme(folder, id, &theme)?;
-                let (json, css, _, _) = read_versions(path)?;
-                self.snapshots.insert(id.into(), Snapshot { json, css, theme: theme.clone() });
-            } else {
-                self.snapshots.insert(id.into(), Snapshot { json, css, theme: theme.clone() });
+            match migrate(folder, id, &theme) {
+                Ok(css) => {
+                    let sources = read_sources(&css)?;
+                    self.snapshots.insert(id.into(), Snapshot { sources });
+                }
+                Err(error) => warnings.push(format!("{id}: kept as JSON, not migrated to CSS: {error}")),
             }
             Ok(theme)
         })();
@@ -120,9 +120,16 @@ impl ThemeFiles {
             if let Some(entry) = self.load_synced(&id, &path, &mut warnings) {
                 entries.push(entry);
             }
+            let path = self.current_path(&id, path);
             self.seen.insert(id, fingerprint(&path).unwrap_or(modified));
         }
         (entries, warnings)
+    }
+
+    /// Where the theme `id` is now: its `theme.css` once a JSON theme has been migrated.
+    fn current_path(&self, id: &str, path: PathBuf) -> PathBuf {
+        let css = self.folder.as_ref().map(|folder| folder.join(id).join(THEME_CSS));
+        css.filter(|css| css.is_file()).unwrap_or(path)
     }
 
     /// Files added or changed since they were last read, at most once every second.
@@ -142,6 +149,7 @@ impl ThemeFiles {
             if let Some(entry) = self.load_synced(&id, &path, &mut warnings) {
                 entries.push(entry);
             }
+            let path = self.current_path(&id, path);
             self.seen.insert(id, fingerprint(&path).unwrap_or(modified));
         }
         (entries, warnings)
@@ -157,47 +165,49 @@ impl ThemeFiles {
         if !is_theme_id(id) {
             return Err(format!("{id} cannot name a theme file"));
         }
-        let path = folder.join(format!("{id}.json"));
-        if let Some(snapshot) = self.snapshots.get(id) {
-            let (json, css) = suhina_plugins::trace::timed("theme save check", || read_sources(&path))?;
-            if json != snapshot.json || css != snapshot.css {
+        let path = folder.join(id).join(THEME_CSS);
+        if let Some(snapshot) = self.snapshots.get(id)
+            && path.exists()
+        {
+            let sources = suhina_plugins::trace::timed("theme save check", || read_sources(&path))?;
+            if sources != snapshot.sources {
                 return Err(format!(
-                    "Theme {id} has external edits. Reload themes before saving; neither file was overwritten."
+                    "Theme {id} has external edits. Reload themes before saving; its files were not overwritten."
                 ));
             }
-            // Validate resources only after an external change. A palette slider must
-            // not decode every unchanged PNG/SVG twice on each mouse movement.
-            if self.seen.get(id).copied() != Some(fingerprint(&path)?) {
-                read_versions(&path)?;
-            }
         }
-        suhina_plugins::trace::timed("theme package persist", || persist_theme(folder, id, theme))?;
-        let (json, css) = suhina_plugins::trace::timed("theme save readback", || read_sources(&path))?;
-        self.snapshots.insert(id.into(), Snapshot { json, css, theme: theme.clone() });
+        suhina_plugins::trace::timed("theme package persist", || persist_css_theme(folder, id, theme))?;
+        let sources = suhina_plugins::trace::timed("theme save readback", || read_sources(&path))?;
+        self.snapshots.insert(id.into(), Snapshot { sources });
         if let Ok(modified) = fingerprint(&path) {
             self.seen.insert(id.to_string(), modified);
         }
         Ok(())
     }
 
-    /// Renames the file of the theme `from` to `to`, after the theme was renamed. A file that is
-    /// not there yet (a theme not saved before) is fine: it is written under its new name next.
+    /// Renames the theme `from` to `to`, after the theme was renamed: its folder, and a JSON file
+    /// not migrated yet. A theme not saved before is fine: it is written under its new name next.
     pub fn rename(&mut self, from: &str, to: &str) -> Result<(), String> {
         let folder = self.folder.as_ref().ok_or("there is no folder to keep themes in")?;
         if !is_theme_id(from) || !is_theme_id(to) {
             return Err(format!("{from} or {to} cannot name a theme file"));
         }
-        let (old, new) = (folder.join(format!("{from}.json")), folder.join(format!("{to}.json")));
-        if !old.exists() {
+        let pairs = [
+            (folder.join(from), folder.join(to)),
+            (folder.join(format!("{from}.json")), folder.join(format!("{to}.json"))),
+        ];
+        if pairs.iter().all(|(old, _)| !old.exists()) {
             return Ok(());
         }
-        if new.exists() && !from.eq_ignore_ascii_case(to) {
-            return Err(format!("there is a theme file {to}.json already"));
+        if !from.eq_ignore_ascii_case(to) && pairs.iter().any(|(old, new)| old.exists() && new.exists()) {
+            return Err(format!("there is a theme {to} already"));
         }
-        std::fs::rename(&old, &new).map_err(|e| format!("could not rename {from}.json: {e}"))?;
+        for (old, new) in pairs.iter().filter(|(old, _)| old.exists()) {
+            std::fs::rename(old, new).map_err(|e| format!("could not rename {from}: {e}"))?;
+        }
         self.seen.remove(from);
         self.snapshots.remove(from);
-        if let Ok(modified) = fingerprint(&new) {
+        if let Some((_, _, modified)) = self.list().into_iter().find(|(id, _, _)| id == to) {
             self.seen.insert(to.to_string(), modified);
         }
         Ok(())
@@ -211,7 +221,7 @@ impl ThemeFiles {
         }
         let mut contents = vec![("README.md".into(), theme::template_readme().into_bytes())];
         for (id, path, _) in files {
-            let (theme, _) = read_loose(&path)?;
+            let (theme, _) = read_any(&path)?;
             contents.extend(portable_package_files(&id, &theme)?);
         }
         let name = format!("suhina-themes-{}.zip", date(SystemTime::now()));
@@ -230,7 +240,11 @@ impl ThemeFiles {
             (TEMPLATE.to_string(), template.to_json().into_bytes()),
         ];
         for (id, theme) in theme::built_in_themes() {
-            contents.push((format!("{EXAMPLES}{id}.json"), theme.to_json().into_bytes()));
+            for (name, data) in package_files(id, &theme)? {
+                if !name.ends_with("/README.md") && !name.contains("/examples/") {
+                    contents.push((format!("{EXAMPLES}{name}"), data));
+                }
+            }
         }
         contents.extend(portable_package_files("my-theme", &template)?);
         write_zip(&self.exports()?.join("suhina-theme-template.zip"), &contents)
@@ -253,7 +267,7 @@ impl ThemeFiles {
             if std::fs::metadata(path).map_err(|e| format!("{name}: {e}"))?.len() > MAX_FILE {
                 return Err(format!("{name} is larger than a theme can be"));
             }
-            let (theme, problems) = read_loose(path)?;
+            let (theme, problems) = read_any(path)?;
             if problems.iter().any(|p| p.contains("not JSON") || p.contains("JSON object")) {
                 return Err(format!("{name} is not a theme: {}", problems.join("; ")));
             }
@@ -290,22 +304,31 @@ impl ThemeFiles {
         reveal(folder, false)
     }
 
-    /// Each `.json` file in the folder: its id, path and when it last changed, by name.
+    /// Each theme in the folder: a `<id>/theme.css`, or a `<id>.json` not migrated yet; its id,
+    /// path and when it last changed, by name. A folder with `theme.css` wins over a JSON file.
     fn list(&self) -> Vec<(String, PathBuf, u64)> {
         let Some(Ok(dir)) = self.folder.as_ref().map(std::fs::read_dir) else { return Vec::new() };
-        let mut files: Vec<_> = dir
-            .filter_map(Result::ok)
-            .filter_map(|entry| {
-                let path = entry.path();
-                if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                    return None;
-                }
-                let id = path.file_stem()?.to_str()?.to_string();
-                let _meta = entry.metadata().ok().filter(|m| m.is_file())?;
-                Some((id, path.clone(), fingerprint(&path).unwrap_or(0)))
-            })
-            .filter(|(id, _, _)| is_theme_id(id))
-            .collect();
+        let mut files: Vec<(String, PathBuf, u64)> = Vec::new();
+        for entry in dir.filter_map(Result::ok).take(4096) {
+            let path = entry.path();
+            let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
+            let found = if meta.is_dir() {
+                let css = path.join(THEME_CSS);
+                let file = std::fs::symlink_metadata(&css).is_ok_and(|m| m.is_file());
+                path.file_name().and_then(|n| n.to_str()).filter(|_| file).map(|id| (id.to_owned(), css))
+            } else if meta.is_file() && path.extension().and_then(|e| e.to_str()) == Some("json") {
+                path.file_stem().and_then(|n| n.to_str()).map(|id| (id.to_owned(), path.clone()))
+            } else {
+                None
+            };
+            let Some((id, path)) = found.filter(|(id, _)| is_theme_id(id)) else { continue };
+            let modified = fingerprint(&path).unwrap_or(0);
+            match files.iter_mut().find(|(other, _, _)| *other == id) {
+                Some(existing) if is_css_theme(&path) => *existing = (id, path, modified),
+                Some(_) => {}
+                None => files.push((id, path, modified)),
+            }
+        }
         files.sort_by_key(|f| f.0.to_lowercase());
         files
     }
@@ -337,10 +360,148 @@ pub fn reveal(path: &Path, select: bool) -> Result<(), String> {
     command.spawn().map(|_| ()).map_err(|e| format!("could not show {}: {e}", path.display()))
 }
 
-/// A file name's last part without `.json`.
+/// A theme's name in a package path: the file's stem, or the folder of a `theme.css`.
 fn stem(name: &str) -> String {
-    let file = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    let mut parts = name.rsplit(['/', '\\']);
+    let file = parts.next().unwrap_or(name);
+    if file == THEME_CSS {
+        return parts.next().unwrap_or_default().to_string();
+    }
     file.strip_suffix(".json").unwrap_or(file).to_string()
+}
+
+fn is_css_theme(path: &Path) -> bool {
+    path.file_name().is_some_and(|name| name == THEME_CSS)
+}
+
+/// A theme file of either kind: a `theme.css` (or any `.css` theme dropped on the window) or JSON.
+fn read_any(path: &Path) -> Result<(Theme, Vec<String>), String> {
+    if path.extension().is_some_and(|e| e == "css") { read_css_theme(path) } else { read_loose(path) }
+}
+
+/// The text a theme is made of: `theme.css` and the stylesheets it imports, for noticing edits.
+fn read_sources(path: &Path) -> Result<String, String> {
+    use suhina_ui::kit::theme_css;
+    let folder = path.parent().unwrap_or(Path::new("."));
+    let text = String::from_utf8(read_bounded(path, theme_css::MAX_CSS as u64)?).map_err(|e| e.to_string())?;
+    let mut sources = text.clone();
+    for import in theme_css::imports(&text) {
+        let css = read_resource(folder, &import, theme_css::MAX_CSS as u64)?;
+        sources.push_str("\n/* imported */\n");
+        sources.push_str(&String::from_utf8(css).map_err(|e| e.to_string())?);
+    }
+    Ok(sources)
+}
+
+/// A `theme.css` on disk, with its import and artwork relative to its folder.
+fn read_css_theme(path: &Path) -> Result<(Theme, Vec<String>), String> {
+    let text =
+        String::from_utf8(read_bounded(path, suhina_ui::kit::theme_css::MAX_CSS as u64)?).map_err(|e| e.to_string())?;
+    let folder = path.parent().unwrap_or(Path::new("."));
+    resolve_css(&text, |relative, max| read_resource(folder, relative, max))
+}
+
+/// A theme from its `theme.css` text: the canonical rules, at most one imported advanced
+/// stylesheet, and artwork and background read through `resource`.
+fn resolve_css(
+    text: &str,
+    mut resource: impl FnMut(&str, u64) -> Result<Vec<u8>, String>,
+) -> Result<(Theme, Vec<String>), String> {
+    use suhina_ui::kit::theme_css;
+    let mut theme = Theme::default();
+    let warnings = theme_css::apply(&mut theme, text);
+    let imports = theme_css::imports(text);
+    if imports.len() > 1 {
+        return Err("a theme imports at most one advanced stylesheet".into());
+    }
+    if let Some(import) = imports.first() {
+        let css = String::from_utf8(resource(import, theme_css::MAX_CSS as u64)?).map_err(|e| e.to_string())?;
+        suhina_ui::kit::native_css::inspect(&css)?;
+        theme.skin.css = (!css.is_empty()).then(|| std::sync::Arc::from(css));
+    }
+    resolve_resources(&mut theme, &mut resource)?;
+    Ok((theme, warnings))
+}
+
+/// Replaces artwork and background paths by their contents, within the package limits.
+fn resolve_resources(
+    theme: &mut Theme,
+    resource: &mut impl FnMut(&str, u64) -> Result<Vec<u8>, String>,
+) -> Result<(), String> {
+    use suhina_ui::kit::skin;
+    if let Some(background) = &theme.skin.background
+        && !background.starts_with("data:image/png;base64,")
+    {
+        let bytes = resource(background, skin::MAX_PNG as u64)?;
+        theme.skin.background = Some(skin::encode_png(&bytes)?);
+    }
+    let mut artwork_bytes = 0usize;
+    for (role, source) in &mut theme.skin.assets {
+        if !source.trim_start().starts_with('<') && !skin::png_artwork(source) {
+            let png = skin::artwork_extension(source) == "png";
+            let data = resource(source, if png { skin::MAX_PNG as u64 } else { skin::MAX_SVG as u64 })?;
+            *source = if png {
+                skin::encode_png(&data)?.to_string()
+            } else {
+                String::from_utf8(data).map_err(|e| e.to_string())?
+            };
+        }
+        artwork_bytes = artwork_bytes
+            .checked_add(source.len())
+            .filter(|total| *total <= skin::MAX_ARTWORK_BYTES)
+            .ok_or("combined artwork exceeds 16 MiB")?;
+        skin::validate_artwork(source).map_err(|e| format!("{role}: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Migrates the JSON theme `id`, already read as `theme`, to `<id>/theme.css`, keeping the
+/// comments of its old `style.css`. The CSS is read back and must give the same theme; only then
+/// are the JSON and old `style.css` moved into `<id>/legacy/`. On a failure the new `theme.css`
+/// is removed and the JSON stays as it was. Returns the new `theme.css`.
+fn migrate(folder: &Path, id: &str, theme: &Theme) -> Result<PathBuf, String> {
+    use suhina_ui::kit::theme_css;
+    let css = folder.join(id).join(THEME_CSS);
+    if css.exists() {
+        return Err("the theme already has a theme.css".into());
+    }
+    let style = folder.join(id).join("style.css");
+    let existing = if style.is_file() {
+        let bytes = read_resource(folder, &format!("{id}/style.css"), theme_css::MAX_CSS as u64)?;
+        Some(String::from_utf8(bytes).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    write_files(folder, css_files(id, theme, existing.as_deref())?)?;
+    let checked = read_css_theme(&css).and_then(|(migrated, problems)| {
+        if migrated != *theme {
+            Err("the CSS does not read back as the same theme".to_string())
+        } else if !problems.is_empty() {
+            Err(problems.join("; "))
+        } else {
+            Ok(())
+        }
+    });
+    if let Err(error) = checked {
+        let _ = std::fs::remove_file(&css);
+        return Err(error);
+    }
+    let legacy = folder.join(id).join(LEGACY);
+    std::fs::create_dir_all(&legacy).map_err(|e| e.to_string())?;
+    let keep = |from: &Path, name: &str| -> Result<(), String> {
+        let mut to = legacy.join(name);
+        let mut number = 2;
+        while to.exists() {
+            to = legacy.join(format!("{number}-{name}"));
+            number += 1;
+        }
+        std::fs::rename(from, to).map_err(|e| e.to_string())
+    };
+    if style.is_file() {
+        keep(&style, "style.css")?;
+    }
+    keep(&folder.join(format!("{id}.json")), &format!("{id}.json"))?;
+    Ok(css)
 }
 
 fn write_zip(path: &Path, contents: &[(String, Vec<u8>)]) -> Result<PathBuf, String> {
@@ -406,7 +567,7 @@ fn resolve_theme(
     text: &str,
     mut resource: impl FnMut(&str, u64) -> Result<Vec<u8>, String>,
 ) -> Result<(Theme, Vec<String>), String> {
-    use suhina_ui::kit::{skin, theme_css};
+    use suhina_ui::kit::theme_css;
     let root: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("invalid theme JSON: {e}"))?;
     if !root.is_object() {
         return Err("a theme must be a JSON object".into());
@@ -441,77 +602,132 @@ fn resolve_theme(
             }
         }
     }
-    if let Some(background) = &theme.skin.background
-        && !background.starts_with("data:image/png;base64,")
-    {
-        let bytes = resource(background, skin::MAX_PNG as u64)?;
-        theme.skin.background = Some(skin::encode_png(&bytes)?);
-    }
-    let mut artwork_bytes = 0usize;
-    for (role, source) in &mut theme.skin.assets {
-        if !source.trim_start().starts_with('<') && !skin::png_artwork(source) {
-            let png = skin::artwork_extension(source) == "png";
-            let data = resource(source, if png { skin::MAX_PNG as u64 } else { skin::MAX_SVG as u64 })?;
-            *source = if png {
-                skin::encode_png(&data)?.to_string()
-            } else {
-                String::from_utf8(data).map_err(|e| e.to_string())?
-            };
-        }
-        artwork_bytes = artwork_bytes
-            .checked_add(source.len())
-            .filter(|total| *total <= skin::MAX_ARTWORK_BYTES)
-            .ok_or("combined artwork exceeds 16 MiB")?;
-        skin::validate_artwork(source).map_err(|e| format!("{role}: {e}"))?;
-    }
+    resolve_resources(&mut theme, &mut resource)?;
     Ok((theme, warnings))
 }
 
-fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, String> {
+/// The import line that brings a theme's advanced stylesheet into its `theme.css`.
+const ADVANCED_IMPORT: &str = "@import \"advanced.css\";";
+
+/// The files of the theme `id` as CSS: `<id>/theme.css`, its advanced stylesheet, background,
+/// artwork, README and examples. `existing` is the theme's current `theme.css` (or, while
+/// migrating, its old `style.css`), whose comments and formatting are kept outside the values
+/// that changed.
+fn css_files(id: &str, theme: &Theme, existing: Option<&str>) -> Result<Vec<(String, Vec<u8>)>, String> {
+    use suhina_ui::kit::{skin, theme_css};
     theme
         .skin
         .assets
         .values()
         .try_fold(0usize, |total, source| total.checked_add(source.len()))
-        .filter(|total| *total <= suhina_ui::kit::skin::MAX_ARTWORK_BYTES)
+        .filter(|total| *total <= skin::MAX_ARTWORK_BYTES)
         .ok_or("combined artwork exceeds 16 MiB")?;
-    let mut root: serde_json::Value = serde_json::from_str(&theme.to_json()).map_err(|e| e.to_string())?;
-    root["stylesheet"] = serde_json::Value::String("style.css".into());
     let mut files = Vec::new();
     if let Some(css) = &theme.skin.css {
         suhina_ui::kit::native_css::inspect(css)?;
-        if css.len() > suhina_ui::kit::theme_css::MAX_CSS {
+        if css.len() > theme_css::MAX_CSS {
             return Err("advanced CSS exceeds 128 KiB".into());
         }
-        root["advanced-stylesheet"] = serde_json::json!("advanced.css");
         files.push((format!("{id}/advanced.css"), css.as_bytes().to_vec()));
     }
     if let Some(background) = &theme.skin.background {
-        let bytes = suhina_ui::kit::skin::decode_png(background)?;
-        root["skin"]["background"] = serde_json::json!("background.png");
-        files.push((format!("{id}/background.png"), bytes));
+        files.push((format!("{id}/background.png"), skin::decode_png(background)?));
     }
     for (role, source) in &theme.skin.assets {
-        if !suhina_ui::kit::skin::valid_role(role) {
+        if !skin::valid_role(role) {
             return Err(format!("unknown SVG role {role}"));
         }
-        suhina_ui::kit::skin::validate_artwork(source)?;
-        let extension = suhina_ui::kit::skin::artwork_extension(source);
-        let relative = format!("assets/{role}.{extension}");
-        root["skin"]["assets"][role] = serde_json::Value::String(relative.clone());
-        let data = if suhina_ui::kit::skin::png_artwork(source) {
-            suhina_ui::kit::skin::decode_png(source)?
-        } else {
-            source.as_bytes().to_vec()
-        };
+        skin::validate_artwork(source)?;
+        let relative = format!("assets/{role}.{}", skin::artwork_extension(source));
+        let data = if skin::png_artwork(source) { skin::decode_png(source)? } else { source.as_bytes().to_vec() };
         files.push((format!("{id}/{relative}"), data));
     }
-    files.push((format!("{id}/style.css"), suhina_ui::kit::theme_css::export(theme).into_bytes()));
+    let generated = theme_css::export(theme);
+    let mut text = match existing {
+        Some(source) => {
+            let source = source.replace(ADVANCED_IMPORT, "");
+            let mut previous = Theme::default();
+            let warnings = theme_css::apply(&mut previous, &source);
+            if !warnings.is_empty() {
+                return Err(format!("Theme CSS was preserved: {}", warnings.join("; ")));
+            }
+            theme_css::source::update(&source, &theme_css::export(&previous), &generated)?
+        }
+        None => generated,
+    };
+    if theme.skin.css.is_some() {
+        text = format!("{ADVANCED_IMPORT}\n{}", text.trim_start_matches('\n'));
+    }
+    files.push((format!("{id}/{THEME_CSS}"), text.into_bytes()));
     files.push((format!("{id}/README.md"), theme::template_readme().into_bytes()));
     files.push((format!("{id}/examples/dark-gloss.css"), theme::GLOSS_EXAMPLE.as_bytes().to_vec()));
     files.push((format!("{id}/examples/compact-session.css"), theme::COMPACT_SESSION_EXAMPLE.as_bytes().to_vec()));
-    files.push((format!("{id}/{id}.json"), serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?));
     Ok(files)
+}
+
+/// A theme as a package: the same files a theme folder holds.
+fn package_files(id: &str, theme: &Theme) -> Result<Vec<(String, Vec<u8>)>, String> {
+    css_files(id, theme, None)
+}
+
+/// Writes the theme `id` to `<id>/theme.css` and the files beside it, keeping the comments and
+/// formatting of the `theme.css` there and an installed README.
+fn persist_css_theme(folder: &Path, id: &str, theme: &Theme) -> Result<(), String> {
+    use suhina_ui::kit::theme_css;
+    let relative = format!("{id}/{THEME_CSS}");
+    let existing = if folder.join(&relative).is_file() {
+        let bytes = read_resource(folder, &relative, theme_css::MAX_CSS as u64)?;
+        Some(String::from_utf8(bytes).map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    write_files(folder, css_files(id, theme, existing.as_deref())?)
+}
+
+/// Writes `files` under `folder` atomically, `theme.css` last, leaving unchanged files and an
+/// installed README alone.
+fn write_files(folder: &Path, mut files: Vec<(String, Vec<u8>)>) -> Result<(), String> {
+    // theme.css commits the snapshot last. Temp files live beside their destinations for atomic renames.
+    files.sort_by_key(|(name, _)| name.ends_with(THEME_CSS));
+    for (name, data) in files {
+        if !safe_relative(&name) {
+            return Err("invalid theme destination".into());
+        }
+        let path = folder.join(&name);
+        let mut current = folder.to_path_buf();
+        std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+        for component in name.split('/') {
+            current.push(component);
+            if std::fs::symlink_metadata(&current).is_ok_and(|m| m.file_type().is_symlink()) {
+                return Err("theme destination may not be a symlink".into());
+            }
+        }
+        // Installed author guides belong to their package version. New packages
+        // get the current guide; editing a colour must not replace a user's copy.
+        if name.ends_with("/README.md") && path.is_file() {
+            continue;
+        }
+        // Keep unchanged artwork and documentation in place. In particular, forcing
+        // dozens of identical SVGs to disk made each theme slider tick take 100+ ms.
+        if std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_file() && meta.len() == data.len() as u64)
+            && read_bounded(&path, data.len() as u64).is_ok_and(|existing| existing == data)
+        {
+            continue;
+        }
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let temporary = path.with_extension(format!("tmp-{}", std::process::id()));
+        if temporary.exists() {
+            return Err(format!("unfinished theme write: {}", temporary.display()));
+        }
+        use std::fs::OpenOptions;
+        let mut file = OpenOptions::new().write(true).create_new(true).open(&temporary).map_err(|e| e.to_string())?;
+        file.write_all(&data).map_err(|e| e.to_string())?;
+        file.sync_all().map_err(|e| e.to_string())?;
+        std::fs::rename(&temporary, &path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 /// A portable theme carries its effective artwork; local files retain sparse overrides.
@@ -641,7 +857,7 @@ fn read_default_assets(folder: &Path, warnings: &mut Vec<String>) -> Result<(), 
         let mut modified = Theme { name: format!("Suhina Default (modified {number})"), ..Default::default() };
         modified.skin.assets = assets;
         // Commit the user's copy first. A failure leaves every edited original intact.
-        persist_theme(folder, &id, &modified)?;
+        persist_css_theme(folder, &id, &modified)?;
         for (key, path, source) in edited {
             if !restore_default_asset(&path, &key, source.as_bytes())? {
                 warnings.push("Default SVG changed again during recovery; newer edit was kept".into());
@@ -713,15 +929,27 @@ fn read_zip(path: &Path) -> Result<Vec<LoadedTheme>, String> {
         }
     }
     let mut themes = Vec::new();
+    // A package holds CSS themes (`<id>/theme.css`) or, from older versions, JSON themes; a JSON
+    // theme in a folder that also has a theme.css is that theme's legacy copy.
+    let css_folders: std::collections::BTreeSet<&str> = files
+        .keys()
+        .filter_map(|name| name.strip_suffix(THEME_CSS))
+        .map(|folder| folder.trim_end_matches('/'))
+        .collect();
     for (name, bytes) in &files {
-        if !name.ends_with(".json") || name == TEMPLATE || name.starts_with(EXAMPLES) {
+        let css = name.ends_with(&format!("/{THEME_CSS}")) || name == THEME_CSS;
+        let json = name.ends_with(".json")
+            && name != TEMPLATE
+            && !name.contains(&format!("/{LEGACY}/"))
+            && !css_folders.contains(name.strip_suffix(".json").unwrap_or_default());
+        if (!css && !json) || name.starts_with(EXAMPLES) {
             continue;
         }
         let text = std::str::from_utf8(bytes).map_err(|e| e.to_string())?;
         let folder = name.rsplit_once('/').map_or("", |(folder, _)| folder);
-        let (theme, warnings) = resolve_theme(text, |relative, max| {
+        let resource = |relative: &str, max: u64| {
             if !safe_relative(relative) {
-                return Err("invalid relative resource path".into());
+                return Err("invalid relative resource path".to_string());
             }
             let path = if folder.is_empty() { relative.to_string() } else { format!("{folder}/{relative}") };
             let data = files.get(&path).ok_or_else(|| format!("missing theme resource {path}"))?;
@@ -729,7 +957,8 @@ fn read_zip(path: &Path) -> Result<Vec<LoadedTheme>, String> {
                 return Err(format!("{path} exceeds resource size limit"));
             }
             Ok(data.clone())
-        })?;
+        };
+        let (theme, warnings) = if css { resolve_css(text, resource)? } else { resolve_theme(text, resource)? };
         themes.push((name.clone(), theme, warnings));
     }
     if themes.is_empty() {
@@ -844,7 +1073,7 @@ mod tests {
         let mut names: Vec<String> = archive.file_names().filter_map(Result::ok).map(|n| n.to_string()).collect();
         names.sort();
         assert!(names.contains(&"README.md".to_string()) && names.contains(&TEMPLATE.to_string()));
-        assert!(names.contains(&"examples/nord.json".to_string()));
+        assert!(names.contains(&"examples/nord/theme.css".to_string()), "{names:?}");
         let mut template = String::new();
         archive
             .by_name(TEMPLATE)
@@ -907,26 +1136,6 @@ mod tests {
     }
 }
 
-/// Both representations are read before any write, so concurrent edits can be merged.
-fn read_sources(path: &Path) -> Result<(String, Option<String>), String> {
-    let text = String::from_utf8(read_bounded(path, MAX_FILE)?).map_err(|e| e.to_string())?;
-    let root: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    let mut sources = Vec::new();
-    for name in [root.get("stylesheet"), root.get("advanced-stylesheet")].into_iter().flatten() {
-        let name =
-            name.as_str().filter(|s| safe_relative(s) && s.ends_with(".css")).ok_or("invalid stylesheet path")?;
-        let css = String::from_utf8(read_resource(
-            path.parent().unwrap_or(Path::new(".")),
-            name,
-            suhina_ui::kit::theme_css::MAX_CSS as u64,
-        )?)
-        .map_err(|e| e.to_string())?;
-        sources.push((name.to_string(), css));
-    }
-    let css = if sources.is_empty() { None } else { Some(serde_json::to_string(&sources).map_err(|e| e.to_string())?) };
-    Ok((text, css))
-}
-
 fn read_resource(folder: &Path, relative: &str, max: u64) -> Result<Vec<u8>, String> {
     if !safe_relative(relative) {
         return Err("invalid relative theme path".to_string());
@@ -941,160 +1150,16 @@ fn read_resource(folder: &Path, relative: &str, max: u64) -> Result<Vec<u8>, Str
     read_bounded(&path, max)
 }
 
-fn read_versions(path: &Path) -> Result<(String, Option<String>, Theme, Theme), String> {
-    let text = String::from_utf8(read_bounded(path, MAX_FILE)?).map_err(|e| e.to_string())?;
-    let mut root: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    let object = root.as_object_mut().ok_or("theme must be a JSON object")?;
-    let stylesheet = object.remove("stylesheet");
-    let advanced = object.remove("advanced-stylesheet");
-    let folder = path.parent().unwrap_or(Path::new("."));
-    let resource = |relative: &str, max: u64| read_resource(folder, relative, max);
-    let (json_theme, _) = resolve_theme(&root.to_string(), resource)?;
-    if stylesheet.is_none() && advanced.is_none() {
-        return Ok((text, None, json_theme.clone(), json_theme));
-    }
-    let mut sources = Vec::new();
-    for name in [stylesheet, advanced].into_iter().flatten() {
-        let name =
-            name.as_str().filter(|s| safe_relative(s) && s.ends_with(".css")).ok_or("invalid stylesheet path")?;
-        let css =
-            String::from_utf8(resource(name, suhina_ui::kit::theme_css::MAX_CSS as u64)?).map_err(|e| e.to_string())?;
-        sources.push((name.to_string(), css));
-    }
-    let (css_theme, warnings) = resolve_theme(&text, resource)?;
-    if !warnings.is_empty() {
-        return Err(warnings.join("; "));
-    }
-    let sources = serde_json::to_string(&sources).map_err(|e| e.to_string())?;
-    Ok((text, Some(sources), json_theme, css_theme))
-}
-
-/// Merge independently edited JSON fields. A conflicting leaf preserves both files for correction.
-fn merge_themes(base: &Theme, json: &Theme, css: &Theme) -> Result<Theme, String> {
-    fn merge(
-        path: &str,
-        base: &serde_json::Value,
-        a: &serde_json::Value,
-        b: &serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
-        if a == b {
-            return Ok(a.clone());
-        }
-        if a == base {
-            return Ok(b.clone());
-        }
-        if b == base {
-            return Ok(a.clone());
-        }
-        if let (Some(a), Some(b)) = (a.as_object(), b.as_object()) {
-            let mut result = serde_json::Map::new();
-            let keys: std::collections::BTreeSet<_> =
-                a.keys().chain(b.keys()).chain(base.as_object().into_iter().flat_map(|m| m.keys())).collect();
-            for key in keys {
-                let value = merge(
-                    &format!("{path}.{key}"),
-                    &base[key],
-                    a.get(key).unwrap_or(&serde_json::Value::Null),
-                    b.get(key).unwrap_or(&serde_json::Value::Null),
-                )?;
-                if !value.is_null() {
-                    result.insert(key.clone(), value);
-                }
-            }
-            return Ok(serde_json::Value::Object(result));
-        }
-        Err(format!("CSS/JSON conflict at {path}. Both files were kept; make this value agree, then reload themes."))
-    }
-    let parse = |theme: &Theme| serde_json::from_str::<serde_json::Value>(&theme.to_json()).map_err(|e| e.to_string());
-    let value = merge("theme", &parse(base)?, &parse(json)?, &parse(css)?)?;
-    let (theme, warnings) = Theme::from_json(&value.to_string());
-    if warnings.is_empty() { Ok(theme) } else { Err(warnings.join("; ")) }
-}
-
-fn persist_theme(folder: &Path, id: &str, theme: &Theme) -> Result<(), String> {
-    let mut files = package_files(id, theme)?;
-    let css_name = format!("{id}/style.css");
-    if folder.join(&css_name).exists() {
-        use suhina_ui::kit::theme_css;
-        let source = String::from_utf8(read_resource(folder, &css_name, theme_css::MAX_CSS as u64)?)
-            .map_err(|e| e.to_string())?;
-        let mut previous = Theme::default();
-        let warnings = theme_css::apply(&mut previous, &source);
-        if !warnings.is_empty() {
-            return Err(format!("Native CSS was preserved: {}", warnings.join("; ")));
-        }
-        let updated = theme_css::source::update(&source, &theme_css::export(&previous), &theme_css::export(theme))?;
-        if let Some((_, bytes)) = files.iter_mut().find(|(name, _)| name == &css_name) {
-            *bytes = updated.into_bytes();
-        }
-    }
-    let json_name = format!("{id}/{id}.json");
-    for (name, data) in &mut files {
-        if name == &json_name {
-            let mut root: serde_json::Value = serde_json::from_slice(data).map_err(|e| e.to_string())?;
-            root["stylesheet"] = serde_json::json!(format!("{id}/style.css"));
-            if theme.skin.css.is_some() {
-                root["advanced-stylesheet"] = serde_json::json!(format!("{id}/advanced.css"));
-            }
-            if theme.skin.background.is_some() {
-                root["skin"]["background"] = serde_json::json!(format!("{id}/background.png"));
-            }
-            for (role, source) in &theme.skin.assets {
-                let extension = suhina_ui::kit::skin::artwork_extension(source);
-                root["skin"]["assets"][role] = serde_json::json!(format!("{id}/assets/{role}.{extension}"));
-            }
-            *data = serde_json::to_vec_pretty(&root).map_err(|e| e.to_string())?;
-            *name = format!("{id}.json");
-        }
-    }
-    // JSON commits the snapshot last. Temp files live beside their destinations for atomic renames.
-    files.sort_by_key(|(name, _)| name.ends_with(".json"));
-    for (name, data) in files {
-        if !safe_relative(&name) {
-            return Err("invalid theme destination".into());
-        }
-        let path = folder.join(&name);
-        let mut current = folder.to_path_buf();
-        std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
-        for component in name.split('/') {
-            current.push(component);
-            if std::fs::symlink_metadata(&current).is_ok_and(|m| m.file_type().is_symlink()) {
-                return Err("theme destination may not be a symlink".into());
-            }
-        }
-        // Installed author guides belong to their package version. New packages
-        // get the current guide; editing a colour must not replace a user's copy.
-        if name.ends_with("/README.md") && path.is_file() {
-            continue;
-        }
-        // Keep unchanged artwork and documentation in place. In particular, forcing
-        // dozens of identical SVGs to disk made each theme slider tick take 100+ ms.
-        if std::fs::symlink_metadata(&path).is_ok_and(|meta| meta.is_file() && meta.len() == data.len() as u64)
-            && read_bounded(&path, data.len() as u64).is_ok_and(|existing| existing == data)
-        {
-            continue;
-        }
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        }
-        let temporary = path.with_extension(format!("tmp-{}", std::process::id()));
-        if temporary.exists() {
-            return Err(format!("unfinished theme write: {}", temporary.display()));
-        }
-        use std::fs::OpenOptions;
-        let mut file = OpenOptions::new().write(true).create_new(true).open(&temporary).map_err(|e| e.to_string())?;
-        file.write_all(&data).map_err(|e| e.to_string())?;
-        file.sync_all().map_err(|e| e.to_string())?;
-        std::fs::rename(&temporary, &path).map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
 /// A bounded resource fingerprint catches CSS and SVG edits as well as JSON edits.
 fn fingerprint(path: &Path) -> Result<u64, String> {
     use std::hash::{Hash, Hasher};
     let mut paths = vec![path.to_path_buf()];
-    let folder = path.with_extension("");
+    // A CSS theme is its folder; a JSON theme has its resources in the folder of its name.
+    let folder = if is_css_theme(path) {
+        path.parent().map_or_else(|| path.with_extension(""), Path::to_path_buf)
+    } else {
+        path.with_extension("")
+    };
     if let Ok(entries) = std::fs::read_dir(folder) {
         for entry in entries.take(MAX_ZIP_FILES).filter_map(Result::ok) {
             let meta = std::fs::symlink_metadata(entry.path()).map_err(|e| e.to_string())?;
@@ -1133,7 +1198,7 @@ mod skin_package_tests {
         let mut files = ThemeFiles::new(Some(root.join("themes")));
         let mut theme = Theme::default();
         files.write("authored", &theme).unwrap();
-        let css_path = root.join("themes/authored/style.css");
+        let css_path = root.join("themes/authored/theme.css");
         let source = format!("/* Revontuli — keep my notes */\n{}", std::fs::read_to_string(&css_path).unwrap());
         std::fs::write(&css_path, &source).unwrap();
         let guide = root.join("themes/authored/README.md");
@@ -1222,14 +1287,14 @@ mod skin_package_tests {
         let (changed, warnings) = files.changed();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(changed[0].theme.skin.assets["track.name.color-00ff00.frame-0"], replacement);
-        let json = root.join("themes/portable.json");
-        let saved = std::fs::read(&json).unwrap();
+        let css = root.join("themes/portable/theme.css");
+        let saved = std::fs::read(&css).unwrap();
         std::fs::write(&png, b"\x89PNG\r\n\x1fcorrupt").unwrap();
         files.checked = None;
         let (changed, warnings) = files.changed();
         assert!(changed.is_empty());
         assert!(!warnings.is_empty());
-        assert_eq!(std::fs::read(json).unwrap(), saved);
+        assert_eq!(std::fs::read(css).unwrap(), saved);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1244,8 +1309,15 @@ mod skin_package_tests {
             }
         }
         let files = portable_package_files("frames", &theme).unwrap();
-        let (_, json) = files.iter().find(|(name, _)| name == "frames/frames.json").unwrap();
-        let (restored, warnings) = Theme::from_json(std::str::from_utf8(json).unwrap());
+        let (_, css) = files.iter().find(|(name, _)| name == "frames/theme.css").unwrap();
+        let (restored, warnings) = resolve_css(std::str::from_utf8(css).unwrap(), |relative, _| {
+            files
+                .iter()
+                .find(|(name, _)| name == &format!("frames/{relative}"))
+                .map(|(_, data)| data.clone())
+                .ok_or_else(|| format!("missing {relative}"))
+        })
+        .unwrap();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(restored.skin.assets.len(), suhina_ui::kit::skin::MAX_PACKAGE_ASSETS);
     }
@@ -1360,12 +1432,12 @@ mod skin_package_tests {
                 .any(|(name, data)| name == "plain/examples/dark-gloss.css" && data == theme::GLOSS_EXAMPLE.as_bytes())
         );
         assert!(theme.skin.assets.is_empty(), "export must not modify sparse local overrides");
-        let json = files.iter().find(|(name, _)| name == "plain/plain.json").unwrap();
-        let value: serde_json::Value = serde_json::from_slice(&json.1).unwrap();
-        assert_eq!(value["skin"]["assets"]["play"], "assets/play.svg");
+        let css = files.iter().find(|(name, _)| name == "plain/theme.css").unwrap();
+        assert!(std::str::from_utf8(&css.1).unwrap().contains("play { image: url(\"assets/play.svg\"); }"));
+        assert!(!files.iter().any(|(name, _)| name.ends_with(".json")), "packages are CSS");
     }
     #[test]
-    fn advanced_css_source_mirrors_losslessly_and_survives_packages() {
+    fn advanced_css_source_is_imported_verbatim_and_survives_packages() {
         let root = folder("advanced");
         let mut theme = styled();
         let source = "/* Keep my comment */\n@layer custom { :root { --ink: oklch(70% .1 240); } .browser { color:var(--ink); } }\n@media (width < 800px) { #performance { display:none; } }\n";
@@ -1374,102 +1446,135 @@ mod skin_package_tests {
         files.write("portable", &theme).unwrap();
         let css = root.join("themes/portable/advanced.css");
         assert_eq!(std::fs::read_to_string(&css).unwrap(), source);
+        let main = std::fs::read_to_string(root.join("themes/portable/theme.css")).unwrap();
+        assert!(main.starts_with("@import \"advanced.css\";\n"), "{main}");
+        assert!(!root.join("themes/portable.json").exists(), "no JSON is written");
         let edited = source.replace("70%", "80%");
         std::fs::write(&css, &edited).unwrap();
         files.checked = None;
         let (changed, warnings) = files.changed();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(changed[0].theme.skin.css.as_deref(), Some(edited.as_str()));
-        let json = root.join("themes/portable.json");
-        let mut saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&json).unwrap()).unwrap();
-        assert_eq!(saved["skin"]["css"], edited);
-        saved["skin"]["css"] = serde_json::json!(source);
-        std::fs::write(&json, serde_json::to_vec_pretty(&saved).unwrap()).unwrap();
         files.checked = None;
-        let (_, warnings) = files.changed();
-        assert!(warnings.is_empty(), "{warnings:?}");
-        assert_eq!(std::fs::read_to_string(&css).unwrap(), source);
+        assert!(files.changed().0.is_empty(), "reading must not trigger its own reload");
         let zip = files.backup().unwrap();
         let mut target = ThemeFiles::new(Some(root.join("imported")));
         assert!(target.import(&zip).unwrap().1.is_empty());
-        assert_eq!(target.read_all().0[0].theme.skin.css.as_deref(), Some(source));
+        assert_eq!(target.read_all().0[0].theme.skin.css.as_deref(), Some(edited.as_str()));
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
-    fn css_json_and_editor_changes_are_mirrored_without_reload_loops() {
-        let root = folder("mirror");
+    fn external_theme_css_edits_load_and_editor_saves_keep_them_without_reload_loops() {
+        let root = folder("css-source");
         let mut files = ThemeFiles::new(Some(root.join("themes")));
         let original = styled();
         files.write("portable", &original).unwrap();
-        let json = root.join("themes/portable.json");
-        let css = root.join("themes/portable/style.css");
-        let css_text = std::fs::read_to_string(&css)
-            .unwrap()
-            .replace("--accent: #A6A3FF;", "--accent: #12AB34;")
-            .replace("intensity: 100%", "intensity: 65%")
-            .replace("offset-transport: 80px", "offset-transport: 96px");
+        let css = root.join("themes/portable/theme.css");
+        let css_text = format!(
+            "/* My notes stay. */\n{}",
+            std::fs::read_to_string(&css)
+                .unwrap()
+                .replace("--accent: #A6A3FF;", "--accent: #12AB34;")
+                .replace("intensity: 100%", "intensity: 65%")
+                .replace("offset-transport: 80px", "offset-transport: 96px")
+        );
         assert!(css_text.contains("--accent: #12AB34;"));
-        std::fs::write(&css, css_text).unwrap();
+        std::fs::write(&css, &css_text).unwrap();
         files.checked = None;
         let (changed, warnings) = files.changed();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(changed.len(), 1);
         assert_eq!(changed[0].theme.colors.accent, theme::parse_hex("#12AB34").unwrap());
-        let saved: serde_json::Value = serde_json::from_slice(&std::fs::read(&json).unwrap()).unwrap();
-        assert_eq!(saved["colors"]["accent"], "#12AB34");
-        assert_eq!(saved["skin"]["toolbar-offsets"]["transport"], 96);
-        assert_eq!(saved["skin"]["meter-intensity"], 65);
         assert_eq!(changed[0].theme.skin.meter_intensity, 65);
+        assert_eq!(changed[0].theme.skin.toolbar_offsets["transport"], 96);
         files.checked = None;
-        assert!(files.changed().0.is_empty(), "sync must not trigger its own reload");
-        let mut updated = saved;
-        updated["colors"]["accent"] = serde_json::json!("#AB12CD");
-        updated["skin"]["toolbar-offsets"]["transport"] = serde_json::json!(112);
-        updated["skin"]["meter-intensity"] = serde_json::json!(35);
-        std::fs::write(&json, serde_json::to_vec_pretty(&updated).unwrap()).unwrap();
-        files.checked = None;
-        let (changed, warnings) = files.changed();
-        assert!(warnings.is_empty(), "{warnings:?}");
-        assert_eq!(changed[0].theme.colors.accent, theme::parse_hex("#AB12CD").unwrap());
-        assert!(std::fs::read_to_string(&css).unwrap().contains("--accent: #AB12CD;"));
-        assert!(std::fs::read_to_string(&css).unwrap().contains("offset-transport: 112px"));
-        assert!(std::fs::read_to_string(&css).unwrap().contains("intensity: 35%"));
+        assert!(files.changed().0.is_empty(), "reading must not trigger its own reload");
         let mut edited = changed[0].theme.clone();
         edited.colors.accent = theme::parse_hex("#112233").unwrap();
         edited.skin.meter_intensity = 80;
         files.write("portable", &edited).unwrap();
-        assert!(std::fs::read_to_string(&css).unwrap().contains("--accent: #112233;"));
-        assert!(std::fs::read_to_string(&css).unwrap().contains("intensity: 80%"));
+        let saved = std::fs::read_to_string(&css).unwrap();
+        assert!(saved.starts_with("/* My notes stay. */\n"), "{saved}");
+        assert!(saved.contains("--accent: #112233;") && saved.contains("intensity: 80%"));
+        assert!(saved.contains("offset-transport: 96px"));
         assert_eq!(files.read_all().0[0].theme, edited);
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
-    fn conflicting_edits_preserve_both_files_and_independent_edits_merge() {
+    fn a_save_over_unread_external_edits_is_refused_and_keeps_the_files() {
         let root = folder("conflict");
         let mut files = ThemeFiles::new(Some(root.join("themes")));
         let original = styled();
         files.write("portable", &original).unwrap();
-        let json = root.join("themes/portable.json");
-        let css = root.join("themes/portable/style.css");
-        let mut j: serde_json::Value = serde_json::from_slice(&std::fs::read(&json).unwrap()).unwrap();
-        j["colors"]["accent"] = serde_json::json!("#112233");
-        let j = serde_json::to_vec_pretty(&j).unwrap();
-        std::fs::write(&json, &j).unwrap();
-        let c = std::fs::read_to_string(&css).unwrap().replace("--accent: #A6A3FF;", "--accent: #445566;");
-        std::fs::write(&css, &c).unwrap();
-        files.checked = None;
-        let (changed, warnings) = files.changed();
-        assert!(changed.is_empty());
-        assert!(warnings.iter().any(|s| s.contains("conflict")), "{warnings:?}");
-        assert_eq!(std::fs::read(&json).unwrap(), j);
-        assert_eq!(std::fs::read_to_string(&css).unwrap(), c);
-        let mut a = original.clone();
-        a.name = "Renamed externally".into();
-        let mut b = original.clone();
-        b.colors.accent = theme::parse_hex("#445566").unwrap();
-        let merged = merge_themes(&original, &a, &b).unwrap();
-        assert_eq!(merged.name, a.name);
-        assert_eq!(merged.colors.accent, b.colors.accent);
+        let css = root.join("themes/portable/theme.css");
+        let external = std::fs::read_to_string(&css).unwrap().replace("--accent: #A6A3FF;", "--accent: #445566;");
+        std::fs::write(&css, &external).unwrap();
+        let mut ours = original.clone();
+        ours.colors.accent = theme::parse_hex("#112233").unwrap();
+        let error = files.write("portable", &ours).unwrap_err();
+        assert!(error.contains("external edits"), "{error}");
+        assert_eq!(std::fs::read_to_string(&css).unwrap(), external);
+        // Once read, the external edit is the theme, and saving works again.
+        let (entries, _) = files.read_all();
+        assert_eq!(entries[0].theme.colors.accent, theme::parse_hex("#445566").unwrap());
+        assert!(files.write("portable", &ours).is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn a_json_theme_migrates_to_css_keeping_its_comments_and_its_originals() {
+        let root = folder("migrate");
+        let themes = root.join("themes");
+        let mut theme = styled();
+        theme.skin.css = Some(std::sync::Arc::from(".browser { color: #abcdef; }\n"));
+        theme.liquid = Some(suhina_ui::kit::liquid::Options { panels: 30, tracks: 0, clips: 10 });
+        // A theme as earlier versions wrote it: JSON beside a folder with style.css and artwork.
+        std::fs::create_dir_all(themes.join("old/assets")).unwrap();
+        let mut json: serde_json::Value = serde_json::from_str(&theme.to_json()).unwrap();
+        json["stylesheet"] = serde_json::json!("old/style.css");
+        json["advanced-stylesheet"] = serde_json::json!("old/advanced.css");
+        if let Some(skin) = json["skin"].as_object_mut() {
+            skin.remove("css");
+        }
+        for (role, source) in &theme.skin.assets {
+            std::fs::write(themes.join(format!("old/assets/{role}.svg")), source).unwrap();
+            json["skin"]["assets"][role] = serde_json::json!(format!("old/assets/{role}.svg"));
+        }
+        let json = serde_json::to_vec_pretty(&json).unwrap();
+        std::fs::write(themes.join("old.json"), &json).unwrap();
+        let style = format!("/* Revontuli notes */\n{}", theme_css::export(&theme));
+        std::fs::write(themes.join("old/style.css"), &style).unwrap();
+        std::fs::write(themes.join("old/advanced.css"), ".browser { color: #abcdef; }\n").unwrap();
+        let mut files = ThemeFiles::new(Some(themes.clone()));
+        let (entries, warnings) = files.read_all();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].theme, theme);
+        let css = std::fs::read_to_string(themes.join("old/theme.css")).unwrap();
+        assert!(css.starts_with("@import \"advanced.css\";\n/* Revontuli notes */"), "{css}");
+        assert!(!themes.join("old.json").exists() && !themes.join("old/style.css").exists());
+        assert_eq!(std::fs::read(themes.join("old/legacy/old.json")).unwrap(), json);
+        assert_eq!(std::fs::read_to_string(themes.join("old/legacy/style.css")).unwrap(), style);
+        // Read again: the CSS theme is the same, and nothing migrates twice.
+        let (again, warnings) = ThemeFiles::new(Some(themes.clone())).read_all();
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(again[0].theme, theme);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn a_json_theme_that_cannot_round_trip_stays_json() {
+        let root = folder("migrate-refused");
+        let themes = root.join("themes");
+        std::fs::create_dir_all(&themes).unwrap();
+        // A JSON theme whose stylesheet has an invalid rule: CSS would lose it, so it is kept.
+        let mut json: serde_json::Value = serde_json::from_str(&styled().to_json()).unwrap();
+        json["stylesheet"] = serde_json::json!("kept/style.css");
+        std::fs::create_dir_all(themes.join("kept")).unwrap();
+        std::fs::write(themes.join("kept/style.css"), "meter { segments: 999; }").unwrap();
+        std::fs::write(themes.join("kept.json"), serde_json::to_vec_pretty(&json).unwrap()).unwrap();
+        let (entries, warnings) = ThemeFiles::new(Some(themes.clone())).read_all();
+        assert_eq!(entries.len(), 1, "the theme still loads from JSON");
+        assert!(warnings.iter().any(|w| w.contains("kept as JSON")), "{warnings:?}");
+        assert!(themes.join("kept.json").exists() && !themes.join("kept/theme.css").exists());
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
@@ -1490,7 +1595,7 @@ mod skin_package_tests {
                 assert!(archive.by_name(&format!("sheet-copy/assets/{role}.svg")).is_ok(), "{role}");
             }
             assert!(archive.by_name("sheet-copy/advanced.css").is_ok());
-            assert!(archive.by_name("sheet-copy/style.css").is_ok());
+            assert!(archive.by_name("sheet-copy/theme.css").is_ok());
             assert!(archive.by_name("sheet-copy/README.md").is_ok());
             assert_eq!(archive.by_name("sheet-copy/background.png").is_ok(), id == "suhina-meadow");
             std::fs::remove_dir_all(root).unwrap();
@@ -1513,7 +1618,7 @@ mod skin_package_tests {
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(target.read_all().0[0].theme, theme);
         let mut archive = zip::ZipArchive::new(std::fs::File::open(zip).unwrap()).unwrap();
-        assert!(archive.by_name("portable/style.css").is_ok());
+        assert!(archive.by_name("portable/theme.css").is_ok());
         assert!(archive.by_name("portable/assets/fader.cap.svg").is_ok());
         assert!(archive.by_name("portable/background.png").is_ok());
         std::fs::remove_dir_all(root).unwrap();
@@ -1536,7 +1641,7 @@ mod skin_package_tests {
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
-    fn live_svg_edit_is_loaded_and_missing_svg_does_not_overwrite_json() {
+    fn live_svg_edit_is_loaded_and_missing_svg_does_not_overwrite_the_theme() {
         let root = folder("svg");
         let mut files = ThemeFiles::new(Some(root.join("themes")));
         files.write("portable", &styled()).unwrap();
@@ -1547,14 +1652,14 @@ mod skin_package_tests {
         let (changed, warnings) = files.changed();
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(changed[0].theme.skin.assets["fader.cap"], replacement);
-        let json = root.join("themes/portable.json");
-        let saved = std::fs::read(&json).unwrap();
+        let css = root.join("themes/portable/theme.css");
+        let saved = std::fs::read(&css).unwrap();
         std::fs::remove_file(svg).unwrap();
         files.checked = None;
         let (changed, warnings) = files.changed();
         assert!(changed.is_empty());
         assert!(!warnings.is_empty());
-        assert_eq!(std::fs::read(&json).unwrap(), saved);
+        assert_eq!(std::fs::read(&css).unwrap(), saved);
         std::fs::remove_dir_all(root).unwrap();
     }
 }

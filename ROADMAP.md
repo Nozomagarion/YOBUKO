@@ -140,7 +140,7 @@ refused or suspended, never by losing its edits.
 ## What works now
 
 - Theme skins: editable SVG/PNG controls with colour/state variants and image sequences, configurable level-meter presentation including signal-driven artwork frames and theme-owned intensity, theme-owned toolbar layouts and native element placement, and portable CSS/JSON/SVG/PNG packages with live literal-value synchronization. Suhina's own style engine (`suhina-style`, no browser engine) adds a retained native style tree, cascade layers, variables, calc(), media ranges, linear/radial/conic gradients, color-mix(), bounded box shadows, paint transitions/keyframes, Flex/Grid toolbar/workspace panel layout and persistent anchors between controls. Bar/window geometry, remaining raw controls and further CSS effects still need integration.
-- Theme presentation: native Session column widths and row heights mirror CSS/JSON; mixer/name backgrounds consume authored materials, and stereo meter gradients retain fixed dBFS colour positions with native peak/RMS opacity and lit-region glow. Fader scales move independently of the rail/cap.
+- Theme presentation: native Session column widths and row heights come from the theme's CSS; mixer/name backgrounds consume authored materials, and stereo meter gradients retain fixed dBFS colour positions with native peak/RMS opacity and lit-region glow. Fader scales move independently of the rail/cap.
 
 - Forest Amber, the green-and-white Suhina Sheet, blue/cream glass Suhina Meadow and brown pixel-textured Suhina Blocks are available as built-in themes. Sheet and Meadow include compact Session geometry, native CSS and original editable SVG controls; Meadow embeds an original generated green-hill background and liquid settings. Blocks uses brown plank CSS without landscape wallpaper, plus colour-keyed SVG track textures.
 
@@ -593,8 +593,9 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 - The whole window zooms from 50 % to 200 % (Ctrl and + or -, Cmd on macOS; Ctrl and 0 for
   100 %; View › Zoom in and Settings › Appearance › Zoom), and the zoom is kept for the next run
   ([spec](docs/spec/window-zoom.md)).
-- **Themes**: every colour comes from the theme in use, a JSON file in the `themes` folder
-  (`{ "name": …, "colors": { "accent": "#A6A3FF", … } }`); track colours and the sample map's
+- **Themes**: every colour comes from the theme in use, a folder with a `theme.css` in the
+  `themes` folder (`theme { name: …; } :root { --accent: #A6A3FF; … }`); JSON themes from earlier
+  versions are converted once, keeping the originals; track colours and the sample map's
   kind colours are theme tokens too (`track.1`–`track.8`, `kind.*`). Nine come with Suhina (Suhina
   Dark and Light, Editor Dark, High Contrast, Dracula, Nord, Catppuccin Mocha and Latte, Solarized
   Dark). Settings › Appearance › Theme picks one, changes its colours, renames, duplicates, reads

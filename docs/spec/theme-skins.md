@@ -316,9 +316,9 @@ Changing a bundled theme creates an editable copy. Duplicating, renaming, resett
 exporting and importing preserve the complete theme. Old colour-only themes retain
 Suhina's existing layout and controls.
 
-The optional `skin` object in theme JSON contains `assets`, `meter`, and `toolbar`.
-Artwork may be inline SVG strings or PNG data URIs in JSON, or relative `.svg`/`.png` file paths beside
-that JSON. Portable ZIPs put each theme and its artwork in a separate folder.
+A theme's artwork is named in its `theme.css` (`play { image: url("assets/play.svg"); }`)
+with relative `.svg`/`.png` paths inside the theme's folder. Portable ZIPs put each theme
+and its artwork in a separate folder.
 Artwork changes presentation only: command dispatch, keyboard access, value ranges,
 gestures and undo remain owned by the application. Missing or invalid artwork uses
 Suhina's normal drawing. Network resources, embedded SVG images and SVG scripts are not
@@ -399,20 +399,30 @@ modern selectors, queries, layout algorithms and animations are not implemented 
 reader. The advanced target and engine research are in
 [ADR 0030](../decisions/0030-native-theme-css.md).
 
-Every edited theme has `<id>.json`, `<id>/style.css` and `<id>/assets/` in the themes
-folder. CSS and JSON changes are observed within the existing one-second poll interval.
-An editor change writes both; an external CSS change updates JSON; an external JSON
-change updates CSS. Native editor saves patch only changed declarations, retaining
-unrelated comments and formatting. Installed package README files are not rewritten.
-Independent field edits merge; conflicting changes to
-one field preserve both files and report the field. A malformed stylesheet or missing
-resource does not overwrite the saved JSON or replace the currently loaded theme.
+### Theme storage: CSS is the one source
 
-Saving a theme retains byte-identical package files, including SVG/PNG artwork,
-examples and documentation. Palette and liquid edits update only changed files;
-unchanged resources keep their timestamps. Editor saves compare the JSON and CSS
-sources for conflicts without decoding the package's images again, and validate
-resources when the package fingerprint changes outside the editor.
+A theme is a folder `<id>/` in the themes folder: `theme.css` holds the whole theme
+(palette tokens, `theme { name }`, `liquid`, `gradient-panels|tracks|clips`, meter,
+artwork, placements and anchors, toolbar, Session geometry, background) and imports at
+most one advanced stylesheet with `@import "advanced.css";` before its first rule. The
+folder also holds `assets/`, `background.png`, `README.md` and `examples/`. No JSON is
+written and nothing is mirrored.
+
+Changes to any file of the folder are noticed within the one-second poll. Editor saves
+patch only changed declarations of `theme.css`, keeping comments and formatting, and
+write only files whose bytes changed. A save over an edit made outside Suhina since the
+theme was last read is refused and leaves the files as they are; reading the themes again
+makes the edit the theme. A malformed stylesheet or missing resource does not replace the
+loaded theme. Installed package README files are not rewritten.
+
+**Migration of JSON themes.** A theme written by earlier versions (`<id>.json` beside
+`<id>/style.css`) is read as before and migrated once: `theme.css` is written from the
+old `style.css`, keeping its comments, with the import of `advanced.css`; it is read back
+and must give exactly the same theme with no warnings. Only then are `<id>.json` and the
+old `style.css` moved into `<id>/legacy/` (never deleted; a later copy gets a numbered
+name). Otherwise the new `theme.css` is removed, the JSON stays in use, and a warning
+says why. ZIP packages and dropped files from earlier versions are read the same way and
+saved as CSS themes.
 File operations and live-reload polling run on one background worker. While a save
 is in flight, later samples of the same slider replace queued saves; rename,
 reload, import and export retain their order. Preview changes remain immediate,
@@ -424,8 +434,8 @@ document instead of discarding it and rebuilding a fallback document per control
 Viewport changes also retain the scope tree while updating media conditions and
 viewport-dependent values. The next repaint consumes the refreshed style snapshot.
 
-ZIP export places each JSON, style.css, SVG and background PNG together under its theme
-id. Import validates resources before writing any theme, and gives colliding ids a suffix.
+ZIP export places each theme's `theme.css`, `advanced.css`, SVG/PNG artwork and
+background together under its theme id. Import validates resources before writing any theme, and gives colliding ids a suffix.
 The in-app CSS editor accepts native values and styles; package-relative image URLs are
 resolved when importing or reloading theme files. The SVG editor accepts vector markup.
 
@@ -530,12 +540,9 @@ that reads on a dark panel can disappear on a bright volume/pan field fill:
         --text-value:#14212C; --text-inverse:#14212C; }
 ```
 
-`skin.css` retains an authored modern stylesheet verbatim in JSON. Export and native
-storage additionally write `advanced.css`, referenced by `advanced-stylesheet`.
-Editing either representation mirrors to the other without changing comments or
-formatting. Conflicting source edits preserve both files. This source remains separate
-from canonical `style.css`, which maps literal palette and skin values into native JSON.
-The same byte limit and package path restrictions apply to both stylesheets.
+`advanced.css` is the authored advanced stylesheet, kept byte for byte; `theme.css`
+imports it. Its rules are separate from `theme.css`'s canonical values, which the editors
+change. The same byte limit and package path restrictions apply to both stylesheets.
 
 The advanced editor supplies a Flex example and calls the native engine, which
 computes variables, layers, inheritance, colours, value expressions and viewport
