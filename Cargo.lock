@@ -4922,6 +4922,7 @@ dependencies = [
  "suhina-device-api",
  "suhina-device-registry",
  "suhina-device-sdk",
+ "suhina-dsp",
  "suhina-model",
  "suhina-stretch",
 ]
