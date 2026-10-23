@@ -16,6 +16,7 @@ pub mod convolver;
 pub mod crossover;
 pub mod dc;
 pub mod delay;
+pub mod fdn;
 pub mod first_order;
 pub mod gain;
 pub mod lfo;
