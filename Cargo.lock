@@ -4973,6 +4973,7 @@ version = "0.0.1"
 dependencies = [
  "midir",
  "suhina-engine",
+ "suhina-plugins",
  "suhina-session",
 ]
 
