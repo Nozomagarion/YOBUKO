@@ -72,7 +72,11 @@ that differ from the theme's:
 { "name": "Frost", "appearance": "light", "values": { "--accent": "#88C0D0", "--window-background": "var(--nord-snow)" } }
 ```
 
-Values are CSS text and may refer to the theme's own variables. A variant's values win over the
+Values are CSS text and may refer to the theme's own variables. A variant may set a core
+property, one of your `@property` settings, or any other variable your `:root` sets (a helper
+such as `--my-well`, without `@property`); variables of yours that refer to it follow, in the
+painted sheet and in the colours the editor shows. A name your sheet never sets is refused with
+a warning. A variant's values win over the
 theme's rules for the same property, including ones inside `@media`. The editor shows a theme's
 variants as swatches under its card. A built-in theme's variants are kept in a folder of its id
 holding only `variants/`, without a copy of its CSS.
@@ -94,6 +98,9 @@ of a device panel is `#its-id`, for example:
 
 1. Duplicate a bundled theme in the editor or start with the supplied example.
 2. Set `theme { name: "My theme"; }` in `theme.css`. Theme folder ids use letters, digits and `-`.
+   The folder's name stays its id when the name changes. A name given in Suhina (the editor's
+   name field) is kept in `layout.css` and wins over the one in `theme.css`: to name the theme
+   in `theme.css` again, remove the `name` line from `layout.css`.
 3. For palette and other settings, set the core properties in `theme.css`'s `:root`. For example:
 
    ```css
@@ -145,7 +152,7 @@ It also affects needles, hold marks and signal-driven artwork frames, while keep
 the native clip warning visible and native bar rails unchanged. Frame artwork dims
 as a whole, including any background baked into its image. This changes visual opacity, not audio
 gain or saturation. Change palette/gradient colours for different hues or saturation.
-Advanced `.meter-level { opacity: .5; }` additionally dims native bars, hold marks,
+In `theme.css`, `.meter-level { opacity: .5; }` additionally dims native bars, hold marks,
 needles and CSS fills/glow. Transparent CSS fills suppress native fill fallback.
 Generic CSS `filter: brightness()` / `saturate()` is not connected to native painting.
 
@@ -186,7 +193,7 @@ Done saves these rules in the theme's `layout.css`; you may also write them in `
 
 Offsets are relative to the native anchor, in logical points, bounded to ±16384;
 sizes are `auto` or 1–4096px. `bottom` anchors to the containing panel. This explicit
-native positioning contract is separate from the advanced stylesheet's Flex/Grid layout.
+native positioning contract is separate from the Flex/Grid layout in `theme.css`.
 Placement overrides do not automatically resolve overlaps with neighbouring elements;
 when moving a name into the footer, arrange the toggles and sends to leave it room.
 Changing direction changes the native drag axis, rail, cap and scale together.
@@ -271,7 +278,7 @@ Portable exports include inherited artwork so another machine receives the same 
 | Motion | Connected paint transitions/keyframes; native animation-off/high-contrast settings suppress motion |
 | Selectors | Retained native class tree, child/sibling matching, connected hover/active/disabled/focus states, named object identities |
 
-The advanced stylesheet runs on Suhina's own style engine, with Taffy for connected layout. For example:
+`theme.css` runs on Suhina's own style engine, with Taffy for connected layout. For example:
 
 ```css
 .browser { color: #D8E8DF; background-color: #101C17;
@@ -284,7 +291,19 @@ The advanced stylesheet runs on Suhina's own style engine, with Taffy for connec
 ```
 
 Workspace layout respects native panel visibility. CSS-owned sizes replace the
-browser/detail splitters; removing the layout rules restores saved native sizes.
+browser/detail splitters; removing the layout rules restores saved native sizes. A panel the grid
+places in the same cells as `#panel-main` is drawn over the view and takes the pointer there,
+for example a browser floating over the left of the view:
+
+```css
+#workspace { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+#panel-main { grid-column: 1; grid-row: 1; }
+#panel-browser { grid-column: 1; grid-row: 1; width: 260px; justify-self: start; }
+```
+
+`.arrangement { --suhina-track-headers: left; }` (or `right`) puts the Arrangement view's track
+headers on that side while the user's **Track headers** setting is *Theme*, its default. A user
+who chose Left or Right keeps their side.
 The toolbar exposes `browser`, `tempo`, `signature`, `grid`, `count-in`, `transport`,
 `position`, `metronome`, `mapping`, `performance`, `views`, `agents` module ids.
 Device SDK controls expose semantic classes such as `.device-panel`, `.knob`,
@@ -292,10 +311,77 @@ Device SDK controls expose semantic classes such as `.device-panel`, `.knob`,
 The native centred toolbar exposes the same module ids as CSS layouts. Its main
 buttons additionally expose `#control-play`, `#control-stop`, `#control-record`,
 `#control-browser-toggle` and `#control-metronome-toggle`. Paint-only rules preserve
-the existing geometry. Button backgrounds (gradients/shadows) remain visible above
-SVG body artwork, below glyphs and labels; CSS corner radius also clips that artwork.
-Class coverage and host integration are still expanding: inspect the current spec
-and test the actual target instead of inventing selectors.
+the existing geometry. The selector reference below lists every class and id.
+
+## Selector reference
+
+Classes, each the native element it styles:
+
+| Class | What it is |
+|---|---|
+| `.window`, `.menu-bar`, `.application-bar`, `.project-tabs`, `.toolbar`, `.status-bar` | the window and its bars |
+| `.workspace`, `.workspace-panel` | the layout under the bars (`#workspace`, `#panel-browser`, `#panel-main`, `#panel-detail`) |
+| `.toolbar-module` | one area of the toolbar, by its id (below) |
+| `.browser`, `.session`, `.arrangement`, `.mixer`, `.detail`, `.clip-editor`, `.piano-roll`, `.sample-map` | the views and panels |
+| `.track-header`, `.track-name`, `.track-column`, `.scene-column`, `.scene`, `.slot`, `.clip` | tracks, scenes, slots and clips |
+| `.waveform`, `.envelope` | what a clip shows |
+| `.device-panel`, `.device-section`, `.device-control`, `.xy-control` | device panels; `#id` selects a device control |
+| `.button`, `.value`, `.value-fill`, `.dropdown`, `.text-input` | buttons, value fields, the lit part of a level field, menus and text fields |
+| `.knob`, `.fader`, `.fader-cap`, `.fader-scale`, `.pan` | mixer and device controls |
+| `.meter`, `.meter-level`, `.meter-vertical`, `.meter-horizontal` | level meters and their lit part |
+| `.label`, `.separator`, `.settings`, `.dialog` | labels, rules, the Settings page and dialogs |
+
+Ids:
+
+| Id | What it is |
+|---|---|
+| `#browser`, `#tempo`, `#signature`, `#grid`, `#count-in`, `#metronome`, `#transport`, `#position`, `#views`, `#performance` (RAM and CPU), `#mapping`, `#agents` | the toolbar's areas (`.toolbar-module`) |
+| `#control-play`, `#control-stop`, `#control-record`, `#control-browser-toggle`, `#control-metronome-toggle` | the toolbar's main buttons |
+| `#arrangement-volume`, `#arrangement-pan` | a track header's volume and pan fields |
+| `#mixer-volume`, `#mixer-pan` | a mixer strip's fader and pan |
+| `#workspace`, `#panel-browser`, `#panel-main`, `#panel-detail` | the workspace and its panels |
+
+A view's or bar's background is the surface behind its controls: `.toolbar` or `.arrangement`
+with a `background-color` does not repaint the buttons on it. A control's own surface takes
+`background-color`, `background-image`, `border-radius`, `border-width` with `border-color`
+(no border is drawn without a width), `box-shadow` and `opacity`; `transparent` paints nothing.
+A button shaped this way is not covered by the artwork Suhina ships, only by your own
+`button` artwork. For example, a toolbar as one surface with recessed displays:
+
+```css
+#browser .button, #metronome .button { background-color: transparent; box-shadow: none; }
+#browser .button:hover, #metronome .button:hover { border-width: 1px; border-color: var(--accent); }
+#performance { background-color: transparent; }
+#tempo, #position { background-color: var(--my-well); border-radius: 4px; }
+```
+
+Volume and pan fields are level bars. The field (`#arrangement-volume`) is the track and its
+`.value-fill` the lit part; `height` sets the thickness of either, so a thin line with a lit
+segment is:
+
+```css
+#arrangement-volume { height: 4px; border-radius: 0; background-color: #2A3238; }
+#arrangement-volume .value-fill { background-color: var(--accent); }
+```
+
+Artwork of your own replaces either: `volume.track`, `volume.fill`, `pan.track` and `pan.fill`.
+
+## What a theme cannot set
+
+- **Choices on the Settings page that change how things look:** the header and clip colour
+  strengths, the waveform and note colours, and knobs or fields for the mixer (apart from
+  `.pan { --suhina-appearance: knob | field; }`) are the user's. A shared theme can look
+  different on another computer because of them. Only the track headers' side follows a theme.
+- **A track's text colour:** worked out from the header's fill (the track's colour at the
+  header colour strength), not from your `track.body` artwork. Over a dark body with a bright
+  track colour, keep the body light enough for that text.
+- **Artwork per variant:** an SVG is the same in every variant and cannot read your variables;
+  colours fixed in it do not follow a light variant. Use `currentColor` where you can.
+- **Buttons in dialogs and on the Settings page:** ordinary widgets, which `:hover` and
+  `:active` rules do not reach.
+
+`track.name` and `track.body` artwork is drawn with `currentColor` as the header's fill: the
+track's colour at the header colour strength.
 
 ## Signal-driven meter artwork
 

@@ -870,26 +870,31 @@
   },
   "Arrangement/Tracks/track_headers": {
     "sourceFingerprint": "836455800937f61a56189fe8d17ea11795f5f4726737b996885673a487dec04b",
-    "summary": "Place Arrangement track names and controls on the left or right of the timeline.",
-    "description": "Track headers contain each track’s name and controls. This moves their column to the selected edge of the Arrangement timeline. It does not reorder tracks, move the browser, or change the Session view’s columns. Browser side is a separate preference.",
+    "summary": "Place Arrangement track names and controls on the left or right of the timeline, or where the theme puts them.",
+    "description": "Track headers contain each track’s name and controls. This moves their column to the chosen edge of the Arrangement timeline. Theme, the default, uses the side the theme in use gives (a theme says it with --suhina-track-headers in its sheet) and the right when it gives none; the headers then move when you change theme. Left and Right are your own choice and stay whatever theme is in use. Moving the headers with the button in the view's corner sets Left or Right. It does not reorder tracks, move the browser, or change the Session view’s columns. Browser side is a separate preference.",
     "options": [
       {
+        "name": "Theme",
+        "description": "Follow the theme in use: its side, or the right when it gives none. This is the default."
+      },
+      {
         "name": "Left",
-        "description": "Show the header column on the left of the Arrangement lanes."
+        "description": "Show the header column on the left of the Arrangement lanes, whatever the theme says."
       },
       {
         "name": "Right",
-        "description": "Show the header column on the right. This is the default."
+        "description": "Show the header column on the right, whatever the theme says."
       }
     ],
-    "whenToChange": "Choose the side that keeps track controls closest to where you usually work on the timeline.",
+    "whenToChange": "Choose Left or Right to keep track controls on the side you usually work on, whatever theme you use; keep Theme to let each theme decide.",
     "references": [
       "crates/ui/src/settings/settings_rows.rs",
       "crates/ui/src/settings.rs",
       "crates/ui/src/settings/view_settings.rs",
       "crates/ui/src/app.rs",
       "crates/ui/src/arrangement/arrangement_view.rs",
-      "docs/spec/arrangement-editing.md"
+      "docs/spec/arrangement-editing.md",
+      "crates/ui/src/kit/style_class.rs"
     ]
   },
   "Arrangement/Tracks/arrangement_returns": {

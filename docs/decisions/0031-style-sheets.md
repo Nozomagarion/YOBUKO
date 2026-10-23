@@ -685,3 +685,31 @@ settings: placements and anchors, the toolbar, artwork and the name. A change of
 artwork to a built-in theme still copies it. The picker shows one card per theme with a swatch
 per variant. Open: rendered thumbnails per variant, and following the system's appearance with
 the variant's `appearance`.
+
+## Amendment: control shapes, overlays and presentation from the theme (2026-10-23)
+
+Accepted for the parts below; *presentation defaults* is proposed.
+
+A first theme made by hand on disk ([#880](https://github.com/suhina-daw/suhina-daw/pull/880)) found
+the controls' shapes fixed in code: the CSS reached their colours only. So:
+
+- **Control surfaces.** A native control's surface (background, `border-width` and
+  `border-color`, radius, shadows, opacity) comes from its element, the native values where the
+  sheet sets none. A transparent background paints nothing. A view's or bar's background is the
+  surface behind its controls, not their fill.
+- **Level bars.** Volume and pan fields are one level bar with a track and a `.value-fill`, a
+  `height` for thickness, ids by their Edit interface names and artwork roles of their own.
+- **Overlays.** A workspace panel the grid lays over the view is drawn on a layer above it.
+- **Track headers' side.** `--suhina-track-headers` on `.arrangement` is used while the user's
+  setting is *Theme*, the new default; the user's Left or Right wins.
+
+**Proposed: presentation defaults from the theme.** The Settings page's other presentation
+choices (header and clip colour strength, waveform and note colours, mixer knobs or fields)
+would work the same way: the theme gives a default as a `--suhina-*` property, the setting gains
+*Theme* and stays the user's override, and the root element says the value in use
+(`[data-track-headers=left]`) so a theme can lay out each case. Open: which choices count as
+presentation; whether present users keep their values as overrides; how this meets the
+appearance, layout and interaction split of [#623](https://github.com/suhina-daw/suhina-daw/issues/623),
+[#625](https://github.com/suhina-daw/suhina-daw/issues/625) and
+[#868](https://github.com/suhina-daw/suhina-daw/issues/868); and whether a profile that bundles a
+theme, its variant, the workspace, interaction and keymap belongs here or in an ADR of its own.

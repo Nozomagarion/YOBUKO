@@ -367,16 +367,46 @@ remain within the theme folder, contain no parent traversal or symlinks, and nam
 supported assets. Reads, file counts, SVG sizes and total expanded data are bounded.
 Imports choose unused theme ids rather than overwriting existing themes.
 
-## Native CSS in this draft
+## Native CSS: controls and the toolbar
 
 The native centred toolbar exposes the same `.toolbar-module` ids as the custom
 layout, without opting into new geometry for colour/paint-only rules. Module
 scopes are siblings rather than nested controls; their palette/style changes
-must be restored before painting another module. Shared button scopes encompass
-their SVG body, foreground glyph and label. Button CSS gradients/shadows are
-painted above the body artwork and below glyphs/text; SVG button bodies respect
-the resolved corner radius. A default SVG must not bypass the CSS background.
-Native hit rectangles, ids, commands and default geometry remain unchanged.
+must be restored before painting another module. Native hit rectangles, ids,
+commands and default geometry remain unchanged.
+
+**Control surfaces.** A control paints its own surface through one function
+(`native_css::surface`): `background-color`, `background-image`, `border-radius`,
+`border-width` with `border-color` (no border without a width), `box-shadow` and
+`opacity` from its element, the native values where the sheet sets none. A transparent
+background paints nothing, never a see-through hole in the window. A button the sheet
+shapes (background, radius or border width) is not covered by the artwork Suhina ships;
+a theme's own `button` artwork still wins. The toolbar's tempo, position and RAM/CPU
+fields paint the same way.
+
+**Views and controls.** A background on a view or bar (`.window`, `.toolbar`, `.session`,
+`.arrangement`, `.browser`, `.mixer`, `.detail` and the others in `style_class::SURFACES`)
+sets the surfaces inside it, not the fill of the controls on it. The add-track buttons
+under the last track keep their own fill.
+
+**Level bars.** Volume and pan fields of the track headers and the mixer are one level
+bar (`mixer_controls::level_bar`): the field's element is the track and `.value-fill` the
+lit part; `height` sets the thickness of either. `#arrangement-volume`,
+`#arrangement-pan`, `#mixer-volume` and `#mixer-pan` select them, and `volume.track`,
+`volume.fill`, `pan.track` and `pan.fill` are artwork roles. Without any of these the
+volume field is the native capsule and the pan field the native flat field.
+
+**Artwork over opaque surfaces.** Artwork clears the window's pixels under it only when
+the theme's surfaces are see-through; over opaque ones the desktop would show wherever the
+artwork leaves a pixel uncovered.
+
+**Theme-given presentation.** `.arrangement { --suhina-track-headers: left | right; }` is
+the side of the Arrangement view's track headers while the user's Track headers setting
+is *Theme* (the default); Left and Right are the user's own and win.
+
+**Workspace overlays.** A browser or detail panel that the `#workspace` grid places in
+the same cells as `#panel-main` is drawn on a layer above the view, so it shows and takes
+the pointer there.
 
 Connected native text helpers support computed CSS `text-shadow`, including lists,
 inherited/currentColor colours and animated offsets/colours. Up to four layers
@@ -386,20 +416,15 @@ weighted approximation on the cached native glyphs, bounded to 32 points of blur
 and offsets of ±256 points. This is not a full image convolution. Native clipping
 still applies. Ordinary egui text that bypasses the shared/native helper is not
 covered yet. The editor includes an original dark gloss CSS example demonstrating
-gradients, rounded SVG-backed buttons and bounded text/box shadows without changing
-the native toolbar/workspace layout.
+gradients, rounded buttons and bounded text/box shadows without changing the native
+toolbar/workspace layout.
 
-The initial reader supports `:root` palette variables (`--window-background` maps to
-`window.background`), class/descendant colour, background and border colours, integer
-pixel font sizes and corner radii. `.meter` accepts `style`, `segments` and `intensity`; `.toolbar`
-accepts comma-separated `order` and `hidden` module lists. Control `image` declarations
-name package-relative SVG/PNG artwork, including state suffixes. `.window` accepts a relative PNG
-`background-image`, `background-opacity` and `background-blur` (0–100).
-
-These are a bounded native subset, not complete CSS. Variables with `var()`, arbitrary
-modern selectors, queries, layout algorithms and animations are not implemented by this
-reader. The advanced target and engine research are in
-[ADR 0030](../decisions/0030-native-theme-css.md).
+Host rules the app reads itself, beside the engine: `.meter` accepts `style`, `segments`
+and `intensity`; `.toolbar` accepts comma-separated `order` and `hidden` module lists;
+control `image` declarations name package-relative SVG/PNG artwork, including state
+suffixes; `.window` accepts a relative PNG `background-image`, `background-opacity` and
+`background-blur` (0–100). Placement offsets in `layout.css` (`left`, `top`, `right`,
+`bottom`) are the app's too and give no notice.
 
 ### Theme storage: one sheet, variants and layout
 
@@ -412,7 +437,10 @@ amendment *Theme settings and variants*):
 - `variants/<variant>.json`: values for the theme's settings,
   `{ "name": "Frost", "appearance": "light", "values": { "--accent": "#88C0D0" } }`. The file's
   name is the variant's id; `name` is its label; values are CSS text checked against each
-  property's syntax (`var()` may refer to the theme's own variables). At most 64 variants of
+  property's syntax (`var()` may refer to the theme's own variables). A value may also be for
+  any variable the theme's `:root` sets without `@property` (a helper colour); the theme's
+  variables that refer to it follow, in the painted sheet and in the model. A name the sheet
+  never sets is refused with a warning. At most 64 variants of
   64 KiB each, 256 values of 1 KiB each.
 - `layout.css`: written by Suhina only, for what the Edit interface and editors set beyond
   settings: `.control-NAME` placements and anchors, `toolbar` order and offsets, `--suhina-*`

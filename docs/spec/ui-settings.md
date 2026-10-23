@@ -91,7 +91,10 @@ chooses. Agents cannot change these settings. Standalone MCP keeps its `--write-
 
 ## Theme gallery and colour editor
 
-Themes shows a miniature musical scene for every built-in or custom palette. The scenes
+Themes has a search field beside *Other themes*: it shows the themes whose name, id or a
+variant's name contains the text, ignoring case, and *No themes match* when none does; the theme in
+use always shows. A theme left in an earlier file format says *Not converted* on its card, with
+the reason when hovered. Themes shows a miniature musical scene for every built-in or custom palette. The scenes
 use the same browser, MIDI/audio clips, grid, controls and meters; drawing them never
 installs a theme or loads another project. The active card has an accent border and Active
 label. The active theme is featured once at full width with a 170 px preview; other
