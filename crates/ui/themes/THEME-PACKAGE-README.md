@@ -9,6 +9,11 @@ data, not executable plug-ins. Audio, parameter gestures and commands remain nat
 Use this guide when creating, editing, explaining or sharing a theme, including when
 asking an AI assistant to modify one. Inspect the supplied files before making changes.
 
+The themes folder is `themes` in Suhina's data folder (`%APPDATA%\Suhina\data` on
+Windows). Programs installed from the Microsoft Store (MSIX), such as some editors and AI
+apps, may see their own private copy of `%APPDATA%` and not Suhina's: open the folder from
+Suhina (**More › Open the themes folder**) or edit it from a terminal.
+
 ## Files and why they are separate
 
 ```text
@@ -266,7 +271,11 @@ loop bar keeps its rounded ends at any length.
 The desktop shows through only where the system composites a window's transparency (the GPU
 renderer on a compositor that supports it; Windows and macOS usually do). Elsewhere the window
 is opaque and a see-through colour reads dark, over black. A background image is the window's
-own: it moves with the window, it is not the desktop's wallpaper.
+own: it moves with the window, it is not the desktop's wallpaper. A picture larger than 8 MiB
+or 4 megapixels (a 4K wallpaper) is scaled down to fit 2560 by 1600 when the theme is read.
+`--window-background` is the surface over the picture: its alpha, scaled by
+`--background-opacity`, is how much it darkens the picture; `--background-opacity: 100` with
+an opaque colour hides it.
 
 A theme whose surfaces show the desktop through them (a window, panel or header colour with
 alpha) has the area under button, fader and track artwork cleared first; on an opaque theme
@@ -501,7 +510,9 @@ whole clip fades, its waveform, notes and name with it), `border-radius` and a b
 ```
 
 The waveform's and notes' `color` applies while **Settings › Arrangement › Waveform colour** is
-**Theme** (its default); the user's other choices there win. `clip.fade-handle` is artwork for
+**Theme** (its default); the user's other choices there win. A setting saved before Theme
+existed reads as the choice it was (Dark, for most): pick Theme there to see the theme's
+colours. `clip.fade-handle` is artwork for
 the fade handles. A new clip takes its track's colour while **New clip colour** is **Track
 colour** (the default); with **Theme default** it takes `clip.midiDefault` or
 `clip.audioDefault`.
@@ -544,6 +555,13 @@ On a level bar (`#arrangement-volume`, `#mixer-pan`) `text-align` moves the valu
 lit part, and `color: transparent` hides it. `.value-handle { width: 6px; background-color: … }`
 draws a handle where the fill ends; `volume.handle` and `pan.handle` are artwork for it.
 
+### Piano roll sizes
+
+`.piano-tool { width; height }` sizes the tool buttons (8 to 96 points wide), so stretched
+artwork has room; `.midi-tools { width }` (80 to 400) and `.clip-info { width }` (120 to 480)
+set the MIDI tools and clip columns' widths. `.loop-region { height }` above the native row
+grows the Arrangement's loop row with it (up to 40 points).
+
 ### Fader size
 
 `.fader-cap { width: 24px; height: 14px; }` sets the mixer fader's cap (4 to 64 by 4 to 96
@@ -563,6 +581,20 @@ parameter list's widgets (`#device-compressor .button`).
 #device-reverb .device-control { accent-color: #7CC4FF; }
 ```
 
+`width` on `.device` or `#device-plugin` widens a panel (up to 1600 points). A panel's
+`background-color` is the surface behind its controls, not their fill, so its sliders keep
+their rails. A parameter's slider has parts of its own once the sheet gives one of them a
+background or artwork: `.slider-rail` (`height` is its thickness), `.slider-fill` (up to the
+value) and `.slider-handle` (`width`), with the artwork roles `slider.rail`, `slider.fill` and
+`slider.handle`. `.slider { --suhina-appearance: knob; }` draws sliders as knobs.
+
+```css
+#device-plugin { width: 640px; background-color: #0E1A24CC; }
+#device-plugin .slider-rail { height: 3px; background-color: #FFFFFF22; }
+#device-plugin .slider-fill { background-color: var(--accent); }
+#device-plugin .slider-handle { width: 6px; background-color: #FFFFFF; border-radius: 3px; }
+```
+
 ### Buttons and fields everywhere
 
 `.button` (with `:hover`, `:active`, `:disabled` and `:checked` for a chosen row in a list or
@@ -570,7 +602,8 @@ menu) and `.text-input` style Suhina's ordinary widgets too: the buttons, check 
 drop-downs and text fields in Settings, in dialogs (Export audio, Save, the loading and closing
 dialogs), on the start page, in the browser, the sample map, the Plug-in manager and in
 popups. Scope them to one place with its class: `.settings .button`, `.dialog .text-input`.
-`border-width: 0` removes egui's own outline.
+`border-width: 0` removes egui's own outline. Settings' choices of several parts (Ask, Panel,
+On) are `.button` parts too, the chosen one `:checked`.
 
 ```css
 .button { background-color: #24272B; border-width: 0; border-radius: 4px; }
@@ -584,7 +617,15 @@ popups. Scope them to one place with its class: `.settings .button`, `.dialog .t
 The line under each bar is that bar's `border-color` (`.menu-bar`, `.application-bar`,
 `.toolbar`), and the line above the view `#workspace`'s, so a theme can join the bars into one
 surface without losing the lines elsewhere. `--border` is every other line: rulers, the
-browser's edges and the piano roll's keys and rows.
+browser's edges and the piano roll's keys and rows. A bar with `border-width: 0` (or a
+transparent `border-color`) fills its line with its own background, so no gap shows between
+bars. A gradient over the whole stack of bars is not possible yet: give each bar its share.
+
+`.arrangement { --suhina-header-tint: 0; }` (0 to 100) sets how strongly the track's colour
+tints its Arrangement header, over the user's header colour strength: 0 leaves the header
+`.track-header`'s own surface, for a see-through theme.
+
+`border-radius` takes a percentage: `50%` makes a control round, and its `box-shadow` follows.
 
 ### Placement names
 

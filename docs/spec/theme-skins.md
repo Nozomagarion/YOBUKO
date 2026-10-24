@@ -796,3 +796,39 @@ These native parts take the sheet (the theme package README lists every selector
 clip its track's colour; *Theme default* the theme's MIDI or audio clip default. Arming an
 audio track while the audio device has no input says so in the status bar.
 
+
+## Round 4 additions
+
+- **Clips:** `border-radius` reaches the name bar's top corners and the leading edge, inset from
+  corners rounder than it.
+- **Text shadows:** a blurred shadow's nine taps stay within 12 % of the text's height of it
+  (and half the blur), so small text keeps one soft shadow rather than visible copies.
+- **Piano roll sizes:** `.piano-tool { width; height }` (8–96 points), `.midi-tools { width }`
+  (80–400), `.clip-info { width }` (120–480); the ×2 and ÷2 buttons share the column's width.
+- **Loop row:** `.loop-region { height }` plus 6 points sets the Arrangement's loop row height,
+  between 14 and 40.
+- **Nine-slice:** insets that do not fit shrink by one factor on both axes.
+- **Settings' segmented choices** are `.button` parts, the chosen one `:checked`.
+- **Export** adds the theme guide (`README.md`) to a package whose folder has none.
+- **Opaque windows:** where the system does not composite the window's transparency, the window
+  clears to the panel colour over black, opaque.
+- **Variants:** a theme read again is read with the whole list; a variant in use whose file is
+  gone gives way to its theme.
+- **Background pictures:** a PNG of up to 64 MiB and 8192 pixels a side is read; one over 8 MiB
+  or 4 megapixels is scaled down to fit 2560 by 1600 and written again as PNG.
+- **Device panels:** `width` on `.device` or `#device-<id>` (120–1600); a container's
+  background (a device panel, Settings, a dialog, a view) is not mapped onto egui's widget
+  fills. Parameter sliders draw from `.slider-rail` (`height`), `.slider-fill` and
+  `.slider-handle` (`width`) with artwork `slider.rail`, `slider.fill`, `slider.handle` once one
+  part is themed; `.slider { --suhina-appearance: knob }` draws them as knobs.
+- **Radius in percent:** a percentage is that share of 256 points, clamped to half the shorter
+  side when painted (so 50 % is round); a shadow's radius is clamped the same way.
+- **Header tint:** `.arrangement { --suhina-header-tint: 0–100 }` overrides the user's header
+  colour strength for the track's tint.
+- **Bars:** a bar with `border-width: 0` or a transparent border fills its separator line with
+  its own background.
+- **Lit toggles:** the inverse ink gives way to the readable one when its contrast with the lit
+  fill is under 3:1.
+
+Not built yet: a background attached to the desktop's wallpaper, one gradient across the stack
+of bars, and a slider id per parameter.
