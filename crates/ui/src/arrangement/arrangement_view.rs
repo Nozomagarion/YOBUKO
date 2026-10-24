@@ -331,6 +331,10 @@ pub struct ArrangementViewState {
     pub scroll: Vec2,
     /// Points per beat.
     pub beat_width: f32,
+    /// The furthest beat a zoom at the pointer has shown at the view's right edge: the timeline
+    /// scrolls at least that far, so zooming past the end of the content keeps the time under
+    /// the pointer in place instead of pulling the view back (#910).
+    zoom_reach: f64,
     /// The value chosen in the control bar, which the grid is drawn from and clips snap to
     /// (`launcher.setQuantization`); the window sets it before each frame.
     pub grid: Quantization,
@@ -475,6 +479,7 @@ impl Default for ArrangementViewState {
     fn default() -> Self {
         Self {
             scroll: Vec2::ZERO,
+            zoom_reach: 0.0,
             beat_width: DEFAULT_BEAT_WIDTH,
             grid: Quantization::Bars(1),
             headers_left: false,
@@ -798,6 +803,20 @@ fn zoomed(beat_width: f32, factor: f32) -> f32 {
     (beat_width * factor).clamp(BEAT_WIDTH_RANGE.0, BEAT_WIDTH_RANGE.1)
 }
 
+/// Zooms by `factor` around the point `offset` points right of the timeline's left edge: the
+/// new beat width and horizontal scroll, which keep the beat under that point where it was.
+fn zoom_at(beat_width: f32, scroll_x: f32, offset: f32, factor: f32) -> (f32, f32) {
+    let beat = (offset + scroll_x) / beat_width;
+    let width = zoomed(beat_width, factor);
+    (width, beat * width - offset)
+}
+
+/// How far the timeline scrolls sideways: to the end of `content_beats`, or as far as a zoom
+/// at the pointer reached (`reach` beats at the right edge), in a view `view_width` wide.
+pub(crate) fn most_scroll_x(content_beats: f64, reach: f64, beat_width: f32, view_width: f32) -> f32 {
+    ((content_beats.max(reach) as f32) * beat_width - view_width).max(0.0)
+}
+
 /// The Arrangement view's grid for the value `chosen` in the control bar, at `beat_width` points
 /// a beat with bars of `bar_beats` beats (`docs/spec/arrangement-editing.md` › The grid): lines
 /// at least [`MIN_GRID_SPACING`] apart; `none` draws beats and bars by the zoom alone and does not
@@ -999,9 +1018,9 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             || state.zoom_area.is_some_and(|rect| rect.contains(pointer));
         let zoom = ui.input(|i| i.zoom_delta());
         if zoom != 1.0 && time.contains(pointer) && !over_field {
-            let beat = (pointer.x - time.left() + state.scroll.x) / state.beat_width;
-            state.beat_width = zoomed(state.beat_width, zoom);
-            state.scroll.x = beat * state.beat_width - (pointer.x - time.left());
+            (state.beat_width, state.scroll.x) =
+                zoom_at(state.beat_width, state.scroll.x, pointer.x - time.left(), zoom);
+            state.zoom_reach = f64::from((state.scroll.x + time.width()) / state.beat_width);
         }
         let (alt, wheel) = ui.input(|i| (i.modifiers.alt, i.smooth_scroll_delta()));
         if over_field {
@@ -1034,13 +1053,14 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         state.scroll -= delta;
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
     }
-    let content_width = ((timeline.end + TAIL_BARS * bar_beats) as f32) * state.beat_width;
     let content_height: f32 = drawn
         .iter()
         .filter_map(|d| timeline.lanes.get(d.lane))
         .map(|l| state.height(l) + 1.0 + state.automation.height(l.track, &timeline.automation))
         .sum();
-    state.scroll.x = state.scroll.x.clamp(0.0, (content_width - time.width()).max(0.0));
+    let content_beats = timeline.end + TAIL_BARS * bar_beats;
+    state.scroll.x =
+        state.scroll.x.clamp(0.0, most_scroll_x(content_beats, state.zoom_reach, state.beat_width, time.width()));
     state.scroll.y = state.scroll.y.clamp(0.0, (content_height - lanes_area.height()).max(0.0));
 
     let (scroll_x, beat_width) = (state.scroll.x, state.beat_width);
@@ -4180,6 +4200,21 @@ mod tests {
         state.pick_clip((TrackId(1), ClipId(2)), false, false, &order);
         state.pick_clip((TrackId(2), ClipId(3)), true, false, &order);
         assert_eq!(state.selected.len(), 4, "from bar 1 to bar 9 on both tracks");
+    }
+
+    #[test]
+    fn a_zoom_at_the_pointer_keeps_its_beat_under_it_past_the_content_end() {
+        // A view 800 points wide at 20 points a beat, scrolled 400 in, the pointer 600 in: beat 50.
+        let (offset, view) = (600.0, 800.0);
+        let (mut width, mut scroll) = (20.0, 400.0);
+        for factor in [1.25, 1.25, 0.8, 0.5, 2.0] {
+            (width, scroll) = zoom_at(width, scroll, offset, factor);
+            let reach = f64::from((scroll + view) / width);
+            // A short project: 40 beats of content, less than the pointer's beat.
+            scroll = scroll.clamp(0.0, most_scroll_x(40.0, reach, width, view));
+            assert!(((offset + scroll) / width - 50.0).abs() < 1e-3, "beat 50 stays under the pointer at {width}");
+        }
+        assert_eq!(most_scroll_x(40.0, 0.0, 20.0, 800.0), 0.0, "without a zoom the content alone limits it");
     }
 
     #[test]

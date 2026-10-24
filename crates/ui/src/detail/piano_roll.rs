@@ -371,6 +371,9 @@ pub struct PianoRollState {
     /// Points scrolled from beat 0 and from the top of the highest key.
     pub scroll: Vec2,
     pub beat_width: f32,
+    /// The furthest beat a zoom at the pointer has shown at the right edge, so the time under
+    /// the pointer stays in place past the clip's end (#910).
+    zoom_reach: f64,
     pub key_height: f32,
     /// Indices of the selected notes.
     pub selected: BTreeSet<usize>,
@@ -463,6 +466,7 @@ impl Default for PianoRollState {
             shown: None,
             scroll: Vec2::ZERO,
             beat_width: 40.0,
+            zoom_reach: 0.0,
             key_height: DEFAULT_KEY_HEIGHT,
             selected: BTreeSet::new(),
             focused: false,
@@ -1358,8 +1362,13 @@ pub fn show(
     state.view_width = grid_rect.width();
     let rows_height = rows.len() as f32 * state.key_height;
     state.scroll.y = state.scroll.y.clamp(0.0, (rows_height - grid_rect.height()).max(0.0));
-    let width = ((clip.length + clip.bar_beats * 4.0) as f32 * state.beat_width).max(grid_rect.width());
-    state.scroll.x = state.scroll.x.clamp(0.0, (width - grid_rect.width()).max(0.0));
+    let most = crate::arrangement::arrangement_view::most_scroll_x(
+        clip.length + clip.bar_beats * 4.0,
+        state.zoom_reach,
+        state.beat_width,
+        grid_rect.width(),
+    );
+    state.scroll.x = state.scroll.x.clamp(0.0, most);
     let layout = Layout {
         keys,
         ruler,
@@ -2510,6 +2519,7 @@ fn scroll_and_zoom_by_hand(ui: &Ui, state: &mut PianoRollState, area: Rect, grid
                 let beat = (pointer.x - grid.left() + state.scroll.x) / state.beat_width;
                 state.beat_width = (state.beat_width * zoom).clamp(BEAT_WIDTH_RANGE.0, BEAT_WIDTH_RANGE.1);
                 state.scroll.x = beat * state.beat_width - (pointer.x - grid.left());
+                state.zoom_reach = f64::from((state.scroll.x + grid.width()) / state.beat_width);
             }
         } else {
             state.scroll -= wheel;

@@ -418,6 +418,7 @@ impl Panel {
         suhina_plugins::trace::timed("sample map points", || self.update_points(state, projects, revision));
         self.view.preview_on_hover = settings.map_hover_preview;
         self.view.dot_size = settings.map_dot_size as f32 / 100.0;
+        self.view.label_size = settings.map_label_size as f32 / 100.0;
         self.view.volume = settings.preview_volume;
         let tags: Vec<String> = projects.file_library_mut().tags().into_iter().map(|t| t.name).collect();
         let status = self.status();
@@ -566,6 +567,10 @@ impl Panel {
             }
             MapEvent::DotSize(percent) => {
                 settings.map_dot_size = percent;
+                return true;
+            }
+            MapEvent::LabelSize(percent) => {
+                settings.map_label_size = percent;
                 return true;
             }
             MapEvent::Volume(db) => {

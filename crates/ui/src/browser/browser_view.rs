@@ -302,13 +302,16 @@ pub fn show(ui: &mut Ui, area: Rect, state: &mut BrowserState, cx: Context<'_>) 
         let provided = projects.preview_session_mut().map(|session| session.provide_audio(&path, data));
         let params = json!({ "path": path.display().to_string(), "from": from, "gain": settings.preview_volume });
         match provided.and_then(|()| projects.execute("preview.play", &params)) {
-            Ok(_) => state.previewing = Some(path.display().to_string()),
+            Ok(_) => state.preview_started(path.display().to_string()),
             Err(e) => out.status = Some(Status::Error(format!("Cannot preview: {}", e.0))),
         }
     }
     if let Some(e) = state.take_preview_error() {
         out.status = Some(Status::Error(format!("Cannot preview: {e}")));
     }
+    // Whether the preview voice still plays, wherever the control for it is shown.
+    let sounding = preview_sounding(projects);
+    state.observe_preview(sounding);
     // While a sample is being read for its preview, every frame looks for it, so it plays the
     // moment it is ready.
     if state.preview_pending() {
@@ -745,7 +748,7 @@ fn results_view(
                 Id::new(("browser-play", row.node())),
                 format!("Preview {}", row.item.name),
             );
-            let playing = state.previewing.as_deref() == Some(row.item.key.as_str());
+            let playing = state.preview_active_for(&row.item.key);
             play_glyph(
                 &painter,
                 lead.center(),
@@ -905,7 +908,7 @@ fn results_view(
     if let Some(index) = play
         && let Some(row) = rows.get(index)
     {
-        if state.previewing.as_deref() == Some(row.item.key.as_str()) {
+        if state.preview_active_for(&row.item.key) {
             stop_preview(state, projects);
         } else {
             start_preview(state, projects, settings, selected_track, &row.item.clone(), 0.0, out);
@@ -1099,7 +1102,7 @@ fn start_preview(
                 params["track"] = json!(track.0);
             }
             if run(projects, "preview.play", params, out) {
-                state.previewing = Some(item.key.clone());
+                state.preview_started(item.key.clone());
             }
         }
         _ => {}
@@ -1231,13 +1234,19 @@ pub fn preview_sample(state: &mut BrowserState, projects: &mut Projects, path: P
     state.want_preview(path, from);
 }
 
-/// Stops any preview.
+/// Stops any preview: the one waiting to be read, and whatever the preview voice plays, even
+/// when the browser has lost track of it (#836).
 pub fn stop_preview(state: &mut BrowserState, projects: &mut Projects) {
-    let was = state.previewing.is_some() || state.preview_pending();
+    let was = state.previewing.is_some() || state.preview_pending() || preview_sounding(projects);
     state.cancel_preview();
     if was {
         let _ = projects.execute("preview.stop", &json!({}));
     }
+}
+
+/// Whether the preview voice plays now.
+fn preview_sounding(projects: &Projects) -> bool {
+    projects.preview_session().and_then(|s| s.player()).is_some_and(|p| p.preview_monitor().playing())
 }
 
 fn preview_strip(
@@ -1285,13 +1294,9 @@ fn preview_strip(
         .preview_session()
         .and_then(|s| s.player())
         .map(|p| (p.preview_monitor().playing(), p.preview_monitor().seconds()));
-    let playing_this = state.previewing.as_deref() == Some(item.key.as_str()) && monitor.is_some_and(|m| m.0);
-    if state.previewing.as_deref() == Some(item.key.as_str())
-        && monitor.is_some_and(|m| !m.0)
-        && !state.preview_pending()
-    {
-        state.previewing = None;
-    }
+    // Stop shows while this item previews or waits to, and while any preview sounds, so a
+    // sounding preview always has a control that stops it (#836).
+    let playing_this = state.preview_active_for(&item.key) || monitor.is_some_and(|m| m.0);
     let info = state.info(&path, true).cloned().unwrap_or_default();
 
     // Top line: play, name, length, tempo, key.

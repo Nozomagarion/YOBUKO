@@ -5768,6 +5768,10 @@ impl App {
             Some([x, y, w, h]) => builder.with_position([x as f32, y as f32]).with_inner_size([w as f32, h as f32]),
             None => builder.with_inner_size(MAP_WINDOW_SIZE),
         };
+        let (main_focused, main_minimised) = ctx.input_for(egui::ViewportId::ROOT, |i| {
+            (i.viewport().focused.unwrap_or(false), i.viewport().minimized.unwrap_or(false))
+        });
+        builder = builder.with_window_level(map_window_level(main_focused, self.map_window.focused));
         let revision = self.revision;
         let had_drag = self.browser.drag.is_some();
         let mut settings = self.settings.clone();
@@ -5811,8 +5815,16 @@ impl App {
                 escape: i.key_pressed(Key::Escape),
                 ctrl: i.modifiers.command,
                 time: i.time,
+                focused: i.viewport().focused.unwrap_or(false),
             })
         });
+        self.map_window.focused = frame.focused;
+        if !frame.embedded
+            && let Some(minimise) = follow_main_minimised(main_minimised, self.map_window.minimised_with_main)
+        {
+            ctx.send_viewport_cmd_to(id, egui::ViewportCommand::Minimized(minimise));
+            self.map_window.minimised_with_main = minimise;
+        }
         if frame.changed || settings != self.settings {
             self.settings = settings;
             self.settings_changed = true;
@@ -6887,6 +6899,27 @@ struct MapWindow {
     moved: Option<([i32; 4], f64)>,
     /// A drag from the browser that started in this window.
     drag: Option<RemoteDrag>,
+    /// Whether this window had the keyboard focus in its last frame.
+    focused: bool,
+    /// Whether it was minimised because the main window was, to be restored with it.
+    minimised_with_main: bool,
+}
+
+/// The map window's level: above Suhina's main window while Suhina is the program in use, so a
+/// click in the main window does not hide it, and an ordinary window once another program is
+/// (#863). egui gives no owner to a viewport, so this stands in for an owned tool window.
+fn map_window_level(main_focused: bool, map_focused: bool) -> egui::WindowLevel {
+    if main_focused || map_focused { egui::WindowLevel::AlwaysOnTop } else { egui::WindowLevel::Normal }
+}
+
+/// What the map window does when the main window is minimised or restored: `Some(true)` to
+/// minimise it along, `Some(false)` to restore it when it went down with the main window.
+fn follow_main_minimised(main_minimised: bool, minimised_with_main: bool) -> Option<bool> {
+    match (main_minimised, minimised_with_main) {
+        (true, false) => Some(true),
+        (false, true) => Some(false),
+        _ => None,
+    }
 }
 
 /// A drag that started in the map's own window, read from that window's input.
@@ -6912,6 +6945,7 @@ struct MapWindowFrame {
     escape: bool,
     ctrl: bool,
     time: f64,
+    focused: bool,
 }
 
 fn keys_for_shortcuts(ctx: &egui::Context) {
@@ -7050,6 +7084,18 @@ fn bar_menu<R>(ui: &mut Ui, title: &str, content: impl FnOnce(&mut Ui) -> R) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_map_window_stays_above_suhina_and_minimises_with_it() {
+        use egui::WindowLevel::{AlwaysOnTop, Normal};
+        assert_eq!(map_window_level(true, false), AlwaysOnTop, "a click in the main window keeps it above");
+        assert_eq!(map_window_level(false, true), AlwaysOnTop);
+        assert_eq!(map_window_level(false, false), Normal, "another program in use covers it");
+        assert_eq!(follow_main_minimised(true, false), Some(true));
+        assert_eq!(follow_main_minimised(true, true), None, "minimised once");
+        assert_eq!(follow_main_minimised(false, true), Some(false), "restored with the main window");
+        assert_eq!(follow_main_minimised(false, false), None, "minimised by hand stays so");
+    }
 
     #[test]
     fn a_pending_quit_check_continues_after_the_close_event_is_gone() {

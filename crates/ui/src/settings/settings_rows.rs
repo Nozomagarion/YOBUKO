@@ -559,6 +559,17 @@ pub(crate) static ROWS: &[Entry] = &[
             cx.choose(r, &options, |s| &mut s.map_max_seconds);
         },
     ),
+    row(
+        Page::Browser,
+        "Sample map",
+        "Map labels",
+        "How large the names of the groups of points are; Off hides them and the legend under the map still names the kinds (Labels in the map's top bar)",
+        &["map_label_size"],
+        |cx, r| {
+            let options = [("Off", 0u32), ("50 %", 50), ("75 %", 75), ("100 %", 100)];
+            cx.choose(r, &options, |s| &mut s.map_label_size);
+        },
+    ),
     row(Page::Browser, "Tags", "Tag limit", "The most colour tags there may be", &[], |cx, r| {
         let options = [("64", 64usize), ("128", 128), ("256", 256), ("1024", 1024)];
         cx.tag_limit(r, &options);
