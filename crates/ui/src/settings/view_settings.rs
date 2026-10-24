@@ -69,6 +69,9 @@ pub struct ViewSettings {
     pub recent_chips: bool,
     /// The Arrangement view leaves out the return tracks' rows (its "Hide returns" button).
     pub returns_hidden: bool,
+    /// A new blank project gets the A and B return tracks (on by default); off, it starts with
+    /// none, so no sends show until a return is inserted (#898).
+    pub new_returns: bool,
 }
 
 impl Default for ViewSettings {
@@ -90,6 +93,7 @@ impl Default for ViewSettings {
             fixed_track_colour: false,
             recent_chips: false,
             returns_hidden: false,
+            new_returns: true,
         }
     }
 }
@@ -98,7 +102,7 @@ impl ViewSettings {
     /// The lines this module adds to the settings file.
     pub fn to_text(&self) -> String {
         format!(
-            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\n",
+            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nnew_project_returns = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\n",
             self.mixer_height,
             self.strip_fader,
             self.detail_layout.param(),
@@ -112,6 +116,7 @@ impl ViewSettings {
             if self.fixed_track_colour { "fixed" } else { "alternating" },
             if self.recent_chips { "chips" } else { "indented" },
             if self.returns_hidden { "hidden" } else { "shown" },
+            if self.new_returns { "two" } else { "none" },
             if self.clip_halves { "halves" } else { "name_bar" },
             if self.grid_in_clips { "on" } else { "off" },
             f64::from(self.waveform_zoom) / 100.0,
@@ -142,6 +147,7 @@ impl ViewSettings {
             ("new_track_colour", "fixed" | "alternating") => self.fixed_track_colour = value == "fixed",
             ("browser_recent", "chips" | "indented") => self.recent_chips = value == "chips",
             ("arrangement_returns", "hidden" | "shown") => self.returns_hidden = value == "hidden",
+            ("new_project_returns", "two" | "none") => self.new_returns = value == "two",
             ("clip_drag", "halves" | "name_bar") => self.clip_halves = value == "halves",
             ("clip_grid", "on" | "off") => self.grid_in_clips = value == "on",
             ("waveform_zoom", zoom) => match zoom.parse::<f32>() {
@@ -178,6 +184,7 @@ mod tests {
             fixed_track_colour: true,
             recent_chips: true,
             returns_hidden: true,
+            new_returns: false,
         };
         let settings = Settings { view, ..Settings::default() };
         let (read, warnings) = Settings::from_text(&settings.to_text());

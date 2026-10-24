@@ -179,7 +179,9 @@ Ctrl+Alt+Down step it too. It is kept as a setting (Settings › Arrangement ›
 
 The **Hide returns** button in the header column's top corner, by the ruler, takes the return
 tracks' rows out of the view and **Show returns** brings them back; it is kept as a setting
-(Settings › Arrangement › Return tracks, `arrangement_returns`). Main's row stays.
+(Settings › Arrangement › Return tracks, `arrangement_returns`). Main's row stays. Whether a new
+blank project has returns at all is Settings › Arrangement › Returns in new projects (#898,
+[ADR 0010](../decisions/0010-project-files.md) › 8); with none, no header or strip shows sends.
 Return tracks, along the bottom, have a track's header: volume and pan, the on switch and solo,
 the menu, automation lanes under them (shown with the header's button), a click to select them
 (the detail area shows their devices) and a top edge that sets their height (tall enough for

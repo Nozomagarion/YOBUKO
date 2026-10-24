@@ -507,7 +507,9 @@ impl Window {
     /// Makes a new project, blank or from a template, and opens it in a new tab.
     fn new_project(&mut self, new: NewProject) {
         let made = match new {
-            NewProject::Blank => Ok((Session::new(suhina_session::blank_project()), Vec::new())),
+            NewProject::Blank { returns } => {
+                Ok((Session::new(suhina_session::blank_project_with(returns)), Vec::new()))
+            }
             NewProject::Template(path) => Session::from_template(&path),
         };
         match made {

@@ -59,7 +59,7 @@ use suhina_model::Project;
 
 pub use ara::ClipNotes;
 pub use audio::{AudioSystem, InputChoice, LiveOutput, OutputChoice, OutputInfo, audio_commands};
-pub use blank::blank_project;
+pub use blank::{blank_project, blank_project_with};
 pub use commands::{
     Agents, CommandKind, CommandSpec, Param, ParamType, PathKind, Policy, Run, commands, parse_quantization,
 };

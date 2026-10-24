@@ -420,6 +420,7 @@ mod tests {
             saved: vec![Some(now - Duration::from_secs(3 * 86_400)), None],
             templates: vec![PathBuf::from("templates/Beat.suhina")],
             templates_folder: "templates".into(),
+            new_returns: true,
         }
     }
 

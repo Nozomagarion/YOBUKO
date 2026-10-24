@@ -20,7 +20,7 @@ fn ctrl_n_asks_for_a_new_project_and_ctrl_s_saves_one() {
     assert_eq!(harness.state_mut().take_lists_wanted(), Some(dir.join("Templates")));
     harness.get_by_label("New blank project").click();
     harness.run();
-    assert_eq!(harness.state_mut().take_new_request(), Some(suhina_ui::NewProject::Blank));
+    assert_eq!(harness.state_mut().take_new_request(), Some(suhina_ui::NewProject::Blank { returns: true }));
     assert!(!harness.state().project_dialog_open());
 
     // Ctrl+S on a project without a .suhina file asks for a name, in the projects folder.

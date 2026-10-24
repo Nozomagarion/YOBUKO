@@ -939,6 +939,30 @@
       "docs/spec/arrangement-editing.md"
     ]
   },
+  "Arrangement/Tracks/new_project_returns": {
+    "sourceFingerprint": "732abbadd5e65e783a2f790fa330f5b06a4b07d4be6dbccba871357b0ad44179",
+    "summary": "Choose whether a new blank project starts with return tracks.",
+    "description": "Return tracks receive sound sent from other channels, often for shared effects. This preference decides whether a new blank project gets the A and B return tracks. With None the project has no returns, so no track shows send controls until you insert a return track. It only affects new blank projects: a project you open that already has returns always shows them, and the New or open dialog offers the other kind for a single project.",
+    "options": [
+      {
+        "name": "A and B",
+        "description": "New blank projects get two return tracks, A and B. This is the default."
+      },
+      {
+        "name": "None",
+        "description": "New blank projects have no return tracks and no send controls."
+      }
+    ],
+    "whenToChange": "Choose None if you never use return tracks and want new projects without them and without send controls; keep A and B if you often send several tracks to shared effects.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/app.rs",
+      "crates/ui/src/app/project_dialog.rs",
+      "crates/session/src/blank.rs",
+      "docs/decisions/0010-project-files.md"
+    ]
+  },
   "Session/Launching/select_on_launch": {
     "sourceFingerprint": "3127edd510ac2e2127a3cd9ce4d7096bea1a20750b1fdd2ee3478fb8764dccf1",
     "summary": "Select a Session clip when its launch control is pressed.",

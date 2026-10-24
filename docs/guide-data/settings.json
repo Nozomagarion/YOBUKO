@@ -1034,6 +1034,31 @@
       "workInProgress": false
     },
     {
+      "id": "Arrangement/Tracks/new_project_returns",
+      "page": "Arrangement",
+      "section": "Tracks",
+      "name": "Returns in new projects",
+      "note": "Choose whether a new blank project starts with return tracks.",
+      "keys": [
+        "new_project_returns"
+      ],
+      "sourceFingerprint": "732abbadd5e65e783a2f790fa330f5b06a4b07d4be6dbccba871357b0ad44179",
+      "helpStatus": "reviewed",
+      "description": "Return tracks receive sound sent from other channels, often for shared effects. This preference decides whether a new blank project gets the A and B return tracks. With None the project has no returns, so no track shows send controls until you insert a return track. It only affects new blank projects: a project you open that already has returns always shows them, and the New or open dialog offers the other kind for a single project.",
+      "options": [
+        {
+          "name": "A and B",
+          "description": "New blank projects get two return tracks, A and B. This is the default."
+        },
+        {
+          "name": "None",
+          "description": "New blank projects have no return tracks and no send controls."
+        }
+      ],
+      "whenToChange": "Choose None if you never use return tracks and want new projects without them and without send controls; keep A and B if you often send several tracks to shared effects.",
+      "workInProgress": false
+    },
+    {
       "id": "Session/Launching/select_on_launch",
       "page": "Session",
       "section": "Launching",

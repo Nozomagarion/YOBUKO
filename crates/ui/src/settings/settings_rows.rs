@@ -394,6 +394,14 @@ pub(crate) static ROWS: &[Entry] = &[
         &["arrangement_returns"],
         |cx, r| cx.choose(r, &[("Shown", false), ("Hidden", true)], |s| &mut s.view.returns_hidden),
     ),
+    row(
+        Page::Arrangement,
+        "Tracks",
+        "Returns in new projects",
+        "Whether a new blank project starts with the A and B return tracks; with None it has no returns and no sends until one is inserted, and a project that has returns always shows them",
+        &["new_project_returns"],
+        |cx, r| cx.choose(r, &[("A and B", true), ("None", false)], |s| &mut s.view.new_returns),
+    ),
     // Session view and mixer.
     row(
         Page::Session,

@@ -108,7 +108,8 @@ pub enum OpenAs {
 /// A new project the user asked for, for the app to make and open in a new tab.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewProject {
-    Blank,
+    /// A blank project, with the A and B return tracks when `returns` (#898).
+    Blank { returns: bool },
     /// An untitled project made from this template file.
     Template(PathBuf),
 }
@@ -1265,7 +1266,7 @@ impl App {
         let missing = match self.settings.at_start {
             AtStart::Panel => None,
             AtStart::Blank => {
-                self.new_request = Some(NewProject::Blank);
+                self.new_request = Some(NewProject::Blank { returns: self.settings.view.new_returns });
                 return;
             }
             AtStart::Template => match self.start_template() {
@@ -1338,7 +1339,9 @@ impl App {
                 }
             }
             Some(StartChoice::UpdatePage(url)) => ui.ctx().open_url(egui::OpenUrl::new_tab(url)),
-            Some(StartChoice::NewBlank) => self.new_request = Some(NewProject::Blank),
+            Some(StartChoice::NewBlank) => {
+                self.new_request = Some(NewProject::Blank { returns: self.settings.view.new_returns });
+            }
             Some(StartChoice::NewFromTemplate(path)) => self.new_request = Some(NewProject::Template(path)),
             Some(StartChoice::Open(path)) => self.request_open(path),
             Some(StartChoice::Browse) => self.ask_pick(PickField::OpenProject),
@@ -1384,8 +1387,13 @@ impl App {
     /// The recent projects and the templates the project dialog and the start panel list.
     pub fn set_project_lists(&mut self, recent: Vec<PathBuf>, templates: Vec<PathBuf>) {
         let saved = recent.iter().map(|p| std::fs::metadata(p).and_then(|m| m.modified()).ok()).collect();
-        self.project_lists =
-            Lists { recent, saved, templates, templates_folder: self.templates_folder().display().to_string() };
+        self.project_lists = Lists {
+            recent,
+            saved,
+            templates,
+            templates_folder: self.templates_folder().display().to_string(),
+            new_returns: self.settings.view.new_returns,
+        };
     }
 
     /// Whether the start panel shows: no project is open.
@@ -1600,7 +1608,7 @@ impl App {
         if let Some(mut state) = self.project_dialog.take() {
             match project_dialog::show(ui, window, &mut state, &self.project_lists) {
                 Some(Choice::Open(path)) => self.request_open(path),
-                Some(Choice::NewBlank) => self.new_request = Some(NewProject::Blank),
+                Some(Choice::NewBlank { returns }) => self.new_request = Some(NewProject::Blank { returns }),
                 Some(Choice::NewFromTemplate(path)) => self.new_request = Some(NewProject::Template(path)),
                 Some(Choice::Browse) => {
                     self.project_dialog = Some(state);
