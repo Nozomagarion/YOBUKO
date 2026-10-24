@@ -3,7 +3,7 @@ description: Automation envelopes - lanes of points over the arrangement for a t
 read_when: automation, envelope, automation lane, automation lanes view, show automation, automation.movePoints, automation.deletePoints, select points, breakpoint, automation point, curve, automation.addPoint, automation.movePoint, automation.deletePoint, automation.clear, automation.setEnabled, automation.list, device.setAutomation, automation off, re-enable automation, volume automation, pan automation, mute automation, device parameter automation, AutomationLane, AutomationPoint, MixLanes, DeviceLanes, Envelope
 type: spec
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 covers:
   - crates/model/src/automation.rs
   - crates/engine/src/automation.rs
@@ -33,7 +33,7 @@ MCP) and drawn and edited in the Arrangement view (#420, [below](#in-the-arrange
 | A track's volume | `volume` (on the track's mixer) | a linear gain in the model, 0 to +6 dB; commands take and show decibels, as `track.setVolume` |
 | A track's pan | `pan` | -1 (left) to 1 (right) |
 | A track's mute | `mute` | 0 (sounding) or 1 (muted), a step |
-| A built-in effect or instrument's parameter | its stable id (`devices.list`) | in the parameter's unit, kept in its range as `device.setParam` keeps it |
+| A built-in effect or instrument's parameter | its stable id (`device.list`) | in the parameter's unit, kept in its range as `device.setParam` keeps it |
 | A data-only `.sd` device's parameter | its stable id in the `.sd` graph | in its unit and range; discrete controls step |
 | A plug-in's parameter | its id, a number (`device.pluginParams`) | in the plug-in's own range (#109) |
 
