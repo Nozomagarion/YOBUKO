@@ -21,7 +21,7 @@
 //! sound does not depend on the block size. Nothing here allocates after the graph is built.
 
 use suhina_device_api::{Device, ParamInfo, ParamKind};
-use suhina_model::automation::{self as model, MAX_POINTS, MUTE, PAN, Taper, VOLUME, VolumeTaper, shape};
+use suhina_model::automation::{self as model, Curve, MAX_POINTS, MUTE, PAN, Taper, VOLUME, VolumeTaper};
 use suhina_model::{AutomationLane, Channel, ChannelRole, Project, TrackId};
 
 /// Frames between the values a moving lane gives (1.3 ms at 48 kHz).
@@ -104,7 +104,7 @@ struct Point {
     value: f64,
     /// Where `value` sits on its control (`Position`).
     position: f64,
-    curve: f64,
+    curve: Curve,
 }
 
 impl Envelope {
@@ -125,7 +125,7 @@ impl Envelope {
                 frame: (p.beat.max(0.0) * frames_per_beat).round() as u64,
                 value: p.value,
                 position: taper.position(p.value),
-                curve: if p.curve.is_finite() { p.curve.clamp(-1.0, 1.0) } else { 0.0 },
+                curve: p.curve.held(),
             })
             .collect();
         // Stable, so two points at one beat keep their order (a jump).
@@ -136,8 +136,10 @@ impl Envelope {
     /// Straight lines through `(frame, value)` points, for tests.
     #[cfg(test)]
     pub(crate) fn linear(points: &[(u64, f64)]) -> Option<Self> {
-        let points: Vec<Point> =
-            points.iter().map(|&(frame, value)| Point { frame, value, position: value, curve: 0.0 }).collect();
+        let points: Vec<Point> = points
+            .iter()
+            .map(|&(frame, value)| Point { frame, value, position: value, curve: Curve::STRAIGHT })
+            .collect();
         (!points.is_empty()).then_some(Self { points, stepped: false, taper: Position::Value })
     }
 
@@ -155,7 +157,7 @@ impl Envelope {
             (Some(a), Some(b)) => {
                 // b.frame > time >= a.frame.
                 let t = (time - a.frame) as f64 / (b.frame - a.frame) as f64;
-                self.taper.value(a.position + (b.position - a.position) * shape(t, a.curve))
+                self.taper.value(a.position + (b.position - a.position) * a.curve.shape(t))
             }
         }
     }
@@ -170,7 +172,7 @@ impl Envelope {
             (Some(a), Some(_)) if self.stepped => a.position,
             (Some(a), Some(b)) => {
                 let t = (time - a.frame) as f64 / (b.frame - a.frame) as f64;
-                a.position + (b.position - a.position) * shape(t, a.curve)
+                a.position + (b.position - a.position) * a.curve.shape(t)
             }
         }
     }

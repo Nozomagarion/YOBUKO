@@ -295,11 +295,11 @@ fn dragging_a_segment_up_bends_its_curve() {
     let middle = Pos2::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
     drag(&mut harness, middle, vec2(0.0, -20.0));
     let (points, _) = pan(&harness);
-    assert!(points[0].curve > 0.1, "{points:?}");
-    assert_eq!(points[1].curve, 0.0);
+    assert!(points[0].curve.shape(0.5) > 0.55, "{points:?}");
+    assert!(points[1].curve.is_straight());
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
     harness.run();
-    assert_eq!(pan(&harness).0[0].curve, 0.0);
+    assert!(pan(&harness).0[0].curve.is_straight());
 }
 
 /// The height of the envelope line painted last frame at `x`, from the longest line inside `lane`.
@@ -362,7 +362,7 @@ fn a_bent_segment_keeps_its_new_shape_when_the_mouse_is_let_go() {
     harness.run();
     let after = envelope_y_at(&harness, rect, middle.x).expect("the envelope is drawn");
     assert!((after - dragging).abs() < 0.5, "after: {after}, while dragging: {dragging}");
-    assert!(pan(&harness).0[0].curve > 0.1);
+    assert!(pan(&harness).0[0].curve.shape(0.5) > 0.55);
 }
 
 /// The demo project with the FM synth, which has over a hundred parameters, on the Drums
@@ -856,7 +856,7 @@ fn render_the_lanes() {
     if let Some(channel) = project.channels.iter_mut().find(|c| Some(c.id) == channel) {
         let mut volume = suhina_engine::model::AutomationLane::new("volume");
         for (beat, value, curve) in [(0.0, 0.3, 0.0), (16.0, 1.0, 0.6), (48.0, 0.5, -0.5), (64.0, 0.9, 0.0)] {
-            volume.insert(AutomationPoint { beat, value, curve });
+            volume.insert(AutomationPoint { beat, value, curve: suhina_engine::model::automation::Curve::bend(curve) });
         }
         let mut pan = suhina_engine::model::AutomationLane::new("pan");
         pan.insert(AutomationPoint::new(8.0, -0.6));

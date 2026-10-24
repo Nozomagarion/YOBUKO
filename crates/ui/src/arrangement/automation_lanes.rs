@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2};
 use serde_json::{Value, json};
 use suhina_device_api::{ParamInfo, ParamKind, Unit};
-use suhina_engine::model::automation::{self, MUTE, PAN, Taper, VOLUME};
+use suhina_engine::model::automation::{self, Curve, MUTE, PAN, Taper, VOLUME};
 use suhina_engine::model::{AutomationLane, AutomationPoint, ClipId, DeviceKind, Project, Rgb, TrackId};
 
 use crate::interaction::timeline_grid::TimelineGrid;
@@ -32,8 +32,9 @@ const POINT_HIT: f32 = 11.0;
 /// How near the envelope a drag has to start to bend a segment, and a click has to be to add a
 /// point on it.
 const SEGMENT_HIT: f32 = 6.0;
-/// How much a point of vertical drag bends a segment's curve.
-const CURVE_PER_POINT: f64 = 0.01;
+/// Points of vertical drag per step of a curve drag (`automation::CurveDrag`): the mirrored
+/// family's whole range, 128 steps, is 192 points.
+const POINTS_PER_STEP: f32 = 1.5;
 /// How strongly a lane without points draws its parameter's value.
 const LEVEL_ALPHA: f32 = 0.4;
 /// Most points one segment of an envelope is drawn with.
@@ -446,13 +447,16 @@ struct PointDrag {
     now: (f64, f64),
 }
 
-/// A segment's curve being bent: the segment's first point and its curve so far.
+/// A segment's curve being bent: the segment's first point, the drag along the control points'
+/// paths, how far the pointer has moved and the curve that gives.
 #[derive(Debug, Clone, PartialEq)]
 struct CurveDrag {
     track: TrackId,
     key: LaneKey,
     point: usize,
-    curve: f64,
+    paths: automation::CurveDrag,
+    moved: f32,
+    curve: Curve,
 }
 
 /// A box drawn over a lane to select the points in it, from where it started to the pointer.
@@ -774,10 +778,11 @@ fn envelope(points: &[AutomationPoint], scale: &Scale, plot: Rect, geometry: &Ge
             // Evenly in the lane's position, as the engine plays it: a straight segment is a
             // straight line; a bent one is sampled along its curve.
             let (ya, yb) = (scale.position(a.value), scale.position(b.value));
-            let steps = if a.curve == 0.0 { 1 } else { (((xb - xa) / 2.0).ceil() as usize).clamp(2, SEGMENT_POINTS) };
+            let steps =
+                if a.curve.is_straight() { 1 } else { (((xb - xa) / 2.0).ceil() as usize).clamp(2, SEGMENT_POINTS) };
             for step in 1..steps {
                 let t = step as f64 / steps as f64;
-                let shaped = suhina_engine::model::automation::shape(t, a.curve);
+                let shaped = a.curve.shape(t);
                 let x = geometry.x_of(a.beat + (b.beat - a.beat) * t);
                 line.push(Pos2::new(x, y_of(plot, ya + (yb - ya) * shaped)));
             }
@@ -824,27 +829,6 @@ fn distance_to(line: &[Pos2], pos: Pos2) -> f32 {
             _ => None,
         })
         .fold(f32::INFINITY, f32::min)
-}
-
-/// A point at `beat` that leaves the envelope of `points` (on `scale`) as it is: the envelope's
-/// value there, and the curve of the segment it starts. The segment before it keeps its curve and
-/// the one after it gets the curve through the old segment's middle: exact for a straight or
-/// level segment, close for a bent one (a bend cut in two is not two bends of the same kind).
-/// `None` for no points.
-fn splice(points: &[AutomationPoint], beat: f64, scale: &Scale) -> Option<(f64, f64)> {
-    use suhina_engine::model::automation::{curve_through, shape, value_at};
-    let stepped = scale.stepped();
-    let value = value_at(points, beat, stepped, scale)?;
-    let index = points.partition_point(|p| p.beat <= beat).checked_sub(1);
-    let segment = index.and_then(|i| Some((points.get(i)?, points.get(i + 1)?)));
-    let Some((a, b)) = segment.filter(|(a, b)| !stepped && a.curve != 0.0 && b.beat > a.beat) else {
-        return Some((value, 0.0));
-    };
-    let t = (beat - a.beat) / (b.beat - a.beat);
-    let start = shape(t, a.curve);
-    let middle = (shape(t + (1.0 - t) / 2.0, a.curve) - start) / (1.0 - start);
-    let curve = curve_through(0.5, middle).map_or(0.0, |c| round(c.clamp(-1.0, 1.0), 1000.0));
-    Some((value, curve))
 }
 
 /// The segment of `points` under `pos`, near enough to its line to bend it: the index of its
@@ -899,15 +883,14 @@ fn lane(
         params["beat"] = json!(beat);
         let level = level_points(param);
         let near = distance_to(&envelope(&level, &param.scale, plot, geometry), pos) <= SEGMENT_HIT;
-        // On a whole-number lane a value between two numbers cannot be kept: the point goes where
-        // the pointer is, as off the line.
-        match splice(&level, beat, &param.scale).filter(|(value, _)| near && param.scale.keeps(*value)) {
-            Some((value, curve)) => {
-                params["value"] = param.scale.exact(value);
-                if curve != 0.0 {
-                    params["curve"] = json!(curve);
-                }
-            }
+        let on_line = automation::value_at(&level, beat, param.scale.stepped(), &param.scale);
+        // Near the line the point goes on the envelope, and the command splits a bent segment so
+        // it plays as before. On a whole-number lane a value between two numbers cannot be kept:
+        // the point goes where the pointer is, as off the line.
+        match on_line.filter(|value| near && param.scale.keeps(*value)) {
+            // Without points, on the faint line at the parameter's value.
+            Some(value) if param.points.is_empty() => params["value"] = param.scale.exact(value),
+            Some(_) => {}
             None => params["value"] = param.scale.command(param.scale.value_at(position_of(plot, pos.y))),
         }
         actions.push(Action::new("automation.addPoint", params));
@@ -920,8 +903,9 @@ fn lane(
     {
         match segment_at(&param.points, &param.scale, plot, geometry, pos) {
             Some(point) => {
-                let curve = param.points.get(point).map_or(0.0, |p| p.curve);
-                state.curve_drag = Some(CurveDrag { track, key: key.clone(), point, curve });
+                let curve = param.points.get(point).map_or(Curve::STRAIGHT, |p| p.curve);
+                let paths = automation::CurveDrag::new(&curve);
+                state.curve_drag = Some(CurveDrag { track, key: key.clone(), point, paths, moved: 0.0, curve });
             }
             None => state.box_drag = Some(BoxDrag { track, key: key.clone(), from: pos, to: pos }),
         }
@@ -929,13 +913,14 @@ fn lane(
     if body.dragged_by(egui::PointerButton::Primary) {
         let dy = body.drag_delta().y;
         if let Some(drag) = state.curve_drag.as_mut().filter(|d| d.track == track && &d.key == key) {
-            // Up bends the line up: a rising segment moves fast first, a falling one late.
+            // Up bends the line up: on a rising segment that moves the curve earlier, on a falling
+            // one later.
             let rising = match (param.points.get(drag.point), param.points.get(drag.point + 1)) {
                 (Some(a), Some(b)) => param.scale.position(b.value) >= param.scale.position(a.value),
                 _ => true,
             };
-            let sign = if rising { 1.0 } else { -1.0 };
-            drag.curve = (drag.curve - f64::from(dy) * CURVE_PER_POINT * sign).clamp(-1.0, 1.0);
+            drag.moved += if rising { dy } else { -dy };
+            drag.curve = drag.paths.dragged((drag.moved / POINTS_PER_STEP).round() as i32);
         }
         if let Some(drag) = state.box_drag.as_mut().filter(|d| d.track == track && &d.key == key)
             && let Some(pos) = body.interact_pointer_pos()
@@ -969,11 +954,11 @@ fn lane(
     if body.drag_stopped_by(egui::PointerButton::Primary)
         && let Some(drag) = state.curve_drag.take_if(|d| d.track == track && &d.key == key)
     {
-        let before = param.points.get(drag.point).map_or(0.0, |p| p.curve);
-        if (drag.curve - before).abs() > 1e-6 {
+        let before = param.points.get(drag.point).map_or(Curve::STRAIGHT, |p| p.curve);
+        if drag.curve != before {
             let mut params = key.params(track);
             params["point"] = json!(drag.point);
-            params["curve"] = json!(round(drag.curve, 1000.0));
+            params["curve"] = json!(drag.curve.to_array());
             actions.push(Action::new("automation.movePoint", params));
         }
     }
