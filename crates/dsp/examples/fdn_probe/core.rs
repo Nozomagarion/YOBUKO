@@ -53,11 +53,15 @@ impl Options {
                 match key.as_str() {
                     "decay_seconds" => core.decay_seconds = number,
                     "room_scale" => core.room_scale = number,
+                    "late_scale" => s.late_scale = number,
                     "high_decay_ratio" => core.high_decay_ratio = number,
+                    "loop_diffusion" => core.loop_diffusion = number as f32,
                     "predelay_ms" => s.predelay_ms = number,
                     "diffusion" => s.diffusion = number as f32,
                     "early_level" => s.early_level = number as f32,
+                    "early_onset_gain" => s.early_onset_gain = number as f32,
                     "early_tilt_db" => s.early_tilt_db = number,
+                    "early_diffusion" => s.early_diffusion = number as f32,
                     "width" => s.width = number as f32,
                     "low_cut_hz" => s.low_cut_hz = number,
                     "high_cut_hz" => s.high_cut_hz = number,
@@ -104,7 +108,7 @@ impl Core {
 }
 
 pub fn describe(s: DiffuseSettings) -> Value {
-    json!({"predelay_ms": s.predelay_ms, "diffusion": s.diffusion, "early_level": s.early_level,
-        "early_tilt_db": s.early_tilt_db,
+    json!({"loop_diffusion": s.core.loop_diffusion, "late_scale": s.late_scale, "predelay_ms": s.predelay_ms, "diffusion": s.diffusion, "early_level": s.early_level,
+        "early_onset_gain": s.early_onset_gain, "early_tilt_db": s.early_tilt_db, "early_diffusion": s.early_diffusion,
         "width": s.width, "low_cut_hz": s.low_cut_hz, "high_cut_hz": s.high_cut_hz})
 }

@@ -10,6 +10,7 @@ fn validates_settings_and_bounds_all_history() {
     }
     for bad in [f32::NAN, f32::INFINITY, -0.1, 3.] {
         for settings in [
+            DiffuseSettings { early_diffusion: bad, ..DiffuseSettings::default() },
             DiffuseSettings { diffusion: bad, ..DiffuseSettings::default() },
             DiffuseSettings { early_level: bad, ..DiffuseSettings::default() },
             DiffuseSettings { width: bad, ..DiffuseSettings::default() },
@@ -28,8 +29,9 @@ fn validates_settings_and_bounds_all_history() {
 
 #[test]
 fn processing_is_block_independent_and_reset_clears_every_path() {
-    let mut whole = DiffusedFdn::new(DiffuseSettings::default()).unwrap();
-    let mut split = DiffusedFdn::new(DiffuseSettings::default()).unwrap();
+    let settings = DiffuseSettings { early_diffusion: 0.6, ..DiffuseSettings::default() };
+    let mut whole = DiffusedFdn::new(settings).unwrap();
+    let mut split = DiffusedFdn::new(settings).unwrap();
     let mut samples = vec![0.; 48_000];
     samples[..2].fill(0.25);
     let mut blocks = samples.clone();
@@ -115,4 +117,74 @@ fn early_tilt_redistributes_reflections_without_changing_the_late_path() {
         }
     }
     assert!(energy[1][1] / energy[1][0] > 1.5 * energy[0][1] / energy[0][0]);
+}
+
+#[test]
+fn early_spreading_reduces_peaks_without_changing_the_late_path() {
+    let settings = DiffuseSettings { early_level: 1., ..DiffuseSettings::default() };
+    let mut plain = DiffusedFdn::new(settings).unwrap();
+    let mut spread = DiffusedFdn::new(DiffuseSettings { early_diffusion: 0.6, ..settings }).unwrap();
+    let mut late = DiffusedFdn::new(DiffuseSettings { early_level: 0., ..settings }).unwrap();
+    let mut spread_late =
+        DiffusedFdn::new(DiffuseSettings { early_level: 0., early_diffusion: 0.6, ..settings }).unwrap();
+    let mut energy = [0_f64; 2];
+    let mut peak = [0_f64; 2];
+    for frame in 0..48_000 {
+        let x = if frame == 0 { [0.25; 2] } else { [0.; 2] };
+        let a = plain.process_frame(x);
+        let b = spread.process_frame(x);
+        let tail = late.process_frame(x);
+        assert_eq!(tail, spread_late.process_frame(x));
+        for channel in 0..2 {
+            for (i, sample) in [a[channel] - tail[channel], b[channel] - tail[channel]].into_iter().enumerate() {
+                let power = f64::from(sample).powi(2);
+                energy[i] += power;
+                peak[i] = peak[i].max(power);
+            }
+        }
+    }
+    assert!(peak[1] < peak[0] * 0.6);
+    // Output filters and overlapping reflections can change path energy after phase spreading.
+    assert!((energy[1] / energy[0] - 1.).abs() < 0.1);
+}
+
+#[test]
+fn late_scale_preserves_early_arrivals_and_validates_effective_size() {
+    for bad in [f64::NAN, f64::INFINITY, 0.49, 2.01] {
+        assert!(DiffusedFdn::new(DiffuseSettings { late_scale: bad, ..DiffuseSettings::default() }).is_err());
+    }
+    assert!(
+        DiffusedFdn::new(DiffuseSettings {
+            late_scale: 0.5,
+            core: Settings { room_scale: 0.5, ..Settings::default() },
+            ..DiffuseSettings::default()
+        })
+        .is_err()
+    );
+    let mut original = DiffusedFdn::new(DiffuseSettings::default()).unwrap();
+    let mut compact = DiffusedFdn::new(DiffuseSettings { late_scale: 0.5, ..DiffuseSettings::default() }).unwrap();
+    // The shorter network cannot return anything before 120 + round(1429 / 2) frames.
+    for frame in 0..834 {
+        let x = if frame == 0 { [0.25; 2] } else { [0.; 2] };
+        assert_eq!(original.process_frame(x), compact.process_frame(x));
+    }
+    assert!(compact.history_bytes() < original.history_bytes());
+}
+
+#[test]
+fn onset_gain_changes_first_reflection_without_moving_it() {
+    for bad in [f32::NAN, f32::INFINITY, -0.1, 8.01] {
+        assert!(DiffusedFdn::new(DiffuseSettings { early_onset_gain: bad, ..DiffuseSettings::default() }).is_err());
+    }
+    let mut a = DiffusedFdn::new(DiffuseSettings::default()).unwrap();
+    let mut b = DiffusedFdn::new(DiffuseSettings { early_onset_gain: 2., ..DiffuseSettings::default() }).unwrap();
+    for i in 0..121 {
+        let x = if i == 0 { [0.25; 2] } else { [0.; 2] };
+        let plain = a.process_frame(x);
+        let doubled = b.process_frame(x);
+        assert_eq!(doubled, plain.map(|v| v * 2.));
+        if i == 120 {
+            assert!(plain[0] != 0.);
+        }
+    }
 }

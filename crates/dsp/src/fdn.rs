@@ -6,6 +6,10 @@
 
 use crate::{DelayLine, FirstOrder, FirstOrderCoefficients};
 
+#[path = "fdn_scatter.rs"]
+mod scatter;
+use scatter::Scatter;
+
 const DELAYS: [usize; 8] = [1429, 1777, 2081, 2383, 2719, 3083, 3469, 3911];
 const NORM: f32 = 0.353_553_38;
 const LEFT: [f32; 8] = [1., 1., 1., 1., -1., -1., -1., -1.];
@@ -20,11 +24,20 @@ pub struct Settings {
     /// Asymptotic high-frequency decay divided by low-frequency decay.
     pub high_decay_ratio: f64,
     pub damping_hz: f64,
+    /// Fixed optional scattering; zero retains the original network.
+    pub loop_diffusion: f32,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { sample_rate: 48_000, decay_seconds: 2., room_scale: 1., high_decay_ratio: 1., damping_hz: 4500. }
+        Self {
+            sample_rate: 48_000,
+            decay_seconds: 2.,
+            room_scale: 1.,
+            high_decay_ratio: 1.,
+            damping_hz: 4500.,
+            loop_diffusion: 0.,
+        }
     }
 }
 
@@ -46,6 +59,7 @@ impl Settings {
             && (0.2..=20.).contains(&self.decay_seconds)
             && (0.5..=2.).contains(&self.room_scale)
             && (0.1..=1.).contains(&self.high_decay_ratio)
+            && (0. ..=0.7).contains(&self.loop_diffusion)
             && (20.0..=0.45 * f64::from(self.sample_rate)).contains(&self.damping_hz)
         {
             Ok(self)
@@ -62,6 +76,7 @@ pub struct Fdn {
     lengths: [usize; 8],
     gains: [f32; 8],
     damping: [FirstOrder; 8],
+    scatter: [Scatter; 8],
 }
 
 impl Fdn {
@@ -75,18 +90,25 @@ impl Fdn {
             let exponent = -3. * n as f64 / rate / s.decay_seconds * (1. / s.high_decay_ratio - 1.);
             FirstOrder::new(FirstOrderCoefficients::high_shelf(rate, s.damping_hz, 10_f64.powf(exponent)))
         });
-        Ok(Self { lines: std::array::from_fn(|i| DelayLine::new(lengths[i])), lengths, gains, damping })
+        let scatter = [43., 59., 73., 89., 107., 127., 149., 173.].map(|n| {
+            Scatter::new((n * rate / 48_000.).round().max(1.) as usize, rate, s.decay_seconds, s.loop_diffusion)
+        });
+        Ok(Self { scatter, lines: std::array::from_fn(|i| DelayLine::new(lengths[i])), lengths, gains, damping })
     }
 
     /// Allocated delay history only, excluding the small fixed state and allocator metadata.
     pub fn history_bytes(&self) -> usize {
-        self.lines.iter().map(|line| (line.capacity() as usize + 3) * size_of::<f32>()).sum()
+        self.lines.iter().map(|line| (line.capacity() as usize + 3) * size_of::<f32>()).sum::<usize>()
+            + self.scatter.iter().map(Scatter::history_bytes).sum::<usize>()
     }
 
     /// Clears history without allocation or resource destruction.
     pub fn reset(&mut self) {
         for line in &mut self.lines {
             line.clear();
+        }
+        for section in &mut self.scatter {
+            section.reset();
         }
         for filter in &mut self.damping {
             filter.reset();
@@ -99,7 +121,7 @@ impl Fdn {
         let mut values = [0.; 8];
         let mut output = [0.; 2];
         for (i, ((line, length), filter)) in self.lines.iter().zip(self.lengths).zip(&mut self.damping).enumerate() {
-            let delayed = line.read(length);
+            let delayed = self.scatter[i].process(line.read(length));
             output[0] += delayed * LEFT[i] * NORM;
             output[1] += delayed * RIGHT[i] * NORM;
             values[i] = (filter.process(f64::from(delayed)) * f64::from(self.gains[i])) as f32;

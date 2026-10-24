@@ -7,6 +7,7 @@ last_verified: 2026-10-23
 covers:
   - crates/dsp/src/fdn.rs
   - crates/dsp/src/fdn_tests.rs
+  - crates/dsp/src/fdn_scatter.rs
   - crates/dsp/src/fdn_diffuse.rs
   - crates/dsp/src/fdn_diffuse_tests.rs
   - crates/dsp/examples/fdn_probe.rs
@@ -153,7 +154,9 @@ perceptual loudness matching, and no onset shift is applied to conceal timing.
 Use `--impulse-only` to limit parameter searches to impulse files. Local settings
 JSON has `short`, `baseline`, `long` objects (and an optional `benchmark` object),
 with keys `decay_seconds`, `room_scale`, `high_decay_ratio`, `predelay_ms`,
-`diffusion`, `early_level`, `early_tilt_db`, `width`, `low_cut_hz`, `high_cut_hz`.
+`diffusion`, `early_level`, `early_tilt_db`, `early_diffusion`, `early_onset_gain`,
+`late_scale`, `loop_diffusion`, `width`,
+`low_cut_hz`, `high_cut_hz`.
 Unknown setting keys and nonnumeric values are refused. Settings files are bounded
 to 64 KiB. Do not infer a control mapping from three independently fitted captures.
 
@@ -206,6 +209,60 @@ records individual energy/correlation residuals and source hashes. The generated
 settings are local experiment inputs, not built-in presets.
 Plot labels can identify successive rounds using `--previous-label` and
 `--candidate-label`, without changing the reported source identities.
+
+## Fourth iteration experiment: independent early spreading
+
+The early-reflection path can optionally pass through two short integer-delay
+Schroeder allpasses per output channel before summing with the late network.
+`early_diffusion` is a fixed construction setting in 0..0.8, default 0 (bypass).
+The delays are 23 and 61 samples on the left and 31 and 73 on the right at 48 kHz,
+scaled only by sample rate, not room scale. These are exploratory values.
+This isolates early peak concentration from input diffusion and feedback decay.
+The allpasses preserve isolated-path magnitude/energy in the ideal arithmetic
+model but change phase and temporal distribution; early/late interference means
+the combined response need not preserve energy or spectrum. They have no pure
+predelay because of their direct term. They do not alter feedback attenuation.
+
+The experiment is motivated by measured early concentration, not a claim that
+more diffusion necessarily sounds better. Validate onset, cumulative energy,
+peak concentration, stereo and tonal attack/release together. Zero early level
+must leave the late path identical; default bypass must reproduce old renders.
+Reset, block independence, finite bounds and history accounting cover the new
+state. Re-measure CPU before accepting a nonzero setting.
+
+### Independent late-network scale
+
+`late_scale` (0.5..2, default 1) multiplies the core room scale only for FDN
+construction. The resulting core scale must still be in 0.5..2. Early taps and
+input diffusion retain the original room scale. This separates recurrence timing
+from the early pattern in controlled experiments. Feedback attenuation is prepared
+from the effective delay lengths, preserving the requested homogeneous decay.
+The probe records both room_scale and late_scale; their product is the effective
+network scale. It remains an experimental fixed setting, not a device control.
+
+### Optional loss-calibrated feedback scattering
+
+`loop_diffusion` is fixed in 0..0.7, default zero bypass. Each FDN delay output
+passes through one short Schroeder section before output projection and feedback.
+Section delays are [43,59,73,89,107,127,149,173] frames at 48 kHz, scaled by rate.
+For section length d, gain g and homogeneous amplitude loss per sample gamma,
+q = gamma^d and H(z) = (q z^-d - g)/(1 - g q z^-d).
+The original delay retains gamma^m feedback attenuation. Thus every delay in the
+lossless feedback characteristic has the same substitution z^-1 -> gamma z^-1;
+the new internal storage does not silently lengthen homogeneous decay. At gamma=1
+the section is allpass. At gamma<1 it is contractive, not magnitude-flat. Damping
+with high_decay_ratio below 1 remains approximate and requires separate bandwise
+validation. This optional experiment follows the IIR filter-feedback formulation
+in Schlecht and Habets (2020), Scattering in Feedback Delay Networks, section III A;
+its delay values and code are original exploratory choices.
+
+### Early onset balance
+
+`early_onset_gain` (0..8, default 1) scales only the first early tap, prepared
+off-thread. This separates immediate early energy from later taps and the late
+network. A bounded basis fit may vary it with early level and width using energy
+windows, early crest and correlation. Tonal validation is kept separate from the
+fit. It is an original envelope control, not an extracted proprietary parameter.
 
 ## Cost gate
 

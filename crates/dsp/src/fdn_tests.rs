@@ -30,7 +30,7 @@ fn rejects_hostile_settings_and_bounds_history() {
 
 #[test]
 fn rendering_is_block_independent_and_reset_removes_tail() {
-    let settings = Settings { high_decay_ratio: 0.4, ..Settings::default() };
+    let settings = Settings { loop_diffusion: 0.6, high_decay_ratio: 0.4, ..Settings::default() };
     let mut a = Fdn::new(settings).unwrap();
     let mut b = Fdn::new(settings).unwrap();
     let mut signal = vec![0.; 48_000 * 2];
@@ -61,9 +61,10 @@ fn hostile_input_does_not_poison_network() {
 #[test]
 fn decay_tracks_target_at_multiple_sample_rates() {
     for rate in [8000, 44_100, 48_000, 96_000] {
-        for decay in [0.5, 2.] {
+        for (decay, scattering) in [(0.5, 0.), (2., 0.), (0.5, 0.6), (2., 0.6)] {
             let mut fdn = Fdn::new(Settings {
                 sample_rate: rate,
+                loop_diffusion: scattering,
                 decay_seconds: decay,
                 damping_hz: 2000.,
                 ..Settings::default()
@@ -87,4 +88,16 @@ fn decay_tracks_target_at_multiple_sample_rates() {
             assert!((measured / decay - 1.).abs() < 0.12, "rate={rate} decay={decay} measured={measured}");
         }
     }
+}
+
+#[test]
+fn scattering_rejects_hostile_settings_and_remains_finite() {
+    for bad in [f32::NAN, f32::INFINITY, -0.1, 0.71] {
+        assert!(Fdn::new(Settings { loop_diffusion: bad, ..Settings::default() }).is_err());
+    }
+    let mut core = Fdn::new(Settings { loop_diffusion: 0.7, ..Settings::default() }).unwrap();
+    for x in [f32::NAN, f32::MAX, f32::NEG_INFINITY] {
+        core.process_frame([x; 2]);
+    }
+    assert!((0..48_000).all(|_| core.process_frame([0.; 2]).iter().all(|v| v.is_finite() && v.abs() < 100.)));
 }
