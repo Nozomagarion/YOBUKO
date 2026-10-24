@@ -1158,7 +1158,18 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     let last_beat = f64::from((state.scroll.x + time.width()) / state.beat_width);
 
     // Ruler: bar numbers through the time-signature changes, a line at each labelled bar.
-    painter.fill_background(ruler, 0.0, theme::panel_background());
+    // `.ruler` styles it: its background, `color` for the bar numbers, `border-color` for
+    // their lines; `ruler` is its artwork (nine-sliced when the SVG says so).
+    let ruler_style = crate::kit::style_class::enter("ruler");
+    if !crate::kit::skin::paint(&painter, ruler, "ruler", crate::kit::skin::State::Normal, theme::text_secondary(), 0.0)
+    {
+        crate::kit::native_css::surface(&painter, ruler, 0.0, theme::panel_background());
+    }
+    let ruler_ink = crate::kit::style_class::foreground(theme::text_secondary());
+    let ruler_line = crate::kit::style_class::computed()
+        .filter(|c| c.authored.border)
+        .map_or_else(theme::border, |c| c.border);
+    drop(ruler_style);
     let meter = &timeline.meter;
     let bar_width = bar_beats as f32 * state.beat_width;
     let label_every = [1u32, 2, 4, 8, 16, 32, 64].into_iter().find(|n| *n as f32 * bar_width >= 40.0).unwrap_or(128);
@@ -1193,7 +1204,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             continue;
         }
         let x = x_of(meter.bar_start(bar)).round() + 0.5;
-        ruler_painter.vline(x, ruler.y_range(), theme::hairline(theme::border()));
+        ruler_painter.vline(x, ruler.y_range(), theme::hairline(ruler_line));
         let label = Rect::from_min_max(Pos2::new(x + 3.0, ruler.top()), Pos2::new(x + 40.0, ruler.bottom()));
         widgets::text_in(
             &ruler_painter,
@@ -1201,7 +1212,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             Align2::LEFT_CENTER,
             &(u64::from(bar) + 1).to_string(),
             theme::mono_font(theme::TEXT_SMALL),
-            theme::text_secondary(),
+            ruler_ink,
         );
     }
     // TimelineGrid in the lanes: a line at every step of the grid the control bar's value sets, coarser
@@ -2141,7 +2152,18 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     if timeline.running || timeline.beat > 0.0 {
         let x = x_of(timeline.beat).round() + 0.5;
         if x >= time.left() && x <= time.right() {
-            painter.vline(x, time.y_range(), theme::hairline(theme::accent()));
+            // `.playhead { color; width }`: its colour and thickness.
+            let _style = crate::kit::style_class::enter("playhead");
+            let color = crate::kit::style_class::foreground(theme::accent());
+            match crate::kit::style_class::computed().and_then(|c| c.width) {
+                Some(width) if width > 0.0 => {
+                    painter.vline(x, time.y_range(), egui::Stroke::new(width.min(8.0), color));
+                }
+                Some(_) => {}
+                None => {
+                    painter.vline(x, time.y_range(), theme::hairline(color));
+                }
+            }
         }
     }
 }
@@ -2396,17 +2418,28 @@ fn loop_brace(
     let Some((start, end)) = shown else { return };
     let enabled = timeline.loop_brace.is_none_or(|b| b.enabled) || state.loop_drag.is_some();
     let (left, right) = (x_of(start).round(), x_of(end).round());
+    // `.loop-region` styles the bar, `:checked` while looping is on; `height` is its thickness
+    // and `loop-region` (`.on` while on) its artwork, nine-sliced when the SVG says so.
+    let _style = crate::kit::style_class::enter("loop-region");
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, enabled);
+    let thickness = crate::kit::native_css::thickness(LOOP_BAR).clamp(1.0, row.height());
     let bar = Rect::from_min_max(
-        Pos2::new(left, row.center().y - LOOP_BAR / 2.0),
-        Pos2::new(right.max(left + 1.0), row.center().y + LOOP_BAR / 2.0),
+        Pos2::new(left, row.center().y - thickness / 2.0),
+        Pos2::new(right.max(left + 1.0), row.center().y + thickness / 2.0),
     );
     let (fill, edge) = if enabled {
         (theme::control_active(), theme::text_secondary())
     } else {
         (theme::control_background(), theme::text_hint())
     };
-    painter.fill_background(bar, 0.0, fill);
-    painter.rect_stroke(bar, 0.0, theme::hairline(edge), StrokeKind::Inside);
+    let state = if enabled { crate::kit::skin::State::On } else { crate::kit::skin::State::Normal };
+    if !crate::kit::skin::paint(&painter, bar, "loop-region", state, edge, 0.0) {
+        let authored = crate::kit::style_class::computed().is_some_and(|c| c.authored.border || c.border_width > 0.0);
+        crate::kit::native_css::surface(&painter, bar, 0.0, fill);
+        if !authored {
+            painter.rect_stroke(bar, 0.0, theme::hairline(edge), StrokeKind::Inside);
+        }
+    }
 }
 
 /// The Back to arrangement glyph: an arrow curving over the top from the right to the left, its

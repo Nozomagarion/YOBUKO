@@ -61,6 +61,9 @@ pub const OWN_ROLES: &[&str] = &[
     "send.fill",
     // The buttons that add a track, after the last one.
     "add-track",
+    // The Arrangement view's ruler and its loop region.
+    "ruler",
+    "loop-region",
     // A track's artwork in one view only, over `track.name` and `track.body`.
     "track.name.session",
     "track.name.mixer",

@@ -1022,3 +1022,25 @@ fn the_add_track_buttons_take_their_class_and_ids() {
     assert_eq!(fills.iter().filter(|f| **f == egui::Color32::from_rgb(0, 0xFF, 0)).count(), 2, "{fills:?}");
     assert!(fills.contains(&egui::Color32::RED), "{fills:?}");
 }
+
+#[test]
+fn the_ruler_loop_region_and_playhead_take_their_classes() {
+    use crate::arrangement::{arrangement_view, timeline};
+    let mut timeline = timeline::Timeline::build(&crate::demo::demo_project(), None);
+    timeline.loop_brace = Some(timeline::LoopBrace { start: 0.0, end: 8.0, enabled: true });
+    timeline.beat = 2.0;
+    let css = ".ruler { background-color: #FF0000; } \
+               .loop-region { background-color: #000080; } \
+               .loop-region:checked { background-color: #00FF00; height: 6px; } \
+               .playhead { color: #0000FF; width: 3px; }";
+    let mut state = arrangement_view::ArrangementViewState::default();
+    let shapes = painted(css, |ui| arrangement_view::show(ui, &timeline, &mut state, &mut Vec::new()));
+    let fills: Vec<_> = rects(&shapes);
+    assert!(fills.iter().any(|r| r.fill == egui::Color32::RED), "the ruler");
+    assert!(fills.iter().any(|r| r.fill == egui::Color32::from_rgb(0, 0xFF, 0) && r.rect.height() == 6.0), "the loop");
+    assert!(
+        shapes.iter().any(|s| matches!(&s.shape, egui::Shape::LineSegment { stroke, .. }
+            if stroke.width == 3.0 && stroke.color == egui::Color32::from_rgb(0, 0, 0xFF))),
+        "the playhead"
+    );
+}
