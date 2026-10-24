@@ -1044,3 +1044,18 @@ fn the_ruler_loop_region_and_playhead_take_their_classes() {
         "the playhead"
     );
 }
+
+#[test]
+fn a_clip_under_the_play_position_is_playing() {
+    use crate::arrangement::{arrangement_view, timeline};
+    let mut timeline = timeline::Timeline::build(&crate::demo::demo_project(), None);
+    let first = timeline.lanes.iter().flat_map(|l| &l.clips).next().expect("the demo has clips");
+    timeline.beat = first.start + first.length / 2.0;
+    let css = ".clip:playing { background-color: #FF0000; }";
+    let mut state = arrangement_view::ArrangementViewState::default();
+    let stopped = rects(&painted(css, |ui| arrangement_view::show(ui, &timeline, &mut state, &mut Vec::new())));
+    assert!(!stopped.iter().any(|r| r.fill == egui::Color32::RED), "stopped, nothing plays");
+    timeline.running = true;
+    let running = rects(&painted(css, |ui| arrangement_view::show(ui, &timeline, &mut state, &mut Vec::new())));
+    assert!(running.iter().any(|r| r.fill == egui::Color32::RED), "the clip under the play position");
+}

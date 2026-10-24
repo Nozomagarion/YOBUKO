@@ -3298,6 +3298,15 @@ fn paint_clip(
     crate::kit::native_css::set_variable("--clip-colour", crate::kit::native_css::hex(rgb(clip.color)));
     crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, selected);
     crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, off);
+    // `:playing` while the play position is inside it, `:recording` while a take records over it.
+    let end = clip.start + clip.length;
+    let playing = timeline.running && !off && (clip.start..end).contains(&timeline.beat);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Playing, playing);
+    let recording = timeline
+        .recording_spans
+        .iter()
+        .any(|(track, from, to)| *track == lane.track && *from < end && *to > clip.start);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Recording, recording);
     // The sheet's opacity fades the whole clip, its waveform, notes and name too.
     let faded;
     let painter = match crate::kit::style_class::computed().map(|style| style.opacity).filter(|o| *o < 1.0) {
