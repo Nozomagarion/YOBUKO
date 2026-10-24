@@ -4794,6 +4794,7 @@ dependencies = [
  "suhina-device-api",
  "suhina-device-registry",
  "suhina-device-sdk",
+ "suhina-dsp",
  "suhina-model",
  "suhina-stretch",
 ]
@@ -4832,6 +4833,7 @@ dependencies = [
  "suhina-device-compressor",
  "suhina-device-limiter",
  "suhina-engine",
+ "suhina-mp3",
  "suhina-project-file",
  "symphonia",
  "vorbis_rs",
@@ -4843,12 +4845,21 @@ version = "0.0.1"
 dependencies = [
  "midir",
  "suhina-engine",
+ "suhina-plugins",
  "suhina-session",
 ]
 
 [[package]]
 name = "suhina-model"
 version = "0.0.1"
+
+[[package]]
+name = "suhina-mp3"
+version = "0.0.1"
+dependencies = [
+ "cc",
+ "symphonia",
+]
 
 [[package]]
 name = "suhina-output"
@@ -4944,6 +4955,7 @@ dependencies = [
  "suhina-library",
  "suhina-media",
  "suhina-model",
+ "suhina-mp3",
  "suhina-plugins",
  "suhina-project-file",
  "suhina-soundmap",

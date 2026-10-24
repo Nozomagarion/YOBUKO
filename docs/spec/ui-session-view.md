@@ -3,7 +3,7 @@ description: Functional spec of the main window and the Session view: regions, c
 read_when: Session view, main window layout, clip slot behaviour, scene launch, launch keys, mapping mode, Map button, Ctrl+M, mixer section, browser structure
 type: spec
 status: draft
-last_verified: 2026-10-20
+last_verified: 2026-10-23
 covers:
   - crates/ui/src/session/session_view.rs
   - crates/ui/src/session/mixer_strip.rs
@@ -169,10 +169,13 @@ the clip there; on an empty audio track the track takes the clip's name **(obser
 Below the last scene each track has a **stop all clips** button for that track, and the main
 column has **stop all clips** for the whole set.
 
-**Suhina:** a click on a track's slot also selects it (a group's slots only launch). A
-right-click selects it and opens its menu: **Copy** copies its clip (`clip.copy {track,
+**Suhina:** a click on a track's slot also selects it (a group's slots only launch; with
+**Select on launch** off, a click on an occupied slot's launch control launches without selecting),
+and selecting a slot, empty or not, selects its track too, so the detail area shows that track and
+auto-arm (Settings › MIDI) arms it (#834). A right-click selects it and opens its menu: **Copy** copies its clip (`clip.copy {track,
 scene}`), **Paste** puts the copied clip in it (`clip.paste {track, scene}`), greyed out while
-nothing has been copied. Ctrl+C and Ctrl+V do the same on the selected slot
+nothing has been copied, and **Delete** takes its clip off, MIDI or audio (`clip.delete {track,
+scene}`, one undo step), greyed out on an empty slot (#842). Ctrl+C and Ctrl+V do the same on the selected slot
 ([shortcuts](../shortcuts.md)); Ctrl+X and Ctrl+D act on arrangement clips only and say so in the
 Session view. **Suhina:** the Delete key (or Backspace) takes a selected slot's clip off its
 slot (`clip.delete` with the slot's track and scene); one undo puts it back, and the detail area

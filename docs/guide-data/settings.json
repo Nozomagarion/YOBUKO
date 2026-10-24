@@ -558,6 +558,31 @@
       "workInProgress": false
     },
     {
+      "id": "Midi/Arming/auto_arm",
+      "page": "Midi",
+      "section": "Arming",
+      "name": "Auto-arm the selected track",
+      "note": "Arm the track you select, so a MIDI controller or the audio input plays into it.",
+      "keys": [
+        "auto_arm"
+      ],
+      "sourceFingerprint": "c59724f5fd002f8b3d8096048538fd84cb585e719b7ab572cbc4ef7540c3f76d",
+      "helpStatus": "reviewed",
+      "description": "When this is on, selecting a track (clicking its header, or a clip slot in its column) arms it for recording, and the track armed this way before is disarmed again. On a MIDI track, a MIDI keyboard or controller then plays the track's instrument; on an audio track, the track hears its audio input, and a track with no input chosen gets the device's first input, as its arm button gives it. Return tracks, the main track and groups are left as they are, and the arm does not move while a take is recording. A track you armed yourself stays armed when you select another one. Arming is not an edit: it is not undone and not saved with the project. The setting is off unless you turn it on.",
+      "options": [
+        {
+          "name": "On",
+          "description": "Selecting a MIDI or audio track arms it, and the track armed by the previous selection is disarmed."
+        },
+        {
+          "name": "Off",
+          "description": "Selecting a track does not change which tracks are armed; arm tracks with their own buttons."
+        }
+      ],
+      "whenToChange": "Turn it on when you play a MIDI keyboard or record an input into one track after another and want the arm to follow the track you select. Leave it off when you record several tracks at once or keep particular tracks armed.",
+      "workInProgress": false
+    },
+    {
       "id": "Plugins/Editors/plugin_editors",
       "page": "Plugins",
       "section": "Editors",
@@ -867,7 +892,7 @@
       "keys": [
         "stretch_alt_drag"
       ],
-      "sourceFingerprint": "0cacb976e3b4b5dc36e03601fef1debee4f33232757ad7c8069b36500fc05fb3",
+      "sourceFingerprint": "464f35094f035650894ea877d91bd8e6fec95a803c6db97b3eb57d7ddb953e2e",
       "helpStatus": "reviewed",
       "description": "Time-stretching changes an audio clip’s duration while aiming to retain its pitch. With this enabled, hold Ctrl+Alt while dragging an Arrangement audio clip’s left or right edge to stretch its content to the new span. Suhina adjusts the timing markers and gives shared content a separate copy where necessary. With it disabled, the edge uses normal trimming behavior. Alt alone allows free edge positioning; it is not the stretch gesture. On macOS use Cmd+Option. MIDI clip edges are not affected.",
       "options": [

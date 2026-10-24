@@ -108,7 +108,7 @@ impl Recording {
 
 /// What an armed track records: audio when it has an audio input, notes when it plays notes.
 fn kind_of(p: &Project, track: TrackId) -> Option<bool> {
-    let t = p.tracks.iter().find(|t| t.id == track)?;
+    let t = p.track(track)?;
     if t.audio_input.channels != InputChannels::None {
         Some(true)
     } else if t.content.notes {
@@ -119,7 +119,7 @@ fn kind_of(p: &Project, track: TrackId) -> Option<bool> {
 }
 
 fn track_name(p: &Project, track: TrackId) -> String {
-    p.tracks.iter().find(|t| t.id == track).map(|t| t.name.clone()).unwrap_or_default()
+    p.track(track).map(|t| t.name.clone()).unwrap_or_default()
 }
 
 impl Session {
@@ -137,6 +137,14 @@ impl Session {
 
     pub fn count_in_bars(&self) -> u8 {
         self.recording.count_in_bars
+    }
+
+    /// Whether a take is being recorded now, into the arrangement or a slot: what auto-arm
+    /// (#834) leaves the arm alone for, so a take is not cut off. A take asked to end counts
+    /// until it is a clip: a slot's records on to its launch boundary, and either waits a
+    /// moment after for the notes on their way.
+    pub fn is_recording(&self) -> bool {
+        !self.recording.takes.is_empty()
     }
 
     /// Whether the arrangement records (`transport.record`).
@@ -608,10 +616,10 @@ pub(crate) fn record_sample(session: &mut Session, params: &Value) -> Result<Val
         session.send_ends();
         return Ok(json!({"recording": false}));
     }
-    let t = session.project.tracks.iter().find(|t| t.id == track).ok_or("track is missing")?;
+    let t = session.project.track(track).ok_or("track is missing")?;
     let stored = t
         .channel
-        .and_then(|id| session.project.channels.iter().find(|c| c.id == id))
+        .and_then(|id| session.project.channel(id))
         .and_then(|c| c.devices.get(device))
         .ok_or("device is missing")?;
     if !matches!(&stored.kind, suhina_model::DeviceKind::Builtin(id) if id == "sampler") {

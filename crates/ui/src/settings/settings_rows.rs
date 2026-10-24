@@ -242,6 +242,14 @@ pub(crate) static ROWS: &[Entry] = &[
         &["midi_input_off"],
         crate::settings::settings_view::midi_inputs,
     ),
+    row(
+        Page::Midi,
+        "Arming",
+        "Auto-arm the selected track",
+        "Selecting a track arms it, so the MIDI controller plays that track's instrument; a track armed by hand stays armed",
+        &["auto_arm"],
+        |cx, r| cx.on_off(r, |s| &mut s.auto_arm),
+    ),
     // Plug-ins.
     row(
         Page::Plugins,
@@ -342,7 +350,7 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Arrangement,
         "Clips",
         "Ctrl+Alt-drag on an edge stretches audio",
-        "An audio clip's edge dragged with Alt held time-stretches its audio to the new length, its pitch kept; off, Alt does nothing there",
+        "An audio clip's edge dragged with Ctrl and Alt held time-stretches its audio to the new length, its pitch kept; off, it moves the edge as a plain drag does",
         &["stretch_alt_drag"],
         |cx, r| cx.on_off(r, |s| &mut s.view.stretch_alt),
     ),

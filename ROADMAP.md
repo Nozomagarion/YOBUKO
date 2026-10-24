@@ -507,7 +507,8 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   themselves permission. Attached exports prepare across frames and render off the window
   thread, including exports in batches.
 - **Export:** File › Export… renders the mix to an audio file the user chose — wav (32-bit
-  float, 24 or 16 with dither), flac or ogg, at a chosen sample rate, with normalise to
+  float, 24 or 16 with dither), flac, ogg or mp3 (through the vendored LAME 3.100 encoder,
+  at 128/192/256/320 kbps or VBR V0/V2), at a chosen sample rate, with normalise to
   −0.3 dBFS and an overwrite question ([spec](docs/spec/export.md)). The same `project.export`
   command serves the MCP server and scripts, and adds a range and tail, and a source (one node
   of the track tree), which the command line reaches with `suhina-cli render --source` too. One
@@ -739,6 +740,11 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   input port opened and Settings › MIDI to turn one off (`midi.inputs`,
   `midi.setInput`); a controller plugged in later is found within seconds. The latency follows
   the buffer size.
+- **Auto-arm the selected track:** with Settings › MIDI › Auto-arm on, selecting a track arms
+  it (a MIDI or an audio track, also by clicking one of its clip slots) and lets go of the one it
+  armed before, so a MIDI controller or the audio input plays into the track in view; tracks
+  armed by hand stay armed, returns and groups are skipped, and the arm stays put while a take
+  records ([#834](https://github.com/suhina-daw/suhina-daw/issues/834), ADR 0017).
 - **Audio input and monitoring:** choose an input device in Settings › Audio (off by default);
   each audio track hears one channel or a stereo pair of it, monitored while armed (Auto),
   always (In) or never (Off), through its devices and mix (`track.setAudioInput`); arm many
