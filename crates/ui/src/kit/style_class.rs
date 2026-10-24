@@ -104,6 +104,7 @@ pub fn valid_property(key: &str, value: &str) -> bool {
         "--suhina-track-artwork" => matches!(value, "on" | "off"),
         "--suhina-appearance" => matches!(value, "native" | "knob" | "field"),
         "--suhina-track-headers" => matches!(value, "left" | "right"),
+        "--suhina-header-tint" => value.trim().parse::<u8>().is_ok_and(|v| v <= 100),
         "--suhina-header-min-width" => value
             .strip_suffix("px")
             .and_then(|v| v.trim().parse::<u16>().ok())
@@ -289,6 +290,14 @@ pub fn theme_track_headers_left() -> Option<bool> {
 /// The narrowest the theme lets the Arrangement view's header column be (`.arrangement {
 /// --suhina-header-min-width: 330px }`): the width its placements were made for, which the
 /// header's narrower layouts would break.
+/// How strongly the theme lets the track's colour tint its Arrangement header (`.arrangement {
+/// --suhina-header-tint: 0 }` for none, up to 100), over the user's header colour strength; a
+/// see-through theme takes the native tint away with 0.
+pub fn theme_header_tint() -> Option<u8> {
+    let skin = skin::current();
+    skin.styles.get(".arrangement")?.get("--suhina-header-tint")?.trim().parse::<u8>().ok().map(|v| v.min(100))
+}
+
 pub fn theme_header_min_width() -> Option<f32> {
     let skin = skin::current();
     skin.styles.get(".arrangement")?.get("--suhina-header-min-width")?.strip_suffix("px")?.trim().parse::<f32>().ok()

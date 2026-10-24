@@ -3895,7 +3895,8 @@ fn track_header(
     // Preserve track identity when selected: a small brightness lift and outline, without
     // replacing the track colour with the global selection accent.
     let background = if selected { theme::track_header_selected() } else { theme::track_header_background() };
-    let surface = colour_surface(background, rgb(lane.color), state.header_colour_strength, lane.mute);
+    let strength = crate::kit::style_class::theme_header_tint().unwrap_or(state.header_colour_strength);
+    let surface = colour_surface(background, rgb(lane.color), strength, lane.mute);
     let header_fill = if selected { motion::mix(surface, theme::text_primary(), 0.07) } else { surface };
     if !crate::kit::skin::paint_colored(
         painter,

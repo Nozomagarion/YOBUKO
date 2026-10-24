@@ -1203,3 +1203,12 @@ fn a_round_button_s_shadow_is_round() {
     let button = rects(&shapes).into_iter().find(|r| r.fill == egui::Color32::RED).expect("the button");
     assert_eq!(button.corner_radius.nw, 12, "50 % is round");
 }
+
+#[test]
+fn a_theme_sets_how_strongly_the_track_colour_tints_its_header() {
+    let (theme, _) = super::super::theme::from_sheet(".arrangement { --suhina-header-tint: 0; }", "");
+    skin::configure(&theme.skin);
+    assert_eq!(super::super::style_class::theme_header_tint(), Some(0));
+    skin::configure(&skin::Skin::default());
+    assert_eq!(super::super::style_class::theme_header_tint(), None);
+}
