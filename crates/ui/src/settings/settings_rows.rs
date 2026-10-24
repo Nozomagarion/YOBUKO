@@ -277,9 +277,9 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Arrangement,
         "Clip editing",
         "Grab a clip by",
-        "Choose where you grab a clip to move it, the name bar at its top or its lower half, while the rest of the clip selects time",
+        "Choose where you grab a clip to move it, by the name bar at its top or by its lower half, and the rest of the clip selects time",
         &["clip_drag"],
-        |cx, r| cx.choose(r, &[("Name bar", false), ("Mirror", true)], |s| &mut s.view.clip_halves),
+        |cx, r| cx.choose(r, &[("Name bar", false), ("Lower half", true)], |s| &mut s.view.clip_halves),
     ),
     row(
         Page::Arrangement,

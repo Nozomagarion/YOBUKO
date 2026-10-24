@@ -144,7 +144,7 @@ headers are tinted with their track's colour, deeper while selected.
 A clip on a lane at least 36 px tall has a name bar along its top. By default (Settings ›
 Arrangement › *Moving a clip*: **Name bar**, `clip_drag = name_bar`) a drag from the name bar
 moves the clip (a hand cursor) and a drag from its body below paints a time selection (a text
-cursor) over the tracks it crosses. **Mirror** (`clip_drag = halves`) splits the clip in two
+cursor) over the tracks it crosses. **Lower half** (`clip_drag = halves`) splits the clip in two
 instead: its upper half paints time and its lower half moves it. An empty spot of a lane is split
 in two either way: its upper half paints time, its lower half draws a rectangle that picks whole
 clips and paints no time. A clip on a lane under 36 px moves from its lower half.
@@ -224,7 +224,7 @@ not on whole clips. It is made by:
 - a drag on the ruler: that time over every track;
 - over a clip, as Settings › Arrangement › *Moving a clip* and *Ctrl+drag selects time over
   clips* say: off (the default) a drag from the clip's body selects time and the clip moves by
-  its name bar (with **Mirror**, from its upper and lower half); on, a drag with Ctrl held
+  its name bar (with **Lower half**, from its upper and lower half); on, a drag with Ctrl held
   selects time anywhere and a plain drag moves the clip.
 
 Its edges are on the grid (Alt: free). A click on a clip, or moving one, ends it, so clicked

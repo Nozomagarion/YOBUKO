@@ -629,11 +629,11 @@
         "description": "Drag the name bar to move the clip and drag the body to select time. This is the default."
       },
       {
-        "name": "Mirror",
+        "name": "Lower half",
         "description": "Drag the lower half to move the clip and the upper half to select time."
       }
     ],
-    "whenToChange": "Choose Name bar for a clear move handle above the clip content. Choose Mirror if you prefer moving clips from their lower half.",
+    "whenToChange": "Choose Name bar for a clear move handle above the clip content. Choose Lower half if you prefer moving clips from their lower half.",
     "references": [
       "crates/ui/src/settings/settings_rows.rs",
       "crates/ui/src/settings.rs",
