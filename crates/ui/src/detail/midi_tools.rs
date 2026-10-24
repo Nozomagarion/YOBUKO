@@ -383,8 +383,11 @@ fn note_tools(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, action
         // Two halves of the column's width, so the second is never pushed off its edge.
         let half = ((ui.available_width() - ui.spacing().item_spacing.x) / 2.0).max(8.0);
         let button = |ui: &mut Ui, name: &str, font: &egui::FontId| {
-            ui.add(egui::Button::new(egui::RichText::new(name).font(font.clone())).min_size(Vec2::new(half, BUTTON_HEIGHT)))
-                .clicked()
+            ui.add(
+                egui::Button::new(egui::RichText::new(name).font(font.clone()))
+                    .min_size(Vec2::new(half, BUTTON_HEIGHT)),
+            )
+            .clicked()
         };
         if button(ui, "×2", &small) {
             let mut params = tools.params();

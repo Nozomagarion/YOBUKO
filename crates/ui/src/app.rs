@@ -7461,9 +7461,7 @@ fn with_bar_line<R>(ui: &mut Ui, class: &str, show: impl FnOnce(&mut Ui) -> R) -
             (c.authored.border_width && c.border_width <= 0.0) || (c.authored.border && c.border.a() == 0)
         });
         if lineless {
-            own.as_ref()
-                .filter(|c| c.authored.background)
-                .map_or_else(theme::panel_background, |c| c.background)
+            own.as_ref().filter(|c| c.authored.background).map_or_else(theme::panel_background, |c| c.background)
         } else {
             theme::border()
         }
@@ -7592,7 +7590,9 @@ mod tests {
                 egui::Shape::LineSegment { points, stroke } => {
                     stroke.color == green && (points[1].x - points[0].x).abs() > 1000.0
                 }
-                egui::Shape::Rect(rect) => rect.fill == green && rect.rect.width() > 1000.0 && rect.rect.height() <= 2.0,
+                egui::Shape::Rect(rect) => {
+                    rect.fill == green && rect.rect.width() > 1000.0 && rect.rect.height() <= 2.0
+                }
                 _ => false,
             });
         }

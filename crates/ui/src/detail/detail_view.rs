@@ -2041,7 +2041,8 @@ fn themed_slider_widget(
         let _rail = crate::kit::style_class::enter("slider-rail");
         let thickness = crate::kit::native_css::thickness(4.0).clamp(1.0, rect.height());
         let rail = Rect::from_center_size(rect.center(), Vec2::new(rect.width(), thickness));
-        if !(skin::has_own("slider.rail") && skin::paint(&painter, rail, "slider.rail", state, theme::text_hint(), 0.0)) {
+        if !(skin::has_own("slider.rail") && skin::paint(&painter, rail, "slider.rail", state, theme::text_hint(), 0.0))
+        {
             crate::kit::native_css::surface(&painter, rail, thickness / 2.0, theme::control_background());
         }
         rail
@@ -2051,7 +2052,8 @@ fn themed_slider_widget(
         let _fill = crate::kit::style_class::enter("slider-fill");
         let fill = Rect::from_min_max(rail.min, Pos2::new(at, rail.bottom()));
         if fill.width() >= 1.0
-            && !(skin::has_own("slider.fill") && skin::paint(&painter, fill, "slider.fill", state, theme::accent(), 0.0))
+            && !(skin::has_own("slider.fill")
+                && skin::paint(&painter, fill, "slider.fill", state, theme::accent(), 0.0))
         {
             crate::kit::native_css::surface(&painter, fill, rail.height() / 2.0, theme::control_selected());
         }
@@ -2059,7 +2061,8 @@ fn themed_slider_widget(
     {
         let _handle = crate::kit::style_class::enter_response("slider-handle", &response);
         let handle = Rect::from_center_size(Pos2::new(at, rect.center().y), Vec2::new(handle_width, rect.height()));
-        if !(skin::has_own("slider.handle") && skin::paint(&painter, handle, "slider.handle", state, theme::text_primary(), 0.0))
+        if !(skin::has_own("slider.handle")
+            && skin::paint(&painter, handle, "slider.handle", state, theme::text_primary(), 0.0))
         {
             crate::kit::native_css::surface(&painter, handle, 2.0, theme::text_primary());
         }

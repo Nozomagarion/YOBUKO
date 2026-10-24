@@ -2337,7 +2337,8 @@ fn segmented<T: Copy + PartialEq>(
         let hover = widgets::hover(ui, &response);
         let idle = motion::mix(theme::control_background(), theme::control_hover(), hover);
         crate::kit::native_css::surface(painter, cell, 0.0, motion::mix(idle, theme::control_selected(), selected));
-        let color = crate::kit::style_class::foreground(motion::mix(theme::text_secondary(), theme::text_inverse(), selected));
+        let color =
+            crate::kit::style_class::foreground(motion::mix(theme::text_secondary(), theme::text_inverse(), selected));
         widgets::text_in(painter, cell, Align2::CENTER_CENTER, text, theme::ui_font(theme::TEXT_SMALL), color);
     }
     picked

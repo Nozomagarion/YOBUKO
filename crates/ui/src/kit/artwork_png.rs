@@ -56,7 +56,8 @@ pub fn fit_background(bytes: &[u8]) -> Result<Vec<u8>, String> {
     reader.limits(limits);
     let image = reader.decode().map_err(|error| format!("the background PNG does not read: {error}"))?;
     let scale = (2560.0 / f64::from(width)).min(1600.0 / f64::from(height)).min(1.0);
-    let (w, h) = (((f64::from(width) * scale).round() as u32).max(1), ((f64::from(height) * scale).round() as u32).max(1));
+    let (w, h) =
+        (((f64::from(width) * scale).round() as u32).max(1), ((f64::from(height) * scale).round() as u32).max(1));
     let small = image.resize(w, h, image::imageops::FilterType::Triangle).to_rgb8();
     let mut out = Cursor::new(Vec::new());
     small.write_to(&mut out, image::ImageFormat::Png).map_err(|e| e.to_string())?;

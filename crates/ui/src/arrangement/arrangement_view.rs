@@ -106,9 +106,7 @@ const LOOP_ROW: f32 = 14.0;
 /// thicker than the native row allows (up to 40 points).
 fn loop_row_height() -> f32 {
     let _style = crate::kit::style_class::enter("loop-region");
-    crate::kit::style_class::computed()
-        .and_then(|c| c.height)
-        .map_or(LOOP_ROW, |h| (h + 6.0).clamp(LOOP_ROW, 40.0))
+    crate::kit::style_class::computed().and_then(|c| c.height).map_or(LOOP_ROW, |h| (h + 6.0).clamp(LOOP_ROW, 40.0))
 }
 const LOOP_BAR: f32 = 6.0;
 const LOOP_GRAB: f32 = 4.0;
@@ -1058,7 +1056,8 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     };
     let time = Rect::from_x_y_ranges(time_x, area.y_range());
     let ruler = Rect::from_min_size(time.min, Vec2::new(time.width(), RULER));
-    let loop_row = Rect::from_min_size(Pos2::new(time.left(), ruler.bottom() + 1.0), Vec2::new(time.width(), loop_row_height()));
+    let loop_row =
+        Rect::from_min_size(Pos2::new(time.left(), ruler.bottom() + 1.0), Vec2::new(time.width(), loop_row_height()));
     let marker_row =
         Rect::from_min_size(Pos2::new(time.left(), loop_row.bottom() + 1.0), Vec2::new(time.width(), MARKER_ROW));
     // Return tracks and the main track are fixed rows along the bottom.

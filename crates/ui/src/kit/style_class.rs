@@ -421,16 +421,29 @@ pub fn ui(ui: &mut egui::Ui) -> UiStyle<'_> {
         stack.borrow().last().is_some_and(|class| {
             matches!(
                 class.as_str(),
-                "device" | "device-panel" | "settings" | "dialog" | "browser" | "sample-map" | "start-page"
-                    | "plugin-manager" | "popup" | "piano-roll" | "detail" | "clip-editor" | "midi-tools"
-                    | "clip-info" | "arrangement" | "session" | "mixer" | "window" | "workspace"
+                "device"
+                    | "device-panel"
+                    | "settings"
+                    | "dialog"
+                    | "browser"
+                    | "sample-map"
+                    | "start-page"
+                    | "plugin-manager"
+                    | "popup"
+                    | "piano-roll"
+                    | "detail"
+                    | "clip-editor"
+                    | "midi-tools"
+                    | "clip-info"
+                    | "arrangement"
+                    | "session"
+                    | "mixer"
+                    | "window"
+                    | "workspace"
             )
         })
     });
-    let fill = values
-        .as_ref()
-        .filter(|style| style.authored.background && !container)
-        .map(|style| style.background);
+    let fill = values.as_ref().filter(|style| style.authored.background && !container).map(|style| style.background);
     // egui's own widgets in the scope (Settings, dialogs, the start page, the browser) take the
     // sheet's generic control rules: `.button`, `.button:hover`, `.button:active`,
     // `.button:disabled` for buttons, check boxes and drop-downs, `.button:checked` for a
