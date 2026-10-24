@@ -1600,7 +1600,7 @@ mod live_volume_tests {
                 points: vec![AutomationPoint::new(0.0, 0.0)],
                 enabled: true,
             });
-            chain.mix = MixLanes::new(&channel, 24_000.0, true);
+            chain.mix = MixLanes::new(&channel, 24_000.0, true, 48_000.0);
             assert!(chain.mix.is_some());
         }
         chain.built_volume = Some(1.0);

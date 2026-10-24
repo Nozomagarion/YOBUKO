@@ -480,18 +480,24 @@ impl Detail {
                     let spec = info.and_then(|info| info.params.iter().find(|p| p.id == lane.param));
                     // On/off and choice parameters hold each point's value until the next, as the
                     // engine plays them and the lane draws them.
-                    let stepped = match spec {
-                        Some(spec) => matches!(
-                            spec.kind,
-                            suhina_device_api::ParamKind::Toggle | suhina_device_api::ParamKind::Choice(_)
-                        ),
+                    // Evenly along the parameter's control, as the engine plays it and the lane
+                    // draws it.
+                    use crate::arrangement::automation_lanes::Scale;
+                    let scale = match spec {
+                        Some(spec) => Some(Scale::Device(*spec)),
                         None => device_box
                             .graph
                             .as_ref()
                             .and_then(|g| g.parameters.iter().find(|p| p.id == lane.param))
-                            .is_some_and(|p| p.control.is_stepped()),
+                            .map(|p| {
+                                let mut sd =
+                                    suhina_device_sdk::Parameter::new(&p.id, &p.name, (p.min, p.max), p.default);
+                                sd.control = p.control;
+                                Scale::Sd(Box::new(sd))
+                            }),
                     };
-                    let Some(value) = lane.value_at(beat, stepped) else { continue };
+                    let Some(scale) = scale else { continue };
+                    let Some(value) = lane.value_at(beat, scale.stepped(), &scale) else { continue };
                     let value = spec.map_or(value, |spec| spec.clamp(value));
                     for (id, v) in &mut device_box.values {
                         if *id == lane.param {

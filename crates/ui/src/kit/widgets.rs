@@ -497,16 +497,11 @@ pub fn format_pan(pan: f64) -> String {
 
 pub(crate) const VOLUME_RANGE: (f64, f64) = (-70.0, 6.0);
 
-/// Where a volume sits on a field, 0 … 1, with 0 dB at 85 % (components › Value field).
+/// Where a volume sits on a field, 0 … 1, as the volume fader places it: 0 dB at 85 %, 40 dB
+/// per travel down to -18 dB, faster below (components › Value field;
+/// `suhina_model::automation::volume_position`).
 pub fn volume_position(db: f64) -> f32 {
-    if !db.is_finite() || db <= VOLUME_RANGE.0 {
-        0.0
-    } else if db <= 0.0 {
-        let x = (db - VOLUME_RANGE.0) / -VOLUME_RANGE.0;
-        (0.85 * x * x) as f32
-    } else {
-        (0.85 + 0.15 * (db / VOLUME_RANGE.1).min(1.0)) as f32
-    }
+    suhina_engine::model::automation::volume_position(db) as f32
 }
 
 pub(crate) fn play_glyph(painter: &egui::Painter, center: Pos2, playing: bool, color: Color32, size: f32) {
