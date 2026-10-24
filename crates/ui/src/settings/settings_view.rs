@@ -403,6 +403,7 @@ impl Entry {
     }
 
     /// Every word is in its name, note, section or page; for the shortcuts, in an action's too.
+    #[cfg(test)]
     pub(crate) fn matches_words(&self, words: &[String]) -> bool {
         self.matches(words)
     }
