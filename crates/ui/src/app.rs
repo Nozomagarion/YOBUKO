@@ -7454,7 +7454,19 @@ pub(crate) const NAME_RECT_TRACK: &str = "track-name-rect";
 fn with_bar_line<R>(ui: &mut Ui, class: &str, show: impl FnOnce(&mut Ui) -> R) -> R {
     let line = {
         let _bar = crate::kit::style_class::enter(class);
-        theme::border()
+        let own = crate::kit::style_class::computed();
+        // A bar with no line (`border-width: 0`, or a transparent border) fills the line's pixel
+        // with its own background, so no gap shows the window behind it.
+        let lineless = own.as_ref().is_some_and(|c| {
+            (c.authored.border_width && c.border_width <= 0.0) || (c.authored.border && c.border.a() == 0)
+        });
+        if lineless {
+            own.as_ref()
+                .filter(|c| c.authored.background)
+                .map_or_else(theme::panel_background, |c| c.background)
+        } else {
+            theme::border()
+        }
     };
     let saved = ui.visuals().widgets.noninteractive.bg_stroke;
     ui.visuals_mut().widgets.noninteractive.bg_stroke.color = line;
@@ -7553,6 +7565,39 @@ mod tests {
         }
         app.use_test_skin(crate::kit::skin::Skin::default());
         assert!(found, "the line under the menu bar is red");
+    }
+
+    #[test]
+    fn a_bar_without_a_line_fills_the_line_with_its_background() {
+        let ctx = egui::Context::default();
+        let mut app = App::new();
+        app.set_session(Session::new(crate::demo::demo_project()), &[]);
+        app.settings.animations = false;
+        app.use_test_skin(crate::kit::skin::Skin {
+            css: Some(std::sync::Arc::from(".menu-bar { background-color: #00FF00; border-width: 0; }")),
+            ..Default::default()
+        });
+        let green = egui::Color32::from_rgb(0, 0xFF, 0);
+        let mut found = false;
+        for _ in 0..4 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| app.ui(ui),
+            );
+            output.textures_delta.clear();
+            found = output.shapes.iter().any(|shape| match &shape.shape {
+                egui::Shape::LineSegment { points, stroke } => {
+                    stroke.color == green && (points[1].x - points[0].x).abs() > 1000.0
+                }
+                egui::Shape::Rect(rect) => rect.fill == green && rect.rect.width() > 1000.0 && rect.rect.height() <= 2.0,
+                _ => false,
+            });
+        }
+        app.use_test_skin(crate::kit::skin::Skin::default());
+        assert!(found, "the menu bar's line is its own green");
     }
 
     #[test]
