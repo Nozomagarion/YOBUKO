@@ -773,7 +773,9 @@ fn resolve_resources(
     if let Some(background) = &theme.skin.background
         && !background.starts_with("data:image/png;base64,")
     {
-        let bytes = resource(background, skin::MAX_PNG as u64)?;
+        // A large picture (a 4K wallpaper) is scaled down to fit rather than refused.
+        let bytes = resource(background, 64 * 1024 * 1024)?;
+        let bytes = suhina_ui::kit::artwork_png::fit_background(&bytes)?;
         theme.skin.background = Some(skin::encode_png(&bytes)?);
     }
     let mut artwork_bytes = 0usize;
