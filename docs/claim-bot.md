@@ -114,7 +114,8 @@ cannot cancel a write already starting. Close/reopen and test-build take no argu
 close/reopen never act on pull requests.
 A completed request is not repeated when its Actions run is rerun. Issue creation recovers an
 issue created before a failed reply. A partially failed test-build request may repeat a label
-event for the same commit, but cannot authorize another commit. Runs for the same comment are
+event for the same commit, but cannot authorize another commit. A test-build request gets one
+reply, which also carries the proof the build checks (its last line). Runs for the same comment are
 serialized; separate comments are independent requests.
 
 For example, comment on the issue that prompted the new work:
