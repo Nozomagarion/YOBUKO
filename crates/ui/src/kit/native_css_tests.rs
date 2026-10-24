@@ -1149,3 +1149,15 @@ fn a_built_in_device_s_panel_is_selected_by_its_id() {
     assert_eq!(seen[0], (Some(egui::Color32::RED), Some(egui::Color32::BLUE)));
     assert_eq!(seen[1], (Some(egui::Color32::from_rgb(0, 0xFF, 0)), None));
 }
+
+#[test]
+fn a_clip_s_radius_reaches_its_name_bar() {
+    use crate::arrangement::{arrangement_view, timeline};
+    let timeline = timeline::Timeline::build(&crate::demo::demo_project(), None);
+    let mut state = arrangement_view::ArrangementViewState::default();
+    let css = ".clip { border-radius: 10px; } .clip-name { background-color: #FF0000; }";
+    let shapes = rects(&painted(css, |ui| arrangement_view::show(ui, &timeline, &mut state, &mut Vec::new())));
+    let bars: Vec<_> = shapes.iter().filter(|r| r.fill == egui::Color32::RED).collect();
+    assert!(!bars.is_empty(), "the name bars");
+    assert!(bars.iter().all(|r| r.corner_radius.nw > 0 && r.corner_radius.sw == 0), "{bars:?}");
+}

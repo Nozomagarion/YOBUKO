@@ -3356,7 +3356,13 @@ fn paint_clip(
     if let Some(bar) = bar {
         let _name_bar = crate::kit::style_class::enter("clip-name");
         let fill = crate::kit::style_class::background(motion::mix(body, ink_on(body), 0.045));
-        painter.rect_filled(bar.shrink2(Vec2::new(2.0, 0.0)), 0.0, fill);
+        // The bar keeps the clip's rounded top corners.
+        let top = radius.min(bar.height()).clamp(0.0, 255.0) as u8;
+        painter.rect_filled(
+            bar.shrink2(Vec2::new(2.0, 0.0)),
+            egui::CornerRadius { nw: top, ne: top, sw: 0, se: 0 },
+            fill,
+        );
     } else {
         painter.fill_background(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, body);
     }
@@ -3372,7 +3378,15 @@ fn paint_clip(
             theme::hairline(motion::mix(body, edge_ink, 0.4)),
         );
     }
-    painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(edge_width, rect.height())), 0.0, edge_ink);
+    // The leading edge follows the clip's rounded left corners.
+    let left = radius.clamp(0.0, 255.0) as u8;
+    painter.rect_filled(
+        // Inset from rounder corners, so it never stands outside them.
+        Rect::from_min_size(rect.min, Vec2::new(edge_width, rect.height()))
+            .shrink2(Vec2::new(0.0, (radius - edge_width).max(0.0).min(rect.height() / 2.0 - 1.0).max(0.0))),
+        egui::CornerRadius { nw: left, sw: left, ne: 0, se: 0 },
+        edge_ink,
+    );
     // A looping clip's passes are marked by the notches and lines at their starts (below), not by
     // shades: the body is one colour all along.
     // The grid shows through the body, faintly, the bars a little stronger.
