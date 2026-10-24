@@ -5156,6 +5156,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "suhina-theme-package"
+version = "0.0.1"
+dependencies = [
+ "flate2",
+ "roxmltree 0.21.1",
+ "serde_json",
+ "sha2",
+ "suhina-style",
+ "zip",
+]
+
+[[package]]
 name = "suhina-ui"
 version = "0.0.1"
 dependencies = [
