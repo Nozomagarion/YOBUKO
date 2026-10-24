@@ -62,7 +62,7 @@ pub struct About {
     /// The NAM devices' folders ([docs/spec/nam-amp-and-cab.md]) the same way.
     pub nam_models_default: String,
     pub irs_default: String,
-    /// The active project's newest backup, as Settings › General shows it: when and where.
+    /// The active project's newest backup, as Settings › Projects and backups shows it: when and where.
     pub last_backup: String,
     /// The active project's implicit MCP write folder, displayed alongside explicit grants.
     pub mcp_project_folder: Option<String>,

@@ -621,7 +621,7 @@ fn the_toolbar_cuts_copies_pastes_and_duplicates_the_selection() {
     assert!(notes(&h).len() < before_cut, "the toolbar's Cut deleted the selection");
 }
 
-/// The Settings › Shortcuts presets: Draw-first makes Ctrl+B duplicate notes and a right-click in
+/// The Settings › Keys presets: Draw-first makes Ctrl+B duplicate notes and a right-click in
 /// Draw delete one; Select-first, the default, keeps Ctrl+D and does nothing on a right-click.
 #[test]
 fn the_shortcuts_presets_set_their_keys_and_the_right_click() {

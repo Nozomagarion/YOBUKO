@@ -11,11 +11,11 @@ use std::path::PathBuf;
 /// The field a chosen path goes into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PickField {
-    /// Settings › General › Projects folder.
+    /// Settings › Projects and backups › Projects folder.
     ProjectsFolder,
-    /// Settings › General › Templates folder.
+    /// Settings › Projects and backups › Templates folder.
     TemplatesFolder,
-    /// Settings › General › Start template.
+    /// Settings › Projects and backups › Start template.
     StartTemplate,
     /// The folder of the save prompt (File › Save as…).
     SaveFolder,
@@ -27,9 +27,9 @@ pub enum PickField {
     OpenProject,
     /// A folder for the browser (+ Add folder).
     BrowserFolder,
-    /// Settings › General › NAM models folder (docs/spec/nam-amp-and-cab.md).
+    /// Settings › Devices › NAM models folder (docs/spec/nam-amp-and-cab.md).
     NamModelsFolder,
-    /// Settings › General › IR folder (docs/spec/nam-amp-and-cab.md).
+    /// Settings › Devices › IR folder (docs/spec/nam-amp-and-cab.md).
     IrFolder,
 }
 

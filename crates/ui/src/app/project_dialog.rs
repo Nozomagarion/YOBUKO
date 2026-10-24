@@ -103,7 +103,8 @@ fn draw(ui: &mut Ui, area: Rect, state: &mut DialogState, lists: &Lists) -> Opti
             }
         });
     }
-    let folder = format!("Templates in {}; the folder is set in Settings › General", lists.templates_folder);
+    let folder =
+        format!("Templates in {}; the folder is set in Settings › Projects and backups", lists.templates_folder);
     let lines = widgets::fitted(&painter, &folder, small.clone(), theme::text_hint(), note.width());
     painter.galley(Pos2::new(note.left(), note.center().y - lines.size().y / 2.0), lines, theme::text_hint());
 

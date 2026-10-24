@@ -1249,7 +1249,7 @@ impl App {
         self.lists_wanted = true;
     }
 
-    /// Opens what Settings › General › At start says, for Suhina started without a project:
+    /// Opens what Settings › Projects and backups › At start says, for Suhina started without a project:
     /// the start panel, or asks for a new project, one from the start template, or the project
     /// opened last (`last`), which the app takes up as it does the user's own requests
     /// ([`App::take_new_request`], [`App::take_open_request`]). A template or last project that
@@ -1267,7 +1267,9 @@ impl App {
                     return;
                 }
                 Some(path) => Some(format!("The template to start from is not there: {}", path.display())),
-                None => Some("No template is chosen to start from (Settings › General › Start template)".into()),
+                None => Some(
+                    "No template is chosen to start from (Settings › Projects and backups › Start template)".into(),
+                ),
             },
             AtStart::Last => match last {
                 Some(path) => {
@@ -1283,7 +1285,7 @@ impl App {
         }
     }
 
-    /// Checks for updates as Settings › General › Updates says; the desktop app calls it once
+    /// Checks for updates as Settings › Agents and updates › Updates says; the desktop app calls it once
     /// the window is up, tests never do (`docs/spec/updates.md`).
     pub fn check_updates_at_start(&mut self, ctx: &egui::Context) {
         self.updates.at_start(ctx, &self.settings.updates);
@@ -2264,7 +2266,7 @@ impl App {
                 ui.scope_builder(egui::UiBuilder::new().max_rect(prompt), |ui| self.missing.bar(ui, prompt));
             }
             // With the detail area across the full width, the browser takes its side of what is
-            // left above it (Settings › Detail area › Detail area layout).
+            // left above it (Settings › Devices › Detail area layout).
             let full_width = grid.is_some()
                 && self.settings.view.detail_layout == crate::settings::view_settings::DetailLayout::FullWidth
                 && self.settings.device_layout != DeviceLayout::Stack;

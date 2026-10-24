@@ -236,7 +236,7 @@ fn the_start_panel_opens_recent_projects_forgets_them_and_comes_back_when_the_la
 #[test]
 fn browse_buttons_ask_for_the_systems_dialog_and_fill_their_fields() {
     use suhina_ui::interaction::pick::PickField;
-    // Settings › General: the folders and the start template.
+    // Settings › Projects and backups: the folders and the start template.
     let mut harness = window(demo_app());
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
     harness.run();
