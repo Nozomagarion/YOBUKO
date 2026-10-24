@@ -150,6 +150,9 @@ impl App {
         };
         let session = self.session();
         let name = |track: TrackId| {
+            if track == TrackId::MAIN {
+                return "Main".to_string();
+            }
             session.and_then(|s| s.project().track(track)).map_or_else(String::new, |t| t.name.clone())
         };
         let device = session
@@ -497,7 +500,12 @@ impl App {
         separate: bool,
     ) -> Option<drop::DropPlan> {
         let project = self.session()?.project();
-        let name = |t: TrackId| project.track(t).map_or_else(|| t.0.to_string(), |x| x.name.clone());
+        let name = |t: TrackId| {
+            if t == TrackId::MAIN {
+                return "Main".to_string();
+            }
+            project.track(t).map_or_else(|| t.0.to_string(), |x| x.name.clone())
+        };
         if let [sample] = items
             && sample.kind == drop::ItemKind::Sample
             && sample.path().is_some_and(|path| !suhina_media::stems::is_stems_path(&path))

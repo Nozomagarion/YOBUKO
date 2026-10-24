@@ -560,8 +560,13 @@ pub(super) fn chain(
     plugins: &mut dyn FnMut(TrackId, &[usize]) -> Option<PluginReport>,
     nam: crate::detail::nam_panel::Lists,
 ) -> Chain {
-    let track_name = project.track(id).map(|t| t.name.clone()).unwrap_or_default();
-    let channel = project.track(id).and_then(|t| t.channel).and_then(|c| project.channel(c));
+    // Main has no track: its name and devices are the main channel's (#687).
+    let track_name = if id == TrackId::MAIN {
+        "Main".to_string()
+    } else {
+        project.track(id).map(|t| t.name.clone()).unwrap_or_default()
+    };
+    let channel = project.channel_of_track(id);
     let devices = channel
         .map(|c| c.devices.iter().enumerate().map(|(index, d)| device_box(d, &[index], id, plugins)).collect())
         .unwrap_or_default();

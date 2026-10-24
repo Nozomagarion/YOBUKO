@@ -143,16 +143,9 @@ impl App {
             && let Ok(session) = self.projects.session_mut(None)
         {
             // Every device's path, inside device groups too.
-            let paths: Vec<Vec<usize>> = session
-                .project()
-                .tracks
-                .iter()
-                .find(|t| t.id == shown_track)
-                .and_then(|t| t.channel)
-                .and_then(|c| session.project().channel(c))
-                .map_or_else(Vec::new, |c| {
-                    suhina_engine::model::walk_devices(&c.devices).into_iter().map(|(path, _)| path).collect()
-                });
+            let paths: Vec<Vec<usize>> = session.project().channel_of_track(shown_track).map_or_else(Vec::new, |c| {
+                suhina_engine::model::walk_devices(&c.devices).into_iter().map(|(path, _)| path).collect()
+            });
             for path in paths {
                 // Its generated panel follows the parameters it lists (#679).
                 session.list_plugin_params_at(shown_track, &path);

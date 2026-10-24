@@ -26,6 +26,7 @@ mod launch_mappings;
 mod launch_settings;
 mod launcher;
 mod library;
+mod main_channel;
 mod meters;
 mod midi;
 mod note_gestures;

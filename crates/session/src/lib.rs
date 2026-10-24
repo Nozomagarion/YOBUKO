@@ -1155,7 +1155,7 @@ pub(crate) fn plugin_key_at(project: &Project, track: suhina_model::TrackId, dev
 
 /// The key of the plug-in device at `path` on `track`'s channel, inside device groups too.
 pub(crate) fn plugin_key_at_path(project: &Project, track: suhina_model::TrackId, path: &[usize]) -> Option<u64> {
-    let channel = project.track(track)?.channel?;
+    let channel = project.channel_of_track(track)?.id;
     suhina_engine::plugin_devices(project).into_iter().find(|d| d.channel == channel && d.path == path).map(|d| d.key)
 }
 

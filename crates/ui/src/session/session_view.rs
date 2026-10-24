@@ -429,7 +429,30 @@ pub fn show(
         actions,
     );
     let main_mixer = Rect::from_x_y_ranges(scene_span, mixer.y_range());
+    // Main: a click on its header or its strip selects it, so the detail area shows its devices,
+    // and devices dropped there go onto it (#687). Under the strip's own controls, which keep
+    // their clicks.
+    let main_selected = state.selected == Some(TrackId::MAIN);
+    for (rect, id) in [(header_rect, "session-main-header"), (main_mixer, "session-main-strip")] {
+        let response = ui.interact(rect, Id::new(id), Sense::click());
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Select Main"));
+        if response.clicked() {
+            state.selected = Some(TrackId::MAIN);
+            state.selected_slot = None;
+            state.track_focus = false;
+        }
+    }
+    if let Some(probe) = state.drop.as_mut()
+        && probe.devices
+        && !probe.files
+        && !probe.clip
+    {
+        probe.offer(header_rect.union(main_mixer), DropTarget::Track(TrackId::MAIN));
+    }
     painter.rect_filled(main_mixer, 0.0, theme::panel_background());
+    if main_selected {
+        painter.rect_stroke(header_rect.shrink(0.5), 0.0, egui::Stroke::new(1.0, theme::accent()), StrokeKind::Inside);
+    }
     let level = state.meters.main;
     // The main meter stands where a track's does: beside the fader, or at the top of the strip
     // while the mixer is too low for a fader.

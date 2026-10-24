@@ -170,9 +170,9 @@ CHAPTERS = [
      "device with a channel or pair per track and monitoring Auto / In / Off "
      "(track.setAudioInput). No MIDI out, external instrument, resampling, sidechain, "
      "multi-timbral."),
-    (18, "Mixing", 18, 0.59, "partial",
+    (18, "Mixing", 18, 0.62, "partial",
      "Faders (vertical in the Session view's channel strips), pan, mute, solo (exclusive/Ctrl), groups as buses nested up to 16 deep (solo and mute "
-     "through the levels), master, latency compensation, "
+     "through the levels), master with devices and plug-ins of its own over the whole mix and its volume, pan and mute lanes, latency compensation, "
      "sends pre or post fader into return tracks that run their device chains (track.setSend, "
      "track.setSendMode, return.add/remove/rename, send knobs in the Session mixer), level "
      "meters (peak, RMS, clip) per track, group, return and main, also over MCP, and a cue output "

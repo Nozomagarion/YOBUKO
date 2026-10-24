@@ -217,8 +217,8 @@ impl Chain {
         plugins: &mut Plugins,
         assets: &crate::DeviceAssets,
     ) -> Option<Self> {
-        let channel = project.track(track)?.channel?;
-        let channel = project.channel(channel)?;
+        // The main channel's chain is built for [`TrackId::MAIN`] (#687).
+        let channel = project.channel_of_track(track)?;
         let keys = plugin_devices(project);
         let frames_per_beat = 60.0 / project.transport.tempo_bpm * f64::from(sample_rate);
         let mut slots: Vec<Slot> = Vec::new();
@@ -495,6 +495,12 @@ impl Chain {
     }
 
     /// Sets the gains the chain's output is added to the cue bus at, or `None` for no cue.
+    /// The main chain's gain after its devices: the main volume itself, as its input is the mix
+    /// at the level it plays at, not a track's sources at [`CHAIN_INPUT_GAIN`] (#687).
+    pub(crate) fn set_main_post(&mut self, gain: f32) {
+        self.post = (gain, gain);
+    }
+
     pub(crate) fn set_cue(&mut self, gains: Option<(f32, f32)>) {
         self.cue = gains.map(|(left, right)| (left / CHAIN_INPUT_GAIN, right / CHAIN_INPUT_GAIN));
     }

@@ -647,3 +647,18 @@ fn moving_the_session_view_with_the_middle_button_scrolls_it() {
     let after = header(&harness);
     assert!(after.x < before.x - 150.0, "{before:?} -> {after:?}");
 }
+
+/// Main can be selected (#687): a click on its header shows its devices in the detail area,
+/// where a device added to it appears.
+#[test]
+fn clicking_main_selects_it_and_its_devices_show() {
+    let mut session = Session::new(demo_project());
+    session.execute("device.add", &json!({ "track": "main", "device": "utility" })).unwrap();
+    let mut app = App::new();
+    app.set_browser_open(false);
+    app.set_session(session, &[]);
+    let mut harness = window(app);
+    harness.get_all_by_label("Select Main").next().unwrap().click();
+    harness.run();
+    assert!(harness.query_by_label_contains("Utility").is_some());
+}

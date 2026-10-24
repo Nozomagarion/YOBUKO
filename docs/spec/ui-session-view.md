@@ -264,7 +264,10 @@ scene can change it.
 - MIDI tracks: "MIDI From" (source, channel), monitoring (In / Auto / Off), "MIDI To" or "Audio
   To" once an instrument is on the track — planned with the I/O section.
 - Return tracks: "Audio To".
-- Main: cue out and main out.
+- Main: cue out and main out. A click on Main's header or strip selects it, and the detail area
+  shows its devices; a device or plug-in dropped on its column goes onto it (`device.add`,
+  `device.addPlugin` with `track: "main"`), as on a track's. Its devices run over the whole mix
+  and its volume comes after them (#687).
 
 ### Sends (toggleable)
 

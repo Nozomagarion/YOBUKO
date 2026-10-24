@@ -22,7 +22,7 @@
 
 use suhina_device_api::{Device, ParamKind};
 use suhina_model::automation::{self as model, MAX_POINTS, MUTE, PAN, VOLUME, shape};
-use suhina_model::{AutomationLane, Channel, ChannelRole, Project, TrackId};
+use suhina_model::{AutomationLane, Channel, Project, TrackId};
 
 /// Frames between the values a moving lane gives (1.3 ms at 48 kHz).
 pub const STEP: usize = 64;
@@ -386,10 +386,11 @@ pub(crate) fn channel_of(project: &Project, track: TrackId) -> Option<&Channel> 
 
 /// `project` with every mixer parameter that follows a lane at its neutral value (volume 1,
 /// centred, not muted), so the graph is built with the lanes' tracks heard and their gains
-/// applied after their chains; `None` when no lane plays (the project as it is). Only the
-/// tracks' own channels: the master's lanes do not play yet. Allocates.
+/// applied after their chains; `None` when no lane plays (the project as it is). Every channel
+/// counts, the main one too (its lanes play after its chain, #687). Allocates.
 pub(crate) fn neutral(project: &Project) -> Option<Project> {
-    let automated = |c: &Channel| c.role != ChannelRole::Master && model::MIXER_PARAMS.iter().any(|p| c.automated(p));
+    // The main channel's lanes play after its chain (#687), so it is built neutral as well.
+    let automated = |c: &Channel| model::MIXER_PARAMS.iter().any(|p| c.automated(p));
     if !project.channels.iter().any(automated) {
         return None;
     }

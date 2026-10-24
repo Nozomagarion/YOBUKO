@@ -1632,7 +1632,11 @@ pub(crate) fn track_gains(project: &Project, track: TrackId) -> Option<(f32, f32
     if !heard_with_solo(project, channel, &visited) {
         return None;
     }
-    if let Some(master) = project.channels.iter().find(|c| c.role == ChannelRole::Master && !visited.contains(&c.id)) {
+    // The main channel's volume and mute apply after its chain when it has one (#687).
+    if !buses::main_runs_chain(project)
+        && let Some(master) =
+            project.channels.iter().find(|c| c.role == ChannelRole::Master && !visited.contains(&c.id))
+    {
         if master.mute {
             return None;
         }

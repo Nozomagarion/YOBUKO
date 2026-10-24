@@ -352,6 +352,9 @@ suhina-cli mcp --read-root ./projects --write-root ./renders [--audio]
   arrangement, `points` a flat list of beat and value (`[0, 0.2, 4, 0.8]`), `[]` removing it.
   Values are kept in the parameter's range once `device.pluginParams` has listed them.
   `track.devices` gives a plug-in's set values and any device's lanes (`automation`).
+  The `device.*` and `automation.*` commands take `"main"` for `track` (and `toTrack`) to act on
+  the main channel, which has no track of its own: its devices run over the whole mix and its
+  volume, pan and mute lanes play (#687). Commands that change tracks themselves do not take it.
 
 - **Device groups.** A device inside a device group is named by a *device path*
   ([spec](spec/device-groups.md)): a whole number is a device on the track, as before, and text

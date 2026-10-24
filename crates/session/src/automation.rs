@@ -12,7 +12,7 @@ use suhina_engine::{MAX_START_BEAT, param_id};
 use suhina_model::automation::{MAX_POINTS, MAX_VOLUME, MUTE, VOLUME, mixer_range};
 use suhina_model::{AutomationLane, AutomationPoint, DeviceKind, TrackId};
 
-use crate::commands::{channel_param, number, to_db, track_id};
+use crate::commands::{device_channel, number, to_db, track_or_main_id};
 use crate::devices::{device_index, is_plugin, plugin_param_id, plugin_value, sd_graph};
 use crate::{CommandError, Session};
 
@@ -45,7 +45,7 @@ enum Kind {
 
 fn target(session: &Session, params: &Value) -> Result<Target, CommandError> {
     let param = params.get("param").and_then(Value::as_str).ok_or("param must be a parameter id")?;
-    let track = track_id(&session.project, params)?;
+    let track = track_or_main_id(&session.project, params)?;
     let channel = channel_of(session, track)?;
     match params.get("device") {
         None | Some(Value::Null) => {
@@ -94,8 +94,7 @@ fn target(session: &Session, params: &Value) -> Result<Target, CommandError> {
 }
 
 fn channel_of(session: &Session, track: TrackId) -> Result<&suhina_model::Channel, CommandError> {
-    let id = session.project.track(track).and_then(|t| t.channel);
-    id.and_then(|id| session.project.channel(id)).ok_or_else(|| "the track has no mixer channel".into())
+    session.project.channel_of_track(track).ok_or_else(|| "the track has no mixer channel".into())
 }
 
 impl Target {
@@ -132,7 +131,7 @@ impl Target {
 
     /// The lanes the parameter's lane is among.
     fn lanes<'a>(&self, session: &'a mut Session) -> Result<&'a mut Vec<AutomationLane>, CommandError> {
-        let channel = channel_param(session, &json!({ "track": self.track.0 }))?;
+        let channel = device_channel(session, &json!({ "track": self.track.0 }))?;
         match self.device {
             None => Ok(&mut channel.automation),
             Some(index) => Ok(&mut channel.devices.get_mut(index).ok_or("the device is missing")?.automation),
@@ -379,12 +378,12 @@ pub(crate) fn clear(session: &mut Session, params: &Value) -> Result<Value, Comm
         return Ok(json!({ "cleared": before - lanes.len() }));
     }
     // Every lane of the mixer, or of the device.
-    let track = track_id(&session.project, params)?;
+    let track = track_or_main_id(&session.project, params)?;
     let device = match params.get("device") {
         None | Some(Value::Null) => None,
         Some(_) => Some(device_index(channel_of(session, track)?.devices.len(), params)?),
     };
-    let channel = channel_param(session, params)?;
+    let channel = device_channel(session, params)?;
     let lanes = match device {
         None => &mut channel.automation,
         Some(index) => &mut channel.devices.get_mut(index).ok_or("the device is missing")?.automation,
@@ -404,7 +403,7 @@ pub(crate) fn set_enabled(session: &mut Session, params: &Value) -> Result<Value
 
 /// Every lane of a track: its mixer's, then each device's.
 pub(crate) fn list(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let track = track_id(&session.project, params)?;
+    let track = track_or_main_id(&session.project, params)?;
     let channel = channel_of(session, track)?;
     let lanes = |lanes: &[AutomationLane], volume_db: bool| -> Vec<Value> {
         lanes

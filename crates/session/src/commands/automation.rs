@@ -10,7 +10,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "automation.addPoint",
         label: "Add a point to a parameter's automation (envelope) over the arrangement, making the lane if it has none; the value moves from point to point along each segment's curve",
         params: &[
-            TRACK,
+            DEVICE_TRACK,
             AUTOMATED_DEVICE,
             AUTOMATED,
             param("beat", ParamType::Number, "arrangement beat, from 0; a second point at one beat makes a jump"),
@@ -29,7 +29,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "automation.movePoint",
         label: "Move a point of a parameter's automation to another beat or value, or change its curve",
         params: &[
-            TRACK,
+            DEVICE_TRACK,
             AUTOMATED_DEVICE,
             AUTOMATED,
             POINT,
@@ -44,7 +44,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         id: "automation.deletePoint",
         label: "Delete a point of a parameter's automation; the lane goes with its last point",
-        params: &[TRACK, AUTOMATED_DEVICE, AUTOMATED, POINT],
+        params: &[DEVICE_TRACK, AUTOMATED_DEVICE, AUTOMATED, POINT],
         kind: CommandKind::Edit,
         run: crate::automation::delete_point,
         policy: Policy::DEFAULT,
@@ -53,7 +53,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "automation.movePoints",
         label: "Move several points of one parameter's automation together, by a number of beats and by a value, in one undo step; values stay in the parameter's range",
         params: &[
-            TRACK,
+            DEVICE_TRACK,
             AUTOMATED_DEVICE,
             AUTOMATED,
             param(
@@ -81,7 +81,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "automation.deletePoints",
         label: "Delete several points of one parameter's automation in one undo step; the lane goes with its last point",
         params: &[
-            TRACK,
+            DEVICE_TRACK,
             AUTOMATED_DEVICE,
             AUTOMATED,
             param(
@@ -98,7 +98,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "automation.clear",
         label: "Remove a parameter's automation, or without param every lane of the track's mixer or of the device",
         params: &[
-            TRACK,
+            DEVICE_TRACK,
             AUTOMATED_DEVICE,
             optional("param", ParamType::Text, "the parameter, as for automation.addPoint; left out for every lane"),
         ],
@@ -110,7 +110,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "automation.setEnabled",
         label: "Turn a parameter's automation off or on again; a manual change to an automated parameter turns it off, and the value set by hand holds until it is on again",
         params: &[
-            TRACK,
+            DEVICE_TRACK,
             AUTOMATED_DEVICE,
             AUTOMATED,
             param("enabled", ParamType::Bool, "false turns the lane off, true on"),
@@ -122,7 +122,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         id: "automation.list",
         label: "List a track's automation: its mixer's lanes and each device's, with their points (beat, value, curve) and whether they play",
-        params: &[TRACK],
+        params: &[DEVICE_TRACK],
         kind: CommandKind::Read,
         run: crate::automation::list,
         policy: Policy::DEFAULT,

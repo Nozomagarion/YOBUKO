@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 use serde_json::{Value, json};
 use suhina_engine::Quantization;
-use suhina_engine::model::{ClipId, FadeCurve, FadeShape, Project, TrackId};
+use suhina_engine::model::{ClipId, FadeCurve, FadeShape, Project, Rgb, TrackId};
 
 use crate::arrangement::automation_lanes::{self as automation, LanesState};
 use crate::arrangement::timeline::{ClipBox, Folds, Lane, Timeline, inside_lanes};
@@ -35,6 +35,9 @@ mod state;
 mod value_controls;
 
 use self::clip::*;
+
+/// The colour Main's automation lanes are drawn in: it has no track colour of its own.
+const MAIN_COLOUR: Rgb = Rgb(150, 150, 150);
 use self::header::*;
 use self::lane_menu::*;
 use self::markers_loop::*;
@@ -333,7 +336,11 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     // main track a row.
     let fixed_height =
         returns.iter().map(|l| state.return_height(l.track) + 1.0 + state.below(l.track, timeline)).sum::<f32>()
-            + if main_volume_db.is_some() { state.main_height + 1.0 } else { 0.0 };
+            + if main_volume_db.is_some() {
+                state.main_height + 1.0 + state.automation.height(TrackId::MAIN, &timeline.automation)
+            } else {
+                0.0
+            };
     // They take at most half the room under the rulers, so the track lanes never vanish under
     // them in a short view.
     let room = (area.bottom() - marker_row.bottom() - 1.0).max(0.0);
@@ -1205,9 +1212,29 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         fixed_painter.hline(area.x_range(), row.time.bottom() + 0.5, theme::hairline(theme::border()));
     }
     if let Some(db) = main_volume_db {
-        let y = fixed.bottom() - state.main_height;
-        let header = Rect::from_x_y_ranges(headers, egui::Rangef::new(y, fixed.bottom()));
-        fixed_painter.rect_filled(header, 0.0, theme::panel_background());
+        // Main's lanes under its row, as a track's (#687): the row sits above them.
+        let main_lanes = state.automation.height(TrackId::MAIN, &timeline.automation);
+        let y = fixed.bottom() - main_lanes - state.main_height;
+        let header = Rect::from_x_y_ranges(headers, egui::Rangef::new(y, y + state.main_height));
+        // A click on Main's header selects it, so the detail area shows its devices (#687).
+        let selected = state.selected_tracks.first() == Some(&TrackId::MAIN);
+        if ui.interact(header.intersect(fixed), Id::new("arrangement-main-header"), Sense::click()).clicked() {
+            state.selected_tracks = vec![TrackId::MAIN];
+            state.focus = None;
+            state.track_focus = false;
+        }
+        let fill = if selected { theme::control_active() } else { theme::panel_background() };
+        fixed_painter.rect_filled(header, 0.0, fill);
+        if let Some(probe) = state.drop.as_mut()
+            && probe.devices
+            && !probe.files
+            && !probe.clip
+        {
+            probe.offer(
+                Rect::from_x_y_ranges(area.x_range(), header.y_range()).intersect(fixed),
+                DropTarget::Track(TrackId::MAIN),
+            );
+        }
         // The top edge resizes the row: the fixed rows sit along the bottom, so they grow upward.
         let edge = Rect::from_x_y_ranges(area.x_range(), egui::Rangef::new(y - 1.0, y + 3.0)).intersect(fixed);
         let response = ui
@@ -1252,6 +1279,36 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         let at = lying_meter(field.left() - PAD, inner.center().y);
         let level = state.meters.main;
         meter::show(ui, &fixed_painter, at, "Main", meter::Source::Main, &level, actions);
+        // Its automation: the envelope button after the name, and the lanes under the row.
+        let button = Rect::from_min_size(
+            Pos2::new(at.left() - PAD - ROW + 4.0, inner.top()),
+            Vec2::splat((ROW - 4.0).min(inner.height())),
+        );
+        automation::header_button(
+            ui,
+            &fixed_painter,
+            button.intersect(fixed),
+            TrackId::MAIN,
+            "Main",
+            &mut state.automation,
+            &timeline.automation,
+        );
+        let fixed_geometry = automation::Geometry { visible: fixed, ..geometry };
+        let lanes = automation::TrackLanes {
+            track: TrackId::MAIN,
+            name: "Main",
+            color: MAIN_COLOUR,
+            top: header.bottom() + 1.0,
+        };
+        automation::show(
+            ui,
+            &fixed_painter,
+            &fixed_geometry,
+            &lanes,
+            &timeline.automation,
+            &mut state.automation,
+            actions,
+        );
     }
 
     // Takes recording into the arrangement: a clip from where the pass began to the playhead,

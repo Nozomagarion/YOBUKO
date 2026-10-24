@@ -333,10 +333,13 @@ impl Params {
     /// built-in and `.sd` device's parameters in device order, with their lanes' points.
     pub fn build(project: &Project) -> Self {
         let mut tracks = HashMap::new();
-        for track in &project.tracks {
-            let Some(channel) = track.channel.and_then(|id| project.channel(id)) else {
-                continue;
-            };
+        // Every track's channel, and Main's under [`TrackId::MAIN`] (#687).
+        let channels = project
+            .tracks
+            .iter()
+            .filter_map(|t| Some((t.id, t.channel.and_then(|id| project.channel(id))?)))
+            .chain(project.main_channel().map(|main| (TrackId::MAIN, main)));
+        for (track, channel) in channels {
             let lane_of = |lanes: &[AutomationLane], id: &str| lanes.iter().find(|l| l.param == id).cloned();
             let mut params: Vec<Param> = [
                 (VOLUME, "Volume", Scale::Volume, channel.volume),
@@ -403,7 +406,7 @@ impl Params {
                     _ => {}
                 }
             }
-            tracks.insert(track.id, params);
+            tracks.insert(track, params);
         }
         Self { tracks }
     }

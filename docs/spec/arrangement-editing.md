@@ -187,7 +187,11 @@ the menu, automation lanes under them (shown with the header's button), a click 
 (the detail area shows their devices) and a top edge that sets their height (tall enough for
 volume and pan by default): the fixed rows sit along the bottom, so they grow upward, as the
 pointer goes. The main track's row has a volume bar that a drag sets (`mixer.setMainVolume`, heard
-while dragging, one undo step), and its top edge sets its height the same way.
+while dragging, one undo step), and its top edge sets its height the same way. A click on its
+header selects Main, so the detail area shows its devices; devices dropped on the row go onto it;
+and its envelope button shows Main's automation lanes under the row (its volume, pan and mute,
+and its devices' parameters), which play (#687, [ADR 0004](../decisions/0004-built-in-devices.md) ›
+Amendment: a chain on the main channel). Commands on devices and lanes name Main `"main"`.
 
 ## Clip edges
 

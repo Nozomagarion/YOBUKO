@@ -40,6 +40,13 @@ pub use scale::{ROOT_NAMES, Scale, ScaleMode};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TrackId(pub u32);
 
+impl TrackId {
+    /// The main channel, which has no track of its own: commands, the engine and the views name
+    /// it by this id where they name a track ([`Project::channel_of_track`], #687). No track has
+    /// it; the largest id is never handed out to one.
+    pub const MAIN: Self = Self(u32::MAX);
+}
+
 /// Identifies a [`Channel`] within a project.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ChannelId(pub u32);
