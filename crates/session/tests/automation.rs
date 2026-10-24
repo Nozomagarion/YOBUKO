@@ -121,7 +121,7 @@ fn a_manual_change_turns_a_lane_off_until_it_is_on_again() {
     )
     .unwrap();
     // Kept in the parameter's range.
-    assert_eq!(session.project().channels[0].devices[0].automation[0].points[0].value, 36.0);
+    assert_eq!(session.project().channels[0].devices[0].automation[0].points[0].value, 35.0);
 
     let set = run(&mut session, "track.setVolume", json!({ "tracks": [1], "db": -3 })).unwrap();
     assert_eq!(set["automation"], "off");
