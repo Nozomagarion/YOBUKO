@@ -181,8 +181,7 @@ pub fn read(bytes: &[u8]) -> Result<Package, String> {
         }
     }
     let manifest = entries.remove(MANIFEST).ok_or("not a theme package: it has no manifest.json")?;
-    let manifest: serde_json::Value =
-        serde_json::from_slice(&manifest).map_err(|e| format!("{MANIFEST}: {e}"))?;
+    let manifest: serde_json::Value = serde_json::from_slice(&manifest).map_err(|e| format!("{MANIFEST}: {e}"))?;
     if manifest["format"] != FORMAT {
         return Err(format!("{MANIFEST}: not a Suhina theme"));
     }
@@ -199,7 +198,9 @@ pub fn read(bytes: &[u8]) -> Result<Package, String> {
     for (path, bytes) in &entries {
         let sum = sums.get(path).and_then(serde_json::Value::as_str).ok_or(format!("{path}: not in the manifest"))?;
         if !sum.eq_ignore_ascii_case(&sha256(bytes)) {
-            return Err(format!("{path}: its SHA-256 sum differs from the manifest's: the package is damaged or changed"));
+            return Err(format!(
+                "{path}: its SHA-256 sum differs from the manifest's: the package is damaged or changed"
+            ));
         }
     }
     if let Some(missing) = sums.keys().find(|path| !entries.contains_key(*path)) {

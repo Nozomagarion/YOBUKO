@@ -448,7 +448,8 @@ impl ThemeFiles {
             let bytes = read_bounded(path, MAX_EXPANDED)?;
             let package = suhina_theme_package::read(&bytes).map_err(|e| format!("{}: {e}", package_name(path)))?;
             let text = |name: &str| package.files.get(name).map(|b| String::from_utf8_lossy(b).into_owned());
-            let (theme, problems) = theme::from_sheet(&text(THEME_CSS).unwrap_or_default(), &text(LAYOUT_CSS).unwrap_or_default());
+            let (theme, problems) =
+                theme::from_sheet(&text(THEME_CSS).unwrap_or_default(), &text(LAYOUT_CSS).unwrap_or_default());
             warnings.extend(package.warnings.iter().chain(&problems).map(|p| format!("{}: {p}", package.name)));
             found.push((package.id.clone(), theme, package.files.into_iter().collect()));
         } else if is_zip {
@@ -751,7 +752,12 @@ fn read_variants(dir: &Path, warnings: &mut Vec<String>) -> Vec<(Variant, String
 /// Whether two themes look the same: every setting, the name, artwork and layout. Their sheets'
 /// text may differ (a migrated theme's is new).
 fn same_look(a: &Theme, b: &Theme) -> bool {
-    let skin = |theme: &Theme| suhina_ui::kit::skin::Skin { css: None, variant: None, variables: Default::default(), ..theme.skin.clone() };
+    let skin = |theme: &Theme| suhina_ui::kit::skin::Skin {
+        css: None,
+        variant: None,
+        variables: Default::default(),
+        ..theme.skin.clone()
+    };
     theme_vars::core_values(a) == theme_vars::core_values(b) && a.name == b.name && skin(a) == skin(b)
 }
 

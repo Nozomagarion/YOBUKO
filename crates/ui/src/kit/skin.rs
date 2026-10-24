@@ -651,8 +651,7 @@ pub struct Slice {
 pub fn slice_of(source: &str) -> Option<Slice> {
     let start = source.find("data-suhina-slice=\"")? + "data-suhina-slice=\"".len();
     let end = source[start..].find('"')? + start;
-    let values: Vec<f32> =
-        source[start..end].split_whitespace().map(str::parse).collect::<Result<_, _>>().ok()?;
+    let values: Vec<f32> = source[start..end].split_whitespace().map(str::parse).collect::<Result<_, _>>().ok()?;
     let insets = match values.as_slice() {
         [all] => [*all; 4],
         [v, h] => [*v, *h, *v, *h],
@@ -779,7 +778,6 @@ pub fn meter_frame(painter: &Painter, rect: Rect, state: State, level: f32) -> b
     paint_variant(painter, rect, "meter", state, Color32::WHITE, 0.0, 0.0, super::artwork::current_color(), Some(level))
 }
 
-#[allow(clippy::too_many_arguments)]
 /// `var(--name)` and `var(--name, fallback)` in artwork take the theme's resolved values; an
 /// unknown name without a fallback stays as written.
 pub fn substitute_variables<'a>(source: &'a str, variables: &BTreeMap<String, String>) -> std::borrow::Cow<'a, str> {
@@ -810,6 +808,7 @@ pub fn substitute_variables<'a>(source: &'a str, variables: &BTreeMap<String, St
     std::borrow::Cow::Owned(out)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn paint_variant(
     painter: &Painter,
     rect: Rect,
@@ -863,7 +862,7 @@ fn paint_variant(
     let source = substituted.as_ref();
     // Plain inherited track surfaces use the native fill and avoid filling the SVG
     // texture cache with a separate rectangle for every colour and strip height.
-    if matches!(role, "track.name" | "track.body") && defaults.get(role) .map(String::as_str) == Some(source) {
+    if matches!(role, "track.name" | "track.body") && defaults.get(role).map(String::as_str) == Some(source) {
         return false;
     }
     // Semantic ink travels with the SVG, so exported inherited artwork retains its colour.
@@ -915,11 +914,7 @@ fn paint_variant(
         textures.sources.insert(source_key, hash);
         hash
     };
-    let slice = if png {
-        None
-    } else {
-        *textures.slices.entry(source_hash).or_insert_with(|| slice_of(source))
-    };
+    let slice = if png { None } else { *textures.slices.entry(source_hash).or_insert_with(|| slice_of(source)) };
     if textures.slices.len() >= 256 {
         textures.slices.clear();
     }

@@ -15,7 +15,12 @@ pub fn pan_field(painter: &egui::Painter, rect: Rect, pan: f64, hover: f32) {
     }
     // The native look: a flat field with centre ticks and a thin bar along its bottom.
     // `.pan` and `#mixer-pan` colour it as well: the theme's background, border and text.
-    crate::kit::native_css::surface(painter, rect, 0.0, motion::mix(theme::pan_background(), theme::panel_hover(), hover));
+    crate::kit::native_css::surface(
+        painter,
+        rect,
+        0.0,
+        motion::mix(theme::pan_background(), theme::panel_hover(), hover),
+    );
     let centre = rect.center().x.round() - 0.5;
     painter.vline(centre, egui::Rangef::new(rect.top(), rect.top() + 2.0), theme::hairline(theme::pan_centre()));
     painter.vline(centre, egui::Rangef::new(rect.bottom() - 2.0, rect.bottom()), theme::hairline(theme::pan_centre()));
@@ -110,7 +115,9 @@ pub fn level_bar(
     }
     // The value's size from the sheet (`font-size`).
     let font = theme::mono_font(
-        crate::kit::style_class::computed().filter(|style| style.authored.font_size).map_or(theme::TEXT_SMALL, |s| s.font_size),
+        crate::kit::style_class::computed()
+            .filter(|style| style.authored.font_size)
+            .map_or(theme::TEXT_SMALL, |s| s.font_size),
     );
     // A narrow field (a header at its least width) gives up its inset before its value is cut.
     let inset = ((rect.width() - 32.0) / 2.0).clamp(2.0, 8.0);
@@ -170,7 +177,8 @@ pub fn send_field(
     let quiet = motion::mix(theme::control_background(), pointer, 0.25);
     painter.fill_background(rail, 1.0, quiet);
     let level = Rect::from_min_size(rail.min, Vec2::new(rail.width() * position.clamp(0.0, 1.0), rail.height()));
-    if level.width() >= 1.0 && !super::skin::paint(painter, level, "send.fill", super::skin::State::Normal, pointer, 0.0)
+    if level.width() >= 1.0
+        && !super::skin::paint(painter, level, "send.fill", super::skin::State::Normal, pointer, 0.0)
     {
         painter.rect_filled(level, 1.0, motion::mix(quiet, pointer, 0.4));
     }

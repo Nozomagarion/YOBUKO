@@ -2653,9 +2653,12 @@ fn draw(
     let muted_style = part_style("piano-note", &[HostState::Muted]);
     let velocity_style = part_style("velocity", &[]);
     let line_colour = |strong: bool| {
-        grid_style.border.map_or_else(|| if strong { theme::border_strong() } else { theme::border() }, |c| {
-            if strong { c } else { c.gamma_multiply(0.6) }
-        })
+        grid_style.border.map_or_else(
+            || if strong { theme::border_strong() } else { theme::border() },
+            |c| {
+                if strong { c } else { c.gamma_multiply(0.6) }
+            },
+        )
     };
     // Rows: black keys darker, a stronger line under each C.
     painter.fill_background(layout.grid, 0.0, grid_style.background.unwrap_or_else(theme::window_background));
@@ -2680,7 +2683,11 @@ fn draw(
     let first_beat = layout.beat_at(layout.grid.left()).max(0.0);
     let last_beat = layout.beat_at(layout.grid.right());
     let bar = clip.bar_beats.max(EPSILON);
-    painter.fill_background(layout.ruler, 0.0, part_style("ruler", &[]).background.unwrap_or_else(theme::panel_background));
+    painter.fill_background(
+        layout.ruler,
+        0.0,
+        part_style("ruler", &[]).background.unwrap_or_else(theme::panel_background),
+    );
     let lane_painter = painter.with_clip_rect(layout.lane);
     for (beat, on_bar) in grid.lines(first_beat, last_beat, MAX_LINES) {
         let x = layout.x_of(beat).round() + 0.5;

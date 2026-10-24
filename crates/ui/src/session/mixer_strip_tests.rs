@@ -303,10 +303,11 @@ fn a_send_takes_its_class_and_its_own_id() {
         let mut state = SessionViewState::default();
         let mut found = false;
         for frame in 0..3 {
-            let mut output = ctx.run_ui(egui::RawInput { time: Some(frame as f64 * 0.01), ..Default::default() }, |ui| {
-                let _frame = native_css::frame(ui);
-                show(ui, ui.painter(), rect, column, &[], 1, 0, &mut state, Id::new("send-strip"), &mut Vec::new());
-            });
+            let mut output =
+                ctx.run_ui(egui::RawInput { time: Some(frame as f64 * 0.01), ..Default::default() }, |ui| {
+                    let _frame = native_css::frame(ui);
+                    show(ui, ui.painter(), rect, column, &[], 1, 0, &mut state, Id::new("send-strip"), &mut Vec::new());
+                });
             found = output
                 .shapes
                 .iter()
@@ -349,19 +350,16 @@ fn the_divider_is_a_control_a_theme_places_and_others_anchor_to() {
 fn an_anchored_part_with_no_room_left_draws_nothing() {
     use crate::kit::{skin, theme_css};
     let mut theme = theme::Theme::default();
-    assert!(
-        theme_css::apply(&mut theme, ".control-mixer-pan { --suhina-anchor-top: mixer-name top 0px; }").is_empty()
-    );
+    assert!(theme_css::apply(&mut theme, ".control-mixer-pan { --suhina-anchor-top: mixer-name top 0px; }").is_empty());
     skin::configure(&theme.skin);
     let ctx = egui::Context::default();
     let bounds = Rect::from_min_size(Pos2::ZERO, Vec2::new(theme::TRACK_COLUMN, NAME_AT + 40.0));
-    let parts = (0..2)
-        .map(|_| {
-            let _capture = crate::kit::control_layout::Capture::begin(&ctx);
-            layout(bounds, true, false)
-        })
-        .last()
-        .unwrap();
+    let frame = || {
+        let _capture = crate::kit::control_layout::Capture::begin(&ctx);
+        layout(bounds, true, false)
+    };
+    frame();
+    let parts = frame();
     skin::configure(&skin::Skin::default());
     assert!(parts.name.is_some());
     assert!(parts.pan.is_none(), "the pan stood on the name: {:?}", parts.pan);

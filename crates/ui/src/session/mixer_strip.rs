@@ -283,7 +283,8 @@ fn place_parts(mut parts: Layout, bounds: Rect, main: bool) -> Layout {
     }
     // Placeholders: resolved, so anchors find them, but neither drawn nor offered for editing.
     if let Some(reserved) = parts.reserved_input.as_mut() {
-        for (name, rect) in ["mixer-input-caption", "mixer-input", "mixer-monitor"].into_iter().zip(reserved.iter_mut()) {
+        for (name, rect) in ["mixer-input-caption", "mixer-input", "mixer-monitor"].into_iter().zip(reserved.iter_mut())
+        {
             *rect = control_layout::resolve(name, *rect, bounds);
         }
     }
@@ -305,7 +306,10 @@ fn place_parts(mut parts: Layout, bounds: Rect, main: bool) -> Layout {
     ] {
         *part = part.filter(|_| !control_layout::placement(name).hidden).map(|rect| {
             if main
-                && !matches!(name, "mixer-devices" | "mixer-divider" | "mixer-volume-readout" | "mixer-volume" | "mixer-meter")
+                && !matches!(
+                    name,
+                    "mixer-devices" | "mixer-divider" | "mixer-volume-readout" | "mixer-volume" | "mixer-meter"
+                )
             {
                 control_layout::resolve(name, rect, bounds)
             } else {
@@ -531,7 +535,11 @@ fn divider(ui: &Ui, painter: &egui::Painter, strip: Rect, rect: Rect, fader: f32
     }
     if response.hovered() || response.dragged() {
         let _style = crate::kit::style_class::enter_named_response("divider", "mixer-divider", &response);
-        painter.hline(rect.x_range(), line, egui::Stroke::new(2.0, crate::kit::style_class::foreground(theme::accent())));
+        painter.hline(
+            rect.x_range(),
+            line,
+            egui::Stroke::new(2.0, crate::kit::style_class::foreground(theme::accent())),
+        );
     }
 }
 

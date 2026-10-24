@@ -1065,7 +1065,15 @@ fn a_level_bar_draws_a_handle_where_its_fill_ends() {
     let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, 20.0));
     let draw = |ui: &mut egui::Ui| {
         let _value = super::super::style_class::enter_named("value", "arrangement-volume");
-        crate::kit::mixer_controls::level_bar(ui.painter(), field, "volume", (0.0, 0.5), 0.0, "0.0", egui::Align2::RIGHT_CENTER);
+        crate::kit::mixer_controls::level_bar(
+            ui.painter(),
+            field,
+            "volume",
+            (0.0, 0.5),
+            0.0,
+            "0.0",
+            egui::Align2::RIGHT_CENTER,
+        );
     };
     assert!(!rects(&painted("", draw)).iter().any(|r| r.fill == egui::Color32::RED));
     let shaped = rects(&painted("#arrangement-volume .value-handle { width: 6px; background-color: #FF0000; }", draw));
@@ -1132,7 +1140,10 @@ fn a_built_in_device_s_panel_is_selected_by_its_id() {
             let _device = super::super::style_class::enter_named("device", id);
             let panel = super::super::style_class::computed().map(|c| c.background);
             let _header = super::super::style_class::enter("device-header");
-            seen.push((panel, super::super::style_class::computed().filter(|c| c.authored.background).map(|c| c.background)));
+            seen.push((
+                panel,
+                super::super::style_class::computed().filter(|c| c.authored.background).map(|c| c.background),
+            ));
         }
     });
     assert_eq!(seen[0], (Some(egui::Color32::RED), Some(egui::Color32::BLUE)));

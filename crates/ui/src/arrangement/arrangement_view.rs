@@ -1166,9 +1166,8 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         crate::kit::native_css::surface(&painter, ruler, 0.0, theme::panel_background());
     }
     let ruler_ink = crate::kit::style_class::foreground(theme::text_secondary());
-    let ruler_line = crate::kit::style_class::computed()
-        .filter(|c| c.authored.border)
-        .map_or_else(theme::border, |c| c.border);
+    let ruler_line =
+        crate::kit::style_class::computed().filter(|c| c.authored.border).map_or_else(theme::border, |c| c.border);
     drop(ruler_style);
     let meter = &timeline.meter;
     let bar_width = bar_beats as f32 * state.beat_width;
@@ -3168,7 +3167,9 @@ fn clip_box<'a>(
         crate::kit::native_css::surface(&gain_painter, field, 0.0, fill);
         let text = format!("{} dB", widgets::format_db(db));
         let font = theme::mono_font(
-            crate::kit::style_class::computed().filter(|c| c.authored.font_size).map_or(theme::TEXT_TINY, |c| c.font_size),
+            crate::kit::style_class::computed()
+                .filter(|c| c.authored.font_size)
+                .map_or(theme::TEXT_TINY, |c| c.font_size),
         );
         widgets::text_in(
             &gain_painter,

@@ -42,7 +42,14 @@ pub(crate) fn empty_space(ui: &Ui, painter: &egui::Painter, area: Rect, actions:
         let font = crate::kit::style_class::computed()
             .filter(|c| c.authored.font_size)
             .map_or_else(|| font.clone(), |c| theme::ui_font(c.font_size));
-        widgets::text_in(painter, rect, Align2::CENTER_CENTER, label, font, crate::kit::style_class::foreground(theme::text_secondary()));
+        widgets::text_in(
+            painter,
+            rect,
+            Align2::CENTER_CENTER,
+            label,
+            font,
+            crate::kit::style_class::foreground(theme::text_secondary()),
+        );
         if response.clicked() {
             if kind == "return" {
                 actions.push(Action::new("return.add", json!({})));
