@@ -199,6 +199,9 @@ fn execute(files: &mut ThemeFiles, actions: Vec<FileAction>) -> Reply {
             }
             FileAction::OpenFolder => files.open_folder().map(|()| None),
             FileAction::Backup => files.backup().map(|path| Some(crate::saved(&path, "Backed up the themes to"))),
+            FileAction::ExportPackage { id, theme } => files
+                .export_package(&id, &theme)
+                .map(|path| Some(crate::saved(&path, &format!("Exported {} to", theme.name)))),
             FileAction::ExportTemplate => {
                 files.export_template().map(|path| Some(crate::saved(&path, "Saved the theme template to")))
             }

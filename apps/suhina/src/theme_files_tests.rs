@@ -203,3 +203,26 @@ fn a_renamed_folder_leaves_the_list_and_an_empty_one_is_named_once() {
     assert!(!again.iter().any(|w| w.contains("empty")), "named once: {again:?}");
     let _clean = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn an_exported_package_brings_the_theme_back_and_a_damaged_one_is_refused() {
+    let dir = folder("package");
+    let mut files = ThemeFiles::new(Some(dir.join("themes")));
+    assert_eq!(files.write("night", &night()), Ok(()));
+    let package = files.export_package("night", &night()).unwrap();
+    assert!(package.to_string_lossy().ends_with("night.theme.suhina"), "{}", package.display());
+    let mut other = ThemeFiles::new(Some(dir.join("other")));
+    let (ids, _) = other.import(&package).unwrap();
+    assert_eq!(ids, ["night"]);
+    assert!(same_look(&other.read_all().0[0].theme, &night()));
+    // A built-in theme has no folder; it is exported from the files Suhina writes for it.
+    let built_in = files.export_package("suhina-dark", &Theme::default()).unwrap();
+    assert!(suhina_theme_package::read(&std::fs::read(&built_in).unwrap()).is_ok());
+    let mut bytes = std::fs::read(&package).unwrap();
+    let last = bytes.len() / 2;
+    bytes[last] ^= 0xFF;
+    let damaged = dir.join("damaged.theme.suhina");
+    std::fs::write(&damaged, bytes).unwrap();
+    assert!(other.import(&damaged).is_err());
+    let _clean = std::fs::remove_dir_all(&dir);
+}

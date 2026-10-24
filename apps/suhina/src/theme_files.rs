@@ -408,6 +408,30 @@ impl ThemeFiles {
         write_zip(&self.exports()?.join("suhina-theme-template.zip"), &contents)
     }
 
+    /// Writes the theme `id` as a theme package, `exports/<id>.theme.suhina`: its folder's files,
+    /// or for a theme without a folder (a built-in one) the files Suhina writes for it. Returns
+    /// its path.
+    pub fn export_package(&self, id: &str, theme: &Theme) -> Result<PathBuf, String> {
+        let dir = self.folder.as_ref().map(|folder| folder.join(id)).filter(|dir| dir.join(THEME_CSS).is_file());
+        let files = match dir {
+            Some(dir) => suhina_theme_package::read_folder(&dir)?,
+            None => {
+                let prefix = format!("{id}/");
+                package_files(id, theme)?
+                    .into_iter()
+                    .filter_map(|(path, bytes)| Some((path.strip_prefix(&prefix)?.to_owned(), bytes)))
+                    .collect()
+            }
+        };
+        let id = slug(id);
+        let bytes = suhina_theme_package::pack(&id, &theme.name, &files)?;
+        let exports = self.exports()?;
+        std::fs::create_dir_all(&exports).map_err(|e| format!("{}: {e}", exports.display()))?;
+        let path = exports.join(format!("{id}{}", suhina_theme_package::EXTENSION));
+        std::fs::write(&path, bytes).map_err(|e| format!("{}: {e}", path.display()))?;
+        Ok(path)
+    }
+
     /// Brings in a theme file or every theme in a zip (a backup, say; the template's own files
     /// are left out): each is written to the themes folder under an id no theme has yet, unless
     /// the same theme is there already. Returns the ids written and warnings.
@@ -415,7 +439,16 @@ impl ThemeFiles {
         let is_zip = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
         let mut found = Vec::new();
         let mut warnings = Vec::new();
-        if is_zip {
+        if suhina_theme_package::is_package(path) {
+            // A theme package: its manifest's sums and every file are checked before anything
+            // is written.
+            let bytes = read_bounded(path, MAX_EXPANDED)?;
+            let package = suhina_theme_package::read(&bytes).map_err(|e| format!("{}: {e}", package_name(path)))?;
+            let text = |name: &str| package.files.get(name).map(|b| String::from_utf8_lossy(b).into_owned());
+            let (theme, problems) = theme::from_sheet(&text(THEME_CSS).unwrap_or_default(), &text(LAYOUT_CSS).unwrap_or_default());
+            warnings.extend(package.warnings.iter().chain(&problems).map(|p| format!("{}: {p}", package.name)));
+            found.push((package.id.clone(), theme, package.files.into_iter().collect()));
+        } else if is_zip {
             for loaded in read_zip(path)? {
                 warnings.extend(loaded.warnings.into_iter().map(|p| format!("{}: {p}", loaded.name)));
                 found.push((stem(&loaded.name), loaded.theme, loaded.files));
@@ -460,6 +493,12 @@ impl ThemeFiles {
             if files.is_empty() {
                 self.write(&id, &theme)?;
             } else {
+                // Every import is checked as a package is: paths, sizes and what each file holds.
+                let checked: std::collections::BTreeMap<String, Vec<u8>> = files.iter().cloned().collect();
+                if let Err(error) = suhina_theme_package::validate(&checked) {
+                    warnings.push(format!("{}: not brought in: {error}", theme.name));
+                    continue;
+                }
                 let folder = self.folder.clone().ok_or("there is no folder to keep themes in")?;
                 write_files(&folder, files.into_iter().map(|(path, bytes)| (format!("{id}/{path}"), bytes)).collect())?;
             }
@@ -709,7 +748,7 @@ fn read_variants(dir: &Path, warnings: &mut Vec<String>) -> Vec<(Variant, String
 /// Whether two themes look the same: every setting, the name, artwork and layout. Their sheets'
 /// text may differ (a migrated theme's is new).
 fn same_look(a: &Theme, b: &Theme) -> bool {
-    let skin = |theme: &Theme| suhina_ui::kit::skin::Skin { css: None, variant: None, ..theme.skin.clone() };
+    let skin = |theme: &Theme| suhina_ui::kit::skin::Skin { css: None, variant: None, variables: Default::default(), ..theme.skin.clone() };
     theme_vars::core_values(a) == theme_vars::core_values(b) && a.name == b.name && skin(a) == skin(b)
 }
 
@@ -971,6 +1010,10 @@ struct LoadedTheme {
     theme: Theme,
     warnings: Vec<String>,
     files: Vec<(String, Vec<u8>)>,
+}
+
+fn package_name(path: &Path) -> String {
+    path.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned())
 }
 
 fn safe_relative(path: &str) -> bool {

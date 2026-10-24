@@ -34,6 +34,8 @@ pub enum FileAction {
     ExportTemplate,
     /// Write every theme file into one zip.
     Backup,
+    /// Write the theme `id` as a theme package (`.theme.suhina`).
+    ExportPackage { id: String, theme: Box<Theme> },
     /// Bring in a theme file or a zip of them dropped on the window.
     Import(PathBuf),
 }
@@ -279,6 +281,11 @@ impl Themes {
             ThemeRequest::OpenFolder => self.file_action(FileAction::OpenFolder),
             ThemeRequest::ExportTemplate => self.file_action(FileAction::ExportTemplate),
             ThemeRequest::Backup => self.file_action(FileAction::Backup),
+            ThemeRequest::ExportPackage => {
+                let id = crate::kit::theme_vars::split_id(&self.real_id(current)).0.to_owned();
+                let theme = self.get(&id)?.clone();
+                self.file_action(FileAction::ExportPackage { id, theme: Box::new(theme) })
+            }
         }
     }
 

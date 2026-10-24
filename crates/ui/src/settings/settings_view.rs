@@ -239,6 +239,8 @@ pub enum ThemeRequest {
     OpenFolder,
     /// Write every theme file into one zip.
     Backup,
+    /// Write the theme in use as a theme package to share (`.theme.suhina`).
+    ExportPackage,
     /// Write a theme template and a README on the format into a zip.
     ExportTemplate,
 }
@@ -1060,6 +1062,7 @@ fn theme_page(
                         ("Duplicate theme", ThemeRequest::Duplicate),
                         ("Reload themes", ThemeRequest::Reload),
                         ("Open the themes folder", ThemeRequest::OpenFolder),
+                        ("Export theme…", ThemeRequest::ExportPackage),
                         ("Back up themes", ThemeRequest::Backup),
                         ("Export the theme template", ThemeRequest::ExportTemplate),
                     ] {

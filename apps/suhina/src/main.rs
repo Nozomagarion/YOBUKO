@@ -603,6 +603,11 @@ impl Window {
     /// Opens a Live Set in a new tab or in place of the active project: imports it, decodes its
     /// audio and starts playing it, stopped.
     fn open(&mut self, path: &Path, how: OpenAs) {
+        // A theme package (a double-click on it, or handed over by a second start) is brought in.
+        if suhina_ui::app::is_theme_package(path) {
+            self.app.request_open(path.to_path_buf());
+            return;
+        }
         match Session::open(path) {
             Ok((session, warnings)) => {
                 self.show_session(session, warnings, how);

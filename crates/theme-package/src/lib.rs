@@ -126,7 +126,7 @@ pub fn validate(files: &BTreeMap<String, Vec<u8>>) -> Result<Vec<String>, String
 /// a reader makes.
 pub fn pack(id: &str, name: &str, files: &BTreeMap<String, Vec<u8>>) -> Result<Vec<u8>, String> {
     if !valid_id(id) {
-        return Err(format!("{id}: a theme id is lowercase letters, digits and hyphens"));
+        return Err(format!("{id}: a theme id is lowercase letters, digits, hyphens and underscores"));
     }
     if files.contains_key(MANIFEST) {
         return Err(format!("a theme's own file may not be named {MANIFEST}"));
@@ -265,7 +265,7 @@ pub fn sheet_name(css: &str) -> Option<String> {
 fn valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
-        && id.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        && id.chars().all(|c| (c.is_alphanumeric() && !c.is_uppercase()) || c == '-' || c == '_')
 }
 
 #[cfg(test)]

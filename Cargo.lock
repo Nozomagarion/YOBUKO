@@ -4736,6 +4736,7 @@ dependencies = [
  "suhina-output",
  "suhina-plugins",
  "suhina-session",
+ "suhina-theme-package",
  "suhina-ui",
  "suhina-update",
  "window-vibrancy",
