@@ -208,9 +208,10 @@ struct Host {
     /// changed, or the host changed the regions: each track's notes are read again after the
     /// next model update when it moved on (#720).
     notes_changed: AtomicU64,
-    /// The sources being analysed (by their host ref, the boxed `Source`) and how far each has
-    /// come, 0 to 1; one is taken out when its analysis completes.
-    analysis: Mutex<Vec<(usize, f32)>>,
+    /// The sources being analysed (by their host ref, the boxed `Source`), how far each has
+    /// come, 0 to 1, and when the plug-in last reported it; one is taken out when its analysis
+    /// completes.
+    analysis: Mutex<Vec<(usize, f32, Instant)>>,
     /// The song's tempo map and time signatures, which the plug-in reads through the musical
     /// context's content readers, so its timeline counts bars as the song does. Changed only
     /// inside an edit, on the model thread, so what a reader handed out stays put.
@@ -279,6 +280,12 @@ const MODEL_UPDATES_EVERY: Duration = Duration::from_millis(250);
 /// How often the notes of regions that have none yet are looked for again (#720): a plug-in may
 /// finish its analysis without saying the content changed.
 const NOTES_AGAIN_EVERY: Duration = Duration::from_secs(1);
+
+/// How long after its last progress report a source whose notes are analysed is taken as done
+/// when the plug-in still says another of its content types is incomplete: one progress covers
+/// all of a source's analyses, but a type the host did not ask for may stay incomplete for
+/// good (#816).
+const ANALYSIS_QUIET: Duration = Duration::from_secs(3);
 
 thread_local! {
     /// The documents this process holds, by the plug-in's factory and the engine's document
@@ -615,18 +622,22 @@ impl Shared {
         slow_call("asking for notes", started);
     }
 
+    /// The content types the plug-in's factory says it can analyse; empty when it lists none.
+    fn analysable_types(&self) -> &[ARAContentType] {
+        // SAFETY: the plug-in's factory, valid while its module is loaded.
+        let Some(factory) = (unsafe { self.factory.as_ref() }) else { return &[] };
+        let types = factory.analyzeableContentTypes;
+        if types.is_null() {
+            return &[];
+        }
+        let count = factory.analyzeableContentTypesCount.min(64);
+        // SAFETY: the factory's list of `count` content types, valid while its module is loaded.
+        unsafe { std::slice::from_raw_parts(types, count) }
+    }
+
     fn ask_for_notes_now(&self, dc: &Controller) {
         let notes_type = kARAContentTypeNotes as ARAContentType;
-        // SAFETY: the plug-in's factory, valid while its module is loaded.
-        let Some(factory) = (unsafe { self.factory.as_ref() }) else { return };
-        let types = factory.analyzeableContentTypes;
-        let count = factory.analyzeableContentTypesCount.min(64);
-        if types.is_null() {
-            return;
-        }
-        // SAFETY: the factory's list of `count` content types, valid while its module is loaded.
-        let listed = unsafe { std::slice::from_raw_parts(types, count) };
-        if !listed.contains(&notes_type) {
+        if !self.analysable_types().contains(&notes_type) {
             return;
         }
         let (Some(incomplete), Some(request)) =
@@ -663,11 +674,11 @@ impl Shared {
     /// never that it *completed*. True when one was taken out.
     fn settle_analysis(&self, dc: &Controller) -> bool {
         let Some(incomplete) = dc.interface.isAudioSourceContentAnalysisIncomplete else { return false };
-        let notes_type = kARAContentTypeNotes as ARAContentType;
-        let settled = settle_analysis(&self.host.analysis, &self.source_keys(), |source| {
-            // SAFETY: a live controller, not being edited, for a source of this document.
-            unsafe { incomplete(dc.reference, source, notes_type) != 0 }
-        });
+        let settled =
+            settle_analysis(&self.host.analysis, &self.source_keys(), self.analysable_types(), |source, kind| {
+                // SAFETY: a live controller, not being edited, for a source of this document.
+                unsafe { incomplete(dc.reference, source, kind) != 0 }
+            });
         if settled {
             self.host.notes_may_have_changed();
         }
@@ -1137,7 +1148,7 @@ impl Document {
             .collect();
         let least = {
             let analysis = shared.host.analysis.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-            analysis.iter().filter(|(s, _)| mine.contains(s)).map(|(_, p)| *p).reduce(f32::min)
+            analysis.iter().filter(|(s, _, _)| mine.contains(s)).map(|(_, p, _)| *p).reduce(f32::min)
         };
         let percent = least.map(|p| (p * 100.0) as u32);
         if percent == self.analysis_sent.get() {
@@ -1747,9 +1758,9 @@ unsafe extern "C" fn analysis_progress(
     if let Some(host) = unsafe { host.cast::<Host>().as_ref() } {
         let key = source as usize;
         let mut analysis = host.analysis.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        analysis.retain(|(s, _)| *s != key);
+        analysis.retain(|(s, _, _)| *s != key);
         if state != kARAAnalysisProgressCompleted as ARAAnalysisProgressState {
-            analysis.push((key, if value.is_finite() { value.clamp(0.0, 1.0) } else { 0.0 }));
+            analysis.push((key, if value.is_finite() { value.clamp(0.0, 1.0) } else { 0.0 }, Instant::now()));
         }
     }
     // An analysis done: its notes are there to read, whether or not the plug-in also says the
@@ -1779,25 +1790,42 @@ unsafe extern "C" fn source_changed(
     notes_may_have_changed(unsafe { host.cast::<Host>().as_ref() }, flags);
 }
 
-/// Takes out of `analysis` (source key, progress) each source of `sources` (key, plug-in ref)
-/// that `incomplete` says is analysed; true when one was taken out. A key not in `sources`
-/// stays.
+/// Takes out of `analysis` (source key, progress, last report) each source of `sources` (key,
+/// plug-in ref) that `incomplete` (source, content type) says is analysed; true when one was
+/// taken out. A key not in `sources` stays. A source is analysed when its notes are and so is
+/// every one of `types` (the plug-in's analysable content types), since one progress covers
+/// all of a source's analyses; or when its notes are and the plug-in has not reported for
+/// [`ANALYSIS_QUIET`], for a type it never analyses unasked.
 fn settle_analysis(
-    analysis: &Mutex<Vec<(usize, f32)>>,
+    analysis: &Mutex<Vec<(usize, f32, Instant)>>,
     sources: &[(usize, ARAAudioSourceRef)],
-    incomplete: impl Fn(ARAAudioSourceRef) -> bool,
+    types: &[ARAContentType],
+    incomplete: impl Fn(ARAAudioSourceRef, ARAContentType) -> bool,
 ) -> bool {
-    let listed: Vec<(usize, ARAAudioSourceRef)> = {
+    let notes_type = kARAContentTypeNotes as ARAContentType;
+    let listed: Vec<(usize, ARAAudioSourceRef, bool)> = {
         let analysis = analysis.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        sources.iter().copied().filter(|(key, _)| analysis.iter().any(|(s, _)| s == key)).collect()
+        sources
+            .iter()
+            .filter_map(|&(key, source)| {
+                let (_, _, reported) = analysis.iter().find(|(s, _, _)| *s == key)?;
+                Some((key, source, reported.elapsed() >= ANALYSIS_QUIET))
+            })
+            .collect()
     };
     // Asked outside the lock: the plug-in may report progress from another thread meanwhile.
-    let done: Vec<usize> = listed.into_iter().filter(|(_, source)| !incomplete(*source)).map(|(key, _)| key).collect();
+    let done: Vec<usize> = listed
+        .into_iter()
+        .filter(|&(_, source, quiet)| {
+            !incomplete(source, notes_type) && (quiet || types.iter().all(|&kind| !incomplete(source, kind)))
+        })
+        .map(|(key, _, _)| key)
+        .collect();
     if done.is_empty() {
         return false;
     }
     let mut analysis = analysis.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    analysis.retain(|(s, _)| !done.contains(s));
+    analysis.retain(|(s, _, _)| !done.contains(s));
     true
 }
 
@@ -1817,13 +1845,13 @@ fn leave_sources(owners: &mut Vec<String>, mine: &[String]) -> Vec<String> {
 /// ([`leave_sources`], #816): the next track that plays one asks the plug-in again, which sends
 /// progress again if it still analyses it.
 fn forget_analysis(
-    analysis: &Mutex<Vec<(usize, f32)>>,
+    analysis: &Mutex<Vec<(usize, f32, Instant)>>,
     asked: &RefCell<Vec<ARAAudioSourceRef>>,
     sources: &[(usize, ARAAudioSourceRef)],
 ) {
     asked.borrow_mut().retain(|source| !sources.iter().any(|(_, s)| s == source));
     let mut analysis = analysis.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-    analysis.retain(|(key, _)| !sources.iter().any(|(k, _)| k == key));
+    analysis.retain(|(key, _, _)| !sources.iter().any(|(k, _)| k == key));
 }
 
 /// Marks the notes to be read again, unless the plug-in says they stayed as they were.

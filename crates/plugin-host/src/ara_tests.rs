@@ -8,31 +8,75 @@ fn source_ref(n: usize) -> ARAAudioSourceRef {
     std::ptr::without_provenance_mut(n)
 }
 
+/// Progress as `analysis` holds it, reported just now.
+fn reported(list: &[(usize, f32)]) -> Mutex<Vec<(usize, f32, Instant)>> {
+    let now = Instant::now();
+    Mutex::new(list.iter().map(|&(key, progress)| (key, progress, now)).collect())
+}
+
+/// The keys and progress `analysis` holds.
+fn progress(analysis: &Mutex<Vec<(usize, f32, Instant)>>) -> Vec<(usize, f32)> {
+    analysis.lock().unwrap().iter().map(|&(key, progress, _)| (key, progress)).collect()
+}
+
 /// A plug-in that said an analysis *started* and then found it done (restored from an
 /// archive) never says *completed*: asking it takes the source out, while one it still
 /// analyses stays (#816).
 #[test]
 fn an_analysis_the_plug_in_says_is_complete_stops_showing() {
-    let analysis = Mutex::new(vec![(1, 0.0), (2, 0.4), (9, 0.5)]);
+    let notes = kARAContentTypeNotes as ARAContentType;
+    let analysis = reported(&[(1, 0.0), (2, 0.4), (9, 0.5)]);
     let sources = [(1, source_ref(11)), (2, source_ref(12)), (3, source_ref(13))];
     // Source 12 is still being analysed; 11 is done; 9 is not this document's.
-    assert!(settle_analysis(&analysis, &sources, |source| source == source_ref(12)));
-    assert_eq!(*analysis.lock().unwrap(), vec![(2, 0.4), (9, 0.5)]);
+    assert!(settle_analysis(&analysis, &sources, &[notes], |source, _| source == source_ref(12)));
+    assert_eq!(progress(&analysis), vec![(2, 0.4), (9, 0.5)]);
     // Nothing more to take out: false, and the list stays.
-    assert!(!settle_analysis(&analysis, &sources, |source| source == source_ref(12)));
-    assert_eq!(*analysis.lock().unwrap(), vec![(2, 0.4), (9, 0.5)]);
+    assert!(!settle_analysis(&analysis, &sources, &[notes], |source, _| source == source_ref(12)));
+    assert_eq!(progress(&analysis), vec![(2, 0.4), (9, 0.5)]);
     // Source 3 is done but was never listed: nothing changes.
-    assert!(!settle_analysis(&Mutex::new(Vec::new()), &sources, |_| false));
+    assert!(!settle_analysis(&Mutex::new(Vec::new()), &sources, &[notes], |_, _| false));
+}
+
+/// One progress covers all of a source's analyses: a plug-in whose notes are done while it
+/// still analyses the tempo keeps showing it, until that is done too, or until it has not
+/// reported for a while (a type it never analyses unasked). With no types listed, the notes
+/// alone settle it.
+#[test]
+fn an_analysis_of_another_content_type_keeps_showing() {
+    let notes = kARAContentTypeNotes as ARAContentType;
+    let tempo = kARAContentTypeTempoEntries as ARAContentType;
+    let types = [notes, tempo];
+    let sources = [(1, source_ref(11))];
+    let tempo_left = |_, kind| kind == tempo;
+
+    let analysis = reported(&[(1, 0.6)]);
+    assert!(!settle_analysis(&analysis, &sources, &types, tempo_left));
+    assert_eq!(progress(&analysis), vec![(1, 0.6)]);
+    // The tempo done too.
+    assert!(settle_analysis(&analysis, &sources, &types, |_, _| false));
+    assert!(analysis.lock().unwrap().is_empty());
+
+    // No report for a while: the tempo is not being analysed.
+    let long_ago = Instant::now().checked_sub(ANALYSIS_QUIET).expect("an instant that long ago");
+    let analysis = Mutex::new(vec![(1, 0.0, long_ago)]);
+    assert!(settle_analysis(&analysis, &sources, &types, tempo_left));
+    // The notes not done: it stays, however long ago.
+    let analysis = Mutex::new(vec![(1, 0.0, long_ago)]);
+    assert!(!settle_analysis(&analysis, &sources, &types, |_, kind| kind == notes));
+
+    // No analysable types listed: the notes alone.
+    let analysis = reported(&[(1, 0.6)]);
+    assert!(settle_analysis(&analysis, &sources, &[], tempo_left));
 }
 
 /// A track removed while its source is analysed leaves nothing behind: a plug-in added again
 /// for that source is asked for its analysis again and starts with no stale progress (#816).
 #[test]
 fn a_track_that_leaves_forgets_its_sources_analysis() {
-    let analysis = Mutex::new(vec![(1, 0.0), (2, 0.3)]);
+    let analysis = reported(&[(1, 0.0), (2, 0.3)]);
     let asked = RefCell::new(vec![source_ref(11), source_ref(12)]);
     forget_analysis(&analysis, &asked, &[(1, source_ref(11))]);
-    assert_eq!(*analysis.lock().unwrap(), vec![(2, 0.3)]);
+    assert_eq!(progress(&analysis), vec![(2, 0.3)]);
     assert_eq!(*asked.borrow(), vec![source_ref(12)]);
 }
 
@@ -45,7 +89,7 @@ fn a_source_another_track_plays_keeps_its_analysis() {
     let first = ids(&["a", "b"]);
     let second = ids(&["a"]);
     let mut owners = ids(&["a", "b", "a"]);
-    let analysis = Mutex::new(vec![(1, 0.2), (2, 0.5)]);
+    let analysis = reported(&[(1, 0.2), (2, 0.5)]);
     let asked = RefCell::new(vec![source_ref(11), source_ref(12)]);
     let keys = |gone: &[String]| -> Vec<(usize, ARAAudioSourceRef)> {
         gone.iter().map(|id| if id == "a" { (1, source_ref(11)) } else { (2, source_ref(12)) }).collect()
@@ -54,7 +98,7 @@ fn a_source_another_track_plays_keeps_its_analysis() {
     let gone = leave_sources(&mut owners, &first);
     assert_eq!(gone, ids(&["b"]));
     forget_analysis(&analysis, &asked, &keys(&gone));
-    assert_eq!(*analysis.lock().unwrap(), vec![(1, 0.2)]);
+    assert_eq!(progress(&analysis), vec![(1, 0.2)]);
     assert_eq!(*asked.borrow(), vec![source_ref(11)]);
 
     let gone = leave_sources(&mut owners, &second);

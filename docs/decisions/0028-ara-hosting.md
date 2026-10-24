@@ -249,7 +249,10 @@ the list below, in a first form). Where it differs from the decisions above it i
   An analysis ends when the plug-in reports it completed, or when, asked whether the source's
   notes are still incomplete (each time the notes are read, and every second while a clip shows
   the analysis), it says they are not: a plug-in that restores its analysis from an archive
-  reports only that it started (#816). A track that leaves the document forgets its sources'
+  reports only that it started (#816). One progress covers all of a source's analyses, so
+  while the plug-in says another content type it lists as analysable is incomplete, the
+  analysis shows until that one is done too, or until it has not reported for 3 s (a type it
+  never analyses unasked). A track that leaves the document forgets its sources'
   analysis, so the next track that plays one asks for it again.
 - **Notes on the clips** (#720). After a model update in which the plug-in said a region's,
   modification's or source's notes may have changed (not with "note scope remains unchanged"),
