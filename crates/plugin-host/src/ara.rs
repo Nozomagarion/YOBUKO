@@ -652,7 +652,9 @@ impl Shared {
             }
             asked.push(*source);
             // SAFETY: a live controller, not being edited, for a source of this document.
-            if unsafe { incomplete(dc.reference, *source, notes_type) } != 0 {
+            let incomplete = unsafe { incomplete(dc.reference, *source, notes_type) } != 0;
+            suhina_plugins::trace!("ara asks for the notes of {source:p}: incomplete {incomplete}");
+            if incomplete {
                 // SAFETY: as above, with a list of one content type.
                 unsafe { request(dc.reference, *source, 1, &notes_type) };
             }
@@ -677,10 +679,25 @@ impl Shared {
         let settled =
             settle_analysis(&self.host.analysis, &self.source_keys(), self.analysable_types(), |source, kind| {
                 // SAFETY: a live controller, not being edited, for a source of this document.
-                unsafe { incomplete(dc.reference, source, kind) != 0 }
+                let answer = unsafe { incomplete(dc.reference, source, kind) != 0 };
+                suhina_plugins::trace!("ara analysis of {source:p} type {kind}: incomplete {answer}");
+                answer
             });
         if settled {
+            suhina_plugins::trace!("ara analysis settled: the plug-in says it is complete");
             self.host.notes_may_have_changed();
+        }
+        settled
+    }
+
+    /// Takes out of the analyses going on those of `keys` (sources whose every region on a
+    /// track has its notes) that the plug-in has not reported for [`ANALYSIS_QUIET`] (#816): a
+    /// plug-in whose analysis an archive replaced may go on saying its notes are incomplete
+    /// while they are there. True when one was taken out.
+    fn settle_quiet(&self, keys: &[usize]) -> bool {
+        let settled = settle_quiet(&self.host.analysis, keys);
+        if settled {
+            suhina_plugins::trace!("ara analysis settled: notes there and no report for {ANALYSIS_QUIET:?}");
         }
         settled
     }
@@ -763,6 +780,14 @@ impl Shared {
             // archive and the filter live for the call.
             unsafe { restore(dc.reference, reader, filter) }
         })?;
+        // An analysis asked for before the archive came may have been dropped for the one in
+        // it without the plug-in saying it completed (#816): each source is asked again, and
+        // a plug-in that has its notes now says so or reports the analysis to its end.
+        if restored != 0 {
+            suhina_plugins::trace!("ara restored an archive: the sources' analysis is asked for again");
+            self.analysis_asked.borrow_mut().clear();
+            self.host.notes_may_have_changed();
+        }
         self.host.archive_may_have_changed();
         self.notify_model_updates();
         Ok(restored != 0)
@@ -1090,10 +1115,26 @@ impl Document {
         if self.analysis_sent.get().is_some() && self.last_settled.get().elapsed() >= NOTES_AGAIN_EVERY {
             self.last_settled.set(Instant::now());
             let shared = self.shared.borrow();
-            if let Some(dc) = shared.controller() {
-                shared.settle_analysis(&dc);
+            let settled = shared.controller().is_some_and(|dc| shared.settle_analysis(&dc));
+            // Every region of the track has its notes: an analysis the plug-in no longer
+            // reports is over, whatever it answers (#816).
+            let all_notes =
+                !self.region_described.is_empty() && self.notes_sent.borrow().len() >= self.region_described.len();
+            if !settled && all_notes {
+                shared.settle_quiet(&self.my_keys(&shared));
             }
         }
+    }
+
+    /// The keys in `host.analysis` of the sources this track's clips play.
+    fn my_keys(&self, shared: &Shared) -> Vec<usize> {
+        shared
+            .source_ids
+            .iter()
+            .zip(&shared.host.sources)
+            .filter(|(id, _)| self.owned_sources.contains(id))
+            .map(|(_, source)| std::ptr::from_ref::<Source>(source) as usize)
+            .collect()
     }
 
     /// Reads every region's notes and keeps for [`Document::take_notes`] those that differ from
@@ -1139,13 +1180,7 @@ impl Document {
     /// this track is being analysed any more.
     pub(crate) fn take_analysis(&self) -> Option<Option<f32>> {
         let shared = self.shared.borrow();
-        let mine: Vec<usize> = shared
-            .source_ids
-            .iter()
-            .zip(&shared.host.sources)
-            .filter(|(id, _)| self.owned_sources.contains(id))
-            .map(|(_, source)| std::ptr::from_ref::<Source>(source) as usize)
-            .collect();
+        let mine = self.my_keys(&shared);
         let least = {
             let analysis = shared.host.analysis.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             analysis.iter().filter(|(s, _, _)| mine.contains(s)).map(|(_, p, _)| *p).reduce(f32::min)
@@ -1827,6 +1862,15 @@ fn settle_analysis(
     let mut analysis = analysis.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     analysis.retain(|(s, _, _)| !done.contains(s));
     true
+}
+
+/// Takes out of `analysis` (source key, progress, last report) each of `keys` the plug-in has
+/// not reported for [`ANALYSIS_QUIET`]; true when one was taken out. Other keys stay.
+fn settle_quiet(analysis: &Mutex<Vec<(usize, f32, Instant)>>, keys: &[usize]) -> bool {
+    let mut analysis = analysis.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    let before = analysis.len();
+    analysis.retain(|(key, _, reported)| !(keys.contains(key) && reported.elapsed() >= ANALYSIS_QUIET));
+    analysis.len() != before
 }
 
 /// Takes one owner of each of `mine` (a leaving track's sources) out of `owners` (each source

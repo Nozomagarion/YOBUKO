@@ -69,6 +69,20 @@ fn an_analysis_of_another_content_type_keeps_showing() {
     assert!(settle_analysis(&analysis, &sources, &[], tempo_left));
 }
 
+/// A plug-in whose analysis an archive replaced may keep saying the notes are incomplete while
+/// it has them (#816): once a track has every region's notes, a source of it the plug-in has not
+/// reported for a while is taken out; one reported just now, or another track's, stays.
+#[test]
+fn a_quiet_analysis_of_a_track_with_its_notes_stops_showing() {
+    let long_ago = Instant::now().checked_sub(ANALYSIS_QUIET).expect("an instant that long ago");
+    let analysis = Mutex::new(vec![(1, 0.0, long_ago), (2, 0.3, Instant::now()), (9, 0.0, long_ago)]);
+    assert!(settle_quiet(&analysis, &[1, 2]));
+    assert_eq!(progress(&analysis), vec![(2, 0.3), (9, 0.0)]);
+    // Nothing quiet left of the track's: false.
+    assert!(!settle_quiet(&analysis, &[1, 2]));
+    assert!(!settle_quiet(&Mutex::new(Vec::new()), &[1]));
+}
+
 /// A track removed while its source is analysed leaves nothing behind: a plug-in added again
 /// for that source is asked for its analysis again and starts with no stale progress (#816).
 #[test]

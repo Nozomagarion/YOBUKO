@@ -253,7 +253,11 @@ the list below, in a first form). Where it differs from the decisions above it i
   while the plug-in says another content type it lists as analysable is incomplete, the
   analysis shows until that one is done too, or until it has not reported for 3 s (a type it
   never analyses unasked). A track that leaves the document forgets its sources'
-  analysis, so the next track that plays one asks for it again.
+  analysis, so the next track that plays one asks for it again. After an archive is restored
+  every source's analysis is asked for again, as one asked for before may have been dropped for
+  the archive's without a *completed* report; and a plug-in that keeps saying the notes are
+  incomplete while every region of the track has them is taken as done once it has not
+  reported for 3 s (Melodyne after a project is opened again, #816).
 - **Notes on the clips** (#720). After a model update in which the plug-in said a region's,
   modification's or source's notes may have changed (not with "note scope remains unchanged"),
   and after the host's own edits, the host reads every region's notes with a playback-region
