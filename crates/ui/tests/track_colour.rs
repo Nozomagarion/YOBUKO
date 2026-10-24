@@ -176,8 +176,8 @@ fn midi_monitor_is_separate_from_arm_and_offers_contextual_choices() {
 }
 
 #[test]
-fn a_midi_tracks_arm_tooltip_speaks_of_recording_and_the_monitoring_modes() {
-    // Arming no longer plays the track on its own (#877): the tooltip says what each mode does.
+fn a_midi_tracks_arm_and_monitoring_tooltips_are_short() {
+    // Arming no longer plays the track on its own (#877): the tooltips are short; the menu says what each mode does.
     let mut h = arrangement();
     let arm = h.get_by_label("Arm Drums for recording").rect().center();
     h.hover_at(arm);
@@ -187,5 +187,5 @@ fn a_midi_tracks_arm_tooltip_speaks_of_recording_and_the_monitoring_modes() {
     let monitor = h.get_by_label("MIDI monitoring of Drums: Auto").rect().center();
     h.hover_at(monitor);
     h.run_steps(60);
-    assert!(h.query_by_label_contains("Auto: hear MIDI while the track is ready to record").is_some());
+    assert!(h.query_by_label_contains("Choose when you hear the MIDI input").is_some());
 }
