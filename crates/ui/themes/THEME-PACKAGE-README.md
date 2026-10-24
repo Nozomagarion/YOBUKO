@@ -243,6 +243,52 @@ combined inline artwork is limited to 16 MiB. Rendered control textures are boun
 to 1024 pixels per axis. SVG remains self-contained: embedding images or external
 resources inside an SVG is not supported. Use separate PNG role files instead.
 
+## Artwork: variables, text and nine-slice
+
+An SVG may write the theme's variables, `fill="var(--accent)"` or
+`stroke="var(--line, #808080)"` with a fallback, so one file serves every variant; a name the
+theme does not set and that has no fallback stays as written. `currentColor` is still the
+control's ink. `<text>` draws with Suhina's own typefaces (Manrope; `font-family="monospace"`
+for IBM Plex Mono), never the computer's fonts.
+
+Artwork that should keep its corners while it stretches says where its edges are:
+`data-suhina-slice="6"` on the root `<svg>` (or `"top right bottom left"`, or
+`"vertical horizontal"`), in the SVG's own units, which are points. Its corners keep their
+size, its edges stretch along one axis and its middle along both; a header's name bar or the
+loop bar keeps its rounded ends at any length.
+
+```svg
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="16" data-suhina-slice="6">
+  <rect x="0.5" y="0.5" width="23" height="15" rx="6" fill="var(--accent)" stroke="currentColor"/>
+</svg>
+```
+
+A theme whose surfaces show the desktop through them (a window, panel or header colour with
+alpha) has the area under button, fader and track artwork cleared first; on an opaque theme
+the artwork is drawn over the surface, so its transparent parts show the strip under them.
+
+## Theme packages
+
+**Settings › Theme › More › Export theme…** writes the theme in use as one file,
+`<theme>.theme.suhina`, into the `exports` folder beside the themes folder. It holds the
+theme's folder and a `manifest.json` with the theme's id, its name and the SHA-256 sum of every
+file. Drop a package on Suhina's window (Settings open or not) or open it with Suhina (a
+double-click, once the system knows the ending) to bring the theme in. Before anything is
+written Suhina checks the manifest, every file's sum, the paths, the sizes and what each file
+holds (a `theme.css` that reads, SVGs that are SVG, PNGs that are PNG, variants that are JSON);
+a damaged or changed package is refused and says why. The same checks run on every import.
+
+From a terminal:
+
+```sh
+suhina-cli theme pack my-theme            # writes my-theme.theme.suhina beside the folder
+suhina-cli theme pack my-theme -o out.theme.suhina
+suhina-cli theme validate out.theme.suhina   # or a folder; lists the notices
+```
+
+A package is not signed. Sign the file with a key of your own, outside Suhina, when the
+receiver needs to know it came from you.
+
 ## SVG inheritance and safe defaults
 
 Supported roles are `fader.cap`, `fader.rail`, `knob.body`, `knob.pointer`, `button`,
@@ -339,6 +385,16 @@ Classes, each the native element it styles:
 | `.knob`, `.fader`, `.fader-cap`, `.fader-scale`, `.pan` | mixer and device controls |
 | `.meter`, `.meter-level`, `.meter-vertical`, `.meter-horizontal` | level meters and their lit part |
 | `.label`, `.separator`, `.settings`, `.dialog` | labels, rules, the Settings page and dialogs |
+| `.start-page`, `.plugin-manager` | the page with no project open, the Plug-in manager |
+| `.send` | a send, in a mixer strip and in a track header |
+| `.add-track` | the **+ MIDI track**, **+ Audio track** and **+ Return track** buttons after the last track |
+| `.ruler`, `.loop-region`, `.playhead` | the Arrangement view's ruler, its loop bar and the play position line |
+| `.divider` | the line between a strip's device list and its controls (`#mixer-divider`) |
+| `.clip-name`, `.clip-waveform`, `.clip-notes`, `.clip-gain`, `.clip-fade-handle` | an arrangement clip's name bar, waveform, notes, gain field and fade handles |
+| `.value-handle`, `.fader-rail` | the handle where a level bar's fill ends; a fader's rail |
+| `.piano-grid`, `.piano-row`, `.piano-row-black`, `.piano-key`, `.piano-key-black`, `.piano-note`, `.velocity` | the piano roll's grid, its rows, its keys, the notes and their velocity stems |
+| `.piano-tool`, `.midi-tools`, `.clip-info`, `.editor-tab` | the piano roll's tool buttons, the MIDI tools column, the clip's column and the **Clip** / **Devices** tabs |
+| `.device`, `.device-header` | a device's panel in the device chain, and its header row |
 
 Ids:
 
@@ -350,6 +406,12 @@ Ids:
 | `#arrangement-volume`, `#arrangement-pan` | a track header's volume and pan fields |
 | `#mixer-volume`, `#mixer-pan` | a mixer strip's fader and pan |
 | `#workspace`, `#panel-browser`, `#panel-main`, `#panel-detail` | the workspace and its panels |
+| `#mixer-send-1`, `#mixer-send-2`, … | a mixer strip's sends, from the left |
+| `#add-midi-track`, `#add-audio-track`, `#add-return-track` | the three add-track buttons |
+| `#mixer-divider` | a strip's divider |
+| `#piano-select`, `#piano-draw`, `#piano-paint`, `#piano-erase`, `#piano-slice`, `#piano-mute`, `#piano-cut`, `#piano-copy`, `#piano-paste`, `#piano-duplicate`, `#piano-quantise`, `#piano-midi-tools`, `#piano-audition`, `#piano-hide` | the piano roll's tool buttons |
+| `#tab-clip`, `#tab-devices` | the clip editor's two tabs |
+| `#device-sampler`, `#device-fm-synth`, `#device-utility`, `#device-auto-pan`, `#device-dj-eq`, `#device-vinyl-distortion`, `#device-overdrive`, `#device-compressor`, `#device-limiter`, `#device-nam-amp-modeler`, `#device-nam-cab-loader`, `#device-delay`, `#device-reverb`, `#device-pitch` | one built-in device's panel; `#device-plugin` a plug-in's, `#device-sd` a device file's |
 
 A view's or bar's background is the surface behind its controls: `.toolbar` or `.arrangement`
 with a `background-color` does not repaint the buttons on it. A control's own surface takes
@@ -387,6 +449,9 @@ Besides `:hover`, `:active` (pressed), `:focus` and `:disabled`, Suhina tells th
 | `:playing`, `:recording` | `#control-play` while the transport runs, `#control-record` while it records |
 | `:selected` | the selected track's `.track-header`, `.track-column`, `.mixer` strip and `.track-name` |
 | `:armed`, `:muted` | an armed track's arm button and header; a muted track's header and strip |
+| `:selected`, `:muted`, `:playing`, `:recording` | an arrangement clip that is selected, off (or on a muted track), under the play position while it plays, or under a take being recorded |
+| `:selected`, `:muted` | a piano roll note that is selected or muted; a device that is selected or off |
+| `:checked` | the loop bar while looping is on, the chosen piano roll tool or open column, the tab shown |
 
 ```css
 #control-metronome-toggle:checked { background-color: var(--accent); color: #000; box-shadow: 0 0 6px var(--accent); }
@@ -414,6 +479,101 @@ also in the Session view, so `.mixer .track-name` is the strip's name and
 `track.name.mixer`, `track.name.arrangement`, `track.body.session` and
 `track.body.arrangement`, over `track.name` and `track.body`.
 
+### Clips
+
+An arrangement clip gives the sheet `--clip-colour`, its own colour, and takes `opacity` (the
+whole clip fades, its waveform, notes and name with it), `border-radius` and a background:
+
+```css
+.clip { border-radius: 4px; background-color: color-mix(in srgb, var(--clip-colour) 70%, #000); }
+.clip:selected { border-width: 1px; border-color: #FFFFFF; }
+.clip:muted { opacity: 0.5; }
+.clip:playing .clip-name { background-color: var(--accent); color: #000; }
+.clip-name { font-size: 10px; color: #F0F0F0; }
+.clip-waveform, .clip-notes { color: #101214; }
+.clip-gain { background-color: #00000080; color: var(--accent); }
+.clip-fade-handle { background-color: #FFFFFF; border-radius: 2px; }
+```
+
+The waveform's and notes' `color` applies while **Settings › Arrangement › Waveform colour** is
+**Theme** (its default); the user's other choices there win. `clip.fade-handle` is artwork for
+the fade handles. A new clip takes its track's colour while **New clip colour** is **Track
+colour** (the default); with **Theme default** it takes `clip.midiDefault` or
+`clip.audioDefault`.
+
+The piano roll's notes have `--clip-colour` too, and their own rules:
+
+```css
+.piano-note { background-color: var(--clip-colour); border-radius: 2px; }
+.piano-note:selected { border-color: #FFFFFF; }
+.piano-row-black { background-color: #15171A; }
+.piano-key { background-color: #E8E8E8; color: #202020; }
+.piano-key-black { background-color: #202020; }
+.piano-grid { border-color: #3A3D42; }
+.velocity { color: var(--accent); }
+.piano-tool:checked { background-color: var(--accent); color: #000; }
+```
+
+Each tool button takes artwork of its own: `piano.draw`, `piano.draw.on`, `piano.select.hover`,
+and so on for every id above, after `piano.`.
+
+### The ruler, the loop and the play position
+
+`.ruler` gives the ruler its background, its bar numbers' `color` and their lines'
+`border-color`; `ruler` is its artwork. The loop bar is `.loop-region` (`:checked` while
+looping is on): `height` sets its thickness, `background-color` and `border-color` its look,
+and `loop-region` (`.on` while on) is its artwork. `.playhead { color; width }` sets the play
+position line's colour and thickness; `width: 0` hides it.
+
+### Sends and the add-track buttons
+
+`.send` styles every send, in the mixer and in the Arrangement header, and `#mixer-send-1`
+one of them. `.send { --suhina-appearance: knob; }` draws the mixer's sends as knobs. `send` is
+a send's artwork and `send.fill` its level. `.add-track` and `#add-midi-track` (and the two
+others) style the add-track buttons, `add-track` is their artwork.
+
+### Level bars: the value and a handle
+
+On a level bar (`#arrangement-volume`, `#mixer-pan`) `text-align` moves the value,
+`font-size` sizes it, `.value-fill { color }` is the value's colour where it stands on the
+lit part, and `color: transparent` hides it. `.value-handle { width: 6px; background-color: … }`
+draws a handle where the fill ends; `volume.handle` and `pan.handle` are artwork for it.
+
+### Fader size
+
+`.fader-cap { width: 24px; height: 14px; }` sets the mixer fader's cap (4 to 64 by 4 to 96
+points) and `.fader-rail { width: 3px; }` its rail (1 to 32).
+
+### Device panels
+
+`.device` styles every device's panel in the device chain and `#device-compressor` one kind of
+device, by the built-in device's id in the table above. Its `:selected` and `:muted` (off)
+states are there too, and everything in the panel is inside that scope: its header
+(`.device-header`), its controls (`#device-compressor .device-control`) and the generated
+parameter list's widgets (`#device-compressor .button`).
+
+```css
+#device-compressor { background-color: #1B1E22; }
+#device-compressor .device-header { background-color: #E5484D; color: #FFFFFF; }
+#device-reverb .device-control { accent-color: #7CC4FF; }
+```
+
+### Buttons and fields everywhere
+
+`.button` (with `:hover`, `:active`, `:disabled` and `:checked` for a chosen row in a list or
+menu) and `.text-input` style Suhina's ordinary widgets too: the buttons, check boxes,
+drop-downs and text fields in Settings, in dialogs (Export audio, Save, the loading and closing
+dialogs), on the start page, in the browser, the sample map, the Plug-in manager and in
+popups. Scope them to one place with its class: `.settings .button`, `.dialog .text-input`.
+`border-width: 0` removes egui's own outline.
+
+```css
+.button { background-color: #24272B; border-width: 0; border-radius: 4px; }
+.button:hover { background-color: #2E3238; }
+.button:checked { background-color: var(--accent); color: #000; }
+.text-input { background-color: #15171A; }
+```
+
 ### Bars and lines
 
 The line under each bar is that bar's `border-color` (`.menu-bar`, `.application-bar`,
@@ -430,7 +590,7 @@ them (`.control-a, .control-b`) places each. The Arrangement header has `arrange
 `arrangement-input`, `arrangement-output`, `arrangement-automation`, `arrangement-color`,
 `arrangement-enable`, `arrangement-fold`, `solo`, `cue`, `arm` and `track-type`; a mixer strip
 `mixer-name`, `mixer-color`, `mixer-enable` (the track number), `mixer-toggles`,
-`mixer-devices`, `mixer-input`, `mixer-input-caption`, `mixer-monitor`, `mixer-output`,
+`mixer-devices`, `mixer-divider`, `mixer-input`, `mixer-input-caption`, `mixer-monitor`, `mixer-output`,
 `mixer-sends` (all of a strip's sends), `mixer-pan`, `mixer-volume`, `mixer-volume-readout`,
 `mixer-volume-scale`, `mixer-compact-volume`, `mixer-meter` and `mixer-metronome`; the toolbar
 `transport-play`, `transport-stop`, `transport-record`, `transport-metronome` and
@@ -445,15 +605,13 @@ control with no room left is not drawn, without a notice: check narrow tracks an
 ## What a theme cannot set
 
 - **Choices on the Settings page that change how things look:** the header and clip colour
-  strengths, the waveform and note colours, and knobs or fields for the mixer (apart from
-  `.pan { --suhina-appearance: knob | field; }`) are the user's. A shared theme can look
-  different on another computer because of them. Only the track headers' side follows a theme.
+  strengths, a waveform or note colour other than **Theme**, and knobs or fields for the mixer
+  (apart from `.pan` and `.send { --suhina-appearance: knob | field; }`) are the user's. A
+  shared theme can look different on another computer because of them. Only the track headers'
+  side follows a theme.
 - **Variants change variables only:** a colour written directly in a rule is the same in every
-  variant. Write colours you want a variant to change as variables.
-- **Artwork per variant:** an SVG is the same in every variant and cannot read your variables;
-  colours fixed in it do not follow a light variant. Use `currentColor` where you can.
-- **Buttons in dialogs and on the Settings page:** ordinary widgets, which `:hover` and
-  `:active` rules do not reach.
+  variant. Write colours you want a variant to change as variables; artwork that writes
+  `var(--name)` follows them too (below).
 
 `track.name` and `track.body` artwork is drawn with `currentColor` as the header's fill: the
 track's colour at the header colour strength.
@@ -617,7 +775,12 @@ When the target is hidden, absent, or in another container, the anchored edge ke
 control's own placement. Anchors that form a cycle (including a control anchored to
 itself) or a chain longer than eight links are ignored with a warning; the editor
 refuses them. A control never leaves its container, and an anchor that leaves no room
-draws nothing.
+draws nothing: in a mixer strip too short for the chains from its top and its bottom, the
+anchored control that would stand on another one is not drawn. A strip without an audio input
+(a MIDI track's) keeps the room its input would take, so a control anchored to `mixer-monitor`
+or `mixer-input` lines up across every strip. The divider is a control as well:
+`.control-mixer-devices { --suhina-anchor-bottom: mixer-divider top 0px; }` ends the device
+list where the theme puts the divider, and its drag area follows it.
 
 **Full width** uses `width: 100%`, with `left` and `right` as panel insets.
 For example `.control-mixer-name { width: 100%; left: 4px; right: 4px; }`.

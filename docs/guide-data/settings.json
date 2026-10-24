@@ -867,10 +867,14 @@
       "keys": [
         "waveform_colour"
       ],
-      "sourceFingerprint": "e655bbace96b4873da22753dd77c17c674cd8136db5016ec1de6019a8702b608",
+      "sourceFingerprint": "940e5ead73e92210fd0617211cf77594b0d3d26fa40c4c7cd9d3055464e0f9dd",
       "helpStatus": "reviewed",
-      "description": "Controls the ink used for audio waveforms, MIDI note previews and ARA note overlays in Arrangement. Changes apply immediately to existing clips. Clip names keep their automatic contrast; the sound and project data do not change.",
+      "description": "Controls the ink used for audio waveforms, MIDI note previews and ARA note overlays in Arrangement. Changes apply immediately to existing clips. Clip names keep their automatic contrast; the sound and project data do not change. Only Theme lets the active theme choose the ink; the other choices override the theme.",
       "options": [
+        {
+          "name": "Theme",
+          "description": "Use the colour the active theme gives waveforms and notes (its .clip-waveform and .clip-notes colour), and dark ink when the theme gives none. This is the default."
+        },
         {
           "name": "Auto",
           "description": "Choose contrasting light or dark ink from each clip background."
@@ -881,14 +885,14 @@
         },
         {
           "name": "Dark",
-          "description": "Use the same dark ink on every clip. This is the default."
+          "description": "Use the same dark ink on every clip."
         },
         {
           "name": "Custom",
           "description": "Use Custom waveform and note colour; selecting this reveals its picker."
         }
       ],
-      "whenToChange": "Use Auto for contrasting ink on differently coloured clips, or select a consistent ink colour.",
+      "whenToChange": "Keep Theme to see waveforms and notes as the theme designed them; use Auto for contrasting ink on differently coloured clips, or select one ink colour of your own.",
       "workInProgress": false
     },
     {
@@ -1021,6 +1025,31 @@
         }
       ],
       "whenToChange": "Use By clip type to distinguish MIDI and audio tracks, or One colour for a uniform starting colour.",
+      "workInProgress": false
+    },
+    {
+      "id": "Arrangement/Tracks/new_clip_colour",
+      "page": "Arrangement",
+      "section": "Tracks",
+      "name": "New clip colour",
+      "note": "Choose whether a new clip takes its track's colour or the theme's clip default.",
+      "keys": [
+        "new_clip_colour"
+      ],
+      "sourceFingerprint": "1cd2e73ccfc9438982a2e0f0767e55e264f46223206e13f08edec745b0958369",
+      "helpStatus": "reviewed",
+      "description": "Sets the colour a newly made clip starts with: one drawn with a double-click, recorded, or made from a file. Existing clips keep their stored colours when this setting, a track's colour or the theme changes, and copies and pasted clips keep the colour they had. Clips can still be coloured individually.",
+      "options": [
+        {
+          "name": "Track colour",
+          "description": "Give a new clip the colour its track has at that moment. This is the default."
+        },
+        {
+          "name": "Theme default",
+          "description": "Give a new MIDI clip the theme's MIDI clip default and a new audio clip its audio clip default, whatever the track's colour."
+        }
+      ],
+      "whenToChange": "Keep Track colour so clips match the track they are on; choose Theme default when every new clip should start in the theme's MIDI or audio colour.",
       "workInProgress": false
     },
     {

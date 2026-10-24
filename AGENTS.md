@@ -98,6 +98,8 @@ crates/
   soundmap L2 the sample map: features of samples, layouts by how they sound (t-SNE), grids, kinds, the feature cache
   update   L2 updates: whether a newer nightly or test build is out (GitHub, through the system's
            curl), downloading it, checking its SHA-256 and putting it in place of the running build
+  theme-package L1 theme packages (.theme.suhina): a theme's files with a SHA-256 manifest, packed, read
+           and validated; used by the app's export and import and suhina-cli theme
   separation L2 stem separation: chunking, weighted overlap-add and resampling around an inference backend
              trait, and a deterministic test backend (a band splitter); no model or commands yet (#146)
   session  L2 open projects (tabs, ADR 0007), undo history, the command registry (ADR 0002), the

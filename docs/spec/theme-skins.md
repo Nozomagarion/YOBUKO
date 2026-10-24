@@ -40,6 +40,10 @@ covers:
   - crates/ui/src/kit/theme_vars.rs
   - crates/style/src/registered.rs
   - crates/ui/src/kit/style_class.rs
+  - crates/theme-package/src/lib.rs
+  - crates/ui/src/detail/piano_roll.rs
+  - crates/ui/src/session/mixer_strip.rs
+  - crates/ui/src/interaction/empty_space.rs
 ---
 
 Toolbar editing keeps the real native controls and their layout visible. Entering or
@@ -697,3 +701,98 @@ a claim of universal CSS conformance.
 SVG symbol roles (`play`, `stop`, `record`, `solo`, `arm`, `cue`, `track.midi`,
 `track.audio`, `knob.body`, `knob.pointer`) fit and centre their intrinsic aspect ratio
 inside the destination rectangle. Surface artwork continues stretching to its rectangle.
+
+## Theme packages
+
+A theme package is one file, `<id>.theme.suhina`: a zip of the theme's folder with
+`manifest.json` at its root. The manifest says `"format": "suhina-theme"`, `"version": 1`,
+the theme's `id` and `name`, and under `files` every other entry's path and SHA-256 sum
+(lowercase hex). `crates/theme-package` packs a folder and reads a package; the app's
+**Export theme…** (Settings › Theme › More), its import and `suhina-cli theme pack` and
+`suhina-cli theme validate` all use it, so they accept and refuse the same packages.
+
+Reading refuses a package, before anything is written, when:
+
+- it is not a zip, has no manifest, or its manifest is not a Suhina theme or names no id;
+- its version is newer than this build reads (the message says to update Suhina);
+- an entry's path is absolute, has `..`, a drive or a backslash, or is a link;
+- an entry is missing from the manifest, a manifest entry is missing from the zip, or a sum
+  differs;
+- a file is larger than its kind allows (style sheets and SVGs 128 KiB, PNGs 8 MiB, others
+  1 MiB; 512 files and 32 MiB together);
+- `theme.css` is missing or does not parse, an SVG is not well-formed SVG or holds a script,
+  an image, a foreign object or a link, a PNG lacks the PNG signature, or a `.json` is not
+  JSON.
+
+A style sheet's notices (an unknown property, a value that does not read) are warnings, not
+refusals. The same checks run on every import of theme files, a zip of them included. A
+package is not signed by Suhina; whoever shares one signs the file with a key of their own.
+A dropped file or one Suhina is asked to open whose name ends in `.theme.suhina` is brought in
+as a theme, never opened as a project, and the drop overlay draws above every window.
+
+Theme backups (`suhina-themes-<local date and time>.zip`) leave Suhina's own copies out
+(`_defaults` and the template).
+
+## Artwork: variables, text, nine-slice and clearing
+
+Before an SVG is rasterised, `var(--name)` and `var(--name, fallback)` are replaced by the
+theme's resolved root variables (its `:root` with the chosen variant above it); an unknown
+name without a fallback is left as written. The texture cache keys on the substituted
+source, so a variant switch redraws the artwork. `<text>` renders with the bundled typefaces:
+Manrope for the default, sans-serif and serif families, IBM Plex Mono for monospace; system
+fonts are never loaded.
+
+`data-suhina-slice` on the root element (one, two or four non-negative numbers, in SVG user
+units, which are logical points) makes artwork nine-sliced: it is rasterised once at its own
+size and drawn as nine quads, corners at their size (scaled down evenly when the destination
+is smaller than two insets), edges stretched along one axis, the centre along both. Insets
+that leave no centre are ignored.
+
+Button, fader and track artwork clears the area under it to transparent only when the
+window, panel or track header colour has alpha below 255 (the desktop shows through); over an
+opaque theme it is composited normally.
+
+## Parts added for themes
+
+These native parts take the sheet (the theme package README lists every selector):
+
+- **Sends:** `.send` in the mixer and the Arrangement header; `#mixer-send-N` by place from
+  the left; `--suhina-appearance: knob` draws mixer sends as knobs; artwork `send` and
+  `send.fill`.
+- **Add-track buttons:** `.add-track`, `#add-midi-track`, `#add-audio-track`,
+  `#add-return-track`, artwork `add-track`.
+- **Ruler, loop region, play position:** `.ruler` (background, `color`, `border-color`;
+  artwork `ruler`), `.loop-region` (`:checked` while looping; `height`; artwork `loop-region`,
+  `.on`), `.playhead` (`color`, `width`; `width: 0` hides it).
+- **Clips:** `--clip-colour`; `:selected`, `:muted`, `:playing` (the play position inside the
+  clip while the transport runs), `:recording` (a recording span over it on its track);
+  `.clip-gain`, `.clip-fade-handle` (artwork `clip.fade-handle`).
+- **Level bars:** `font-size` for the value; `.value-handle` with a `width` (or artwork
+  `volume.handle`, `pan.handle`) draws a handle at the fill's moving end; a narrow field drops
+  its inset before its value is cut.
+- **Faders:** `.fader-cap { width; height }` (4–64 by 4–96) and `.fader-rail { width }`
+  (1–32), in paint and in the strip's travel.
+- **Mixer strips:** `mixer-divider` is a placeable control; the divider's drag area and its
+  highlight follow it and stay inside the strip. A strip without an audio input resolves its
+  input's caption, source and monitor rectangles without drawing them, so anchors to them line
+  up across strips. After placement, an anchored part that overlaps another part (other than
+  one containing the other, as the meter in the fader's column) or the toggles is not drawn.
+- **Piano roll:** `.piano-grid` (background; `border-color` for the lines), `.piano-row`,
+  `.piano-row-black` (without a scale), `.piano-key`, `.piano-key-black`, `.piano-note` with
+  `--clip-colour`, `:selected` and `:muted` (background, border, radius, `color` for its name),
+  `.velocity` (`color` of the stems), `.ruler`; the tool buttons `.piano-tool` with
+  `#piano-<tool>` ids, `:checked` and artwork `piano.<tool>`; `.midi-tools`, `.clip-info`,
+  `.editor-tab` (`#tab-clip`, `#tab-devices`, `:checked`).
+- **Device panels:** `.device` with `#device-<id>` (a built-in device's registry id; `plugin`,
+  `sd`, `unsupported` otherwise), `:selected` and `:muted` (off), and `.device-header`.
+- **Generic widgets:** inside any scope that maps the sheet onto egui (Settings, dialogs, the
+  start page `.start-page`, the browser, the sample map, the Plug-in manager
+  `.plugin-manager`, popups), `.button`, `.button:hover`, `.button:active`, `.button:disabled`
+  set egui's widget fills, outlines (`border-width: 0` removes them), text and radius;
+  `.button:checked` the selection; `.text-input` text fields' background.
+- **Pan field:** the native field takes `.pan` and `#mixer-pan` colours.
+
+**New clip colour** (Settings › Arrangement › Tracks): *Track colour* (default) gives a new
+clip its track's colour; *Theme default* the theme's MIDI or audio clip default. Arming an
+audio track while the audio device has no input says so in the status bar.
+
