@@ -952,29 +952,18 @@ fn lane(
             drag.to = pos;
         }
     }
-    if body.drag_stopped_by(egui::PointerButton::Primary) {
-        if let Some(drag) = state.curve_drag.take_if(|d| d.track == track && &d.key == key) {
-            let before = param.points.get(drag.point).map_or(0.0, |p| p.curve);
-            if (drag.curve - before).abs() > 1e-6 {
-                let mut params = key.params(track);
-                params["point"] = json!(drag.point);
-                params["curve"] = json!(round(drag.curve, 1000.0));
-                actions.push(Action::new("automation.movePoint", params));
-            }
-        }
-        if let Some(drag) = state.box_drag.take_if(|d| d.track == track && &d.key == key) {
-            let area = Rect::from_two_pos(drag.from, drag.to);
-            let points: Vec<usize> = param
-                .points
-                .iter()
-                .enumerate()
-                .filter(|(_, p)| {
-                    area.contains(Pos2::new(geometry.x_of(p.beat), y_of(plot, param.scale.position(p.value))))
-                })
-                .map(|(i, _)| i)
-                .collect();
-            state.selection = (!points.is_empty()).then(|| Selection { track, key: key.clone(), points });
-        }
+    if body.drag_stopped_by(egui::PointerButton::Primary)
+        && let Some(drag) = state.box_drag.take_if(|d| d.track == track && &d.key == key)
+    {
+        let area = Rect::from_two_pos(drag.from, drag.to);
+        let points: Vec<usize> = param
+            .points
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| area.contains(Pos2::new(geometry.x_of(p.beat), y_of(plot, param.scale.position(p.value)))))
+            .map(|(i, _)| i)
+            .collect();
+        state.selection = (!points.is_empty()).then(|| Selection { track, key: key.clone(), points });
     }
 
     // The envelope: in the track colour while it plays, dimmed while a manual change has turned
@@ -983,6 +972,20 @@ fn lane(
     let points = shown_points(param, track, geometry, free, state);
     let ink = if param.enabled { color(lanes.color) } else { theme::text_hint() };
     let line = envelope(&points, &param.scale, plot, geometry);
+    // A finished bend asks for its command only now, after the envelope above drew it: the
+    // project has the new curve only once the command has run, after this frame, so dropping
+    // the drag before drawing showed the old curve for one frame.
+    if body.drag_stopped_by(egui::PointerButton::Primary)
+        && let Some(drag) = state.curve_drag.take_if(|d| d.track == track && &d.key == key)
+    {
+        let before = param.points.get(drag.point).map_or(0.0, |p| p.curve);
+        if (drag.curve - before).abs() > 1e-6 {
+            let mut params = key.params(track);
+            params["point"] = json!(drag.point);
+            params["curve"] = json!(round(drag.curve, 1000.0));
+            actions.push(Action::new("automation.movePoint", params));
+        }
+    }
     if line.len() > 1 {
         lane_painter.add(Shape::line(line, Stroke::new(1.5, ink)));
     } else if points.is_empty() {
