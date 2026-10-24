@@ -388,6 +388,11 @@ Session and mixer › **Mixer controls** on Knob, the volume is drawn as a knob 
 knob, and its value stays beside them
 ([arrangement editing](arrangement-editing.md) › Volume, pan, mute and solo).
 
+The wheel scrolls the view (Shift and the wheel, or a sideways swipe, along the tracks).
+Holding the middle mouse button over the slots, the headers or the mixer moves the view with
+the pointer both ways, as in the Arrangement, with a grabbing cursor; nothing under it is
+clicked, launched or selected (#920).
+
 ## Detail area: device chain
 
 Devices left to right in chain order. Each device has a header (on/off switch, name, fold,

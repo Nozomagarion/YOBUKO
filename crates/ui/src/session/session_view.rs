@@ -68,6 +68,9 @@ pub struct SessionViewState {
     /// Launching a clip leaves the selection as it is (Settings › Detail area › Select on
     /// launch is off); by default a launch selects the clip.
     pub keep_selection_on_launch: bool,
+    /// The middle button is held after being pressed over the view: the view follows the
+    /// pointer both ways, as the Arrangement's does (#920).
+    pub(crate) panning: bool,
     /// A column header being dragged to move its track, and where it was let go.
     track_drag: Option<TrackId>,
     track_drop: Option<(TrackId, f32)>,
@@ -237,6 +240,25 @@ pub fn show(
             let delta = ui.input(|i| i.smooth_scroll_delta());
             state.scroll -= delta;
         }
+    }
+    // Free movement with the middle button held over the view: it follows the pointer both
+    // ways, and nothing under it is clicked.
+    let (middle_pressed, middle_down, delta) = ui.input(|i| {
+        (
+            i.pointer.button_pressed(egui::PointerButton::Middle),
+            i.pointer.button_down(egui::PointerButton::Middle),
+            i.pointer.delta(),
+        )
+    });
+    if middle_pressed {
+        state.panning = widgets::pointer_over(ui, area).is_some();
+    }
+    if !middle_down {
+        state.panning = false;
+    }
+    if state.panning {
+        state.scroll -= delta;
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
     }
     state.scroll.x = state.scroll.x.clamp(0.0, (content_width - tracks_clip.width()).max(0.0));
     state.scroll.y = state.scroll.y.clamp(0.0, (content_height - body.height()).max(0.0));

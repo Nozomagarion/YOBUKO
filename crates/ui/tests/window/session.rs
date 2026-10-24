@@ -612,3 +612,38 @@ fn a_slots_context_menu_deletes_its_clip() {
     harness.run();
     assert!(harness.query_by_label("Launch Loop on Loop (scene 1)").is_none(), "the audio clip is gone");
 }
+
+#[test]
+fn moving_the_session_view_with_the_middle_button_scrolls_it() {
+    // Enough tracks that the columns run past the window.
+    let mut session = Session::new(demo_project());
+    for _ in 0..20 {
+        session.execute("track.add", &json!({ "kind": "midi" })).unwrap();
+    }
+    let mut app = App::new();
+    app.set_browser_open(false);
+    app.set_session(session, &[]);
+    let mut harness = window(app);
+    let header = |h: &Harness<'static, App>| h.get_by_label("Track Bass").rect().center();
+    let before = header(&harness);
+    let from = harness.get_by_label("Launch Walk on Bass (scene 2)").rect().center();
+    let button = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Middle,
+        pressed,
+        modifiers: Modifiers::NONE,
+    };
+    harness.hover_at(from);
+    harness.run();
+    harness.input_mut().events.push(button(from, true));
+    harness.run();
+    for step in 1..=4 {
+        harness.hover_at(from + egui::vec2(-50.0 * step as f32, 0.0));
+        harness.run();
+    }
+    let to = from + egui::vec2(-200.0, 0.0);
+    harness.input_mut().events.push(button(to, false));
+    harness.run();
+    let after = header(&harness);
+    assert!(after.x < before.x - 150.0, "{before:?} -> {after:?}");
+}
