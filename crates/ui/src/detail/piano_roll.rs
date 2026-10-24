@@ -1816,9 +1816,18 @@ fn toolbar(ui: &mut Ui, rect: Rect, cx: ToolbarCx<'_>, state: &mut PianoRollStat
     let icon = (TOOL_ICON * scale).min(row.height());
     let gap = TOOL_GAP * scale;
     let side = row.height().min(icon);
+    // `.piano-tool { width; height }` sizes the buttons, so stretched artwork has room.
+    let size = {
+        let _style = crate::kit::style_class::enter("piano-tool");
+        let own = crate::kit::style_class::computed();
+        Vec2::new(
+            own.as_ref().and_then(|c| c.width).map_or(side, |w| w.clamp(8.0, 96.0)),
+            own.as_ref().and_then(|c| c.height).map_or(side, |h| h.clamp(8.0, row.height().max(8.0))),
+        )
+    };
     let x = std::cell::Cell::new(row.left() + KEYS - 4.0);
     let place = || {
-        let area = Rect::from_min_size(Pos2::new(x.get(), row.top() + (row.height() - side) / 2.0), Vec2::splat(side));
+        let area = Rect::from_min_size(Pos2::new(x.get(), row.top() + (row.height() - size.y) / 2.0), size);
         x.set(area.right() + gap);
         area
     };

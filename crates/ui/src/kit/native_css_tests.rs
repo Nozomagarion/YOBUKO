@@ -1161,3 +1161,11 @@ fn a_clip_s_radius_reaches_its_name_bar() {
     assert!(!bars.is_empty(), "the name bars");
     assert!(bars.iter().all(|r| r.corner_radius.nw > 0 && r.corner_radius.sw == 0), "{bars:?}");
 }
+
+#[test]
+fn the_midi_tools_column_takes_its_width_from_the_sheet() {
+    let mut widths = (0.0, 0.0);
+    painted("", |_| widths.0 = crate::detail::midi_tools::tools_width());
+    painted(".midi-tools { width: 220px; }", |_| widths.1 = crate::detail::midi_tools::tools_width());
+    assert_eq!(widths, (crate::detail::midi_tools::TOOLS_WIDTH, 220.0));
+}
