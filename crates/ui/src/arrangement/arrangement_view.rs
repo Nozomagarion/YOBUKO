@@ -5,9 +5,9 @@
 //! (`docs/design/components.md` › Arrangement view). Track headers show more controls as a lane
 //! grows. Like the Session view it draws data and turns gestures into [`Action`]s.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use egui::{Align2, Color32, Id, Pos2, Rect, Sense, StrokeKind, Ui, Vec2};
+use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 use serde_json::{Value, json};
 use suhina_engine::Quantization;
 use suhina_engine::model::{ClipId, FadeCurve, FadeShape, Project, TrackId};
@@ -37,6 +37,8 @@ const MAX_LANE: f32 = 400.0;
 const LANE_ZOOM_PER_POINT: f32 = 0.004;
 /// Heights at which a header shows its next group (components › Track header levels).
 const SHOWS_MIXER: f32 = 48.0;
+/// A take lane's height under its track (`docs/spec/recording.md` › Take lanes).
+const TAKE_ROW: f32 = 36.0;
 const SHOWS_ROUTING: f32 = 70.0;
 /// A track that plays notes shows its MIDI input under its routing from this height.
 const SHOWS_MIDI_INPUT: f32 = 90.0;
@@ -342,6 +344,11 @@ pub struct ArrangementViewState {
     pub headers_left: bool,
     /// The return tracks' rows are left out (the "Hide returns" button by the ruler).
     pub returns_hidden: bool,
+    /// Tracks whose take lanes are folded away (Hide take lanes in the lane's menu).
+    pub takes_hidden: HashSet<TrackId>,
+    /// A drag across a take lane that picks the part to comp: the track, the take's number and
+    /// the beat it started at.
+    take_drag: Option<(TrackId, usize, f64)>,
     /// Moved clips stack on others instead of replacing them: audio clips, MIDI clips.
     pub stack_audio: bool,
     pub stack_midi: bool,
@@ -484,6 +491,8 @@ impl Default for ArrangementViewState {
             grid: Quantization::Bars(1),
             headers_left: false,
             returns_hidden: false,
+            takes_hidden: HashSet::new(),
+            take_drag: None,
             stack_audio: false,
             stack_midi: false,
             time_select_ctrl: false,
@@ -777,6 +786,19 @@ impl ArrangementViewState {
         shown
     }
 
+    /// How much taller `track`'s row is for its take lanes, while they show.
+    fn takes_height(&self, track: TrackId, timeline: &Timeline) -> f32 {
+        if self.takes_hidden.contains(&track) {
+            return 0.0;
+        }
+        timeline.takes.iter().filter(|t| t.track == track).count() as f32 * (TAKE_ROW + 1.0)
+    }
+
+    /// What is drawn under `track`'s own row: its take lanes, then its automation lanes.
+    fn below(&self, track: TrackId, timeline: &Timeline) -> f32 {
+        self.takes_height(track, timeline) + self.automation.height(track, &timeline.automation)
+    }
+
     fn height(&self, lane: &Lane) -> f32 {
         if lane.kind == ColumnKind::Return { self.return_height(lane.track) } else { self.lane_height(lane.track) }
     }
@@ -995,11 +1017,9 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     };
     // Each return its own height (a row by default, its bottom edge dragged to change it), the
     // main track a row.
-    let fixed_height = returns
-        .iter()
-        .map(|l| state.return_height(l.track) + 1.0 + state.automation.height(l.track, &timeline.automation))
-        .sum::<f32>()
-        + if main_volume_db.is_some() { state.main_height + 1.0 } else { 0.0 };
+    let fixed_height =
+        returns.iter().map(|l| state.return_height(l.track) + 1.0 + state.below(l.track, timeline)).sum::<f32>()
+            + if main_volume_db.is_some() { state.main_height + 1.0 } else { 0.0 };
     // They take at most half the room under the rulers, so the track lanes never vanish under
     // them in a short view.
     let room = (area.bottom() - marker_row.bottom() - 1.0).max(0.0);
@@ -1056,7 +1076,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     let content_height: f32 = drawn
         .iter()
         .filter_map(|d| timeline.lanes.get(d.lane))
-        .map(|l| state.height(l) + 1.0 + state.automation.height(l.track, &timeline.automation))
+        .map(|l| state.height(l) + 1.0 + state.below(l.track, timeline))
         .sum();
     let content_beats = timeline.end + TAIL_BARS * bar_beats;
     state.scroll.x =
@@ -1433,7 +1453,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         let lane_time = Rect::from_x_y_ranges(time.x_range(), egui::Rangef::new(y, y + height));
         let clips = timeline.lanes.get(shown.clips).map_or(lane.track, |l| l.track);
         rows.push(Row { track: lane.track, clips, time: lane_time, clip: lane_time.intersect(lanes_area) });
-        y += height + 1.0 + state.automation.height(lane.track, &timeline.automation);
+        y += height + 1.0 + state.below(lane.track, timeline);
     }
     // Where the lanes end, scrolled as they are: how far a drag past the bottom may scroll.
     let lanes_end = y;
@@ -1442,7 +1462,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         let height = state.return_height(lane.track);
         let lane_time = Rect::from_x_y_ranges(time.x_range(), egui::Rangef::new(y, y + height));
         rows.push(Row { track: lane.track, clips: lane.track, time: lane_time, clip: lane_time.intersect(fixed) });
-        y += height + 1.0 + state.automation.height(lane.track, &timeline.automation);
+        y += height + 1.0 + state.below(lane.track, timeline);
     }
     let row_of = |track: TrackId| rows.iter().find(|r| r.track == track).copied();
     let row_of_clips = |track: TrackId| rows.iter().find(|r| r.clips == track).copied();
@@ -1499,7 +1519,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         track_number = focus_number.unwrap_or(track_number + 1);
         let Some(row) = row_of(lane.track) else { continue };
         let lane_rect = Rect::from_x_y_ranges(area.x_range(), row.time.y_range());
-        let below = state.automation.height(lane.track, &timeline.automation);
+        let below = state.below(lane.track, timeline);
         if lane_rect.bottom() + below < lanes_area.top() || lane_rect.top() > lanes_area.bottom() {
             continue;
         }
@@ -1542,7 +1562,8 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             state.menu_beat = Some(grid.place(raw, ui.input(|i| i.modifiers.alt), true));
         }
         body.context_menu(|ui| {
-            empty_lane_menu(ui, clips_lane.track, clips_lane.notes, state, actions);
+            let has_takes = timeline.takes.iter().any(|t| t.track == clips_lane.track);
+            empty_lane_menu(ui, clips_lane.track, clips_lane.notes, has_takes, state, actions);
         });
         body.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Lane {}", lane.name)));
         if body.clicked() {
@@ -1663,12 +1684,15 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             lanes_painter.rect_filled(lane_rect, 0.0, theme::window_background().gamma_multiply(0.45));
         }
         lanes_painter.hline(area.x_range(), lane_rect.bottom() + 0.5, theme::hairline(theme::border_strong()));
-        // The track's automation lanes, under it.
+        // The track's take lanes, under it, then its automation lanes.
+        let takes =
+            TakeLanes { time: time.x_range(), headers, top: lane_rect.bottom() + 1.0, visible: lanes_area, bar_beats };
+        take_lanes(ui, &lanes_painter, &takes, lane, timeline, state, &x_of, actions);
         let lanes = automation::TrackLanes {
             track: lane.track,
             name: &lane.name,
             color: lane.color,
-            top: lane_rect.bottom() + 1.0,
+            top: lane_rect.bottom() + 1.0 + state.takes_height(lane.track, timeline),
         };
         automation::show(ui, &lanes_painter, &geometry, &lanes, &timeline.automation, &mut state.automation, actions);
     }
@@ -1914,6 +1938,14 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         let at = lying_meter(field.left() - PAD, inner.center().y);
         let level = state.meters.main;
         meter::show(ui, &fixed_painter, at, "Main", meter::Source::Main, &level, actions);
+    }
+
+    // Takes recording into the arrangement: a clip from where the pass began to the playhead,
+    // with its notes or its waveform so far, edged in the record colour (#909).
+    for take in &timeline.live_takes {
+        let Some(row) = row_of_clips(take.track) else { continue };
+        let Some(lane) = timeline.lanes.iter().find(|l| l.track == take.track) else { continue };
+        paint_live_take(&painter.with_clip_rect(row.clip), row.time, lane, take, &x_of, state.beat_width, timeline);
     }
 
     // A clip dragged onto another lane is drawn there, over everything in that lane.
@@ -3093,6 +3125,194 @@ fn saturated(colour: Color32) -> Color32 {
     hsva.into()
 }
 
+/// Where a track's take lanes go: the timeline's and the headers' x ranges, the top of the
+/// first, the lanes' visible area, and the beats in a bar for the grid.
+struct TakeLanes {
+    time: egui::Rangef,
+    headers: egui::Rangef,
+    top: f32,
+    visible: Rect,
+    bar_beats: f64,
+}
+
+/// Draws `lane`'s take lanes under it (`docs/spec/recording.md` › Take lanes): each take's
+/// clips greyed, as they do not play. A click on a take's clip puts the whole clip on the track,
+/// a drag across a take the part dragged over (`take.comp`); the take's name has Delete take in
+/// its menu.
+#[allow(clippy::too_many_arguments)]
+fn take_lanes(
+    ui: &mut Ui,
+    painter: &egui::Painter,
+    at: &TakeLanes,
+    lane: &Lane,
+    timeline: &Timeline,
+    state: &mut ArrangementViewState,
+    x_of: &dyn Fn(f64) -> f32,
+    actions: &mut Vec<Action>,
+) {
+    if state.takes_hidden.contains(&lane.track) {
+        return;
+    }
+    let free = ui.input(|i| i.modifiers.alt);
+    let grid = arrangement_grid(state.grid, state.beat_width, at.bar_beats);
+    let (scroll_x, beat_width) = (state.scroll.x, state.beat_width);
+    let beat_of = |x: f32| ruler_beat(f64::from((x - at.time.min + scroll_x) / beat_width), grid, free);
+    let mut y = at.top;
+    for take in timeline.takes.iter().filter(|t| t.track == lane.track) {
+        let row = Rect::from_x_y_ranges(at.time, egui::Rangef::new(y, y + TAKE_ROW));
+        let header = Rect::from_x_y_ranges(at.headers, row.y_range());
+        y += TAKE_ROW + 1.0;
+        painter.hline(
+            egui::Rangef::new(at.time.min.min(at.headers.min), at.time.max.max(at.headers.max)),
+            row.bottom() + 0.5,
+            theme::hairline(theme::border()),
+        );
+        if row.bottom() < at.visible.top() || row.top() > at.visible.bottom() {
+            continue;
+        }
+        let params = json!({ "track": lane.track.0, "take": take.number });
+        painter.rect_filled(header, 0.0, theme::window_background());
+        widgets::text_in(
+            painter,
+            header.shrink2(Vec2::new(8.0, 0.0)),
+            Align2::LEFT_CENTER,
+            &take.name,
+            theme::ui_font(theme::TEXT_SMALL),
+            theme::text_secondary(),
+        );
+        let name = ui.interact(
+            header.intersect(at.visible),
+            Id::new(("take-name", lane.track.0, take.number)),
+            Sense::click(),
+        );
+        name.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{} of {}", take.name, lane.name))
+        });
+        name.context_menu(|ui| {
+            if ui.button("Delete take").clicked() {
+                actions.push(Action::new("take.delete", params.clone()));
+                ui.close();
+            }
+        });
+        // Greyed like a muted track's: a take does not play.
+        let look = Lane { mute: true, ..lane.clone() };
+        for clip in &take.clips {
+            let rect = clip_rect(row, clip.start, clip.length, x_of);
+            paint_clip(painter, rect, &look, clip, Shown::of(clip), clip.start, x_of, beat_width, timeline, false);
+        }
+        let body = ui.interact(
+            row.intersect(at.visible),
+            Id::new(("take-lane", lane.track.0, take.number)),
+            Sense::click_and_drag(),
+        );
+        body.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                true,
+                format!("Comp from {} of {}", take.name, lane.name),
+            )
+        });
+        if body.drag_started()
+            && let Some(pointer) = body.interact_pointer_pos()
+        {
+            state.take_drag = Some((lane.track, take.number, beat_of(pointer.x)));
+        }
+        if let Some((_, _, from)) = state.take_drag.filter(|d| d.0 == lane.track && d.1 == take.number)
+            && let Some(pointer) = ui.ctx().pointer_latest_pos()
+        {
+            let to = beat_of(pointer.x);
+            let (start, end) = (from.min(to), from.max(to));
+            let picked = Rect::from_min_max(Pos2::new(x_of(start), row.top()), Pos2::new(x_of(end), row.bottom()));
+            painter.rect_filled(picked, 0.0, theme::selection().gamma_multiply(0.25));
+            painter.rect_stroke(picked, 0.0, Stroke::new(1.0, theme::selection()), StrokeKind::Inside);
+            if body.drag_stopped() {
+                state.take_drag = None;
+                if end - start > 1e-6 {
+                    let mut comp = params.clone();
+                    comp["start"] = json!(start);
+                    comp["end"] = json!(end);
+                    actions.push(Action::new("take.comp", comp));
+                }
+            }
+        }
+        if body.clicked()
+            && let Some(pointer) = body.interact_pointer_pos()
+        {
+            let beat = f64::from((pointer.x - at.time.min + scroll_x) / beat_width);
+            if let Some(clip) = take.clips.iter().find(|c| (c.start..c.start + c.length).contains(&beat)) {
+                let mut comp = params.clone();
+                comp["start"] = json!(clip.start);
+                comp["end"] = json!(clip.start + clip.length);
+                actions.push(Action::new("take.comp", comp));
+            }
+        }
+    }
+}
+
+/// Draws a take recording into the arrangement on its track's row (#909): from where its pass
+/// began to the playhead, its notes or its waveform as they come in, edged in the record colour.
+fn paint_live_take(
+    painter: &egui::Painter,
+    row: Rect,
+    lane: &Lane,
+    take: &suhina_session::LiveTake,
+    x_of: &dyn Fn(f64) -> f32,
+    beat_width: f32,
+    timeline: &Timeline,
+) {
+    let length = (take.end - take.start).max(0.0);
+    let rect = clip_rect(row, take.start, length, x_of);
+    let clip = ClipBox {
+        id: ClipId::NONE,
+        index: 0,
+        start: take.start,
+        length,
+        name: "Recording".into(),
+        enabled: true,
+        audio: take.audio,
+        fade_in: 0.0,
+        fade_out: 0.0,
+        fade_in_curve: FadeCurve::default(),
+        fade_out_curve: FadeCurve::default(),
+        audio_view: None,
+        notes: take
+            .notes
+            .iter()
+            .map(|&(start, length, key)| crate::arrangement::timeline::NoteMark { start, length, key })
+            .collect(),
+        seams: Vec::new(),
+        row: 0,
+        rows: 1,
+        earliest_start: take.start,
+        latest_end: None,
+        color: lane.color,
+        stack_key: (0, take.start.to_bits()),
+    };
+    paint_clip(painter, rect, lane, &clip, Shown::of(&clip), take.start, x_of, beat_width, timeline, false);
+    // An audio take's waveform so far: a line per peak, about the middle of the clip.
+    if take.audio && !take.peaks.is_empty() && take.peaks_end > take.start {
+        let body = Rect::from_min_max(Pos2::new(rect.left(), rect.top() + 14.0), rect.max);
+        let step = (take.peaks_end - take.start) / take.peaks.len() as f64;
+        let ink = theme::text_primary().gamma_multiply(0.8);
+        let mut last = f32::NEG_INFINITY;
+        for (i, peak) in take.peaks.iter().enumerate() {
+            let x = x_of(take.start + i as f64 * step).round() + 0.5;
+            // One line per pixel at most: the loudest is what shows.
+            if x <= last || x < painter.clip_rect().left() || x > painter.clip_rect().right() {
+                continue;
+            }
+            last = x;
+            let half = body.height() / 2.0 * peak.clamp(0.0, 1.0);
+            painter.vline(
+                x,
+                egui::Rangef::new(body.center().y - half, body.center().y + half.max(0.5)),
+                Stroke::new(1.0, ink),
+            );
+        }
+    }
+    painter.rect_stroke(rect, 0.0, Stroke::new(1.5, theme::recording()), StrokeKind::Inside);
+}
+
 /// A clip as a Shift-click's rectangle finds it: its key, the row its lane is drawn in, and
 /// its span in beats.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -4144,8 +4364,26 @@ fn pan_field(painter: &egui::Painter, rect: Rect, pan: f64, hover: f32) {
 
 /// The menu of an empty spot of a lane: a new empty MIDI clip where it was right-clicked (on a
 /// notes track), and, with a time selection, looping it and consolidating it on this track.
-fn empty_lane_menu(ui: &mut Ui, track: TrackId, notes: bool, state: &ArrangementViewState, actions: &mut Vec<Action>) {
+fn empty_lane_menu(
+    ui: &mut Ui,
+    track: TrackId,
+    notes: bool,
+    has_takes: bool,
+    state: &mut ArrangementViewState,
+    actions: &mut Vec<Action>,
+) {
     ui.set_min_width(180.0);
+    // The take lanes under the track fold away and back (`docs/spec/recording.md` › Take lanes).
+    if has_takes {
+        let hidden = state.takes_hidden.contains(&track);
+        if ui.button(if hidden { "Show take lanes" } else { "Hide take lanes" }).clicked() {
+            if !state.takes_hidden.remove(&track) {
+                state.takes_hidden.insert(track);
+            }
+            ui.close();
+        }
+        ui.separator();
+    }
     let beat = state.menu_beat.unwrap_or(0.0);
     if ui.add_enabled(notes, egui::Button::new("Insert empty MIDI clip")).clicked() {
         let stack = state.stack_midi;
@@ -4261,6 +4499,28 @@ mod tests {
         assert!(tracks.iter().all(|l| state.height(l) == MIN_LANE));
         state.zoom_lanes(&timeline.lanes, f32::NAN, 0.0);
         assert!(tracks.iter().all(|l| state.height(l) == MIN_LANE));
+    }
+
+    #[test]
+    fn a_tracks_take_lanes_show_under_it_and_fold_away() {
+        let mut project = crate::demo::demo_project();
+        let lane = project.arrangement.lanes.iter().find(|l| l.track.is_some() && !l.clips.is_empty()).unwrap();
+        let (track, clip) = (lane.track.unwrap(), lane.clips[0].clone());
+        let take = |name: &str| suhina_engine::model::TakeLane {
+            track,
+            name: name.into(),
+            clips: vec![suhina_engine::model::Clip { id: ClipId::NONE, ..clip.clone() }],
+        };
+        project.arrangement.takes = vec![take("Take 1"), take("Take 2")];
+        let timeline = Timeline::build(&project, None);
+        let rows: Vec<(usize, &str)> = timeline.takes.iter().map(|t| (t.number, t.name.as_str())).collect();
+        assert_eq!(rows, [(1, "Take 1"), (2, "Take 2")], "numbered as take.comp names them");
+        assert_eq!(timeline.takes[0].clips.len(), 1);
+        let mut state = ArrangementViewState::default();
+        let automation = state.automation.height(track, &timeline.automation);
+        assert_eq!(state.below(track, &timeline), 2.0 * (TAKE_ROW + 1.0) + automation);
+        state.takes_hidden.insert(track);
+        assert_eq!(state.below(track, &timeline), automation, "folded away");
     }
 
     fn audio_clip() -> ClipBox {

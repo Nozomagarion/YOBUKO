@@ -1176,6 +1176,12 @@ impl Project {
                 }
             }
         }
+        for take in &self.arrangement.takes {
+            track_ref(take.track, &mut errors);
+            for clip in &take.clips {
+                content_ref(clip.content, &mut errors);
+            }
+        }
         for (index, marker) in self.arrangement.markers.iter().enumerate() {
             if !marker.is_valid() {
                 errors.push(ValidationError::BadMarker(index));

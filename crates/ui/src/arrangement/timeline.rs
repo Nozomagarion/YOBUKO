@@ -213,7 +213,25 @@ pub struct Timeline {
     pub tempo: Option<suhina_engine::model::TempoMap>,
     /// The parameters each track's automation lanes can show, with their points.
     pub automation: crate::arrangement::automation_lanes::Params,
+    /// The take lanes under tracks that recorded into the arrangement (`docs/spec/recording.md` ›
+    /// Take lanes), in the order they were recorded.
+    pub takes: Vec<TakeRow>,
+    /// The takes recording into the arrangement now, set by the app every frame (#909).
+    pub live_takes: Vec<suhina_session::LiveTake>,
 }
+
+/// One take lane: its track, its number on the track (from 1, as `take.comp` names it), its
+/// name and its clips.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TakeRow {
+    pub track: TrackId,
+    pub number: usize,
+    pub name: String,
+    pub clips: Vec<ClipBox>,
+}
+
+/// How many take lanes a track needs before they are shown.
+pub const TAKES_SHOWN_FROM: usize = 1;
 
 impl Lane {
     /// Where the track sits in the track list.
@@ -305,37 +323,7 @@ impl Timeline {
                     lane.clips
                         .iter()
                         .enumerate()
-                        .map(|(index, clip)| {
-                            let content = project.content(clip.content);
-                            let looped = clip.loop_range.is_some();
-                            let audio =
-                                content.is_some_and(|c| c.lanes.iter().any(|l| matches!(l.data, LaneData::Audio(_))));
-                            ClipBox {
-                                id: clip.id,
-                                color: clip.color.unwrap_or(track_color),
-                                stack_key: (clip.content.0, clip.start.to_bits()),
-                                earliest_start: if looped { 0.0 } else { (clip.start - clip.offset).max(0.0) },
-                                latest_end: content
-                                    .filter(|_| audio && !looped)
-                                    .map(|c| clip.start - clip.offset + c.length),
-                                index,
-                                start: clip.start,
-                                length: clip.length,
-                                name: content.map(|c| c.name.clone()).unwrap_or_default(),
-                                enabled: clip.enabled,
-                                fade_in: clip.fade_in,
-                                fade_out: clip.fade_out,
-                                fade_in_curve: clip.fade_in_curve,
-                                fade_out_curve: clip.fade_out_curve,
-                                audio: content
-                                    .is_some_and(|c| c.lanes.iter().any(|l| matches!(l.data, LaneData::Audio(_)))),
-                                audio_view: content.and_then(|c| audio_view(c, clip, project.transport.tempo_bpm)),
-                                notes: content.map(|c| note_marks(c, clip)).unwrap_or_default(),
-                                seams: loop_seams(clip),
-                                row: 0,
-                                rows: 1,
-                            }
-                        })
+                        .map(|(index, clip)| clip_box(project, clip, index, track_color))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -410,6 +398,7 @@ impl Timeline {
             .fold(0.0, f64::max);
         let main_volume_db =
             project.channels.iter().find(|c| c.role == ChannelRole::Master).map(|c| gain_to_db(c.volume));
+        let takes = take_rows(project);
         let mut timeline = Self {
             stack_rows,
             ara_notes: std::collections::HashMap::new(),
@@ -431,6 +420,8 @@ impl Timeline {
             overrides: false,
             waveforms: Arc::default(),
             automation: crate::arrangement::automation_lanes::Params::build(project),
+            takes,
+            live_takes: Vec::new(),
         };
         timeline.follow(monitor);
         timeline
@@ -577,6 +568,55 @@ fn holds(project: &Project, group: TrackId, track: TrackId) -> bool {
 pub(crate) fn inside_lanes<T: std::borrow::Borrow<Lane>>(lanes: &[T], index: usize) -> usize {
     let depth = lanes.get(index).map_or(0, |l| l.borrow().depth);
     lanes.iter().skip(index.saturating_add(1)).take_while(|l| l.borrow().depth > depth).count()
+}
+
+/// The take lanes of tracks with at least [`TAKES_SHOWN_FROM`] takes, numbered per track.
+fn take_rows(project: &Project) -> Vec<TakeRow> {
+    let mut rows = Vec::new();
+    for (position, track) in project.tracks.iter().enumerate() {
+        let takes: Vec<&suhina_engine::model::TakeLane> =
+            project.arrangement.takes.iter().filter(|t| t.track == track.id).collect();
+        if takes.len() < TAKES_SHOWN_FROM {
+            continue;
+        }
+        let color = track.color.unwrap_or_else(|| default_track_colour(position));
+        rows.extend(takes.into_iter().enumerate().map(|(i, take)| TakeRow {
+            track: track.id,
+            number: i + 1,
+            name: take.name.clone(),
+            clips: take.clips.iter().enumerate().map(|(index, clip)| clip_box(project, clip, index, color)).collect(),
+        }));
+    }
+    rows
+}
+
+/// How the view draws `clip`, the `index`th of its lane, on a track coloured `track_color`.
+fn clip_box(project: &Project, clip: &Clip, index: usize, track_color: Rgb) -> ClipBox {
+    let content = project.content(clip.content);
+    let looped = clip.loop_range.is_some();
+    let audio = content.is_some_and(|c| c.lanes.iter().any(|l| matches!(l.data, LaneData::Audio(_))));
+    ClipBox {
+        id: clip.id,
+        color: clip.color.unwrap_or(track_color),
+        stack_key: (clip.content.0, clip.start.to_bits()),
+        earliest_start: if looped { 0.0 } else { (clip.start - clip.offset).max(0.0) },
+        latest_end: content.filter(|_| audio && !looped).map(|c| clip.start - clip.offset + c.length),
+        index,
+        start: clip.start,
+        length: clip.length,
+        name: content.map(|c| c.name.clone()).unwrap_or_default(),
+        enabled: clip.enabled,
+        fade_in: clip.fade_in,
+        fade_out: clip.fade_out,
+        fade_in_curve: clip.fade_in_curve,
+        fade_out_curve: clip.fade_out_curve,
+        audio: content.is_some_and(|c| c.lanes.iter().any(|l| matches!(l.data, LaneData::Audio(_)))),
+        audio_view: content.and_then(|c| audio_view(c, clip, project.transport.tempo_bpm)),
+        notes: content.map(|c| note_marks(c, clip)).unwrap_or_default(),
+        seams: loop_seams(clip),
+        row: 0,
+        rows: 1,
+    }
 }
 
 /// What an audio clip needs to draw its waveform: the engine's mapping from beats to the file.

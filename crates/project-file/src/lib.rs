@@ -27,8 +27,8 @@ use suhina_model::{
     LaneId, LaunchMapping, LaunchMode, LaunchQuantization, LaunchSettings, Launcher, LauncherColumn, LoopRange,
     MAX_CHANGE_BEAT, MAX_INPUT_CHANNEL, MAX_TEMPO_CHANGES, MAX_TIME_SIGNATURE_CHANGES, Macro, MacroMapping,
     MappingSource, MappingTarget, Marker, MidiInput, MidiPort, Monitor, Note, Project, Rgb, Scale, ScaleMode, Scene,
-    SceneId, Send, Slot, StretchMode, TempoPoint, TimeSignature, TimeSignatureChange, Track, TrackId, Transport,
-    WarpMarker, automation, has_groups, valid_bpm,
+    SceneId, Send, Slot, StretchMode, TakeLane, TempoPoint, TimeSignature, TimeSignatureChange, Track, TrackId,
+    Transport, WarpMarker, automation, has_groups, valid_bpm,
 };
 
 /// The file extension, without the dot.
@@ -275,6 +275,21 @@ fn project_value(p: &Project) -> Value {
     if !p.arrangement.markers.is_empty() {
         arrangement["markers"] =
             p.arrangement.markers.iter().map(|m| json!({ "beat": number(m.beat), "name": m.name })).collect();
+    }
+    // Take lanes (#909), left out when there are none, so a project without is written as before.
+    if !p.arrangement.takes.is_empty() {
+        arrangement["takes"] = p
+            .arrangement
+            .takes
+            .iter()
+            .map(|t| {
+                json!({
+                    "track": t.track.0,
+                    "name": t.name,
+                    "clips": t.clips.iter().map(clip_value).collect::<Vec<_>>(),
+                })
+            })
+            .collect();
     }
     out.insert("arrangement".into(), arrangement);
     let mut launcher = json!({
@@ -917,7 +932,24 @@ fn read_project(value: &Value) -> Result<Project, ProjectFileError> {
                 }
                 markers.push(Marker { beat, name: text(m, "name", &at)? });
             }
-            let mut arrangement = Arrangement { lanes, markers, takes: Vec::new() };
+            let mut takes = Vec::new();
+            for (i, v) in list(a, "takes", "project.arrangement")?.iter().enumerate() {
+                let at = format!("project.arrangement.takes[{i}]");
+                let take = object(v, &at)?;
+                let clips = list(take, "clips", &at)?
+                    .iter()
+                    .enumerate()
+                    .map(|(j, c)| read_clip(c, &format!("{at}.clips[{j}]")))
+                    .collect::<Result<Vec<_>, _>>()?;
+                // A take's clips have no ids: commands name a take by its track and number.
+                let clips = clips.into_iter().map(|c| Clip { id: ClipId::NONE, ..c }).collect();
+                takes.push(TakeLane {
+                    track: TrackId(whole(take, "track", &at)?),
+                    name: text(take, "name", &at)?,
+                    clips,
+                });
+            }
+            let mut arrangement = Arrangement { lanes, markers, takes };
             arrangement.sort_markers();
             arrangement
         }

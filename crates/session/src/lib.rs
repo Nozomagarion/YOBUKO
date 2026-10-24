@@ -65,7 +65,7 @@ pub use rack::{
     BlockCounts, Hosted, OfflinePlugins, PluginEnv, PluginProgress, PluginReport, PluginStatus, ProcessGroup,
     is_instrument, plugin_group, start_offline,
 };
-pub use recording::{COUNT_IN_BARS, RECORDED_FOLDER};
+pub use recording::{COUNT_IN_BARS, LiveTake, RECORDED_FOLDER};
 pub use relink::COLLECTED;
 pub use relink::{MAX_RELINK, search as find_candidates};
 pub use soundmap::{scope_files, sound_map_commands};

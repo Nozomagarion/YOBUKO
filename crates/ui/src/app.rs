@@ -2942,6 +2942,8 @@ impl App {
                                 // Its progress moves without input.
                                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
                             }
+                            // Takes recording into the arrangement grow on their lanes (#909).
+                            timeline.live_takes = session.live_takes();
                             timeline.input_channels = session
                                 .player()
                                 .and_then(suhina_session::Player::output_info)
