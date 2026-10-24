@@ -204,6 +204,8 @@ pub fn background_rounded(painter: &Painter, rect: Rect, radius: f32) -> bool {
         if !style.authored.radius {
             style.radius = radius;
         }
+        // A shadow follows the surface's corners, never rounder than the surface can be.
+        style.radius = style.radius.min(rect.width().min(rect.height()) / 2.0).max(0.0);
         background_with(painter, rect, &style)
     })
 }

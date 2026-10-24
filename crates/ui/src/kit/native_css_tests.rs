@@ -1191,3 +1191,15 @@ fn device_sliders_take_parts_and_knobs_from_the_sheet_and_a_panel_colour_spares_
     });
     assert_ne!(fill, Some(egui::Color32::from_rgb(0x10, 0x20, 0x30)), "the rails keep their own colour");
 }
+
+#[test]
+fn a_round_button_s_shadow_is_round() {
+    let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(24.0, 24.0));
+    let shapes = painted("#control-stop { border-radius: 50%; background-color: #FF0000; }", |ui| {
+        let response = ui.interact(field, egui::Id::new("stop"), egui::Sense::click());
+        let _stop = super::super::style_class::enter_named_response("button", "stop", &response);
+        crate::kit::widgets::button_surface(ui.painter(), field, &response, false, egui::Color32::GRAY, 0.0);
+    });
+    let button = rects(&shapes).into_iter().find(|r| r.fill == egui::Color32::RED).expect("the button");
+    assert_eq!(button.corner_radius.nw, 12, "50 % is round");
+}

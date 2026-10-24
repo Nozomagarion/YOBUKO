@@ -247,6 +247,9 @@ pub(super) fn computed(style: &ComputedStyle) -> Computed {
     let radius = match style.get(Property::Radius) {
         Value::Length(Length::Px(value)) => value,
         Value::Length(Length::Em(value)) => value * font,
+        // A share of the size, which the painter learns only later: 50 % or more is round
+        // (clamped to half the shorter side there), less is that share of 256 points.
+        Value::Length(Length::Percent(value)) => value * 256.0,
         _ => 0.0,
     };
     let foreground = match style.get(Property::Color) {
