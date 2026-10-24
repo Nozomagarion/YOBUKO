@@ -294,8 +294,9 @@ fn on_envelope(lane: &mut AutomationLane, beat: f64, target: &Target) -> Result<
     let Some((i, a, b)) = segment.filter(|(_, a, b)| !stepped && b.beat > a.beat && a.value != b.value) else {
         return Ok(AutomationPoint::new(beat, value));
     };
+    // At the segment's first point's beat the new point starts the segment, so it takes its curve.
     let Some(cut) = a.curve.split((beat - a.beat) / (b.beat - a.beat)) else {
-        return Ok(AutomationPoint::new(beat, value));
+        return Ok(AutomationPoint { beat, value, curve: a.curve });
     };
     let (from, to) = (target.kind.position(a.value), target.kind.position(b.value));
     if let Some(first) = lane.points.get_mut(i) {

@@ -83,7 +83,8 @@ A point placed on a bent segment keeps the sound exactly (`Curve::split`, `autom
 without a value): at share x of the segment's time the curve's parameter t is where its time
 share is x; the new point's value is the parameter's value at the curve's position there, and
 each half gets the de Casteljau subdivision at t, scaled to its own box. The halves are no longer
-mirrored. A half that does not move is straight.
+mirrored. A half that does not move is straight. A point added at another point's beat takes that
+point's curve, since it starts the segment.
 
 ## Dragging a curve
 

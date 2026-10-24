@@ -130,3 +130,32 @@ fn the_volume_fader_is_40_db_per_travel_above_minus_18_db_and_falls_faster_below
     let p = points(&[(0.0, 0.3), (2.0, 0.3)]);
     assert_eq!(value_at(&p, 1.0, false, &VolumeTaper), Some(0.3));
 }
+
+/// A segment of any bend, or a lopsided one, split anywhere plays as it did, and a straight one
+/// splits into straight halves; a cut at an end is no cut.
+#[test]
+fn a_split_segment_plays_as_the_whole_did() {
+    let mut curves: Vec<Curve> = [-1.0, -0.6, -0.4, 0.0, 0.3, 0.6, 1.0].into_iter().map(Curve::bend).collect();
+    curves.push(curve([0.1, 0.7, 0.825, 0.525]));
+    for c in curves {
+        for t in [0.01, 0.125, 0.375, 0.5, 0.75, 0.99] {
+            let cut = c.split(t).unwrap();
+            let whole = [AutomationPoint { beat: 0.0, value: 0.0, curve: c }, AutomationPoint::new(8.0, 1.0)];
+            let halves = [
+                AutomationPoint { beat: 0.0, value: 0.0, curve: cut.before },
+                AutomationPoint { beat: 8.0 * t, value: cut.share, curve: cut.after },
+                AutomationPoint::new(8.0, 1.0),
+            ];
+            for beat in (0..=64).map(|q| q as f64 / 8.0) {
+                let (old, new) = (value_at(&whole, beat, false, &Plain), value_at(&halves, beat, false, &Plain));
+                assert!((old.unwrap() - new.unwrap()).abs() < 1e-9, "{c:?} at {t}, beat {beat}");
+            }
+        }
+    }
+    let straight = Curve::STRAIGHT.split(0.3);
+    assert_eq!(straight, Some(Split { share: 0.3, before: Curve::STRAIGHT, after: Curve::STRAIGHT }));
+    assert_eq!(
+        (Curve::bend(0.5).split(0.0), Curve::bend(0.5).split(1.0), Curve::bend(0.5).split(f64::NAN)),
+        (None, None, None)
+    );
+}
