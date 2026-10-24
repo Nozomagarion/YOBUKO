@@ -251,7 +251,9 @@ It acts with a short-lived token of the GitHub App that also pushes the generate
 `GITHUB_TOKEN`, and those on `main` must run after every merge. Setup, once: the app has Repository
 permissions › **Contents**, **Pull requests** and **Issues**: Read and write (the queue merges as the
 app, and GitHub closes the issues a description closes, `Closes #N`, as the one who merged: without
-Issues they stay open, and nothing reports it); its public Client ID is the
+Issues they stay open, and nothing reports it). A permission added to the app reaches its token only
+once the installation accepts it: Organization settings › GitHub Apps › suhina-docs-bot ›
+**Configure**, then **Review request** › **Accept new permissions**. Its public Client ID is the
 `DOCS_BOT_CLIENT_ID` variable and its private key the `DOCS_BOT_PRIVATE_KEY` secret in the
 `docs-bot` environment, which `pull_request_target` may use
 because it runs on `main`; and Settings › General › **Allow auto-merge** is on. Without that setting the

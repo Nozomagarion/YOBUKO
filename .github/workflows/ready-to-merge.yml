@@ -32,6 +32,8 @@ name: Ready to merge
 # (pull_request_target runs on main, which the environment allows); Settings › General › Allow
 # auto-merge is on. The queue merges as the app, and GitHub closes the issues a description
 # closes (`Closes #N`) as the one who merged: without Issues, they stay open and nothing reports it.
+# A permission added to the app reaches the token only once the organisation's installation
+# accepts it (Settings › GitHub Apps › suhina-docs-bot › Configure › Accept new permissions).
 
 on:
   pull_request_target:
