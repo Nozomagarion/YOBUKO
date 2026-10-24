@@ -513,7 +513,10 @@ directly or time-stretched, and launched clips).
 ## Play position
 
 The transport starts from the **play start marker**, a position in beats (0 when a project
-opens). While stopped, the playhead sits on the marker.
+opens). While stopped, the playhead sits on the marker. Setting the marker and moving playback
+are two actions (#657): a click in the tracks' area (an empty lane, a clip's body) sets the
+marker, on the grid (Alt: free), and never moves playback while it plays; a click on the ruler is
+a seek, which while playing waits for the next launch boundary (`transport.jump`).
 
 **Where other DAWs stand** (their public manuals, October 2026): every one starts playback from a
 start position the user sets; they differ on the first Stop.
@@ -534,6 +537,8 @@ setting, and a second Stop goes to the beginning.
 | Command | Does |
 |---|---|
 | `transport.setPosition {beats}` | Moves the marker to `beats` (0 … 120 000; a negative, too large or non-numeric value is an error). Stopped, the next `transport.play` starts there. Playing, playback jumps there at once. |
+| `transport.setStart {beats}` | Moves the marker to `beats` as `transport.setPosition` does, but while playing, playback goes on where it is; the next start begins at the marker (#657). A click in the tracks' area runs it. |
+| `transport.jump {beats}` | A deliberate seek (#657). Playing, playback jumps to `beats` at the next boundary of the global launch quantization (the control bar's value; at once with None), and the marker moves there then; until it does the jump is pending: the ruler marks where it goes and the Play button flashes, a second seek replaces it and Stop cancels it. Stopped, the marker moves there. At 120 BPM in 4/4 with 1 Bar, a seek half-way through a bar waits about a second. A click on the ruler runs it. |
 | `transport.play {from?, track?, index?}` | `from: "marker"` (the default): starts the transport from the marker; nothing happens while it runs. Launching a clip or scene while stopped also starts the arrangement from the marker. `from: "clip"`: `track` and `index` (from `project.clips`) name an arrangement clip; the marker moves to that clip's start and the transport starts there, or, while it runs, jumps there as `transport.setPosition` does. A missing or unknown clip, a track without an arrangement lane, another `from`, or `track`/`index` without `from: "clip"` is an error and changes nothing. |
 | `transport.stop {return?}` | Stops everything at once. `return: "marker"` (the default): the playhead goes back to the marker. `return: "here"`: the marker moves to where the playhead stopped, so the next start carries on from there. Either way, stopping while already stopped moves the marker to beat 0. |
 

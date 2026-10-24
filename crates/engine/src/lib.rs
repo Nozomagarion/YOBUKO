@@ -364,6 +364,9 @@ pub struct Renderer {
     sample_rate: u32,
     graph: Box<Graph>,
     next_event: usize,
+    /// A jump asked for on the playback strip: where it goes and the launcher beat it waits for
+    /// (#657).
+    pending_jump: Option<(f64, f64)>,
     /// The transport started or jumped: the notes that span the playhead start on the next
     /// frame, as if their beginning were there (`docs/spec/arrangement-editing.md` › Play
     /// position).
@@ -509,6 +512,7 @@ impl Renderer {
             graph,
             next_event: 0,
             chase: false,
+            pending_jump: None,
             voices: [Voice::default(); MAX_VOICES],
             next_audio: 0,
             active_audio: [0; MAX_AUDIO_VOICES],
@@ -774,12 +778,15 @@ impl Renderer {
         while !out.is_empty() {
             self.wrap_loop();
             self.drain_commands();
+            self.jump_if_due();
             // A count-in that has counted its beats starts the transport on this frame.
             self.end_count_in();
             let frames = (out.len() / 2).min(MAX_BLOCK);
             self.wait_to_start(frames as u64);
             let frames = self.frames_to_loop_end().map_or(frames, |to_end| frames.min(to_end.max(1)));
             let frames = self.frames_to_count_in_end().map_or(frames, |to_end| frames.min(to_end.max(1)));
+            // A pending jump lands on its boundary's frame (#657).
+            let frames = self.frames_to_jump().map_or(frames, |to_jump| frames.min(to_jump.max(1)));
             let (chunk, rest) = std::mem::take(&mut out).split_at_mut(frames * 2);
             let (cue_chunk, cue_after) = split_cue(cue, chunk.len());
             self.process_chunk(chunk, cue_chunk);

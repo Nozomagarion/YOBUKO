@@ -149,7 +149,14 @@ impl App {
         let running = motion::toward(ui.ctx(), response.id.with("running"), grid.running, motion::VALUE);
         let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
         painter.rect_filled(play, 0.0, motion::mix(hover, theme::control_active(), running));
-        let glyph = motion::mix(theme::text_primary(), theme::accent(), running);
+        // A seek from the ruler waiting for its boundary flashes the triangle (#657).
+        let pending = self.session().and_then(|s| s.player()).and_then(|p| p.monitor().pending_jump()).is_some();
+        let flash = pending && (ui.input(|i| i.time) * 4.0).floor() as i64 % 2 == 0;
+        if pending {
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(125));
+        }
+        let glyph =
+            if flash { theme::text_primary() } else { motion::mix(theme::text_primary(), theme::accent(), running) };
         let c = play.center();
         painter.add(egui::Shape::convex_polygon(
             vec![c + Vec2::new(-3.5, -5.0), c + Vec2::new(5.0, 0.0), c + Vec2::new(-3.5, 5.0)],

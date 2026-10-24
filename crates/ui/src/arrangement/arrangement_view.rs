@@ -529,7 +529,8 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     painter.hline(area.x_range(), marker_row.bottom() + 0.5, theme::hairline(theme::border_strong()));
 
     // A click on the ruler moves the play start marker there, on the clip grid (Alt: free); while
-    // playing, playback jumps there (`docs/spec/arrangement-editing.md` › Play position).
+    // playing, playback jumps there at the next launch boundary (`docs/spec/arrangement-editing.md`
+    // › Play position).
     // The time selection shows along the ruler as well: which span is selected now.
     if let Some(selection) = &state.time_selection {
         let x = |beat: f64| time.left() + beat as f32 * state.beat_width - state.scroll.x;
@@ -546,12 +547,24 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     }
     let ruler_response = ui.interact(ruler, Id::new("arrangement-ruler"), Sense::click_and_drag());
     ruler_response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Ruler"));
+    // The ruler is the deliberate seek: while playing, the jump waits for the next boundary of the
+    // global launch quantisation, and shows where it goes until then (#657).
     if ruler_response.clicked()
         && let Some(pointer) = ruler_response.interact_pointer_pos()
     {
         let free = ui.input(|i| i.modifiers.alt);
         let raw = f64::from((pointer.x - time.left() + state.scroll.x) / state.beat_width);
-        actions.push(Action::new("transport.setPosition", json!({ "beats": ruler_beat(raw, grid, free) })));
+        actions.push(Action::new("transport.jump", json!({ "beats": ruler_beat(raw, grid, free) })));
+    }
+    if let Some(pending) = timeline.pending_jump {
+        let x = time.left() + pending as f32 * state.beat_width - state.scroll.x;
+        if time.x_range().contains(x) {
+            // Blinking while it waits, as the Play button does.
+            let on = (ui.input(|i| i.time) * 4.0).floor() as i64 % 2 == 0;
+            let colour = if on { theme::accent() } else { theme::accent().gamma_multiply(0.4) };
+            painter.vline(x, ruler.y_range(), egui::Stroke::new(2.0, colour));
+            ui.ctx().request_repaint_after(std::time::Duration::from_millis(125));
+        }
     }
     // A drag along the ruler selects that time over every track (on the grid; Alt: free).
     if ruler_response.drag_started_by(egui::PointerButton::Primary)
@@ -894,14 +907,14 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
                 state.clear_selected_clip();
             }
             state.time_selection = None;
-            // The click also moves the play start marker there, on the clip grid (Alt: free), as
-            // a click on the ruler does; while playing, playback jumps there.
+            // The click also moves the play start marker there, on the clip grid (Alt: free);
+            // while playing, playback goes on where it is and the next start begins there (#657).
             if let Some(pointer) = body.interact_pointer_pos() {
                 let free = ui.input(|i| i.modifiers.alt);
                 let raw = f64::from((pointer.x - time.left() + state.scroll.x) / state.beat_width);
                 let beat = ruler_beat(raw, grid, free);
                 state.insert = Some((clips_lane.track, beat));
-                actions.push(Action::new("transport.setPosition", json!({ "beats": beat })));
+                actions.push(Action::new("transport.setStart", json!({ "beats": beat })));
             }
         }
         if (lane.notes || lane.plays_audio)

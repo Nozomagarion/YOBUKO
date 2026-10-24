@@ -1473,3 +1473,39 @@ fn the_edit_keys_copy_cut_paste_and_duplicate_selected_tracks() {
     let drums = after.iter().position(|n| n == "Drums").unwrap();
     assert_eq!(after.get(drums + 1).map(String::as_str), Some("Bass"), "{after:?}");
 }
+
+/// While playing, a click in a clip's body moves the play start marker and leaves playback
+/// where it is; the ruler's seek waits for the next bar (#657).
+#[test]
+fn a_click_in_the_tracks_while_playing_moves_the_marker_not_playback() {
+    let mut renderer =
+        suhina_engine::Renderer::stopped(&demo_project(), &suhina_engine::AudioPool::new(), 48_000).unwrap();
+    let mut harness = arrangement_app_with_engine(&mut renderer);
+    let monitor = renderer.monitor();
+    harness.get_by_label("Play").click();
+    harness.run_steps(2);
+    for _ in 0..10 {
+        render_a_block(&mut renderer);
+    }
+    let body = harness.get_by_label("Clip Beat B on Drums at bar 17").rect().center();
+    harness.hover_at(body);
+    harness.run_steps(2);
+    harness.drag_at(body);
+    harness.drop_at(body);
+    harness.run_steps(2);
+    render_a_block(&mut renderer);
+    assert!(monitor.running());
+    assert!(monitor.beat() < 4.0, "playback goes on: {}", monitor.beat());
+    assert!(monitor.start_beat() >= 64.0, "the marker moved: {}", monitor.start_beat());
+    // The ruler's seek waits for the next bar of the launch quantisation (1 bar).
+    let ruler = harness.get_by_label("Ruler").rect();
+    let at = egui::pos2(ruler.left() + 130.0, ruler.center().y);
+    harness.hover_at(at);
+    harness.run_steps(2);
+    harness.drag_at(at);
+    harness.drop_at(at);
+    harness.run_steps(2);
+    render_a_block(&mut renderer);
+    assert_eq!(monitor.pending_jump(), Some(16.0));
+    assert!(monitor.beat() < 4.0, "{}", monitor.beat());
+}

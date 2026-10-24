@@ -270,7 +270,8 @@ pub(super) fn clip_box<'a>(
                 let beat = ruler_beat(raw, grid, free);
                 state.picked_whole = false;
                 state.insert = Some((lane.track, beat));
-                actions.push(Action::new("transport.setPosition", json!({ "beats": beat })));
+                // The next start begins there; playback is not moved (#657).
+                actions.push(Action::new("transport.setStart", json!({ "beats": beat })));
             }
             _ => {
                 state.picked_whole = true;

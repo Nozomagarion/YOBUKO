@@ -195,6 +195,8 @@ pub struct Timeline {
     pub beat: f64,
     /// The play start marker: where the transport starts, in beats.
     pub start_beat: f64,
+    /// Where a seek from the ruler goes while it waits for its launch boundary (#657).
+    pub pending_jump: Option<f64>,
     /// The arrangement's markers, in beat order.
     pub markers: Vec<MarkerFlag>,
     /// The loop region, when the project has one (on or off).
@@ -415,6 +417,7 @@ impl Timeline {
             running: false,
             beat: 0.0,
             start_beat: 0.0,
+            pending_jump: None,
             markers,
             loop_brace,
             overrides: false,
@@ -456,6 +459,7 @@ impl Timeline {
         self.running = running;
         self.beat = beats(beat);
         self.start_beat = beats(start);
+        self.pending_jump = monitor.and_then(LauncherMonitor::pending_jump).filter(|_| running);
         // Which tracks play launched clips instead of their arrangement clips: their lanes
         // dim, and the arrangement shows Back to arrangement while any does.
         for lane in &mut self.lanes {

@@ -80,6 +80,22 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "transport.setStart",
+        label: "Move the play start marker, where the next start begins; while playing, playback goes on where it is",
+        params: &[param("beats", ParamType::Number, "beats from the beginning, 0 … 120000")],
+        kind: CommandKind::Transport,
+        run: set_start,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "transport.jump",
+        label: "Seek: while playing, playback jumps to a beat at the next boundary of the global launch quantization (at once with none), the play start marker with it; stopped, the marker moves there",
+        params: &[param("beats", ParamType::Number, "beats from the beginning, 0 … 120000")],
+        kind: CommandKind::Transport,
+        run: jump,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "transport.followTempoMap",
         label: "Play the arrangement's tempo and time signature again after a launched scene's tempo or time signature took over; starting the transport does the same",
         params: &[],
@@ -198,6 +214,24 @@ fn set_position(session: &mut Session, params: &Value) -> Result<Value, CommandE
     }
     send(session, LaunchCommand::SetPosition { beat: beats })?;
     Ok(json!({ "start_beat": beats }))
+}
+
+fn set_start(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let beats = number(params, "beats")?;
+    if !(0.0..=MAX_START_BEAT).contains(&beats) {
+        return Err(format!("beats must be between 0 and {MAX_START_BEAT}, got {beats}").into());
+    }
+    send(session, LaunchCommand::SetStart { beat: beats })?;
+    Ok(json!({ "start_beat": beats }))
+}
+
+fn jump(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let beats = number(params, "beats")?;
+    if !(0.0..=MAX_START_BEAT).contains(&beats) {
+        return Err(format!("beats must be between 0 and {MAX_START_BEAT}, got {beats}").into());
+    }
+    send(session, LaunchCommand::JumpOnGrid { beat: beats })?;
+    Ok(json!({ "beats": beats }))
 }
 
 fn follow_tempo_map(session: &mut Session, _: &Value) -> Result<Value, CommandError> {
