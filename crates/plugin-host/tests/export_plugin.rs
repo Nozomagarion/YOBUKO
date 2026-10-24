@@ -106,6 +106,7 @@ fn project() -> Project {
                 clips: vec![Clip::new(ContentId(1), 0.0, 4.0)],
             }],
             markers: Vec::new(),
+            takes: Vec::new(),
         },
         ..Project::default()
     }

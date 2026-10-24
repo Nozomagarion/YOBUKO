@@ -811,6 +811,21 @@ pub struct Arrangement {
     pub lanes: Vec<ArrangementLane>,
     /// Named positions on the timeline, sorted by beat ([`Arrangement::sort_markers`]).
     pub markers: Vec<Marker>,
+    /// Recorded passes kept under their tracks (take lanes), oldest first: what a recording
+    /// into the arrangement played, pass by pass, so parts of each can be put together on the
+    /// track (comping, ADR 0001 › Amendment: take lanes). They do not play.
+    pub takes: Vec<TakeLane>,
+}
+
+/// One recorded pass of a track: its clips, on the arrangement's beats. Their clips have no ids
+/// ([`ClipId::NONE`]): commands name a take by its track and its number, and comping copies a
+/// part of one onto the track as a new clip.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TakeLane {
+    pub track: TrackId,
+    /// Its name, as the window shows it ("Take 3").
+    pub name: String,
+    pub clips: Vec<Clip>,
 }
 
 impl Arrangement {
@@ -1350,6 +1365,7 @@ mod tests {
                     clips: vec![clip(1, 0.0)],
                 }],
                 markers: Vec::new(),
+                takes: Vec::new(),
             },
             launcher: Launcher {
                 mappings: Vec::new(),
@@ -1394,6 +1410,7 @@ mod tests {
                     clips: vec![clip(1, 0.0), clip(1, 4.0)],
                 }],
                 markers: Vec::new(),
+                takes: Vec::new(),
             },
             ..Project::default()
         };
@@ -1420,6 +1437,7 @@ mod tests {
                     clips: vec![clip(3, 0.0)],
                 }],
                 markers: Vec::new(),
+                takes: Vec::new(),
             },
             ..Project::default()
         };
@@ -1505,6 +1523,7 @@ mod tests {
                     clips: vec![with(1.0, 1.0), with(3.0, 3.0)],
                 }],
                 markers: Vec::new(),
+                takes: Vec::new(),
             },
             ..Project::default()
         };
@@ -1564,6 +1583,7 @@ mod tests {
             arrangement: Arrangement {
                 lanes: Vec::new(),
                 markers: vec![Marker::new(0.0, "ok"), Marker::new(-1.0, "before"), Marker::new(f64::NAN, "nan")],
+                takes: Vec::new(),
             },
             ..Project::default()
         };

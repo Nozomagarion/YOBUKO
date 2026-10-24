@@ -213,7 +213,7 @@ impl Reader {
             tracks,
             channels,
             contents: std::mem::take(&mut self.contents),
-            arrangement: Arrangement { lanes, markers: self.markers(live_set) },
+            arrangement: Arrangement { lanes, markers: self.markers(live_set), takes: Vec::new() },
             launcher: Launcher { scenes, columns, mappings: Vec::new() },
             extensions: Extensions::default(),
             default_scale: None,

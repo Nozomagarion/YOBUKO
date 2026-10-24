@@ -213,6 +213,7 @@ fn everything() -> Project {
                 },
             ],
             markers: vec![Marker::new(0.0, "Intro"), Marker::new(16.0, "Verse"), Marker::new(16.0, "")],
+            takes: Vec::new(),
         },
         launcher: Launcher {
             mappings: vec![

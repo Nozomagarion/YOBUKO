@@ -84,6 +84,7 @@ fn project(clip: bool) -> Project {
                 ..ArrangementLane::default()
             }],
             markers: Vec::new(),
+            takes: Vec::new(),
         },
         ..Project::default()
     }

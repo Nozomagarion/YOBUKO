@@ -144,6 +144,7 @@ fn project(length: f64, two: bool, devices: Vec<Device>) -> Project {
                 }],
             }],
             markers: Vec::new(),
+            takes: Vec::new(),
         },
         ..Project::default()
     }

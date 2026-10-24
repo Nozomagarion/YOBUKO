@@ -105,7 +105,9 @@ pub use plugin::{
 };
 pub use plugin_params::{MAX_BLOCK_PARAMS, ParamEvent, RAMP_STEP, param_id};
 pub use preview::{PreviewMonitor, PreviewNote, PreviewNotes, preview_notes};
-pub use record::{RECORD_CHUNK, RECORD_CHUNKS, RECORD_NOTES, RecordReceiver, RecordedAudio, RecordedNote};
+pub use record::{
+    RECORD_CHUNK, RECORD_CHUNKS, RECORD_NOTES, RecordReceiver, RecordedAudio, RecordedJump, RecordedNote,
+};
 use stretch::StretchVoice;
 pub use suhina_device_api::NoteEvent as DeviceEvent;
 use suhina_device_api::{MusicalScale, ProcessContext};
@@ -1891,6 +1893,7 @@ mod tests {
                     clips,
                 }],
                 markers: Vec::new(),
+                takes: Vec::new(),
             },
             ..Project::default()
         }

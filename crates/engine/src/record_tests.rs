@@ -341,3 +341,25 @@ fn a_full_ring_counts_what_it_dropped() {
     assert!(out.iter().all(|s| s.is_finite()));
     assert_eq!(recorder.lost().1, (4 * BLOCK) as u64, "what found the ring full is counted");
 }
+
+#[test]
+fn a_jump_of_the_playhead_while_recording_goes_out_with_its_frame_and_beats() {
+    let (mut renderer, mut controller, mut live, mut recorder) = armed();
+    controller.send(LaunchCommand::Play).unwrap();
+    controller.send(LaunchCommand::SetRecording { on: true }).unwrap();
+    blocks(&mut renderer, 8, BLOCK);
+    assert!(recorder.next_jump().is_none(), "playing on is no jump");
+    controller.send(LaunchCommand::SetPosition { beat: 0.5 }).unwrap();
+    blocks(&mut renderer, 2, BLOCK);
+    let jump = recorder.next_jump().expect("the jump back");
+    assert!((jump.beat - 0.5).abs() < 1e-9, "{jump:?}");
+    assert!([8 * BLOCK, 9 * BLOCK].contains(&(jump.position as usize)), "{jump:?}");
+    let at = beats(jump.position as usize);
+    assert!((jump.from - at).abs() < 1e-6, "where it would have been: {jump:?}");
+    assert!(recorder.next_jump().is_none());
+    // A note after the jump carries a frame past it, so it is known to be in the second pass.
+    live.send(LiveEvent::NoteOn { key: 60, velocity: 0.5 });
+    blocks(&mut renderer, 1, BLOCK);
+    let got = notes(&mut recorder);
+    assert!(got.first().is_some_and(|n| n.position >= jump.position), "{got:?}");
+}

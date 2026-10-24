@@ -39,6 +39,7 @@ fn project_built() -> Project {
                 clips: vec![clip(0.0), clip(8.0)],
             }],
             markers: Vec::new(),
+            takes: Vec::new(),
         },
         ..Project::default()
     }

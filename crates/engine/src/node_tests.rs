@@ -64,6 +64,7 @@ fn tree(group_devices: Vec<Device>, premaster_devices: Vec<Device>, master_devic
                 })
                 .collect(),
             markers: Vec::new(),
+            takes: Vec::new(),
         },
         ..Project::default()
     }

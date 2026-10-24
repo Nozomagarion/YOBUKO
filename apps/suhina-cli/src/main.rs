@@ -1029,6 +1029,7 @@ fn demo_project() -> Project {
                 },
             ],
             markers: Vec::new(),
+            takes: Vec::new(),
         },
         ..Project::default()
     }

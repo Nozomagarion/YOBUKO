@@ -102,6 +102,7 @@ fn project_built() -> Project {
                 }],
             }],
             markers: Vec::new(),
+            takes: Vec::new(),
         },
         ..Project::default()
     }

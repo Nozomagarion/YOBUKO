@@ -917,7 +917,7 @@ fn read_project(value: &Value) -> Result<Project, ProjectFileError> {
                 }
                 markers.push(Marker { beat, name: text(m, "name", &at)? });
             }
-            let mut arrangement = Arrangement { lanes, markers };
+            let mut arrangement = Arrangement { lanes, markers, takes: Vec::new() };
             arrangement.sort_markers();
             arrangement
         }

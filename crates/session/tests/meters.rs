@@ -51,6 +51,7 @@ fn project_built(volume: f64) -> Project {
                 })
                 .collect(),
             markers: Vec::new(),
+            takes: Vec::new(),
         },
         ..Project::default()
     }

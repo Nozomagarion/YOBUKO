@@ -53,6 +53,7 @@ pub(crate) fn project(notes: Vec<Note>, length: f64, devices: Vec<Device>) -> Pr
                 clips: vec![clip(0.0, false)],
             }],
             markers: Vec::new(),
+            takes: Vec::new(),
         },
         launcher: Launcher {
             mappings: Vec::new(),
