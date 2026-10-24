@@ -285,3 +285,35 @@ fn the_device_list_is_as_tall_on_a_strip_without_sends() {
         );
     }
 }
+
+#[test]
+fn a_send_takes_its_class_and_its_own_id() {
+    use crate::interaction::grid::Grid;
+    use crate::kit::{native_css, skin};
+    let grid = Grid::build(&crate::demo::demo_project(), None);
+    let column = grid.columns.iter().find(|c| !c.sends.is_empty()).expect("the demo has a track with sends");
+    for (css, colour) in [
+        (".send { background-color: #00FF00; }", Color32::from_rgb(0, 0xFF, 0)),
+        (".send { background-color: #00FF00; } #mixer-send-1 { background-color: #FF0000; }", Color32::RED),
+    ] {
+        let ctx = egui::Context::default();
+        theme::install(&ctx);
+        skin::configure(&skin::Skin { css: Some(css.into()), ..Default::default() });
+        let rect = Rect::from_min_size(Pos2::new(20.0, 20.0), Vec2::new(116.0, 400.0));
+        let mut state = SessionViewState::default();
+        let mut found = false;
+        for frame in 0..3 {
+            let mut output = ctx.run_ui(egui::RawInput { time: Some(frame as f64 * 0.01), ..Default::default() }, |ui| {
+                let _frame = native_css::frame(ui);
+                show(ui, ui.painter(), rect, column, &[], 1, 0, &mut state, Id::new("send-strip"), &mut Vec::new());
+            });
+            found = output
+                .shapes
+                .iter()
+                .any(|shape| matches!(&shape.shape, egui::Shape::Rect(shape) if shape.fill == colour));
+            output.textures_delta.clear();
+        }
+        assert!(found, "{css}");
+    }
+    skin::configure(&skin::Skin::default());
+}

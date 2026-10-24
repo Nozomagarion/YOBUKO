@@ -56,6 +56,9 @@ pub const OWN_ROLES: &[&str] = &[
     "volume.fill",
     "pan.track",
     "pan.fill",
+    // A send's tile and its level rail.
+    "send",
+    "send.fill",
     // A track's artwork in one view only, over `track.name` and `track.body`.
     "track.name.session",
     "track.name.mixer",

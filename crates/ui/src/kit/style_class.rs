@@ -49,6 +49,7 @@ pub const CLASSES: &[&str] = &[
     "fader",
     "fader-scale",
     "pan",
+    "send",
     "fader-cap",
     "fader-rail",
     "knob",

@@ -454,6 +454,12 @@ fn element_id(node: &StyleNode) -> String {
     {
         return name.clone();
     }
+    // A mixer send by its place: `#mixer-send-1` is the first.
+    if node.class == "send"
+        && let Some(name) = node.name.as_deref().filter(|name| name.starts_with("mixer-send-"))
+    {
+        return name.to_owned();
+    }
     if node.class == "popup"
         && let Some(name) = node.name.as_deref().filter(|name| *name == "metronome-level")
     {

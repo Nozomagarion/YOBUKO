@@ -1294,8 +1294,38 @@ fn send_knobs(
             _ => committed.unwrap_or(level),
         };
         let position = ((shown - VOLUME_RANGE.0) / (VOLUME_RANGE.1 - VOLUME_RANGE.0)) as f32;
-        let pointer = motion::mix(theme::text_value(), theme::text_primary(), widgets::hover(ui, &response));
-        crate::kit::mixer_controls::send_field(&painter, rect, &letter, shown, send.pre_fader, pointer, position);
+        // `.send` styles every send, `#mixer-send-N` one of them; `--suhina-appearance: knob`
+        // draws it as a knob.
+        let _style = crate::kit::style_class::enter_named_response("send", &name, &response);
+        let pointer = crate::kit::style_class::foreground(motion::mix(
+            theme::text_value(),
+            theme::text_primary(),
+            widgets::hover(ui, &response),
+        ));
+        if crate::kit::style_class::knob_preference(false) {
+            let size = (rect.height() - 10.0).min(rect.width()).max(8.0);
+            widgets::knob(
+                &painter,
+                Pos2::new(rect.center().x, rect.top() + size / 2.0),
+                size,
+                position,
+                pointer,
+                Some(&response),
+            );
+            widgets::text_in(
+                &painter,
+                Rect::from_min_max(Pos2::new(rect.left(), rect.top() + size), rect.max),
+                Align2::CENTER_CENTER,
+                &format!("{letter} {}", widgets::format_db(shown)),
+                theme::mono_font(7.0),
+                pointer,
+            );
+        } else {
+            let state = crate::kit::skin::State::response(&response, false);
+            crate::kit::native_css::surface(&painter, rect, 2.0, egui::Color32::TRANSPARENT);
+            crate::kit::skin::paint(&painter, rect, "send", state, pointer, 0.0);
+            crate::kit::mixer_controls::send_field(&painter, rect, &letter, shown, send.pre_fader, pointer, position);
+        }
     }
     sending
 }

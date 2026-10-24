@@ -145,7 +145,10 @@ pub fn send_field(
     let quiet = motion::mix(theme::control_background(), pointer, 0.25);
     painter.fill_background(rail, 1.0, quiet);
     let level = Rect::from_min_size(rail.min, Vec2::new(rail.width() * position.clamp(0.0, 1.0), rail.height()));
-    painter.rect_filled(level, 1.0, motion::mix(quiet, pointer, 0.4));
+    if level.width() >= 1.0 && !super::skin::paint(painter, level, "send.fill", super::skin::State::Normal, pointer, 0.0)
+    {
+        painter.rect_filled(level, 1.0, motion::mix(quiet, pointer, 0.4));
+    }
     // The destination stays legible; a dot denotes pre-fader mode.
     if rect.width() < 40.0 {
         // Session's two-column send grid preserves the narrow channel width.
