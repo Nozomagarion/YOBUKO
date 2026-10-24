@@ -1062,7 +1062,7 @@ fn version_file(version: u64) -> std::path::PathBuf {
 }
 
 /// One file per version, as that version wrote it, and every one of them still reads: version 1
-/// without the device group it could not hold.
+/// without the device group it could not hold, versions before 4 without take lanes.
 #[test]
 fn a_file_of_every_version_reads() {
     for version in 1..=VERSION {
@@ -1071,6 +1071,10 @@ fn a_file_of_every_version_reads() {
         let mut expected = every_feature();
         if version == 1 {
             expected.channels[0].devices.retain(|d| d.as_group().is_none());
+        }
+        if version < 4 {
+            // Take lanes came with version 4.
+            expected.arrangement.takes.clear();
         }
         assert_eq!(from_json(&text), Ok(expected), "version {version}");
     }
