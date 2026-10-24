@@ -287,3 +287,18 @@ fn svg_text_draws_with_the_bundled_font() {
     let image = super::raster_artwork(svg, Color32::WHITE, 40, 20, false).unwrap();
     assert!(image.pixels.iter().any(|p| p.r() > 200 && p.a() > 200), "the text should be drawn");
 }
+
+#[test]
+fn nine_slice_keeps_the_corners_and_stretches_the_middle() {
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10" data-suhina-slice="2 4"><rect width="20" height="10"/></svg>"#;
+    let slice = super::slice_of(svg).unwrap();
+    assert_eq!(slice.insets, [2.0, 4.0, 2.0, 4.0]);
+    assert_eq!(slice.size, [20.0, 10.0]);
+    let mut mesh = egui::Mesh::default();
+    super::nine_slice(&mut mesh, Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 30.0)), slice);
+    assert_eq!(mesh.vertices.len(), 36);
+    // The top-left corner stays 4 by 2 and maps to the artwork's own corner.
+    assert_eq!(mesh.vertices[3].pos, egui::pos2(4.0, 2.0));
+    assert_eq!(mesh.vertices[3].uv, egui::pos2(0.2, 0.2));
+    assert!(super::slice_of(r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" data-suhina-slice="3"/>"#).is_none());
+}

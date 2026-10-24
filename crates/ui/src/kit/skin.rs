@@ -609,6 +609,56 @@ struct Textures {
     images: HashMap<u64, Option<egui::TextureHandle>>,
     source_owner: Option<Arc<Skin>>,
     sources: HashMap<String, u64>,
+    /// Per source hash: the nine-slice insets and the artwork's own size, when it has them.
+    slices: HashMap<u64, Option<Slice>>,
+}
+
+/// Artwork that stretches only its middle: `data-suhina-slice="top right bottom left"` (or one
+/// value for all four) on the root `<svg>`, in the SVG's own units, which are logical points.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Slice {
+    pub insets: [f32; 4],
+    pub size: [f32; 2],
+}
+
+pub fn slice_of(source: &str) -> Option<Slice> {
+    let start = source.find("data-suhina-slice=\"")? + "data-suhina-slice=\"".len();
+    let end = source[start..].find('"')? + start;
+    let values: Vec<f32> =
+        source[start..end].split_whitespace().map(str::parse).collect::<Result<_, _>>().ok()?;
+    let insets = match values.as_slice() {
+        [all] => [*all; 4],
+        [v, h] => [*v, *h, *v, *h],
+        [t, r, b, l] => [*t, *r, *b, *l],
+        _ => return None,
+    };
+    if insets.iter().any(|v| !v.is_finite() || *v < 0.0) {
+        return None;
+    }
+    let tree = parse_svg(source).ok()?;
+    let size = [tree.size().width(), tree.size().height()];
+    (insets[1] + insets[3] < size[0] && insets[0] + insets[2] < size[1]).then_some(Slice { insets, size })
+}
+
+/// The nine quads of `slice` over `rect`: corners keep their size (shrunk evenly when `rect` is
+/// smaller), edges stretch along one axis, the middle along both.
+pub fn nine_slice(mesh: &mut egui::Mesh, rect: Rect, slice: Slice) {
+    let [t, r, b, l] = slice.insets;
+    let fit_x = (rect.width() / (l + r).max(f32::EPSILON)).min(1.0);
+    let fit_y = (rect.height() / (t + b).max(f32::EPSILON)).min(1.0);
+    let xs = [rect.left(), rect.left() + l * fit_x, rect.right() - r * fit_x, rect.right()];
+    let ys = [rect.top(), rect.top() + t * fit_y, rect.bottom() - b * fit_y, rect.bottom()];
+    let us = [0.0, l / slice.size[0], 1.0 - r / slice.size[0], 1.0];
+    let vs = [0.0, t / slice.size[1], 1.0 - b / slice.size[1], 1.0];
+    for row in 0..3 {
+        for col in 0..3 {
+            mesh.add_rect_with_uv(
+                Rect::from_min_max(egui::pos2(xs[col], ys[row]), egui::pos2(xs[col + 1], ys[row + 1])),
+                Rect::from_min_max(egui::pos2(us[col], vs[row]), egui::pos2(us[col + 1], vs[row + 1])),
+                Color32::WHITE,
+            );
+        }
+    }
 }
 
 fn raster_artwork(source: &str, ink: Color32, width: u32, height: u32, contain: bool) -> Option<egui::ColorImage> {
@@ -838,6 +888,21 @@ fn paint_variant(
         textures.sources.insert(source_key, hash);
         hash
     };
+    let slice = if png {
+        None
+    } else {
+        *textures.slices.entry(source_hash).or_insert_with(|| slice_of(source))
+    };
+    if textures.slices.len() >= 256 {
+        textures.slices.clear();
+    }
+    // Sliced artwork rasters once at its own size; the mesh stretches only its middle.
+    let (w, h) = slice.map_or((w, h), |slice| {
+        (
+            (slice.size[0] * scale).ceil().clamp(1.0, 1024.0) as u32,
+            (slice.size[1] * scale).ceil().clamp(1.0, 1024.0) as u32,
+        )
+    });
     let mut hash = std::hash::DefaultHasher::new();
     (source_hash, role, ink.to_array(), w, h).hash(&mut hash);
     let key = hash.finish();
@@ -891,6 +956,13 @@ fn paint_variant(
             radius,
             Color32::TRANSPARENT,
         );
+    }
+    if let Some(slice) = slice {
+        let mut mesh = egui::Mesh::with_texture(texture.id());
+        nine_slice(&mut mesh, rect, slice);
+        mesh.rotate(egui::emath::Rot2::from_angle(angle), rect.center());
+        painter.add(egui::Shape::mesh(mesh));
+        return true;
     }
     if role == "button" || role.starts_with("button.") {
         painter.add(
