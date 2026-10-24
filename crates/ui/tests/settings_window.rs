@@ -121,7 +121,7 @@ fn every_page_scrolls_to_its_last_setting_in_a_short_window() {
         ("MIDI", None),
         ("Plug-ins", Some("Editors: Device view")),
         ("Devices", Some("Detail area layout: Full width")),
-        ("Importing", Some("Warp mode: Re-pitch")),
+        ("Importing", Some("Warp mode: Rhythmic")),
         ("Arrangement", Some("Show advanced settings")),
         ("Session and mixer", Some("Mixer controls: Knob")),
         ("Clip editor", Some("Toolbar size: Larger")),

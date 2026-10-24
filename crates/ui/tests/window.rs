@@ -937,6 +937,8 @@ fn settings_change_right_away_and_are_handed_out_to_be_saved() {
     harness.run();
     harness.get_by_label("Settings page: Arrangement").click();
     harness.run();
+    harness.get_by_label("Track headers: Left").scroll_to_me();
+    harness.run();
     harness.get_by_label("Track headers: Left").click();
     harness.run();
     let saved = harness.state_mut().take_changed_settings();
@@ -2223,6 +2225,8 @@ fn a_key_set_in_settings_runs_its_action_and_is_saved() {
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
     harness.run();
     harness.get_by_label("Settings page: Keys").click();
+    harness.run();
+    harness.get_by_label("Change keys of view.arrangement").scroll_to_me();
     harness.run();
     harness.get_by_label("Change keys of view.arrangement").click();
     harness.run();
