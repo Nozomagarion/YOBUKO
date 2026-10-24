@@ -1188,6 +1188,14 @@ impl App {
     /// name (the built-in one when there is no such file).
     pub fn set_themes(&mut self, ctx: &egui::Context, files: Vec<ThemeEntry>, folder: Option<String>) {
         self.themes.set(files, folder);
+        // A variant in use whose file went: its theme's own values take its place.
+        if self.themes.get(&self.settings.theme).is_none()
+            && let Some((base, _)) = self.settings.theme.split_once('@')
+            && self.themes.get(base).is_some()
+        {
+            self.settings.theme = base.to_owned();
+            self.settings_changed = true;
+        }
         theme::set_palette(ctx, self.themes.palette(&self.settings.theme));
     }
 

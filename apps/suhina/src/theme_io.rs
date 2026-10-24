@@ -229,7 +229,13 @@ fn execute(files: &mut ThemeFiles, actions: Vec<FileAction>) -> Reply {
     if !reply.replace && files.gone() {
         reply.replace = true;
     }
-    let (entries, warnings) = if reply.replace { files.read_all() } else { files.changed() };
+    let (mut entries, mut warnings) = if reply.replace { files.read_all() } else { files.changed() };
+    // A theme read again may have lost a variant (its file deleted): the list is read whole, so
+    // the variant's card goes with it rather than staying in use.
+    if !reply.replace && !entries.is_empty() {
+        reply.replace = true;
+        (entries, warnings) = files.read_all();
+    }
     if reload && warnings.is_empty() {
         reply.notices.push(Ok(format!("Read {} theme files", entries.len())));
     }
