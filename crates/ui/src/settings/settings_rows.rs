@@ -284,10 +284,10 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Time and play",
-        "Select time with Ctrl+drag",
-        "On, a plain drag moves clips and Ctrl+drag selects time; off, dragging the upper half of a clip selects time and the lower half moves it",
+        "Select time by",
+        "Ctrl+drag selects time and a plain drag moves clips, or dragging a clip's upper half selects time and its lower half moves it",
         &["time_select"],
-        |cx, r| cx.on_off(r, |s| &mut s.view.time_select_ctrl),
+        |cx, r| cx.choose(r, &[("Ctrl+drag", true), ("Upper half", false)], |s| &mut s.view.time_select_ctrl),
     ),
     row(
         Page::Arrangement,

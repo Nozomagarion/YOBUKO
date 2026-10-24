@@ -49,7 +49,7 @@ what is inside it).
 | Devices | Device panels | Device chain, Detail area layout |
 | Importing | Dropping files | When you drop several files, Warp mode for dropped samples |
 | Arrangement | Clip editing | Let audio clips overlap, Let MIDI clips overlap, Double-click to make a clip, Rename in the clip menu, Grab a clip by |
-| Arrangement | Time and play | Select time with Ctrl+drag, Move the start marker to a clip you select, Play starts at, When you press Stop |
+| Arrangement | Time and play | Select time by, Move the start marker to a clip you select, Play starts at, When you press Stop |
 | Arrangement | View | Show the grid inside clips, Waveform size |
 | Arrangement | Tracks | Colour of new tracks, Track headers, Show return tracks |
 | Arrangement | Advanced | Stretch audio by its edge, Ctrl+R renames every selected clip |

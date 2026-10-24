@@ -669,7 +669,7 @@
       "keys": [
         "clip_drag"
       ],
-      "sourceFingerprint": "22e3ff70721616c0288c93a7020de7fb66773307c43ee5dc81961de2a7dcbc55",
+      "sourceFingerprint": "3308f8c3c2f73578b24233eb691739fbf145d27423eed1d94ba6f05b4100d3a7",
       "helpStatus": "reviewed",
       "description": "A clip can have a name bar above its waveform or note preview. This preference divides the clip into movement and time-selection regions. Ctrl+drag selects time over clips overrides that division when enabled. Very short clip rows without room for a name bar use upper and lower regions. Clicking a clip body can set the play start at the clicked position instead of choosing the whole clip’s span.",
       "options": [
@@ -678,36 +678,36 @@
           "description": "Drag the name bar to move the clip and drag the body to select time. This is the default."
         },
         {
-          "name": "Mirror",
+          "name": "Lower half",
           "description": "Drag the lower half to move the clip and the upper half to select time."
         }
       ],
-      "whenToChange": "Choose Name bar for a clear move handle above the clip content. Choose Mirror if you prefer moving clips from their lower half.",
+      "whenToChange": "Choose Name bar for a clear move handle above the clip content. Choose Lower half if you prefer moving clips from their lower half.",
       "workInProgress": false
     },
     {
       "id": "Arrangement/Time and play/time_select",
       "page": "Arrangement",
       "section": "Time and play",
-      "name": "Select time with Ctrl+drag",
+      "name": "Select time by",
       "note": "Use Ctrl-drag for time selection instead of dividing clips into drag regions.",
       "keys": [
         "time_select"
       ],
-      "sourceFingerprint": "f88ff52c05c8ac147d6c5ecf7b3d63d07f368294269d720cb4e22e77ef524754",
+      "sourceFingerprint": "33b861e03d7a50c45a9e4b293f2c6fd83e58e1f7e9159a10d054ae1d2be8faaf",
       "helpStatus": "reviewed",
       "description": "A time selection is a span of the timeline across one or more tracks; editing can act on material inside that span. This setting changes how you paint that selection over Arrangement clips and lanes. When enabled, an ordinary clip drag moves it and Ctrl-drag selects time; Shift-drag is then the copy gesture. When disabled, Moving a clip determines the clip’s move and selection regions, and Ctrl-drag copies clips. A ruler drag selects time in either mode. Ctrl is Cmd on macOS.",
       "options": [
         {
-          "name": "On",
-          "description": "Ctrl-drag selects time over clips; plain clip dragging moves, and Shift-drag copies."
+          "name": "Ctrl+drag",
+          "description": "A plain drag moves a clip and holding Ctrl while dragging selects time."
         },
         {
-          "name": "Off",
-          "description": "Use clip regions for time selection and movement, as set by Moving a clip. This is the default."
+          "name": "Upper half",
+          "description": "Dragging the upper half of a clip or lane selects time and dragging the lower half moves the clip."
         }
       ],
-      "whenToChange": "Enable this when you prefer using the whole clip as a move handle and holding a modifier to select time.",
+      "whenToChange": "Choose Ctrl+drag when you prefer the whole clip as a move handle and a modifier key for selecting time.",
       "workInProgress": false
     },
     {
