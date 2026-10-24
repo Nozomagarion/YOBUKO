@@ -677,6 +677,10 @@ mod tests {
 
     const RULES: &str = "docs/spec/ui-settings.md > Adding a setting";
 
+    /// Words a newcomer cannot read, kept out of descriptions (docs/spec/ui-settings.md › Adding a
+    /// setting, rule 4); a setting's options or help may name them when someone needs them.
+    const JARGON: [&str; 9] = ["underruns", "underrun", "MCP", "IR", "latency", "ADR", "GPU", "OpenGL", "buffer"];
+
     #[test]
     fn every_entry_has_a_page_a_group_and_a_one_sentence_description() {
         for entry in ROWS {
@@ -696,6 +700,16 @@ mod tests {
             // A name reads on its own, not as a sentence cut off before its buttons.
             let cut = [" by", " at", " to", " is"].iter().any(|end| entry.name.ends_with(end));
             assert!(!cut, "{}: the name is a sentence cut off before its buttons ({RULES})", entry.name);
+            // The switch shows the off state, and the Keys page lists shortcuts.
+            let note = entry.note.to_lowercase();
+            assert!(!note.contains("off,"), "{}: the description explains the off state ({RULES})", entry.name);
+            let shortcut = ["Ctrl+", "Alt+", "Shift+", "Cmd+"].iter().any(|key| entry.note.contains(key));
+            assert!(!shortcut, "{}: the description names a shortcut ({RULES})", entry.name);
+            // Plain words: the effect, not the mechanism.
+            for word in JARGON {
+                let found = format!(" {note} ").contains(&format!(" {} ", word.to_lowercase()));
+                assert!(!found, "{}: the description uses {word:?}; say what it does instead ({RULES})", entry.name);
+            }
         }
     }
 
