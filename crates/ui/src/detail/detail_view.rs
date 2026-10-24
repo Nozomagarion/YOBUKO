@@ -87,6 +87,9 @@ pub struct DeviceBox {
     pub name: String,
     /// What it is: a built-in effect or instrument, a plug-in format, or one Suhina cannot run.
     pub kind: String,
+    /// What a theme selects its panel by, after `#device-`: a built-in device's id
+    /// (`#device-compressor`), `sd` for a device file, `plugin` for a plug-in.
+    pub theme_id: String,
     pub enabled: bool,
     /// Parameter ids and values as text.
     pub params: Vec<(String, String)>,
@@ -628,6 +631,12 @@ fn device_box(
         at: DeviceAt(path.to_vec()),
         group: d.as_group().map(|g| group_box(g, d, path, id, plugins)),
         name: device_display_name(d),
+        theme_id: match &d.kind {
+            DeviceKind::Builtin(id) => id.to_ascii_lowercase(),
+            DeviceKind::Sd => "sd".into(),
+            DeviceKind::Clap { .. } | DeviceKind::Vst3 { .. } | DeviceKind::Vst2 { .. } => "plugin".into(),
+            _ => "unsupported".into(),
+        },
         kind: match &d.kind {
             DeviceKind::Builtin(_) => "Suhina".into(),
             DeviceKind::Sd => d
@@ -1375,9 +1384,20 @@ fn device_panel(
             painter.rect_stroke(rect, 1.0, theme::hairline(theme::selection()), egui::StrokeKind::Inside);
         }
     };
-    painter.fill_background(rect, 0.0, theme::panel_background());
+    // `.device` styles every device's panel and `#device-compressor` (a built-in device's id)
+    // one kind of them; `.device-header` its header row. Everything inside (`.device-control`,
+    // the generated parameter list's widgets) is in that scope.
+    let _device_style = crate::kit::style_class::enter_named("device", &format!("device-{}", device.theme_id));
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, selected);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, !device.enabled);
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
+    crate::kit::native_css::surface(painter, rect, 0.0, theme::panel_background());
     let header = Rect::from_min_size(rect.min, Vec2::new(rect.width(), ROW));
-    painter.fill_background(header, 0.0, theme::control_background());
+    {
+        let _header = crate::kit::style_class::enter("device-header");
+        crate::kit::native_css::surface(painter, header, 0.0, theme::control_background());
+    }
     let switch = Rect::from_min_size(
         Pos2::new(header.left() + PAD, header.center().y - ON_SWITCH / 2.0),
         Vec2::splat(ON_SWITCH),

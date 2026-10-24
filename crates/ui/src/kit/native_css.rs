@@ -474,6 +474,12 @@ fn element_id(node: &StyleNode) -> String {
     if node.class == "divider" && node.name.as_deref() == Some("mixer-divider") {
         return "mixer-divider".to_owned();
     }
+    // A device's panel by what it is: `#device-compressor`, `#device-plugin`.
+    if node.class == "device"
+        && let Some(name) = node.name.as_deref().filter(|name| name.starts_with("device-"))
+    {
+        return name.to_owned();
+    }
     if node.class == "editor-tab"
         && let Some(name) = node.name.as_deref().filter(|name| name.starts_with("tab-"))
     {

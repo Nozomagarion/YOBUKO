@@ -35,6 +35,8 @@ pub const CLASSES: &[&str] = &[
     "clip-editor",
     "piano-roll",
     "device-panel",
+    "device",
+    "device-header",
     "device-control",
     "device-section",
     "envelope",

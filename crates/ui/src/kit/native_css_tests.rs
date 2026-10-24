@@ -1120,3 +1120,21 @@ fn egui_widgets_in_a_scope_take_the_generic_button_and_input_rules() {
     assert_eq!(visuals.selection.bg_fill, egui::Color32::from_rgb(0x40, 0x40, 0x40));
     assert_eq!(visuals.extreme_bg_color, egui::Color32::from_rgb(5, 5, 5));
 }
+
+#[test]
+fn a_built_in_device_s_panel_is_selected_by_its_id() {
+    let css = ".device { background-color: #00FF00; } #device-compressor { background-color: #FF0000; } \
+               #device-compressor .device-header { background-color: #0000FF; }";
+    let mut seen = Vec::new();
+    painted(css, |_| {
+        seen.clear();
+        for id in ["device-compressor", "device-limiter"] {
+            let _device = super::super::style_class::enter_named("device", id);
+            let panel = super::super::style_class::computed().map(|c| c.background);
+            let _header = super::super::style_class::enter("device-header");
+            seen.push((panel, super::super::style_class::computed().filter(|c| c.authored.background).map(|c| c.background)));
+        }
+    });
+    assert_eq!(seen[0], (Some(egui::Color32::RED), Some(egui::Color32::BLUE)));
+    assert_eq!(seen[1], (Some(egui::Color32::from_rgb(0, 0xFF, 0)), None));
+}
