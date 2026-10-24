@@ -230,8 +230,8 @@ they were. Take clips reference contents like any clip; they have no ids (`ClipI
 command names one by id: a take is named by its track and its number. `Project::validate` checks
 that a take's track and its clips' contents exist; deleting a track deletes its takes.
 
-The project file writes them under `arrangement.takes`, left out when there are none, so a project
-without takes is written as before ([`.suhina` format](../spec/suhina-format.md)).
+The project file writes them under `arrangement.takes`, left out when there are none; files with
+them are version 4 ([`.suhina` format](../spec/suhina-format.md) › Versions).
 
 ## Consequences
 
