@@ -64,6 +64,22 @@ const SEND_HEIGHT: f32 = 22.0;
 /// Session meters use wider stereo bars than compact Arrangement headers.
 pub const METER_WIDTH: f32 = 14.0;
 const CAP: Vec2 = Vec2::new(20.0, 26.0);
+
+/// The fader cap's size: `.fader-cap { width; height }` in the theme, else [`CAP`].
+pub(crate) fn cap_size() -> Vec2 {
+    let _style = crate::kit::style_class::enter("fader-cap");
+    let computed = crate::kit::style_class::computed();
+    Vec2::new(
+        computed.as_ref().and_then(|c| c.width).filter(|w| *w >= 4.0).unwrap_or(CAP.x).min(64.0),
+        computed.as_ref().and_then(|c| c.height).filter(|h| *h >= 4.0).unwrap_or(CAP.y).min(96.0),
+    )
+}
+
+/// The fader rail's thickness: `.fader-rail { width }` in the theme, else 5 points.
+pub(crate) fn rail_width() -> f32 {
+    let _style = crate::kit::style_class::enter("fader-rail");
+    crate::kit::style_class::computed().and_then(|c| c.width).filter(|w| *w >= 1.0).unwrap_or(5.0).min(32.0)
+}
 const LEAST_FADER: f32 = 48.0;
 const TALLEST_FADER_WITH_DEVICES: f32 = 140.0;
 
@@ -929,15 +945,16 @@ fn paint_fader(
         paint_horizontal_fader(painter, fader, db, hover, response);
         return;
     }
-    if fader.height() < CAP.y {
+    let cap_size = cap_size();
+    if fader.height() < cap_size.y {
         return;
     }
     // The cap's centre travels from half a cap above the bottom to half a cap under the top.
-    let travel = egui::Rangef::new(fader.bottom() - CAP.y / 2.0, fader.top() + CAP.y / 2.0);
+    let travel = egui::Rangef::new(fader.bottom() - cap_size.y / 2.0, fader.top() + cap_size.y / 2.0);
     let at = |position: f32| travel.min + (travel.max - travel.min) * position;
     let x = fader.center().x;
     // An unfilled recessed rail: volume is the cap's position, not a bright background bar.
-    let rail = Rect::from_center_size(Pos2::new(x, fader.center().y), Vec2::new(5.0, fader.height()));
+    let rail = Rect::from_center_size(Pos2::new(x, fader.center().y), Vec2::new(rail_width(), fader.height()));
     let recess = motion::mix(theme::control_background(), egui::Color32::BLACK, 0.65);
     if !crate::kit::skin::paint(
         painter,
@@ -985,17 +1002,18 @@ fn paint_fader(
     }
     drop(_scale_style);
     let level = at(widgets::volume_position(db));
-    let cap = Rect::from_center_size(Pos2::new(x, level), CAP);
+    let cap = Rect::from_center_size(Pos2::new(x, level), cap_size);
     crate::kit::mixer_controls::fader_cap(painter, cap, hover, crate::kit::skin::State::response(response, false));
 }
 
 fn paint_horizontal_fader(painter: &egui::Painter, fader: Rect, db: f64, hover: f32, response: &egui::Response) {
-    let length = CAP.y.min(fader.width());
-    let thickness = CAP.x.min(fader.height());
+    let cap_size = cap_size();
+    let length = cap_size.y.min(fader.width());
+    let thickness = cap_size.x.min(fader.height());
     let at = |position: f32| fader.left() + length / 2.0 + (fader.width() - length) * position;
     let state = crate::kit::skin::State::response(response, false);
     // Rasterize the same vertical artwork, then rotate its geometry and texture together.
-    let rail = Rect::from_center_size(fader.center(), Vec2::new(5.0, fader.width()));
+    let rail = Rect::from_center_size(fader.center(), Vec2::new(rail_width(), fader.width()));
     if !crate::kit::skin::paint(painter, rail, "fader.rail", state, theme::text_value(), std::f32::consts::FRAC_PI_2) {
         painter.fill_background(
             Rect::from_center_size(fader.center(), Vec2::new(fader.width(), 5.0)),

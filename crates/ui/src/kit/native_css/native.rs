@@ -282,6 +282,10 @@ pub(super) fn computed(style: &ComputedStyle) -> Computed {
             Value::Keyword("right" | "end") => Some(1),
             _ => None,
         },
+        width: match style.get(Property::Width) {
+            Value::Length(Length::Px(value)) if style.authored(Property::Width) => Some(value.clamp(0.0, 512.0)),
+            _ => None,
+        },
         height: match style.get(Property::Height) {
             Value::Length(Length::Px(value)) if style.authored(Property::Height) => Some(value.clamp(0.0, 512.0)),
             _ => None,

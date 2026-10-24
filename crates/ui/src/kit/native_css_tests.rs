@@ -997,3 +997,14 @@ fn a_sheet_s_border_is_the_ordinary_widgets_outline() {
     assert_eq!(strokes[0].width, 0.0);
     assert_eq!(strokes[1], egui::Stroke::new(2.0, egui::Color32::from_rgb(0xFF, 0, 0)));
 }
+
+#[test]
+fn the_fader_cap_and_rail_take_their_size_from_the_sheet() {
+    let mut sizes = (Vec2::ZERO, 0.0);
+    painted("", |_| sizes = (crate::session::mixer_strip::cap_size(), crate::session::mixer_strip::rail_width()));
+    assert_eq!(sizes, (Vec2::new(20.0, 26.0), 5.0));
+    painted(".fader-cap { width: 30px; height: 12px; } .fader-rail { width: 2px; }", |_| {
+        sizes = (crate::session::mixer_strip::cap_size(), crate::session::mixer_strip::rail_width());
+    });
+    assert_eq!(sizes, (Vec2::new(30.0, 12.0), 2.0));
+}

@@ -47,6 +47,8 @@ pub struct Computed {
     pub border_width: f32,
     /// `height` in pixels, when the sheet sets one: the thickness of a bar such as a volume field's.
     pub height: Option<f32>,
+    /// `width` in pixels, when the sheet sets one: the size of a fader's cap or rail.
+    pub width: Option<f32>,
     /// `text-align` where the sheet sets one: -1 left, 0 centre, 1 right.
     pub text_align: Option<i8>,
     pub opacity: f32,
