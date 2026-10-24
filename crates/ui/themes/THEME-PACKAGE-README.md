@@ -269,7 +269,7 @@ the artwork is drawn over the surface, so its transparent parts show the strip u
 
 ## Theme packages
 
-**Settings › Theme › More › Export theme…** writes the theme in use as one file,
+**Settings › Appearance › Themes › More › Export theme…** writes the theme in use as one file,
 `<theme>.theme.suhina`, into the `exports` folder beside the themes folder. It holds the
 theme's folder and a `manifest.json` with the theme's id, its name and the SHA-256 sum of every
 file. Drop a package on Suhina's window (Settings open or not) or open it with Suhina (a

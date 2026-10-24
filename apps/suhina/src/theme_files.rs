@@ -426,6 +426,9 @@ impl ThemeFiles {
                     .collect()
             }
         };
+        // The author's guide travels with the theme, so whoever receives it can edit it.
+        let mut files = files;
+        files.entry("README.md".into()).or_insert_with(|| theme::template_readme().into_bytes());
         let id = slug(id);
         let bytes = suhina_theme_package::pack(&id, &theme.name, &files)?;
         let exports = self.exports()?;

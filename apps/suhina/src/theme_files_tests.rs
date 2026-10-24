@@ -204,6 +204,8 @@ fn an_exported_package_brings_the_theme_back_and_a_damaged_one_is_refused() {
     let package = files.export_package("night", &night()).unwrap();
     assert!(package.to_string_lossy().ends_with("night.theme.suhina"), "{}", package.display());
     let mut other = ThemeFiles::new(Some(dir.join("other")));
+    let read = suhina_theme_package::read(&std::fs::read(&package).unwrap()).unwrap();
+    assert!(read.files.contains_key("README.md"), "the guide goes with the theme");
     let (ids, _) = other.import(&package).unwrap();
     assert_eq!(ids, ["night"]);
     assert!(same_look(&other.read_all().0[0].theme, &night()));

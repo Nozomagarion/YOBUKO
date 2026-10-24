@@ -708,7 +708,7 @@ A theme package is one file, `<id>.theme.suhina`: a zip of the theme's folder wi
 `manifest.json` at its root. The manifest says `"format": "suhina-theme"`, `"version": 1`,
 the theme's `id` and `name`, and under `files` every other entry's path and SHA-256 sum
 (lowercase hex). `crates/theme-package` packs a folder and reads a package; the app's
-**Export theme…** (Settings › Theme › More), its import and `suhina-cli theme pack` and
+**Export theme…** (Settings › Appearance › Themes › More), its import and `suhina-cli theme pack` and
 `suhina-cli theme validate` all use it, so they accept and refuse the same packages.
 
 Reading refuses a package, before anything is written, when:
