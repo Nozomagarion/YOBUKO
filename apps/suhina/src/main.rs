@@ -362,7 +362,14 @@ struct StartUp {
 impl eframe::App for Window {
     /// Nothing behind the backgrounds: where none is painted, the desktop shows.
     fn clear_color(&self, visuals: &eframe::egui::Visuals) -> [f32; 4] {
-        if self.see_through == Some(true) { [0.0; 4] } else { visuals.panel_fill.to_normalized_gamma_f32() }
+        if self.see_through == Some(true) {
+            [0.0; 4]
+        } else {
+            // A window that cannot show the desktop clears to the panel colour over black, opaque:
+            // a theme's see-through colours then read dark, never as the white behind the window.
+            let [r, g, b, _] = visuals.panel_fill.to_array();
+            eframe::egui::Color32::from_rgba_premultiplied(r, g, b, 255).to_normalized_gamma_f32()
+        }
     }
 
     fn ui(&mut self, ui: &mut eframe::egui::Ui, frame: &mut eframe::Frame) {

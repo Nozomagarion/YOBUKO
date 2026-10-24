@@ -263,6 +263,11 @@ loop bar keeps its rounded ends at any length.
 </svg>
 ```
 
+The desktop shows through only where the system composites a window's transparency (the GPU
+renderer on a compositor that supports it; Windows and macOS usually do). Elsewhere the window
+is opaque and a see-through colour reads dark, over black. A background image is the window's
+own: it moves with the window, it is not the desktop's wallpaper.
+
 A theme whose surfaces show the desktop through them (a window, panel or header colour with
 alpha) has the area under button, fader and track artwork cleared first; on an opaque theme
 the artwork is drawn over the surface, so its transparent parts show the strip under them.
