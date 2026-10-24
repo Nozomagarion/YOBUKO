@@ -1689,9 +1689,9 @@ fn now_rows(ui: &Ui, painter: &egui::Painter, page: Rect, y: &mut f32, settings:
                 if info.failed { "; the device reported an error" } else { "" }
             ),
         ),
-        None => ("None: no project is playing".to_string(), "-".to_string()),
+        None => ("No project is playing".to_string(), "Not playing".to_string()),
     };
-    label(painter, r, "Output", &output);
+    label(painter, r, "Playing on", &output);
     let refresh = Rect::from_min_size(Pos2::new(r.right() - 120.0, r.top() + 1.0), Vec2::new(120.0, SEGMENT));
     let response = widgets::button_area(ui, refresh, Id::new("audio-refresh"), "List the audio devices again");
     let hover = widgets::hover(ui, &response);
@@ -1705,7 +1705,7 @@ fn now_rows(ui: &Ui, painter: &egui::Painter, page: Rect, y: &mut f32, settings:
         theme::text_primary(),
     );
     let r = row(y);
-    label(painter, r, "Latency", &format!("Engine to speaker, measured: {latency}"));
+    label(painter, r, "Delay to the speakers", &format!("Measured from the engine to the speakers: {latency}"));
     // A key on a MIDI controller (ADR 0017): the engine keeps less ahead while a track is armed.
     let r = row(y);
     let key = match &about.audio_live {
@@ -1716,9 +1716,9 @@ fn now_rows(ui: &Ui, painter: &egui::Painter, page: Rect, y: &mut f32, settings:
             "Up to {:.1} ms now; arming a track keeps one block ahead, so less. Smaller buffers are quicker",
             info.live_latency_ms
         ),
-        None => "-".to_string(),
+        None => "Not playing".to_string(),
     };
-    label(painter, r, "Key to sound", &key);
+    label(painter, r, "Delay when you play a key", &key);
     let r = row(y);
     let input = match &about.audio_live {
         Some(info) => match &info.input {
@@ -1731,9 +1731,9 @@ fn now_rows(ui: &Ui, painter: &egui::Painter, page: Rect, y: &mut f32, settings:
             ),
             None => "None: no input device is open".to_string(),
         },
-        None => "-".to_string(),
+        None => "Not playing".to_string(),
     };
-    label(painter, r, "Input now", &input);
+    label(painter, r, "Recording input", &input);
     response.clicked()
 }
 
@@ -1783,7 +1783,7 @@ fn midi_section(ui: &Ui, painter: &egui::Painter, page: Rect, y: &mut f32, about
     let ports = match &about.midi_inputs {
         Ok(ports) if ports.is_empty() => {
             let r = setting_row(page, y);
-            label(painter, r, "None", "No MIDI controller is connected; one plugged in is found within seconds");
+            label(painter, r, "No MIDI controller found", "Plug one in and it appears here within a few seconds");
             return None;
         }
         Ok(ports) => ports,

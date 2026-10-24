@@ -41,34 +41,34 @@ what is inside it).
 | Audio | Output | Driver, Device, Sample rate, Buffer size (or Engine block), Exclusive mode, Input |
 | Audio | Cue | Cue output, Cue volume |
 | MIDI | MIDI inputs | Each MIDI input port, on or off |
-| MIDI | Arming | Auto-arm the selected track |
+| MIDI | Arming | Arm the track you select |
 | Plug-ins | Actions | Scan, Rescan all, Manage plug-ins (commands, set off above the folders) |
 | Plug-ins | Folders | Folders (each on or off, with its format; add with a format, remove) |
 | Plug-ins | Editors | Editors (Window, Device view) |
 | Devices | NAM | NAM models folder, IR folder ([nam spec](nam-amp-and-cab.md) › Folders) |
 | Devices | Device panels | Device chain, Detail area layout |
-| Importing | Dropping files | Several files, Warp mode |
-| Arrangement | Clip editing | Allow sample stacking, Allow MIDI stacking, Double-click makes a clip, Name field in clip menus, Moving a clip |
-| Arrangement | Time and play | Ctrl+drag selects time over clips, Play from the selected clip, Play from, Stop |
-| Arrangement | View | Grid in clips, Waveform zoom |
-| Arrangement | Tracks | New track colour, Track headers, Return tracks |
-| Arrangement | Advanced | Ctrl+Alt-drag on an edge stretches audio, Ctrl+R renames every selected clip |
-| Session and mixer | Launching | Select on launch |
-| Session and mixer | Mixer | Mixer controls |
-| Clip editor | Piano roll | Pulled to the top, Piano roll grid, Toolbar size, Moved notes replace the notes under them |
-| Browser | Browser | Browser side, Recent's kinds |
+| Importing | Dropping files | When you drop several files, Warp mode for dropped samples |
+| Arrangement | Clip editing | Let audio clips overlap, Let MIDI clips overlap, Double-click to make a clip, Rename in the clip menu, Grab a clip by |
+| Arrangement | Time and play | Select time with Ctrl+drag, Move the start marker to a clip you select, Play starts at, When you press Stop |
+| Arrangement | View | Show the grid inside clips, Waveform size |
+| Arrangement | Tracks | Colour of new tracks, Track headers, Show return tracks |
+| Arrangement | Advanced | Stretch audio by its edge, Ctrl+R renames every selected clip |
+| Session and mixer | Launching | Show the clip you launch |
+| Session and mixer | Mixer | Volume and pan controls |
+| Clip editor | Piano roll | When the piano roll is pulled to the top, Piano roll grid size, Toolbar size, Moved notes replace notes |
+| Browser | Browser | Browser side, Recent items layout |
 | Browser | Previews | Auto-play, Preview volume |
 | Browser | Sample map | Map layout, Map preview on hover, Map: longest sample |
-| Browser | Tags | Tag limit |
+| Browser | Tags | Most colour tags |
 | Keys | Mouse and key behaviour | The clip editor's workflow settings (click, right click, double-click, duplicate key); kept in `keymap.json` |
 | Keys | Shortcuts | The preset, every action's keys, Reset all |
 | Appearance | Window | Zoom, Animations |
 | Appearance | Waveforms | Waveform scale |
-| Appearance | Advanced | Renderer |
+| Appearance | Advanced | Graphics system |
 | Theme | Theme | The themes, the theme in use, its colours |
-| Agents and updates | Agents | Let agents work on open projects (off by default; [ADR 0028](../decisions/0028-mcp-in-the-running-app.md)) |
+| Agents and updates | Agents | Let an AI agent edit open projects (off by default; [ADR 0028](../decisions/0028-mcp-in-the-running-app.md)) |
 | Agents and updates | MCP write permissions | Allow the project's folder (on by default, with the active folder shown), MCP allowed write folders (Add folder… and Remove); all grants include subfolders |
-| Agents and updates | Updates | Check for updates, Channel (Test builds only in developer mode) ([spec](updates.md)) |
+| Agents and updates | Updates | Check for updates, Update source (Test builds only in developer mode) ([spec](updates.md)) |
 | Agents and updates | Advanced | Developer mode |
 
 The Settings window opens on the page used last in the session. Descriptions are shown whole: they

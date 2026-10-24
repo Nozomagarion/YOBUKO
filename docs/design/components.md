@@ -356,10 +356,10 @@ wheel over it, as far as its last row and no further.
 | Projects and backups › Projects | Start template | Shown with At start › Template: a 300 px field, a template's file name in the templates folder or a path, ending in a 60 px **Browse…** button (the system's file dialog) |
 | Projects and backups › Backups | Backups | A 260 px dropdown: Before critical operations, Every minute, Every 5 minutes (default), 10, 15, 30 or 60 minutes, Every 4 hours, Never ([spec](../spec/backups.md)) |
 | Projects and backups › Backups | Clean up backups | On (default): the newest 20 backups of each project are kept; Off |
-| Importing › Dropping files | Several files | One track (default), One each; Ctrl while dropping does the other ([browser spec](../spec/browser.md) › Files) |
-| Importing › Dropping files | Warp mode | Rhythmic (default), Tonal, Texture, Smooth, High quality, Re-pitch: how a dropped sample with a known tempo is stretched |
+| Importing › Dropping files | When you drop several files | One track (default), One each; Ctrl while dropping does the other ([browser spec](../spec/browser.md) › Files) |
+| Importing › Dropping files | Warp mode for dropped samples | Rhythmic (default), Tonal, Texture, Smooth, High quality, Re-pitch: how a dropped sample with a known tempo is stretched |
 | Agents and updates › Updates | Check for updates | On (default): once per start, asks GitHub whether a newer build is out ([spec](../spec/updates.md)); Off |
-| Agents and updates › Updates | Channel | Nightly (default); Test builds as well while developer mode is on |
+| Agents and updates › Updates | Update source | Nightly (default); Test builds as well while developer mode is on |
 | Agents and updates › Advanced | Developer mode | Off (default); On lists test builds of pull requests as a channel |
 | Audio › Output | Driver | Default (the host's own), then each host (WASAPI, ASIO, …): a 260 px dropdown |
 | Audio › Output | Device | Default (the host's default device), then the host's devices; a saved device that is gone says so and the default plays |
@@ -373,17 +373,17 @@ wheel over it, as far as its last row and no further.
 | Audio › Status | Output, Latency, Key to sound, Input now | Read only: the device in use (", until X is back" when it plays in place of the chosen device X, which it goes back to once connected again), its measured latency and underruns, the longest a key on a MIDI controller takes to be heard (saying whether a track is armed, which keeps one block ahead), and the input device open with its channels and underruns; "List devices again" (120 px) on the Output row. Changes on this page run `audio.setOutput`, or `output.setCuePair` and `output.setCueVolume` for the cue |
 | MIDI › MIDI inputs | Each MIDI input port | On (default), Off: the note says whether it plays the armed tracks or why it could not be opened; "None" when no controller is connected. Listed again every 2 s while the page shows; runs `midi.setInput` |
 | Plug-ins › Editors | Editors | Window (default), Device view: where a plug-in's editor opens; the note says when the device view is not available on this system |
-| Arrangement › Clip editing | Allow sample stacking, Allow MIDI stacking | On, Off (default): moved clips stack instead of replacing ([spec](../spec/arrangement-editing.md)) |
-| Arrangement › Clip editing | Double-click makes a clip | On (default): a double-click on an empty slot (Session view) or an empty spot of a lane (Arrangement view) makes an empty clip of the track's kind — MIDI on a notes track, audio with no file yet on an audio track — (`clip.create`); Off: it does nothing ([spec](../spec/ui-session-view.md) › Clip slots) |
+| Arrangement › Clip editing | Let audio clips overlap, Let MIDI clips overlap | On, Off (default): moved clips stack instead of replacing ([spec](../spec/arrangement-editing.md)) |
+| Arrangement › Clip editing | Double-click to make a clip | On (default): a double-click on an empty slot (Session view) or an empty spot of a lane (Arrangement view) makes an empty clip of the track's kind — MIDI on a notes track, audio with no file yet on an audio track — (`clip.create`); Off: it does nothing ([spec](../spec/ui-session-view.md) › Clip slots) |
 | Arrangement › Tracks | Track headers | Left, Right (default) |
-| Session and mixer › Launching | Select on launch | On (default), Off: launching a clip in the Session view selects it, so the detail area shows it ([spec](../spec/ui-session-view.md)) |
-| Session and mixer › Mixer | Mixer controls | Field (default): the volume bar and the pan centre bar; Knob: a knob with its value beside it, in the Arrangement headers and the Session mixer ([spec](../spec/arrangement-editing.md) › Volume, pan, mute and solo) |
-| Clip editor › Piano roll | Pulled to the top | Edited track (default), Whole window ([clip editor spec](../spec/ui-clip-editor.md)) |
-| Clip editor › Piano roll | Piano roll grid | Its own (default), Control bar ([clip editor spec](../spec/ui-clip-editor.md)) |
+| Session and mixer › Launching | Show the clip you launch | On (default), Off: launching a clip in the Session view selects it, so the detail area shows it ([spec](../spec/ui-session-view.md)) |
+| Session and mixer › Mixer | Volume and pan controls | Field (default): the volume bar and the pan centre bar; Knob: a knob with its value beside it, in the Arrangement headers and the Session mixer ([spec](../spec/arrangement-editing.md) › Volume, pan, mute and solo) |
+| Clip editor › Piano roll | When the piano roll is pulled to the top | Edited track (default), Whole window ([clip editor spec](../spec/ui-clip-editor.md)) |
+| Clip editor › Piano roll | Piano roll grid size | Its own (default), Control bar ([clip editor spec](../spec/ui-clip-editor.md)) |
 | Clip editor › Piano roll | Toolbar size | Normal, Large (default), Larger; the toolbar's box, gaps and icon strokes scale with it ([clip editor spec](../spec/ui-clip-editor.md) › Layout) |
 | Keys › Mouse and key behaviour | Click on empty grid, Right click on a note, Shift+right drag, Alt+right button, Duplicate key, Double-click on empty grid, Double-click on a note | The workflow settings, each set on its own; changing one makes the workflow **Custom**; kept in `keymap.json` ([shortcuts](../shortcuts.md) › Presets) |
-| Arrangement › Time and play | Play from | Marker (default): Play and Space start from the play start marker; Selected clip: from the start of the clip selected in the Arrangement view, the marker moving there ([spec](../spec/arrangement-editing.md) › Play position) |
-| Arrangement › Time and play | Stop | Marker (default): back to the play start marker; Stay: the marker moves to where it stopped ([spec](../spec/arrangement-editing.md) › Play position) |
+| Arrangement › Time and play | Play starts at | Marker (default): Play and Space start from the play start marker; Selected clip: from the start of the clip selected in the Arrangement view, the marker moving there ([spec](../spec/arrangement-editing.md) › Play position) |
+| Arrangement › Time and play | When you press Stop | Marker (default): back to the play start marker; Stay: the marker moves to where it stopped ([spec](../spec/arrangement-editing.md) › Play position) |
 | Devices › Device panels | Device chain | Row (default), Stack |
 | Devices › Device panels | Detail area layout | Beside (default): the detail area starts right of the browser, which runs down to the status bar; Full width: it spans the whole window, under the browser too. Not used while the device chain is stacked ([spec](../spec/ui-session-view.md) › Window regions) |
 | Browser › Browser | Browser side | Left (default), Right |
@@ -392,11 +392,11 @@ wheel over it, as far as its last row and no further.
 | Browser › Sample map | Map layout | Cloud (default), Grid ([sample map](../spec/sample-map.md)) |
 | Browser › Sample map | Map preview on hover | On (default), Off |
 | Browser › Sample map | Map: longest sample | 5, 10 (default), 30, 60 s |
-| Browser › Tags | Tag limit | 64 (default), 128, 256, 1024 colour tags (`library.setTag`'s `limit`) |
+| Browser › Tags | Most colour tags | 64 (default), 128, 256, 1024 colour tags (`library.setTag`'s `limit`) |
 | Appearance › Window | Zoom | Three parts: −, the value ("100 %", a click goes back to 100 %), +; 50–200 % in 10 % steps, the size of the whole window ([spec](../spec/window-zoom.md)) |
 | Appearance › Window | Animations | On (default), Off |
 | Appearance › Waveforms | Waveform scale | Linear (default), dB ([waveforms](../spec/waveforms.md)) |
-| Appearance › Advanced | Renderer | GPU (wgpu, default), OpenGL (glow) |
+| Appearance › Advanced | Graphics system | GPU (wgpu, default), OpenGL (glow) |
 
 **Appearance › Theme** (a page of its own, listed stepped in under Appearance): the themes as 20 px rows in a list that scrolls after eight, the user's
 own first and then those that come with Suhina, the name on the left and the file name or

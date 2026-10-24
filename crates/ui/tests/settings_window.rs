@@ -121,11 +121,11 @@ fn every_page_scrolls_to_its_last_setting_in_a_short_window() {
         ("MIDI", None),
         ("Plug-ins", Some("Editors: Device view")),
         ("Devices", Some("Detail area layout: Full width")),
-        ("Importing", Some("Warp mode: Rhythmic")),
+        ("Importing", Some("Warp mode for dropped samples: Rhythmic")),
         ("Arrangement", Some("Show advanced settings")),
-        ("Session and mixer", Some("Mixer controls: Knob")),
+        ("Session and mixer", Some("Volume and pan controls: Knob")),
         ("Clip editor", Some("Toolbar size: Larger")),
-        ("Browser", Some("Tag limit: 1024")),
+        ("Browser", Some("Most colour tags: 1024")),
         ("Keys", Some("Change keys of file.new")),
         ("Appearance", Some("Show advanced settings")),
         ("Theme", Some("Export the theme template")),
@@ -152,13 +152,13 @@ fn a_long_page_needs_the_wheel_and_another_page_opens_at_its_top() {
     assert!(!shown(&harness, last), "the short window shows the whole Arrangement page");
     assert!(wheel_to(&mut harness, last, 40) > 0);
     // Scrolled down, the page's first setting is out of view; another page starts at its top.
-    assert!(!shown(&harness, "Allow sample stacking"));
+    assert!(!shown(&harness, "Let audio clips overlap"));
     harness.get_by_label("Settings page: Browser").click();
     harness.run();
     assert!(shown(&harness, "Browser side: Left"));
     harness.get_by_label("Settings page: Arrangement").click();
     harness.run();
-    assert!(shown(&harness, "Allow sample stacking"));
+    assert!(shown(&harness, "Let audio clips overlap"));
 }
 
 #[test]
@@ -178,18 +178,18 @@ fn the_advanced_group_is_folded_until_it_is_opened_and_a_search_finds_inside_it(
     let mut harness = short_window();
     harness.get_by_label("Settings page: Appearance").click();
     settle(&mut harness);
-    assert!(harness.query_by_label("Renderer: OpenGL").is_none(), "folded");
+    assert!(harness.query_by_label("Graphics system: OpenGL").is_none(), "folded");
     harness.get_by_label("Show advanced settings").click();
     settle(&mut harness);
-    assert!(harness.query_by_label("Renderer: OpenGL").is_some(), "unfolded");
+    assert!(harness.query_by_label("Graphics system: OpenGL").is_some(), "unfolded");
     harness.get_by_label("Hide advanced settings").click();
     settle(&mut harness);
-    assert!(harness.query_by_label("Renderer: OpenGL").is_none());
+    assert!(harness.query_by_label("Graphics system: OpenGL").is_none());
     harness.get_by_label("Search settings").focus();
     settle(&mut harness);
     harness.get_by_label("Search settings").type_text("renderer");
     settle(&mut harness);
-    assert!(harness.query_by_label("Renderer: OpenGL").is_some(), "a search shows it");
+    assert!(harness.query_by_label("Graphics system: OpenGL").is_some(), "a search shows it");
 }
 
 #[test]
@@ -227,19 +227,19 @@ fn a_search_shows_the_settings_that_match_from_every_page() {
     harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
     harness.get_by_label("Search settings").type_text("arrangement stay");
     settle(&mut harness);
-    assert!(harness.query_by_label("Stop: Stay").is_some());
-    assert!(harness.query_by_label("Play from: Marker").is_none(), "only Stop has both words (Stay is its note)");
+    assert!(harness.query_by_label("When you press Stop: Stay").is_some());
+    assert!(harness.query_by_label("Play starts at: Marker").is_none(), "only Stop has both words (Stay is its note)");
 
     // Nothing matches.
     harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
     harness.get_by_label("Search settings").type_text("nothing like this");
     settle(&mut harness);
-    assert!(harness.query_by_label("Stop: Stay").is_none());
+    assert!(harness.query_by_label("When you press Stop: Stay").is_none());
 
     // A page clicked empties the search and shows the page.
     harness.get_by_label("Settings page: Arrangement").click();
     settle(&mut harness);
-    assert!(harness.query_by_label("Play from: Marker").is_some());
+    assert!(harness.query_by_label("Play starts at: Marker").is_some());
     assert_eq!(harness.get_by_label("Search settings").value().as_deref(), Some(""));
     assert!(harness.state().settings_open());
 }
