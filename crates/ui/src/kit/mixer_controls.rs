@@ -90,7 +90,31 @@ pub fn level_bar(
         }
         fill
     };
-    let inner = rect.shrink2(Vec2::new(8.0, 0.0));
+    // A handle where the fill ends, when the sheet gives `.value-handle` a width (or artwork
+    // `{kind}.handle`): its background, border and radius, as tall as the field.
+    {
+        let _handle = crate::kit::style_class::enter("value-handle");
+        let width = crate::kit::style_class::computed().and_then(|style| style.width);
+        let role = format!("{kind}.handle");
+        if let Some(width) = width.filter(|w| *w >= 1.0).or_else(|| skin::has_own(&role).then_some(8.0)) {
+            // The end that moves: a volume's right end, a pan's end away from the centre.
+            let at = if span.0 > 0.0 && span.0 < 0.5 { x(span.0) } else { x(span.1) };
+            let handle = Rect::from_center_size(
+                Pos2::new(at.clamp(track.left() + width / 2.0, track.right() - width / 2.0), rect.center().y),
+                Vec2::new(width.min(rect.width()), crate::kit::native_css::thickness(rect.height()).min(rect.height())),
+            );
+            if !(skin::has_own(&role) && skin::paint(painter, handle, &role, state, fill, 0.0)) {
+                crate::kit::native_css::surface(painter, handle, 2.0, theme::text_primary());
+            }
+        }
+    }
+    // The value's size from the sheet (`font-size`).
+    let font = theme::mono_font(
+        crate::kit::style_class::computed().filter(|style| style.authored.font_size).map_or(theme::TEXT_SMALL, |s| s.font_size),
+    );
+    // A narrow field (a header at its least width) gives up its inset before its value is cut.
+    let inset = ((rect.width() - 32.0) / 2.0).clamp(2.0, 8.0);
+    let inner = rect.shrink2(Vec2::new(inset, 0.0));
     // The sheet may move the value (`text-align`) and give the lit part's text its own colour
     // (`.value-fill { color }`).
     let align = match crate::kit::style_class::computed().and_then(|style| style.text_align) {
@@ -112,8 +136,8 @@ pub fn level_bar(
             inner,
             align,
             text,
-            theme::mono_font(theme::TEXT_SMALL),
-            theme::text_primary(),
+            font.clone(),
+            crate::kit::style_class::foreground(theme::text_primary()),
         );
     }
     let on_fill = lit_ink.unwrap_or_else(|| {
@@ -124,7 +148,7 @@ pub fn level_bar(
         inner,
         align,
         text,
-        theme::mono_font(theme::TEXT_SMALL),
+        font,
         on_fill,
     );
 }

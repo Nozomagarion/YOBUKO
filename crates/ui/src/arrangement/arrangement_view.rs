@@ -4460,9 +4460,12 @@ fn send_knob(
         _ => committed.unwrap_or(level),
     };
     let position = ((shown - VOLUME_RANGE.0) / (VOLUME_RANGE.1 - VOLUME_RANGE.0)) as f32;
+    // `.send` styles it here as in the mixer.
+    let _style = crate::kit::style_class::enter_response("send", &response);
     let amount = widgets::hover(ui, &response);
     let surface = motion::mix(background, theme::control_hover(), amount);
-    let pointer = theme::text_on(surface);
+    crate::kit::native_css::surface(painter, rect, 0.0, egui::Color32::TRANSPARENT);
+    let pointer = crate::kit::style_class::foreground(theme::text_on(surface));
     if amount > 0.0 || response.has_focus() {
         let fill = theme::control_hover().gamma_multiply(amount.max(0.3));
         widgets::track_button_face(ui, painter, rect, &response, fill);

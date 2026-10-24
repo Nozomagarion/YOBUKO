@@ -1059,3 +1059,17 @@ fn a_clip_under_the_play_position_is_playing() {
     let running = rects(&painted(css, |ui| arrangement_view::show(ui, &timeline, &mut state, &mut Vec::new())));
     assert!(running.iter().any(|r| r.fill == egui::Color32::RED), "the clip under the play position");
 }
+
+#[test]
+fn a_level_bar_draws_a_handle_where_its_fill_ends() {
+    let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, 20.0));
+    let draw = |ui: &mut egui::Ui| {
+        let _value = super::super::style_class::enter_named("value", "arrangement-volume");
+        crate::kit::mixer_controls::level_bar(ui.painter(), field, "volume", (0.0, 0.5), 0.0, "0.0", egui::Align2::RIGHT_CENTER);
+    };
+    assert!(!rects(&painted("", draw)).iter().any(|r| r.fill == egui::Color32::RED));
+    let shaped = rects(&painted("#arrangement-volume .value-handle { width: 6px; background-color: #FF0000; }", draw));
+    let handle = shaped.iter().find(|r| r.fill == egui::Color32::RED).expect("the handle");
+    assert_eq!(handle.rect.center().x, 110.0);
+    assert_eq!(handle.rect.width(), 6.0);
+}

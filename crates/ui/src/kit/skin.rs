@@ -56,6 +56,8 @@ pub const OWN_ROLES: &[&str] = &[
     "volume.fill",
     "pan.track",
     "pan.fill",
+    "volume.handle",
+    "pan.handle",
     // A send's tile and its level rail.
     "send",
     "send.fill",
