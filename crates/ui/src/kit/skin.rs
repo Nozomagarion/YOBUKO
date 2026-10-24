@@ -68,6 +68,10 @@ pub const OWN_ROLES: &[&str] = &[
     "loop-region",
     // An arrangement clip's fade handles.
     "clip.fade-handle",
+    // A device parameter's slider: its rail, the fill up to its value and its handle.
+    "slider.rail",
+    "slider.fill",
+    "slider.handle",
     // The piano roll's tool buttons, by the id after `#piano-`.
     "piano.select",
     "piano.draw",

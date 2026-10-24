@@ -1169,3 +1169,25 @@ fn the_midi_tools_column_takes_its_width_from_the_sheet() {
     painted(".midi-tools { width: 220px; }", |_| widths.1 = crate::detail::midi_tools::tools_width());
     assert_eq!(widths, (crate::detail::midi_tools::TOOLS_WIDTH, 220.0));
 }
+
+#[test]
+fn device_sliders_take_parts_and_knobs_from_the_sheet_and_a_panel_colour_spares_them() {
+    use crate::detail::detail_view::{slider_as_knob, themed_slider};
+    let mut seen = (true, true);
+    painted("", |_| seen = (themed_slider(), slider_as_knob()));
+    assert_eq!(seen, (false, false));
+    painted(".slider-handle { background-color: #FF0000; }", |_| seen = (themed_slider(), slider_as_knob()));
+    assert_eq!(seen, (true, false));
+    // The appearance is a host rule, read from the theme's sheet as the app reads it.
+    let (theme, _) = super::super::theme::from_sheet(".slider { --suhina-appearance: knob; }", "");
+    skin::configure(&theme.skin);
+    assert!(slider_as_knob());
+    skin::configure(&skin::Skin::default());
+    let mut fill = None;
+    painted("#device-plugin { background-color: #102030; }", |ui| {
+        let _device = super::super::style_class::enter_named("device", "device-plugin");
+        let styled = super::super::style_class::ui(ui);
+        fill = Some(styled.style().visuals.widgets.inactive.bg_fill);
+    });
+    assert_ne!(fill, Some(egui::Color32::from_rgb(0x10, 0x20, 0x30)), "the rails keep their own colour");
+}

@@ -1949,6 +1949,10 @@ fn parameter_widget(
                 .max_decimals(style.decimals),
         ),
         ParameterControl::Knob | ParameterControl::LogKnob => knob(ui, parameter, rect, accent, value),
+        // `.slider { --suhina-appearance: knob }` draws a slider as a knob.
+        ParameterControl::Slider | ParameterControl::LogSlider | ParameterControl::Integer if slider_as_knob() => {
+            knob(ui, parameter, rect, accent, value)
+        }
         ParameterControl::VerticalSlider => {
             let rect = Rect::from_center_size(rect.center(), Vec2::new(ui.spacing().interact_size.y, rect.height()));
             let mut slider_ui =
@@ -1962,6 +1966,7 @@ fn parameter_widget(
                     .step_by(style.step),
             )
         }
+        control if themed_slider() => themed_slider_widget(ui, parameter, rect, control, value),
         control => ui.add(
             egui::Slider::new(value, parameter.min..=parameter.max)
                 .show_value(false)
@@ -1971,6 +1976,88 @@ fn parameter_widget(
                 .step_by(if control == ParameterControl::Integer { 1.0 } else { style.step }),
         ),
     }
+}
+
+/// Whether the theme draws parameter sliders as knobs (`.slider { --suhina-appearance: knob }`).
+pub(crate) fn slider_as_knob() -> bool {
+    let _style = crate::kit::style_class::enter("slider");
+    crate::kit::style_class::knob_preference(false)
+}
+
+/// Whether the theme gives sliders parts of their own: `.slider-rail`, `.slider-fill` or
+/// `.slider-handle` with a background, or `slider.rail` / `slider.fill` / `slider.handle` artwork.
+pub(crate) fn themed_slider() -> bool {
+    let _style = crate::kit::style_class::enter("slider");
+    ["slider-rail", "slider-fill", "slider-handle"].into_iter().any(|class| {
+        let _part = crate::kit::style_class::enter(class);
+        crate::kit::style_class::computed().is_some_and(|c| c.authored.background || c.has_gradient())
+    }) || ["slider.rail", "slider.fill", "slider.handle"].into_iter().any(crate::kit::skin::has_own)
+}
+
+/// A parameter slider drawn from the theme's parts: the rail (`.slider-rail`, `height` its
+/// thickness), the fill up to the value (`.slider-fill`) and the handle (`.slider-handle`,
+/// `width`), each also as artwork. Dragged sideways, back to its default on a double click.
+fn themed_slider_widget(
+    ui: &mut Ui,
+    parameter: &GraphParameter,
+    rect: Rect,
+    control: ParameterControl,
+    value: &mut f64,
+) -> egui::Response {
+    use crate::kit::skin::{self, State};
+    let (min, max) = (parameter.min, parameter.max);
+    let logarithmic = control == ParameterControl::LogSlider && min > 0.0 && max > min;
+    let height = ui.spacing().interact_size.y.min(rect.height()).max(8.0);
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(rect.width(), height), Sense::click_and_drag());
+    let _style = crate::kit::style_class::enter_response("slider", &response);
+    let to_position = |v: f64| {
+        if logarithmic { (v / min).ln() / (max / min).ln() } else { (v - min) / (max - min).max(f64::EPSILON) }
+    };
+    let handle_width = {
+        let _handle = crate::kit::style_class::enter("slider-handle");
+        crate::kit::style_class::computed().and_then(|c| c.width).unwrap_or(8.0).clamp(2.0, rect.width().max(2.0))
+    };
+    let travel = (rect.width() - handle_width).max(1.0);
+    if let Some(pointer) = response.interact_pointer_pos().filter(|_| response.dragged() || response.clicked()) {
+        let position = f64::from(((pointer.x - rect.left() - handle_width / 2.0) / travel).clamp(0.0, 1.0));
+        let mut next = if logarithmic { min * (max / min).powf(position) } else { min + position * (max - min) };
+        let step = if control == ParameterControl::Integer { 1.0 } else { parameter.ui.step };
+        if step > 0.0 {
+            next = (min + ((next - min) / step).round() * step).clamp(min, max);
+        }
+        *value = next;
+    }
+    let position = to_position(*value).clamp(0.0, 1.0) as f32;
+    let state = State::response(&response, false);
+    let painter = ui.painter_at(rect);
+    let rail = {
+        let _rail = crate::kit::style_class::enter("slider-rail");
+        let thickness = crate::kit::native_css::thickness(4.0).clamp(1.0, rect.height());
+        let rail = Rect::from_center_size(rect.center(), Vec2::new(rect.width(), thickness));
+        if !(skin::has_own("slider.rail") && skin::paint(&painter, rail, "slider.rail", state, theme::text_hint(), 0.0)) {
+            crate::kit::native_css::surface(&painter, rail, thickness / 2.0, theme::control_background());
+        }
+        rail
+    };
+    let at = rect.left() + handle_width / 2.0 + travel * position;
+    {
+        let _fill = crate::kit::style_class::enter("slider-fill");
+        let fill = Rect::from_min_max(rail.min, Pos2::new(at, rail.bottom()));
+        if fill.width() >= 1.0
+            && !(skin::has_own("slider.fill") && skin::paint(&painter, fill, "slider.fill", state, theme::accent(), 0.0))
+        {
+            crate::kit::native_css::surface(&painter, fill, rail.height() / 2.0, theme::control_selected());
+        }
+    }
+    {
+        let _handle = crate::kit::style_class::enter_response("slider-handle", &response);
+        let handle = Rect::from_center_size(Pos2::new(at, rect.center().y), Vec2::new(handle_width, rect.height()));
+        if !(skin::has_own("slider.handle") && skin::paint(&painter, handle, "slider.handle", state, theme::text_primary(), 0.0))
+        {
+            crate::kit::native_css::surface(&painter, handle, 2.0, theme::text_primary());
+        }
+    }
+    response
 }
 
 /// A knob in `rect`, logarithmic for a `LogKnob`: dragged up and down (finer with Shift),
