@@ -1388,6 +1388,35 @@
       "docs/spec/sample-map.md"
     ]
   },
+  "Browser/Sample map/map_label_size": {
+    "sourceFingerprint": "408cafc06e0deb688332c7f71f407fd385b4aedde10baddeb168add9c9dddf64",
+    "summary": "Set how large the names of the sample map's clusters are, or hide them.",
+    "description": "The sample map names its groups of similar sounds (Kick, Snare, Vocal and so on) with labels drawn over the points. In a narrow map, large labels can cover the very points they name. This setting scales every label by the same amount, so bigger groups keep their larger labels and labels still never overlap. It is the same choice as Labels in the map's top bar.",
+    "options": [
+      {
+        "name": "Off",
+        "description": "Hide the labels; the legend under the map still names the kinds."
+      },
+      {
+        "name": "50 %",
+        "description": "Labels at half their full size."
+      },
+      {
+        "name": "75 %",
+        "description": "Labels at three quarters of their full size."
+      },
+      {
+        "name": "100 %",
+        "description": "Labels at their full size. This is the default."
+      }
+    ],
+    "whenToChange": "Make the labels smaller or turn them off when they hide samples you want to see or click, most often in the map docked in the browser.",
+    "references": [
+      "crates/ui/src/browser/sample_map.rs",
+      "crates/ui/src/settings.rs",
+      "docs/spec/sample-map.md"
+    ]
+  },
   "Browser/Tags/Tag limit": {
     "sourceFingerprint": "f5ef001296009ec13dded95149613e321e2590df6b4c206fa82823e366664de5",
     "summary": "Set the maximum number of color tags in the browser library.",
