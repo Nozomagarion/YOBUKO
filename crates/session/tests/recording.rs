@@ -53,10 +53,7 @@ fn channel(id: u32) -> Channel {
 
 /// Keys (plays notes) and Mic (hears input channel 1), with two empty scenes.
 fn project() -> Project {
-    // Ids on its lanes, clips and scenes, as a session gives them.
-    let mut project = project_built();
-    assert_eq!(project.assign_ids(), Ok(()));
-    project
+    suhina_test_support::with_ids(project_built())
 }
 
 fn project_built() -> Project {
@@ -98,7 +95,7 @@ fn rig(project: Project) -> Rig {
 
 impl Rig {
     fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
-        self.session.execute(id, &params).map_err(|e| e.0)
+        self.session.execute(id, &params).map_err(String::from)
     }
 
     /// Renders until frame `until`, feeding the input `level`.
@@ -167,8 +164,11 @@ fn a_slot_records_from_the_next_bar_and_plays_its_take_looped() {
     let ended = rig.run("clip.launch", json!({ "track": 1, "scene": 1 })).unwrap();
     assert_eq!(ended["end_beat"], json!(8.0));
     assert_eq!(rig.session.recording_slot(TrackId(1)), None, "ending");
+    // Asked to end, the take still records to its boundary: auto-arm leaves the arm alone.
+    assert!(rig.session.is_recording(), "the take records on to beat 8");
     rig.render_to(BEAT * 8 + BLOCK, 0.0);
     rig.settle();
+    assert!(!rig.session.is_recording(), "the take is a clip");
     let (clip, content) = rig.slot_clip(0, 0).expect("the take is a clip");
     assert_eq!(clip.loop_range, Some(LoopRange { start: 0.0, end: 4.0 }), "four beats, looped");
     assert!(close(content.length, 4.0));

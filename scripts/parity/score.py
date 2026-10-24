@@ -160,8 +160,10 @@ CHAPTERS = [
      "launch modes (trigger, gate, toggle, repeat) with press and release, legato, per-clip launch "
      "quantisation, slots and scenes launched from computer keys. Missing velocity amount, clip "
      "offset/nudge, launching from live MIDI notes, follow-action multiplier and scene follow actions."),
-    (17, "Routing and I/O", 22, 0.38, "partial",
-     "Track output to main or a group (track.setOutput); MIDI controllers play the armed tracks, "
+    (17, "Routing and I/O", 22, 0.39, "partial",
+     "Track output to main or a group (track.setOutput); MIDI controllers play the armed tracks "
+     "and, with auto-arm on, the selected one as well (while a take records, arming "
+     "does not follow the selection, Settings > MIDI, #834), with MIDI monitoring Auto / In / Off per track, "
      "each track choosing its MIDI port and channel (track.setMidiInput), with the mod wheel, "
      "pitch bend and aftertouch reaching the instrument alongside notes (#812); an audio input "
      "device with a channel or pair per track and monitoring Auto / In / Off "

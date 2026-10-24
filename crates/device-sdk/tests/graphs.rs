@@ -219,7 +219,7 @@ fn version_one_gain_example_remains_readable_and_new_nodes_require_version_two()
     let mut out = [1.0, -1.0];
     g.compile().unwrap().process(&mut out);
     assert_eq!(out, [1.0, -1.0]);
-    let text = graph(K::Tanh).to_sd().unwrap().replace("\"version\": 4", "\"version\": 1");
+    let text = graph(K::Tanh).to_sd().unwrap().replace("\"version\": 6", "\"version\": 1");
     assert!(DeviceGraph::from_sd(&text).is_err());
     assert!(g.compile_at(f64::NAN).is_err());
     assert!(g.compile_at(1e9).is_err());
@@ -776,5 +776,5 @@ fn the_expanded_panel_fixture_reads_and_round_trips() {
     assert_eq!(expanded.controls[0].name, "Big power switch");
     assert!(g.ui.is_none());
     // A Windows checkout may have turned the fixture's line ends into CRLF; `to_sd` writes LF.
-    assert_eq!(g.to_sd().unwrap(), text.replace("\r\n", "\n"));
+    assert_eq!(g.to_sd().unwrap(), text.replace("\r\n", "\n").replacen("\"version\": 5", "\"version\": 6", 1));
 }

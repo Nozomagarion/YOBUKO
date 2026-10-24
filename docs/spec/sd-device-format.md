@@ -3,7 +3,7 @@ description: Version 6 of the data-only Suhina device graph format, SDK, track l
 read_when: .sd, Suhina device, device graph, device SDK, community effect, visual node, device UI
 type: spec
 status: current
-last_verified: 2026-10-22
+last_verified: 2026-10-24
 covers:
   - crates/device-sdk/src/builtin.rs
   - crates/device-sdk/Cargo.toml
@@ -40,10 +40,9 @@ supported graph for audio processing.
 
 The top-level object contains `format: "suhina-device"`, `version`, a `device` object,
 `nodes`, `connections` and optional `editor` metadata. The reader accepts file versions 1 through
-6. Writing canonical JSON gives version 6 when a panel has a style sheet (`style`), version 5 when
-the device has an expanded panel (`device.expanded`) and version 4 otherwise, without changing its
-sound; a version 4 or older file with `device.expanded`, or a version 5 or older file with a panel
-`style`, is rejected. Older readers reject the version they do not know, preventing
+6, and a writer always writes the newest (*Versions* below); a version 4 or older file with
+`device.expanded`, or a version 5 or older file with a panel `style`, is rejected. Older readers
+reject a version they do not know, preventing
 silent loss of authoring metadata when saving. File version describes
 the JSON schema; `device.version` describes revisions of a device's identity and parameter
 contract. Files without `device.version` are revision 1. Device `id` remains stable across
@@ -101,6 +100,22 @@ state when the embedded graph is unchanged, including effect tails and oscillato
 See the complete [node reference](sdk-nodes.md) and the [authoring guide](../device-sdk.md),
 including the machine-readable catalog for AI agents.
 
+## Versions
+
+The file version rises with every change to what a file holds, and every file is written as the
+newest ([ADR 0010](../decisions/0010-project-files.md) › Amendment: format versions); a reader
+refuses a newer file and reads every older one. `device.version`, the device's own revision, is
+separate (above).
+
+| Version | What it added |
+|---|---|
+| 1 | Input, gain and output nodes in a linear chain |
+| 2 | Every node kind and port connections |
+| 3 | `editor` metadata |
+| 4 | `device.version` and `migrations`, apart from the file version |
+| 5 | `device.expanded`, the expanded panel; since 2026-10-24 written by every file, not only one with an expanded panel |
+| 6 | A panel's `style`, its own style sheet (theme tiers, `docs/spec/theme-skins.md`) |
+
 ## Visual connection layout
 
 Optional `editor.graph` contains `nodes` and `wires` arrays (both default empty).
@@ -153,7 +168,7 @@ Layers, component hierarchy and editable envelope documents remain separate plan
 ```json
 {
   "format": "suhina-device",
-  "version": 4,
+  "version": 5,
   "device": {
     "id": "org.example.gain",
     "version": 1,

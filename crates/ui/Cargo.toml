@@ -33,6 +33,7 @@ resvg = { version = "0.45", default-features = false, features = ["text"] } # MP
 
 
 [dev-dependencies]
+suhina-test-support.workspace = true
 egui_kittest = { version = "0.36", features = ["wgpu", "snapshot"] }  # MIT OR Apache-2.0
 hound.workspace = true
 suhina-output.workspace = true  # tests that preview through a real audio device

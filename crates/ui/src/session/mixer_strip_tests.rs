@@ -75,7 +75,7 @@ fn volume_scale_labels_move_independently_and_can_be_hidden_in_both_directions()
 
 #[test]
 fn mixer_and_name_css_materials_override_native_tint_and_paint_gradients() {
-    use crate::interaction::grid::Grid;
+    use crate::interaction::grid::TrackGrid;
     use crate::kit::{native_css, skin};
     for (gradient, name_gradient) in [(false, false), (true, false), (false, true), (true, true)] {
         let ctx = egui::Context::default();
@@ -86,7 +86,7 @@ fn mixer_and_name_css_materials_override_native_tint_and_paint_gradients() {
             css: Some(format!(".mixer {{ background: {body}; }} .track-name {{ background: {name}; }}").into()),
             ..Default::default()
         });
-        let grid = Grid::build(&crate::demo::demo_project(), None);
+        let grid = TrackGrid::build(&crate::demo::demo_project(), None);
         let name_fill = if name_gradient {
             colour_picker::fill(grid.columns[0].color, false)
         } else {
@@ -288,9 +288,9 @@ fn the_device_list_is_as_tall_on_a_strip_without_sends() {
 
 #[test]
 fn a_send_takes_its_class_and_its_own_id() {
-    use crate::interaction::grid::Grid;
+    use crate::interaction::grid::TrackGrid;
     use crate::kit::{native_css, skin};
-    let grid = Grid::build(&crate::demo::demo_project(), None);
+    let grid = TrackGrid::build(&crate::demo::demo_project(), None);
     let column = grid.columns.iter().find(|c| !c.sends.is_empty()).expect("the demo has a track with sends");
     for (css, colour) in [
         (".send { background-color: #00FF00; }", Color32::from_rgb(0, 0xFF, 0)),

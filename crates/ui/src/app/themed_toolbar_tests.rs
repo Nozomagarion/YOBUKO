@@ -80,13 +80,13 @@ fn responsive_theme_survives_live_reload_and_resize() {
 
 struct Fixture {
     app: App,
-    grid: Grid,
+    grid: TrackGrid,
     actions: Vec<Action>,
 }
 
 fn native_bar() -> Harness<'static, Fixture> {
     let fixture =
-        Fixture { app: App::new(), grid: Grid::build(&crate::demo::demo_project(), None), actions: Vec::new() };
+        Fixture { app: App::new(), grid: TrackGrid::build(&crate::demo::demo_project(), None), actions: Vec::new() };
     let mut harness = Harness::builder().with_size((1920.0, 240.0)).build_ui_state(
         |ui, fixture: &mut Fixture| {
             let skin = fixture.app.themes.get(&fixture.app.settings.theme).map(|t| t.skin.clone()).unwrap_or_default();
@@ -277,7 +277,7 @@ fn css_toolbar_targets_keep_native_commands_with_svg_artwork() {
         ..Default::default()
     };
     app.use_test_skin(skin::Skin { assets:skin::example_assets(),toolbar:Some(layout),css:Some(std::sync::Arc::from(".toolbar { display:grid; grid-template-columns:80px 120px; gap:8px; } #tempo { grid-column:1; grid-row:1; width:auto; } #transport { grid-column:2; width:auto; } #mapping { display:none; }")),..Default::default() });
-    let fixture = Fixture { app, grid: Grid::build(&crate::demo::demo_project(), None), actions: Vec::new() };
+    let fixture = Fixture { app, grid: TrackGrid::build(&crate::demo::demo_project(), None), actions: Vec::new() };
     let mut harness = Harness::builder().with_size((640.0, 56.0)).build_ui_state(
         |ui, fixture: &mut Fixture| {
             let skin =

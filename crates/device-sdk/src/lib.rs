@@ -30,13 +30,11 @@ pub use suhina_device_api::ProcessContext;
 
 pub const EXTENSION: &str = "sd";
 pub const FORMAT: &str = "suhina-device";
-/// The newest file version this crate reads. A file is written as the oldest version that holds
-/// it: 4, 5 with an expanded panel, 6 with a panel style sheet, so an older Suhina still opens it.
+/// The version every file is written as, and the newest this crate reads. It rises with every
+/// change to what a file holds, so an older Suhina refuses a newer file rather than dropping
+/// what it does not know (ADR 0010 › Amendment: format versions, `docs/spec/sd-device-format.md`
+/// › Versions). Files of every earlier version are still read. Version 6 adds a panel's style sheet.
 pub const VERSION: u32 = 6;
-/// The version a file with an expanded panel and no panel style sheet is written as.
-const EXPANDED_VERSION: u32 = 5;
-/// The version a file without an expanded panel is written as.
-const COMPACT_VERSION: u32 = 4;
 pub const MAX_FILE_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_NODES: usize = 128;
 pub const MAX_CONNECTIONS: usize = MAX_NODES * 5;
@@ -655,13 +653,7 @@ impl From<&DeviceGraph> for FileV1 {
             .collect();
         Self {
             format: FORMAT.into(),
-            version: if graph.ui.iter().chain(graph.expanded.iter()).any(|ui| ui.style.is_some()) {
-                VERSION
-            } else if graph.expanded.is_some() {
-                EXPANDED_VERSION
-            } else {
-                COMPACT_VERSION
-            },
+            version: VERSION,
             device: DeviceV1 {
                 ui: graph.ui.clone(),
                 expanded: graph.expanded.clone(),
@@ -858,7 +850,7 @@ mod tests {
         assert_eq!(old.device_version, 1);
         let encoded = old.to_sd().expect("legacy graph upgrades to current format");
         let json: serde_json::Value = serde_json::from_str(&encoded).expect("valid JSON");
-        assert_eq!(json["version"], 4, "a file without an expanded panel stays version 4");
+        assert_eq!(json["version"], VERSION, "every file is written as the current version");
         assert_eq!(json["device"]["version"], 1);
         assert_eq!(DeviceGraph::from_sd(&encoded), Ok(old));
     }
@@ -883,16 +875,16 @@ mod tests {
     }
 
     #[test]
-    fn an_expanded_panel_round_trips_as_version_5_and_older_versions_refuse_it() {
+    fn an_expanded_panel_round_trips_and_older_versions_refuse_it() {
         let mut graph = gain_graph();
         graph.ui = Some(ui::DeviceUi { size: [260., 168.], ..ui::DeviceUi::default() });
         graph.expanded = Some(ui::DeviceUi { size: [720., 400.], ..ui::DeviceUi::default() });
         let encoded = graph.to_sd().unwrap();
         let json: serde_json::Value = serde_json::from_str(&encoded).unwrap();
-        assert_eq!(json["version"], 5);
+        assert_eq!(json["version"], VERSION);
         assert_eq!(json["device"]["expanded"]["size"], serde_json::json!([720.0, 400.0]));
         assert_eq!(DeviceGraph::from_sd(&encoded), Ok(graph.clone()));
-        assert!(DeviceGraph::from_sd(&encoded.replace("\"version\": 5", "\"version\": 4")).is_err());
+        assert!(DeviceGraph::from_sd(&encoded.replace("\"version\": 6", "\"version\": 4")).is_err());
         // The expanded panel is checked against the parameters like the compact one.
         let mut bad = graph;
         bad.expanded = Some(ui::DeviceUi { hidden_parameters: vec!["missing".into()], ..ui::DeviceUi::default() });

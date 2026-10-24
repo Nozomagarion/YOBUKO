@@ -11,6 +11,7 @@
 
 mod agents;
 mod arrangement_editing;
+mod auto_arm;
 mod automation_lanes;
 mod browser;
 mod browser_preview;
@@ -36,6 +37,7 @@ mod session_menus;
 mod settings_window;
 mod short_panes;
 mod slot_launch;
+mod temp_dir;
 mod track_colour;
 mod waveforms;
 mod window;

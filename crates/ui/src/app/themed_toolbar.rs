@@ -74,7 +74,7 @@ impl App {
     pub(super) fn themed_toolbar(
         &mut self,
         ui: &mut Ui,
-        grid: Option<&Grid>,
+        grid: Option<&TrackGrid>,
         cpu: Option<u32>,
         ram: Option<u64>,
         actions: &mut Vec<Action>,
@@ -324,7 +324,7 @@ impl App {
         ui: &mut Ui,
         rect: Rect,
         module: &str,
-        grid: &Grid,
+        grid: &TrackGrid,
         cpu: Option<u32>,
         ram: Option<u64>,
         actions: &mut Vec<Action>,
