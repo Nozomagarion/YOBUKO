@@ -308,6 +308,48 @@ fn moved_points_keep_beat_order_and_report_their_new_places() {
     assert_eq!(points, [(4.0, 0.5), (8.0, -0.5), (10.0, -1.0)]);
 }
 
+/// A point dragged onto the beat of the next one stays before it, so the lane jumps from the
+/// dragged point's value to the other's, as drawn while dragging, not the other way round; a
+/// point dragged back onto the beat of the one before stays after it, and changing only the
+/// value of the first of two points at one beat keeps their order.
+#[test]
+fn a_point_moved_onto_another_points_beat_keeps_its_side() {
+    let pans =
+        |session: &Session| -> Vec<(f64, f64)> { lanes(session)[0].points.iter().map(|p| (p.beat, p.value)).collect() };
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, -0.5), (4.0, 0.5)] {
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    let moved = run(&mut session, "automation.movePoint", json!({ "track": 1, "param": "pan", "point": 0, "beat": 4 }))
+        .unwrap();
+    assert_eq!(moved["point"], json!(0));
+    assert_eq!(pans(&session), [(4.0, -0.5), (4.0, 0.5)]);
+    // Only the value of the first: the order stays.
+    run(&mut session, "automation.movePoint", json!({ "track": 1, "param": "pan", "point": 0, "value": -0.25 }))
+        .unwrap();
+    assert_eq!(pans(&session), [(4.0, -0.25), (4.0, 0.5)]);
+    // A point that comes from later goes after the ones at its beat.
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 8, "value": 1 })).unwrap();
+    run(&mut session, "automation.movePoint", json!({ "track": 1, "param": "pan", "point": 2, "beat": 4 })).unwrap();
+    assert_eq!(pans(&session), [(4.0, -0.25), (4.0, 0.5), (4.0, 1.0)]);
+    // A selection moved later goes before the points at its beat, and a value change of a
+    // selection keeps the order.
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, -0.5), (4.0, 0.5)] {
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    run(&mut session, "automation.movePoints", json!({ "track": 1, "param": "pan", "points": [0], "beats": 4 }))
+        .unwrap();
+    assert_eq!(pans(&session), [(4.0, -0.5), (4.0, 0.5)]);
+    let moved =
+        run(&mut session, "automation.movePoints", json!({ "track": 1, "param": "pan", "points": [0], "value": 0.25 }))
+            .unwrap();
+    assert_eq!(moved["points"], json!([0]));
+    assert_eq!(pans(&session), [(4.0, -0.25), (4.0, 0.5)]);
+}
+
 #[test]
 fn several_points_are_deleted_in_one_undo_step_and_the_lane_goes_with_the_last() {
     let mut session = Session::new(project());

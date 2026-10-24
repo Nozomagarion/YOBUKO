@@ -62,6 +62,18 @@ impl AutomationLane {
         index
     }
 
+    /// Puts back a point taken out of index `from`, in beat order, keeping its side of the
+    /// points at its beat: one that comes from before them goes first, one from after them
+    /// last, and one that stays at its beat keeps its place, so moving a point onto another's
+    /// beat, or changing only its value, never turns a jump around. Returns its index.
+    pub fn insert_near(&mut self, point: AutomationPoint, from: usize) -> usize {
+        let first = self.points.partition_point(|p| p.beat < point.beat);
+        let after = self.points.partition_point(|p| p.beat <= point.beat);
+        let index = from.clamp(first, after);
+        self.points.insert(index, point);
+        index
+    }
+
     /// The lane's value at `beat` (see [`value_at`]).
     pub fn value_at(&self, beat: f64, stepped: bool) -> Option<f64> {
         value_at(&self.points, beat, stepped)
@@ -152,5 +164,21 @@ mod tests {
         assert_eq!(lane.insert(AutomationPoint::new(1.0, 0.0)), 0);
         assert_eq!(lane.insert(AutomationPoint::new(2.0, 0.5)), 2);
         assert_eq!(lane.points.iter().map(|p| p.value).collect::<Vec<_>>(), [0.0, 1.0, 0.5]);
+        // Put back near where it was: from before the points at its beat, first among them;
+        // from after them, last; from among them, where it was.
+        let mut jump = AutomationLane::new("volume");
+        for (beat, value) in [(0.0, 0.1), (4.0, 0.2), (4.0, 0.3), (8.0, 0.4)] {
+            jump.insert(AutomationPoint::new(beat, value));
+        }
+        let mut moved = jump.clone();
+        let point = moved.points.remove(0);
+        assert_eq!(moved.insert_near(AutomationPoint { beat: 4.0, ..point }, 0), 0);
+        let mut moved = jump.clone();
+        let point = moved.points.remove(3);
+        assert_eq!(moved.insert_near(AutomationPoint { beat: 4.0, ..point }, 3), 3);
+        let mut moved = jump.clone();
+        let point = moved.points.remove(1);
+        assert_eq!(moved.insert_near(AutomationPoint { value: 0.9, ..point }, 1), 1);
+        assert_eq!(moved.points[2].value, 0.3);
     }
 }

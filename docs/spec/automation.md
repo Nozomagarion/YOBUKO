@@ -175,7 +175,7 @@ the value set on the mixer or the device. Editing (every edit is one undo step):
 |---|---|
 | Click the lane | `automation.addPoint` at the beat under the pointer (on the nearest line the arrangement's grid draws at this zoom, [arrangement editing](arrangement-editing.md#the-grid); Alt, Option on macOS: free) and the value at its height |
 | Click on or near the line (within 6 points), or a lane's faint line | `automation.addPoint` on the envelope: its value at that beat, so the envelope keeps its shape (a level or straight segment stays exactly so). The segment before the new point keeps its curve; the one after gets the curve that passes through the old segment's middle |
-| Drag a point | `automation.movePoint`, its beat on the grid (Alt, Option on macOS: free) and its value following the pointer; points dragged past others keep beat order |
+| Drag a point | `automation.movePoint`, its beat on the grid (Alt, Option on macOS: free) and its value following the pointer; points dragged past others keep beat order, and a point dragged onto another's beat stays on the side it came from, so the jump runs as drawn while dragging |
 | Click a point | selects it; Shift or Ctrl adds it to the selection or takes it out. Selecting a clip ends a selection of points |
 | Drag on the lane away from the line | draws a box that selects the points in it |
 | Drag a selected point | `automation.movePoints`: the whole selection moves by the same beats (none before beat 0) and the same change of value |
