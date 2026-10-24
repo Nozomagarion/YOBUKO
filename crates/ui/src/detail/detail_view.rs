@@ -902,6 +902,13 @@ fn chain_row(
                 )
             });
             let width = editor.map_or(authored_width, |e| authored_width.max(e.x + PAD * 2.0));
+            // `.device { width }` or `#device-<id> { width }` widens the panel (up to 1600 points).
+            let width = {
+                let _style = crate::kit::style_class::enter_named("device", &format!("device-{}", device.theme_id));
+                crate::kit::style_class::computed()
+                    .and_then(|c| c.width)
+                    .map_or(width, |themed| width.max(themed.clamp(120.0, 1600.0)))
+            };
             let height = sdk_viewport(device)
                 .map_or_else(|| panel_height(device, width - PAD * 2.0, editor), |v| ROW + PAD * 2.0 + v[1]);
             (width, height)
