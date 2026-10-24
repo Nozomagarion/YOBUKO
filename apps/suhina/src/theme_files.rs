@@ -369,7 +369,8 @@ impl ThemeFiles {
         }
         let folder = self.folder.as_ref().ok_or("there is no folder to keep themes in")?;
         let mut contents = vec![("README.md".into(), theme::template_readme().into_bytes())];
-        for (id, path, _) in files {
+        // Suhina's own kept copies (`_defaults`, the template) are no theme of the user's.
+        for (id, path, _) in files.into_iter().filter(|(id, _, _)| !id.starts_with('_') && id != "template") {
             if is_css_theme(&path) || path.is_dir() {
                 // A theme folder as it is: its sheets, variants and artwork.
                 contents.extend(folder_files(folder, &id)?);
@@ -378,7 +379,9 @@ impl ThemeFiles {
                 contents.extend(portable_package_files(&id, &theme)?);
             }
         }
-        let name = format!("suhina-themes-{}.zip", date(SystemTime::now()));
+        // The local date and time, so the name says the day the user knows, and two backups on
+        // one day are both kept.
+        let name = format!("suhina-themes-{}.zip", chrono::Local::now().format("%Y-%m-%d-%H%M%S"));
         write_zip(&self.exports()?.join(name), &contents)
     }
 
@@ -1399,22 +1402,6 @@ fn read_zip(path: &Path) -> Result<Vec<LoadedTheme>, String> {
         return Err("there are no themes in this package".into());
     }
     Ok(themes)
-}
-
-/// `YYYY-MM-DD` of `time`, in UTC.
-fn date(time: SystemTime) -> String {
-    let days = time.duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs() / 86_400) as i64;
-    // Howard Hinnant's days-to-civil.
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}")
 }
 
 #[cfg(test)]

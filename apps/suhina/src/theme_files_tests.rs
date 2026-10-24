@@ -150,14 +150,6 @@ fn without_a_folder_nothing_is_read_or_written() {
 }
 
 #[test]
-fn dates_are_written_year_first() {
-    let day = |d: u64| date(SystemTime::UNIX_EPOCH + Duration::from_secs(d * 86_400));
-    assert_eq!(day(0), "1970-01-01");
-    assert_eq!(day(11_016), "2000-02-29");
-    assert_eq!(day(20_738), "2026-10-12");
-}
-
-#[test]
 fn a_folder_without_theme_css_and_two_themes_with_one_name_are_named() {
     let dir = folder("not-themes");
     let themes = dir.join("themes");
