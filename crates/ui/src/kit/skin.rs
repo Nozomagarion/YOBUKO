@@ -824,7 +824,7 @@ fn paint_variant(
     if (matches!(role, "button" | "fader.rail" | "fader.cap" | "track.name" | "track.body")
         || role.starts_with("button."))
         && super::surface::available(painter.ctx())
-        && super::theme::see_through()
+        && desktop_shows()
     {
         let (sin, cos) = angle.sin_cos();
         let size = egui::vec2(
@@ -851,6 +851,15 @@ fn paint_variant(
     mesh.rotate(egui::emath::Rot2::from_angle(angle), rect.center());
     painter.add(egui::Shape::mesh(mesh));
     true
+}
+
+/// Whether the surfaces artwork stands on let the desktop show through: the window's, the
+/// panels' and the track headers'. A translucent hover or selection colour does not count.
+fn desktop_shows() -> bool {
+    use super::theme;
+    [theme::window_background(), theme::panel_background(), theme::track_header_background()]
+        .iter()
+        .any(|color| color.a() < 255)
 }
 
 /// Original editable artwork supplied with the theme template.

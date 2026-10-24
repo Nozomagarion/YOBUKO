@@ -109,6 +109,20 @@ fn svg_backgrounds_clear_native_alpha_once_and_keep_private_images_underneath() 
     });
     output.textures_delta.clear();
     assert!(!output.shapes.iter().any(|shape| matches!(shape.shape, egui::Shape::Circle(_))));
+    // A translucent hover colour is not a see-through window.
+    let mut hover = saved;
+    hover.control_hover = Color32::from_rgba_unmultiplied(255, 255, 255, 20);
+    super::super::theme::set_palette(&ctx, hover);
+    let mut output = ctx.run_ui(Default::default(), |ui| {
+        super::super::surface::begin_frame(ui.ctx());
+        let painter = ui.ctx().layer_painter(egui::LayerId::background());
+        let rect = Rect::from_min_size(egui::pos2(10.0, 10.0), egui::Vec2::splat(30.0));
+        assert!(button(&painter, rect, State::Normal, Color32::from_rgb(50, 60, 70), 3.0));
+        super::super::surface::finish_frame(ui.ctx());
+    });
+    output.textures_delta.clear();
+    super::super::theme::set_palette(&ctx, saved);
+    assert!(!output.shapes.iter().any(|shape| matches!(shape.shape, egui::Shape::Circle(_))));
 }
 #[test]
 fn inherited_svg_renders_missing_roles_while_theme_artwork_overrides_one_role() {
