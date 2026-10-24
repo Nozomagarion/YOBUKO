@@ -285,7 +285,7 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Arrangement,
         "Time and play",
         "Ctrl+drag selects time over clips",
-        "On, a plain drag moves clips and Ctrl+drag selects time; off, a drag from a lane's or a clip's upper half paints time and from the lower half moves clips or picks them. a drag on the ruler always selects time",
+        "On, a plain drag moves clips and Ctrl+drag selects time; off, a drag from a lane's or a clip's upper half paints time and from the lower half moves clips or picks them; a drag on the ruler always selects time",
         &["time_select"],
         |cx, r| cx.on_off(r, |s| &mut s.view.time_select_ctrl),
     ),

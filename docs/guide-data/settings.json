@@ -694,7 +694,7 @@
       "keys": [
         "time_select"
       ],
-      "sourceFingerprint": "f1fd5b9fb64d77c556a3dad8e51ca31f859b80b64dfe97fa952df0b4f2530bd6",
+      "sourceFingerprint": "79d18458b81425803ba4be54ca33cfe7419f74607aee963c0e4622bec2c4326a",
       "helpStatus": "reviewed",
       "description": "A time selection is a span of the timeline across one or more tracks; editing can act on material inside that span. This setting changes how you paint that selection over Arrangement clips and lanes. When enabled, an ordinary clip drag moves it and Ctrl-drag selects time; Shift-drag is then the copy gesture. When disabled, Moving a clip determines the clip’s move and selection regions, and Ctrl-drag copies clips. A ruler drag selects time in either mode. Ctrl is Cmd on macOS.",
       "options": [
