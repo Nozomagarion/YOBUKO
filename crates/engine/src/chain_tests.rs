@@ -393,3 +393,25 @@ fn sdk_delay_tail_and_oscillator_phase_carry_through_graph_swaps() {
         assert!(max_diff(&out, &reference) < 1e-5, "{name}: {}", max_diff(&out, &reference));
     }
 }
+
+/// #911: with the loop on over bars 3 to 10 and playback starting before a MIDI clip at bar 5,
+/// the clip's first note sounds on its beat, not later.
+#[test]
+fn a_midi_clip_sounds_on_its_beat_after_play_with_the_loop_on() {
+    let mut p = project(vec![note(0.0, 1.0, 60)], 4.0, vec![device("fm-synth", &[])]);
+    if let Some(clip) = p.arrangement.lanes.get_mut(0).and_then(|l| l.clips.get_mut(0)) {
+        clip.start = 16.0;
+    }
+    p.transport.loop_range = Some(LoopRange { start: 8.0, end: 36.0 });
+    p.transport.loop_enabled = true;
+    let mut renderer = Renderer::stopped(&p, &crate::AudioPool::new(), SR).unwrap();
+    let mut controller = renderer.controller();
+    controller.send(crate::LaunchCommand::SetPosition { beat: 4.0 }).unwrap();
+    blocks(&mut renderer, 2, 256);
+    controller.send(crate::LaunchCommand::Play).unwrap();
+    let out = blocks(&mut renderer, (14 * BEAT) / 256, 256);
+    let first = out.iter().position(|s| s.abs() > 1e-4).map(|i| i / 2).expect("the note sounds");
+    // Twelve beats from the start at beat 4 to the clip at beat 16, give or take a block.
+    let expected = 12 * BEAT;
+    assert!(first + 256 >= expected && first <= expected + 512, "first sound at frame {first}, expected {expected}");
+}

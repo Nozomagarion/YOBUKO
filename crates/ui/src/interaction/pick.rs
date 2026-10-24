@@ -31,6 +31,8 @@ pub enum PickField {
     NamModelsFolder,
     /// Settings › General › IR folder (docs/spec/nam-amp-and-cab.md).
     IrFolder,
+    /// The folder Copy to folder… copies samples into (`library.copyTo`, #865).
+    CopyToFolder,
 }
 
 impl PickField {
@@ -52,6 +54,7 @@ impl PickField {
             Self::BrowserFolder => "Add a folder to the browser",
             Self::NamModelsFolder => "NAM models folder",
             Self::IrFolder => "IR folder",
+            Self::CopyToFolder => "Copy the samples to",
         }
     }
 

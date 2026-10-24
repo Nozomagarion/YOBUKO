@@ -294,6 +294,25 @@ fn launch_mappings_are_written_with_their_targets() {
     assert!(empty["project"]["launcher"].get("mappings").is_none(), "{empty}");
 }
 
+/// Take lanes (#909) are written under the arrangement with their track, name and clips, the
+/// clips without ids, and left out when there are none.
+#[test]
+fn take_lanes_survive_a_round_trip() {
+    let mut project = everything();
+    let lane = project.arrangement.lanes.iter().find(|l| l.track.is_some() && !l.clips.is_empty()).unwrap();
+    let (track, clip) = (lane.track.unwrap(), lane.clips[0].clone());
+    project.arrangement.takes = vec![
+        TakeLane { track, name: "Take 1".into(), clips: vec![Clip { id: ClipId::NONE, ..clip.clone() }] },
+        TakeLane { track, name: "Take 2".into(), clips: vec![Clip { id: ClipId::NONE, start: 4.0, ..clip }] },
+    ];
+    assert_eq!(project.validate(), Ok(()));
+    let text = to_json(&project);
+    let written: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(written["project"]["arrangement"]["takes"][1]["name"], json!("Take 2"));
+    assert_eq!(from_json(&text), Ok(project));
+    assert!(!to_json(&everything()).contains("\"takes\""), "none, none written");
+}
+
 #[test]
 fn an_empty_project_survives_a_round_trip() {
     assert_eq!(from_json(&to_json(&Project::default())), Ok(Project::default()));

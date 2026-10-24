@@ -36,6 +36,17 @@ pub fn confine(workspace: &Workspace, id: &str, mut params: Value, source: Optio
             }
         }
         "preview.play" => confine_one_file(workspace, &mut params, "path")?,
+        // Copies read the files and write only into a folder below the write root (#865).
+        "library.copyTo" => {
+            if let Some(items) = params.get_mut("items").and_then(Value::as_array_mut) {
+                for item in items.iter_mut() {
+                    let given = item.as_str().ok_or("items must be a list of file paths")?;
+                    *item = json!(display_path(&workspace.readable(given)?));
+                }
+            }
+            let folder = params.get("folder").and_then(Value::as_str).ok_or("folder must be a folder")?;
+            params["folder"] = json!(display_path(&workspace.writable_folder(Path::new(folder))?));
+        }
         "project.relinkFiles" => {
             if let Some(paths) = params.get_mut("to").and_then(Value::as_array_mut) {
                 for path in paths.iter_mut() {

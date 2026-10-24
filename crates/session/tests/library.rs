@@ -227,3 +227,36 @@ fn library_commands_are_listed_and_need_no_project() {
     }
     let _ = std::fs::remove_dir_all(&settings);
 }
+
+#[test]
+fn copy_to_copies_files_into_a_folder_numbering_taken_names_and_lists_the_missing() {
+    let settings = temp("copy-settings");
+    let samples = temp("copy-samples");
+    let out = temp("copy-out");
+    wav(&samples.join("Kick.wav"));
+    wav(&samples.join("Snare.wav"));
+    std::fs::write(out.join("Kick.wav"), b"mine").unwrap();
+    let mut p = projects(&settings);
+    let gone = samples.join("Gone.wav");
+    let items: Vec<String> = [samples.join("Kick.wav"), samples.join("Snare.wav"), gone.clone()]
+        .iter()
+        .map(|f| f.display().to_string())
+        .collect();
+    let done = run(&mut p, "library.copyTo", json!({ "items": items, "folder": out.display().to_string() })).unwrap();
+    // The name taken there gets a number; the file that was there is left alone.
+    assert_eq!(std::fs::read(out.join("Kick.wav")).unwrap(), b"mine");
+    assert_eq!(std::fs::read(out.join("Kick 2.wav")).unwrap(), std::fs::read(samples.join("Kick.wav")).unwrap());
+    assert!(out.join("Snare.wav").is_file());
+    assert_eq!(done["copied"].as_array().unwrap().len(), 2, "{done}");
+    assert_eq!(done["missing"], json!([gone.display().to_string()]));
+    // The originals stay where they are.
+    assert!(samples.join("Kick.wav").is_file() && samples.join("Snare.wav").is_file());
+    // A second copy takes the next number.
+    let again =
+        json!({ "items": [samples.join("Kick.wav").display().to_string()], "folder": out.display().to_string() });
+    let done = run(&mut p, "library.copyTo", again).unwrap();
+    assert!(done["copied"][0]["to"].as_str().unwrap().ends_with("Kick 3.wav"), "{done}");
+    assert!(run(&mut p, "library.copyTo", json!({ "items": [], "folder": out.display().to_string() })).is_err());
+    let nowhere = out.join("no such folder").display().to_string();
+    assert!(run(&mut p, "library.copyTo", json!({ "items": items, "folder": nowhere })).is_err());
+}

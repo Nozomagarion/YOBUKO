@@ -73,6 +73,9 @@ pub struct BrowserOut {
     pub pick_folder: bool,
     /// The preview strip's Auto switch was clicked: turn the automatic preview on or off.
     pub toggle_autoplay: bool,
+    /// Copy to folder… in a row's menu: these files, into a folder the system's dialog picks
+    /// (`library.copyTo`, #865).
+    pub copy_to: Vec<PathBuf>,
 }
 
 /// Draws the results area another way: the area, the browser's state and the projects.
@@ -1034,9 +1037,27 @@ fn row_menu(
         state.place = Some(Place::Folder(parent.to_path_buf()));
         ui.close();
     }
+    // The row's file, or every selected file when the row is one of them, copied into a
+    // folder; the originals stay (#865).
+    let files = copy_files(item, state.selected());
+    if !files.is_empty() && ui.button("Copy to folder…").clicked() {
+        out.copy_to = files;
+        ui.close();
+    }
     if item.kind == ItemKind::Folder && ui.button("Refresh").clicked() {
         state.relist();
         ui.close();
+    }
+}
+
+/// The files Copy to folder… copies from `item`'s menu: every selected sample when `item` is one
+/// of the selection, else `item` alone, when it is a sample.
+pub fn copy_files(item: &BrowserItem, selected: &[BrowserItem]) -> Vec<PathBuf> {
+    let sample = |i: &BrowserItem| (i.kind == ItemKind::Sample).then(|| i.path()).flatten();
+    if selected.iter().any(|s| s.key == item.key) {
+        selected.iter().filter_map(sample).collect()
+    } else {
+        sample(item).into_iter().collect()
     }
 }
 

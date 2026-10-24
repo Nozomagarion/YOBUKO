@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use egui::{Align2, Id, Key, Pos2, Rect, Sense, Ui, Vec2};
-use serde_json::json;
+use serde_json::{Value, json};
 use suhina_engine::model::{ClipId, TrackId};
 use suhina_session::{CommandKind, ExportGather, PluginStatus, ProjectId, Projects, Session};
 
@@ -471,6 +471,11 @@ pub struct App {
     /// back while the user moves it), a new place waiting to be saved, and a drag that started in
     /// it, which the main window finishes.
     map_window: MapWindow,
+    /// Samples Copy to folder… copies once the system's dialog has picked the folder (#865).
+    copy_to: Vec<PathBuf>,
+    /// Samples a drag carried out of every Suhina window, for the desktop app to hand the
+    /// system as a drag of files the file manager copies (#865).
+    drag_out: Option<Vec<PathBuf>>,
     pending_drop: Option<PendingDrop>,
     /// Where the detail area is this frame and the track it shows, for drops on its devices.
     detail_drop: Option<(Rect, TrackId)>,
@@ -612,6 +617,8 @@ impl App {
             browser: BrowserState::default(),
             sample_map: crate::browser::sample_map_panel::Panel::default(),
             map_window: MapWindow::default(),
+            copy_to: Vec::new(),
+            drag_out: None,
             pending_drop: None,
             detail_drop: None,
             expanded_panel: None,
@@ -1453,7 +1460,7 @@ impl App {
                 .map(|d| d.path.trim().to_string())
                 .filter(|text| !text.is_empty())
                 .and_then(|text| Path::new(&text).parent().map(Path::to_path_buf)),
-            PickField::BrowserFolder | PickField::McpWriteFolder => None,
+            PickField::BrowserFolder | PickField::McpWriteFolder | PickField::CopyToFolder => None,
         };
         self.pick_request = Some(PickRequest { field, start });
     }
@@ -1496,6 +1503,16 @@ impl App {
                 self.request_open(path);
                 return;
             }
+            PickField::CopyToFolder => {
+                let items: Vec<String> =
+                    std::mem::take(&mut self.copy_to).iter().map(|p| p.display().to_string()).collect();
+                if !items.is_empty() {
+                    self.status = copied_status(
+                        self.projects.execute("library.copyTo", &json!({ "items": items, "folder": text })),
+                    );
+                }
+                return;
+            }
             PickField::BrowserFolder => {
                 match self.projects.execute("library.addFolder", &json!({ "folder": text })) {
                     Ok(_) => {
@@ -1508,6 +1525,21 @@ impl App {
             }
         }
         self.settings_changed = true;
+    }
+
+    /// Samples dragged out of every Suhina window, taken once: the desktop app starts a system
+    /// drag of those files, offering a copy only, so the originals stay (#865).
+    pub fn take_drag_out(&mut self) -> Option<Vec<PathBuf>> {
+        self.drag_out.take()
+    }
+
+    /// What a system drag of samples out of the window came to, for the status line.
+    pub fn drag_out_ended(&mut self, result: Result<bool, String>) {
+        self.status = match result {
+            Ok(true) => Status::Done("Copied the samples where they were dropped".into()),
+            Ok(false) => return,
+            Err(e) => Status::Error(format!("Could not drag the samples out: {e}")),
+        };
     }
 
     /// A project the user took off the recent list on the start panel, for the app to forget.
@@ -5700,6 +5732,13 @@ impl App {
         if out.pick_folder {
             self.ask_pick(PickField::BrowserFolder);
         }
+        let copy_to = std::mem::take(&mut self.sample_map.copy_to);
+        for files in [out.copy_to, copy_to] {
+            if !files.is_empty() {
+                self.copy_to = files;
+                self.ask_pick(PickField::CopyToFolder);
+            }
+        }
         if out.toggle_autoplay {
             self.settings.preview_autoplay = !self.settings.preview_autoplay;
             self.settings_changed = true;
@@ -5827,6 +5866,9 @@ impl App {
             })
         });
         self.map_window.focused = frame.focused;
+        if frame.place.is_some() {
+            self.map_window.place = frame.place;
+        }
         if !frame.embedded
             && let Some(minimise) = follow_main_minimised(main_minimised, self.map_window.minimised_with_main)
         {
@@ -5930,12 +5972,25 @@ impl App {
             (released, escape, ctrl) = (remote.released, remote.escape, remote.ctrl);
             pointer = self.drag_pointer(ui.ctx());
         }
-        let target = self.drop_target(&items, pointer);
         if escape {
             self.browser.drag = None;
             self.map_window.drag = None;
             return;
         }
+        // Carried out of every Suhina window, samples become a drag of files that the system's
+        // file manager copies where they are dropped; the originals stay (#865).
+        if !released && self.outside_suhina(ui.ctx(), pointer) {
+            let files = drag_out_files(&items);
+            if !files.is_empty() {
+                self.drag_out = Some(files);
+                self.browser.drag = None;
+                self.map_window.drag = None;
+                self.view.drop = None;
+                self.arrangement.drop = None;
+                return;
+            }
+        }
+        let target = self.drop_target(&items, pointer);
         let separate = ctrl != self.settings.drop_separate;
         if let Some(pointer) = pointer {
             self.drag_label(ui, pointer, &items, target, separate);
@@ -5951,6 +6006,24 @@ impl App {
                 self.drop_items(&items, target, separate);
             }
         }
+    }
+
+    /// Whether `pointer` (in the main window's points) is over neither the main window nor the
+    /// sample map's own window. No pointer is not taken for outside: the window keeps the pointer
+    /// while a button is held, so it always knows where a drag is.
+    fn outside_suhina(&self, ctx: &egui::Context, pointer: Option<Pos2>) -> bool {
+        let Some(pointer) = pointer else { return false };
+        if ctx.content_rect().contains(pointer) {
+            return false;
+        }
+        let main = ctx.input(|i| i.viewport().inner_rect).map_or(Pos2::ZERO, |r| r.min);
+        let desktop = pointer + main.to_vec2();
+        let over_map = self.sample_map.view.window
+            && self.map_window.place.is_some_and(|[x, y, w, h]| {
+                Rect::from_min_size(Pos2::new(x as f32, y as f32), Vec2::new(w as f32, h as f32 + 40.0))
+                    .contains(desktop)
+            });
+        !over_map
     }
 
     /// While a device is carried from a chain or a strip's list: the label beside the pointer,
@@ -6911,6 +6984,38 @@ struct MapWindow {
     focused: bool,
     /// Whether it was minimised because the main window was, to be restored with it.
     minimised_with_main: bool,
+    /// Where it is on the desktop (`left, top, width, height`), as its last frame said.
+    place: Option<[i32; 4]>,
+}
+
+/// The sample files among dragged items: what a drag out of the window hands the system.
+fn drag_out_files(items: &[BrowserItem]) -> Vec<PathBuf> {
+    items
+        .iter()
+        .filter(|i| i.kind == drop::ItemKind::Sample)
+        .filter_map(BrowserItem::path)
+        .filter(|p| p.is_absolute())
+        .collect()
+}
+
+/// What the status line says after `library.copyTo`.
+fn copied_status(result: Result<Value, suhina_session::CommandError>) -> Status {
+    let done = match result {
+        Ok(done) => done,
+        Err(e) => return Status::Error(e.0),
+    };
+    let count = |key: &str| done[key].as_array().map_or(0, Vec::len);
+    let (copied, missing, failed) = (count("copied"), count("missing"), count("failed"));
+    let folder = done["folder"].as_str().unwrap_or_default();
+    let mut text = format!("Copied {copied} {} to {folder}", if copied == 1 { "sample" } else { "samples" });
+    if missing > 0 {
+        text.push_str(&format!("; {missing} not found"));
+    }
+    if failed > 0 {
+        text.push_str(&format!("; {failed} could not be copied"));
+        return Status::Error(text);
+    }
+    if missing > 0 { Status::Hint(text) } else { Status::Done(text) }
 }
 
 /// The map window's level: above Suhina's main window while Suhina is the program in use, so a

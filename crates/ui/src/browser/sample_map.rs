@@ -93,6 +93,8 @@ pub enum MapEvent {
         on: bool,
     },
     ShowInFolder(usize),
+    /// Copy it, or every picked point when it is one of them, into a folder (#865).
+    CopyTo(usize),
     /// Set its kind by hand, or (`None`) give it back to its name and sound.
     SetKind {
         item: usize,
@@ -839,6 +841,10 @@ fn map_area(ui: &mut Ui, rect: Rect, view: &mut MapView, content: &Content<'_>, 
             }
             if ui.button("Show in folder").clicked() {
                 events.push(MapEvent::ShowInFolder(i));
+                ui.close();
+            }
+            if ui.button("Copy to folder…").clicked() {
+                events.push(MapEvent::CopyTo(i));
                 ui.close();
             }
         }

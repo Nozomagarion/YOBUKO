@@ -68,6 +68,8 @@ pub struct Panel {
     flags_key: Option<String>,
     /// An item double-clicked, for the window to add to the selected track.
     pub add: Vec<BrowserItem>,
+    /// Files Copy to folder… asked for, for the window to copy once a folder is picked (#865).
+    pub copy_to: Vec<std::path::PathBuf>,
     /// Something to say in the status bar (a preview that cannot play).
     pub status: Option<String>,
     /// A kind was set by hand since the layout was made: the next refresh lays the scope out
@@ -89,6 +91,7 @@ impl Default for Panel {
             points: Vec::new(),
             flags_key: None,
             add: Vec::new(),
+            copy_to: Vec::new(),
             status: None,
             stale: false,
         }
@@ -526,6 +529,11 @@ impl Panel {
                     let _ = projects
                         .execute("library.tag", &json!({ "item": path.display().to_string(), "tag": tag, "on": on }));
                     self.flags_key = None;
+                }
+            }
+            MapEvent::CopyTo(i) => {
+                if let Some(path) = self.path(i) {
+                    self.copy_to = crate::browser::browser_view::copy_files(&item_of(&path), state.selected());
                 }
             }
             MapEvent::ShowInFolder(i) => {
