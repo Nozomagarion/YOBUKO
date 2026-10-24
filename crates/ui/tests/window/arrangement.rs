@@ -1443,3 +1443,33 @@ fn ctrl_r_with_several_clips_selected_renames_them_all() {
         .count();
     assert_eq!(named, count);
 }
+
+/// After a header click the edit keys act on tracks (#919): Ctrl+D duplicates the selected
+/// tracks right after themselves, Ctrl+X cuts and Ctrl+V pastes them back.
+#[test]
+fn the_edit_keys_copy_cut_paste_and_duplicate_selected_tracks() {
+    let mut harness = arrangement_app();
+    let names = |h: &Harness<'static, App>| {
+        h.state()
+            .session()
+            .map(|s| s.project().tracks.iter().map(|t| t.name.clone()).collect::<Vec<_>>())
+            .unwrap_or_default()
+    };
+    harness.get_by_label("Track Drums").click();
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::D);
+    harness.run();
+    assert_eq!(names(&harness)[..2], ["Drums", "Drums 2"]);
+    harness.get_by_label("Track Bass").click();
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::X);
+    harness.run();
+    assert!(!names(&harness).contains(&"Bass".to_string()), "{:?}", names(&harness));
+    harness.get_by_label("Track Drums").click();
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::V);
+    harness.run();
+    let after = names(&harness);
+    let drums = after.iter().position(|n| n == "Drums").unwrap();
+    assert_eq!(after.get(drums + 1).map(String::as_str), Some("Bass"), "{after:?}");
+}

@@ -34,6 +34,8 @@ pub struct TrackMenu<'a> {
     /// For a track that plays audio: its audio input, and the channels the input device has
     /// (0 while none is open).
     pub audio: Option<(&'a AudioInput, u16)>,
+    /// Whole tracks have been copied, so Paste can add them (#919).
+    pub tracks_copied: bool,
 }
 
 /// How a track's audio input reads: "No input", "In 3" or "In 1/2", with its monitoring.
@@ -324,6 +326,25 @@ pub fn track_menu(ui: &mut Ui, menu: &TrackMenu<'_>, actions: &mut Vec<Action>) 
     ui.separator();
     insert_items(ui, (!menu.is_return).then_some(menu.track), actions);
     ui.separator();
+    // Cut, copy and duplicate take the selected tracks when this one is among them (#919).
+    if !menu.is_return {
+        let tracks: Vec<u32> = if selected { menu.selection.iter().map(|t| t.0).collect() } else { vec![track] };
+        for (label, keys, command) in [
+            ("Cut", "Ctrl+X", "track.cut"),
+            ("Copy", "Ctrl+C", "track.copy"),
+            ("Duplicate", "Ctrl+D", "track.duplicate"),
+        ] {
+            if ui.add(egui::Button::new(label).shortcut_text(shown(keys))).clicked() {
+                actions.push(Action::new(command, json!({ "tracks": tracks })));
+                ui.close();
+            }
+        }
+        if ui.add_enabled(menu.tracks_copied, egui::Button::new("Paste").shortcut_text(shown("Ctrl+V"))).clicked() {
+            actions.push(Action::new("track.paste", json!({ "after": track })));
+            ui.close();
+        }
+        ui.separator();
+    }
     if ui.button("Delete track").clicked() {
         actions.push(Action::new("track.delete", json!({ "track": track })));
         ui.close();

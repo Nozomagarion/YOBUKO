@@ -19,4 +19,6 @@ pub(crate) struct Clipboards {
     pub(crate) devices: Vec<Device>,
     /// Notes copied from a MIDI clip, for `note.paste`.
     pub(crate) notes: Option<NoteClipboard>,
+    /// Whole tracks copied for `track.paste` (#919).
+    pub(crate) whole_tracks: crate::track_copy::TrackClipboard,
 }

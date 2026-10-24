@@ -138,6 +138,42 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::CRITICAL,
     },
     CommandSpec {
+        id: "track.copy",
+        label: "Copy whole tracks for track.paste: each with its channel, devices, automation, clips, take lanes and slots, a group with its tracks",
+        params: &[param("tracks", ParamType::Tracks, "the tracks to copy (ids or names), in project order")],
+        kind: CommandKind::Read,
+        run: copy_tracks,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "track.cut",
+        label: "Copy whole tracks for track.paste and delete them, as one undo step",
+        params: &[param("tracks", ParamType::Tracks, "the tracks to cut (ids or names)")],
+        kind: CommandKind::Edit,
+        run: cut_tracks,
+        policy: Policy::CRITICAL,
+    },
+    CommandSpec {
+        id: "track.paste",
+        label: "Add the tracks track.copy or track.cut copied, with new clips of their own, after a track or at the end of the regular tracks",
+        params: &[optional(
+            "after",
+            ParamType::Track,
+            "put them after this track, in its group (default: after the last regular track)",
+        )],
+        kind: CommandKind::Edit,
+        run: paste_tracks,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "track.duplicate",
+        label: "Copy each named track right after itself, with new clips of its own; a group with its tracks",
+        params: &[param("tracks", ParamType::Tracks, "the tracks to duplicate (ids or names)")],
+        kind: CommandKind::Edit,
+        run: duplicate_tracks,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "track.renameClips",
         label: "Name every clip of a track, in the arrangement and in its slots, after the track",
         params: &[TRACK],
@@ -622,6 +658,46 @@ fn set_color(session: &mut Session, params: &Value) -> Result<Value, CommandErro
         t.color = color;
     }
     Ok(json!({ "color": text }))
+}
+
+fn copy_tracks(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let tracks = track_list(&session.project, params)?;
+    let copied = crate::track_copy::copy(&session.project, &tracks)?;
+    let names = copied.first_names();
+    let count = copied.len();
+    session.clipboards.whole_tracks = copied;
+    Ok(json!({ "copied": count, "tracks": names }))
+}
+
+fn cut_tracks(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let tracks = track_list(&session.project, params)?;
+    let copied = crate::track_copy::copy(&session.project, &tracks)?;
+    let names = copied.first_names();
+    let count = copied.len();
+    // The tracks in groups first, so deleting a group leaves none of them behind.
+    let mut gone = crate::track_copy::with_their_tracks(&session.project, &tracks);
+    gone.reverse();
+    for track in gone {
+        delete_track(session, &json!({ "track": track.0 }))?;
+    }
+    session.clipboards.whole_tracks = copied;
+    Ok(json!({ "cut": count, "tracks": names }))
+}
+
+fn paste_tracks(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let after = match params.get("after") {
+        None | Some(Value::Null) => None,
+        Some(_) => Some(track_at(&session.project, params, "after")?),
+    };
+    let clipboard = session.clipboards.whole_tracks.clone();
+    let added = crate::track_copy::paste(&mut session.project, &clipboard, after)?;
+    Ok(json!({ "tracks": added.iter().map(|t| t.0).collect::<Vec<_>>() }))
+}
+
+fn duplicate_tracks(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let tracks = track_list(&session.project, params)?;
+    let added = crate::track_copy::duplicate(&mut session.project, &tracks)?;
+    Ok(json!({ "tracks": added.iter().map(|t| t.0).collect::<Vec<_>>() }))
 }
 
 fn delete_track(session: &mut Session, params: &Value) -> Result<Value, CommandError> {

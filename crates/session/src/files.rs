@@ -89,23 +89,7 @@ pub(crate) fn insert_track(
     let id = TrackId(p.tracks.iter().map(|t| t.id.0).max().unwrap_or(0).checked_add(1).ok_or("too many tracks")?);
     let channel =
         ChannelId(p.channels.iter().map(|c| c.id.0).max().unwrap_or(0).checked_add(1).ok_or("too many channels")?);
-    let (at, parent) = match after {
-        Some(after) => {
-            let index = p.tracks.iter().position(|t| t.id == after).ok_or("the track to add after is missing")?;
-            let parent = p.tracks.get(index).and_then(|t| t.parent);
-            // After the track and anything in it (a group's tracks).
-            let mut end = index + 1;
-            while let Some(next) = p.tracks.get(end) {
-                if within(p, next.id, after) {
-                    end += 1;
-                } else {
-                    break;
-                }
-            }
-            (end, parent)
-        }
-        None => (end_of_regular_tracks(p), None),
-    };
+    let (at, parent) = insert_position(p, after)?;
     // Into its group, or into the main channel like the other tracks.
     let main = p.channels.iter().find(|c| c.role == ChannelRole::Master).map(|c| c.id);
     let output = match parent {
@@ -152,8 +136,26 @@ pub(crate) fn insert_track(
     Ok(id)
 }
 
+/// Where a track added after `after` goes in `p.tracks`, and the group it goes into: right after
+/// `after` and anything in it (a group's tracks), in `after`'s group; or, with no track named, at
+/// the end of the regular tracks, in no group.
+pub(crate) fn insert_position(p: &Project, after: Option<TrackId>) -> Result<(usize, Option<TrackId>), CommandError> {
+    let Some(after) = after else { return Ok((end_of_regular_tracks(p), None)) };
+    let index = p.tracks.iter().position(|t| t.id == after).ok_or("the track to add after is missing")?;
+    let parent = p.tracks.get(index).and_then(|t| t.parent);
+    let mut end = index + 1;
+    while let Some(next) = p.tracks.get(end) {
+        if within(p, next.id, after) {
+            end += 1;
+        } else {
+            break;
+        }
+    }
+    Ok((end, parent))
+}
+
 /// Whether `track` is inside the group `group` (at any depth).
-fn within(p: &Project, track: TrackId, group: TrackId) -> bool {
+pub(crate) fn within(p: &Project, track: TrackId, group: TrackId) -> bool {
     let mut current = p.track(track).and_then(|t| t.parent);
     let mut steps = 0;
     while let Some(parent) = current {

@@ -47,6 +47,7 @@ mod soundmap;
 mod stems;
 mod support;
 mod tempo;
+mod track_copy;
 mod trusted_audio;
 
 #[test]

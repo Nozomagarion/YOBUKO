@@ -62,6 +62,9 @@ pub struct SessionViewState {
     pub track_focus: bool,
     /// Something has been copied, so a slot's menu can paste it; the window says so each frame.
     pub can_paste: bool,
+    /// Whole tracks have been copied, so a header's menu can paste them (#919); the window says
+    /// so each frame.
+    pub tracks_copied: bool,
     /// A clip slot whose drag started this frame (track, scene from 0): the window carries the
     /// clip from there (`docs/spec/ui-session-view.md` › Between the views).
     pub slot_drag: Option<(TrackId, usize)>,
@@ -272,6 +275,7 @@ pub fn show(
     let bands = Bands {
         midi_ports: &grid.midi_ports,
         input_channels: grid.input_channels,
+        tracks_copied: state.tracks_copied,
         header,
         body,
         mixer,
@@ -520,6 +524,8 @@ struct Bands<'a> {
     /// menus.
     midi_ports: &'a [String],
     input_channels: u16,
+    /// Whole tracks have been copied, so a header's menu can paste them.
+    tracks_copied: bool,
     header: Rect,
     body: Rect,
     mixer: Rect,
@@ -607,6 +613,7 @@ fn track_menu_on(response: &Response, column: &Column, bands: &Bands, actions: &
             out: nesting::out_of_group(&bands.places, column.track),
             midi: column.plays_notes.then_some((&column.midi_input, bands.midi_ports)),
             audio: column.plays_audio.then_some((&column.audio_input, bands.input_channels)),
+            tracks_copied: bands.tracks_copied,
         };
         menus::track_menu(ui, &menu, actions);
     });

@@ -204,6 +204,7 @@ pub(super) fn track_header(
             out: nesting::out_of_group(nest.places, lane.track),
             midi: lane.plays_notes.then_some((&lane.midi_input, timeline.midi_ports.as_slice())),
             audio: lane.plays_audio.then_some((&lane.audio_input, timeline.input_channels)),
+            tracks_copied: state.tracks_copied,
         };
         menus::track_menu(ui, &menu, actions);
     });

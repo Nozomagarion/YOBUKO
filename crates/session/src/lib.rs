@@ -48,6 +48,7 @@ mod scales;
 mod sends;
 mod soundmap;
 mod tempo;
+mod track_copy;
 
 use std::collections::HashMap;
 use std::fmt;
@@ -209,6 +210,11 @@ impl Session {
     /// How many devices `device.paste` would add.
     pub fn copied_devices(&self) -> usize {
         self.clipboards.devices.len()
+    }
+
+    /// How many tracks `track.paste` would add (a group's tracks counted).
+    pub fn copied_tracks(&self) -> usize {
+        self.clipboards.whole_tracks.len()
     }
 
     pub fn copied_from_tracks(&self) -> bool {

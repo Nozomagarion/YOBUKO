@@ -71,8 +71,9 @@ CHAPTERS = [
      "attached MCP exports prepare over frames and render off the window thread. "
      "Missing project folders/collect, unused files, packing, .asd, decoding cache, set "
      "merging, file-reference view, the export dialog's source and range rows."),
-    (6, "Arrangement View", 22, 0.60, "partial",
+    (6, "Arrangement View", 22, 0.61, "partial",
      "Layout, zoom, transport, track headers with a band of the track colour that opens the colour palette, ruler/play start, play from the selected clip, clip drag+move, "
+     "whole tracks cut, copied, pasted (between project tabs too) and duplicated with their devices, automation and clips, "
      "overlap replace/stack, fades and fade shapes, the control bar's grid value (bars to "
      "triplets, or none) drawn as lines that adapt to the zoom and snapping moves, drops, fades "
      "and ruler clicks (Alt for off the grid), nested groups folded and unfolded, "

@@ -682,6 +682,16 @@ impl Projects {
         }
         let result = self.session_mut(project)?.execute(id, params);
         self.poll_plugins();
+        // Copied tracks paste into any open project, as copying between tabs is expected to work.
+        if matches!(id, "track.copy" | "track.cut")
+            && result.is_ok()
+            && let Some(copied) = target.and_then(|t| self.tabs.open.iter().find(|o| o.id == t))
+        {
+            let clipboard = copied.session.clipboards.whole_tracks.clone();
+            for open in self.tabs.open.iter_mut().filter(|o| Some(o.id) != target) {
+                open.session.clipboards.whole_tracks = clipboard.clone();
+            }
+        }
         if let Ok(value) = &result {
             crate::library::record_use(&mut self.browser.files, id, params, value);
         }

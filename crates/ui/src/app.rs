@@ -2383,6 +2383,9 @@ impl App {
                 _ => probe,
             };
             self.view.can_paste = self.session().is_some_and(|s| s.copied_clip_is_audio().is_some());
+            let tracks_copied = self.session().is_some_and(|s| s.copied_tracks() > 0);
+            self.view.tracks_copied = tracks_copied;
+            self.arrangement.tracks_copied = tracks_copied;
             self.view.drop = probe.clone();
             self.arrangement.drop = probe;
             let meters =

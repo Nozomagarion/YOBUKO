@@ -117,6 +117,9 @@ pub struct ArrangementViewState {
     pub headers_left: bool,
     /// The return tracks' rows are left out (the "Hide returns" button by the ruler).
     pub returns_hidden: bool,
+    /// Whole tracks have been copied, so a header's menu can paste them (#919); the window says
+    /// so each frame.
+    pub tracks_copied: bool,
     /// Tracks whose take lanes are folded away (Hide take lanes in the lane's menu).
     pub takes_hidden: HashSet<TrackId>,
     /// A drag across a take lane that picks the part to comp: the track, the take's number and
@@ -264,6 +267,7 @@ impl Default for ArrangementViewState {
             grid: Quantization::Bars(1),
             headers_left: false,
             returns_hidden: false,
+            tracks_copied: false,
             takes_hidden: HashSet::new(),
             take_drag: None,
             stack_audio: false,

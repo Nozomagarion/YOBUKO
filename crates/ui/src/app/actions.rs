@@ -217,6 +217,22 @@ impl App {
                 let devices: Vec<usize> = picks.iter().map(|(_, i)| *i).collect();
                 actions.push(Action::new("device.duplicateMany", json!({ "track": track.0, "devices": devices })));
             }
+            // Track headers clicked last: the edit keys act on the selected tracks (#919).
+            "selection.copy" | "selection.cut" | "selection.paste" | "selection.duplicate"
+                if !self.focused_tracks().is_empty() =>
+            {
+                let tracks = self.focused_tracks();
+                let ids: Vec<u32> = tracks.iter().map(|t| t.0).collect();
+                match action {
+                    "selection.copy" => actions.push(Action::new("track.copy", json!({ "tracks": ids }))),
+                    "selection.cut" => actions.push(Action::new("track.cut", json!({ "tracks": ids }))),
+                    "selection.duplicate" => actions.push(Action::new("track.duplicate", json!({ "tracks": ids }))),
+                    _ => {
+                        let after = tracks.last().map(|t| t.0);
+                        actions.push(Action::new("track.paste", json!({ "after": after })));
+                    }
+                }
+            }
             "selection.copy" | "selection.paste" if self.shown == View::Session => {
                 let Some((track, scene)) = self.view.selected_slot else {
                     self.status = Status::Hint("Click a clip slot first".into());
@@ -724,6 +740,20 @@ impl App {
 
     /// Where a track added from the keyboard goes: after the lowest selected track that is not a
     /// return track; `None` (after the last regular track) without one.
+    /// The tracks the edit keys act on: the selected ones while a track header was the last
+    /// thing clicked (in the Session view, with no slot selected), in project order.
+    pub(super) fn focused_tracks(&self) -> Vec<TrackId> {
+        let selected: Vec<TrackId> = match self.shown {
+            View::Arrangement if self.arrangement.track_focus => self.arrangement.selected_tracks.clone(),
+            View::Session if self.view.track_focus && self.view.selected_slot.is_none() => {
+                self.view.selected.into_iter().collect()
+            }
+            _ => Vec::new(),
+        };
+        let Some(session) = self.session() else { return Vec::new() };
+        session.project().tracks.iter().map(|t| t.id).filter(|id| selected.contains(id)).collect()
+    }
+
     pub(super) fn add_track_after(&self) -> Option<TrackId> {
         let project = self.session()?.project();
         let selected: Vec<TrackId> = match self.shown {
