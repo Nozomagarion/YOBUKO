@@ -666,12 +666,13 @@ pub fn slice_of(source: &str) -> Option<Slice> {
     (insets[1] + insets[3] < size[0] && insets[0] + insets[2] < size[1]).then_some(Slice { insets, size })
 }
 
-/// The nine quads of `slice` over `rect`: corners keep their size (shrunk evenly when `rect` is
-/// smaller), edges stretch along one axis, the middle along both.
+/// The nine quads of `slice` over `rect`: corners keep their size (shrunk evenly on both axes when
+/// `rect` is smaller than two insets), edges stretch along one axis, the middle along both.
 pub fn nine_slice(mesh: &mut egui::Mesh, rect: Rect, slice: Slice) {
     let [t, r, b, l] = slice.insets;
-    let fit_x = (rect.width() / (l + r).max(f32::EPSILON)).min(1.0);
-    let fit_y = (rect.height() / (t + b).max(f32::EPSILON)).min(1.0);
+    // One scale for both axes, so a rounded end shrinks as a whole rather than flattening.
+    let fit = (rect.width() / (l + r).max(f32::EPSILON)).min(rect.height() / (t + b).max(f32::EPSILON)).min(1.0);
+    let (fit_x, fit_y) = (fit, fit);
     let xs = [rect.left(), rect.left() + l * fit_x, rect.right() - r * fit_x, rect.right()];
     let ys = [rect.top(), rect.top() + t * fit_y, rect.bottom() - b * fit_y, rect.bottom()];
     let us = [0.0, l / slice.size[0], 1.0 - r / slice.size[0], 1.0];

@@ -311,3 +311,12 @@ fn piano_roll_tools_have_artwork_roles() {
     assert!(valid_role("piano.draw") && valid_role("piano.draw.on") && valid_role("piano.midi-tools.hover"));
     assert!(!valid_role("piano.unknown"));
 }
+
+#[test]
+fn a_nine_slice_too_big_for_its_rect_shrinks_its_corners_evenly() {
+    let slice = super::Slice { insets: [4.0, 4.0, 4.0, 4.0], size: [12.0, 12.0] };
+    let mut mesh = egui::Mesh::default();
+    super::nine_slice(&mut mesh, Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 6.0)), slice);
+    // The top-left corner is 3 by 3, not 4 wide and 3 high.
+    assert_eq!(mesh.vertices[3].pos, egui::pos2(3.0, 3.0));
+}
