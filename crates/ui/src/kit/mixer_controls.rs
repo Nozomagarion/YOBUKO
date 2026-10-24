@@ -14,7 +14,8 @@ pub fn pan_field(painter: &egui::Painter, rect: Rect, pan: f64, hover: f32) {
         return;
     }
     // The native look: a flat field with centre ticks and a thin bar along its bottom.
-    painter.fill_background(rect, 0.0, motion::mix(theme::pan_background(), theme::panel_hover(), hover));
+    // `.pan` and `#mixer-pan` colour it as well: the theme's background, border and text.
+    crate::kit::native_css::surface(painter, rect, 0.0, motion::mix(theme::pan_background(), theme::panel_hover(), hover));
     let centre = rect.center().x.round() - 0.5;
     painter.vline(centre, egui::Rangef::new(rect.top(), rect.top() + 2.0), theme::hairline(theme::pan_centre()));
     painter.vline(centre, egui::Rangef::new(rect.bottom() - 2.0, rect.bottom()), theme::hairline(theme::pan_centre()));
@@ -28,7 +29,7 @@ pub fn pan_field(painter: &egui::Painter, rect: Rect, pan: f64, hover: f32) {
         Align2::CENTER_CENTER,
         &widgets::format_pan(pan),
         theme::mono_font(theme::TEXT_SMALL),
-        theme::text_primary(),
+        crate::kit::style_class::foreground(theme::text_primary()),
     );
 }
 
