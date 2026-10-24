@@ -68,6 +68,21 @@ pub const OWN_ROLES: &[&str] = &[
     "loop-region",
     // An arrangement clip's fade handles.
     "clip.fade-handle",
+    // The piano roll's tool buttons, by the id after `#piano-`.
+    "piano.select",
+    "piano.draw",
+    "piano.paint",
+    "piano.erase",
+    "piano.slice",
+    "piano.mute",
+    "piano.cut",
+    "piano.copy",
+    "piano.paste",
+    "piano.duplicate",
+    "piano.quantise",
+    "piano.midi-tools",
+    "piano.audition",
+    "piano.hide",
     // A track's artwork in one view only, over `track.name` and `track.body`.
     "track.name.session",
     "track.name.mixer",

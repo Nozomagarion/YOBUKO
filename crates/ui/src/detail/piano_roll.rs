@@ -861,6 +861,26 @@ impl IconButton {
         }
     }
 
+    /// The id a theme selects it by (`#piano-draw`) and the name of its artwork (`piano.draw`).
+    pub(crate) fn id(self) -> &'static str {
+        match self {
+            Self::Select => "piano-select",
+            Self::Draw => "piano-draw",
+            Self::Paint => "piano-paint",
+            Self::Erase => "piano-erase",
+            Self::Slice => "piano-slice",
+            Self::Mute => "piano-mute",
+            Self::Cut => "piano-cut",
+            Self::Copy => "piano-copy",
+            Self::Paste => "piano-paste",
+            Self::Duplicate => "piano-duplicate",
+            Self::Quantise => "piano-quantise",
+            Self::MidiTools => "piano-midi-tools",
+            Self::Audition => "piano-audition",
+            Self::Hide => "piano-hide",
+        }
+    }
+
     /// The action id whose key the tooltip shows ("Draw (2)"), when the button has one.
     fn action(self) -> Option<&'static str> {
         Some(match self {
@@ -2086,22 +2106,35 @@ impl ButtonPaint<'_> {
         let hint = icon_hint(button, self.keymap);
         let response = response.on_hover_text(hint.clone());
         response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, active, chosen, hint.clone()));
-        if active {
-            let fill = if chosen { theme::control_active() } else { theme::control_background() };
-            painter.fill_background(
-                area,
-                0.0,
-                crate::kit::motion::mix(fill, theme::control_hover(), widgets::hover(ui, &response)),
-            );
-        }
-        let color = if !active {
+        // `.piano-tool` styles them all, `#piano-draw` and the others one; `:checked` is the
+        // chosen tool or an open column. `piano.draw` (`.on`, `.hover`) replaces its shape.
+        let _style = crate::kit::style_class::enter_named_response("piano-tool", button.id(), &response);
+        crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, chosen);
+        let color = crate::kit::style_class::foreground(if !active {
             theme::text_hint()
         } else if chosen {
             theme::text_primary()
         } else {
             theme::text_secondary()
+        });
+        let state = if !active {
+            crate::kit::skin::State::Disabled
+        } else {
+            crate::kit::skin::State::response(&response, chosen)
         };
-        button.draw(painter, area, color, self.scale);
+        let role = format!("piano.{}", button.id().trim_start_matches("piano-"));
+        if active {
+            let fill = if chosen { theme::control_active() } else { theme::control_background() };
+            crate::kit::native_css::surface(
+                painter,
+                area,
+                0.0,
+                crate::kit::motion::mix(fill, theme::control_hover(), widgets::hover(ui, &response)),
+            );
+        }
+        if !(crate::kit::skin::has_own(&role) && crate::kit::skin::paint(painter, area, &role, state, color, 0.0)) {
+            button.draw(painter, area, color, self.scale);
+        }
         active && response.clicked()
     }
 }

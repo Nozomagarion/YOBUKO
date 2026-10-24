@@ -65,6 +65,7 @@ pub const CLASSES: &[&str] = &[
     "piano-key-black",
     "piano-note",
     "velocity",
+    "piano-tool",
     "fader-cap",
     "fader-rail",
     "knob",

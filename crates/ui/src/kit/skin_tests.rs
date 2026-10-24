@@ -302,3 +302,9 @@ fn nine_slice_keeps_the_corners_and_stretches_the_middle() {
     assert_eq!(mesh.vertices[3].uv, egui::pos2(0.2, 0.2));
     assert!(super::slice_of(r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" data-suhina-slice="3"/>"#).is_none());
 }
+
+#[test]
+fn piano_roll_tools_have_artwork_roles() {
+    assert!(valid_role("piano.draw") && valid_role("piano.draw.on") && valid_role("piano.midi-tools.hover"));
+    assert!(!valid_role("piano.unknown"));
+}
