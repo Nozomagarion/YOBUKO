@@ -417,10 +417,11 @@ pub(crate) fn move_points(session: &mut Session, params: &Value) -> Result<Value
         point.curve = curve.unwrap_or(point.curve);
         moved.push(point);
     }
-    // The points left in place, then the moved ones in the order given. Moved later, they go
-    // before the points that stayed at their beat (they come from before them); moved earlier,
-    // after them; moved only in value, each stays where it was. `None` marks a point that
-    // stayed.
+    // The points left in place, then the moved ones in their order in the lane, so points that
+    // shared a beat keep their order (the jump between them). Moved later, they go before the
+    // points that stayed at their beat (they come from before them); moved earlier, after them;
+    // moved only in value, each stays where it was. A tag is the point's place in the request,
+    // `None` a point that stayed.
     if beats == 0.0 {
         let lane = target.lane(session)?;
         for (&index, point) in indices.iter().zip(moved) {
@@ -436,7 +437,9 @@ pub(crate) fn move_points(session: &mut Session, params: &Value) -> Result<Value
         points.remove(index);
     }
     let mut tagged: Vec<(AutomationPoint, Option<usize>)> = points.into_iter().map(|p| (p, None)).collect();
-    for (order, point) in moved.into_iter().enumerate() {
+    let mut in_lane: Vec<(usize, AutomationPoint)> = moved.into_iter().enumerate().collect();
+    in_lane.sort_by_key(|(order, _)| indices.get(*order).copied().unwrap_or(usize::MAX));
+    for (order, point) in in_lane {
         let at = if beats > 0.0 {
             tagged.partition_point(|(p, tag)| p.beat < point.beat || (p.beat == point.beat && tag.is_some()))
         } else {

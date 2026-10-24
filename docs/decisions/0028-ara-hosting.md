@@ -3,7 +3,7 @@ description: How ARA plug-ins (audio editors such as pitch editors) are hosted o
 read_when: ARA, ARA2, Melodyne, pitch editor, audio random access, playback region, audio source, audio modification, region sequence, document controller, overlapping audio clips, audio overlap, arrangement.audioOverlaps, stacked clips and ARA
 type: decision
 status: draft
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 covers:
   - crates/model/src/overlap.rs
   - crates/session/src/commands.rs
@@ -249,8 +249,15 @@ the list below, in a first form). Where it differs from the decisions above it i
   An analysis ends when the plug-in reports it completed, or when, asked whether the source's
   notes are still incomplete (each time the notes are read, and every second while a clip shows
   the analysis), it says they are not: a plug-in that restores its analysis from an archive
-  reports only that it started (#816). A track that leaves the document forgets its sources'
-  analysis, so the next track that plays one asks for it again.
+  reports only that it started (#816). One progress covers all of a source's analyses, so
+  while the plug-in says another content type it lists as analysable is incomplete, the
+  analysis shows until that one is done too, or until it has not reported for 3 s (a type it
+  never analyses unasked). A track that leaves the document forgets its sources'
+  analysis, so the next track that plays one asks for it again. After an archive is restored
+  every source's analysis is asked for again, as one asked for before may have been dropped for
+  the archive's without a *completed* report; and a plug-in that keeps saying the notes are
+  incomplete while every region of the track has them is taken as done once it has not
+  reported for 3 s (Melodyne after a project is opened again, #816).
 - **Notes on the clips** (#720). After a model update in which the plug-in said a region's,
   modification's or source's notes may have changed (not with "note scope remains unchanged"),
   and after the host's own edits, the host reads every region's notes with a playback-region

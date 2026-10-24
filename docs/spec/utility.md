@@ -6,6 +6,8 @@ status: current
 last_verified: 2026-10-24
 covers:
   - devices/utility/**
+  - crates/device-api/src/lib.rs
+  - crates/dsp/src/smooth.rs
 ---
 
 # Utility

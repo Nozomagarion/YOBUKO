@@ -167,7 +167,7 @@ impl ParamInfo {
     }
 
     fn gain(&self) -> bool {
-        matches!(self.kind, ParamKind::Continuous(Scale::Gain)) && self.max > self.min
+        matches!(self.kind, ParamKind::Continuous(Scale::Gain)) && self.min < self.max - GAIN_SLOPE * (1.0 - GAIN_KNEE)
     }
 
     /// Where `value` sits on the knob, from 0.0 to 1.0.
@@ -615,6 +615,14 @@ mod tests {
         let empty = ParamInfo::choice("x", "X", &[], 0);
         assert_eq!(empty.to_normalized(0.0), 0.0);
         assert_eq!(empty.from_normalized(0.5), 0.0);
+    }
+
+    #[test]
+    fn a_gain_scale_over_a_range_that_does_not_reach_below_its_knee_is_linear() {
+        let narrow = ParamInfo::continuous("x", "X", (-12.0, 12.0), 0.0, Unit::Decibels, Scale::Gain);
+        assert_eq!(narrow.from_normalized(0.5), 0.0);
+        assert_eq!(narrow.to_normalized(-12.0), 0.0);
+        assert_eq!(narrow.to_normalized(0.0), 0.5);
     }
 
     /// A scale knows its keys in every octave, snaps a key outside it to the nearest one (a tie going

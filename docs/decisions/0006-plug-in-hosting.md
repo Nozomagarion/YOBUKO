@@ -3,7 +3,7 @@ description: How third-party plug-ins are hosted out of process (process model, 
 read_when: plug-in, plugin host, CLAP, VST3, VST2, sandbox, out of process, IPC, shared memory, unsafe, plug-in crash, scanning, plug-in editor
 type: decision
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 covers:
   - crates/ipc/**
   - crates/plugins/**
@@ -84,6 +84,13 @@ workspace forbids.
    instances use it, so `InitDll`/`ModuleEntry` and `ExitDll`/`ModuleExit` run once (`clack-host`
    does the same for a CLAP entry's `init`/`deinit`). An instance whose audio thread does not
    stop when it is unloaded is stuck in the plug-in and is left as it is, so the others go on.
+   An unloaded instance's audio stops and the engine gets its answer before its editor closes:
+   the host takes the editor down and releases the plug-in from its main loop afterwards, as an
+   editor embedded in the engine's window sends that window messages while it goes, which the
+   engine answers only once it stops waiting. The engine waits for an unload at most
+   10 s (or the launch timeout, when shorter); a process that has not answered by then is stuck
+   in the plug-in's teardown and is ended, so a closed project or a removed plug-in never holds
+   up the window, and a restart then loads into a new process.
    On the engine side, `Launch::group` names the process an instance starts in: instances with
    the same host executable and group share the process a registry in `crates/plugins` keeps
    while any of them lives; `None` is a process of its own. Requests from the instances are

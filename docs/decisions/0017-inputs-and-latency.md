@@ -3,7 +3,7 @@ description: How played input reaches the engine (MIDI controllers first, audio 
 read_when: MIDI input, MIDI controller, keyboard, arm, armed track, track.setArm, midi.inputs, live notes, sustain pedal, input latency, monitoring, recording, low latency, midir
 type: decision
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 covers:
   - crates/engine/src/record.rs
   - crates/engine/src/live.rs
@@ -246,8 +246,7 @@ the arm. Decision 3 has the rules.
 - A clip note and a live note on the same key of the same track share that key: the later one
   restarts it, and either's release ends it.
 - Arming is lost when the project closes; the MIDI monitoring choice is part of the project and
-  is kept. Saving it with the project can be added later as a
-  project field without changing the engine side.
+  is kept.
 - The last queued block is the one left between the engine and the device; rendering inside the
   device's callback would remove it, but would put plug-in round trips and graph swaps on the
   driver's thread, so it is not done. Lower latency from here comes from real-time priority
