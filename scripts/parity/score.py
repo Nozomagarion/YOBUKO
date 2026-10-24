@@ -163,7 +163,7 @@ CHAPTERS = [
     (17, "Routing and I/O", 22, 0.39, "partial",
      "Track output to main or a group (track.setOutput); MIDI controllers play the armed tracks "
      "and, with auto-arm on, the selected one as well (while a take records, arming "
-     "does not follow the selection, Settings › MIDI, #834), with MIDI monitoring Auto / In / Off per track, "
+     "does not follow the selection, Settings > MIDI, #834), with MIDI monitoring Auto / In / Off per track, "
      "each track choosing its MIDI port and channel (track.setMidiInput), with the mod wheel, "
      "pitch bend and aftertouch reaching the instrument alongside notes (#812); an audio input "
      "device with a channel or pair per track and monitoring Auto / In / Off "
