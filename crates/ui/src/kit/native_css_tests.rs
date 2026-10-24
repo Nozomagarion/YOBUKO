@@ -1073,3 +1073,27 @@ fn a_level_bar_draws_a_handle_where_its_fill_ends() {
     assert_eq!(handle.rect.center().x, 110.0);
     assert_eq!(handle.rect.width(), 6.0);
 }
+
+#[test]
+fn piano_roll_notes_take_the_clip_colour_and_their_states() {
+    use crate::detail::piano_roll::part_style;
+    use crate::kit::native_css::HostState;
+    let css = ".piano-note { background-color: var(--clip-colour); } \
+               .piano-note:selected { border-color: #FFFFFF; } \
+               .piano-key-black { background-color: #000000; }";
+    let mut seen = None;
+    painted(css, |_| {
+        let _roll = super::super::style_class::enter("piano-roll");
+        super::set_variable("--clip-colour", super::hex(egui::Color32::from_rgb(0x12, 0x34, 0x56)));
+        seen = Some((
+            part_style("piano-note", &[]),
+            part_style("piano-note", &[HostState::Selected]),
+            part_style("piano-key-black", &[]),
+        ));
+    });
+    let (note, selected, black) = seen.unwrap();
+    assert_eq!(note.background, Some(egui::Color32::from_rgb(0x12, 0x34, 0x56)));
+    assert_eq!(note.border, None);
+    assert_eq!(selected.border, Some(egui::Color32::WHITE));
+    assert_eq!(black.background, Some(egui::Color32::BLACK));
+}
