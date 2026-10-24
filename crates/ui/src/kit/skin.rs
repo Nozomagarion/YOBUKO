@@ -64,6 +64,8 @@ pub const OWN_ROLES: &[&str] = &[
     // The Arrangement view's ruler and its loop region.
     "ruler",
     "loop-region",
+    // An arrangement clip's fade handles.
+    "clip.fade-handle",
     // A track's artwork in one view only, over `track.name` and `track.body`.
     "track.name.session",
     "track.name.mixer",

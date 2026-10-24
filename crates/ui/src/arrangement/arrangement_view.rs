@@ -3162,17 +3162,21 @@ fn clip_box<'a>(
     // The gain sits on top of the clip.
     if let Some((field, db, hover)) = gain_paint {
         let gain_painter = painter.with_clip_rect(row.clip);
+        // `.clip-gain`: its background, border, radius and text.
+        let _style = crate::kit::style_class::enter("clip-gain");
         let fill = motion::mix(theme::control_background(), theme::control_hover(), hover);
-        gain_painter.fill_background(field, 0.0, fill);
+        crate::kit::native_css::surface(&gain_painter, field, 0.0, fill);
         let text = format!("{} dB", widgets::format_db(db));
-        let font = theme::mono_font(theme::TEXT_TINY);
+        let font = theme::mono_font(
+            crate::kit::style_class::computed().filter(|c| c.authored.font_size).map_or(theme::TEXT_TINY, |c| c.font_size),
+        );
         widgets::text_in(
             &gain_painter,
             field.shrink2(Vec2::new(3.0, 0.0)),
             Align2::RIGHT_CENTER,
             &text,
             font,
-            theme::text_value(),
+            crate::kit::style_class::foreground(theme::text_value()),
         );
     }
     // The handles sit on top of everything on the clip, where the fades now end.
@@ -3190,9 +3194,25 @@ fn clip_box<'a>(
     for (edge, hover) in handles {
         let length = if edge == FadeEdge::In { shown.fade_in } else { shown.fade_out };
         let handle = fade_handle(rect, edge, length as f32 * state.beat_width);
+        // `.clip-fade-handle`: its fill (`background-color`), border and radius, or the
+        // `clip.fade-handle` artwork.
+        let _style = crate::kit::style_class::enter("clip-fade-handle");
         let fill = motion::mix(theme::text_secondary(), theme::text_primary(), hover);
-        handle_painter.rect_filled(handle, 0.0, fill);
-        handle_painter.rect_stroke(handle, 0.0, theme::hairline(theme::window_background()), StrokeKind::Outside);
+        let state = if hover > 0.5 { crate::kit::skin::State::Hover } else { crate::kit::skin::State::Normal };
+        if !crate::kit::skin::paint(&handle_painter, handle, "clip.fade-handle", state, fill, 0.0) {
+            let authored = crate::kit::style_class::computed();
+            if authored.as_ref().is_some_and(|c| c.authored.background || c.authored.border) {
+                crate::kit::native_css::surface(&handle_painter, handle, 0.0, fill);
+            } else {
+                handle_painter.rect_filled(handle, 0.0, fill);
+                handle_painter.rect_stroke(
+                    handle,
+                    0.0,
+                    theme::hairline(theme::window_background()),
+                    StrokeKind::Outside,
+                );
+            }
+        }
     }
     for (edge, hover) in curves {
         let length = if edge == FadeEdge::In { shown.fade_in } else { shown.fade_out };

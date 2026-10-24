@@ -55,6 +55,8 @@ pub const CLASSES: &[&str] = &[
     "loop-region",
     "playhead",
     "divider",
+    "clip-gain",
+    "clip-fade-handle",
     "fader-cap",
     "fader-rail",
     "knob",
