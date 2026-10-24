@@ -2132,7 +2132,9 @@ fn clip_properties(
         Rect::from_min_max(area.min, Pos2::new(area.left() + CLIP_WIDTH, area.bottom()))
     }
     .intersect(area);
-    painter.fill_background(column, 0.0, theme::panel_background());
+    // `.clip-info` styles the clip's column: its background and its text.
+    let _style = crate::kit::style_class::enter("clip-info");
+    crate::kit::native_css::surface(painter, column, 0.0, theme::panel_background());
     // Rows that do not fit under the column's bottom are left out rather than cut in half, the
     // title last; text never wraps (› Clip column in `docs/spec/ui-clip-editor.md`).
     let title = Rect::from_min_size(column.min, Vec2::new(column.width(), ROW));
@@ -2332,10 +2334,13 @@ fn switch(ui: &Ui, painter: &egui::Painter, rect: Rect, showing: Showing) -> Opt
         if response.clicked() && value != showing {
             picked = Some(value);
         }
+        // `.editor-tab` (`:checked` for the one shown), `#tab-clip` and `#tab-devices`.
+        let _style = crate::kit::style_class::enter_named_response("editor-tab", &format!("tab-{}", text.to_ascii_lowercase()), &response);
+        crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, value == showing);
         let on = motion::toward(ui.ctx(), response.id.with("on"), value == showing, motion::VALUE);
         let idle = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-        painter.fill_background(cell, 0.0, motion::mix(idle, theme::control_selected(), on));
-        let color = motion::mix(theme::text_secondary(), theme::text_inverse(), on);
+        crate::kit::native_css::surface(painter, cell, 0.0, motion::mix(idle, theme::control_selected(), on));
+        let color = crate::kit::style_class::foreground(motion::mix(theme::text_secondary(), theme::text_inverse(), on));
         widgets::text_in(painter, cell, Align2::CENTER_CENTER, text, theme::ui_font(theme::TEXT_SMALL), color);
     }
     picked

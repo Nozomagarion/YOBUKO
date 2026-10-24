@@ -150,7 +150,9 @@ pub fn show(ui: &mut Ui, area: Rect, tools: &Tools<'_>, state: &mut PianoRollSta
     let column = Rect::from_min_max(area.min, Pos2::new(area.left() + TOOLS_WIDTH, area.bottom()));
     ui.allocate_rect(column, egui::Sense::hover());
     let painter = ui.painter_at(column);
-    painter.fill_background(column, 0.0, theme::panel_background());
+    // `.midi-tools` styles the column: its background and, through the scope, its controls' text.
+    let _style = crate::kit::style_class::enter("midi-tools");
+    crate::kit::native_css::surface(&painter, column, 0.0, theme::panel_background());
     painter.line_segment(
         [Pos2::new(column.right() - 0.5, column.top()), Pos2::new(column.right() - 0.5, column.bottom())],
         egui::Stroke::new(1.0, theme::border()),
