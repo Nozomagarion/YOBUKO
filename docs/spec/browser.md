@@ -188,6 +188,12 @@ with the part played so far brighter and a playhead.
 - Selecting something else, Escape in the search field, the play button again, or dropping
   items from the browser into the project stops it. Dragging does not: a press held still
   counts as the start of a drag, and the preview it started goes on.
+- **The play button follows what plays (#836).** It shows Stop from the click that starts a
+  preview, while the sample is still being read, until the sample has played to its end, and
+  whenever any preview sounds, even one started from another item: a sounding preview always has
+  a Stop to end it. A second click on a row's play button while its sample is still being read
+  stops it rather than starting it again. Stop silences whatever the preview voice plays, even a
+  preview the browser no longer knows it started.
 - **A MIDI file** previews through the selected track's instrument, a built-in one or a
   plug-in, when that track has one; otherwise through the FM synth with its first voice. All
   of the file's MIDI tracks sound together, at 120 BPM or the file's first tempo.
@@ -329,6 +335,23 @@ A **preset** is its device with the preset's values: a DX7 voice is the FM synth
 voice (a bank adds its first voice; a voice row inside the bank adds that voice). Several
 devices dropped together are added in the order they were selected.
 
+### Copying samples out
+
+Samples can be copied out of Suhina into a folder of one's own, for a collection of picked
+sounds (#865). The originals stay where they are; nothing is ever moved or overwritten.
+
+- **Copy to folder…** in a sample row's right-click menu (and a point's on the
+  [sample map](sample-map.md)) copies that sample, or every selected sample when the row is one
+  of them, into a folder the system's folder dialog picks (`library.copyTo`). A name taken in
+  that folder gets a number (`Kick 2.wav`, `Kick 3.wav`); a file that is gone is left out and the
+  status line says how many were not found.
+- **Dragging out:** samples dragged from the list or the map out of every Suhina window (not
+  over the main window, nor the map's own window) become a drag of files. Dropped on a folder in
+  the file manager, or on the desktop, they are copied there. The drag offers a copy only, so the
+  file manager's move key (Shift on Windows) still copies. A drag that stays in Suhina lands on
+  tracks, slots and devices as before. Windows and macOS; on Linux, where the window toolkit has
+  no drag of files out yet, the status line points to Copy to folder… instead.
+
 ### Adding without dragging
 
 Enter in the search field or a double-click on an item adds it to the selected track:
@@ -398,6 +421,7 @@ the CLI can do the same.
 | `library.removeTag` | `name` | removes a tag from the list and every item |
 | `library.tag` | `item`, `tag`, `on` | sets or clears a tag on an item |
 | `library.setPluginsView` | `view` | which plug-ins the Plug-ins category lists: `instruments` (default) or `effects` ([plug-in browsing](plugin-browsing.md)) |
+| `library.copyTo` | `items`, `folder` | copies files (at most 4096) into a folder that exists, under their own names or the first numbered one free (`Kick 2.wav`); never overwrites; returns what was `copied` (from, to), what is `missing` and what `failed` (#865) |
 | `library.findFiles` | `names`, `folder?` | finds files by name for missing files: in the folders' index and the active project's folder, or by walking `folder` ([missing files](missing-files.md)) |
 
 **Project** (on the active project, one undo step each):
@@ -414,7 +438,8 @@ when it has none); `preview.stop`. `launcher.state` reports `preview` (`playing`
 
 Over MCP, every path a command reads (`paths`, `path`, `preset`, `folder`, a file `item`) must
 be inside the server's read root, and `library.addFolder` and `library.removeFolder` are refused:
-the user chooses the browser's folders ([`mcp.md`](../mcp.md)).
+the user chooses the browser's folders ([`mcp.md`](../mcp.md)). `library.copyTo` reads its
+`items` below the read root and writes only into a `folder` below the write root.
 
 ## Limits
 

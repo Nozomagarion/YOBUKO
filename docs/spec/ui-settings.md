@@ -54,7 +54,7 @@ is on exactly one page, under one heading.
 | Detail area | Devices | Device chain |
 | Browser | Browser | Browser side |
 | Browser | Previews | Auto-play, Preview volume |
-| Browser | Sample map | Map layout, Map preview on hover, Map: longest sample |
+| Browser | Sample map | Map layout, Map preview on hover, Map: longest sample, Map labels |
 | Browser | Tags | Tag limit |
 | Appearance | Window | Zoom, Animations |
 | Appearance | Waveforms | Waveform scale |

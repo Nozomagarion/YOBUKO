@@ -528,7 +528,8 @@ empty list clears the map. Optional `continue` groups consecutive drag edits.
 read-root confinement. `project.collect` writes below the write root: its `folder` (made if it
 is new, inside an existing folder of the root) or, without one, the folder of the project's own
 file; a blank `folder` is refused, and so is a `Samples` or `Samples/Collected` in it that leads
-outside. A test lists
+outside. `library.copyTo` reads every file of its `items` below the read root and copies them
+only into a `folder` below the write root (#865). A test lists
 every command parameter named like a file or a folder (`path`, `paths`, `folder`, `file`, `to`,
 `item`, `preset`, `sd`, `output`, `place`) and fails for one that neither `confine()` handles nor the agents are
 refused, so a new command cannot take a path unchecked.

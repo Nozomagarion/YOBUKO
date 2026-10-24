@@ -361,7 +361,7 @@ pull up.
 ## Zoom and scroll
 
 - **Built:** the mouse wheel scrolls up and down through keys; **Shift**+wheel scrolls in time;
-  **Ctrl**+wheel zooms time around the pointer; **Ctrl+Shift**+wheel or **Alt**+wheel (Option on
+  **Ctrl**+wheel zooms time around the pointer, the beat under it staying put even past the clip's end (#910); **Ctrl+Shift**+wheel or **Alt**+wheel (Option on
   macOS, as in the Arrangement view) zooms key height around the pointer. Dragging with the middle mouse button pans both ways. A newly shown clip opens scrolled
   so its notes are in view (the middle of its lowest and highest note; C3 for an empty clip) and
   zoomed so the whole clip fits the width.

@@ -23,7 +23,7 @@ UTF-8 JSON, written pretty-printed. Its parts mirror the project model
   "project": {
     "transport": { "tempo_bpm": 120.0, "time_signature": [4, 4] },
     "tracks": [ … ], "channels": [ … ], "contents": [ … ],
-    "arrangement": { "lanes": [ … ], "markers": [ … ] },
+    "arrangement": { "lanes": [ … ], "markers": [ … ], "takes": [ … ] },
     "launcher": { "scenes": [ … ], "columns": [ … ] },
     "next_id": 12
   }
@@ -77,7 +77,7 @@ UTF-8 JSON, written pretty-printed. Its parts mirror the project model
 | `default_scale` | in `project`, beside `transport`: the scale new MIDI clips take, written only when the project has one; missing or `null` means none |
 | note | `time`, `duration` (beats); `key` 0–127; `velocity`, `release_velocity` 0–1; `channel` 0–15; `muted` (written only when the note is muted, missing means it plays; [ADR 0001](../decisions/0001-daw-neutral-model.md) › Amendment: muted notes) |
 | audio | `file` (relative to the project file, `/` between folders); `absolute_file`; `sample_rate`, `channels`, `duration_seconds` (if known); `warped`; `stretch` `repitch`, `rhythmic`, `tonal`, `texture`, `smooth` or `high_quality`; `warp_markers` `[{ time, audio_time }]`; `gain` (linear); `transpose` (semitones); `stream`: which audio track of a file with several plays (a Stems file: 0 the master, 1 and up the stems; missing or `null` for an ordinary file) |
-| arrangement | `lanes`; `markers` `[{ beat, name }]`: named positions on the timeline, `beat` a number from 0 on; read in any order and kept in beat order; left out when there are none ([arrangement editing](arrangement-editing.md#markers)) |
+| arrangement | `lanes`; `markers` `[{ beat, name }]`: named positions on the timeline, `beat` a number from 0 on; read in any order and kept in beat order; left out when there are none ([arrangement editing](arrangement-editing.md#markers)); `takes` `[{ track, name, clips }]`: the take lanes, recorded passes kept under their tracks in the order recorded, their clips written as a lane's are but without ids; left out when there are none ([recording](recording.md#take-lanes)) |
 | arrangement lane | `id`; `name`; `track` or `null`; `clips` |
 | clip | `id`; `content`; `start`, `length`, `offset` (beats); `loop` `[start, end]` or `null`; `enabled`; `fade_in`, `fade_out` (beats); `fade_in_shape`, `fade_out_shape` (`linear`, `equal_power`, `fast`, `slow` or `s_curve`; default `linear`) and `fade_in_curve`, `fade_out_curve` (−1 to 1, default 0), see [arrangement-editing](arrangement-editing.md#fades); `follow` (written only when it differs from the default, missing means off) `{ enabled, time, linked, a, b, chance_a, chance_b }`: time in beats (more than 0, at most 100000), actions `nothing`, `stop`, `again`, `previous`, `next`, `first`, `last`, `any`, `other` or `jump N` (N a scene, from 1), chances 0–100, see [clip-launching](clip-launching.md#follow-actions); `launch` `{mode, legato, quantization}`, written only when it differs from the defaults (`trigger`, `false`, `global`), each key optional, see [clip-launching](clip-launching.md#launch-settings) |
 | scene | `id`; `name`; `tempo_bpm` or `null`; `time_signature` `[numerator, denominator]` (left out when the scene has none; both whole numbers from 1) |

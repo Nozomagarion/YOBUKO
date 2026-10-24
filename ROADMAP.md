@@ -753,6 +753,18 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   time the driver stamped it with, at the frame where that falls, instead of on the next block's
   first frame, so fast playing no longer jitters by up to a block
   ([#269](https://github.com/suhina-daw/suhina-daw/issues/269), ADR 0017).
+- **Take lanes and comping:** recording into the arrangement draws the take as it grows, with
+  its notes or waveform, and keeps every pass over the same beats (the loop wrapping, a click back
+  on the ruler) as a take lane under the track, the latest on the track and playing; a click on a
+  take's clip, or a drag across part of a take, copies it onto the track (`take.comp`), and takes
+  can be deleted (`take.delete`) or folded away
+  ([#909](https://github.com/suhina-daw/suhina-daw/issues/909)).
+- **Copying samples out:** Copy to folder… in a sample's menu in the browser or the sample map
+  copies it, or every selected one, into a folder (`library.copyTo`, numbered names, nothing
+  overwritten), and samples dragged out of Suhina onto the file manager or the desktop are copied
+  there on Windows and macOS ([#865](https://github.com/suhina-daw/suhina-daw/issues/865)).
+- **Sample map labels:** a Labels control (Off, 50, 75, 100 %) beside Size scales or hides the
+  cluster names, kept as a setting ([#864](https://github.com/suhina-daw/suhina-daw/issues/864)).
 - **Recording:** an armed track records into an empty clip slot from the next launch boundary
   (the slot's record button, `clip.record`; a second click ends the take on the next boundary
   and plays it, looped) or into the arrangement (the control bar's record button,

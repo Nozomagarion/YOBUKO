@@ -127,7 +127,7 @@ impl Take {
     fn add_to_peak(&mut self, level: f32) {
         self.peak = self.peak.max(level);
         self.written += 1;
-        if self.written % PEAK_FRAMES == 0 {
+        if self.written.is_multiple_of(PEAK_FRAMES) {
             // At most a report's worth waits; the session gathers and caps them.
             if self.peaks.len() < 1 << 16 {
                 self.peaks.push(self.peak.min(1.0));

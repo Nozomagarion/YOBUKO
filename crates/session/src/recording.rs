@@ -671,7 +671,7 @@ impl Session {
         let bar = self.project.transport.meter().position(take.start.max(0.0)).bar_beats;
         if let Some(last) = passes.last_mut()
             && take.file.is_none()
-            && !(last.length > 0.0)
+            && last.length.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater)
         {
             // The playhead ended before the pass began: it spans what was played in it.
             let in_last = take.notes.iter().filter_map(|n| in_pass(n, last, take.start));

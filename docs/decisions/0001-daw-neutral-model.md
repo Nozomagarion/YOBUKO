@@ -218,6 +218,21 @@ The project file writes a group as a device of `"type": "group"` and is version 
 project holds one ([`.suhina` format](../spec/suhina-format.md)), so a project without groups
 still opens in a Suhina from before them.
 
+## Amendment: take lanes (2026-10-24)
+
+`Arrangement::takes` holds `TakeLane`s: a track and a name, and the clips of one recorded pass on
+the arrangement's beats ([recording spec](../spec/recording.md#take-lanes), #909). Recording into
+the arrangement keeps every pass over the same beats (the loop wrapping, the playhead moved back)
+as a take lane and puts the latest on the track, so comping copies parts of a take onto the track
+as new clips. On the arrangement rather than on each lane, because takes belong to a track and
+not to the lane's own clips, they never play, and the engine, the importers and every lane stay as
+they were. Take clips reference contents like any clip; they have no ids (`ClipId::NONE`), since no
+command names one by id: a take is named by its track and its number. `Project::validate` checks
+that a take's track and its clips' contents exist; deleting a track deletes its takes.
+
+The project file writes them under `arrangement.takes`, left out when there are none, so a project
+without takes is written as before ([`.suhina` format](../spec/suhina-format.md)).
+
 ## Consequences
 
 - Importers do real conversion work instead of copying a file's structure, and every importer

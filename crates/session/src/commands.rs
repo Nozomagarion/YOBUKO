@@ -4411,7 +4411,7 @@ fn comp_take(session: &mut Session, params: &Value) -> Result<Value, CommandErro
         }
     };
     let (from, to) = (bound("start", first)?, bound("end", last)?);
-    if !(to > from) {
+    if to.partial_cmp(&from) != Some(std::cmp::Ordering::Greater) {
         return Err("end must be after start".into());
     }
     let mut pieces = Vec::new();

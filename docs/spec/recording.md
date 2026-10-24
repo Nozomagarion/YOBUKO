@@ -86,10 +86,39 @@ else in a new scene.
    start marker. With the transport running, the take starts at the playhead.
 2. `transport.record` with `on: false` or `transport.stop` ends it at the playhead.
 3. Each take becomes a clip on its track from the beat recording started to the beat it ended,
-   replacing what it covers, like a clip pasted there. With the loop on, the notes of every pass
-   are merged into the one clip (when the playhead ended before where it started, the clip
-   reaches the last note, at least a bar); an audio take keeps everything from where it started,
-   one pass after another, as one long clip.
+   replacing what it covers, like a clip pasted there, as soon as it has ended: the arm, Play or
+   Stop make no difference (#909).
+4. **Every pass over the beats is a take of its own.** When the playhead jumps while recording
+   (the loop wrapping at its end, or a click on the ruler), the pass so far ends where the
+   playhead was and a new one begins where it went. Each pass becomes a clip on the track, the
+   later ones over the earlier, so the latest plays; and each is kept on a take lane under the
+   track (*Take lanes* below), so nothing played is thrown away. A MIDI pass holds the notes
+   played in it (a key held across the jump is cut at the pass's end); the passes of an audio
+   take are clips of its one file, each from where its pass began. When the playhead ended before
+   where the last pass began, that pass reaches its last note, at least a bar.
+
+While a take records into the arrangement, it is drawn on its track as a clip from where its
+pass began to the playhead, edged in the record colour and named **Recording**, with its notes
+or, for audio, its waveform drawn as they come in. After a jump it starts again at the new pass.
+
+### Take lanes
+
+A track that recorded into the arrangement has its passes as **take lanes** under it, oldest
+first, named **Take 1**, **Take 2** and so on. Take lanes do not play: their clips are drawn
+greyed. They are where the best parts of each pass are picked and put together on the track
+(comping):
+
+- **Click** a take's clip: the whole clip is copied onto the track over what is there.
+- **Drag** across a take: the part dragged over (on the grid; Alt for no grid) is copied onto the
+  track over what is there, as new clips that start in the take where the part does. Each copy is
+  one undo step.
+- **Right-click** a take's name: **Delete take** removes the lane; the track's clips stay.
+- **Hide take lanes** / **Show take lanes** in the right-click menu of the track's lane folds
+  them away and back.
+
+Take lanes are saved with the project (the project format,
+[`suhina-format.md`](suhina-format.md)); deleting the track deletes its takes. A copy on the
+track is a clip like any other: editing it leaves the take as it was.
 
 While recording into the arrangement, launching a slot plays it as usual; it is the slot record
 button that records into slots.
@@ -154,6 +183,8 @@ file's frames.
 | `clip.record` | `track`, `scene`: records into that empty slot of an armed track, from the next launch boundary |
 | `transport.record` | `on`: true records every armed track into the arrangement; false ends every take (slot takes at the next launch boundary) |
 | `transport.setCountIn` | `bars`: 0, 1, 2 or 4 |
+| `take.comp` | `track`, `take` (from 1), `start?`, `end?`: copies the take, or its part from `start` to `end` beats, onto the track over what is there; one undo step |
+| `take.delete` | `track`, `take`: deletes the take lane; one undo step |
 | `record.state` | Whether the arrangement records, the takes running (track, slot or arrangement, audio or MIDI, start and end beat, notes so far, frames written, file), the count-in setting and the beats it has left, notices |
 
 `clip.launch` on a slot that records ends its take; `transport.stop` ends every take. All of
@@ -173,6 +204,7 @@ step.
 ## Not yet
 
 - Overdubbing into a clip that exists (recording adds notes to a playing clip).
-- Punch in and out points, and keeping each loop pass of an audio take as its own take.
+- Punch in and out points.
+- Hearing a take lane on its own (audition), and marking on a take which parts are on the track.
 - Recording automation (a moved parameter written as a lane).
 - Recording a track's output (resampling) rather than its input.

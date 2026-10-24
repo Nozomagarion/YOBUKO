@@ -50,12 +50,13 @@ CHAPTERS = [
     (3, "Live Concepts", 27, 0.50, "partial",
      "Control bar, browser, sets, arrangement/session, tracks, audio/MIDI clips, devices, mixer "
      "concepts exist. Routing, recording, racks, clip/device view and presets are missing or thin."),
-    (4, "Working with the Browser", 60, 0.49, "partial",
+    (4, "Working with the Browser", 60, 0.50, "partial",
      "Search, categories, folders watched on disk, pins, recent, colour tags, preview through the "
      "engine, sample map by sound similarity (smooth with 200 000 items, also while its window is resized) with kinds recognised from the sound and set by hand; samples and MIDI files dragged from the system's file "
      "manager land like a browser drag; dropping one sample on an empty MIDI track adds Sampler (exact placement waits for pointer positions from the "
      "windowing layer); installed plug-ins grouped by vendor in the tree, and in the Plug-ins "
      "category as the instruments or the effects by name and format, with pins and tags on them. "
+     "Samples copied out to a folder (Copy to folder…, library.copyTo) or dragged out to the file manager as copies. "
      "Missing collections/tag editor depth, packs, Splice, "
      "Cloud, Push transfer, filter groups, browser history."),
     (5, "Managing Files and Sets", 43, 0.40, "partial",
@@ -176,16 +177,22 @@ CHAPTERS = [
      "meters (peak, RMS, clip) per track, group, return and main, also over MCP, and a cue output "
      "on a second pair of the device (previews, per-track cue, cue volume); return tracks "
      "imported and drawn. Missing crossfader, track delay, send fields in the Arrangement headers."),
-    (19, "Recording New Clips", 13, 0.45, "partial",
+    (19, "Recording New Clips", 13, 0.50, "partial",
      "Independent record arm and Auto / In / Off input monitoring (MIDI controllers, audio inputs); MIDI and audio recording into "
      "an empty slot from the next launch boundary (ended on the next one, then played looped) or "
      "into the arrangement, several armed tracks at once, a count-in of 1, 2 or 4 bars, takes lined "
      "up with what was heard, audio written to WAV files off the audio thread, one undo step per "
-     "take. Missing overdub, punch in/out, recording automation, capture MIDI, session record button."),
+     "take; the take drawn growing with its notes or waveform while it records, every loop pass or "
+     "jump back kept as a take of its own. Missing overdub, punch in/out, recording automation, capture MIDI, session record button."),
     (20, "Bounce to Audio", 6, 0.15, "partial",
      "Whole-project offline render to 32-bit float WAV (CLI/MCP), from an open project with its "
      "running plug-ins' state as heard; no per-track or group bounce, no paste."),
-    (21, "Comping", 6, 0.00, "absent", "No take lanes, no comping."),
+    (21, "Comping", 6, 0.55, "partial",
+     "Take lanes made by recording into the arrangement (a lane per loop pass or jump back, the latest "
+     "copied to the track and playing), drawn greyed under the track and folded away from its menu; a "
+     "click copies a take's clip and a drag a part of it onto the track (take.comp), Delete take "
+     "(take.delete); saved with the project. Missing audition, comp highlights on takes, keys to swap "
+     "takes, take lanes made by hand, renaming and reordering them, crossfades at comp edges."),
     (22, "Stem Separation", 8, 0.00, "planned",
      "Roadmap item (Demucs candidate, weights unaudited). The pipeline around a model (chunking, "
      "resampling) exists in crates/separation with a test backend; no model and nothing a user "
