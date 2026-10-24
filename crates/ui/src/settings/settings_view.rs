@@ -13,7 +13,7 @@ use crate::kit::theme::{self, PAD, Palette};
 use crate::kit::widgets;
 use crate::settings::keymap::{Keymap, Preset, Shortcut, actions};
 use crate::settings::workflow::Setting;
-use crate::settings::{Graphics, Settings};
+use crate::settings::{Descriptions, Graphics, Settings};
 
 const PAGE_WIDTH: f32 = 560.0;
 /// The list of pages on the left, and the gap between it and the page.
@@ -24,9 +24,13 @@ const SIDEBAR_ROW: f32 = 20.0;
 const SEARCH_FIELD: f32 = 18.0;
 const LABEL_WIDTH: f32 = 180.0;
 const SETTING_ROW: f32 = 34.0;
+/// Where every setting's control starts: names in one column and controls in the next, lined
+/// up down the page, so the eye runs straight down either.
+const CONTROL_COLUMN: f32 = 240.0;
+/// A setting's row when it is its name and its control alone; its description is the name's
+/// tooltip.
+const LINE_ROW: f32 = 24.0;
 const SEGMENT: f32 = 15.0;
-/// A folder field on the right of its row; empty shows the default folder.
-const FOLDER_FIELD: f32 = 300.0;
 /// The Browse… button at the end of a path field.
 const BROWSE_WIDTH: f32 = 60.0;
 /// Themes shown before their list scrolls.
@@ -449,7 +453,7 @@ impl Cx<'_> {
     /// The person's explicit MCP write grants; each includes all its subfolders.
     pub fn mcp_write_folders(&mut self, y: &mut f32) {
         let row = setting_row(self.page, y);
-        label(self.painter, row, "Other folders agents may write in", "Each allowed folder includes its subfolders");
+        label(self.painter, row, "More agent write folders", "Each allowed folder includes its subfolders");
         let mut remove = None;
         for (index, folder) in self.settings.mcp_write_folders.iter().enumerate() {
             let row = setting_row(self.page, y);
@@ -536,9 +540,8 @@ impl Cx<'_> {
     /// in a Browse… button that asks the app for the system's dialog.
     pub fn folder(&mut self, row: Rect, hint: &str, pick: PickField, field: impl FnOnce(&mut Settings) -> &mut String) {
         let name = self.name;
-        // The note is cut where the field starts.
-        self.label =
-            Some(Rect::from_min_size(row.min, Vec2::new(row.width() - FOLDER_FIELD - 8.0 + LABEL_WIDTH, row.height())));
+        // The name is cut where the field starts.
+        self.label = Some(Rect::from_min_size(row.min, Vec2::new(CONTROL_COLUMN - 8.0, row.height())));
         let browse = Rect::from_min_size(
             Pos2::new(row.right() - BROWSE_WIDTH, row.top() + 1.0),
             Vec2::new(BROWSE_WIDTH, SEGMENT),
@@ -547,8 +550,8 @@ impl Cx<'_> {
             self.outcome.pick = Some(pick);
         }
         let rect = Rect::from_min_size(
-            Pos2::new(row.right() - FOLDER_FIELD, row.top()),
-            Vec2::new(FOLDER_FIELD - BROWSE_WIDTH - 4.0, SEGMENT + 2.0),
+            Pos2::new(control_x(row), row.top()),
+            Vec2::new((row.right() - BROWSE_WIDTH - 4.0 - control_x(row)).max(40.0), SEGMENT + 2.0),
         );
         let value = field(self.settings);
         let edit = self
@@ -780,9 +783,18 @@ fn page_body(
             Draw::Row(draw) => {
                 let r = setting_row(page, &mut y);
                 draw(&mut cx, r);
-                let note = cx.note.take();
+                let status = cx.note.take();
                 let name_rect = cx.label.take().unwrap_or(r);
-                let height = wrapped_label(&painter, r, name_rect, entry.name, note.as_deref().unwrap_or(entry.note));
+                let how = cx.settings.setting_descriptions;
+                // Shown under the name, the description is the row's second line, with what the
+                // setting reports now (the last backup) after it.
+                let second = match (how, status) {
+                    (Descriptions::Shown, Some(status)) => Some(format!("{}: {status}", entry.note)),
+                    (Descriptions::Shown, None) => Some(entry.note.to_string()),
+                    (_, status) => status,
+                };
+                let height = wrapped_label(&painter, r, name_rect, entry.name, second.as_deref());
+                describe(cx.ui, &painter, r, entry.name, entry.note, how);
                 y = r.top() + height;
             }
             Draw::Block(draw) if entry.role == Role::Status => {
@@ -870,7 +882,10 @@ pub(crate) fn mouse_switches(cx: &mut Cx<'_>, y: &mut f32) {
             cx.keymap.set_workflow(setting, index);
             cx.outcome.keymap_changed = true;
         }
-        let height = wrapped_label(cx.painter, r, r, setting.name(), setting.note());
+        let how = cx.settings.setting_descriptions;
+        let second = (how == Descriptions::Shown).then(|| setting.note());
+        let height = wrapped_label(cx.painter, r, r, setting.name(), second);
+        describe(cx.ui, cx.painter, r, setting.name(), setting.note(), how);
         *y = r.top() + height;
     }
     let color = theme::text_secondary();
@@ -1835,10 +1850,8 @@ fn choice_dropdown<T: Clone + PartialEq>(
     options: &[(String, T)],
     current: &T,
 ) -> Option<T> {
-    let field = Rect::from_min_size(
-        Pos2::new(row.right() - DROPDOWN_FIELD, row.top() + 1.0),
-        Vec2::new(DROPDOWN_FIELD, SEGMENT + 2.0),
-    );
+    let left = control_x(row).min(row.right() - DROPDOWN_FIELD);
+    let field = Rect::from_min_size(Pos2::new(left, row.top() + 1.0), Vec2::new(row.right() - left, SEGMENT + 2.0));
     let shown = options.iter().find(|(_, v)| v == current).map_or("-", |(text, _)| text.as_str());
     let response = widgets::button_area(ui, field, Id::new(("audio-setting", name)), format!("{name}: {shown}"));
     widgets::dropdown(ui, painter, field, &response, shown);
@@ -1854,17 +1867,49 @@ fn choice_dropdown<T: Clone + PartialEq>(
     picked
 }
 
-/// A setting's name and its whole note under it, wrapped to the row's width. The name is cut to
-/// `name_rect`, which leaves room for a field beside it. Returns the height the row needs.
-fn wrapped_label(painter: &egui::Painter, row: Rect, name_rect: Rect, name: &str, note: &str) -> f32 {
-    let top = Rect::from_min_size(name_rect.min, Vec2::new(name_rect.width(), 16.0));
+/// A setting's name in the first column of `row`, cut to `name_rect`, and under it `status` when
+/// the setting reports one (the last backup, a folder that is missing). Returns the height the
+/// row needs. The setting's description is its name's tooltip (`describe`), not a line of its own.
+fn wrapped_label(painter: &egui::Painter, row: Rect, name_rect: Rect, name: &str, status: Option<&str>) -> f32 {
+    let width = name_rect.width().min(CONTROL_COLUMN - 8.0);
+    let top = Rect::from_min_size(name_rect.min, Vec2::new(width, 16.0));
     widgets::text_in(painter, top, Align2::LEFT_CENTER, name, theme::ui_font(theme::TEXT), theme::text_primary());
+    let Some(status) = status.filter(|s| !s.is_empty()) else { return LINE_ROW };
     let color = theme::text_secondary();
     let galley =
-        painter.layout(note.to_string(), theme::ui_font(theme::TEXT_SMALL), color, (row.width() - 8.0).max(40.0));
+        painter.layout(status.to_string(), theme::ui_font(theme::TEXT_SMALL), color, (row.width() - 8.0).max(40.0));
     let height = galley.size().y;
     painter.galley(Pos2::new(row.left(), row.top() + 18.0), galley, color);
-    SETTING_ROW.max(18.0 + height + 8.0)
+    LINE_ROW.max(18.0 + height + 6.0)
+}
+
+/// The description of the setting named `name`, as Settings › Appearance › Setting descriptions
+/// asks: a tooltip on its name, or on a ? drawn after the name. (Shown under the name, it is the
+/// row's second line instead, drawn by [`wrapped_label`].)
+fn describe(ui: &Ui, painter: &egui::Painter, row: Rect, name: &str, description: &str, how: Descriptions) {
+    let font = theme::ui_font(theme::TEXT);
+    let name_width = widgets::text_width(ui, name, font).min(CONTROL_COLUMN - 26.0);
+    let area = match how {
+        Descriptions::Tooltip => Rect::from_min_size(row.min, Vec2::new(CONTROL_COLUMN - 8.0, LINE_ROW)),
+        Descriptions::Icon => {
+            let icon =
+                Rect::from_center_size(Pos2::new(row.left() + name_width + 12.0, row.top() + 8.0), Vec2::splat(12.0));
+            painter.circle_stroke(icon.center(), 5.5, egui::Stroke::new(1.0, theme::text_hint()));
+            widgets::text_in(
+                painter,
+                icon,
+                Align2::CENTER_CENTER,
+                "?",
+                theme::ui_font(theme::TEXT_TINY),
+                theme::text_secondary(),
+            );
+            icon.expand(3.0)
+        }
+        Descriptions::Shown => return,
+    };
+    let response = ui.interact(area, Id::new(("setting-description", name)), Sense::hover());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, description));
+    response.on_hover_text(description);
 }
 
 /// A setting's name and a note under it, on the left of its row.
@@ -1890,8 +1935,7 @@ const SWITCH_WIDTH: f32 = 34.0;
 /// A switch on the right of `row` for a yes/no setting: one control, labelled with the setting's
 /// name. Returns the new value when it is clicked.
 fn switch(ui: &Ui, painter: &egui::Painter, row: Rect, name: &str, on: bool) -> Option<bool> {
-    let track =
-        Rect::from_min_size(Pos2::new(row.right() - SWITCH_WIDTH, row.top() + 1.0), Vec2::new(SWITCH_WIDTH, SEGMENT));
+    let track = Rect::from_min_size(Pos2::new(control_x(row), row.top() + 1.0), Vec2::new(SWITCH_WIDTH, SEGMENT));
     let response = ui.interact(track, Id::new(("setting-switch", name)), Sense::click());
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, on, name));
     let lit = motion::toward(ui.ctx(), response.id.with("on"), on, motion::VALUE);
@@ -1912,13 +1956,18 @@ fn options_rect<T>(ui: &Ui, row: Rect, options: &[(&str, T)]) -> Rect {
     let part = (widest + 16.0).max(48.0).ceil();
     let count = options.len().max(1) as f32;
     let width = part * count + (count - 1.0);
-    Rect::from_min_size(Pos2::new(row.right() - width, row.top() + 1.0), Vec2::new(width, SEGMENT))
+    Rect::from_min_size(Pos2::new(control_x(row), row.top() + 1.0), Vec2::new(width, SEGMENT))
+}
+
+/// Where a setting's control starts in `row`: the second column.
+fn control_x(row: Rect) -> f32 {
+    row.left() + CONTROL_COLUMN
 }
 
 /// Where a segmented control with `parts` parts sits on the right of a row.
 fn control_rect(row: Rect, parts: usize) -> Rect {
     let width = 64.0 * parts as f32;
-    Rect::from_min_size(Pos2::new(row.right() - width, row.top() + 1.0), Vec2::new(width, SEGMENT))
+    Rect::from_min_size(Pos2::new(control_x(row), row.top() + 1.0), Vec2::new(width, SEGMENT))
 }
 
 /// A segmented control (components › Dropdown and segmented control). Returns the option

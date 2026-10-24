@@ -385,13 +385,13 @@ fn settings_clip_editor_has_both_piano_roll_settings_and_they_change_the_setting
     h.get_by_label("Settings page: Clip editor").click();
     h.run();
     // Both rows fit on the page, inside the window.
-    for name in ["Piano roll at full height: Whole window", "Piano roll grid: Control bar"] {
+    for name in ["Full-height piano roll covers: Whole window", "Piano roll grid source: Control bar"] {
         let rect = h.get_by_label(name).rect();
         assert!(rect.bottom() < SIZE.1, "{name} at {rect:?}");
     }
-    h.get_by_label("Piano roll at full height: Whole window").click();
+    h.get_by_label("Full-height piano roll covers: Whole window").click();
     h.run();
-    h.get_by_label("Piano roll grid: Control bar").click();
+    h.get_by_label("Piano roll grid source: Control bar").click();
     h.run();
     assert_eq!(h.state().settings().piano_roll_top, PianoRollTop::Window);
     assert!(h.state().settings().piano_grid_follows);

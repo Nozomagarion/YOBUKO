@@ -35,39 +35,39 @@ what is inside it).
 
 | Page | Group | Settings |
 |---|---|---|
-| Projects and backups | Projects | Opening a project, At start, Projects folder, Templates folder, Start template (shown with At start › Template) |
-| Projects and backups | Backups | Backups (the note names the newest backup of the active project), Clean up backups |
+| Projects and backups | Projects | Open projects in, At start, Projects folder, Templates folder, Startup template (shown with At start › Template) |
+| Projects and backups | Backups | Backup interval (the note names the newest backup of the active project), Delete old backups |
 | Audio | Status | Audio status: the output and input in use, how long sound takes to come out, dropouts, List devices again (a panel, not a setting) |
 | Audio | Output | Audio device: Driver, Device, Sample rate, Buffer size (or Engine block), Exclusive mode, Input |
 | Audio | Cue | Headphone output: Cue output, Cue volume |
 | MIDI | MIDI inputs | Each MIDI input port, on or off |
-| MIDI | Arming | Arm the track you select |
+| MIDI | Arming | Arm selected track |
 | Plug-ins | Actions | Scan, Rescan all, Manage plug-ins (commands, set off above the folders) |
 | Plug-ins | Folders | Folders (each on or off, with its format; add with a format, remove) |
-| Plug-ins | Editors | Plug-in windows (Window, Device view) |
+| Plug-ins | Editors | Plug-in editors open in (Window, Device view) |
 | Devices | NAM | Amp models folder, Cabinet sounds folder ([nam spec](nam-amp-and-cab.md) › Folders) |
-| Devices | Device panels | Device chain, Detail area |
-| Importing | Dropping files | Dropping several files, Fitting samples to the tempo |
-| Arrangement | Clip editing | Let audio clips overlap, Let MIDI clips overlap, Double-click makes a clip, Rename in the clip menu, Moving clips |
-| Arrangement | Time and play | Selecting time, Start marker follows the clip you select, Where Play starts, Where Stop leaves the playhead |
-| Arrangement | View | Show the grid inside clips, Waveform size |
-| Arrangement | Tracks | Colour of new tracks, Track headers, Show return tracks |
-| Arrangement | Advanced | Stretch audio by its edge, Rename every selected clip |
-| Session and mixer | Launching | Select the clip you launch |
-| Session and mixer | Mixer | Volume and pan controls |
-| Clip editor | Piano roll | Piano roll at full height, Piano roll grid, Toolbar size, Moved notes replace notes |
-| Browser | Browser | Browser side, Recent items |
-| Browser | Previews | Preview on select, Preview volume |
-| Browser | Sample map | Sample map layout, Preview on the map by pointing, Longest sample on the map |
-| Browser | Tags | Most colour tags |
+| Devices | Device panels | Device chain layout, Detail area width |
+| Importing | Dropping files | Tracks for dropped files, Warp mode for samples |
+| Arrangement | Clip editing | Let audio clips overlap, Let MIDI clips overlap, Double-click makes a clip, Clip menu name field, Clip drag handle |
+| Arrangement | Time and play | Select time with, Start marker follows selection, Play from, Playhead after Stop |
+| Arrangement | View | Grid inside clips, Waveform size |
+| Arrangement | Tracks | New track colour, Track header side, Return tracks |
+| Arrangement | Advanced | Edge drag stretches audio, Rename all selected clips |
+| Session and mixer | Launching | Select launched clip |
+| Session and mixer | Mixer | Mixer control style |
+| Clip editor | Piano roll | Full-height piano roll covers, Piano roll grid source, Piano roll toolbar size, Moved notes replace notes |
+| Browser | Browser | Browser side, Recent item kinds layout |
+| Browser | Previews | Preview selected file, Preview volume |
+| Browser | Sample map | Sample map layout, Preview on map hover, Map sample length limit |
+| Browser | Tags | Colour tag limit |
 | Keys | Mouse and key behaviour | The clip editor's workflow settings (click, right click, double-click, duplicate key); kept in `keymap.json` |
 | Keys | Shortcuts | The preset, every action's keys, Reset all |
-| Appearance | Window | Zoom, Animations |
+| Appearance | Window | Window zoom, Animations |
 | Appearance | Waveforms | Waveform scale |
-| Appearance | Advanced | Graphics system |
+| Appearance | Advanced | Graphics renderer |
 | Theme | Theme | The themes, the theme in use, its colours |
-| Agents and updates | Agents | Let an AI agent edit open projects (off by default; [ADR 0028](../decisions/0028-mcp-in-the-running-app.md)) |
-| Agents and updates | MCP write permissions | Agents may write in the project folder (on by default, with the active folder shown), Other folders agents may write in (Add folder… and Remove); all grants include subfolders |
+| Agents and updates | Agents | AI agents edit projects (off by default; [ADR 0028](../decisions/0028-mcp-in-the-running-app.md)) |
+| Agents and updates | MCP write permissions | Project folder for agents (on by default, with the active folder shown), More agent write folders (Add folder… and Remove); all grants include subfolders |
 | Agents and updates | Updates | Check for updates, Update source (Test builds only in developer mode) ([spec](updates.md)) |
 | Agents and updates | Advanced | Developer mode |
 
@@ -127,13 +127,18 @@ checks the ones a machine can check and names this section when one fails.
 3. **Settings only.** A readout of what is happening (latency, what is playing) is a status panel
    first on its page (`.status()`); buttons that do something once (Scan) are a row of actions
    first on its page (`.actions()`). Neither sits among the settings.
-4. **Words a newcomer reads at once** (the Microsoft and Toptal guidance in Sources: plain words that
+4. **Two columns, words a newcomer reads at once.** Names sit in the first column and every
+   control starts at the second (`CONTROL_COLUMN` in `settings_view.rs`), so both run straight down
+   the page; a row is its name and its control, with a second line only for what the setting
+   reports now (the last backup). The wording follows (the Microsoft and Toptal guidance in Sources: plain words that
    say what a setting does, short, no jargon):
-   - The **name** is short and says what the setting is about: a noun (*Projects folder*, *Waveform
-     size*), or for a switch what it makes happen (*Let audio clips overlap*, *Show return tracks*).
-     It reads on its own, without its buttons: not a sentence cut off before them (*Grab a clip by*).
+   - The **name** says exactly what the setting does, in one to four words, so that with its value it
+     reads as one line (*Playhead after Stop: Marker*, *Arm selected track: on*, *Warp mode for
+     samples: Rhythmic*). A noun for a choice, what it makes happen for a switch; not a sentence cut
+     off before its buttons (*Grab a clip by*), not only the topic (*Moving clips*).
    - The **description** is one whole sentence that says what changes when the setting is on or
-     chosen, shown whole. It holds one thought: no semicolon, no second clause about the off state
+     chosen. By default it is the name's tooltip; **Setting descriptions** on the Appearance page
+     shows it as a ? after the name, or under the name. It holds one thought: no semicolon, no second clause about the off state
      (the switch shows that), no shortcut keys (the Keys page lists them), and it does not end with
      a full stop.
    - **Plain words:** the effect, not the mechanism. Not *underruns* but dropouts, not *IR* but

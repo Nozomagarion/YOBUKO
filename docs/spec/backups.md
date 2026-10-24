@@ -32,7 +32,7 @@ last save. The next time Suhina starts it offers the copy back.
 
 ## When a backup is written
 
-A setting, **Backups** in Settings › Projects and backups, says when:
+A setting, **Backup interval** in Settings › Projects and backups, says when:
 
 | Choice | Settings file (`backup =`) | A backup is written |
 |---|---|---|
@@ -112,7 +112,7 @@ this list.
 
 ## Clean-up
 
-A setting, **Clean up backups** in Settings › Projects and backups (`backup_clean_up = on|off`, on by default),
+A setting, **Delete old backups** in Settings › Projects and backups (`backup_clean_up = on|off`, on by default),
 deletes old backups:
 
 - After each backup is written, the newest **20** backups of that project in that folder are kept

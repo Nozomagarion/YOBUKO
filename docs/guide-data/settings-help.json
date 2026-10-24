@@ -1,6 +1,6 @@
 {
   "Projects/Projects/open_projects": {
-    "sourceFingerprint": "0ad15bded2449c456b04044eb0585bd4559ac5a95de8f9cfc48c600a8fb10c9e",
+    "sourceFingerprint": "f73af09be8bb328d4c6ff82c5270127a776e9b1e1aedcad84c81b7a5583c9b6b",
     "description": "Choose what happens when you open another project while one is already open. This controls whether Suhina asks you each time, keeps both projects open in separate tabs, or replaces the active project. It does not choose what opens when you start Suhina; use At start for that.",
     "options": [
       {
@@ -25,7 +25,7 @@
     "summary": "Choose whether another project opens in a new tab or replaces the active project."
   },
   "Projects/Projects/at_start": {
-    "sourceFingerprint": "df80a1042fb93e3a930c015e790dd274f2d86eb76b59e2d75be375aaa9eada2e",
+    "sourceFingerprint": "f0b67c8f469e4bca4d343af350351df4b9cba1752c4c8d49da4b2b8f22bc1342",
     "summary": "Choose what opens when Suhina starts without a project file.",
     "description": "This controls the first screen when no project is supplied at launch. A template is a saved starting project that Suhina copies into a new, unsaved project. If no start template is chosen or its file is missing, Suhina shows the start panel with an explanation; if there is no last project recorded, it also leaves you on the panel.",
     "options": [
@@ -81,7 +81,7 @@
     ]
   },
   "Projects/Projects/start_template": {
-    "sourceFingerprint": "68e9c7c99b136cb9e00fddebc358f65bce4812488f6f2b47ae6993dcecb17d8b",
+    "sourceFingerprint": "9c88d321d91df48e0a4226e7b000a879e36f10c405834c6548d4367c9ee0747e",
     "summary": "Choose the template used by the Template startup option.",
     "description": "Enter a template file name from Templates folder, or an absolute path to a template, or use Browse to select the file. Suhina creates a new project from it at startup only when At start is Template. This control is hidden for the other startup choices. An empty or missing template leaves the start panel visible with an explanation.",
     "options": [],
@@ -94,7 +94,7 @@
     ]
   },
   "Projects/Backups/backup": {
-    "sourceFingerprint": "6b1ccc64fc86d982ee491f8470d682bac1f5d656ef1a9f2e7b6ee4ec73768f01",
+    "sourceFingerprint": "c5bf3bef10d0e3fddf79c9e377eb2f51d70b13717d16b0f2497d97209f6500e4",
     "summary": "Choose when changed projects receive recovery copies.",
     "description": "A backup is a separate project copy, not a replacement for saving your project. Suhina backs up open projects only when they have unsaved changes that are newer than their last backup. Saved projects keep copies in a .backup folder alongside their project file; projects never saved use Suhina’s settings backup folder. After an interrupted session, recovery can offer these copies.",
     "options": [
@@ -144,7 +144,7 @@
     ]
   },
   "Projects/Backups/backup_clean_up": {
-    "sourceFingerprint": "27608f2086d73c301aee36353d3a25a0392a7b82cbe78a768f96f6d9062ad9f9",
+    "sourceFingerprint": "ab7163585a80d7579b304a8933475618441f0a7cbfa50b67acbb6dfe73e80f3c",
     "summary": "Keep the newest 20 backup copies of each project.",
     "description": "Clean-up removes older recovery copies when backups are written, keeping the newest 20 for each project. It does not delete the main project file. It only has new backups to clean up when the Backups setting permits them.",
     "options": [
@@ -277,7 +277,7 @@
     ]
   },
   "Midi/Arming/auto_arm": {
-    "sourceFingerprint": "94d482a72d3894c4e1d9f2a633111bb2d01799128e68311db3193282527c1494",
+    "sourceFingerprint": "f5ecbcb5615be3e18a1cb4ebed1aa1344591adaf8c4fba689b5254de0cb91fca",
     "summary": "Arm the track you select, so a MIDI controller or the audio input plays into it.",
     "description": "When this is on, selecting a track (clicking its header, or a clip slot in its column) arms it for recording, and the track armed this way before is disarmed again. On a MIDI track, a MIDI keyboard or controller then plays the track's instrument; on an audio track, the track hears its audio input, and a track with no input chosen gets the device's first input, as its arm button gives it. Return tracks, the main track and groups are left as they are, and the arm does not move while a take is recording. A track you armed yourself stays armed when you select another one. Arming is not an edit: it is not undone and not saved with the project. The setting is off unless you turn it on.",
     "options": [
@@ -360,7 +360,7 @@
     "workInProgress": true
   },
   "Plugins/Editors/plugin_editors": {
-    "sourceFingerprint": "4d639b3b8af6f33e893426f58fbbc2b3cf44a1fbe293bfe76c7cd7558ee6a493",
+    "sourceFingerprint": "1e6893bd9f42545107fc3d748761dc4f5e345ef1fa7cd29fccff72f9ba78afc9",
     "summary": "Choose where a plug-in’s own editing interface opens.",
     "description": "A plug-in editor is the instrument or effect’s own graphical controls. Window gives it a separate window above Suhina; Device view embeds it in the selected track’s device panel. Embedded editors are supported on Windows and X11. The Settings panel reports when editors cannot open on the current system; selecting Device view does not add platform support.",
     "options": [
@@ -411,7 +411,7 @@
     ]
   },
   "Devices/Device panels/device_chain": {
-    "sourceFingerprint": "9ecb0ad981f30707c7c8884763cce5268f1c05ac0a3a053571b4f9b922fdcbf2",
+    "sourceFingerprint": "7b0938a9f035837b8fcd06d2235b55af1a58598787cf17a7653b5a04d9239173",
     "summary": "Show a track's instruments and effects side by side below the tracks, or stacked in a side panel.",
     "description": "A device chain is the collection of instruments and effects on a track. Select a track to see these controls in the detail area, the panel used for devices and clip editing. This setting changes how that panel and its device controls are arranged; it does not reorder the effects or change the sound.",
     "options": [
@@ -433,7 +433,7 @@
     ]
   },
   "Devices/Device panels/detail_layout": {
-    "sourceFingerprint": "2ec7718397617e983f47ce1e9ae351bd6d56af1c881c7bb61d8c3dc2ce977400",
+    "sourceFingerprint": "e9b6d8f79d8ba7fc6e715309f971f844d0096e4ae5a01f7b30a506a8f1c76b5d",
     "summary": "Let the bottom editing panel extend underneath the browser, or keep the browser full height beside it.",
     "description": "The detail area shows the selected track's instruments and effects, or the selected clip's editor. When Device chain is set to Row, this panel sits at the bottom of the window. This setting decides how the bottom panel shares space with the browser, the panel where you find samples, instruments and files. It has no effect while Device chain is set to Stack.",
     "options": [
@@ -455,7 +455,7 @@
     ]
   },
   "Importing/Dropping files/drop_files": {
-    "sourceFingerprint": "8f1c9afff8c59ef4a201c778bd0c1919b7e931cb28cc1a4683a63b3b7fd23934",
+    "sourceFingerprint": "6baa2f36ad523ec2ff9eeee386ab35ab728a76b6e4ebebcd9f8f32907a061687",
     "summary": "Choose how several dropped files are distributed across tracks.",
     "description": "When importing several files together, choose whether they share one track or each gets a track. Holding Ctrl while dropping reverses the selected behavior for that drop. This concerns multi-file placement; it does not rearrange files already in the project. On macOS the command modifier is Cmd.",
     "options": [
@@ -479,7 +479,7 @@
     ]
   },
   "Importing/Dropping files/warp_mode": {
-    "sourceFingerprint": "c67d08652a37381d27bb22f4fc091d9957eaeab041811ee9c589cbf98e670a6a",
+    "sourceFingerprint": "b9614a53b13e383490e4ad7ec86136f874f8202b20f395ca1323d1cbecfdb90c",
     "summary": "Choose how newly imported samples follow the project tempo.",
     "description": "Warping maps a sample’s recorded timing to musical beats so it can follow the project tempo. This setting supplies the stretch mode for dropped samples whose tempo is known. A sample without a known tempo is not automatically warped. It does not change the modes of existing clips. Currently Rhythmic, Tonal, Texture, Smooth and High quality all use the same pitch-preserving stretch algorithm; their names do not give different sound quality yet. Unsupported files or extreme stretch ratios can fall back to Re-pitch.",
     "options": [
@@ -595,7 +595,7 @@
     ]
   },
   "Arrangement/Clip editing/menu_name_field": {
-    "sourceFingerprint": "23aa378aecd45158b7913d187bf7c8db5f1dc8e7d02e7629e05898e74009495d",
+    "sourceFingerprint": "f88a6b3667aea367ecc723153479f42b72a7c2a99ad5ec0244d137e53e6d55d0",
     "summary": "Choose whether a clip’s context menu includes an editable name field.",
     "description": "The clip context menu is the menu opened by right-clicking a clip. With this enabled, it contains a name field for editing the clip name. With it disabled, Rename opens name editing on the clip instead. This changes where you type a name, not the clip’s audio or notes.",
     "options": [
@@ -620,7 +620,7 @@
     ]
   },
   "Arrangement/Clip editing/clip_drag": {
-    "sourceFingerprint": "21ba9116b285e3603c3c6de9688ce00e6add5a5c8fab5278f29863d54d51f45b",
+    "sourceFingerprint": "e440c96f022610f29da44a28ad50eef31955618fc5ed117b5cd9e1e764430dad",
     "summary": "Choose which part of an Arrangement clip moves it and which selects time.",
     "description": "A clip can have a name bar above its waveform or note preview. This preference divides the clip into movement and time-selection regions. Ctrl+drag selects time over clips overrides that division when enabled. Very short clip rows without room for a name bar use upper and lower regions. Clicking a clip body can set the play start at the clicked position instead of choosing the whole clip’s span.",
     "options": [
@@ -644,7 +644,7 @@
     ]
   },
   "Arrangement/Time and play/time_select": {
-    "sourceFingerprint": "23ca48a732de6b96965e9418c01f6bcd046ca88c3cfea81149ea62f722f35a7d",
+    "sourceFingerprint": "754d8016807f6c26b13cae5f5e203d174e459ed97858ebdd37191abba1b87719",
     "summary": "Use Ctrl-drag for time selection instead of dividing clips into drag regions.",
     "description": "A time selection is a span of the timeline across one or more tracks; editing can act on material inside that span. This setting changes how you paint that selection over Arrangement clips and lanes. When enabled, an ordinary clip drag moves it and Ctrl-drag selects time; Shift-drag is then the copy gesture. When disabled, Moving a clip determines the clip’s move and selection regions, and Ctrl-drag copies clips. A ruler drag selects time in either mode. Ctrl is Cmd on macOS.",
     "options": [
@@ -668,7 +668,7 @@
     ]
   },
   "Arrangement/Time and play/play_from_selected_clip": {
-    "sourceFingerprint": "5e8513227b633bd9ec73ec2cb2689337325cca210a73ddfbd7e033a89b48d112",
+    "sourceFingerprint": "0fca2897946a7f844e94409dc8a6aff8d55bdd025cfbe68d93a76e18c9805c73",
     "summary": "Move the play start marker to newly selected whole clips while stopped.",
     "description": "The play start marker is the timeline position used by marker-based playback. With this enabled, changing the whole-clip selection while stopped moves that marker to the earliest selected clip’s start. It does not move the marker during playback. A click in a clip body still sets the position where you clicked; clips on a track edited by an ARA audio editor also keep their own position behavior. Transport → Play from separately chooses whether Play uses the marker or the selected clip.",
     "options": [
@@ -692,7 +692,7 @@
     ]
   },
   "Arrangement/Time and play/play_start": {
-    "sourceFingerprint": "6c1d7468189035f67c9715713d3949281cfb03e10984302baf75605143c6123f",
+    "sourceFingerprint": "2cf4c2b229eac772ed66e48816df348b0580f919b92f6db0faea4ab824183b3e",
     "summary": "Choose the starting position used by Play and the play/stop shortcut.",
     "description": "The play start marker marks the timeline position from which playback can begin. Selected clip instead starts from a whole clip selected in the Arrangement. With no suitable whole-clip selection, Play uses the marker. Clicking a clip body uses the clicked position, and clips on an ARA audio-editor track also use the position set by that editor or a click. Arrangement → Play from the selected clip separately controls whether changing selection moves the marker.",
     "options": [
@@ -718,7 +718,7 @@
     ]
   },
   "Arrangement/Time and play/stop": {
-    "sourceFingerprint": "22ec2cef76bdff0a830d0f43c0ab86a33cd65d0c8957a3a51352a8751064296c",
+    "sourceFingerprint": "ff828caa44e6bc1a137f9ba8e4fefae36e6d7834bc8747b84d935adbce595aef",
     "summary": "Choose whether Stop returns to the play start marker or stays at the stopped position.",
     "description": "The playhead shows the current playback position. Marker returns it to the play start marker when you stop. Stay stops at the current position and moves the start marker there. Pressing Stop again while already stopped returns to the song’s beginning. This sets stop behavior; Play from separately determines how the next Play action chooses its start.",
     "options": [
@@ -744,7 +744,7 @@
     ]
   },
   "Arrangement/View/clip_grid": {
-    "sourceFingerprint": "f1cd88d8ef59467c9349d690c56c3252fc48b444d112b3867af962c66d5fe66c",
+    "sourceFingerprint": "e67840958dced252e67ffe8cf52ae682e21bc6e332a0899bf8a464e1ea2268e3",
     "summary": "Show the Arrangement beat grid through clip bodies.",
     "description": "The grid marks musical time with vertical beat and bar lines. Enabling this draws faint lines through clip bodies as well as the empty timeline, making timing easier to compare with waveforms and notes. It changes drawing only; disabling the lines inside clips does not disable snapping.",
     "options": [
@@ -800,7 +800,7 @@
     ]
   },
   "Arrangement/Tracks/new_track_colour": {
-    "sourceFingerprint": "9d5a6b0ee3f8c5931cb6b6015e05641d18d618ff4dbf328cfa8e2b5e065de55a",
+    "sourceFingerprint": "4e10a6b0bcfdcece59e5284e0d994282453a024561ba59a59119852519465842",
     "summary": "Give new tracks successive palette colors or one fixed palette color.",
     "description": "The palette is the theme’s set of track colors. This chooses how a new track gets its initial color. Existing tracks retain their stored colors when the preference changes or tracks are reordered. You can still set a track’s color individually.",
     "options": [
@@ -824,7 +824,7 @@
     ]
   },
   "Arrangement/Tracks/track_headers": {
-    "sourceFingerprint": "48e63cfd32fe4f97c9972c9686d121657e2df23527dea64770a15cab0441e401",
+    "sourceFingerprint": "ebe4686abf1033b27aeab50d7842ce70362995d9f48f158eecd0b8a95300608d",
     "summary": "Place Arrangement track names and controls on the left or right of the timeline.",
     "description": "Track headers contain each track’s name and controls. This moves their column to the selected edge of the Arrangement timeline. It does not reorder tracks, move the browser, or change the Session view’s columns. Browser side is a separate preference.",
     "options": [
@@ -848,7 +848,7 @@
     ]
   },
   "Arrangement/Tracks/arrangement_returns": {
-    "sourceFingerprint": "45c9dcdcd0471f223939794334c2d01586a8223e844fa9d715592e3c170f2166",
+    "sourceFingerprint": "caf8f360bad0adfb05fc9bbf05a0831a74a91dd255f990f0262e731cdde75227",
     "summary": "Show or hide the Arrangement rows for return tracks.",
     "description": "Return tracks receive sound sent from other channels, often for shared effects. This preference hides or shows their rows at the bottom of the Arrangement. Hiding is visual: it does not remove return tracks or mute their audio. The Hide returns / Show returns button near the ruler changes the same preference; the main output row remains.",
     "options": [
@@ -872,7 +872,7 @@
     ]
   },
   "Arrangement/Advanced/stretch_alt_drag": {
-    "sourceFingerprint": "1ee9b1319b00ef528832f2143d6f43d98804646547bf1b6021e3a63049500234",
+    "sourceFingerprint": "d307d0f36d87c685d466649069303bdddc108805201f2a31711875d69d88e8ae",
     "summary": "Enable pitch-preserving audio stretching with Ctrl+Alt at a clip edge.",
     "description": "Time-stretching changes an audio clip’s duration while aiming to retain its pitch. With this enabled, hold Ctrl+Alt while dragging an Arrangement audio clip’s left or right edge to stretch its content to the new span. Suhina adjusts the timing markers and gives shared content a separate copy where necessary. With it disabled, the edge uses normal trimming behavior. Alt alone allows free edge positioning; it is not the stretch gesture. On macOS use Cmd+Option. MIDI clip edges are not affected.",
     "options": [
@@ -897,7 +897,7 @@
     ]
   },
   "Arrangement/Advanced/rename_selected_clips": {
-    "sourceFingerprint": "427533e030f60f1381cabfd6562369c3857652f48c32702126dffd55b15bb64a",
+    "sourceFingerprint": "a9c216a814d87c257d343eecfd4f2dbdc3ce99aa86df9c537455be78f331f7cf",
     "summary": "Apply the name typed after Ctrl+R to every selected Arrangement clip.",
     "description": "With multiple Arrangement clips selected, this makes the rename action apply the same typed name to all of them as one undoable edit. With it off, renaming targets the last clicked clip. On macOS the default shortcut uses Cmd+R. This is about clip names, not track names.",
     "options": [
@@ -921,7 +921,7 @@
     ]
   },
   "Session/Launching/select_on_launch": {
-    "sourceFingerprint": "0908fc2448778553589753da01f8dc6d6a583b25f2f4b88d3e4553e2090948a8",
+    "sourceFingerprint": "472f1211e33f3116c9415321f86be26f7ad105b2d676a9e2ee479e981eff5e6c",
     "summary": "Select a Session clip when its launch control is pressed.",
     "description": "The Session view is the grid used to launch clips independently of the Arrangement timeline. With this enabled, launching a clip with its slot’s launch control also selects the clip and its track, so the detail area follows that clip. With it off, launch playback can change while you keep editing the previously selected clip. Clicking the clip name still selects it without launching.",
     "options": [
@@ -944,7 +944,7 @@
     ]
   },
   "Session/Mixer/mixer_controls": {
-    "sourceFingerprint": "2414b7811ab28e5adf94bc0414e2be8ee293a47418da72ef7d15c54b014d6b62",
+    "sourceFingerprint": "bae7be713b7770ef9aeed6aa33d2a2dc755fe5303769e4b54d9aff5c98ef1a61",
     "summary": "Show track volume and pan as value fields or knobs.",
     "description": "Volume sets a track’s level and pan sets its left/right balance. This changes how their controls are drawn, including the Arrangement track headers, without changing the values or sound. Both styles support dragging. Use Ctrl plus the mouse wheel over a value to adjust it instead of scrolling; Ctrl is Cmd on macOS and adding Shift makes the adjustment finer.",
     "options": [
@@ -969,7 +969,7 @@
     ]
   },
   "ClipEditor/Piano roll/piano_roll_top": {
-    "sourceFingerprint": "78184c88d3aeb96582a773b8a04255ebda2fb6e599195f5cbccb904094112459",
+    "sourceFingerprint": "8720a624fd734467058d63f061368bb35ebbe526ebaeffaad8fcadded3a93e78",
     "summary": "Choose what remains visible when the clip editor is pulled to the top.",
     "description": "The piano roll is the MIDI note editor in the detail area. Dragging its top divider high enough in the Arrangement expands the editor to the top; this also applies to the audio editor supplied by an ARA plug-in. This preference decides whether the edited track’s timeline remains visible. It has no effect on that gesture when Device chain is Stack, because the detail area is then a side column rather than a bottom panel.",
     "options": [
@@ -992,7 +992,7 @@
     ]
   },
   "ClipEditor/Piano roll/piano_roll_grid": {
-    "sourceFingerprint": "4c13e1ebd7dba67d1deba8ea12e9f05b4b876007a6363fd363cc4a3a66727fc4",
+    "sourceFingerprint": "7ebeceb6b937e4d2ea1865f82f441757207a7415c11494210d322a63b52162c7",
     "summary": "Give the piano roll its own timing grid or link it to the control bar.",
     "description": "A timing grid draws beat divisions and supplies the steps that edited notes snap to. The control bar’s value also controls Arrangement placement and clip-launch timing. Linking the piano roll makes its menu and grid shortcuts change that shared value too. The shared control bar cannot represent adaptive grids or a 1/32 triplet, so those choices are unavailable while linked. This chooses the grid source, not the notes’ timing: existing notes are not automatically moved.",
     "options": [
@@ -1016,7 +1016,7 @@
     ]
   },
   "ClipEditor/Piano roll/piano_roll_toolbar": {
-    "sourceFingerprint": "900164c88d1f6e085b1aed732d67004d5a3b96316d52bcaac4769a504449fc8c",
+    "sourceFingerprint": "a0d5c110e2a21f9cb847d0adce1598218f165320f2c760400bd95972f36ea5d3",
     "summary": "Scale the piano roll toolbar without enlarging the rest of the editor.",
     "description": "This scales the toolbar’s height, button boxes, gaps and icon strokes together. It gives the note-editing tools larger targets without changing the notes, time ruler or grid size. Appearance → Zoom separately scales the whole interface.",
     "options": [
@@ -1093,7 +1093,7 @@
     ]
   },
   "Browser/Browser/browser_recent": {
-    "sourceFingerprint": "9b3ad256250d435aaa5edc4afcf6557ea5b06d4b7d93f0765aa005bc66770a77",
+    "sourceFingerprint": "c57294f908d089b29c17b74423896deb92e6b10e1a4bd75473725d8cd09a28f6",
     "summary": "Show Recent’s item types in the sidebar or as buttons above the browser list.",
     "description": "Recent contains recently used items grouped by type, such as Projects, Samples and MIDI. This changes where you choose those types. It does not change what counts as recently used or turn the Library categories into recent-only lists.",
     "options": [
@@ -1116,7 +1116,7 @@
     ]
   },
   "Browser/Previews/preview_autoplay": {
-    "sourceFingerprint": "f4d2098bde32e1a8b9042caa57ac8e29d96b13881d61d8d1dce9763bd0f5851f",
+    "sourceFingerprint": "75e9c47c46f4226f24d39d2ca3963176035759e254de27c12b831de39302848b",
     "summary": "Preview a browser sample or MIDI file when you select it.",
     "description": "A preview lets you hear a file before adding it to the project. Auto-play starts it when its browser row is selected. With Auto-play off, use the preview play control or click the preview waveform instead. Previews play at the file’s own timing rather than synchronizing to the song. Sample-map hover preview has its own setting. A MIDI preview can use the selected track’s instrument, or a fallback instrument if no suitable track instrument is available.",
     "options": [
@@ -1198,7 +1198,7 @@
     ]
   },
   "Browser/Sample map/map_hover_preview": {
-    "sourceFingerprint": "9152cabab13d9e21a812f5b2b0886eb42b3483a1820f7da1ef127109d5104cd6",
+    "sourceFingerprint": "76ad1a373c2a493d6b521ccefac6c585fe0b498808cef868e421ff9d53bf5594",
     "summary": "Hear samples by pointing at them on the sample map.",
     "description": "Hover means placing the pointer over a sample point without clicking. With this enabled, hovering a new sample starts its preview. It uses the shared preview level and cue routing. This is independent of browser list Auto-play; turning one off does not turn the other off.",
     "options": [
@@ -1222,7 +1222,7 @@
     ]
   },
   "Browser/Sample map/map_max_seconds": {
-    "sourceFingerprint": "ae458cda082f289c7e9af7be4a73ad46ab35aa491ef1c781304535705efac0a1",
+    "sourceFingerprint": "e3ef12f731a9212e0ec49c4223408cc4bf883148324667a56706ebfb4ed37441",
     "summary": "Limit the sample map to files no longer than the chosen duration.",
     "description": "The sample map is intended for short sounds and loops. Samples exceeding this duration are omitted from the map, but their files remain in the library and can still be found in the normal browser. Changing the limit uses stored duration information and does not require analyzing the audio again. The map’s status reports samples left out for being too long.",
     "options": [
@@ -1254,7 +1254,7 @@
     ]
   },
   "Keys/Mouse and key behaviour/keymap.json": {
-    "sourceFingerprint": "ad45ac5d4676fb622b5d1b5d76a9ef25b8f89bfb857f7f63f4acfbb3b0ff6f72",
+    "sourceFingerprint": "ab2e8d03a6fe8c47ae502d7b59a8da639c2915f5f2e7134bf08b8450d0e391ae",
     "summary": "Choose a keyboard preset or rebind individual actions.",
     "description": "This panel lists actions, their assigned keys and controls to Change or Clear them. Change captures the next key with its modifiers; Escape cancels capture. Clear removes an action’s binding. Filter shortcuts searches action names, groups and keys, and conflicts are displayed when one key triggers several actions. Choosing a preset resets keyboard bindings to defaults and applies that preset’s piano-roll workflow behaviors. Editing a workflow choice makes the mode Custom. Reset all currently resets the entire keymap to its default Select-first state. Keys and workflow preferences are saved in keymap.json. Ctrl means Cmd on macOS; Alt means Option.",
     "options": [
@@ -1318,7 +1318,7 @@
     ]
   },
   "Appearance/Window/zoom": {
-    "sourceFingerprint": "1ad358b0cadceb0be515f338185d01c3ec60a1f61826f28b90301c3030877660",
+    "sourceFingerprint": "246fd1b59140c0413ae702ff9f3818887340ebfa9a8bb9f8c1bd9f663f3d5d30",
     "summary": "Scale all interface text, panels and controls together.",
     "description": "Window zoom changes the drawing size of the whole interface from 50 to 200 percent. Use the minus and plus controls to change it in ten-percentage-point steps; click the value to return to 100 percent. Ctrl+Plus or Ctrl+Equals, Ctrl+Minus and Ctrl+0 provide the same actions; use Cmd on macOS. This is separate from zooming time in the Arrangement or piano roll.",
     "options": [],
@@ -1328,6 +1328,31 @@
       "crates/ui/src/settings.rs",
       "crates/ui/src/settings/settings_view.rs",
       "docs/spec/window-zoom.md"
+    ]
+  },
+  "Appearance/Window/setting_descriptions": {
+    "sourceFingerprint": "d7ba2cf68b511084ba78a711df53f1939931acddc23d0f305eb306b4d42abada",
+    "summary": "Choose how the Settings window explains each setting.",
+    "description": "Every setting's name says what it does. Its one-sentence description can show as a tooltip when you point at the name, as a question mark beside the name that shows it when you point at it, or under the name all the time.",
+    "options": [
+      {
+        "name": "Tooltip",
+        "description": "Point at a setting's name to read what it does. This is the default."
+      },
+      {
+        "name": "? icon",
+        "description": "A question mark beside each name shows the description when you point at it."
+      },
+      {
+        "name": "Shown",
+        "description": "The description is written under each name."
+      }
+    ],
+    "whenToChange": "Choose Shown while you learn the settings, and Tooltip once the names are enough.",
+    "references": [
+      "crates/ui/src/settings/settings_view.rs",
+      "crates/ui/src/settings.rs",
+      "docs/spec/ui-settings.md"
     ]
   },
   "Appearance/Window/animations": {
@@ -1376,7 +1401,7 @@
     ]
   },
   "Appearance/Advanced/renderer": {
-    "sourceFingerprint": "6693e895062f3b518c5c35eb8e999d3ed93db0ec606b0f0c5b22634251eb0ad3",
+    "sourceFingerprint": "8816de1f87fa0cd060c3ada787a979db91f3ba8aee78f15734cbfea547736752",
     "summary": "Choose the graphics system used to draw Suhina after its next start.",
     "description": "The renderer draws the application window and controls. GPU uses Suhina’s wgpu graphics path; OpenGL uses its OpenGL path. This preference takes effect on the next application start rather than changing the running window. It does not change the audio engine. A command-line renderer choice can override the saved preference for a launch.",
     "options": [
@@ -1413,7 +1438,7 @@
     ]
   },
   "Agents/Agents/agents": {
-    "sourceFingerprint": "07bba4c454d8da415ba1a7803159a9f2309f19ffdaf3194a6fbda02a185d746d",
+    "sourceFingerprint": "370ce8a26f0f5ae015c2e4b71977ab779dd10395c21e858fcd24be7fad3cd388",
     "summary": "Allow an attached AI agent to request access to open projects.",
     "description": "An agent is an external tool that can inspect and edit a project through Suhina’s command interface. Turning this on enables attachment with suhina-cli mcp --attach. Each connection still requires your approval in Suhina. Approved changes appear in the open projects and project edits can be undone. Turning the setting off disconnects attached agents.",
     "options": [
@@ -1435,7 +1460,7 @@
     ]
   },
   "Agents/MCP write permissions/mcp_project_folder": {
-    "sourceFingerprint": "ee1425c0fd80844b1aee7c83dd56ef501fd4f1abbf453dc0de97a7e47e007729",
+    "sourceFingerprint": "3962619501af94dbaf019079e073ee55b8f3774e71205bfebe6a2d727ad801b7",
     "description": "Allow attached agents to write in the folder of the project they act on, including its subfolders. This is on by default. Turn it off to require an explicitly added folder for writes. An unsaved project has no project folder. This does not restrict exports you choose yourself in File > Export.",
     "options": [
       {
@@ -1456,7 +1481,7 @@
     ]
   },
   "Agents/MCP write permissions/mcp_write_folders": {
-    "sourceFingerprint": "e3b365f7a3a3db6d44f1b322cb7b8b59d98ca4b20ec7d0174dc508d26e1e52da",
+    "sourceFingerprint": "d05f7fb9dc47c75f3fd734805916fb4620674c1689d22e69b1fce627de4ec921",
     "description": "Choose the folders where attached agents may save projects and export audio. Add folder opens the system folder picker; Remove revokes that folder's grant. Each grant includes subfolders and is saved across restarts. Missing folders grant no access. Agents cannot change these permissions. Revocation applies to new operations and exports still gathering plug-in state, but does not cancel a render already running.",
     "options": [],
     "whenToChange": "Add a destination before asking an agent to export outside your project folder, or to export an unsaved project. Remove folders when access is no longer needed.",
@@ -1491,7 +1516,7 @@
     ]
   },
   "Agents/Updates/update_channel": {
-    "sourceFingerprint": "9a19db171b10b429de6a7d5e5acce3b4298b396c146929db9bdcbe1ce68ddcdc",
+    "sourceFingerprint": "2e4c8eeedef6067cd4fe65382c5106b0e723a1ac70aae2751b6e2c99b9257cbc",
     "summary": "Choose the builds offered by the update checker.",
     "description": "An update channel chooses which Suhina builds the checker looks for. Nightly builds follow ongoing development. Test builds are produced for proposed changes and appear as a choice only in Developer mode or when Suhina itself is a test build. Without either condition, the effective channel is Nightly. Checking and installation are separate actions.",
     "options": [
@@ -1536,8 +1561,8 @@
       "docs/spec/updates.md"
     ]
   },
-  "Browser/Tags/Most colour tags": {
-    "sourceFingerprint": "9114a284618882ec6f480f58abe3e94af57d9d55c28acfb997037a4df8edd117",
+  "Browser/Tags/Colour tag limit": {
+    "sourceFingerprint": "863b35885e11712f55a9e13369f31d5144f68f6f1d658ac4b848a6b058efe676",
     "summary": "Set the maximum number of color tags in the browser library.",
     "description": "A color tag is a named label you assign to library items for filtering and organization. This limits the total number of distinct tags, not the number of files in your library. It is stored with browser library data rather than as a key in settings.txt. Suhina refuses to lower the limit below the number of tags already present; remove unused tags first if needed.",
     "options": [

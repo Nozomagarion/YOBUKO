@@ -167,7 +167,7 @@ bottom:
    for Erase (the shape of the eraser button, not the no-entry sign it used before), a text cursor
    for Slice, an arrow for Select and Mute.
 
-   **Toolbar size** is a setting, Settings › Clip editor › Piano roll › **Toolbar size**: **Normal**
+   **Piano roll toolbar size** is a setting, Settings › Clip editor › Piano roll › **Piano roll toolbar size**: **Normal**
    (100 %), **Large** (125 %, the default) and **Larger** (150 %). It scales the toolbar's height,
    every button's box and the icon strokes inside it together, so the icons stay 1.1 px at Normal
    and grow with the box; the rest of the editor (grid, notes, ruler) does not change with it. The
@@ -342,7 +342,7 @@ pull up.
   The keys work after a click in the piano roll, like its other keys (› Shortcuts). The grid value
   and its steps are the `piano_roll_grid` module of the `ui` crate (`crates/ui/src/detail/piano_roll_grid.rs`);
   the lines and snapping are the shared `TimelineGrid` (`crates/ui/src/interaction/timeline_grid.rs`).
-- **Built:** Settings › Clip editor › Piano roll › **Piano roll grid** set to **Control bar** makes the
+- **Built:** Settings › Clip editor › Piano roll › **Piano roll grid source** set to **Control bar** makes the
   piano roll use the control bar's value instead, and its menu and keys then set the control
   bar's (`launcher.setQuantization`). The control bar has no adaptive grid and no 1/32 triplet,
   so an entry whose result it cannot hold is greyed out and its key does nothing: the adaptive

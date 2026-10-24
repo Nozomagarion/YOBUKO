@@ -171,11 +171,11 @@ fn at_start_is_chosen_in_settings_and_template_asks_for_the_template() {
     let mut harness = window(demo_app());
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
     harness.run();
-    assert!(harness.query_by_label("Start template").is_none(), "only for a template");
+    assert!(harness.query_by_label("Startup template").is_none(), "only for a template");
     harness.get_by_label("At start: Template").click();
     harness.run();
     assert_eq!(harness.state().settings().at_start, AtStart::Template);
-    assert!(harness.query_by_label("Start template").is_some());
+    assert!(harness.query_by_label("Startup template").is_some());
     harness.get_by_label("At start: Last").click();
     harness.run();
     assert_eq!(harness.state().settings().at_start, AtStart::Last);

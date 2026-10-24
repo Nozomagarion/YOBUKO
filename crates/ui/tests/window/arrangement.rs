@@ -315,7 +315,7 @@ fn a_click_on_the_ruler_moves_the_play_start_marker_on_the_grid() {
     harness.run();
     harness.get_by_label("Settings page: Arrangement").click();
     harness.run();
-    harness.get_by_label("Where Stop leaves the playhead: Stay").click();
+    harness.get_by_label("Playhead after Stop: Stay").click();
     harness.run();
     assert_eq!(
         harness.state_mut().take_changed_settings().map(|s| s.stop),
@@ -372,9 +372,9 @@ fn play_starts_from_the_selected_clip_with_shift_space_or_the_setting() {
     harness.run();
     harness.get_by_label("Settings page: Arrangement").click();
     harness.run();
-    harness.get_by_label("Where Play starts: Marker").click();
+    harness.get_by_label("Play from: Marker").click();
     harness.run();
-    harness.get_by_label("Where Play starts: Selected clip").click();
+    harness.get_by_label("Play from: Selected clip").click();
     harness.run();
     assert_eq!(
         harness.state_mut().take_changed_settings().map(|s| s.play_from),

@@ -457,7 +457,7 @@ impl Window {
     }
 
     /// Starts the browser's library and the sample map, and opens the project asked for, or what
-    /// Settings › Projects and backups › When Suhina starts says without one.
+    /// Settings › Projects and backups › Startup project says without one.
     fn start(&mut self, start_up: StartUp) {
         let StartUp { source, output_choice, mut warnings } = start_up;
         // The browser's library: browser.json and the folder indexes beside the settings (ADR 0012).
@@ -476,7 +476,7 @@ impl Window {
             self.app.set_status(Status::Hint(warning.clone()));
         }
         match source {
-            // What Settings › Projects and backups › When Suhina starts says; the last project is the newest recent one.
+            // What Settings › Projects and backups › Startup project says; the last project is the newest recent one.
             Source::Nothing => self.app.open_at_start(self.recent.existing().into_iter().next()),
             Source::Demo => {
                 self.app.projects_mut().close_preview_output();

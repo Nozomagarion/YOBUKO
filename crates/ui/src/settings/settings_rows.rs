@@ -26,7 +26,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Projects,
         "Projects",
-        "Opening a project",
+        "Open projects in",
         "What happens when you open a project while another one is open",
         &["open_projects"],
         |cx, r| {
@@ -37,7 +37,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Projects,
         "Projects",
-        "When Suhina starts",
+        "Startup project",
         "What Suhina shows when it starts without a project to open",
         &["at_start"],
         |cx, r| {
@@ -75,7 +75,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Projects,
         "Projects",
-        "Start template",
+        "Startup template",
         "The template a new project is made from when Suhina starts with one",
         &["start_template"],
         |cx, r| {
@@ -87,7 +87,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Projects,
         "Backups",
-        "Backups",
+        "Backup interval",
         "How often Suhina saves a spare copy of each changed project next to it",
         &["backup"],
         |cx, r| {
@@ -103,7 +103,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Projects,
         "Backups",
-        "Clean up backups",
+        "Delete old backups",
         "Suhina keeps the newest 20 spare copies of each project and deletes older ones",
         &["backup_clean_up"],
         |cx, r| cx.on_off(r, |s| &mut s.backup_clean_up),
@@ -144,7 +144,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Midi,
         "Arming",
-        "Arm the track you select",
+        "Arm selected track",
         "Selecting a track gets it ready to record, so your MIDI keyboard plays its instrument",
         &["auto_arm"],
         |cx, r| cx.on_off(r, |s| &mut s.auto_arm),
@@ -169,7 +169,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Plugins,
         "Editors",
-        "Plug-in windows",
+        "Plug-in editors open in",
         "Whether a plug-in opens in a window of its own or inside the device panel",
         &["plugin_editors"],
         |cx, r| {
@@ -205,7 +205,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Devices,
         "Device panels",
-        "Device chain",
+        "Device chain layout",
         "Whether a track's devices sit in a row under the view or in a column beside it",
         &["device_chain"],
         |cx, r| {
@@ -216,7 +216,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Devices,
         "Device panels",
-        "Detail area",
+        "Detail area width",
         "Whether the area under the view stops at the browser or spans the whole window",
         &["detail_layout"],
         |cx, r| {
@@ -227,7 +227,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Importing,
         "Dropping files",
-        "Dropping several files",
+        "Tracks for dropped files",
         "Whether files you drop together go on one track or each on a track of its own",
         &["drop_files"],
         |cx, r| cx.choose(r, &[("One track", false), ("One each", true)], |s| &mut s.drop_separate),
@@ -235,7 +235,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Importing,
         "Dropping files",
-        "Fitting samples to the tempo",
+        "Warp mode for samples",
         "How a dropped sample with a known tempo is sped up or slowed down to match the project",
         &["warp_mode"],
         |cx, r| {
@@ -270,7 +270,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Clip editing",
-        "Rename in the clip menu",
+        "Clip menu name field",
         "A clip's right-click menu has a field for its name",
         &["menu_name_field"],
         |cx, r| cx.on_off(r, |s| &mut s.view.menu_name_field),
@@ -278,7 +278,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Clip editing",
-        "Moving clips",
+        "Clip drag handle",
         "Which part of a clip you drag to move it, while dragging the rest of it selects time",
         &["clip_drag"],
         |cx, r| cx.choose(r, &[("Name bar", false), ("Lower half", true)], |s| &mut s.view.clip_halves),
@@ -286,7 +286,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Time and play",
-        "Selecting time",
+        "Select time with",
         "How a drag over a clip selects time instead of moving the clip",
         &["time_select"],
         |cx, r| cx.choose(r, &[("Ctrl+drag", true), ("Upper half", false)], |s| &mut s.view.time_select_ctrl),
@@ -294,7 +294,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Time and play",
-        "Start marker follows the clip you select",
+        "Start marker follows selection",
         "While stopped, selecting a clip moves the play start marker to the clip's start",
         &["play_from_selected_clip"],
         |cx, r| cx.on_off(r, |s| &mut s.view.play_from_clip),
@@ -302,7 +302,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Time and play",
-        "Where Play starts",
+        "Play from",
         "Where playback starts when you press Play",
         &["play_start"],
         |cx, r| {
@@ -313,7 +313,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Time and play",
-        "Where Stop leaves the playhead",
+        "Playhead after Stop",
         "Where the playhead goes when you press Stop",
         &["stop"],
         |cx, r| cx.choose(r, &[("Marker", StopReturn::Marker), ("Stay", StopReturn::Here)], |s| &mut s.stop),
@@ -321,7 +321,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "View",
-        "Show the grid inside clips",
+        "Grid inside clips",
         "The beat and bar lines show faintly through clips",
         &["clip_grid"],
         |cx, r| cx.on_off(r, |s| &mut s.view.grid_in_clips),
@@ -337,7 +337,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Tracks",
-        "Colour of new tracks",
+        "New track colour",
         "Whether each new track takes the next colour or every new track takes the same one",
         &["new_track_colour"],
         |cx, r| cx.choose(r, &[("Alternating", false), ("Fixed", true)], |s| &mut s.view.fixed_track_colour),
@@ -345,7 +345,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Tracks",
-        "Track headers",
+        "Track header side",
         "Which side of the timeline the track names and controls are on",
         &["track_headers"],
         |cx, r| cx.choose(r, &[("Left", Side::Left), ("Right", Side::Right)], |s| &mut s.track_headers),
@@ -353,7 +353,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Tracks",
-        "Show return tracks",
+        "Return tracks",
         "The return tracks' rows show along the bottom of the Arrangement view",
         &["arrangement_returns"],
         |cx, r| cx.choose(r, &[("Shown", false), ("Hidden", true)], |s| &mut s.view.returns_hidden),
@@ -361,7 +361,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Advanced",
-        "Stretch audio by its edge",
+        "Edge drag stretches audio",
         "Dragging an audio clip's edge with Ctrl and Alt held stretches its sound to the new length",
         &["stretch_alt_drag"],
         |cx, r| cx.on_off(r, |s| &mut s.view.stretch_alt),
@@ -369,7 +369,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Advanced",
-        "Rename every selected clip",
+        "Rename all selected clips",
         "Renaming a clip while several are selected gives them all the new name",
         &["rename_selected_clips"],
         |cx, r| cx.on_off(r, |s| &mut s.view.rename_selected),
@@ -377,7 +377,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Session,
         "Launching",
-        "Select the clip you launch",
+        "Select launched clip",
         "Starting a clip in the Session view also selects it and shows it in the detail area",
         &["select_on_launch"],
         |cx, r| cx.on_off(r, |s| &mut s.select_on_launch),
@@ -385,7 +385,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Session,
         "Mixer",
-        "Volume and pan controls",
+        "Mixer control style",
         "Whether each track's volume and pan show as numbers or as knobs",
         &["mixer_controls"],
         |cx, r| {
@@ -396,7 +396,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::ClipEditor,
         "Piano roll",
-        "Piano roll at full height",
+        "Full-height piano roll covers",
         "What the piano roll covers when you drag its divider all the way up",
         &["piano_roll_top"],
         |cx, r| {
@@ -407,7 +407,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::ClipEditor,
         "Piano roll",
-        "Piano roll grid",
+        "Piano roll grid source",
         "Whether the piano roll has its own grid or follows the one in the control bar",
         &["piano_roll_grid"],
         |cx, r| cx.choose(r, &[("Its own", false), ("Control bar", true)], |s| &mut s.piano_grid_follows),
@@ -415,7 +415,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::ClipEditor,
         "Piano roll",
-        "Toolbar size",
+        "Piano roll toolbar size",
         "How large the piano roll's toolbar buttons are",
         &["piano_roll_toolbar"],
         |cx, r| {
@@ -442,7 +442,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Browser,
         "Browser",
-        "Recent items",
+        "Recent item kinds layout",
         "Whether the kinds of recent items show in the sidebar or as buttons above the list",
         &["browser_recent"],
         |cx, r| cx.choose(r, &[("Indented", false), ("Chips", true)], |s| &mut s.view.recent_chips),
@@ -450,7 +450,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Browser,
         "Previews",
-        "Preview on select",
+        "Preview selected file",
         "Selecting a sample or MIDI file plays it",
         &["preview_autoplay"],
         |cx, r| cx.on_off(r, |s| &mut s.preview_autoplay),
@@ -477,7 +477,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Browser,
         "Sample map",
-        "Preview on the map by pointing",
+        "Preview on map hover",
         "Pointing at a sample on the sample map plays it",
         &["map_hover_preview"],
         |cx, r| cx.on_off(r, |s| &mut s.map_hover_preview),
@@ -485,7 +485,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Browser,
         "Sample map",
-        "Longest sample on the map",
+        "Map sample length limit",
         "Samples longer than this are left off the sample map",
         &["map_max_seconds"],
         |cx, r| {
@@ -493,14 +493,14 @@ pub(crate) static ROWS: &[Entry] = &[
             cx.choose(r, &options, |s| &mut s.map_max_seconds);
         },
     ),
-    row(Page::Browser, "Tags", "Most colour tags", "How many colour tags you can make in the browser", &[], |cx, r| {
+    row(Page::Browser, "Tags", "Colour tag limit", "How many colour tags you can make in the browser", &[], |cx, r| {
         let options = [("64", 64usize), ("128", 128), ("256", 256), ("1024", 1024)];
         cx.tag_limit(r, &options);
     }),
     block(
         Page::Keys,
         "Mouse and key behaviour",
-        "Mouse in the piano roll",
+        "Piano roll mouse behaviour",
         "What clicks, double-clicks and right-clicks do to notes in the piano roll",
         KEYMAP,
         crate::settings::settings_view::mouse_switches,
@@ -513,9 +513,27 @@ pub(crate) static ROWS: &[Entry] = &[
         KEYMAP,
         crate::settings::settings_view::shortcuts_block,
     ),
-    row(Page::Appearance, "Window", "Zoom", "How large everything in the window is drawn", &["zoom"], |cx, r| {
-        cx.zoom(r)
-    }),
+    row(
+        Page::Appearance,
+        "Window",
+        "Window zoom",
+        "How large everything in the window is drawn",
+        &["zoom"],
+        |cx, r| cx.zoom(r),
+    ),
+    row(
+        Page::Appearance,
+        "Window",
+        "Setting descriptions",
+        "How this window explains a setting: when you point at its name, with a question mark beside it, or under it",
+        &["setting_descriptions"],
+        |cx, r| {
+            use crate::settings::Descriptions;
+            let options =
+                [("Tooltip", Descriptions::Tooltip), ("? icon", Descriptions::Icon), ("Shown", Descriptions::Shown)];
+            cx.choose(r, &options, |s| &mut s.setting_descriptions);
+        },
+    ),
     row(
         Page::Appearance,
         "Window",
@@ -535,7 +553,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Appearance,
         "Advanced",
-        "Graphics system",
+        "Graphics renderer",
         "Which part of the computer draws the window, used from the next start",
         &["renderer"],
         |cx, r| {
@@ -556,7 +574,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Agents,
         "Agents",
-        "Let an AI agent edit open projects",
+        "AI agents edit projects",
         "An AI agent you start can change your open projects, and you can undo each change",
         &["agents"],
         |cx, r| cx.on_off(r, |s| &mut s.agents),
@@ -564,7 +582,7 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Agents,
         "MCP write permissions",
-        "Agents may write in the project folder",
+        "Project folder for agents",
         "An AI agent can save files in the open project's folder and the folders inside it",
         &["mcp_project_folder"],
         |cx, r| {
@@ -576,7 +594,7 @@ pub(crate) static ROWS: &[Entry] = &[
     block(
         Page::Agents,
         "MCP write permissions",
-        "Other folders agents may write in",
+        "More agent write folders",
         "More folders an AI agent can save files in, with the folders inside them",
         &["mcp_write_folders"],
         |cx, y| cx.mcp_write_folders(y),
@@ -589,7 +607,7 @@ pub(crate) static ROWS: &[Entry] = &[
         &["check_updates"],
         |cx, r| cx.on_off(r, |s| &mut s.updates.check),
     ),
-    row(Page::Agents, "Updates", "Updates from", "Which builds Suhina updates to", &["update_channel"], |cx, r| {
+    row(Page::Agents, "Updates", "Update channel", "Which builds Suhina updates to", &["update_channel"], |cx, r| {
         if cx.settings.updates.test_builds_listed() {
             let options = [("Nightly", Channel::Nightly), ("Test builds", Channel::TestBuilds)];
             cx.choose(r, &options, |s| &mut s.updates.channel);
@@ -697,6 +715,9 @@ mod tests {
             assert!(!sentences, "{}: the description is more than one sentence ({RULES})", entry.name);
             // One thought: no second clause after a semicolon, such as what the off state does.
             assert!(!entry.note.contains(';'), "{}: the description holds two thoughts ({RULES})", entry.name);
+            // A name says what the setting does in one to four words.
+            let words = entry.name.split_whitespace().count();
+            assert!(words <= 4, "{}: the name has {words} words, at most four ({RULES})", entry.name);
             // A name reads on its own, not as a sentence cut off before its buttons.
             let cut = [" by", " at", " to", " is"].iter().any(|end| entry.name.ends_with(end));
             assert!(!cut, "{}: the name is a sentence cut off before its buttons ({RULES})", entry.name);

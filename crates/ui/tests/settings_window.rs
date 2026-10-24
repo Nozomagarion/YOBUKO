@@ -37,9 +37,9 @@ fn export_permissions_are_added_by_picker_removed_and_saved() {
     harness.get_by_label(&format!("Remove MCP write folder {}", folder.display())).click();
     harness.run();
     assert!(harness.state().settings().mcp_write_folders.is_empty());
-    harness.get_by_label("Agents may write in the project folder").scroll_to_me();
+    harness.get_by_label("Project folder for agents").scroll_to_me();
     harness.run();
-    harness.get_by_label("Agents may write in the project folder").click();
+    harness.get_by_label("Project folder for agents").click();
     harness.run();
     assert!(!harness.state().settings().mcp_project_folder);
 }
@@ -116,16 +116,16 @@ fn every_page_scrolls_to_its_last_setting_in_a_short_window() {
     let mut harness = short_window();
     // Each page, and the control at its end (MIDI has none with no controller connected).
     let pages = [
-        ("Projects and backups", Some("Clean up backups")),
+        ("Projects and backups", Some("Delete old backups")),
         ("Audio", Some("Cue volume: +6 dB")),
         ("MIDI", None),
         ("Plug-ins", Some("Editors: Device view")),
-        ("Devices", Some("Detail area: Full width")),
-        ("Importing", Some("Fitting samples to the tempo: Rhythmic")),
+        ("Devices", Some("Detail area width: Full width")),
+        ("Importing", Some("Warp mode for samples: Rhythmic")),
         ("Arrangement", Some("Show advanced settings")),
-        ("Session and mixer", Some("Volume and pan controls: Knob")),
-        ("Clip editor", Some("Toolbar size: Larger")),
-        ("Browser", Some("Most colour tags: 1024")),
+        ("Session and mixer", Some("Mixer control style: Knob")),
+        ("Clip editor", Some("Piano roll toolbar size: Larger")),
+        ("Browser", Some("Colour tag limit: 1024")),
         ("Keys", Some("Change keys of file.new")),
         ("Appearance", Some("Show advanced settings")),
         ("Theme", Some("Export the theme template")),
@@ -178,18 +178,18 @@ fn the_advanced_group_is_folded_until_it_is_opened_and_a_search_finds_inside_it(
     let mut harness = short_window();
     harness.get_by_label("Settings page: Appearance").click();
     settle(&mut harness);
-    assert!(harness.query_by_label("Graphics system: OpenGL").is_none(), "folded");
+    assert!(harness.query_by_label("Graphics renderer: OpenGL").is_none(), "folded");
     harness.get_by_label("Show advanced settings").click();
     settle(&mut harness);
-    assert!(harness.query_by_label("Graphics system: OpenGL").is_some(), "unfolded");
+    assert!(harness.query_by_label("Graphics renderer: OpenGL").is_some(), "unfolded");
     harness.get_by_label("Hide advanced settings").click();
     settle(&mut harness);
-    assert!(harness.query_by_label("Graphics system: OpenGL").is_none());
+    assert!(harness.query_by_label("Graphics renderer: OpenGL").is_none());
     harness.get_by_label("Search settings").focus();
     settle(&mut harness);
     harness.get_by_label("Search settings").type_text("renderer");
     settle(&mut harness);
-    assert!(harness.query_by_label("Graphics system: OpenGL").is_some(), "a search shows it");
+    assert!(harness.query_by_label("Graphics renderer: OpenGL").is_some(), "a search shows it");
 }
 
 #[test]
@@ -212,12 +212,12 @@ fn a_search_shows_the_settings_that_match_from_every_page() {
     harness.get_by_label("Search settings").type_text("preview");
     settle(&mut harness);
     // Previews in the browser and on the map, from one page; settings that do not match are gone.
-    assert!(harness.query_by_label("Preview on select").is_some());
-    assert!(harness.query_by_label("Preview on the map by pointing").is_some());
+    assert!(harness.query_by_label("Preview selected file").is_some());
+    assert!(harness.query_by_label("Preview on map hover").is_some());
     assert!(harness.query_by_label("Browser side: Left").is_none());
-    assert!(harness.query_by_label("Opening a project: Ask").is_none());
+    assert!(harness.query_by_label("Open projects in: Ask").is_none());
     // A change made in the results is made as on its page.
-    harness.get_by_label("Preview on select").click();
+    harness.get_by_label("Preview selected file").click();
     settle(&mut harness);
     assert_eq!(harness.state_mut().take_changed_settings().map(|s| s.preview_autoplay), Some(false));
 
@@ -227,22 +227,19 @@ fn a_search_shows_the_settings_that_match_from_every_page() {
     harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
     harness.get_by_label("Search settings").type_text("arrangement stay");
     settle(&mut harness);
-    assert!(harness.query_by_label("Where Stop leaves the playhead: Stay").is_some());
-    assert!(
-        harness.query_by_label("Where Play starts: Marker").is_none(),
-        "only Stop has both words (Stay is its note)"
-    );
+    assert!(harness.query_by_label("Playhead after Stop: Stay").is_some());
+    assert!(harness.query_by_label("Play from: Marker").is_none(), "only Stop has both words (Stay is its note)");
 
     // Nothing matches.
     harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
     harness.get_by_label("Search settings").type_text("nothing like this");
     settle(&mut harness);
-    assert!(harness.query_by_label("Where Stop leaves the playhead: Stay").is_none());
+    assert!(harness.query_by_label("Playhead after Stop: Stay").is_none());
 
     // A page clicked empties the search and shows the page.
     harness.get_by_label("Settings page: Arrangement").click();
     settle(&mut harness);
-    assert!(harness.query_by_label("Where Play starts: Marker").is_some());
+    assert!(harness.query_by_label("Play from: Marker").is_some());
     assert_eq!(harness.get_by_label("Search settings").value().as_deref(), Some(""));
     assert!(harness.state().settings_open());
 }
@@ -254,11 +251,11 @@ fn escape_in_the_search_empties_it_and_keeps_settings_open() {
     settle(&mut harness);
     harness.get_by_label("Search settings").type_text("zoom");
     settle(&mut harness);
-    assert!(harness.query_by_label("Zoom: +").is_some());
+    assert!(harness.query_by_label("Window zoom: +").is_some());
     harness.key_press(Key::Escape);
     settle(&mut harness);
     assert!(harness.state().settings_open(), "Escape in the search closed Settings");
-    assert!(harness.query_by_label("Zoom: +").is_none(), "the General page shows again");
+    assert!(harness.query_by_label("Window zoom: +").is_none(), "the General page shows again");
     harness.key_press(Key::Escape);
     settle(&mut harness);
     assert!(!harness.state().settings_open());

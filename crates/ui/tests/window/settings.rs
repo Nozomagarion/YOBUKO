@@ -36,10 +36,10 @@ fn a_saved_zoom_is_used_from_the_start_and_settings_can_change_it() {
     harness.run();
     harness.get_by_label("Settings page: Appearance").click();
     harness.run();
-    harness.get_by_label("Zoom: -").click();
+    harness.get_by_label("Window zoom: -").click();
     harness.run();
     assert_eq!(harness.state_mut().take_changed_settings().map(|s| s.zoom), Some(140));
-    harness.get_by_label("Zoom: 140 %").click();
+    harness.get_by_label("Window zoom: 140 %").click();
     harness.run();
     assert_eq!(harness.state_mut().take_changed_settings().map(|s| s.zoom), Some(100));
     assert_eq!(harness.ctx.zoom_factor(), 1.0);
@@ -57,9 +57,9 @@ fn settings_change_right_away_and_are_handed_out_to_be_saved() {
     harness.run();
     harness.get_by_label("Settings page: Arrangement").click();
     harness.run();
-    harness.get_by_label("Track headers: Left").scroll_to_me();
+    harness.get_by_label("Track header side: Left").scroll_to_me();
     harness.run();
-    harness.get_by_label("Track headers: Left").click();
+    harness.get_by_label("Track header side: Left").click();
     harness.run();
     let saved = harness.state_mut().take_changed_settings();
     assert_eq!(saved.as_ref().map(|s| s.animations), Some(false));
@@ -297,11 +297,11 @@ fn settings_set_the_toolbar_size_and_the_mouse_switches() {
     harness.get_by_label("Settings page: Clip editor").click();
     harness.run();
     // The piano roll's row shows the size in use, Large by default.
-    assert!(harness.query_by_label("Toolbar size: Large").is_some(), "the row reads its value");
-    assert!(harness.query_by_label("Toolbar size: Normal").is_some());
-    assert!(harness.query_by_label("Toolbar size: Larger").is_some());
+    assert!(harness.query_by_label("Piano roll toolbar size: Large").is_some(), "the row reads its value");
+    assert!(harness.query_by_label("Piano roll toolbar size: Normal").is_some());
+    assert!(harness.query_by_label("Piano roll toolbar size: Larger").is_some());
     assert_eq!(harness.state().settings().toolbar_size, suhina_ui::settings::ToolbarSize::Large);
-    harness.get_by_label("Toolbar size: Larger").click();
+    harness.get_by_label("Piano roll toolbar size: Larger").click();
     harness.run();
     assert_eq!(harness.state().settings().toolbar_size, suhina_ui::settings::ToolbarSize::Larger);
     assert_eq!(

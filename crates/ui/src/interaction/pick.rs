@@ -15,7 +15,7 @@ pub enum PickField {
     ProjectsFolder,
     /// Settings › Projects and backups › Templates folder.
     TemplatesFolder,
-    /// Settings › Projects and backups › Start template.
+    /// Settings › Projects and backups › Startup template.
     StartTemplate,
     /// The folder of the save prompt (File › Save as…).
     SaveFolder,

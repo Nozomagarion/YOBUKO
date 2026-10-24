@@ -33,7 +33,7 @@ pub enum OnOpen {
     Replace,
 }
 
-/// What opens when Suhina starts without a project given (Settings › Projects and backups › When Suhina starts).
+/// What opens when Suhina starts without a project given (Settings › Projects and backups › Startup project).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AtStart {
     /// The start panel, with the recent projects and the templates (`start_panel`).
@@ -255,9 +255,37 @@ pub const ZOOMS: (u32, u32) = (50, 200);
 pub const ZOOM: u32 = 100;
 pub const ZOOM_STEP: u32 = 10;
 
+/// How the Settings window explains each setting: its name says what it does, and its one
+/// sentence of description shows as the name's tooltip, as a ? beside the name to point at, or
+/// under the name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Descriptions {
+    #[default]
+    Tooltip,
+    Icon,
+    Shown,
+}
+
+impl Descriptions {
+    pub fn param(self) -> &'static str {
+        match self {
+            Self::Tooltip => "tooltip",
+            Self::Icon => "icon",
+            Self::Shown => "shown",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<Self> {
+        [Self::Tooltip, Self::Icon, Self::Shown].into_iter().find(|d| d.param() == text)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     pub animations: bool,
+    /// How the Settings window explains each setting (Settings › Appearance › Setting
+    /// descriptions): a tooltip on its name, a ? beside it, or the sentence under it.
+    pub setting_descriptions: Descriptions,
     pub track_headers: Side,
     pub graphics: Graphics,
     /// Audio clips moved over others stack (all play) instead of replacing them.
@@ -370,6 +398,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             animations: true,
+            setting_descriptions: Descriptions::Tooltip,
             track_headers: Side::Right,
             graphics: Graphics::Gpu,
             sample_stacking: false,
@@ -573,6 +602,7 @@ impl Settings {
             + &format!("mcp_project_folder = {}\n", if self.mcp_project_folder { "on" } else { "off" })
             + &format!("mcp_write_folders = {}\n", serde_json::json!(self.mcp_write_folders))
             + &format!("auto_arm = {}\n", if self.auto_arm { "on" } else { "off" })
+            + &format!("setting_descriptions = {}\n", self.setting_descriptions.param())
             + &self.updates.to_text()
             + &self.midi_inputs_off.iter().map(|port| format!("midi_input_off = {port}\n")).collect::<String>()
     }
@@ -704,6 +734,9 @@ impl Settings {
                     settings.backup = suhina_session::backup::Interval::parse(when).unwrap_or_default();
                 }
                 ("backup_clean_up", "on" | "off") => settings.backup_clean_up = value == "on",
+                ("setting_descriptions", text) if Descriptions::parse(text).is_some() => {
+                    settings.setting_descriptions = Descriptions::parse(text).unwrap_or_default();
+                }
                 ("audio_input", input) => {
                     settings.audio_input = suhina_session::InputChoice::from_text(input).as_text().to_string()
                 }
