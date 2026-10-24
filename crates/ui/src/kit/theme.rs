@@ -690,12 +690,12 @@ pub fn hairline(color: Color32) -> Stroke {
 }
 
 /// The default UI typeface, shared with the website (SIL Open Font License 1.1).
-const UI_FONT: &[u8] = include_bytes!("../../fonts/manrope/Manrope-Variable.ttf");
+pub(crate) const UI_FONT: &[u8] = include_bytes!("../../fonts/manrope/Manrope-Variable.ttf");
 /// Preserve the previous UI font as an embedded alternative and glyph fallback.
 const LEGACY_UI_FONT: &[u8] = include_bytes!("../../fonts/encode-sans/EncodeSansSemiExpanded-Regular.ttf");
 /// Numbers, times and positions: IBM Plex Mono (SIL Open Font License 1.1,
 /// `fonts/ibm-plex-mono/OFL.txt`).
-const MONO_FONT: &[u8] = include_bytes!("../../fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf");
+pub(crate) const MONO_FONT: &[u8] = include_bytes!("../../fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf");
 
 /// egui's fonts with ours first: Manrope for UI text, IBM Plex Mono for numbers. egui's own
 /// fonts stay behind them for characters ours lack.

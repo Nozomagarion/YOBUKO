@@ -280,3 +280,10 @@ fn artwork_takes_the_theme_s_variables() {
     );
     assert!(matches!(super::substitute_variables("<svg/>", &vars), std::borrow::Cow::Borrowed(_)));
 }
+
+#[test]
+fn svg_text_draws_with_the_bundled_font() {
+    let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><text x="2" y="16" font-size="16" fill="#ff0000">Hi</text></svg>"##;
+    let image = super::raster_artwork(svg, Color32::WHITE, 40, 20, false).unwrap();
+    assert!(image.pixels.iter().any(|p| p.r() > 200 && p.a() > 200), "the text should be drawn");
+}

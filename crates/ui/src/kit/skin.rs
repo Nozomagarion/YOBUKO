@@ -254,6 +254,23 @@ pub fn validate_artwork(source: &str) -> Result<(), String> {
     if png_artwork(source) { super::artwork_png::decode(source).map(|_| ()) } else { parse_svg(source).map(|_| ()) }
 }
 
+/// SVG `<text>` draws with Suhina's own typefaces, never the system's: Manrope as the default
+/// and sans-serif family, IBM Plex Mono as monospace.
+fn svg_fonts() -> Arc<resvg::usvg::fontdb::Database> {
+    static FONTS: std::sync::OnceLock<Arc<resvg::usvg::fontdb::Database>> = std::sync::OnceLock::new();
+    FONTS
+        .get_or_init(|| {
+            let mut db = resvg::usvg::fontdb::Database::new();
+            db.load_font_data(super::theme::UI_FONT.to_vec());
+            db.load_font_data(super::theme::MONO_FONT.to_vec());
+            db.set_sans_serif_family("Manrope");
+            db.set_serif_family("Manrope");
+            db.set_monospace_family("IBM Plex Mono");
+            Arc::new(db)
+        })
+        .clone()
+}
+
 pub fn parse_svg(source: &str) -> Result<resvg::usvg::Tree, String> {
     if source.len() > MAX_SVG {
         return Err("SVG exceeds 128 KiB".into());
@@ -271,6 +288,8 @@ pub fn parse_svg(source: &str) -> Result<resvg::usvg::Tree, String> {
             resolve_data: Box::new(|_, _, _| None),
             resolve_string: Box::new(|_, _| None),
         },
+        font_family: "Manrope".into(),
+        fontdb: svg_fonts(),
         ..Default::default()
     };
     resvg::usvg::Tree::from_str(source, &options).map_err(|e| format!("invalid SVG: {e}"))
