@@ -2330,11 +2330,14 @@ fn segmented<T: Copy + PartialEq>(
         if response.clicked() && *value != current {
             picked = Some(*value);
         }
+        // A part is a `.button` (`:checked` when chosen), as the sheet's generic rules say.
+        let _style = crate::kit::style_class::enter_response("button", &response);
+        crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, *value == current);
         let selected = motion::toward(ui.ctx(), response.id.with("selected"), *value == current, motion::VALUE);
         let hover = widgets::hover(ui, &response);
         let idle = motion::mix(theme::control_background(), theme::control_hover(), hover);
-        painter.fill_background(cell, 0.0, motion::mix(idle, theme::control_selected(), selected));
-        let color = motion::mix(theme::text_secondary(), theme::text_inverse(), selected);
+        crate::kit::native_css::surface(painter, cell, 0.0, motion::mix(idle, theme::control_selected(), selected));
+        let color = crate::kit::style_class::foreground(motion::mix(theme::text_secondary(), theme::text_inverse(), selected));
         widgets::text_in(painter, cell, Align2::CENTER_CENTER, text, theme::ui_font(theme::TEXT_SMALL), color);
     }
     picked
