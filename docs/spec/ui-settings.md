@@ -129,7 +129,8 @@ checks the ones a machine can check and names this section when one fails.
    first on its page (`.actions()`). Neither sits among the settings.
 4. **One sentence of description**, saying what the setting does, shown whole. It holds no second
    sentence and does not end with a full stop; the window wraps it, so it may be long, but not
-   two thoughts.
+   two thoughts. It is written for the person using Suhina: no file paths into the
+   docs, no ADR or issue numbers, no code names.
 5. **One control per kind of choice:** a switch (`cx.on_off`) for yes/no, option buttons
    (`cx.choose`) for up to five choices that exclude each other, a drop-down beyond that
    (`cx.choose` switches by itself). No text is cut off.

@@ -182,7 +182,7 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Devices,
         "NAM",
         "NAM models folder",
-        "Where the NAM Amp Modeler lists .nam models ([docs/spec/nam-amp-and-cab.md])",
+        "Where the NAM Amp Modeler lists .nam models",
         &["nam_models_folder"],
         |cx, r| {
             let default = cx.about.nam_models_default.clone();
@@ -693,6 +693,12 @@ mod tests {
             assert!(!entry.name.trim().is_empty(), "an entry has no name ({RULES})");
             assert!(!entry.section.trim().is_empty(), "{}: no group ({RULES})", entry.name);
             assert!(!entry.note.trim().is_empty(), "{}: no description ({RULES})", entry.name);
+            let developer = ["docs/", ".md", "[`", "ADR "].iter().any(|word| entry.note.contains(word));
+            assert!(
+                !developer,
+                "{}: a description is for the person using Suhina, not a link to the docs ({RULES})",
+                entry.name
+            );
             let sentences = [". ", "? ", "! "].iter().any(|end| entry.note.contains(end)) || entry.note.ends_with('.');
             assert!(!sentences, "{}: the description is more than one sentence ({RULES})", entry.name);
         }
