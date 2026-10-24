@@ -1097,3 +1097,26 @@ fn piano_roll_notes_take_the_clip_colour_and_their_states() {
     assert_eq!(selected.border, Some(egui::Color32::WHITE));
     assert_eq!(black.background, Some(egui::Color32::BLACK));
 }
+
+#[test]
+fn egui_widgets_in_a_scope_take_the_generic_button_and_input_rules() {
+    let css = ".settings .button { background-color: #101010; border-width: 0px; } \
+               .settings .button:hover { background-color: #202020; } \
+               .settings .button:active { background-color: #303030; } \
+               .settings .button:checked { background-color: #404040; } \
+               .settings .text-input { background-color: #050505; }";
+    let mut seen = None;
+    painted(css, |ui| {
+        let _settings = super::super::style_class::enter("settings");
+        let styled = super::super::style_class::ui(ui);
+        let visuals = styled.style().visuals.clone();
+        seen = Some(visuals);
+    });
+    let visuals = seen.unwrap();
+    assert_eq!(visuals.widgets.inactive.bg_fill, egui::Color32::from_rgb(0x10, 0x10, 0x10));
+    assert_eq!(visuals.widgets.inactive.bg_stroke.width, 0.0, "egui's own outline can be removed");
+    assert_eq!(visuals.widgets.hovered.bg_fill, egui::Color32::from_rgb(0x20, 0x20, 0x20));
+    assert_eq!(visuals.widgets.active.bg_fill, egui::Color32::from_rgb(0x30, 0x30, 0x30));
+    assert_eq!(visuals.selection.bg_fill, egui::Color32::from_rgb(0x40, 0x40, 0x40));
+    assert_eq!(visuals.extreme_bg_color, egui::Color32::from_rgb(5, 5, 5));
+}

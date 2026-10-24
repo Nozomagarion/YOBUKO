@@ -68,6 +68,9 @@ pub const CLASSES: &[&str] = &[
     "piano-tool",
     "midi-tools",
     "editor-tab",
+    "start-page",
+    "plugin-manager",
+    "export",
     "clip-info",
     "fader-cap",
     "fader-rail",
@@ -398,9 +401,81 @@ pub fn ui(ui: &mut egui::Ui) -> UiStyle<'_> {
         .filter(|style| style.authored.border_width)
         .map(|style| egui::Stroke::new(style.border_width, style.border));
     let fill = values.as_ref().filter(|style| style.authored.background).map(|style| style.background);
-    let previous = if color.is_some() || font.is_some() || radius.is_some() || border.is_some() || fill.is_some() {
+    // egui's own widgets in the scope (Settings, dialogs, the start page, the browser) take the
+    // sheet's generic control rules: `.button`, `.button:hover`, `.button:active`,
+    // `.button:disabled` for buttons, check boxes and drop-downs, `.button:checked` for a
+    // chosen row, and `.text-input` for text fields.
+    let control = |hovered: bool, pressed: bool, disabled: bool| {
+        let _button = enter("button");
+        super::native_css::mark_pointer(hovered, pressed, disabled);
+        computed().filter(|c| c.authored.background || c.authored.border || c.authored.color || c.authored.radius)
+    };
+    let controls = [
+        control(false, false, false),
+        control(true, false, false),
+        control(true, true, false),
+        control(false, false, true),
+    ];
+    // `.button:checked`: a chosen item in a list or a menu (egui's selection).
+    let chosen = {
+        let _button = enter("button");
+        super::native_css::mark(super::native_css::HostState::Checked, true);
+        computed().filter(|c| c.authored.background || c.authored.color)
+    };
+    let input = {
+        let _input = enter("text-input");
+        computed().filter(|c| c.authored.background || c.authored.border || c.authored.color)
+    };
+    let has_controls = controls.iter().any(Option::is_some) || input.is_some() || chosen.is_some();
+    let previous = if color.is_some()
+        || font.is_some()
+        || radius.is_some()
+        || border.is_some()
+        || fill.is_some()
+        || has_controls
+    {
         let previous = ui.style().clone();
         let style = ui.style_mut();
+        let [idle, hovered, pressed, disabled] = &controls;
+        for (widget, own) in [
+            (&mut style.visuals.widgets.inactive, idle.as_ref()),
+            (&mut style.visuals.widgets.hovered, hovered.as_ref()),
+            (&mut style.visuals.widgets.active, pressed.as_ref()),
+            (&mut style.visuals.widgets.open, pressed.as_ref()),
+            (&mut style.visuals.widgets.noninteractive, disabled.as_ref()),
+        ] {
+            let Some(own) = own else { continue };
+            if own.authored.background {
+                widget.bg_fill = own.background;
+                widget.weak_bg_fill = own.background;
+            }
+            if own.authored.border || own.authored.border_width {
+                widget.bg_stroke = egui::Stroke::new(own.border_width, own.border);
+            }
+            if own.authored.color {
+                widget.fg_stroke.color = own.color;
+            }
+            if own.authored.radius {
+                widget.corner_radius = egui::CornerRadius::same(own.radius.clamp(0.0, 128.0) as u8);
+            }
+        }
+        if let Some(chosen) = &chosen {
+            if chosen.authored.background {
+                style.visuals.selection.bg_fill = chosen.background;
+            }
+            if chosen.authored.color {
+                style.visuals.selection.stroke.color = chosen.color;
+            }
+        }
+        if let Some(input) = &input {
+            if input.authored.background {
+                style.visuals.extreme_bg_color = input.background;
+                style.visuals.text_edit_bg_color = Some(input.background);
+            }
+            if input.authored.color {
+                style.visuals.widgets.inactive.fg_stroke.color = input.color;
+            }
+        }
         if let Some(stroke) = border {
             for widget in [
                 &mut style.visuals.widgets.noninteractive,

@@ -427,6 +427,23 @@ pub fn leave() {
     });
 }
 
+/// Marks the element in scope as the pointer leaves it: `hovered` (`:hover`), `pressed`
+/// (`:active`) or `disabled` (`:disabled`), for a style looked up before any widget exists.
+pub fn mark_pointer(hovered: bool, pressed: bool, disabled: bool) {
+    let bits = u16::from(hovered) | u16::from(pressed) << 1 | u16::from(disabled) << 2;
+    if bits == 0 {
+        return;
+    }
+    ENGINE.with(|engine| {
+        let mut engine = engine.borrow_mut();
+        if let Some(&at) = engine.parents.last()
+            && let Some(node) = engine.nodes.get_mut(at)
+        {
+            node.state |= bits;
+        }
+    });
+}
+
 /// Buttons a theme selects by id, as `#control-NAME`: the toolbar's and a track's.
 pub const CONTROL_IDS: &[&str] =
     &["play", "stop", "record", "browser-toggle", "metronome-toggle", "solo", "cue", "arm", "track-on"];

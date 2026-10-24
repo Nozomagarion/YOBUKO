@@ -245,6 +245,9 @@ pub fn show_export(ui: &Ui, area: Rect, state: &mut ExportDialog) -> Option<Expo
         .order(egui::Order::Foreground)
         .fixed_pos(area.min)
         .show(ui.ctx(), |ui| {
+            // The sheet's generic `.button` and `.text-input` rules reach the dialog's own widgets.
+            let mut styled_ui = crate::kit::style_class::ui(ui);
+            let ui = &mut *styled_ui;
             ui.set_min_size(area.size());
             draw_export(ui, area, state)
         })

@@ -5,7 +5,6 @@
 //! note tools, each one `note.*` command over the selection or the whole clip
 //! (`docs/spec/ui-clip-editor.md` › Other note tools).
 
-use crate::kit::surface::Backgrounds as _;
 use std::collections::BTreeSet;
 
 use egui::{Align2, Pos2, Rect, Ui, Vec2};
