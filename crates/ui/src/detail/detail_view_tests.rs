@@ -497,6 +497,42 @@ fn automation_replaces_a_plug_ins_listed_text_with_the_value_it_plays() {
     assert_eq!(value_text(&graph.parameters[0], 0.75), "0.75");
 }
 
+/// A panel showing what automation plays sends nothing by itself, also where the value
+/// falls between the control's steps or decimals: egui's slider rounds the value it draws,
+/// and that rounding was sent as a change, which turned the lane off as soon as playback
+/// reached it (reported on Discord).
+#[test]
+fn a_followed_value_between_steps_is_not_sent_as_an_edit() {
+    use egui_kittest::Harness;
+    use suhina_engine::model::{AutomationLane, AutomationPoint};
+    let mut project = demo_project();
+    let mut utility = Device::new("Utility", DeviceKind::Builtin("utility".into()));
+    for param in ["mono", "balance", "gain", "width"] {
+        let mut lane = AutomationLane::new(param);
+        lane.points = vec![AutomationPoint::new(0.0, 0.0), AutomationPoint::new(4.0, 1.0)];
+        utility.automation.push(lane);
+    }
+    project.channels[0].devices.push(utility);
+    let mut detail = build(&project, Some(TrackId(1)), None);
+    detail.follow_automation(&project, 1.234_567);
+    for stacked in [false, true] {
+        let mut harness = Harness::builder().with_size(egui::vec2(900.0, 400.0)).build_ui_state(
+            |ui, actions: &mut Vec<Action>| {
+                let mut places = Vec::new();
+                if stacked {
+                    show_stack(ui, &detail, &[], actions, &mut places);
+                } else {
+                    show_row(ui, &detail, &[], actions, &mut places);
+                }
+            },
+            Vec::new(),
+        );
+        harness.run_steps(3);
+        let set: Vec<_> = harness.state().iter().filter(|a| a.id == "device.setParam").collect();
+        assert!(set.is_empty(), "stacked {stacked}: {set:?}");
+    }
+}
+
 #[test]
 fn a_plug_ins_generated_list_sets_its_parameters_by_id() {
     use egui_kittest::Harness;

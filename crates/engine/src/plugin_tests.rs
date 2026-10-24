@@ -181,6 +181,28 @@ fn a_plug_in_is_told_the_loop_in_beats_and_in_seconds_through_the_tempo_map() {
     p.transport.loop_enabled = true;
     let stand = Stand::new(Behaviour::Gain(1.0));
     let songs = Arc::clone(&stand.songs);
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins(&p, vec![(stand, EFFECT)])),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
+    blocks(&mut renderer, 1, 512);
+    let song = *songs.lock().unwrap().first().expect("told of the song");
+    assert_eq!(song.cycle, Some((2.0, 8.0)));
+    let (start, end) = song.cycle_seconds.expect("in seconds too");
+    assert!((start - 1.0).abs() < 1e-3 && (end - 6.0).abs() < 1e-3, "{start} to {end}");
+}
+
+#[test]
+fn an_offline_render_plays_through_the_loop_and_tells_plug_ins_of_no_cycle() {
+    // A render does not repeat the loop (#873): the plug-ins see a song that plays straight on.
+    let mut p = project(vec![note(0.0, 1.0, 60)], 8.0, vec![plug(vst3())]);
+    p.transport.loop_range = Some(LoopRange { start: 2.0, end: 8.0 });
+    p.transport.loop_enabled = true;
+    let stand = Stand::new(Behaviour::Gain(1.0));
+    let songs = Arc::clone(&stand.songs);
     render_offline_from(
         &p,
         RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins(&p, vec![(stand, EFFECT)])),
@@ -189,10 +211,9 @@ fn a_plug_in_is_told_the_loop_in_beats_and_in_seconds_through_the_tempo_map() {
         None,
     )
     .unwrap();
-    let song = *songs.lock().unwrap().first().expect("told of the song");
-    assert_eq!(song.cycle, Some((2.0, 8.0)));
-    let (start, end) = song.cycle_seconds.expect("in seconds too");
-    assert!((start - 1.0).abs() < 1e-3 && (end - 6.0).abs() < 1e-3, "{start} to {end}");
+    let songs = songs.lock().unwrap();
+    assert!(!songs.is_empty(), "told of the song");
+    assert!(songs.iter().all(|song| song.cycle.is_none() && song.cycle_seconds.is_none()));
 }
 
 #[test]
