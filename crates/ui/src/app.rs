@@ -2060,6 +2060,21 @@ impl App {
                         .filter_map(|t| t.as_u64().and_then(|t| u32::try_from(t).ok()))
                         .map(TrackId)
                         .collect();
+                    // A duplicate is as tall as the track it copies.
+                    let sources = action.params["tracks"].as_array().map(|t| {
+                        t.iter()
+                            .filter_map(|t| t.as_u64().and_then(|t| u32::try_from(t).ok()))
+                            .map(TrackId)
+                            .collect::<Vec<_>>()
+                    });
+                    if action.id == "track.duplicate"
+                        && let Some(sources) = sources.filter(|s| s.len() == tracks.len())
+                    {
+                        for (source, copy) in sources.iter().zip(&tracks) {
+                            let height = self.arrangement.lane_height(*source);
+                            self.arrangement.set_lane_height(*copy, height);
+                        }
+                    }
                     if let Some(&first) = tracks.first() {
                         self.arrangement.selected_tracks.clone_from(&tracks);
                         self.arrangement.track_focus = true;

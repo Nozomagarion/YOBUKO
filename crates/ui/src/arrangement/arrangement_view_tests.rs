@@ -53,6 +53,8 @@ fn alt_and_the_wheel_zoom_every_lane_within_its_limits() {
     state.zoom_lanes(&timeline.lanes, 2.0, 0.0);
     assert_eq!(state.height(tracks[0]), 200.0);
     assert!(tracks[1..].iter().all(|l| state.height(l) == DEFAULT_LANE * 2.0));
+    // A track added after the zoom comes in as tall as the zoomed ones, not at the default.
+    assert_eq!(state.lane_height(TrackId(999)), DEFAULT_LANE * 2.0);
     // The content under the pointer stays put: what was 10 points down is now 20.
     state.scroll.y = 0.0;
     state.zoom_lanes(&timeline.lanes, 0.5, 10.0);
@@ -64,6 +66,7 @@ fn alt_and_the_wheel_zoom_every_lane_within_its_limits() {
         state.zoom_lanes(&timeline.lanes, 0.5, 0.0);
     }
     assert!(tracks.iter().all(|l| state.height(l) == MIN_LANE));
+    assert_eq!(state.lane_height(TrackId(999)), MIN_LANE);
     state.zoom_lanes(&timeline.lanes, f32::NAN, 0.0);
     assert!(tracks.iter().all(|l| state.height(l) == MIN_LANE));
 }

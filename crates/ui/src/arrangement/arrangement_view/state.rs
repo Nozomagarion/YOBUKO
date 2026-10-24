@@ -145,6 +145,10 @@ pub struct ArrangementViewState {
     pub ara_default: Option<String>,
     pub header_width: f32,
     pub(super) heights: HashMap<TrackId, f32>,
+    /// How far Alt and the wheel have zoomed the lanes since the project opened: a track added
+    /// later is this much taller than the default, so it matches the tracks around it rather
+    /// than coming in at the height a new project starts with.
+    lane_zoom: f32,
     /// The selected clips, in the order they were picked, and the one clicked last: a Shift-click
     /// takes the run of clips from it, and the other views work on it.
     pub(super) selected: Vec<(TrackId, ClipId)>,
@@ -279,6 +283,7 @@ impl Default for ArrangementViewState {
             ara_default: None,
             header_width: HEADER_COLUMN,
             heights: HashMap::new(),
+            lane_zoom: 1.0,
             selected: Vec::new(),
             anchor: None,
             marquee: None,
@@ -522,6 +527,7 @@ impl ArrangementViewState {
             let height = self.height(lane) * factor;
             self.heights.insert(lane.track, height.clamp(MIN_LANE, MAX_LANE));
         }
+        self.lane_zoom = (self.lane_zoom * factor).clamp(MIN_LANE / DEFAULT_LANE, MAX_LANE / DEFAULT_LANE);
         let ratio = if before > 0.0 { content(self) / before } else { 1.0 };
         self.scroll.y = ((self.scroll.y + anchor) * ratio - anchor).max(0.0);
     }
@@ -585,9 +591,10 @@ impl ArrangementViewState {
         self.heights.get(&track).copied().unwrap_or(SHOWS_MIXER)
     }
 
-    /// How tall `track`'s lane is.
+    /// How tall `track`'s lane is: the height it was given, or the default as far as the lanes
+    /// have been zoomed.
     pub fn lane_height(&self, track: TrackId) -> f32 {
-        self.heights.get(&track).copied().unwrap_or(DEFAULT_LANE)
+        self.heights.get(&track).copied().unwrap_or_else(|| (DEFAULT_LANE * self.lane_zoom).clamp(MIN_LANE, MAX_LANE))
     }
 
     /// How tall the view is when it shows only `track` ([`Self::focus`]): the ruler, the loop
