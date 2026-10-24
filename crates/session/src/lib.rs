@@ -344,6 +344,8 @@ pub struct Session {
     /// window's palette), and the one a new track gets instead, when set ([`Session::set_track_colours`]).
     track_colours: (Vec<suhina_model::Rgb>, Option<suhina_model::Rgb>),
     track_type_colours: Option<(suhina_model::Rgb, suhina_model::Rgb)>,
+    /// A new clip takes its track's colour rather than the MIDI or audio default.
+    new_clips_take_track_colour: bool,
     /// The project's plug-ins, running while it plays (ADR 0006).
     pub(crate) plugins: rack::Rack,
     /// The project's decoded audio, by the key its regions name (ADR 0011).
@@ -410,6 +412,7 @@ impl Session {
             param_gesture: None,
             track_colours: (Vec::new(), None),
             track_type_colours: None,
+            new_clips_take_track_colour: false,
             plugins: rack::Rack::default(),
             audio: suhina_engine::AudioPool::new(),
             audio_changed: false,
@@ -1206,6 +1209,11 @@ impl Session {
         self.track_type_colours = Some((midi, audio));
     }
 
+    /// Whether a new clip takes its track's colour (`true`) or the MIDI or audio default.
+    pub fn set_new_clips_take_track_colour(&mut self, on: bool) {
+        self.new_clips_take_track_colour = on;
+    }
+
     /// After an edit that adds, removes or moves tracks: every track keeps the colour it showed
     /// (#690, #709). A track without a colour of its own showed its place's colour from the
     /// palette, so it is given that colour now, before the places shift; a new track gets the
@@ -1274,16 +1282,21 @@ impl Session {
                 )
             })
             .collect();
-        for clip in self.project.arrangement.lanes.iter_mut().flat_map(|lane| &mut lane.clips).chain(
-            self.project
-                .launcher
-                .columns
-                .iter_mut()
-                .flat_map(|column| &mut column.slots)
-                .filter_map(|slot| slot.clip.as_mut()),
-        ) {
+        let take_track = self.new_clips_take_track_colour;
+        let track_colours: std::collections::HashMap<_, _> =
+            self.project.tracks.iter().filter_map(|track| Some((track.id, track.color?))).collect();
+        let lanes = self.project.arrangement.lanes.iter_mut().flat_map(|lane| {
+            let track = lane.track;
+            lane.clips.iter_mut().map(move |clip| (track, clip))
+        });
+        let slots = self.project.launcher.columns.iter_mut().flat_map(|column| {
+            let track = column.track;
+            column.slots.iter_mut().filter_map(move |slot| slot.clip.as_mut().map(|clip| (Some(track), clip)))
+        });
+        for (track, clip) in lanes.chain(slots) {
             if clip.color.is_none() && !old_clips.contains(&clip.id) {
-                clip.color = new_contents.get(&clip.content).copied();
+                let own = track.and_then(|track| track_colours.get(&track)).copied().filter(|_| take_track);
+                clip.color = own.or_else(|| new_contents.get(&clip.content).copied());
             }
         }
     }

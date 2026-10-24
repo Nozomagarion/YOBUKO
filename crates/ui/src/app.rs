@@ -2510,6 +2510,7 @@ impl App {
                 crate::interaction::grid::to_rgb(theme::midi_clip_default()),
                 crate::interaction::grid::to_rgb(theme::audio_clip_default()),
             );
+            session.set_new_clips_take_track_colour(self.settings.view.new_clip_track_colour);
         }
         let notices = self.projects.poll_plugins();
         if let Some(last) = notices.last() {

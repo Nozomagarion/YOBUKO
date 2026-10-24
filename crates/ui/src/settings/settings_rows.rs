@@ -411,6 +411,14 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Arrangement,
         "Tracks",
+        "New clip colour",
+        "Track colour: a new clip takes the colour its track has now. Theme default: MIDI and audio clips use the theme's clip defaults. Existing clips keep their colours",
+        &["new_clip_colour"],
+        |cx, r| cx.choose(r, &[("Track colour", true), ("Theme default", false)], |s| &mut s.view.new_clip_track_colour),
+    ),
+    row(
+        Page::Arrangement,
+        "Tracks",
         "Track header colour strength",
         "How strongly track headers show their original colour; applies immediately",
         &["track_header_colour_strength"],
