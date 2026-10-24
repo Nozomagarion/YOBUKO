@@ -26,6 +26,11 @@ pub struct Settings {
     pub damping_hz: f64,
     /// Fixed optional scattering; zero retains the original network.
     pub loop_diffusion: f32,
+    /// Fixed modal excitation/observation angles in radians; zero preserves the baseline.
+    pub input_rotation: f64,
+    pub output_rotation: f64,
+    /// Optional orthogonal feedback rotation, prepared off-thread.
+    pub feedback_rotation: f64,
 }
 
 impl Default for Settings {
@@ -37,6 +42,9 @@ impl Default for Settings {
             high_decay_ratio: 1.,
             damping_hz: 4500.,
             loop_diffusion: 0.,
+            input_rotation: 0.,
+            output_rotation: 0.,
+            feedback_rotation: 0.,
         }
     }
 }
@@ -60,6 +68,9 @@ impl Settings {
             && (0.5..=2.).contains(&self.room_scale)
             && (0.1..=1.).contains(&self.high_decay_ratio)
             && (0. ..=0.7).contains(&self.loop_diffusion)
+            && (-std::f64::consts::PI..=std::f64::consts::PI).contains(&self.input_rotation)
+            && (-std::f64::consts::PI..=std::f64::consts::PI).contains(&self.output_rotation)
+            && (-std::f64::consts::PI..=std::f64::consts::PI).contains(&self.feedback_rotation)
             && (20.0..=0.45 * f64::from(self.sample_rate)).contains(&self.damping_hz)
         {
             Ok(self)
@@ -77,6 +88,9 @@ pub struct Fdn {
     gains: [f32; 8],
     damping: [FirstOrder; 8],
     scatter: [Scatter; 8],
+    rotations: Option<[(f32, f32); 4]>,
+    input_weights: [f32; 8],
+    output_weights: [[f32; 8]; 2],
 }
 
 impl Fdn {
@@ -93,7 +107,31 @@ impl Fdn {
         let scatter = [43., 59., 73., 89., 107., 127., 149., 173.].map(|n| {
             Scatter::new((n * rate / 48_000.).round().max(1.) as usize, rate, s.decay_seconds, s.loop_diffusion)
         });
-        Ok(Self { scatter, lines: std::array::from_fn(|i| DelayLine::new(lengths[i])), lengths, gains, damping })
+        let (si, ci) = s.input_rotation.sin_cos();
+        let input_weights = std::array::from_fn(|i| (ci + si * f64::from(RIGHT[i])) as f32);
+        let (so, co) = s.output_rotation.sin_cos();
+        let alternate_left = [1., 1., -1., -1., 1., 1., -1., -1.];
+        let alternate_right = [1., -1., -1., 1., 1., -1., -1., 1.];
+        let output_weights = [
+            std::array::from_fn(|i| (co * f64::from(LEFT[i]) + so * alternate_left[i]) as f32),
+            std::array::from_fn(|i| (co * f64::from(RIGHT[i]) + so * alternate_right[i]) as f32),
+        ];
+        let rotations = (s.feedback_rotation != 0.).then(|| {
+            [1., 0.7, -0.9, -0.5].map(|factor| {
+                let (sin, cos) = (factor * s.feedback_rotation).sin_cos();
+                (sin as f32, cos as f32)
+            })
+        });
+        Ok(Self {
+            rotations,
+            input_weights,
+            output_weights,
+            scatter,
+            lines: std::array::from_fn(|i| DelayLine::new(lengths[i])),
+            lengths,
+            gains,
+            damping,
+        })
     }
 
     /// Allocated delay history only, excluding the small fixed state and allocator metadata.
@@ -122,15 +160,18 @@ impl Fdn {
         let mut output = [0.; 2];
         for (i, ((line, length), filter)) in self.lines.iter().zip(self.lengths).zip(&mut self.damping).enumerate() {
             let delayed = self.scatter[i].process(line.read(length));
-            output[0] += delayed * LEFT[i] * NORM;
-            output[1] += delayed * RIGHT[i] * NORM;
+            output[0] += delayed * self.output_weights[0][i] * NORM;
+            output[1] += delayed * self.output_weights[1][i] * NORM;
             values[i] = (filter.process(f64::from(delayed)) * f64::from(self.gains[i])) as f32;
         }
         mix(&mut values);
         // Permutation prevents the same Hadamard coordinate from returning to itself every trip.
         values.rotate_left(1);
-        for (line, value) in self.lines.iter_mut().zip(values) {
-            line.push(mono + value);
+        if let Some(rotations) = self.rotations {
+            rotate_pairs(&mut values, rotations);
+        }
+        for ((line, value), weight) in self.lines.iter_mut().zip(values).zip(self.input_weights) {
+            line.push(mono * weight + value);
         }
         output
     }
@@ -147,6 +188,14 @@ impl Fdn {
 
 fn safe_input(value: f32) -> f32 {
     if value.is_finite() { value.clamp(-4., 4.) } else { 0. }
+}
+
+fn rotate_pairs(values: &mut [f32; 8], rotations: [(f32, f32); 4]) {
+    for ([a, b], (sin, cos)) in values.as_chunks_mut::<2>().0.iter_mut().zip(rotations) {
+        let before = *a;
+        *a = cos * before - sin * *b;
+        *b = sin * before + cos * *b;
+    }
 }
 
 fn mix(values: &mut [f32; 8]) {

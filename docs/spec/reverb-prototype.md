@@ -264,6 +264,54 @@ network. A bounded basis fit may vary it with early level and width using energy
 windows, early crest and correlation. Tonal validation is kept separate from the
 fit. It is an original envelope control, not an extracted proprietary parameter.
 
+### Direct dry-file verification
+
+The probe accepts `--input <path.wav> --profile short|baseline|long` alongside
+`--settings`, `--flat-decay` and `--diffused`. This developer-only mode renders a
+supplied stereo 32-bit IEEE float WAV through the native core, in fixed 128-frame
+blocks, without normalizing or resetting between blocks. Input is bounded to
+128 MiB and 8..384 kHz; malformed formats and non-finite samples are rejected.
+`input-wet.wav` and `input-manifest.json` record the output and exact settings.
+The input must already contain enough silence for the tail. No captured audio
+or reference-fitted parameter files belong in the repository.
+
+## Modal-excitation experiment
+
+Two optional fixed angles, `input_rotation` and `output_rotation`, are bounded to
+-pi..pi radians and default to zero. Preparation rotates the uniform input vector
+into the alternating-sign unit vector. The left/right output vectors rotate into
+two further mutually orthogonal Hadamard sign vectors. Each input/output vector
+retains its Euclidean norm; the two output vectors remain orthogonal. These gains
+are prepared off-thread, with no trigonometry or allocation during processing.
+The feedback matrix, delay lengths and decay losses do not change. Thus the
+experiment changes modal excitation/observation, not the pole decay law.
+
+This original restricted parameterization follows the distinction between modal
+frequencies and excitation in Heldmann and Schlecht (2021), sections 2 and 3,
+and the joint input/output-gain optimization motivation in Dal Santo et al.
+(2025), sections 2.4, 2.5 and 3. It does not reproduce either paper's optimizer
+or claim an allpass FDN. Zero angles retain the previous transfer response.
+
+Evaluate envelopes, tail-energy fractions and mono loss separately across several
+source pitches. Separate tuning and validation pitches; do not accept improvement
+on the tuning set alone. Fit local reference observations outside the public tree.
+Check native renders against linear basis predictions, decay, reset, malformed
+angles, and CPU before offering a listening candidate.
+
+### Orthogonal feedback rotation
+
+`feedback_rotation` (-pi..pi, default zero bypass) adds four independent Givens
+plane rotations after the Hadamard/permutation mix, with angle multipliers
+[1, 0.7, -0.9, -0.5]. Coefficients are prepared at construction. Each two-by-two
+rotation is orthogonal, so the whole feedback transform remains orthogonal and
+delay-proportional loss still controls homogeneous decay. Unlike input/output
+rotation, this changes modal frequencies. The multipliers are original exploratory
+choices, not measured or extracted from a reference product. This is a restricted
+orthogonal parameterization motivated by Dal Santo et al. (2025), section 3.2;
+it is not that paper's matrix-exponential optimizer. Zero bypass must preserve
+existing renders. Nonzero operation adds bounded arithmetic and needs a new CPU
+measurement. Validation data must remain separate from parameter selection.
+
 ## Cost gate
 
 CPU timing begins with the first runnable core. The probe reports repeated release

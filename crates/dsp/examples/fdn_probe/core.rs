@@ -7,6 +7,8 @@ use suhina_dsp::fdn::{Fdn, Settings, SettingsError};
 use suhina_dsp::fdn_diffuse::{DiffuseSettings, DiffusedFdn};
 
 pub struct Options {
+    pub input: Option<std::path::PathBuf>,
+    pub profile: String,
     pub flat_decay: bool,
     pub diffused: bool,
     pub render_only: bool,
@@ -16,11 +18,29 @@ pub struct Options {
 
 impl Options {
     pub fn read() -> Result<Self, Box<dyn Error>> {
-        let mut result =
-            Self { flat_decay: false, diffused: false, render_only: false, impulse_only: false, local: Value::Null };
+        let mut result = Self {
+            input: None,
+            profile: "baseline".into(),
+            flat_decay: false,
+            diffused: false,
+            render_only: false,
+            impulse_only: false,
+            local: Value::Null,
+        };
         let mut args = std::env::args_os().skip(2);
         while let Some(arg) = args.next() {
-            if arg == "--flat-decay" {
+            if arg == "--input" {
+                result.input = Some(args.next().ok_or("--input needs a WAV path")?.into());
+            } else if arg == "--profile" {
+                result.profile = args
+                    .next()
+                    .ok_or("--profile needs short, baseline or long")?
+                    .into_string()
+                    .map_err(|_| "invalid profile")?;
+                if !["short", "baseline", "long"].contains(&result.profile.as_str()) {
+                    return Err("invalid profile".into());
+                }
+            } else if arg == "--flat-decay" {
                 result.flat_decay = true;
             } else if arg == "--diffused" {
                 result.diffused = true;
@@ -55,6 +75,9 @@ impl Options {
                     "room_scale" => core.room_scale = number,
                     "late_scale" => s.late_scale = number,
                     "high_decay_ratio" => core.high_decay_ratio = number,
+                    "feedback_rotation" => core.feedback_rotation = number,
+                    "input_rotation" => core.input_rotation = number,
+                    "output_rotation" => core.output_rotation = number,
                     "loop_diffusion" => core.loop_diffusion = number as f32,
                     "predelay_ms" => s.predelay_ms = number,
                     "diffusion" => s.diffusion = number as f32,
@@ -108,7 +131,7 @@ impl Core {
 }
 
 pub fn describe(s: DiffuseSettings) -> Value {
-    json!({"loop_diffusion": s.core.loop_diffusion, "late_scale": s.late_scale, "predelay_ms": s.predelay_ms, "diffusion": s.diffusion, "early_level": s.early_level,
+    json!({"feedback_rotation": s.core.feedback_rotation, "input_rotation": s.core.input_rotation, "output_rotation": s.core.output_rotation, "loop_diffusion": s.core.loop_diffusion, "late_scale": s.late_scale, "predelay_ms": s.predelay_ms, "diffusion": s.diffusion, "early_level": s.early_level,
         "early_onset_gain": s.early_onset_gain, "early_tilt_db": s.early_tilt_db, "early_diffusion": s.early_diffusion,
         "width": s.width, "low_cut_hz": s.low_cut_hz, "high_cut_hz": s.high_cut_hz})
 }

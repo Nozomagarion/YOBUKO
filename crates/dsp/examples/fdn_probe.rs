@@ -6,6 +6,8 @@
 use serde_json::{Value, json};
 use std::{error::Error, hint::black_box, path::Path, time::Instant};
 use suhina_dsp::fdn::Settings;
+#[path = "fdn_probe/file.rs"]
+mod file_probe;
 #[path = "fdn_probe/core.rs"]
 mod probe_core;
 use probe_core::{Core, Options};
@@ -20,6 +22,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         return Err("output directory already exists; choose a new run directory to preserve results".into());
     }
     std::fs::create_dir_all(output)?;
+    if let Some(input) = &options.input {
+        return file_probe::render(input, output, &options);
+    }
     let mut renders = Vec::new();
     for (name, decay, scale, ratio) in [("short", 0.5, 0.7, 1.), ("baseline", 2., 1., 1.), ("long", 6., 1.5, 0.5)] {
         let (scale, ratio) = if options.flat_decay { (1., 1.) } else { (scale, ratio) };

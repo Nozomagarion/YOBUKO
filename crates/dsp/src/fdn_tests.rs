@@ -30,7 +30,13 @@ fn rejects_hostile_settings_and_bounds_history() {
 
 #[test]
 fn rendering_is_block_independent_and_reset_removes_tail() {
-    let settings = Settings { loop_diffusion: 0.6, high_decay_ratio: 0.4, ..Settings::default() };
+    let settings = Settings {
+        input_rotation: 0.7,
+        output_rotation: -0.3,
+        loop_diffusion: 0.6,
+        high_decay_ratio: 0.4,
+        ..Settings::default()
+    };
     let mut a = Fdn::new(settings).unwrap();
     let mut b = Fdn::new(settings).unwrap();
     let mut signal = vec![0.; 48_000 * 2];
@@ -64,6 +70,9 @@ fn decay_tracks_target_at_multiple_sample_rates() {
         for (decay, scattering) in [(0.5, 0.), (2., 0.), (0.5, 0.6), (2., 0.6)] {
             let mut fdn = Fdn::new(Settings {
                 sample_rate: rate,
+                feedback_rotation: 0.7,
+                input_rotation: 0.3,
+                output_rotation: -0.4,
                 loop_diffusion: scattering,
                 decay_seconds: decay,
                 damping_hz: 2000.,
@@ -100,4 +109,40 @@ fn scattering_rejects_hostile_settings_and_remains_finite() {
         core.process_frame([x; 2]);
     }
     assert!((0..48_000).all(|_| core.process_frame([0.; 2]).iter().all(|v| v.is_finite() && v.abs() < 100.)));
+}
+
+#[test]
+fn rotations_preserve_vector_norms_and_output_orthogonality() {
+    for angle in [-std::f64::consts::PI, -1., 0., 0.7, std::f64::consts::PI] {
+        let core = Fdn::new(Settings { input_rotation: angle, output_rotation: angle, ..Settings::default() }).unwrap();
+        for weights in [&core.input_weights, &core.output_weights[0], &core.output_weights[1]] {
+            assert!((weights.iter().map(|v| v * v).sum::<f32>() - 8.).abs() < 2e-6);
+        }
+        let dot: f32 = core.output_weights[0].iter().zip(core.output_weights[1]).map(|(a, b)| a * b).sum();
+        assert!(dot.abs() < 2e-6);
+    }
+    for bad in [f64::NAN, f64::INFINITY, -4., 4.] {
+        assert!(Fdn::new(Settings { input_rotation: bad, ..Settings::default() }).is_err());
+        assert!(Fdn::new(Settings { output_rotation: bad, ..Settings::default() }).is_err());
+    }
+}
+
+#[test]
+fn feedback_rotations_preserve_energy_and_reject_hostile_angles() {
+    for angle in [-3., -0.5, 0., 0.7, 3.] {
+        let core = Fdn::new(Settings { feedback_rotation: angle, ..Settings::default() }).unwrap();
+        if let Some(rotations) = core.rotations {
+            for i in 0..8 {
+                let mut v = [0.; 8];
+                v[i] = 1.;
+                mix(&mut v);
+                v.rotate_left(1);
+                rotate_pairs(&mut v, rotations);
+                assert!((v.iter().map(|x| x * x).sum::<f32>() - 1.).abs() < 1e-6);
+            }
+        }
+    }
+    for bad in [f64::NAN, f64::INFINITY, -4., 4.] {
+        assert!(Fdn::new(Settings { feedback_rotation: bad, ..Settings::default() }).is_err());
+    }
 }
