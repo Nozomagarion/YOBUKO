@@ -317,3 +317,29 @@ fn a_send_takes_its_class_and_its_own_id() {
     }
     skin::configure(&skin::Skin::default());
 }
+
+#[test]
+fn the_divider_is_a_control_a_theme_places_and_others_anchor_to() {
+    use crate::kit::{skin, theme_css};
+    let bounds = Rect::from_min_size(Pos2::ZERO, Vec2::new(theme::TRACK_COLUMN, DEVICES_AT + 120.0));
+    let original = layout(bounds, true, false);
+    let divider = original.divider.expect("a strip with devices has a divider");
+    assert!(divider.top() >= original.devices.unwrap().bottom() - 3.0);
+    let mut theme = theme::Theme::default();
+    assert!(
+        theme_css::apply(
+            &mut theme,
+            ".control-mixer-divider { top: 10px; } \
+             .control-mixer-devices { --suhina-anchor-bottom: mixer-divider top 0px; }"
+        )
+        .is_empty()
+    );
+    skin::configure(&theme.skin);
+    let ctx = egui::Context::default();
+    let capture = crate::kit::control_layout::Capture::begin(&ctx);
+    let moved = layout(bounds, true, false);
+    drop(capture);
+    assert_eq!(moved.divider.unwrap().top(), divider.top() + 10.0);
+    assert_eq!(moved.devices.unwrap().bottom(), moved.divider.unwrap().top());
+    skin::configure(&skin::Skin::default());
+}

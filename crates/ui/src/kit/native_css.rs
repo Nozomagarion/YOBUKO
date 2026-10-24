@@ -454,6 +454,9 @@ fn element_id(node: &StyleNode) -> String {
     {
         return name.clone();
     }
+    if node.class == "divider" && node.name.as_deref() == Some("mixer-divider") {
+        return "mixer-divider".to_owned();
+    }
     if node.class == "add-track"
         && let Some(name) = node.name.as_deref().filter(|name| name.starts_with("add-"))
     {

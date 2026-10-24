@@ -103,6 +103,9 @@ pub struct Layout {
     pub audio_source: Option<Rect>,
     pub audio_monitor: Option<Rect>,
     pub devices: Option<Rect>,
+    /// The line between the device list and the controls under it: dragged, it shares the
+    /// strip's height between them. A theme places it as `mixer-divider`.
+    pub divider: Option<Rect>,
     pub sends: Option<Rect>,
     pub pan: Option<Rect>,
     /// The dB value over the fader.
@@ -158,6 +161,7 @@ fn layout_native(rect: Rect, has_sends: bool, can_hear_input: bool, shared: Shar
         audio_source: None,
         audio_monitor: None,
         devices: None,
+        divider: None,
         sends: None,
         pan: None,
         readout: None,
@@ -254,6 +258,10 @@ fn horizontal_volume() -> bool {
 }
 
 fn place_parts(mut parts: Layout, bounds: Rect, main: bool) -> Layout {
+    parts.divider = parts.devices.map(|list| {
+        let line = list.bottom() + UNDER_DEVICES / 2.0;
+        Rect::from_x_y_ranges(bounds.x_range(), egui::Rangef::new(line - 3.0, line + 3.0))
+    });
     if horizontal_volume()
         && let Some(fader) = parts.fader
     {
@@ -273,6 +281,8 @@ fn place_parts(mut parts: Layout, bounds: Rect, main: bool) -> Layout {
         ("mixer-input-caption", &mut parts.audio_caption),
         ("mixer-input", &mut parts.audio_source),
         ("mixer-monitor", &mut parts.audio_monitor),
+        // The divider before the list, so the list can end where the theme places it.
+        ("mixer-divider", &mut parts.divider),
         ("mixer-devices", &mut parts.devices),
         ("mixer-sends", &mut parts.sends),
         ("mixer-pan", &mut parts.pan),
@@ -282,7 +292,9 @@ fn place_parts(mut parts: Layout, bounds: Rect, main: bool) -> Layout {
         ("mixer-compact-volume", &mut parts.compact),
     ] {
         *part = part.filter(|_| !control_layout::placement(name).hidden).map(|rect| {
-            if main && !matches!(name, "mixer-devices" | "mixer-volume-readout" | "mixer-volume" | "mixer-meter") {
+            if main
+                && !matches!(name, "mixer-devices" | "mixer-divider" | "mixer-volume-readout" | "mixer-volume" | "mixer-meter")
+            {
                 control_layout::resolve(name, rect, bounds)
             } else {
                 control_layout::place(name, rect, bounds)
@@ -383,8 +395,8 @@ pub fn show(
     }
     if let Some(list) = parts.devices {
         devices(ui, painter, list, column, state, id);
-        if let Some(fader) = parts.fader {
-            divider(ui, painter, rect, list, fader.height(), state);
+        if let (Some(fader), Some(line)) = (parts.fader, parts.divider) {
+            divider(ui, painter, rect, line, fader.height(), state);
         }
     }
     // Sends first, so a dragged send's level can stand where the pan's value is.
@@ -410,9 +422,13 @@ pub fn show(
 
 /// The line under a strip's device list: dragged down, the lists grow and the controls under them
 /// get lower in every strip at once; double-clicked, the split is automatic again.
-fn divider(ui: &Ui, painter: &egui::Painter, strip: Rect, list: Rect, fader: f32, state: &mut SessionViewState) {
-    let line = list.bottom() + UNDER_DEVICES / 2.0;
-    let rect = Rect::from_x_y_ranges(strip.x_range(), egui::Rangef::new(line - 3.0, line + 3.0));
+fn divider(ui: &Ui, painter: &egui::Painter, strip: Rect, rect: Rect, fader: f32, state: &mut SessionViewState) {
+    // The drag area and its highlight follow where the theme places it, inside the strip.
+    let rect = rect.intersect(strip);
+    if !rect.is_positive() {
+        return;
+    }
+    let line = rect.center().y;
     let response = ui
         .interact(
             rect.intersect(painter.clip_rect()),
@@ -432,7 +448,8 @@ fn divider(ui: &Ui, painter: &egui::Painter, strip: Rect, list: Rect, fader: f32
         state.strip_fader = fader.round();
     }
     if response.hovered() || response.dragged() {
-        painter.hline(strip.x_range(), line, egui::Stroke::new(2.0, theme::accent()));
+        let _style = crate::kit::style_class::enter_named_response("divider", "mixer-divider", &response);
+        painter.hline(rect.x_range(), line, egui::Stroke::new(2.0, crate::kit::style_class::foreground(theme::accent())));
     }
 }
 
