@@ -7542,6 +7542,85 @@ mod tests {
     }
 
     #[test]
+    fn an_arrangement_header_and_name_draw_the_sheet_s_backgrounds() {
+        let ctx = egui::Context::default();
+        let mut app = App::new();
+        app.set_session(Session::new(crate::demo::demo_project()), &[]);
+        app.settings.animations = false;
+        app.shown = View::Arrangement;
+        app.use_test_skin(crate::kit::skin::Skin {
+            css: Some(std::sync::Arc::from(
+                ".arrangement .track-header { background-color: #102030; } \
+                 .arrangement .track-name { background-color: #FF0000; }",
+            )),
+            ..Default::default()
+        });
+        let (mut header, mut name) = (false, false);
+        for _ in 0..4 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| app.ui(ui),
+            );
+            output.textures_delta.clear();
+            for shape in &output.shapes {
+                if let egui::Shape::Rect(rect) = &shape.shape {
+                    header |= rect.fill == egui::Color32::from_rgb(0x10, 0x20, 0x30);
+                    name |= rect.fill == egui::Color32::from_rgb(0xFF, 0, 0);
+                }
+            }
+        }
+        app.use_test_skin(crate::kit::skin::Skin::default());
+        assert!(header && name, "header {header}, name {name}");
+    }
+
+    #[test]
+    fn a_clip_takes_its_radius_opacity_and_name_colour_from_the_sheet() {
+        let ctx = egui::Context::default();
+        let mut app = App::new();
+        app.set_session(Session::new(crate::demo::demo_project()), &[]);
+        app.settings.animations = false;
+        app.shown = View::Arrangement;
+        app.use_test_skin(crate::kit::skin::Skin {
+            css: Some(std::sync::Arc::from(
+                ".clip { border-radius: 9px; opacity: 0.5; background-color: #2040FF; } \
+                 .clip-name { color: #FF0000; }",
+            )),
+            ..Default::default()
+        });
+        let (mut round, mut faded, mut red_name) = (false, false, false);
+        for _ in 0..4 {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                    ..Default::default()
+                },
+                |ui| app.ui(ui),
+            );
+            output.textures_delta.clear();
+            for shape in &output.shapes {
+                match &shape.shape {
+                    egui::Shape::Rect(rect) if rect.corner_radius.nw == 9 => {
+                        round = true;
+                        faded |= rect.fill.a() < 200;
+                    }
+                    egui::Shape::Text(text) => {
+                        red_name |= text.galley.job.sections.iter().any(|s| {
+                            let c = s.format.color;
+                            c.r() > 0 && c.g() == 0 && c.b() == 0
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+        app.use_test_skin(crate::kit::skin::Skin::default());
+        assert!(round && faded && red_name, "round {round}, faded {faded}, red name {red_name}");
+    }
+
+    #[test]
     fn a_rename_in_place_covers_the_name_drawn_under_it() {
         use egui_kittest::kittest::Queryable;
         let mut app = App::new();

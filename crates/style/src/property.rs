@@ -21,6 +21,7 @@ const ALIGN: &[&str] = &[
     "space-evenly",
 ];
 const VISIBILITY: &[&str] = &["visible", "hidden", "collapse"];
+const TEXT_ALIGN: &[&str] = &["left", "center", "right", "start", "end"];
 
 #[derive(Clone, Copy, Debug)]
 pub enum Kind {
@@ -108,6 +109,7 @@ properties! {
     GridRow, "grid-row", Placement, Value::Placement([crate::layout::GridLine::Auto; 2]), false, "Grid row lines, as grid-column.";
     Transition, "transition", Transitions, Value::Transitions(Vec::new()), false, "Colours, opacity, radius and font size change smoothly: property, duration, easing, delay.";
     Animation, "animation", Animations, Value::Animations(Vec::new()), false, "Keyframe animations: name, duration, easing, delay, count, direction, fill.";
+    TextAlign, "text-align", Keyword(TEXT_ALIGN), Value::Keyword("start"), true, "Where a control's value text sits: left, center or right.";
     Visibility, "visibility", Keyword(VISIBILITY), Value::Keyword("visible"), true, "hidden keeps the element's space but neither draws it nor lets it take input.";
     Layout, "layout", Layout, Value::Layout(Layout::Column), false, "Native row, column, grid or stack.";
     Order, "order", Integer, Value::Integer(0), false, "Visual order within the same parent; bindings do not change.";

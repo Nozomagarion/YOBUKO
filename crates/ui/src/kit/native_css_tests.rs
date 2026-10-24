@@ -784,7 +784,7 @@ fn unrelated_css_preserves_native_colours_font_sizes_and_corner_defaults() {
 
 /// Runs `paint` inside the window for a few frames with `css`, so element ids resolve, and
 /// returns the last frame's shapes.
-fn painted(css: &str, mut paint: impl FnMut(&egui::Ui)) -> Vec<egui::epaint::ClippedShape> {
+fn painted(css: &str, mut paint: impl FnMut(&mut egui::Ui)) -> Vec<egui::epaint::ClippedShape> {
     prepare(css, 800.0);
     let ctx = egui::Context::default();
     let mut shapes = Vec::new();
@@ -820,7 +820,7 @@ fn rects(shapes: &[egui::epaint::ClippedShape]) -> Vec<egui::epaint::RectShape> 
 #[test]
 fn a_level_bar_takes_its_shape_and_thickness_from_the_sheet() {
     let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, 20.0));
-    let draw = |ui: &egui::Ui| {
+    let draw = |ui: &mut egui::Ui| {
         let _value = super::super::style_class::enter_named("value", "arrangement-volume");
         crate::kit::mixer_controls::level_bar(
             ui.painter(),
@@ -951,4 +951,49 @@ fn a_track_gives_its_colour_to_the_sheet_and_each_view_is_known() {
     assert_eq!(fill, egui::Color32::from_rgb(0xE8, 0x91, 0x3A));
     assert_eq!(view, Some("mixer"), "a strip in the Session view is the mixer's");
     assert_eq!(hex(egui::Color32::from_rgba_unmultiplied(255, 0, 0, 128)), "#ff000080");
+}
+
+#[test]
+fn a_level_bar_s_value_may_sit_left_and_its_lit_part_take_its_own_ink() {
+    let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, 20.0));
+    let css = "#arrangement-volume { text-align: left; } #arrangement-volume .value-fill { color: #00FF00; }";
+    let shapes = painted(css, |ui| {
+        let _value = super::super::style_class::enter_named("value", "arrangement-volume");
+        crate::kit::mixer_controls::level_bar(
+            ui.painter(),
+            field,
+            "volume",
+            (0.0, 0.9),
+            0.0,
+            "0.0",
+            egui::Align2::RIGHT_CENTER,
+        );
+    });
+    let green = shapes.iter().find_map(|shape| match &shape.shape {
+        egui::Shape::Text(text)
+            if text.galley.job.sections.iter().any(|s| s.format.color == egui::Color32::from_rgb(0, 0xFF, 0)) =>
+        {
+            Some(text.pos.x)
+        }
+        _ => None,
+    });
+    let x = green.expect("the lit part's text is green");
+    assert!(x < field.center().x, "the value sits at the left: {x}");
+}
+
+#[test]
+fn a_sheet_s_border_is_the_ordinary_widgets_outline() {
+    let mut strokes = Vec::new();
+    for css in [".dropdown { border-width: 0px; }", ".dropdown { border-width: 2px; border-color: #FF0000; }"] {
+        let mut seen = None;
+        painted(css, |ui| {
+            let _menu = super::super::style_class::enter("dropdown");
+            let mut child = ui.new_child(egui::UiBuilder::new());
+            let styled = super::super::style_class::ui(&mut child);
+            seen = Some(styled.visuals().widgets.inactive.bg_stroke);
+        });
+        strokes.push(seen.unwrap());
+    }
+    assert_eq!(strokes[0].width, 0.0);
+    assert_eq!(strokes[1], egui::Stroke::new(2.0, egui::Color32::from_rgb(0xFF, 0, 0)));
 }

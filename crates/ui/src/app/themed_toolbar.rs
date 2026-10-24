@@ -155,13 +155,14 @@ impl App {
                                 continue;
                             }
                             let painter = ui.painter().with_clip_rect(ui.clip_rect().intersect(at));
-                            painter.rect_filled(
-                                at,
-                                module.style.radius,
-                                module.style.background.gamma_multiply(module.style.opacity),
-                            );
-                            crate::kit::native_css::background_with(&painter, at, &module.style);
+                            // Without a project the modules are empty: no boxes where nothing is.
                             if let Some(grid) = grid {
+                                painter.rect_filled(
+                                    at,
+                                    module.style.radius,
+                                    module.style.background.gamma_multiply(module.style.opacity),
+                                );
+                                crate::kit::native_css::background_with(&painter, at, &module.style);
                                 let mut module_ui = ui.new_child(
                                     egui::UiBuilder::new().id_salt(("css-toolbar", &module.name)).max_rect(at),
                                 );

@@ -47,6 +47,8 @@ pub struct Computed {
     pub border_width: f32,
     /// `height` in pixels, when the sheet sets one: the thickness of a bar such as a volume field's.
     pub height: Option<f32>,
+    /// `text-align` where the sheet sets one: -1 left, 0 centre, 1 right.
+    pub text_align: Option<i8>,
     pub opacity: f32,
     pub visible: bool,
     /// `accent-color`: a control's accent, such as a knob's arc.
@@ -372,6 +374,14 @@ pub enum HostState {
 /// The host states and the selector names they match.
 pub(crate) const HOST_STATES: [(u16, &str); 6] =
     [(16, "checked"), (32, "selected"), (64, "playing"), (128, "recording"), (256, "armed"), (512, "muted")];
+
+/// The name of the element now in scope (`play` for `#control-play`), when it has one.
+pub fn current_name() -> Option<String> {
+    ENGINE.with(|engine| {
+        let engine = engine.borrow();
+        engine.parents.last().and_then(|&at| engine.nodes.get(at)).and_then(|node| node.name.clone())
+    })
+}
 
 /// Gives the element now in scope the custom property `name` (`--track-colour`) as `value`, which
 /// it and its descendants see below every rule of the sheet.

@@ -343,12 +343,13 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Arrangement,
         "Clips",
         "Waveform and note colour",
-        "Auto follows each clip's brightness; Light, Dark and Custom use one colour for waveforms, MIDI notes and ARA notes",
+        "Theme uses the theme's colour (dark when it gives none); Auto follows each clip's brightness; Light, Dark and Custom use one colour for waveforms, MIDI notes and ARA notes",
         &["waveform_colour"],
         |cx, r| {
             cx.choose(
                 r,
                 &[
+                    ("Theme", WaveformColour::Theme),
                     ("Auto", WaveformColour::Auto),
                     ("Light", WaveformColour::Light),
                     ("Dark", WaveformColour::Dark),

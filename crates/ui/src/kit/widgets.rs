@@ -115,7 +115,8 @@ pub fn button_surface(painter: &Painter, rect: Rect, response: &Response, on: bo
     // A shape the sheet gives the button wins over the artwork Suhina ships, not over the theme's own.
     let shaped = super::style_class::computed()
         .is_some_and(|style| style.authored.background || style.authored.radius || style.authored.border_width);
-    if !shaped || super::skin::has_own("button") {
+    let role = super::skin::button_role();
+    if !shaped || role != "button" || super::skin::has_own("button") {
         let fill = super::style_class::background(fill);
         let radius = super::style_class::radius(radius);
         if super::skin::button(painter, rect, super::skin::State::response(response, on), fill, radius) {

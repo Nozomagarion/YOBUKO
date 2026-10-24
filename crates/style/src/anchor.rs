@@ -146,11 +146,7 @@ impl Anchor {
 
 impl fmt::Display for Anchor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.target.as_str(), self.edge.name())?;
-        if self.gap != 0 {
-            write!(f, " {}px", self.gap)?;
-        }
-        Ok(())
+        write!(f, "{} {} {}px", self.target.as_str(), self.edge.name(), self.gap)
     }
 }
 
@@ -204,6 +200,28 @@ impl fmt::Display for Rejected {
 /// element on a cycle, then every element starting a chain of more than [`MAX_CHAIN`] links
 /// among the remaining anchors. Deterministic; work is bounded by [`MAX_NODES`].
 pub fn rejected<'a>(graph: impl IntoIterator<Item = (&'a str, Anchors)>) -> BTreeMap<String, Rejected> {
+    // Each axis on its own: an element whose x follows another's while that one's y follows it
+    // is no cycle, since an edge only ever follows an edge on its own axis.
+    let graph: Vec<(&str, Anchors)> = graph.into_iter().collect();
+    let mut result = BTreeMap::new();
+    for vertical in [false, true] {
+        let axis = graph.iter().map(|(name, anchors)| {
+            let mut only = Anchors::default();
+            for (edge, anchor) in anchors.iter() {
+                if matches!(edge, Edge::Top | Edge::Bottom) == vertical {
+                    only.set(edge, Some(anchor));
+                }
+            }
+            (*name, only)
+        });
+        for (name, reason) in rejected_on_axis(axis) {
+            result.entry(name).or_insert(reason);
+        }
+    }
+    result
+}
+
+fn rejected_on_axis<'a>(graph: impl IntoIterator<Item = (&'a str, Anchors)>) -> BTreeMap<String, Rejected> {
     let mut edges: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (name, anchors) in graph {
         if anchors.is_empty() {
@@ -334,7 +352,7 @@ mod tests {
         let anchor = Anchor::parse(Edge::Bottom, "arrangement-volume top 4px");
         assert_eq!(anchor, Ok(Anchor { target: name("arrangement-volume"), edge: Edge::Top, gap: 4 }));
         assert_eq!(anchor.map(|a| a.to_string()), Ok("arrangement-volume top 4px".into()));
-        assert_eq!(Anchor::parse(Edge::Left, "meter right").map(|a| a.to_string()), Ok("meter right".into()));
+        assert_eq!(Anchor::parse(Edge::Left, "meter right").map(|a| a.to_string()), Ok("meter right 0px".into()));
         for bad in [
             "",
             "meter",
@@ -393,6 +411,21 @@ mod tests {
         assert!(!rejected.contains_key("follows-cycle"));
         assert!(!rejected.contains_key("meter"));
         assert!(!rejected.contains_key("volume"));
+    }
+
+    #[test]
+    fn following_each_other_on_different_axes_is_no_cycle() {
+        // The fader's right follows the meter's left while the meter's top follows the fader's.
+        let graph = [
+            ("volume", anchors(&[(Edge::Right, "meter", Edge::Left, 0)])),
+            ("meter", anchors(&[(Edge::Top, "volume", Edge::Top, 0)])),
+        ];
+        assert!(rejected(graph.iter().map(|(n, a)| (*n, *a))).is_empty());
+        let same_axis = [
+            ("volume", anchors(&[(Edge::Right, "meter", Edge::Left, 0)])),
+            ("meter", anchors(&[(Edge::Left, "volume", Edge::Right, 0)])),
+        ];
+        assert_eq!(rejected(same_axis.iter().map(|(n, a)| (*n, *a))).len(), 2);
     }
 
     #[test]

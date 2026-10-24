@@ -83,8 +83,8 @@ pub fn apply(theme: &mut Theme, css: &str) -> Vec<String> {
     let mut rules = 0;
     while !rest.trim().is_empty() {
         rules += 1;
-        if rules > 128 {
-            warnings.push("stylesheet exceeds 128 rules".into());
+        if rules > 4096 {
+            warnings.push("stylesheet exceeds 4096 rules".into());
             break;
         }
         let Some((selector, after)) = rest.split_once('{') else {
@@ -532,12 +532,12 @@ pub fn layout(theme: &Theme, sheet_theme: &Theme) -> String {
             .map(str::to_owned)
             .collect()
     };
-    let ours = structure(&full);
-    if ours != structure(&export(sheet_theme)) {
-        for line in ours {
-            css.push_str(&line);
-            css.push('\n');
-        }
+    // Only the rules that differ from the sheet's: a control moved in the app, not a copy of
+    // every placement the sheet already makes.
+    let theirs: std::collections::BTreeSet<String> = structure(&export(sheet_theme)).into_iter().collect();
+    for line in structure(&full).into_iter().filter(|line| !theirs.contains(line)) {
+        css.push_str(&line);
+        css.push('\n');
     }
     css
 }

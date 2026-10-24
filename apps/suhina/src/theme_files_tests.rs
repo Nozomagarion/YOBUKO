@@ -178,3 +178,28 @@ fn a_folder_without_theme_css_and_two_themes_with_one_name_are_named() {
     assert!(warnings.iter().any(|w| w.contains("two themes are named")), "{warnings:?}");
     let _clean = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_renamed_folder_leaves_the_list_and_an_empty_one_is_named_once() {
+    let dir = folder("renamed");
+    let themes = dir.join("themes");
+    std::fs::create_dir_all(themes.join("kierros3")).unwrap();
+    std::fs::write(themes.join("kierros3").join("theme.css"), "theme { name: \"Kierros 3\"; }").unwrap();
+    let mut files = ThemeFiles::new(Some(themes.clone()));
+    let (entries, _) = files.read_all();
+    assert_eq!(entries.len(), 1);
+    files.checked = None;
+    assert!(!files.gone());
+    std::fs::rename(themes.join("kierros3"), themes.join("test-round-3")).unwrap();
+    assert!(files.gone(), "the old id is gone");
+    let (entries, _) = files.read_all();
+    assert_eq!(entries.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["test-round-3"]);
+    std::fs::create_dir_all(themes.join("empty")).unwrap();
+    files.checked = None;
+    let (_, warnings) = files.changed();
+    assert!(warnings.iter().any(|w| w.contains("empty") && w.contains("no theme.css")), "{warnings:?}");
+    files.checked = None;
+    let (_, again) = files.changed();
+    assert!(!again.iter().any(|w| w.contains("empty")), "named once: {again:?}");
+    let _clean = std::fs::remove_dir_all(&dir);
+}

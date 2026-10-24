@@ -194,6 +194,13 @@ impl Default for Skin {
 }
 
 pub fn valid_role(role: &str) -> bool {
+    // One button's own artwork: `button.play`, `button.record:on`.
+    if let Some(rest) = role.strip_prefix("button.") {
+        let name = rest.split('.').next().unwrap_or_default();
+        if super::native_css::CONTROL_IDS.contains(&name) {
+            return valid_role(&format!("button{}", &rest[name.len()..]));
+        }
+    }
     ROLES.iter().chain(OWN_ROLES).any(|base| {
         if role == *base {
             return true;
@@ -628,7 +635,25 @@ pub fn paint(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color
 }
 
 pub fn button(painter: &Painter, rect: Rect, state: State, fill: Color32, radius: f32) -> bool {
-    paint_inner(painter, rect, "button", state, fill, 0.0, radius)
+    let role = button_role();
+    // A state the button's own artwork leaves out is every button's.
+    (role != "button" && paint_inner(painter, rect, &role, state, fill, 0.0, radius))
+        || paint_inner(painter, rect, "button", state, fill, 0.0, radius)
+}
+
+/// The artwork role of the button now in scope: its own (`button.play`, with any of its states)
+/// when the theme has one, else every button's.
+pub fn button_role() -> String {
+    super::native_css::current_name()
+        .filter(|name| super::native_css::CONTROL_IDS.contains(&name.as_str()))
+        .map(|name| format!("button.{name}"))
+        .filter(|role| {
+            let skin = current();
+            skin.assets
+                .keys()
+                .any(|key| key == role || key.strip_prefix(role.as_str()).is_some_and(|rest| rest.starts_with('.')))
+        })
+        .unwrap_or_else(|| "button".to_owned())
 }
 
 fn paint_inner(painter: &Painter, rect: Rect, role: &str, state: State, ink: Color32, angle: f32, radius: f32) -> bool {
@@ -796,7 +821,8 @@ fn paint_variant(
     // image backdrops and the opaque/OpenGL path keep ordinary blending. Only a theme whose
     // surfaces show the desktop needs it: over an opaque one, clearing would let the desktop
     // show through wherever the artwork leaves a pixel uncovered (rounded corners, edges).
-    if matches!(role, "button" | "fader.rail" | "fader.cap" | "track.name" | "track.body")
+    if (matches!(role, "button" | "fader.rail" | "fader.cap" | "track.name" | "track.body")
+        || role.starts_with("button."))
         && super::surface::available(painter.ctx())
         && super::theme::see_through()
     {
@@ -812,7 +838,7 @@ fn paint_variant(
             Color32::TRANSPARENT,
         );
     }
-    if role == "button" {
+    if role == "button" || role.starts_with("button.") {
         painter.add(
             egui::epaint::RectShape::filled(rect, super::style_class::radius(radius), Color32::WHITE)
                 .with_texture(texture.id(), Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)))

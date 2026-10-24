@@ -68,11 +68,20 @@ pub struct ThemeFiles {
     snapshots: HashMap<String, Snapshot>,
     /// When `user.css` last changed, as last read (`Some(0)` when it was not there).
     user_seen: Option<u64>,
+    /// The folders last named as not themes, so each is named once until it changes.
+    not_themes: Vec<String>,
 }
 
 impl ThemeFiles {
     pub fn new(folder: Option<PathBuf>) -> Self {
-        Self { folder, seen: HashMap::new(), checked: None, snapshots: HashMap::new(), user_seen: None }
+        Self {
+            folder,
+            seen: HashMap::new(),
+            checked: None,
+            snapshots: HashMap::new(),
+            user_seen: None,
+            not_themes: Vec::new(),
+        }
     }
 
     fn refresh_default_assets(&self, warnings: &mut Vec<String>) {
@@ -199,9 +208,21 @@ impl ThemeFiles {
             let path = self.current_path(&id, path);
             self.seen.insert(id, fingerprint(&path).unwrap_or(modified));
         }
-        warnings.extend(self.not_themes());
+        self.not_themes = self.not_themes();
+        warnings.extend(self.not_themes.iter().cloned());
         warnings.extend(same_names(&entries));
         (entries, warnings)
+    }
+
+    /// Whether a theme read before is gone from the folder (deleted or renamed), so the list has
+    /// to be read again whole.
+    pub fn gone(&self) -> bool {
+        // As often as the files are looked at for changes, not more.
+        if self.checked.is_some_and(|at| at.elapsed() < CHECK_EVERY) {
+            return false;
+        }
+        let ids: std::collections::HashSet<String> = self.list().into_iter().map(|(id, _, _)| id).collect();
+        self.seen.keys().any(|id| !ids.contains(id))
     }
 
     /// Folders in the themes folder that are not themes because they have no `theme.css`
@@ -262,6 +283,10 @@ impl ThemeFiles {
             let path = self.current_path(&id, path);
             self.seen.insert(id, fingerprint(&path).unwrap_or(modified));
         }
+        // A folder made by hand that is not a theme yet is named once, when it appears or changes.
+        let not_themes = self.not_themes();
+        warnings.extend(not_themes.iter().filter(|w| !self.not_themes.contains(w)).cloned());
+        self.not_themes = not_themes;
         (entries, warnings)
     }
 
@@ -493,11 +518,25 @@ impl ThemeFiles {
 
 /// Shows `path` in the system's file manager: the folder, or the file selected where the system
 /// can do that.
+/// `/select,"<path>"` as Explorer reads it: quoted after the comma. Passed as one ordinary
+/// argument, the whole of it is quoted, and Explorer then says the folder is not available when
+/// the path has a space.
+#[cfg(target_os = "windows")]
+fn select_in_explorer(command: &mut std::process::Command, path: &Path) {
+    use std::os::windows::process::CommandExt;
+    command.raw_arg(format!("/select,\"{}\"", path.display()));
+}
+
+#[cfg(not(target_os = "windows"))]
+fn select_in_explorer(command: &mut std::process::Command, path: &Path) {
+    command.arg(format!("/select,{}", path.display()));
+}
+
 pub fn reveal(path: &Path, select: bool) -> Result<(), String> {
     let mut command = if cfg!(target_os = "windows") {
         let mut c = std::process::Command::new("explorer");
         if select {
-            c.arg(format!("/select,{}", path.display()));
+            select_in_explorer(&mut c, path);
         } else {
             c.arg(path);
         }

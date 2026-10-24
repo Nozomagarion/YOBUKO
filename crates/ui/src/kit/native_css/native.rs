@@ -275,6 +275,13 @@ pub(super) fn computed(style: &ComputedStyle) -> Computed {
             Value::Length(Length::Px(value)) => value.clamp(0.0, 16.0),
             _ => 0.0,
         },
+        text_align: match style.get(Property::TextAlign) {
+            _ if !style.authored(Property::TextAlign) => None,
+            Value::Keyword("left" | "start") => Some(-1),
+            Value::Keyword("center") => Some(0),
+            Value::Keyword("right" | "end") => Some(1),
+            _ => None,
+        },
         height: match style.get(Property::Height) {
             Value::Length(Length::Px(value)) if style.authored(Property::Height) => Some(value.clamp(0.0, 512.0)),
             _ => None,

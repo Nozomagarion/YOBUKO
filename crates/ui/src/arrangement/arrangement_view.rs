@@ -3261,20 +3261,39 @@ fn paint_clip(
     if !rect.intersects(view) {
         return;
     }
+    let off = lane.mute || !clip.enabled;
+    crate::kit::native_css::set_variable("--clip-colour", crate::kit::native_css::hex(rgb(clip.color)));
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, selected);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, off);
+    // The sheet's opacity fades the whole clip, its waveform, notes and name too.
+    let faded;
+    let painter = match crate::kit::style_class::computed().map(|style| style.opacity).filter(|o| *o < 1.0) {
+        Some(opacity) => {
+            let mut fade = painter.clone();
+            fade.multiply_opacity(opacity.clamp(0.0, 1.0));
+            faded = fade;
+            &faded
+        }
+        None => painter,
+    };
     // Keep the clip colour legible against the quiet grid. Selection changes brightness,
     // never hue; the reserved title area leaves notes and waveforms unobstructed.
-    let off = lane.mute || !clip.enabled;
     let strength = if clip.audio {
         painter.ctx().data(|d| d.get_temp::<u8>(Id::new(AUDIO_COLOUR_STRENGTH))).unwrap_or(82)
     } else {
         82
     };
     let strength = if selected { strength.saturating_add(12).min(100) } else { strength };
-    let body = colour_surface(theme::panel_background(), rgb(clip.color), strength, off);
-    painter.fill_background(rect, 2.0, body);
+    let body =
+        crate::kit::style_class::background(colour_surface(theme::panel_background(), rgb(clip.color), strength, off));
+    let radius = crate::kit::style_class::radius(2.0);
+    painter.fill_background(rect, radius, body);
+    crate::kit::native_css::background_rounded(painter, rect, radius);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
-        painter.rect_filled(bar.shrink2(Vec2::new(2.0, 0.0)), 0.0, motion::mix(body, ink_on(body), 0.045));
+        let _name_bar = crate::kit::style_class::enter("clip-name");
+        let fill = crate::kit::style_class::background(motion::mix(body, ink_on(body), 0.045));
+        painter.rect_filled(bar.shrink2(Vec2::new(2.0, 0.0)), 0.0, fill);
     } else {
         painter.fill_background(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, body);
     }
@@ -3310,7 +3329,16 @@ fn paint_clip(
         .ctx()
         .data(|d| d.get_temp::<crate::settings::view_settings::WaveformAppearance>(Id::new(WAVEFORM_APPEARANCE)))
         .unwrap_or_default();
-    let content_ink = appearance.ink(ink);
+    // Theme: the sheet's `.clip-waveform` and `.clip-notes` colours, else Dark.
+    let themed = |class: &str| {
+        let _part = crate::kit::style_class::enter(class);
+        crate::kit::style_class::foreground(appearance.ink(ink))
+    };
+    let content_ink = if appearance.mode == crate::settings::view_settings::WaveformColour::Theme {
+        themed(if clip.audio { "clip-waveform" } else { "clip-notes" })
+    } else {
+        appearance.ink(ink)
+    };
     let wave_ink = if ara_notes.is_some() { motion::mix(body, content_ink, 0.75) } else { content_ink };
     let dim = |_: Color32| wave_ink;
     let color = ink;
@@ -3332,7 +3360,10 @@ fn paint_clip(
             Pos2::new(left, rect.top() + 3.0),
             Pos2::new(rect.right() - 5.0, bar.map_or(rect.top(), |bar| bar.bottom()) - 3.0),
         );
-        widgets::text_in(painter, name_rect, Align2::LEFT_CENTER, &clip.name, theme::ui_font(theme::TEXT), text_color);
+        let _name = crate::kit::style_class::enter("clip-name");
+        let font = theme::ui_font(crate::kit::style_class::font_size(theme::TEXT));
+        let text_color = crate::kit::style_class::foreground(text_color);
+        widgets::text_in(painter, name_rect, Align2::LEFT_CENTER, &clip.name, font, text_color);
     }
     let marks = Rect::from_min_max(
         Pos2::new(rect.left() + 3.0, bar.map_or(rect.top() + 4.0, |bar| bar.bottom() + 3.0)),
@@ -3791,6 +3822,8 @@ fn track_header(
         painter.fill_background(rect, 0.0, header_fill);
     }
     crate::kit::liquid::paint(painter, rect, header_fill, crate::kit::liquid::Surface::Track);
+    // The sheet's own background for the header (`.arrangement .track-header`) over the native one.
+    crate::kit::native_css::surface(painter, rect.intersect(clip), 0.0, egui::Color32::TRANSPARENT);
     if selected {
         let outline = motion::mix(theme::border_strong(), saturated(rgb(lane.color)), 0.5);
         painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, outline), StrokeKind::Inside);
@@ -4029,6 +4062,8 @@ fn track_header(
             header_fill,
             rgb(lane.color),
         );
+        // The sheet's own background for the name (`.arrangement .track-name`).
+        crate::kit::native_css::surface(painter, name.intersect(clip), 0.0, egui::Color32::TRANSPARENT);
     }
     // Ink that reads on the fill, unless the sheet gives the name a colour.
     let name_color = crate::kit::style_class::foreground(if lane.mute {

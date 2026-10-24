@@ -12,9 +12,11 @@ pub const MIXER_HEIGHTS: (u32, u32, u32) = (46, 166, 2000);
 /// How Arrangement waveforms and note previews choose their ink, independently of clip names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WaveformColour {
+    /// The theme's colour (`.clip-waveform`, `.clip-notes`), or Dark where it gives none.
+    #[default]
+    Theme,
     Auto,
     Light,
-    #[default]
     Dark,
     Custom,
 }
@@ -22,6 +24,7 @@ pub enum WaveformColour {
 impl WaveformColour {
     fn name(self) -> &'static str {
         match self {
+            Self::Theme => "theme",
             Self::Auto => "auto",
             Self::Light => "light",
             Self::Dark => "dark",
@@ -38,7 +41,7 @@ pub struct WaveformAppearance {
 
 impl Default for WaveformAppearance {
     fn default() -> Self {
-        Self { mode: WaveformColour::Dark, custom: egui::Color32::from_rgb(232, 228, 221) }
+        Self { mode: WaveformColour::Theme, custom: egui::Color32::from_rgb(232, 228, 221) }
     }
 }
 
@@ -47,7 +50,7 @@ impl WaveformAppearance {
         match self.mode {
             WaveformColour::Auto => automatic,
             WaveformColour::Light => egui::Color32::from_rgb(240, 237, 232),
-            WaveformColour::Dark => egui::Color32::from_rgb(32, 31, 29),
+            WaveformColour::Dark | WaveformColour::Theme => egui::Color32::from_rgb(32, 31, 29),
             WaveformColour::Custom => self.custom,
         }
     }
@@ -267,6 +270,7 @@ impl ViewSettings {
             }
             ("waveform_colour", mode) => {
                 self.waveform.mode = match mode {
+                    "theme" => WaveformColour::Theme,
                     "auto" => WaveformColour::Auto,
                     "light" => WaveformColour::Light,
                     "dark" => WaveformColour::Dark,
@@ -381,8 +385,14 @@ mod tests {
 
     #[test]
     fn waveform_choices_round_trip_and_invalid_colours_preserve_defaults() {
-        assert_eq!(Settings::from_text("").0.view.waveform.mode, WaveformColour::Dark);
-        for mode in [WaveformColour::Auto, WaveformColour::Light, WaveformColour::Dark, WaveformColour::Custom] {
+        assert_eq!(Settings::from_text("").0.view.waveform.mode, WaveformColour::Theme);
+        for mode in [
+            WaveformColour::Theme,
+            WaveformColour::Auto,
+            WaveformColour::Light,
+            WaveformColour::Dark,
+            WaveformColour::Custom,
+        ] {
             let mut settings = Settings::default();
             settings.view.waveform = WaveformAppearance { mode, custom: egui::Color32::from_rgb(23, 140, 212) };
             let (read, warnings) = Settings::from_text(&settings.to_text());

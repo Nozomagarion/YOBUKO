@@ -24,6 +24,9 @@ pub const CLASSES: &[&str] = &[
     "track-header",
     "track-name",
     "clip",
+    "clip-name",
+    "clip-waveform",
+    "clip-notes",
     "scene",
     "scene-column",
     "track-column",
@@ -366,9 +369,34 @@ pub fn ui(ui: &mut egui::Ui) -> UiStyle<'_> {
         .filter(|style| style.authored.radius)
         .map(|style| style.radius)
         .or_else(|| property("border-radius").map(|_| self::radius(0.0)));
-    let previous = if color.is_some() || font.is_some() || radius.is_some() {
+    // A border the sheet gives (a width, 0 for none) is the ordinary widgets' outline too, in
+    // every state: without it they keep egui's own.
+    let border = values
+        .as_ref()
+        .filter(|style| style.authored.border_width)
+        .map(|style| egui::Stroke::new(style.border_width, style.border));
+    let fill = values.as_ref().filter(|style| style.authored.background).map(|style| style.background);
+    let previous = if color.is_some() || font.is_some() || radius.is_some() || border.is_some() || fill.is_some() {
         let previous = ui.style().clone();
         let style = ui.style_mut();
+        if let Some(stroke) = border {
+            for widget in [
+                &mut style.visuals.widgets.noninteractive,
+                &mut style.visuals.widgets.inactive,
+                &mut style.visuals.widgets.hovered,
+                &mut style.visuals.widgets.active,
+                &mut style.visuals.widgets.open,
+            ] {
+                widget.bg_stroke = stroke;
+            }
+            style.visuals.selection.stroke.width = style.visuals.selection.stroke.width.min(stroke.width.max(1.0));
+        }
+        if let Some(fill) = fill {
+            for widget in [&mut style.visuals.widgets.inactive, &mut style.visuals.widgets.open] {
+                widget.bg_fill = fill;
+                widget.weak_bg_fill = fill;
+            }
+        }
         if let Some(color) = color {
             style.visuals.override_text_color = Some(color);
         }

@@ -222,6 +222,10 @@ fn execute(files: &mut ThemeFiles, actions: Vec<FileAction>) -> Reply {
             Err(error) => reply.notices.push(Err(error)),
         }
     }
+    // A theme deleted or renamed on disk leaves the list only when it is read again whole.
+    if !reply.replace && files.gone() {
+        reply.replace = true;
+    }
     let (entries, warnings) = if reply.replace { files.read_all() } else { files.changed() };
     if reload && warnings.is_empty() {
         reply.notices.push(Ok(format!("Read {} theme files", entries.len())));

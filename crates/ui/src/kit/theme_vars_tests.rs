@@ -205,3 +205,33 @@ fn a_theme_may_keep_the_header_column_wide_enough_for_its_placements() {
     crate::kit::skin::configure(&crate::kit::skin::Skin::default());
     assert_eq!(crate::kit::style_class::theme_header_min_width(), None);
 }
+
+#[test]
+fn a_button_may_have_artwork_of_its_own_per_state() {
+    let mut theme = Theme::default();
+    let css = "button:on { image: url(\"assets/button.on.svg\"); } \
+               button.record:on { image: url(\"assets/button.record.on.svg\"); }";
+    assert!(
+        theme_css::read_host_rules(&mut theme, css).is_empty(),
+        "{:?}",
+        theme_css::read_host_rules(&mut Theme::default(), css)
+    );
+    assert!(theme.skin.assets.contains_key("button.record.on"), "{:?}", theme.skin.assets.keys().collect::<Vec<_>>());
+    assert!(crate::kit::skin::valid_role("button.play.hover"));
+    assert!(!crate::kit::skin::valid_role("button.nothing"));
+}
+
+#[test]
+fn layout_css_holds_only_the_placements_that_differ_from_the_sheet() {
+    let sheet = ".control-mixer-pan { --suhina-anchor-bottom: mixer-toggles top 6px; }\n\
+                 .control-mixer-name { width: 80px; }";
+    let (from_sheet, _) = crate::kit::theme::from_sheet(sheet, "");
+    let mut moved = from_sheet.clone();
+    let mut name = moved.skin.controls["mixer-name"];
+    name.set_offset(egui::vec2(0.0, 8.0));
+    moved.skin.controls.insert("mixer-name".into(), name);
+    let layout = theme_css::layout(&moved, &from_sheet);
+    assert!(layout.contains(".control-mixer-name"), "{layout}");
+    assert!(!layout.contains(".control-mixer-pan"), "the sheet's own placement is not copied: {layout}");
+    assert!(theme_css::layout(&from_sheet, &from_sheet).is_empty());
+}

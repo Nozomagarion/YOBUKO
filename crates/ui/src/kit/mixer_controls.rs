@@ -90,6 +90,18 @@ pub fn level_bar(
         fill
     };
     let inner = rect.shrink2(Vec2::new(8.0, 0.0));
+    // The sheet may move the value (`text-align`) and give the lit part's text its own colour
+    // (`.value-fill { color }`).
+    let align = match crate::kit::style_class::computed().and_then(|style| style.text_align) {
+        Some(-1) => Align2::LEFT_CENTER,
+        Some(0) => Align2::CENTER_CENTER,
+        Some(_) => Align2::RIGHT_CENTER,
+        None => align,
+    };
+    let lit_ink = {
+        let _fill = crate::kit::style_class::enter("value-fill");
+        crate::kit::style_class::computed().filter(|style| style.authored.color).map(|style| style.color)
+    };
     // The value can cross the fill's edge; each part keeps the ink that reads on what is under it.
     let unfilled = Rect::from_min_max(Pos2::new(filled.right(), rect.top()), rect.max);
     let before = Rect::from_min_max(rect.min, Pos2::new(filled.left(), rect.bottom()));
@@ -103,8 +115,9 @@ pub fn level_bar(
             theme::text_primary(),
         );
     }
-    let on_fill =
-        if fill.a() > 0 && height >= rect.height() * 0.6 { theme::text_on(fill) } else { theme::text_primary() };
+    let on_fill = lit_ink.unwrap_or_else(|| {
+        if fill.a() > 0 && height >= rect.height() * 0.6 { theme::text_on(fill) } else { theme::text_primary() }
+    });
     widgets::text_in(
         &painter.with_clip_rect(painter.clip_rect().intersect(filled.with_min_y(rect.top()).with_max_y(rect.bottom()))),
         inner,
