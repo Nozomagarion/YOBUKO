@@ -115,6 +115,9 @@ pub struct Layout {
     /// The volume as a value across the strip, at heights too small for the fader.
     pub compact: Option<Rect>,
     pub toggles: Rect,
+    /// A strip without an input keeps its input's room: the caption, source and monitor where
+    /// they would be, so controls a theme anchors to them line up across every strip.
+    pub reserved_input: Option<[Rect; 3]>,
 }
 
 /// What every strip of the mixer lays itself out by, besides its own track.
@@ -169,6 +172,7 @@ fn layout_native(rect: Rect, has_sends: bool, can_hear_input: bool, shared: Shar
         meter: None,
         compact: None,
         toggles,
+        reserved_input: None,
     };
     let block = |top: f32, height: f32| {
         Rect::from_min_max(Pos2::new(inner.left(), top), Pos2::new(inner.right(), top + height))
@@ -187,6 +191,8 @@ fn layout_native(rect: Rect, has_sends: bool, can_hear_input: bool, shared: Shar
             parts.audio_monitor = Some(monitor);
             parts.audio_source = Some(source);
             parts.audio_caption = Some(caption);
+        } else {
+            parts.reserved_input = Some([caption, source, monitor]);
         }
     }
     let row = |top: f32, height: f32| {
@@ -275,6 +281,12 @@ fn place_parts(mut parts: Layout, bounds: Rect, main: bool) -> Layout {
             Vec2::new(bounds.width(), 10.0),
         ));
     }
+    // Placeholders: resolved, so anchors find them, but neither drawn nor offered for editing.
+    if let Some(reserved) = parts.reserved_input.as_mut() {
+        for (name, rect) in ["mixer-input-caption", "mixer-input", "mixer-monitor"].into_iter().zip(reserved.iter_mut()) {
+            *rect = control_layout::resolve(name, *rect, bounds);
+        }
+    }
     for (name, part) in [
         ("mixer-name", &mut parts.name),
         ("mixer-output", &mut parts.output),
@@ -302,7 +314,77 @@ fn place_parts(mut parts: Layout, bounds: Rect, main: bool) -> Layout {
         });
     }
     parts.toggles = control_layout::place("mixer-toggles", parts.toggles, bounds);
+    drop_crowded(&mut parts);
     parts
+}
+
+/// An anchored part that the strip's height has pushed onto another part draws nothing, rather
+/// than over it: when a short strip leaves the chains from the top and the bottom no room, the
+/// anchored part gives way, so nothing jumps between frames.
+fn drop_crowded(parts: &mut Layout) {
+    let anchored = |name: &str| !control_layout::placement(name).anchors.is_empty();
+    let names = [
+        "mixer-name",
+        "mixer-output",
+        "mixer-input-caption",
+        "mixer-input",
+        "mixer-monitor",
+        "mixer-devices",
+        "mixer-sends",
+        "mixer-pan",
+        "mixer-volume-readout",
+        "mixer-volume",
+        "mixer-meter",
+    ];
+    if !names.iter().any(|name| anchored(name)) {
+        return;
+    }
+    let rects = [
+        parts.name,
+        parts.output,
+        parts.audio_caption,
+        parts.audio_source,
+        parts.audio_monitor,
+        parts.devices,
+        parts.sends,
+        parts.pan,
+        parts.readout,
+        parts.fader,
+        parts.meter,
+    ];
+    let mut crowded = [false; 11];
+    for (i, (name, rect)) in names.iter().zip(rects).enumerate() {
+        let Some(rect) = rect.filter(|_| anchored(name)) else { continue };
+        // A part over another one it is not inside of (the meter stands in the fader's column).
+        crowded[i] = rects.iter().enumerate().any(|(j, other)| {
+            other.is_some_and(|other| {
+                j != i
+                    && !crowded[j]
+                    && rect.intersect(other).height() > 1.0
+                    && rect.intersect(other).width() > 1.0
+                    && !other.contains_rect(rect)
+                    && !rect.contains_rect(other)
+            })
+        }) || rect.intersect(parts.toggles).height() > 1.0 && rect.intersect(parts.toggles).width() > 1.0;
+    }
+    let slots = [
+        &mut parts.name,
+        &mut parts.output,
+        &mut parts.audio_caption,
+        &mut parts.audio_source,
+        &mut parts.audio_monitor,
+        &mut parts.devices,
+        &mut parts.sends,
+        &mut parts.pan,
+        &mut parts.readout,
+        &mut parts.fader,
+        &mut parts.meter,
+    ];
+    for (slot, crowded) in slots.into_iter().zip(crowded) {
+        if crowded {
+            *slot = None;
+        }
+    }
 }
 
 /// One column's strip in `rect`: what [`layout`] gives this height, drawn with `painter` (clipped

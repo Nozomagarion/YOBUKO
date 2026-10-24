@@ -329,8 +329,9 @@ fn the_divider_is_a_control_a_theme_places_and_others_anchor_to() {
     assert!(
         theme_css::apply(
             &mut theme,
-            ".control-mixer-divider { top: 10px; } \
-             .control-mixer-devices { --suhina-anchor-bottom: mixer-divider top 0px; }"
+            ".control-mixer-divider { top: -10px; } \
+             .control-mixer-devices { --suhina-anchor-top: mixer-output bottom 4px; \
+                                      --suhina-anchor-bottom: mixer-divider top 0px; }"
         )
         .is_empty()
     );
@@ -339,7 +340,38 @@ fn the_divider_is_a_control_a_theme_places_and_others_anchor_to() {
     let capture = crate::kit::control_layout::Capture::begin(&ctx);
     let moved = layout(bounds, true, false);
     drop(capture);
-    assert_eq!(moved.divider.unwrap().top(), divider.top() + 10.0);
+    assert_eq!(moved.divider.unwrap().top(), divider.top() - 10.0);
     assert_eq!(moved.devices.unwrap().bottom(), moved.divider.unwrap().top());
     skin::configure(&skin::Skin::default());
+}
+
+#[test]
+fn an_anchored_part_with_no_room_left_draws_nothing() {
+    use crate::kit::{skin, theme_css};
+    let mut theme = theme::Theme::default();
+    assert!(
+        theme_css::apply(&mut theme, ".control-mixer-pan { --suhina-anchor-top: mixer-name top 0px; }").is_empty()
+    );
+    skin::configure(&theme.skin);
+    let ctx = egui::Context::default();
+    let bounds = Rect::from_min_size(Pos2::ZERO, Vec2::new(theme::TRACK_COLUMN, NAME_AT + 40.0));
+    let parts = (0..2)
+        .map(|_| {
+            let _capture = crate::kit::control_layout::Capture::begin(&ctx);
+            layout(bounds, true, false)
+        })
+        .last()
+        .unwrap();
+    skin::configure(&skin::Skin::default());
+    assert!(parts.name.is_some());
+    assert!(parts.pan.is_none(), "the pan stood on the name: {:?}", parts.pan);
+}
+
+#[test]
+fn a_strip_without_an_input_keeps_its_room_for_anchors() {
+    let bounds = Rect::from_min_size(Pos2::ZERO, Vec2::new(theme::TRACK_COLUMN, INPUT_AT + 200.0));
+    let with = layout_shared(bounds, true, true, Shared { reserve_input: true, ..Default::default() });
+    let without = layout_shared(bounds, true, false, Shared { reserve_input: true, ..Default::default() });
+    assert!(without.audio_monitor.is_none());
+    assert_eq!(without.reserved_input.map(|r| r[2]), with.audio_monitor);
 }
