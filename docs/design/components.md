@@ -3,7 +3,7 @@ description: Measurements, states and tokens of every UI component, from the min
 read_when: widget sizes, marker row, clip slot states, value field, slider, knob, toggle, meter, track header levels, device panel, piano roll layout, audition button, velocity lane top edge, ghost menu, ghost notes look, Scale menu, scale rows, key column mark, folded rows
 type: spec
 status: draft
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 covers:
   - crates/ui/src/kit/theme.rs
   - crates/ui/src/session/session_view.rs
@@ -421,7 +421,7 @@ one, a four-part format switch (Both, VST3, CLAP, VST2 in `text.hint`, not choos
 VST2 is hosted) and a 64 px Add button; a 34 px Scan row (the count found, switched off, failed
 and built for another processor as its note, Scan and Rescan all on the right, run in the
 background); a 34 px Plug-in manager row with **Manage plug-ins** on the right. Read and changed
-through the `plugins.*` commands.
+through the `plugin.*` commands.
 
 **Plug-in manager**, in the Settings dialog's place: the title (11 px) and the counts (10 px
 `text.secondary`), Scan, Rescan all and Close on the right; a 260 px search field; the column

@@ -4651,6 +4651,7 @@ version = "0.0.1"
 dependencies = [
  "suhina-device-api",
  "suhina-dsp",
+ "suhina-test-support",
 ]
 
 [[package]]
@@ -4739,6 +4740,7 @@ version = "0.0.1"
 dependencies = [
  "suhina-device-api",
  "suhina-dsp",
+ "suhina-test-support",
 ]
 
 [[package]]
@@ -4797,6 +4799,7 @@ dependencies = [
  "suhina-dsp",
  "suhina-model",
  "suhina-stretch",
+ "suhina-test-support",
 ]
 
 [[package]]
@@ -4919,6 +4922,7 @@ dependencies = [
  "base64",
  "serde_json",
  "suhina-model",
+ "suhina-test-support",
 ]
 
 [[package]]
@@ -4934,6 +4938,9 @@ dependencies = [
 [[package]]
 name = "suhina-separation"
 version = "0.0.1"
+dependencies = [
+ "suhina-test-support",
+]
 
 [[package]]
 name = "suhina-session"
@@ -4959,6 +4966,7 @@ dependencies = [
  "suhina-plugins",
  "suhina-project-file",
  "suhina-soundmap",
+ "suhina-test-support",
 ]
 
 [[package]]
@@ -4978,6 +4986,14 @@ version = "0.0.1"
 dependencies = [
  "hound",
  "rustfft",
+]
+
+[[package]]
+name = "suhina-test-support"
+version = "0.0.1"
+dependencies = [
+ "hound",
+ "suhina-model",
 ]
 
 [[package]]
@@ -5002,6 +5018,7 @@ dependencies = [
  "suhina-plugins",
  "suhina-session",
  "suhina-soundmap",
+ "suhina-test-support",
  "suhina-update",
  "tiny-skia",
 ]

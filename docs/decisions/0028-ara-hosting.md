@@ -3,7 +3,7 @@ description: How ARA plug-ins (audio editors such as pitch editors) are hosted o
 read_when: ARA, ARA2, Melodyne, pitch editor, audio random access, playback region, audio source, audio modification, region sequence, document controller, overlapping audio clips, audio overlap, arrangement.audioOverlaps, stacked clips and ARA
 type: decision
 status: draft
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 covers:
   - crates/model/src/overlap.rs
   - crates/session/src/commands.rs
@@ -92,11 +92,11 @@ protocol (`crates/plugins/src/protocol.rs`).
    controller. ADR 0006's default, one process per plug-in file, already does this; the
    *own process per instance* choice is refused for an ARA plug-in, with the reason.
    *Built (#589):* the scan marks each VST3 plug-in that supports ARA (`PluginInfo::ara`, shown
-   by `plugins.list`): its module declares a class in the category `ARA Main Factory Class`
+   by `plugin.list`): its module declares a class in the category `ARA Main Factory Class`
    with the plug-in's class name, as `ARAVST3.h` pairs them, or the module has one of each. It
    is read from `moduleinfo.json` without loading anything, or from the factory's class list in
    the scan worker without making any object. The catalog keeps it (version 4; an older
-   catalog's VST3 files are read again so installed ARA plug-ins are found). `plugins.setHosting
+   catalog's VST3 files are read again so installed ARA plug-ins are found). `plugin.setHosting
    ... instance` is refused for such a plug-in, and an `instance` choice saved before its
    support was known starts it in its file's process. The factory's API generations are checked
    when an instance is bound (below, *Built so far*).
@@ -232,7 +232,7 @@ the list below, in a first form). Where it differs from the decisions above it i
   one, as before.
 - **Edits taken to another track** (stage 6 in part, #722). A clip an ARA plug-in edits that is
   moved or copied to another track asks first: **Keep edits** or **Copy as new** (or Cancel).
-  `clip.moveMany` takes it as `ara_edits` (`keep`, or `new`, the default). With keep, the track it
+  `clip.moveMany` takes it as `araEdits` (`keep`, or `new`, the default). With keep, the track it
   goes to gets the same plug-in first in its chain when it has none (with no state of its own),
   and the clip's edits go along: the first track's plug-in stores the clip's modification and its
   source on their own (`storeObjectsToArchive` with a filter, a partial archive: `ara_export`),
