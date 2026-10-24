@@ -136,6 +136,9 @@ pub(crate) const LOOP_CROSSFADE: NodeInfo = NodeInfo {
     configuration: "see sample playback contracts",
     example: r#"{"kind":"loop_crossfade"}"#,
 };
+/// The longest sample a resource graph binds, in frames: positions travel as f32 signals, which
+/// count frames exactly up to 2^24 (349 s at 48 kHz).
+pub(crate) const MAX_SAMPLE_FRAMES: usize = 16_777_216;
 pub(crate) struct Resources {
     assets: Vec<(String, Arc<SampleAsset>)>,
     maps: Vec<(String, Vec<u64>)>,
@@ -151,8 +154,15 @@ impl Resources {
     pub(crate) fn new(graph: &crate::DeviceGraph, samples: &PreparedSamples) -> Result<Arc<Self>, DeviceSdkError> {
         let mut total = 0usize;
         for (_, asset) in &samples.assets {
-            if asset.frames() > 16_777_216 {
-                return Err(DeviceSdkError("resource frame indices exceed exact signal precision".into()));
+            if asset.frames() > MAX_SAMPLE_FRAMES {
+                // Positions travel as f32 signals, exact only up to 2^24 frames.
+                let rate = f64::from(asset.sample_rate());
+                return Err(DeviceSdkError(format!(
+                    "the sample is {:.0} s long; at its {} Hz a sample graph takes at most {:.0} s ({MAX_SAMPLE_FRAMES} frames)",
+                    asset.frames() as f64 / rate,
+                    asset.sample_rate(),
+                    MAX_SAMPLE_FRAMES as f64 / rate,
+                )));
             }
             total = total
                 .checked_add(

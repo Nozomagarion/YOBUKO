@@ -130,7 +130,7 @@ pub(crate) const GRAIN_POOL: NodeInfo = NodeInfo {
         PortInfo { name: "pan", default: Some(0.0), unit: "balance" },
     ],
     outputs: &["out", "left", "right", "finished", "dropped"],
-    description: "Prepared private grain graphs, bounded lifetime and drop-new overflow.",
+    description: "Prepared private grain graphs started by a rising trigger, bounded lifetime and drop-new overflow.",
     configuration: "grains 1..128 and embedded instrument graph",
     example: r#"{"kind":"grain_pool","grains":8,"graph":"{\"format\":\"suhina-device\",\"version\":4,\"device\":{\"id\":\"org.suhina.grain-example\",\"name\":\"Grain\",\"role\":\"instrument\",\"parameters\":[]},\"nodes\":[{\"id\":\"voice\",\"kind\":\"voice_input\",\"controller\":1},{\"id\":\"done\",\"kind\":\"constant\",\"value\":0.0},{\"id\":\"result\",\"kind\":\"voice_output\"},{\"id\":\"out\",\"kind\":\"audio_output\"}],\"connections\":[{\"from\":\"voice\",\"to\":\"result\"},{\"from\":\"done\",\"to\":\"result\",\"to_port\":\"finished\"},{\"from\":\"result\",\"to\":\"out\"}]}"}"#,
 };
@@ -170,6 +170,8 @@ struct Pool {
     bend: f32,
     pressure: f32,
     cache: [[[f32; 2]; 64]; 2],
+    /// Whether the trigger was above zero on the frame before: a grain starts as it rises.
+    triggered: bool,
 }
 pub(crate) fn pool(graphs: Vec<PreparedEffect>, rate: f64) -> Box<dyn NativeNode> {
     Box::new(Pool {
@@ -186,6 +188,7 @@ pub(crate) fn pool(graphs: Vec<PreparedEffect>, rate: f64) -> Box<dyn NativeNode
         bend: 0.,
         pressure: 0.,
         cache: [[[0.; 2]; 64]; 2],
+        triggered: false,
     })
 }
 impl NativeNode for Pool {
@@ -203,7 +206,10 @@ impl NativeNode for Pool {
                 let v = inputs[p].get(frame * 2).copied().unwrap_or(0.);
                 if v.is_finite() { v } else { 0. }
             });
-            if x[0] > 0. {
+            // A rising trigger starts one grain; one held high (a gate) does not fill the pool.
+            let rising = x[0] > 0. && !self.triggered;
+            self.triggered = x[0] > 0.;
+            if rising {
                 if let Some(grain) = self.grains.iter_mut().find(|g| !g.active) {
                     grain.graph.reset();
                     grain.active = true;
@@ -319,6 +325,7 @@ impl NativeNode for Pool {
         self.bend = 0.;
         self.pressure = 0.;
         self.cache.fill([[0.; 2]; 64]);
+        self.triggered = false;
         for g in &mut self.grains {
             g.active = false;
             g.age = 0;
@@ -459,6 +466,37 @@ pub fn template(sample: &str, voices: u8, grains: u16, seed: u32) -> Result<Devi
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_trigger_held_high_starts_one_grain() {
+        // No grain graphs: every start is dropped, so the count is the number of starts.
+        let mut pool = pool(Vec::new(), 48_000.);
+        let high = [1.; 128];
+        let zero = [0.; 128];
+        let mut out = [0.; 128];
+        pool.process([&high, &zero, &zero, &zero, &zero], &mut out);
+        assert_eq!(pool.output(1, 63), [1.; 2], "one start for a trigger held over 64 frames");
+        // Falling and rising again starts another.
+        let mut pulses = [0.; 128];
+        pulses[20] = 1.;
+        pulses[21] = 1.;
+        pool.process([&zero, &zero, &zero, &zero, &zero], &mut out);
+        pool.process([&pulses, &zero, &zero, &zero, &zero], &mut out);
+        assert_eq!(pool.output(1, 63), [2.; 2]);
+    }
+    #[test]
+    fn a_granular_player_over_the_grain_budget_fails_validation() {
+        let player = |voices, grains| {
+            let mut g = DeviceGraph::new("org.test.granular", "Granular", DeviceRole::Instrument);
+            g.nodes = vec![
+                N::new("player", NodeKind::GranularPlayer { sample: "sample".into(), voices, grains, seed: 1 }),
+                N::audio_output("out"),
+            ];
+            g.connections = vec![C::new("player", "out")];
+            g.validate().err().map(|e| e.0).unwrap_or_default()
+        };
+        assert!(player(8, 64).contains("at most 256 grains in all"), "{}", player(8, 64));
+        assert!(!player(8, 32).contains("grains in all"), "{}", player(8, 32));
+    }
     #[test]
     fn scheduler_preserves_fractional_carry() {
         let mut remaining = 0.;

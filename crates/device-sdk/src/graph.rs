@@ -48,9 +48,14 @@ impl DeviceGraph {
                 return Err(fail("grain pools need a bounded graph and 1..128 grains"));
             }
             if let NodeKind::GranularPlayer { voices, grains, .. } = &node.kind
-                && (*voices == 0 || *voices > 32 || *grains == 0 || *grains > 128)
+                && (*voices == 0
+                    || *voices > 32
+                    || *grains == 0
+                    || *grains > 128
+                    || usize::from(*voices) * usize::from(*grains) > crate::nodes::factory::MAX_GRAINS_IN_ALL)
             {
-                return Err(fail("invalid granular voice or grain budget"));
+                // Each voice holds its own grains, so preparing it would refuse more than this in all.
+                return Err(fail("granular players need 1..32 voices, 1..128 grains and at most 256 grains in all"));
             }
             if node.kind.is_instrument_event_node()
                 && !instrument

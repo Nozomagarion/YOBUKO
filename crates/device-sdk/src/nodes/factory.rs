@@ -4,6 +4,8 @@
 //! Bounded off-thread node and component preparation; never used by audio processing.
 use crate::native_node::{NativeNode, prepare_with};
 use crate::{DeviceSdkError, NodeKind, PreparedEffect};
+/// Most grain graphs one prepared device holds in all, across its voices.
+pub(crate) const MAX_GRAINS_IN_ALL: usize = 256;
 #[derive(Clone, Copy, Default)]
 struct Scope {
     depth: usize,
@@ -119,7 +121,7 @@ fn compile_nested(
                 return Err(DeviceSdkError("grain capacity must be 1..128".into()));
             }
             budget.grains = budget.grains.saturating_add(usize::from(*grains));
-            if budget.grains > 256 {
+            if budget.grains > MAX_GRAINS_IN_ALL {
                 return Err(DeviceSdkError("expanded grain capacity exceeds 256".into()));
             }
             let child = crate::DeviceGraph::from_sd(text)?;

@@ -139,7 +139,7 @@ The JSON catalog uses the same records and includes a minimal configuration exam
 | `sample_rate` / `SampleRate` | None | Current graph processing sample rate in Hz. |
 | `glide` / `Glide` | `target` (0, signal), `time` (0.1, seconds), `gate` (1, signal), `legato` (1, signal) | Exponential pitch glide; gate rise starts at target in legato mode. |
 | `grain_scheduler` / `GrainScheduler` | `density` (8, Hz), `gate` (1, signal), `trigger` (0, signal), `events` (0, midi) | Bounded periodic grain starts with event-timed retrigger. |
-| `grain_pool` / `GrainPool` | `trigger` (0, signal), `position` (0, frames), `rate` (1, frames/sample), `duration` (0.12, seconds), `pan` (0, balance) | Prepared private grain graphs, bounded lifetime and drop-new overflow. |
+| `grain_pool` / `GrainPool` | `trigger` (0, signal), `position` (0, frames), `rate` (1, frames/sample), `duration` (0.12, seconds), `pan` (0, balance) | Prepared private grain graphs started by a rising trigger, bounded lifetime and drop-new overflow. |
 | `granular_player` / `GranularPlayer` | `position` (0.5, normalized), `size` (0.12, seconds), `density` (8, Hz), `pitch` (1, ratio), `events` (0, midi) | Granular instrument compiled from the same editable grain and voice graphs. |
 | `grain_read` / `GrainRead` | `asset` (required, sample), `position` (0, frames), `rate` (1, frames/sample), `duration` (0.12, seconds), `events` (0, midi) | Triggered one-shot grain read with age and completion. |
 | `slice_playback` / `SlicePlayback` | `region` (required, region), `rate` (1, frames/sample), `gate` (0, signal), `events` (0, midi) | Triggered selected-region playback in gate or one-shot mode. |
@@ -281,7 +281,8 @@ are distinct from signal ports and cannot feed arithmetic or audio output direct
 fails for missing names or invalid maps. Handles are private to a prepared graph, never paths,
 and are not serialized. Replacement builds a new prepared graph; active graphs retain old Arcs.
 
-Resource graphs cap assets at 128, exact frame indices at 16777216 per asset, referenced PCM
+Resource graphs cap assets at 128, exact frame indices at 16777216 per asset (349 s at 48 kHz,
+380 s at 44.1 kHz; the error names the sample's length and the limit at its rate), referenced PCM
 at 256 MiB and manual slice boundaries at 4096 per map. These limits are checked off-thread.
 
 ## Named signal outputs
@@ -352,8 +353,10 @@ The LCG and Hann window are shared with the existing sample instrument.
 
 GrainScheduler emits one start on gate rise or trigger, then periodic starts using the same
 bounded countdown as the sample instrument. Density is capped at one grain per sample.
-GrainPool owns 1..128 prepared grain graphs (256 total across an expanded graph), snapshots
-position/rate/duration/pan at each positive start sample, and drops new starts when full.
+GrainPool owns 1..128 prepared grain graphs (256 total across an expanded graph, which a
+GranularPlayer's voices × grains is checked against when the graph is validated), snapshots
+position/rate/duration/pan on each sample where its trigger rises above zero (a trigger held
+high starts one grain, not one per sample), and drops new starts when full.
 Its private inputs are position, rate, duration seconds, pan and age seconds. Every grain body
 has one VoiceOutput; it completes explicitly or at its duration limit. No grain allocation
 occurs during processing. GrainRead is a triggered, signed-rate one-shot sample reader with
