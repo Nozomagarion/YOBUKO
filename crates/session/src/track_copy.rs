@@ -218,16 +218,33 @@ pub(crate) fn paste(
     Ok(tops)
 }
 
-/// Copies each of `tracks` right after itself (after a group's tracks, for a group), and returns
-/// the copies, in order.
+/// Copies `tracks` and returns the copies, in order. Tracks next to each other in one group (or
+/// at the top), a group counted with its tracks, are copied as one block after the last of them,
+/// so two adjacent tracks give their two copies after the second; a track apart from the others
+/// is copied right after itself (after a group's tracks, for a group).
 pub(crate) fn duplicate(p: &mut Project, tracks: &[TrackId]) -> Result<Vec<TrackId>, CommandError> {
     let ids = with_their_tracks(p, tracks);
     // Only the named tracks that no other named track holds: a group's copy brings its tracks.
     let tops: Vec<TrackId> = ids.iter().copied().filter(|&t| !ids.iter().any(|&g| g != t && within(p, t, g))).collect();
+    let index = |p: &Project, id: TrackId| p.tracks.iter().position(|t| t.id == id);
+    let mut runs: Vec<Vec<TrackId>> = Vec::new();
+    // Where the run so far ends (the index past its last track) and the group it is in.
+    let mut end = None;
+    for &top in &tops {
+        let Some(start) = index(p, top) else { continue };
+        let parent = p.track(top).and_then(|t| t.parent);
+        let last = with_their_tracks(p, &[top]).last().and_then(|&l| index(p, l)).unwrap_or(start);
+        match runs.last_mut() {
+            Some(run) if end == Some((start, parent)) => run.push(top),
+            _ => runs.push(vec![top]),
+        }
+        end = Some((last.saturating_add(1), parent));
+    }
     let mut copies = Vec::new();
-    for track in tops {
-        let clipboard = copy(p, &[track])?;
-        copies.extend(paste(p, &clipboard, Some(track))?);
+    for run in runs {
+        let Some(&after) = run.last() else { continue };
+        let clipboard = copy(p, &run)?;
+        copies.extend(paste(p, &clipboard, Some(after))?);
     }
     Ok(copies)
 }

@@ -892,3 +892,31 @@ fn alt_drags_a_point_off_the_grid() {
     assert_eq!(points.len(), 1);
     assert!((points[0].beat - 16.5).abs() < 0.2, "{points:?}");
 }
+
+/// The line under a lane drags it taller, the height stays while the lanes are hidden, and a
+/// double-click on the line puts it back (#818).
+#[test]
+fn a_lanes_bottom_edge_drags_its_height_and_a_double_click_resets_it() {
+    let mut harness = with_lanes();
+    let before = lane(&harness).height();
+    let edge = Pos2::new(lane(&harness).center().x, lane(&harness).bottom());
+    drag(&mut harness, edge, vec2(0.0, 60.0));
+    let taller = lane(&harness).height();
+    assert!((taller - (before + 60.0)).abs() < 2.0, "{before} -> {taller}");
+    harness.get_by_label("Hide automation of Drums").click();
+    harness.run();
+    harness.get_by_label("Show automation of Drums").click();
+    harness.run();
+    assert!((lane(&harness).height() - taller).abs() < 0.5);
+    let edge = Pos2::new(lane(&harness).center().x, lane(&harness).bottom());
+    harness.hover_at(edge);
+    harness.run();
+    for _ in 0..2 {
+        harness.hover_at(edge);
+        harness.drag_at(edge);
+        harness.drop_at(edge);
+        harness.step();
+    }
+    harness.run();
+    assert!((lane(&harness).height() - before).abs() < 0.5, "{}", lane(&harness).height());
+}

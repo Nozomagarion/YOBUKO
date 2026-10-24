@@ -349,7 +349,7 @@ impl App {
                     let tracks: Vec<TrackId> = match self.shown {
                         View::Arrangement if self.arrangement.track_focus => self.arrangement.selected_tracks.clone(),
                         View::Session if self.view.track_focus && self.view.selected_slot.is_none() => {
-                            self.view.selected.into_iter().collect()
+                            self.view.header_tracks()
                         }
                         _ => Vec::new(),
                     };
@@ -358,6 +358,7 @@ impl App {
                         self.arrangement.track_focus = false;
                         self.view.track_focus = false;
                         self.view.selected = None;
+                        self.view.selected_tracks.clear();
                         for track in tracks {
                             actions.push(Action::new("track.delete", json!({ "track": track.0 })));
                         }
@@ -600,6 +601,7 @@ impl App {
                 let tracks: Vec<u32> = self.arrangement.selected_tracks.iter().map(|t| t.0).collect();
                 actions.push(Action::new("track.group", json!({ "tracks": tracks })));
                 self.arrangement.selected_tracks.clear();
+                self.view.selected_tracks.clear();
             }
             "marker.addAtPlayhead" => {
                 // Where the playhead is while playing; stopped, where playback would start.
@@ -745,9 +747,7 @@ impl App {
     pub(super) fn focused_tracks(&self) -> Vec<TrackId> {
         let selected: Vec<TrackId> = match self.shown {
             View::Arrangement if self.arrangement.track_focus => self.arrangement.selected_tracks.clone(),
-            View::Session if self.view.track_focus && self.view.selected_slot.is_none() => {
-                self.view.selected.into_iter().collect()
-            }
+            View::Session if self.view.track_focus && self.view.selected_slot.is_none() => self.view.header_tracks(),
             _ => Vec::new(),
         };
         let Some(session) = self.session() else { return Vec::new() };
@@ -757,7 +757,7 @@ impl App {
     pub(super) fn add_track_after(&self) -> Option<TrackId> {
         let project = self.session()?.project();
         let selected: Vec<TrackId> = match self.shown {
-            View::Session => self.view.selected.into_iter().collect(),
+            View::Session => self.view.header_tracks(),
             View::Arrangement => self.arrangement.selected_tracks.clone(),
         };
         project

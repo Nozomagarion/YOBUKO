@@ -247,6 +247,7 @@ pub fn show(
     // A click on the strip selects its track, a return's too; a slot selected on that track stays.
     if strip.clicked() {
         state.selected = Some(column.track);
+        state.selected_tracks = vec![column.track];
         if state.selected_slot.is_some_and(|(track, _)| track != column.track) {
             state.selected_slot = None;
         }
@@ -465,6 +466,9 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
                 Some(crate::session::session_view::DeviceEvent::Open { track, index, plugin: device.plugin });
         } else if response.clicked() {
             state.selected = Some(track);
+            if !state.selected_tracks.contains(&track) {
+                state.selected_tracks = vec![track];
+            }
             state.selected_slot = None;
             state.shown_device = Some((track, index));
             state.open_detail = true;

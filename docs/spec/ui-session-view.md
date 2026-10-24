@@ -371,7 +371,10 @@ planned.
 ([clip launching](clip-launching.md) › Follow actions) first in the detail area, in a column at
 the left of a row or at the top of the stacked column, with the rest of the detail beside or
 under it. Launching a clip on a track selects it; clicking a track's header selects the track
-instead and hides the section; the Arrangement view shows only its own selection. Top to bottom:
+instead and hides the section (Ctrl-click adds a header to the selection or takes it out,
+Shift-click takes the columns from the header selected last to this one: the same selection as
+the Arrangement view's headers, which Delete, Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+D and Ctrl+G act on;
+the detail area shows the header clicked; #208); the Arrangement view shows only its own selection. Top to bottom:
 
 | Control | What it does |
 |---|---|

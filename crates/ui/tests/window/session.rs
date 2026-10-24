@@ -662,3 +662,41 @@ fn clicking_main_selects_it_and_its_devices_show() {
     harness.run();
     assert!(harness.query_by_label_contains("Utility").is_some());
 }
+
+/// Ctrl-click adds a header to the selection and Shift-click takes the run between, as in the
+/// Arrangement view; Ctrl+D copies the selected tracks as one block after the last and selects
+/// the copies (#208, #919).
+#[test]
+fn ctrl_and_shift_clicks_select_several_headers_and_ctrl_d_copies_them_as_a_block() {
+    let mut app = App::new();
+    app.set_browser_open(false);
+    app.set_session(Session::new(demo_project()), &[]);
+    let mut harness = window(app);
+    let names = |h: &Harness<'static, App>| {
+        h.state()
+            .session()
+            .map(|s| s.project().tracks.iter().map(|t| t.name.clone()).collect::<Vec<_>>())
+            .unwrap_or_default()
+    };
+    harness.get_by_label("Track Drums").click();
+    harness.run();
+    harness.get_by_label("Track Bass").click_modifiers(Modifiers::COMMAND);
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::D);
+    harness.run();
+    assert_eq!(names(&harness)[..5], ["Drums", "Bass", "Drums 2", "Bass 2", "Keys"]);
+    // The copies are selected: Delete removes them.
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert_eq!(names(&harness)[..3], ["Drums", "Bass", "Keys"]);
+    // Shift-click: Drums to Keys, three tracks; Ctrl-click takes Bass out again.
+    harness.get_by_label("Track Drums").click();
+    harness.run();
+    harness.get_by_label("Track Keys").click_modifiers(Modifiers::SHIFT);
+    harness.run();
+    harness.get_by_label("Track Bass").click_modifiers(Modifiers::COMMAND);
+    harness.run();
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert_eq!(names(&harness)[..2], ["Bass", "Vox"]);
+}

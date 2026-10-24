@@ -694,14 +694,14 @@ while playing; offline it plays without a gap.
 | `track.rename`, `track.setColor`, `track.delete` | Name (not empty), colour (`#rrggbb` or `none`), and deleting a track with its clips and slots; deleting a group ungroups it. |
 | `track.copy {tracks}`, `track.cut {tracks}` | Copy whole tracks for `track.paste`: each with its channel (volume, pan, mute, sends, output, inputs, monitoring; solo is not copied), devices with their parameters and plug-in states, automation, arrangement clips, take lanes and slots, and the clip contents they play; a group with every track in it. Cut deletes them after copying, as one undo step. Return tracks and Main are not copied. The copy reaches every open project, so it pastes in another tab too (#919). |
 | `track.paste {after?}` | Adds the copied tracks after `after` (in its group) or after the last regular track, with new ids and clip contents of their own (editing one copy's notes leaves the other alone), a number added to a name a track already has ("Bass 2"), slots fitted to the project's scenes, and sends only to returns the project has. A copied group's tracks play into the new group; the rest play into the group they land in, or Main. |
-| `track.duplicate {tracks}` | Copies each named track right after itself (after a group's tracks, for a group), as a copy and paste do. |
+| `track.duplicate {tracks}` | Copies the named tracks as a copy and paste do. Tracks next to each other in one group (or at the top), a group counted with its tracks, are copied as one block after the last of them, so two adjacent tracks give "A", "B", "A 2", "B 2"; a track apart from the others is copied right after itself (after a group's tracks, for a group). Returns the copies; the window selects them, so the next Ctrl+D copies them on. |
 | `track.add {kind?, name?, after?, device?, preset?, voice?, sd?}` | A new audio or MIDI track with its channel, slots and lane, after `after` or after the last regular track. `sd` adds a data-only `.sd` effect to a new audio track; `device.addSd {track, path, position?}` inserts one on an existing track ([browser](browser.md) › Commands, [ADR 0021](../decisions/0021-device-graph-files.md)). |
 
 Clips placed from the browser or dropped from the system's file manager (`clip.addFiles`) replace what they cover in the Arrangement like a
 moved clip; they stack when either stacking setting is on (one `stack` flag for the whole drop,
 not per kind) ([browser](browser.md) › Files).
 
-In the Arrangement view a header click selects a track (Ctrl adds, Shift takes a run), Ctrl+G
+In the Arrangement view a header click selects a track (Ctrl adds or takes one out, Shift takes a run), and the Session view's column headers select the same tracks the same way (#208), Ctrl+G
 groups the selection, dragging a header moves the track above the lane under the pointer (below it
 from its lower half), and a right-click opens the track's menu: name, colour, group, ungroup,
 **Move into group** (a submenu of every other group it can go into), **Move out of group** (one

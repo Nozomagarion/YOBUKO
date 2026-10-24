@@ -127,10 +127,15 @@ of more than 65,536 points; a `movePoint` with nothing to change.
 Each track header has an envelope button at the end of its first row ("Show automation of
 Drums"); a click shows the track's automation lanes under it, and another hides them. Shown the
 first time, they are the lanes that have points, or the volume's. Which lanes are shown is the
-view's own state, like a lane's height: it is not saved and needs no command. Return tracks and
-the main track have no lanes yet.
+view's own state, like a lane's height: it is not saved and needs no command. Return tracks have
+no lanes yet; Main's are under its row ([arrangement editing](arrangement-editing.md), #687).
 
-A lane is 40 px tall across the timeline, with a header under the track's:
+A lane is 40 px tall across the timeline until it is given another height, with a header under
+the track's. Dragging the line under a lane makes it taller or shorter (24 to 240 px) and moves
+the lanes below; the envelope is drawn to the new height. A double-click on that line, or
+**Reset height** in the menu a right-click on the lane's header opens, puts it back to 40 px.
+Each lane keeps its height while the track's lanes are hidden, for as long as the project is
+open (#818). The header:
 
 - **The parameter**, a dropdown of the track's volume, pan and mute and each built-in or `.sd`
   device's parameters, grouped by device; a parameter with points is marked " •". Choosing one

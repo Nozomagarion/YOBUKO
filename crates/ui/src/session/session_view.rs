@@ -53,6 +53,10 @@ pub struct SessionViewState {
     /// The selected track (its header was clicked, or a clip on it selected); the detail area
     /// shows its devices.
     pub selected: Option<TrackId>,
+    /// The track headers selected (a click, Ctrl adds or takes one out, Shift takes the run
+    /// between): the same selection the Arrangement's headers have, which the window copies in
+    /// before each frame and back after it (#208). `selected` is the one the detail area shows.
+    pub selected_tracks: Vec<TrackId>,
     /// The selected clip slot, its track and scene from 0: a click on the clip's name, a launch,
     /// or a click on an empty slot selected it. The detail area shows its clip; Ctrl+C and Ctrl+V
     /// act on it.
@@ -142,6 +146,18 @@ impl SessionViewState {
         self.track_focus = false;
         self.selected_slot = Some((track, scene));
         self.selected = Some(track);
+        self.selected_tracks = vec![track];
+    }
+
+    /// The tracks a header click selected, for the edit keys and Delete: the selection, or the
+    /// selected track alone when the selection is empty; never Main.
+    pub(crate) fn header_tracks(&self) -> Vec<TrackId> {
+        let tracks = if self.selected_tracks.is_empty() {
+            self.selected.into_iter().collect()
+        } else {
+            self.selected_tracks.clone()
+        };
+        tracks.into_iter().filter(|t| *t != TrackId::MAIN).collect()
     }
 }
 
@@ -276,6 +292,7 @@ pub fn show(
         midi_ports: &grid.midi_ports,
         input_channels: grid.input_channels,
         tracks_copied: state.tracks_copied,
+        order: grid.columns.iter().map(|c| c.track).collect(),
         header,
         body,
         mixer,
@@ -438,6 +455,7 @@ pub fn show(
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Select Main"));
         if response.clicked() {
             state.selected = Some(TrackId::MAIN);
+            state.selected_tracks = vec![TrackId::MAIN];
             state.selected_slot = None;
             state.track_focus = false;
         }
@@ -549,6 +567,8 @@ struct Bands<'a> {
     input_channels: u16,
     /// Whole tracks have been copied, so a header's menu can paste them.
     tracks_copied: bool,
+    /// The columns' tracks left to right, for a Shift-click's run of headers.
+    order: Vec<TrackId>,
     header: Rect,
     body: Rect,
     mixer: Rect,
@@ -590,9 +610,8 @@ fn draw_column(
                 egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("{} column", column.name))
             });
             if response.clicked() {
-                state.selected = Some(column.track);
-                state.selected_slot = None;
-                state.track_focus = true;
+                let (command, shift) = ui.input(|i| (i.modifiers.command, i.modifiers.shift));
+                select_header(state, &bands.order, column.track, command, shift);
             }
             track_menu_on(&response, column, bands, actions);
         }
@@ -614,6 +633,35 @@ fn draw_column(
     // Column separator through header, grid and mixer.
     let full = egui::Rangef::new(bands.header.top(), bands.mixer.bottom());
     painter.with_clip_rect(clip).vline(span.max + 0.5, full, theme::hairline(theme::border_strong()));
+}
+
+/// A click on `track`'s header (#208): alone it selects the track; with Ctrl (Cmd) it adds the
+/// track to the selection or takes it out; with Shift it selects the run of columns (in
+/// `order`) from the track selected last to this one. The detail area shows the one clicked, or
+/// the first left.
+fn select_header(state: &mut SessionViewState, order: &[TrackId], track: TrackId, command: bool, shift: bool) {
+    state.selected_slot = None;
+    state.track_focus = true;
+    if shift && let Some(anchor) = state.selected.filter(|a| *a != TrackId::MAIN) {
+        let at = |t: TrackId| order.iter().position(|o| *o == t);
+        if let (Some(a), Some(b)) = (at(anchor), at(track)) {
+            let (from, to) = (a.min(b), a.max(b));
+            state.selected_tracks = order.get(from..=to).map(<[TrackId]>::to_vec).unwrap_or_default();
+            return;
+        }
+    }
+    if command {
+        if let Some(index) = state.selected_tracks.iter().position(|t| *t == track) {
+            state.selected_tracks.remove(index);
+            state.selected = state.selected_tracks.first().copied();
+        } else {
+            state.selected_tracks.push(track);
+            state.selected = Some(track);
+        }
+        return;
+    }
+    state.selected_tracks = vec![track];
+    state.selected = Some(track);
 }
 
 /// The track's right-click menu on `response`: its header, its strip, a return's column.
@@ -670,9 +718,8 @@ fn column_header(
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Track {}", column.name)));
     track_menu_on(&response, column, bands, actions);
     if response.clicked() {
-        state.selected = Some(column.track);
-        state.selected_slot = None;
-        state.track_focus = true;
+        let (command, shift) = ui.input(|i| (i.modifiers.command, i.modifiers.shift));
+        select_header(state, &bands.order, column.track, command, shift);
     }
     if response.double_clicked() {
         state.open_devices = Some(column.track);
@@ -682,7 +729,7 @@ fn column_header(
     let fill = colour_picker::fill(column.color, column.mute);
     painter.rect_filled(rect, 0.0, fill);
     let color = theme::text_on(fill);
-    if state.selected == Some(column.track) {
+    if state.selected == Some(column.track) || state.selected_tracks.contains(&column.track) {
         painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.5, color), StrokeKind::Inside);
     }
     // Nested tracks step in a little; a group's name follows its fold arrow.

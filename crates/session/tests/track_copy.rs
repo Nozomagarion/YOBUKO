@@ -81,6 +81,25 @@ fn a_duplicated_track_comes_right_after_with_its_devices_sends_and_clips_of_its_
 }
 
 #[test]
+fn adjacent_tracks_are_duplicated_as_a_block_after_the_last_and_one_apart_after_itself() {
+    let project = ProjectBuilder::new()
+        .midi_track(1, "Bass")
+        .midi_track(2, "Lead")
+        .midi_track(3, "Pad")
+        .midi_track(4, "Keys")
+        .build();
+    let mut session = Session::new(project);
+    let added = run(&mut session, "track.duplicate", json!({ "tracks": ["Bass", "Lead", "Keys"] })).unwrap();
+    assert_eq!(names(&session)[..7], ["Bass", "Lead", "Bass 2", "Lead 2", "Pad", "Keys", "Keys 2"]);
+    // The copies, in order, so the window selects them.
+    let added: Vec<u64> = added["tracks"].as_array().unwrap().iter().filter_map(serde_json::Value::as_u64).collect();
+    let copies: Vec<u64> = ["Bass 2", "Lead 2", "Keys 2"].iter().map(|n| u64::from(track(&session, n).id.0)).collect();
+    assert_eq!(added, copies);
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(names(&session)[..4], ["Bass", "Lead", "Pad", "Keys"]);
+}
+
+#[test]
 fn cut_and_paste_move_a_track_and_undo_puts_it_back() {
     let mut session = session();
     run(&mut session, "track.cut", json!({ "tracks": ["Bass"] })).unwrap();

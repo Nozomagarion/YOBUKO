@@ -167,7 +167,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "track.duplicate",
-        label: "Copy each named track right after itself, with new clips of its own; a group with its tracks",
+        label: "Copy the named tracks with new clips of their own: adjacent ones as one block after the last of them, any other right after itself; a group with its tracks",
         params: &[param("tracks", ParamType::Tracks, "the tracks to duplicate (ids or names)")],
         kind: CommandKind::Edit,
         run: duplicate_tracks,

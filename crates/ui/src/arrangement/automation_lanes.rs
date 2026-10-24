@@ -19,8 +19,11 @@ use crate::interaction::timeline_grid::TimelineGrid;
 use crate::kit::theme::{self, PAD};
 use crate::kit::widgets::{self, Action};
 
-/// Height of one automation lane.
+/// Height of an automation lane until it is given another (#818).
 pub const LANE: f32 = 40.0;
+/// The lowest and highest a lane's bottom edge drags it to.
+const MIN_LANE: f32 = 24.0;
+const MAX_LANE: f32 = LANE * 6.0;
 /// Height of the line under a lane.
 const LINE: f32 = 1.0;
 /// Space kept above and below the envelope inside a lane.
@@ -498,6 +501,9 @@ struct BoxDrag {
 #[derive(Debug, Default)]
 pub struct LanesState {
     open: HashSet<TrackId>,
+    /// The lanes dragged to a height of their own; the rest are [`LANE`] high. Kept while a
+    /// track's lanes are hidden, so they come back as tall as they were (#818).
+    heights: HashMap<(TrackId, LaneKey), f32>,
     shown: HashMap<TrackId, Vec<LaneKey>>,
     selection: Option<Selection>,
     point_drag: Option<PointDrag>,
@@ -527,7 +533,23 @@ impl LanesState {
 
     /// How much taller `track`'s row is for its lanes.
     pub fn height(&self, track: TrackId, params: &Params) -> f32 {
-        self.shown(track, params).len() as f32 * (LANE + LINE)
+        self.shown(track, params).iter().map(|key| self.lane_height(track, key) + LINE).sum()
+    }
+
+    /// The height of `track`'s lane `key`.
+    pub fn lane_height(&self, track: TrackId, key: &LaneKey) -> f32 {
+        self.heights.get(&(track, key.clone())).copied().unwrap_or(LANE)
+    }
+
+    /// Gives `track`'s lane `key` the height `height`, within the lanes' limits; [`LANE`] puts
+    /// it back to the normal height.
+    pub fn set_lane_height(&mut self, track: TrackId, key: &LaneKey, height: f32) {
+        let height = height.clamp(MIN_LANE, MAX_LANE);
+        if (height - LANE).abs() < f32::EPSILON {
+            self.heights.remove(&(track, key.clone()));
+        } else {
+            self.heights.insert((track, key.clone()), height);
+        }
     }
 
     /// Shows or hides `track`'s lanes. Shown the first time, they are the lanes that have
@@ -718,9 +740,10 @@ pub fn show(
     let mut y = lanes.top;
     for key in state.shown(lanes.track, params) {
         let Some(param) = params.param(lanes.track, &key) else { continue };
-        let time = Rect::from_x_y_ranges(geometry.time, egui::Rangef::new(y, y + LANE));
+        let height = state.lane_height(lanes.track, &key);
+        let time = Rect::from_x_y_ranges(geometry.time, egui::Rangef::new(y, y + height));
         let header = Rect::from_x_y_ranges(geometry.headers, time.y_range());
-        y += LANE + LINE;
+        y += height + LINE;
         let full = Rect::from_x_y_ranges(geometry.visible.x_range(), time.y_range());
         if full.bottom() < geometry.visible.top() || full.top() > geometry.visible.bottom() {
             continue;
@@ -728,6 +751,35 @@ pub fn show(
         lane(ui, painter, geometry, lanes, param, time, state, actions);
         lane_header(ui, painter, geometry, lanes, param, header, state, params, actions);
         painter.hline(geometry.visible.x_range(), time.bottom() + 0.5, theme::hairline(theme::border()));
+        resize_edge(ui, geometry, lanes, &key, full, state);
+    }
+}
+
+/// The line under a lane: dragged, it makes the lane taller or shorter; a double-click puts it
+/// back to the normal height (#818).
+fn resize_edge(
+    ui: &Ui,
+    geometry: &Geometry,
+    lanes: &TrackLanes<'_>,
+    key: &LaneKey,
+    full: Rect,
+    state: &mut LanesState,
+) {
+    let edge = Rect::from_min_max(
+        Pos2::new(full.left(), full.bottom() - 3.0),
+        Pos2::new(full.right(), full.bottom() + LINE + 2.0),
+    )
+    .intersect(geometry.visible);
+    if !edge.is_positive() {
+        return;
+    }
+    let id = Id::new(("automation-resize", lanes.track.0, key.device, key.param.as_str()));
+    let response = ui.interact(edge, id, Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical);
+    if response.double_clicked() {
+        state.set_lane_height(lanes.track, key, LANE);
+    } else if response.dragged_by(egui::PointerButton::Primary) {
+        let height = state.lane_height(lanes.track, key) + response.drag_delta().y;
+        state.set_lane_height(lanes.track, key, height);
     }
 }
 
@@ -1420,6 +1472,15 @@ fn lane_header(
     painter.rect_filled(rect, 0.0, theme::panel_background());
     let track = lanes.track;
     let id = Id::new(("automation-header", track.0, param.key.device, param.key.param.as_str()));
+    // A right-click on the header's free space: the lane's height back to normal (#818).
+    let background = ui.interact(clip, id.with("background"), Sense::click());
+    background.context_menu(|ui| {
+        let tall = state.heights.contains_key(&(track, param.key.clone()));
+        if ui.add_enabled(tall, egui::Button::new("Reset height")).clicked() {
+            state.set_lane_height(track, &param.key, LANE);
+            ui.close();
+        }
+    });
     let inner = rect.shrink2(Vec2::new(PAD, 5.0));
     let row = Rect::from_min_size(inner.min, Vec2::new(inner.width(), HEADER_ROW));
     let hide =

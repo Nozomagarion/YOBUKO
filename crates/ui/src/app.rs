@@ -2050,6 +2050,25 @@ impl App {
         suhina_plugins::trace!("action {} {}", action.id, action.params);
         match session.execute(action.id, &action.params) {
             Ok(result) => {
+                // Duplicated or pasted tracks are selected in both views, so the next Ctrl+D
+                // copies the copies (#919).
+                if matches!(action.id, "track.duplicate" | "track.paste")
+                    && let Some(added) = result["tracks"].as_array()
+                {
+                    let tracks: Vec<TrackId> = added
+                        .iter()
+                        .filter_map(|t| t.as_u64().and_then(|t| u32::try_from(t).ok()))
+                        .map(TrackId)
+                        .collect();
+                    if let Some(&first) = tracks.first() {
+                        self.arrangement.selected_tracks.clone_from(&tracks);
+                        self.arrangement.track_focus = true;
+                        self.view.selected = Some(first);
+                        self.view.selected_tracks = tracks;
+                        self.view.selected_slot = None;
+                        self.view.track_focus = true;
+                    }
+                }
                 // A clip made by a double-click is selected, ready to edit: in the Arrangement
                 // the clip, in the Session its slot, so the detail area shows it.
                 if action.id == "clip.create"
@@ -2452,8 +2471,16 @@ impl App {
                         self.view.strip_fader = self.settings.view.strip_fader as f32;
                         self.view.double_click_does_nothing = !self.settings.view.double_click_clip;
                         self.view.device_picks = self.device_picks();
+                        // Both views select the same tracks (#208): the Arrangement view keeps them.
+                        self.view.selected_tracks.clone_from(&self.arrangement.selected_tracks);
+                        if let Some(&first) = self.view.selected_tracks.first()
+                            && !self.view.selected.is_some_and(|t| self.view.selected_tracks.contains(&t))
+                        {
+                            self.view.selected = Some(first);
+                        }
                         self.frame_trace.mark("view setup");
                         session_view::show(ui, grid, &progress, &mut self.view, &mut actions);
+                        self.arrangement.selected_tracks.clone_from(&self.view.selected_tracks);
                         self.frame_trace.mark("session view");
                         self.frame_trace.note(|| format!("session view, {} tracks", grid.columns.len()));
                         match self.view.device_event.take() {
