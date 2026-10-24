@@ -7,6 +7,7 @@
 
 mod ara;
 pub mod audio;
+mod audio_timing;
 mod automation;
 pub mod backup;
 mod blank;

@@ -244,6 +244,9 @@ pub(crate) fn set_audio(session: &mut Session, params: &Value) -> Result<Value, 
     let beats_for = |seconds: f64| {
         if in_slot { seconds * tempo / 60.0 } else { map.beat_at(map.time_at(origin) + seconds) - origin }
     };
+    // What the content's beats mean in the file before the change, so every clip that plays it
+    // stays on the same audio after (#830).
+    let before = crate::audio_timing::mapping(&session.project, content_id);
     let content =
         session.project.contents.iter_mut().find(|c| c.id == content_id).ok_or("the clip's content is missing")?;
     let mut found = None;
@@ -272,6 +275,9 @@ pub(crate) fn set_audio(session: &mut Session, params: &Value) -> Result<Value, 
         found = Some((region.warped, region.stretch, region.transpose));
     }
     let (warped, stretch, transpose) = found.ok_or("only an audio clip can be warped or transposed")?;
+    if let Some(before) = before {
+        crate::audio_timing::follow(&mut session.project, content_id, &before);
+    }
     let mut out = address(at, id);
     out.insert("warp".into(), json!(warped));
     out.insert("mode".into(), json!(mode_name(stretch)));

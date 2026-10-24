@@ -154,7 +154,11 @@ fn set_tempo(session: &mut Session, params: &Value) -> Result<Value, CommandErro
     if !(20.0..=999.0).contains(&bpm) {
         return Err(format!("bpm must be between 20 and 999, got {bpm}").into());
     }
+    // Unwarped audio plays at its file's speed: its clips keep their seconds, so they span
+    // more or fewer beats at the new tempo (#830).
+    let before = crate::audio_timing::mappings(&session.project);
     session.project.transport.tempo_bpm = bpm;
+    crate::audio_timing::follow_all(&mut session.project, &before);
     Ok(json!({ "tempo_bpm": bpm }))
 }
 

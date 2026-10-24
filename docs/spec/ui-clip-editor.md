@@ -702,7 +702,14 @@ one undo step, so Ctrl+Z (Cmd+Z on macOS) takes back exactly what it did.
     Re-pitch, Rhythmic, Tonal, Texture, Smooth and High quality) and **Transpose** (dragged by
     semitones, -48 to +48, a double-click puts it at 0), all through `clip.setAudio`. Warp turned
     on for audio without warp markers gives it two, at its start and its end, so it plays as it did
-    and then follows the tempo.
+    and then follows the tempo. Warp off plays the file at its own speed whatever the tempo (a
+    transpose repitches it): the clip then spans what its seconds take at the song's tempo, and
+    changing the tempo makes it span more or fewer beats at once (a 4-beat file at 124 BPM is
+    1.935 s, 2.903 beats at 90 BPM; warped to the song it is 4 beats). Whenever warp, a repitching
+    transpose or the tempo changes what a clip's beats mean in its file, every clip that plays it
+    keeps its start and keeps playing the same part of the file: its offset, length and loop are
+    worked out again, so the waveform, the end and the Length row agree with what is heard, and
+    undo puts both back (#830).
   - A drag shows its value as it goes and sends one command when it is let go.
 - **Built ([#460](https://github.com/suhina-daw/suhina-daw/issues/460)):** the **Notes** row reads
   **"N of M"** while notes are selected, where N is how many are selected and M how many the clip

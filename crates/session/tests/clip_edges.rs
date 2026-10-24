@@ -219,3 +219,34 @@ fn an_audio_clips_warp_mode_and_transpose_are_set() {
     run(&mut session, "edit.undo", json!({})).unwrap();
     assert!(region(&session).warped, "undone, warp is back on");
 }
+
+/// Warp off plays the file at its own speed, so the clip spans what its seconds take at the
+/// song's tempo, and a tempo change resizes it; warp on follows the tempo, and the clip keeps its
+/// start throughout (#830, #831).
+#[test]
+fn an_unwarped_clip_spans_its_seconds_at_the_tempo_and_keeps_its_start() {
+    let mut session = Session::new(project());
+    let clip = first(&session, 3);
+    assert_eq!((clip.start, clip.length), (4.0, 8.0), "4 s at 120 BPM");
+    // Unwarped at 60 BPM: the same 4 s are 4 beats.
+    run(&mut session, "transport.setTempo", json!({ "bpm": 60 })).unwrap();
+    let clip = first(&session, 3);
+    assert_eq!(clip.start, 4.0);
+    assert!((clip.length - 4.0).abs() < 1e-9, "{}", clip.length);
+    // Warped from here it follows the tempo: back at 120 it stays 4 beats.
+    run(&mut session, "clip.setAudio", json!({ "clip": clip.id.0, "warp": true })).unwrap();
+    run(&mut session, "transport.setTempo", json!({ "bpm": 120 })).unwrap();
+    assert!((first(&session, 3).length - 4.0).abs() < 1e-9, "{}", first(&session, 3).length);
+    // Warp off again: the file's 4 s at 120 BPM are 8 beats, from the same start.
+    run(&mut session, "clip.setAudio", json!({ "clip": clip.id.0, "warp": false })).unwrap();
+    let unwarped = first(&session, 3);
+    assert_eq!(unwarped.start, 4.0);
+    assert!((unwarped.length - 8.0).abs() < 1e-9, "{}", unwarped.length);
+    // Undo puts the length back with the warp switch.
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert!((first(&session, 3).length - 4.0).abs() < 1e-9);
+    // Loop and gain edits never move it.
+    run(&mut session, "clip.setLoop", json!({ "clip": clip.id.0, "loop": true })).unwrap();
+    run(&mut session, "clip.setGain", json!({ "clip": clip.id.0, "db": -3.0 })).unwrap();
+    assert_eq!(first(&session, 3).start, 4.0);
+}
