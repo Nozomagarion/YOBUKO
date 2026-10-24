@@ -2379,6 +2379,7 @@ impl App {
         }
         // A critical operation is backed up first, when the settings say so.
         self.projects.back_up_before(action.id);
+        let mut no_input = false;
         let Ok(session) = self.projects.session_mut(None) else { return };
         // An audio track armed while it hears no input gets the device's first input (a stereo
         // pair where there are two channels), so Record has something to record and stays on
@@ -2398,10 +2399,20 @@ impl App {
             };
             if let Some(input) = input {
                 let _ = session.execute("track.setAudioInput", &json!({ "track": track.0, "input": input }));
+            } else {
+                // Armed with nothing to hear: say so, rather than a button that seems not to work.
+                no_input = true;
             }
         }
         suhina_plugins::trace!("action {} {}", action.id, action.params);
         match session.execute(action.id, &action.params) {
+            Ok(_) if no_input => {
+                self.revision += 1;
+                self.status = Status::Hint(
+                    "Armed, but the audio device has no input: choose an input device in Settings › Audio, then pick it under Audio From"
+                        .into(),
+                );
+            }
             Ok(result) => {
                 // A clip made by a double-click is selected, ready to edit: in the Arrangement
                 // the clip, in the Session its slot, so the detail area shows it.
