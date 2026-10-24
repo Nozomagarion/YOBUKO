@@ -33,7 +33,7 @@ pub enum OnOpen {
     Replace,
 }
 
-/// What opens when Suhina starts without a project given (Settings › Projects and backups › At start).
+/// What opens when Suhina starts without a project given (Settings › Projects and backups › When Suhina starts).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AtStart {
     /// The start panel, with the recent projects and the templates (`start_panel`).

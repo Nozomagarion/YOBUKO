@@ -114,7 +114,7 @@ Ctrl+E, Ctrl+D and Ctrl+J act on what plays inside it: clips crossing its edges 
 Ctrl+V puts material copied from several tracks back on its own tracks, from the play start
 marker. Ctrl+R edits a clip's name right on the clip; Enter or a click elsewhere keeps it, Escape
 leaves it. With several clips selected the name goes to all of them, as one undo step (Settings ›
-Arrangement › Ctrl+R renames every selected clip, on by default); after a click on a track's
+Arrangement › Rename every selected clip, on by default); after a click on a track's
 header, in either view, Ctrl+R edits the track's name in its header.
 
 Devices picked in a mixer strip's device list or the detail area's chain (a click, Ctrl to add,

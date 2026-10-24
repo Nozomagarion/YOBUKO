@@ -37,9 +37,9 @@ fn export_permissions_are_added_by_picker_removed_and_saved() {
     harness.get_by_label(&format!("Remove MCP write folder {}", folder.display())).click();
     harness.run();
     assert!(harness.state().settings().mcp_write_folders.is_empty());
-    harness.get_by_label("Allow the project's folder").scroll_to_me();
+    harness.get_by_label("Agents may write in the project folder").scroll_to_me();
     harness.run();
-    harness.get_by_label("Allow the project's folder").click();
+    harness.get_by_label("Agents may write in the project folder").click();
     harness.run();
     assert!(!harness.state().settings().mcp_project_folder);
 }
@@ -120,8 +120,8 @@ fn every_page_scrolls_to_its_last_setting_in_a_short_window() {
         ("Audio", Some("Cue volume: +6 dB")),
         ("MIDI", None),
         ("Plug-ins", Some("Editors: Device view")),
-        ("Devices", Some("Detail area layout: Full width")),
-        ("Importing", Some("Warp mode for dropped samples: Rhythmic")),
+        ("Devices", Some("Detail area: Full width")),
+        ("Importing", Some("Fitting samples to the tempo: Rhythmic")),
         ("Arrangement", Some("Show advanced settings")),
         ("Session and mixer", Some("Volume and pan controls: Knob")),
         ("Clip editor", Some("Toolbar size: Larger")),
@@ -212,12 +212,12 @@ fn a_search_shows_the_settings_that_match_from_every_page() {
     harness.get_by_label("Search settings").type_text("preview");
     settle(&mut harness);
     // Previews in the browser and on the map, from one page; settings that do not match are gone.
-    assert!(harness.query_by_label("Auto-play").is_some());
-    assert!(harness.query_by_label("Map preview on hover").is_some());
+    assert!(harness.query_by_label("Preview on select").is_some());
+    assert!(harness.query_by_label("Preview on the map by pointing").is_some());
     assert!(harness.query_by_label("Browser side: Left").is_none());
-    assert!(harness.query_by_label("When opening a project: Ask").is_none());
+    assert!(harness.query_by_label("Opening a project: Ask").is_none());
     // A change made in the results is made as on its page.
-    harness.get_by_label("Auto-play").click();
+    harness.get_by_label("Preview on select").click();
     settle(&mut harness);
     assert_eq!(harness.state_mut().take_changed_settings().map(|s| s.preview_autoplay), Some(false));
 
@@ -227,19 +227,22 @@ fn a_search_shows_the_settings_that_match_from_every_page() {
     harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
     harness.get_by_label("Search settings").type_text("arrangement stay");
     settle(&mut harness);
-    assert!(harness.query_by_label("When you press Stop: Stay").is_some());
-    assert!(harness.query_by_label("Play starts at: Marker").is_none(), "only Stop has both words (Stay is its note)");
+    assert!(harness.query_by_label("Where Stop leaves the playhead: Stay").is_some());
+    assert!(
+        harness.query_by_label("Where Play starts: Marker").is_none(),
+        "only Stop has both words (Stay is its note)"
+    );
 
     // Nothing matches.
     harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
     harness.get_by_label("Search settings").type_text("nothing like this");
     settle(&mut harness);
-    assert!(harness.query_by_label("When you press Stop: Stay").is_none());
+    assert!(harness.query_by_label("Where Stop leaves the playhead: Stay").is_none());
 
     // A page clicked empties the search and shows the page.
     harness.get_by_label("Settings page: Arrangement").click();
     settle(&mut harness);
-    assert!(harness.query_by_label("Play starts at: Marker").is_some());
+    assert!(harness.query_by_label("Where Play starts: Marker").is_some());
     assert_eq!(harness.get_by_label("Search settings").value().as_deref(), Some(""));
     assert!(harness.state().settings_open());
 }

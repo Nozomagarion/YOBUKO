@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The start panel: what the window shows right of the browser while no project is open (at
-//! start, as Settings › Projects and backups › At start › Panel says, and after the last project closes). A
+//! start, as Settings › Projects and backups › When Suhina starts › Panel says, and after the last project closes). A
 //! new project, one from a template, or a recent project, found by name and listed with when it
 //! was last saved; the audio output at a glance; the version. Files dropped on it open as they
 //! do anywhere on the window.

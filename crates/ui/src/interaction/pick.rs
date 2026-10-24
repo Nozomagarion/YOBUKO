@@ -27,9 +27,9 @@ pub enum PickField {
     OpenProject,
     /// A folder for the browser (+ Add folder).
     BrowserFolder,
-    /// Settings › Devices › NAM models folder (docs/spec/nam-amp-and-cab.md).
+    /// Amp models folder (docs/spec/nam-amp-and-cab.md).
     NamModelsFolder,
-    /// Settings › Devices › IR folder (docs/spec/nam-amp-and-cab.md).
+    /// Cabinet sounds folder (docs/spec/nam-amp-and-cab.md).
     IrFolder,
 }
 
@@ -50,8 +50,8 @@ impl PickField {
             Self::McpWriteFolder => "Allow MCP writes in",
             Self::OpenProject => "Open a project",
             Self::BrowserFolder => "Add a folder to the browser",
-            Self::NamModelsFolder => "NAM models folder",
-            Self::IrFolder => "IR folder",
+            Self::NamModelsFolder => "Amp models folder",
+            Self::IrFolder => "Cabinet sounds folder",
         }
     }
 

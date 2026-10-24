@@ -40,7 +40,7 @@ usage: suhina [<project.suhina> | <project.als> | --demo] [--renderer wgpu|glow]
 While this build of Suhina is running, starting it again opens the project in the running
 window as a tab instead. Agents reach the running window with suhina-cli mcp --attach once
 Options > Settings > General > Let agents work on open projects is on.
-Without a project the window opens what Options > Settings > General > At start says (the
+Without a project the window opens what Options > Settings > General > When Suhina starts says (the
 New or open dialog unless changed); Ctrl+T makes a new one or opens one, and a .suhina
 or .als file dropped on it opens.
 Settings are kept in settings.txt, the keys in keymap.json and themes in themes/<name>.json,
@@ -457,7 +457,7 @@ impl Window {
     }
 
     /// Starts the browser's library and the sample map, and opens the project asked for, or what
-    /// Settings › Projects and backups › At start says without one.
+    /// Settings › Projects and backups › When Suhina starts says without one.
     fn start(&mut self, start_up: StartUp) {
         let StartUp { source, output_choice, mut warnings } = start_up;
         // The browser's library: browser.json and the folder indexes beside the settings (ADR 0012).
@@ -476,7 +476,7 @@ impl Window {
             self.app.set_status(Status::Hint(warning.clone()));
         }
         match source {
-            // What Settings › Projects and backups › At start says; the last project is the newest recent one.
+            // What Settings › Projects and backups › When Suhina starts says; the last project is the newest recent one.
             Source::Nothing => self.app.open_at_start(self.recent.existing().into_iter().next()),
             Source::Demo => {
                 self.app.projects_mut().close_preview_output();

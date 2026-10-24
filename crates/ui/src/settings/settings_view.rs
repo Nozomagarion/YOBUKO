@@ -449,7 +449,7 @@ impl Cx<'_> {
     /// The person's explicit MCP write grants; each includes all its subfolders.
     pub fn mcp_write_folders(&mut self, y: &mut f32) {
         let row = setting_row(self.page, y);
-        label(self.painter, row, "MCP allowed write folders", "Each allowed folder includes its subfolders");
+        label(self.painter, row, "Other folders agents may write in", "Each allowed folder includes its subfolders");
         let mut remove = None;
         for (index, folder) in self.settings.mcp_write_folders.iter().enumerate() {
             let row = setting_row(self.page, y);

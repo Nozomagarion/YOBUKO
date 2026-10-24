@@ -315,7 +315,7 @@ fn a_click_on_the_ruler_moves_the_play_start_marker_on_the_grid() {
     harness.run();
     harness.get_by_label("Settings page: Arrangement").click();
     harness.run();
-    harness.get_by_label("When you press Stop: Stay").click();
+    harness.get_by_label("Where Stop leaves the playhead: Stay").click();
     harness.run();
     assert_eq!(
         harness.state_mut().take_changed_settings().map(|s| s.stop),
@@ -348,7 +348,7 @@ fn play_starts_from_the_selected_clip_with_shift_space_or_the_setting() {
         render_a_block(renderer);
     };
 
-    // By default Play starts from the selected clip: picked whole, by its name bar.
+    // By default Where Play starts the selected clip: picked whole, by its name bar.
     click_name_bar(&mut harness, "Clip Beat B on Drums at bar 17");
     harness.get_by_label("Play").click();
     harness.run_steps(2);
@@ -372,9 +372,9 @@ fn play_starts_from_the_selected_clip_with_shift_space_or_the_setting() {
     harness.run();
     harness.get_by_label("Settings page: Arrangement").click();
     harness.run();
-    harness.get_by_label("Play starts at: Marker").click();
+    harness.get_by_label("Where Play starts: Marker").click();
     harness.run();
-    harness.get_by_label("Play starts at: Selected clip").click();
+    harness.get_by_label("Where Play starts: Selected clip").click();
     harness.run();
     assert_eq!(
         harness.state_mut().take_changed_settings().map(|s| s.play_from),
@@ -410,7 +410,7 @@ fn play_starts_from_the_selected_clip_with_shift_space_or_the_setting() {
     assert_eq!((monitor.running(), monitor.start_beat()), (true, 72.0));
     stop(&mut harness, &mut renderer);
 
-    // In the Session view the selection is not shown, so Play starts from the marker; stopping
+    // In the Session view the selection is not shown, so Where Play starts the marker; stopping
     // again first puts the marker at the beginning.
     stop(&mut harness, &mut renderer);
     assert_eq!(monitor.start_beat(), 0.0);

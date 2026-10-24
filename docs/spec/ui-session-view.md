@@ -74,7 +74,7 @@ From top to bottom:
    - **Groove pool** under the browser (collapsible).
    - **Session view** (or Arrangement view; Tab switches).
 4. **Detail area** (collapsible), across the full width: the selected track's device chain, or
-   the selected clip's editor. **Suhina:** Settings › Devices › **Detail area layout** puts it
+   the selected clip's editor. **Suhina:** Settings › Devices › **Detail area** puts it
    **Beside the browser** (the default: it starts right of the browser, which runs down to the
    status bar) or **Full width** (it spans the whole window, under the browser too, which ends
    above it); with the device chain stacked in a column beside the view the layout does not

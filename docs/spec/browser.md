@@ -155,7 +155,7 @@ selected or under the pointer; clicking it previews the sample (a second click s
 
 **Double-click or Enter** (in the search field) on an item adds it to the selected track (see
 *Adding without dragging*); on a project file it opens the project as a project dropped on the
-window does (Settings › Projects and backups › When opening a project).
+window does (Settings › Projects and backups › Opening a project).
 
 **Right-click menu:** Pin or Unpin; Tag ▸ (each tag as a painted checkbox, ticked when set, its colour's swatch and its name; a
 click anywhere on the entry sets or clears it; a *New tag…* field that
@@ -176,7 +176,7 @@ The preview strip shows the selected sample or MIDI file: a play button, the nam
 tempo (BPM) and key when known, and a waveform (a sample) or a strip of the notes (a MIDI file),
 with the part played so far brighter and a playhead.
 
-- **Auto-play** (Settings › Browser › Auto-play, on by default): selecting a sample
+- **Preview on select** (Settings › Browser › Preview on select, on by default): selecting a sample
   or MIDI file previews it. Off, previewing takes the play button or a click on the waveform.
 - **Clicking the waveform** previews from there. The waveform is drawn as
   [waveforms](waveforms.md) says: the whole file across the strip, both channels when there is
