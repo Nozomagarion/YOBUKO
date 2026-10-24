@@ -219,7 +219,7 @@ fn the_waveform_zoom_draws_every_audio_clip_larger_and_is_kept_as_a_setting() {
 
 #[test]
 fn settings_add_and_remove_plugin_folders_and_scan_in_the_background() {
-    let base = std::env::temp_dir().join(format!("suhina-ui-plugins-{}", std::process::id()));
+    let base = crate::temp_dir::TempDir::new("ui-plugins");
     let folder = base.join("my plug-ins");
     std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
     let library = suhina_plugins::library::Library::new(Some(base.join("settings")), base.join("no-such-host"))
@@ -261,7 +261,6 @@ fn settings_add_and_remove_plugin_folders_and_scan_in_the_background() {
     harness.run();
     harness.run();
     assert_eq!(harness.query_all_by_label_contains("Remove ").count(), 0);
-    let _cleanup = std::fs::remove_dir_all(&base);
 }
 
 #[test]
