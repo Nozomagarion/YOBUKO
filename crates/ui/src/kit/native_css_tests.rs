@@ -1008,3 +1008,17 @@ fn the_fader_cap_and_rail_take_their_size_from_the_sheet() {
     });
     assert_eq!(sizes, (Vec2::new(30.0, 12.0), 2.0));
 }
+
+#[test]
+fn the_add_track_buttons_take_their_class_and_ids() {
+    let css = ".add-track { background-color: #00FF00; } #add-return-track { background-color: #FF0000; }";
+    let fills: Vec<_> = rects(&painted(css, |ui| {
+        let area = Rect::from_min_size(egui::pos2(0.0, 0.0), Vec2::new(300.0, 300.0));
+        crate::interaction::empty_space::empty_space(ui, &ui.painter().clone(), area, &mut Vec::new());
+    }))
+    .into_iter()
+    .map(|r| r.fill)
+    .collect();
+    assert_eq!(fills.iter().filter(|f| **f == egui::Color32::from_rgb(0, 0xFF, 0)).count(), 2, "{fills:?}");
+    assert!(fills.contains(&egui::Color32::RED), "{fills:?}");
+}

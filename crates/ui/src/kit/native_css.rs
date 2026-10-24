@@ -454,6 +454,11 @@ fn element_id(node: &StyleNode) -> String {
     {
         return name.clone();
     }
+    if node.class == "add-track"
+        && let Some(name) = node.name.as_deref().filter(|name| name.starts_with("add-"))
+    {
+        return name.to_owned();
+    }
     // A mixer send by its place: `#mixer-send-1` is the first.
     if node.class == "send"
         && let Some(name) = node.name.as_deref().filter(|name| name.starts_with("mixer-send-"))
