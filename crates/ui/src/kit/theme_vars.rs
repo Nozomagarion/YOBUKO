@@ -370,6 +370,7 @@ pub fn resolve(theme: &mut Theme) -> Vec<String> {
     {
         values = full;
     }
+    theme.skin.variables = Arc::new(values.clone());
     warnings.extend(apply_core(theme, &values));
     warnings
 }

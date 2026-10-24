@@ -212,6 +212,7 @@ fn skin_round_trip_and_old_defaults() {
         toolbar: Some(Toolbar::default()),
         toolbar_offsets: BTreeMap::from([("transport".into(), 80)]),
         controls: BTreeMap::new(),
+        variables: Arc::default(),
     };
     let mut warnings = Vec::new();
     assert_eq!(Skin::from_json(&skin.to_json(), &mut warnings), skin);
@@ -267,4 +268,15 @@ fn moving_module_preserves_all_others() {
     toolbar.move_after("browser", "agents");
     assert_eq!(toolbar.order.last().map(String::as_str), Some("browser"));
     assert_eq!(toolbar.order.len(), MODULES.len());
+}
+
+#[test]
+fn artwork_takes_the_theme_s_variables() {
+    let vars: BTreeMap<String, String> = [("--accent".to_owned(), "#ff0000".to_owned())].into();
+    let svg = r#"<rect fill="var(--accent)" stroke="var(--line, #00ff00)" opacity="var(--none)"/>"#;
+    assert_eq!(
+        super::substitute_variables(svg, &vars),
+        r##"<rect fill="#ff0000" stroke="#00ff00" opacity="var(--none)"/>"##
+    );
+    assert!(matches!(super::substitute_variables("<svg/>", &vars), std::borrow::Cow::Borrowed(_)));
 }
