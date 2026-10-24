@@ -4789,6 +4789,7 @@ dependencies = [
  "suhina-output",
  "suhina-plugins",
  "suhina-session",
+ "suhina-theme-package",
  "tokio",
  "winresource",
 ]
