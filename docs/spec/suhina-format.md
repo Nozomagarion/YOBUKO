@@ -11,14 +11,14 @@ covers:
 
 # The .suhina project file
 
-Suhina's own project file ([ADR 0010](../decisions/0010-project-files.md)), version 3. It is
+Suhina's own project file ([ADR 0010](../decisions/0010-project-files.md)), version 4. It is
 UTF-8 JSON, written pretty-printed. Its parts mirror the project model
 ([ADR 0001](../decisions/0001-daw-neutral-model.md)); this lists them and what a reader accepts.
 
 ```json
 {
   "format": "suhina",
-  "version": 3,
+  "version": 4,
   "project": {
     "transport": { "tempo_bpm": 120.0, "time_signature": [4, 4] },
     "tracks": [ … ], "channels": [ … ], "contents": [ … ],
@@ -31,7 +31,7 @@ UTF-8 JSON, written pretty-printed. Its parts mirror the project model
 
 ## Rules
 
-- `format` is `"suhina"` and `version` a whole number from 1 to the newest the reader knows (3);
+- `format` is `"suhina"` and `version` a whole number from 1 to the newest the reader knows (4);
   anything else is refused, and the message names the format the file gave or the newest version
   the reader knows. A writer always writes the newest version (*Versions* below). Files saved
   before 2026-10-13 named another format and are not read
