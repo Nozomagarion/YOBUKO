@@ -246,8 +246,7 @@ the arm. Decision 3 has the rules.
 - A clip note and a live note on the same key of the same track share that key: the later one
   restarts it, and either's release ends it.
 - Arming is lost when the project closes; the MIDI monitoring choice is part of the project and
-  is kept. Saving it with the project can be added later as a
-  project field without changing the engine side.
+  is kept.
 - The last queued block is the one left between the engine and the device; rendering inside the
   device's callback would remove it, but would put plug-in round trips and graph swaps on the
   driver's thread, so it is not done. Lower latency from here comes from real-time priority

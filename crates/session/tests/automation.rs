@@ -350,6 +350,39 @@ fn a_point_moved_onto_another_points_beat_keeps_its_side() {
     assert_eq!(pans(&session), [(4.0, -0.25), (4.0, 0.5)]);
 }
 
+/// Two selected points at one beat (a jump) moved together onto a third point's beat keep their
+/// order, whatever order the request names them in, and the places reported follow the request.
+#[test]
+fn points_at_one_beat_moved_together_keep_their_jump() {
+    let pans =
+        |session: &Session| -> Vec<(f64, f64)> { lanes(session)[0].points.iter().map(|p| (p.beat, p.value)).collect() };
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, -0.5), (2.0, 0.5), (4.0, 1.0)] {
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    // A jump at beat 0, from -0.5 to 0.5.
+    run(&mut session, "automation.movePoint", json!({ "track": 1, "param": "pan", "point": 1, "beat": 0 })).unwrap();
+    assert_eq!(pans(&session), [(0.0, -0.5), (0.0, 0.5), (4.0, 1.0)]);
+    // Moved later onto the third point's beat, named last first.
+    let moved =
+        run(&mut session, "automation.movePoints", json!({ "track": 1, "param": "pan", "points": [1, 0], "beats": 4 }))
+            .unwrap();
+    assert_eq!(moved["points"], json!([1, 0]));
+    assert_eq!(pans(&session), [(4.0, -0.5), (4.0, 0.5), (4.0, 1.0)]);
+    // And back earlier onto a point at beat 0: after it, still in their order.
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 0, "value": 0 })).unwrap();
+    assert_eq!(pans(&session)[0], (0.0, 0.0));
+    let moved = run(
+        &mut session,
+        "automation.movePoints",
+        json!({ "track": 1, "param": "pan", "points": [2, 1], "beats": -4 }),
+    )
+    .unwrap();
+    assert_eq!(moved["points"], json!([2, 1]));
+    assert_eq!(pans(&session), [(0.0, 0.0), (0.0, -0.5), (0.0, 0.5), (4.0, 1.0)]);
+}
+
 #[test]
 fn several_points_are_deleted_in_one_undo_step_and_the_lane_goes_with_the_last() {
     let mut session = Session::new(project());

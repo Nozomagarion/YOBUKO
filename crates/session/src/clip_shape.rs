@@ -242,7 +242,8 @@ pub(crate) fn set_audio(session: &mut Session, params: &Value) -> Result<Value, 
     let project = &session.project;
     let seconds = project.content(content_id).and_then(|c| {
         c.lanes.iter().find_map(|l| match &l.data {
-            suhina_model::LaneData::Audio(r) if r.warp_markers.is_empty() => r.duration_seconds,
+            // Audio not warped now, markers kept from before or none (#874).
+            suhina_model::LaneData::Audio(r) if !r.warped || r.warp_markers.is_empty() => r.duration_seconds,
             _ => None,
         })
     });

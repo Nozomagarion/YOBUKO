@@ -310,6 +310,10 @@ struct Shared {
     factory: *const ARAFactory,
     /// The sources whose notes the host asked the plug-in to find (once each).
     analysis_asked: RefCell<Vec<ARAAudioSourceRef>>,
+    /// The persistent id of each source a bound track's clips play, once per track that plays it
+    /// (each [`Document::owned_sources`]): a source leaves the analysis shown only with the last
+    /// track that plays it.
+    source_owners: Vec<String>,
     /// The texts handed to the plug-in, kept for as long as the document.
     texts: Vec<CString>,
 }
@@ -387,6 +391,7 @@ impl Shared {
             modification_ids: Vec::new(),
             factory,
             analysis_asked: RefCell::new(Vec::new()),
+            source_owners: Vec::new(),
             texts: Vec::new(),
         };
         let properties =
@@ -994,6 +999,7 @@ impl Document {
         if let Some(id) = s.source_ids.get(region.source)
             && !self.owned_sources.contains(id)
         {
+            s.source_owners.push(id.clone());
             self.owned_sources.push(id.clone());
         }
         if !self.owned_modifications.contains(&region.modification) {
@@ -1399,6 +1405,8 @@ impl Drop for Document {
     fn drop(&mut self) {
         let all = Edited { added: Vec::new(), removed: self.regions.clone() };
         self.renderers(&all);
+        // The sources no other track plays any more; the others' analysis stays shown on them.
+        let gone = leave_sources(&mut self.shared.borrow_mut().source_owners, &self.owned_sources);
         let shared = self.shared.borrow();
         let Some(dc) = shared.controller() else { return };
         let i = &dc.interface;
@@ -1427,7 +1435,7 @@ impl Drop for Document {
             .source_ids
             .iter()
             .zip(shared.source_keys())
-            .filter(|(id, _)| self.owned_sources.contains(id))
+            .filter(|(id, _)| gone.contains(id))
             .map(|(_, keys)| keys)
             .collect();
         forget_analysis(&shared.host.analysis, &shared.analysis_asked, &mine);
@@ -1793,10 +1801,21 @@ fn settle_analysis(
     true
 }
 
+/// Takes one owner of each of `mine` (a leaving track's sources) out of `owners` (each source
+/// once per track that plays it) and returns those no track plays any more.
+fn leave_sources(owners: &mut Vec<String>, mine: &[String]) -> Vec<String> {
+    for id in mine {
+        if let Some(at) = owners.iter().position(|o| o == id) {
+            owners.remove(at);
+        }
+    }
+    mine.iter().filter(|id| !owners.contains(id)).cloned().collect()
+}
+
 /// Forgets what was asked and reported of the analysis of `sources` (key, plug-in ref), the
-/// sources of a track that leaves the document (#816): the next track that plays one asks the
-/// plug-in again, which sends progress again if it still analyses it. An analysis another
-/// track still waits on shows again with the plug-in's next report.
+/// sources of a track that leaves the document and that no other track plays
+/// ([`leave_sources`], #816): the next track that plays one asks the plug-in again, which sends
+/// progress again if it still analyses it.
 fn forget_analysis(
     analysis: &Mutex<Vec<(usize, f32)>>,
     asked: &RefCell<Vec<ARAAudioSourceRef>>,
@@ -2052,6 +2071,34 @@ mod tests {
         forget_analysis(&analysis, &asked, &[(1, source_ref(11))]);
         assert_eq!(*analysis.lock().unwrap(), vec![(2, 0.3)]);
         assert_eq!(*asked.borrow(), vec![source_ref(12)]);
+    }
+
+    /// Two tracks play source `a`, the first also `b`: when the first leaves, only `b` is
+    /// forgotten, so the second track's analysis of `a` keeps showing; when the second leaves
+    /// too, `a` is forgotten.
+    #[test]
+    fn a_source_another_track_plays_keeps_its_analysis() {
+        let ids = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let first = ids(&["a", "b"]);
+        let second = ids(&["a"]);
+        let mut owners = ids(&["a", "b", "a"]);
+        let analysis = Mutex::new(vec![(1, 0.2), (2, 0.5)]);
+        let asked = RefCell::new(vec![source_ref(11), source_ref(12)]);
+        let keys = |gone: &[String]| -> Vec<(usize, ARAAudioSourceRef)> {
+            gone.iter().map(|id| if id == "a" { (1, source_ref(11)) } else { (2, source_ref(12)) }).collect()
+        };
+
+        let gone = leave_sources(&mut owners, &first);
+        assert_eq!(gone, ids(&["b"]));
+        forget_analysis(&analysis, &asked, &keys(&gone));
+        assert_eq!(*analysis.lock().unwrap(), vec![(1, 0.2)]);
+        assert_eq!(*asked.borrow(), vec![source_ref(11)]);
+
+        let gone = leave_sources(&mut owners, &second);
+        assert_eq!(gone, ids(&["a"]));
+        forget_analysis(&analysis, &asked, &keys(&gone));
+        assert!(analysis.lock().unwrap().is_empty());
+        assert!(owners.is_empty());
     }
 
     #[test]
