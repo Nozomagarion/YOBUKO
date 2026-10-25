@@ -19,6 +19,16 @@ pub(crate) const MAX_CHANGES: usize = 4096;
 /// Values waiting for the next block: parameter id and normalized value.
 pub(crate) type Pending = Arc<Mutex<Vec<(ParamID, ParamValue)>>>;
 
+/// Puts `(id, value)` in `list` as the parameter's value now: one entry per parameter, the last
+/// one wins. The audio thread fills these lists, so this keeps them no longer than the
+/// parameters touched since the main thread read them, which the room reserved for them holds.
+fn note(list: &mut Vec<(ParamID, ParamValue)>, id: ParamID, value: ParamValue) {
+    match list.iter_mut().find(|(other, _)| *other == id) {
+        Some(slot) => slot.1 = value,
+        None => list.push((id, value)),
+    }
+}
+
 /// Most values one parameter takes in one block; past that the last one is replaced.
 const MAX_POINTS: usize = 16;
 
@@ -124,16 +134,24 @@ pub(crate) struct BlockChanges {
     changes: ComWrapper<Changes>,
     pointer: Option<ComPtr<IParameterChanges>>,
     pending: Pending,
+    /// What the editor changed and a block took in, for the main thread to give the controller
+    /// (its own value cache, which a parameter listing reads) and the session (which keeps the
+    /// project's values in step) — so the kernel's parts know an edit made outside the host.
+    applied: Pending,
+    /// What the engine sent with a block (a panel set, automation): the last value each
+    /// parameter got, for the main thread to give the controller too, so the plug-in's editor
+    /// follows the panel and automation.
+    engine: Pending,
 }
 
 impl BlockChanges {
     /// Made before processing starts; allocates the list for [`MAX_CHANGES`] parameters.
-    pub(crate) fn new(pending: Pending) -> Self {
+    pub(crate) fn new(pending: Pending, applied: Pending, engine: Pending) -> Self {
         let queues: Vec<ComWrapper<Queue>> = (0..MAX_CHANGES).map(|_| ComWrapper::new(Queue::new())).collect();
         let pointers = queues.iter().filter_map(|q| q.to_com_ptr::<IParamValueQueue>()).collect();
         let changes = ComWrapper::new(Changes { queues, pointers, count: Cell::new(0) });
         let pointer = changes.to_com_ptr::<IParameterChanges>();
-        Self { changes, pointer, pending }
+        Self { changes, pointer, pending, applied, engine }
     }
 
     /// Takes what is pending (if the control thread is not using the list right now) and the
@@ -159,14 +177,26 @@ impl BlockChanges {
                 queue.push(offset, value);
             }
         };
-        if let Ok(mut pending) = self.pending.try_lock() {
+        if let (Ok(mut pending), Ok(mut applied)) = (self.pending.try_lock(), self.applied.try_lock()) {
             let room = pending.len().min(MAX_CHANGES);
             for (id, value) in pending.drain(..room) {
                 add(id, 0, value);
+                // Past the room the report loses the rest; the next edit reports again.
+                note(&mut applied, id, value);
             }
         }
         for (id, offset, value) in extra {
             add(id, offset, value);
+        }
+        // The last value each parameter took in this block, for the controller to show.
+        if let Ok(mut engine) = self.engine.try_lock() {
+            for queue in self.changes.queues.iter().take(count) {
+                let id = queue.id.get();
+                let last = (0..queue.count.get()).next_back().and_then(|i| queue.points.get(i)).map(|p| p.get().1);
+                if let Some(value) = last {
+                    note(&mut engine, id, value);
+                }
+            }
         }
         self.changes.count.set(count);
         if count == 0 {
@@ -190,11 +220,11 @@ mod tests {
 
     #[test]
     fn a_parameter_changed_several_times_in_a_block_gets_each_value() {
-        let pending = Pending::default();
+        let (pending, applied, engine) = (Pending::default(), Pending::default(), Pending::default());
         if let Ok(mut list) = pending.lock() {
             list.push((5, 0.1));
         }
-        let mut changes = BlockChanges::new(pending);
+        let mut changes = BlockChanges::new(pending, applied.clone(), engine.clone());
         // In frame order; a second value at frame 20 replaces the first, and one before the
         // last point is moved to it.
         let extra = [(5, 10, 0.2), (5, 20, 0.4), (5, 20, 0.5), (7, 3, 0.9), (5, 15, 0.6)];
@@ -221,5 +251,12 @@ mod tests {
         changes.done();
         // The next block starts empty.
         assert!(changes.take(std::iter::empty()).is_null());
+        // The editor's edit was reported and the engine's last value recorded.
+        assert_eq!(take(applied), [(5, 0.1)]);
+        assert_eq!(take(engine).into_iter().find(|(id, _)| *id == 5), Some((5, 0.6)));
+    }
+
+    fn take(list: Pending) -> Vec<(ParamID, ParamValue)> {
+        std::mem::take(&mut list.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
     }
 }

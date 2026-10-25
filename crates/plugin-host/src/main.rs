@@ -401,11 +401,17 @@ impl Loaded {
         }
     }
 
-    fn tick(&mut self) {
+    fn tick(&mut self) -> Vec<(u32, f64)> {
         match self {
-            Self::Clap(plugin) => plugin.tick(),
+            // A CLAP plug-in's own editor does not report to the host the way a VST3 one does
+            // through `performEdit`, so nothing comes back for it yet; its listing still read
+            // its values again as they stand.
+            Self::Clap(plugin) => {
+                plugin.tick();
+                Vec::new()
+            }
             Self::Vst3(plugin) => plugin.tick(),
-            Self::Test { .. } => {}
+            Self::Test { .. } => Vec::new(),
         }
     }
 
@@ -689,7 +695,9 @@ fn run(address: &str) -> Result<(), Box<dyn std::error::Error>> {
             last_memory = Instant::now();
         }
         for (instance, loaded) in &mut instances {
-            loaded.tick();
+            for (id, value) in loaded.tick() {
+                send(&mut writer, &Message::ParamChanged { instance: *instance, id, value })?;
+            }
             for (region, notes, truncated) in loaded.take_ara_notes() {
                 send(&mut writer, &Message::AraNotes { instance: *instance, region, notes, truncated })?;
             }

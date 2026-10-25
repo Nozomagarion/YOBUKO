@@ -25,7 +25,7 @@
 use serde_json::{Value, json};
 
 /// Bumped whenever a message changes; both sides refuse a different version.
-pub const VERSION: u64 = 13;
+pub const VERSION: u64 = 14;
 /// Longest line either side accepts; state blobs are hex, so this bounds them at 32 MiB.
 pub const MAX_LINE: usize = 64 * 1024 * 1024;
 
@@ -407,6 +407,14 @@ pub enum Message {
         instance: u32,
         param: ParamInfo,
     },
+    /// Set by the user in the plug-in's own editor: the host reports it so the session keeps
+    /// the project's values in step (decision 6). Comes unasked; `value` is what the plug-in
+    /// now runs with.
+    ParamChanged {
+        instance: u32,
+        id: u32,
+        value: f64,
+    },
     /// Open the plug-in's editor; answered with `EditorOpened` and the size of its inside.
     /// `owner` is the engine's window (a Win32 `HWND`, an X11 window id). Not `embedded`: the
     /// editor gets a window of its own that `owner` owns: it stays above it, has no taskbar
@@ -554,6 +562,7 @@ impl Message {
             | Self::Params { instance, .. }
             | Self::SetParam { instance, .. }
             | Self::Param { instance, .. }
+            | Self::ParamChanged { instance, .. }
             | Self::OpenEditor { instance, .. }
             | Self::EditorOpened { instance, .. }
             | Self::PlaceEditor { instance, .. }
@@ -618,6 +627,9 @@ impl Message {
                 json!({ "op": "set_param", "instance": instance, "id": id, "value": value })
             }
             Self::Param { instance, param } => json!({ "op": "param", "instance": instance, "param": param.to_json() }),
+            Self::ParamChanged { instance, id, value } => {
+                json!({ "op": "param_changed", "instance": instance, "id": id, "value": value })
+            }
             Self::OpenEditor { instance, owner, embedded } => {
                 json!({ "op": "open_editor", "instance": instance, "owner": owner, "embedded": embedded })
             }
@@ -749,6 +761,11 @@ impl Message {
                 value: value.get("value").and_then(Value::as_f64).filter(|v| v.is_finite())?,
             },
             "param" => Self::Param { instance: instance()?, param: ParamInfo::from_json(value.get("param")?)? },
+            "param_changed" => Self::ParamChanged {
+                instance: instance()?,
+                id: small("id")?,
+                value: value.get("value").and_then(Value::as_f64).filter(|v| v.is_finite())?,
+            },
             "open_editor" => Self::OpenEditor {
                 instance: instance()?,
                 owner: match value.get("owner") {

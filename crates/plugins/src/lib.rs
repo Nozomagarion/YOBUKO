@@ -413,6 +413,9 @@ struct Group {
     resized_editors: Vec<(u32, (u32, u32))>,
     /// Instances whose plug-in reported another latency (the latest), not yet taken in.
     latencies: Vec<(u32, u32)>,
+    /// Parameters the host said the user moved in a plug-in's editor (the latest per instance
+    /// and id), not yet taken in.
+    param_edits: Vec<(u32, u32, f64)>,
     /// The notes ARA plug-ins found in their regions (the latest per instance and region), not
     /// yet taken in (#720).
     ara_notes: Vec<(u32, String, Vec<protocol::AraNote>)>,
@@ -432,6 +435,7 @@ impl Group {
             closed_editors: Vec::new(),
             resized_editors: Vec::new(),
             latencies: Vec::new(),
+            param_edits: Vec::new(),
             ara_notes: Vec::new(),
             ara_analysis: Vec::new(),
             ram: None,
@@ -451,6 +455,7 @@ impl Group {
         self.closed_editors.clear();
         self.resized_editors.clear();
         self.latencies.clear();
+        self.param_edits.clear();
         self.ara_notes.clear();
         self.ram = None;
     }
@@ -494,6 +499,14 @@ impl Group {
                 self.latencies.retain(|(i, _)| i != instance);
                 if self.latencies.len() < MAX_CLOSED_EDITORS {
                     self.latencies.push((*instance, *latency));
+                }
+            }
+            Message::ParamChanged { instance, id, value } => {
+                // The last value of a parameter wins; one that already moved a step keeps its
+                // latest.
+                self.param_edits.retain(|(i, other, _)| !(i == instance && other == id));
+                if self.param_edits.len() < MAX_CLOSED_EDITORS {
+                    self.param_edits.push((*instance, *id, *value));
                 }
             }
             Message::AraNotes { instance, region, notes, .. } => {
@@ -567,6 +580,20 @@ impl Group {
     fn take_latency(&mut self, instance: u32) -> Option<u32> {
         let at = self.latencies.iter().position(|(i, _)| *i == instance)?;
         Some(self.latencies.swap_remove(at).1)
+    }
+
+    /// What the host said the user moved in `instance`'s editor since the last call (and
+    /// forgets it): each (id, value) once, the latest per id.
+    fn take_param_edits(&mut self, instance: u32) -> Vec<(u32, f64)> {
+        let mut taken = Vec::new();
+        self.param_edits.retain_mut(|(i, id, value)| {
+            if *i != instance {
+                return true;
+            }
+            taken.push((*id, *value));
+            false
+        });
+        taken
     }
 
     /// Sends `message` (about `instance`, or the process) and waits for the reply `wanted`
@@ -766,6 +793,19 @@ impl Plugin {
             }
         }
         self.latency
+    }
+
+    /// What the user moved in the plug-in's editor since the last call, as (id, value) pairs
+    /// in the plug-in's own range (see [`ParamInfo`]): the session keeps the project's values
+    /// in step with them. Never waits: while the process is busy with another request,
+    /// nothing yet.
+    pub fn take_param_edits(&mut self) -> Vec<(u32, f64)> {
+        let Some(mut group) = try_lock(&self.group) else { return Vec::new() };
+        if group.generation != self.generation {
+            return Vec::new();
+        }
+        group.drain();
+        group.take_param_edits(self.instance)
     }
 
     /// The notes the ARA plug-in found in its regions since the last call, by region id
