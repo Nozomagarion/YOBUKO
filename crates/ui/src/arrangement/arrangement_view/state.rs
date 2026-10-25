@@ -627,9 +627,12 @@ impl ArrangementViewState {
         }
     }
 
-    /// How tall `track`'s lane is.
+    /// How tall a track's row is: its own height once its edge is dragged or it is resized, else
+    /// the theme's (`--suhina-track-height`), else the default size.
     pub fn lane_height(&self, track: TrackId) -> f32 {
-        self.heights.get(&track).copied().unwrap_or(f32::from(self.sizes.height(self.sizes.tracks)))
+        self.heights.get(&track).copied().unwrap_or_else(|| {
+            crate::kit::style_class::theme_track_height().unwrap_or(f32::from(self.sizes.height(self.sizes.tracks)))
+        })
     }
 
     /// How tall the view is when it shows only `track` ([`Self::focus`]): the ruler, the loop

@@ -1263,3 +1263,25 @@ fn a_theme_sets_how_strongly_the_track_colour_tints_its_header() {
     skin::configure(&skin::Skin::default());
     assert_eq!(super::super::style_class::theme_header_tint(), None);
 }
+
+#[test]
+fn the_native_toolbar_paints_its_gradient() {
+    let bar = Rect::from_min_size(egui::pos2(0.0, 0.0), Vec2::new(400.0, 40.0));
+    let mut painted_any = false;
+    let shapes = painted(".toolbar { background-image: linear-gradient(90deg, #ff0000, #0000ff); }", |ui| {
+        let _toolbar = super::super::style_class::enter("toolbar");
+        painted_any = background(ui.painter(), bar);
+    });
+    assert!(painted_any, "{shapes:?}");
+}
+
+#[test]
+fn a_theme_gives_tracks_without_a_height_its_own() {
+    let (theme, _) = super::super::theme::from_sheet(".arrangement { --suhina-track-height: 96px; }", "");
+    skin::configure(&theme.skin);
+    assert_eq!(super::super::style_class::theme_track_height(), Some(96.0));
+    let (theme, _) = super::super::theme::from_sheet(".arrangement { --suhina-track-height: 4px; }", "");
+    skin::configure(&theme.skin);
+    assert_eq!(super::super::style_class::theme_track_height(), None, "out of range is left out");
+    skin::configure(&skin::Skin::default());
+}

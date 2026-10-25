@@ -108,6 +108,7 @@ pub fn valid_property(key: &str, value: &str) -> bool {
         }
         "--suhina-track-headers" => matches!(value, "left" | "right"),
         "--suhina-header-tint" => value.trim().parse::<u8>().is_ok_and(|v| v <= 100),
+        "--suhina-track-height" => px(value).is_some_and(|v| (MIN_TRACK_HEIGHT..=MAX_TRACK_HEIGHT).contains(&v)),
         "--suhina-header-min-width" => value
             .strip_suffix("px")
             .and_then(|v| v.trim().parse::<u16>().ok())
@@ -296,6 +297,22 @@ pub fn theme_track_headers_left() -> Option<bool> {
 /// How strongly the theme lets the track's colour tint its Arrangement header (`.arrangement {
 /// --suhina-header-tint: 0 }` for none, up to 100), over the user's header colour strength; a
 /// see-through theme takes the native tint away with 0.
+/// The least and most a theme's row height for tracks may be, in points.
+const MIN_TRACK_HEIGHT: u16 = 20;
+const MAX_TRACK_HEIGHT: u16 = 400;
+
+fn px(value: &str) -> Option<u16> {
+    value.trim().strip_suffix("px").and_then(|v| v.trim().parse::<u16>().ok())
+}
+
+/// The height a theme gives an Arrangement track that has none of its own (`.arrangement {
+/// --suhina-track-height: 96px }`), in place of Settings › Arrangement's default size.
+pub fn theme_track_height() -> Option<f32> {
+    let skin = skin::current();
+    let value = skin.styles.get(".arrangement")?.get("--suhina-track-height")?;
+    px(value).filter(|v| (MIN_TRACK_HEIGHT..=MAX_TRACK_HEIGHT).contains(v)).map(f32::from)
+}
+
 pub fn theme_header_tint() -> Option<u8> {
     let skin = skin::current();
     skin.styles.get(".arrangement")?.get("--suhina-header-tint")?.trim().parse::<u8>().ok().map(|v| v.min(100))
