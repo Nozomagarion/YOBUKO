@@ -60,6 +60,27 @@ struct Snapshot {
     sources: String,
 }
 
+/// What [`ThemeFiles::import_with`] does with a package whose theme is here already.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Again {
+    /// Write nothing and name it, for the app to ask; a theme that looks the same as one here
+    /// is left out.
+    Ask,
+    /// Write it in place of the theme here, which goes with its variants.
+    Replace,
+    /// Write it under a new id, even when it looks the same as a theme here.
+    Copy,
+}
+
+/// What an import brought in.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Imported {
+    pub ids: Vec<String>,
+    pub warnings: Vec<String>,
+    /// The name of a package's theme that is here already, when nothing was written for it.
+    pub conflict: Option<String>,
+}
+
 pub struct ThemeFiles {
     folder: Option<PathBuf>,
     /// When each file was last changed, as last read or written.
@@ -441,7 +462,17 @@ impl ThemeFiles {
     /// Brings in a theme file or every theme in a zip (a backup, say; the template's own files
     /// are left out): each is written to the themes folder under an id no theme has yet, unless
     /// the same theme is there already. Returns the ids written and warnings.
+    #[cfg(test)]
     pub fn import(&mut self, path: &Path) -> Result<(Vec<String>, Vec<String>), String> {
+        self.import_with(path, Again::Ask).map(|imported| (imported.ids, imported.warnings))
+    }
+
+    /// Brings in a file as [`Self::import`] does; a theme package whose id is a theme here
+    /// already is written as `again` says: in its place, as a copy, or not at all (`Ask`, and
+    /// its name is returned in `conflict` for the app to ask).
+    pub fn import_with(&mut self, path: &Path, again: Again) -> Result<Imported, String> {
+        let mut conflict = None;
+        let mut replace = None;
         let is_zip = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip"));
         let mut found = Vec::new();
         let mut warnings = Vec::new();
@@ -454,6 +485,15 @@ impl ThemeFiles {
             let (theme, problems) =
                 theme::from_sheet(&text(THEME_CSS).unwrap_or_default(), &text(LAYOUT_CSS).unwrap_or_default());
             warnings.extend(package.warnings.iter().chain(&problems).map(|p| format!("{}: {p}", package.name)));
+            let here = self.list().into_iter().any(|(id, _, _)| id.eq_ignore_ascii_case(&package.id));
+            match again {
+                Again::Ask if here => {
+                    conflict = Some(package.name.clone());
+                    return Ok(Imported { ids: Vec::new(), warnings, conflict });
+                }
+                Again::Replace if here => replace = Some(package.id.clone()),
+                _ => {}
+            }
             found.push((package.id.clone(), theme, package.files.into_iter().collect()));
         } else if is_zip {
             for loaded in read_zip(path)? {
@@ -479,11 +519,18 @@ impl ThemeFiles {
             };
             found.push((stem(&name), theme, files));
         }
+        // A theme replaced goes first, its variants with it, and the package's files take its folder.
+        if let (Some(id), Some(folder)) = (&replace, &self.folder) {
+            let dir = folder.join(id);
+            if std::fs::symlink_metadata(&dir).is_ok_and(|m| m.is_dir()) {
+                std::fs::remove_dir_all(&dir).map_err(|e| format!("could not replace {id}: {e}"))?;
+            }
+        }
         let (existing, _) = self.read_all();
         let existing: Vec<ThemeEntry> = existing.into_iter().filter(|e| !e.id.contains('@')).collect();
         let mut written: Vec<ThemeEntry> = Vec::new();
         for (stem, theme, files) in found {
-            if existing.iter().chain(written.iter()).any(|e| same_look(&e.theme, &theme)) {
+            if again == Again::Ask && existing.iter().chain(written.iter()).any(|e| same_look(&e.theme, &theme)) {
                 continue;
             }
             let base = slug(if stem.is_empty() { &theme.name } else { &stem });
@@ -511,7 +558,7 @@ impl ThemeFiles {
             }
             written.push(ThemeEntry { id, theme });
         }
-        Ok((written.into_iter().map(|e| e.id).collect(), warnings))
+        Ok(Imported { ids: written.into_iter().map(|e| e.id).collect(), warnings, conflict })
     }
 
     /// Shows the themes folder in the system's file manager, made first if it is not there.

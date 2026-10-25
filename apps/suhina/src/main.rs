@@ -696,6 +696,9 @@ impl Window {
             if let Some(id) = reply.select {
                 self.app.use_theme(ctx, &id);
             }
+            if let Some((path, name)) = reply.conflict {
+                self.app.ask_theme_import(path, name);
+            }
             let clean = reply.notices.iter().all(Result::is_ok);
             if clean && let Some(error) = self.theme_error.take() {
                 self.app.clear_error(&error);

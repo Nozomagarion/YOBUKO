@@ -480,6 +480,9 @@ pub struct App {
     export_gather: Option<(suhina_session::ProjectId, ExportJob, std::time::Instant, String)>,
     /// Help › About Suhina is open.
     about_open: bool,
+    /// A theme package whose theme is here already, by its file and the theme's name, waiting
+    /// for the answer: replace it or bring in a copy.
+    theme_import: Option<(PathBuf, String)>,
     /// The update check, Help › Check for updates… and the start panel's update line.
     updates: crate::app::updates::Updates,
     /// Restart now was pressed: the window starts the updated build as it closes.
@@ -638,6 +641,7 @@ impl App {
             export_project: None,
             export_gather: None,
             about_open: false,
+            theme_import: None,
             updates: crate::app::updates::Updates::default(),
             restart: false,
             new_request: None,
@@ -1165,6 +1169,12 @@ impl App {
 
     /// Draws with the theme `id` from now on and saves that in the settings, if there is such a
     /// theme.
+    /// Asks whether the theme package at `path`, whose theme `name` is here already, replaces it
+    /// or comes in as a copy.
+    pub fn ask_theme_import(&mut self, path: PathBuf, name: String) {
+        self.theme_import = Some((path, name));
+    }
+
     pub fn use_theme(&mut self, ctx: &egui::Context, id: &str) {
         if self.themes.get(id).is_some() {
             self.settings.theme = id.to_string();
@@ -1774,6 +1784,20 @@ impl App {
         {
             self.updates_wanted(ui.ctx(), wanted);
         }
+        if let Some((path, name)) = self.theme_import.clone() {
+            match project_dialog::show_theme_import(ui, window, &name) {
+                Some(project_dialog::ImportChoice::Replace) => {
+                    self.themes.import_again(path, true);
+                    self.theme_import = None;
+                }
+                Some(project_dialog::ImportChoice::Copy) => {
+                    self.themes.import_again(path, false);
+                    self.theme_import = None;
+                }
+                Some(project_dialog::ImportChoice::Cancel) => self.theme_import = None,
+                None => {}
+            }
+        }
         if self.about_open {
             match project_dialog::show_about(ui, window) {
                 Some(AboutChoice::Copy) => {
@@ -1790,6 +1814,7 @@ impl App {
             || self.unsaved_prompt.is_some()
             || !self.recovery.is_empty()
             || self.about_open
+            || self.theme_import.is_some()
             || self.settings_open;
         if !other_dialog && let Some((connection, client)) = self.agent_asks.first().cloned() {
             match project_dialog::show_agent(ui, window, &client) {

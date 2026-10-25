@@ -81,6 +81,7 @@ impl App {
             || self.ara_prompt.is_some()
             || self.missing.open
             || self.about_open
+            || self.theme_import.is_some()
             || !self.agent_asks.is_empty()
             || self.updates.open
     }

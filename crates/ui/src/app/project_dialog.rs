@@ -576,6 +576,64 @@ fn draw_agent(ui: &mut Ui, area: Rect, client: &str) -> Option<AgentChoice> {
     closed
 }
 
+/// The answer to a theme package whose theme is here already.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportChoice {
+    Replace,
+    Copy,
+    Cancel,
+}
+
+impl CloseChoice for ImportChoice {
+    fn close() -> Self {
+        ImportChoice::Cancel
+    }
+}
+
+/// Asks what to do with a theme package whose theme, `name`, is here already: replace it, bring
+/// it in as a copy, or leave it.
+pub fn show_theme_import(ui: &Ui, area: Rect, name: &str) -> Option<ImportChoice> {
+    let _style_class = crate::kit::style_class::enter("dialog");
+    egui::Area::new(Id::new("theme-import"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(area.min)
+        .show(ui.ctx(), |ui| {
+            let mut styled_ui = crate::kit::style_class::ui(ui);
+            let ui = &mut *styled_ui;
+            ui.set_min_size(area.size());
+            let mut closed: Option<ImportChoice> = None;
+            let size = Vec2::new(RECOVERY_WIDTH, ROW + 2.0 * LINE + BUTTON.y + 3.0 * PAD);
+            let panel = panel(ui, area, size, "The theme is here already", &mut closed);
+            let painter = ui.painter_at(area);
+            let lines = [
+                format!("{name} is one of your themes already."),
+                "Replace it with this one, or bring this one in as a copy.".to_string(),
+            ];
+            for (n, line) in lines.iter().enumerate() {
+                let text = Rect::from_min_size(
+                    Pos2::new(panel.left() + PAD, panel.top() + ROW + PAD + n as f32 * LINE),
+                    Vec2::new(panel.width() - 2.0 * PAD, LINE),
+                );
+                let colour = if n == 0 { theme::text_primary() } else { theme::text_hint() };
+                widgets::text_in(&painter, text, Align2::LEFT_CENTER, line, theme::ui_font(theme::TEXT), colour);
+            }
+            let bottom = panel.bottom() - PAD - BUTTON.y;
+            let replace = Rect::from_min_size(Pos2::new(panel.right() - PAD - BUTTON.x, bottom), BUTTON);
+            let copy = Rect::from_min_size(Pos2::new(replace.left() - 4.0 - BUTTON.x, bottom), BUTTON);
+            if button(ui, &painter, replace, "Replace", &format!("Replace {name}")) {
+                return Some(ImportChoice::Replace);
+            }
+            if button(ui, &painter, copy, "Copy", &format!("Bring in {name} as a copy")) {
+                return Some(ImportChoice::Copy);
+            }
+            if ui.input(|i| i.key_pressed(Key::Escape)) {
+                return Some(ImportChoice::Cancel);
+            }
+            closed
+        })
+        .inner
+}
+
 /// A panel in the middle of `area` with a title row and a Close button, the area behind dimmed
 /// and its clicks swallowed. Returns the panel; `closed` is set when Close is clicked.
 pub(crate) fn panel<T: CloseChoice>(ui: &Ui, area: Rect, size: Vec2, title: &str, closed: &mut Option<T>) -> Rect {

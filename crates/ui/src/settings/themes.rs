@@ -36,8 +36,12 @@ pub enum FileAction {
     Backup,
     /// Write the theme `id` as a theme package (`.theme.suhina`).
     ExportPackage { id: String, theme: Box<Theme> },
-    /// Bring in a theme file or a zip of them dropped on the window.
+    /// Bring in a theme file or a zip of them dropped on the window. A package whose theme is
+    /// here already is not written: the app asks whether to replace it or bring in a copy.
     Import(PathBuf),
+    /// Bring in a theme package whose theme is here already: in place of it (`replace`), or as
+    /// a copy under a new id.
+    ImportAgain { path: PathBuf, replace: bool },
 }
 
 #[derive(Debug, Clone)]
@@ -342,6 +346,11 @@ impl Themes {
     /// A theme file or zip dropped on the window, for the app to bring in.
     pub fn import(&mut self, path: PathBuf) {
         self.actions.push(Pending::Other(Box::new(FileAction::Import(path))));
+    }
+
+    /// The answer to a package whose theme is here already: replace it, or bring in a copy.
+    pub fn import_again(&mut self, path: PathBuf, replace: bool) {
+        self.actions.push(Pending::Other(Box::new(FileAction::ImportAgain { path, replace })));
     }
 
     /// What the app should do with the theme files, in order, once.

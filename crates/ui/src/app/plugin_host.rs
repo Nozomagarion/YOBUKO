@@ -119,6 +119,7 @@ impl App {
     pub(super) fn over_the_window(&self) -> bool {
         (self.settings_open && !self.page.window)
             || self.about_open
+            || self.theme_import.is_some()
             || self.updates.open
             || self.project_dialog.is_some()
             || self.save_prompt.is_some()

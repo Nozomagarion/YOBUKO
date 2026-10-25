@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use eframe::egui;
 use suhina_ui::settings::themes::{FileAction, ThemeEntry};
 
-use crate::theme_files::ThemeFiles;
+use crate::theme_files::{Again, ThemeFiles};
 
 struct Work {
     actions: Vec<FileAction>,
@@ -24,6 +24,9 @@ pub struct Reply {
     pub folder: Option<String>,
     pub select: Option<String>,
     pub notices: Vec<Result<String, String>>,
+    /// A theme package whose theme is here already, by its file and the theme's name, for the
+    /// app to ask whether to replace it or bring in a copy.
+    pub conflict: Option<(std::path::PathBuf, String)>,
     /// The user's style sheet when it changed: `Some(None)` once it is removed.
     pub user_css: Option<Option<std::sync::Arc<str>>>,
 }
@@ -205,19 +208,10 @@ fn execute(files: &mut ThemeFiles, actions: Vec<FileAction>) -> Reply {
             FileAction::ExportTemplate => {
                 files.export_template().map(|path| Some(crate::saved(&path, "Saved the theme template to")))
             }
-            FileAction::Import(path) => files.import(&path).map(|(ids, warnings)| {
-                reply.replace = true;
-                if let [id] = ids.as_slice() {
-                    reply.select = Some(id.clone());
-                }
-                let file = path.file_name().unwrap_or_default().to_string_lossy();
-                let message = match ids.len() {
-                    0 => format!("{file} has no themes that are not here already"),
-                    1 => format!("Added the theme from {file}"),
-                    n => format!("Added {n} themes from {file}"),
-                };
-                Some(warnings.first().map_or(message.clone(), |warning| format!("{message}; {warning}")))
-            }),
+            FileAction::Import(path) => imported(files, &path, Again::Ask, &mut reply),
+            FileAction::ImportAgain { path, replace } => {
+                imported(files, &path, if replace { Again::Replace } else { Again::Copy }, &mut reply)
+            }
         };
         match result {
             Ok(Some(message)) => reply.notices.push(Ok(message)),
@@ -247,6 +241,32 @@ fn execute(files: &mut ThemeFiles, actions: Vec<FileAction>) -> Reply {
         None => {}
     }
     reply
+}
+
+/// Brings in `path` as `again` says, and what it says for the status bar.
+fn imported(
+    files: &mut ThemeFiles,
+    path: &std::path::Path,
+    again: Again,
+    reply: &mut Reply,
+) -> Result<Option<String>, String> {
+    let imported = files.import_with(path, again)?;
+    reply.replace = true;
+    let file = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    if let Some(name) = imported.conflict {
+        reply.conflict = Some((path.to_path_buf(), name));
+        return Ok(None);
+    }
+    if let [id] = imported.ids.as_slice() {
+        reply.select = Some(id.clone());
+    }
+    let message = match (imported.ids.len(), again) {
+        (0, _) => format!("{file} has no themes that are not here already"),
+        (1, Again::Replace) => format!("Replaced the theme with the one from {file}"),
+        (1, _) => format!("Added the theme from {file}"),
+        (n, _) => format!("Added {n} themes from {file}"),
+    };
+    Ok(Some(imported.warnings.first().map_or(message.clone(), |warning| format!("{message}; {warning}"))))
 }
 
 #[cfg(test)]

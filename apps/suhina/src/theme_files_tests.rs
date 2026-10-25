@@ -220,3 +220,22 @@ fn an_exported_package_brings_the_theme_back_and_a_damaged_one_is_refused() {
     assert!(other.import(&damaged).is_err());
     let _clean = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_package_brought_in_again_asks_then_replaces_or_copies() {
+    let dir = folder("package-again");
+    let mut files = ThemeFiles::new(Some(dir.join("themes")));
+    assert_eq!(files.write("night", &night()), Ok(()));
+    let package = files.export_package("night", &night()).unwrap();
+    // The theme is here already, so nothing is written until the answer comes.
+    let asked = files.import_with(&package, Again::Ask).unwrap();
+    assert_eq!((asked.ids.len(), asked.conflict.as_deref()), (0, Some(night().name.as_str())));
+    let replaced = files.import_with(&package, Again::Replace).unwrap();
+    assert_eq!(replaced.ids, ["night"]);
+    let (themes, _) = files.read_all();
+    assert!(same_look(&themes.iter().find(|e| e.id == "night").unwrap().theme, &night()));
+    assert!(!themes.iter().any(|e| e.id == "night-2"), "no copy");
+    let copied = files.import_with(&package, Again::Copy).unwrap();
+    assert_eq!(copied.ids, ["night-2"], "a copy even of the same look, as asked");
+    let _clean = std::fs::remove_dir_all(&dir);
+}
