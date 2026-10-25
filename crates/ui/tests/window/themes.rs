@@ -713,3 +713,23 @@ fn the_loop_lines_reach_down_past_the_returns_to_main() {
     assert!(tallest > 0.0, "the line takes .loop-line's colour");
     assert!(tallest > main, "it reaches down past Main's row: ends at {tallest}, Main at {main}");
 }
+
+#[test]
+fn choosing_another_themes_folder_asks_before_its_themes_move() {
+    use suhina_ui::interaction::pick::PickField;
+    let mut h = window(demo_app());
+    let chosen = std::env::temp_dir().join("suhina-themes-elsewhere");
+    h.state_mut().set_picked(PickField::ThemesFolder, chosen.clone());
+    h.run();
+    assert!(h.state().settings().themes_folder.is_empty(), "nothing changes before the answer");
+    h.get_by_label("Leave them where they are").click();
+    h.run();
+    assert!(h.query_by_label("Move your themes").is_none());
+    assert!(h.state().settings().themes_folder.is_empty() && h.state_mut().take_theme_move().is_none());
+    h.state_mut().set_picked(PickField::ThemesFolder, chosen.clone());
+    h.run();
+    h.get_by_label("Move your themes").click();
+    h.run();
+    assert_eq!(h.state().settings().themes_folder, chosen.display().to_string());
+    assert!(h.state_mut().take_theme_move().is_some_and(|(_, to)| to == chosen));
+}

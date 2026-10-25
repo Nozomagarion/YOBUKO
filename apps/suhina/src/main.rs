@@ -700,42 +700,74 @@ impl Window {
         }
     }
 
-    /// Does what Settings asked of the theme files (write, rename, read again, back up, export
-    /// the template, bring in a dropped file, show the folder) and reads a theme file saved
-    /// elsewhere. While a theme file is in use the folder is looked at every second.
-    /// Settings › General › Settings folder changed: Suhina's data is copied into the folder chosen
-    /// (what is there already is kept) and used from the next start; empty goes back to the default.
+    /// Settings › General › Settings folder changed (the person confirmed the move): a backup of
+    /// Suhina's data is made beside it, the data moves into the folder chosen (what is there
+    /// already is kept) and is used from now on; empty moves it back to the default.
     fn move_data_folder(&mut self, chosen: &str) {
         if chosen == self.data_folder {
             return;
         }
-        self.data_folder = chosen.to_owned();
+        let previous = std::mem::replace(&mut self.data_folder, chosen.to_owned());
         let Some(default) = default_data_dir() else { return };
         if data_override().is_some() {
             self.app.set_status(Status::Hint("--data-dir or SUHINA_DATA chooses the settings folder this time".into()));
+            return;
         }
-        let result = if chosen.is_empty() {
-            data_folder::point(&default, None)
-                .map(|()| format!("Settings are kept in {} from the next start", default.display()))
-        } else {
-            let folder = PathBuf::from(chosen);
-            if !folder.is_absolute() {
-                return;
+        let to = if chosen.is_empty() { default.clone() } else { PathBuf::from(chosen) };
+        if !to.is_absolute() {
+            self.data_folder = previous;
+            return;
+        }
+        let from = data_dir().unwrap_or_else(|| default.clone());
+        let pointer = (!chosen.is_empty()).then_some(to.as_path());
+        let moved = data_folder::move_data(&from, &to, false)
+            .and_then(|(backup, count)| data_folder::point(&default, pointer).map(|()| (backup, count)));
+        match moved {
+            Ok((backup, count)) => {
+                if let Ok(mut current) = MOVED_DATA_DIR.lock() {
+                    *current = Some(to.clone());
+                }
+                self.recent.set_file(Some(to.join(RECENT_FILE)));
+                self.app.projects_mut().set_backup_folder(Some(to.join(suhina_session::backup::SETTINGS_SUBFOLDER)));
+                self.app.set_default_themes_folder(to.join(THEMES_FOLDER));
+                // The settings were moved with the rest; they are written there whole now.
+                let settings = self.app.settings().clone();
+                if let Err(e) = save_settings(&settings) {
+                    self.app.set_status(Status::Error(e));
+                    return;
+                }
+                self.app.set_status(Status::Done(format!(
+                    "Moved {count} files to {}; a backup of them is in {}",
+                    to.display(),
+                    backup.display()
+                )));
             }
-            let from = data_dir().unwrap_or_else(|| default.clone());
-            data_folder::copy_over(&from, &folder).and_then(|copied| {
-                data_folder::point(&default, Some(&folder)).map(|()| {
-                    format!("Copied {copied} files; settings are kept in {} from the next start", folder.display())
-                })
-            })
-        };
-        match result {
-            Ok(message) => self.app.set_status(Status::Done(message)),
-            Err(error) => self.app.set_status(Status::Error(error)),
+            Err(error) => {
+                self.data_folder = previous;
+                self.app.set_status(Status::Error(error));
+            }
         }
     }
 
+    /// Does what Settings asked of the theme files (write, rename, read again, back up, export
+    /// the template, bring in a dropped file, show the folder) and reads a theme file saved
+    /// elsewhere. While a theme file is in use the folder is looked at every second.
     fn sync_themes(&mut self, ctx: &eframe::egui::Context) {
+        // The themes folder moved, as the person agreed: a backup beside the old one, then its
+        // themes go to the new one before it is read.
+        if let Some((from, to)) = self.app.take_theme_move()
+            && from != to
+            && from.is_dir()
+        {
+            match data_folder::move_data(&from, &to, true) {
+                Ok((backup, count)) => self.app.set_status(Status::Done(format!(
+                    "Moved {count} theme files to {}; a backup of them is in {}",
+                    to.display(),
+                    backup.display()
+                ))),
+                Err(error) => self.app.set_status(Status::Error(error)),
+            }
+        }
         // Settings › Theme › Themes folder changed: the themes are read from the new one.
         let wanted = themes_env().or_else(|| Some(self.app.themes_folder()));
         // A folder that is not there (a path half typed) is not read; the default is made.
@@ -832,11 +864,17 @@ static DATA_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 /// Settings folder (named in the default folder, `data_folder`), or Suhina's folder of the user's
 /// app data. Worked out once, at the first call after the command line is read.
 fn data_dir() -> Option<PathBuf> {
+    if let Some(moved) = MOVED_DATA_DIR.lock().ok().and_then(|moved| moved.clone()) {
+        return Some(moved);
+    }
     static RESOLVED: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
     RESOLVED
         .get_or_init(|| data_override().or_else(|| default_data_dir().map(|d| data_folder::pointed(&d).unwrap_or(d))))
         .clone()
 }
+
+/// The folder Suhina's data was moved to while it runs (Settings › General › Settings folder).
+static MOVED_DATA_DIR: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 
 /// The data folder `--data-dir` or `SUHINA_DATA` gives for this run, over the setting.
 fn data_override() -> Option<PathBuf> {

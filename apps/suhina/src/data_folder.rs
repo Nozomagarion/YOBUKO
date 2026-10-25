@@ -57,6 +57,62 @@ pub fn copy_over(from: &Path, to: &Path) -> Result<usize, String> {
     Ok(copied)
 }
 
+/// Moves Suhina's data (the settings, keys, recent projects and themes; `only_themes` for the
+/// themes folder alone) from `from` into `to`: a backup of it is made first, beside `from`
+/// (`<name>-backup-<date and time>`), then it is copied into `to`, keeping what `to` has
+/// already, and only then taken out of `from`. Returns the backup's folder and how many files
+/// moved.
+pub fn move_data(from: &Path, to: &Path, only_themes: bool) -> Result<(PathBuf, usize), String> {
+    if from == to || to.starts_with(from) {
+        return Err(format!("{} is inside the folder it would move from", to.display()));
+    }
+    let stamp = chrono::Local::now().format("%Y-%m-%d-%H%M%S");
+    let name = from.file_name().map_or_else(|| "suhina".into(), |n| n.to_string_lossy().into_owned());
+    let backup = from.with_file_name(format!("{name}-backup-{stamp}"));
+    let mut copied = 0;
+    let mut seen = 0;
+    if only_themes {
+        copy_tree(from, &backup, &mut copied, &mut seen)?;
+        copied = 0;
+        seen = 0;
+        copy_tree(from, to, &mut copied, &mut seen)?;
+        remove_children(from)?;
+    } else {
+        copy_over(from, &backup)?;
+        copied = copy_over(from, to)?;
+        for name in FILES {
+            remove_file(&from.join(name))?;
+        }
+        let themes = from.join(THEMES);
+        if std::fs::symlink_metadata(&themes).is_ok_and(|m| m.is_dir()) {
+            std::fs::remove_dir_all(&themes).map_err(|e| format!("could not remove {}: {e}", themes.display()))?;
+        }
+    }
+    Ok((backup, copied))
+}
+
+fn remove_file(path: &Path) -> Result<(), String> {
+    match std::fs::remove_file(path) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(format!("could not remove {}: {e}", path.display())),
+        _ => Ok(()),
+    }
+}
+
+/// Empties `folder`, keeping the folder itself; links are removed, never followed.
+fn remove_children(folder: &Path) -> Result<(), String> {
+    let Ok(entries) = std::fs::read_dir(folder) else { return Ok(()) };
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        let removed = match std::fs::symlink_metadata(&path) {
+            Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(&path),
+            Ok(_) => std::fs::remove_file(&path),
+            Err(_) => continue,
+        };
+        removed.map_err(|e| format!("could not remove {}: {e}", path.display()))?;
+    }
+    Ok(())
+}
+
 fn copy_file(from: &Path, to: &Path) -> Result<usize, String> {
     let ordinary = std::fs::symlink_metadata(from).is_ok_and(|m| m.is_file());
     if !ordinary || std::fs::symlink_metadata(to).is_ok() {
@@ -111,6 +167,12 @@ mod tests {
         assert_eq!(pointed(&default), Some(chosen.clone()));
         assert_eq!(point(&default, None), Ok(()));
         assert_eq!(pointed(&default), None);
+        // Moving: a backup beside the old folder, the files in the new one, none left behind.
+        let moved = base.join("moved");
+        let (backup, count) = move_data(&default, &moved, false).unwrap();
+        assert!(count >= 1 && backup.join("settings.txt").is_file() && moved.join("settings.txt").is_file());
+        assert!(!default.join("settings.txt").exists() && !default.join("themes").exists());
+        assert!(move_data(&moved, &moved.join("inside"), false).is_err());
         // A folder that is gone is not used.
         point(&default, Some(&base.join("gone"))).unwrap();
         assert_eq!(pointed(&default), None);

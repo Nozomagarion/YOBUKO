@@ -375,6 +375,8 @@ pub struct Outcome {
     pub midi_input: Option<(String, bool)>,
     /// A field's Browse… was clicked: the app shows the system's dialog for it.
     pub pick: Option<PickField>,
+    /// A folder that moves its files asked to go back to its default (Reset).
+    pub folder_reset: Option<PickField>,
 }
 
 /// What the page shows and changes besides the settings.
@@ -677,6 +679,53 @@ impl Cx<'_> {
         if edit.changed() {
             self.outcome.changed = true;
         }
+    }
+
+    /// A folder whose files move with it (the settings and the themes): shown, not typed into, so
+    /// it changes only through Browse or Reset, each asking first.
+    pub fn moved_folder(&mut self, row: Rect, hint: &str, pick: PickField, value: &str) {
+        let name = self.name;
+        self.label =
+            Some(Rect::from_min_size(row.min, Vec2::new(row.width() - FOLDER_FIELD - 8.0 + LABEL_WIDTH, row.height())));
+        let browse = Rect::from_min_size(
+            Pos2::new(row.right() - BROWSE_WIDTH, row.top() + 1.0),
+            Vec2::new(BROWSE_WIDTH, SEGMENT),
+        );
+        if crate::kit::widgets::button(self.ui, self.painter, browse, "Browse…", &format!("Browse for {name}")) {
+            self.outcome.pick = Some(pick);
+        }
+        let reset_width = if value.is_empty() { 0.0 } else { BROWSE_WIDTH };
+        let reset = Rect::from_min_size(
+            Pos2::new(browse.left() - 4.0 - reset_width, browse.top()),
+            Vec2::new(reset_width, SEGMENT),
+        );
+        if !value.is_empty()
+            && crate::kit::widgets::button(
+                self.ui,
+                self.painter,
+                reset,
+                "Reset",
+                &format!("Reset {name} to its default"),
+            )
+        {
+            self.outcome.folder_reset = Some(pick);
+        }
+        let rect = Rect::from_min_max(
+            Pos2::new(row.right() - FOLDER_FIELD, row.top()),
+            Pos2::new(reset.left() - 4.0, row.top() + SEGMENT + 2.0),
+        );
+        let (text, color) = if value.is_empty() { (hint, theme::text_hint()) } else { (value, theme::text_value()) };
+        self.painter.rect_stroke(rect, 2.0, theme::hairline(theme::border()), egui::StrokeKind::Inside);
+        crate::kit::widgets::text_in(
+            self.painter,
+            rect.shrink2(Vec2::new(6.0, 0.0)),
+            Align2::LEFT_CENTER,
+            text,
+            theme::ui_font(theme::TEXT_SMALL),
+            color,
+        );
+        let shown = self.ui.interact(rect, Id::new(("moved-folder", name)), Sense::hover());
+        shown.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{name}: {text}")));
     }
 
     /// The most colour tags the browser may have, kept by the library rather than the settings.

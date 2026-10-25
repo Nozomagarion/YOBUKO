@@ -756,7 +756,8 @@ control with no room left is not drawn, without a notice: check narrow tracks an
 - **Low tracks:** `.arrangement { --suhina-compact-below: 48px }`: a track lower than that keeps
   Suhina's own header layout instead of the placements, so nothing overlaps.
 - **Settings folder:** Settings › General › Projects › Settings folder moves all of Suhina's
-  data (copied, used from the next start).
+  data. Changing it or the themes folder asks first, backs the files up beside the old folder
+  and moves them.
 - **A copy of a theme** says how many placed controls it keeps; Edit interface › **Reset all**
   takes them away.
 - **Choosing a theme** keeps the Themes page where it was.

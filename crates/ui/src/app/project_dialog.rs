@@ -576,6 +576,51 @@ fn draw_agent(ui: &mut Ui, area: Rect, client: &str) -> Option<AgentChoice> {
     closed
 }
 
+/// Asks whether to move Suhina's `what` to the folder `to`, a backup made first. `Some(true)` to
+/// move, `Some(false)` to leave them.
+pub fn show_folder_move(ui: &Ui, area: Rect, what: &str, to: &str) -> Option<bool> {
+    let _style_class = crate::kit::style_class::enter("dialog");
+    egui::Area::new(Id::new("folder-move"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(area.min)
+        .show(ui.ctx(), |ui| {
+            let mut styled_ui = crate::kit::style_class::ui(ui);
+            let ui = &mut *styled_ui;
+            ui.set_min_size(area.size());
+            let mut closed: Option<AgentChoice> = None;
+            let size = Vec2::new(RECOVERY_WIDTH, ROW + 3.0 * LINE + BUTTON.y + 3.0 * PAD);
+            let panel = panel(ui, area, size, "Move the folder?", &mut closed);
+            let painter = ui.painter_at(area);
+            let lines = [
+                format!("Move your {what} to {to}?"),
+                "A backup of them is made first, beside the folder they are in now.".to_string(),
+                "Files the new folder has already are kept.".to_string(),
+            ];
+            for (n, line) in lines.iter().enumerate() {
+                let text = Rect::from_min_size(
+                    Pos2::new(panel.left() + PAD, panel.top() + ROW + PAD + n as f32 * LINE),
+                    Vec2::new(panel.width() - 2.0 * PAD, LINE),
+                );
+                let colour = if n == 0 { theme::text_primary() } else { theme::text_hint() };
+                widgets::text_in(&painter, text, Align2::LEFT_CENTER, line, theme::ui_font(theme::TEXT), colour);
+            }
+            let bottom = panel.bottom() - PAD - BUTTON.y;
+            let confirm = Rect::from_min_size(Pos2::new(panel.right() - PAD - BUTTON.x, bottom), BUTTON);
+            let cancel = Rect::from_min_size(Pos2::new(confirm.left() - 4.0 - BUTTON.x, bottom), BUTTON);
+            if button(ui, &painter, confirm, "Move", &format!("Move your {what}")) {
+                return Some(true);
+            }
+            if button(ui, &painter, cancel, "Cancel", "Leave them where they are")
+                || ui.input(|i| i.key_pressed(Key::Escape))
+                || closed.is_some()
+            {
+                return Some(false);
+            }
+            None
+        })
+        .inner
+}
+
 /// The answer to a theme package whose theme is here already.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportChoice {

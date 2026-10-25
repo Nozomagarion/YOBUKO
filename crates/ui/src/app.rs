@@ -483,6 +483,11 @@ pub struct App {
     /// A theme package whose theme is here already, by its file and the theme's name, waiting
     /// for the answer: replace it or bring in a copy.
     theme_import: Option<(PathBuf, String)>,
+    /// A folder whose files move with it (the settings, the themes), chosen and waiting for the
+    /// answer to "move them there?": the new folder, or `None` for the default.
+    folder_move: Option<(PickField, Option<PathBuf>)>,
+    /// The themes moved from one folder to another, for the app to move their files.
+    theme_move: Option<(PathBuf, PathBuf)>,
     /// The update check, Help › Check for updates… and the start panel's update line.
     updates: crate::app::updates::Updates,
     /// Restart now was pressed: the window starts the updated build as it closes.
@@ -646,6 +651,8 @@ impl App {
             export_gather: None,
             about_open: false,
             theme_import: None,
+            folder_move: None,
+            theme_move: None,
             updates: crate::app::updates::Updates::default(),
             restart: false,
             new_request: None,
@@ -1177,6 +1184,11 @@ impl App {
     /// theme.
     /// Asks whether the theme package at `path`, whose theme `name` is here already, replaces it
     /// or comes in as a copy.
+    /// The themes folder that changed after the person agreed to move them: from and to.
+    pub fn take_theme_move(&mut self) -> Option<(PathBuf, PathBuf)> {
+        self.theme_move.take()
+    }
+
     pub fn ask_theme_import(&mut self, path: PathBuf, name: String) {
         self.theme_import = Some((path, name));
     }
@@ -1515,8 +1527,8 @@ impl App {
                 }
             }
             PickField::NamModelsFolder => self.settings.nam_models_folder = text,
-            PickField::ThemesFolder => self.settings.themes_folder = text,
-            PickField::DataFolder => self.settings.data_folder = text,
+            // A folder whose files move with it asks first.
+            PickField::ThemesFolder | PickField::DataFolder => self.folder_move = Some((field, Some(path))),
             PickField::IrFolder => self.settings.irs_folder = text,
             PickField::TemplatesFolder => self.settings.templates_folder = text,
             PickField::StartTemplate => self.settings.start_template = text,
@@ -1815,6 +1827,33 @@ impl App {
         {
             self.updates_wanted(ui.ctx(), wanted);
         }
+        if let Some((field, to)) = self.folder_move.clone() {
+            let what =
+                if field == PickField::DataFolder { "settings, keys, recent projects and themes" } else { "themes" };
+            let target = to.clone().unwrap_or_else(|| {
+                if field == PickField::DataFolder {
+                    self.data_default_folder.clone()
+                } else {
+                    self.themes_default_folder.clone()
+                }
+            });
+            match project_dialog::show_folder_move(ui, window, what, &target.display().to_string()) {
+                Some(true) => {
+                    let text = to.map_or_else(String::new, |p| p.display().to_string());
+                    if field == PickField::ThemesFolder {
+                        let from = self.themes_folder();
+                        self.settings.themes_folder = text;
+                        self.theme_move = Some((from, self.themes_folder()));
+                    } else {
+                        self.settings.data_folder = text;
+                    }
+                    self.settings_changed = true;
+                    self.folder_move = None;
+                }
+                Some(false) => self.folder_move = None,
+                None => {}
+            }
+        }
         if let Some((path, name)) = self.theme_import.clone() {
             match project_dialog::show_theme_import(ui, window, &name) {
                 Some(project_dialog::ImportChoice::Replace) => {
@@ -1846,6 +1885,7 @@ impl App {
             || !self.recovery.is_empty()
             || self.about_open
             || self.theme_import.is_some()
+            || self.folder_move.is_some()
             || self.settings_open;
         if !other_dialog && let Some((connection, client)) = self.agent_asks.first().cloned() {
             match project_dialog::show_agent(ui, window, &client) {

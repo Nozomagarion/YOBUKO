@@ -271,6 +271,9 @@ impl App {
         if let Some(field) = outcome.pick {
             self.ask_pick(field);
         }
+        if let Some(field) = outcome.folder_reset {
+            self.folder_move = Some((field, None));
+        }
         if let Some(choice) = outcome.audio_output.clone() {
             self.choose_output(&choice);
         }

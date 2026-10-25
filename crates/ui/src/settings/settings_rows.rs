@@ -80,8 +80,8 @@ pub(crate) static ROWS: &[Entry] = &[
         "Where Suhina keeps its settings, keys, recent projects and themes; used from the next start",
         &[],
         |cx, r| {
-            let default = cx.about.data_default.clone();
-            cx.folder(r, &default, crate::interaction::pick::PickField::DataFolder, |s| &mut s.data_folder);
+            let (default, value) = (cx.about.data_default.clone(), cx.settings.data_folder.clone());
+            cx.moved_folder(r, &default, crate::interaction::pick::PickField::DataFolder, &value);
         },
     ),
     row(
@@ -860,8 +860,8 @@ pub(crate) static ROWS: &[Entry] = &[
         "Where themes are kept and read from; empty for the folder in Suhina's data",
         &["themes_folder"],
         |cx, r| {
-            let default = cx.about.themes_default.clone();
-            cx.folder(r, &default, crate::interaction::pick::PickField::ThemesFolder, |s| &mut s.themes_folder);
+            let (default, value) = (cx.about.themes_default.clone(), cx.settings.themes_folder.clone());
+            cx.moved_folder(r, &default, crate::interaction::pick::PickField::ThemesFolder, &value);
         },
     ),
     // Shortcuts.

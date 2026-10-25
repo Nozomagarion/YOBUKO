@@ -164,17 +164,18 @@ Premultiplied interpolation preserves transparency, including the liquid body gr
 Opacity changes apply live and save with the theme; holding their slider previews the
 background without dimming, as with the other colour controls.
 
-Under the gallery, *Themes folder* (`themes_folder`) is where themes are kept and read from: a
-path typed or chosen with Browse, or empty for `themes` in Suhina's data folder, shown as the
-default. Changing it reads the themes of the new folder at once; one that does not exist yet
-is not read, and the themes of the old folder are neither moved nor copied. `SUHINA_THEMES`
-wins over it, and `--data-dir` or `SUHINA_DATA` moves the whole data folder.
+Under the gallery, *Themes folder* (`themes_folder`) is where themes are kept and read from. It is
+shown, not typed into: **Browse** chooses a folder and **Reset** goes back to `themes` in Suhina's
+data. Either asks *Move the folder?* first; **Move** makes a backup of the current folder beside it
+(`<name>-backup-<date and time>`), moves its themes into the new one (keeping what that has) and
+reads the themes from there at once; **Cancel** changes nothing. `SUHINA_THEMES` wins over it.
 
 General › Projects › *Settings folder* (`data_folder`) chooses Suhina's data folder: its
 settings, keys, recent projects and themes. It is not written in the settings file, which lives
-in that folder: `data-location.txt` in the default folder names it. Choosing a folder copies
-those files into it, keeping what it has already, and the folder is used from the next start;
-empty goes back to the default. `--data-dir` and `SUHINA_DATA` win over it.
+in that folder: `data-location.txt` in the default folder names it. It changes as *Themes folder*
+does, through Browse or Reset and the same question; **Move** backs the files up beside the
+current folder, moves them into the new one (keeping what it has) and uses it at once.
+`--data-dir` and `SUHINA_DATA` win over it.
 
 ## Scrolling
 
