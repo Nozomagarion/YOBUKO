@@ -156,14 +156,23 @@ fn chain_row(
             });
             let width = editor.map_or(authored_width, |e| authored_width.max(e.x + PAD * 2.0));
             // `.device { width }` or `#device-<id> { width }` widens the panel (up to 1600 points).
-            let width = {
+            let (width, themed_height) = {
                 let _style = crate::kit::style_class::enter_named("device", &format!("device-{}", device.theme_id));
-                crate::kit::style_class::computed()
+                let computed = crate::kit::style_class::computed();
+                let width = computed
+                    .as_ref()
                     .and_then(|c| c.width)
-                    .map_or(width, |themed| width.max(themed.clamp(120.0, 1600.0)))
+                    .map_or(width, |themed| width.max(themed.clamp(120.0, 1600.0)));
+                (width, computed.and_then(|c| c.height))
             };
             let height = sdk_viewport(device)
                 .map_or_else(|| panel_height(device, width - PAD * 2.0, editor), |v| ROW + PAD * 2.0 + v[1]);
+            // `.device { height }` or `#device-<id> { height }` sets the panel's height (60 to 1200
+            // points); what does not fit scrolls. An embedded editor keeps its own room.
+            let height = match (themed_height, editor) {
+                (Some(themed), None) => themed.clamp(60.0, 1200.0),
+                _ => height,
+            };
             (width, height)
         })
         .collect();

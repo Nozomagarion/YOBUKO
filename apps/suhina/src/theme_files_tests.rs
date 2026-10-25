@@ -258,3 +258,26 @@ fn a_theme_folder_linked_from_elsewhere_is_read_and_written() {
     assert!(dir.join("work/night/variants/custom.json").is_file());
     let _clean = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_background_picture_in_the_assets_folder_is_read() {
+    let dir = folder("background-assets");
+    let theme = dir.join("themes/pictured");
+    std::fs::create_dir_all(theme.join("assets")).unwrap();
+    let png = b"\x89PNG\r\n\x1a\nfake-data-for-the-path-only".to_vec();
+    std::fs::write(theme.join("assets/bg-4k.png"), &png).unwrap();
+    std::fs::write(
+        theme.join("theme.css"),
+        "theme { name: \"Pictured\"; } :root { --background-image: url(\"assets/bg-4k.png\"); }",
+    )
+    .unwrap();
+    let mut files = ThemeFiles::new(Some(dir.join("themes")));
+    let (themes, warnings) = files.read_all();
+    let pictured = themes.iter().find(|e| e.id == "pictured").expect("the theme reads");
+    assert!(
+        pictured.theme.skin.background.as_deref().is_some_and(|b| b.starts_with("data:image/png")),
+        "{:?} {warnings:?}",
+        pictured.theme.skin.background.as_deref().map(|b| &b[..b.len().min(40)])
+    );
+    let _clean = std::fs::remove_dir_all(&dir);
+}

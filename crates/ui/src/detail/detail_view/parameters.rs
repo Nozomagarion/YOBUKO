@@ -29,7 +29,8 @@ pub(super) fn parameter_cell(
     at: &DeviceAt,
     actions: &mut Vec<Action>,
 ) {
-    let style = &parameter.ui;
+    let themed = themed_ui(parameter);
+    let style = &themed;
     let family = if style.monospace { egui::FontFamily::Monospace } else { egui::FontFamily::Proportional };
     let font = egui::FontId::new(style.font_size, family);
     let foreground = style.text_color.map_or_else(theme::text_secondary, rgb);
@@ -422,6 +423,8 @@ pub(super) fn switch(ui: &Ui, painter: &egui::Painter, rect: Rect, showing: Show
 }
 
 pub(super) fn parameter_height(parameter: &GraphParameter) -> f32 {
+    let themed = themed_ui(parameter);
+    let parameter = &GraphParameter { ui: themed, ..parameter.clone() };
     if let Some([_, height]) = parameter.ui.size {
         return height;
     }
@@ -469,4 +472,16 @@ pub(super) fn parameter_layout(parameters: &[GraphParameter], width: f32, hidden
             rect
         })
         .collect()
+}
+
+/// A parameter's look with the theme's label position (`--suhina-param-label`) over its own.
+fn themed_ui(parameter: &GraphParameter) -> suhina_device_sdk::ParameterUi {
+    let mut ui = parameter.ui.clone();
+    ui.label_position = match crate::kit::style_class::theme_param_label() {
+        Some("top") => LabelPosition::Top,
+        Some("hidden") => LabelPosition::Hidden,
+        Some(_) => LabelPosition::Left,
+        None => ui.label_position,
+    };
+    ui
 }

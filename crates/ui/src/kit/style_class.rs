@@ -114,6 +114,7 @@ pub fn valid_property(key: &str, value: &str) -> bool {
         "--suhina-track-headers" => matches!(value, "left" | "right"),
         "--suhina-header-tint" => value.trim().parse::<u8>().is_ok_and(|v| v <= 100),
         "--suhina-param-columns" => value.trim().parse::<u8>().is_ok_and(|v| (1..=8).contains(&v)),
+        "--suhina-param-label" => matches!(value, "left" | "top" | "hidden"),
         "--suhina-param-row" => px(value).is_some_and(|v| (16..=160).contains(&v)),
         "--suhina-track-height" => px(value).is_some_and(|v| (MIN_TRACK_HEIGHT..=MAX_TRACK_HEIGHT).contains(&v)),
         "--suhina-header-min-width" => value
@@ -329,6 +330,18 @@ pub fn theme_param_grid() -> (usize, Option<f32>) {
         device.get("--suhina-param-columns").and_then(|v| v.trim().parse::<u8>().ok()).map_or(1, |v| v.clamp(1, 8));
     let row = device.get("--suhina-param-row").and_then(|v| px(v)).filter(|v| (16..=160).contains(v)).map(f32::from);
     (usize::from(columns), row)
+}
+
+/// Where a device panel's generated parameters show their names (`.device { --suhina-param-label:
+/// top }`): `left`, `top` or `hidden`, over what each device says.
+pub fn theme_param_label() -> Option<&'static str> {
+    let skin = skin::current();
+    match skin.styles.get(".device")?.get("--suhina-param-label")?.trim() {
+        "left" => Some("left"),
+        "top" => Some("top"),
+        "hidden" => Some("hidden"),
+        _ => None,
+    }
 }
 
 pub fn theme_header_tint() -> Option<u8> {
