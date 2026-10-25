@@ -54,6 +54,7 @@ pub const LAYOUT_FILES: &[(&str, &str)] = &[
     ("auto-pan", include_str!("../../../devices/auto-pan/panel.json")),
     ("vinyl-distortion", include_str!("../../../devices/vinyl-distortion/panel.json")),
     ("delay", include_str!("../../../devices/delay/panel.json")),
+    ("pitch", include_str!("../../../devices/pitch/panel.json")),
 ];
 
 /// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
@@ -275,8 +276,9 @@ mod tests {
                 assert_eq!((parameter.min, parameter.max, parameter.default), (native.min, native.max, native.default));
             }
         }
-        // MIDI effects get one too: the generated list.
-        assert!(panel("pitch").is_some_and(|p| p.ui.is_none()));
+        // A device without a layout gets the generated list; MIDI effects get a panel too.
+        assert!(panel("utility").is_some_and(|p| p.ui.is_none()));
+        assert!(panel("pitch").is_some_and(|p| p.ui.is_some()));
         assert!(panel("sampler").is_some_and(|p| p.ui.is_some()));
         assert!(panel("no-such-device").is_none());
     }

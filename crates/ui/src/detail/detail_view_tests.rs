@@ -182,10 +182,7 @@ fn a_selected_track_shows_its_devices() {
 #[test]
 fn a_built_ins_generated_list_fits_the_compact_panel() {
     let mut project = demo_project();
-    project.channels[0].devices = vec![
-        Device::new("Utility", DeviceKind::Builtin("utility".into())),
-        Device::new("Pitch", DeviceKind::Builtin("pitch".into())),
-    ];
+    project.channels[0].devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into()))];
     let Detail::Devices(chain) = build(&project, Some(TrackId(1)), None) else { panic!() };
     for device in &chain.devices {
         let graph = device.graph.as_ref().unwrap_or_else(|| panic!("{} has a panel", device.name));
