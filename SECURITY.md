@@ -40,3 +40,9 @@ which part failed:
 - Each build has one more endpoint, which the first app of that build holds: it only opens files as
   tabs and brings the window forward, as starting the app with those files would.
 - Dependencies, CI, packaging and release artifact integrity.
+
+## Multiplayer fork experiment
+
+The fork-only offline collaboration API has no remote endpoint or authentication. Its
+[threat model](docs/security/session-sharing.md) records this closed boundary and the requirements
+before any network adapter. Peer handles and role checks are not network credentials.

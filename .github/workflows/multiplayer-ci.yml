@@ -1,0 +1,127 @@
+name: Multiplayer fork checks and development builds
+
+on:
+  push:
+    branches: [feature/multiplayer, 'integration/multiplayer-*']
+  pull_request:
+    branches: [feature/multiplayer]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: multiplayer-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Reuse the test profile's smaller artifacts for these development builds.
+  CARGO_PROFILE_DEV_DEBUG: 'false'
+
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            package: linux
+          - os: windows-latest
+            package: windows-x86_64
+          - os: macos-latest
+            package: macos-universal
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Linux prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
+      - name: macOS targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Toolchain and source identity
+        run: |
+          rustc -vV
+          git rev-parse HEAD
+      - name: Formatting
+        run: cargo fmt --all --check
+      - name: Collaboration tests
+        run: cargo test --locked -p suhina-collaboration
+      - name: Two independent local players
+        run: cargo run --locked --profile test -p suhina-collaboration --example two_peers
+      - name: Documentation and source rules
+        if: runner.os == 'Linux'
+        run: |
+          python3 scripts/docs.py check
+          python3 scripts/license_header.py --check
+          python3 scripts/rename_suhina.py --check
+          python3 scripts/inline_tests.py --check
+          python3 scripts/parity/update_report.py --check-inputs
+      - name: Collaboration clippy
+        run: cargo clippy --locked -p suhina-collaboration --all-targets --no-deps -- -D warnings
+      # Development packages are built before the complete upstream suite so a baseline failure
+      # does not hide whether this exact source compiles. The final suite still fails the job.
+      - name: Build development binaries
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '11.0'
+        run: |
+          if [ "$RUNNER_OS" = 'macOS' ]; then
+            for target in aarch64-apple-darwin x86_64-apple-darwin; do
+              cargo build --locked -p suhina -p suhina-cli -p suhina-plugin-host --target "$target"
+            done
+          else
+            cargo build --locked -p suhina -p suhina-cli -p suhina-plugin-host
+          fi
+      - name: Collect and smoke-test development package
+        env:
+          PLATFORM: ${{ matrix.package }}
+        run: |
+          package="dist/suhina-multiplayer-experiment-$PLATFORM"
+          mkdir -p "$package"
+          for bin in suhina suhina-cli suhina-plugin-host; do
+            case "$RUNNER_OS" in
+              Windows) cp "target/debug/$bin.exe" "$package/" ;;
+              macOS) lipo -create "target/aarch64-apple-darwin/debug/$bin" "target/x86_64-apple-darwin/debug/$bin" -output "$package/$bin" ;;
+              *) cp "target/debug/$bin" "$package/" ;;
+            esac
+          done
+          cp LICENSE NOTICE ATTRIBUTION.md README.md "$package/"
+          cp devices/fm-synth/LICENSE-APACHE crates/stretch/LICENSE-signalsmith.txt "$package/"
+          cp docs/multiplayer-fork.md "$package/MULTIPLAYER-STATUS.md"
+          git rev-parse HEAD > "$package/SOURCE-COMMIT.txt"
+          rustc -vV > "$package/BUILD-HOST.txt"
+          cli="$package/suhina-cli"
+          if [ "$RUNNER_OS" = 'Windows' ]; then cli="$cli.exe"; fi
+          "$cli" --version
+          python3 - "$package" <<'PY'
+          import hashlib, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          lines = [hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name
+                   for p in sorted(root.iterdir()) if p.is_file()]
+          (root / 'SHA256SUMS.txt').write_text('\n'.join(lines) + '\n')
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: multiplayer-experiment-${{ matrix.package }}-${{ github.sha }}
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error
+      - name: Workspace clippy (baseline failures remain failures)
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Complete workspace tests (baseline failures remain failures)
+        if: always() && !cancelled()
+        run: |
+          if [ "$RUNNER_OS" = 'Linux' ]; then
+            xvfb-run -a cargo test --locked --workspace --no-fail-fast
+          else
+            cargo test --locked --workspace --no-fail-fast
+          fi
