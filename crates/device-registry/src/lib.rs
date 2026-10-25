@@ -284,6 +284,33 @@ mod tests {
         assert!(panel("no-such-device").is_none());
     }
 
+    #[test]
+    fn every_json_layout_fits_its_canvases_and_reaches_every_parameter() {
+        for (id, _) in LAYOUT_FILES {
+            let panel = panel(id).unwrap();
+            if let Some(compact) = &panel.ui {
+                assert!(compact.size[1] <= builtin::COMPACT_HEIGHT, "{id}: the compact canvas scrolls");
+            }
+            let canvases: Vec<_> = [&panel.ui, &panel.expanded].into_iter().flatten().collect();
+            for canvas in &canvases {
+                for c in &canvas.controls {
+                    let [x, y, w, h] = c.bounds;
+                    assert!(x + w <= canvas.size[0] && y + h <= canvas.size[1], "{id}: {} is outside", c.id);
+                }
+            }
+            // A parameter is reachable on a canvas control or, when the compact canvas does not
+            // hide it, in the generated list under it.
+            let hidden = panel.ui.as_ref().map_or(&[][..], |c| &c.hidden_parameters[..]);
+            for p in &panel.parameters {
+                let bound = canvases
+                    .iter()
+                    .flat_map(|c| &c.controls)
+                    .any(|c| [&c.x, &c.y].into_iter().flatten().any(|b| b.parameter == p.id));
+                assert!(bound || !hidden.contains(&p.id), "{id}: {} cannot be reached", p.id);
+            }
+        }
+    }
+
     fn panel_ids(panel: &Panel) -> Vec<&str> {
         panel.parameters.iter().map(|p| p.id.as_str()).collect()
     }
