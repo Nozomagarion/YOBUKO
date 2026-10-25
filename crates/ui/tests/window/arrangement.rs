@@ -1633,3 +1633,21 @@ fn the_take_lanes_button_hides_them_and_a_comped_part_takes_the_takes_colour() {
     });
     assert!(coloured, "the comped part shows the take's colour");
 }
+
+/// The rename field opens with the whole name selected, so typing replaces it (#916).
+#[test]
+fn renaming_in_place_starts_with_the_whole_name_selected() {
+    let mut harness = arrangement_app();
+    harness.get_by_label("Track Bass").click();
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::R);
+    harness.run();
+    harness.run();
+    harness.get_by_label("Track name").type_text("Sub");
+    harness.run();
+    harness.key_press(Key::Enter);
+    harness.run();
+    let names: Vec<String> =
+        harness.state().session().unwrap().project().tracks.iter().map(|t| t.name.clone()).collect();
+    assert!(names.contains(&"Sub".to_string()), "typing replaced the selected name: {names:?}");
+}

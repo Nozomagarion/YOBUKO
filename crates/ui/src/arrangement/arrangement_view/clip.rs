@@ -990,7 +990,9 @@ pub(super) fn paint_clip(
     );
     let pass = painter.ctx().cumulative_pass_nr();
     painter.ctx().data_mut(|d| {
-        d.insert_temp(Id::new((crate::app::NAME_RECT_CLIP, u64::from(clip.id.0))), (strip, pass));
+        let fill = if bar.is_some() { base } else { body };
+        let spot = crate::app::NameSpot { rect: strip, pass, fill, text: text_color };
+        d.insert_temp(Id::new((crate::app::NAME_RECT_CLIP, u64::from(clip.id.0))), spot);
     });
     let has_name = rect.height() >= 20.0;
     if has_name {

@@ -1721,27 +1721,41 @@ impl App {
             };
             let what = if renamed_track.is_some() { "Track name" } else { "Clip name" };
             let now = ui.ctx().cumulative_pass_nr();
-            let place = ui
-                .ctx()
-                .data(|d| d.get_temp::<(Rect, u64)>(key))
-                .filter(|(_, pass)| now.saturating_sub(*pass) <= 2)
-                .map(|(rect, _)| rect);
+            let place =
+                ui.ctx().data(|d| d.get_temp::<NameSpot>(key)).filter(|spot| now.saturating_sub(spot.pass) <= 2);
             match place {
                 None => keep = false,
-                Some(rect) => {
+                Some(spot) => {
+                    // The field takes the name's own place and colours, with no frame of its
+                    // own, the whole name selected to type over (#916).
+                    let rect = spot.rect;
                     egui::Area::new(egui::Id::new("inline-rename"))
                         .order(egui::Order::Foreground)
                         .fixed_pos(rect.min)
                         .show(ui.ctx(), |ui| {
-                            let field = ui.add(
+                            ui.painter().rect_filled(rect, 0.0, spot.fill);
+                            let field_id = egui::Id::new("inline-rename-field");
+                            let field = ui.put(
+                                rect,
                                 egui::TextEdit::singleline(&mut draft)
-                                    .id(egui::Id::new("inline-rename-field"))
+                                    .id(field_id)
+                                    .frame(egui::Frame::NONE)
+                                    .margin(egui::Margin::ZERO)
                                     .font(theme::ui_font(theme::TEXT_SMALL))
-                                    .desired_width(rect.width().max(120.0)),
+                                    .text_color(spot.text)
+                                    .desired_width(rect.width()),
                             );
                             field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, what));
                             if !focused {
                                 field.request_focus();
+                                if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), field_id) {
+                                    let all = egui::text::CCursorRange::two(
+                                        egui::text::CCursor::new(0),
+                                        egui::text::CCursor::new(draft.chars().count()),
+                                    );
+                                    state.cursor.set_char_range(Some(all));
+                                    state.store(ui.ctx(), field_id);
+                                }
                             }
                             let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
                             if escape {
@@ -2955,6 +2969,16 @@ pub(crate) const NAME_RECT_CLIP: &str = "clip-name-rect";
 pub(crate) const NAME_RECT_SLOT: &str = "slot-name-rect";
 /// Where a track's name is drawn in its header, by track id, in the view shown (#696).
 pub(crate) const NAME_RECT_TRACK: &str = "track-name-rect";
+
+/// Where a view drew a name last frame, for a rename in place: its place, the pass it was drawn
+/// in, and the colours behind and of the text, so the field reads as the name itself (#916).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct NameSpot {
+    pub rect: Rect,
+    pub pass: u64,
+    pub fill: egui::Color32,
+    pub text: egui::Color32,
+}
 
 #[cfg(test)]
 #[path = "app_tests.rs"]

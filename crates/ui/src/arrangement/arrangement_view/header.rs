@@ -403,7 +403,8 @@ pub(super) fn track_header(
     // The name's place, for a rename in place (Ctrl+R, #696).
     let pass = ui.ctx().cumulative_pass_nr();
     ui.ctx().data_mut(|d| {
-        d.insert_temp(Id::new((crate::app::NAME_RECT_TRACK, u64::from(lane.track.0))), (name.intersect(clip), pass));
+        let spot = crate::app::NameSpot { rect: name.intersect(clip), pass, fill: header_fill, text: name_color };
+        d.insert_temp(Id::new((crate::app::NAME_RECT_TRACK, u64::from(lane.track.0))), spot);
     });
     if solo.intersects(clip)
         && let Some(action) =

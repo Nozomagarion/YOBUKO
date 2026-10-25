@@ -781,7 +781,8 @@ fn column_header(
     // The name's place, for a rename in place (Ctrl+R, #696).
     let pass = ui.ctx().cumulative_pass_nr();
     ui.ctx().data_mut(|d| {
-        d.insert_temp(Id::new((crate::app::NAME_RECT_TRACK, u64::from(column.track.0))), (text, pass));
+        let spot = crate::app::NameSpot { rect: text, pass, fill, text: color };
+        d.insert_temp(Id::new((crate::app::NAME_RECT_TRACK, u64::from(column.track.0))), spot);
     });
 }
 
@@ -970,7 +971,12 @@ fn column_body(
         ui.ctx().data_mut(|d| {
             d.insert_temp(
                 egui::Id::new((crate::app::NAME_RECT_SLOT, u64::from(column.track.0), number as u64)),
-                (rect, pass),
+                crate::app::NameSpot {
+                    rect,
+                    pass,
+                    fill: colour_picker::fill(slot.color.unwrap_or(column.color), false),
+                    text: theme::text_on(colour_picker::fill(slot.color.unwrap_or(column.color), false)),
+                },
             );
         });
         slot_cell(painter, rect, column, slot, hover, pulse, progress, selectable && selected);
