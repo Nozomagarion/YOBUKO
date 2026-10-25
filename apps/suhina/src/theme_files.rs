@@ -467,7 +467,7 @@ impl ThemeFiles {
         self.import_with(path, Again::Ask).map(|imported| (imported.ids, imported.warnings))
     }
 
-    /// Brings in a file as [`Self::import`] does; a theme package whose id is a theme here
+    /// Brings in a theme file or a zip of them, as the import from a drop does; a theme package whose id is a theme here
     /// already is written as `again` says: in its place, as a copy, or not at all (`Ask`, and
     /// its name is returned in `conflict` for the app to ask).
     pub fn import_with(&mut self, path: &Path, again: Again) -> Result<Imported, String> {
