@@ -68,11 +68,28 @@ impl App {
     /// index in the track's chain.
     pub(super) fn ara_clip(&mut self) -> Option<(TrackId, ClipId, usize)> {
         let ClipRef::Arrangement(track, clip) = self.shown_clip()? else { return None };
-        if self.piano_clip(Some(ClipRef::Arrangement(track, clip))).is_some() {
+        if self.piano_clip(Some(ClipRef::Arrangement(track, clip))).is_some() || !self.clip_uses_ara(track, clip) {
             return None;
         }
         let device = self.session()?.ara_device(track)?;
         Some((track, clip, device))
+    }
+
+    /// Whether `clip` on `track` plays through its channel's ARA plug-in: it names it, or the
+    /// track's ARA plug-in is one from before clips named their own, which edits all of them
+    /// (#990).
+    pub(super) fn clip_uses_ara(&self, track: TrackId, clip: ClipId) -> bool {
+        self.session().is_some_and(|s| {
+            let p = s.project();
+            let hosted = p.channel_of_track(track).and_then(|c| c.devices.first()).is_some_and(|d| d.clip_host);
+            !hosted
+                || p.arrangement
+                    .lanes
+                    .iter()
+                    .filter(|l| l.track == Some(track))
+                    .flat_map(|l| &l.clips)
+                    .any(|c| c.id == clip && c.ara)
+        })
     }
 
     /// Opens the selected clip in its track's plug-in that edits clips (ARA): the detail area
@@ -118,23 +135,12 @@ impl App {
         self.show_editor();
         // It opens on its own once it runs bound to the clips (`detail_area`).
         self.ara_opened = None;
-        let on_track = self.session().is_some_and(|s| {
-            let project = s.project();
-            project
-                .tracks
-                .iter()
-                .find(|t| t.id == track)
-                .and_then(|t| t.channel)
-                .and_then(|c| project.channel(c))
-                .is_some_and(|c| c.devices.iter().any(|d| d.name == name))
-        });
-        if on_track {
-            self.status = Status::Hint(format!("{name} is starting with the track's clips; it opens when it is ready"));
-            return;
-        }
-        self.run(&Action::new("device.addPlugin", json!({ "track": track.0, "plugin": spec })));
+        // The clip plays through it from now on: the track's clip host when it has one, else the
+        // installed one becomes it (#990). Its editor opens with the clip once it runs.
+        self.run(&Action::new("clip.setAra", json!({ "clips": [{ "clip": clip.0 }], "on": true, "plugin": spec })));
         if !matches!(self.status, Status::Error(_)) {
-            self.status = Status::Hint(format!("{name} added to the track; it opens with the clip when it is ready"));
+            self.ara_armed = Some((track, clip));
+            self.status = Status::Hint(format!("{name} edits the clip; it opens with the clip when it is ready"));
         }
     }
 
@@ -201,7 +207,7 @@ impl App {
         // the piano roll's place: the plug-in is told the clip is selected, and its editor opens
         // on its own the first time the clip is shown.
         let ara = match clip {
-            Some(ClipRef::Arrangement(t, c)) if piano.is_none() => {
+            Some(ClipRef::Arrangement(t, c)) if piano.is_none() && self.clip_uses_ara(t, c) => {
                 // An ARA plug-in sits first in the track's own chain, never inside a device group.
                 let mut found: Vec<_> = reports
                     .iter()

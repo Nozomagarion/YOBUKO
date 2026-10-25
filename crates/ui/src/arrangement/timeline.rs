@@ -106,6 +106,8 @@ pub struct ClipBox {
     /// The number on its track (from 1) of the take it was comped from, for a part of a comp: it
     /// is named and coloured after that take (#989).
     pub take: Option<usize>,
+    /// It plays through its channel's ARA plug-in (#990).
+    pub ara: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -669,6 +671,7 @@ fn clip_box(project: &Project, clip: &Clip, index: usize, track_color: Rgb) -> C
         row: 0,
         rows: 1,
         take: None,
+        ara: clip.ara,
     }
 }
 

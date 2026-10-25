@@ -249,7 +249,7 @@ pub(super) fn clip_box<'a>(
         if clip.audio
             && let Some(name) = ara
         {
-            menus::ara_menu(ui, lane.track, clip.id, name, actions);
+            menus::ara_menu(ui, lane.track, clip.id, name, clip.ara, actions);
         }
     });
     let (shift, command) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
@@ -1554,6 +1554,7 @@ pub(super) fn paint_live_take(
         color: lane.color,
         stack_key: (0, take.start.to_bits()),
         take: None,
+        ara: false,
     };
     paint_clip(painter, rect, lane, &clip, Shown::of(&clip), take.start, x_of, beat_width, timeline, false);
     // An audio take's waveform so far: a line per peak, about the middle of the clip.

@@ -216,6 +216,22 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "clip.setAra",
+        label: "Play audio clips through their track's ARA plug-in (such as Melodyne), or no longer: a track without one gets it as its clip host, first in its chain and not in its device list",
+        params: &[
+            CLIPS,
+            param("on", ParamType::Bool, "true plays the clips through the plug-in, false plays them as they are"),
+            optional(
+                "plugin",
+                ParamType::Text,
+                "the ARA plug-in a track without one gets, as plugin.list names it (default: the installed one, Melodyne first)",
+            ),
+        ],
+        kind: CommandKind::Edit,
+        run: crate::clip_ara::set_ara,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "clip.setColor",
         label: "Give a clip a colour of its own (by index), or every clip of a track one when no index is given; \"none\" makes them show the track's colour again",
         params: &[

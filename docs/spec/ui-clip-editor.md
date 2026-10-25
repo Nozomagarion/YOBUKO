@@ -73,12 +73,16 @@ lane, the grid and zoom, and the `note.*` commands.
   clip, and selecting another clip on the track shows that one. The editor opens on its own the
   first time a clip is shown; closed, the area offers **Open editor**, and it stays closed for that
   clip until the clip is selected again. The clip column has the **Clip / Devices** switch, which
-  works as for a MIDI clip (Devices shows the chain, the plug-in's editor among it). The clip's
-  right-click menu has **Open in** and the plug-in's name, and **Alt+M** (`view.araEditor`)
-  does the same for the selected clip: it selects **Clip**, opens the detail area and the editor.
-  Both work on any audio clip in the Arrangement while such a plug-in is installed (Melodyne
-  first): on a track without it, it is added to the track first, and its editor opens in the
-  clip's place once it runs with the track's clips; the status bar says so meanwhile.
+  works as for a MIDI clip (Devices shows the chain, the plug-in's editor among it). The plug-in belongs to the clip (ADR 0028 › Amendment: the ARA plug-in belongs to the clip,
+  #990): the clip's right-click menu has **Edit with** and the plug-in's name for a clip that does
+  not play through it yet, **Open in** for one that does, and **Stop editing with** to take it off
+  (`clip.setAra`); **Alt+M** (`view.araEditor`) is Edit with or Open in for the selected clip: it
+  selects **Clip**, opens the detail area and the editor. They work on any audio clip in the
+  Arrangement while such a plug-in is installed (Melodyne first): on a track without it, it
+  becomes the track's clip host, first in its chain and not in its device lists, and its editor
+  opens in the clip's place once it runs with the clip; the status bar says so meanwhile. A
+  double-click on a clip that plays through it opens the editor; other clips on the track open
+  nothing there.
   Moving or trimming the clip changes it in the editor at once, the editor staying open; when the
   plug-in has to be loaded again (it was added to a track with no audio clips yet), an editor
   that was open opens again.

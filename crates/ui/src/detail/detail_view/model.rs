@@ -567,8 +567,16 @@ pub(super) fn chain(
     // Main has no track: its name and devices are the main channel's (#687).
     let track_name = if id == TrackId::MAIN { "Main".to_string() } else { project.shown_track_name(id) };
     let channel = project.channel_of_track(id);
+    // The clip host is the clips' (#990): not in the track's chain as the area shows it.
     let devices = channel
-        .map(|c| c.devices.iter().enumerate().map(|(index, d)| device_box(d, &[index], id, plugins)).collect())
+        .map(|c| {
+            c.devices
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| !d.clip_host)
+                .map(|(index, d)| device_box(d, &[index], id, plugins))
+                .collect()
+        })
         .unwrap_or_default();
     Chain { track: id, name: track_name, devices, nam }
 }

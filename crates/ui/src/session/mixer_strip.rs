@@ -449,8 +449,9 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
     } else {
         state.device_scroll.remove(&track);
     }
-    for (index, device) in column.devices.iter().enumerate() {
-        let top = rect.top() - scroll + index as f32 * DEVICE_ROW;
+    for (row_index, device) in column.devices.iter().enumerate() {
+        let index = device.at;
+        let top = rect.top() - scroll + row_index as f32 * DEVICE_ROW;
         let row = Rect::from_min_size(Pos2::new(rect.left(), top), Vec2::new(rect.width(), DEVICE_ROW));
         if !row.intersects(clip) {
             continue;

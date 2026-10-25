@@ -126,6 +126,7 @@ impl Session {
         let value = (prepared.spec.run)(self, params)?;
         if prepared.spec.id.starts_with("device.") {
             crate::devices::follow_instruments(self, before);
+            crate::clip_ara::keep_hosts_first(&mut self.project);
         }
         // A lane, clip or scene the command added without an id gets one now.
         self.project.assign_ids()?;

@@ -344,27 +344,28 @@ the list below, in a first form). Where it differs from the decisions above it i
 ## Amendment: the ARA plug-in belongs to the clip (2026-10-25)
 
 [#990](https://github.com/suhina-daw/suhina-daw/issues/990). An ARA edit is the clip's, not the
-track's, so the plug-in is no longer a device in the track's chain:
+track's, so the plug-in is no longer one of the track's effects:
 
-- **A clip names its ARA plug-in** (`clip.setAra {clip, plugin}`, the clip menu's **Edit with…**);
-  it holds no other effect, and an ordinary effect dropped on a clip is refused. Only clips that
-  name a plug-in are its playback regions (decision 5). A track's clips use one ARA plug-in in the
-  first version.
+- **A clip names its ARA plug-in** (`Clip::ara`, `clip.setAra {clips, on, plugin?}`, the clip
+  menu's **Edit with** and **Stop editing with**); a clip holds no other effect. Only clips that
+  name it are its playback regions (decision 5). A track's clips use one ARA plug-in in the first
+  version.
 - **Signal flow:** the clip's raw audio → its ARA plug-in → the clip's gain and fades → the track's
   devices → Main. The plug-in reads the source itself (decision 4), so gain never reaches its
   analysis; the host applies each clip's gain and fades to the renderer's output, as the ARA API
-  describes for per-region processing in the host. Clips with no plug-in go to the track's chain
-  as before.
-- **Hosting:** the plug-in instance is the channel's own (`Channel::clip_host`), not in its device
-  list: the engine runs it in a chain of its own ahead of the track's, fed with nothing, its output
-  scaled frame by frame by the playing ARA clip's gain and fade. Overlaps of ARA clips stay refused
-  (decision 6), so one renderer per track is enough; overlaps would need one per concurrently
-  sounding region, round robin. The document still holds every audio source, so a plug-in that
-  reads a guide on another track can.
-- **The editor** opens with a double-click on the clip, the host's view selection set to its regions.
-- **Copies and moves** keep the clip's plug-in and its edits; #722's question goes.
-- **Old projects:** a track's ARA device becomes its channel's clip host, and the track's audio
-  clips name it; the edits are kept, as they are stored per content.
+  describes for per-region processing in the host. The track's other clips go past the plug-in.
+- **Hosting:** the plug-in is the channel's first device, marked as its clip host
+  (`Device::clip_host`), which the device lists leave out and a device command never puts behind
+  another device. The engine runs it on its own (never in a joint block with the plug-ins after
+  it), fed with nothing, its output scaled frame by frame by the playing ARA clip's gain and fade
+  (1 while stopped, so the editor's auditions sound). Overlaps of ARA clips stay refused (decision
+  6), so one renderer per track is enough; overlaps would need one per concurrently sounding
+  region, round robin. A disabled or missing host leaves the clips playing as they are.
+- **The editor** opens with a double-click on an ARA clip, the host's view selection set to it.
+- **Copies and moves** keep the clip's flag and its edits.
+- **Old projects:** a track's ARA device from before keeps editing every audio clip of its track;
+  the first **Edit with** or `clip.setAra` there makes it the clip host and names those clips. An
+  ARA plug-in dropped on a track becomes its clip host for all its audio clips, as before.
 
 ## Alternatives considered
 

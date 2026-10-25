@@ -497,10 +497,16 @@ pub fn clip_edit_menu(
 
 /// The part of an audio clip's menu on a track whose plug-in edits clips (ARA): open the clip
 /// in that plug-in's editor (`view.araEditor`, which the window does).
-pub fn ara_menu(ui: &mut Ui, track: TrackId, clip: ClipId, plugin: &str, actions: &mut Vec<Action>) {
+pub fn ara_menu(ui: &mut Ui, track: TrackId, clip: ClipId, plugin: &str, edited: bool, actions: &mut Vec<Action>) {
     ui.separator();
-    if ui.add(egui::Button::new(format!("Open in {plugin}")).shortcut_text("Alt+M")).clicked() {
+    // The clip's own ARA plug-in (#990): it plays through it once edited with it.
+    let open = if edited { format!("Open in {plugin}") } else { format!("Edit with {plugin}") };
+    if ui.add(egui::Button::new(open).shortcut_text("Alt+M")).clicked() {
         actions.push(Action::new("view.araEditor", json!({ "track": track.0, "clip": clip.0 })));
+        ui.close();
+    }
+    if edited && ui.button(format!("Stop editing with {plugin}")).clicked() {
+        actions.push(Action::new("clip.setAra", json!({ "clips": [{ "clip": clip.0 }], "on": false })));
         ui.close();
     }
 }
@@ -687,18 +693,35 @@ mod tests {
     }
 
     #[test]
-    fn an_audio_clip_opens_in_its_tracks_ara_plug_in() {
+    fn an_audio_clip_is_edited_with_the_ara_plug_in_and_can_stop() {
         use egui_kittest::Harness;
         use egui_kittest::kittest::Queryable;
+        // Not edited yet: Edit with, which opens it there.
         let mut harness = Harness::builder().with_size(egui::vec2(300.0, 120.0)).build_ui_state(
-            |ui, actions: &mut Vec<Action>| ara_menu(ui, TrackId(2), ClipId(7), "Tune", actions),
+            |ui, actions: &mut Vec<Action>| ara_menu(ui, TrackId(2), ClipId(7), "Tune", false, actions),
             Vec::new(),
         );
         harness.run();
-        harness.get_by_label_contains("Open in Tune").click();
+        assert!(harness.query_by_label_contains("Stop editing").is_none());
+        harness.get_by_label_contains("Edit with Tune").click();
         harness.run();
         let action = &harness.state()[0];
         assert_eq!((action.id, action.params.clone()), ("view.araEditor", json!({ "track": 2, "clip": 7 })));
+        drop(harness);
+        // Edited: Open in, and Stop editing with, which takes the clip off it (#990).
+        let mut harness = Harness::builder().with_size(egui::vec2(300.0, 120.0)).build_ui_state(
+            |ui, actions: &mut Vec<Action>| ara_menu(ui, TrackId(2), ClipId(7), "Tune", true, actions),
+            Vec::new(),
+        );
+        harness.run();
+        harness.get_by_label_contains("Open in Tune");
+        harness.get_by_label_contains("Stop editing with Tune").click();
+        harness.run();
+        let action = &harness.state()[0];
+        assert_eq!(
+            (action.id, action.params.clone()),
+            ("clip.setAra", json!({ "clips": [{ "clip": 7 }], "on": false }))
+        );
     }
 
     #[test]

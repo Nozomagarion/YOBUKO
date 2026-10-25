@@ -11,6 +11,7 @@ mod audio_timing;
 mod automation;
 pub mod backup;
 mod blank;
+mod clip_ara;
 mod clip_color;
 mod clip_edges;
 mod clip_shape;

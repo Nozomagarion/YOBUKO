@@ -1248,7 +1248,7 @@ pub(crate) fn add_plugin(session: &mut Session, params: &Value) -> Result<Value,
     let position = if plugin.ara { 0 } else { position };
     let position = take_out(&mut channel.devices, replaced.as_ref(), position);
     channel.devices.insert(position, device);
-    Ok(json!({
+    let result = json!({
         "device": position,
         "name": plugin.name,
         "vendor": plugin.vendor,
@@ -1257,7 +1257,20 @@ pub(crate) fn add_plugin(session: &mut Session, params: &Value) -> Result<Value,
         "ara": plugin.ara,
         "moved_first": moved_first,
         "replaced": replaced.map(|(_, name)| name),
-    }))
+    });
+    // An ARA plug-in is its channel's clip host (#990): `clip.setAra` names the clips it plays;
+    // put on a track, it plays every audio clip of the track, as before.
+    if plugin.ara {
+        let track = track_or_main_id(&session.project, params)?;
+        if params.get("clip_host").and_then(Value::as_bool) == Some(true) {
+            if let Some(first) = session.project.channel_of_track_mut(track).and_then(|c| c.devices.first_mut()) {
+                first.clip_host = true;
+            }
+        } else {
+            crate::clip_ara::make_host(&mut session.project, track);
+        }
+    }
+    Ok(result)
 }
 
 /// A plug-in device's state as JSON.

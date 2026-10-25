@@ -116,6 +116,9 @@ pub struct Column {
 /// A device in a channel strip's list.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StripDevice {
+    /// Its index among the channel's devices, as the device commands take it: the clip host
+    /// is not listed (#990), so the list's row is not always the device's index.
+    pub at: usize,
     pub name: String,
     pub enabled: bool,
     /// A plug-in, run outside Suhina; otherwise a built-in effect or instrument.
@@ -145,11 +148,15 @@ pub fn played_mixer(channel: &suhina_engine::model::Channel, beat: f64) -> (Opti
     )
 }
 
-/// A channel's devices as its strip's list shows them.
+/// A channel's devices as its strip's list shows them: all but its clip host, the ARA plug-in
+/// its clips play through, which belongs to the clips (#990).
 fn strip_devices(devices: &[suhina_engine::model::Device]) -> Vec<StripDevice> {
     devices
         .iter()
-        .map(|d| StripDevice {
+        .enumerate()
+        .filter(|(_, d)| !d.clip_host)
+        .map(|(at, d)| StripDevice {
+            at,
             name: d.name.clone(),
             enabled: d.enabled,
             plugin: matches!(

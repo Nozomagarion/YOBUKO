@@ -896,7 +896,7 @@ fn keys_copy_paste_and_delete_the_selected_clip() {
             .map(|s| s.project().arrangement.lanes[0].clips.iter().map(|c| (c.start, c.length)).collect::<Vec<_>>())
             .unwrap_or_default()
     };
-    harness.get_by_label("Clip Beat A on Drums at bar 1").click();
+    harness.get_by_label("Clip Fill on Drums at bar 29").click();
     harness.run();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::C);
     harness.run();
@@ -922,7 +922,7 @@ fn the_selected_clip_stays_selected_when_a_clip_before_it_moves() {
     let drums = |h: &Harness<'static, App>| {
         h.state().session().map(|s| s.project().arrangement.lanes[0].clips.clone()).unwrap_or_default()
     };
-    harness.get_by_label("Clip Beat A on Drums at bar 1").click();
+    harness.get_by_label("Clip Fill on Drums at bar 29").click();
     harness.run();
     let fill = drums(&harness).iter().find(|c| c.start == 112.0).map(|c| c.id).unwrap();
     assert_eq!(harness.state().selected_clip(), Some((TrackId(1), fill)));

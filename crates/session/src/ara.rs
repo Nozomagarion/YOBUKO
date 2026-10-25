@@ -59,7 +59,10 @@ impl Layout {
         let mut files: Vec<(String, String)> = Vec::new();
         let mut regions = Vec::new();
         let clips = project.arrangement.lanes.iter().filter(|l| l.track == Some(track)).flat_map(|l| &l.clips);
-        for clip in clips.filter(|c| c.enabled) {
+        // With a clip host only the clips that name it are its regions (#990); a track-wide ARA
+        // plug-in from before has every audio clip of its track.
+        let hosted = crate::clip_ara::has_host(project, track);
+        for clip in clips.filter(|c| c.enabled && (c.ara || !hosted)) {
             if regions.len() >= MAX_ARA_OBJECTS || files.len() >= MAX_ARA_OBJECTS {
                 break;
             }

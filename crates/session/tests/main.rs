@@ -10,6 +10,7 @@
 mod audio;
 mod audio_input;
 mod automation;
+mod clip_ara;
 mod clip_color;
 mod clip_edges;
 mod clip_shape;
