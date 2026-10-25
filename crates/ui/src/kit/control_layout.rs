@@ -404,7 +404,27 @@ impl Placement {
     }
 }
 
+thread_local! { static NATIVE_ONLY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) }; }
+
+/// While it lives, every control keeps its native place: for a part too small for the theme's
+/// placements (a low track, `--suhina-compact-below`), which would otherwise overlap.
+pub struct NativeOnly(bool);
+
+impl Drop for NativeOnly {
+    fn drop(&mut self) {
+        NATIVE_ONLY.with(|cell| cell.set(self.0));
+    }
+}
+
+/// Keeps every control in its native place while the guard lives, when `on`.
+pub fn native_only(on: bool) -> NativeOnly {
+    NativeOnly(NATIVE_ONLY.with(|cell| cell.replace(on || cell.get())))
+}
+
 pub fn placement(name: &str) -> Placement {
+    if NATIVE_ONLY.with(std::cell::Cell::get) {
+        return Placement::default();
+    }
     if let Some(placement) = RUNTIME.with(|runtime| {
         runtime.borrow().as_ref().and_then(|runtime| {
             runtime

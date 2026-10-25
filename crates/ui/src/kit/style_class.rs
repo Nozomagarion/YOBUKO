@@ -152,6 +152,7 @@ pub fn valid_property(key: &str, value: &str) -> bool {
         "--suhina-gap" => px(value).is_some_and(|v| v <= 16),
         "--suhina-param-label" => matches!(value, "left" | "top" | "hidden"),
         "--suhina-param-row" => px(value).is_some_and(|v| (16..=160).contains(&v)),
+        "--suhina-compact-below" => px(value).is_some_and(|v| v <= 200),
         "--suhina-track-height" => px(value).is_some_and(|v| (MIN_TRACK_HEIGHT..=MAX_TRACK_HEIGHT).contains(&v)),
         "--suhina-header-min-width" => value
             .strip_suffix("px")
@@ -380,6 +381,13 @@ pub fn theme_param_label() -> Option<&'static str> {
         "hidden" => Some("hidden"),
         _ => None,
     }
+}
+
+/// The height under which an Arrangement header keeps Suhina's own layout instead of the theme's
+/// placements (`.arrangement { --suhina-compact-below: 48px }`), so a low track does not overlap.
+pub fn theme_compact_below() -> Option<f32> {
+    let skin = skin::current();
+    px(skin.styles.get(".arrangement")?.get("--suhina-compact-below")?).filter(|v| *v <= 200).map(f32::from)
 }
 
 pub fn theme_header_tint() -> Option<u8> {

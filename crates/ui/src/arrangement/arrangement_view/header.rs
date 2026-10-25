@@ -179,6 +179,9 @@ pub(super) fn track_header(
     state: &mut ArrangementViewState,
     actions: &mut Vec<Action>,
 ) {
+    // A track lower than the theme allows for its placements keeps Suhina's own layout.
+    let low = crate::kit::style_class::theme_compact_below().is_some_and(|below| rect.height() < below);
+    let _native = crate::kit::control_layout::native_only(low);
     let mut work_trace = crate::kit::frame_trace::WorkSpan::new("arrangement track header");
     let _style_class = crate::kit::style_class::enter_named("track-header", &format!("track-{}", lane.track.0));
     crate::kit::native_css::set_variable("--track-colour", crate::kit::native_css::hex(rgb(lane.color)));
