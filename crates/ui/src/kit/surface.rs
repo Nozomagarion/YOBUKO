@@ -37,10 +37,14 @@ pub fn install(ctx: &Context, provider: Arc<dyn Provider>) {
     ctx.data_mut(|data| data.insert_temp(Id::new(HOST), Host(provider)));
 }
 
-/// Whether backgrounds set the window's pixels in this window. A private image needs normal
+/// Whether backgrounds set the window's pixels in this window: only while the theme asks for a
+/// see-through window (its `--window-background` has alpha). An opaque theme's alpha colours
+/// blend with Suhina's own surfaces, never with the desktop. A private image needs normal
 /// blending, so its pixels remain under the theme surfaces instead of exposing the desktop.
 pub fn available(ctx: &Context) -> bool {
-    ctx.data(|data| data.get_temp::<Host>(Id::new(HOST))).is_some() && super::liquid::background_image(ctx).is_none()
+    ctx.data(|data| data.get_temp::<Host>(Id::new(HOST))).is_some()
+        && super::theme::window_background().a() < u8::MAX
+        && super::liquid::background_image(ctx).is_none()
 }
 
 /// A shape that clears `rect` to see-through, for something painted over the window's content
@@ -137,14 +141,23 @@ mod tests {
         output.shapes.into_iter().map(|clipped| clipped.shape).collect()
     }
 
+    /// A context with the provider and a theme that asks for a see-through window.
+    fn see_through() -> Context {
+        let ctx = Context::default();
+        let mut palette = super::super::theme::Palette::DARK;
+        palette.window_background = Color32::from_rgba_unmultiplied(20, 20, 20, 200);
+        super::super::theme::set_palette(&ctx, palette);
+        install(&ctx, Arc::new(Marking));
+        ctx
+    }
+
     fn rect() -> Rect {
         Rect::from_min_size(Pos2::new(10.0, 10.0), Vec2::new(40.0, 20.0))
     }
 
     #[test]
     fn backgrounds_in_the_window_are_swapped_and_floating_ones_blend() {
-        let ctx = Context::default();
-        install(&ctx, Arc::new(Marking));
+        let ctx = see_through();
         let shapes = painted(&ctx, |ctx| {
             let window = ctx.layer_painter(LayerId::background());
             window.fill_background(rect(), 0.0, Color32::from_rgba_unmultiplied(20, 90, 130, 100));
@@ -159,6 +172,18 @@ mod tests {
     }
 
     #[test]
+    fn an_opaque_theme_blends_every_background() {
+        let ctx = see_through();
+        super::super::theme::set_palette(&ctx, super::super::theme::Palette::DARK);
+        let shapes = painted(&ctx, |ctx| {
+            let color = Color32::from_rgba_unmultiplied(20, 90, 130, 100);
+            ctx.layer_painter(LayerId::background()).fill_background(rect(), 0.0, color);
+        });
+        assert!(!shapes.iter().any(|s| matches!(s, Shape::Circle(_))), "{shapes:?}");
+        assert!(clear(&ctx, rect()).is_none());
+    }
+
+    #[test]
     fn without_a_provider_a_background_is_an_ordinary_rectangle() {
         let ctx = Context::default();
         let shapes = painted(&ctx, |ctx| {
@@ -170,8 +195,7 @@ mod tests {
 
     #[test]
     fn private_image_keeps_surface_blending_and_removal_restores_transparency() {
-        let ctx = Context::default();
-        install(&ctx, Arc::new(Marking));
+        let ctx = see_through();
         for private_image in [true, false, true] {
             super::super::liquid::set_background_image(
                 &ctx,
@@ -193,8 +217,7 @@ mod tests {
 
     #[test]
     fn a_shape_set_again_after_it_was_painted_is_left_alone() {
-        let ctx = Context::default();
-        install(&ctx, Arc::new(Marking));
+        let ctx = see_through();
         let shapes = painted(&ctx, |ctx| {
             let painter = ctx.layer_painter(LayerId::background());
             painter.fill_background(rect(), 0.0, Color32::from_rgb(9, 9, 9));

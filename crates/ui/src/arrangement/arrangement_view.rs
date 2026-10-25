@@ -974,7 +974,8 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         }
         // The track the piano roll edits, alone in the view: lit, so it is clear which it is.
         if focus == Some(lane.track) {
-            lanes_painter.fill_background(row.time, 0.0, theme::panel_hover());
+            // It lights the lane over what is painted there, so it blends and never makes it see-through.
+            lanes_painter.rect_filled(row.time, 0.0, theme::panel_hover());
             let edge = Rect::from_min_size(row.time.min, Vec2::new(2.0, row.time.height()));
             lanes_painter.rect_filled(edge, 0.0, theme::accent());
         }

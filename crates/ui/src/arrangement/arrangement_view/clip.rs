@@ -1009,7 +1009,9 @@ pub(super) fn paint_clip(
     let body =
         crate::kit::style_class::background(colour_surface(theme::panel_background(), rgb(clip.color), strength, off));
     let radius = crate::kit::style_class::radius(2.0);
-    painter.fill_background(rect, radius, body);
+    // A clip is content, not a background: it blends with the lane under it, so its alpha never
+    // reaches the window and the desktop never shows through it.
+    painter.rect_filled(rect, radius, body);
     crate::kit::native_css::background_rounded(painter, rect, radius);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
@@ -1023,7 +1025,7 @@ pub(super) fn paint_clip(
             fill,
         );
     } else {
-        painter.fill_background(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, body);
+        painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, body);
     }
     crate::kit::liquid::paint(painter, rect.shrink(1.0), body, crate::kit::liquid::Surface::Clip);
     let ink = ink_on(body);

@@ -360,9 +360,11 @@ struct StartUp {
 }
 
 impl eframe::App for Window {
-    /// Nothing behind the backgrounds: where none is painted, the desktop shows.
+    /// Nothing behind the backgrounds while the theme asks for a see-through window: where none
+    /// is painted, the desktop shows. An opaque theme clears to its colour, so no alpha in it
+    /// ever reaches the desktop.
     fn clear_color(&self, visuals: &eframe::egui::Visuals) -> [f32; 4] {
-        if self.see_through == Some(true) {
+        if self.see_through == Some(true) && suhina_ui::kit::theme::window_background().a() < u8::MAX {
             [0.0; 4]
         } else {
             // A window that cannot show the desktop clears to the panel colour over black, opaque:
