@@ -120,6 +120,10 @@ pub fn level_bar(
             .map_or(theme::TEXT_SMALL, |s| s.font_size),
     );
     // A narrow field (a header at its least width) gives up its inset before its value is cut.
+    // `--suhina-value-position: none` keeps the bar without its value.
+    if widgets::ValuePosition::current() == widgets::ValuePosition::None {
+        return;
+    }
     let inset = ((rect.width() - 32.0) / 2.0).clamp(2.0, 8.0);
     let inner = rect.shrink2(Vec2::new(inset, 0.0));
     // The sheet may move the value (`text-align`) and give the lit part's text its own colour

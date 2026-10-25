@@ -209,35 +209,16 @@ pub(super) fn value_control(
 /// A volume as a small knob with its value beside it, for Settings › Session and mixer ›
 /// Mixer controls: Knob.
 pub(super) fn volume_knob(painter: &egui::Painter, rect: Rect, db: f64, hover: f32, response: Option<&egui::Response>) {
-    let size = rect.height().min(theme::KNOB);
-    let center = Pos2::new(rect.left() + size / 2.0 + 2.0, rect.center().y);
     let pointer = motion::mix(theme::text_value(), theme::text_primary(), hover);
-    widgets::knob(painter, center, size, volume_position(db), pointer, response);
-    let text = Rect::from_min_max(Pos2::new(center.x + size / 2.0 + 4.0, rect.top()), rect.max);
-    widgets::text_in(
-        painter,
-        text,
-        Align2::RIGHT_CENTER,
-        &widgets::format_db(db),
-        theme::mono_font(theme::TEXT_SMALL),
-        theme::text_primary(),
-    );
+    let text = widgets::format_db(db);
+    widgets::knob_with_value(painter, rect, volume_position(db), pointer, response, &text, theme::text_primary());
 }
 
-/// A pan as a knob in the middle of its field, with the value at its right.
+/// A pan as a knob with its value where `--suhina-value-position` puts it (beside it by default).
 pub(super) fn pan_knob(painter: &egui::Painter, rect: Rect, pan: f64, response: Option<&egui::Response>) {
-    let size = rect.height().min(theme::KNOB);
-    let center = Pos2::new(rect.left() + size / 2.0 + 2.0, rect.center().y);
-    widgets::knob(painter, center, size, ((pan + 1.0) / 2.0) as f32, theme::text_primary(), response);
-    let text = Rect::from_min_max(Pos2::new(center.x + size / 2.0 + 4.0, rect.top()), rect.max);
-    widgets::text_in(
-        painter,
-        text,
-        Align2::RIGHT_CENTER,
-        &widgets::format_pan(pan),
-        theme::mono_font(theme::TEXT_SMALL),
-        theme::text_secondary(),
-    );
+    let position = ((pan + 1.0) / 2.0) as f32;
+    let text = widgets::format_pan(pan);
+    widgets::knob_with_value(painter, rect, position, theme::text_primary(), response, &text, theme::text_secondary());
 }
 
 /// The command a finished volume or pan drag runs: one track is set to the value the drag reached,

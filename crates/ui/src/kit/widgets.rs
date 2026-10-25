@@ -141,6 +141,84 @@ pub fn track_number_text(painter: &Painter, rect: Rect, number: &str, ink: Color
     text_in(painter, rect, Align2::CENTER_CENTER, number, theme::mono_font(size), ink);
 }
 
+/// Where a knob's value goes, from `--suhina-value-position` on the control in scope: `right`
+/// (beside it, the default), `left`, `top`, `bottom`, `inside` (over its middle) or `none`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValuePosition {
+    Right,
+    Left,
+    Top,
+    Bottom,
+    Inside,
+    None,
+}
+
+impl ValuePosition {
+    /// The position the sheet gives the control in scope.
+    pub fn current() -> Self {
+        match super::style_class::property("--suhina-value-position").as_deref().map(str::trim) {
+            Some("left") => Self::Left,
+            Some("top") => Self::Top,
+            Some("bottom") => Self::Bottom,
+            Some("inside" | "center" | "centre") => Self::Inside,
+            Some("none" | "hidden") => Self::None,
+            _ => Self::Right,
+        }
+    }
+}
+
+/// A knob in `rect` at `position` (0 to 1) with its value `text` where the sheet puts it
+/// ([`ValuePosition`]), in `ink` unless the sheet's `color` says otherwise, at its `font-size`.
+pub fn knob_with_value(
+    painter: &Painter,
+    rect: Rect,
+    position: f32,
+    pointer: Color32,
+    response: Option<&Response>,
+    text: &str,
+    ink: Color32,
+) {
+    let computed = super::style_class::computed();
+    let size_text = computed.as_ref().filter(|c| c.authored.font_size).map_or(theme::TEXT_SMALL, |c| c.font_size);
+    let ink = super::style_class::foreground(ink);
+    let line = size_text + 3.0;
+    let place = ValuePosition::current();
+    let (knob_area, text_area, align) = match place {
+        ValuePosition::Right | ValuePosition::Left => {
+            let size = rect.height().min(theme::KNOB);
+            if place == ValuePosition::Right {
+                let knob =
+                    Rect::from_min_size(Pos2::new(rect.left() + 2.0, rect.center().y - size / 2.0), Vec2::splat(size));
+                (knob, Rect::from_min_max(Pos2::new(knob.right() + 4.0, rect.top()), rect.max), Align2::RIGHT_CENTER)
+            } else {
+                let knob = Rect::from_min_size(
+                    Pos2::new(rect.right() - 2.0 - size, rect.center().y - size / 2.0),
+                    Vec2::splat(size),
+                );
+                (knob, Rect::from_min_max(rect.min, Pos2::new(knob.left() - 4.0, rect.bottom())), Align2::LEFT_CENTER)
+            }
+        }
+        ValuePosition::Top | ValuePosition::Bottom => {
+            let size = (rect.height() - line).min(rect.width()).max(4.0);
+            let (knob_y, text_rect) = if place == ValuePosition::Top {
+                (rect.bottom() - size, Rect::from_min_max(rect.min, Pos2::new(rect.right(), rect.top() + line)))
+            } else {
+                (rect.top(), Rect::from_min_max(Pos2::new(rect.left(), rect.bottom() - line), rect.max))
+            };
+            let knob = Rect::from_min_size(Pos2::new(rect.center().x - size / 2.0, knob_y), Vec2::splat(size));
+            (knob, text_rect, Align2::CENTER_CENTER)
+        }
+        ValuePosition::Inside | ValuePosition::None => {
+            let size = rect.height().min(rect.width());
+            (Rect::from_center_size(rect.center(), Vec2::splat(size)), rect, Align2::CENTER_CENTER)
+        }
+    };
+    knob(painter, knob_area.center(), knob_area.width(), position, pointer, response);
+    if place != ValuePosition::None && text_area.is_positive() {
+        text_in(painter, text_area, align, text, theme::mono_font(size_text), ink);
+    }
+}
+
 /// Fill and text of a track-on toggle: light when on, dark when off, a step brighter hovered.
 pub fn toggle_colors(ui: &Ui, response: &Response, on: bool) -> (Color32, Color32) {
     let hover = hover(ui, response);

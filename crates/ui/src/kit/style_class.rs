@@ -103,6 +103,9 @@ pub fn valid_property(key: &str, value: &str) -> bool {
     match key {
         "--suhina-track-artwork" => matches!(value, "on" | "off"),
         "--suhina-appearance" => matches!(value, "native" | "knob" | "field"),
+        "--suhina-value-position" => {
+            matches!(value, "right" | "left" | "top" | "bottom" | "inside" | "center" | "centre" | "none" | "hidden")
+        }
         "--suhina-track-headers" => matches!(value, "left" | "right"),
         "--suhina-header-tint" => value.trim().parse::<u8>().is_ok_and(|v| v <= 100),
         "--suhina-header-min-width" => value

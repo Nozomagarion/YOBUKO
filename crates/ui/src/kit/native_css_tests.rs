@@ -971,6 +971,38 @@ fn artwork_reads_the_variables_of_the_elements_in_scope() {
 }
 
 #[test]
+fn a_knob_s_value_goes_where_the_sheet_puts_it() {
+    let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(60.0, 60.0));
+    // The position is a host rule, read from the theme's sheet as the app reads it.
+    let text_top = |css: &str| {
+        let (theme, _) = super::super::theme::from_sheet(css, "");
+        let shapes = painted("", |ui| {
+            skin::configure(&theme.skin);
+            let _pan = super::super::style_class::enter("pan");
+            crate::kit::widgets::knob_with_value(
+                ui.painter(),
+                field,
+                0.5,
+                egui::Color32::WHITE,
+                None,
+                "C",
+                theme::text_secondary(),
+            );
+        });
+        shapes.iter().find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) => Some(text.pos.y),
+            _ => None,
+        })
+    };
+    let beside = text_top("").unwrap();
+    assert!(beside > field.top() + 10.0, "beside the knob, in the middle of the field");
+    let above = text_top(".pan { --suhina-value-position: top; }").unwrap();
+    assert!(above < field.top() + 4.0, "over the knob: {above}");
+    assert_eq!(text_top(".pan { --suhina-value-position: none; }"), None);
+    skin::configure(&skin::Skin::default());
+}
+
+#[test]
 fn a_level_bar_s_value_may_sit_left_and_its_lit_part_take_its_own_ink() {
     let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, 20.0));
     let css = "#arrangement-volume { text-align: left; } #arrangement-volume .value-fill { color: #00FF00; }";
