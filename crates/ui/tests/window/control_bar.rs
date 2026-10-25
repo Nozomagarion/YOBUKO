@@ -195,3 +195,45 @@ fn a_triplet_or_none_grid_places_a_dragged_clip_by_its_own_rule() {
     let free = beat_b_start(&harness).unwrap_or_default();
     assert!((free - 65.3).abs() < 0.02 && (free * 4.0).fract().abs() > 0.01, "{free}");
 }
+
+/// The tempo takes a typed number: click it, type, Enter; a comma reads as the point (#707,
+/// #829).
+#[test]
+fn a_typed_tempo_is_set_on_enter() {
+    let mut harness = window(demo_app());
+    let tempo = |h: &Harness<'static, App>| h.state().session().map(|s| s.project().transport.tempo_bpm);
+    harness.get_by_label("Tempo").click();
+    harness.run();
+    harness.get_by_label("Tempo").type_text("128,5");
+    harness.run();
+    harness.key_press(Key::Enter);
+    harness.run();
+    assert_eq!(tempo(&harness), Some(128.5));
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_ne!(tempo(&harness), Some(128.5));
+}
+
+/// A volume set on one of several selected tracks is set on all of them (#707).
+#[test]
+fn a_volume_set_on_one_selected_track_is_set_on_all_of_them() {
+    let mut harness = window(demo_app());
+    harness.get_by_label("Track Drums").click();
+    harness.run();
+    harness.get_by_label("Track Bass").click_modifiers(Modifiers::COMMAND);
+    harness.run();
+    harness.state_mut().run(&suhina_ui::kit::widgets::Action::new(
+        "track.setVolume",
+        serde_json::json!({ "tracks": [1], "db": -6.0 }),
+    ));
+    let volumes: Vec<f64> = harness
+        .state()
+        .session()
+        .map(|s| {
+            let p = s.project();
+            p.tracks.iter().take(2).filter_map(|t| p.channel_of_track(t.id)).map(|c| c.volume).collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(volumes.len(), 2);
+    assert!(volumes.iter().all(|v| (v - 0.5012).abs() < 1e-3), "{volumes:?}");
+}

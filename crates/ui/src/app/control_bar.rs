@@ -8,6 +8,44 @@ use super::*;
 /// Seconds between the tempo sent while the tempo field is dragged.
 const TEMPO_SEND: f64 = 0.1;
 
+/// `bpm` on the steps of the place a drag holds, counted from where it started (`grab`: the step
+/// and the start), to a thousandth of a BPM, within the tempo's range (#829).
+pub(crate) fn snap_tempo(grab: Option<(f64, f64)>, bpm: f64) -> f64 {
+    let snapped = match grab {
+        Some((step, from)) if step > 0.0 => from + ((bpm - from) / step).round() * step,
+        _ => bpm,
+    };
+    ((snapped * 1000.0).round() / 1000.0).clamp(20.0, 999.0)
+}
+
+/// The step of the place in the tempo `text` (right-aligned at `right`, characters `width`
+/// apart) under `x`: 1 BPM for the integer part, 0.1, 0.01 or 0.001 for the decimals (#829).
+pub(crate) fn tempo_place(text: &str, right: f32, width: f32, x: f32) -> f64 {
+    let len = text.chars().count();
+    let Some(dot) = text.find('.') else { return 1.0 };
+    if width <= 0.0 {
+        return 1.0;
+    }
+    let from_right = ((right - x) / width).floor().max(0.0) as usize;
+    let index = len.saturating_sub(from_right + 1);
+    if index <= dot {
+        return 1.0;
+    }
+    let decimals = (index - dot).min(3);
+    10f64.powi(-(decimals as i32))
+}
+
+/// The characters of the tempo `text` the place of `step` covers, as a range of indices: the
+/// whole integer part for 1 BPM, one decimal otherwise.
+pub(crate) fn tempo_place_span(text: &str, step: f64) -> (usize, usize) {
+    let dot = text.find('.').unwrap_or(text.len());
+    if step >= 1.0 {
+        return (0, dot);
+    }
+    let decimals = (-step.log10()).round().max(1.0) as usize;
+    (dot + decimals, dot + decimals + 1)
+}
+
 impl App {
     pub(super) fn control_bar(
         &mut self,
@@ -65,46 +103,71 @@ impl App {
         x = browser_rect.right() + 4.0;
         let tempo_rect = row(x, 56.0);
         ui.ctx().data_mut(|d| d.insert_temp(egui::Id::new("sampler-tempo"), grid.tempo_bpm));
-        let tempo_shown = self.tempo_drag.unwrap_or(grid.tempo_bpm);
-        let response = widgets::value_area(ui, tempo_rect, Id::new("tempo"), "Tempo", format!("{tempo_shown:.2}"));
-        match widgets::drag_value(ui, &response, &mut self.tempo_drag, grid.tempo_bpm, 0.1, 1.0, (20.0, 999.0), 120.0) {
-            Drag::Done(bpm) => {
-                // The drag's last value joins the step its moves made.
-                let more = self.tempo_sent.take().is_some();
-                actions.push(Action::new(
-                    "transport.setTempo",
-                    json!({ "bpm": (bpm * 100.0).round() / 100.0, "continue": more }),
-                ));
-            }
-            // While it moves the project follows, a few times a second, in one undo step, so
-            // clips that follow the tempo change length as it moves (#916).
-            Drag::Moving(bpm) => {
-                let now = ui.input(|i| i.time);
-                if self.tempo_sent.is_none_or(|sent| now - sent >= TEMPO_SEND) {
-                    let more = self.tempo_sent.is_some();
-                    self.tempo_sent = Some(now);
-                    actions.push(Action::new(
-                        "transport.setTempo",
-                        json!({ "bpm": (bpm * 100.0).round() / 100.0, "continue": more }),
-                    ));
-                }
-            }
-            Drag::None => {}
-        }
+        let grab = self.tempo_grab;
+        let tempo_shown = self.tempo_drag.map_or(grid.tempo_bpm, |bpm| snap_tempo(grab, bpm));
+        let tempo_text = format!("{tempo_shown:.3}");
+        let response = widgets::value_area(ui, tempo_rect, Id::new("tempo"), "Tempo", tempo_text.clone());
+        // The field first: a typed number and the place grabbed are drawn over it.
         painter.rect_filled(
             tempo_rect,
             0.0,
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response)),
         );
         let mono = theme::mono_font(theme::TEXT);
-        widgets::text_in(
-            &painter,
-            tempo_rect.shrink2(Vec2::new(PAD, 0.0)),
-            Align2::RIGHT_CENTER,
-            &format!("{tempo_shown:.2}"),
-            mono.clone(),
-            theme::text_primary(),
-        );
+        let text_area = tempo_rect.shrink2(Vec2::new(PAD, 0.0));
+        widgets::text_in(&painter, text_area, Align2::RIGHT_CENTER, &tempo_text, mono.clone(), theme::text_primary());
+        // The place under the pointer, or the one the drag holds: the integer part steps 1 BPM,
+        // each decimal a tenth of the one before (#829).
+        let char_width = widgets::text_width(ui, "0", mono.clone());
+        let place_at = |x: f32| tempo_place(&tempo_text, text_area.right(), char_width, x);
+        if response.drag_started_by(egui::PointerButton::Primary)
+            && let Some(origin) = ui.input(|i| i.pointer.press_origin())
+        {
+            self.tempo_grab = Some((place_at(origin.x), grid.tempo_bpm));
+        }
+        let held = self.tempo_grab.map(|(step, _)| step);
+        let shown_place = held.or_else(|| response.hover_pos().map(|p| place_at(p.x)));
+        if let Some(step) = shown_place {
+            let (from, to) = tempo_place_span(&tempo_text, step);
+            let right = text_area.right();
+            let len = tempo_text.chars().count() as f32;
+            let underline =
+                egui::Rangef::new(right - (len - from as f32) * char_width, right - (len - to as f32) * char_width);
+            let ink = if held.is_some() { theme::accent() } else { theme::text_secondary() };
+            painter.hline(underline, tempo_rect.bottom() - 3.0, egui::Stroke::new(1.0, ink));
+        }
+        // Four points of drag a step of the place grabbed; the arrow keys and the wheel 1 BPM.
+        let per_point = held.unwrap_or(1.0) / 4.0;
+        match widgets::drag_value(
+            ui,
+            &response,
+            &mut self.tempo_drag,
+            grid.tempo_bpm,
+            per_point,
+            1.0,
+            (20.0, 999.0),
+            120.0,
+        ) {
+            Drag::Done(bpm) => {
+                // The drag's last value joins the step its moves made.
+                let bpm = snap_tempo(self.tempo_grab, bpm);
+                self.tempo_grab = None;
+                let more = self.tempo_sent.take().is_some();
+                actions.push(Action::new("transport.setTempo", json!({ "bpm": bpm, "continue": more })));
+            }
+            // While it moves the project follows, a few times a second, in one undo step, so
+            // clips that follow the tempo change length as it moves (#916).
+            Drag::Moving(bpm) => {
+                let bpm = snap_tempo(self.tempo_grab, bpm);
+                let now = ui.input(|i| i.time);
+                if self.tempo_sent.is_none_or(|sent| now - sent >= TEMPO_SEND) {
+                    let more = self.tempo_sent.is_some();
+                    self.tempo_sent = Some(now);
+                    actions.push(Action::new("transport.setTempo", json!({ "bpm": bpm, "continue": more })));
+                }
+            }
+            Drag::None => {}
+        }
         x = tempo_rect.right() + PAD;
         // The time signature playing, like the tempo: a launched scene may have changed it.
         let ts = grid.time_signature();
@@ -414,4 +477,35 @@ pub(super) fn quantization_label(quantization: suhina_engine::Quantization) -> &
 pub(super) fn ram_text(bytes: u64) -> String {
     let mib = bytes as f64 / (1024.0 * 1024.0);
     if mib >= 1024.0 { format!("{:.1} GB", mib / 1024.0) } else { format!("{mib:.0} MB") }
+}
+
+#[cfg(test)]
+mod tempo_tests {
+    use super::{snap_tempo, tempo_place, tempo_place_span};
+
+    #[test]
+    fn the_place_under_the_pointer_picks_the_step_of_a_drag() {
+        // "124.567" right-aligned at x = 70, characters 10 wide: "7" spans 60..70.
+        let text = "124.567";
+        assert_eq!(tempo_place(text, 70.0, 10.0, 65.0), 0.001);
+        assert_eq!(tempo_place(text, 70.0, 10.0, 55.0), 0.01);
+        assert_eq!(tempo_place(text, 70.0, 10.0, 45.0), 0.1);
+        assert_eq!(tempo_place(text, 70.0, 10.0, 35.0), 1.0, "the point counts with the integer part");
+        assert_eq!(tempo_place(text, 70.0, 10.0, 5.0), 1.0);
+        assert_eq!(tempo_place_span(text, 1.0), (0, 3));
+        assert_eq!(tempo_place_span(text, 0.01), (5, 6));
+    }
+
+    #[test]
+    fn a_drag_moves_in_steps_of_its_place_and_keeps_the_rest() {
+        // The integer part: 124.567 stays .567 and carries across 125.
+        assert_eq!(snap_tempo(Some((1.0, 124.567)), 125.4), 125.567);
+        assert_eq!(snap_tempo(Some((1.0, 124.567)), 123.2), 123.567);
+        // A hundredth: 124.567 → 124.597 three steps up, across the tenth.
+        assert_eq!(snap_tempo(Some((0.01, 124.567)), 124.598), 124.597);
+        assert_eq!(snap_tempo(Some((0.01, 124.567)), 124.611), 124.607);
+        // Within the tempo's range, to a thousandth.
+        assert_eq!(snap_tempo(Some((1.0, 998.0)), 1005.0), 999.0);
+        assert_eq!(snap_tempo(None, 120.12345), 120.123);
+    }
 }

@@ -341,6 +341,9 @@ pub struct App {
     /// While the tempo field is dragged: when it last sent the tempo, so clips that follow the
     /// tempo change on screen as it moves (#916), a few times a second.
     tempo_sent: Option<f64>,
+    /// The tempo field's drag: the step of the place grabbed (1, 0.1, 0.01 or 0.001 BPM) and
+    /// the tempo it started from, kept until release (#829).
+    tempo_grab: Option<(f64, f64)>,
     open_request: Option<(PathBuf, OpenAs)>,
     /// Counts changes to the project, so views derived from it are rebuilt only when it changed.
     revision: u64,
@@ -576,6 +579,7 @@ impl App {
             status: Status::Hint(start_panel::DROP_HINT.into()),
             tempo_drag: None,
             tempo_sent: None,
+            tempo_grab: None,
             open_request: None,
             revision: 0,
             timeline: None,

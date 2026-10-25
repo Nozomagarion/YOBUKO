@@ -874,7 +874,8 @@ impl App {
 
     /// `action` widened to the selection it is part of (#948): `device.setEnabled` on one of
     /// several devices picked on its track becomes `device.setEnabledMany` on all of them, and
-    /// `track.setMute` on one of several selected tracks mutes them all; `None` otherwise.
+    /// `track.setMute`, `track.setVolume` or `track.setPan` on one of several selected tracks
+    /// sets them all; `None` otherwise.
     pub(super) fn to_selection(&self, action: &Action) -> Option<Action> {
         let id = |v: &serde_json::Value| v.as_u64().and_then(|n| u32::try_from(n).ok());
         match action.id {
@@ -892,7 +893,9 @@ impl App {
                     json!({ "track": track.0, "devices": devices, "enabled": enabled }),
                 ))
             }
-            "track.setMute" => {
+            // A value set on one of several selected tracks, by a click, a drag, a typed number or
+            // the arrow keys, is set on all of them (#707, #948).
+            "track.setMute" | "track.setVolume" | "track.setPan" => {
                 let [one] = action.params["tracks"].as_array()?.as_slice() else { return None };
                 let track = TrackId(id(one)?);
                 let selected = &self.arrangement.selected_tracks;
@@ -900,7 +903,9 @@ impl App {
                     return None;
                 }
                 let tracks: Vec<u32> = selected.iter().filter(|t| **t != TrackId::MAIN).map(|t| t.0).collect();
-                Some(Action::new("track.setMute", json!({ "tracks": tracks, "mute": action.params["mute"].clone() })))
+                let mut params = action.params.clone();
+                params["tracks"] = json!(tracks);
+                Some(Action::new(action.id, params))
             }
             _ => None,
         }
