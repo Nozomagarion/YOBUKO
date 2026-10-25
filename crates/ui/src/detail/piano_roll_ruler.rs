@@ -262,6 +262,7 @@ pub fn command(address: &Value, before: &ClipShape, after: &ClipShape, part: Par
 /// command is pushed when it is let go; a click on the bar turns the loop on or off; a drag
 /// anywhere else zooms time around the pointer (up and down) and scrolls it (sideways). Returns
 /// the clip as the drag in progress leaves it, to draw.
+#[allow(clippy::too_many_arguments)]
 pub fn interact(
     ui: &Ui,
     ruler: Rect,
