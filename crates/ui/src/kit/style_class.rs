@@ -94,6 +94,7 @@ pub const CLASSES: &[&str] = &[
     "browser-row",
     "track-number",
     "fold",
+    "loop-line",
 ];
 thread_local! {static STACK: RefCell<Vec<String>> = const {RefCell::new(Vec::new())};}
 

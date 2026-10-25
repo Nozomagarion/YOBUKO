@@ -685,3 +685,31 @@ fn the_browser_s_places_and_rows_take_their_own_rules() {
     suhina_ui::kit::native_css::set_user_sheet(None);
     assert!(shown, "the chosen place takes .browser-place:checked");
 }
+
+#[test]
+fn the_loop_lines_reach_down_past_the_returns_to_main() {
+    fn tallest_line(shape: &egui::Shape, ink: egui::Color32) -> f32 {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().map(|s| tallest_line(s, ink)).fold(0.0, f32::max),
+            egui::Shape::LineSegment { points, stroke } if stroke.color == ink && points[0].x == points[1].x => {
+                points[0].y.max(points[1].y)
+            }
+            _ => 0.0,
+        }
+    }
+    let mut project = demo_project();
+    project.transport.loop_range = Some(suhina_engine::model::LoopRange { start: 0.0, end: 4.0 });
+    project.transport.loop_enabled = true;
+    let mut app = App::new();
+    app.set_session(Session::new(project), &[]);
+    suhina_ui::kit::native_css::set_user_sheet(Some(".loop-line { color: #00ff00; }".into()));
+    let mut h = window(app);
+    h.get_by_label("Arrangement view").click();
+    h.run();
+    let green = egui::Color32::from_rgb(0, 0xFF, 0);
+    let tallest = h.output().shapes.iter().map(|s| tallest_line(&s.shape, green)).fold(0.0, f32::max);
+    let main = h.query_all_by_label_contains("Main").map(|n| n.rect().top()).fold(0.0, f32::max);
+    suhina_ui::kit::native_css::set_user_sheet(None);
+    assert!(tallest > 0.0, "the line takes .loop-line's colour");
+    assert!(tallest > main, "it reaches down past Main's row: ends at {tallest}, Main at {main}");
+}

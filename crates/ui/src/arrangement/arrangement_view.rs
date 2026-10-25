@@ -1094,17 +1094,6 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     if state.automation.selected_points().is_some() {
         state.clear_selected_clip();
     }
-    // The loop region, while looping is on: a line at its start and its end down every lane, so
-    // the region reads in the lanes too, not only in the brace over them.
-    if let Some(brace) = timeline.loop_brace.filter(|b| b.enabled) {
-        let stroke = egui::Stroke::new(1.5, theme::accent());
-        for beat in [brace.start, brace.end] {
-            let x = x_of(beat).round() + 0.5;
-            if lanes_area.x_range().contains(x) {
-                lanes_painter.vline(x, lanes_area.y_range(), stroke);
-            }
-        }
-    }
     // The time selection, lit over its tracks' lanes.
     if let Some(selection) = &state.time_selection {
         // Within the timeline: the track headers beside it are not lit.
@@ -1333,6 +1322,32 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         let at = lying_meter(field.left() - PAD, inner.center().y);
         let level = state.meters.main;
         meter::show(ui, &fixed_painter, at, "Main", meter::Source::Main, &level, actions);
+    }
+
+    // The loop region, while looping is on: a line at its start and its end down every lane, the
+    // returns and Main too, so the region reads in the lanes, not only in the brace over them. It
+    // follows the brace while it is dragged. `.loop-line` gives its `color` and `width`.
+    {
+        let free = ui.input(|i| i.modifiers.alt);
+        let shown = state
+            .loop_drag
+            .and_then(|(grab, raw)| markers_loop::dragged_loop(timeline, state, free, grab, raw))
+            .or_else(|| timeline.loop_brace.filter(|b| b.enabled).map(|b| (b.start, b.end)));
+        if let Some((start, end)) = shown {
+            let _line = crate::kit::style_class::enter("loop-line");
+            let style = crate::kit::style_class::computed();
+            let colour = crate::kit::style_class::foreground(theme::accent());
+            let width = style.as_ref().and_then(|s| s.width).map_or(1.5, |w| w.clamp(0.5, 6.0));
+            let down = egui::Rangef::new(lanes_area.top(), fixed.bottom());
+            let column = Rect::from_x_y_ranges(lanes_area.x_range(), down);
+            let line_painter = painter.with_clip_rect(column);
+            for beat in [start, end] {
+                let x = x_of(beat).round() + 0.5;
+                if column.x_range().contains(x) && colour.a() > 0 {
+                    line_painter.vline(x, down, egui::Stroke::new(width, colour));
+                }
+            }
+        }
     }
 
     // A clip dragged onto another lane is drawn there, over everything in that lane.
