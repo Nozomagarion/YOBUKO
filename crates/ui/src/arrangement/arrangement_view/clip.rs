@@ -1393,7 +1393,7 @@ pub(super) fn take_lanes(
         // Its buttons, as a track's header has (#989): delete, solo, its colour, and the up arrow
         // that puts the whole take on the track.
         let button = Vec2::splat(16.0);
-        let row_y = header.top() + 3.0;
+        let row_y = header.center().y - button.y / 2.0;
         let place = |x: f32| Rect::from_min_size(Pos2::new(x, row_y), button);
         let delete = place(header.left() + 8.0);
         let solo = place(delete.right() + 3.0);
@@ -1409,7 +1409,11 @@ pub(super) fn take_lanes(
             };
             let r = clicked(delete, "Delete take", format!("Delete {}", take.name));
             painter.rect_filled(delete, 2.0, motion::mix(shade, theme::control_hover(), widgets::hover(ui, &r)));
-            widgets::text_in(painter, delete, Align2::CENTER_CENTER, "\u{2715}", small.clone(), ink);
+            // A cross drawn, not a glyph: the interface font has no multiplication cross.
+            let c = delete.center();
+            let cross = Stroke::new(1.2, ink);
+            painter.line_segment([c + Vec2::new(-3.5, -3.5), c + Vec2::new(3.5, 3.5)], cross);
+            painter.line_segment([c + Vec2::new(-3.5, 3.5), c + Vec2::new(3.5, -3.5)], cross);
             if r.clicked() {
                 actions.push(Action::new("take.delete", json!({ "track": params["track"], "take": params["take"] })));
             }
@@ -1582,16 +1586,21 @@ pub(super) fn take_lanes(
         if row.bottom() < at.visible.top() || row.top() > at.visible.bottom() {
             continue;
         }
-        painter.rect_filled(header, 0.0, theme::window_background());
+        // In its colour and named as the take it becomes ("3 Audio Take 2"), as the kept ones are.
+        let colour = take_colour(kept + index + 1);
+        let swatch = crate::interaction::colour_picker::color32(colour);
+        let shade = motion::mix(theme::window_background(), swatch, 0.35);
+        painter.rect_filled(header, 0.0, shade);
+        painter.rect_filled(Rect::from_min_size(header.min, Vec2::new(4.0, header.height())), 0.0, swatch);
         widgets::text_in(
             painter,
-            header.shrink2(Vec2::new(8.0, 0.0)),
+            header.shrink2(Vec2::new(10.0, 0.0)),
             Align2::LEFT_CENTER,
-            &format!("Take {}", kept + index + 1),
+            &format!("{} Take {}", lane.name, kept + index + 1),
             theme::ui_font(theme::TEXT_SMALL),
-            theme::text_secondary(),
+            ink_on(shade),
         );
-        let look = Lane { mute: true, color: take_colour(kept + index + 1), ..lane.clone() };
+        let look = Lane { mute: false, color: colour, ..lane.clone() };
         paint_live_take(painter, row, &look, pass, x_of, beat_width, timeline);
     }
 }
