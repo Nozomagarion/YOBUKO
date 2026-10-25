@@ -20,11 +20,15 @@ pub const MAX_POINTS: usize = 65_536;
 
 /// The shape of a segment: a cubic Bezier from (0, 0) to (1, 1) in (share of the segment's time,
 /// share of the way from its first point's position to the next's), through two inner control
-/// points (x1, y1) and (x2, y2), each anywhere in the unit square (`docs/spec/automation.md` ›
-/// Curves). With both control points on the diagonal the segment is straight.
+/// points (x1, y1) and (x2, y2) (`docs/spec/automation.md` › Lanes and points). With both
+/// control points on the diagonal the segment is straight.
 ///
-/// With x1 and x2 in the square the time share never falls, so the curve is a function of time;
-/// with y1 and y2 in it, the value stays between the segment's two points.
+/// Bending and dragging keep the control points in the unit square; with x1 and x2 in it the
+/// time share never falls, so the curve is a function of time, and with y1 and y2 in it the value
+/// stays between the segment's two points. A split keeps that shape but not the square: a half of
+/// a curve whose points run back can have a coordinate from -1/3 to 4/3 ([`Curve::split`]). Each
+/// coordinate is kept from [`CONTROL_MIN`] to [`CONTROL_MAX`]; a curve inside those limits whose
+/// time share falls still plays, as [`Curve::shape`] says.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Curve {
     pub x1: f64,
@@ -42,14 +46,20 @@ impl Default for Curve {
 /// How close to the diagonal or a corner a control point counts as on it.
 const NEAR: f64 = 1e-9;
 
+/// The lowest a control point's coordinate goes. A split of a curve in the unit square reaches
+/// -1/3 at most, however often it is repeated; the rest is room for rounding.
+pub const CONTROL_MIN: f64 = -0.5;
+/// The highest a control point's coordinate goes: a split reaches 4/3 at most.
+pub const CONTROL_MAX: f64 = 1.5;
+
 impl Curve {
     /// A straight segment: the mirrored family's middle, (1/4, 1/4) and (3/4, 3/4).
     pub const STRAIGHT: Self = Self { x1: 0.25, y1: 0.25, x2: 0.75, y2: 0.75 };
 
     /// The curve through control points (x1, y1) and (x2, y2), or `None` when one is not a
-    /// number from 0 to 1.
+    /// number from [`CONTROL_MIN`] to [`CONTROL_MAX`].
     pub fn new(x1: f64, y1: f64, x2: f64, y2: f64) -> Option<Self> {
-        [x1, y1, x2, y2].iter().all(|v| (0.0..=1.0).contains(v)).then_some(Self { x1, y1, x2, y2 })
+        [x1, y1, x2, y2].iter().all(|v| (CONTROL_MIN..=CONTROL_MAX).contains(v)).then_some(Self { x1, y1, x2, y2 })
     }
 
     /// The curve as `[x1, y1, x2, y2]`.
@@ -62,14 +72,26 @@ impl Curve {
         Self::new(x1, y1, x2, y2)
     }
 
-    /// The curve with each coordinate held from 0 to 1; one that is not a number makes the
-    /// curve straight. For curves from outside, where a refusal is not wanted.
+    /// The curve with each coordinate held from [`CONTROL_MIN`] to [`CONTROL_MAX`]; one that is
+    /// not a number makes the curve straight. For curves from outside, where a refusal is not
+    /// wanted.
     pub fn held(self) -> Self {
+        self.held_in(CONTROL_MIN, CONTROL_MAX)
+    }
+
+    /// The curve with each coordinate held from 0 to 1 on its own, as a drag starts
+    /// (`docs/spec/automation.md` › Dragging a curve); one that is not a number makes the curve
+    /// straight.
+    pub fn boxed(self) -> Self {
+        self.held_in(0.0, 1.0)
+    }
+
+    fn held_in(self, lo: f64, hi: f64) -> Self {
         let [x1, y1, x2, y2] = self.to_array();
         if [x1, y1, x2, y2].iter().any(|v| v.is_nan()) {
             return Self::STRAIGHT;
         }
-        Self { x1: x1.clamp(0.0, 1.0), y1: y1.clamp(0.0, 1.0), x2: x2.clamp(0.0, 1.0), y2: y2.clamp(0.0, 1.0) }
+        Self { x1: x1.clamp(lo, hi), y1: y1.clamp(lo, hi), x2: x2.clamp(lo, hi), y2: y2.clamp(lo, hi) }
     }
 
     /// Whether the segment is straight: both control points on the diagonal.
@@ -108,19 +130,54 @@ impl Curve {
         }
     }
 
-    /// The Bezier's parameter at which its time share is `t` (0 to 1). The time share never
-    /// falls along the curve, so halving finds it.
+    /// The Bezier's parameter at which its time share first reaches `t` (0 to 1). The time share
+    /// rises and falls in at most three runs, between the zeros of its slope; the first run that
+    /// reaches `t` holds it, and halving finds it there. For a curve whose time share never falls
+    /// (every curve bending, dragging and splitting give) that is the one parameter with that
+    /// share; for another it is the first, so the curve is still a function of time. Never
+    /// allocates.
     fn parameter(&self, t: f64) -> f64 {
-        let (mut lo, mut hi) = (0.0f64, 1.0f64);
-        for _ in 0..52 {
-            let mid = 0.5 * (lo + hi);
-            if cubic(self.x1, self.x2, mid) < t {
-                lo = mid;
-            } else {
-                hi = mid;
+        let x = |s: f64| cubic(self.x1, self.x2, s);
+        // The slope over 3: a + 2 b s + c s^2, from the Bernstein form of the derivative.
+        let (a, b, c) = (self.x1, self.x2 - 2.0 * self.x1, 1.0 + 3.0 * (self.x1 - self.x2));
+        let mut ends = [1.0f64; 3];
+        let mut n = 0;
+        let mut push = |s: f64| {
+            if s > 0.0 && s < 1.0 && n < 2 {
+                ends[n] = s;
+                n += 1;
+            }
+        };
+        if c.abs() < 1e-12 {
+            if b != 0.0 {
+                push(-a / (2.0 * b));
+            }
+        } else {
+            let disc = b * b - a * c;
+            if disc > 0.0 {
+                let root = disc.sqrt();
+                let (r1, r2) = ((-b - root) / c, (-b + root) / c);
+                push(r1.min(r2));
+                push(r1.max(r2));
             }
         }
-        0.5 * (lo + hi)
+        let mut lo = 0.0f64;
+        for hi in ends {
+            if hi > lo && x(hi) >= t {
+                let (mut lo, mut hi) = (lo, hi);
+                for _ in 0..60 {
+                    let mid = 0.5 * (lo + hi);
+                    if x(mid) < t {
+                        lo = mid;
+                    } else {
+                        hi = mid;
+                    }
+                }
+                return 0.5 * (lo + hi);
+            }
+            lo = lo.max(hi);
+        }
+        1.0
     }
 
     /// How far the segment has moved at `t` (0 to 1) of its time, as a share of the way from its
@@ -135,8 +192,12 @@ impl Curve {
 
     /// The segment cut at `t` (strictly between 0 and 1) of its time, so that the two halves
     /// play exactly as the whole did: the share of the way at the cut and each half's curve,
-    /// scaled to its own box (de Casteljau). A half that does not move (all of its way at one
-    /// end) is straight. `None` for a `t` at an end or not a number.
+    /// scaled to its own box (de Casteljau), not held in the unit square: a half of a curve whose
+    /// points run back in time or in value, such as (1, 0, 0, 1), lies partly outside it (down to
+    /// -1/3, up to 4/3). A half that does not move (all of its way at one end) is straight; a
+    /// coordinate past [`CONTROL_MIN`] or [`CONTROL_MAX`], which only a curve whose time share
+    /// falls or rounding in a sliver of a cut can give, is held there. `None` for a `t` at an end
+    /// or not a number.
     pub fn split(&self, t: f64) -> Option<Split> {
         if !(t > 0.0 && t < 1.0) {
             return None;
@@ -153,7 +214,7 @@ impl Curve {
         // Each half in its own box: the first from (0, 0) to M, the second from M to (1, 1).
         let scale = |a: (f64, f64), b: (f64, f64), from: (f64, f64), to: (f64, f64)| {
             let (w, h) = (to.0 - from.0, to.1 - from.1);
-            if w <= 0.0 || h <= 0.0 {
+            if !(w > 0.0 && h > 0.0) {
                 return Self::STRAIGHT;
             }
             Self { x1: (a.0 - from.0) / w, y1: (a.1 - from.1) / h, x2: (b.0 - from.0) / w, y2: (b.1 - from.1) / h }
@@ -204,8 +265,10 @@ impl CurveDrag {
     /// A drag starting from `curve`. A straight curve, one whose control points are both on the
     /// diagonal and one with both in the corners (0, 1) or (1, 0) start on the mirrored family's
     /// paths (p = 1/4 and 3/4); a single control point in a corner takes its family path too.
+    /// A control point outside the unit square (from a split) is first held in it, each
+    /// coordinate on its own, so even a drag of no steps gives the held curve.
     pub fn new(curve: &Curve) -> Self {
-        let curve = curve.held();
+        let curve = curve.boxed();
         let (first, second) = (path_place(curve.x1, curve.y1), path_place(curve.x2, curve.y2));
         let straight = first.1 == 1.0 && second.1 == 1.0;
         let paths = if straight || (first.0.is_none() && second.0.is_none()) {
@@ -246,7 +309,7 @@ impl CurveDrag {
         }
         let (x1, y1) = on_path(self.paths[0], places[0]);
         let (x2, y2) = on_path(self.paths[1], places[1]);
-        Curve { x1, y1, x2, y2 }.held()
+        Curve { x1, y1, x2, y2 }.boxed()
     }
 }
 

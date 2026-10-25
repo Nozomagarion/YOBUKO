@@ -326,7 +326,7 @@ const POINT: Param =
 const CURVE: Param = optional(
     "curve",
     ParamType::Curve,
-    "shape of the segment to the next point: [x1, y1, x2, y2], the two control points of a cubic Bezier from (0, 0) to (1, 1) in (share of the time, share of the way), each from 0 to 1; or one bend from -1 to 1 for the mirrored curve (0 straight, the default; above 0 fast first, below 0 slow first)",
+    "shape of the segment to the next point: [x1, y1, x2, y2], the two control points of a cubic Bezier from (0, 0) to (1, 1) in (share of the time, share of the way), each from 0 to 1 (from -0.5 to 1.5 for the halves of a split, which can lie outside); or one bend from -1 to 1 for the mirrored curve (0 straight, the default; above 0 fast first, below 0 slow first)",
 );
 const MARKER: Param = param("index", ParamType::Integer, "marker index, from 0, as in project.markers");
 /// `clip.delete` takes a list of arrangement clips, or one clip by `track` with `index` or `scene`.

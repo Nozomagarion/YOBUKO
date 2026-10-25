@@ -71,6 +71,39 @@ fn a_point_added_on_a_bent_segment_splits_it_exactly() {
     assert_eq!(list["mixer"][0]["points"][2]["curve"], lopsided);
 }
 
+/// An S whose points run back in time, split by a point on the envelope, plays as before: its
+/// halves lie outside the unit square, unclamped, and are listed and taken back as they are.
+#[test]
+fn a_split_s_curve_plays_as_before_with_halves_outside_the_square() {
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, -1.0), (8.0, 1.0)] {
+        let point = json!({ "track": 1, "param": "pan", "beat": beat, "value": value, "curve": [1, 0, 0, 1] });
+        run(&mut session, "automation.addPoint", point).unwrap();
+    }
+    let before = lanes(&session)[0].clone();
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 6 })).unwrap();
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 1 })).unwrap();
+    let after = lanes(&session)[0].clone();
+    assert_eq!(after.points.len(), 4);
+    // The 0.75 cut's first half had x1 = 1.1958; cut again at beat 1, its second half keeps x1
+    // above 1.
+    assert!(after.points[1].curve.x1 > 1.1, "{:?}", after.points[1]);
+    for q in 0..=640 {
+        let beat = q as f64 / 80.0;
+        let (old, new) =
+            (before.value_at(beat, false, &automation::Plain), after.value_at(beat, false, &automation::Plain));
+        // Beat 4 is the S's upright middle, where rounding alone moves the value by about 1e-5.
+        let tolerance = if (beat - 4.0).abs() < 1e-9 { 1e-4 } else { 1e-9 };
+        assert!((old.unwrap() - new.unwrap()).abs() < tolerance, "{beat}: {old:?} against {new:?}");
+    }
+    let list = run(&mut session, "automation.list", json!({ "track": 1 })).unwrap();
+    let listed = list["mixer"][0]["points"][1]["curve"].clone();
+    assert_eq!(listed, json!(after.points[1].curve.to_array()));
+    let back = json!({ "track": 1, "param": "pan", "point": 0, "curve": listed });
+    run(&mut session, "automation.movePoint", back).unwrap();
+    assert_eq!(lanes(&session)[0].points[0].curve, after.points[1].curve);
+}
+
 /// A point added without a value keeps a level or straight segment exactly, holds the value
 /// outside the points and on a step, and at a point's beat takes that point's curve; a lane
 /// without points needs a value.
@@ -295,6 +328,14 @@ fn malformed_automation_edits_are_refused_and_change_nothing() {
         ("automation.addPoint", json!({ "track": 1, "param": "volume", "beat": 0, "value": 7 })),
         ("automation.addPoint", json!({ "track": 1, "param": "mute", "beat": 0, "value": 0.5, "curve": 2 })),
         ("automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 0, "value": 0, "curve": "round" })),
+        (
+            "automation.addPoint",
+            json!({ "track": 1, "param": "pan", "beat": 0, "value": 0, "curve": [0, 1.6, 0.5, 0.5] }),
+        ),
+        (
+            "automation.addPoint",
+            json!({ "track": 1, "param": "pan", "beat": 0, "value": 0, "curve": [-0.6, 0, 0.5, 0.5] }),
+        ),
         ("automation.addPoint", json!({ "track": 1, "device": 1, "param": "gain", "beat": 0, "value": 0 })),
         ("automation.addPoint", json!({ "track": 1, "device": 0, "param": "volume", "beat": 0, "value": 0 })),
         ("automation.addPoint", json!({ "track": 1, "device": -1, "param": "gain", "beat": 0, "value": 0 })),

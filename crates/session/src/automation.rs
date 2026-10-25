@@ -9,7 +9,9 @@
 
 use serde_json::{Value, json};
 use suhina_engine::{MAX_START_BEAT, param_id};
-use suhina_model::automation::{Curve, MAX_POINTS, MAX_VOLUME, MUTE, Taper, VOLUME, VolumeTaper, mixer_range};
+use suhina_model::automation::{
+    CONTROL_MAX, CONTROL_MIN, Curve, MAX_POINTS, MAX_VOLUME, MUTE, Taper, VOLUME, VolumeTaper, mixer_range,
+};
 use suhina_model::{AutomationLane, AutomationPoint, DeviceKind, TrackId};
 
 use crate::commands::{channel_param, number, to_db, track_id};
@@ -163,10 +165,13 @@ fn beat(params: &Value) -> Result<f64, CommandError> {
     Ok(beat)
 }
 
-/// `params["curve"]`: four numbers from 0 to 1 (the two control points), or one bend from -1 to
-/// 1 for the mirrored curve.
+/// `params["curve"]`: four numbers (the two control points), each from -0.5 to 1.5 as a split can
+/// give ([`CONTROL_MIN`], [`CONTROL_MAX`]), or one bend from -1 to 1 for the mirrored curve.
 fn curve(params: &Value) -> Result<Option<Curve>, CommandError> {
-    let bad = || "curve must be [x1, y1, x2, y2], each from 0 to 1, or a bend from -1 to 1".into();
+    let bad = || {
+        format!("curve must be [x1, y1, x2, y2], each from {CONTROL_MIN} to {CONTROL_MAX}, or a bend from -1 to 1")
+            .into()
+    };
     match params.get("curve") {
         None | Some(Value::Null) => Ok(None),
         Some(Value::Array(list)) => {

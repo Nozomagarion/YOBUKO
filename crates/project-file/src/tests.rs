@@ -102,7 +102,13 @@ fn everything() -> Project {
                     // Two control points outside the mirrored family: from version 4.
                     AutomationPoint { beat: 0.0, value: 0.0, curve: Curve { x1: 0.1, y1: 0.7, x2: 0.825, y2: 0.525 } },
                     AutomationPoint::new(4.0, 1.0),
-                    AutomationPoint::new(4.0, 0.5),
+                    // A split's half, outside the unit square (version 4 too); the last point's
+                    // curve plays nothing but is kept.
+                    AutomationPoint {
+                        beat: 4.0,
+                        value: 0.5,
+                        curve: Curve { x1: 1.195_800_350_656_066_6, y1: 0.0, x2: 0.5, y2: -0.293_128_413_857_272_2 },
+                    },
                 ],
                 enabled: true,
             }],
@@ -447,6 +453,11 @@ fn hostile_values_are_errors_not_crashes() {
         r#"{ "channels": [ { "id": 1, "devices": [ { "kind": { "type": "clap", "id": "x" }, "automation": 5 } ] } ] }"#,
         r#"{ "channels": [ { "id": 1, "automation": [ { "param": "pan", "points": [ { "beat": 0, "value": 0, "curve": 1.5 } ] } ] } ] }"#,
         r#"{ "channels": [ { "id": 1, "automation": [ { "param": "pan", "points": [ { "beat": 0, "value": 0, "curve": "bent" } ] } ] } ] }"#,
+        r#"{ "channels": [ { "id": 1, "automation": [ { "param": "pan", "points": [ { "beat": 0, "value": 0, "curve": [0, 1.6, 0.5, 0.5] } ] } ] } ] }"#,
+        r#"{ "channels": [ { "id": 1, "automation": [ { "param": "pan", "points": [ { "beat": 0, "value": 0, "curve": [-0.51, 0, 0.5, 0.5] } ] } ] } ] }"#,
+        r#"{ "channels": [ { "id": 1, "automation": [ { "param": "pan", "points": [ { "beat": 0, "value": 0, "curve": [0, 1e300, 0.5, 0.5] } ] } ] } ] }"#,
+        r#"{ "channels": [ { "id": 1, "automation": [ { "param": "pan", "points": [ { "beat": 0, "value": 0, "curve": [0, 0.5, 0.5] } ] } ] } ] }"#,
+        r#"{ "channels": [ { "id": 1, "automation": [ { "param": "pan", "points": [ { "beat": 0, "value": 0, "curve": [0, "x", 0.5, 0.5] } ] } ] } ] }"#,
         r#"{ "channels": [ { "id": 1, "automation": [ { "param": "pan", "enabled": "yes", "points": [] } ] } ] }"#,
         r#"{ "channels": [ { "id": 1, "automation": { "param": "pan" } } ] }"#,
         r#"{ "channels": [ { "id": 1, "devices": [ { "kind": { "type": "vst3", "id": "x" }, "state": "***" } ] } ] }"#,

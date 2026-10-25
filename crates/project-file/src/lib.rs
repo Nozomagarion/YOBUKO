@@ -1155,10 +1155,12 @@ fn read_lanes(map: &Obj, at: &str) -> Result<Vec<AutomationLane>, ProjectFileErr
     Ok(automation)
 }
 
-/// A point's `curve`: four numbers from 0 to 1 (x1, y1, x2, y2), or before version 4 one bend
+/// A point's `curve`: four numbers (x1, y1, x2, y2), each from -0.5 to 1.5 (a split's halves can
+/// lie outside 0 to 1, `automation::CONTROL_MIN`, `CONTROL_MAX`), or before version 4 one bend
 /// from -1 to 1; straight when left out.
 fn read_curve(p: &Obj, at: &str) -> Result<automation::Curve, ProjectFileError> {
-    let bad = || ProjectFileError(format!("{at}.curve: expected four numbers from 0 to 1, or a number from -1 to 1"));
+    let bad =
+        || ProjectFileError(format!("{at}.curve: expected four numbers from -0.5 to 1.5, or a number from -1 to 1"));
     match p.get("curve") {
         None | Some(Value::Null) => Ok(automation::Curve::STRAIGHT),
         Some(Value::Array(list)) => {

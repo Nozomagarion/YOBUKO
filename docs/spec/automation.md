@@ -61,14 +61,21 @@ and is deleted with its device. One lane per parameter.
   158 Hz. A whole-number parameter moves along the line between its points and the device rounds.
 - The movement follows the first point's **curve** (`automation::Curve`): a cubic Bezier from
   (0, 0) to (1, 1) in (share of the segment's time, share of the way in position) through two
-  inner control points (x1, y1) and (x2, y2), each anywhere from 0 to 1. With both on the
-  diagonal the segment is straight (the default). The same curve has the same shape going up and
+  inner control points (x1, y1) and (x2, y2). Bending and dragging keep each anywhere from 0 to 1;
+  a split can put them outside ([below](#splitting-a-segment)). With both on the diagonal the
+  segment is straight (the default). The same curve has the same shape going up and
   down. Bending a straight segment gives the **mirrored family**, one handle `bend` from -1 to 1
   (`Curve::bend`): the second control point is the first's mirror, (1 - y1, 1 - x1), and the
   first runs along y1 = 1 - 3 x1 to (0, 1) at 1 (fast first, then settles) or along
   x1 = 1 - 3 y1 to (1, 0) at -1 (waits, then moves late); the two lines meet at (1/4, 1/4),
   straight. Splitting and dragging give pairs outside the family. This follows how Live 12.4.6
   stores and plays its lanes (#906, #913).
+- **Limits.** Each coordinate is kept from -0.5 to 1.5 (`CONTROL_MIN`, `CONTROL_MAX`). With x1
+  and x2 from 0 to 1 the time share never falls, so the curve is a function of time, and with y1
+  and y2 there the value stays between the two points; a split's half is a piece of such a curve,
+  so it keeps both, whatever its points. A curve inside the limits whose time share does fall,
+  which only a hand-edited file or command can give, plays at the first moment its time share
+  reaches each share of the segment's time, its value held between the two points.
 - **Two points at one beat make a jump**: the value reaches the first, then leaves from the second.
   A new point at a beat that has points goes after them.
 - On/off and choice parameters, and the mute, are **steps**: each point's value holds until the
@@ -83,7 +90,16 @@ A point placed on a bent segment keeps the sound exactly (`Curve::split`, `autom
 without a value): at share x of the segment's time the curve's parameter t is where its time
 share is x; the new point's value is the parameter's value at the curve's position there, and
 each half gets the de Casteljau subdivision at t, scaled to its own box. The halves are no longer
-mirrored. A half that does not move is straight. A point added at another point's beat takes that
+mirrored. A half that does not move is straight.
+
+The halves are **not clamped** to the unit square, as Live 12.4.6 stores them (split-overshoot in
+`live-12/automation.md`): from a curve whose points run back in time or in value they lie partly
+outside it. (1, 0, 0, 1) split at 0.75 of its time gives a first half with x1 = 1.1958, at 0.25 a
+second half with x2 = -0.1958; (0, 1, 1, 0) gives y1 = 1.2931 at 0.75 and y2 = -0.2931 at 0.25.
+Splitting a curve of the square, however often, keeps the first control point's coordinates from
+0 to 4/3 and the second's from -1/3 to 1 (a cubic whose time share never falls has no others), so
+the limits above leave room for rounding; a coordinate past them, which only a sliver of a cut or a
+curve whose time runs back can give, is held at the limit. A point added at another point's beat takes that
 point's curve, since it starts the segment.
 
 ## Dragging a curve
@@ -93,6 +109,10 @@ Dragging a segment's line reshapes its curve (`automation::CurveDrag`), as measu
 the diagonal, then on to (1, 0); its place on the path F is 0 at (0, 1), 1 at (p, p) and 2 at
 (1, 0). A drag moves F in whole steps of 1/64 and never changes p.
 
+- **A drag first holds the curve in the unit square**: each coordinate of a control point outside
+  it (from a split) is moved to 0 or 1 on its own, so x1 = 1.1958 becomes 1 and (0, 1.2931) the
+  corner (0, 1). The drag then goes on as below from the held curve. A drag shorter than one step
+  still holds it, and changes the sound by that alone (split-overshoot-drag, Live 12.4.6).
 - A straight curve, one with both points on the diagonal and one with both in the corners (0, 1)
   or (1, 0) start on the family's paths, p = 1/4 and 3/4; a single point in a corner takes its
   family path (not measured). A single point on the diagonal keeps its own p.
@@ -186,12 +206,12 @@ mixer) and `param`. Values are in the unit of the parameter's set command.
 | `automation.list {track}` | the track's lanes: `mixer` and `devices` (index, name, lanes), each with `param`, `enabled` and `points` (`beat`, `value`, `curve` as `[x1, y1, x2, y2]`) |
 | `device.setAutomation {track, device, param, points}` | replaces a device lane with straight segments (`points` a flat list of beat and value; `[]` removes it), for built-in devices, `.sd` devices and plug-ins |
 
-A `curve` is `[x1, y1, x2, y2]`, each from 0 to 1, or one bend from -1 to 1 for the mirrored
-family.
+A `curve` is `[x1, y1, x2, y2]`, each from -0.5 to 1.5 (from 0 to 1 but for a split's halves,
+which `automation.list` shows as they are), or one bend from -1 to 1 for the mirrored family.
 
 Refused, changing nothing: an unknown track, device or parameter; a beat below 0 or past the
 arrangement's limit; a value out of range for the mixer (a volume above +6 dB, a pan outside -1 to
-1, a mute other than 0 or 1); a curve that is not four numbers from 0 to 1 or a bend from -1 to 1; a point index the lane does not have; a lane
+1, a mute other than 0 or 1); a curve that is not four numbers from -0.5 to 1.5 or a bend from -1 to 1; a point index the lane does not have; a lane
 of more than 65,536 points; a `movePoint` with nothing to change.
 
 ## In the Arrangement view
@@ -263,8 +283,9 @@ enabled? }]`. Values are stored in the parameter's unit (a linear gain for the v
 `[x1, y1, x2, y2]` from version 4, written only when the segment is not straight; files before
 version 4 wrote one bend from -1 to 1, which reads as the mirrored curve it played (#906), so they
 sound as before. `enabled` is written only when it is false
-([suhina-format.md](suhina-format.md)). A curve with a coordinate outside 0 to 1 (or a bend
-outside -1 to 1) is refused, as is a lane of more than 65,536 points; points are read in beat
+([suhina-format.md](suhina-format.md)). A coordinate may lie outside 0 to 1, as a split leaves
+it ([Splitting a segment](#splitting-a-segment)); one outside -0.5 to 1.5 or not a number (or a
+bend outside -1 to 1) is refused, as is a lane of more than 65,536 points; points are read in beat
 order.
 
 ## Not done yet

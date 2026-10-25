@@ -904,7 +904,10 @@ fn lane(
         match segment_at(&param.points, &param.scale, plot, geometry, pos) {
             Some(point) => {
                 let curve = param.points.get(point).map_or(Curve::STRAIGHT, |p| p.curve);
+                // A drag first holds a split half's control points in the unit square, so even one
+                // shorter than a step changes a curve that lay outside it.
                 let paths = automation::CurveDrag::new(&curve);
+                let curve = paths.dragged(0);
                 state.curve_drag = Some(CurveDrag { track, key: key.clone(), point, paths, moved: 0.0, curve });
             }
             None => state.box_drag = Some(BoxDrag { track, key: key.clone(), from: pos, to: pos }),
