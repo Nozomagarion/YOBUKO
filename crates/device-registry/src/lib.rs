@@ -48,6 +48,7 @@ pub fn layout(id: &str) -> Option<Result<Layout, DeviceSdkError>> {
 pub const LAYOUT_FILES: &[(&str, &str)] = &[
     ("compressor", include_str!("../../../devices/compressor/panel.json")),
     ("overdrive", include_str!("../../../devices/overdrive/panel.json")),
+    ("reverb", include_str!("../../../devices/reverb/panel.json")),
 ];
 
 /// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
@@ -238,6 +239,26 @@ mod tests {
         let band = canvas.controls.iter().find(|c| c.id == "band").unwrap();
         let axes = (band.x.as_ref().map(|b| b.parameter.as_str()), band.y.as_ref().map(|b| b.parameter.as_str()));
         assert_eq!(axes, (Some("bandFrequency"), Some("bandWidth")));
+    }
+
+    #[test]
+    fn the_reverbs_expanded_panel_has_every_parameter_and_the_compact_one_fits() {
+        let panel = panel("reverb").unwrap();
+        let compact = panel.ui.as_ref().unwrap();
+        assert_eq!(compact.size, [builtin::COMPACT_WIDTH, builtin::COMPACT_HEIGHT]);
+        for c in &compact.controls {
+            let [x, y, w, h] = c.bounds;
+            assert!(x + w <= compact.size[0] && y + h <= compact.size[1], "{} is outside", c.id);
+        }
+        // The compact panel shows the main ones; the rest are reachable only in the expanded one.
+        let mut bound: Vec<&str> = (panel.expanded.as_ref().unwrap().controls.iter())
+            .flat_map(|c| [c.x.as_ref(), c.y.as_ref()])
+            .flatten()
+            .map(|b| b.parameter.as_str())
+            .collect();
+        bound.sort_unstable();
+        bound.dedup();
+        assert_eq!(bound.len(), suhina_device_reverb::INFO.params.len());
     }
 
     #[test]
