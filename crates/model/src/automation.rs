@@ -48,6 +48,9 @@ const NEAR: f64 = 1e-9;
 
 /// The lowest a control point's coordinate goes. A split of a curve in the unit square reaches
 /// -1/3 at most, however often it is repeated; the rest is room for rounding.
+/// How far rounding may take the share of the way at a cut past an end before it is refused.
+const SLIVER: f64 = 1e-9;
+
 pub const CONTROL_MIN: f64 = -0.5;
 /// The highest a control point's coordinate goes: a split reaches 4/3 at most.
 pub const CONTROL_MAX: f64 = 1.5;
@@ -197,7 +200,8 @@ impl Curve {
     /// -1/3, up to 4/3). A half that does not move (all of its way at one end) is straight; a
     /// coordinate past [`CONTROL_MIN`] or [`CONTROL_MAX`], which only a curve whose time share
     /// falls or rounding in a sliver of a cut can give, is held there. `None` for a `t` at an end
-    /// or not a number.
+    /// or not a number, and for a cut where the way is past either end (a curve whose points lie
+    /// beyond the box can overshoot): the halves could not play as the whole does.
     pub fn split(&self, t: f64) -> Option<Split> {
         if !(t > 0.0 && t < 1.0) {
             return None;
@@ -220,6 +224,11 @@ impl Curve {
             Self { x1: (a.0 - from.0) / w, y1: (a.1 - from.1) / h, x2: (b.0 - from.0) / w, y2: (b.1 - from.1) / h }
                 .held()
         };
+        // A cut where the way is past either end cannot be kept by two halves that stay between
+        // their own points: the whole plays held there, a half could not.
+        if !(-SLIVER..=1.0 + SLIVER).contains(&m.1) {
+            return None;
+        }
         Some(Split { share: m.1.clamp(0.0, 1.0), before: scale(q, u, p0, m), after: scale(v, w, m, p3) })
     }
 }

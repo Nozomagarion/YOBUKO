@@ -588,3 +588,21 @@ fn malformed_point_lists_change_nothing() {
     }
     assert_eq!(session.project(), &before);
 }
+
+/// A curve whose points lie beyond the box can overshoot its own points; two halves could not
+/// play as it does there, so a point is not added on it without a value.
+#[test]
+fn a_point_is_not_added_on_a_segment_that_overshoots_its_points() {
+    let mut session = Session::new(project());
+    let overshoot = json!([0.3, 1.5, 0.7, 1.5]);
+    for (beat, value) in [(0, -1), (8, 1)] {
+        let point = json!({ "track": 1, "param": "pan", "beat": beat, "value": value, "curve": overshoot });
+        run(&mut session, "automation.addPoint", point).unwrap();
+    }
+    let before = lanes(&session)[0].clone();
+    let refused = run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 4 }));
+    assert!(refused.is_err());
+    assert_eq!(lanes(&session)[0], before);
+    // A value given, or the beat of a point, still works.
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 4, "value": 0 })).unwrap();
+}

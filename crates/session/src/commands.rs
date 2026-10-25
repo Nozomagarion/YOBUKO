@@ -110,7 +110,7 @@ impl ParamType {
             Self::Track => "a track id or name",
             Self::Decibels => "a number of decibels or \"-inf\"",
             Self::AutomationValue => "a number, \"-inf\", or true or false",
-            Self::Curve => "four numbers from 0 to 1 or one number from -1 to 1",
+            Self::Curve => "four numbers from -0.5 to 1.5 or one number from -1 to 1",
             Self::Text => "a text",
             Self::Tracks => "a list of track ids or names",
             Self::Texts | Self::Path(PathKind::Files) => "a list of texts",

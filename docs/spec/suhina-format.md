@@ -81,7 +81,7 @@ Before 1.0 the number may rise often. A file saved by a pull request's test buil
 | 1 | The project as JSON ([ADR 0010](../decisions/0010-project-files.md)); ids, markers, automation, follow actions, launch settings, cue and launch mappings came later without a rise | #212 and earlier |
 | 2 | Device groups, written only when a project held one ([device groups](device-groups.md) › Project file) | #147 |
 | 3 | Written by every file: the first version that rises with every change | #893 |
-| 4 | An automation point's `curve` as two control points, `[x1, y1, x2, y2]`, each from -0.5 to 1.5 (a split's halves lie outside 0 to 1); a bend from earlier versions reads as the mirrored curve | #913 |
+| 4 | An automation point's `curve` as two control points, `[x1, y1, x2, y2]`, each from -0.5 to 1.5 (a split's halves lie outside 0 to 1); a bend from earlier versions reads as the mirrored curve | #914 |
 
 ## Parts
 

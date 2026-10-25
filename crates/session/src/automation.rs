@@ -301,7 +301,11 @@ fn on_envelope(lane: &mut AutomationLane, beat: f64, target: &Target) -> Result<
         return Ok(AutomationPoint::new(beat, value));
     };
     // At the segment's first point's beat the new point starts the segment, so it takes its curve.
-    let Some(cut) = a.curve.split((beat - a.beat) / (b.beat - a.beat)) else {
+    let fraction = (beat - a.beat) / (b.beat - a.beat);
+    let Some(cut) = a.curve.split(fraction) else {
+        if fraction > 0.0 && fraction < 1.0 {
+            return Err("the segment's curve overshoots its points, so a point cannot be added on it without changing it; give a value".into());
+        }
         return Ok(AutomationPoint { beat, value, curve: a.curve });
     };
     let (from, to) = (target.kind.position(a.value), target.kind.position(b.value));
