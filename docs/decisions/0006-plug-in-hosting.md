@@ -221,8 +221,12 @@ workspace forbids.
      them again after a restart. `param_changed` (since version 14, unasked, #828) tells the
      session what the user moved in the plug-in's editor: the value the plug-in runs with now,
      which the session keeps the project's values in step with — no undo step of its own, and
-     a change since the last save. A CLAP plug-in's own editor reports nothing of the kind
-     today, so its panel follows only its own listing.
+     a change since the last save. A VST3 plug-in reports it through the host's component
+     handler (`performEdit`); a CLAP one comes out with the blocks as output parameter events,
+     which the host reads after each block (the only way CLAP has: its host params extension
+     has no call of the kind, and the host does not give that extension today, so its
+     `request_flush` stays unanswered and a change made while no block runs waits for the
+     next one).
 4. **Block sync and deadline.** The engine signals the host, the host processes and signals
    back. Primitives: a futex in the shared memory on Linux; duplicated auto-reset events on
    Windows, waited on together with a high-resolution waitable timer that wakes the wait 1 ms

@@ -403,13 +403,10 @@ impl Loaded {
 
     fn tick(&mut self) -> Vec<(u32, f64)> {
         match self {
-            // A CLAP plug-in's own editor does not report to the host the way a VST3 one does
-            // through `performEdit`, so nothing comes back for it yet; its listing still read
-            // its values again as they stand.
-            Self::Clap(plugin) => {
-                plugin.tick();
-                Vec::new()
-            }
+            // What a CLAP plug-in changed itself comes out with the blocks as output parameter
+            // events, which its audio thread hands over here; its listing still read its values
+            // again as they stand.
+            Self::Clap(plugin) => plugin.tick(),
             Self::Vst3(plugin) => plugin.tick(),
             Self::Test { .. } => Vec::new(),
         }

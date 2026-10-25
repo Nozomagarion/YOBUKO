@@ -22,7 +22,7 @@ pub(crate) type Pending = Arc<Mutex<Vec<(ParamID, ParamValue)>>>;
 /// Puts `(id, value)` in `list` as the parameter's value now: one entry per parameter, the last
 /// one wins. The audio thread fills these lists, so this keeps them no longer than the
 /// parameters touched since the main thread read them, which the room reserved for them holds.
-fn note(list: &mut Vec<(ParamID, ParamValue)>, id: ParamID, value: ParamValue) {
+pub(crate) fn note(list: &mut Vec<(ParamID, ParamValue)>, id: ParamID, value: ParamValue) {
     match list.iter_mut().find(|(other, _)| *other == id) {
         Some(slot) => slot.1 = value,
         None => list.push((id, value)),
