@@ -246,7 +246,7 @@ fn active_theme_is_featured_and_holding_it_keeps_the_preview_clear() {
     settle(&mut harness);
     let id = harness.state().settings().theme.clone();
     let name = suhina_ui::kit::theme::built_in_themes().into_iter().find(|(key, _)| *key == id).unwrap().1.name;
-    let rect = harness.get_by_label(&format!("Theme: {name}")).rect();
+    let rect = harness.get_by_label(&format!("Theme in use: {name}")).rect();
     assert!(rect.width() > 500.0 && rect.height() > 200.0);
     let pointer = rect.center_top() + Vec2::new(0.0, 20.0);
     harness.hover_at(pointer);
@@ -293,7 +293,7 @@ fn restoring_a_built_in_waits_for_the_save_choice_and_can_be_cancelled() {
     harness.get_by_label("Save a copy & restore").click();
     settle(&mut harness);
     assert_eq!(harness.state().settings().theme, "nord");
-    assert!(harness.get_by_label("Theme: Nord").rect().width() > 500.0);
+    assert!(harness.get_by_label("Theme in use: Nord").rect().width() > 500.0);
     harness.get_by_label(&format!(
         "Theme: {name} copy",
         name = suhina_ui::kit::theme::built_in_themes().into_iter().find(|(id, _)| *id == original).unwrap().1.name
@@ -356,6 +356,9 @@ fn themes_gallery_switches_immediately_and_opens_a_separate_editor() {
     settle(&mut harness);
     assert_eq!(harness.state().settings().theme, "suhina-studio-light");
     let palette = theme::palette();
+    // Choosing it left the page where it was: the card clicked is still in view.
+    assert!(harness.get_by_label("Theme: Suhina Studio Light").rect().is_positive());
+    wheel_to(&mut harness, "Edit current theme…", 40);
     harness.get_by_label("Edit current theme…").click();
     settle(&mut harness);
     harness.get_by_label("Colour grid.major");

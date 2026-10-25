@@ -1105,11 +1105,12 @@ fn theme_page(
                 widgets::input_line(ui, &search);
             });
             let query = state.theme_search.trim().to_lowercase();
+            // Every theme stays in the list, the one in use too (marked), so choosing one leaves
+            // the list as it is and the page where it was.
             let mut others = themes
                 .list
                 .iter()
-                .filter(|(id, _, _)| id != current)
-                .filter(|(id, name, _)| theme_matches(&query, id, name, &themes.variants))
+                .filter(|(id, name, _)| id == current || theme_matches(&query, id, name, &themes.variants))
                 .peekable();
             if others.peek().is_none() && !query.is_empty() {
                 ui.label(egui::RichText::new("No themes match").color(theme::text_hint()));
@@ -1120,12 +1121,14 @@ fn theme_page(
                     ui.spacing_mut().item_spacing.x = gap;
                     for (id, name, built_in) in std::iter::once(first).chain(second) {
                         let (card, chosen) = theme_card(ui, themes, id, name, *built_in, width, false);
+                        if id == current {
+                            let ring = egui::Stroke::new(2.0, theme::accent());
+                            ui.painter().rect_stroke(card.rect, 4.0, ring, egui::StrokeKind::Outside);
+                        }
                         if let Some(id) = chosen {
                             request = Some(ThemeRequest::Use(id));
-                            state.scrolled = None;
                         } else if card.clicked() {
                             request = Some(ThemeRequest::Use(id.clone()));
-                            state.scrolled = None;
                         }
                     }
                 });
@@ -1174,9 +1177,14 @@ fn theme_card(
     let preview_height = if active { 170.0 } else { 92.0 };
     let (rect, _) = ui.allocate_exact_size(Vec2::new(width, preview_height + 50.0 + swatches), Sense::hover());
     let card = Rect::from_min_size(rect.min, Vec2::new(width, preview_height + 50.0));
-    let response =
-        ui.interact(card, Id::new(("theme", base)), if active { Sense::click_and_drag() } else { Sense::click() });
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Theme: {name}")));
+    let response = ui.interact(
+        card,
+        Id::new(("theme", base, active)),
+        if active { Sense::click_and_drag() } else { Sense::click() },
+    );
+    // The one in use shows twice: large at the top, and in its place in the list.
+    let label = if active { format!("Theme in use: {name}") } else { format!("Theme: {name}") };
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label.clone()));
     let mut chosen = None;
     let kept = themes.kept.iter().find(|(kept, _)| kept == base).map(|(_, why)| why.as_str());
     // Two themes with one name: the folder tells them apart.
