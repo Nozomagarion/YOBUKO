@@ -3,7 +3,7 @@ description: How versions are numbered, how release builds, the nightly and test
 read_when: release, version, release candidate, tag, binaries, release workflow, nightly, past nightlies, development build, download, test build, pull request build, try a pull request, merge queue, merge group, ready to merge label, auto-merge, update branch, merging many pull requests, batch build, Discord announcement, Discord bot, testing forum, merged thread, release notes, changelog
 type: howto
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-25
 covers:
   - .github/workflows/ci.yml
   - .github/workflows/release.yml
@@ -249,7 +249,11 @@ The merge method is the queue's (squash). Agents never add the label (`AGENTS.md
 It acts with a short-lived token of the GitHub App that also pushes the generated docs
 (`docs-generated.yml`), not with `GITHUB_TOKEN`: GitHub starts no workflows for a merge made through
 `GITHUB_TOKEN`, and those on `main` must run after every merge. Setup, once: the app has Repository
-permissions › **Contents** and **Pull requests**: Read and write; its public Client ID is the
+permissions › **Contents**, **Pull requests** and **Issues**: Read and write (the queue merges as the
+app, and GitHub closes the issues a description closes, `Closes #N`, as the one who merged: without
+Issues they stay open, and nothing reports it). A permission added to the app reaches its token only
+once the installation accepts it: Organization settings › GitHub Apps › suhina-docs-bot ›
+**Configure**, then **Review request** › **Accept new permissions**. Its public Client ID is the
 `DOCS_BOT_CLIENT_ID` variable and its private key the `DOCS_BOT_PRIVATE_KEY` secret in the
 `docs-bot` environment, which `pull_request_target` may use
 because it runs on `main`; and Settings › General › **Allow auto-merge** is on. Without that setting the
