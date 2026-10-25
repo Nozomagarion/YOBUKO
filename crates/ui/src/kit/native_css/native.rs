@@ -96,6 +96,7 @@ pub(super) fn element(class: &str, id: Option<&str>, object: Option<&str>, paren
     element.id = id.map(str::to_owned);
     element.object = object.map(str::to_owned);
     element.classes.push(class.into());
+    element.classes.extend(super::super::style_class::families(class, None).iter().map(|f| (*f).to_owned()));
     element.states.push("enabled".into());
     element
 }
@@ -108,6 +109,8 @@ pub(super) fn retained(engine: &Engine) -> Option<Vec<(u64, Computed)>> {
         element.id = Some(element_id(node));
         element.object = node.name.clone();
         element.classes.push(node.class.clone());
+        let families = super::super::style_class::families(&node.class, node.name.as_deref());
+        element.classes.extend(families.iter().map(|f| (*f).to_owned()));
         element.variables.clone_from(&node.variables);
         element.states.push(if node.state & 4 != 0 { "disabled" } else { "enabled" }.into());
         for (bit, state) in

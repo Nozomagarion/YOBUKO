@@ -98,7 +98,31 @@ pub const CLASSES: &[&str] = &[
     "track-number",
     "fold",
     "loop-line",
+    // Families: one class a group of parts shares, for a rule over all of them (`families`).
+    "value-control",
+    "track-button",
+    "transport-button",
+    "list-row",
+    "timeline-part",
 ];
+
+/// The families an element of `class` (named `name`) belongs to besides its own class, so one
+/// rule reaches every part of a kind: `.value-control` every value a user drags (levels, pans,
+/// faders, sends, knobs, sliders, a device's parameters), `.track-button` a track's own buttons,
+/// `.transport-button` the transport's, `.list-row` the browser's rows and places,
+/// `.timeline-part` the ruler, loop and play position.
+pub fn families(class: &str, name: Option<&str>) -> &'static [&'static str] {
+    match (class, name) {
+        ("value" | "pan" | "fader" | "send" | "knob" | "slider" | "device-control" | "clip-gain", _) => {
+            &["value-control"]
+        }
+        ("button", Some("solo" | "cue" | "arm" | "track-on" | "monitor" | "automation")) => &["track-button"],
+        ("button", Some("play" | "stop" | "record" | "metronome-toggle")) => &["transport-button"],
+        ("browser-row" | "browser-place", _) => &["list-row"],
+        ("ruler" | "loop-region" | "loop-line" | "playhead", _) => &["timeline-part"],
+        _ => &[],
+    }
+}
 thread_local! {static STACK: RefCell<Vec<String>> = const {RefCell::new(Vec::new())};}
 
 pub fn valid_selector(selector: &str) -> bool {
@@ -143,12 +167,14 @@ pub fn valid_property(key: &str, value: &str) -> bool {
 }
 fn matches(selector: &str, stack: &[String]) -> bool {
     let parts: Vec<_> = selector.split_whitespace().filter_map(|s| s.strip_prefix('.')).collect();
-    if parts.last().copied() != stack.last().map(String::as_str) {
+    // A part names the class in scope or one of its families.
+    let is = |class: &str, part: &str| class == part || families(class, None).contains(&part);
+    if !parts.last().copied().zip(stack.last()).is_some_and(|(part, class)| is(class, part)) {
         return false;
     }
     let mut at = 0;
     for part in parts {
-        let Some(index) = stack.get(at..).and_then(|s| s.iter().position(|c| c == part)) else {
+        let Some(index) = stack.get(at..).and_then(|s| s.iter().position(|c| is(c, part))) else {
             return false;
         };
         at += index + 1;

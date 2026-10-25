@@ -1298,3 +1298,31 @@ fn a_value_s_number_and_unit_follow_the_sheet() {
     });
     assert_eq!(seen, ["-4 dB", "-inf", "C"], "{warnings:?}");
 }
+
+#[test]
+fn a_family_class_reaches_every_part_of_its_kind() {
+    let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(24.0, 24.0));
+    let css = ".value-control { background-color: #FF0000; } .track-button { background-color: #00FF00; }";
+    let mut pan = None;
+    let shapes = painted(css, |ui| {
+        {
+            let _pan = super::super::style_class::enter("pan");
+            pan = Some(super::super::style_class::background(egui::Color32::BLACK));
+        }
+        let response = ui.interact(field, egui::Id::new("solo"), egui::Sense::click());
+        let _solo = super::super::style_class::enter_named_response("button", "solo", &response);
+        surface(ui.painter(), field, 0.0, egui::Color32::BLACK);
+    });
+    assert_eq!(pan, Some(egui::Color32::from_rgb(0xFF, 0, 0)), ".value-control reaches .pan");
+    assert!(
+        rects(&shapes).iter().any(|r| r.fill == egui::Color32::from_rgb(0, 0xFF, 0)),
+        ".track-button reaches #control-solo"
+    );
+    // Host rules read the family too.
+    let (theme, _) = super::super::theme::from_sheet(".value-control { --suhina-appearance: knob; }", "");
+    skin::configure(&theme.skin);
+    let _send = super::super::style_class::enter("send");
+    assert!(super::super::style_class::knob_preference(false));
+    drop(_send);
+    skin::configure(&skin::Skin::default());
+}
