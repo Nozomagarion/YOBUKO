@@ -141,8 +141,9 @@ fn instrument_in(session: &Session, params: &Value) -> Result<Option<(usize, Str
 
 /// Names each track after its instrument when that changed (#946): a track whose name is the
 /// one new tracks take ("# MIDI", "# Audio") or its previous instrument's takes the new
-/// instrument's name, and the new tracks' name again when it has none left. A name the user
-/// chose stays. Runs after every device command, in the same undo step.
+/// instrument's name with the track's number ("# FM Synth", shown "3 FM Synth"), and the new
+/// tracks' name again when it has none left. A name the user chose stays. Runs after every
+/// device command, in the same undo step.
 pub(crate) fn follow_instruments(session: &mut Session, before: &suhina_model::Project) {
     use crate::device_groups::{Kind, kind_of};
     let instrument = |session: &Session, devices: &[Device]| {
@@ -158,8 +159,11 @@ pub(crate) fn follow_instruments(session: &mut Session, before: &suhina_model::P
         }
         let kind = if track.content.audio { "Audio" } else { "MIDI" };
         let default = suhina_model::names::new_track_name(kind);
-        if track.name == default || was.as_ref().is_some_and(|w| *w == track.name) {
-            renames.push((track.id, now.unwrap_or(default)));
+        // The previous instrument's name, numbered or as an earlier build wrote it.
+        let was_named =
+            was.as_ref().is_some_and(|w| track.name == suhina_model::names::new_track_name(w) || *w == track.name);
+        if track.name == default || was_named {
+            renames.push((track.id, now.map_or(default, |n| suhina_model::names::new_track_name(&n))));
         }
     }
     for (track, name) in renames {

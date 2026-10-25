@@ -54,7 +54,15 @@ pub(crate) fn fit_empty_for(session: &mut Session, track: TrackId, content: Cont
 /// the new tracks' one follows the kind ("# MIDI" to "# Audio").
 fn set_kind_of(session: &mut Session, track: TrackId, notes: bool) -> Result<(), CommandError> {
     use crate::device_groups::{Kind, kind_of};
+    // The names the track's instruments gave it ("# FM Synth"), which follow the kind too.
+    let mut instruments: Vec<String> = Vec::new();
     if !notes && let Some(channel) = session.project.channel_of_track(track) {
+        instruments = channel
+            .devices
+            .iter()
+            .filter(|d| kind_of(session, d) == Kind::Instrument)
+            .map(|d| suhina_model::names::new_track_name(&d.name))
+            .collect();
         let keep: Vec<bool> = channel.devices.iter().map(|d| kind_of(session, d) == Kind::Effect).collect();
         if let Some(channel) = session.project.channel_of_track_mut(track) {
             let mut keep = keep.into_iter();
@@ -65,7 +73,7 @@ fn set_kind_of(session: &mut Session, track: TrackId, notes: bool) -> Result<(),
     let t = session.project.tracks.iter_mut().find(|t| t.id == track).ok_or("the track is missing")?;
     t.content.notes = notes;
     t.content.audio = !notes;
-    if t.name == suhina_model::names::new_track_name(from) {
+    if t.name == suhina_model::names::new_track_name(from) || instruments.contains(&t.name) {
         t.name = suhina_model::names::new_track_name(to);
     }
     Ok(())

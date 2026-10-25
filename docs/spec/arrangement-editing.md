@@ -707,6 +707,14 @@ while playing; offline it plays without a gap.
 
 ## Tracks
 
+**Names (#946).** A `#` in a track's name that no digit follows reads as the track's number among
+the tracks (returns and Main left out), in every view, message and file name: "# Bass" on the
+third track shows as "3 Bass" and follows the track when tracks move. New tracks are "# MIDI" and
+"# Audio". A track the user never renamed is named after its instrument with its number
+("# FM Synth", shown "3 FM Synth"), and gets the new tracks' name back when the instrument goes
+or the track becomes an audio track; a name the user chose stays. Commands find a track by its
+name as shown ("3 FM Synth") or as written.
+
 | Command | Does |
 |---|---|
 | `track.group {tracks, name?}` | A new group track takes the place of the first track; the tracks (with what is inside them) follow it, play into it, and it plays where they played. They must all be in the same group, or in none. Grouping tracks already in a group nests the new group inside it. |

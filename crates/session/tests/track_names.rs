@@ -31,13 +31,14 @@ fn a_track_never_renamed_takes_its_instruments_name_until_the_user_names_it() {
     let mut session = Session::new(blank_project());
     run(&mut session, "device.add", json!({ "track": "1 MIDI", "id": "fm-synth" })).unwrap();
     let name = |s: &Session| s.project().tracks.first().map(|t| t.name.clone()).unwrap_or_default();
-    assert_eq!(name(&session), "FM Synth");
+    assert_eq!(name(&session), "# FM Synth", "named after it, with the track's number");
+    assert_eq!(shown(&session)[0], "1 FM Synth");
     // Undo takes the instrument and the name back in one step.
     run(&mut session, "edit.undo", json!({})).unwrap();
     assert_eq!(name(&session), "# MIDI");
     run(&mut session, "edit.redo", json!({})).unwrap();
     // Removing the instrument brings the new tracks' name back.
-    run(&mut session, "device.remove", json!({ "track": "FM Synth", "device": 0 })).unwrap();
+    run(&mut session, "device.remove", json!({ "track": "1 FM Synth", "device": 0 })).unwrap();
     assert_eq!(name(&session), "# MIDI");
     // A name the user chose stays.
     run(&mut session, "track.rename", json!({ "track": "1 MIDI", "name": "Lead" })).unwrap();
@@ -75,11 +76,12 @@ fn an_empty_track_takes_the_kind_of_the_clip_moved_onto_it() {
     // track.setKind: refused on a track with clips, done on an empty one, its instrument dropped.
     assert!(run(&mut session, "track.setKind", json!({ "track": "1 MIDI", "kind": "audio" })).is_err());
     run(&mut session, "device.add", json!({ "track": "2 MIDI", "id": "fm-synth" })).unwrap();
-    run(&mut session, "device.add", json!({ "track": "FM Synth", "id": "utility" })).unwrap();
-    run(&mut session, "track.setKind", json!({ "track": "FM Synth", "kind": "audio" })).unwrap();
+    run(&mut session, "device.add", json!({ "track": "2 FM Synth", "id": "utility" })).unwrap();
+    run(&mut session, "track.setKind", json!({ "track": "2 FM Synth", "kind": "audio" })).unwrap();
     let p = session.project();
     let second = &p.tracks[1];
     assert!(second.content.audio);
     let devices: Vec<&str> = p.channel_of_track(second.id).unwrap().devices.iter().map(|d| d.name.as_str()).collect();
     assert_eq!(devices, ["Utility"], "the instrument goes, the effect stays");
+    assert_eq!(p.shown_track_name(second.id), "2 Audio", "and its name with it");
 }
