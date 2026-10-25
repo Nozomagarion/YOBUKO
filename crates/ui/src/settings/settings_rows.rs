@@ -410,6 +410,16 @@ pub(crate) static ROWS: &[Entry] = &[
         &["copy_names"],
         |cx, r| cx.choose(r, &[("Wrapped (2)", true), ("Hash #2", false)], |s| &mut s.view.copy_wrapped),
     ),
+    row(
+        Page::Arrangement,
+        "Tracks",
+        "Alt+wheel changes the height of",
+        "What Alt and the mouse wheel over the tracks make taller or shorter: all tracks and their automation lanes together, or only the track or automation lane under the pointer",
+        &["alt_wheel"],
+        |cx, r| {
+            cx.choose(r, &[("All tracks", false), ("The one under the pointer", true)], |s| &mut s.view.alt_wheel_one)
+        },
+    ),
     // Session view and mixer.
     row(
         Page::Session,

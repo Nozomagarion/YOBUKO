@@ -199,6 +199,14 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "device.setEnabledMany",
+        label: "Switch several devices of a track on or off as one undo step",
+        params: &[DEVICE_TRACK, DEVICES, param("enabled", ParamType::Bool, "false switches the devices off")],
+        kind: CommandKind::Edit,
+        run: devices::set_enabled_many,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "device.setNamFile",
         label: "Load a .nam model into a NAM Amp Modeler, or a .wav impulse response into a NAM Cab Loader (docs/spec/nam-amp-and-cab.md)",
         params: &[

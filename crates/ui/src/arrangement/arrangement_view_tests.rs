@@ -401,3 +401,20 @@ fn a_tracks_take_lanes_show_under_it_and_fold_away() {
     state.takes_hidden.insert(track);
     assert_eq!(state.below(track, &timeline), automation, "folded away");
 }
+
+#[test]
+fn alt_and_the_wheel_can_change_only_the_lane_under_the_pointer() {
+    let timeline = Timeline::build(&crate::demo::demo_project(), None);
+    let tracks: Vec<&Lane> = timeline.lanes.iter().filter(|l| l.kind != ColumnKind::Return).collect();
+    let mut state = ArrangementViewState::default();
+    state.zoom_one = true;
+    // Halfway down the second track's lane.
+    let offset = state.height(tracks[0]) + 1.0 + state.height(tracks[1]) / 2.0;
+    state.zoom_wheel(&tracks, &timeline, 2.0, offset);
+    assert_eq!(state.height(tracks[1]), DEFAULT_LANE * 2.0);
+    assert!(tracks.iter().enumerate().filter(|(i, _)| *i != 1).all(|(_, l)| state.height(l) == DEFAULT_LANE));
+    // All lanes, as before, with the setting off.
+    state.zoom_one = false;
+    state.zoom_wheel(&tracks, &timeline, 2.0, 0.0);
+    assert_eq!(state.height(tracks[0]), DEFAULT_LANE * 2.0);
+}

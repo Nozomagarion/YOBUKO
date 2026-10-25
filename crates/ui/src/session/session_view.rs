@@ -660,6 +660,12 @@ fn draw_column(
     // Column separator through header, grid and mixer.
     let full = egui::Rangef::new(bands.header.top(), bands.mixer.bottom());
     painter.with_clip_rect(clip).vline(span.max + 0.5, full, theme::hairline(theme::border_strong()));
+    // A selected track is outlined along its whole column, header, slots and strip (#916).
+    if state.selected_tracks.contains(&column.track) || state.selected == Some(column.track) {
+        let outline = Rect::from_x_y_ranges(span, full);
+        let colour = colour_picker::fill(column.color, false);
+        painter.with_clip_rect(clip).rect_stroke(outline, 0.0, egui::Stroke::new(1.5, colour), StrokeKind::Inside);
+    }
 }
 
 /// A click on `track`'s header (#208): alone it selects the track; with Ctrl (Cmd) it adds the

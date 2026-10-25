@@ -2018,6 +2018,10 @@ impl App {
 
     /// Runs one command and shows its outcome in the status bar.
     pub fn run(&mut self, action: &Action) {
+        // One device's on/off or one track's mute among several selected acts on all of them.
+        if let Some(wider) = self.to_selection(action) {
+            return self.run(&wider);
+        }
         if action.id == "ui.renameClip" {
             let mut target = action.params.clone();
             let name = target.get("name").and_then(serde_json::Value::as_str).unwrap_or_default().to_string();
@@ -2246,6 +2250,7 @@ impl App {
         self.arrangement.name_bar_moves = !self.settings.view.clip_halves;
         self.arrangement.grid_in_clips = self.settings.view.grid_in_clips;
         self.arrangement.stretch_alt = self.settings.view.stretch_alt;
+        self.arrangement.zoom_one = self.settings.view.alt_wheel_one;
         // Any press ends a device panel's hold on Delete and the mute key; a click on a panel
         // takes it again when the button comes up, whether or not the detail area is shown.
         if ui.input(|i| i.pointer.primary_pressed()) {

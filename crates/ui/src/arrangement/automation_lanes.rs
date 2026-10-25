@@ -552,6 +552,21 @@ impl LanesState {
         }
     }
 
+    /// Every shown lane of every track `factor` times as tall, within the lanes' limits, as Alt
+    /// and the wheel make the tracks (#957).
+    pub fn zoom_all(&mut self, factor: f32) {
+        let shown: Vec<(TrackId, LaneKey)> = self
+            .shown
+            .iter()
+            .filter(|(track, _)| self.open.contains(track))
+            .flat_map(|(track, keys)| keys.iter().map(move |k| (*track, k.clone())))
+            .collect();
+        for (track, key) in shown {
+            let height = self.lane_height(track, &key) * factor;
+            self.set_lane_height(track, &key, height);
+        }
+    }
+
     /// Shows or hides `track`'s lanes. Shown the first time, they are the lanes that have
     /// points, or the volume's when none has.
     pub fn toggle(&mut self, track: TrackId, params: &Params) {

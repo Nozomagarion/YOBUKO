@@ -509,10 +509,32 @@ impl App {
                         p.channel(channel)?.devices.get(index).map(|d| d.enabled)
                     })
                 {
-                    actions.push(Action::new(
-                        "device.setEnabled",
-                        json!({ "track": track.0, "device": index, "enabled": !enabled }),
-                    ));
+                    // Every picked device follows the one clicked last (#948).
+                    let picks = self.device_picks();
+                    if picks.len() > 1 && picks.iter().all(|(t, _)| *t == track) {
+                        let devices: Vec<usize> = picks.iter().map(|(_, i)| *i).collect();
+                        actions.push(Action::new(
+                            "device.setEnabledMany",
+                            json!({ "track": track.0, "devices": devices, "enabled": !enabled }),
+                        ));
+                    } else {
+                        actions.push(Action::new(
+                            "device.setEnabled",
+                            json!({ "track": track.0, "device": index, "enabled": !enabled }),
+                        ));
+                    }
+                    return;
+                }
+                // Track headers clicked last: the key mutes the selected tracks, or unmutes them
+                // when the first is muted (#948).
+                let tracks = self.focused_tracks();
+                if !tracks.is_empty() {
+                    let muted = self.session().is_some_and(|s| {
+                        let p = s.project();
+                        tracks.first().and_then(|t| p.channel_of_track(*t)).is_some_and(|c| c.mute)
+                    });
+                    let ids: Vec<u32> = tracks.iter().map(|t| t.0).collect();
+                    actions.push(Action::new("track.setMute", json!({ "tracks": ids, "mute": !muted })));
                     return;
                 }
                 let clips = self.selected_clip_list();
@@ -847,6 +869,40 @@ impl App {
             if self.session().is_some_and(|s| s.is_armed(track)) {
                 self.auto_arm.armed.insert(project, track);
             }
+        }
+    }
+
+    /// `action` widened to the selection it is part of (#948): `device.setEnabled` on one of
+    /// several devices picked on its track becomes `device.setEnabledMany` on all of them, and
+    /// `track.setMute` on one of several selected tracks mutes them all; `None` otherwise.
+    pub(super) fn to_selection(&self, action: &Action) -> Option<Action> {
+        let id = |v: &serde_json::Value| v.as_u64().and_then(|n| u32::try_from(n).ok());
+        match action.id {
+            "device.setEnabled" => {
+                let track = TrackId(id(&action.params["track"])?);
+                let device = action.params["device"].as_u64().and_then(|d| usize::try_from(d).ok())?;
+                let picks = self.device_picks();
+                if picks.len() < 2 || !picks.contains(&(track, device)) || picks.iter().any(|(t, _)| *t != track) {
+                    return None;
+                }
+                let devices: Vec<usize> = picks.iter().map(|(_, i)| *i).collect();
+                let enabled = action.params["enabled"].clone();
+                Some(Action::new(
+                    "device.setEnabledMany",
+                    json!({ "track": track.0, "devices": devices, "enabled": enabled }),
+                ))
+            }
+            "track.setMute" => {
+                let [one] = action.params["tracks"].as_array()?.as_slice() else { return None };
+                let track = TrackId(id(one)?);
+                let selected = &self.arrangement.selected_tracks;
+                if selected.len() < 2 || !selected.contains(&track) {
+                    return None;
+                }
+                let tracks: Vec<u32> = selected.iter().filter(|t| **t != TrackId::MAIN).map(|t| t.0).collect();
+                Some(Action::new("track.setMute", json!({ "tracks": tracks, "mute": action.params["mute"].clone() })))
+            }
+            _ => None,
         }
     }
 

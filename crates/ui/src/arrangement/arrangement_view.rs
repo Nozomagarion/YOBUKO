@@ -370,7 +370,9 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             // Some systems turn Alt and the wheel into a sideways scroll; either axis zooms.
             let steps = if wheel.y == 0.0 { wheel.x } else { wheel.y };
             if steps != 0.0 && pointer.y > lanes_area.top() {
-                state.zoom_lanes(&timeline.lanes, (steps * LANE_ZOOM_PER_POINT).exp(), pointer.y - lanes_area.top());
+                let lanes: Vec<&Lane> = drawn.iter().filter_map(|d| timeline.lanes.get(d.lane)).collect();
+                let factor = (steps * LANE_ZOOM_PER_POINT).exp();
+                state.zoom_wheel(&lanes, timeline, factor, pointer.y - lanes_area.top());
             }
         } else {
             state.scroll -= wheel;

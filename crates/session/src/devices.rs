@@ -860,6 +860,19 @@ pub(crate) fn set_enabled(session: &mut Session, params: &Value) -> Result<Value
     Ok(json!({ "device": path_value(&path), "enabled": enabled }))
 }
 
+/// `device.setEnabledMany {track, devices, enabled}`: several devices of a track on or off, one
+/// undo step (0 or an on/off button with several devices picked, #948).
+pub(crate) fn set_enabled_many(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let enabled = params.get("enabled").and_then(Value::as_bool).ok_or("enabled must be true or false")?;
+    let channel = device_channel(session, params)?;
+    let paths = device_list(&channel.devices, params)?;
+    for path in &paths {
+        let device = device_at_mut(&mut channel.devices, path).ok_or("a device is missing")?;
+        device.enabled = enabled;
+    }
+    Ok(json!({ "devices": paths.len(), "enabled": enabled }))
+}
+
 /// `device.setNamFile` ([docs/spec/nam-amp-and-cab.md]): the file a NAM Amp Modeler or a NAM
 /// Cab Loader runs. The device's state becomes the file's absolute path; the parsed model or
 /// decoded IR goes into the session's assets with this command, so the playing engine hears it

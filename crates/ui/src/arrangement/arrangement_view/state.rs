@@ -221,6 +221,9 @@ pub struct ArrangementViewState {
     /// A track to scroll into view on the next frame: one just added or selected from the
     /// keyboard (#918).
     pub reveal: Option<TrackId>,
+    /// Alt and the wheel change only the lane under the pointer, a track's or an automation
+    /// lane's, rather than every lane (Settings › Arrangement, #957). The window sets it.
+    pub zoom_one: bool,
     /// A drag from the browser over the window: the view says which target is under the
     /// pointer (`docs/spec/browser.md` › Dragging into the project).
     pub drop: Option<DropProbe>,
@@ -325,6 +328,7 @@ impl Default for ArrangementViewState {
             track_drop: None,
             panning: false,
             reveal: None,
+            zoom_one: false,
             drop: None,
             meters: Meters::default(),
             focus: None,
@@ -535,12 +539,46 @@ impl ArrangementViewState {
         let content = |state: &Self| lanes.iter().map(|l| state.height(l) + 1.0).sum::<f32>();
         let before = content(self);
         for lane in &lanes {
-            let height = self.height(lane) * factor;
+            // From the height as kept, not as drawn: small steps would round back to it.
+            let height = self.kept_height(lane.track) * factor;
             self.heights.insert(lane.track, height.clamp(MIN_LANE, MAX_LANE));
         }
         self.lane_zoom = (self.lane_zoom * factor).clamp(MIN_LANE / DEFAULT_LANE, MAX_LANE / DEFAULT_LANE);
         let ratio = if before > 0.0 { content(self) / before } else { 1.0 };
         self.scroll.y = ((self.scroll.y + anchor) * ratio - anchor).max(0.0);
+    }
+
+    /// Alt and the wheel over the lanes, `offset` points below their top (#957): every track lane
+    /// and every shown automation lane by `factor`, or with [`Self::zoom_one`] only the lane under
+    /// the pointer.
+    pub(super) fn zoom_wheel(&mut self, drawn: &[&Lane], timeline: &Timeline, factor: f32, offset: f32) {
+        if !factor.is_finite() || factor <= 0.0 {
+            return;
+        }
+        if !self.zoom_one {
+            self.zoom_lanes(&timeline.lanes, factor, offset);
+            self.automation.zoom_all(factor);
+            return;
+        }
+        let y = offset + self.scroll.y;
+        let mut top = 0.0;
+        for lane in drawn {
+            let height = self.height(lane);
+            if y < top + height {
+                let kept = if lane.kind == ColumnKind::Return { height } else { self.kept_height(lane.track) };
+                self.heights.insert(lane.track, (kept * factor).clamp(MIN_LANE, MAX_LANE));
+                return;
+            }
+            top += height + 1.0 + self.takes_height(lane.track, timeline);
+            for key in self.automation.shown(lane.track, &timeline.automation) {
+                let lane_height = self.automation.lane_height(lane.track, &key);
+                if y < top + lane_height {
+                    self.automation.set_lane_height(lane.track, &key, lane_height * factor);
+                    return;
+                }
+                top += lane_height + 1.0;
+            }
+        }
     }
 
     /// What the clip at `key` shows: the project's gain and fades, or the value of a drag in
@@ -602,9 +640,15 @@ impl ArrangementViewState {
         self.heights.get(&track).copied().unwrap_or(SHOWS_MIXER)
     }
 
-    /// How tall `track`'s lane is: the height it was given, or the default as far as the lanes
-    /// have been zoomed.
+    /// How tall `track`'s lane is drawn: the height it was given, or the default as far as the
+    /// lanes have been zoomed, in whole points, so tracks zoomed alike are as tall as each other
+    /// and a header never falls a fraction under the height its rows need (#916).
     pub fn lane_height(&self, track: TrackId) -> f32 {
+        self.kept_height(track).round()
+    }
+
+    /// `track`'s lane height as kept, a fraction of a point too, for the next zoom step.
+    fn kept_height(&self, track: TrackId) -> f32 {
         self.heights.get(&track).copied().unwrap_or_else(|| (DEFAULT_LANE * self.lane_zoom).clamp(MIN_LANE, MAX_LANE))
     }
 
