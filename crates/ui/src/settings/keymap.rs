@@ -719,18 +719,35 @@ impl Keymap {
         all.sort_by_key(|(_, k)| std::cmp::Reverse(k.modifier_count()));
         let mut fired = Vec::new();
         for (id, key) in all {
+            // A key held down repeats; only the actions that step something (the arrows, undo)
+            // follow the repeat. The others, Space's play and stop among them, act once (#916).
+            let only_repeats = input.events.iter().any(|e| is_press(e, key.key, true))
+                && !input.events.iter().any(|e| is_press(e, key.key, false));
             let shortcut = egui::KeyboardShortcut::new(key.modifiers, key.key);
             let pressed = if key.modifiers.is_none() {
                 input.consume_key(Modifiers::NONE, key.key)
             } else {
                 input.consume_shortcut(&shortcut)
             };
-            if pressed && !fired.contains(id) {
+            if pressed && !fired.contains(id) && (!only_repeats || repeats(id, key.key)) {
                 fired.push(id.clone());
             }
         }
         fired
     }
+}
+
+/// Whether `event` presses `key`, as a repeat of a key held down when `repeat`.
+fn is_press(event: &egui::Event, key: egui::Key, repeat: bool) -> bool {
+    matches!(event, egui::Event::Key { key: k, pressed: true, repeat: r, .. } if *k == key && *r == repeat)
+}
+
+/// Whether the action `id` on `key` follows a held key's repeat: stepping keys and undo do;
+/// a toggle does not.
+fn repeats(id: &str, key: egui::Key) -> bool {
+    use egui::Key::{ArrowDown, ArrowLeft, ArrowRight, ArrowUp, PageDown, PageUp};
+    matches!(key, ArrowUp | ArrowDown | ArrowLeft | ArrowRight | PageUp | PageDown)
+        || matches!(id, "edit.undo" | "edit.redo")
 }
 
 /// A key written as the keymap writes it ("Ctrl+C"), as menus show it on this system.
