@@ -684,7 +684,7 @@ fn ctrl_and_shift_clicks_select_several_headers_and_ctrl_d_copies_them_as_a_bloc
     harness.run();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::D);
     harness.run();
-    assert_eq!(names(&harness)[..5], ["Drums", "Bass", "Drums 2", "Bass 2", "Keys"]);
+    assert_eq!(names(&harness)[..5], ["Drums", "Bass", "Drums (2)", "Bass (2)", "Keys"]);
     // The copies are selected: Delete removes them.
     harness.key_press(Key::Delete);
     harness.run();

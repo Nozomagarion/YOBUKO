@@ -139,6 +139,39 @@ fn instrument_in(session: &Session, params: &Value) -> Result<Option<(usize, Str
     Ok(at.and_then(|at| devices.get(at).map(|d| (at, d.name.clone()))))
 }
 
+/// Names each track after its instrument when that changed (#946): a track whose name is the
+/// one new tracks take ("# MIDI", "# Audio") or its previous instrument's takes the new
+/// instrument's name, and the new tracks' name again when it has none left. A name the user
+/// chose stays. Runs after every device command, in the same undo step.
+pub(crate) fn follow_instruments(session: &mut Session, before: &suhina_model::Project) {
+    use crate::device_groups::{Kind, kind_of};
+    let instrument = |session: &Session, devices: &[Device]| {
+        devices.iter().find(|d| kind_of(session, d) == Kind::Instrument).map(|d| d.name.clone())
+    };
+    let mut renames = Vec::new();
+    for track in &session.project.tracks {
+        let now = session.project.channel_of_track(track.id).map(|c| c.devices.as_slice()).unwrap_or_default();
+        let was = before.channel_of_track(track.id).map(|c| c.devices.as_slice()).unwrap_or_default();
+        let (now, was) = (instrument(session, now), instrument(session, was));
+        if now == was {
+            continue;
+        }
+        let kind = if track.content.audio { "Audio" } else { "MIDI" };
+        let default = suhina_model::names::new_track_name(kind);
+        if track.name == default || was.as_ref().is_some_and(|w| *w == track.name) {
+            renames.push((track.id, now.unwrap_or(default)));
+        }
+    }
+    for (track, name) in renames {
+        if let Some(t) = session.project.tracks.iter_mut().find(|t| t.id == track) {
+            t.name.clone_from(&name);
+        }
+        if let Some(channel) = session.project.channel_of_track_mut(track) {
+            channel.name = name;
+        }
+    }
+}
+
 /// Takes the instrument `replaced` names out of `devices`; the place the new one goes.
 fn take_out(devices: &mut Vec<Device>, replaced: Option<&(usize, String)>, position: usize) -> usize {
     match replaced {

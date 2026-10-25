@@ -169,7 +169,7 @@ pub fn ghosts(project: &Project, edited: ClipRef, source: GhostSource) -> Ghosts
         }
         let Some(notes) = notes_of(project, track, clip) else { continue };
         let Some(position) = project.tracks.iter().position(|t| t.id == track) else { continue };
-        let name = project.tracks.get(position).map_or_else(String::new, |t| t.name.clone());
+        let name = project.tracks.get(position).map_or_else(String::new, |t| project.shown_track_name(t.id));
         let rgb = project.tracks.get(position).and_then(|t| t.color).unwrap_or_else(|| default_track_colour(position));
         let color = Color32::from_rgb(rgb.0, rgb.1, rgb.2);
         let source = ghosts.sources.iter().position(|s| *s == name).unwrap_or(ghosts.sources.len());
@@ -338,7 +338,7 @@ fn notes_of<'a>(project: &'a Project, track: TrackId, clip: &Clip) -> Option<&'a
 fn choices(project: &Project, edited: ClipRef) -> Vec<GhostChoice> {
     let ts = project.transport.time_signature;
     let bar = if ts.denominator == 0 { 4.0 } else { f64::from(ts.numerator.max(1)) * 4.0 / f64::from(ts.denominator) };
-    let track_name = |track: TrackId| project.track(track).map_or("", |t| t.name.as_str());
+    let track_name = |track: TrackId| project.shown_track_name(track);
     let content_name = |track: TrackId, clip: &Clip| -> Option<String> {
         notes_of(project, track, clip)?;
         let name = project.content(clip.content).map_or("", |c| c.name.as_str());

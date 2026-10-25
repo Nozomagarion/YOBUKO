@@ -14,6 +14,7 @@ pub mod automation;
 mod build;
 mod groups;
 mod ids;
+pub mod names;
 mod tempo;
 
 pub use tempo::{

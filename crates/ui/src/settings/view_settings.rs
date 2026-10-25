@@ -72,6 +72,9 @@ pub struct ViewSettings {
     /// A new blank project gets the A and B return tracks (on by default); off, it starts with
     /// none, so no sends show until a return is inserted (#898).
     pub new_returns: bool,
+    /// A copy of a track whose name is taken reads "Bass (2)" (on by default) or, off, "Bass #2"
+    /// (#946).
+    pub copy_wrapped: bool,
 }
 
 impl Default for ViewSettings {
@@ -94,15 +97,22 @@ impl Default for ViewSettings {
             recent_chips: false,
             returns_hidden: false,
             new_returns: true,
+            copy_wrapped: true,
         }
     }
 }
 
 impl ViewSettings {
+    /// How a copy of a track with a taken name reads, as `track.paste` and `track.duplicate`
+    /// take it: "wrapped" ("Bass (2)") or "hash" ("Bass #2").
+    pub fn copy_suffix(&self) -> &'static str {
+        if self.copy_wrapped { "wrapped" } else { "hash" }
+    }
+
     /// The lines this module adds to the settings file.
     pub fn to_text(&self) -> String {
         format!(
-            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nnew_project_returns = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\n",
+            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nnew_project_returns = {}\ncopy_names = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\n",
             self.mixer_height,
             self.strip_fader,
             self.detail_layout.param(),
@@ -117,6 +127,7 @@ impl ViewSettings {
             if self.recent_chips { "chips" } else { "indented" },
             if self.returns_hidden { "hidden" } else { "shown" },
             if self.new_returns { "two" } else { "none" },
+            self.copy_suffix(),
             if self.clip_halves { "halves" } else { "name_bar" },
             if self.grid_in_clips { "on" } else { "off" },
             f64::from(self.waveform_zoom) / 100.0,
@@ -148,6 +159,7 @@ impl ViewSettings {
             ("browser_recent", "chips" | "indented") => self.recent_chips = value == "chips",
             ("arrangement_returns", "hidden" | "shown") => self.returns_hidden = value == "hidden",
             ("new_project_returns", "two" | "none") => self.new_returns = value == "two",
+            ("copy_names", "wrapped" | "hash") => self.copy_wrapped = value == "wrapped",
             ("clip_drag", "halves" | "name_bar") => self.clip_halves = value == "halves",
             ("clip_grid", "on" | "off") => self.grid_in_clips = value == "on",
             ("waveform_zoom", zoom) => match zoom.parse::<f32>() {
@@ -185,6 +197,7 @@ mod tests {
             recent_chips: true,
             returns_hidden: true,
             new_returns: false,
+            copy_wrapped: false,
         };
         let settings = Settings { view, ..Settings::default() };
         let (read, warnings) = Settings::from_text(&settings.to_text());

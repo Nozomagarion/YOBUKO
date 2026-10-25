@@ -218,6 +218,9 @@ pub struct ArrangementViewState {
     pub(super) track_drop: Option<(TrackId, f32)>,
     /// The middle button is held after being pressed over the timeline: the view follows it.
     pub(super) panning: bool,
+    /// A track to scroll into view on the next frame: one just added or selected from the
+    /// keyboard (#918).
+    pub reveal: Option<TrackId>,
     /// A drag from the browser over the window: the view says which target is under the
     /// pointer (`docs/spec/browser.md` › Dragging into the project).
     pub drop: Option<DropProbe>,
@@ -316,6 +319,7 @@ impl Default for ArrangementViewState {
             track_drag: None,
             track_drop: None,
             panning: false,
+            reveal: None,
             drop: None,
             meters: Meters::default(),
             focus: None,

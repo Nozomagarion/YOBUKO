@@ -395,6 +395,19 @@ impl Projects {
     }
 
     /// The session `id` names, or the active one when `id` is `None`.
+    /// Gives every other open project the tracks `from` (the active one for `None`) copied, so
+    /// copied tracks paste into any tab (#919). [`Projects::execute`] does it after `track.copy`
+    /// and `track.cut`; a caller that runs those on a session directly, as the window does, calls
+    /// it after them.
+    pub fn share_copied_tracks(&mut self, from: Option<ProjectId>) {
+        let from = from.or(self.tabs.active);
+        let Some(copied) = from.and_then(|t| self.tabs.open.iter().find(|o| o.id == t)) else { return };
+        let clipboard = copied.session.clipboards.whole_tracks.clone();
+        for open in self.tabs.open.iter_mut().filter(|o| Some(o.id) != from) {
+            open.session.clipboards.whole_tracks = clipboard.clone();
+        }
+    }
+
     pub fn session_mut(&mut self, id: Option<ProjectId>) -> Result<&mut Session, CommandError> {
         let id = match id.or(self.tabs.active) {
             Some(id) => id,
@@ -682,15 +695,8 @@ impl Projects {
         }
         let result = self.session_mut(project)?.execute(id, params);
         self.poll_plugins();
-        // Copied tracks paste into any open project, as copying between tabs is expected to work.
-        if matches!(id, "track.copy" | "track.cut")
-            && result.is_ok()
-            && let Some(copied) = target.and_then(|t| self.tabs.open.iter().find(|o| o.id == t))
-        {
-            let clipboard = copied.session.clipboards.whole_tracks.clone();
-            for open in self.tabs.open.iter_mut().filter(|o| Some(o.id) != target) {
-                open.session.clipboards.whole_tracks = clipboard.clone();
-            }
+        if matches!(id, "track.copy" | "track.cut") && result.is_ok() {
+            self.share_copied_tracks(target);
         }
         if let Ok(value) = &result {
             crate::library::record_use(&mut self.browser.files, id, params, value);

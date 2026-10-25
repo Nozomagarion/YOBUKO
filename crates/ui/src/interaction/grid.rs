@@ -246,6 +246,7 @@ impl TrackGrid {
                 channel.is_some_and(|c| c.role == ChannelRole::Effect)
             })
             .collect();
+        let mut number = 0;
         for (index, track) in project.tracks.iter().enumerate() {
             let channel = track.channel.and_then(|id| project.channel(id));
             let role = channel.map_or(ChannelRole::Regular, |c| c.role);
@@ -256,6 +257,9 @@ impl TrackGrid {
             };
             if role == ChannelRole::Master {
                 continue;
+            }
+            if kind != ColumnKind::Return {
+                number += 1;
             }
             let launcher = project.launcher.columns.iter().position(|c| c.track == track.id);
             let status = launcher.zip(monitor).and_then(|(i, m)| m.column(i));
@@ -303,7 +307,12 @@ impl TrackGrid {
             };
             let column = Column {
                 track: track.id,
-                name: track.name.clone(),
+                // Its `#` read as its number (#946).
+                name: if kind == ColumnKind::Return {
+                    track.name.clone()
+                } else {
+                    suhina_engine::model::names::shown_with_number(&track.name, number)
+                },
                 color: track.color.unwrap_or_else(|| default_track_colour(index)),
                 kind,
                 notes: kind == ColumnKind::Track && track.content.notes,

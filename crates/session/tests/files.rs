@@ -80,7 +80,7 @@ fn midi(dir: &Path, name: &str, tracks: &[TrackNotes<'_>]) -> PathBuf {
 }
 
 fn names(p: &Project) -> Vec<String> {
-    p.tracks.iter().map(|t| t.name.clone()).collect()
+    p.tracks.iter().map(|t| p.shown_track_name(t.id)).collect()
 }
 
 fn text(path: &Path) -> String {
@@ -123,7 +123,7 @@ fn a_track_is_added_before_the_returns_with_its_channel_slots_and_lane() {
     let added = run(&mut session, "track.add", json!({ "kind": "audio" })).unwrap();
     let id = TrackId(added["track"].as_u64().unwrap() as u32);
     let p = session.project();
-    assert_eq!(names(p), ["1 MIDI", "2 MIDI", "3 Audio", "4 Audio", "Audio 3", "A Return", "B Return"]);
+    assert_eq!(names(p), ["1 MIDI", "2 MIDI", "3 Audio", "4 Audio", "5 Audio", "A Return", "B Return"]);
     let track = p.track(id).unwrap();
     assert_eq!(track.content, ContentKinds { notes: false, audio: true });
     let channel = p.channels.iter().find(|c| Some(c.id) == track.channel).unwrap();
@@ -328,7 +328,7 @@ fn separate_puts_each_file_on_a_track_of_its_own() {
     .unwrap();
     assert_eq!(out["tracks"].as_array().map(Vec::len), Some(2));
     let p = session.project();
-    assert_eq!(names(p)[2..6], ["3 Audio", "snare", "hat", "4 Audio"]);
+    assert_eq!(names(p)[2..6], ["3 Audio", "snare", "hat", "6 Audio"]);
     for lane in p.arrangement.lanes.iter().filter(|l| l.clips.len() == 1) {
         assert_eq!(lane.clips[0].start, 8.0, "side by side, at the same beat");
     }
@@ -376,7 +376,7 @@ fn files_a_track_cannot_hold_go_on_a_new_track_after_it() {
     run(&mut session, "clip.addFiles", json!({ "paths": [text(&m), text(&a)], "track": "1 MIDI", "start": 0.0 }))
         .unwrap();
     let p = session.project();
-    assert_eq!(names(p)[..3], ["1 MIDI", "vox", "2 MIDI"]);
+    assert_eq!(names(p)[..3], ["1 MIDI", "vox", "3 MIDI"]);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

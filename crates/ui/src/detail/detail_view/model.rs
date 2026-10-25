@@ -489,7 +489,7 @@ pub fn build_with(
     nam: crate::detail::nam_panel::Lists,
 ) -> Detail {
     let bar = bar_beats(project);
-    let track_name = |id: TrackId| project.track(id).map(|t| t.name.clone()).unwrap_or_default();
+    let track_name = |id: TrackId| project.shown_track_name(id);
     let found = clip.and_then(|clip| match clip {
         ClipRef::Arrangement(id, clip) => project
             .arrangement
@@ -561,11 +561,7 @@ pub(super) fn chain(
     nam: crate::detail::nam_panel::Lists,
 ) -> Chain {
     // Main has no track: its name and devices are the main channel's (#687).
-    let track_name = if id == TrackId::MAIN {
-        "Main".to_string()
-    } else {
-        project.track(id).map(|t| t.name.clone()).unwrap_or_default()
-    };
+    let track_name = if id == TrackId::MAIN { "Main".to_string() } else { project.shown_track_name(id) };
     let channel = project.channel_of_track(id);
     let devices = channel
         .map(|c| c.devices.iter().enumerate().map(|(index, d)| device_box(d, &[index], id, plugins)).collect())

@@ -23,7 +23,7 @@ pub fn blank_project_with(returns: bool) -> Project {
     let main = ChannelId(100);
     let all_returns = [(ChannelId(90), "A Return"), (ChannelId(91), "B Return")];
     let returns = if returns { &all_returns[..] } else { &[] };
-    let tracks = [("1 MIDI", true), ("2 MIDI", true), ("3 Audio", false), ("4 Audio", false)];
+    let tracks = [("# MIDI", true), ("# MIDI", true), ("# Audio", false), ("# Audio", false)];
     let channel = |id: ChannelId, name: &str, role: ChannelRole, output: Option<ChannelId>| Channel {
         id,
         name: name.into(),

@@ -91,13 +91,14 @@ pub(crate) fn copy(p: &Project, tracks: &[TrackId]) -> Result<TrackClipboard, Co
 }
 
 /// Adds the tracks of `clipboard` to `p` right after `after` (in its group), or at the end of
-/// the regular tracks, with new ids, new clip contents and a number added to each name taken.
+/// the regular tracks, with new ids, new clip contents and names as [`copy_name`] gives them.
 /// Returns the new tracks no other new track holds, in order. A send to a return `p` lacks is
 /// left out; a track plays into its group, as copied, or into where it is pasted.
 pub(crate) fn paste(
     p: &mut Project,
     clipboard: &TrackClipboard,
     after: Option<TrackId>,
+    suffix: Suffix,
 ) -> Result<Vec<TrackId>, CommandError> {
     if clipboard.tracks.is_empty() {
         return Err("no track has been copied; run track.copy first".into());
@@ -139,7 +140,8 @@ pub(crate) fn paste(
     for copied in &clipboard.tracks {
         let id = tracks.get(&copied.track.id).copied().ok_or("a copied track has no new id")?;
         let inner = copied.track.parent.and_then(|old| tracks.get(&old).copied());
-        let name = numbered(&copied.track.name, &names);
+        let kind = if copied.track.content.audio { "Audio" } else { "MIDI" };
+        let name = copy_name(&copied.track.name, kind, &names, suffix);
         names.push(name.clone());
         let channel = copied.channel.as_ref().map(|c| {
             let output = match c.output.and_then(|o| channels.get(&o).copied()) {
@@ -218,46 +220,95 @@ pub(crate) fn paste(
     Ok(tops)
 }
 
-/// Copies `tracks` and returns the copies, in order. Tracks next to each other in one group (or
-/// at the top), a group counted with its tracks, are copied as one block after the last of them,
-/// so two adjacent tracks give their two copies after the second; a track apart from the others
-/// is copied right after itself (after a group's tracks, for a group).
-pub(crate) fn duplicate(p: &mut Project, tracks: &[TrackId]) -> Result<Vec<TrackId>, CommandError> {
+/// Copies `tracks` (a group with its tracks) as one block right after the last of them, in
+/// their order, and returns the copies: tracks 1 and 3 give 1, 2, 3, the copy of 1, the copy
+/// of 3, as a copy and a paste after track 3 do.
+pub(crate) fn duplicate(p: &mut Project, tracks: &[TrackId], suffix: Suffix) -> Result<Vec<TrackId>, CommandError> {
     let ids = with_their_tracks(p, tracks);
     // Only the named tracks that no other named track holds: a group's copy brings its tracks.
     let tops: Vec<TrackId> = ids.iter().copied().filter(|&t| !ids.iter().any(|&g| g != t && within(p, t, g))).collect();
-    let index = |p: &Project, id: TrackId| p.tracks.iter().position(|t| t.id == id);
-    let mut runs: Vec<Vec<TrackId>> = Vec::new();
-    // Where the run so far ends (the index past its last track) and the group it is in.
-    let mut end = None;
-    for &top in &tops {
-        let Some(start) = index(p, top) else { continue };
-        let parent = p.track(top).and_then(|t| t.parent);
-        let last = with_their_tracks(p, &[top]).last().and_then(|&l| index(p, l)).unwrap_or(start);
-        match runs.last_mut() {
-            Some(run) if end == Some((start, parent)) => run.push(top),
-            _ => runs.push(vec![top]),
-        }
-        end = Some((last.saturating_add(1), parent));
-    }
-    let mut copies = Vec::new();
-    for run in runs {
-        let Some(&after) = run.last() else { continue };
-        let clipboard = copy(p, &run)?;
-        copies.extend(paste(p, &clipboard, Some(after))?);
-    }
-    Ok(copies)
+    let Some(&after) = tops.last() else { return Err("no track to duplicate".into()) };
+    let clipboard = copy(p, &tops)?;
+    paste(p, &clipboard, Some(after), suffix)
 }
 
-/// `name`, or with the first number after it that no track of `taken` has ("Bass 2").
-fn numbered(name: &str, taken: &[String]) -> String {
+/// How a copy's name says it is a copy when the name is taken (Settings › Arrangement).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Suffix {
+    /// "Bass 1 (2)".
+    #[default]
+    Wrapped,
+    /// "Bass 1 #2".
+    Hash,
+}
+
+impl Suffix {
+    /// The suffix named `name` ("wrapped", "hash").
+    pub fn parse(name: &str) -> Option<Self> {
+        match name {
+            "wrapped" => Some(Self::Wrapped),
+            "hash" => Some(Self::Hash),
+            _ => None,
+        }
+    }
+
+    fn with(self, base: &str, n: u32) -> String {
+        match self {
+            Self::Wrapped => format!("{base} ({n})"),
+            Self::Hash => format!("{base} #{n}"),
+        }
+    }
+}
+
+/// The name a copy of a `kind` track ("MIDI", "Audio") named `name` takes among the tracks
+/// named `taken` (#946): a name with the track's number in it ("# Bass") stays, as the number
+/// tells the copies apart; a name Suhina gave a new track before names held the number ("Audio
+/// 3", "3 MIDI") becomes the new tracks' name ("# MIDI"); any other name stays when it is free
+/// and otherwise takes the first free suffix after its own, so a copy of "Bass (2)" is "Bass (3)"
+/// rather than "Bass (2) (2)".
+fn copy_name(name: &str, kind: &str, taken: &[String], suffix: Suffix) -> String {
+    if suhina_model::names::has_number_mark(name) {
+        return name.to_string();
+    }
+    if old_default_name(name) {
+        return suhina_model::names::new_track_name(kind);
+    }
     if !taken.iter().any(|t| t == name) {
         return name.to_string();
     }
-    (2..)
-        .map(|n| format!("{name} {n}"))
+    let (base, own) = split_suffix(name);
+    (own.map_or(2, |n| n.saturating_add(1))..)
+        .map(|n| suffix.with(base, n))
         .find(|candidate| !taken.contains(candidate))
         .unwrap_or_else(|| name.to_string())
+}
+
+/// `name` without a copy's suffix of either kind, and its number: "Bass 1 (2)" and "Bass 1 #2"
+/// are "Bass 1" and 2.
+fn split_suffix(name: &str) -> (&str, Option<u32>) {
+    if let Some(inner) = name.strip_suffix(')')
+        && let Some((base, n)) = inner.rsplit_once(" (")
+        && let Ok(n) = n.parse::<u32>()
+        && !base.is_empty()
+    {
+        return (base, Some(n));
+    }
+    match name.rsplit_once(" #") {
+        Some((base, n)) if !base.is_empty() => match n.parse::<u32>() {
+            Ok(n) => (base, Some(n)),
+            Err(_) => (name, None),
+        },
+        _ => (name, None),
+    }
+}
+
+/// Whether `name` is one new tracks were given before names held their number: "Audio 3",
+/// "MIDI 12", and "3 Audio" as imported sets name them.
+fn old_default_name(name: &str) -> bool {
+    let Some((first, second)) = name.split_once(' ') else { return false };
+    let kind = |word: &str| matches!(word, "Audio" | "MIDI");
+    let number = |n: &str| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit());
+    (kind(first) && number(second)) || (number(first) && kind(second))
 }
 
 impl TrackClipboard {

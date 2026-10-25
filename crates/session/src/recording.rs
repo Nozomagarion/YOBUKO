@@ -152,7 +152,7 @@ fn kind_of(p: &Project, track: TrackId) -> Option<bool> {
 }
 
 fn track_name(p: &Project, track: TrackId) -> String {
-    p.track(track).map(|t| t.name.clone()).unwrap_or_default()
+    p.shown_track_name(track)
 }
 
 impl Session {

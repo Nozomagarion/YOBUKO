@@ -307,6 +307,7 @@ impl Timeline {
                 channel.is_some_and(|c| c.role == ChannelRole::Effect)
             })
             .collect();
+        let mut number = 0;
         for (position, track) in project.tracks.iter().enumerate() {
             let channel = track.channel.and_then(|id| project.channel(id));
             let kind = match channel.map(|c| c.role) {
@@ -315,6 +316,9 @@ impl Timeline {
                 Some(ChannelRole::Submix) => ColumnKind::Group,
                 _ => ColumnKind::Track,
             };
+            if kind != ColumnKind::Return {
+                number += 1;
+            }
             let track_color = track.color.unwrap_or_else(|| default_track_colour(position));
             let clips = project
                 .arrangement
@@ -332,7 +336,12 @@ impl Timeline {
             let clips = sub_rows(clips, track.id, rows_before, &mut stack_rows);
             let lane = Lane {
                 track: track.id,
-                name: track.name.clone(),
+                // Its `#` read as its number (#946).
+                name: if kind == ColumnKind::Return {
+                    track.name.clone()
+                } else {
+                    suhina_engine::model::names::shown_with_number(&track.name, number)
+                },
                 color: track.color.unwrap_or_else(|| default_track_colour(position)),
                 kind,
                 notes: kind == ColumnKind::Track && track.content.notes,

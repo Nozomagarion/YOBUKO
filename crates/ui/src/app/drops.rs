@@ -153,7 +153,7 @@ impl App {
             if track == TrackId::MAIN {
                 return "Main".to_string();
             }
-            session.and_then(|s| s.project().track(track)).map_or_else(String::new, |t| t.name.clone())
+            session.map_or_else(String::new, |s| s.project().shown_track_name(track))
         };
         let device = session
             .and_then(|s| {
@@ -409,7 +409,7 @@ impl App {
     /// A track's name, or its id when the project has none by that id.
     pub(super) fn track_name(&self, track: TrackId) -> String {
         self.session()
-            .and_then(|s| s.project().track(track).map(|t| t.name.clone()))
+            .and_then(|s| s.project().track(track).map(|_| s.project().shown_track_name(track)))
             .unwrap_or_else(|| track.0.to_string())
     }
 

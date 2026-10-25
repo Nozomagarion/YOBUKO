@@ -78,6 +78,9 @@ pub struct SessionViewState {
     /// The middle button is held after being pressed over the view: the view follows the
     /// pointer both ways, as the Arrangement's does (#920).
     pub(crate) panning: bool,
+    /// A track to scroll into view on the next frame: one just added or selected from the
+    /// keyboard (#918).
+    pub reveal: Option<TrackId>,
     /// A column header being dragged to move its track, and where it was let go.
     track_drag: Option<TrackId>,
     track_drop: Option<(TrackId, f32)>,
@@ -278,6 +281,22 @@ pub fn show(
     if state.panning {
         state.scroll -= delta;
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    }
+    // A track asked to be shown comes into view, its whole column when it fits (#918).
+    if let Some(track) = state.reveal.take() {
+        let mut left = 0.0;
+        for column in grid.columns.iter().filter(|c| c.kind != ColumnKind::Return && !hidden.contains(&c.track)) {
+            let width = column_width(column) + 1.0;
+            if column.track == track {
+                if left < state.scroll.x {
+                    state.scroll.x = left;
+                } else if left + width > state.scroll.x + tracks_clip.width() {
+                    state.scroll.x = left + width - tracks_clip.width();
+                }
+                break;
+            }
+            left += width;
+        }
     }
     state.scroll.x = state.scroll.x.clamp(0.0, (content_width - tracks_clip.width()).max(0.0));
     state.scroll.y = state.scroll.y.clamp(0.0, (content_height - body.height()).max(0.0));

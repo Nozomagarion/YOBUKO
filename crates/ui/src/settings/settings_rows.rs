@@ -402,6 +402,14 @@ pub(crate) static ROWS: &[Entry] = &[
         &["new_project_returns"],
         |cx, r| cx.choose(r, &[("A and B", true), ("None", false)], |s| &mut s.view.new_returns),
     ),
+    row(
+        Page::Arrangement,
+        "Tracks",
+        "Copy names",
+        "How a duplicated or pasted track reads when its name is taken: Wrapped gives Bass (2), Hash gives Bass #2; a name with # (the track's number) stays as it is",
+        &["copy_names"],
+        |cx, r| cx.choose(r, &[("Wrapped (2)", true), ("Hash #2", false)], |s| &mut s.view.copy_wrapped),
+    ),
     // Session view and mixer.
     row(
         Page::Session,

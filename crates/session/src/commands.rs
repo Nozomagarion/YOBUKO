@@ -593,7 +593,8 @@ fn tracks(session: &mut Session, _: &Value) -> Result<Value, CommandError> {
                     p.arrangement.lanes.iter().filter(|l| l.track == Some(t.id)).map(|l| l.clips.len()).sum::<usize>();
                 json!({
                     "id": t.id.0,
-                    "name": t.name,
+                    "name": p.shown_track_name(t.id),
+                    "written_name": t.name,
                     "plays": if t.content.notes { "notes" } else if t.content.audio { "audio" } else { "none" },
                     "volume_db": channel.map(|c| to_db(c.volume)),
                     "pan": channel.map(|c| c.pan),
@@ -1122,7 +1123,7 @@ pub(crate) fn scene_index(p: &Project, params: &Value) -> Result<usize, CommandE
 }
 
 fn track_name(p: &Project, track: TrackId) -> String {
-    p.track(track).map_or_else(|| track.0.to_string(), |t| t.name.clone())
+    p.track(track).map_or_else(|| track.0.to_string(), |_| p.shown_track_name(track))
 }
 
 fn undo(session: &mut Session, _: &Value) -> Result<Value, CommandError> {
@@ -1171,12 +1172,19 @@ pub(crate) fn track_at(p: &Project, params: &Value, key: &str) -> Result<TrackId
                 .ok_or_else(|| format!("track {id} does not exist").into())
         }
         Some(Value::String(name)) => {
-            if let Some(t) = p.tracks.iter().find(|t| t.name == *name) {
-                return Ok(t.id);
-            }
-            let matches: Vec<&Track> = p.tracks.iter().filter(|t| t.name.eq_ignore_ascii_case(name)).collect();
+            // A name as the views show it ("2 MIDI" for "# MIDI", #946) or as it is written.
+            let names: Vec<(TrackId, String, &str)> =
+                p.tracks.iter().map(|t| (t.id, p.shown_track_name(t.id), t.name.as_str())).collect();
+            let found = |same: &dyn Fn(&str) -> bool| -> Vec<TrackId> {
+                let mut ids: Vec<TrackId> =
+                    names.iter().filter(|(_, shown, written)| same(shown) || same(written)).map(|n| n.0).collect();
+                ids.dedup();
+                ids
+            };
+            let exact = found(&|n: &str| n == name.as_str());
+            let matches = if exact.is_empty() { found(&|n: &str| n.eq_ignore_ascii_case(name)) } else { exact };
             match matches.as_slice() {
-                [t] => Ok(t.id),
+                [id] => Ok(*id),
                 [] => Err(format!("no track named {name:?}; project.tracks lists them").into()),
                 _ => Err(format!("several tracks are named {name:?}; use the track id").into()),
             }

@@ -1027,15 +1027,15 @@ fn a_double_click_on_an_empty_spot_of_an_audio_lane_makes_a_clip_there() {
     // An audio track next to the demo's MIDI ones; its empty lane shows in the arrangement.
     harness.get_by_label("+ Audio track").click();
     harness.run();
-    assert!(harness.query_by_label("Lane Audio 1").is_some(), "the lane is there");
-    let at = harness.get_by_label("Lane Audio 1").rect().center();
+    assert!(harness.query_by_label("Lane 5 Audio").is_some(), "the lane is there");
+    let at = harness.get_by_label("Lane 5 Audio").rect().center();
     double_click_at(&mut harness, at);
     let made = harness.state().session().and_then(|s| {
         s.project()
             .arrangement
             .lanes
             .iter()
-            .find(|l| l.name == "Audio 1")
+            .find(|l| l.name == "# Audio")
             .map(|l| l.clips.len().max(1) == l.clips.len() && !l.clips.is_empty())
     });
     assert!(made.unwrap_or(false), "the empty audio clip is in the lane");
@@ -1459,7 +1459,7 @@ fn the_edit_keys_copy_cut_paste_and_duplicate_selected_tracks() {
     harness.run();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::D);
     harness.run();
-    assert_eq!(names(&harness)[..2], ["Drums", "Drums 2"]);
+    assert_eq!(names(&harness)[..2], ["Drums", "Drums (2)"]);
     harness.get_by_label("Track Bass").click();
     harness.run();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::X);
@@ -1508,4 +1508,41 @@ fn a_click_in_the_tracks_while_playing_moves_the_marker_not_playback() {
     render_a_block(&mut renderer);
     assert_eq!(monitor.pending_jump(), Some(16.0));
     assert!(monitor.beat() < 4.0, "{}", monitor.beat());
+}
+
+/// After Delete or Ctrl+X the next track is selected, Ctrl+V pastes a cut track back, and a new
+/// track is selected (#918, #919).
+#[test]
+fn delete_and_cut_select_the_next_track_and_ctrl_v_pastes_back() {
+    let mut harness = arrangement_app();
+    let names = |h: &Harness<'static, App>| {
+        h.state()
+            .session()
+            .map(|s| s.project().tracks.iter().map(|t| t.name.clone()).collect::<Vec<_>>())
+            .unwrap_or_default()
+    };
+    let selected = |h: &Harness<'static, App>| {
+        h.state().session().and_then(|s| {
+            let p = s.project();
+            h.state().selected_tracks().first().and_then(|id| p.track(*id)).map(|t| t.name.clone())
+        })
+    };
+    harness.get_by_label("Track Drums").click();
+    harness.run();
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert_eq!(selected(&harness).as_deref(), Some("Bass"));
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::X);
+    harness.run();
+    assert!(!names(&harness).contains(&"Bass".to_string()));
+    assert_eq!(selected(&harness).as_deref(), Some("Keys"));
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::V);
+    harness.run();
+    let after = names(&harness);
+    let keys = after.iter().position(|n| n == "Keys").unwrap();
+    assert_eq!(after.get(keys + 1).map(String::as_str), Some("Bass"), "{after:?}");
+    // A new track is selected.
+    harness.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::T);
+    harness.run();
+    assert_eq!(selected(&harness).as_deref(), Some("# MIDI"));
 }

@@ -52,7 +52,7 @@ pub(crate) struct Layout {
 impl Layout {
     /// The layout for a plug-in on `track`: its enabled audio clips whose files the pool holds.
     pub(crate) fn of(project: &Project, audio: &AudioPool, track: TrackId) -> Self {
-        let name = project.track(track).map_or_else(String::new, |t| t.name.clone());
+        let name = project.shown_track_name(track);
         let order =
             project.tracks.iter().position(|t| t.id == track).map_or(0, |i| u32::try_from(i).unwrap_or(u32::MAX));
         let map = project.transport.tempo_map(1.0);

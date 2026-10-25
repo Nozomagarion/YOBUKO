@@ -402,6 +402,22 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     let content_beats = timeline.end + TAIL_BARS * bar_beats;
     state.scroll.x =
         state.scroll.x.clamp(0.0, most_scroll_x(content_beats, state.zoom_reach, state.beat_width, time.width()));
+    // A track asked to be shown comes into view, its whole row when it fits (#918).
+    if let Some(track) = state.reveal.take() {
+        let mut top = 0.0;
+        for lane in drawn.iter().filter_map(|d| timeline.lanes.get(d.lane)) {
+            let height = state.height(lane) + 1.0 + state.below(lane.track, timeline);
+            if lane.track == track {
+                if top < state.scroll.y {
+                    state.scroll.y = top;
+                } else if top + height > state.scroll.y + lanes_area.height() {
+                    state.scroll.y = top + height - lanes_area.height();
+                }
+                break;
+            }
+            top += height;
+        }
+    }
     state.scroll.y = state.scroll.y.clamp(0.0, (content_height - lanes_area.height()).max(0.0));
 
     let (scroll_x, beat_width) = (state.scroll.x, state.beat_width);

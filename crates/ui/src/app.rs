@@ -1023,6 +1023,12 @@ impl App {
         &self.status
     }
 
+    /// The tracks selected, shared by both views (#208); the first is the one the detail area
+    /// shows.
+    pub fn selected_tracks(&self) -> &[TrackId] {
+        &self.arrangement.selected_tracks
+    }
+
     /// Turns animations on or off (a setting; on by default).
     pub fn set_animations(ctx: &egui::Context, on: bool) {
         motion::set_enabled(ctx, on);
@@ -2024,6 +2030,17 @@ impl App {
         if action.id == "transport.play" {
             browser_view::stop_preview(&mut self.browser, &mut self.projects);
         }
+        // A copied track's name reads as Settings › Arrangement › Copy names says (#946).
+        let suffixed;
+        let params = if matches!(action.id, "track.duplicate" | "track.paste") && action.params.get("suffix").is_none()
+        {
+            let mut params = action.params.clone();
+            params["suffix"] = json!(self.settings.view.copy_suffix());
+            suffixed = params;
+            &suffixed
+        } else {
+            &action.params
+        };
         // A critical operation is backed up first, when the settings say so.
         self.projects.back_up_before(action.id);
         let Ok(session) = self.projects.session_mut(None) else { return };
@@ -2048,8 +2065,28 @@ impl App {
             }
         }
         suhina_plugins::trace!("action {} {}", action.id, action.params);
-        match session.execute(action.id, &action.params) {
+        // The track to select once tracks are deleted or cut: the next one, or the one before
+        // when they were the last (#918). Known before the command, while they are there.
+        let next_track = match action.id {
+            "track.delete" | "track.cut" => {
+                let removed: Vec<TrackId> = params
+                    .get("tracks")
+                    .and_then(serde_json::Value::as_array)
+                    .map(|t| t.iter().collect::<Vec<_>>())
+                    .unwrap_or_else(|| params.get("track").into_iter().collect())
+                    .into_iter()
+                    .filter_map(|t| t.as_u64().and_then(|t| u32::try_from(t).ok()).map(TrackId))
+                    .collect();
+                actions::track_after_removing(session.project(), &removed)
+            }
+            _ => None,
+        };
+        match session.execute(action.id, params) {
             Ok(result) => {
+                // Copied tracks paste into every open tab (#919).
+                if matches!(action.id, "track.copy" | "track.cut") {
+                    self.projects.share_copied_tracks(None);
+                }
                 // Duplicated or pasted tracks are selected in both views, so the next Ctrl+D
                 // copies the copies (#919).
                 if matches!(action.id, "track.duplicate" | "track.paste")
@@ -2075,14 +2112,17 @@ impl App {
                             self.arrangement.set_lane_height(*copy, height);
                         }
                     }
-                    if let Some(&first) = tracks.first() {
-                        self.arrangement.selected_tracks.clone_from(&tracks);
-                        self.arrangement.track_focus = true;
-                        self.view.selected = Some(first);
-                        self.view.selected_tracks = tracks;
-                        self.view.selected_slot = None;
-                        self.view.track_focus = true;
-                    }
+                    self.select_tracks(tracks);
+                }
+                // A new track is selected and scrolled into view (#918).
+                if action.id == "track.add"
+                    && let Some(track) = result["track"].as_u64().and_then(|t| u32::try_from(t).ok()).map(TrackId)
+                {
+                    self.select_tracks(vec![track]);
+                }
+                // After a delete or a cut the next track is selected, so the keys go on (#918).
+                if let Some(next) = next_track {
+                    self.select_tracks(vec![next]);
                 }
                 // A clip made by a double-click is selected, ready to edit: in the Arrangement
                 // the clip, in the Session its slot, so the detail area shows it.

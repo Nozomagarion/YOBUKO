@@ -233,6 +233,12 @@ impl App {
                     }
                 }
             }
+            // A header clicked last but its tracks gone (cut): Ctrl+V still pastes the copied
+            // tracks, after the last regular track (#919).
+            "selection.paste" if self.track_keys_on() && self.session().is_some_and(|s| s.copied_tracks() > 0) => {
+                let suffix = self.settings.view.copy_suffix();
+                actions.push(Action::new("track.paste", json!({ "after": null, "suffix": suffix })));
+            }
             "selection.copy" | "selection.paste" if self.shown == View::Session => {
                 let Some((track, scene)) = self.view.selected_slot else {
                     self.status = Status::Hint("Click a clip slot first".into());
@@ -740,10 +746,17 @@ impl App {
         }
     }
 
-    /// Where a track added from the keyboard goes: after the lowest selected track that is not a
-    /// return track; `None` (after the last regular track) without one.
-    /// The tracks the edit keys act on: the selected ones while a track header was the last
-    /// thing clicked (in the Session view, with no slot selected), in project order.
+    /// Whether the edit keys act on tracks: a track header was the last thing clicked (in the
+    /// Session view, with no slot selected).
+    pub(super) fn track_keys_on(&self) -> bool {
+        match self.shown {
+            View::Arrangement => self.arrangement.track_focus,
+            View::Session => self.view.track_focus && self.view.selected_slot.is_none(),
+        }
+    }
+
+    /// The tracks the edit keys act on: the selected ones while [`Self::track_keys_on`], in
+    /// project order.
     pub(super) fn focused_tracks(&self) -> Vec<TrackId> {
         let selected: Vec<TrackId> = match self.shown {
             View::Arrangement if self.arrangement.track_focus => self.arrangement.selected_tracks.clone(),
@@ -754,6 +767,8 @@ impl App {
         session.project().tracks.iter().map(|t| t.id).filter(|id| selected.contains(id)).collect()
     }
 
+    /// Where a track added from the keyboard goes: after the lowest selected track that is not a
+    /// return track; `None` (after the last regular track) without one.
     pub(super) fn add_track_after(&self) -> Option<TrackId> {
         let project = self.session()?.project();
         let selected: Vec<TrackId> = match self.shown {
@@ -835,6 +850,20 @@ impl App {
         }
     }
 
+    /// Selects `tracks` in both views as a header click would, the first one shown in the
+    /// detail area and scrolled into view (#918); nothing for none.
+    pub(super) fn select_tracks(&mut self, tracks: Vec<TrackId>) {
+        let Some(&first) = tracks.first() else { return };
+        self.arrangement.selected_tracks.clone_from(&tracks);
+        self.arrangement.track_focus = true;
+        self.arrangement.reveal = Some(first);
+        self.view.selected = Some(first);
+        self.view.selected_tracks = tracks;
+        self.view.selected_slot = None;
+        self.view.track_focus = true;
+        self.view.reveal = Some(first);
+    }
+
     /// The track selected in the view shown.
     pub(super) fn selected_track(&self) -> Option<TrackId> {
         match self.shown {
@@ -885,4 +914,33 @@ pub(super) fn describe(action: &Action) -> Option<String> {
         "edit.redo" => "Redone".into(),
         _ => return None,
     })
+}
+
+/// The track to select once `removed` are deleted: the first track after the last of them that
+/// stays, or the last one before them when nothing stays after; returns and Main are left out
+/// (#918).
+pub(super) fn track_after_removing(project: &suhina_engine::model::Project, removed: &[TrackId]) -> Option<TrackId> {
+    let numbered: Vec<TrackId> =
+        project.tracks.iter().map(|t| t.id).filter(|id| project.track_number(*id).is_some()).collect();
+    let last = numbered.iter().rposition(|id| removed.contains(id))?;
+    let first = numbered.iter().position(|id| removed.contains(id))?;
+    // A deleted group takes the tracks inside it along.
+    let inside = |track: TrackId| {
+        let mut parent = project.track(track).and_then(|t| t.parent);
+        for _ in 0..project.tracks.len() {
+            let Some(group) = parent else { return false };
+            if removed.contains(&group) {
+                return true;
+            }
+            parent = project.track(group).and_then(|t| t.parent);
+        }
+        false
+    };
+    let gone = |id: &TrackId| removed.contains(id) || inside(*id);
+    numbered
+        .iter()
+        .skip(last + 1)
+        .find(|id| !gone(id))
+        .or_else(|| numbered.iter().take(first).rev().find(|id| !gone(id)))
+        .copied()
 }

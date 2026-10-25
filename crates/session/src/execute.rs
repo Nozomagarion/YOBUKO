@@ -124,6 +124,9 @@ impl Session {
     /// fails when what is left does not validate. The caller puts `before` back on an error.
     fn apply(&mut self, prepared: &Prepared, params: &Value, before: &Project) -> Result<Value, CommandError> {
         let value = (prepared.spec.run)(self, params)?;
+        if prepared.spec.id.starts_with("device.") {
+            crate::devices::follow_instruments(self, before);
+        }
         // A lane, clip or scene the command added without an id gets one now.
         self.project.assign_ids()?;
         self.keep_track_colours(before);

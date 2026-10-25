@@ -156,19 +156,25 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         id: "track.paste",
         label: "Add the tracks track.copy or track.cut copied, with new clips of their own, after a track or at the end of the regular tracks",
-        params: &[optional(
-            "after",
-            ParamType::Track,
-            "put them after this track, in its group (default: after the last regular track)",
-        )],
+        params: &[
+            optional(
+                "after",
+                ParamType::Track,
+                "put them after this track, in its group (default: after the last regular track)",
+            ),
+            optional("suffix", ParamType::Text, COPY_SUFFIX),
+        ],
         kind: CommandKind::Edit,
         run: paste_tracks,
         policy: Policy::DEFAULT,
     },
     CommandSpec {
         id: "track.duplicate",
-        label: "Copy the named tracks with new clips of their own: adjacent ones as one block after the last of them, any other right after itself; a group with its tracks",
-        params: &[param("tracks", ParamType::Tracks, "the tracks to duplicate (ids or names)")],
+        label: "Copy the named tracks, with new clips of their own, as one block after the last of them; a group with its tracks",
+        params: &[
+            param("tracks", ParamType::Tracks, "the tracks to duplicate (ids or names)"),
+            optional("suffix", ParamType::Text, COPY_SUFFIX),
+        ],
         kind: CommandKind::Edit,
         run: duplicate_tracks,
         policy: Policy::DEFAULT,
@@ -684,20 +690,33 @@ fn cut_tracks(session: &mut Session, params: &Value) -> Result<Value, CommandErr
     Ok(json!({ "cut": count, "tracks": names }))
 }
 
+/// The `suffix` parameter's description, shared by `track.paste` and `track.duplicate`.
+const COPY_SUFFIX: &str = "how a copy of a taken name reads: wrapped (\"Bass (2)\", default) or hash (\"Bass #2\"); a name with # (the track's number) stays as it is";
+
 fn paste_tracks(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let after = match params.get("after") {
         None | Some(Value::Null) => None,
         Some(_) => Some(track_at(&session.project, params, "after")?),
     };
     let clipboard = session.clipboards.whole_tracks.clone();
-    let added = crate::track_copy::paste(&mut session.project, &clipboard, after)?;
+    let added = crate::track_copy::paste(&mut session.project, &clipboard, after, suffix(params)?)?;
     Ok(json!({ "tracks": added.iter().map(|t| t.0).collect::<Vec<_>>() }))
 }
 
 fn duplicate_tracks(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let tracks = track_list(&session.project, params)?;
-    let added = crate::track_copy::duplicate(&mut session.project, &tracks)?;
+    let added = crate::track_copy::duplicate(&mut session.project, &tracks, suffix(params)?)?;
     Ok(json!({ "tracks": added.iter().map(|t| t.0).collect::<Vec<_>>() }))
+}
+
+/// The `suffix` parameter of `track.paste` and `track.duplicate`: how a taken name says it is a
+/// copy ("wrapped": "Bass (2)", "hash": "Bass #2"); wrapped when it is left out.
+fn suffix(params: &Value) -> Result<crate::track_copy::Suffix, CommandError> {
+    match params.get("suffix").and_then(Value::as_str) {
+        None => Ok(crate::track_copy::Suffix::default()),
+        Some(name) => crate::track_copy::Suffix::parse(name)
+            .ok_or_else(|| format!("suffix is \"wrapped\" or \"hash\", not {name:?}").into()),
+    }
 }
 
 fn delete_track(session: &mut Session, params: &Value) -> Result<Value, CommandError> {

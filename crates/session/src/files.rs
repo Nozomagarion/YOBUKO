@@ -171,10 +171,9 @@ pub(crate) fn within(p: &Project, track: TrackId, group: TrackId) -> bool {
     false
 }
 
-/// "Audio 3": the next number among tracks of that kind.
-fn numbered_name(p: &Project, kind: TrackKind) -> String {
-    let count = p.tracks.iter().filter(|t| TrackKind::of(t) == Some(kind)).count();
-    format!("{} {}", kind.default_name(), count + 1)
+/// "# Audio": the name a new track takes, its `#` read as the track's number (#946).
+fn numbered_name(kind: TrackKind) -> String {
+    suhina_model::names::new_track_name(kind.default_name())
 }
 
 fn text<'a>(params: &'a Value, name: &str) -> Result<Option<&'a str>, CommandError> {
@@ -254,10 +253,10 @@ pub(crate) fn add_track(session: &mut Session, params: &Value) -> Result<Value, 
                 || session.plugins.env().and_then(|e| e.catalog.find(id).map(|p| p.name.clone())).unwrap_or_default(),
                 |i| i.name.to_string(),
             ),
-            (None, None, None) => numbered_name(&session.project, kind),
+            (None, None, None) => numbered_name(kind),
         },
     };
-    let name = if name.trim().is_empty() { numbered_name(&session.project, kind) } else { name };
+    let name = if name.trim().is_empty() { numbered_name(kind) } else { name };
     let track = insert_track(&mut session.project, kind, &name, after)?;
     let mut added = Value::Null;
     if device.is_some() || preset.is_some() || sd.is_some() {
@@ -437,7 +436,7 @@ pub(crate) fn add_files(session: &mut Session, params: &Value) -> Result<Value, 
             }
             let name = match of_kind.as_slice() {
                 [one] => one.name.clone(),
-                _ => numbered_name(p, kind),
+                _ => numbered_name(kind),
             };
             let id = insert_track(p, kind, &name, last)?;
             new_tracks.push(id);

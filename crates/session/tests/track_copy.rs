@@ -53,19 +53,19 @@ fn contents(session: &Session, name: &str) -> Vec<ContentId> {
 #[test]
 fn a_duplicated_track_comes_right_after_with_its_devices_sends_and_clips_of_its_own() {
     let mut session = session();
-    run(&mut session, "device.add", json!({ "track": "Bass", "device": "utility" })).unwrap();
+    run(&mut session, "device.add", json!({ "track": "Bass", "id": "utility" })).unwrap();
     run(&mut session, "return.add", json!({})).unwrap();
     run(&mut session, "track.setSend", json!({ "track": "Bass", "return": "A Return", "level": -6 })).unwrap();
     let added = run(&mut session, "track.duplicate", json!({ "tracks": ["Bass"] })).unwrap();
     assert_eq!(added["tracks"].as_array().unwrap().len(), 1);
-    assert_eq!(names(&session)[..3], ["Bass", "Bass 2", "Lead"]);
-    let (original, copy) = (channel(&session, "Bass").clone(), channel(&session, "Bass 2").clone());
+    assert_eq!(names(&session)[..3], ["Bass", "Bass (2)", "Lead"]);
+    let (original, copy) = (channel(&session, "Bass").clone(), channel(&session, "Bass (2)").clone());
     assert_ne!(original.id, copy.id);
     assert_eq!(copy.devices.len(), 1);
     assert_eq!(copy.sends, original.sends);
     assert_eq!(copy.output, original.output);
     // The copy's clips play contents of their own, with the same notes.
-    let (old, new) = (contents(&session, "Bass"), contents(&session, "Bass 2"));
+    let (old, new) = (contents(&session, "Bass"), contents(&session, "Bass (2)"));
     assert_eq!(new.len(), 2);
     assert!(new.iter().all(|c| !old.contains(c)), "{old:?} {new:?}");
     let p = session.project();
@@ -81,7 +81,7 @@ fn a_duplicated_track_comes_right_after_with_its_devices_sends_and_clips_of_its_
 }
 
 #[test]
-fn adjacent_tracks_are_duplicated_as_a_block_after_the_last_and_one_apart_after_itself() {
+fn selected_tracks_are_duplicated_as_one_block_after_the_last_of_them() {
     let project = ProjectBuilder::new()
         .midi_track(1, "Bass")
         .midi_track(2, "Lead")
@@ -89,14 +89,35 @@ fn adjacent_tracks_are_duplicated_as_a_block_after_the_last_and_one_apart_after_
         .midi_track(4, "Keys")
         .build();
     let mut session = Session::new(project);
-    let added = run(&mut session, "track.duplicate", json!({ "tracks": ["Bass", "Lead", "Keys"] })).unwrap();
-    assert_eq!(names(&session)[..7], ["Bass", "Lead", "Bass 2", "Lead 2", "Pad", "Keys", "Keys 2"]);
+    let added = run(&mut session, "track.duplicate", json!({ "tracks": ["Bass", "Keys"] })).unwrap();
+    assert_eq!(names(&session)[..6], ["Bass", "Lead", "Pad", "Keys", "Bass (2)", "Keys (2)"]);
     // The copies, in order, so the window selects them.
     let added: Vec<u64> = added["tracks"].as_array().unwrap().iter().filter_map(serde_json::Value::as_u64).collect();
-    let copies: Vec<u64> = ["Bass 2", "Lead 2", "Keys 2"].iter().map(|n| u64::from(track(&session, n).id.0)).collect();
+    let copies: Vec<u64> = ["Bass (2)", "Keys (2)"].iter().map(|n| u64::from(track(&session, n).id.0)).collect();
     assert_eq!(added, copies);
+    // A copy of a copy takes the next number, in the suffix asked for.
+    run(&mut session, "track.duplicate", json!({ "tracks": ["Bass (2)"], "suffix": "hash" })).unwrap();
+    assert!(names(&session).contains(&"Bass #3".to_string()), "{:?}", names(&session));
+    run(&mut session, "edit.undo", json!({})).unwrap();
     run(&mut session, "edit.undo", json!({})).unwrap();
     assert_eq!(names(&session)[..4], ["Bass", "Lead", "Pad", "Keys"]);
+    assert!(run(&mut session, "track.duplicate", json!({ "tracks": ["Bass"], "suffix": "dots" })).is_err());
+}
+
+#[test]
+fn a_name_with_the_track_number_is_copied_as_it_is_and_an_old_default_takes_it() {
+    let project = ProjectBuilder::new().midi_track(1, "# Bass").midi_track(2, "MIDI 3").build();
+    let mut session = Session::new(project);
+    run(&mut session, "track.duplicate", json!({ "tracks": ["# Bass", "MIDI 3"] })).unwrap();
+    assert_eq!(names(&session)[..4], ["# Bass", "MIDI 3", "# Bass", "# MIDI"]);
+    let p = session.project();
+    assert_eq!(p.shown_track_name(p.tracks[2].id), "3 Bass");
+    // A new track is named with its number.
+    run(&mut session, "track.add", json!({ "kind": "midi" })).unwrap();
+    let p = session.project();
+    let last = p.tracks.iter().rev().find(|t| t.name.contains("MIDI")).unwrap();
+    assert_eq!(last.name, "# MIDI");
+    assert_eq!(p.shown_track_name(last.id), format!("{} MIDI", p.track_number(last.id).unwrap()));
 }
 
 #[test]
@@ -120,9 +141,9 @@ fn copying_a_group_copies_its_tracks_into_the_copy() {
     run(&mut session, "track.copy", json!({ "tracks": ["Band"] })).unwrap();
     assert_eq!(session.copied_tracks(), 3);
     run(&mut session, "track.paste", json!({})).unwrap();
-    let copy = track(&session, "Band 2");
+    let copy = track(&session, "Band (2)");
     let inside: Vec<Track> = session.project().tracks.iter().filter(|t| t.parent == Some(copy.id)).cloned().collect();
-    assert_eq!(inside.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["Bass 2", "Lead 2"]);
+    assert_eq!(inside.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["Bass (2)", "Lead (2)"]);
     // They play into the copied group, not the original.
     for t in &inside {
         assert_eq!(channel(&session, &t.name).output, copy.channel);
