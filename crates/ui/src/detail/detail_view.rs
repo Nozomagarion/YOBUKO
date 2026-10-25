@@ -69,7 +69,7 @@ pub fn row_height_with_editor(height: u32, pixels_per_point: f32) -> f32 {
 pub fn show_row(
     ui: &mut Ui,
     detail: &Detail,
-    selected: &[(TrackId, usize)],
+    selected: &[(TrackId, DeviceAt)],
     actions: &mut Vec<Action>,
     places: &mut Vec<EditorPlace>,
 ) -> Picked {
@@ -105,7 +105,7 @@ fn chain_row(
     painter: &egui::Painter,
     area: Rect,
     chain: &Chain,
-    selected: &[(TrackId, usize)],
+    selected: &[(TrackId, DeviceAt)],
     actions: &mut Vec<Action>,
     places: &mut Vec<EditorPlace>,
 ) -> Picked {
@@ -189,8 +189,8 @@ fn chain_row(
         if rect.left() > area.right() {
             break;
         }
-        // Picks are of the track's own devices (Ctrl+G groups them, Delete removes them).
-        let lit = device.at.top() && selected.contains(&(chain.track, device.index));
+        // Picks are of any device, inside a group too (Ctrl+G groups them, Delete removes them).
+        let lit = selected.iter().any(|(t, at)| *t == chain.track && *at == device.at);
         let clicked = match &device.group {
             Some(group) => {
                 group_panel(ui, &painter.with_clip_rect(area), rect, chain.track, device, group, lit, actions)
@@ -201,8 +201,8 @@ fn chain_row(
         };
         inside_group_mark(&painter.with_clip_rect(area), rect, &device.at);
         // Keep a device an earlier iteration clicked: the later panels were not clicked.
-        if clicked && device.at.top() {
-            picked.clicked = Some((chain.track, device.index));
+        if clicked {
+            picked.clicked = Some((chain.track, device.at.clone()));
         }
         plugin_button(ui, &painter.with_clip_rect(area), rect, chain.track, device, actions);
         if let Some(editor) = editor {
@@ -278,7 +278,7 @@ fn sdk_viewport(device: &DeviceBox) -> Option<[f32; 2]> {
 pub fn show_stack(
     ui: &mut Ui,
     detail: &Detail,
-    selected: &[(TrackId, usize)],
+    selected: &[(TrackId, DeviceAt)],
     actions: &mut Vec<Action>,
     places: &mut Vec<EditorPlace>,
 ) -> Picked {
@@ -333,7 +333,7 @@ fn chain_stack(
     painter: &egui::Painter,
     area: Rect,
     chain: &Chain,
-    selected: &[(TrackId, usize)],
+    selected: &[(TrackId, DeviceAt)],
     actions: &mut Vec<Action>,
     places: &mut Vec<EditorPlace>,
 ) -> Picked {
@@ -353,12 +353,12 @@ fn chain_stack(
             if rect.top() > area.bottom() {
                 break;
             }
-            let lit = device.at.top() && selected.contains(&(chain.track, device.index));
+            let lit = selected.iter().any(|(t, at)| *t == chain.track && *at == device.at);
             let clicked =
                 group_panel(ui, &painter.with_clip_rect(area), rect, chain.track, device, group, lit, actions);
             inside_group_mark(&painter.with_clip_rect(area), rect, &device.at);
-            if clicked && device.at.top() {
-                picked.clicked = Some((chain.track, device.index));
+            if clicked {
+                picked.clicked = Some((chain.track, device.at.clone()));
             }
             continue;
         }
@@ -371,13 +371,13 @@ fn chain_stack(
         if rect.top() > area.bottom() {
             break;
         }
-        let lit = device.at.top() && selected.contains(&(chain.track, device.index));
+        let lit = selected.iter().any(|(t, at)| *t == chain.track && *at == device.at);
         let clicked =
             device_panel(ui, &painter.with_clip_rect(area), rect, chain.track, device, lit, actions, &chain.nam);
         inside_group_mark(&painter.with_clip_rect(area), rect, &device.at);
         // Keep a device an earlier iteration clicked: the later panels were not clicked.
-        if clicked && device.at.top() {
-            picked.clicked = Some((chain.track, device.index));
+        if clicked {
+            picked.clicked = Some((chain.track, device.at.clone()));
         }
         plugin_button(ui, &painter.with_clip_rect(area), rect, chain.track, device, actions);
         if let Some(editor) = editor {

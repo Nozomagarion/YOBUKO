@@ -170,6 +170,11 @@ While the search field has the cursor: Up and Down move the selection in the res
 adds the selected item(s) to the selected track; Escape clears the search, a second Escape
 gives the keyboard back to the window.
 
+After a click on a row of the list (and until a click outside the browser), the arrow keys move
+through it before the window's shortcuts see them: Up and Down select the row above or below
+(previewing it as a click does), Right opens a closed folder or heading and goes into an open one,
+Left closes an open one or goes up to the folder or heading the row is in.
+
 ## Preview
 
 The preview strip shows the selected sample or MIDI file: a play button, the name, duration,

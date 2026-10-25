@@ -50,7 +50,7 @@ CHAPTERS = [
     (3, "Live Concepts", 27, 0.50, "partial",
      "Control bar, browser, sets, arrangement/session, tracks, audio/MIDI clips, devices, mixer "
      "concepts exist. Routing, recording, racks, clip/device view and presets are missing or thin."),
-    (4, "Working with the Browser", 60, 0.52, "partial",
+    (4, "Working with the Browser", 60, 0.53, "partial",
      "Search, categories, folders watched on disk, pins, recent, colour tags, preview through the "
      "engine, sample map by sound similarity (smooth with 200 000 items, also while its window is resized) with kinds recognised from the sound and set by hand; samples and MIDI files dragged from the system's file "
      "manager land like a browser drag; dropping one sample on an empty MIDI track adds Sampler (exact placement waits for pointer positions from the "
@@ -58,6 +58,7 @@ CHAPTERS = [
      "category as the instruments or the effects by name and format, with pins and tags on them. "
      "Samples copied out to a folder (Copy to folder…, library.copyTo) or dragged out to the file manager as copies; "
      "samples dragged onto a browser folder moved or copied there (asked, or as a setting says; library.moveTo keeps their pins, recent places and tags). "
+     "The arrow keys move through the list after a click on a row, opening and closing folders. "
      "Missing collections/tag editor depth, packs, Splice, "
      "Cloud, Push transfer, filter groups, browser history."),
     (5, "Managing Files and Sets", 43, 0.40, "partial",
@@ -191,14 +192,16 @@ CHAPTERS = [
     (20, "Bounce to Audio", 6, 0.15, "partial",
      "Whole-project offline render to 32-bit float WAV (CLI/MCP), from an open project with its "
      "running plug-ins' state as heard; no per-track or group bounce, no paste."),
-    (21, "Comping", 6, 0.75, "partial",
+    (21, "Comping", 6, 0.85, "partial",
      "Take lanes made by recording into the arrangement (a lane per loop pass or jump back, the latest "
      "copied to the track and playing), drawn under the track with the parts in use lit and the rest dimmed, "
      "folded away from a button or a menu; a click copies a take's clip and a drag a part of it onto the track "
      "(take.comp), the parts named and coloured after their takes; Alt+Up/Down swap a part's take, the cut "
      "between two parts dragged (take.moveCut), Recolor lane and Recolor selected take, splits reaching the "
-     "takes, Delete take; saved with the project. Missing audition, take lanes made by hand, renaming and "
-     "reordering them, crossfades at comp edges."),
+     "takes, Delete take, take pieces picked with Ctrl and deleted; a take lane soloed in place of its track, "
+     "put whole on the track, unused takes deleted; short crossfades where parts of two takes meet; clips "
+     "not stacked over takes; saved with the project. Missing take lanes made by hand, renaming and "
+     "reordering them."),
     (22, "Stem Separation", 8, 0.00, "planned",
      "Roadmap item (Demucs candidate, weights unaudited). The pipeline around a model (chunking, "
      "resampling) exists in crates/separation with a test backend; no model and nothing a user "
@@ -230,16 +233,18 @@ CHAPTERS = [
      "Device groups: Ctrl+G groups picked devices, parallel branches with volume, pan, mute and "
      "solo in the group's panel, a mix against the dry signal and an output gain, instruments "
      "layered on the same notes, plug-ins inside, latency compensated, groups nested four deep, "
-     "moved and duplicated by command. No macros, key/velocity/chain zones, drum pads or group "
+     "moved and duplicated by command, devices inside groups picked and Ctrl+A picking a whole chain. No macros, key/velocity/chain zones, drum pads or group "
      "presets."),
-    (26, "Automation and Editing Envelopes", 22, 0.48, "partial",
+    (26, "Automation and Editing Envelopes", 22, 0.56, "partial",
      "Envelopes for track volume, pan and mute, built-in, .sd and plug-in device parameters: breakpoints "
      "with curved segments and jumps, saved, played in playback and renders (64-frame steps, ramped "
      "mixer gains), a manual change turning a lane off until re-enabled. Lanes under each track in "
      "the Arrangement: a parameter chooser with a search, the automated parameters first, devices and "
      "parameter groups folded under headings, points added, moved on the grid, selected and moved or "
      "deleted together, curves bent by dragging, re-enabled from the lane, a click near the line adding "
-     "a point on it, a faint line at the value of a lane without points. Missing recording, "
+     "a point on it, a faint line at the value of a lane without points; a time range painted on a lane "
+     "copied, pasted onto any lane, duplicated right after itself and deleted, and shapes inserted into it "
+     "(sine, triangle, saws, square, ramps, curves, swell). Missing recording, "
      "drawing with a pencil, plug-in lanes in the view, send, master and tempo automation, "
      "locking, simplifying envelopes."),
     (27, "Clip Envelopes", 13, 0.00, "absent", "No clip envelopes."),

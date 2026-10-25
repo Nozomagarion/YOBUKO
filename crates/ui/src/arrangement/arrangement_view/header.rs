@@ -172,6 +172,7 @@ pub(super) fn track_header(
         // and the detail area shows the track's devices (#950).
         state.track_focus = true;
         state.devices_clicked = true;
+        state.automation.range = None;
     }
     // A double-click shows the track's devices in the detail area.
     if body.double_clicked() {

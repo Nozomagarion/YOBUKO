@@ -381,7 +381,9 @@ suhina-cli mcp --read-root ./projects --write-root ./renders [--audio]
 
 - **Automation.** `automation.addPoint`, `automation.movePoint`, `automation.deletePoint`,
   `automation.movePoints`, `automation.deletePoints` (several points of one lane in one undo
-  step), `automation.clear`, `automation.setEnabled` and `automation.list` (through `command_run`) edit
+  step), `automation.copy`, `automation.paste`, `automation.duplicate`, `automation.deleteRange`
+  and `automation.insertShape` (a time range of a lane), `automation.clear`,
+  `automation.setEnabled` and `automation.list` (through `command_run`) edit
   the envelopes of a track's `volume`, `pan` and `mute` (no `device`) and of any device
   parameter (`device` and its `param` id), point by point, each one undo step; values in the
   set command's unit (the volume in dB). `device.setAutomation` replaces a whole device lane, for

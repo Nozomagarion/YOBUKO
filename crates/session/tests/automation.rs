@@ -338,3 +338,91 @@ fn malformed_point_lists_change_nothing() {
     }
     assert_eq!(session.project(), &before);
 }
+
+fn pan_points(session: &Session) -> Vec<(f64, f64)> {
+    lanes(session).iter().find(|l| l.param == "pan").map_or_else(Vec::new, |l| {
+        l.points.iter().map(|p| ((p.beat * 1e6).round() / 1e6, (p.value * 1e6).round() / 1e6)).collect()
+    })
+}
+
+/// A range of a lane copies with its edge values and pastes anywhere, onto another parameter at
+/// the same heights; Ctrl+D's duplicate goes right after the range; a deleted range keeps the
+/// envelope outside it (#916).
+#[test]
+fn an_automation_range_copies_pastes_duplicates_and_deletes() {
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, -1.0), (4.0, 1.0)] {
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    run(&mut session, "automation.copy", json!({ "track": 1, "param": "pan", "start": 0, "end": 4 })).unwrap();
+    // Pasted at beat 8: the rise again, the lane holding its last value up to there.
+    let done = run(&mut session, "automation.paste", json!({ "track": 1, "param": "pan", "start": 8 })).unwrap();
+    assert_eq!((done["start"].as_f64(), done["end"].as_f64()), (Some(8.0), Some(12.0)));
+    assert_eq!(pan_points(&session), [(0.0, -1.0), (4.0, 1.0), (8.0, 1.0), (8.0, -1.0), (12.0, 1.0)]);
+    // Onto the mute lane: the bottom is off, the top on.
+    run(&mut session, "automation.paste", json!({ "track": 1, "param": "mute", "start": 0 })).unwrap();
+    let mute = lanes(&session).iter().find(|l| l.param == "mute").unwrap();
+    assert_eq!(mute.points.first().map(|p| p.value), Some(0.0));
+    assert_eq!(mute.points.last().map(|p| p.value), Some(1.0));
+    // Duplicated right after itself, answering the copy's range.
+    let done = run(&mut session, "automation.duplicate", json!({ "track": 1, "param": "pan", "start": 8, "end": 12 }))
+        .unwrap();
+    assert_eq!((done["start"].as_f64(), done["end"].as_f64()), (Some(12.0), Some(16.0)));
+    let points = pan_points(&session);
+    assert!(points.contains(&(16.0, 1.0)) && points.contains(&(12.0, -1.0)), "{points:?}");
+    // Deleting 1 to 3 keeps the values at 1 and 3, so the line outside is as it was.
+    run(&mut session, "automation.deleteRange", json!({ "track": 1, "param": "pan", "start": 1, "end": 3 })).unwrap();
+    assert_eq!(pan_points(&session)[..4], [(0.0, -1.0), (1.0, -0.5), (3.0, 0.5), (4.0, 1.0)]);
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(pan_points(&session)[..2], [(0.0, -1.0), (4.0, 1.0)]);
+}
+
+/// A shape fills a range over the parameter's whole travel, a repeating one as many times as
+/// asked; the envelope outside the range stays (#916).
+#[test]
+fn a_shape_fills_an_automation_range() {
+    let mut session = Session::new(project());
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 0, "value": 0 })).unwrap();
+    run(
+        &mut session,
+        "automation.insertShape",
+        json!({ "track": 1, "param": "pan", "start": 4, "end": 8, "shape": "square", "cycles": 2 }),
+    )
+    .unwrap();
+    assert_eq!(
+        pan_points(&session),
+        [
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 1.0),
+            (5.0, 1.0),
+            (5.0, -1.0),
+            (6.0, -1.0),
+            (6.0, 1.0),
+            (7.0, 1.0),
+            (7.0, -1.0),
+            (8.0, -1.0),
+            (8.0, 0.0)
+        ]
+    );
+    // A shape on a lane with no automation makes the lane.
+    run(
+        &mut session,
+        "automation.insertShape",
+        json!({ "track": 1, "param": "volume", "start": 0, "end": 4, "shape": "ramp_up" }),
+    )
+    .unwrap();
+    let volume = lanes(&session).iter().find(|l| l.param == "volume").unwrap();
+    assert_eq!(volume.points.first().map(|p| p.value), Some(0.0), "the bottom is silence");
+    assert!(volume.points.last().is_some_and(|p| (p.value - suhina_model::automation::MAX_VOLUME).abs() < 1e-9));
+    assert!(
+        run(
+            &mut session,
+            "automation.insertShape",
+            json!({ "track": 1, "param": "pan", "start": 0, "end": 4, "shape": "spiral" })
+        )
+        .is_err()
+    );
+    assert!(run(&mut session, "automation.copy", json!({ "track": 1, "param": "pan", "start": 4, "end": 4 })).is_err());
+}

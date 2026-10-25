@@ -540,9 +540,9 @@ impl App {
             self.detail_showing = showing;
         }
         self.detail_cap = picked.inner.content_height.map(|h| h as f32);
-        if let Some((track, index)) = picked.inner.clicked {
+        if let Some((track, at)) = picked.inner.clicked {
             let (add, run) = ui.input(|i| (i.modifiers.command, i.modifiers.shift));
-            self.pick_device(track, index, add, run);
+            self.pick_device(track, at, add, run);
             // A fresh pick says where the user is now: a removal's undo or redo no longer
             // moves the selection for them.
             self.pending_device_remove = None;

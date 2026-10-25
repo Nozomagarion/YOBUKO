@@ -405,6 +405,44 @@ fn search_field(ui: &mut Ui, rect: Rect, state: &mut BrowserState, key: &str, ou
 }
 
 /// Moves the selection `step` rows (from the search field's arrow keys).
+/// The arrow keys while a row of the list was pressed last: up and down move the selection (and
+/// its preview), right opens a folder or goes into an open one, left closes one or goes up to
+/// the folder it is in. Taken before the window's shortcuts see them.
+pub fn list_keys(ui: &Ui, state: &mut BrowserState) {
+    if !state.list_focused || state.search_focused {
+        return;
+    }
+    let (down, up, left, right) = ui.input_mut(|i| {
+        (
+            i.consume_key(Modifiers::NONE, Key::ArrowDown),
+            i.consume_key(Modifiers::NONE, Key::ArrowUp),
+            i.consume_key(Modifiers::NONE, Key::ArrowLeft),
+            i.consume_key(Modifiers::NONE, Key::ArrowRight),
+        )
+    });
+    if down || up {
+        move_selection(state, if down { 1 } else { -1 });
+    }
+    if !(left || right) {
+        return;
+    }
+    let rows = state.rows();
+    let Some(current) = state.selected.last().and_then(|s| rows.iter().position(|r| r.item.key == s.key)) else {
+        return;
+    };
+    let Some(row) = rows.get(current) else { return };
+    let (opens, open, depth, node) = (row.opens, row.open, row.depth, row.node().to_string());
+    if right && opens && !open {
+        state.toggle(&node);
+    } else if right && open {
+        move_selection(state, 1);
+    } else if left && open {
+        state.toggle(&node);
+    } else if left && let Some(parent) = rows.get(..current).and_then(|r| r.iter().rposition(|r| r.depth < depth)) {
+        move_selection(state, parent as isize - current as isize);
+    }
+}
+
 fn move_selection(state: &mut BrowserState, step: isize) {
     let rows = state.rows();
     if rows.is_empty() {
@@ -874,6 +912,7 @@ fn results_view(
             click_row(state, &rows, index, modifiers);
             state.handled_press = Some(row.item.key.clone());
         }
+        state.list_focused = true;
     }
     if let Some((index, modifiers)) = clicked {
         let key = rows.get(index).map(|r| r.item.key.clone());

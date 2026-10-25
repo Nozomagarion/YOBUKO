@@ -75,6 +75,36 @@ impl DeviceAt {
     pub fn top(&self) -> bool {
         self.0.len() == 1
     }
+
+    /// The device at `index` on the track itself.
+    pub fn at(index: usize) -> Self {
+        Self(vec![index])
+    }
+
+    /// From a device command's `device` parameter: an index, or a path `"2/1/0"`.
+    pub fn parse(value: &serde_json::Value) -> Option<Self> {
+        if let Some(index) = value.as_u64() {
+            return usize::try_from(index).ok().map(Self::at);
+        }
+        let path: Option<Vec<usize>> = value.as_str()?.split('/').map(|n| n.trim().parse().ok()).collect();
+        path.filter(|p| !p.is_empty()).map(Self)
+    }
+
+    /// Its index on the track, when it is on the track itself.
+    pub fn index(&self) -> Option<usize> {
+        match self.0.as_slice() {
+            [index] => Some(*index),
+            _ => None,
+        }
+    }
+
+    /// The chain or branch it is in (the path to it without its own index), and its index there.
+    pub fn split(&self) -> (&[usize], usize) {
+        match self.0.split_last() {
+            Some((last, parent)) => (parent, *last),
+            None => (&[], 0),
+        }
+    }
 }
 
 /// A device group in the detail area: its mix and gain and its branches.
@@ -304,11 +334,12 @@ pub enum Showing {
 
 /// What the detail area's frame picked: the Clip / Devices switch's value, and a device panel
 /// clicked (to select it).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Picked {
     pub showing: Option<Showing>,
-    /// A device panel was clicked: the track and the device's index, to select.
-    pub clicked: Option<(TrackId, usize)>,
+    /// A device panel was clicked: the track and where the device is, to select (one inside a
+    /// group too).
+    pub clicked: Option<(TrackId, DeviceAt)>,
     /// How tall the device chain's panels are, in points, when the area shows only the chain:
     /// the detail area is kept no taller.
     pub content_height: Option<u32>,

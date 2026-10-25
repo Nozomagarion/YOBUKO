@@ -146,7 +146,7 @@ type DecodedDrop = (PathBuf, Option<u16>, std::sync::Arc<suhina_engine::AudioDat
 struct Stash {
     view: SessionViewState,
     arrangement: Option<ArrangementViewState>,
-    selected_device: Option<(TrackId, usize)>,
+    selected_device: Option<(TrackId, detail_view::DeviceAt)>,
     revision: u64,
     timeline: Option<(u64, Folds, Timeline)>,
     waveforms: std::sync::Arc<crate::kit::waveform::Waveforms>,
@@ -392,13 +392,13 @@ pub struct App {
     clip_opened: bool,
     /// The device selected in the detail area (its panel's click): the track and the device's
     /// index, for the Delete key to take off the track. Window state.
-    selected_device: Option<(TrackId, usize)>,
+    selected_device: Option<(TrackId, detail_view::DeviceAt)>,
     /// A device panel was the last thing clicked (a click in the view clears it): Delete and the
     /// mute key act on the selected device then, even while a clip is selected too.
     device_focus: bool,
     /// The devices picked together (Ctrl or Shift clicks), on the selected device's track; the
     /// strips' lists and the chain light them, and Delete, copy and paste act on them.
-    device_picks: Vec<(TrackId, usize)>,
+    device_picks: Vec<(TrackId, detail_view::DeviceAt)>,
     /// Actions picked outside the window (the macOS menu bar), run at the start of the next frame.
     queued: Vec<String>,
     /// A device removal awaiting its undo or redo: the track, the index it left, how long the
@@ -2029,8 +2029,8 @@ impl App {
     }
 
     /// The devices picked now: the picks on the selected device's track, or that device alone.
-    fn device_picks(&self) -> Vec<(TrackId, usize)> {
-        let Some(primary) = self.selected_device else { return Vec::new() };
+    fn device_picks(&self) -> Vec<(TrackId, detail_view::DeviceAt)> {
+        let Some(primary) = self.selected_device.clone() else { return Vec::new() };
         if self.device_picks.contains(&primary) && self.device_picks.iter().all(|(t, _)| *t == primary.0) {
             self.device_picks.clone()
         } else {
@@ -2038,33 +2038,51 @@ impl App {
         }
     }
 
-    /// A device clicked in a strip's list or the chain: picked alone, added or taken out with
-    /// Ctrl (Cmd), or with Shift the run from the device picked last, on the same track.
-    fn pick_device(&mut self, track: TrackId, index: usize, add: bool, run: bool) {
+    /// The picked devices as a device command's `devices` list: indices, or paths through groups.
+    fn picked_devices(&self) -> Vec<Value> {
+        self.device_picks().iter().map(|(_, at)| at.value()).collect()
+    }
+
+    /// A device clicked in a strip's list or the chain, on the track or inside a group: picked
+    /// alone, added or taken out with Ctrl (Cmd), or with Shift the run from the device picked
+    /// last, in the same chain or branch of the same track.
+    fn pick_device(&mut self, track: TrackId, at: detail_view::DeviceAt, add: bool, run: bool) {
         let mut picks = self.device_picks();
         let same_track = picks.first().is_some_and(|(t, _)| *t == track);
+        let key = (track, at.clone());
         if add && same_track {
-            if let Some(at) = picks.iter().position(|p| *p == (track, index)) {
+            if let Some(i) = picks.iter().position(|p| *p == key) {
                 if picks.len() > 1 {
-                    picks.remove(at);
+                    picks.remove(i);
                 }
             } else {
-                picks.push((track, index));
+                picks.push(key.clone());
             }
         } else if run
             && same_track
-            && let Some((_, from)) = self.selected_device
+            && let Some((_, from)) = self.selected_device.as_ref()
+            && from.split().0 == at.split().0
         {
-            picks = (from.min(index)..=from.max(index)).map(|i| (track, i)).collect();
+            let (parent, last) = at.split();
+            let first = from.split().1;
+            picks = (first.min(last)..=first.max(last))
+                .map(|i| {
+                    let mut path = parent.to_vec();
+                    path.push(i);
+                    (track, detail_view::DeviceAt(path))
+                })
+                .collect();
         } else {
-            picks = vec![(track, index)];
+            picks = vec![key.clone()];
         }
-        self.selected_device = Some((track, index));
-        if !picks.contains(&(track, index)) {
-            self.selected_device = picks.last().copied();
+        self.selected_device = Some(key.clone());
+        if !picks.contains(&key) {
+            self.selected_device = picks.last().cloned();
         }
         self.device_picks = picks;
         self.device_focus = true;
+        // The devices, not a range of automation, are what the edit keys act on now.
+        self.arrangement.automation.range = None;
         // A fresh pick says where the user is now: a removal's undo or redo no longer moves the
         // selection for them.
         self.pending_device_remove = None;
@@ -2218,11 +2236,9 @@ impl App {
                     && let Some(track) = action.params["track"].as_u64().and_then(|t| u32::try_from(t).ok())
                     && let Some(made) = result["devices"].as_array()
                 {
-                    let copies: Vec<(TrackId, usize)> = made
-                        .iter()
-                        .filter_map(|d| Some((TrackId(track), usize::try_from(d.as_u64()?).ok()?)))
-                        .collect();
-                    if let Some(last) = copies.last().copied() {
+                    let copies: Vec<(TrackId, detail_view::DeviceAt)> =
+                        made.iter().filter_map(|d| Some((TrackId(track), detail_view::DeviceAt::parse(d)?))).collect();
+                    if let Some(last) = copies.last().cloned() {
                         self.selected_device = Some(last);
                         self.device_picks = copies;
                     }
@@ -2630,10 +2646,10 @@ impl App {
                         self.frame_trace.note(|| format!("session view, {} tracks", grid.columns.len()));
                         match self.view.device_event.take() {
                             Some(session_view::DeviceEvent::Pick { track, index, add, run }) => {
-                                self.pick_device(track, index, add, run);
+                                self.pick_device(track, detail_view::DeviceAt::at(index), add, run);
                             }
                             Some(session_view::DeviceEvent::Open { track, index, plugin }) => {
-                                self.pick_device(track, index, false, false);
+                                self.pick_device(track, detail_view::DeviceAt::at(index), false, false);
                                 if plugin {
                                     actions.push(Action::new(
                                         "device.openEditor",
@@ -2909,13 +2925,14 @@ impl App {
                 && let Some((track, count)) = before_removal
                 && let Some(index) = action.params["device"].as_u64().and_then(|i| usize::try_from(i).ok())
                 && !matches!(self.status, Status::Error(_))
-                && self.selected_device.is_some_and(|(t, _)| t == track)
+                && let Some(selected) =
+                    self.selected_device.as_ref().filter(|(t, _)| *t == track).and_then(|(_, at)| at.index())
             {
-                let followed = self.selected_device;
-                match self.selected_device {
-                    Some((_, selected)) if selected == index => self.selected_device = None,
-                    Some((t, selected)) if selected > index => self.selected_device = Some((t, selected - 1)),
-                    _ => {}
+                let followed = Some((track, selected));
+                if selected == index {
+                    self.selected_device = None;
+                } else if selected > index {
+                    self.selected_device = Some((track, detail_view::DeviceAt::at(selected - 1)));
                 }
                 // Its undo or redo then puts the chain back or takes it again: the selection
                 // follows once, from where it pointed before the removal.
@@ -2931,10 +2948,11 @@ impl App {
                 && let Some(now) = self.device_count(track)
             {
                 if now == count {
-                    self.selected_device = Some((track, selected));
+                    self.selected_device = Some((track, detail_view::DeviceAt::at(selected)));
                 } else if now.checked_add(1) == Some(count) {
-                    self.selected_device =
-                        (selected != index).then_some((track, if selected > index { selected - 1 } else { selected }));
+                    self.selected_device = (selected != index).then(|| {
+                        (track, detail_view::DeviceAt::at(if selected > index { selected - 1 } else { selected }))
+                    });
                 }
             }
             // The window gets Ctrl+V only as a paste of the system clipboard's text, which it

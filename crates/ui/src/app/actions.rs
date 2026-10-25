@@ -186,13 +186,24 @@ impl App {
                 actions.push(edit)
             }
             _ if crate::settings::keymap::piano_roll_only(action) => actions.extend(self.piano_key(action)),
+            // A range painted on an automation lane: copy, cut, paste (from its start), duplicate
+            // (right after it) and delete act on it (#916).
+            "selection.copy" | "selection.cut" | "selection.paste" | "selection.duplicate" | "selection.delete"
+                if self.shown == View::Arrangement && self.arrangement.automation.range.is_some() =>
+            {
+                let edit = action.trim_start_matches("selection.");
+                if edit == "paste" && !self.session().is_some_and(Session::copied_automation) {
+                    self.status = Status::Hint("Copy a range of automation first".into());
+                    return;
+                }
+                actions.extend(self.arrangement.automation.range_actions(edit));
+            }
             // In the Session view copy and paste act on the selected clip slot.
             // Picked devices (a click on a strip's device or a panel of the chain): copy, cut
             // and paste act on them, before any clip.
             "selection.copy" | "selection.cut" if self.device_focus && self.selected_device.is_some() => {
-                let picks = self.device_picks();
-                let Some((track, _)) = picks.first().copied() else { return };
-                let devices: Vec<usize> = picks.iter().map(|(_, i)| *i).collect();
+                let Some((track, _)) = self.device_picks().first().cloned() else { return };
+                let devices = self.picked_devices();
                 actions.push(Action::new("device.copy", json!({ "track": track.0, "devices": devices })));
                 if action == "selection.cut" {
                     self.selected_device = None;
@@ -206,15 +217,16 @@ impl App {
                     && self.session().is_some_and(|s| s.copied_devices() > 0) =>
             {
                 let picks = self.device_picks();
-                let Some((track, _)) = picks.first().copied() else { return };
-                let after = picks.iter().map(|(_, i)| *i).max().unwrap_or(0) + 1;
+                let Some((track, _)) = picks.first().cloned() else { return };
+                // After the last picked device on the track itself (one inside a group: after
+                // its group).
+                let after = picks.iter().filter_map(|(_, at)| at.0.first().copied()).max().unwrap_or(0) + 1;
                 actions.push(Action::new("device.paste", json!({ "track": track.0, "position": after })));
             }
             // Ctrl+D copies the picked devices right after the last of them (#685).
             "selection.duplicate" if self.device_focus && self.selected_device.is_some() => {
-                let picks = self.device_picks();
-                let Some((track, _)) = picks.first().copied() else { return };
-                let devices: Vec<usize> = picks.iter().map(|(_, i)| *i).collect();
+                let Some((track, _)) = self.device_picks().first().cloned() else { return };
+                let devices = self.picked_devices();
                 actions.push(Action::new("device.duplicateMany", json!({ "track": track.0, "devices": devices })));
             }
             // Track headers clicked last: the edit keys act on the selected tracks (#919).
@@ -345,24 +357,25 @@ impl App {
                 // clip, while the detail shows the chain.
                 if action == "selection.delete"
                     && (self.detail_shows_devices() || self.device_focus)
-                    && let Some((track, index)) = self.selected_device
+                    && let Some((track, at)) = self.selected_device.clone()
                     && self.session().is_some_and(|s| {
                         let p = s.project();
                         p.tracks
                             .iter()
                             .find(|t| t.id == track)
                             .and_then(|t| t.channel)
-                            .is_some_and(|c| p.channels.iter().any(|ch| ch.id == c && ch.devices.get(index).is_some()))
+                            .and_then(|c| p.channels.iter().find(|ch| ch.id == c))
+                            .is_some_and(|ch| suhina_engine::model::device_at(&ch.devices, &at.0).is_some())
                     })
                 {
                     let picks = self.device_picks();
+                    let devices = self.picked_devices();
                     self.selected_device = None;
                     self.device_picks.clear();
                     if picks.len() > 1 {
-                        let devices: Vec<usize> = picks.iter().map(|(_, i)| *i).collect();
                         actions.push(Action::new("device.removeMany", json!({ "track": track.0, "devices": devices })));
                     } else {
-                        actions.push(Action::new("device.remove", json!({ "track": track.0, "device": index })));
+                        actions.push(Action::new("device.remove", json!({ "track": track.0, "device": at.value() })));
                     }
                     return;
                 }
@@ -518,17 +531,17 @@ impl App {
                 // A device panel clicked last: the key turns that device off or on again, as its
                 // header's square does.
                 if (self.detail_shows_devices() || self.device_focus)
-                    && let Some((track, index)) = self.selected_device
+                    && let Some((track, at)) = self.selected_device.clone()
                     && let Some(enabled) = self.session().and_then(|s| {
                         let p = s.project();
                         let channel = p.track(track).and_then(|t| t.channel)?;
-                        p.channel(channel)?.devices.get(index).map(|d| d.enabled)
+                        suhina_engine::model::device_at(&p.channel(channel)?.devices, &at.0).map(|d| d.enabled)
                     })
                 {
                     // Every picked device follows the one clicked last (#948).
                     let picks = self.device_picks();
                     if picks.len() > 1 && picks.iter().all(|(t, _)| *t == track) {
-                        let devices: Vec<usize> = picks.iter().map(|(_, i)| *i).collect();
+                        let devices = self.picked_devices();
                         actions.push(Action::new(
                             "device.setEnabledMany",
                             json!({ "track": track.0, "devices": devices, "enabled": !enabled }),
@@ -536,7 +549,7 @@ impl App {
                     } else {
                         actions.push(Action::new(
                             "device.setEnabled",
-                            json!({ "track": track.0, "device": index, "enabled": !enabled }),
+                            json!({ "track": track.0, "device": at.value(), "enabled": !enabled }),
                         ));
                     }
                     return;
@@ -561,6 +574,44 @@ impl App {
                 // playing turns the whole selection off, else all of them back on.
                 let enabled = self.any_selected_clip_plays();
                 actions.push(Action::new("clip.setEnabled", json!({ "clips": clips, "enabled": !enabled })));
+            }
+            // A device clicked last: Ctrl+A picks every device of its chain, or of the group's
+            // branch it is in.
+            "selection.selectAll" if self.device_focus && self.selected_device.is_some() => {
+                let Some((track, at)) = self.selected_device.clone() else { return };
+                let parent = at.split().0.to_vec();
+                let siblings: Vec<usize> = self
+                    .session()
+                    .and_then(|s| {
+                        let p = s.project();
+                        let devices = &p.channel(p.track(track)?.channel?)?.devices;
+                        let list = match parent.split_last() {
+                            None => devices.as_slice(),
+                            Some((branch, group)) => {
+                                &suhina_engine::model::device_at(devices, group)?
+                                    .as_group()?
+                                    .branches
+                                    .get(*branch)?
+                                    .devices
+                            }
+                        };
+                        Some(list.iter().enumerate().filter(|(_, d)| !d.clip_host).map(|(i, _)| i).collect())
+                    })
+                    .unwrap_or_default();
+                if siblings.is_empty() {
+                    return;
+                }
+                self.device_picks = siblings
+                    .into_iter()
+                    .map(|i| {
+                        let mut path = parent.clone();
+                        path.push(i);
+                        (track, detail_view::DeviceAt(path))
+                    })
+                    .collect();
+                if !self.device_picks.contains(&(track, at)) {
+                    self.selected_device = self.device_picks.last().cloned();
+                }
             }
             "selection.selectAll" => {
                 let clips: Vec<(TrackId, ClipId)> = self
@@ -613,8 +664,13 @@ impl App {
             // each other on one track, in the place of the first.
             "selection.group" if self.device_focus && self.selected_device.is_some() => {
                 let picks = self.device_picks();
-                let Some((track, _)) = picks.first().copied() else { return };
-                let mut indices: Vec<usize> = picks.iter().map(|(_, i)| *i).collect();
+                let Some((track, primary)) = picks.first().cloned() else { return };
+                let parent = primary.split().0.to_vec();
+                if picks.iter().any(|(_, at)| at.split().0 != parent.as_slice()) {
+                    self.status = Status::Hint("Group devices of one chain or branch".into());
+                    return;
+                }
+                let mut indices: Vec<usize> = picks.iter().map(|(_, at)| at.split().1).collect();
                 indices.sort_unstable();
                 indices.dedup();
                 let (Some(&first), Some(&last)) = (indices.first(), indices.last()) else { return };
@@ -622,18 +678,21 @@ impl App {
                     self.status = Status::Hint("Group devices that sit next to each other".into());
                     return;
                 }
+                let mut path = parent;
+                path.push(first);
+                let at = detail_view::DeviceAt(path);
                 actions.push(Action::new(
                     "device.group",
-                    json!({ "track": track.0, "device": first, "count": indices.len() }),
+                    json!({ "track": track.0, "device": at.value(), "count": indices.len() }),
                 ));
-                self.selected_device = Some((track, first));
-                self.device_picks = vec![(track, first)];
+                self.selected_device = Some((track, at.clone()));
+                self.device_picks = vec![(track, at)];
             }
             "selection.ungroup" => {
                 if self.device_focus
-                    && let Some((track, index)) = self.selected_device
+                    && let Some((track, at)) = self.selected_device.clone()
                 {
-                    actions.push(Action::new("device.ungroup", json!({ "track": track.0, "device": index })));
+                    actions.push(Action::new("device.ungroup", json!({ "track": track.0, "device": at.value() })));
                 } else {
                     self.status = Status::Hint("Click a device group first".into());
                 }
@@ -727,12 +786,12 @@ impl App {
             return action;
         }
         let track = action.params["track"].as_u64().and_then(|t| u32::try_from(t).ok()).map(TrackId);
-        let index = action.params["device"].as_u64().and_then(|i| usize::try_from(i).ok());
-        let (Some(track), Some(index)) = (track, index) else { return action };
-        if !self.device_picks.contains(&(track, index)) || self.device_picks.iter().any(|(t, _)| *t != track) {
+        let at = detail_view::DeviceAt::parse(&action.params["device"]);
+        let (Some(track), Some(at)) = (track, at) else { return action };
+        if !self.device_picks.contains(&(track, at)) || self.device_picks.iter().any(|(t, _)| *t != track) {
             return action;
         }
-        let devices: Vec<usize> = self.device_picks.iter().map(|(_, i)| *i).collect();
+        let devices: Vec<Value> = self.device_picks.iter().map(|(_, at)| at.value()).collect();
         self.selected_device = None;
         self.device_picks.clear();
         Action::new("device.removeMany", json!({ "track": track.0, "devices": devices }))
@@ -928,12 +987,12 @@ impl App {
         match action.id {
             "device.setEnabled" => {
                 let track = TrackId(id(&action.params["track"])?);
-                let device = action.params["device"].as_u64().and_then(|d| usize::try_from(d).ok())?;
+                let device = detail_view::DeviceAt::parse(&action.params["device"])?;
                 let picks = self.device_picks();
                 if picks.len() < 2 || !picks.contains(&(track, device)) || picks.iter().any(|(t, _)| *t != track) {
                     return None;
                 }
-                let devices: Vec<usize> = picks.iter().map(|(_, i)| *i).collect();
+                let devices = self.picked_devices();
                 let enabled = action.params["enabled"].clone();
                 Some(Action::new(
                     "device.setEnabledMany",

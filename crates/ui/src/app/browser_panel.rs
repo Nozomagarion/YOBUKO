@@ -92,6 +92,10 @@ impl App {
                 browser_view::show(ui, panel, &mut self.browser, cx)
             })
             .inner;
+        // A press anywhere outside the browser gives the arrow keys back to the window.
+        if ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !panel.contains(p))) {
+            self.browser.list_focused = false;
+        }
         if map_settings != self.settings {
             self.settings = map_settings;
             self.settings_changed = true;

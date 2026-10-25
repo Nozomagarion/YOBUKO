@@ -98,6 +98,10 @@ impl App {
         }
         // With the computer keyboard on, its keys play notes and run no shortcut (#944).
         self.typing_keys(ui);
+        // A row of the browser pressed last: the arrows move through its list.
+        if self.browser_part > 0.001 {
+            crate::browser::browser_view::list_keys(ui, &mut self.browser);
+        }
         // The piano roll's own keys only while it has the keyboard; the selected slot's keys
         // only while it does not, as the two share keys.
         let notes = self.piano_roll.focused;

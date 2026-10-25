@@ -5,6 +5,9 @@
 
 use super::*;
 
+const RANGE_START: Param = param("start", ParamType::Number, "the range's first arrangement beat, from 0");
+const RANGE_END: Param = param("end", ParamType::Number, "the range's end, an arrangement beat after start");
+
 pub(super) static COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         id: "automation.addPoint",
@@ -117,6 +120,67 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         ],
         kind: CommandKind::Edit,
         run: crate::automation::set_enabled,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "automation.copy",
+        label: "Copy a time range of a parameter's automation, its values at the range's edges with it, for automation.paste",
+        params: &[DEVICE_TRACK, AUTOMATED_DEVICE, AUTOMATED, RANGE_START, RANGE_END],
+        kind: CommandKind::Read,
+        run: crate::automation_range::copy,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "automation.paste",
+        label: "Paste the copied automation range onto a parameter's lane from a beat, over what is there; on another parameter each value sits where it sat on its own lane (the same height); the envelope outside the range stays",
+        params: &[
+            DEVICE_TRACK,
+            AUTOMATED_DEVICE,
+            AUTOMATED,
+            param("start", ParamType::Number, "arrangement beat the pasted range starts at, from 0"),
+        ],
+        kind: CommandKind::Edit,
+        run: crate::automation_range::paste,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "automation.duplicate",
+        label: "Copy a time range of a parameter's automation right after itself, over what is there; answers the copy's range; the clipboard stays as it was",
+        params: &[DEVICE_TRACK, AUTOMATED_DEVICE, AUTOMATED, RANGE_START, RANGE_END],
+        kind: CommandKind::Edit,
+        run: crate::automation_range::duplicate,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "automation.deleteRange",
+        label: "Delete the points of a parameter's automation inside a time range; the values at the range's edges stay, so the envelope outside it does not change",
+        params: &[DEVICE_TRACK, AUTOMATED_DEVICE, AUTOMATED, RANGE_START, RANGE_END],
+        kind: CommandKind::Edit,
+        run: crate::automation_range::delete_range,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "automation.insertShape",
+        label: "Fill a time range of a parameter's automation with a shape over the parameter's whole range: sine, triangle, saw_up, saw_down, square (these repeat), ramp_up, ramp_down, curve_up, curve_down or swell; the envelope outside the range stays",
+        params: &[
+            DEVICE_TRACK,
+            AUTOMATED_DEVICE,
+            AUTOMATED,
+            RANGE_START,
+            RANGE_END,
+            param(
+                "shape",
+                ParamType::Text,
+                "sine, triangle, saw_up, saw_down, square, ramp_up, ramp_down, curve_up, curve_down or swell",
+            ),
+            optional(
+                "cycles",
+                ParamType::Integer,
+                "how many times a repeating shape plays in the range, 1 to 512 (default 1)",
+            ),
+        ],
+        kind: CommandKind::Edit,
+        run: crate::automation_range::insert_shape,
         policy: Policy::DEFAULT,
     },
     CommandSpec {

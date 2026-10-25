@@ -9,6 +9,7 @@ mod ara;
 pub mod audio;
 mod audio_timing;
 mod automation;
+mod automation_range;
 pub mod backup;
 mod blank;
 mod clip_ara;
@@ -62,6 +63,7 @@ use suhina_model::Project;
 
 pub use ara::ClipNotes;
 pub use audio::{AudioSystem, InputChoice, LiveOutput, OutputChoice, OutputInfo, audio_commands};
+pub use automation_range::{SHAPES as AUTOMATION_SHAPES, shape_points as automation_shape};
 pub use blank::{blank_project, blank_project_with};
 pub use commands::{
     Agents, CommandKind, CommandSpec, Param, ParamType, PathKind, Policy, Run, commands, parse_quantization,
@@ -241,6 +243,11 @@ impl Session {
     /// How many devices `device.paste` would add.
     pub fn copied_devices(&self) -> usize {
         self.clipboards.devices.len()
+    }
+
+    /// Whether a range of automation is copied for `automation.paste`.
+    pub fn copied_automation(&self) -> bool {
+        self.clipboards.automation.is_some()
     }
 
     /// How many tracks `track.paste` would add (a group's tracks counted).

@@ -486,7 +486,8 @@ horizontal drag sets the fade with its end on [the grid](#the-grid) (Alt held: f
 the clip's own edge and the other fade snap like grid lines, so a clip that does not start or
 end on the grid can be faded over its whole length; the clip shows the fade while it is dragged, and letting go runs `clip.setFades`. A
 double-click on a handle removes that fade. A right-click on a handle opens a menu of the shapes,
-with the fade's shape checked; choosing one runs `clip.setFades`. A fade at least 21 px wide has a
+with the fade's shape checked; choosing one runs `clip.setFades`. Under them **Reset fade** takes
+the fade away and sets its shape and curve back to the defaults (linear, 0), one `clip.setFades`. A fade at least 21 px wide has a
 second, round **curve handle** on its line half-way through the fade. Dragging it up or down
 moves it with the pointer: the curve becomes the one whose line passes through the handle (up
 for +, down for −), until it reaches −1 or +1, the line following live, and letting go runs

@@ -832,6 +832,33 @@ fn loop_fade_in_curve(harness: &Harness<'static, App>) -> Option<suhina_engine::
     lane.clips.first().map(|clip| clip.fade_in_curve)
 }
 
+/// A fade's menu resets it: no fade, its shape and curve the defaults (#916).
+#[test]
+fn a_fades_menu_resets_it() {
+    use suhina_engine::model::{FadeCurve, FadeShape};
+    let mut harness = window_with_step(audio_app(), 1.0 / 60.0);
+    harness.get_by_label("Arrangement view").click();
+    harness.run();
+    harness.get_by_label("Clip Loop on Loop at bar 1").click();
+    harness.run();
+    drag_sideways(&mut harness, "Fade-in of Loop on Loop", 24.0);
+    harness.get_by_label("Fade-in of Loop on Loop").click_secondary();
+    harness.run();
+    harness.get_by_label("Equal power").click();
+    harness.run();
+    assert_eq!(loop_fade_in_curve(&harness), Some(FadeCurve { shape: FadeShape::EqualPower, curve: 0.0 }));
+    harness.get_by_label("Fade-in of Loop on Loop").click_secondary();
+    harness.run();
+    harness.get_by_label("Reset fade").click();
+    harness.run();
+    assert_eq!(loop_fade_in_curve(&harness), Some(FadeCurve::default()));
+    let fade_in = harness
+        .state()
+        .session()
+        .and_then(|s| s.project().arrangement.lanes.iter().flat_map(|l| &l.clips).next().map(|c| c.fade_in));
+    assert_eq!(fade_in, Some(0.0));
+}
+
 /// A right-click on a fade handle picks the shape; the curve handle on the fade's line bends it
 /// with a vertical drag and a double-click straightens it (#197).
 #[test]

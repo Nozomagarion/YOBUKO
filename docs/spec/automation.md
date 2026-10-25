@@ -114,10 +114,21 @@ mixer) and `param`. Values are in the unit of the parameter's set command.
 | `automation.deletePoints {track, device?, param, points}` | removes several points in one undo step; the lane goes with its last point |
 | `automation.clear {track, device?, param?}` | removes a lane, or every lane of the mixer or the device |
 | `automation.setEnabled {track, device?, param, enabled}` | turns a lane off or on again |
+| `automation.copy {track, device?, param, start, end}` | copies the envelope of a time range, with its values at the range's edges, for `automation.paste`; each value is kept as where it sits on its lane (0 at the bottom, 1 at the top), as the lanes place it |
+| `automation.paste {track, device?, param, start}` | pastes the copied range from `start` over what is there, making the lane if there is none; on another parameter each value goes to the same height of that lane (the bottom of a pan lane is full left, of a mute lane off); answers the range pasted |
+| `automation.duplicate {track, device?, param, start, end}` | copies a range right after itself, over what is there; answers the copy's range, so the next duplicate goes on from it; the clipboard stays as it was |
+| `automation.deleteRange {track, device?, param, start, end}` | removes the points inside a range |
+| `automation.insertShape {track, device?, param, start, end, shape, cycles?}` | fills a range with a shape over the parameter's whole travel: `sine`, `triangle`, `saw_up`, `saw_down` and `square` repeat `cycles` times (1 to 512, default 1); `ramp_up`, `ramp_down`, `curve_up`, `curve_down` and `swell` play once |
 | `automation.list {track}` | the track's lanes: `mixer` and `devices` (index, name, lanes), each with `param`, `enabled` and `points` (`beat`, `value`, `curve`) |
 | `device.setAutomation {track, device, param, points}` | replaces a device lane with straight segments (`points` a flat list of beat and value; `[]` removes it), for built-in devices, `.sd` devices and plug-ins |
 
-Refused, changing nothing: an unknown track, device or parameter; a beat below 0 or past the
+An edit of a range replaces the points inside it and keeps the envelope outside it: points at the
+range's edges hold the values the lane had there (left out where the new points already start or
+end with them).
+
+Refused, changing nothing: an unknown track, device or parameter; a range whose end is not after
+its start; a copy or duplicate of a lane with no points, a paste with nothing copied, an unknown
+shape; a beat below 0 or past the
 arrangement's limit; a value out of range for the mixer (a volume above +6 dB, a pan outside -1 to
 1, a mute other than 0 or 1); a curve outside -1 to 1; a point index the lane does not have; a lane
 of more than 65,536 points; a `movePoint` with nothing to change.
@@ -182,7 +193,10 @@ the value set on the mixer or the device. Editing (every edit is one undo step):
 | Click on or near the line (within 6 points), or a lane's faint line | `automation.addPoint` on the envelope: its value at that beat, so the envelope keeps its shape (a level or straight segment stays exactly so). The segment before the new point keeps its curve; the one after gets the curve that passes through the old segment's middle |
 | Drag a point | `automation.movePoint`, its beat on the grid (Alt, Option on macOS: free) and its value following the pointer; points dragged past others keep beat order |
 | Click a point | selects it; Shift or Ctrl adds it to the selection or takes it out. Selecting a clip ends a selection of points |
-| Drag on the lane away from the line | draws a box that selects the points in it |
+| Drag on the lane away from the line | paints a time range over the lane's whole height, its ends on the grid (Alt, Option on macOS: free), and selects the points in it. A click on the lane or a point, a clip or a track header ends it |
+| Ctrl+C, Ctrl+X, Ctrl+D, Delete with a range painted | `automation.copy`; `automation.copy` and `automation.deleteRange`; `automation.duplicate`, the range moving onto the copy so the next Ctrl+D goes on; `automation.deleteRange`. They act on the range before anything else that is selected |
+| Ctrl+V with a range painted | `automation.paste` from the range's start, on that lane: paint a range where the copy should go, then paste |
+| Right-click the lane: **Insert shape** | ten small pictures of shapes; a click runs `automation.insertShape` in the painted range when the click was inside it, otherwise in the bar under the pointer. A repeating shape plays once a beat |
 | Drag a selected point | `automation.movePoints`: the whole selection moves by the same beats (none before beat 0) and the same change of value |
 | Delete (or Backspace) | `automation.deletePoints` for the selection, before any selected clip |
 | Double-click a point, or its menu's Delete point | `automation.deletePoint` (the menu deletes the whole selection when the point is part of one) |

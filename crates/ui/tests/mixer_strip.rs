@@ -594,3 +594,39 @@ fn a_clicked_volume_takes_a_typed_number_and_the_arrow_keys() {
     harness.run();
     assert_eq!(volume(&harness), before, "Ctrl+Up does not step the volume");
 }
+
+/// A device inside a group is picked with a click on its panel and deleted from its branch;
+/// Ctrl+A picks every device of the chain, so Delete takes them all in one step (#916).
+#[test]
+fn a_device_inside_a_group_is_picked_and_ctrl_a_picks_the_whole_chain() {
+    let mut harness = window_at(DEVICES_AT + 40.0);
+    harness.get_by_label("Show Utility on Drums").click();
+    harness.run();
+    harness.get_by_label("Show Limiter on Drums").click_modifiers(Modifiers::COMMAND);
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::G);
+    harness.run();
+    harness.get_by_label("Show Group on Drums").click();
+    harness.run();
+    harness.get_by_label("Device Limiter").click();
+    harness.run();
+    harness.key_press(Key::Delete);
+    harness.run();
+    let group = drums(&harness).iter().find_map(Device::as_group).cloned().expect("a device group");
+    let inside: Vec<&str> = group.branches[0].devices.iter().map(|d| d.name.as_str()).collect();
+    assert_eq!(inside, ["Utility"], "the Limiter inside the group went");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    let grouped = drums(&harness);
+    // Ctrl+A on the chain, then Delete: every device goes in one step, and one undo brings them.
+    harness.get_by_label("Show Group on Drums").click();
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    harness.run();
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert!(drums(&harness).is_empty(), "{:?}", drums(&harness).iter().map(|d| d.name.clone()).collect::<Vec<_>>());
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_eq!(drums(&harness), grouped);
+}

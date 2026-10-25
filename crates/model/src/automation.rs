@@ -17,6 +17,39 @@ pub const MUTE: &str = "mute";
 pub const MAX_VOLUME: f64 = 1.995_262_314_968_879_6;
 /// Most points one lane holds.
 pub const MAX_POINTS: usize = 65_536;
+/// The quietest a volume lane shows above its bottom, in decibels: below it is silence.
+pub const VOLUME_LANE_FLOOR: f64 = -70.0;
+
+/// Where a volume lane places a linear `gain`, 0 at the bottom to 1 at the top: as the mixer's
+/// volume field does, 0 dB at 85 %, silence at 0.
+pub fn volume_lane_position(gain: f64) -> f64 {
+    let db = if gain > 0.0 { 20.0 * gain.log10() } else { f64::NEG_INFINITY };
+    if !db.is_finite() || db <= VOLUME_LANE_FLOOR {
+        0.0
+    } else if db <= 0.0 {
+        let x = (db - VOLUME_LANE_FLOOR) / -VOLUME_LANE_FLOOR;
+        0.85 * x * x
+    } else {
+        0.85 + 0.15 * (db / 6.0).min(1.0)
+    }
+}
+
+/// The volume in decibels at `position` (0 … 1) on a volume lane: the inverse of
+/// [`volume_lane_position`]; `None` for silence at the bottom.
+pub fn volume_lane_db(position: f64) -> Option<f64> {
+    if position.is_nan() || position <= 0.0 {
+        None
+    } else if position <= 0.85 {
+        Some(VOLUME_LANE_FLOOR * (1.0 - (position / 0.85).sqrt()))
+    } else {
+        Some(((position - 0.85) / 0.15 * 6.0).min(6.0))
+    }
+}
+
+/// The linear gain at `position` on a volume lane (0 for silence).
+pub fn volume_lane_gain(position: f64) -> f64 {
+    volume_lane_db(position).map_or(0.0, |db| 10f64.powf(db / 20.0).min(MAX_VOLUME))
+}
 
 /// How far a segment of shape `curve` (-1 to 1) has moved at `t` (0 to 1) of its length: `t`
 /// itself for 0, `t` to the power of 4^-curve otherwise, so 1 moves fast first and settles,

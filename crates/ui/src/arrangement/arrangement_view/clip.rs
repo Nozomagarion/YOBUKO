@@ -746,6 +746,21 @@ pub(super) fn clip_box<'a>(
                         ui.close();
                     }
                 }
+                ui.separator();
+                // Back to no fade, its shape and curve the defaults.
+                if ui.button("Reset fade").clicked() {
+                    let (length, shape, bend) = if edge == FadeEdge::In {
+                        ("in", "inShape", "inCurve")
+                    } else {
+                        ("out", "outShape", "outCurve")
+                    };
+                    let mut params = json!({ "clip": clip.id.0 });
+                    params[length] = json!(0.0);
+                    params[shape] = json!(FadeShape::default().name());
+                    params[bend] = json!(0.0);
+                    actions.push(Action::new("clip.setFades", params));
+                    ui.close();
+                }
             });
             handles.push((edge, widgets::hover(ui, &response)));
 

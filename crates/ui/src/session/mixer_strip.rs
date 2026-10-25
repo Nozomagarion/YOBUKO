@@ -478,7 +478,7 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
             state.device_event = Some(crate::session::session_view::DeviceEvent::Pick { track, index, add, run });
         }
         // Lit as the detail area's chain lights it: the devices picked in either.
-        let lit = state.device_picks.contains(&(track, index));
+        let lit = state.device_picks.iter().any(|(t, at)| *t == track && at.index() == Some(index));
         let fill = if lit {
             theme::control_active()
         } else {

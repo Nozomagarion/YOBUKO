@@ -21,4 +21,6 @@ pub(crate) struct Clipboards {
     pub(crate) notes: Option<NoteClipboard>,
     /// Whole tracks copied for `track.paste` (#919).
     pub(crate) whole_tracks: crate::track_copy::TrackClipboard,
+    /// A range of an automation lane copied for `automation.paste`.
+    pub(crate) automation: Option<crate::automation_range::AutomationClip>,
 }

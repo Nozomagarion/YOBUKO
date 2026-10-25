@@ -272,6 +272,9 @@ pub struct BrowserState {
     pub select_search: bool,
     /// The search field had the keyboard last frame.
     pub search_focused: bool,
+    /// A row of the list was pressed last, not anything outside the browser: the arrow keys move
+    /// through the list.
+    pub list_focused: bool,
     /// Escape in the search field asked for the preview to stop.
     pub stop_preview: bool,
     /// The sidebar's field for a folder to add, while it shows.
@@ -324,6 +327,7 @@ impl Default for BrowserState {
             focus_search: false,
             select_search: false,
             search_focused: false,
+            list_focused: false,
             stop_preview: false,
             new_folder: None,
             drag: None,

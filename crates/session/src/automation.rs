@@ -20,12 +20,12 @@ use crate::{CommandError, Session};
 const SILENCE_DB: f64 = -150.0;
 
 /// The parameter a command names, checked.
-struct Target {
+pub(crate) struct Target {
     track: TrackId,
     /// The device's index on the track; `None` for the track's mixer.
     device: Option<usize>,
     /// The parameter's id as lanes store it.
-    param: String,
+    pub(crate) param: String,
     kind: Kind,
 }
 
@@ -43,7 +43,7 @@ enum Kind {
     Plugin(u32),
 }
 
-fn target(session: &Session, params: &Value) -> Result<Target, CommandError> {
+pub(crate) fn target(session: &Session, params: &Value) -> Result<Target, CommandError> {
     let param = params.get("param").and_then(Value::as_str).ok_or("param must be a parameter id")?;
     let track = track_or_main_id(&session.project, params)?;
     let channel = channel_of(session, track)?;
@@ -121,6 +121,64 @@ impl Target {
         }
     }
 
+    /// Whether the lane holds each value up to the next point (on/off and choices), as the
+    /// lanes draw it.
+    pub(crate) fn stepped(&self) -> bool {
+        match &self.kind {
+            Kind::Plain => self.param == MUTE,
+            Kind::Builtin(spec) => {
+                matches!(spec.kind, suhina_device_api::ParamKind::Toggle | suhina_device_api::ParamKind::Choice(_))
+            }
+            Kind::Sd(parameter) => parameter.control.is_stepped(),
+            Kind::Volume | Kind::Plugin(_) => false,
+        }
+    }
+
+    /// A plug-in parameter's range, when its host has said it.
+    fn plugin_range(&self, session: &Session, id: u32) -> Option<(f64, f64)> {
+        let key = crate::plugin_key_at_path(&session.project, self.track, &[self.device?])?;
+        session.plugins.param_range(key, id).flatten().filter(|(min, max)| max > min)
+    }
+
+    /// Where a lane's `value` sits on the lane, 0 at the bottom to 1 at the top, as the lanes
+    /// draw it.
+    pub(crate) fn position(&self, session: &Session, value: f64) -> f64 {
+        let position = match &self.kind {
+            Kind::Volume => suhina_model::automation::volume_lane_position(value),
+            Kind::Plain => match mixer_range(&self.param) {
+                Some((min, max)) if max > min => (value - min) / (max - min),
+                _ => value,
+            },
+            Kind::Builtin(spec) => spec.to_normalized(value),
+            Kind::Sd(parameter) => parameter.lane_position(value),
+            Kind::Plugin(id) => match self.plugin_range(session, *id) {
+                Some((min, max)) => (value - min) / (max - min),
+                None => value,
+            },
+        };
+        if position.is_finite() { position.clamp(0.0, 1.0) } else { 0.0 }
+    }
+
+    /// The lane's value at `position` (0 … 1): the inverse of [`Target::position`], as the
+    /// parameter takes it.
+    pub(crate) fn value_at_position(&self, session: &Session, position: f64) -> f64 {
+        let position = if position.is_finite() { position.clamp(0.0, 1.0) } else { 0.0 };
+        match &self.kind {
+            Kind::Volume => suhina_model::automation::volume_lane_gain(position),
+            Kind::Plain => {
+                let (min, max) = mixer_range(&self.param).unwrap_or((0.0, 1.0));
+                let value = min + position * (max - min);
+                if self.param == MUTE { value.round() } else { value }
+            }
+            Kind::Builtin(spec) => spec.clamp(spec.from_normalized(position)),
+            Kind::Sd(parameter) => parameter.lane_value(position),
+            Kind::Plugin(id) => match self.plugin_range(session, *id) {
+                Some((min, max)) => min + position * (max - min),
+                None => position,
+            },
+        }
+    }
+
     /// A lane's value as commands show it.
     fn show(&self, value: f64) -> Value {
         match &self.kind {
@@ -130,7 +188,7 @@ impl Target {
     }
 
     /// The lanes the parameter's lane is among.
-    fn lanes<'a>(&self, session: &'a mut Session) -> Result<&'a mut Vec<AutomationLane>, CommandError> {
+    pub(crate) fn lanes<'a>(&self, session: &'a mut Session) -> Result<&'a mut Vec<AutomationLane>, CommandError> {
         let channel = device_channel(session, &json!({ "track": self.track.0 }))?;
         match self.device {
             None => Ok(&mut channel.automation),
@@ -138,7 +196,7 @@ impl Target {
         }
     }
 
-    fn matches(&self, lane: &AutomationLane) -> bool {
+    pub(crate) fn matches(&self, lane: &AutomationLane) -> bool {
         match &self.kind {
             Kind::Plugin(id) => param_id(&lane.param) == Some(*id),
             _ => lane.param == self.param,

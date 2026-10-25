@@ -922,3 +922,57 @@ fn a_lanes_bottom_edge_drags_its_height_and_a_double_click_resets_it() {
     harness.run();
     assert!((lane(&harness).height() - before).abs() < 0.5, "{}", lane(&harness).height());
 }
+
+/// A drag on a lane paints a time range: Ctrl+C copies it, Ctrl+D copies it right after itself,
+/// and Ctrl+V pastes it at the start of a range painted elsewhere (#916).
+#[test]
+fn a_painted_range_copies_duplicates_and_pastes() {
+    let mut harness = with_lanes();
+    for x in [100.0, 200.0] {
+        add_point(&mut harness, x);
+    }
+    let beats = |h: &Harness<'static, App>| -> Vec<f64> { volume(h).0.iter().map(|p| p.beat).collect() };
+    assert_eq!(beats(&harness), [12.0, 24.0]);
+    // Bars 3 to 8 (beats 8 to 32), on the grid.
+    let rect = lane(&harness);
+    drag(&mut harness, Pos2::new(rect.left() + 60.0, rect.center().y), vec2(180.0, 0.0));
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::C);
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::D);
+    harness.run();
+    let after = beats(&harness);
+    assert!(after.contains(&36.0) && after.contains(&48.0), "the copy is right after the range: {after:?}");
+    // A range painted at beat 48: Ctrl+V pastes the copied range from there.
+    drag(&mut harness, Pos2::new(rect.left() + 392.0, rect.center().y), vec2(32.0, 0.0));
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::V);
+    harness.run();
+    let after = beats(&harness);
+    assert!(after.contains(&52.0) && after.contains(&64.0), "pasted from beat 48: {after:?}");
+    // Delete clears a range (beats 48 to 72), keeping the values at its edges.
+    let pasted = beats(&harness);
+    drag(&mut harness, Pos2::new(rect.left() + 392.0, rect.center().y), vec2(192.0, 0.0));
+    harness.key_press(Key::Delete);
+    harness.run();
+    let deleted = beats(&harness);
+    assert!(!deleted.iter().any(|b| *b > 48.0 && *b < 72.0), "{deleted:?}");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_eq!(beats(&harness), pasted);
+}
+
+/// The lane's menu inserts a shape into the bar under the pointer (#916).
+#[test]
+fn the_lane_menu_inserts_a_shape() {
+    let mut harness = with_lanes();
+    let rect = lane(&harness);
+    harness.hover_at(rect.center());
+    harness.run();
+    harness.get_by_label("Volume automation on Drums").click_secondary();
+    harness.run();
+    harness.get_by_label("Insert sine").click();
+    harness.run();
+    let points = volume(&harness).0;
+    assert!(points.len() > 10, "{}", points.len());
+    let (first, last) = (points.first().map_or(0.0, |p| p.beat), points.last().map_or(0.0, |p| p.beat));
+    assert!(first % 4.0 == 0.0 && (last - first - 4.0).abs() < 1e-9, "one bar: {first} to {last}");
+}
