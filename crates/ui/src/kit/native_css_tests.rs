@@ -1326,3 +1326,25 @@ fn a_family_class_reaches_every_part_of_its_kind() {
     drop(_send);
     skin::configure(&skin::Skin::default());
 }
+
+#[test]
+fn a_level_bar_s_fill_can_take_the_track_s_colour() {
+    let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, 20.0));
+    let css = ".value-fill { background-color: var(--track-colour); }";
+    let shapes = painted(css, |ui| {
+        let _header = super::super::style_class::enter_named("track-header", "track-1");
+        set_variable("--track-colour", hex(egui::Color32::from_rgb(0xE8, 0x91, 0x3A)));
+        let _value = super::super::style_class::enter_named("value", "arrangement-volume");
+        crate::kit::mixer_controls::level_bar(
+            ui.painter(),
+            field,
+            "volume",
+            (0.0, 0.7),
+            0.0,
+            "0.0",
+            egui::Align2::RIGHT_CENTER,
+        );
+    });
+    let orange = egui::Color32::from_rgb(0xE8, 0x91, 0x3A);
+    assert!(rects(&shapes).iter().any(|r| r.fill == orange), "the lit part is the track's colour");
+}
