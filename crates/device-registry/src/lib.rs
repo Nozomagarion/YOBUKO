@@ -45,7 +45,10 @@ pub fn layout(id: &str) -> Option<Result<Layout, DeviceSdkError>> {
 }
 
 /// The layouts kept as JSON next to a device crate, by device id.
-pub const LAYOUT_FILES: &[(&str, &str)] = &[("compressor", include_str!("../../../devices/compressor/panel.json"))];
+pub const LAYOUT_FILES: &[(&str, &str)] = &[
+    ("compressor", include_str!("../../../devices/compressor/panel.json")),
+    ("overdrive", include_str!("../../../devices/overdrive/panel.json")),
+];
 
 /// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
 /// layout, or the generated parameter list when it has none or its layout does not load.
@@ -220,6 +223,21 @@ mod tests {
             let ([x, y], [w, h]) = (p.ui.position.unwrap(), p.ui.size.unwrap());
             assert!(x + w <= builtin::COMPACT_WIDTH && y + h <= builtin::COMPACT_HEIGHT, "{} is outside", p.id);
         }
+    }
+
+    #[test]
+    fn the_overdrives_canvas_holds_every_parameter_in_the_compact_panel() {
+        let canvas = panel("overdrive").unwrap().ui.clone().unwrap();
+        assert_eq!(canvas.size, [builtin::COMPACT_WIDTH, builtin::COMPACT_HEIGHT]);
+        // Every parameter is on the canvas, so the generated list shows none of them twice.
+        assert_eq!(canvas.hidden_parameters.len(), suhina_device_overdrive::INFO.params.len());
+        for c in &canvas.controls {
+            let [x, y, w, h] = c.bounds;
+            assert!(x + w <= canvas.size[0] && y + h <= canvas.size[1], "{} is outside", c.id);
+        }
+        let band = canvas.controls.iter().find(|c| c.id == "band").unwrap();
+        let axes = (band.x.as_ref().map(|b| b.parameter.as_str()), band.y.as_ref().map(|b| b.parameter.as_str()));
+        assert_eq!(axes, (Some("bandFrequency"), Some("bandWidth")));
     }
 
     #[test]
