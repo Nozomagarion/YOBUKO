@@ -65,6 +65,7 @@ pub fn level_bar(
     if !rect.is_finite() || rect.height() < 1.0 || rect.width() < 1.0 {
         return;
     }
+    let text = &widgets::formatted_value(text);
     let state = if hover > 0.5 { State::Hover } else { State::Normal };
     let height = crate::kit::native_css::thickness(rect.height()).clamp(1.0, rect.height());
     let track = Rect::from_center_size(rect.center(), Vec2::new(rect.width(), height));

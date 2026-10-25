@@ -1285,3 +1285,16 @@ fn a_theme_gives_tracks_without_a_height_its_own() {
     assert_eq!(super::super::style_class::theme_track_height(), None, "out of range is left out");
     skin::configure(&skin::Skin::default());
 }
+
+#[test]
+fn a_value_s_number_and_unit_follow_the_sheet() {
+    let (theme, warnings) =
+        super::super::theme::from_sheet(".pan { --suhina-value-decimals: 0; --suhina-value-unit: \" dB\"; }", "");
+    let mut seen = Vec::new();
+    painted("", |_| {
+        skin::configure(&theme.skin);
+        let _pan = super::super::style_class::enter("pan");
+        seen = ["-3.6", "-inf", "C"].map(crate::kit::widgets::formatted_value).to_vec();
+    });
+    assert_eq!(seen, ["-4 dB", "-inf", "C"], "{warnings:?}");
+}

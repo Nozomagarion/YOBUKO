@@ -117,6 +117,14 @@ pub fn valid_property(key: &str, value: &str) -> bool {
         "--suhina-track-headers" => matches!(value, "left" | "right"),
         "--suhina-header-tint" => value.trim().parse::<u8>().is_ok_and(|v| v <= 100),
         "--suhina-param-columns" => value.trim().parse::<u8>().is_ok_and(|v| (1..=8).contains(&v)),
+        "--suhina-value-decimals" => matches!(value.trim(), "0" | "1" | "2"),
+        "--suhina-value-unit" => {
+            let unit = value.trim();
+            unit.len() >= 2
+                && unit.starts_with(['"', '\''])
+                && unit.ends_with(['"', '\''])
+                && unit.chars().count() <= 10
+        }
         "--suhina-gap" => px(value).is_some_and(|v| v <= 16),
         "--suhina-param-label" => matches!(value, "left" | "top" | "hidden"),
         "--suhina-param-row" => px(value).is_some_and(|v| (16..=160).contains(&v)),

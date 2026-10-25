@@ -193,6 +193,7 @@ pub fn knob_with_value(
     let ink = super::style_class::foreground(ink);
     let line = size_text + 3.0;
     let place = ValuePosition::or(default);
+    let text = &formatted_value(text);
     let (knob_area, text_area, align) = match place {
         ValuePosition::Right | ValuePosition::Left => {
             let size = rect.height().min(theme::KNOB);
@@ -811,6 +812,27 @@ pub fn knob(painter: &Painter, center: Pos2, size: f32, position: f32, pointer: 
 /// A volume in dB as the mixer shows it.
 pub fn format_db(db: f64) -> String {
     if db.is_finite() && db > -70.0 { format!("{db:.1}") } else { "-inf".into() }
+}
+
+/// A value's text as the sheet formats it: `--suhina-value-decimals: 0 | 1 | 2` rounds its
+/// number, and `--suhina-value-unit: " dB"` follows it (quoted; at most 8 characters). Text
+/// with no number (`-inf`, `C`) only takes the unit when it ends in a digit.
+pub fn formatted_value(text: &str) -> String {
+    let decimals = super::style_class::property("--suhina-value-decimals")
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|d| *d <= 2);
+    let unit = super::style_class::property("--suhina-value-unit")
+        .map(|v| v.trim().trim_matches(['"', '\'']).chars().take(8).collect::<String>());
+    let mut out = match (decimals, text.trim().parse::<f64>()) {
+        (Some(decimals), Ok(number)) if number.is_finite() => format!("{number:.decimals$}"),
+        _ => text.to_owned(),
+    };
+    if let Some(unit) = unit
+        && out.ends_with(|c: char| c.is_ascii_digit())
+    {
+        out.push_str(&unit);
+    }
+    out
 }
 
 /// A pan position as the mixer shows it: 50L … C … 50R.
