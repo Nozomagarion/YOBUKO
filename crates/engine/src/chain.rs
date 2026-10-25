@@ -160,6 +160,40 @@ pub(crate) struct Chain {
     next_off: u64,
     /// The scale last sent to the devices ([`Chain::set_scale`]); `None` before the first.
     scale: Option<Option<MusicalScale>>,
+    /// When its first slot is the channel's clip host, the ARA plug-in its clips play through
+    /// (ADR 0028 › Amendment: the ARA plug-in belongs to the clip, #990): what scales the host's
+    /// output frame by frame and the other clips' sound, added after it.
+    pub(crate) ara: Option<AraHost>,
+}
+
+/// A chain's clip host's buffers (#990): `env`, the gains its output takes frame by frame (the
+/// playing ARA clip's gain and fades; 1 where none plays), and `bypass`, the sound of the track's
+/// other clips, which do not go through it. Both interleaved stereo, a block long.
+pub(crate) struct AraHost {
+    env: Vec<f32>,
+    bypass: Vec<f32>,
+}
+
+impl AraHost {
+    fn new() -> Self {
+        Self { env: vec![1.0; MAX_BLOCK * 2], bypass: vec![0.0; MAX_BLOCK * 2] }
+    }
+}
+
+/// After the clip host (the chain's first slot) has run over the block's frames `from..to`: its
+/// output scaled by the ARA clips' gains and fades, and the other clips' sound added (#990).
+/// Never allocates.
+fn after_host(ara: &Option<AraHost>, buffer: &mut [f32], from: usize, to: usize) {
+    let Some(host) = ara else { return };
+    let span = from * 2..to * 2;
+    let (Some(out), Some(env), Some(bypass)) =
+        (buffer.get_mut(span.clone()), host.env.get(span.clone()), host.bypass.get(span))
+    else {
+        return;
+    };
+    for ((sample, gain), dry) in out.iter_mut().zip(env).zip(bypass) {
+        *sample = *sample * gain + dry;
+    }
 }
 
 /// The identity of built-in device `id` for graph swaps: a device that holds a file changes with
@@ -363,7 +397,14 @@ impl Chain {
             params.insert(at, Vec::new());
             instrument = true;
         }
+        // The channel's clip host plays the ARA clips (#990): only while it is enabled and running
+        // as the first slot; otherwise the clips play as they are.
+        let ara = (channel.devices.first().is_some_and(|d| d.clip_host && d.enabled)
+            && positions.first() == Some(&0)
+            && matches!(slots.first(), Some(Slot::Plugin(_))))
+        .then(AraHost::new);
         (!slots.is_empty()).then(|| Self {
+            ara,
             track,
             column,
             slots,
@@ -416,6 +457,7 @@ impl Chain {
     /// fader's smoothing follows). Allocates.
     pub(crate) fn passthrough(track: TrackId, column: u32, sample_rate: u32) -> Self {
         Self {
+            ara: None,
             track,
             column,
             slots: Vec::new(),
@@ -525,6 +567,14 @@ impl Chain {
         if let Some(buffer) = self.buffer.get_mut(..frames.min(MAX_BLOCK) * 2) {
             buffer.fill(0.0);
         }
+        if let Some(host) = self.ara.as_mut() {
+            if let Some(env) = host.env.get_mut(..frames.min(MAX_BLOCK) * 2) {
+                env.fill(1.0);
+            }
+            if let Some(bypass) = host.bypass.get_mut(..frames.min(MAX_BLOCK) * 2) {
+                bypass.fill(0.0);
+            }
+        }
         self.done = 0;
         for (frame, _) in &mut self.pending {
             *frame = 0;
@@ -602,9 +652,11 @@ impl Chain {
             sent_at,
             behind,
             caught_up,
+            ara,
             ..
         } = self;
         let from = (*done).min(to);
+        let alone = ara.is_some();
         while let Some(slot) = slots.get_mut(*stage) {
             match slot {
                 Slot::Device(device) => {
@@ -667,7 +719,9 @@ impl Chain {
                         *stage += 1;
                         continue;
                     };
-                    let (sent, next) = send_plugins(slots, *stage, (from, to), span, span_events, *deadline, joined);
+                    let host = alone && *stage == 0;
+                    let (sent, next) =
+                        send_plugins(slots, *stage, (from, to), span, span_events, *deadline, joined, host);
                     match sent {
                         Sent::Out => {
                             *waiting = Some(*stage);
@@ -681,6 +735,9 @@ impl Chain {
                                 plugin.run(span, span_events, *deadline);
                             }
                         }
+                    }
+                    if host {
+                        after_host(ara, buffer, from, to);
                     }
                     *stage = next;
                 }
@@ -737,11 +794,42 @@ impl Chain {
         self.sent_at = None;
         let to = frames.min(MAX_BLOCK);
         let from = self.done.min(to);
-        let Self { slots, buffer, span_events, joined, stage, .. } = self;
+        let Self { slots, buffer, span_events, joined, stage, ara, .. } = self;
         *stage = match buffer.get_mut(from * 2..to * 2) {
             Some(span) => collect_plugins(slots, index, span, span_events, limit, joined),
             None => index + 1,
         };
+        if index == 0 {
+            after_host(ara, buffer, from, to);
+        }
+    }
+
+    /// Adds a frame of a clip that does not play through the clip host at `frame` of the block:
+    /// after the host when the chain has one, else as [`Chain::add`] (#990).
+    pub(crate) fn add_past_host(&mut self, frame: usize, left: f32, right: f32) {
+        match self.ara.as_mut() {
+            Some(host) => {
+                if let Some([l, r]) =
+                    host.bypass.get_mut(frame * 2..frame * 2 + 2).and_then(|s| <&mut [f32; 2]>::try_from(s).ok())
+                {
+                    *l += left;
+                    *r += right;
+                }
+            }
+            None => self.add(frame, left, right),
+        }
+    }
+
+    /// The gains the clip host's output takes at `frame` of the block: the playing ARA clip's
+    /// (#990). Nothing without a host.
+    pub(crate) fn set_host_gain(&mut self, frame: usize, left: f32, right: f32) {
+        if let Some(host) = self.ara.as_mut()
+            && let Some([l, r]) =
+                host.env.get_mut(frame * 2..frame * 2 + 2).and_then(|s| <&mut [f32; 2]>::try_from(s).ok())
+        {
+            *l = left;
+            *r = right;
+        }
     }
 
     /// Adds a frame of the track's sound at `frame` of the block.
@@ -874,9 +962,11 @@ impl Chain {
             sample_rate,
             device_lanes,
             joined,
+            ara,
             ..
         } = self;
         let from = (*done).min(to);
+        let alone = ara.is_some();
         let mut index = 0;
         while let Some(slot) = slots.get_mut(index) {
             match slot {
@@ -941,7 +1031,9 @@ impl Chain {
                         index += 1;
                         continue;
                     };
-                    let (sent, next) = send_plugins(slots, index, (from, to), span, span_events, *deadline, joined);
+                    let host = alone && index == 0;
+                    let (sent, next) =
+                        send_plugins(slots, index, (from, to), span, span_events, *deadline, joined, host);
                     index = match sent {
                         Sent::Out => collect_plugins(slots, index, span, span_events, *deadline, joined),
                         Sent::Refused => next,
@@ -952,6 +1044,9 @@ impl Chain {
                             next
                         }
                     };
+                    if host {
+                        after_host(ara, buffer, from, to);
+                    }
                 }
             }
         }
@@ -1230,6 +1325,7 @@ fn find_joined(
 /// go on with: [`Sent::Out`], wait with [`collect_plugins`]; [`Sent::Refused`], a miss already
 /// counted for each (the sound passes, an instrument is silent); [`Sent::Unsupported`], nothing
 /// was sent and the plug-in at `at` runs on its own. Never allocates.
+#[allow(clippy::too_many_arguments)]
 fn send_plugins(
     slots: &mut [Slot],
     at: usize,
@@ -1238,9 +1334,15 @@ fn send_plugins(
     events: &[(usize, NoteEvent)],
     deadline: Option<Instant>,
     joined: &mut Joined,
+    alone: bool,
 ) -> (Sent, usize) {
     let mut members = [0u32; MAX_JOINED];
-    find_joined(slots, at, from_to, joined, &mut members);
+    // A clip host runs on its own: its output is scaled and mixed before the next plug-in (#990).
+    if alone {
+        joined.len = 0;
+    } else {
+        find_joined(slots, at, from_to, joined, &mut members);
+    }
     if joined.len > 0
         && let Some(Slot::Plugin(first)) = slots.get_mut(at)
     {

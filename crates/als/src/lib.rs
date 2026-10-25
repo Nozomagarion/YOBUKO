@@ -450,6 +450,7 @@ impl Reader {
                 state: None,
                 params,
                 automation: Vec::new(),
+                clip_host: false,
                 extensions,
             });
         }
@@ -462,6 +463,7 @@ impl Reader {
                 state: None,
                 params: Vec::new(),
                 automation: Vec::new(),
+                clip_host: false,
                 extensions,
             });
         }
@@ -536,6 +538,7 @@ impl Reader {
             state,
             params: Vec::new(),
             automation: Vec::new(),
+            clip_host: false,
             extensions,
         })
     }
@@ -704,6 +707,7 @@ impl Reader {
             follow_action: Default::default(),
             launch: Default::default(),
             color: None,
+            ara: false,
             extensions: Extensions::default(),
         })
     }

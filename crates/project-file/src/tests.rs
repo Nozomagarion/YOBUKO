@@ -294,6 +294,21 @@ fn launch_mappings_are_written_with_their_targets() {
     assert!(empty["project"]["launcher"].get("mappings").is_none(), "{empty}");
 }
 
+/// A clip edited by its channel's ARA plug-in and the channel's clip host survive a round trip
+/// (#990); neither is written when not set.
+#[test]
+fn a_clip_host_and_its_ara_clips_survive_a_round_trip() {
+    let mut project = everything();
+    assert!(!to_json(&project).contains("\"clip_host\"") && !to_json(&project).contains("\"ara\""));
+    let lane = project.arrangement.lanes.iter_mut().find(|l| l.track.is_some() && !l.clips.is_empty()).unwrap();
+    lane.clips[0].ara = true;
+    let channel = project.channels.iter_mut().find(|c| !c.devices.is_empty()).unwrap();
+    channel.devices[0].clip_host = true;
+    let text = to_json(&project);
+    assert!(text.contains("\"clip_host\": true") && text.contains("\"ara\": true"), "{text}");
+    assert_eq!(from_json(&text), Ok(project));
+}
+
 /// Take lanes (#909) are written under the arrangement with their track, name and clips, the
 /// clips without ids, and left out when there are none.
 #[test]

@@ -41,6 +41,7 @@ fn sd_device() -> Device {
         state: graph.to_sd().ok().map(String::into_bytes),
         params: Vec::new(),
         automation: Vec::new(),
+        clip_host: false,
         extensions: Extensions::default(),
     }
 }

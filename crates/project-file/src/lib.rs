@@ -480,6 +480,10 @@ fn device_value(d: &Device) -> Value {
         if !d.automation.is_empty() {
             map.insert("automation".into(), lanes_value(&d.automation));
         }
+        // Only a channel's clip host says so (#990), so other devices keep their shape.
+        if d.clip_host {
+            map.insert("clip_host".into(), json!(true));
+        }
         with_extensions(map, &d.extensions);
     }
     out
@@ -612,6 +616,10 @@ fn clip_value(c: &Clip) -> Value {
         // Only a clip with a colour of its own carries one; the others show their track's.
         if let Some(Rgb(r, g, b)) = c.color {
             map.insert("color".into(), json!(format!("#{r:02X}{g:02X}{b:02X}")));
+        }
+        // Only a clip edited by its channel's ARA plug-in says so (#990).
+        if c.ara {
+            map.insert("ara".into(), json!(true));
         }
         with_extensions(map, &c.extensions);
     }
@@ -1228,6 +1236,7 @@ fn read_device(value: &Value, at: &str) -> Result<Device, ProjectFileError> {
         state: bytes(d, "state", at)?,
         params,
         automation,
+        clip_host: flag(d, "clip_host", false, at)?,
         extensions: extensions(d, at)?,
     })
 }
@@ -1389,6 +1398,7 @@ fn read_clip(value: &Value, at: &str) -> Result<Clip, ProjectFileError> {
         follow_action: read_follow(c, at)?,
         launch: read_launch(c, at)?,
         color: read_color(c.get("color"), at)?,
+        ara: flag(c, "ara", false, at)?,
         extensions: extensions(c, at)?,
     })
 }

@@ -218,6 +218,7 @@ pub(super) fn project_with_audio() -> (suhina_engine::model::Project, suhina_ui:
         follow_action: Default::default(),
         launch: Default::default(),
         color: None,
+        ara: false,
         extensions: Extensions::default(),
     };
     project.arrangement.lanes.push(ArrangementLane {
@@ -254,6 +255,7 @@ pub(super) fn project_with_a_device() -> suhina_engine::model::Project {
         state: None,
         params: vec![DeviceParam::new("gain", -3.5), DeviceParam::new("width", 1.2)],
         automation: Vec::new(),
+        clip_host: false,
         extensions: Extensions::default(),
     });
     project

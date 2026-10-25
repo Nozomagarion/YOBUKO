@@ -670,6 +670,7 @@ pub(crate) fn place_clip(
         follow_action: Default::default(),
         launch: Default::default(),
         color: None,
+        ara: false,
         extensions: Default::default(),
     };
     match row {
@@ -980,6 +981,7 @@ fn place_stems(
                 state: None,
                 params: setting.params.iter().map(|(id, v)| suhina_model::DeviceParam::new(*id, *v)).collect(),
                 automation: Vec::new(),
+                clip_host: false,
                 extensions: Default::default(),
             });
         }

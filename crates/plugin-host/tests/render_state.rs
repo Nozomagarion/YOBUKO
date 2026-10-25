@@ -70,6 +70,7 @@ fn project() -> Project {
                 enabled: true,
                 state: None,
                 params: Vec::new(),
+                clip_host: false,
                 extensions: Extensions::default(),
                 automation: Vec::new(),
             }],

@@ -338,6 +338,7 @@ fn menu_on(devices: &[(&str, &str)], size: (f32, f32), track: usize, detail: boo
             state: None,
             params,
             automation: Vec::new(),
+            clip_host: false,
             extensions: Extensions::default(),
         });
     }
@@ -655,6 +656,7 @@ fn with_automation_of(fm: &[&str]) -> Harness<'static, App> {
             state: None,
             params,
             automation,
+            clip_host: false,
             extensions: Extensions::default(),
         });
     }

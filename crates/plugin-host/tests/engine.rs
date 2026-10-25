@@ -69,6 +69,7 @@ fn plugin_device(id: &str) -> Device {
         state: None,
         params: Vec::new(),
         automation: Vec::new(),
+        clip_host: false,
         extensions: Extensions::default(),
     }
 }
@@ -141,6 +142,7 @@ fn project(length: f64, two: bool, devices: Vec<Device>) -> Project {
                     follow_action: Default::default(),
                     launch: Default::default(),
                     color: None,
+                    ara: false,
                     extensions: Extensions::default(),
                 }],
             }],

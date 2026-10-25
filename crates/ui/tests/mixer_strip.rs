@@ -33,6 +33,7 @@ fn project() -> suhina_engine::model::Project {
             state: None,
             params: Vec::new(),
             automation: Vec::new(),
+            clip_host: false,
             extensions: Extensions::default(),
         });
     }

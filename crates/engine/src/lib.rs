@@ -252,6 +252,23 @@ struct StretchEvent {
     bus: u32,
     /// The track's meter slot (`meters::meter_slot`).
     meter: u32,
+    /// Its track's chain has a clip host that this clip does not play through: it is added
+    /// after the host (#990).
+    past_host: bool,
+}
+
+/// An ARA clip on a track whose chain has a clip host (#990): the host plays it, and the gains
+/// and fades it takes are applied to the host's output from `start` to `end` (arrangement
+/// frames).
+struct HostedClip {
+    start: u64,
+    end: u64,
+    gain_left: f32,
+    gain_right: f32,
+    fades: Fades,
+    column: u32,
+    /// 1 + the index of the track's chain.
+    bus: u32,
 }
 
 /// A note with its position resolved to sample frames and its mix resolved from the channel.
@@ -311,6 +328,8 @@ struct ArrangedAudio {
     /// Which clip of the project this is (arrangement lane, clip, content lane), so a graph swap
     /// can find the same clip in the old graph (ADR 0005).
     key: (usize, usize, usize),
+    /// Its track's chain has a clip host that this clip does not play through (#990).
+    past_host: bool,
 }
 
 /// A source render's capture: the chain whose output the render reads, which chains are inside
@@ -335,6 +354,8 @@ pub(crate) struct Graph {
     audio_events: Vec<ArrangedAudio>,
     /// Warped clips stretched as they play (ADR 0003), rendered ahead and mixed block by block.
     stretch_events: Vec<StretchEvent>,
+    /// The ARA clips a clip host plays, by start (#990).
+    hosted: Vec<HostedClip>,
     ahead: AheadReader,
     length: u64,
     launcher: Launcher,
@@ -1059,6 +1080,7 @@ impl Renderer {
         }
         if running {
             self.mix_stretched(out, block_start);
+            self.host_gains(frames, block_start);
         }
         // What went straight to the output waits for the slowest chain (latency compensation).
         self.graph.direct_delay.run(out);
@@ -1099,6 +1121,34 @@ impl Renderer {
         self.block_frame = 0;
     }
 
+    /// Sets the gains the clip hosts' output takes over the block of `frames` frames starting at
+    /// frame `block_start`: each playing ARA clip's gain and fades (#990). Never allocates.
+    fn host_gains(&mut self, frames: usize, block_start: u64) {
+        let time_start = block_start - self.origin + self.time_at_origin;
+        let time_end = time_start + frames as u64;
+        let launcher = &self.graph.launcher;
+        let chains = &mut self.graph.chains;
+        for clip in &self.graph.hosted {
+            if clip.start >= time_end {
+                break;
+            }
+            if clip.end <= time_start {
+                continue;
+            }
+            let Some(chain) = bus_chain(chains, clip.bus) else { continue };
+            for frame in clip.start.max(time_start)..clip.end.min(time_end) {
+                let at = (frame - time_start) as usize;
+                let (left, right) = if launcher.overrides_at(clip.column, frame - time_start + block_start) {
+                    (0.0, 0.0)
+                } else {
+                    let fade = clip.fades.gain((frame - clip.start) as f64, (clip.end - frame) as f64);
+                    (clip.gain_left * fade, clip.gain_right * fade)
+                };
+                chain.set_host_gain(at, left, right);
+            }
+        }
+    }
+
     /// Adds the stretched clips that overlap the block starting at frame `block_start` to `out`.
     /// Clips on a track that plays launched clips keep running, so they stay in time, but are
     /// not heard.
@@ -1135,7 +1185,11 @@ impl Renderer {
                     let at = (frame - time_start) as usize;
                     let (l, r) = (left * event.gain_left * fade, right * event.gain_right * fade);
                     if let Some(chain) = bus_chain(chains, event.bus) {
-                        chain.add(at, l, r);
+                        if event.past_host {
+                            chain.add_past_host(at, l, r);
+                        } else {
+                            chain.add(at, l, r);
+                        }
                     } else if let Some([ol, or]) =
                         out.get_mut(at * 2..at * 2 + 2).and_then(|s| <&mut [f32; 2]>::try_from(s).ok())
                     {
@@ -1174,6 +1228,7 @@ impl Renderer {
                     if !self.graph.launcher.overrides(arranged.column) {
                         let (l, r) = arranged.event.sample(time);
                         match bus_chain(&mut self.graph.chains, arranged.bus) {
+                            Some(chain) if arranged.past_host => chain.add_past_host(frame, l, r),
                             Some(chain) => chain.add(frame, l, r),
                             None => {
                                 self.graph.levels.add(arranged.meter, frame, l, r);
@@ -1362,6 +1417,7 @@ impl Graph {
         let mut stretch_events = Vec::new();
         let mut stretch_voices = Vec::new();
         let mut stretch_heard = Vec::new();
+        let mut hosted = Vec::new();
         for (lane_index, lane) in project.arrangement.lanes.iter().enumerate() {
             for (clip_index, clip) in lane.clips.iter().enumerate().filter(|(_, c)| c.enabled) {
                 let Some(content) = project.content(clip.content) else { continue };
@@ -1382,6 +1438,28 @@ impl Graph {
                         LaneData::Audio(region) => {
                             let Some(data) = audio.files.get(region.pool_key().as_ref()) else { continue };
                             let gains = (gain_left * AUDIO_HEADROOM, gain_right * AUDIO_HEADROOM);
+                            // A track whose chain has a clip host: its ARA clips are the host's to
+                            // play, at their gains and fades; its other clips go past it (#990).
+                            let has_host = usize::try_from(bus)
+                                .ok()
+                                .and_then(|b| b.checked_sub(1))
+                                .and_then(|i| chains.get(i))
+                                .is_some_and(|c| c.ara.is_some());
+                            if has_host && clip.ara {
+                                let gain = if region.gain.is_finite() { region.gain.max(0.0) as f32 } else { 0.0 };
+                                let to_frame = |beats: f64| tempo::frame_of(&tempo, beats);
+                                hosted.push(HostedClip {
+                                    start: to_frame(clip.start),
+                                    end: to_frame(clip.start + clip.length),
+                                    gain_left: gains.0 * gain,
+                                    gain_right: gains.1 * gain,
+                                    fades: Fades::on_map(clip, &tempo, sample_rate),
+                                    column,
+                                    bus,
+                                });
+                                continue;
+                            }
+                            let past_host = has_host;
                             // Warped clips are time-stretched as they play; the rest, and clips
                             // the stretcher cannot handle, are re-pitched.
                             let voice_began = std::time::Instant::now();
@@ -1406,6 +1484,7 @@ impl Graph {
                                     column,
                                     bus,
                                     meter,
+                                    past_host,
                                 });
                                 continue;
                             }
@@ -1418,6 +1497,7 @@ impl Graph {
                                     bus,
                                     meter,
                                     key: (lane_index, clip_index, content_index),
+                                    past_host,
                                 },
                             ));
                         }
@@ -1427,6 +1507,7 @@ impl Graph {
         }
         events.sort_by_key(|e| e.start);
         audio_events.sort_by_key(|a| a.event.start);
+        hosted.sort_by_key(|h: &HostedClip| h.start);
 
         let release = (RELEASE_SECONDS * f64::from(sample_rate)) as u64;
         let notes_end = events.iter().map(|e| e.end.saturating_add(release)).max().unwrap_or(0);
@@ -1491,6 +1572,7 @@ impl Graph {
             events,
             audio_events,
             stretch_events,
+            hosted,
             ahead,
             length,
             launcher,

@@ -97,6 +97,7 @@ fn project_built() -> Project {
                     follow_action: Default::default(),
                     launch: Default::default(),
                     color: None,
+                    ara: false,
                     extensions: Extensions::default(),
                 }],
             }],

@@ -186,6 +186,7 @@ fn a_built_in_devices_parameters_can_be_shown_with_its_lanes() {
         state: None,
         params: Vec::new(),
         automation: vec![lane],
+        clip_host: false,
         extensions: Default::default(),
     });
     let params = Params::build(&project);
@@ -228,6 +229,7 @@ fn sd_parameters_are_listed_and_use_their_control_scale() {
         state: graph.to_sd().ok().map(String::into_bytes),
         params: Vec::new(),
         automation: vec![lane],
+        clip_host: false,
         extensions: Default::default(),
     });
     let params = Params::build(&project);

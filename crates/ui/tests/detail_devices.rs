@@ -28,6 +28,7 @@ fn device(name: &str) -> Device {
         state: None,
         params: Vec::new(),
         automation: Vec::new(),
+        clip_host: false,
         extensions: Extensions::default(),
     }
 }

@@ -76,6 +76,7 @@ fn clip(start: f64, length: f64) -> Clip {
         follow_action: Default::default(),
         launch: Default::default(),
         color: None,
+        ara: false,
         extensions: Extensions::default(),
     }
 }
@@ -777,6 +778,7 @@ fn with_utility(project: &mut Project) {
         state: None,
         params: Vec::new(),
         automation: Vec::new(),
+        clip_host: false,
         extensions: Extensions::default(),
     });
 }
@@ -841,6 +843,7 @@ fn a_device_parameter_on_the_main_channel_is_heard_from_the_next_block() {
             state: None,
             params: Vec::new(),
             automation: Vec::new(),
+            clip_host: false,
             extensions: Extensions::default(),
         });
     }

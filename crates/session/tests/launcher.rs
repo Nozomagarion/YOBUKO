@@ -80,6 +80,7 @@ fn project_built() -> Project {
         follow_action: Default::default(),
         launch: Default::default(),
         color: None,
+        ara: false,
         extensions: Extensions::default(),
     };
     let slot = |clip: Option<Clip>, has_stop: bool| Slot { clip, has_stop };
@@ -528,6 +529,7 @@ fn playing_with_clips() -> (Session, Renderer) {
         fade_out_curve: Default::default(),
         follow_action: Default::default(),
         color: None,
+        ara: false,
         extensions: Extensions::default(),
         launch: Default::default(),
     };
