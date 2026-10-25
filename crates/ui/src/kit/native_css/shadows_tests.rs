@@ -156,3 +156,24 @@ fn outset_excludes_the_caster_and_inset_excludes_its_exterior() {
     let soft = shadow.alpha(egui::pos2(8.0, 20.0), caster, 0.0);
     assert!((0.4..0.6).contains(&soft));
 }
+
+#[test]
+fn artwork_casts_its_glow_in_its_own_shape() {
+    let mut artwork = egui::Mesh::default();
+    artwork.add_rect_with_uv(
+        Rect::from_min_size(Pos2::new(10.0, 10.0), Vec2::splat(20.0)),
+        Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+        Color32::WHITE,
+    );
+    let glow =
+        Shadow { offset: Vec2::ZERO, blur: 8.0, spread: 0.0, color: Color32::from_rgb(0, 200, 255), inset: false };
+    let copies = glow.from_artwork(&artwork, 1.0);
+    assert_eq!(copies.len(), 9, "the centre and eight taps around the blur");
+    // Every copy is the artwork's own shape, tinted, and spread around it.
+    assert!(copies.iter().all(|copy| copy.vertices.len() == artwork.vertices.len()));
+    assert!(copies.iter().all(|copy| copy.vertices.iter().all(|v| v.color.b() > 0 && v.color.r() == 0)));
+    let reach = copies.iter().map(|c| c.calc_bounds()).fold(Rect::NOTHING, |a, b| a.union(b));
+    assert!(reach.width() > 20.0 + 6.0, "{reach:?}");
+    let inset = Shadow { inset: true, ..glow };
+    assert!(inset.from_artwork(&artwork, 1.0).is_empty());
+}

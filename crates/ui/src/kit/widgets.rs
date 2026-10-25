@@ -120,7 +120,8 @@ pub fn button_surface(painter: &Painter, rect: Rect, response: &Response, on: bo
         let fill = super::style_class::background(fill);
         let radius = super::style_class::radius(radius);
         if super::skin::button(painter, rect, super::skin::State::response(response, on), fill, radius) {
-            super::native_css::background_rounded(painter, rect, radius);
+            // The artwork cast the shadows already, in its own shape.
+            super::native_css::gradients_rounded(painter, rect, radius);
             return;
         }
     }

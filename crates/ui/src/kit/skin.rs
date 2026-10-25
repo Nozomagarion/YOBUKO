@@ -1018,10 +1018,15 @@ fn paint_variant(
         let texel = [1.0 / size[0].max(1) as f32, 1.0 / size[1].max(1) as f32];
         nine_slice(&mut mesh, rect, slice, texel);
         mesh.rotate(egui::emath::Rot2::from_angle(angle), rect.center());
+        cast_shadows(painter, &mesh);
         painter.add(egui::Shape::mesh(mesh));
         return true;
     }
     if role == "button" || role.starts_with("button.") {
+        let mut outline = egui::Mesh::with_texture(texture.id());
+        outline.add_rect_with_uv(rect, Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::WHITE);
+        outline.rotate(egui::emath::Rot2::from_angle(angle), rect.center());
+        cast_shadows(painter, &outline);
         painter.add(
             egui::epaint::RectShape::filled(rect, super::style_class::radius(radius), Color32::WHITE)
                 .with_texture(texture.id(), Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)))
@@ -1034,6 +1039,13 @@ fn paint_variant(
     mesh.rotate(egui::emath::Rot2::from_angle(angle), rect.center());
     painter.add(egui::Shape::mesh(mesh));
     true
+}
+
+/// The element in scope's `box-shadow` (a glow is one without an offset), cast by a surface's
+/// artwork about to be drawn as `mesh`, under it and in its shape, in place of the rectangle's.
+fn cast_shadows(painter: &Painter, mesh: &egui::Mesh) {
+    let slot = painter.add(egui::Shape::Noop);
+    super::native_css::artwork_shadows(painter, slot, mesh);
 }
 
 /// Whether the surfaces artwork stands on let the desktop show through: the window's, the

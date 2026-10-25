@@ -27,7 +27,10 @@ mod shadows;
 mod text;
 mod workspace;
 pub use diagnostics::{Notice, inspect};
-pub use paint::{background, background_rounded, background_with, level_fill, level_glow, surface, thickness};
+pub use paint::{
+    artwork_shadows, background, background_rounded, background_with, gradients_rounded, level_fill, level_glow,
+    surface, thickness,
+};
 pub use text::paint_text;
 pub use workspace::{Workspace, workspace};
 

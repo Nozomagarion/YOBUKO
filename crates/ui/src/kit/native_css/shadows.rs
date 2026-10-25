@@ -87,6 +87,37 @@ impl Shadow {
         if self.inset { original * (1.0 - shadow) } else { (1.0 - original) * shadow }
     }
 
+    /// Casts this shadow from artwork rather than a rectangle: copies of `shape` (the artwork's
+    /// mesh), tinted with the shadow's colour, at its offset and spread around the blur's radius,
+    /// so a round button glows round. Returns the copies, to draw under the artwork.
+    pub fn from_artwork(&self, shape: &egui::Mesh, opacity: f32) -> Vec<egui::Mesh> {
+        if self.inset || self.color.a() == 0 || !self.blur.is_finite() || !self.offset.is_finite() {
+            return Vec::new();
+        }
+        let blur = self.blur.clamp(0.0, 64.0);
+        let spread = self.spread.clamp(-32.0, 32.0);
+        // The centre and eight taps around half the blur, each a share of the colour.
+        let mut taps = vec![Vec2::ZERO];
+        if blur > 0.5 {
+            taps.extend((0..8).map(|i| Vec2::angled(i as f32 * std::f32::consts::FRAC_PI_4) * (blur / 2.0)));
+        }
+        let share = (1.0 / taps.len() as f32 * 1.6).min(1.0) * opacity.clamp(0.0, 1.0);
+        let tint = self.color.gamma_multiply(share);
+        let centre = shape.calc_bounds().center();
+        taps.into_iter()
+            .map(|tap| {
+                let mut copy = shape.clone();
+                for vertex in &mut copy.vertices {
+                    vertex.color = tint;
+                    // `spread` grows the copy about the artwork's centre.
+                    let grown = centre + (vertex.pos - centre) * (1.0 + spread / 32.0).max(0.1);
+                    vertex.pos = grown + self.offset + tap;
+                }
+                copy
+            })
+            .collect()
+    }
+
     pub fn paint(&self, painter: &Painter, caster: Rect, radius: f32, opacity: f32) -> bool {
         if !caster.is_finite()
             || !caster.size().is_finite()

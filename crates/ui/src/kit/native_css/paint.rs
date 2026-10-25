@@ -183,6 +183,16 @@ pub fn surface(painter: &Painter, rect: Rect, radius: f32, fill: egui::Color32) 
     }
     if let Some(mut style) = style {
         style.radius = radius;
+        // A see-through surface shows only its glyph, so its shadow (a glow) is round, around the
+        // glyph, rather than the square of a box no one sees, unless the sheet gives a radius.
+        if fill.a() == 0 && !style.authored.radius {
+            let round = rect.width().min(rect.height()) / 2.0;
+            let mut glow = style.clone();
+            glow.radius = round;
+            glow.gradients = Vec::new().into();
+            background_with(painter, rect, &glow);
+            style.shadows = style.shadows.iter().filter(|s| s.inset).cloned().collect::<Vec<_>>().into();
+        }
         background_with(painter, rect, &style);
         if style.border_width > 0.0 && style.border.a() > 0 {
             let stroke = egui::Stroke::new(style.border_width, style.border.gamma_multiply(style.opacity));
@@ -195,6 +205,39 @@ pub fn surface(painter: &Painter, rect: Rect, radius: f32, fill: egui::Color32) 
 /// The thickness the sheet gives the element in scope (`height`), or `fallback`.
 pub fn thickness(fallback: f32) -> f32 {
     super::super::style_class::computed().and_then(|style| style.height).unwrap_or(fallback)
+}
+
+/// The shadows (a glow is a shadow without an offset) of the element in scope, cast by artwork:
+/// drawn into `slot`, a place reserved under the artwork, as tinted copies of its `mesh`.
+/// Returns whether there were any.
+pub fn artwork_shadows(painter: &Painter, slot: egui::layers::ShapeIdx, mesh: &egui::Mesh) -> bool {
+    let Some(style) = super::super::style_class::computed() else { return false };
+    let copies: Vec<egui::Shape> = style
+        .shadows
+        .iter()
+        .rev()
+        .flat_map(|shadow| shadow.from_artwork(mesh, style.opacity))
+        .map(egui::Shape::mesh)
+        .collect();
+    if copies.is_empty() {
+        return false;
+    }
+    painter.set(slot, egui::Shape::Vec(copies));
+    true
+}
+
+/// The element in scope's gradients without its outer shadows: for a surface whose artwork
+/// casts them itself ([`artwork_shadows`]).
+pub fn gradients_rounded(painter: &Painter, rect: Rect, radius: f32) -> bool {
+    super::super::style_class::computed().is_some_and(|mut style| {
+        if !style.authored.radius {
+            style.radius = radius;
+        }
+        style.radius = style.radius.min(rect.width().min(rect.height()) / 2.0).max(0.0);
+        let shadows: Vec<_> = style.shadows.iter().filter(|s| s.inset).cloned().collect();
+        style.shadows = shadows.into();
+        background_with(painter, rect, &style)
+    })
 }
 
 pub fn background(painter: &Painter, rect: Rect) -> bool {
