@@ -26,6 +26,45 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "take.setColor",
+        label: "Set a take lane's colour and the colour of its parts on the track (Recolor lane); null gives it the palette's again",
+        params: &[
+            TRACK,
+            param("take", ParamType::Integer, "the take's number on the track, from 1"),
+            param("color", ParamType::Text, "\"#rrggbb\", or null"),
+            optional(
+                "clips",
+                ParamType::Clips,
+                "only these parts of the take on the track (Recolor selected take), each { \"clip\": id }; the lane keeps its colour",
+            ),
+        ],
+        kind: CommandKind::Edit,
+        run: set_take_color,
+        policy: Policy::UNHEARD,
+    },
+    CommandSpec {
+        id: "take.swap",
+        label: "Replace a comped part on a track with the same span of the take above or below, in turn round the takes that have something there",
+        params: &[
+            param("clip", ParamType::Integer, "the comped part's clip id, as project.clips lists it"),
+            param("direction", ParamType::Text, "up or down"),
+        ],
+        kind: CommandKind::Edit,
+        run: swap_take,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "take.moveCut",
+        label: "Move the cut between a comped part and the part right after it: one gets longer, the other shorter, each playing its own take",
+        params: &[
+            param("clip", ParamType::Integer, "the clip id of the part before the cut"),
+            param("to", ParamType::Number, "where the cut goes, in beats"),
+        ],
+        kind: CommandKind::Edit,
+        run: move_cut,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "take.delete",
         label: "Delete a recorded take lane of a track; the track's clips stay",
         params: &[TRACK, param("take", ParamType::Integer, "the take's number on the track, from 1")],
@@ -57,9 +96,10 @@ fn comp_take(session: &mut Session, params: &Value) -> Result<Value, CommandErro
     let p = &mut session.project;
     let track = track_id(p, params)?;
     let index = take_index(p, track, params)?;
-    let take = p.arrangement.takes.get(index).ok_or("the take is missing")?.clone();
+    let take = p.arrangement.takes.get(index).ok_or("the take is missing")?;
     let first = take.clips.iter().map(|c| c.start).fold(f64::INFINITY, f64::min);
     let last = take.clips.iter().map(|c| c.start + c.length).fold(f64::NEG_INFINITY, f64::max);
+    let name = take.name.clone();
     let bound = |key: &str, default: f64| -> Result<f64, CommandError> {
         match params.get(key) {
             None | Some(Value::Null) => Ok(default),
@@ -77,6 +117,23 @@ fn comp_take(session: &mut Session, params: &Value) -> Result<Value, CommandErro
         None | Some(Value::Null) => None,
         Some(_) => crate::clip_color::parse_color(params, "color")?,
     };
+    let clips = comp_part(p, track, index, from, to, color)?;
+    Ok(json!({ "track": track.0, "take": name, "start": from, "end": to, "clips": clips }))
+}
+
+/// Lays the part of take `index` (in `arrangement.takes`) from `from` to `to` on `track`'s lane,
+/// over what it covers, as new clips in `color`, or the take's own colour when it has one; a part
+/// with neither shows its take's colour in the window. Returns the clips' ids.
+fn comp_part(
+    p: &mut Project,
+    track: TrackId,
+    index: usize,
+    from: f64,
+    to: f64,
+    color: Option<suhina_model::Rgb>,
+) -> Result<Vec<u32>, CommandError> {
+    let take = p.arrangement.takes.get(index).ok_or("the take is missing")?.clone();
+    let color = color.or(take.color);
     let mut pieces = Vec::new();
     for clip in &take.clips {
         let (start, end) = (clip.start.max(from), (clip.start + clip.length).min(to));
@@ -113,7 +170,141 @@ fn comp_take(session: &mut Session, params: &Value) -> Result<Value, CommandErro
     lane.clips.sort_by(|a, b| a.start.total_cmp(&b.start));
     // The second parts of clips the pieces split get their ids (ADR 0025).
     p.assign_ids()?;
-    Ok(json!({ "track": track.0, "take": take.name, "start": from, "end": to, "clips": clips }))
+    Ok(clips)
+}
+
+/// `take.setColor {track, take, color, clips?}`: the take lane's colour, and the parts of it on
+/// the track (Recolor lane, #989); `null` gives the lane the palette's colour again and the parts
+/// follow it. With `clips`, only those parts of it (Recolor selected take), the lane left as it is.
+fn set_take_color(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let p = &mut session.project;
+    let track = track_id(p, params)?;
+    let index = take_index(p, track, params)?;
+    let color = crate::clip_color::parse_color(params, "color")?;
+    let only: Option<Vec<u64>> = match params.get("clips") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(
+            v.as_array()
+                .ok_or("clips must be a list of clip ids")?
+                .iter()
+                .map(|c| {
+                    c.as_u64()
+                        .or_else(|| c.get("clip").and_then(Value::as_u64))
+                        .ok_or("clips must be a list of clip ids")
+                })
+                .collect::<Result<_, _>>()?,
+        ),
+    };
+    let parts: Vec<suhina_model::ClipId> = p
+        .arrangement
+        .lanes
+        .iter()
+        .filter(|l| l.track == Some(track))
+        .flat_map(|l| &l.clips)
+        .filter(|c| p.comp_source(track, c) == Some(index))
+        .filter(|c| only.as_ref().is_none_or(|ids| ids.contains(&u64::from(c.id.0))))
+        .map(|c| c.id)
+        .collect();
+    if only.is_none()
+        && let Some(take) = p.arrangement.takes.get_mut(index)
+    {
+        take.color = color;
+    }
+    for clip in p.arrangement.lanes.iter_mut().flat_map(|l| l.clips.iter_mut()).filter(|c| parts.contains(&c.id)) {
+        clip.color = color;
+    }
+    Ok(json!({ "track": track.0, "parts": parts.len() }))
+}
+
+/// `take.swap {clip, direction}`: the comped part `clip` replaced by the same span of the take
+/// above (`up`) or below (`down`) on its track, in turn round the takes that have something
+/// there (#989).
+fn swap_take(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let p = &mut session.project;
+    let id = params.get("clip").and_then(Value::as_u64).ok_or("clip must be a clip id")?;
+    let (track, clip) = p
+        .arrangement
+        .lanes
+        .iter()
+        .find_map(|l| Some((l.track?, l.clips.iter().find(|c| u64::from(c.id.0) == id)?.clone())))
+        .ok_or_else(|| format!("clip {id} is not on the arrangement"))?;
+    let up = match params.get("direction").and_then(Value::as_str) {
+        Some("up") => true,
+        Some("down") => false,
+        _ => return Err("direction must be up or down".into()),
+    };
+    let source = p.comp_source(track, &clip).ok_or("the clip was not comped from a take")?;
+    let (start, end) = (clip.start, clip.start + clip.length);
+    let takes: Vec<usize> = (0..p.arrangement.takes.len())
+        .filter(|&i| {
+            p.arrangement.takes.get(i).is_some_and(|t| {
+                t.track == track && t.clips.iter().any(|c| c.start < end - 1e-9 && start + 1e-9 < c.start + c.length)
+            })
+        })
+        .collect();
+    let at = takes.iter().position(|&i| i == source).ok_or("the clip's take is missing")?;
+    let next = if up { (at + takes.len() - 1) % takes.len() } else { (at + 1) % takes.len() };
+    let target = *takes.get(next).ok_or("no other take")?;
+    if target == source {
+        return Err("no other take has something there".into());
+    }
+    let lane = p.arrangement.lanes.iter_mut().find(|l| l.track == Some(track)).ok_or("the lane is missing")?;
+    lane.clips.retain(|c| u64::from(c.id.0) != id);
+    let clips = comp_part(p, track, target, start, end, None)?;
+    let name = p.arrangement.takes.get(target).map(|t| t.name.clone()).unwrap_or_default();
+    Ok(json!({ "track": track.0, "take": name, "clips": clips }))
+}
+
+/// `take.moveCut {clip, to}`: the cut between comped part `clip` and the part right after it moves
+/// to `to`: one gets longer, the other shorter, each playing its own take (#989).
+fn move_cut(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let id = params.get("clip").and_then(Value::as_u64).ok_or("clip must be a clip id")?;
+    let to = params.get("to").and_then(Value::as_f64).filter(|t| t.is_finite()).ok_or("to must be a beat")?;
+    let p = &session.project;
+    let (track, left, right) = p
+        .arrangement
+        .lanes
+        .iter()
+        .find_map(|l| {
+            let left = l.clips.iter().find(|c| u64::from(c.id.0) == id)?;
+            let cut = left.start + left.length;
+            let right = l.clips.iter().find(|c| (c.start - cut).abs() < 1e-6 && c.id != left.id)?;
+            Some((l.track?, left.clone(), right.clone()))
+        })
+        .ok_or("the clip has no part right after it")?;
+    let cut = left.start + left.length;
+    // Each part keeps at least a sixteenth of a beat.
+    let to = to.clamp(left.start + 1.0 / 16.0, right.start + right.length - 1.0 / 16.0);
+    let trim = |session: &mut Session, clip: &Clip, edge: &str, at: f64| -> Result<Value, CommandError> {
+        let index = session
+            .project
+            .arrangement
+            .lanes
+            .iter()
+            .find(|l| l.track == Some(track))
+            .and_then(|l| l.clips.iter().position(|c| c.id == clip.id))
+            .ok_or("the part is missing")?;
+        crate::clip_edges::trim_clip(session, &json!({ "track": track.0, "index": index, edge: at, "stack": true }))
+    };
+    // The part that gets shorter first, so the other never covers it.
+    let done = if to > cut {
+        trim(session, &right, "start", to)?;
+        let grown = trim(session, &left, "end", to)?;
+        grown["end"].as_f64().unwrap_or(to)
+    } else {
+        trim(session, &left, "end", to)?;
+        let grown = trim(session, &right, "start", to)?;
+        grown["start"].as_f64().unwrap_or(to)
+    };
+    // The part that got shorter starts or ends where the other one got to.
+    if (done - to).abs() > 1e-9 {
+        if to > cut {
+            trim(session, &right, "start", done)?;
+        } else {
+            trim(session, &left, "end", done)?;
+        }
+    }
+    Ok(json!({ "track": track.0, "cut": done }))
 }
 
 /// `take.delete`.

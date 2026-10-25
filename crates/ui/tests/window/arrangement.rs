@@ -1598,6 +1598,7 @@ fn the_take_lanes_button_hides_them_and_a_comped_part_takes_the_takes_colour() {
         track: drums,
         name: "Take 1".into(),
         clips: vec![suhina_engine::model::Clip { id: suhina_engine::model::ClipId::NONE, ..clip.clone() }],
+        color: None,
     });
     project.assign_ids().unwrap();
     let mut app = App::new();
@@ -1612,9 +1613,10 @@ fn the_take_lanes_button_hides_them_and_a_comped_part_takes_the_takes_colour() {
     assert!(harness.query_by_label("Take 1 of Drums").is_none());
     harness.get_by_label("Show take lanes of Drums").click();
     harness.run();
-    // A click on the take's clip comps it, coloured: at the clip's own place on the row, the
-    // same as on the track's lane.
-    let lane = harness.get_by_label("Clip Beat A on Drums at bar 1").rect();
+    // The track's clip is the take's own pass, so it reads as a part of Take 1 (#989). A click on
+    // the take's clip comps it, coloured: at the clip's own place on the row, the same as on the
+    // track's lane.
+    let lane = harness.get_by_label("Clip Take 1 on Drums at bar 1").rect();
     let row = harness.get_by_label("Comp from Take 1 of Drums").rect();
     let at = egui::pos2(lane.center().x, row.center().y);
     harness.hover_at(at);
@@ -1632,6 +1634,14 @@ fn the_take_lanes_button_hides_them_and_a_comped_part_takes_the_takes_colour() {
             .any(|c| c.color.is_some())
     });
     assert!(coloured, "the comped part shows the take's colour");
+    // The part is still named after its take, and the take lane's menu recolours it.
+    harness.get_by_label("Clip Take 1 on Drums at bar 1");
+    harness.get_by_label("Comp from Take 1 of Drums").click_secondary();
+    harness.run();
+    // Submenus: their buttons carry an arrow after the name.
+    harness.get_by_label_contains("Recolor lane");
+    harness.get_by_label_contains("Recolor selected take");
+    harness.get_by_label("Delete take");
 }
 
 /// The rename field opens with the whole name selected, so typing replaces it (#916).

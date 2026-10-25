@@ -793,6 +793,7 @@ impl Session {
                     track: take.track,
                     name: format!("Take {taken}"),
                     clips: vec![Clip { id: suhina_model::ClipId::NONE, ..clip }],
+                    color: None,
                 });
             }
             // The takes' clips, and the second parts of clips they split, get their ids (ADR 0025).

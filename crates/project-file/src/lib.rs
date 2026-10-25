@@ -276,11 +276,16 @@ fn project_value(p: &Project) -> Value {
             .takes
             .iter()
             .map(|t| {
-                json!({
+                let mut take = json!({
                     "track": t.track.0,
                     "name": t.name,
                     "clips": t.clips.iter().map(clip_value).collect::<Vec<_>>(),
-                })
+                });
+                // A take's own colour (#989), left out while it takes the palette's.
+                if let Some(Rgb(r, g, b)) = t.color {
+                    take["color"] = json!(format!("#{r:02X}{g:02X}{b:02X}"));
+                }
+                take
             })
             .collect();
     }
@@ -940,6 +945,7 @@ fn read_project(value: &Value) -> Result<Project, ProjectFileError> {
                     track: TrackId(whole(take, "track", &at)?),
                     name: text(take, "name", &at)?,
                     clips,
+                    color: read_color(take.get("color"), &at)?,
                 });
             }
             let mut arrangement = Arrangement { lanes, markers, takes };

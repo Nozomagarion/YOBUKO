@@ -110,7 +110,7 @@ pub struct Action {
 }
 
 /// Actions the window does itself or on the selection, with their labels.
-const WINDOW_ACTIONS: [(&str, &str, &str); 71] = [
+const WINDOW_ACTIONS: [(&str, &str, &str); 73] = [
     ("file.new", "New project or open one", "File"),
     ("file.open", "Open a project", "File"),
     ("file.save", "Save the project", "File"),
@@ -178,6 +178,8 @@ const WINDOW_ACTIONS: [(&str, &str, &str); 71] = [
     ("pianoRoll.tool4", "Choose the Erase tool", PIANO_ROLL),
     ("pianoRoll.tool5", "Choose the Slice tool", PIANO_ROLL),
     ("marker.addAtPlayhead", "Add an arrangement marker at the playhead", "Edit"),
+    ("selection.takeUp", "Swap the selected comped part for the take above it", "Edit"),
+    ("selection.takeDown", "Swap the selected comped part for the take below it", "Edit"),
     ("pianoRoll.tool6", "Choose the Mute tool", PIANO_ROLL),
     ("pianoRoll.gridNarrow", "Make the piano roll's grid finer", PIANO_ROLL),
     ("pianoRoll.gridWiden", "Make the piano roll's grid coarser", PIANO_ROLL),
@@ -426,7 +428,7 @@ const PRESET_KEY: &str = "preset";
 /// The duplicate key of Draw-first, and the browser's key otherwise.
 const CTRL_B: Shortcut = Shortcut::new(Modifiers::COMMAND, Key::B);
 
-const DEFAULTS: [(&str, &[&str]); 72] = [
+const DEFAULTS: [(&str, &[&str]); 74] = [
     ("file.new", &["Ctrl+N"]),
     ("track.addAudio", &["Ctrl+T"]),
     ("track.addMidi", &["Ctrl+Shift+T"]),
@@ -473,6 +475,8 @@ const DEFAULTS: [(&str, &[&str]); 72] = [
     ("selection.right", &["Right"]),
     ("pianoRoll.quantize", &["Ctrl+U"]),
     ("marker.addAtPlayhead", &["M"]),
+    ("selection.takeUp", &["Alt+Up"]),
+    ("selection.takeDown", &["Alt+Down"]),
     ("transport.setLoopEnabled", &["Ctrl+L"]),
     ("project.next", &["Ctrl+Tab"]),
     ("project.previous", &["Ctrl+Shift+Tab"]),

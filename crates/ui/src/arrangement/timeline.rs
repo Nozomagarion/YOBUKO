@@ -103,6 +103,9 @@ pub struct ClipBox {
     /// What the clip is known by from one build to the next (its content and its start), so a
     /// stacked clip keeps its sub-row when another goes.
     pub stack_key: (u32, u64),
+    /// The number on its track (from 1) of the take it was comped from, for a part of a comp: it
+    /// is named and coloured after that take (#989).
+    pub take: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -230,6 +233,25 @@ pub struct TakeRow {
     pub number: usize,
     pub name: String,
     pub clips: Vec<ClipBox>,
+    /// Its colour: its own, or the palette's in turn ([`take_colour`]).
+    pub color: Rgb,
+    /// The spans of it that are on the track (start, end in beats): drawn lit, the rest dimmed
+    /// (#989).
+    pub used: Vec<(f64, f64)>,
+}
+
+/// The colour of a track's take `number` (from 1) while it has none of its own: the palette's
+/// colours in turn, three apart so neighbouring takes differ (#953).
+pub fn take_colour(number: usize) -> Rgb {
+    let swatches = crate::interaction::colour_picker::swatches();
+    swatches[number.saturating_mul(3) % swatches.len()]
+}
+
+/// The number on its track (from 1), name and colour of take `index` of `arrangement.takes`.
+fn take_of(project: &Project, index: usize) -> Option<(usize, String, Rgb)> {
+    let take = project.arrangement.takes.get(index)?;
+    let number = project.arrangement.takes.iter().take(index + 1).filter(|t| t.track == take.track).count();
+    Some((number, take.name.clone(), take.color.unwrap_or_else(|| take_colour(number))))
 }
 
 /// How many take lanes a track needs before they are shown.
@@ -329,7 +351,18 @@ impl Timeline {
                     lane.clips
                         .iter()
                         .enumerate()
-                        .map(|(index, clip)| clip_box(project, clip, index, track_color))
+                        .map(|(index, clip)| {
+                            let mut shown = clip_box(project, clip, index, track_color);
+                            // A part of a comp: named and coloured after its take (#989).
+                            if let Some((number, name, color)) =
+                                project.comp_source(track.id, clip).and_then(|i| take_of(project, i))
+                            {
+                                shown.take = Some(number);
+                                shown.name = name;
+                                shown.color = clip.color.unwrap_or(color);
+                            }
+                            shown
+                        })
                         .collect()
                 })
                 .unwrap_or_default();
@@ -593,11 +626,16 @@ fn take_rows(project: &Project) -> Vec<TakeRow> {
             continue;
         }
         let color = track.color.unwrap_or_else(|| default_track_colour(position));
-        rows.extend(takes.into_iter().enumerate().map(|(i, take)| TakeRow {
+        let indices: Vec<usize> = (0..project.arrangement.takes.len())
+            .filter(|&i| project.arrangement.takes.get(i).is_some_and(|t| t.track == track.id))
+            .collect();
+        rows.extend(takes.into_iter().zip(indices).enumerate().map(|(i, (take, index))| TakeRow {
             track: track.id,
             number: i + 1,
             name: take.name.clone(),
             clips: take.clips.iter().enumerate().map(|(index, clip)| clip_box(project, clip, index, color)).collect(),
+            color: take.color.unwrap_or_else(|| take_colour(i + 1)),
+            used: project.comp_used(index),
         }));
     }
     rows
@@ -630,6 +668,7 @@ fn clip_box(project: &Project, clip: &Clip, index: usize, track_color: Rgb) -> C
         seams: loop_seams(clip),
         row: 0,
         rows: 1,
+        take: None,
     }
 }
 

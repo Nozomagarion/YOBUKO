@@ -112,12 +112,30 @@ greyed. They are where the best parts of each pass are picked and put together o
 - **Drag** across a take: the part dragged over (on the grid; Alt for no grid) is copied onto the
   track over what is there, as new clips that start in the take where the part does. Each copy is
   one undo step.
-- **Right-click** a take's name: **Delete take** removes the lane; the track's clips stay.
+- **Right-click** a take's name or lane: **Recolor lane** gives the take a colour of its own and
+  its parts on the track with it (`take.setColor`); **Recolor selected take** colours only the
+  parts of it selected on the track (`take.setColor` with `clips`); **Delete take** removes the
+  lane, and the track's clips stay.
 - **Hide take lanes** / **Show take lanes** in the right-click menu of the track's lane folds
   them away and back.
 
-Take lanes are saved with the project (the project format,
-[`suhina-format.md`](suhina-format.md)); deleting the track deletes its takes. A copy on the
+The track's lane reads as the comp (#989). A clip on the track that plays a take's content from
+the same place is a **part** of that take, found by its content and by where in it each beat lands
+(the passes of an audio take are clips of one file at different offsets; each MIDI pass has a
+content of its own), so nothing extra is stored and a trimmed part keeps its take:
+
+- A part is named after its take ("Take 4") and shows the take's colour unless it has one of its
+  own; the track's own copy of the last pass is a part of that take too.
+- On each take lane the spans that are on the track are drawn lit and the rest dimmed.
+- **Alt+Up** / **Alt+Down** swap every selected part for the same span of the take above or below,
+  in turn round the takes that have something there (`take.swap`), each one undo step.
+- Dragging the edge between two neighbouring parts moves their cut: one gets longer and the other
+  shorter, each still playing its own take (`take.moveCut`).
+- Splitting a clip on the track (`clip.split`) splits every take lane of the track at the same
+  beat, so the takes stay cut where the comp is.
+
+Take lanes are saved with the project, a take's own colour with them (the project format,
+[`suhina-format.md`](suhina-format.md)); deleting the track deletes its takes. A part on the
 track is a clip like any other: editing it leaves the take as it was.
 
 While recording into the arrangement, launching a slot plays it as usual; it is the slot record
@@ -185,6 +203,9 @@ file's frames.
 | `transport.setCountIn` | `bars`: 0, 1, 2 or 4 |
 | `take.comp` | `track`, `take` (from 1), `start?`, `end?`: copies the take, or its part from `start` to `end` beats, onto the track over what is there; one undo step |
 | `take.delete` | `track`, `take`: deletes the take lane; one undo step |
+| `take.setColor` | `track`, `take`, `color` (`"#rrggbb"` or null), `clips?`: the take's colour and its parts', or only the parts in `clips`; one undo step |
+| `take.swap` | `clip`, `direction` (`up` or `down`): the part replaced by the same span of the next take that has something there; one undo step |
+| `take.moveCut` | `clip`, `to`: moves the cut between the part and the one right after it; one undo step |
 | `record.state` | Whether the arrangement records, the takes running (track, slot or arrangement, audio or MIDI, start and end beat, notes so far, frames written, file), the count-in setting and the beats it has left, notices |
 
 `clip.launch` on a slot that records ends its take; `transport.stop` ends every take. All of

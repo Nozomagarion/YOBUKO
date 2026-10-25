@@ -14,6 +14,7 @@ mod clip_color;
 mod clip_edges;
 mod clip_shape;
 mod commands;
+mod comping;
 mod cue;
 mod device_groups;
 mod devices;

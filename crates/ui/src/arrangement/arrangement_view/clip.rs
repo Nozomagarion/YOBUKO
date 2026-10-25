@@ -574,7 +574,26 @@ pub(super) fn clip_box<'a>(
                     params["stack"] = json!(true);
                 }
                 let old = if grab == EdgeGrab::Left { clip.start } else { clip.start + clip.length };
-                if (beat - old).abs() > 1e-9 {
+                // Between two parts of a comp the edge is their cut: both move (#989).
+                let end = clip.start + clip.length;
+                let cut = clip.take.and(match grab {
+                    EdgeGrab::Right => lane
+                        .clips
+                        .iter()
+                        .any(|c| c.take.is_some() && c.id != clip.id && (c.start - end).abs() < 1e-6)
+                        .then_some(clip.id),
+                    EdgeGrab::Left => lane
+                        .clips
+                        .iter()
+                        .find(|c| c.take.is_some() && c.id != clip.id && (c.start + c.length - clip.start).abs() < 1e-6)
+                        .map(|c| c.id),
+                });
+                if (beat - old).abs() > 1e-9
+                    && let Some(before) = cut.filter(|_| !stretch)
+                {
+                    actions.push(Action::new("take.moveCut", json!({ "clip": before.0, "to": beat })));
+                    state.edge_released = Some((key, from, to, 30));
+                } else if (beat - old).abs() > 1e-9 {
                     if !stretch && state.selected.len() > 1 && state.is_selected(key) {
                         // Every selected clip's same edge moves as far, in one step (#956).
                         let clips: Vec<Value> = state.selected.iter().map(|(_, id)| json!({ "clip": id.0 })).collect();
@@ -1254,12 +1273,7 @@ pub(super) struct TakeLanes {
     pub(super) bar_beats: f64,
 }
 
-/// The colour of a track's take `number` (from 1): the palette's colours in turn, three apart so
-/// neighbouring takes differ; the part of a take put on the track takes it too (#953).
-pub(super) fn take_colour(number: usize) -> suhina_engine::model::Rgb {
-    let swatches = crate::interaction::colour_picker::swatches();
-    swatches[number.saturating_mul(3) % swatches.len()]
-}
+use crate::arrangement::timeline::take_colour;
 
 /// Draws `lane`'s take lanes under it (`docs/spec/recording.md` › Take lanes): each take's
 /// clips dimmed in the take's own colour, as they do not play. A click on a take's clip puts the whole clip on the track,
@@ -1296,7 +1310,7 @@ pub(super) fn take_lanes(
         if row.bottom() < at.visible.top() || row.top() > at.visible.bottom() {
             continue;
         }
-        let colour = take_colour(take.number);
+        let colour = take.color;
         let params = json!({
             "track": lane.track.0,
             "take": take.number,
@@ -1319,17 +1333,31 @@ pub(super) fn take_lanes(
         name.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{} of {}", take.name, lane.name))
         });
-        name.context_menu(|ui| {
-            if ui.button("Delete take").clicked() {
-                actions.push(Action::new("take.delete", params.clone()));
-                ui.close();
-            }
-        });
-        // Dimmed like a muted track's, in the take's colour: a take does not play.
+        // The parts of this take selected on the track, which Recolor selected take colours.
+        let selected: Vec<u32> = lane
+            .clips
+            .iter()
+            .filter(|c| c.take == Some(take.number) && state.selected_clips().iter().any(|(_, id)| *id == c.id))
+            .map(|c| c.id.0)
+            .collect();
+        let menu =
+            |ui: &mut Ui, actions: &mut Vec<Action>| take_menu(ui, lane.track, take, &selected, &params, actions);
+        name.context_menu(|ui| menu(ui, actions));
+        // Dimmed like a muted track's, in the take's colour: a take does not play. The parts of
+        // it on the track are drawn lit (#989).
         let look = Lane { mute: true, color: colour, ..lane.clone() };
+        let lit = Lane { mute: false, color: colour, ..lane.clone() };
         for clip in &take.clips {
             let rect = clip_rect(row, clip.start, clip.length, x_of);
             paint_clip(painter, rect, &look, clip, Shown::of(clip), clip.start, x_of, beat_width, timeline, false);
+            for &(start, end) in &take.used {
+                let span = Rect::from_x_y_ranges(egui::Rangef::new(x_of(start), x_of(end)), row.y_range());
+                let span = span.intersect(rect).intersect(painter.clip_rect());
+                if span.width() > 0.5 {
+                    let used = painter.with_clip_rect(span);
+                    paint_clip(&used, rect, &lit, clip, Shown::of(clip), clip.start, x_of, beat_width, timeline, false);
+                }
+            }
         }
         let body = ui.interact(
             row.intersect(at.visible),
@@ -1343,6 +1371,7 @@ pub(super) fn take_lanes(
                 format!("Comp from {} of {}", take.name, lane.name),
             )
         });
+        body.context_menu(|ui| menu(ui, actions));
         // The clip a click would take, under the pointer, before the click (#953).
         if state.take_drag.is_none()
             && let Some(pointer) = body.hover_pos()
@@ -1419,6 +1448,41 @@ pub(super) fn take_lanes(
     }
 }
 
+/// A take lane's menu (#989): Recolor lane colours the take and its parts on the track; Recolor
+/// selected take only the parts of it selected on the track; Delete take.
+fn take_menu(
+    ui: &mut Ui,
+    track: TrackId,
+    take: &crate::arrangement::timeline::TakeRow,
+    selected: &[u32],
+    params: &serde_json::Value,
+    actions: &mut Vec<Action>,
+) {
+    ui.menu_button("Recolor lane", |ui| {
+        if let Some(colour) = crate::interaction::colour_picker::swatch_row(ui, Some(take.color)) {
+            let hex = crate::interaction::colour_picker::hex(colour);
+            actions.push(Action::new("take.setColor", json!({ "track": track.0, "take": take.number, "color": hex })));
+            ui.close();
+        }
+    });
+    ui.add_enabled_ui(!selected.is_empty(), |ui| {
+        ui.menu_button("Recolor selected take", |ui| {
+            if let Some(colour) = crate::interaction::colour_picker::swatch_row(ui, None) {
+                let hex = crate::interaction::colour_picker::hex(colour);
+                let clips: Vec<serde_json::Value> = selected.iter().map(|id| json!({ "clip": id })).collect();
+                let params = json!({ "track": track.0, "take": take.number, "color": hex, "clips": clips });
+                actions.push(Action::new("take.setColor", params));
+                ui.close();
+            }
+        });
+    });
+    ui.separator();
+    if ui.button("Delete take").clicked() {
+        actions.push(Action::new("take.delete", params.clone()));
+        ui.close();
+    }
+}
+
 /// Draws a take recording into the arrangement on its track's row (#909): from where its pass
 /// began to the playhead, its notes or its waveform as they come in, edged in the record colour.
 pub(super) fn paint_live_take(
@@ -1457,6 +1521,7 @@ pub(super) fn paint_live_take(
         latest_end: None,
         color: lane.color,
         stack_key: (0, take.start.to_bits()),
+        take: None,
     };
     paint_clip(painter, rect, lane, &clip, Shown::of(&clip), take.start, x_of, beat_width, timeline, false);
     // An audio take's waveform so far: a line per peak, about the middle of the clip.

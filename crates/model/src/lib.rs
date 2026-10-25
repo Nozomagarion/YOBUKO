@@ -12,6 +12,7 @@ use std::fmt;
 
 pub mod automation;
 mod build;
+mod comping;
 mod groups;
 mod ids;
 pub mod names;
@@ -834,6 +835,8 @@ pub struct TakeLane {
     /// Its name, as the window shows it ("Take 3").
     pub name: String,
     pub clips: Vec<Clip>,
+    /// Its colour, set from its menu (Recolor lane, #989); `None` takes the palette's in turn.
+    pub color: Option<Rgb>,
 }
 
 impl Arrangement {

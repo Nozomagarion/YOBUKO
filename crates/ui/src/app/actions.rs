@@ -632,6 +632,25 @@ impl App {
                 self.view.selected_tracks.clear();
             }
             "view.computerKeyboard" => self.toggle_typing_keys(),
+            // The selected parts of a comp take the same span of the take above or below (#989).
+            "selection.takeUp" | "selection.takeDown" => {
+                let direction = if action == "selection.takeUp" { "up" } else { "down" };
+                let Some(session) = self.session() else { return };
+                let p = session.project();
+                for (track, id) in self.arrangement.selected_clips() {
+                    let comped = p
+                        .arrangement
+                        .lanes
+                        .iter()
+                        .filter(|l| l.track == Some(*track))
+                        .flat_map(|l| &l.clips)
+                        .find(|c| c.id == *id)
+                        .is_some_and(|c| p.comp_source(*track, c).is_some());
+                    if comped {
+                        actions.push(Action::new("take.swap", json!({ "clip": id.0, "direction": direction })));
+                    }
+                }
+            }
             "marker.addAtPlayhead" => {
                 // Where the playhead is while playing; stopped, where playback would start.
                 let monitor = self.session().and_then(|s| s.player()).map(|p| p.monitor());

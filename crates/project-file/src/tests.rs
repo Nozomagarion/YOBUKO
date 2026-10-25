@@ -302,8 +302,18 @@ fn take_lanes_survive_a_round_trip() {
     let lane = project.arrangement.lanes.iter().find(|l| l.track.is_some() && !l.clips.is_empty()).unwrap();
     let (track, clip) = (lane.track.unwrap(), lane.clips[0].clone());
     project.arrangement.takes = vec![
-        TakeLane { track, name: "Take 1".into(), clips: vec![Clip { id: ClipId::NONE, ..clip.clone() }] },
-        TakeLane { track, name: "Take 2".into(), clips: vec![Clip { id: ClipId::NONE, start: 4.0, ..clip }] },
+        TakeLane {
+            track,
+            name: "Take 1".into(),
+            clips: vec![Clip { id: ClipId::NONE, ..clip.clone() }],
+            color: Some(Rgb(0x12, 0x34, 0x56)),
+        },
+        TakeLane {
+            track,
+            name: "Take 2".into(),
+            clips: vec![Clip { id: ClipId::NONE, start: 4.0, ..clip }],
+            color: None,
+        },
     ];
     assert_eq!(project.validate(), Ok(()));
     let text = to_json(&project);
@@ -1053,7 +1063,7 @@ fn every_feature() -> Project {
     let lane = project.arrangement.lanes.iter().find(|l| l.track.is_some() && !l.clips.is_empty()).unwrap();
     let (track, clip) = (lane.track.unwrap(), lane.clips[0].clone());
     project.arrangement.takes =
-        vec![TakeLane { track, name: "Take 1".into(), clips: vec![Clip { id: ClipId::NONE, ..clip }] }];
+        vec![TakeLane { track, name: "Take 1".into(), clips: vec![Clip { id: ClipId::NONE, ..clip }], color: None }];
     project
 }
 

@@ -190,12 +190,14 @@ CHAPTERS = [
     (20, "Bounce to Audio", 6, 0.15, "partial",
      "Whole-project offline render to 32-bit float WAV (CLI/MCP), from an open project with its "
      "running plug-ins' state as heard; no per-track or group bounce, no paste."),
-    (21, "Comping", 6, 0.55, "partial",
+    (21, "Comping", 6, 0.75, "partial",
      "Take lanes made by recording into the arrangement (a lane per loop pass or jump back, the latest "
-     "copied to the track and playing), drawn greyed under the track and folded away from its menu; a "
-     "click copies a take's clip and a drag a part of it onto the track (take.comp), Delete take "
-     "(take.delete); saved with the project. Missing audition, comp highlights on takes, keys to swap "
-     "takes, take lanes made by hand, renaming and reordering them, crossfades at comp edges."),
+     "copied to the track and playing), drawn under the track with the parts in use lit and the rest dimmed, "
+     "folded away from a button or a menu; a click copies a take's clip and a drag a part of it onto the track "
+     "(take.comp), the parts named and coloured after their takes; Alt+Up/Down swap a part's take, the cut "
+     "between two parts dragged (take.moveCut), Recolor lane and Recolor selected take, splits reaching the "
+     "takes, Delete take; saved with the project. Missing audition, take lanes made by hand, renaming and "
+     "reordering them, crossfades at comp edges."),
     (22, "Stem Separation", 8, 0.00, "planned",
      "Roadmap item (Demucs candidate, weights unaudited). The pipeline around a model (chunking, "
      "resampling) exists in crates/separation with a test backend; no model and nothing a user "

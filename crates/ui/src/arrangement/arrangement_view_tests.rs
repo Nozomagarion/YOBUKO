@@ -389,6 +389,7 @@ fn a_tracks_take_lanes_show_under_it_and_fold_away() {
         track,
         name: name.into(),
         clips: vec![suhina_engine::model::Clip { id: ClipId::NONE, ..clip.clone() }],
+        color: None,
     };
     project.arrangement.takes = vec![take("Take 1"), take("Take 2")];
     let timeline = Timeline::build(&project, None);
