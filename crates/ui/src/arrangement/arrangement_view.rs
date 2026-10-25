@@ -860,6 +860,8 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             .position(|d| timeline.lanes.get(d.lane).is_some_and(|l| l.track == f))
             .map(|i| i + 1)
     });
+    // A drop drawn last frame on its new track has been moved by now.
+    state.landing = None;
     let mut ghost = None;
     let mut rows_seen: Vec<(TrackId, Rect)> = Vec::new();
     let mut clip_rects: Vec<((TrackId, ClipId), Rect)> = Vec::new();
@@ -1355,7 +1357,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
 
     // A clip dragged onto another lane is drawn there, over everything in that lane.
     if let Some((lane, clip, start)) = ghost
-        && let Some(drag) = state.clip_drag
+        && let Some(drag) = state.clip_drag.or(state.landing)
         && let Some(row) = row_of_clips(drag.target)
         && let Some(target) = timeline.lanes.iter().find(|l| l.track == drag.target)
     {

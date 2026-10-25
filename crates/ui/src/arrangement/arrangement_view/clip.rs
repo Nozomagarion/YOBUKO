@@ -400,6 +400,12 @@ pub(super) fn clip_box<'a>(
                 actions.push(Action::new("clip.move", params));
             }
         }
+        // Dropped on another track: the view draws it there, as while it was dragged, until the
+        // project has moved it.
+        if moved && !copying && (drag.target != lane.track || drag.new_track) {
+            state.landing = Some(ClipDrag { start, ..drag });
+            return Some((lane, clip, start));
+        }
         // Drawn where it was dropped until the project has moved it.
         let rect = clip_rect(space, start, clip.length, x_of);
         let shown = Shown::of(clip);

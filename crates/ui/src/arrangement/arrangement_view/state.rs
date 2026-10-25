@@ -177,6 +177,9 @@ pub struct ArrangementViewState {
     /// The beat an empty spot of a lane was right-clicked on, for its menu.
     pub(super) menu_beat: Option<f64>,
     pub(super) clip_drag: Option<ClipDrag>,
+    /// A clip dropped on another track this frame: drawn there until the project has moved it,
+    /// not back on its own track for a frame (#916).
+    pub(super) landing: Option<ClipDrag>,
     /// The empty space under the tracks this frame, top to bottom: a clip dropped there goes to
     /// a new track.
     pub(super) below_tracks: Option<(f32, f32)>,
@@ -307,6 +310,7 @@ impl Default for ArrangementViewState {
             edge_released: None,
             menu_beat: None,
             clip_drag: None,
+            landing: None,
             below_tracks: None,
             value_drag: None,
             gain_drag: None,
