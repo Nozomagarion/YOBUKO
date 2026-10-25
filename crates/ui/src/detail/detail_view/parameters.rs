@@ -348,11 +348,14 @@ pub(super) fn knob(
     let (min, max) = (parameter.min, parameter.max);
     let logarithmic = parameter.control == ParameterControl::LogKnob;
     // `.device .knob { width }` (or height) sets the knob's size, within its cell; with
-    // `--suhina-param-row` taller rows give it room.
-    let themed = {
+    // `--suhina-param-row` taller rows give it room. Its `accent-color` colours its ring and
+    // pointer, unless the device gives an accent of its own.
+    let (themed, sheet_accent) = {
         let _knob = crate::kit::style_class::enter("knob");
-        crate::kit::style_class::computed().and_then(|c| c.width.or(c.height))
+        let computed = crate::kit::style_class::computed();
+        (computed.as_ref().and_then(|c| c.width.or(c.height)), computed.filter(|c| c.authored.accent).map(|c| c.accent))
     };
+    let accent = accent.or(sheet_accent);
     let room = rect.width().min(rect.height()).max(8.0);
     let size = themed.map_or(room, |s| s.clamp(8.0, room));
     let (rect, mut response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click_and_drag());

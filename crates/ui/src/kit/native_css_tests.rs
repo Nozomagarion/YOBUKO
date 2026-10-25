@@ -938,6 +938,21 @@ fn checked_and_selected_states_reach_the_sheet() {
 }
 
 #[test]
+fn a_selected_header_s_background_never_fills_its_buttons() {
+    let mut seen = None;
+    painted(".track-header:selected { background-color: #304050; }", |_| {
+        let _header = super::super::style_class::enter_named("track-header", "track-1");
+        mark(HostState::Selected, true);
+        let shown = super::super::style_class::background(egui::Color32::BLACK);
+        let _button = super::super::style_class::enter("button");
+        seen = Some((shown, theme::control_background()));
+    });
+    let (shown, control) = seen.unwrap();
+    assert_eq!(shown, egui::Color32::from_rgb(0x30, 0x40, 0x50), "the header shows the sheet's colour");
+    assert_ne!(control, shown, "its buttons keep their own fill");
+}
+
+#[test]
 fn a_track_gives_its_colour_to_the_sheet_and_each_view_is_known() {
     let mut seen = None;
     painted(".mixer .track-name { background-color: var(--track-colour); }", |_| {

@@ -867,3 +867,50 @@ fn theme_override_disables_global_liquid_sliders_until_inheritance_returns() {
     assert!(!harness.get_by_label("Panel liquid").accesskit_node().is_disabled());
     assert_eq!(harness.state().settings().view.liquid, global);
 }
+
+/// A real pointer click on Cancel in *Move the folder?* leaves the themes where they are: the
+/// themes folder keeps its value and no move is asked for (round 6, step 63).
+#[test]
+fn a_pointer_click_on_cancel_in_move_the_folder_moves_nothing() {
+    let mut harness = short_window();
+    let mut settings = harness.state().settings().clone();
+    settings.themes_folder = "/tmp/suhina-themes-elsewhere".into();
+    let ctx = harness.ctx.clone();
+    harness.state_mut().set_settings(&ctx, settings);
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    harness.get_by_label("Reset Themes folder to its default").scroll_to_me();
+    settle(&mut harness);
+    let reset = harness.get_by_label("Reset Themes folder to its default").rect().center();
+    harness.drag_at(reset);
+    harness.drop_at(reset);
+    settle(&mut harness);
+    let cancel = harness.get_by_label("Leave them where they are").rect().center();
+    harness.hover_at(cancel);
+    settle(&mut harness);
+    harness.drag_at(cancel);
+    harness.drop_at(cancel);
+    for _ in 0..4 {
+        settle(&mut harness);
+    }
+    assert_eq!(harness.state_mut().take_theme_move(), None);
+    assert_eq!(harness.state().settings().themes_folder, "/tmp/suhina-themes-elsewhere");
+    assert!(harness.query_by_label("Leave them where they are").is_none());
+}
+
+/// A search no theme matches says so, the theme in use included (round 6, step 17).
+#[test]
+fn a_theme_search_nothing_matches_says_no_themes_match() {
+    let mut harness = short_window();
+    harness.get_by_label("Settings page: Themes").click();
+    settle(&mut harness);
+    harness.get_by_label("Search themes").focus();
+    harness.run();
+    harness.get_by_label("Search themes").type_text("zzz");
+    for _ in 0..3 {
+        settle(&mut harness);
+    }
+    let search = harness.get_by_label("Search themes").value();
+    assert_eq!(search.as_deref(), Some("zzz"));
+    assert!(harness.query_by_label("No themes match").is_some());
+}

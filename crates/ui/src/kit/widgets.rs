@@ -174,6 +174,9 @@ impl ValuePosition {
     }
 }
 
+/// The smallest knob drawn with its value above or below it.
+const MIN_STACKED_KNOB: f32 = 10.0;
+
 /// A knob in `rect` at `position` (0 to 1) with its value `text` where the sheet puts it
 /// ([`ValuePosition`], `default` where it says nothing), in `ink` unless the sheet's `color` says
 /// otherwise, at its `font-size` (`font_size` where it says none).
@@ -193,7 +196,12 @@ pub fn knob_with_value(
     let size_text = computed.as_ref().filter(|c| c.authored.font_size).map_or(font_size, |c| c.font_size);
     let ink = super::style_class::foreground(ink);
     let line = size_text + 3.0;
-    let place = ValuePosition::or(default);
+    let place = match ValuePosition::or(default) {
+        // A row too low for a knob with its value above or below it keeps the value beside it,
+        // so the knob stays big enough to see and use (a pan in a track's header).
+        ValuePosition::Top | ValuePosition::Bottom if rect.height() - line < MIN_STACKED_KNOB => ValuePosition::Right,
+        place => place,
+    };
     let text = &formatted_value(text);
     let (knob_area, text_area, align) = match place {
         ValuePosition::Right | ValuePosition::Left => {

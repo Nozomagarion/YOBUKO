@@ -2267,6 +2267,8 @@ impl App {
         if self.settings.track_headers.is_none() {
             self.arrangement.headers_left = headers_left(None);
         }
+        // The frame's placed controls, for anchors between them (`--suhina-anchor-*`).
+        let _capture = crate::kit::control_layout::Capture::begin(ui.ctx());
         self.ui_content(ui);
     }
 

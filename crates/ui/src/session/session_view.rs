@@ -685,13 +685,16 @@ fn column_header(
         painter.fill_background(rect, 0.0, fill);
     }
     crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Track);
-    crate::kit::native_css::background(painter, rect);
+    // The sheet's own background for the header (`.track-header:selected`) over the native one;
+    // the name's ink reads on whichever is shown.
+    let shown = crate::kit::style_class::background(fill);
+    crate::kit::native_css::surface(painter, rect, 0.0, egui::Color32::TRANSPARENT);
     let _name_style =
         crate::kit::style_class::enter_named_response("track-name", &format!("track-{}", column.track.0), &response);
     crate::kit::native_css::set_variable("--track-fill", crate::kit::native_css::hex(fill));
     crate::kit::native_css::background(painter, rect);
     // Ink that reads on the fill, unless the sheet gives the name a colour.
-    let color = crate::kit::style_class::foreground(theme::text_on(fill));
+    let color = crate::kit::style_class::foreground(theme::text_on(shown));
     if state.selected == Some(column.track) {
         painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.5, color), StrokeKind::Inside);
     }

@@ -290,6 +290,8 @@ pub(super) fn track_header(
     crate::kit::liquid::paint(painter, rect, header_fill, crate::kit::liquid::Surface::Track);
     // The sheet's own background for the header (`.arrangement .track-header`) over the native one.
     crate::kit::native_css::surface(painter, rect.intersect(clip), 0.0, egui::Color32::TRANSPARENT);
+    // The name and the controls' ink read on whichever background is shown.
+    let header_fill = crate::kit::style_class::background(header_fill);
     if selected {
         let outline = motion::mix(theme::border_strong(), saturated(rgb(lane.color)), 0.5);
         painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, outline), StrokeKind::Inside);

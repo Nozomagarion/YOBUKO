@@ -127,6 +127,16 @@ pub fn level_bar(
     }
     let inset = ((rect.width() - 32.0) / 2.0).clamp(2.0, 8.0);
     let inner = rect.shrink2(Vec2::new(inset, 0.0));
+    // A bar thinner than its value (`height: 4px`) keeps the value off it: above the bar when
+    // there is room, otherwise not drawn, never across the bar.
+    if track.height() < font.size {
+        let above = Rect::from_min_max(inner.min, Pos2::new(inner.right(), track.top()));
+        if above.height() >= font.size {
+            let ink = crate::kit::style_class::foreground(theme::text_primary());
+            widgets::text_in(painter, above, align, text, font, ink);
+        }
+        return;
+    }
     // The sheet may move the value (`text-align`) and give the lit part's text its own colour
     // (`.value-fill { color }`).
     let align = match crate::kit::style_class::computed().and_then(|style| style.text_align) {

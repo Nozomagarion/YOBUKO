@@ -1164,12 +1164,9 @@ fn theme_page(
             });
             let query = state.theme_search.trim().to_lowercase();
             // Every theme stays in the list, the one in use too (marked), so choosing one leaves
-            // the list as it is and the page where it was.
-            let mut others = themes
-                .list
-                .iter()
-                .filter(|(id, name, _)| id == current || theme_matches(&query, id, name, &themes.variants))
-                .peekable();
+            // the list as it is and the page where it was; a search shows only what matches.
+            let mut others =
+                themes.list.iter().filter(|(id, name, _)| theme_matches(&query, id, name, &themes.variants)).peekable();
             if others.peek().is_none() && !query.is_empty() {
                 ui.label(egui::RichText::new("No themes match").color(theme::text_hint()));
             }

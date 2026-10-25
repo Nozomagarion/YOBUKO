@@ -269,6 +269,11 @@ fn enter_inner(class: &str, name: Option<&str>, response: Option<&egui::Response
         if values.authored.background {
             set_background(&mut palette, values.background, class);
         }
+        // `accent-color` reaches every control drawn in the scope (a knob's arc, a lit button),
+        // the parameter list of a built-in effect too.
+        if values.authored.accent {
+            palette.accent = values.accent;
+        }
     }
     theme::local_palette(palette);
     Scope { palette: saved, revision: theme::palette_revision(), native }
@@ -293,6 +298,13 @@ const SURFACES: &[&str] = &[
     "settings",
     "dialog",
     "sample-map",
+    // Containers of controls: a selected header's background never fills its buttons.
+    "track-header",
+    "track-column",
+    "mixer-strip",
+    "device",
+    "device-panel",
+    "midi-tools",
 ];
 
 /// A background for `class`: a view's sets the surfaces inside it, and a control's its own fill

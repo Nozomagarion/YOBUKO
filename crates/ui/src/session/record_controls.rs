@@ -100,12 +100,13 @@ pub fn metronome_button(
     });
     let lit = motion::toward(ui.ctx(), response.id.with("on"), on, motion::VALUE);
     let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-    widgets::button_surface(painter, rect, &response, on, motion::mix(hover, theme::control_active(), lit), 0.0);
-    metronome_glyph(
-        painter,
-        rect,
-        crate::kit::style_class::foreground(motion::mix(theme::text_primary(), theme::accent(), lit)),
-    );
+    let fill = motion::mix(hover, theme::control_active(), lit);
+    widgets::button_surface(painter, rect, &response, on, fill, 0.0);
+    // The glyph keeps reading on a fill the sheet gives (`:checked { background-color }`).
+    let shown = crate::kit::style_class::background(fill);
+    let ink = motion::mix(theme::text_primary(), theme::accent(), lit);
+    let ink = if theme::contrast(shown, ink) < 3.0 { theme::text_on(shown) } else { ink };
+    metronome_glyph(painter, rect, crate::kit::style_class::foreground(ink));
     drop(style);
     // The level's slider is a popup of its own (`#metronome-level`), not part of the button.
     let _popup = crate::kit::style_class::enter_named("popup", "metronome-level");
