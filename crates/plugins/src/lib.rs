@@ -809,7 +809,18 @@ impl Plugin {
             return Vec::new();
         }
         group.drain();
-        group.take_param_edits(self.instance)
+        let taken = group.take_param_edits(self.instance);
+        // An edit the session keeps the project's values in step with is also a value set
+        // since the state was last read: a restart sets it again, the latest of a parameter
+        // winning (ADR 0006, decision 3). Kept only until the state is read again, which
+        // holds it.
+        for (id, value) in &taken {
+            self.params_since.retain(|(other, _)| *other != *id);
+            if self.params_since.len() < protocol::MAX_PARAMS {
+                self.params_since.push((*id, *value));
+            }
+        }
+        taken
     }
 
     /// The notes the ARA plug-in found in its regions since the last call, by region id

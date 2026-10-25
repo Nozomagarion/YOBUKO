@@ -13,6 +13,8 @@ path = "src/main.rs"
 suhina-ipc.workspace = true
 suhina-plugins.workspace = true
 interprocess = "2.4"  # 0BSD OR Apache-2.0
+# Values the audio thread hands the main thread between blocks (a report of one-shot changes).
+rtrb.workspace = true
 clack-host = { version = "0.2", features = ["clack-plugin"] }  # MIT OR Apache-2.0
 # The test plug-in built into the host (`test:clap`).
 clack-plugin = "0.2"  # MIT OR Apache-2.0
