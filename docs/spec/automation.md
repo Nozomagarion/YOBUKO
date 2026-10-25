@@ -99,6 +99,13 @@ transport runs, and the answer says `"automation": "off"`. The value set by hand
 `automation.setEnabled {enabled: true}` turns the lane on again; the lane's points are kept. Undo
 brings the lane back on with the old value.
 
+## What the controls show
+
+A control whose parameter follows an enabled lane (a track header's volume and pan, a mixer
+strip's, the returns' and Main's, a device's knob) shows the lane's value at the playhead,
+whether the transport runs, is paused or is stopped, and follows the playhead when it is moved
+while stopped (#706, #811). A lane turned off shows the value set by hand.
+
 ## How the engine plays them
 
 The engine runs one render path (offline renders and playback alike), turns lanes into
