@@ -1174,6 +1174,19 @@ fn move_clip(session: &mut Session, params: &Value) -> Result<Value, CommandErro
         None | Some(Value::Null) => None,
         Some(_) => crate::clip_color::parse_color(params, "color")?,
     };
+    // An empty track of the other kind takes the clip's (#945).
+    if to != track
+        && let Some(content) = session
+            .project
+            .arrangement
+            .lanes
+            .iter()
+            .find(|l| l.track == Some(track))
+            .and_then(|l| usize::try_from(index).ok().and_then(|i| l.clips.get(i)))
+            .map(|c| c.content)
+    {
+        crate::track_kind::fit_empty_for(session, to, content)?;
+    }
     let p = &mut session.project;
     let from_lane =
         p.arrangement.lanes.iter().position(|l| l.track == Some(track)).ok_or("the track has no arrangement lane")?;
@@ -1243,6 +1256,20 @@ fn move_slot(session: &mut Session, params: &Value) -> Result<Value, CommandErro
         ),
     };
 
+    // An empty track of the other kind takes the clip's (#945).
+    let from = session.project.launcher.columns.get(from_column).map(|c| c.track);
+    if let Some(to) = to_track.filter(|t| Some(*t) != from)
+        && let Some(content) = session
+            .project
+            .launcher
+            .columns
+            .get(from_column)
+            .and_then(|c| c.slots.get(from_scene))
+            .and_then(|s| s.clip.as_ref())
+            .map(|c| c.content)
+    {
+        crate::track_kind::fit_empty_for(session, to, content)?;
+    }
     let project = &mut session.project;
     let from_track = project.launcher.columns.get(from_column).map(|c| c.track).ok_or("the track has no clip slots")?;
     let to_track = to_track.unwrap_or(from_track);

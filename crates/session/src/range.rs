@@ -411,6 +411,15 @@ pub(crate) fn move_clips(session: &mut Session, params: &Value) -> Result<Value,
     if to.is_some() && !new_track && chosen.iter().any(|(track, _)| *track != chosen[0].0) {
         return Err("toTrack moves clips of one track; these are on several".into());
     }
+    // An empty track of the other kind takes the clips' kind (#945).
+    if let Some(target) = to.filter(|t| !new_track && chosen.iter().all(|(track, _)| track != t))
+        && let Some(content) = chosen.first().and_then(|(track, index)| {
+            let lane = session.project.arrangement.lanes.iter().find(|l| l.track == Some(*track));
+            lane.and_then(|l| l.clips.get(*index)).map(|c| c.content)
+        })
+    {
+        crate::track_kind::fit_empty_for(session, target, content)?;
+    }
     let p = &mut session.project;
     // Taken out first, the highest index of each lane first so the others keep theirs.
     let mut taken: Vec<(TrackId, Clip)> = Vec::with_capacity(chosen.len());

@@ -91,6 +91,12 @@ impl App {
             }
         }
         let target = self.drop_target(&items, pointer);
+        // Samples on a MIDI track that holds clips, or MIDI files on such an audio track, are
+        // refused, with the pointer saying so (#945).
+        let refused = self.refused_drop(&items, target);
+        if refused.is_some() && !released {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
+        }
         let separate = ctrl != self.settings.drop_separate;
         if let Some(pointer) = pointer {
             self.drag_label(ui, pointer, &items, target, separate);
@@ -100,12 +106,35 @@ impl App {
             self.map_window.drag = None;
             self.view.drop = None;
             self.arrangement.drop = None;
-            if let Some(target) = target {
+            if let Some(why) = refused {
+                self.status = Status::Hint(why);
+            } else if let Some(target) = target {
                 // Dropped into the project: the preview has done its job.
                 browser_view::stop_preview(&mut self.browser, &mut self.projects);
                 self.drop_items(&items, target, separate);
             }
         }
+    }
+
+    /// Why dropping `items` on `target` is refused (#945): samples on a MIDI track, or MIDI files
+    /// on an audio track, that holds clips. An empty track takes their kind instead.
+    pub(super) fn refused_drop(&self, items: &[BrowserItem], target: Option<DropTarget>) -> Option<String> {
+        let track = match target? {
+            DropTarget::Track(t) | DropTarget::Lane { track: t, .. } | DropTarget::Slot { track: t, .. } => t,
+            _ => return None,
+        };
+        let session = self.session()?;
+        let t = session.project().track(track)?;
+        let samples = items.iter().any(|i| i.kind == crate::interaction::drop::ItemKind::Sample);
+        let midi = items.iter().any(|i| i.kind == crate::interaction::drop::ItemKind::Midi);
+        let other = (samples && !t.content.audio && t.content.notes) || (midi && !t.content.notes && t.content.audio);
+        (other && !session.track_is_empty(track)).then(|| {
+            let what = if samples { "audio" } else { "MIDI" };
+            format!(
+                "{} holds clips of another kind: drop the {what} on an empty track, or below the tracks",
+                session.project().shown_track_name(track)
+            )
+        })
     }
 
     /// Whether `pointer` (in the main window's points) is over neither the main window nor the

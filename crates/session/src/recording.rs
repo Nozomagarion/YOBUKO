@@ -176,6 +176,12 @@ impl Session {
         self.live.recording.count_in_bars
     }
 
+    /// Whether `track` holds no clip, on its lane, take lanes or slots: such a track takes the
+    /// kind of what is dropped on it (#945).
+    pub fn track_is_empty(&self, track: TrackId) -> bool {
+        crate::track_kind::is_empty(&self.project, track)
+    }
+
     /// Counts the project's changes, edits and kept takes alike: a view built from the project
     /// is out of date when it moved (a take kept while polling, #909).
     pub fn change_count(&self) -> u64 {

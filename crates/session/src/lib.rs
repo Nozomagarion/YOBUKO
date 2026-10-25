@@ -50,6 +50,7 @@ mod sends;
 mod soundmap;
 mod tempo;
 mod track_copy;
+mod track_kind;
 
 use std::collections::HashMap;
 use std::fmt;

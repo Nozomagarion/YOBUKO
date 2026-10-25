@@ -422,6 +422,14 @@ pub(crate) fn add_files(session: &mut Session, params: &Value) -> Result<Value, 
         return Err(format!("nothing could be placed ({})", reasons.join("; ")).into());
     }
 
+    // An empty target of the other kind takes the kind of the first file (#945).
+    let mut target_kind = target_kind;
+    if let (Some(t), Some(kind), Some(first)) = (target, target_kind, sources.first())
+        && kind != first.kind
+        && crate::track_kind::fit_empty(session, t, first.kind == TrackKind::Midi, first.kind == TrackKind::Audio)?
+    {
+        target_kind = Some(first.kind);
+    }
     // Which track each clip goes on.
     let p = &mut session.project;
     let mut new_tracks: Vec<TrackId> = Vec::new();

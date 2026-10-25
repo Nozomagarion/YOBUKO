@@ -169,6 +169,14 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "track.setKind",
+        label: "Make an empty track a MIDI or an audio track; a MIDI track that becomes an audio track loses its instrument and MIDI effects",
+        params: &[TRACK, param("kind", ParamType::Text, "midi or audio")],
+        kind: CommandKind::Edit,
+        run: crate::track_kind::set_kind,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "track.duplicate",
         label: "Copy the named tracks, with new clips of their own, as one block after the last of them; a group with its tracks",
         params: &[

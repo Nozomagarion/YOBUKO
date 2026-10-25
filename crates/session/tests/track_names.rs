@@ -56,3 +56,30 @@ fn several_empty_tracks_are_added_at_once_in_one_undo_step() {
     assert!(run(&mut session, "track.add", json!({ "kind": "audio", "count": 65 })).is_err());
     assert!(run(&mut session, "track.add", json!({ "device": "fm-synth", "count": 2 })).is_err());
 }
+
+/// An empty track takes the kind of what lands on it, and a track that holds clips keeps its
+/// own (#945).
+#[test]
+fn an_empty_track_takes_the_kind_of_the_clip_moved_onto_it() {
+    let mut session = Session::new(suhina_test_support::with_ids(blank_project()));
+    // A MIDI clip on 1 MIDI; 3 Audio is empty.
+    run(&mut session, "clip.create", json!({ "track": "1 MIDI", "start": 0.0, "length": 4.0 })).unwrap();
+    let midi_clip = session.project().arrangement.lanes.iter().find_map(|l| l.clips.first()).map(|c| c.id.0).unwrap();
+    run(&mut session, "clip.move", json!({ "clip": midi_clip, "start": 0.0, "toTrack": "3 Audio" })).unwrap();
+    let p = session.project();
+    let third = &p.tracks[2];
+    assert!(third.content.notes && !third.content.audio, "3 Audio became a MIDI track");
+    assert_eq!(p.shown_track_name(third.id), "3 MIDI");
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert!(session.project().tracks[2].content.audio, "undo makes it an audio track again");
+    // track.setKind: refused on a track with clips, done on an empty one, its instrument dropped.
+    assert!(run(&mut session, "track.setKind", json!({ "track": "1 MIDI", "kind": "audio" })).is_err());
+    run(&mut session, "device.add", json!({ "track": "2 MIDI", "id": "fm-synth" })).unwrap();
+    run(&mut session, "device.add", json!({ "track": "FM Synth", "id": "utility" })).unwrap();
+    run(&mut session, "track.setKind", json!({ "track": "FM Synth", "kind": "audio" })).unwrap();
+    let p = session.project();
+    let second = &p.tracks[1];
+    assert!(second.content.audio);
+    let devices: Vec<&str> = p.channel_of_track(second.id).unwrap().devices.iter().map(|d| d.name.as_str()).collect();
+    assert_eq!(devices, ["Utility"], "the instrument goes, the effect stays");
+}

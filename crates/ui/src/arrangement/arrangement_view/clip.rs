@@ -334,6 +334,16 @@ pub(super) fn clip_box<'a>(
                 }
             }
         }
+        // Over a track of the other kind that holds clips, the drop is refused, and the pointer
+        // says so; an empty one takes the clip's kind (#945).
+        if let Some(target) = timeline.lanes.iter().find(|l| l.track == drag.target && l.track != lane.track) {
+            let other =
+                if clip.audio { !target.plays_audio && target.notes } else { !target.notes && target.plays_audio };
+            let holds = !target.clips.is_empty() || timeline.takes.iter().any(|t| t.track == target.track);
+            if other && holds {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
+            }
+        }
     }
     if response.drag_stopped_by(egui::PointerButton::Primary)
         && let Some(drag) = state.clip_drag.take()
