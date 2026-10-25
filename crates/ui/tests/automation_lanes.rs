@@ -973,7 +973,7 @@ fn a_painted_range_copies_duplicates_and_pastes() {
     assert_eq!(beats(&harness), pasted);
 }
 
-/// A right-click on the line, the menu's shape, and the curve handle (#916).
+/// A right-click at `at`.
 fn right_click_at(harness: &mut Harness<'static, App>, at: Pos2) {
     harness.hover_at(at);
     harness.run();
@@ -1072,4 +1072,68 @@ fn by_default_only_a_click_on_the_line_adds_a_point() {
     let line = rect.bottom() - 0.85 * (rect.height() - 2.0 * 4.0) - 4.0;
     click_at(&mut harness, Pos2::new(rect.left() + 100.0, line));
     assert_eq!(volume(&harness).0.len(), 1, "a click on the line adds a point");
+}
+
+/// A right-click on the line offers Add value; a point's menu has Edit value, whose field sets the
+/// value typed; Snap to grid off in the menu lets a point land off the grid (#916).
+#[test]
+fn add_value_edit_value_and_snap_to_grid_from_the_menus() {
+    let mut harness = with_lanes();
+    click_anywhere(&mut harness, false);
+    let rect = lane(&harness);
+    // The faint line at 0 dB is 85 % up the lane's plot.
+    let line = rect.bottom() - 4.0 - 0.85 * (rect.height() - 8.0);
+    right_click_at(&mut harness, Pos2::new(rect.left() + 100.0, line));
+    harness.get_by_label("Add value").click();
+    harness.run();
+    let points = volume(&harness).0;
+    assert_eq!(points.iter().map(|p| p.beat).collect::<Vec<_>>(), [12.0], "on the grid");
+    // Edit value: type -6 and Enter.
+    harness.get_by_label("Volume point 1 on Drums").click_secondary();
+    harness.run();
+    harness.get_by_label("Edit value").click();
+    harness.run();
+    harness.run();
+    harness.input_mut().events.push(egui::Event::Text("-6".into()));
+    harness.run();
+    harness.key_press(Key::Enter);
+    harness.run();
+    let gain = volume(&harness).0.first().map_or(0.0, |p| p.value);
+    assert!((20.0 * gain.log10() + 6.0).abs() < 0.01, "{gain}");
+    // Snap to grid off: a point lands where the pointer is.
+    harness.get_by_label("Volume point 1 on Drums").click_secondary();
+    harness.run();
+    harness.get_by_label("Snap to grid").click();
+    harness.run();
+    click_anywhere(&mut harness, true);
+    click_at(&mut harness, Pos2::new(rect.left() + 303.0, rect.center().y));
+    let beats: Vec<f64> = volume(&harness).0.iter().map(|p| p.beat).collect();
+    assert!(beats.iter().any(|b| (b - 37.875).abs() < 0.01), "off the grid: {beats:?}");
+}
+
+/// A drag on a segment's line moves its two points up or down together; with Alt it bends it
+/// (#916).
+#[test]
+fn a_segment_drag_moves_it_and_alt_bends_it() {
+    let mut harness = with_lanes();
+    let rect = lane(&harness);
+    click_at(&mut harness, Pos2::new(rect.left() + 100.0, rect.bottom() - 10.0));
+    click_at(&mut harness, Pos2::new(rect.left() + 300.0, rect.top() + 20.0));
+    let before = volume(&harness).0;
+    let a = harness.get_by_label("Volume point 1 on Drums").rect().center();
+    let b = harness.get_by_label("Volume point 2 on Drums").rect().center();
+    // A quarter of the way along the line, away from the curve handle in the middle.
+    let on = a.lerp(b, 0.25);
+    drag(&mut harness, on, vec2(0.0, 8.0));
+    let after = volume(&harness).0;
+    assert_eq!(after.len(), 2);
+    assert!(after[0].value < before[0].value && after[1].value < before[1].value, "{before:?} -> {after:?}");
+    assert_eq!((after[0].beat, after[1].beat), (before[0].beat, before[1].beat), "up and down only");
+    // With Alt the drag bends the segment.
+    let a = harness.get_by_label("Volume point 1 on Drums").rect().center();
+    let b = harness.get_by_label("Volume point 2 on Drums").rect().center();
+    harness.event(egui::Event::ModifiersChanged(Modifiers::ALT));
+    drag(&mut harness, a.lerp(b, 0.25), vec2(0.0, -20.0));
+    harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
+    assert!(volume(&harness).0.first().is_some_and(|p| p.curve.abs() > 0.05));
 }

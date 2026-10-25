@@ -74,7 +74,7 @@ use self::keys::*;
 
 /// Launch quantisation choices, as `launcher.setQuantization` takes them; the Arrangement
 /// view's grid follows the same value.
-const QUANTIZATION: [&str; 14] = [
+pub(crate) const QUANTIZATION: [&str; 14] = [
     "none", "8 bars", "4 bars", "2 bars", "1 bar", "1/2", "1/2T", "1/4", "1/4T", "1/8", "1/8T", "1/16", "1/16T", "1/32",
 ];
 /// The quantisation of a session before anything is set.
@@ -2745,6 +2745,7 @@ impl App {
                             // The grid follows the value in the control bar, which each
                             // project keeps (`launcher.setQuantization`).
                             self.arrangement.grid = session.quantization();
+                            self.arrangement.automation.grid = Some(session.quantization());
                             let mut timeline = timeline;
                             timeline.follow_automation(session.project());
                             timeline.midi_ports = self.projects.midi_ports().to_vec();

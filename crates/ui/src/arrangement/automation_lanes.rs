@@ -151,6 +151,53 @@ impl Scale {
         }
     }
 
+    /// A value as Edit value's field starts with: the set command's number, `-inf` for a silent
+    /// volume.
+    fn typed_text(&self, value: f64) -> String {
+        match self.command(value) {
+            Value::String(text) => text,
+            number => number.to_string(),
+        }
+    }
+
+    /// A value typed into Edit value's field, as the set command takes it: a number in its unit
+    /// (decibels for the volume, `-inf` for silence; a pan as -1 to 1 or as `25L`, `C`, `25R`; a
+    /// percentage with `%`), units written after it left out. `None` for text that is not one.
+    fn parse_typed(&self, text: &str) -> Option<Value> {
+        let text = text.trim();
+        let lower = text.to_lowercase();
+        if matches!(self, Self::Volume) && (lower == "-inf" || lower == "inf" || lower == "-∞") {
+            return Some(json!("-inf"));
+        }
+        if matches!(self, Self::Pan) {
+            if lower == "c" {
+                return Some(json!(0.0));
+            }
+            for (side, sign) in [('l', -1.0), ('r', 1.0)] {
+                if let Some(amount) = lower.strip_suffix(side).and_then(|n| n.trim().parse::<f64>().ok()) {
+                    return Some(json!((sign * amount / 50.0).clamp(-1.0, 1.0)));
+                }
+            }
+        }
+        let percent = lower.ends_with('%');
+        let number: String = lower
+            .chars()
+            .take_while(|c| c.is_ascii_digit() || matches!(c, '-' | '+' | '.' | ','))
+            .map(|c| if c == ',' { '.' } else { c })
+            .collect();
+        let value: f64 = number.parse().ok().filter(|v: &f64| v.is_finite())?;
+        let value = match self {
+            Self::Device(info) if percent && info.unit == Unit::Percent => value / 100.0,
+            Self::Device(info) if lower.ends_with("ms") && info.unit == Unit::Seconds => value / 1000.0,
+            Self::Volume => value.min(6.0),
+            Self::Pan => value.clamp(-1.0, 1.0),
+            Self::Mute => value.round().clamp(0.0, 1.0),
+            Self::Device(info) => info.clamp(value),
+            Self::Sd(parameter) => parameter.clamp(value),
+        };
+        Some(json!(value))
+    }
+
     /// A value in the unit of the set command, as a number: the volume's silence is its floor.
     fn number(&self, value: f64) -> f64 {
         match self {
@@ -437,6 +484,19 @@ struct PointDrag {
     together: Vec<usize>,
     grab: (f64, f64),
     now: (f64, f64),
+    /// A segment's two points dragged by their line: up and down only.
+    segment: bool,
+}
+
+/// Where a point drag is now from `pos`: with Shift, only along the axis the pointer has moved
+/// further on, and up or down at a quarter of the pointer's speed for a finer value.
+fn dragged_to(grab: (f64, f64), beat: f64, position: f64, plot: Rect, geometry: &Geometry, shift: bool) -> (f64, f64) {
+    if !shift {
+        return (beat, position);
+    }
+    let across = (beat - grab.0).abs() as f32 * geometry.beat_width;
+    let along = (position - grab.1).abs() as f32 * plot.height();
+    if across > along { (beat, grab.1) } else { (grab.0, grab.1 + (position - grab.1) * 0.25) }
 }
 
 /// A segment's curve being bent: the segment's first point and its curve so far.
@@ -490,6 +550,16 @@ pub struct LanesState {
     /// Where a right-click on a lane was: its track, lane and beat, for the shapes its menu
     /// inserts.
     menu_at: Option<(TrackId, LaneKey, f64)>,
+    /// The beat on the grid a right-click on the line was at, for the menu's Add value.
+    menu_line: Option<f64>,
+    /// Snap to grid is off in the lanes' menu: points and ranges go where the pointer is, as with
+    /// Alt. The window's choice, not saved.
+    pub snap_off: bool,
+    /// The grid value the project has (`launcher.setQuantization`), which the menu marks; the
+    /// window sets it before each frame.
+    pub grid: Option<suhina_engine::Quantization>,
+    /// A point whose value is being typed (its menu's Edit value): track, lane, point and text.
+    editing: Option<(TrackId, LaneKey, usize, String)>,
     /// The lanes whose parameter was chosen in the parameter menu's "Automated" section: the
     /// menu opens there again for them, and on the parameter's own row for the rest.
     from_automated: HashSet<(TrackId, LaneKey)>,
@@ -977,7 +1047,9 @@ fn lane(
     let key = &param.key;
     let visible = time.intersect(geometry.visible);
     let plot = plot(time);
-    let free = ui.input(|i| i.modifiers.alt);
+    // Points added and dragged and a painted range go on the grid; Alt, or Snap to grid off in the
+    // lane's menu, frees them (#916).
+    let free = ui.input(|i| i.modifiers.alt) || state.snap_off;
     let id = Id::new(("automation-lane", track.0, key.device, key.param.as_str()));
     let label = param.label();
 
@@ -1025,13 +1097,18 @@ fn lane(
         body.hover_pos().filter(|pos| state.box_drag.is_none() && state.curve_drag.is_none() && near_line(*pos));
     if let Some(pos) = over_line {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
-        let beat = geometry.beat_of(pos.x);
+        // Where a click puts the point: on the grid (at the pointer with Alt, or with Snap to grid
+        // off), marked by a line across the lane.
+        let beat = geometry.snap(geometry.beat_of(pos.x), free);
         if let Some(value) = suhina_engine::model::automation::value_at(&level, beat, param.scale.stepped()) {
             let y = y_of(plot, param.scale.position(value));
-            painter.with_clip_rect(visible).circle_filled(Pos2::new(pos.x, y), POINT, color(lanes.color));
+            let x = geometry.x_of(beat);
+            let guide = painter.with_clip_rect(visible);
+            guide.vline(x, time.y_range(), Stroke::new(1.0, theme::text_secondary()));
+            guide.circle_filled(Pos2::new(x, y), POINT, color(lanes.color));
             egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), id.with("value"), egui::PopupAnchor::Pointer)
                 .gap(12.0)
-                .show(|ui| ui.label(param.scale.text(value)));
+                .show(|ui| ui.add(egui::Label::new(param.scale.text(value)).wrap_mode(egui::TextWrapMode::Extend)));
         }
     }
     // A drag starts once the pointer has moved a little: it is measured from where it was pressed.
@@ -1039,13 +1116,37 @@ fn lane(
     if body.drag_started_by(egui::PointerButton::Primary)
         && let Some(pos) = pressed_at.or_else(|| body.interact_pointer_pos())
     {
+        // On a segment's line: a drag moves its two points up or down together; with Alt it bends
+        // the segment instead (#916).
+        let alt = ui.input(|i| i.modifiers.alt);
         match segment_at(&param.points, &param.scale, plot, geometry, pos) {
-            Some(point) => {
+            Some(point) if alt => {
                 let curve = param.points.get(point).map_or(0.0, |p| p.curve);
                 state.curve_drag = Some(CurveDrag { track, key: key.clone(), point, curve });
             }
+            Some(point) => {
+                let grab = (geometry.beat_of(pos.x), position_of(plot, pos.y));
+                state.point_drag = Some(PointDrag {
+                    track,
+                    key: key.clone(),
+                    point,
+                    together: vec![point, point + 1],
+                    grab,
+                    now: grab,
+                    segment: true,
+                });
+                state.selection = None;
+            }
             None => state.box_drag = Some(BoxDrag { track, key: key.clone(), from: pos, to: pos }),
         }
+    }
+    if body.dragged_by(egui::PointerButton::Primary)
+        && let Some(pos) = body.interact_pointer_pos()
+        && let Some(drag) = state.point_drag.as_mut().filter(|d| d.segment && d.track == track && &d.key == key)
+    {
+        let shift = ui.input(|i| i.modifiers.shift);
+        let position = position_of(plot, pos.y);
+        drag.now = (drag.grab.0, if shift { drag.grab.1 + (position - drag.grab.1) * 0.25 } else { position });
     }
     if body.dragged_by(egui::PointerButton::Primary) {
         let dy = body.drag_delta().y;
@@ -1065,6 +1166,11 @@ fn lane(
         }
     }
     if body.drag_stopped_by(egui::PointerButton::Primary) {
+        if let Some(drag) = state.point_drag.take_if(|d| d.segment && d.track == track && &d.key == key)
+            && let Some(action) = drop_points(&drag, param, geometry, free)
+        {
+            actions.push(action);
+        }
         if let Some(drag) = state.curve_drag.take_if(|d| d.track == track && &d.key == key) {
             let before = param.points.get(drag.point).map_or(0.0, |p| p.curve);
             if (drag.curve - before).abs() > 1e-6 {
@@ -1096,11 +1202,39 @@ fn lane(
         && let Some(pos) = body.interact_pointer_pos()
     {
         state.menu_at = Some((track, key.clone(), geometry.beat_of(pos.x).max(0.0)));
+        state.menu_line = near_line(pos).then(|| geometry.snap(geometry.beat_of(pos.x), free));
     }
     body.context_menu(|ui| {
         let Some(beat) = state.menu_at.as_ref().filter(|(t, k, _)| *t == track && k == key).map(|(_, _, b)| *b) else {
             return;
         };
+        // On the line: Add value puts a point on it there, on the grid, keeping its shape.
+        if let Some(at) = state.menu_line {
+            if ui.button("Add value").clicked() {
+                let mut params = key.params(track);
+                params["beat"] = json!(at);
+                match splice(&level, at, param.scale.stepped()).filter(|(value, _)| param.scale.keeps(*value)) {
+                    Some((value, curve)) => {
+                        params["value"] = param.scale.exact(value);
+                        if curve != 0.0 {
+                            params["curve"] = json!(curve);
+                        }
+                    }
+                    None => {
+                        let value = suhina_engine::model::automation::value_at(&level, at, param.scale.stepped())
+                            .unwrap_or(param.current);
+                        params["value"] = param.scale.command(value);
+                    }
+                }
+                if let Some(shape) = state.new_shape {
+                    params["shape"] = json!(shape);
+                }
+                actions.push(Action::new("automation.addPoint", params));
+                state.selection = None;
+                ui.close();
+            }
+            ui.separator();
+        }
         match state.range.as_ref().filter(|r| r.track == track && &r.key == key && (r.start..=r.end).contains(&beat)) {
             // Inside a painted range: the shape fills it, once a beat for a repeating one.
             Some(range) => {
@@ -1129,6 +1263,7 @@ fn lane(
                 }
             }
         }
+        grid_menu(ui, state, actions);
     });
 
     // The envelope: in the track colour while it plays, dimmed while a manual change has turned
@@ -1239,6 +1374,10 @@ fn lane(
             None => (point.beat, point.value),
         };
         let center = Pos2::new(geometry.x_of(shown.0), y_of(plot, param.scale.position(shown.1)));
+        // The point being dragged by itself shows a thin line across the lane, against the grid.
+        if dragging == Some(index) && state.point_drag.as_ref().is_some_and(|d| !d.segment) {
+            lane_painter.vline(center.x, time.y_range(), Stroke::new(1.0, theme::text_secondary()));
+        }
         if !visible.expand(POINT_HIT).contains(center) {
             continue;
         }
@@ -1282,14 +1421,16 @@ fn lane(
                 .filter(|s| s.track == track && &s.key == key)
                 .map_or_else(|| vec![index], |s| s.points.clone());
             let grab = (geometry.beat_of(pos.x), position_of(plot, pos.y));
-            state.point_drag = Some(PointDrag { track, key: key.clone(), point: index, together, grab, now: grab });
+            state.point_drag =
+                Some(PointDrag { track, key: key.clone(), point: index, together, grab, now: grab, segment: false });
         }
         if response.dragged_by(egui::PointerButton::Primary)
             && let Some(pos) = response.interact_pointer_pos()
             && let Some(drag) =
                 state.point_drag.as_mut().filter(|d| d.track == track && &d.key == key && d.point == index)
         {
-            drag.now = (geometry.beat_of(pos.x), position_of(plot, pos.y));
+            let shift = ui.input(|i| i.modifiers.shift);
+            drag.now = dragged_to(drag.grab, geometry.beat_of(pos.x), position_of(plot, pos.y), plot, geometry, shift);
         }
         if response.drag_stopped_by(egui::PointerButton::Primary)
             && let Some(drag) = state.point_drag.take_if(|d| d.track == track && &d.key == key && d.point == index)
@@ -1304,6 +1445,12 @@ fn lane(
         }
         let selected = state.is_selected(track, key, index);
         response.context_menu(|ui| {
+            // Edit value: a field beside the point takes the value typed, in the set command's unit.
+            if ui.button("Edit value").clicked() {
+                state.editing = Some((track, key.clone(), index, param.scale.typed_text(point.value)));
+                ui.close();
+            }
+            ui.separator();
             let several = state.selection.as_ref().filter(|s| selected && s.points.len() > 1);
             if let Some(selection) = several {
                 if ui.button(format!("Delete {} points", selection.points.len())).clicked() {
@@ -1331,12 +1478,74 @@ fn lane(
                     ui.close();
                 }
             }
+            grid_menu(ui, state, actions);
         });
+        // The field Edit value opened, beside the point: Enter (or a click elsewhere) sets the
+        // value typed, Escape leaves it.
+        if let Some((_, _, _, text)) =
+            state.editing.as_mut().filter(|(t, k, p, _)| *t == track && k == key && *p == index)
+        {
+            let field = Rect::from_min_size(center + Vec2::new(6.0, -22.0), Vec2::new(64.0, 18.0));
+            let edit_id = point_id.with("edit");
+            let response = ui.put(
+                field,
+                egui::TextEdit::singleline(text)
+                    .id(edit_id)
+                    .font(theme::mono_font(theme::TEXT_SMALL))
+                    .desired_width(60.0),
+            );
+            // It opens with the whole value selected, so typing replaces it.
+            if !response.has_focus() && !response.lost_focus() {
+                response.request_focus();
+                if let Some(mut edit) = egui::TextEdit::load_state(ui.ctx(), edit_id) {
+                    let all = egui::text::CCursorRange::two(
+                        egui::text::CCursor::new(0),
+                        egui::text::CCursor::new(text.chars().count()),
+                    );
+                    edit.cursor.set_char_range(Some(all));
+                    edit.store(ui.ctx(), edit_id);
+                }
+            }
+            let escape = ui.input(|i| i.key_pressed(egui::Key::Escape));
+            if response.lost_focus() || escape {
+                let typed = text.clone();
+                state.editing = None;
+                if !escape && let Some(value) = param.scale.parse_typed(&typed) {
+                    let mut params = key.params(track);
+                    params["point"] = json!(index);
+                    params["value"] = value;
+                    actions.push(Action::new("automation.movePoint", params));
+                }
+            }
+        }
         let hover = widgets::hover(ui, &response);
         let radius = POINT + hover;
         let fill = if selected { theme::text_primary() } else { ink };
         lane_painter.circle_filled(center, radius, fill);
         lane_painter.circle_stroke(center, radius, Stroke::new(1.0, theme::window_background()));
+    }
+}
+
+/// The grid entries at the end of the lanes' menus: Snap to grid, and the grid value (the
+/// control bar's, `launcher.setQuantization`).
+fn grid_menu(ui: &mut Ui, state: &mut LanesState, actions: &mut Vec<Action>) {
+    ui.separator();
+    let mut snap = !state.snap_off;
+    if ui.checkbox(&mut snap, "Snap to grid").clicked() {
+        state.snap_off = !snap;
+        ui.close();
+    }
+    ui.label(egui::RichText::new("Grid").color(theme::text_hint()).size(theme::TEXT_SMALL));
+    for row in crate::app::QUANTIZATION.iter().filter(|q| **q != "none").collect::<Vec<_>>().chunks(5) {
+        ui.horizontal(|ui| {
+            for &&value in row {
+                let on = state.grid.is_some_and(|g| suhina_session::parse_quantization(value).ok() == Some(g));
+                if ui.selectable_label(on, value).clicked() {
+                    actions.push(Action::new("launcher.setQuantization", json!({ "value": value })));
+                    ui.close();
+                }
+            }
+        });
     }
 }
 
