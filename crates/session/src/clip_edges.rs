@@ -59,6 +59,39 @@ fn put_back(p: &mut Project, lane: usize, clip: Clip, stack: bool) -> Result<usi
 /// clip that does not loop ends at most where its audio does (a MIDI clip's content grows with
 /// it); a looping clip repeats its loop as far as it goes. The clip replaces what it now covers
 /// unless stacked. Edges past the limits stop at them.
+/// `clip.trimMany {clips, edge, by, stack?}`: the same edge of every clip moved by `by` beats as
+/// `clip.trim` moves it, each stopping at its own limits, in one undo step (#956). Each clip is
+/// found by its id when its turn comes, as an earlier one may have changed where the others are.
+pub(crate) fn trim_clips(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let edge = match params.get("edge").and_then(Value::as_str) {
+        Some("start") => "start",
+        Some("end") => "end",
+        _ => return Err("edge must be start or end".into()),
+    };
+    let by =
+        params.get("by").and_then(Value::as_f64).filter(|b| b.is_finite()).ok_or("by must be a number of beats")?;
+    let stack = params.get("stack").cloned().unwrap_or(Value::Bool(false));
+    let p = &session.project;
+    let ids: Vec<u32> = crate::commands::clip_list(p, params)?
+        .into_iter()
+        .filter_map(|(track, index)| {
+            p.arrangement.lanes.iter().find(|l| l.track == Some(track)).and_then(|l| l.clips.get(index)).map(|c| c.id.0)
+        })
+        .collect();
+    for id in &ids {
+        let p = &session.project;
+        let Some((track, index, clip)) = p.arrangement.lanes.iter().find_map(|l| {
+            let index = l.clips.iter().position(|c| c.id.0 == *id)?;
+            Some((l.track?, index, l.clips.get(index)?.clone()))
+        }) else {
+            continue;
+        };
+        let at = if edge == "start" { clip.start } else { clip.start + clip.length };
+        trim_clip(session, &json!({ "track": track.0, "index": index, edge: at + by, "stack": stack }))?;
+    }
+    Ok(json!({ "clips": ids.len() }))
+}
+
 pub(crate) fn trim_clip(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let (start, end) = (edge(params, "start")?, edge(params, "end")?);
     let (turn_loop, stack) = (flag(params, "loop")?, flag(params, "stack")?);

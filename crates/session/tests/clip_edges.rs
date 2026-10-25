@@ -250,3 +250,19 @@ fn an_unwarped_clip_spans_its_seconds_at_the_tempo_and_keeps_its_start() {
     run(&mut session, "clip.setGain", json!({ "clip": clip.id.0, "db": -3.0 })).unwrap();
     assert_eq!(first(&session, 3).start, 4.0);
 }
+
+/// The selected clips dragged by one edge move it as far, each stopping at its own limits, in
+/// one undo step (#956): the MIDI clip grows by eight beats, the unlooped audio clip only as far
+/// as its audio goes.
+#[test]
+fn several_clips_move_the_same_edge_by_as_much_in_one_step() {
+    let mut session = Session::new(suhina_test_support::with_ids(project()));
+    let ids: Vec<u32> = [1, 3].iter().map(|t| first(&session, *t).id.0).collect();
+    let clips: Vec<serde_json::Value> = ids.iter().map(|id| json!({ "clip": id })).collect();
+    run(&mut session, "clip.trimMany", json!({ "clips": clips, "edge": "end", "by": 8.0 })).unwrap();
+    assert_eq!(first(&session, 1).length, 12.0);
+    assert!(first(&session, 3).length <= 8.0 + 1e-9, "the audio clip stops at its audio: {:?}", first(&session, 3));
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!((first(&session, 1).length, first(&session, 3).length), (4.0, 8.0));
+    assert!(run(&mut session, "clip.trimMany", json!({ "clips": clips, "edge": "middle", "by": 1.0 })).is_err());
+}

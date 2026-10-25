@@ -37,6 +37,23 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::UNHEARD,
     },
     CommandSpec {
+        id: "clip.trimMany",
+        label: "Move the same edge of several arrangement clips by the same beats as one undo step, each stopping at its own limits as clip.trim does (the selected clips dragged by one edge)",
+        params: &[
+            CLIPS,
+            param("edge", ParamType::Text, "start (the left edge, the content moving with it) or end"),
+            param("by", ParamType::Number, "how far each edge moves, in beats; negative moves it left"),
+            optional(
+                "stack",
+                ParamType::Bool,
+                "true leaves clips under them as they are; false (default) replaces them",
+            ),
+        ],
+        kind: CommandKind::Edit,
+        run: crate::clip_edges::trim_clips,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "clip.renameMany",
         label: "Give several arrangement clips the same name, as one undo step; clips that play the same content share the name",
         params: &[CLIPS, param("name", ParamType::Text, "the new name (empty clears it)")],

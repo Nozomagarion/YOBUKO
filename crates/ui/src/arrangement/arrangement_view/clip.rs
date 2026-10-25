@@ -549,7 +549,18 @@ pub(super) fn clip_box<'a>(
                 }
                 let old = if grab == EdgeGrab::Left { clip.start } else { clip.start + clip.length };
                 if (beat - old).abs() > 1e-9 {
-                    actions.push(Action::new(if stretch { "clip.stretch" } else { "clip.trim" }, params));
+                    if !stretch && state.selected.len() > 1 && state.is_selected(key) {
+                        // Every selected clip's same edge moves as far, in one step (#956).
+                        let clips: Vec<Value> = state.selected.iter().map(|(_, id)| json!({ "clip": id.0 })).collect();
+                        let edge = if grab == EdgeGrab::Left { "start" } else { "end" };
+                        let mut many = json!({ "clips": clips, "edge": edge, "by": beat - old });
+                        if params.get("stack").is_some() {
+                            many["stack"] = json!(true);
+                        }
+                        actions.push(Action::new("clip.trimMany", many));
+                    } else {
+                        actions.push(Action::new(if stretch { "clip.stretch" } else { "clip.trim" }, params));
+                    }
                     state.edge_released = Some((key, from, to, 30));
                 }
             }
