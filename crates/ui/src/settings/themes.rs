@@ -50,6 +50,8 @@ pub struct Themes {
     entries: Vec<ThemeEntry>,
     built_in: usize,
     folder: Option<String>,
+    /// Something to say once in the status bar about what a request did.
+    notice: Option<String>,
     /// File actions not taken by the app yet.
     actions: Vec<Pending>,
 }
@@ -67,7 +69,7 @@ impl Default for Themes {
     fn default() -> Self {
         let entries: Vec<ThemeEntry> =
             theme::built_in_themes().into_iter().map(|(id, theme)| ThemeEntry { id: id.to_string(), theme }).collect();
-        Self { built_in: entries.len(), entries, folder: None, actions: Vec::new() }
+        Self { built_in: entries.len(), entries, folder: None, actions: Vec::new(), notice: None }
     }
 }
 
@@ -267,6 +269,14 @@ impl Themes {
             ThemeRequest::Duplicate => {
                 let name = format!("{} copy", self.get(current).map_or("Suhina Dark", |t| t.name.as_str()));
                 let id = self.copy(current, &name);
+                // The copy keeps the controls placed in the theme it came from: say so, as they
+                // can look out of place in a theme made from it.
+                let placed = self.get(&id).map_or(0, |t| t.skin.controls.len());
+                if placed > 0 {
+                    self.notice = Some(format!(
+                        "{name} keeps the {placed} placed controls of the theme it copies; Edit interface › Reset all takes them away"
+                    ));
+                }
                 self.actions.push(Pending::Save(id.clone()));
                 Some(id)
             }
@@ -351,6 +361,11 @@ impl Themes {
     /// The answer to a package whose theme is here already: replace it, or bring in a copy.
     pub fn import_again(&mut self, path: PathBuf, replace: bool) {
         self.actions.push(Pending::Other(Box::new(FileAction::ImportAgain { path, replace })));
+    }
+
+    /// Something to say once in the status bar about the last request.
+    pub fn take_notice(&mut self) -> Option<String> {
+        self.notice.take()
     }
 
     /// What the app should do with the theme files, in order, once.

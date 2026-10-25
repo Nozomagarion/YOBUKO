@@ -249,6 +249,9 @@ impl App {
                 self.settings.theme = id;
                 self.settings_changed = true;
             }
+            if let Some(notice) = self.themes.take_notice() {
+                self.status = Status::Hint(notice);
+            }
             theme::set_palette(ui.ctx(), self.themes.palette(&self.settings.theme));
         }
         if outcome.keymap_changed {

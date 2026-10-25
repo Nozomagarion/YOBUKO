@@ -390,6 +390,12 @@ impl App {
                         draft.controls.remove(&draft.selected);
                     }
                 }
+                // Every placement goes, as in a theme that places nothing (a copy, say).
+                if !draft.controls.is_empty()
+                    && tools.button("Reset all").on_hover_text("Put every control back in its own place").clicked()
+                {
+                    draft.controls.clear();
+                }
                 tools.horizontal(|tools| {
                     done = tools.button("Done").clicked();
                     cancel |= tools.button("Cancel").clicked();
