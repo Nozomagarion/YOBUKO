@@ -116,6 +116,21 @@ pub fn replace_bundle(new: &Path, old: &Path) -> Result<(), String> {
     })
 }
 
+/// Puts an unpacked download, `program`, in place of the one running from `dir`: a bundle takes
+/// a bundle's place whole, so its signature keeps covering every file in it; a download without
+/// an app bundle is refused while the running app is a bundle, for its files cannot go inside
+/// the bundle's signature; otherwise the files go in place one by one.
+pub fn put_in_place(program: &Path, dir: &Path) -> Result<(), String> {
+    match (bundle_of(program), bundle_of(dir)) {
+        (Some(new), Some(old)) => replace_bundle(&new, &old),
+        (None, Some(_)) => {
+            Err("the download has no Suhina.app, and the running app is one: download a build that has the app"
+                .to_string())
+        }
+        _ => replace(program, dir).map(|_| ()),
+    }
+}
+
 fn unzip(archive: &Path, into: &Path) -> Result<(), String> {
     let file = File::open(archive).map_err(|e| format!("could not read the download: {e}"))?;
     let mut zip = zip::ZipArchive::new(file).map_err(|e| format!("the download is not a readable zip: {e}"))?;

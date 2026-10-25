@@ -143,6 +143,40 @@ fn a_bundle_that_cannot_be_moved_in_leaves_the_running_one_in_place() {
 }
 
 #[test]
+fn a_package_without_an_app_bundle_is_refused_while_the_running_one_is_a_bundle() {
+    let dir = folder("put-in-place");
+    let running = dir.join("Suhina.app/Contents/MacOS");
+    std::fs::create_dir_all(&running).unwrap();
+    std::fs::write(running.join(program_name()), b"old").unwrap();
+
+    // No bundle in the download: refused, and the running bundle is untouched — its files cannot
+    // go inside the bundle's signature.
+    let plain = dir.join("plain");
+    std::fs::create_dir(&plain).unwrap();
+    std::fs::write(plain.join(program_name()), b"new").unwrap();
+    let refused = put_in_place(&plain, &running).unwrap_err();
+    assert!(refused.contains("no Suhina.app"), "{refused}");
+    assert_eq!(std::fs::read(running.join(program_name())).unwrap(), b"old");
+    assert!(!dir.join("Suhina.app.old").exists());
+
+    // A bundle takes a bundle's place whole.
+    let new = dir.join("New.app/Contents/MacOS");
+    std::fs::create_dir_all(&new).unwrap();
+    std::fs::write(new.join(program_name()), b"new").unwrap();
+    put_in_place(&new, &running).unwrap();
+    assert_eq!(std::fs::read(running.join(program_name())).unwrap(), b"new");
+    assert!(dir.join("Suhina.app.old").is_dir(), "the old bundle is aside");
+
+    // Without a bundle running, the files go in place one by one.
+    let bare = dir.join("bare");
+    std::fs::create_dir(&bare).unwrap();
+    std::fs::write(bare.join("kept.txt"), b"kept").unwrap();
+    put_in_place(&running, &bare).unwrap();
+    assert_eq!(std::fs::read(bare.join(program_name())).unwrap(), b"new");
+    assert_eq!(std::fs::read(bare.join("kept.txt")).unwrap(), b"kept");
+}
+
+#[test]
 fn replacing_puts_each_file_in_place_and_cleaning_up_removes_what_was_moved_aside() {
     let dir = folder("replace");
     let program = dir.join("program");
