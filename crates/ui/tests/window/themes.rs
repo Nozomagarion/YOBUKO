@@ -664,3 +664,24 @@ fn the_arrangement_track_on_toggle_is_control_track_on() {
     assert!(h.output().shapes.iter().any(|s| filled(&s.shape, toggle, orange)), "the toggle takes #control-track-on");
     suhina_ui::kit::native_css::set_user_sheet(None);
 }
+
+#[test]
+fn the_browser_s_places_and_rows_take_their_own_rules() {
+    fn filled(shape: &egui::Shape, ink: egui::Color32) -> bool {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().any(|shape| filled(shape, ink)),
+            egui::Shape::Rect(rect) => rect.fill == ink,
+            _ => false,
+        }
+    }
+    let magenta = egui::Color32::from_rgb(0xFF, 0x00, 0xFF);
+    suhina_ui::kit::native_css::set_user_sheet(Some(".browser-place:checked { background-color: #ff00ff; }".into()));
+    let mut h = window(demo_app());
+    if let Some(show) = h.query_by_label("Show browser") {
+        show.click();
+    }
+    h.run();
+    let shown = h.output().shapes.iter().any(|s| filled(&s.shape, magenta));
+    suhina_ui::kit::native_css::set_user_sheet(None);
+    assert!(shown, "the chosen place takes .browser-place:checked");
+}

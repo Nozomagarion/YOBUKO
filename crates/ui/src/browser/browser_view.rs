@@ -501,14 +501,16 @@ fn sidebar_view(
                     state.scroll = 0.0;
                 }
                 if rect.intersects(area) {
+                    let _style = place_style(&response, chosen);
                     let fill = if chosen {
                         theme::control_active()
                     } else {
                         motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response))
                     };
-                    painter.fill_background(rect.intersect(area), 0.0, fill);
+                    paint_row(&painter, rect.intersect(area), fill);
                     let text = Rect::from_min_max(rect.min + Vec2::new(PAD + 2.0, 0.0), rect.max - Vec2::new(PAD, 0.0));
                     let color = if chosen { theme::browser_text_primary() } else { theme::browser_text_secondary() };
+                    let color = crate::kit::style_class::foreground(color);
                     widgets::text_in(&painter, text, Align2::LEFT_CENTER, label, item_font.clone(), color);
                 }
                 return response;
@@ -519,10 +521,12 @@ fn sidebar_view(
         } else {
             motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response))
         };
+        let _style = place_style(&response, chosen);
         if rect.intersects(area) {
-            painter.fill_background(rect.intersect(area), 0.0, fill);
+            paint_row(&painter, rect.intersect(area), fill);
             let text = Rect::from_min_max(rect.min + Vec2::new(PAD + 2.0, 0.0), rect.max - Vec2::new(PAD, 0.0));
             let color = if chosen { theme::browser_text_primary() } else { theme::browser_text_secondary() };
+            let color = crate::kit::style_class::foreground(color);
             widgets::text_in(&painter, text, Align2::LEFT_CENTER, label, item_font.clone(), color);
             if let Some(note) = note.filter(|_| !chosen) {
                 widgets::text_in(
@@ -750,12 +754,15 @@ fn results_view(
             egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Browser {}", row.item.name))
         });
         let selected = state.selected.iter().any(|s| s.key == row.item.key);
+        // `.browser-row`, with `:hover`, `:active` and `:selected`; its `color` is the name's.
+        let _row_style = crate::kit::style_class::enter_response("browser-row", &response);
+        crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, selected);
         let fill = if selected {
             theme::control_active()
         } else {
             motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response))
         };
-        painter.fill_background(shown, 0.0, fill);
+        paint_row(&painter, shown, fill);
         let mut x = rect.left() + 4.0 + row.depth as f32 * INDENT;
         let lead = Rect::from_min_size(Pos2::new(x, rect.top()), Vec2::new(10.0, ROW));
         let previewable = matches!(row.item.kind, ItemKind::Sample | ItemKind::Midi);
@@ -825,7 +832,11 @@ fn results_view(
         let name_space = (name_right - meta_width - x).max(0.0);
         let item_tags = projects.file_library_mut().item_tags(&row.item.key);
         let dots = item_tags.len() as f32 * DOT_HIT;
-        let color = if selected { theme::browser_text_primary() } else { theme::browser_text_value() };
+        let color = crate::kit::style_class::foreground(if selected {
+            theme::browser_text_primary()
+        } else {
+            theme::browser_text_value()
+        });
         let galley = widgets::fitted(&painter, &row.item.name, font.clone(), color, (name_space - dots).max(0.0));
         let name_pos = Pos2::new(x, rect.center().y - galley.size().y / 2.0);
         let name_end = name_pos.x + galley.size().x;
@@ -1906,6 +1917,22 @@ pub fn resize_handle(ui: &Ui, handle: Rect, width: f32, left: bool, default: f32
 /// The active project's session.
 fn active(projects: &Projects) -> Option<&suhina_session::Session> {
     projects.active().and_then(|id| projects.get(id))
+}
+
+/// A place or kind in the browser's left column, `.browser-place`: `:hover`, `:active`, and
+/// `:checked` and `:selected` while it is the one shown.
+fn place_style(response: &egui::Response, chosen: bool) -> crate::kit::style_class::Scope {
+    let style = crate::kit::style_class::enter_response("browser-place", response);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, chosen);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, chosen);
+    style
+}
+
+/// A row's background: the sheet's `background-color` for the element in scope, else `fill`,
+/// and its gradients and shadows.
+fn paint_row(painter: &egui::Painter, rect: Rect, fill: egui::Color32) {
+    painter.fill_background(rect, 0.0, crate::kit::style_class::background(fill));
+    crate::kit::native_css::background(painter, rect);
 }
 
 #[cfg(test)]

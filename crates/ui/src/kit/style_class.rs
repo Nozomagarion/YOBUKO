@@ -90,6 +90,10 @@ pub const CLASSES: &[&str] = &[
     "popup",
     "dropdown",
     "text-input",
+    "browser-place",
+    "browser-row",
+    "track-number",
+    "fold",
 ];
 thread_local! {static STACK: RefCell<Vec<String>> = const {RefCell::new(Vec::new())};}
 
