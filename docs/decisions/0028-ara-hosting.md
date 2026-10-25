@@ -88,8 +88,9 @@ protocol (`crates/plugins/src/protocol.rs`).
    updates, playback control) and forwards what the engine must know.
 
 2. **One document per ARA plug-in product per project, in one process.** Every instance bound to a
-   document (one per track the plug-in sits on) must live in the process that holds its document
-   controller. ADR 0006's default, one process per plug-in file, already does this; the
+   document (one per track whose clips the plug-in edits) must live in the process that holds its
+   document controller.
+   *Amended 2026-10-25, see Amendment: the ARA plug-in belongs to the clip.* ADR 0006's default, one process per plug-in file, already does this; the
    *own process per instance* choice is refused for an ARA plug-in, with the reason.
    *Built (#589):* the scan marks each VST3 plug-in that supports ARA (`PluginInfo::ara`, shown
    by `plugin.list`): its module declares a class in the category `ARA Main Factory Class`
@@ -122,12 +123,13 @@ protocol (`crates/plugins/src/protocol.rs`).
    process that makes a link or a source.
 
 5. **The model maps onto the document like this:**
+   *Amended 2026-10-25, see Amendment: the ARA plug-in belongs to the clip.*
 
    | ARA object | Suhina | Persistent id |
    |---|---|---|
    | Audio source | an audio content's file (`AudioRegion`, by its pool key) | from the content id |
    | Audio modification | the edits of one content; clips that share the content share them | from the content id and a counter |
-   | Playback region | an arrangement clip: start, length and offset as samples through the tempo map | from the clip id ([#568](https://github.com/suhina-daw/suhina-daw/issues/568)) |
+   | Playback region | an arrangement clip that names the plug-in: start, length and offset as samples through the tempo map | from the clip id ([#568](https://github.com/suhina-daw/suhina-daw/issues/568)) |
    | Region sequence | a track's arrangement lane | from the track id |
    | Musical context | the tempo and time-signature changes ([ADR 0024](0024-musical-time-and-tempo.md)) | one per project |
 
@@ -338,6 +340,31 @@ the list below, in a first form). Where it differs from the decisions above it i
   `notifyDocumentDataChanged` flag is kept but not read yet: the edits are noticed when the
   state is read. `test:ara` (decision 10) does not exist yet; the test VST3 plug-in, listed as an
   ARA one, checks that a document reaches the host and that a refusal is reported.
+
+## Amendment: the ARA plug-in belongs to the clip (2026-10-25)
+
+[#990](https://github.com/suhina-daw/suhina-daw/issues/990). An ARA edit is the clip's, not the
+track's, so the plug-in is no longer a device in the track's chain:
+
+- **A clip names its ARA plug-in** (`clip.setAra {clip, plugin}`, the clip menu's **Edit with…**);
+  it holds no other effect, and an ordinary effect dropped on a clip is refused. Only clips that
+  name a plug-in are its playback regions (decision 5). A track's clips use one ARA plug-in in the
+  first version.
+- **Signal flow:** the clip's raw audio → its ARA plug-in → the clip's gain and fades → the track's
+  devices → Main. The plug-in reads the source itself (decision 4), so gain never reaches its
+  analysis; the host applies each clip's gain and fades to the renderer's output, as the ARA API
+  describes for per-region processing in the host. Clips with no plug-in go to the track's chain
+  as before.
+- **Hosting:** the plug-in instance is the channel's own (`Channel::clip_host`), not in its device
+  list: the engine runs it in a chain of its own ahead of the track's, fed with nothing, its output
+  scaled frame by frame by the playing ARA clip's gain and fade. Overlaps of ARA clips stay refused
+  (decision 6), so one renderer per track is enough; overlaps would need one per concurrently
+  sounding region, round robin. The document still holds every audio source, so a plug-in that
+  reads a guide on another track can.
+- **The editor** opens with a double-click on the clip, the host's view selection set to its regions.
+- **Copies and moves** keep the clip's plug-in and its edits; #722's question goes.
+- **Old projects:** a track's ARA device becomes its channel's clip host, and the track's audio
+  clips name it; the edits are kept, as they are stored per content.
 
 ## Alternatives considered
 
