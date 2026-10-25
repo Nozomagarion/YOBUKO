@@ -1579,3 +1579,57 @@ fn the_empty_area_menu_pastes_tracks_and_insert_multiple_adds_several() {
     harness.run();
     assert_eq!(count(&harness), before + 1);
 }
+
+/// A track with take lanes has a button in its header that hides and shows them, and a click on
+/// a take puts its part on the track in the take's colour (#953).
+#[test]
+fn the_take_lanes_button_hides_them_and_a_comped_part_takes_the_takes_colour() {
+    let mut project = demo_project();
+    let drums = project.tracks.iter().find(|t| t.name == "Drums").map(|t| t.id).unwrap();
+    let clip = project
+        .arrangement
+        .lanes
+        .iter()
+        .find(|l| l.track == Some(drums))
+        .and_then(|l| l.clips.first())
+        .cloned()
+        .unwrap();
+    project.arrangement.takes.push(suhina_engine::model::TakeLane {
+        track: drums,
+        name: "Take 1".into(),
+        clips: vec![suhina_engine::model::Clip { id: suhina_engine::model::ClipId::NONE, ..clip.clone() }],
+    });
+    project.assign_ids().unwrap();
+    let mut app = App::new();
+    app.set_browser_open(false);
+    app.set_session(Session::new(project), &[]);
+    let mut harness = window(app);
+    harness.get_by_label("Arrangement view").click();
+    harness.run();
+    assert!(harness.query_by_label("Take 1 of Drums").is_some());
+    harness.get_by_label("Hide take lanes of Drums").click();
+    harness.run();
+    assert!(harness.query_by_label("Take 1 of Drums").is_none());
+    harness.get_by_label("Show take lanes of Drums").click();
+    harness.run();
+    // A click on the take's clip comps it, coloured: at the clip's own place on the row, the
+    // same as on the track's lane.
+    let lane = harness.get_by_label("Clip Beat A on Drums at bar 1").rect();
+    let row = harness.get_by_label("Comp from Take 1 of Drums").rect();
+    let at = egui::pos2(lane.center().x, row.center().y);
+    harness.hover_at(at);
+    harness.run();
+    harness.drag_at(at);
+    harness.drop_at(at);
+    harness.run();
+    let coloured = harness.state().session().is_some_and(|s| {
+        s.project()
+            .arrangement
+            .lanes
+            .iter()
+            .filter(|l| l.track == Some(drums))
+            .flat_map(|l| &l.clips)
+            .any(|c| c.color.is_some())
+    });
+    assert!(coloured, "the comped part shows the take's colour");
+}

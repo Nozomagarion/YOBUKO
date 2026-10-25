@@ -430,6 +430,12 @@ fn moving_back_while_recording_keeps_each_pass_as_a_take_and_the_latest_plays() 
     assert!(clips.iter().all(|c| c.id.0 != 0), "comped clips have ids: {clips:?}");
     rig.run("edit.undo", json!({})).unwrap();
     assert_eq!(lane_clips(&rig.session, 1)[0].content, second.content);
+    // A part comped with the take lane's colour shows it on the track (#953).
+    rig.run("take.comp", json!({ "track": 1, "take": 1, "start": 0.0, "end": 1.0, "color": "#33aa55" })).unwrap();
+    let coloured = lane_clips(&rig.session, 1);
+    assert_eq!(coloured.iter().find(|c| close(c.start, 0.0)).and_then(|c| c.color), Some(Rgb(0x33, 0xaa, 0x55)));
+    assert!(rig.run("take.comp", json!({ "track": 1, "take": 1, "color": "green" })).is_err());
+    rig.run("edit.undo", json!({})).unwrap();
     // A take can be deleted; the track keeps its clips.
     rig.run("take.delete", json!({ "track": 1, "take": 2 })).unwrap();
     assert_eq!(rig.session.project().arrangement.takes.len(), 1);
@@ -471,4 +477,26 @@ fn the_loop_wrapping_while_recording_audio_makes_a_take_of_each_pass_from_one_fi
     let clips = lane_clips(&rig.session, 2);
     assert_eq!(clips[0].offset, second.offset, "the latest pass plays first: {clips:?}");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A take ends where Stop was pressed, not at the next grid line or bar (finding 4 of #916's
+/// testing): a note played in the first beat, Stop after two and a half beats, and the clip is
+/// two and a half beats long.
+#[test]
+fn a_take_stopped_mid_bar_is_as_long_as_what_was_recorded() {
+    let mut rig = rig(project());
+    rig.run("track.setArm", json!({ "track": 1, "armed": true })).unwrap();
+    rig.run("transport.record", json!({ "on": true })).unwrap();
+    rig.render_to(BLOCK * 4, 0.0);
+    rig.live.send(LiveEvent::NoteOn { key: 60, velocity: 1.0 });
+    rig.render_to(BEAT / 2, 0.0);
+    rig.live.send(LiveEvent::NoteOff { key: 60 });
+    rig.render_to(BEAT * 5 / 2, 0.0);
+    rig.run("transport.stop", json!({ "return": "marker" })).unwrap();
+    rig.render_to(BEAT * 5 / 2 + BLOCK * 4, 0.0);
+    let notices = rig.settle();
+    assert!(notices.is_empty(), "{notices:?}");
+    let clips = lane_clips(&rig.session, 1);
+    assert_eq!(clips.len(), 1, "{clips:?}");
+    assert!((clips[0].length - 2.5).abs() < 0.02, "{:?}", clips[0]);
 }

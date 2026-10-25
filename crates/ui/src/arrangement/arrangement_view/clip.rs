@@ -1206,8 +1206,15 @@ pub(super) struct TakeLanes {
     pub(super) bar_beats: f64,
 }
 
+/// The colour of a track's take `number` (from 1): the palette's colours in turn, three apart so
+/// neighbouring takes differ; the part of a take put on the track takes it too (#953).
+pub(super) fn take_colour(number: usize) -> suhina_engine::model::Rgb {
+    let swatches = crate::interaction::colour_picker::swatches();
+    swatches[number.saturating_mul(3) % swatches.len()]
+}
+
 /// Draws `lane`'s take lanes under it (`docs/spec/recording.md` › Take lanes): each take's
-/// clips greyed, as they do not play. A click on a take's clip puts the whole clip on the track,
+/// clips dimmed in the take's own colour, as they do not play. A click on a take's clip puts the whole clip on the track,
 /// a drag across a take the part dragged over (`take.comp`); the take's name has Delete take in
 /// its menu.
 #[allow(clippy::too_many_arguments)]
@@ -1241,7 +1248,12 @@ pub(super) fn take_lanes(
         if row.bottom() < at.visible.top() || row.top() > at.visible.bottom() {
             continue;
         }
-        let params = json!({ "track": lane.track.0, "take": take.number });
+        let colour = take_colour(take.number);
+        let params = json!({
+            "track": lane.track.0,
+            "take": take.number,
+            "color": crate::interaction::colour_picker::hex(colour),
+        });
         painter.rect_filled(header, 0.0, theme::window_background());
         widgets::text_in(
             painter,
@@ -1265,8 +1277,8 @@ pub(super) fn take_lanes(
                 ui.close();
             }
         });
-        // Greyed like a muted track's: a take does not play.
-        let look = Lane { mute: true, ..lane.clone() };
+        // Dimmed like a muted track's, in the take's colour: a take does not play.
+        let look = Lane { mute: true, color: colour, ..lane.clone() };
         for clip in &take.clips {
             let rect = clip_rect(row, clip.start, clip.length, x_of);
             paint_clip(painter, rect, &look, clip, Shown::of(clip), clip.start, x_of, beat_width, timeline, false);
@@ -1283,6 +1295,18 @@ pub(super) fn take_lanes(
                 format!("Comp from {} of {}", take.name, lane.name),
             )
         });
+        // The clip a click would take, under the pointer, before the click (#953).
+        if state.take_drag.is_none()
+            && let Some(pointer) = body.hover_pos()
+        {
+            let beat = f64::from((pointer.x - at.time.min + scroll_x) / beat_width);
+            if let Some(clip) = take.clips.iter().find(|c| (c.start..c.start + c.length).contains(&beat)) {
+                let rect = clip_rect(row, clip.start, clip.length, x_of);
+                painter.rect_filled(rect, 0.0, theme::selection().gamma_multiply(0.18));
+                painter.rect_stroke(rect, 0.0, Stroke::new(1.0, theme::selection()), StrokeKind::Inside);
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+        }
         if body.drag_started()
             && let Some(pointer) = body.interact_pointer_pos()
         {
@@ -1317,6 +1341,33 @@ pub(super) fn take_lanes(
                 actions.push(Action::new("take.comp", comp));
             }
         }
+    }
+    // The passes of a take still recording that the loop or a jump already ended: take lanes
+    // at once, numbered after the kept ones, so each pass shows as soon as it is done (#909).
+    let kept = timeline.takes.iter().filter(|t| t.track == lane.track).count();
+    for (index, pass) in timeline.live_takes.iter().filter(|t| t.track == lane.track && t.finished).enumerate() {
+        let row = Rect::from_x_y_ranges(at.time, egui::Rangef::new(y, y + TAKE_ROW));
+        let header = Rect::from_x_y_ranges(at.headers, row.y_range());
+        y += TAKE_ROW + 1.0;
+        painter.hline(
+            egui::Rangef::new(at.time.min.min(at.headers.min), at.time.max.max(at.headers.max)),
+            row.bottom() + 0.5,
+            theme::hairline(theme::border()),
+        );
+        if row.bottom() < at.visible.top() || row.top() > at.visible.bottom() {
+            continue;
+        }
+        painter.rect_filled(header, 0.0, theme::window_background());
+        widgets::text_in(
+            painter,
+            header.shrink2(Vec2::new(8.0, 0.0)),
+            Align2::LEFT_CENTER,
+            &format!("Take {}", kept + index + 1),
+            theme::ui_font(theme::TEXT_SMALL),
+            theme::text_secondary(),
+        );
+        let look = Lane { mute: true, color: take_colour(kept + index + 1), ..lane.clone() };
+        paint_live_take(painter, row, &look, pass, x_of, beat_width, timeline);
     }
 }
 

@@ -15,6 +15,11 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             param("take", ParamType::Integer, "the take's number on the track, from 1, as the take lanes show"),
             optional("start", ParamType::Number, "where the part starts, in beats (default: where the take starts)"),
             optional("end", ParamType::Number, "where the part ends, in beats (default: where the take ends)"),
+            optional(
+                "color",
+                ParamType::Text,
+                "the colour the part takes on the track, \"#rrggbb\" (the take lane's), so the track shows which take each part came from",
+            ),
         ],
         kind: CommandKind::Edit,
         run: comp_take,
@@ -68,6 +73,10 @@ fn comp_take(session: &mut Session, params: &Value) -> Result<Value, CommandErro
     if to.partial_cmp(&from) != Some(std::cmp::Ordering::Greater) {
         return Err("end must be after start".into());
     }
+    let color = match params.get("color") {
+        None | Some(Value::Null) => None,
+        Some(_) => crate::clip_color::parse_color(params, "color")?,
+    };
     let mut pieces = Vec::new();
     for clip in &take.clips {
         let (start, end) = (clip.start.max(from), (clip.start + clip.length).min(to));
@@ -78,6 +87,9 @@ fn comp_take(session: &mut Session, params: &Value) -> Result<Value, CommandErro
         let mut piece = Clip { id: p.new_clip_id()?, start, length: end - start, offset, ..clip.clone() };
         piece.fade_in = 0.0;
         piece.fade_out = 0.0;
+        if color.is_some() {
+            piece.color = color;
+        }
         pieces.push(piece);
     }
     if pieces.is_empty() {

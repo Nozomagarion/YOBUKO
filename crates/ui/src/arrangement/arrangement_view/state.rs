@@ -623,7 +623,10 @@ impl ArrangementViewState {
         if self.takes_hidden.contains(&track) {
             return 0.0;
         }
-        timeline.takes.iter().filter(|t| t.track == track).count() as f32 * (TAKE_ROW + 1.0)
+        // The kept takes, and the passes of a take still recording that are already done.
+        let kept = timeline.takes.iter().filter(|t| t.track == track).count();
+        let recording = timeline.live_takes.iter().filter(|t| t.track == track && t.finished).count();
+        (kept + recording) as f32 * (TAKE_ROW + 1.0)
     }
 
     /// What is drawn under `track`'s own row: its take lanes, then its automation lanes.

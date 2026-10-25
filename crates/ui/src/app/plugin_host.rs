@@ -75,7 +75,14 @@ impl App {
             let fixed = self.settings.view.fixed_track_colour.then(|| palette[0]);
             session.set_track_colours(palette.to_vec(), fixed);
         }
+        let changes = self.session().map(suhina_session::Session::change_count);
         let notices = self.projects.poll_plugins();
+        // A take kept while polling changed the project: the views are built again now, so its
+        // clip and take lanes show at once, not at the next command (#909).
+        if self.session().map(suhina_session::Session::change_count) != changes {
+            self.revision += 1;
+            self.timeline = None;
+        }
         if let Some(last) = notices.last() {
             self.status = Status::Hint(last.clone());
         }

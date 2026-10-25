@@ -86,8 +86,8 @@ const MAX_PEAKS: usize = 1 << 21;
 #[derive(Debug, Clone, PartialEq)]
 pub struct LiveTake {
     pub track: TrackId,
-    /// The beats it covers now, on the arrangement: the pass recording, from where it started
-    /// (or the playhead last jumped to) to the playhead.
+    /// The beats the pass covers on the arrangement: from where it started (or the playhead
+    /// jumped to) to the playhead, or to where the next pass began.
     pub start: f64,
     pub end: f64,
     /// The pass's notes: start and length in beats from `start`, key. A held key reaches `end`.
@@ -97,6 +97,9 @@ pub struct LiveTake {
     pub audio: bool,
     pub peaks: Vec<f32>,
     pub peaks_end: f64,
+    /// A pass the loop or a jump already ended while the take goes on: drawn as a take lane
+    /// under the track, not on it (#909).
+    pub finished: bool,
 }
 
 /// The session's recording state; arming stays with the session.
@@ -171,6 +174,12 @@ impl Session {
 
     pub fn count_in_bars(&self) -> u8 {
         self.live.recording.count_in_bars
+    }
+
+    /// Counts the project's changes, edits and kept takes alike: a view built from the project
+    /// is out of date when it moved (a take kept while polling, #909).
+    pub fn change_count(&self) -> u64 {
+        self.history.changes
     }
 
     /// Whether a take is being recorded now, into the arrangement or a slot: what auto-arm
@@ -647,35 +656,40 @@ impl Session {
             .takes
             .iter()
             .filter(|t| t.target == Target::Arrangement)
-            .map(|take| {
+            .flat_map(|take| {
                 let end = take.end.unwrap_or(beat);
-                let pass = passes_of(take.start, end, &take.jumps).pop().unwrap_or(Pass {
-                    start: take.start,
-                    length: 0.0,
-                    from: None,
-                    until: None,
-                    beats_per_frame: 0.0,
-                });
-                let length = pass.length.max(0.0);
-                let played = take.notes.iter().filter_map(|n| in_pass(n, &pass, take.start).map(|at| (n, at)));
-                let notes = notes_in(played, length).into_iter().map(|n| (n.time, n.duration, n.key)).collect();
-                // The peaks of this pass: from the frame it began at.
-                let peak_frames = crate::record_writer::PEAK_FRAMES;
-                let beats_per_peak = peak_frames as f64 / rate * tempo / 60.0;
-                let first = match (pass.from, take.began) {
-                    (Some(from), Some(began)) => usize::try_from(from.saturating_sub(began) / peak_frames).unwrap_or(0),
-                    _ => 0,
-                };
-                let peaks = take.peaks.get(first.min(take.peaks.len())..).unwrap_or_default().to_vec();
-                LiveTake {
-                    track: take.track,
-                    start: pass.start,
-                    end: pass.start + length,
-                    notes,
-                    audio: take.file.is_some(),
-                    peaks_end: pass.start + peaks.len() as f64 * beats_per_peak,
-                    peaks,
-                }
+                let passes = passes_of(take.start, end, &take.jumps);
+                let last = passes.len().saturating_sub(1);
+                // Every pass of the take: the ones the loop or a jump already ended show as take
+                // lanes while the take goes on, the last on the track (#909).
+                passes.into_iter().enumerate().map(move |(index, pass)| {
+                    let length = pass.length.max(0.0);
+                    let played = take.notes.iter().filter_map(|n| in_pass(n, &pass, take.start).map(|at| (n, at)));
+                    let notes = notes_in(played, length).into_iter().map(|n| (n.time, n.duration, n.key)).collect();
+                    // The peaks of this pass: from the frame it began at to the one it ended at.
+                    let peak_frames = crate::record_writer::PEAK_FRAMES;
+                    let beats_per_peak = peak_frames as f64 / rate * tempo / 60.0;
+                    let peak_at = |frame: Option<u64>| match (frame, take.began) {
+                        (Some(frame), Some(began)) => {
+                            usize::try_from(frame.saturating_sub(began) / peak_frames).unwrap_or(usize::MAX)
+                        }
+                        _ => 0,
+                    };
+                    let first = peak_at(pass.from).min(take.peaks.len());
+                    let until =
+                        pass.until.map_or(take.peaks.len(), |u| peak_at(Some(u))).clamp(first, take.peaks.len());
+                    let peaks = take.peaks.get(first..until).unwrap_or_default().to_vec();
+                    LiveTake {
+                        track: take.track,
+                        start: pass.start,
+                        end: pass.start + length,
+                        notes,
+                        audio: take.file.is_some(),
+                        peaks_end: pass.start + peaks.len() as f64 * beats_per_peak,
+                        peaks,
+                        finished: index < last,
+                    }
+                })
             })
             .collect()
     }

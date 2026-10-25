@@ -1347,7 +1347,7 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
 
     // Takes recording into the arrangement: a clip from where the pass began to the playhead,
     // with its notes or its waveform so far, edged in the record colour (#909).
-    for take in &timeline.live_takes {
+    for take in timeline.live_takes.iter().filter(|t| !t.finished) {
         let Some(row) = row_of_clips(take.track) else { continue };
         let Some(lane) = timeline.lanes.iter().find(|l| l.track == take.track) else { continue };
         paint_live_take(&painter.with_clip_rect(row.clip), row.time, lane, take, &x_of, state.beat_width, timeline);

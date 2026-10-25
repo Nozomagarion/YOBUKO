@@ -340,12 +340,44 @@ pub(super) fn track_header(
             &timeline.automation,
         );
     }
+    // A track with take lanes has a button beside it that hides and shows them (#953).
+    let has_takes = timeline.takes.iter().any(|t| t.track == lane.track)
+        || timeline.live_takes.iter().any(|t| t.track == lane.track && t.finished);
+    let takes_button = has_takes.then(|| {
+        if side {
+            lanes_button.translate(Vec2::new(SOLO + 2.0, 0.0))
+        } else {
+            lanes_button.translate(Vec2::new(-(SOLO + 2.0), 0.0))
+        }
+    });
+    if let Some(button) = takes_button.filter(|b| b.intersects(clip)) {
+        let hidden = state.takes_hidden.contains(&lane.track);
+        let label = if hidden {
+            format!("Show take lanes of {}", lane.name)
+        } else {
+            format!("Hide take lanes of {}", lane.name)
+        };
+        let response = widgets::button_area(ui, button.intersect(clip), id.with("takes"), label);
+        if response.clicked() && !state.takes_hidden.remove(&lane.track) {
+            state.takes_hidden.insert(lane.track);
+        }
+        let (fill, text) = widgets::toggle_colors(ui, &response, !hidden);
+        painter.rect_filled(button, 0.0, fill);
+        // Three stacked lines: the lanes under the track.
+        let glyph = button.shrink2(Vec2::new(4.0, 4.0));
+        for i in 0..3 {
+            let y = glyph.top() + glyph.height() * i as f32 / 2.0;
+            painter.hline(glyph.x_range(), y, egui::Stroke::new(1.0, text));
+        }
+    }
+    let lanes_left = takes_button.filter(|_| !side).unwrap_or(lanes_button).left();
+    let lanes_right = takes_button.filter(|_| side).unwrap_or(lanes_button).right();
     // Two rows: the sends at the end of the lower row, as many as leave the name its room.
     let step = FIELD + SEND_GAP;
     let stacked_pan =
         Rect::from_min_max(Pos2::new(below.right() - PAN_FIELD, below.top()), Pos2::new(below.right(), below.bottom()));
     let shown_sends = if side {
-        let room = ((below.right() - lanes_button.right() - PAD - LEAST_NAME) / step).floor().max(0.0) as usize;
+        let room = ((below.right() - lanes_right - PAD - LEAST_NAME) / step).floor().max(0.0) as usize;
         lane.sends.len().min(room)
     } else if stacked {
         let room = ((stacked_pan.left() - 4.0 - below.left() - LEAST_VOLUME) / step).floor().max(0.0) as usize;
@@ -360,11 +392,11 @@ pub(super) fn track_header(
     };
     let name = if side {
         Rect::from_min_max(
-            Pos2::new(lanes_button.right() + PAD, below.top()),
+            Pos2::new(lanes_right + PAD, below.top()),
             Pos2::new(sends_left - SEND_GAP - 4.0, below.top() + HEADER_ROW),
         )
     } else {
-        Rect::from_min_max(Pos2::new(controls_end + PAD, row.top()), Pos2::new(lanes_button.left() - 4.0, row.bottom()))
+        Rect::from_min_max(Pos2::new(controls_end + PAD, row.top()), Pos2::new(lanes_left - 4.0, row.bottom()))
     };
     let name_color = if lane.mute { theme::text_hint() } else { theme::text_primary() };
     widgets::text_in(painter, name, Align2::LEFT_CENTER, &lane.name, theme::ui_font(theme::TEXT), name_color);
