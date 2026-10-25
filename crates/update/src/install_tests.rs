@@ -88,6 +88,16 @@ fn a_macos_package_unpacks_to_the_program_in_its_app_bundle() {
     assert_eq!(bundle_of(&found), Some(into.join(top).join("Suhina.app")));
     assert_eq!(bundle_of(&into.join(top)), None);
     assert_eq!(bundle_of(&into.join("Other/Contents/MacOS")), None);
+
+    // The program under another Contents folder is no app bundle Suhina can run: no update.
+    let archive = dir.join("package-misplaced.tar.gz");
+    package_tar(&archive, &format!("{top}/Suhina.app/Contents/Resources"), b"misplaced");
+    let into = dir.join("misplaced");
+    std::fs::create_dir(&into).unwrap();
+    assert!(
+        unpack(&archive, &into).is_err_and(|e| e.contains(&format!("no {}", program_name()))),
+        "a program outside Contents/MacOS is not found"
+    );
 }
 
 #[test]
