@@ -339,7 +339,17 @@ pub fn show(ui: &mut Ui, area: Rect, state: &mut BrowserState, cx: Context<'_>) 
 
 fn search_field(ui: &mut Ui, rect: Rect, state: &mut BrowserState, key: &str, out: &mut BrowserOut) {
     let painter = ui.painter_at(rect);
-    painter.fill_background(rect, 0.0, theme::window_background());
+    // `.browser-search` (or `.browser .text-input`): its background, border, radius and `color`.
+    let _search_style = crate::kit::style_class::enter_named("text-input", "browser-search");
+    paint_row(&painter, rect, theme::window_background());
+    if let Some(style) = crate::kit::style_class::computed().filter(|s| s.border_width > 0.0 && s.border.a() > 0) {
+        painter.rect_stroke(
+            rect,
+            style.radius,
+            Stroke::new(style.border_width, style.border),
+            egui::StrokeKind::Inside,
+        );
+    }
     let glass = Pos2::new(rect.left() + PAD + 5.0, rect.center().y);
     painter.circle_stroke(glass + Vec2::new(-1.0, -1.0), 3.5, Stroke::new(1.1, theme::browser_text_hint()));
     painter.line_segment(
@@ -389,7 +399,7 @@ fn search_field(ui: &mut Ui, rect: Rect, state: &mut BrowserState, key: &str, ou
         .frame(egui::Frame::NONE)
         .hint_text(egui::RichText::new("Search").color(theme::browser_text_hint()))
         .font(theme::ui_font(theme::TEXT))
-        .text_color(theme::browser_text_primary());
+        .text_color(crate::kit::style_class::foreground(theme::browser_text_primary()));
     let response = crate::kit::widgets::text_input_at(ui, field, edit);
     if std::mem::take(&mut state.focus_search) {
         response.request_focus();
@@ -776,13 +786,11 @@ fn results_view(
                 format!("Preview {}", row.item.name),
             );
             let playing = state.previewing.as_deref() == Some(row.item.key.as_str());
-            play_glyph(
-                &painter,
-                lead.center(),
-                playing,
-                if button.hovered() { theme::browser_text_primary() } else { theme::browser_text_secondary() },
-                7.0,
-            );
+            // `.browser-play`, `:checked` while it plays, `color` its glyph.
+            let _play_style = crate::kit::style_class::enter_named_response("browser-play", "browser-play", &button);
+            crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, playing);
+            let ink = if button.hovered() { theme::browser_text_primary() } else { theme::browser_text_secondary() };
+            play_glyph(&painter, lead.center(), playing, crate::kit::style_class::foreground(ink), 7.0);
             if button.clicked() {
                 play = Some(index);
             }
@@ -844,7 +852,14 @@ fn results_view(
         for (i, name) in item_tags.iter().enumerate() {
             if let Some(tag) = tags.iter().find(|t| t.name == *name) {
                 let center = tag_dot_center(name_end, i, rect.center().y);
-                painter.circle_filled(center, DOT / 2.0, tag_color(&tag.color));
+                // `.browser-tag-dot { opacity; border-color }`; its fill stays the tag's colour.
+                let _dot = crate::kit::style_class::enter("browser-tag-dot");
+                let style = crate::kit::style_class::computed();
+                let fill = tag_color(&tag.color).gamma_multiply(style.as_ref().map_or(1.0, |s| s.opacity));
+                painter.circle_filled(center, DOT / 2.0, fill);
+                if let Some(style) = style.filter(|s| s.border_width > 0.0) {
+                    painter.circle_stroke(center, DOT / 2.0, Stroke::new(style.border_width, style.border));
+                }
                 // The dot answers a hover with its tag's name: a tooltip, the status bar, and
                 // an accessible label.
                 let dot = ui
@@ -1457,16 +1472,13 @@ fn preview_strip(
             Rect::from_min_max(Pos2::new(played_x, wave.top()), wave.max),
         );
         let clipped = |part: Rect| painter.with_clip_rect(part.intersect(painter.clip_rect()));
-        crate::kit::waveform::paint(
-            &clipped(done),
-            &shape,
-            crate::kit::waveform::Colors::from(theme::browser_text_secondary()),
-        );
-        crate::kit::waveform::paint(
-            &clipped(rest),
-            &shape,
-            crate::kit::waveform::Colors::from(theme::browser_text_hint()),
-        );
+        // `.browser-preview-wave { color }` for the part played, `border-color` for the rest.
+        let _wave = crate::kit::style_class::enter("browser-preview-wave");
+        let style = crate::kit::style_class::computed();
+        let played = crate::kit::style_class::foreground(theme::browser_text_secondary());
+        let ahead = style.as_ref().filter(|s| s.authored.border).map_or(theme::browser_text_hint(), |s| s.border);
+        crate::kit::waveform::paint(&clipped(done), &shape, crate::kit::waveform::Colors::from(played));
+        crate::kit::waveform::paint(&clipped(rest), &shape, crate::kit::waveform::Colors::from(ahead));
     } else if let Some(notes) = &info.notes {
         let (low, high) = notes.iter().fold((127u8, 0u8), |(l, h), n| (l.min(n.2), h.max(n.2)));
         let span = f32::from(high.saturating_sub(low).max(1));

@@ -200,6 +200,18 @@ pub fn show(ui: &mut Ui, area: Rect, tools: &Tools<'_>, state: &mut PianoRollSta
         }
         // A button or field too narrow for its text shortens it; nothing wraps onto more lines.
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+        // `.midi-tools { --suhina-gap: 2px }` packs the rows closer (0 to 16 points), and
+        // `.midi-tools .button { height }` sets the buttons' and fields' height.
+        if let Some(gap) = crate::kit::style_class::property("--suhina-gap").and_then(|v| px_value(&v)) {
+            ui.spacing_mut().item_spacing.y = gap.clamp(0.0, 16.0);
+        }
+        let button_height = {
+            let _button = crate::kit::style_class::enter("button");
+            crate::kit::style_class::computed().and_then(|c| c.height)
+        };
+        if let Some(height) = button_height {
+            ui.spacing_mut().interact_size.y = height.clamp(10.0, 40.0);
+        }
         egui::ScrollArea::vertical().id_salt("piano-roll-midi-tools").show(ui, |ui| {
             if state.quantize_open {
                 quantise_block(ui, tools, state, actions);
@@ -278,13 +290,14 @@ fn quantise_block(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, ac
     let apply = ui
         .add(
             egui::Button::new(egui::RichText::new("Quantise notes").font(small.clone()))
-                .min_size(Vec2::new(0.0, BUTTON_HEIGHT)),
+                .min_size(Vec2::new(0.0, ui.spacing().interact_size.y)),
         )
         .on_hover_text("Quantise the selected notes, or every note")
         .clicked();
     // Its accessible label is the whole name, as the block had in the clip column.
     let close = ui.add(
-        egui::Button::new(egui::RichText::new("Close").font(small.clone())).min_size(Vec2::new(0.0, BUTTON_HEIGHT)),
+        egui::Button::new(egui::RichText::new("Close").font(small.clone()))
+            .min_size(Vec2::new(0.0, ui.spacing().interact_size.y)),
     );
     close.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Close quantise"));
     if close.on_hover_text("Close the quantise controls").clicked() {
@@ -414,7 +427,7 @@ fn note_tools(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, action
         let button = |ui: &mut Ui, name: &str, font: &egui::FontId| {
             ui.add(
                 egui::Button::new(egui::RichText::new(name).font(font.clone()))
-                    .min_size(Vec2::new(half, BUTTON_HEIGHT)),
+                    .min_size(Vec2::new(half, ui.spacing().interact_size.y)),
             )
             .clicked()
         };
@@ -479,7 +492,7 @@ fn note_tools(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, action
 fn button(ui: &mut Ui, name: &str, font: &egui::FontId) -> bool {
     ui.add(
         egui::Button::new(egui::RichText::new(name).font(font.clone()))
-            .min_size(Vec2::new(ui.available_width().min(tools_width() - PAD * 2.0), BUTTON_HEIGHT)),
+            .min_size(Vec2::new(ui.available_width().min(tools_width() - PAD * 2.0), ui.spacing().interact_size.y)),
     )
     .clicked()
 }
@@ -489,4 +502,9 @@ fn button(ui: &mut Ui, name: &str, font: &egui::FontId) -> bool {
 fn heading(ui: &mut Ui, text: &str, color: egui::Color32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), LABEL + 3.0), egui::Sense::hover());
     widgets::text_in(ui.painter(), rect, Align2::LEFT_CENTER, text, theme::ui_font(theme::TEXT_SMALL), color);
+}
+
+/// `12px` as 12.0.
+fn px_value(value: &str) -> Option<f32> {
+    value.trim().strip_suffix("px").and_then(|v| v.trim().parse::<f32>().ok()).filter(|v| v.is_finite())
 }
