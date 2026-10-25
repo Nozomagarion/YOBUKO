@@ -51,6 +51,7 @@ pub const LAYOUT_FILES: &[(&str, &str)] = &[
     ("reverb", include_str!("../../../devices/reverb/panel.json")),
     ("limiter", include_str!("../../../devices/limiter/panel.json")),
     ("dj-eq", include_str!("../../../devices/dj-eq/panel.json")),
+    ("auto-pan", include_str!("../../../devices/auto-pan/panel.json")),
 ];
 
 /// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
