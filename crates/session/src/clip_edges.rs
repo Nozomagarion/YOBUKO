@@ -44,6 +44,7 @@ fn is_audio(p: &Project, content: ContentId) -> bool {
 /// Puts `clip` back on lane `lane` (it was taken out), replacing what it covers unless `stack`;
 /// answers with its index there.
 fn put_back(p: &mut Project, lane: usize, clip: Clip, stack: bool) -> Result<usize, CommandError> {
+    let stack = stack && !p.lane_takes_cover(lane, clip.start, clip.start + clip.length);
     let lane = p.arrangement.lanes.get_mut(lane).ok_or("the lane is missing")?;
     if !stack {
         make_room(&mut lane.clips, clip.start, clip.start + clip.length);

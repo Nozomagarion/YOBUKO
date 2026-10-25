@@ -844,7 +844,9 @@ second part sounds as the original did at that moment.
 
 Replace and stack are chosen per move (`stack: true` stacks). The app passes the user's settings:
 **Allow sample stacking** for audio clips and **Allow MIDI stacking** for MIDI clips, both off by
-default.
+default. Where a track has take lanes, a clip moved, pasted, duplicated or dropped over a piece of
+a take replaces what it covers even with stacking on, so the comp stays one line of clips
+([recording.md](recording.md)); outside the takes' spans the settings hold (#989).
 
 ## Showing stacked clips
 

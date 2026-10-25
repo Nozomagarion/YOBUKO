@@ -120,3 +120,43 @@ fn a_take_is_promoted_soloed_and_the_unused_ones_deleted() {
     assert_eq!(names, ["Take 3"]);
     assert_eq!(source(&s, &lane(&s)[0]), Some(0), "the part keeps its take");
 }
+
+/// Pieces picked with Ctrl and deleted go from their take, and a take with none left goes too
+/// (#989).
+#[test]
+fn deleting_pieces_of_a_take_removes_them_and_an_emptied_take() {
+    let mut s = session();
+    run(&mut s, "take.comp", json!({ "track": 1, "take": 1, "start": 0.0, "end": 8.0 })).unwrap();
+    run(&mut s, "clip.split", json!({ "track": 1, "index": 0, "at": 4.0 })).unwrap();
+    let done = run(&mut s, "take.deletePieces", json!({ "track": 1, "take": 2, "pieces": [2] })).unwrap();
+    assert_eq!(done["take_deleted"], json!(false));
+    let take = &s.project().arrangement.takes[1];
+    assert_eq!(take.clips.iter().map(|c| (c.start, c.length)).collect::<Vec<_>>(), [(0.0, 4.0)]);
+    let done = run(&mut s, "take.deletePieces", json!({ "track": 1, "take": 2, "pieces": [1] })).unwrap();
+    assert_eq!(done["take_deleted"], json!(true));
+    let names: Vec<&str> = s.project().arrangement.takes.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(names, ["Take 1", "Take 3"]);
+    assert!(run(&mut s, "take.deletePieces", json!({ "track": 1, "take": 1, "pieces": [3] })).is_err());
+    run(&mut s, "edit.undo", json!({})).unwrap();
+    assert_eq!(s.project().arrangement.takes.len(), 3);
+}
+
+/// Where the track has takes, a clip moved with stacking on still replaces what it covers, so
+/// the comp stays one line of clips; outside the takes it stacks (#989).
+#[test]
+fn clips_do_not_stack_where_the_track_has_takes() {
+    let mut s = session();
+    run(&mut s, "take.comp", json!({ "track": 1, "take": 1, "start": 0.0, "end": 4.0 })).unwrap();
+    run(&mut s, "take.comp", json!({ "track": 1, "take": 2, "start": 4.0, "end": 8.0 })).unwrap();
+    let second = lane(&s)[1].id.0;
+    run(&mut s, "clip.move", json!({ "track": 1, "index": 1, "start": 2.0, "stack": true })).unwrap();
+    let spans: Vec<(f64, f64)> = lane(&s).iter().map(|c| (c.start, c.length)).collect();
+    assert_eq!(spans, [(0.0, 2.0), (2.0, 4.0)], "the moved part cut the one under it");
+    let moved = lane(&s).into_iter().position(|c| c.id.0 == second).unwrap();
+    run(&mut s, "clip.move", json!({ "track": 1, "index": moved, "start": 20.0, "stack": true })).unwrap();
+    // Past the takes (they end at beat 8) two clips may share time.
+    let index = lane(&s).iter().position(|c| c.start == 0.0).unwrap();
+    run(&mut s, "clip.move", json!({ "track": 1, "index": index, "start": 21.0, "stack": true })).unwrap();
+    let after: Vec<(f64, f64)> = lane(&s).iter().filter(|c| c.start >= 20.0).map(|c| (c.start, c.length)).collect();
+    assert!(after.contains(&(20.0, 4.0)) && after.contains(&(21.0, 2.0)), "{after:?}");
+}

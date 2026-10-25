@@ -111,8 +111,11 @@ greyed. They are where the best parts of each pass are picked and put together o
 
 - The pointer over a take lane is the text cursor, as for selecting. A single click takes nothing;
   a **double-click** on a piece of a take copies the whole piece onto the track over what is there.
-  With **Ctrl** held the take lane takes ordinary clicks: the pointer is the arrow, a click picks
-  a piece (outlined; **Recolor** colours it) and a drag comps nothing.
+  With **Ctrl** held the take lane takes ordinary clicks: the pointer is the arrow, a click adds a
+  piece to the pieces picked or takes it out (each outlined; **Recolor** colours the one clicked)
+  and a drag comps nothing. A click without Ctrl lets go of them all. **Delete** deletes the picked
+  pieces (`take.deletePieces {track, take, pieces}`, one undo step per take), and a take left with
+  no piece goes; the track's clips stay.
 - **Drag** across a take: the part dragged over (on the grid; Alt for no grid) is copied onto the
   track over what is there, as new clips that start in the take where the part does. Each copy is
   one undo step.

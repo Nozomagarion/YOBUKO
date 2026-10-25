@@ -98,6 +98,7 @@ fn place(
         let at = clip.start + offset;
         let mut copy = Clip { id: p.new_clip_id()?, content: id, start: at, ..clip };
         copy.fit_fades();
+        let stack = stack && !p.takes_cover(track, at, at + copy.length);
         let lane = lane_of(p, track)?;
         let lane = p.arrangement.lanes.get_mut(lane).ok_or("the lane is missing")?;
         if !stack {
@@ -472,6 +473,7 @@ pub(crate) fn move_clips(session: &mut Session, params: &Value) -> Result<Value,
     came.reverse();
     for (track, mut clip) in taken.into_iter().rev() {
         clip.start = (clip.start + beats).max(0.0);
+        let stack = stack && !p.takes_cover(track, clip.start, clip.start + clip.length);
         let lane = lane_of(p, track)?;
         let lane = p.arrangement.lanes.get_mut(lane).ok_or("the lane is missing")?;
         if !stack {

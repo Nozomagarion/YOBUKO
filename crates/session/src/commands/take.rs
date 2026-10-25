@@ -89,6 +89,18 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::UNHEARD,
     },
     CommandSpec {
+        id: "take.deletePieces",
+        label: "Delete pieces of a take (a split take has several); a take left with none goes; the track's clips stay",
+        params: &[
+            TRACK,
+            param("take", ParamType::Integer, "the take's number on the track, from 1"),
+            param("pieces", ParamType::Integers, "the pieces, numbered from 1 in time order"),
+        ],
+        kind: CommandKind::Edit,
+        run: delete_pieces,
+        policy: Policy::UNHEARD,
+    },
+    CommandSpec {
         id: "take.delete",
         label: "Delete a recorded take lane of a track; the track's clips stay",
         params: &[TRACK, param("take", ParamType::Integer, "the take's number on the track, from 1")],
@@ -381,6 +393,38 @@ fn delete_unused_takes(session: &mut Session, params: &Value) -> Result<Value, C
     }
     session.take_solo = None;
     Ok(json!({ "track": track.0, "deleted": unused.len() }))
+}
+
+/// `take.deletePieces {track, take, pieces}`: the pieces go from the take, and the take goes too
+/// when none is left (#989).
+fn delete_pieces(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let p = &mut session.project;
+    let track = track_id(p, params)?;
+    let index = take_index(p, track, params)?;
+    let list = params.get("pieces").and_then(Value::as_array).ok_or("pieces must be a list")?;
+    let count = p.arrangement.takes.get(index).map_or(0, |t| t.clips.len());
+    let mut doomed: Vec<usize> = Vec::new();
+    for entry in list {
+        let piece = entry
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .and_then(|n| n.checked_sub(1))
+            .filter(|&n| n < count)
+            .ok_or("each piece is a number from 1 up to the take's pieces")?;
+        doomed.push(piece);
+    }
+    doomed.sort_unstable();
+    doomed.dedup();
+    let Some(take) = p.arrangement.takes.get_mut(index) else { return Err("no such take".into()) };
+    for &piece in doomed.iter().rev() {
+        take.clips.remove(piece);
+    }
+    let emptied = take.clips.is_empty();
+    if emptied {
+        p.arrangement.takes.remove(index);
+        session.take_solo = None;
+    }
+    Ok(json!({ "track": track.0, "pieces": doomed.len(), "take_deleted": emptied }))
 }
 
 /// `take.delete`.

@@ -950,6 +950,7 @@ fn paste_clip(session: &mut Session, params: &Value) -> Result<Value, CommandErr
         let at = clip.start + offset;
         let mut copy = Clip { id: p.new_clip_id()?, content: id, start: at, ..clip };
         copy.fit_fades();
+        let stack = stack && !p.lane_takes_cover(lane, at, at + copy.length);
         let lane = p.arrangement.lanes.get_mut(lane).ok_or("the lane is missing")?;
         if !stack {
             make_room(&mut lane.clips, at, at + copy.length);
@@ -1131,9 +1132,10 @@ fn duplicate_clips(session: &mut Session, params: &Value) -> Result<Value, Comma
         for copy in &mut copies {
             copy.id = p.new_clip_id()?;
         }
+        let covered: Vec<bool> = copies.iter().map(|c| p.takes_cover(track, c.start, c.start + c.length)).collect();
         let Some(lane) = p.arrangement.lanes.iter_mut().find(|l| l.track == Some(track)) else { continue };
-        for copy in copies {
-            if !stack {
+        for (copy, covered) in copies.into_iter().zip(covered) {
+            if !stack || covered {
                 make_room(&mut lane.clips, copy.start, copy.start + copy.length);
             }
             let (copy_id, copy_start) = (copy.id, copy.start);
@@ -1233,6 +1235,7 @@ fn move_clip(session: &mut Session, params: &Value) -> Result<Value, CommandErro
     if to != track && clip.color.is_none() {
         clip.color = keep;
     }
+    let stack = stack && !p.takes_cover(to, start, start + clip.length);
     let lane = p.arrangement.lanes.get_mut(to_lane).ok_or("the lane is missing")?;
     if !stack {
         make_room(&mut lane.clips, start, start + clip.length);

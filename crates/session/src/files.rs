@@ -707,6 +707,7 @@ pub(crate) fn place_clip(
                     p.arrangement.lanes.len() - 1
                 }
             };
+            let stack = stack && !p.takes_cover(track, at, at + length);
             let lane = p.arrangement.lanes.get_mut(lane).ok_or("the lane is missing")?;
             if !stack {
                 make_room(&mut lane.clips, at, at + length);

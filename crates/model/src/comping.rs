@@ -13,6 +13,21 @@ use crate::{Clip, Project, TrackId};
 const ALIGNED: f64 = 1e-6;
 
 impl Project {
+    /// Whether a take of `track` has a piece in `[from, to)`. Clips placed there replace what they
+    /// cover even where stacking is allowed, so the comp stays one line of clips (#989).
+    pub fn takes_cover(&self, track: TrackId, from: f64, to: f64) -> bool {
+        self.arrangement
+            .takes
+            .iter()
+            .filter(|t| t.track == track)
+            .flat_map(|t| &t.clips)
+            .any(|c| c.start < to && from < c.start + c.length)
+    }
+
+    /// [`Project::takes_cover`] for the track of arrangement lane `lane`.
+    pub fn lane_takes_cover(&self, lane: usize, from: f64, to: f64) -> bool {
+        self.arrangement.lanes.get(lane).and_then(|l| l.track).is_some_and(|t| self.takes_cover(t, from, to))
+    }
     /// The index in `arrangement.takes` of the take of `track` that `clip` was comped from.
     pub fn comp_source(&self, track: TrackId, clip: &Clip) -> Option<usize> {
         self.comp_piece(track, clip).map(|(take, _)| take)

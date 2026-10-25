@@ -1825,6 +1825,73 @@ fn with_ctrl_a_take_lane_drag_comps_nothing() {
     assert_ne!(lanes(&harness), before);
 }
 
+/// Ctrl and a click pick take pieces, a second one lets go of it, and Delete deletes those picked;
+/// a take left with none goes (#989).
+#[test]
+fn ctrl_clicks_pick_take_pieces_and_delete_deletes_them() {
+    let mut project = demo_project();
+    let drums = project.tracks.iter().find(|t| t.name == "Drums").map(|t| t.id).unwrap();
+    let clip = project
+        .arrangement
+        .lanes
+        .iter()
+        .find(|l| l.track == Some(drums))
+        .and_then(|l| l.clips.first())
+        .cloned()
+        .unwrap();
+    for n in 1..=2 {
+        project.arrangement.takes.push(suhina_engine::model::TakeLane {
+            track: drums,
+            name: format!("Take {n}"),
+            clips: vec![suhina_engine::model::Clip { id: suhina_engine::model::ClipId::NONE, ..clip.clone() }],
+            color: None,
+        });
+    }
+    project.assign_ids().unwrap();
+    let mut app = App::new();
+    app.set_browser_open(false);
+    app.set_session(Session::new(project), &[]);
+    let mut harness = window(app);
+    harness.get_by_label("Arrangement view").click();
+    harness.run();
+    let takes = |h: &Harness<'static, App>| h.state().session().map_or(0, |s| s.project().arrangement.takes.len());
+    let click = |h: &mut Harness<'static, App>, label: &str| {
+        let at = h.get_by_label(label).rect().left_center() + egui::vec2(20.0, 0.0);
+        h.hover_at(at);
+        h.drag_at(at);
+        h.drop_at(at);
+        h.run();
+    };
+    harness.event(egui::Event::ModifiersChanged(Modifiers::COMMAND));
+    click(&mut harness, "Comp from Drums Take 1");
+    click(&mut harness, "Comp from Drums Take 2");
+    // A second Ctrl-click lets go of Take 2's piece again.
+    click(&mut harness, "Comp from Drums Take 2");
+    harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
+    harness.key_press(Key::Delete);
+    harness.run();
+    let names: Vec<String> = harness
+        .state()
+        .session()
+        .map(|s| s.project().arrangement.takes.iter().map(|t| t.name.clone()).collect())
+        .unwrap_or_default();
+    assert_eq!(names, ["Take 2"], "only the picked piece's take went");
+    assert!(
+        harness.state().session().is_some_and(|s| !s.project().arrangement.lanes.iter().all(|l| l.clips.is_empty()))
+    );
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_eq!(takes(&harness), 2);
+    // A click without Ctrl lets go of what was picked: Delete then leaves the takes alone.
+    harness.event(egui::Event::ModifiersChanged(Modifiers::COMMAND));
+    click(&mut harness, "Comp from Drums Take 1");
+    harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
+    click(&mut harness, "Comp from Drums Take 1");
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert_eq!(takes(&harness), 2);
+}
+
 /// A take lane's header: S solos it, the up arrow puts it on the track, ✕ deletes it (#989).
 #[test]
 fn a_take_lanes_header_buttons_solo_promote_and_delete_it() {

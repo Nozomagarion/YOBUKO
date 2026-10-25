@@ -252,6 +252,22 @@ impl App {
             "selection.cut" | "selection.duplicate" if self.shown == View::Session => {
                 self.status = Status::Hint("In the Session view, a slot's clip can be copied and pasted".into());
             }
+            // Take pieces picked with Ctrl and a click: Delete deletes them, the last take first so
+            // the numbers of the others hold when an emptied take goes (#989).
+            "selection.delete" if self.shown == View::Arrangement && !self.arrangement.take_selected.is_empty() => {
+                let mut picked = std::mem::take(&mut self.arrangement.take_selected);
+                picked.sort_unstable_by_key(|(t, n, p)| (t.0, std::cmp::Reverse(*n), *p));
+                let mut takes: Vec<(TrackId, usize)> = picked.iter().map(|(t, n, _)| (*t, *n)).collect();
+                takes.dedup();
+                for (track, take) in takes {
+                    let pieces: Vec<usize> =
+                        picked.iter().filter(|(t, n, _)| *t == track && *n == take).map(|(_, _, p)| p + 1).collect();
+                    actions.push(Action::new(
+                        "take.deletePieces",
+                        json!({ "track": track.0, "take": take, "pieces": pieces }),
+                    ));
+                }
+            }
             // A time selection in the Arrangement: the keys act on what plays inside it, as in
             // clips picked by a click act whole (the arm below).
             "selection.copy"

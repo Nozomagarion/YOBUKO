@@ -1504,22 +1504,31 @@ pub(super) fn take_lanes(
         // the piece a double-click would take shows under the pointer (#953, #989). With Ctrl
         // held it is the ordinary pointer: a click picks a piece, a drag comps nothing.
         let ctrl = ui.input(|i| i.modifiers.command);
-        if let Some((_, _, piece)) = state.take_piece.filter(|(t, n, _)| *t == lane.track && *n == take.number)
-            && let Some(clip) = take.clips.get(piece)
-        {
-            let rect = clip_rect(row, clip.start, clip.length, x_of);
-            painter.rect_stroke(rect, 0.0, Stroke::new(1.5, theme::selection()), StrokeKind::Inside);
+        for &(_, _, piece) in state.take_selected.iter().filter(|(t, n, _)| *t == lane.track && *n == take.number) {
+            if let Some(clip) = take.clips.get(piece) {
+                let rect = clip_rect(row, clip.start, clip.length, x_of);
+                painter.rect_stroke(rect, 0.0, Stroke::new(1.5, theme::selection()), StrokeKind::Inside);
+            }
         }
-        if ctrl
-            && body.clicked()
+        // Ctrl and a click picks a piece, or takes it out of what is picked, so Delete deletes
+        // them; a click without Ctrl lets go of them all (#989).
+        if body.clicked()
             && let Some(pointer) = body.interact_pointer_pos()
         {
-            let beat = f64::from((pointer.x - at.time.min + scroll_x) / beat_width);
-            state.take_piece = take
-                .clips
-                .iter()
-                .position(|c| (c.start..c.start + c.length).contains(&beat))
-                .map(|p| (lane.track, take.number, p));
+            if ctrl {
+                let beat = f64::from((pointer.x - at.time.min + scroll_x) / beat_width);
+                if let Some(piece) = take.clips.iter().position(|c| (c.start..c.start + c.length).contains(&beat)) {
+                    let key = (lane.track, take.number, piece);
+                    if let Some(i) = state.take_selected.iter().position(|k| *k == key) {
+                        state.take_selected.remove(i);
+                    } else {
+                        state.take_selected.push(key);
+                    }
+                    state.take_piece = Some(key);
+                }
+            } else {
+                state.take_selected.clear();
+            }
         }
         if !ctrl
             && state.take_drag.is_none()

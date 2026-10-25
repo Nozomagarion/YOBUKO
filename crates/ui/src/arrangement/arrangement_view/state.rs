@@ -160,6 +160,9 @@ pub struct ArrangementViewState {
     pub(super) take_piece: Option<(TrackId, usize, usize)>,
     /// The height `track`'s take lanes were dragged to (#989); the default for the rest.
     pub(super) take_heights: HashMap<TrackId, f32>,
+    /// Take pieces picked with Ctrl and a click (track, take number, piece from 0), which Delete
+    /// deletes (#989).
+    pub take_selected: Vec<(TrackId, usize, usize)>,
     /// The take lane heard in place of its track (track, take number), as the session says
     /// (`take.solo`): its S lit and the track's lane greyed.
     pub take_solo: Option<(TrackId, usize)>,
@@ -337,6 +340,7 @@ impl Default for ArrangementViewState {
             take_drag: None,
             take_piece: None,
             take_heights: HashMap::new(),
+            take_selected: Vec::new(),
             take_solo: None,
             stack_audio: false,
             stack_midi: false,
