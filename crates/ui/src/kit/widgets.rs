@@ -127,6 +127,20 @@ pub fn button_surface(painter: &Painter, rect: Rect, response: &Response, on: bo
     super::native_css::surface(painter, rect, radius, fill);
 }
 
+/// A track's number, `.track-number`: its own `color`, `font-size` and `display: none`, and
+/// `:muted` while the track is off.
+pub fn track_number_text(painter: &Painter, rect: Rect, number: &str, ink: Color32, muted: bool) {
+    let _style = super::style_class::enter("track-number");
+    super::native_css::mark(super::native_css::HostState::Muted, muted);
+    let computed = super::style_class::computed();
+    if computed.as_ref().is_some_and(|c| !c.visible) {
+        return;
+    }
+    let size = computed.as_ref().filter(|c| c.authored.font_size).map_or(theme::TEXT_SMALL, |c| c.font_size);
+    let ink = super::style_class::foreground(ink);
+    text_in(painter, rect, Align2::CENTER_CENTER, number, theme::mono_font(size), ink);
+}
+
 /// Fill and text of a track-on toggle: light when on, dark when off, a step brighter hovered.
 pub fn toggle_colors(ui: &Ui, response: &Response, on: bool) -> (Color32, Color32) {
     let hover = hover(ui, response);

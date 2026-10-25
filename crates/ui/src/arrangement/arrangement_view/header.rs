@@ -371,7 +371,13 @@ pub(super) fn track_header(
             format!("Collapse {}", lane.name)
         };
         let response = widgets::button_area(ui, fold.intersect(clip), id.with("fold"), label);
+        // `.fold`, `:checked` while folded, and `fold` artwork (`.on` while folded).
+        let _style = crate::kit::style_class::enter_named_response("fold", "fold", &response);
+        crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, folded);
         let color = motion::mix(header_fill, theme::text_on(header_fill), 0.75 + 0.25 * widgets::hover(ui, &response));
+        let color = crate::kit::style_class::foreground(color);
+        let fold_state = crate::kit::skin::State::response(&response, folded);
+        let drawn = crate::kit::skin::paint(painter, fold, "fold", fold_state, color, 0.0);
         let center = fold.center();
         let (wide, tall) = (7.0, 4.0);
         // Pointing right while the group is folded, down while it is open.
@@ -388,7 +394,9 @@ pub(super) fn track_header(
                 Pos2::new(center.x, center.y + tall / 2.0),
             ]
         };
-        painter.add(egui::Shape::convex_polygon(points, color, egui::Stroke::NONE));
+        if !drawn {
+            painter.add(egui::Shape::convex_polygon(points, color, egui::Stroke::NONE));
+        }
         if response.clicked() {
             if group_fold {
                 state.folds.toggle(lane.track);
@@ -587,23 +595,41 @@ pub(super) fn track_header(
     {
         actions.push(action);
     }
+    let number = if lane.kind == ColumnKind::Return {
+        lane.name.chars().next().map(String::from).unwrap_or_default()
+    } else {
+        track_number.to_string()
+    };
     if toggle.intersects(clip) && !crate::kit::control_layout::placement("arrangement-enable").hidden {
         let toggle = crate::kit::control_layout::place("arrangement-enable", toggle, clip);
         let label = if lane.mute { format!("Turn {} on", lane.name) } else { format!("Turn {} off", lane.name) };
         let response = widgets::button_area(ui, toggle.intersect(clip), id.with("on"), label);
+        // `#control-track-on`, as in the mixer: `:checked` while the track is on, `:muted` while
+        // it is off, and `track-on` artwork (`.on`).
+        let _style = crate::kit::style_class::enter_named_response("button", "track-on", &response);
+        crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, lane.mute);
         if response.clicked() {
             actions.push(Action::new("track.setMute", json!({ "tracks": controlled, "mute": !lane.mute })));
         }
         let (fill, text) = widgets::toggle_colors(ui, &response, !lane.mute);
-        widgets::track_button_face(ui, painter, toggle, &response, fill);
-        let number = if lane.kind == ColumnKind::Return {
-            lane.name.chars().next().map(String::from).unwrap_or_default()
-        } else {
-            track_number.to_string()
-        };
-        widgets::text_in(painter, toggle, Align2::CENTER_CENTER, &number, theme::mono_font(theme::TEXT_SMALL), text);
+        widgets::button_surface(painter, toggle, &response, !lane.mute, fill, 0.0);
+        let text = crate::kit::style_class::foreground(text);
+        let state = crate::kit::skin::State::response(&response, !lane.mute);
+        if !crate::kit::skin::paint(painter, toggle, "track-on", state, text, 0.0) {
+            widgets::track_number_text(painter, toggle, &number, text, lane.mute);
+        }
+    } else if !crate::kit::control_layout::placement("arrangement-number").hidden {
+        // With the toggle hidden, the number can stay as a label of its own (`.track-number`,
+        // placed as `arrangement-number`), which turns nothing off.
+        let at = crate::kit::control_layout::place("arrangement-number", toggle, clip);
+        if at.intersects(clip) {
+            widgets::track_number_text(painter, at, &number, theme::text_secondary(), lane.mute);
+        }
     }
 
+    let monitor = monitor
+        .filter(|_| !crate::kit::control_layout::placement("arrangement-monitor").hidden)
+        .map(|at| crate::kit::control_layout::place("arrangement-monitor", at, clip));
     if let Some(at) = monitor.filter(|at| at.intersects(clip)) {
         let mode = lane.midi_input.monitor;
         let text = menus::monitor_name(mode);
@@ -615,16 +641,28 @@ pub(super) fn track_header(
         )
         .on_hover_text("Choose when you hear the MIDI input");
         let active = mode == suhina_engine::model::Monitor::In;
+        // `#control-monitor`, `:checked` while monitoring is In, and `monitor` artwork.
+        let _style = crate::kit::style_class::enter_named_response("button", "monitor", &response);
         let (fill, ink) = widgets::toggle_colors(ui, &response, active);
-        painter.rect_filled(at, 0.0, fill);
-        widgets::text_in(
+        widgets::button_surface(painter, at, &response, active, fill, 0.0);
+        let ink = crate::kit::style_class::foreground(ink);
+        if !crate::kit::skin::paint(
             painter,
             at,
-            Align2::CENTER_CENTER,
-            text,
-            theme::ui_font(if at.height() < 16.0 { 9.0 } else { 10.0 }),
+            "monitor",
+            crate::kit::skin::State::response(&response, active),
             ink,
-        );
+            0.0,
+        ) {
+            widgets::text_in(
+                painter,
+                at,
+                Align2::CENTER_CENTER,
+                text,
+                theme::ui_font(if at.height() < 16.0 { 9.0 } else { 10.0 }),
+                ink,
+            );
+        }
         egui::Popup::menu(&response).show(|ui| menus::midi_monitor_choices(ui, lane.track, mode, actions));
     }
 

@@ -954,6 +954,23 @@ fn a_track_gives_its_colour_to_the_sheet_and_each_view_is_known() {
 }
 
 #[test]
+fn artwork_reads_the_variables_of_the_elements_in_scope() {
+    let mut seen = Vec::new();
+    painted("", |_| {
+        let _header = super::super::style_class::enter_named("track-header", "track-1");
+        set_variable("--track-colour", hex(egui::Color32::from_rgb(0xE8, 0x91, 0x3A)));
+        let _button = super::super::style_class::enter("button");
+        seen = scope_variables();
+    });
+    assert_eq!(seen, [("--track-colour".to_string(), "#e8913a".to_string())]);
+    let mut theme = std::collections::BTreeMap::new();
+    theme.insert("--track-colour".to_string(), "#000000".to_string());
+    theme.extend(seen);
+    let svg = r#"<rect fill="var(--track-colour, #ff00ff)"/>"#;
+    assert_eq!(crate::kit::skin::substitute_variables(svg, &theme), r##"<rect fill="#e8913a"/>"##);
+}
+
+#[test]
 fn a_level_bar_s_value_may_sit_left_and_its_lit_part_take_its_own_ink() {
     let field = Rect::from_min_size(egui::pos2(10.0, 10.0), Vec2::new(200.0, 20.0));
     let css = "#arrangement-volume { text-align: left; } #arrangement-volume .value-fill { color: #00FF00; }";

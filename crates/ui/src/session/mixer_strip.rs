@@ -1490,7 +1490,10 @@ fn toggles(
     } else {
         track_number.to_string()
     };
-    widgets::text_in(painter, toggle, Align2::CENTER_CENTER, &number, theme::mono_font(theme::TEXT_SMALL), text);
+    let state = crate::kit::skin::State::response(&response, !column.mute);
+    if !crate::kit::skin::paint(painter, toggle, "track-on", state, text, 0.0) {
+        widgets::track_number_text(painter, toggle, &number, text, column.mute);
+    }
 }
 
 #[cfg(test)]

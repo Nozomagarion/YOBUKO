@@ -653,9 +653,23 @@ pub fn header_button(
     if response.clicked() {
         state.toggle(track, params);
     }
+    // `#control-automation`, `:checked` while the lanes show, and `automation` artwork.
+    let _style = crate::kit::style_class::enter_named_response("button", "automation", &response);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, open);
     let hover = widgets::hover(ui, &response);
     let off = crate::kit::motion::mix(theme::control_background(), theme::control_hover(), hover);
     widgets::track_button_face(ui, painter, rect, &response, if open { theme::control_active() } else { off });
+    let ink = crate::kit::style_class::foreground(if open { theme::text_primary() } else { theme::text_secondary() });
+    if crate::kit::skin::paint(
+        painter,
+        rect,
+        "automation",
+        crate::kit::skin::State::response(&response, open),
+        ink,
+        0.0,
+    ) {
+        return;
+    }
     // A small envelope: up, along, down.
     let glyph = rect.shrink2(Vec2::new(4.0, 4.0));
     let line = vec![
@@ -664,7 +678,6 @@ pub fn header_button(
         Pos2::new(glyph.left() + glyph.width() * 0.65, glyph.top()),
         glyph.right_bottom(),
     ];
-    let ink = if open { theme::text_primary() } else { theme::text_secondary() };
     painter.add(Shape::line(line, Stroke::new(1.0, ink)));
 }
 

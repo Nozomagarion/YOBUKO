@@ -93,6 +93,12 @@ pub const OWN_ROLES: &[&str] = &[
     "track.name.arrangement",
     "track.body.session",
     "track.body.arrangement",
+    // An Arrangement header's own buttons: the track-on toggle (over its number), automation,
+    // the fold triangle and the MIDI monitoring chip.
+    "track-on",
+    "automation",
+    "fold",
+    "monitor",
 ];
 
 /// The very same original SVG sources are embedded and distributed as editable files.
@@ -863,7 +869,15 @@ fn paint_variant(
     let Some(source) = own.or_else(|| defaults.get(&key)).or_else(|| defaults.get(role)) else {
         return false;
     };
-    let substituted = substitute_variables(source, &skin.variables);
+    // The variables of the elements in scope (a track's `--track-colour`) win over the theme's.
+    let scoped = if source.contains("var(--") { super::native_css::scope_variables() } else { Vec::new() };
+    let substituted = if scoped.is_empty() {
+        substitute_variables(source, &skin.variables)
+    } else {
+        let mut variables = (*skin.variables).clone();
+        variables.extend(scoped.iter().cloned());
+        std::borrow::Cow::Owned(substitute_variables(source, &variables).into_owned())
+    };
     let source = substituted.as_ref();
     // Plain inherited track surfaces use the native fill and avoid filling the SVG
     // texture cache with a separate rectangle for every colour and strip height.
@@ -906,7 +920,10 @@ fn paint_variant(
         textures.sources.clear();
         textures.source_owner = Some(Arc::clone(&skin));
     }
-    let source_key = variant.as_ref().map_or_else(|| key.clone(), |(key, _)| key.clone());
+    let mut source_key = variant.as_ref().map_or_else(|| key.clone(), |(key, _)| key.clone());
+    for (name, value) in &scoped {
+        source_key.push_str(&format!("|{name}={value}"));
+    }
     let source_hash = if let Some(hash) = textures.sources.get(&source_key) {
         *hash
     } else {

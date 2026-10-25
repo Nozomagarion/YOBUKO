@@ -645,3 +645,22 @@ fn loop_boundaries_appear_while_extending_the_clip_before_release() {
         h.run();
     }
 }
+
+#[test]
+fn the_arrangement_track_on_toggle_is_control_track_on() {
+    fn filled(shape: &egui::Shape, at: egui::Rect, ink: egui::Color32) -> bool {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().any(|shape| filled(shape, at, ink)),
+            egui::Shape::Rect(rect) => rect.fill == ink && rect.rect.intersects(at),
+            _ => false,
+        }
+    }
+    let orange = egui::Color32::from_rgb(0xFF, 0x88, 0x00);
+    suhina_ui::kit::native_css::set_user_sheet(Some("#control-track-on { background-color: #ff8800; }".into()));
+    let mut h = window(demo_app());
+    h.get_by_label("Arrangement view").click();
+    h.run();
+    let toggle = h.get_by_label("Turn Drums off").rect();
+    assert!(h.output().shapes.iter().any(|s| filled(&s.shape, toggle, orange)), "the toggle takes #control-track-on");
+    suhina_ui::kit::native_css::set_user_sheet(None);
+}

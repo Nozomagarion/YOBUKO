@@ -399,6 +399,20 @@ pub fn set_variable(name: &str, value: String) {
     });
 }
 
+/// The variables Suhina sets for the elements in scope (`--track-colour`, `--clip-colour`, …),
+/// the innermost last, for artwork's `var()`.
+pub fn scope_variables() -> Vec<(String, String)> {
+    ENGINE.with(|engine| {
+        let engine = engine.borrow();
+        engine
+            .parents
+            .iter()
+            .filter_map(|&at| engine.nodes.get(at))
+            .flat_map(|node| node.variables.iter().cloned())
+            .collect()
+    })
+}
+
 /// `color` as `#RRGGBB` or `#RRGGBBAA`, for a value given to the sheet.
 pub fn hex(color: Color32) -> String {
     let [r, g, b, a] = color.to_srgba_unmultiplied();
@@ -445,8 +459,19 @@ pub fn mark_pointer(hovered: bool, pressed: bool, disabled: bool) {
 }
 
 /// Buttons a theme selects by id, as `#control-NAME`: the toolbar's and a track's.
-pub const CONTROL_IDS: &[&str] =
-    &["play", "stop", "record", "browser-toggle", "metronome-toggle", "solo", "cue", "arm", "track-on"];
+pub const CONTROL_IDS: &[&str] = &[
+    "play",
+    "stop",
+    "record",
+    "browser-toggle",
+    "metronome-toggle",
+    "solo",
+    "cue",
+    "arm",
+    "track-on",
+    "automation",
+    "monitor",
+];
 
 /// Level fields a theme selects by id (`#arrangement-volume`).
 pub const LEVEL_FIELDS: &[&str] = &["arrangement-volume", "arrangement-pan", "mixer-volume", "mixer-pan"];
