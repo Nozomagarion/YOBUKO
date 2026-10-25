@@ -610,3 +610,19 @@ fn a_point_is_not_added_on_a_segment_that_overshoots_its_points() {
     // A value given, or the beat of a point, still works.
     run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 4, "value": 0 })).unwrap();
 }
+
+/// A half that cannot move is level only if its control points are: a curve that rises before
+/// reaching the cut value of zero is not split into a straight first half.
+#[test]
+fn a_point_is_not_added_where_a_half_would_lose_its_rise() {
+    let mut session = Session::new(project());
+    let dips = json!([0.25, 1.0 / 6.0, 0.75, -0.5]);
+    for (beat, value) in [(0, -1), (8, 1)] {
+        let point = json!({ "track": 1, "param": "pan", "beat": beat, "value": value, "curve": dips });
+        run(&mut session, "automation.addPoint", point).unwrap();
+    }
+    let before = lanes(&session)[0].clone();
+    let refused = run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 4 }));
+    assert!(refused.is_err());
+    assert_eq!(lanes(&session)[0], before);
+}

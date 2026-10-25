@@ -220,7 +220,9 @@ impl Curve {
         let scale = |a: (f64, f64), b: (f64, f64), from: (f64, f64), to: (f64, f64)| {
             let (w, h) = (to.0 - from.0, to.1 - from.1);
             if !(w > 0.0 && h > 0.0) {
-                return Some(Self::STRAIGHT);
+                // A half that does not move plays as a straight one only if its points do not move either.
+                let level = w > 0.0 && [a.1, b.1, to.1].iter().all(|y| (y - from.1).abs() <= SLIVER);
+                return level.then_some(Self::STRAIGHT);
             }
             let half = [(a.0 - from.0) / w, (a.1 - from.1) / h, (b.0 - from.0) / w, (b.1 - from.1) / h];
             // A half whose points the limits would move plays differently from the whole.
