@@ -201,7 +201,8 @@ impl Curve {
     /// coordinate past [`CONTROL_MIN`] or [`CONTROL_MAX`], which only a curve whose time share
     /// falls or rounding in a sliver of a cut can give, is held there. `None` for a `t` at an end
     /// or not a number, and for a cut where the way is past either end (a curve whose points lie
-    /// beyond the box can overshoot): the halves could not play as the whole does.
+    /// beyond the box can overshoot), and for one whose half would need a control point beyond
+    /// the limits: the halves could not play as the whole does.
     pub fn split(&self, t: f64) -> Option<Split> {
         if !(t > 0.0 && t < 1.0) {
             return None;
@@ -219,17 +220,19 @@ impl Curve {
         let scale = |a: (f64, f64), b: (f64, f64), from: (f64, f64), to: (f64, f64)| {
             let (w, h) = (to.0 - from.0, to.1 - from.1);
             if !(w > 0.0 && h > 0.0) {
-                return Self::STRAIGHT;
+                return Some(Self::STRAIGHT);
             }
-            Self { x1: (a.0 - from.0) / w, y1: (a.1 - from.1) / h, x2: (b.0 - from.0) / w, y2: (b.1 - from.1) / h }
-                .held()
+            let half = [(a.0 - from.0) / w, (a.1 - from.1) / h, (b.0 - from.0) / w, (b.1 - from.1) / h];
+            // A half whose points the limits would move plays differently from the whole.
+            let kept = half.iter().all(|v| (CONTROL_MIN - SLIVER..=CONTROL_MAX + SLIVER).contains(v));
+            kept.then(|| Self { x1: half[0], y1: half[1], x2: half[2], y2: half[3] }.held())
         };
         // A cut where the way is past either end cannot be kept by two halves that stay between
         // their own points: the whole plays held there, a half could not.
         if !(-SLIVER..=1.0 + SLIVER).contains(&m.1) {
             return None;
         }
-        Some(Split { share: m.1.clamp(0.0, 1.0), before: scale(q, u, p0, m), after: scale(v, w, m, p3) })
+        Some(Split { share: m.1.clamp(0.0, 1.0), before: scale(q, u, p0, m)?, after: scale(v, w, m, p3)? })
     }
 }
 

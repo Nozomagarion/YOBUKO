@@ -603,6 +603,10 @@ fn a_point_is_not_added_on_a_segment_that_overshoots_its_points() {
     let refused = run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 4 }));
     assert!(refused.is_err());
     assert_eq!(lanes(&session)[0], before);
+    // A cut before the overshoot is refused too when a half's points would need clamping.
+    let refused = run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 1.925 }));
+    assert!(refused.is_err());
+    assert_eq!(lanes(&session)[0], before);
     // A value given, or the beat of a point, still works.
     run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 4, "value": 0 })).unwrap();
 }
