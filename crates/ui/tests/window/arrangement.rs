@@ -981,13 +981,13 @@ fn an_audio_clip_renames_and_moves_like_a_midi_one() {
     // An audio track and its empty clip, made with the double-click.
     harness.get_by_label("+ Audio track").click();
     harness.run();
-    let at = harness.get_by_label("Stop Audio 1 (scene 1)").rect().center();
+    let at = harness.get_by_label("Stop 5 Audio (scene 1)").rect().center();
     double_click_at(&mut harness, at);
     harness.run();
-    assert!(harness.query_by_label("Launch Audio clip on Audio 1 (scene 1)").is_some());
+    assert!(harness.query_by_label("Launch Audio clip on 5 Audio (scene 1)").is_some());
 
     // Renaming through the slot's menu: click into the field, select all, type, Enter.
-    harness.get_by_label("Launch Audio clip on Audio 1 (scene 1)").click_secondary();
+    harness.get_by_label("Launch Audio clip on 5 Audio (scene 1)").click_secondary();
     harness.run();
     harness.get_by_label_contains("Rename clip Audio clip").click();
     harness.run();
@@ -997,11 +997,11 @@ fn an_audio_clip_renames_and_moves_like_a_midi_one() {
     harness.run();
     harness.key_press(Key::Enter);
     harness.run();
-    assert!(harness.query_by_label("Launch Break on Audio 1 (scene 1)").is_some(), "the audio clip took the name");
+    assert!(harness.query_by_label("Launch Break on 5 Audio (scene 1)").is_some(), "the audio clip took the name");
 
     // Dragging it to the next scene moves it.
-    let from = harness.get_by_label("Launch Break on Audio 1 (scene 1)").rect().center();
-    let to = harness.get_by_label("Stop Audio 1 (scene 2)").rect().center();
+    let from = harness.get_by_label("Launch Break on 5 Audio (scene 1)").rect().center();
+    let to = harness.get_by_label("Stop 5 Audio (scene 2)").rect().center();
     harness.hover_at(from);
     harness.step();
     harness.drag_at(from);
@@ -1010,8 +1010,8 @@ fn an_audio_clip_renames_and_moves_like_a_midi_one() {
     harness.step();
     harness.drop_at(to);
     harness.run();
-    assert!(harness.query_by_label("Launch Break on Audio 1 (scene 2)").is_some(), "the audio clip moved by drag");
-    assert!(harness.query_by_label("Stop Audio 1 (scene 1)").is_some(), "the source emptied");
+    assert!(harness.query_by_label("Launch Break on 5 Audio (scene 2)").is_some(), "the audio clip moved by drag");
+    assert!(harness.query_by_label("Stop 5 Audio (scene 1)").is_some(), "the source emptied");
     assert!(
         matches!(harness.state().status(), Status::Done(text) if text.contains("Moved")),
         "{:?}",

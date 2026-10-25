@@ -921,6 +921,9 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             // back to every track under the pointer, mid-click.
             if focus.is_none() {
                 state.clear_selected_clip();
+                // The track whose lane was clicked is selected and its devices show (#950).
+                state.selected_tracks = vec![clips_lane.track];
+                state.devices_clicked = true;
             }
             state.time_selection = None;
             // The click also moves the play start marker there, on the clip grid (Alt: free);

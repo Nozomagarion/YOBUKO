@@ -368,6 +368,12 @@ pub struct App {
     /// again a second later, as a plug-in that is busy or reloading misses it (#719).
     ara_was_open: Option<(TrackId, ClipId)>,
     ara_open_asked: Option<((TrackId, ClipId), f64)>,
+    /// The clip whose ARA editor a double-click asked for: the editor opens on its own only for
+    /// it, never for a clip only selected (#916).
+    ara_armed: Option<(TrackId, ClipId)>,
+    /// A clip was double-clicked: the editor (piano roll or ARA plug-in) is asked for, opening
+    /// the detail area if it was hidden.
+    clip_opened: bool,
     /// The device selected in the detail area (its panel's click): the track and the device's
     /// index, for the Delete key to take off the track. Window state.
     selected_device: Option<(TrackId, usize)>,
@@ -580,6 +586,8 @@ impl App {
             ara_opened: None,
             ara_was_open: None,
             ara_open_asked: None,
+            ara_armed: None,
+            clip_opened: false,
             selected_device: None,
             device_focus: false,
             device_picks: Vec::new(),
@@ -1261,6 +1269,8 @@ impl App {
         self.save_prompt = None;
         self.project_dialog = Some(DialogState { path: String::new(), focus_path: open });
         self.lists_wanted = true;
+        // The blank row follows the setting at once, before the app hands the lists back.
+        self.project_lists.new_returns = self.settings.view.new_returns;
     }
 
     /// Opens what Settings › General › At start says, for Suhina started without a project:
@@ -2403,18 +2413,19 @@ impl App {
                     Vec::<crate::detail::device_canvas::SampleTarget>::new(),
                 )
             });
-            // A clip selected (or clicked) while the editor was closed by hand opens it again.
+            // A double-click on a clip opens its editor, the detail area with it when it was
+            // hidden; a click only selects, so a hidden piano roll or ARA editor stays hidden
+            // (#916). With the detail area showing, another clip clicked shows its editor.
             let shown_clip = self.shown_clip();
             let clicked = std::mem::take(&mut self.arrangement.clip_clicked);
-            if self.editor_closed
-                && !self.detail_open
-                && shown_clip.is_some()
-                && (clicked || shown_clip != self.last_clip)
-            {
-                self.show_editor();
-            }
-            // Selecting another clip, or clicking the selected one, shows its editor again.
-            if shown_clip.is_some() && (clicked || shown_clip != self.last_clip) {
+            let opened = std::mem::take(&mut self.arrangement.clip_opened) | std::mem::take(&mut self.view.clip_opened);
+            if opened && shown_clip.is_some() {
+                if !self.detail_open {
+                    self.show_editor();
+                }
+                self.detail_showing = detail_view::Showing::Clip;
+                self.clip_opened = true;
+            } else if self.detail_open && shown_clip.is_some() && (clicked || shown_clip != self.last_clip) {
                 self.detail_showing = detail_view::Showing::Clip;
             }
             self.last_clip = shown_clip;

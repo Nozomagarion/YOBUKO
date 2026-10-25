@@ -22,7 +22,7 @@ fn main_channel(session: &Session) -> Channel {
 #[test]
 fn devices_and_their_automation_go_on_main() {
     let mut session = Session::new(suhina_session::blank_project());
-    run(&mut session, "device.add", json!({ "track": "main", "device": "utility" })).unwrap();
+    run(&mut session, "device.add", json!({ "track": "main", "id": "utility" })).unwrap();
     assert_eq!(main_channel(&session).devices.len(), 1);
     run(&mut session, "device.setParam", json!({ "track": "main", "device": 0, "param": "gain", "value": -6.0 }))
         .unwrap();
@@ -45,7 +45,7 @@ fn devices_and_their_automation_go_on_main() {
 #[test]
 fn main_takes_no_instrument_and_is_not_a_track() {
     let mut session = Session::new(suhina_session::blank_project());
-    assert!(run(&mut session, "device.add", json!({ "track": "main", "device": "fm-synth" })).is_err());
+    assert!(run(&mut session, "device.add", json!({ "track": "main", "id": "fm-synth" })).is_err());
     // Track commands do not reach the main channel.
     assert!(run(&mut session, "track.delete", json!({ "track": "main" })).is_err());
     assert!(run(&mut session, "track.setOutput", json!({ "track": "main", "to": "main" })).is_err());

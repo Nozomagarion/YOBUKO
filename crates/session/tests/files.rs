@@ -346,7 +346,7 @@ fn mixed_files_on_empty_space_make_an_audio_and_a_midi_track() {
         run(&mut session, "clip.addFiles", json!({ "paths": [text(&a), text(&m), text(&b)], "scene": 1 })).unwrap();
     assert_eq!(out["tracks"].as_array().map(Vec::len), Some(2));
     let p = session.project();
-    assert_eq!(names(p)[4..6], ["Audio 3", "groove"]);
+    assert_eq!(names(p)[4..6], ["5 Audio", "groove"]);
     let midi_track = p.tracks.iter().find(|t| t.name == "groove").unwrap();
     assert_eq!(midi_track.content, ContentKinds { notes: true, audio: false });
     // The MIDI clip is a bar long (its notes end at beat 3) and loops in its slot.

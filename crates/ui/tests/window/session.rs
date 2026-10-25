@@ -144,17 +144,17 @@ fn a_double_click_on_an_empty_slot_of_an_audio_track_makes_an_empty_clip_there()
     // An audio track next to the demo's MIDI ones.
     harness.get_by_label("+ Audio track").click();
     harness.run();
-    assert!(harness.query_by_label("Stop Audio 1 (scene 1)").is_some(), "the track's empty slot is there");
-    let at = harness.get_by_label("Stop Audio 1 (scene 1)").rect().center();
+    assert!(harness.query_by_label("Stop 5 Audio (scene 1)").is_some(), "the track's empty slot is there");
+    let at = harness.get_by_label("Stop 5 Audio (scene 1)").rect().center();
     double_click_at(&mut harness, at);
     assert!(
-        harness.query_by_label("Launch Audio clip on Audio 1 (scene 1)").is_some(),
+        harness.query_by_label("Launch Audio clip on 5 Audio (scene 1)").is_some(),
         "the empty audio clip is there"
     );
     // One undo step takes it back.
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
     harness.run();
-    assert!(harness.query_by_label("Stop Audio 1 (scene 1)").is_some(), "the slot is empty again");
+    assert!(harness.query_by_label("Stop 5 Audio (scene 1)").is_some(), "the slot is empty again");
 }
 
 #[test]
@@ -653,14 +653,14 @@ fn moving_the_session_view_with_the_middle_button_scrolls_it() {
 #[test]
 fn clicking_main_selects_it_and_its_devices_show() {
     let mut session = Session::new(demo_project());
-    session.execute("device.add", &json!({ "track": "main", "device": "utility" })).unwrap();
+    session.execute("device.add", &json!({ "track": "main", "id": "utility" })).unwrap();
     let mut app = App::new();
     app.set_browser_open(false);
     app.set_session(session, &[]);
     let mut harness = window(app);
     harness.get_all_by_label("Select Main").next().unwrap().click();
     harness.run();
-    assert!(harness.query_by_label_contains("Utility").is_some());
+    assert!(harness.query_all_by_label_contains("Utility").next().is_some());
 }
 
 /// Ctrl-click adds a header to the selection and Shift-click takes the run between, as in the

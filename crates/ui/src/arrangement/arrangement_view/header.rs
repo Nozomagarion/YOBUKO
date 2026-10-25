@@ -168,9 +168,10 @@ pub(super) fn track_header(
         state.targeted = Some(lane.track);
         let (shift, command) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
         state.pick_track(lane.track, shift, command, order.tracks);
-        // The track, not a clip, is what Delete acts on now (#690); a clip on it stays selected
-        // for the detail area.
+        // The track, not a clip, is what Delete acts on now (#690); a clip on it stays selected,
+        // and the detail area shows the track's devices (#950).
         state.track_focus = true;
+        state.devices_clicked = true;
     }
     // A double-click shows the track's devices in the detail area.
     if body.double_clicked() {

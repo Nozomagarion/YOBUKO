@@ -233,6 +233,11 @@ pub struct ArrangementViewState {
     /// opens a clip editor closed by hand again (`docs/spec/ui-clip-editor.md` › Least height
     /// and closing).
     pub clip_clicked: bool,
+    /// A clip was double-clicked: the window opens its editor (#916).
+    pub clip_opened: bool,
+    /// A click on a track that was not on a clip (its header, an empty part of its lane): the
+    /// window shows its devices (#950).
+    pub devices_clicked: bool,
     /// The clips are picked whole (a click on a name bar, a rectangle, Ctrl+A, a paste): play
     /// starts from the first of them, as the setting says. A click in a clip's body picks it
     /// too, but play starts where it was clicked, as the insert marker shows.
@@ -324,6 +329,8 @@ impl Default for ArrangementViewState {
             meters: Meters::default(),
             focus: None,
             clip_clicked: false,
+            clip_opened: false,
+            devices_clicked: false,
             picked_whole: true,
             name_bar_moves: true,
             grid_in_clips: true,

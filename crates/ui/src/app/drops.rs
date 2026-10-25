@@ -656,6 +656,13 @@ impl App {
                     // A Stems file arrives as one group: it opens folded, so the drop reads as a
                     // single lane until the group's triangle is clicked (`clip.addFiles`).
                     self.fold_new_groups(&result);
+                    // A device dropped on a track shows that track's devices, the new one among
+                    // them (#950).
+                    if id.starts_with("device.add")
+                        && let Some(track) = params["track"].as_u64().and_then(|t| u32::try_from(t).ok())
+                    {
+                        self.show_devices_of(TrackId(track));
+                    }
                     let skipped = result["skipped"].as_array().map_or(0, Vec::len);
                     let placed = result["clips"].as_array().map_or(0, Vec::len);
                     self.status = match (id, skipped) {

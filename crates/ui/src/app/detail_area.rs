@@ -26,6 +26,21 @@ impl App {
             }
             self.show_devices();
         }
+        // A click anywhere on a track that is not a clip shows its devices too, the selection
+        // as the click left it (#950). A hidden detail area stays hidden: opening it under the
+        // pointer would move what a double-click's second click lands on.
+        if std::mem::take(&mut self.arrangement.devices_clicked) | std::mem::take(&mut self.view.devices_clicked)
+            && self.detail_open
+        {
+            self.detail_showing = detail_view::Showing::Devices;
+        }
+    }
+
+    /// Selects `track` (Main too) and shows its devices, opening the detail area: after a device
+    /// was dropped on it (#950).
+    pub(super) fn show_devices_of(&mut self, track: TrackId) {
+        self.select_tracks(vec![track]);
+        self.show_devices();
     }
 
     /// Shows the shown track's devices in the detail area, opening it when it is hidden.
@@ -214,7 +229,16 @@ impl App {
         // The editor opens in the clip's place on its own, and again until it is open: a plug-in
         // that is busy or loading again misses the first ask. Closed by the user while its clip
         // is shown, it stays closed for that clip (#719).
-        match ara.filter(|_| self.detail_showing == detail_view::Showing::Clip) {
+        // Only a double-clicked clip opens the editor on its own (#916).
+        if let Some((t, c, _, _)) = ara
+            && std::mem::take(&mut self.clip_opened)
+        {
+            self.ara_armed = Some((t, c));
+            self.ara_opened = None;
+        }
+        match ara.filter(|(t, c, _, _)| {
+            self.detail_showing == detail_view::Showing::Clip && self.ara_armed == Some((*t, *c))
+        }) {
             Some((t, c, device, open)) => {
                 let key = (t, c);
                 if open {

@@ -253,6 +253,9 @@ pub(super) fn clip_box<'a>(
         // Clips picked by a click or moved: the time selection gives way to them.
         state.time_selection = None;
     }
+    if response.double_clicked() {
+        state.clip_opened = true;
+    }
     if response.clicked() {
         state.pick_clip(key, shift, command, clip_order);
         state.clip_clicked = true;

@@ -248,6 +248,7 @@ pub fn show(
     if strip.clicked() {
         state.selected = Some(column.track);
         state.selected_tracks = vec![column.track];
+        state.devices_clicked = true;
         if state.selected_slot.is_some_and(|(track, _)| track != column.track) {
             state.selected_slot = None;
         }

@@ -131,6 +131,11 @@ pub struct SessionViewState {
     /// A double-click on an empty slot does nothing (Settings › Arrangement › Double-click makes a
     /// clip is off); by default it makes an empty clip of the track's kind.
     pub double_click_does_nothing: bool,
+    /// A slot's clip was double-clicked: the window opens its editor (#916).
+    pub clip_opened: bool,
+    /// A click on a track that was not on a clip (its header, its strip, an empty slot): the
+    /// window shows its devices (#950).
+    pub devices_clicked: bool,
 }
 
 impl SessionViewState {
@@ -664,6 +669,7 @@ fn draw_column(
 fn select_header(state: &mut SessionViewState, order: &[TrackId], track: TrackId, command: bool, shift: bool) {
     state.selected_slot = None;
     state.track_focus = true;
+    state.devices_clicked = true;
     if shift && let Some(anchor) = state.selected.filter(|a| *a != TrackId::MAIN) {
         let at = |t: TrackId| order.iter().position(|o| *o == t);
         if let (Some(a), Some(b)) = (at(anchor), at(track)) {
@@ -901,6 +907,17 @@ fn column_body(
         }
         if select.as_ref().is_some_and(Response::clicked) {
             state.select_slot(column.track, scene);
+            // An empty slot shows its track's devices (#950).
+            if !has_clip {
+                state.devices_clicked = true;
+            }
+        }
+        if has_clip
+            && (select.as_ref().is_some_and(Response::double_clicked)
+                || launch.as_ref().is_some_and(Response::double_clicked))
+        {
+            state.select_slot(column.track, scene);
+            state.clip_opened = true;
         }
         if editable {
             // The slot's rename draft dies with its menu — either of the slot's two responses may
