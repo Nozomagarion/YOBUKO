@@ -24,6 +24,7 @@ pub mod project_dialog;
 pub mod splash;
 pub mod start_panel;
 mod tabs;
+mod typing_keys;
 pub mod updates;
 
 use std::collections::HashMap;
@@ -344,6 +345,8 @@ pub struct App {
     /// The tempo field's drag: the step of the place grabbed (1, 0.1, 0.01 or 0.001 BPM) and
     /// the tempo it started from, kept until release (#829).
     tempo_grab: Option<(f64, f64)>,
+    /// Notes from the computer keyboard (#944).
+    typing: typing_keys::TypingKeys,
     open_request: Option<(PathBuf, OpenAs)>,
     /// Counts changes to the project, so views derived from it are rebuilt only when it changed.
     revision: u64,
@@ -580,6 +583,7 @@ impl App {
             tempo_drag: None,
             tempo_sent: None,
             tempo_grab: None,
+            typing: typing_keys::TypingKeys::default(),
             open_request: None,
             revision: 0,
             timeline: None,

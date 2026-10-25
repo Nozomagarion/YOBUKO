@@ -176,6 +176,22 @@ impl App {
         let ts_rect = row(x, 40.0);
         widgets::text_in(&painter, ts_rect, Align2::CENTER_CENTER, &signature, mono.clone(), theme::text_secondary());
         x = ts_rect.right() + PAD;
+        // The computer keyboard: lit while its keys play notes, with the octave of A (#944).
+        let keys_rect = row(x, 44.0);
+        let label = if self.typing.on {
+            format!("Computer keyboard on, {}", self.typing.label())
+        } else {
+            "Computer keyboard".into()
+        };
+        let response = widgets::button_area(ui, keys_rect, Id::new("computer-keyboard"), label);
+        if response.clicked() {
+            self.toggle_typing_keys();
+        }
+        let (fill, ink) = widgets::toggle_colors(ui, &response, self.typing.on);
+        painter.rect_filled(keys_rect, 0.0, fill);
+        let text = if self.typing.on { self.typing.label() } else { "Keys".into() };
+        widgets::text_in(&painter, keys_rect, Align2::CENTER_CENTER, &text, theme::ui_font(theme::TEXT_SMALL), ink);
+        x = keys_rect.right() + PAD;
         let small = theme::ui_font(theme::TEXT_SMALL);
         // At narrow widths the captions go, then the count-in and the metronome (the main strip
         // has one too), so nothing runs under the transport in the middle.

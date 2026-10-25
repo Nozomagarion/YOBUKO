@@ -96,6 +96,8 @@ impl App {
         {
             return;
         }
+        // With the computer keyboard on, its keys play notes and run no shortcut (#944).
+        self.typing_keys(ui);
         // The piano roll's own keys only while it has the keyboard; the selected slot's keys
         // only while it does not, as the two share keys.
         let notes = self.piano_roll.focused;

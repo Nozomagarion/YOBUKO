@@ -237,3 +237,20 @@ fn a_volume_set_on_one_selected_track_is_set_on_all_of_them() {
     assert_eq!(volumes.len(), 2);
     assert!(volumes.iter().all(|v| (v - 0.5012).abs() < 1e-3), "{volumes:?}");
 }
+
+/// Ctrl+K turns the computer keyboard on: the control bar shows the octave of A, and Z and X
+/// move it (#944).
+#[test]
+fn ctrl_k_turns_the_computer_keyboard_on_and_x_raises_its_octave() {
+    let mut harness = window(demo_app());
+    assert!(harness.query_by_label("Computer keyboard").is_some());
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::K);
+    harness.run();
+    assert!(harness.query_by_label("Computer keyboard on, C3").is_some());
+    harness.key_press(Key::X);
+    harness.run();
+    assert!(harness.query_by_label("Computer keyboard on, C4").is_some(), "X raised the octave");
+    harness.get_by_label("Computer keyboard on, C4").click();
+    harness.run();
+    assert!(harness.query_by_label("Computer keyboard").is_some(), "a click turns it off");
+}

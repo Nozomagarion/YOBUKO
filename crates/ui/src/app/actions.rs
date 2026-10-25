@@ -631,6 +631,7 @@ impl App {
                 self.arrangement.selected_tracks.clear();
                 self.view.selected_tracks.clear();
             }
+            "view.computerKeyboard" => self.toggle_typing_keys(),
             "marker.addAtPlayhead" => {
                 // Where the playhead is while playing; stopped, where playback would start.
                 let monitor = self.session().and_then(|s| s.player()).map(|p| p.monitor());
