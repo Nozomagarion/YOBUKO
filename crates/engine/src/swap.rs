@@ -258,12 +258,19 @@ impl Renderer {
         // them changed, and waiting ones take theirs if it has them now.
         for chain in &mut self.graph.chains {
             for slot in chain.plugin_slots().filter(|s| s.processor.is_none()) {
-                slot.processor = old
+                if let Some(running) = old
                     .chains
                     .iter_mut()
                     .flat_map(|c| c.plugin_slots())
                     .find(|o| o.key == slot.key && o.processor.is_some())
-                    .and_then(|o| o.processor.take());
+                {
+                    slot.processor = running.processor.take();
+                    // The running plug-in keeps what it was sent: only values the edit changed
+                    // go to it, not every set value again, which would undo what was turned in
+                    // its own window meanwhile (#916).
+                    std::mem::swap(&mut slot.params, &mut running.params);
+                    slot.params.adopt(&mut running.params);
+                }
                 if slot.processor.is_none()
                     && let Some(index) = self.swap.parked.iter().position(|(key, _)| *key == slot.key)
                 {
