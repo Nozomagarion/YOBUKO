@@ -163,6 +163,9 @@ pub struct Session {
     /// When the project was last backed up and where (`backup.rs`).
     pub(crate) backup: backup::SessionBackups,
     pub(crate) live: live_input::LiveInput,
+    /// The take lane heard in place of its track's clips (`take.solo`, #989): its track and its
+    /// index in `arrangement.takes`. Not saved, not an undo step.
+    pub(crate) take_solo: Option<(suhina_model::TrackId, usize)>,
 }
 
 /// Files kept decoded ahead of the commands that use them.
@@ -186,7 +189,32 @@ impl Session {
             sync: player_sync::PlayerSync::default(),
             backup: backup::SessionBackups::default(),
             live: live_input::LiveInput::default(),
+            take_solo: None,
         }
+    }
+
+    /// The take lane heard in place of its track's clips (`take.solo`), by its track and its
+    /// number on the track, from 1.
+    pub fn take_solo(&self) -> Option<(suhina_model::TrackId, usize)> {
+        let (track, index) = self.take_solo?;
+        let take = self.project.arrangement.takes.get(index).filter(|t| t.track == track)?;
+        let number = self.project.arrangement.takes.iter().take(index + 1).filter(|t| t.track == take.track).count();
+        Some((track, number))
+    }
+
+    /// The project as the engine plays it: with a soloed take lane's clips in place of its
+    /// track's (#989).
+    fn heard_project(&self) -> std::borrow::Cow<'_, Project> {
+        let Some((track, index)) = self.take_solo else { return std::borrow::Cow::Borrowed(&self.project) };
+        let Some(take) = self.project.arrangement.takes.get(index).filter(|t| t.track == track) else {
+            return std::borrow::Cow::Borrowed(&self.project);
+        };
+        let mut heard = self.project.clone();
+        if let Some(lane) = heard.arrangement.lanes.iter_mut().find(|l| l.track == Some(track)) {
+            lane.clips = take.clips.clone();
+        }
+        let _ = heard.assign_ids();
+        std::borrow::Cow::Owned(heard)
     }
 
     /// Whether the clips copied for `clip.paste` play audio: `Some(true)` for audio, `Some(false)`
@@ -1100,7 +1128,9 @@ impl Session {
             player.set_device_assets(std::sync::Arc::new(self.device_files.assets.clone()));
             self.device_files.changed = false;
         }
-        player.update_with_scenes(&self.project, scenes).map_err(|e| {
+        let heard = self.take_solo.map(|_| self.heard_project().into_owned());
+        let Some(player) = self.sync.player.as_mut() else { return Ok(()) };
+        player.update_with_scenes(heard.as_ref().unwrap_or(&self.project), scenes).map_err(|e| {
             CommandError(format!("the edit was made, but the playing engine could not follow it: {}", e.0))
         })
     }

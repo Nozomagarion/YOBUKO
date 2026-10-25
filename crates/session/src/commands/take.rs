@@ -65,6 +65,30 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "take.solo",
+        label: "Hear a take lane in place of its track's clips (its S button), or the track again with take 0; not saved and not an undo step",
+        params: &[TRACK, param("take", ParamType::Integer, "the take's number on the track, from 1, or 0 for none")],
+        kind: CommandKind::Transport,
+        run: solo_take,
+        policy: Policy::UNHEARD,
+    },
+    CommandSpec {
+        id: "take.promote",
+        label: "Put a whole take on its track over what is there (its up arrow), its pieces as they are",
+        params: &[TRACK, param("take", ParamType::Integer, "the take's number on the track, from 1")],
+        kind: CommandKind::Edit,
+        run: promote_take,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "take.deleteUnused",
+        label: "Delete a track's take lanes that its comp does not use; the track's clips stay",
+        params: &[TRACK],
+        kind: CommandKind::Edit,
+        run: delete_unused_takes,
+        policy: Policy::UNHEARD,
+    },
+    CommandSpec {
         id: "take.delete",
         label: "Delete a recorded take lane of a track; the track's clips stay",
         params: &[TRACK, param("take", ParamType::Integer, "the take's number on the track, from 1")],
@@ -318,11 +342,53 @@ fn move_cut(session: &mut Session, params: &Value) -> Result<Value, CommandError
     Ok(json!({ "track": track.0, "cut": done }))
 }
 
+/// `take.solo {track, take}`: the take lane heard in place of its track's clips, or none with 0.
+fn solo_take(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let track = track_id(&session.project, params)?;
+    let none = params.get("take").and_then(Value::as_u64) == Some(0);
+    session.take_solo = if none { None } else { Some((track, take_index(&session.project, track, params)?)) };
+    session.update_player(None)?;
+    Ok(json!({ "track": track.0, "take": session.take_solo().map_or(0, |(_, n)| n) }))
+}
+
+/// `take.promote {track, take}`: every piece of the take put on the track over what is there.
+fn promote_take(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let p = &mut session.project;
+    let track = track_id(p, params)?;
+    let index = take_index(p, track, params)?;
+    let spans: Vec<(f64, f64)> = p
+        .arrangement
+        .takes
+        .get(index)
+        .map(|t| t.clips.iter().map(|c| (c.start, c.start + c.length)).collect())
+        .unwrap_or_default();
+    let mut clips = Vec::new();
+    for (from, to) in spans {
+        clips.extend(comp_part(p, track, index, from, to, None)?);
+    }
+    Ok(json!({ "track": track.0, "clips": clips }))
+}
+
+/// `take.deleteUnused {track}`: the take lanes the comp uses nothing of go.
+fn delete_unused_takes(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let p = &mut session.project;
+    let track = track_id(p, params)?;
+    let unused: Vec<usize> = (0..p.arrangement.takes.len())
+        .filter(|&i| p.arrangement.takes.get(i).is_some_and(|t| t.track == track) && p.comp_used(i).is_empty())
+        .collect();
+    for &index in unused.iter().rev() {
+        p.arrangement.takes.remove(index);
+    }
+    session.take_solo = None;
+    Ok(json!({ "track": track.0, "deleted": unused.len() }))
+}
+
 /// `take.delete`.
 fn delete_take(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let p = &mut session.project;
     let track = track_id(p, params)?;
     let index = take_index(p, track, params)?;
     let take = p.arrangement.takes.remove(index);
+    session.take_solo = None;
     Ok(json!({ "track": track.0, "deleted": take.name }))
 }

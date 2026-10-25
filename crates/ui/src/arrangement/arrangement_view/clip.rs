@@ -1378,14 +1378,6 @@ pub(super) fn take_lanes(
         painter.rect_filled(header, 0.0, shade);
         let strip = Rect::from_min_size(header.min, Vec2::new(4.0, header.height()));
         painter.rect_filled(strip, 0.0, swatch);
-        widgets::text_in(
-            painter,
-            header.shrink2(Vec2::new(10.0, 0.0)),
-            Align2::LEFT_CENTER,
-            &take.name,
-            theme::ui_font(theme::TEXT_SMALL),
-            ink_on(shade),
-        );
         let name = ui.interact(
             header.intersect(at.visible),
             Id::new(("take-name", lane.track.0, take.number)),
@@ -1398,6 +1390,77 @@ pub(super) fn take_lanes(
             take_menu(ui, lane.track, take, piece, &params, actions)
         };
         name.context_menu(|ui| menu(ui, actions, None));
+        // Its buttons, as a track's header has (#989): delete, solo, its colour, and the up arrow
+        // that puts the whole take on the track.
+        let button = Vec2::splat(16.0);
+        let row_y = header.top() + 3.0;
+        let place = |x: f32| Rect::from_min_size(Pos2::new(x, row_y), button);
+        let delete = place(header.left() + 8.0);
+        let solo = place(delete.right() + 3.0);
+        let colour_button = place(solo.right() + 3.0);
+        let promote = place(header.right() - 4.0 - button.x);
+        let ink = ink_on(shade);
+        let small = theme::ui_font(theme::TEXT_SMALL);
+        let soloed = state.take_solo == Some((lane.track, take.number));
+        if header.height() >= button.y + 4.0 {
+            let id = |what: &str| Id::new(("take-button", what, lane.track.0, take.number));
+            let clicked = |rect: Rect, what: &str, label: String| {
+                widgets::button_area(ui, rect.intersect(at.visible), id(what), label).on_hover_text(what.to_string())
+            };
+            let r = clicked(delete, "Delete take", format!("Delete {}", take.name));
+            painter.rect_filled(delete, 2.0, motion::mix(shade, theme::control_hover(), widgets::hover(ui, &r)));
+            widgets::text_in(painter, delete, Align2::CENTER_CENTER, "\u{2715}", small.clone(), ink);
+            if r.clicked() {
+                actions.push(Action::new("take.delete", json!({ "track": params["track"], "take": params["take"] })));
+            }
+            let r = clicked(solo, "Solo take", format!("Solo {}", take.name));
+            let fill = if soloed {
+                theme::accent()
+            } else {
+                motion::mix(shade, theme::control_hover(), widgets::hover(ui, &r))
+            };
+            painter.rect_filled(solo, 2.0, fill);
+            widgets::text_in(
+                painter,
+                solo,
+                Align2::CENTER_CENTER,
+                "S",
+                small.clone(),
+                if soloed { ink_on(fill) } else { ink },
+            );
+            if r.clicked() {
+                let number = if soloed { 0 } else { take.number };
+                actions.push(Action::new("take.solo", json!({ "track": lane.track.0, "take": number })));
+            }
+            let r = clicked(colour_button, "Recolor lane", format!("Colour of {}", take.name));
+            painter.rect_filled(colour_button.shrink(3.0), 2.0, swatch);
+            egui::Popup::menu(&r).show(|ui| {
+                if let Some(picked) = crate::interaction::colour_picker::swatch_row(ui, Some(colour)) {
+                    let hex = crate::interaction::colour_picker::hex(picked);
+                    actions.push(Action::new(
+                        "take.setColor",
+                        json!({ "track": lane.track.0, "take": take.number, "color": hex }),
+                    ));
+                    ui.close();
+                }
+            });
+            let r = clicked(promote, "Put the whole take on the track", format!("Put {} on the track", take.name));
+            painter.rect_filled(promote, 2.0, motion::mix(shade, theme::control_hover(), widgets::hover(ui, &r)));
+            widgets::text_in(painter, promote, Align2::CENTER_CENTER, "\u{2191}", small.clone(), ink);
+            if r.clicked() {
+                actions.push(Action::new("take.promote", json!({ "track": lane.track.0, "take": take.number })));
+            }
+        }
+        let name_left =
+            if header.height() >= button.y + 4.0 { colour_button.right() + 6.0 } else { header.left() + 10.0 };
+        widgets::text_in(
+            painter,
+            Rect::from_min_max(Pos2::new(name_left, header.top()), Pos2::new(promote.left() - 4.0, header.bottom())),
+            Align2::LEFT_CENTER,
+            &take.name,
+            small,
+            ink,
+        );
         // Each piece in its colour, a dark shade of it where the comp does not use it and lit where
         // it does (#989): a take keeps its hue either way.
         for clip in &take.clips {
@@ -1564,7 +1627,7 @@ fn take_menu(
     });
     ui.separator();
     if ui.button("Delete take").clicked() {
-        actions.push(Action::new("take.delete", params.clone()));
+        actions.push(Action::new("take.delete", json!({ "track": params["track"], "take": params["take"] })));
         ui.close();
     }
 }

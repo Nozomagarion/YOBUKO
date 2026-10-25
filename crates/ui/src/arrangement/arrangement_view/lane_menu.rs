@@ -25,6 +25,10 @@ pub(super) fn empty_lane_menu(
             }
             ui.close();
         }
+        if ui.button("Delete unused takes").clicked() {
+            actions.push(Action::new("take.deleteUnused", json!({ "track": track.0 })));
+            ui.close();
+        }
         ui.separator();
     }
     let beat = state.menu_beat.unwrap_or(0.0);

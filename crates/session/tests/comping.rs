@@ -100,3 +100,23 @@ fn recolouring_a_take_colours_its_parts_and_a_split_cuts_the_takes() {
     // The parts still know their take.
     assert!(lane(&s).iter().all(|c| source(&s, c) == Some(1)));
 }
+
+/// The up arrow puts a whole take on the track; deleting the unused takes keeps those the comp
+/// uses; a soloed take is heard in place of the track (#989).
+#[test]
+fn a_take_is_promoted_soloed_and_the_unused_ones_deleted() {
+    let mut s = session();
+    run(&mut s, "take.promote", json!({ "track": 1, "take": 3 })).unwrap();
+    let parts = lane(&s);
+    assert_eq!(parts.len(), 1);
+    assert_eq!((parts[0].start, parts[0].length, source(&s, &parts[0])), (0.0, 8.0, Some(2)));
+    run(&mut s, "take.solo", json!({ "track": 1, "take": 2 })).unwrap();
+    assert_eq!(s.take_solo(), Some((TrackId(1), 2)));
+    run(&mut s, "take.solo", json!({ "track": 1, "take": 0 })).unwrap();
+    assert_eq!(s.take_solo(), None);
+    let done = run(&mut s, "take.deleteUnused", json!({ "track": 1 })).unwrap();
+    assert_eq!(done["deleted"], json!(2));
+    let names: Vec<&str> = s.project().arrangement.takes.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(names, ["Take 3"]);
+    assert_eq!(source(&s, &lane(&s)[0]), Some(0), "the part keeps its take");
+}

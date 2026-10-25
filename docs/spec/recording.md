@@ -121,7 +121,12 @@ greyed. They are where the best parts of each pass are picked and put together o
   take the right-click was over (a split take has several) and its parts (`take.setColor` with
   `piece`); **Delete take** removes the lane, and the track's clips stay.
 - **Hide take lanes** / **Show take lanes** in the right-click menu of the track's lane folds
-  them away and back.
+  them away and back; **Delete unused takes** there deletes the take lanes the comp uses nothing
+  of (`take.deleteUnused`).
+- A take lane's header has buttons, as a track's: **✕** deletes the take, **S** solos it (the
+  take is heard in place of the track's clips, which grey; not saved and not an undo step,
+  `take.solo`), the colour swatch recolours the lane, and **↑** puts the whole take on the track
+  (`take.promote`).
 - Dragging the line under a take lane makes the track's take lanes taller or shorter, all alike
   (20 to 240 px); a double-click on the line puts them back to 36 px.
 
@@ -216,6 +221,9 @@ file's frames.
 | `take.comp` | `track`, `take` (from 1), `start?`, `end?`: copies the take, or its part from `start` to `end` beats, onto the track over what is there; one undo step |
 | `take.delete` | `track`, `take`: deletes the take lane; one undo step |
 | `take.setColor` | `track`, `take`, `color` (`"#rrggbb"` or null), `piece?` (from 1): the take's colour and its parts', or one piece's and its parts'; one undo step |
+| `take.solo` | `track`, `take` (from 1, or 0 for none): the take heard in place of the track's clips; not an undo step |
+| `take.promote` | `track`, `take`: every piece of the take put on the track over what is there; one undo step |
+| `take.deleteUnused` | `track`: deletes the take lanes the comp uses nothing of; one undo step |
 | `take.swap` | `clip`, `direction` (`up` or `down`): the part replaced by the same span of the next take that has something there; one undo step |
 | `take.moveCut` | `clip`, `to`: moves the cut between the part and the one right after it; one undo step |
 | `record.state` | Whether the arrangement records, the takes running (track, slot or arrangement, audio or MIDI, start and end beat, notes so far, frames written, file), the count-in setting and the beats it has left, notices |

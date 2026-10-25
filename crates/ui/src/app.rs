@@ -2317,6 +2317,7 @@ impl App {
             self.arrangement.tool = arrangement_view::ArrangementTool::Select;
         }
         self.arrangement.has_focus = !self.piano_roll.focused;
+        self.arrangement.take_solo = self.session().and_then(Session::take_solo);
         if self.arrangement.toolbar && self.arrangement.tool_keys.is_empty() {
             self.arrangement.tool_keys =
                 arrangement_view::TOOL_ACTIONS.iter().map(|id| self.keymap.label(id)).collect();

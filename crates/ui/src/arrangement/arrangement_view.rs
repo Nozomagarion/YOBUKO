@@ -1094,6 +1094,10 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         if lane.overrides {
             lanes_painter.rect_filled(lane_rect, 0.0, theme::window_background().gamma_multiply(0.45));
         }
+        // A take lane is soloed: the track's own clips are not heard, so they grey (#989).
+        if state.take_solo.is_some_and(|(t, _)| t == lane.track) {
+            lanes_painter.rect_filled(lane_rect, 0.0, theme::window_background().gamma_multiply(0.6));
+        }
         lanes_painter.hline(area.x_range(), lane_rect.bottom() + 0.5, theme::hairline(theme::border_strong()));
         // The track's take lanes, under it, then its automation lanes.
         let takes =

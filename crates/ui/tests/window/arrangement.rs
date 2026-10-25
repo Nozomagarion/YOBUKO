@@ -1824,3 +1824,55 @@ fn with_ctrl_a_take_lane_drag_comps_nothing() {
     harness.run();
     assert_ne!(lanes(&harness), before);
 }
+
+/// A take lane's header: S solos it, the up arrow puts it on the track, ✕ deletes it (#989).
+#[test]
+fn a_take_lanes_header_buttons_solo_promote_and_delete_it() {
+    let mut project = demo_project();
+    let drums = project.tracks.iter().find(|t| t.name == "Drums").map(|t| t.id).unwrap();
+    let clip = project
+        .arrangement
+        .lanes
+        .iter()
+        .find(|l| l.track == Some(drums))
+        .and_then(|l| l.clips.first())
+        .cloned()
+        .unwrap();
+    project.arrangement.takes.push(suhina_engine::model::TakeLane {
+        track: drums,
+        name: "Take 1".into(),
+        clips: vec![suhina_engine::model::Clip { id: suhina_engine::model::ClipId::NONE, start: 200.0, ..clip }],
+        color: None,
+    });
+    project.assign_ids().unwrap();
+    let mut app = App::new();
+    app.set_browser_open(false);
+    app.set_session(Session::new(project), &[]);
+    let mut harness = window(app);
+    harness.get_by_label("Arrangement view").click();
+    harness.run();
+    harness.get_by_label("Solo Drums Take 1").click();
+    harness.run();
+    assert_eq!(harness.state().session().and_then(Session::take_solo), Some((drums, 1)));
+    harness.get_by_label("Solo Drums Take 1").click();
+    harness.run();
+    assert_eq!(harness.state().session().and_then(Session::take_solo), None);
+    let clips = |h: &Harness<'static, App>| {
+        h.state().session().map_or(0, |s| {
+            s.project()
+                .arrangement
+                .lanes
+                .iter()
+                .filter(|l| l.track == Some(drums))
+                .map(|l| l.clips.len())
+                .sum::<usize>()
+        })
+    };
+    let before = clips(&harness);
+    harness.get_by_label("Put Drums Take 1 on the track").click();
+    harness.run();
+    assert_eq!(clips(&harness), before + 1, "the take is on the track");
+    harness.get_by_label("Delete Drums Take 1").click();
+    harness.run();
+    assert!(harness.state().session().is_some_and(|s| s.project().arrangement.takes.is_empty()));
+}
