@@ -982,7 +982,7 @@ fn paint_variant(
                     | "track.audio"
                     | "knob.body"
                     | "knob.pointer"
-            ),
+            ) || role.starts_with("piano."),
         )
         .map(|image| painter.ctx().load_texture(format!("skin-{key}"), image, egui::TextureOptions::LINEAR));
         textures.images.insert(key, texture);

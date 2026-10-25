@@ -237,10 +237,39 @@ fn quantise_block(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, ac
     );
     menu.response
         .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::ComboBox, true, format!("Quantise grid {shown}")));
-    let slider = ui.add_sized(
-        Vec2::new(ui.available_width().min(150.0), 16.0),
-        egui::Slider::new(&mut settings.amount, 0.0..=100.0).suffix(" %").integer().max_decimals(0),
-    );
+    // `.midi-tools .slider { --suhina-appearance: knob }` draws the amount as a knob, dragged up
+    // or down; `#quantise-amount` selects it alone.
+    let slider_style = crate::kit::style_class::enter_named("slider", "quantise-amount");
+    let slider = if crate::kit::style_class::knob_preference(false) {
+        let size = crate::kit::style_class::computed().and_then(|c| c.height).map_or(32.0, |h| h.clamp(16.0, 96.0));
+        let (rect, response) = ui.allocate_exact_size(Vec2::new(size * 2.4, size), egui::Sense::drag());
+        if response.dragged() {
+            settings.amount = (settings.amount - f64::from(response.drag_delta().y) * 0.5).clamp(0.0, 100.0).round();
+        }
+        let text = format!("{} %", settings.amount);
+        let ink = crate::kit::theme::text_secondary();
+        let pointer = crate::kit::theme::text_primary();
+        let right = crate::kit::widgets::ValuePosition::Right;
+        let position = (settings.amount / 100.0) as f32;
+        crate::kit::widgets::knob_with_value(
+            ui.painter(),
+            rect,
+            position,
+            pointer,
+            Some(&response),
+            &text,
+            ink,
+            right,
+            10.0,
+        );
+        response
+    } else {
+        ui.add_sized(
+            Vec2::new(ui.available_width().min(150.0), 16.0),
+            egui::Slider::new(&mut settings.amount, 0.0..=100.0).suffix(" %").integer().max_decimals(0),
+        )
+    };
+    drop(slider_style);
     slider.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, format!("Amount {} %", settings.amount))
     });
