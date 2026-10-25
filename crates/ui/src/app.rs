@@ -494,6 +494,8 @@ pub struct App {
     default_folders: (PathBuf, PathBuf),
     /// The themes folder used while Settings › Theme › Themes folder is empty.
     themes_default_folder: PathBuf,
+    /// Suhina's default data folder, shown while Settings folder is empty.
+    data_default_folder: PathBuf,
     /// The NAM models' and IR folders while the settings leave them empty.
     nam_default_folders: (PathBuf, PathBuf),
     /// The NAM folders' files, read again when either folder's writes change
@@ -650,6 +652,7 @@ impl App {
             saved_path: None,
             default_folders: (PathBuf::from("Projects"), PathBuf::from("Templates")),
             themes_default_folder: PathBuf::from("themes"),
+            data_default_folder: PathBuf::new(),
             nam_default_folders: (PathBuf::from("NAM models"), PathBuf::from("IRs")),
             nam_cache: NamCache::default(),
             window_title: String::new(),
@@ -1296,6 +1299,11 @@ impl App {
         self.themes_default_folder = folder;
     }
 
+    /// Suhina's default data folder, shown while Settings › General › Settings folder is empty.
+    pub fn set_default_data_folder(&mut self, folder: PathBuf) {
+        self.data_default_folder = folder;
+    }
+
     /// Where themes are kept: Settings › Theme › Themes folder, or the default.
     pub fn themes_folder(&self) -> PathBuf {
         match self.settings.themes_folder.trim() {
@@ -1466,6 +1474,10 @@ impl App {
             PickField::ProjectsFolder | PickField::OpenProject => Some(self.projects_folder()),
             PickField::NamModelsFolder => Some(self.nam_models_folder()),
             PickField::ThemesFolder => Some(self.themes_folder()),
+            PickField::DataFolder => Some(match self.settings.data_folder.trim() {
+                "" => self.data_default_folder.clone(),
+                folder => PathBuf::from(folder),
+            }),
             PickField::IrFolder => Some(self.ir_folder()),
             PickField::TemplatesFolder | PickField::StartTemplate => Some(self.templates_folder()),
             PickField::SaveFolder => self.save_prompt.as_ref().and_then(|p| folder_of(&p.folder)),
@@ -1504,6 +1516,7 @@ impl App {
             }
             PickField::NamModelsFolder => self.settings.nam_models_folder = text,
             PickField::ThemesFolder => self.settings.themes_folder = text,
+            PickField::DataFolder => self.settings.data_folder = text,
             PickField::IrFolder => self.settings.irs_folder = text,
             PickField::TemplatesFolder => self.settings.templates_folder = text,
             PickField::StartTemplate => self.settings.start_template = text,

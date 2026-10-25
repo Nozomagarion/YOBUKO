@@ -170,6 +170,12 @@ default. Changing it reads the themes of the new folder at once; one that does n
 is not read, and the themes of the old folder are neither moved nor copied. `SUHINA_THEMES`
 wins over it, and `--data-dir` or `SUHINA_DATA` moves the whole data folder.
 
+General › Projects › *Settings folder* (`data_folder`) chooses Suhina's data folder: its
+settings, keys, recent projects and themes. It is not written in the settings file, which lives
+in that folder: `data-location.txt` in the default folder names it. Choosing a folder copies
+those files into it, keeping what it has already, and the folder is used from the next start;
+empty goes back to the default. `--data-dir` and `SUHINA_DATA` win over it.
+
 ## Scrolling
 
 Liquid panel refraction samples the current frame's captured backdrop through a bounded

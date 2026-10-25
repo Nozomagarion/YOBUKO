@@ -60,6 +60,8 @@ pub struct About {
     pub templates_default: String,
     /// The themes folder used while Themes folder is empty.
     pub themes_default: String,
+    /// Suhina's default data folder, used while Settings folder is empty.
+    pub data_default: String,
     /// The NAM devices' folders ([docs/spec/nam-amp-and-cab.md]) the same way.
     pub nam_models_default: String,
     pub irs_default: String,
@@ -80,6 +82,7 @@ impl Default for About {
             projects_default: String::new(),
             templates_default: String::new(),
             themes_default: String::new(),
+            data_default: String::new(),
             nam_models_default: String::new(),
             irs_default: String::new(),
             last_backup: Default::default(),

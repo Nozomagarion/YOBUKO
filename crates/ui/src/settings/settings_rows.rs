@@ -72,6 +72,18 @@ pub(crate) static ROWS: &[Entry] = &[
             cx.folder(r, &default, crate::interaction::pick::PickField::TemplatesFolder, |s| &mut s.templates_folder);
         },
     ),
+    // Settings folder is named beside the default folder, not in the settings file: no saved key.
+    row(
+        Page::General,
+        "Projects",
+        "Settings folder",
+        "Where Suhina keeps its settings, keys, recent projects and themes; used from the next start",
+        &[],
+        |cx, r| {
+            let default = cx.about.data_default.clone();
+            cx.folder(r, &default, crate::interaction::pick::PickField::DataFolder, |s| &mut s.data_folder);
+        },
+    ),
     row(
         Page::General,
         "Projects",

@@ -8,6 +8,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod crash_log;
+mod data_folder;
 mod liquid;
 #[cfg(target_os = "macos")]
 mod mac_menu;
@@ -143,7 +144,10 @@ fn main() -> ExitCode {
     ];
     let copied: Vec<String> =
         old_folders.into_iter().filter_map(|(old, new)| suhina_plugins::library::adopt_old_folder(old, new)).collect();
-    let (settings, mut settings_warnings) = load_settings();
+    let (mut settings, mut settings_warnings) = load_settings();
+    // The settings folder is named outside the settings (`data_folder`).
+    settings.data_folder =
+        default_data_dir().and_then(|d| data_folder::pointed(&d)).map_or_else(String::new, |f| f.display().to_string());
     settings_warnings.extend(copied);
     let (keymap, keymap_warnings) = load_keymap();
     settings_warnings.extend(keymap_warnings);
@@ -188,6 +192,7 @@ fn main() -> ExitCode {
         blurred: false,
         themes,
         themes_folder,
+        data_folder: settings.data_folder.clone(),
         theme_error: None,
         recent,
         #[cfg(target_os = "macos")]
@@ -216,6 +221,7 @@ fn main() -> ExitCode {
     let (projects, templates) = default_folders();
     window.app.set_default_folders(projects, templates);
     window.app.set_default_themes_folder(themes_env().or(default_themes).unwrap_or_default());
+    window.app.set_default_data_folder(default_data_dir().unwrap_or_default());
     // The NAM devices' folders: the defaults exist from the start, so a user's first step is
     // only to drop files in ([docs/spec/nam-amp-and-cab.md]).
     let nam_base = documents_base();
@@ -357,6 +363,8 @@ struct Window {
     themes: theme_io::ThemeIo,
     /// The folder `themes` reads, to start reading another when the setting changes.
     themes_folder: Option<PathBuf>,
+    /// Settings › General › Settings folder as last applied: empty for the default.
+    data_folder: String,
     /// The theme files' last error in the status bar, cleared once they read without one.
     theme_error: Option<String>,
     /// The projects opened and saved lately, for the project dialog.
@@ -510,10 +518,11 @@ impl Window {
             }
             self.share_about();
         }
-        if let Some(settings) = self.app.take_changed_settings()
-            && let Err(e) = save_settings(&settings)
-        {
-            self.app.set_status(Status::Error(e));
+        if let Some(settings) = self.app.take_changed_settings() {
+            if let Err(e) = save_settings(&settings) {
+                self.app.set_status(Status::Error(e));
+            }
+            self.move_data_folder(settings.data_folder.trim());
         }
         if let Some(keymap) = self.app.take_changed_keymap()
             && let Err(e) = save_file(KEYMAP_FILE, &keymap.to_json())
@@ -694,6 +703,38 @@ impl Window {
     /// Does what Settings asked of the theme files (write, rename, read again, back up, export
     /// the template, bring in a dropped file, show the folder) and reads a theme file saved
     /// elsewhere. While a theme file is in use the folder is looked at every second.
+    /// Settings › General › Settings folder changed: Suhina's data is copied into the folder chosen
+    /// (what is there already is kept) and used from the next start; empty goes back to the default.
+    fn move_data_folder(&mut self, chosen: &str) {
+        if chosen == self.data_folder {
+            return;
+        }
+        self.data_folder = chosen.to_owned();
+        let Some(default) = default_data_dir() else { return };
+        if data_override().is_some() {
+            self.app.set_status(Status::Hint("--data-dir or SUHINA_DATA chooses the settings folder this time".into()));
+        }
+        let result = if chosen.is_empty() {
+            data_folder::point(&default, None)
+                .map(|()| format!("Settings are kept in {} from the next start", default.display()))
+        } else {
+            let folder = PathBuf::from(chosen);
+            if !folder.is_absolute() {
+                return;
+            }
+            let from = data_dir().unwrap_or_else(|| default.clone());
+            data_folder::copy_over(&from, &folder).and_then(|copied| {
+                data_folder::point(&default, Some(&folder)).map(|()| {
+                    format!("Copied {copied} files; settings are kept in {} from the next start", folder.display())
+                })
+            })
+        };
+        match result {
+            Ok(message) => self.app.set_status(Status::Done(message)),
+            Err(error) => self.app.set_status(Status::Error(error)),
+        }
+    }
+
     fn sync_themes(&mut self, ctx: &eframe::egui::Context) {
         // Settings › Theme › Themes folder changed: the themes are read from the new one.
         let wanted = themes_env().or_else(|| Some(self.app.themes_folder()));
@@ -787,13 +828,24 @@ fn saved(path: &Path, what: &str) -> String {
 /// The data folder `--data-dir` chose for this run.
 static DATA_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 
-/// Suhina's data folder: `--data-dir`, `SUHINA_DATA`, or Suhina's folder of the user's app data.
+/// Suhina's data folder: `--data-dir`, `SUHINA_DATA`, the folder chosen in Settings › General ›
+/// Settings folder (named in the default folder, `data_folder`), or Suhina's folder of the user's
+/// app data. Worked out once, at the first call after the command line is read.
 fn data_dir() -> Option<PathBuf> {
-    DATA_DIR
-        .get()
-        .cloned()
-        .or_else(|| std::env::var_os("SUHINA_DATA").filter(|v| !v.is_empty()).map(PathBuf::from))
-        .or_else(|| eframe::storage_dir(app_id()))
+    static RESOLVED: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    RESOLVED
+        .get_or_init(|| data_override().or_else(|| default_data_dir().map(|d| data_folder::pointed(&d).unwrap_or(d))))
+        .clone()
+}
+
+/// The data folder `--data-dir` or `SUHINA_DATA` gives for this run, over the setting.
+fn data_override() -> Option<PathBuf> {
+    DATA_DIR.get().cloned().or_else(|| std::env::var_os("SUHINA_DATA").filter(|v| !v.is_empty()).map(PathBuf::from))
+}
+
+/// Suhina's folder of the user's app data, where the chosen folder is named.
+fn default_data_dir() -> Option<PathBuf> {
+    eframe::storage_dir(app_id())
 }
 
 /// The themes folder `SUHINA_THEMES` names, which wins over the setting.

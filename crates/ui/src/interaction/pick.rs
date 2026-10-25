@@ -33,6 +33,8 @@ pub enum PickField {
     NamModelsFolder,
     /// Settings › Appearance › Themes folder.
     ThemesFolder,
+    /// Settings › General › Settings folder.
+    DataFolder,
     /// Settings › General › IR folder (docs/spec/nam-amp-and-cab.md).
     IrFolder,
 }
@@ -57,6 +59,7 @@ impl PickField {
             Self::BrowserFolder => "Add a folder to the browser",
             Self::NamModelsFolder => "NAM models folder",
             Self::ThemesFolder => "Themes folder",
+            Self::DataFolder => "Settings folder",
             Self::IrFolder => "IR folder",
         }
     }

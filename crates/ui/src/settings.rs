@@ -313,6 +313,9 @@ pub struct Settings {
     /// Where themes are kept; empty for `themes` in Suhina's data folder. `SUHINA_THEMES` wins
     /// over it.
     pub themes_folder: String,
+    /// Where Suhina keeps its settings, keys, recent projects and themes; empty for the default.
+    /// Not written in the settings file, which is kept there: the app names it beside the default.
+    pub data_folder: String,
     /// The browser panel shows, on which side, and how wide (`docs/spec/browser.md`).
     pub browser_open: bool,
     pub browser_side: Side,
@@ -404,6 +407,7 @@ impl Default for Settings {
             templates_folder: String::new(),
             nam_models_folder: String::new(),
             themes_folder: String::new(),
+            data_folder: String::new(),
             irs_folder: String::new(),
             browser_open: true,
             browser_side: Side::Left,

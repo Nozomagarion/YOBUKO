@@ -216,6 +216,7 @@ impl App {
         self.about.projects_default = self.default_folders.0.display().to_string();
         self.about.templates_default = self.default_folders.1.display().to_string();
         self.about.themes_default = self.themes_default_folder.display().to_string();
+        self.about.data_default = self.data_default_folder.display().to_string();
         self.about.nam_models_default = self.nam_default_folders.0.display().to_string();
         self.about.irs_default = self.nam_default_folders.1.display().to_string();
         self.about.mcp_project_folder =

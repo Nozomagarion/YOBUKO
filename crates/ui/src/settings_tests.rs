@@ -145,6 +145,7 @@ fn settings_survive_a_round_trip() {
         nam_models_folder: "/home/me/nam models".into(),
         irs_folder: "/home/me/irs".into(),
         themes_folder: "/home/me/Documents/themes".into(),
+        data_folder: String::new(),
         browser_open: false,
         browser_side: Side::Right,
         browser_width: 420,

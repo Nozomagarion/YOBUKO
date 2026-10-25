@@ -96,6 +96,20 @@
       "workInProgress": false
     },
     {
+      "id": "General/Projects/Settings folder",
+      "page": "General",
+      "section": "Projects",
+      "name": "Settings folder",
+      "note": "Choose the folder Suhina keeps its settings, keys, recent projects and themes in.",
+      "keys": [],
+      "sourceFingerprint": "a7b708a738cef54333720953893d60e9d9d5d2423dff0d7bc1793a3449d3084c",
+      "helpStatus": "reviewed",
+      "description": "Suhina keeps its settings, its keyboard shortcuts, the list of recent projects and the themes folder in its data folder. Leave the field empty to use the default shown, Suhina's folder of your app data. When you type or choose another folder, Suhina copies those files into it (files the folder has already are kept, never overwritten) and uses it from the next start; a small file in the default folder remembers where it is. Emptying the field goes back to the default from the next start. Projects, samples and plug-ins are not moved. Starting Suhina with --data-dir <folder> or the SUHINA_DATA environment variable wins over this setting for that run.",
+      "options": [],
+      "whenToChange": "Change this to keep Suhina's settings and themes where another program can reach them, such as in Documents (apps installed from the Microsoft Store may only see their own copy of the app data folder), on another drive, or in a folder you back up or sync.",
+      "workInProgress": false
+    },
+    {
       "id": "General/Projects/start_template",
       "page": "General",
       "section": "Projects",
