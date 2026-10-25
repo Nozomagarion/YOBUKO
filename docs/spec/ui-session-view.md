@@ -3,7 +3,7 @@ description: Functional spec of the main window and the Session view: regions, c
 read_when: Session view, main window layout, clip slot behaviour, scene launch, launch keys, mapping mode, Map button, Ctrl+M, mixer section, browser structure
 type: spec
 status: draft
-last_verified: 2026-10-23
+last_verified: 2026-10-24
 covers:
   - crates/ui/src/session/session_view.rs
   - crates/ui/src/session/mixer_strip.rs
@@ -111,8 +111,9 @@ Double-clicking selects the track and shows its devices in the detail area, open
 area if it was hidden ([clip editor](ui-clip-editor.md) › Where it opens); renaming stays in the
 menu.
 Dropping a device or file from the browser on the empty area right of the last track creates a
-new track; the area also has **+ MIDI track**, **+ Audio track** and **+ Return track** buttons,
-and a right-click there offers the three inserts ([browser](browser.md) ›
+new track; the area also has **+ MIDI track**, **+ Audio track** and **+ Return track** buttons
+(the view scrolls far enough past the last track for them to keep their width however many
+tracks there are), and a right-click there offers the three inserts ([browser](browser.md) ›
 Files). A file dropped on a slot or below the stop row becomes a clip in that slot (scenes are
 added below when needed); a device dropped on a column joins the track's chain. Samples and MIDI
 files dragged from the system's file manager land the same way ([browser](browser.md) › Files
