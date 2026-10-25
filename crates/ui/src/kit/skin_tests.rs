@@ -295,11 +295,16 @@ fn nine_slice_keeps_the_corners_and_stretches_the_middle() {
     assert_eq!(slice.insets, [2.0, 4.0, 2.0, 4.0]);
     assert_eq!(slice.size, [20.0, 10.0]);
     let mut mesh = egui::Mesh::default();
-    super::nine_slice(&mut mesh, Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 30.0)), slice);
+    super::nine_slice(&mut mesh, Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 30.0)), slice, [0.05, 0.1]);
     assert_eq!(mesh.vertices.len(), 36);
     // The top-left corner stays 4 by 2 and maps to the artwork's own corner.
     assert_eq!(mesh.vertices[3].pos, egui::pos2(4.0, 2.0));
     assert_eq!(mesh.vertices[3].uv, egui::pos2(0.2, 0.2));
+    // The stretched middle samples half a texel inside its own pixels: no corner pixel in it.
+    let middle = &mesh.vertices[16..20];
+    let min_u = middle.iter().map(|v| v.uv.x).fold(f32::MAX, f32::min);
+    let min_v = middle.iter().map(|v| v.uv.y).fold(f32::MAX, f32::min);
+    assert!((min_u - 0.225).abs() < 1e-4 && (min_v - 0.25).abs() < 1e-4, "{middle:?}");
     assert!(
         super::slice_of(r#"<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4" data-suhina-slice="3"/>"#)
             .is_none()
@@ -316,7 +321,7 @@ fn piano_roll_tools_have_artwork_roles() {
 fn a_nine_slice_too_big_for_its_rect_shrinks_its_corners_evenly() {
     let slice = super::Slice { insets: [4.0, 4.0, 4.0, 4.0], size: [12.0, 12.0] };
     let mut mesh = egui::Mesh::default();
-    super::nine_slice(&mut mesh, Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 6.0)), slice);
+    super::nine_slice(&mut mesh, Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(100.0, 6.0)), slice, [0.0, 0.0]);
     // The top-left corner is 3 by 3, not 4 wide and 3 high.
     assert_eq!(mesh.vertices[3].pos, egui::pos2(3.0, 3.0));
 }

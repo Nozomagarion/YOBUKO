@@ -677,8 +677,10 @@ pub fn slice_of(source: &str) -> Option<Slice> {
 }
 
 /// The nine quads of `slice` over `rect`: corners keep their size (shrunk evenly on both axes when
-/// `rect` is smaller than two insets), edges stretch along one axis, the middle along both.
-pub fn nine_slice(mesh: &mut egui::Mesh, rect: Rect, slice: Slice) {
+/// `rect` is smaller than two insets), edges stretch along one axis, the middle along both. A
+/// stretched part samples half a texel (`texel`, its size in UV) inside its own pixels, so the
+/// corners' and edges' pixels never bleed into it as a gradient.
+pub fn nine_slice(mesh: &mut egui::Mesh, rect: Rect, slice: Slice, texel: [f32; 2]) {
     let [t, r, b, l] = slice.insets;
     // One scale for both axes, so a rounded end shrinks as a whole rather than flattening.
     let fit = (rect.width() / (l + r).max(f32::EPSILON)).min(rect.height() / (t + b).max(f32::EPSILON)).min(1.0);
@@ -687,11 +689,20 @@ pub fn nine_slice(mesh: &mut egui::Mesh, rect: Rect, slice: Slice) {
     let ys = [rect.top(), rect.top() + t * fit_y, rect.bottom() - b * fit_y, rect.bottom()];
     let us = [0.0, l / slice.size[0], 1.0 - r / slice.size[0], 1.0];
     let vs = [0.0, t / slice.size[1], 1.0 - b / slice.size[1], 1.0];
+    // The stretched middle column and row, half a texel in from each side (never crossing).
+    let inner = |from: f32, to: f32, half: f32| {
+        let half = half.min((to - from) / 2.0).max(0.0);
+        (from + half, to - half)
+    };
+    let (u1, u2) = inner(us[1], us[2], texel[0] / 2.0);
+    let (v1, v2) = inner(vs[1], vs[2], texel[1] / 2.0);
     for row in 0..3 {
         for col in 0..3 {
+            let (u_from, u_to) = if col == 1 { (u1, u2) } else { (us[col], us[col + 1]) };
+            let (v_from, v_to) = if row == 1 { (v1, v2) } else { (vs[row], vs[row + 1]) };
             mesh.add_rect_with_uv(
                 Rect::from_min_max(egui::pos2(xs[col], ys[row]), egui::pos2(xs[col + 1], ys[row + 1])),
-                Rect::from_min_max(egui::pos2(us[col], vs[row]), egui::pos2(us[col + 1], vs[row + 1])),
+                Rect::from_min_max(egui::pos2(u_from, v_from), egui::pos2(u_to, v_to)),
                 Color32::WHITE,
             );
         }
@@ -1003,7 +1014,9 @@ fn paint_variant(
     }
     if let Some(slice) = slice {
         let mut mesh = egui::Mesh::with_texture(texture.id());
-        nine_slice(&mut mesh, rect, slice);
+        let size = texture.size();
+        let texel = [1.0 / size[0].max(1) as f32, 1.0 / size[1].max(1) as f32];
+        nine_slice(&mut mesh, rect, slice, texel);
         mesh.rotate(egui::emath::Rot2::from_angle(angle), rect.center());
         painter.add(egui::Shape::mesh(mesh));
         return true;
