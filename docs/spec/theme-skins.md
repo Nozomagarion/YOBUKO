@@ -869,3 +869,28 @@ of bars, and a slider id per parameter.
 - **File order:** `layout.css` is applied after `theme.css`; where both set one role or
   placement, `layout.css` wins.
 
+## Round 6 additions
+
+- **Families:** `style_class::families` gives an element's family classes (`value-control`,
+  `track-button`, `transport-button`, `list-row`, `timeline-part`); the native engine adds them
+  to the element's classes and host rules match them, so `.value-control` reaches a `.pan`.
+- **Shadows from artwork:** a surface drawn with artwork casts its outer shadows as tinted
+  copies of the artwork's mesh (the centre and eight taps at half the blur), drawn under it; a
+  surface with a transparent background and no authored radius casts them round.
+- **Value text:** `--suhina-value-decimals` (0–2) and `--suhina-value-unit` (quoted, at most 8
+  characters) format a level bar's and a knob's value.
+- **Device panels:** `height` on `.device` or `#device-<id>` (60–1200, not with an embedded
+  editor); `--suhina-param-label` over each parameter's own; `.knob { width | height }` within
+  its cell.
+- **Low tracks:** `--suhina-compact-below` on `.arrangement` (at most 200 points): a header
+  lower than it resolves every placement natively (`control_layout::native_only`).
+- **Ruler:** `.ruler-number` (`color`, `font-size`, `display`) and `.ruler-tick` (`color`, `width`
+  0–4).
+- **Browser:** `.browser-play` (`:checked` while playing), `.browser-tag-dot` (`opacity`,
+  border), `.browser-preview-wave` (`color` played, `border-color` ahead), the search field
+  `#browser-search`.
+- **Dialogs:** `.settings-nav` (`:checked` for the page shown), `.progress`, `.progress-fill`.
+- **MIDI tools:** `--suhina-gap` (0–16) and `.button { height }` inside `.midi-tools`.
+- **Duplicate:** a copy keeping placed controls returns a notice; Edit interface › Reset all
+  clears the draft's placements.
+

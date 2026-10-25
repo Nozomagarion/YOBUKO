@@ -389,6 +389,48 @@ buttons additionally expose `#control-play`, `#control-stop`, `#control-record`,
 `#control-browser-toggle` and `#control-metronome-toggle`. Paint-only rules preserve
 the existing geometry. The selector reference below lists every class and id.
 
+## Selectors by area
+
+An element has its own class (and often an id), and belongs to a *family* of parts of its kind.
+The area it is in is one of its ancestors. Combine them as CSS does:
+
+```css
+.value-control { background-color: #203040; }          /* every value a user drags, everywhere */
+.arrangement .value-control { border-radius: 2px; }     /* only in the Arrangement */
+#arrangement-pan { --suhina-value-position: top; }      /* one control */
+```
+
+**Families:** `.value-control` (levels, pans, faders, sends, knobs, sliders, device parameters,
+clip gain), `.track-button` (solo, cue, arm, track-on, monitor, automation), `.transport-button`
+(play, stop, record, metronome), `.list-row` (the browser's rows and places), `.timeline-part`
+(ruler, loop region, loop lines, play position). A family works in host rules too
+(`.value-control { --suhina-appearance: knob; }`).
+
+| Area (ancestor) | Parts (class or id) |
+|---|---|
+| Toolbar `.toolbar` | `.toolbar-module`, modules `#browser`, `#tempo`, `#position`, `#signature`, `#grid`, `#count-in`, `#metronome`, `#views`, `#performance`, `#mapping`, `#agents`; `#control-play`, `#control-stop`, `#control-record`, `#control-metronome-toggle`, `#control-browser-toggle` |
+| Arrangement header `.arrangement .track-header` | `.track-name`, `.track-number`, `#control-track-on`, `#control-solo`, `#control-cue`, `#control-arm`, `#control-automation`, `#control-monitor`, `.fold`, `#arrangement-volume`, `#arrangement-pan`, `.send`, `.value-fill`, `.value-handle` |
+| Timeline `.arrangement` | `.ruler`, `.ruler-number`, `.ruler-tick`, `.loop-region`, `.loop-line`, `.playhead`, `.clip`, `.clip-name`, `.clip-waveform`, `.clip-notes`, `.clip-gain`, `.clip-fade-handle`, `.add-track`, `#add-midi-track`, `#add-audio-track`, `#add-return-track` |
+| Session and mixer `.session`, `.mixer` | `.track-column`, `.slot`, `.scene`, `.scene-column`, `#mixer-volume`, `#mixer-pan`, `#mixer-send-N`, `.fader`, `.fader-cap`, `.fader-rail`, `.fader-scale`, `.meter`, `#mixer-divider` |
+| Piano roll `.piano-roll` | `.piano-grid`, `.piano-row`, `.piano-row-black`, `.piano-key`, `.piano-key-black`, `.piano-note`, `.velocity`, `.piano-tool` with `#piano-<tool>`, `.midi-tools` (`#quantise-amount`), `.clip-info`, `.editor-tab` |
+| Browser `.browser` | `.browser-place`, `.browser-row`, `.browser-play`, `.browser-tag-dot`, `.browser-preview-wave`, `#browser-search` (`.text-input`) |
+| Devices `.device`, `#device-<id>` | `.device-header`, `.device-control`, `.slider`, `.slider-rail`, `.slider-fill`, `.slider-handle`, `.knob`, `.value` |
+| Dialogs `.settings`, `.dialog`, `.start-page`, `.plugin-manager` | `.button` (also egui's check boxes and drop-downs), `.button:checked` (a chosen item), `.text-input`, `.settings-nav`, `.progress`, `.progress-fill`, `.menu`, `.popup` |
+
+States: `:hover`, `:active`, `:disabled`, `:focus`, `:checked`, `:selected`, `:muted`,
+`:playing`, `:recording`, `:armed`. Artwork names its state `.hover`, `.active`, `.on`.
+
+**Glow:** a shadow without an offset, `box-shadow: 0 0 12px #00c8ff`. A button drawn with artwork
+casts it in the artwork's shape, under it; a button without a background of its own glows round
+about its glyph unless the sheet gives it a `border-radius`.
+
+**Text in SVG** is sized in the SVG's own units, so it shrinks with the artwork: in a 24 by 16
+button graphic, `font-size="9"` is 9/16 of the button's height. Give text a size for the
+artwork's own `viewBox`, or draw the glyph as a path.
+
+**Not yet:** the toolbar's modules as one block (position, tempo and signature as one LCD); the
+MIDI tools in a compact one-line layout.
+
 ## Selector reference
 
 Classes, each the native element it styles:
@@ -702,6 +744,22 @@ control with no room left is not drawn, without a notice: check narrow tracks an
   artwork keeps its aspect ratio.
 - **Nine-slice:** the stretched edges and centre sample only their own pixels, so a hard edge
   stays hard.
+
+### Round 6 additions
+
+- **Families** (above) for rules over every part of a kind.
+- **Formats:** `--suhina-value-decimals: 0 | 1 | 2` and `--suhina-value-unit: " dB"` on a
+  value's control.
+- **Device panels:** `.device { height }` (60–1200), `--suhina-param-label: left | top | hidden`,
+  `.device .knob { width }`.
+- **MIDI tools:** `.midi-tools { --suhina-gap: 2px }` and `.midi-tools .button { height }`.
+- **Low tracks:** `.arrangement { --suhina-compact-below: 48px }`: a track lower than that keeps
+  Suhina's own header layout instead of the placements, so nothing overlaps.
+- **Settings folder:** Settings › General › Projects › Settings folder moves all of Suhina's
+  data (copied, used from the next start).
+- **A copy of a theme** says how many placed controls it keeps; Edit interface › **Reset all**
+  takes them away.
+- **Choosing a theme** keeps the Themes page where it was.
 
 ## What a theme cannot set
 
