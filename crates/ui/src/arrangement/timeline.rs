@@ -612,7 +612,8 @@ fn clip_box(project: &Project, clip: &Clip, index: usize, track_color: Rgb) -> C
         id: clip.id,
         color: clip.color.unwrap_or(track_color),
         stack_key: (clip.content.0, clip.start.to_bits()),
-        earliest_start: if looped { 0.0 } else { (clip.start - clip.offset).max(0.0) },
+        // A MIDI clip goes on before its notes (#832); an audio clip's audio starts where it does.
+        earliest_start: if looped || !audio { 0.0 } else { (clip.start - clip.offset).max(0.0) },
         latest_end: content.filter(|_| audio && !looped).map(|c| clip.start - clip.offset + c.length),
         index,
         start: clip.start,

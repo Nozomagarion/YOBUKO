@@ -418,3 +418,49 @@ fn alt_and_the_wheel_can_change_only_the_lane_under_the_pointer() {
     state.zoom_wheel(&tracks, &timeline, 2.0, 0.0);
     assert_eq!(state.height(tracks[0]), DEFAULT_LANE * 2.0);
 }
+
+#[test]
+fn a_stretch_goes_past_the_audio_and_a_midi_clip_before_its_notes() {
+    use suhina_engine::model::{AudioRegion, ClipContent, ContentId, ContentLane, Extensions, LaneData};
+    let mut project = crate::demo::demo_project();
+    let audio = ContentId(900);
+    project.contents.push(ClipContent {
+        id: audio,
+        name: "Loop".into(),
+        length: 4.0,
+        lanes: vec![ContentLane { target: None, data: LaneData::Audio(AudioRegion::new("loop.wav")) }],
+        extensions: Extensions::default(),
+        scale: None,
+    });
+    let drums = project.tracks.first().map(|t| t.id).unwrap_or(TrackId(1));
+    if let Some(lane) = project.arrangement.lanes.iter_mut().find(|l| l.track == Some(drums)) {
+        lane.clips = vec![suhina_engine::model::Clip::new(audio, 100.0, 4.0)];
+    }
+    project.assign_ids().unwrap();
+    let timeline = Timeline::build(&project, None);
+    let clip = timeline.lanes.iter().find(|l| l.track == drums).and_then(|l| l.clips.first()).unwrap();
+    let grid = arrangement_grid(Quantization::Beats(1.0), 24.0, 4.0);
+    let right = EdgeDrag { key: (drums, clip.id), grab: EdgeGrab::Right, raw: 112.0, from: 104.0, origin: 0.0 };
+    // A plain drag stops where the audio ends; a stretch goes on (#833).
+    assert_eq!(edge_extent(clip, right, &grid, false, false), (100.0, 104.0));
+    assert_eq!(edge_extent(clip, right, &grid, false, true), (100.0, 112.0));
+    let left = EdgeDrag { key: (drums, clip.id), grab: EdgeGrab::Left, raw: 96.0, from: 100.0, origin: 0.0 };
+    assert_eq!(edge_extent(clip, left, &grid, false, false).0, 100.0);
+    assert_eq!(edge_extent(clip, left, &grid, false, true).0, 96.0);
+    // A MIDI clip's left edge goes before its notes (#832).
+    let demo = Timeline::build(&crate::demo::demo_project(), None);
+    let midi = demo
+        .lanes
+        .iter()
+        .flat_map(|l| l.clips.iter().map(move |c| (l.track, c)))
+        .find(|(_, c)| !c.audio && c.start >= 4.0)
+        .unwrap();
+    let before = EdgeDrag {
+        key: (midi.0, midi.1.id),
+        grab: EdgeGrab::Left,
+        raw: midi.1.start - 2.0,
+        from: midi.1.start,
+        origin: 0.0,
+    };
+    assert_eq!(edge_extent(midi.1, before, &grid, false, false).0, midi.1.start - 2.0);
+}

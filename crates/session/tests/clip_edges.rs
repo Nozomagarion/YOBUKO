@@ -266,3 +266,30 @@ fn several_clips_move_the_same_edge_by_as_much_in_one_step() {
     assert_eq!((first(&session, 1).length, first(&session, 3).length), (4.0, 8.0));
     assert!(run(&mut session, "clip.trimMany", json!({ "clips": clips, "edge": "middle", "by": 1.0 })).is_err());
 }
+
+/// A MIDI clip's left edge goes on before its notes (#832): the clip starts earlier with empty
+/// time, its note stays where it plays, and a content another clip plays is copied first.
+#[test]
+fn a_midi_clips_left_edge_goes_before_its_notes() {
+    let mut project = project();
+    // The riff on beat 4 too, playing the same content.
+    if let Some(lane) = project.arrangement.lanes.iter_mut().find(|l| l.track == Some(TrackId(1))) {
+        lane.clips.push(Clip::new(ContentId(2), 8.0, 4.0));
+    }
+    let mut session = Session::new(suhina_test_support::with_ids(project));
+    run(&mut session, "clip.trim", json!({ "track": 1, "index": 1, "start": 6.0 })).unwrap();
+    let p = session.project();
+    let clips = &p.arrangement.lanes.iter().find(|l| l.track == Some(TrackId(1))).unwrap().clips;
+    let moved = clips.iter().find(|c| (c.start - 6.0).abs() < 1e-9).unwrap();
+    assert_eq!((moved.length, moved.offset), (6.0, 0.0));
+    assert_ne!(moved.content, ContentId(2), "the shared content was copied");
+    let content = p.content(moved.content).unwrap();
+    assert_eq!(content.length, 6.0);
+    let LaneData::Notes(notes) = &content.lanes[0].data else { panic!("notes") };
+    assert_eq!(notes[0].time, 2.0, "the note still plays on beat 8");
+    // The other clip keeps its content as it was.
+    let LaneData::Notes(theirs) = &p.content(ContentId(2)).unwrap().lanes[0].data else { panic!("notes") };
+    assert_eq!(theirs[0].time, 0.0);
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(session.project().contents.len(), 2);
+}

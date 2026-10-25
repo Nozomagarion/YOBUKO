@@ -6,16 +6,29 @@
 use super::*;
 
 /// The keys held over a clip's edge drag: Alt alone lets the edge off the grid, as Alt does for
-/// every other drag; Ctrl and Alt stretch an audio clip's audio with it (Settings › Arrangement).
+/// every other drag; Shift (or Ctrl and Alt) stretches an audio clip's audio with it (Settings ›
+/// Arrangement).
 pub(super) fn edge_keys(ui: &Ui) -> (bool, bool) {
-    ui.input(|i| (i.modifiers.alt && !i.modifiers.command, i.modifiers.alt && i.modifiers.command))
+    // Off the grid with Alt; a stretch with Shift (Alt and Shift: a free stretch), or Ctrl and
+    // Alt as before (#833).
+    ui.input(|i| {
+        let stretch = i.modifiers.shift || (i.modifiers.alt && i.modifiers.command);
+        (i.modifiers.alt && !i.modifiers.command, stretch)
+    })
 }
 
 /// Where a clip's edges are while `drag` moves one: on the grid (free with `free`), kept at
 /// least a grid step (or a 16th of a beat) long, its left edge no earlier than its content's
 /// start and its right edge no later than its audio's end (none for a looping clip), as
-/// `clip.trim` keeps them.
-pub(super) fn edge_extent(clip: &ClipBox, drag: EdgeDrag, grid: &TimelineGrid, free: bool) -> (f64, f64) {
+/// `clip.trim` keeps them. A stretch (`stretch`) scales the audio to the new length, so it has
+/// neither limit, only the song's start (#833).
+pub(super) fn edge_extent(
+    clip: &ClipBox,
+    drag: EdgeDrag,
+    grid: &TimelineGrid,
+    free: bool,
+    stretch: bool,
+) -> (f64, f64) {
     let end = clip.start + clip.length;
     // A clip already shorter than a grid step keeps at least its length: a coarse grid (1 bar)
     // does not stretch a short clip just because its edge was touched.
@@ -27,7 +40,9 @@ pub(super) fn edge_extent(clip: &ClipBox, drag: EdgeDrag, grid: &TimelineGrid, f
     }
     let beat = grid.place(drag.raw, free, false);
     match drag.grab {
+        EdgeGrab::Left if stretch => (beat.min(end - least).max(0.0), end),
         EdgeGrab::Left => (beat.max(clip.earliest_start).min(end - least).max(0.0), end),
+        EdgeGrab::Right if stretch => (clip.start, beat.max(clip.start + least)),
         EdgeGrab::Right => {
             let to = beat.max(clip.start + least);
             (clip.start, clip.latest_end.map_or(to, |last| to.min(last.max(clip.start + least))))
@@ -435,7 +450,8 @@ pub(super) fn clip_box<'a>(
     let released = state.edge_released.filter(|(k, ..)| *k == key).map(|(_, from, to, _)| (from, to));
     let (live_start, live_length) = match state.edge_drag.filter(|d| d.key == key) {
         Some(edge) => {
-            let (from, to) = edge_extent(clip, edge, &grid, edge_keys(ui).0);
+            let stretching = edge_keys(ui).1 && state.stretch_alt && clip.audio;
+            let (from, to) = edge_extent(clip, edge, &grid, edge_keys(ui).0, stretching);
             (from, to - from)
         }
         None => released.map_or((clip.start, clip.length), |(from, to)| (from, to - from)),
@@ -539,9 +555,9 @@ pub(super) fn clip_box<'a>(
             if response.drag_stopped_by(egui::PointerButton::Primary)
                 && let Some(drag) = state.edge_drag.take_if(|d| mine_edge(d))
             {
-                let (from, to) = edge_extent(clip, drag, &grid, free);
-                let beat = if grab == EdgeGrab::Left { from } else { to };
                 let stretch = stretch_held && state.stretch_alt && clip.audio;
+                let (from, to) = edge_extent(clip, drag, &grid, free, stretch);
+                let beat = if grab == EdgeGrab::Left { from } else { to };
                 let mut params = json!({ "clip": clip.id.0 });
                 params[if grab == EdgeGrab::Left { "start" } else { "end" }] = json!(beat);
                 if (clip.audio && state.stack_audio) || (!clip.audio && state.stack_midi) {
@@ -774,7 +790,10 @@ pub(super) fn clip_box<'a>(
             // where it plays.
             let free = edge_keys(ui).0;
             let extent = match state.edge_drag.filter(|d| d.key == key) {
-                Some(edge) => Some(edge_extent(clip, edge, &grid, free)),
+                Some(edge) => {
+                    let stretching = edge_keys(ui).1 && state.stretch_alt && clip.audio;
+                    Some(edge_extent(clip, edge, &grid, free, stretching))
+                }
                 None => state.edge_released.filter(|(k, ..)| *k == key).map(|(_, from, to, _)| (from, to)),
             };
             let (rect, clip_area) = match extent {

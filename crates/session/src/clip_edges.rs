@@ -53,12 +53,6 @@ fn put_back(p: &mut Project, lane: usize, clip: Clip, stack: bool) -> Result<usi
     Ok(lane.clips.iter().position(|c| *c == clip).unwrap_or_default())
 }
 
-/// `clip.trim {track, index, start?, end?, loop?, stack?}`: moves the clip's left edge to
-/// `start` and its right edge to `end` (arrangement beats). The left edge moves the content
-/// with it, so what plays stays where it was; it goes no earlier than the content's start. A
-/// clip that does not loop ends at most where its audio does (a MIDI clip's content grows with
-/// it); a looping clip repeats its loop as far as it goes. The clip replaces what it now covers
-/// unless stacked. Edges past the limits stop at them.
 /// `clip.trimMany {clips, edge, by, stack?}`: the same edge of every clip moved by `by` beats as
 /// `clip.trim` moves it, each stopping at its own limits, in one undo step (#956). Each clip is
 /// found by its id when its turn comes, as an earlier one may have changed where the others are.
@@ -92,6 +86,13 @@ pub(crate) fn trim_clips(session: &mut Session, params: &Value) -> Result<Value,
     Ok(json!({ "clips": ids.len() }))
 }
 
+/// `clip.trim {track, index, start?, end?, loop?, stack?}`: moves the clip's left edge to
+/// `start` and its right edge to `end` (arrangement beats). The left edge moves the content
+/// with it, so what plays stays where it was; an audio clip's goes no earlier than its audio's
+/// start, a MIDI clip's on before its notes, the content growing at the start (#832). A clip
+/// that does not loop ends at most where its audio does (a MIDI clip's content grows with it);
+/// a looping clip repeats its loop as far as it goes. The clip replaces what it now covers
+/// unless stacked. Edges past the limits stop at them.
 pub(crate) fn trim_clip(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let (start, end) = (edge(params, "start")?, edge(params, "end")?);
     let (turn_loop, stack) = (flag(params, "loop")?, flag(params, "stack")?);
@@ -126,6 +127,30 @@ pub(crate) fn trim_clip(session: &mut Session, params: &Value) -> Result<Value, 
         // end at the loop's start, which moved what played.
         Some(range) if offset < 0.0 || (clip.offset >= range.start && offset < range.start) || offset >= range.end => {
             offset = range.start + (offset - range.start).rem_euclid(range.end - range.start);
+        }
+        // A MIDI clip goes on before its notes (#832): its content grows at the start by as
+        // much, its notes keeping where they play, so the clip starts with empty time. A content
+        // other clips play too is copied first, so they are left as they are.
+        _ if offset < 0.0 && !audio => {
+            let grow = -offset;
+            let shared = p.all_clips().filter(|c| c.content == clip.content).count() > 1;
+            if shared {
+                let mut copy = p.content(clip.content).cloned().ok_or("the clip's content is missing")?;
+                copy.id = new_content_id(p)?;
+                clip.content = copy.id;
+                p.contents.push(copy);
+            }
+            if let Some(content) = p.contents.iter_mut().find(|c| c.id == clip.content) {
+                content.length += grow;
+                for lane in &mut content.lanes {
+                    if let LaneData::Notes(notes) = &mut lane.data {
+                        for note in notes {
+                            note.time += grow;
+                        }
+                    }
+                }
+            }
+            offset = 0.0;
         }
         _ if offset < 0.0 => {
             new_start -= offset / rate;
