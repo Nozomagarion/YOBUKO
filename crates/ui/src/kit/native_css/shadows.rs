@@ -90,7 +90,7 @@ impl Shadow {
     /// Casts this shadow from artwork rather than a rectangle: copies of `shape` (the artwork's
     /// mesh), tinted with the shadow's colour, at its offset and spread around the blur's radius,
     /// so a round button glows round. Returns the copies, to draw under the artwork.
-    pub fn from_artwork(&self, shape: &egui::Mesh, opacity: f32) -> Vec<egui::Mesh> {
+    pub fn cast_by_artwork(&self, shape: &egui::Mesh, opacity: f32) -> Vec<egui::Mesh> {
         if self.inset || self.color.a() == 0 || !self.blur.is_finite() || !self.offset.is_finite() {
             return Vec::new();
         }

@@ -167,7 +167,7 @@ fn artwork_casts_its_glow_in_its_own_shape() {
     );
     let glow =
         Shadow { offset: Vec2::ZERO, blur: 8.0, spread: 0.0, color: Color32::from_rgb(0, 200, 255), inset: false };
-    let copies = glow.from_artwork(&artwork, 1.0);
+    let copies = glow.cast_by_artwork(&artwork, 1.0);
     assert_eq!(copies.len(), 9, "the centre and eight taps around the blur");
     // Every copy is the artwork's own shape, tinted, and spread around it.
     assert!(copies.iter().all(|copy| copy.vertices.len() == artwork.vertices.len()));
@@ -175,5 +175,5 @@ fn artwork_casts_its_glow_in_its_own_shape() {
     let reach = copies.iter().map(|c| c.calc_bounds()).fold(Rect::NOTHING, |a, b| a.union(b));
     assert!(reach.width() > 20.0 + 6.0, "{reach:?}");
     let inset = Shadow { inset: true, ..glow };
-    assert!(inset.from_artwork(&artwork, 1.0).is_empty());
+    assert!(inset.cast_by_artwork(&artwork, 1.0).is_empty());
 }

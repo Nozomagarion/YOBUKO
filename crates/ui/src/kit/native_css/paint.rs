@@ -216,7 +216,7 @@ pub fn artwork_shadows(painter: &Painter, slot: egui::layers::ShapeIdx, mesh: &e
         .shadows
         .iter()
         .rev()
-        .flat_map(|shadow| shadow.from_artwork(mesh, style.opacity))
+        .flat_map(|shadow| shadow.cast_by_artwork(mesh, style.opacity))
         .map(egui::Shape::mesh)
         .collect();
     if copies.is_empty() {
