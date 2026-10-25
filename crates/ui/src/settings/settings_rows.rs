@@ -420,6 +420,14 @@ pub(crate) static ROWS: &[Entry] = &[
             cx.choose(r, &[("All tracks", false), ("The one under the pointer", true)], |s| &mut s.view.alt_wheel_one)
         },
     ),
+    row(
+        Page::Arrangement,
+        "Tools",
+        "Toolbar",
+        "A row of tools over the Arrangement: Select, Range, Split, Erase, Draw and Mute; while the Arrangement has the focus (it was clicked last, not the piano roll), the keys 1 to 6 choose them",
+        &["arrangement_toolbar"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.arrangement_toolbar),
+    ),
     // Session view and mixer.
     row(
         Page::Session,

@@ -45,6 +45,28 @@ notes are left out. Each pair has the track, the shared span (`start`, `end`, in
 there were more. ARA's first version refuses such overlaps for the clips it edits
 ([ADR 0028](../decisions/0028-ara-hosting.md)); ordinary stacking is unaffected.
 
+## Tools
+
+With Settings › Arrangement › **Toolbar** on (off by default, #991), a row of tools runs along the
+top of the view, in the piano roll's look: **Select**, **Range**, **Split**, **Erase**, **Draw** and
+**Mute**. The tool chosen decides what a press on a clip or a lane does:
+
+| Tool | Key | What it does |
+|---|---|---|
+| Select | 1 | moves, trims and selects clips, as the view does without a toolbar |
+| Range | 2 | a drag selects time across the tracks it crosses, from anywhere on a clip or a lane |
+| Split | 3 | a click cuts the clip where it is clicked, on the grid (Alt: free), as `clip.split` |
+| Erase | 4 | a click deletes the clip (`clip.delete`) |
+| Draw | 5 | a drag on a lane makes an empty clip as long as the drag, on the grid (`clip.create` with `length`) |
+| Mute | 6 | a click mutes the clip, or unmutes it (`clip.setEnabled`) |
+
+Edges and fades are dragged with Select only. Off, the view works as Select always.
+
+**Focus.** The Arrangement and the piano roll are areas of their own: a press in one gives it the
+keyboard. The tool keys (1 to 6) choose the piano roll's tools while it has the keyboard and the
+Arrangement's while the Arrangement has it; with the toolbar on, the Arrangement draws a thin
+outline in the accent colour while it has the keyboard.
+
 ## Moving a clip
 
 `clip.move {track, index, start, toTrack?, stack?}` moves one arrangement clip to `start` (beats,

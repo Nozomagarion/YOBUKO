@@ -632,6 +632,17 @@ impl App {
                 self.view.selected_tracks.clear();
             }
             "view.computerKeyboard" => self.toggle_typing_keys(),
+            // The Arrangement's tool keys, while its toolbar shows (#991).
+            id if id.starts_with("arrangement.tool") => {
+                let index =
+                    id.trim_start_matches("arrangement.tool").parse::<usize>().ok().and_then(|n| n.checked_sub(1));
+                if self.arrangement.toolbar
+                    && self.shown == View::Arrangement
+                    && let Some((tool, _)) = index.and_then(|i| arrangement_view::ArrangementTool::ALL.get(i))
+                {
+                    self.arrangement.tool = *tool;
+                }
+            }
             // The selected parts of a comp take the same span of the take above or below (#989).
             "selection.takeUp" | "selection.takeDown" => {
                 let direction = if action == "selection.takeUp" { "up" } else { "down" };

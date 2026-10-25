@@ -72,9 +72,10 @@ CHAPTERS = [
      "attached MCP exports prepare over frames and render off the window thread. "
      "Missing project folders/collect, unused files, packing, .asd, decoding cache, set "
      "merging, file-reference view, the export dialog's source and range rows."),
-    (6, "Arrangement View", 22, 0.64, "partial",
+    (6, "Arrangement View", 22, 0.66, "partial",
      "Layout, zoom, transport, track headers with a band of the track colour that opens the colour palette, ruler/play start, a click in the tracks setting the next start without moving playback and a ruler seek quantized to the launch grid, play from the selected clip, clip drag+move, "
      "whole tracks cut, copied, pasted (between project tabs too) and duplicated with their devices, automation and clips, "
+     "an optional toolbar of tools (Select, Range, Split, Erase, Draw, Mute) with keys while the view has the focus, "
      "track names with # shown as the track's number, an empty track taking the kind of the clip dropped on it, several clips' edges dragged together, a MIDI clip's left edge drawn out before its notes, "
      "overlap replace/stack, fades and fade shapes, the control bar's grid value (bars to "
      "triplets, or none) drawn as lines that adapt to the zoom and snapping moves, drops, fades "

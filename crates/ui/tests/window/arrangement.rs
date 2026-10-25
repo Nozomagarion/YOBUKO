@@ -896,7 +896,7 @@ fn keys_copy_paste_and_delete_the_selected_clip() {
             .map(|s| s.project().arrangement.lanes[0].clips.iter().map(|c| (c.start, c.length)).collect::<Vec<_>>())
             .unwrap_or_default()
     };
-    harness.get_by_label("Clip Fill on Drums at bar 29").click();
+    harness.get_by_label("Clip Beat A on Drums at bar 1").click();
     harness.run();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::C);
     harness.run();
@@ -922,7 +922,7 @@ fn the_selected_clip_stays_selected_when_a_clip_before_it_moves() {
     let drums = |h: &Harness<'static, App>| {
         h.state().session().map(|s| s.project().arrangement.lanes[0].clips.clone()).unwrap_or_default()
     };
-    harness.get_by_label("Clip Fill on Drums at bar 29").click();
+    harness.get_by_label("Clip Beat A on Drums at bar 1").click();
     harness.run();
     let fill = drums(&harness).iter().find(|c| c.start == 112.0).map(|c| c.id).unwrap();
     assert_eq!(harness.state().selected_clip(), Some((TrackId(1), fill)));
@@ -1686,4 +1686,34 @@ fn a_click_on_the_piano_rolls_ruler_sets_where_playback_starts() {
     assert!((64.0..72.0).contains(&start), "the marker is inside the clip: {start}");
     harness.run_steps(2);
     assert!(harness.query_by_label_contains("Play start at beat").is_some(), "and shows in the piano roll");
+}
+
+/// With the toolbar on, the tool keys choose the Arrangement's tools while it has the focus, and
+/// the Erase tool deletes a clicked clip (#991).
+#[test]
+fn the_arrangement_toolbar_tools_act_on_clips_and_its_keys_choose_them() {
+    let mut harness = arrangement_app();
+    assert!(harness.query_by_label("Arrangement tool Erase").is_none(), "no toolbar by default");
+    let mut settings = suhina_ui::settings::Settings::default();
+    settings.view.arrangement_toolbar = true;
+    let ctx = harness.ctx.clone();
+    harness.state_mut().set_settings(&ctx, settings);
+    harness.run();
+    harness.get_by_label("Arrangement tool Select");
+    // A click on an empty lane gives the view the focus; 4 chooses Erase.
+    harness.get_by_label("Lane Drums").click();
+    harness.run();
+    harness.key_press(Key::Num4);
+    harness.run();
+    let clips = |h: &Harness<'_, App>| h.state().session().map_or(0, |s| s.project().all_clips().count());
+    let before = clips(&harness);
+    harness.get_by_label("Clip Beat B on Drums at bar 17").click();
+    harness.run();
+    assert_eq!(clips(&harness), before - 1, "the Erase tool deleted the clip");
+    // 1 goes back to Select: a click only selects.
+    harness.key_press(Key::Num1);
+    harness.run();
+    harness.get_by_label("Clip Beat A on Drums at bar 1").click();
+    harness.run();
+    assert_eq!(clips(&harness), before - 1);
 }

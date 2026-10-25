@@ -101,6 +101,36 @@ pub(super) struct ValueDrag {
 
 /// What the view keeps between frames: scrolling, zoom, lane heights, the header column, the
 /// selected clip and whatever is being dragged.
+/// The Arrangement's tools (#991), chosen on its toolbar or with the tool keys while it has the
+/// focus: what a press on a clip or a lane does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ArrangementTool {
+    /// Moves, trims and selects clips, as the view does without a toolbar.
+    #[default]
+    Select,
+    /// A drag selects time, across the tracks it crosses.
+    Range,
+    /// A click cuts a clip where it is clicked (on the grid; Alt: free).
+    Split,
+    /// A click deletes a clip.
+    Erase,
+    /// A drag on a lane makes an empty clip as long as the drag.
+    Draw,
+    /// A click mutes a clip, or unmutes it.
+    Mute,
+}
+
+impl ArrangementTool {
+    pub const ALL: [(Self, &'static str); 6] = [
+        (Self::Select, "Select"),
+        (Self::Range, "Range"),
+        (Self::Split, "Split"),
+        (Self::Erase, "Erase"),
+        (Self::Draw, "Draw"),
+        (Self::Mute, "Mute"),
+    ];
+}
+
 #[derive(Debug)]
 pub struct ArrangementViewState {
     pub scroll: Vec2,
@@ -131,6 +161,15 @@ pub struct ArrangementViewState {
     /// How a drag over a clip selects time (Settings › Arrangement › Time selection): with Ctrl
     /// held when true; from the clip's upper half when false. A drag on empty lanes or on the ruler selects time either way.
     pub time_select_ctrl: bool,
+    /// The toolbar shows (Settings › Arrangement › Toolbar, #991), the tool chosen on it, the
+    /// keys of the tool actions for its tooltips, and whether the view has the focus: the tool
+    /// keys act on it, and it is outlined.
+    pub toolbar: bool,
+    pub tool: ArrangementTool,
+    pub tool_keys: Vec<Option<String>>,
+    pub has_focus: bool,
+    /// A drag of the Draw tool on a lane: the track and the beat it started at.
+    pub(super) draw_drag: Option<(TrackId, f64)>,
     /// Alt held while an audio clip's edge is dragged stretches its audio to the new length
     /// (Settings › Arrangement › Ctrl+Alt-drag on an edge stretches audio).
     pub stretch_alt: bool,
@@ -291,6 +330,11 @@ impl Default for ArrangementViewState {
             stack_audio: false,
             stack_midi: false,
             time_select_ctrl: false,
+            toolbar: false,
+            tool: ArrangementTool::Select,
+            tool_keys: Vec::new(),
+            has_focus: false,
+            draw_drag: None,
             stretch_alt: true,
             double_click_does_nothing: false,
             ara_tracks: Vec::new(),

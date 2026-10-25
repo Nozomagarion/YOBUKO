@@ -46,6 +46,7 @@ is on exactly one page, under one heading.
 | Plug-ins | Library | Folders (each on or off, with its format; add with a format, remove), Scan and Rescan all with a count of what was found, Plug-in manager (opens the [plug-in manager](plugin-manager.md)) |
 | Arrangement | Clips | Allow sample stacking, Allow MIDI stacking |
 | Arrangement | Tracks | Track headers, Return tracks, Returns in new projects (A and B, or None, #898) |
+| Arrangement | Tools | Toolbar (On or Off, Off by default, #991) |
 | Session and mixer | Launching | Select on launch |
 | Session and mixer | Mixer | Mixer controls |
 | Clip editor | Piano roll | Pulled to the top, Piano roll grid, Toolbar size |

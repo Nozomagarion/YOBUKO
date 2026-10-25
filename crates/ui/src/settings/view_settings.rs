@@ -109,6 +109,9 @@ pub struct ViewSettings {
     pub alt_wheel_one: bool,
     /// What samples dropped on a folder in the browser do: ask, move or copy (#943).
     pub folder_drop: FolderDrop,
+    /// The Arrangement's toolbar of tools shows, and the tool keys choose them while it has the
+    /// focus (off by default, #991).
+    pub arrangement_toolbar: bool,
 }
 
 impl Default for ViewSettings {
@@ -134,6 +137,7 @@ impl Default for ViewSettings {
             copy_wrapped: true,
             alt_wheel_one: false,
             folder_drop: FolderDrop::Ask,
+            arrangement_toolbar: false,
         }
     }
 }
@@ -148,7 +152,7 @@ impl ViewSettings {
     /// The lines this module adds to the settings file.
     pub fn to_text(&self) -> String {
         format!(
-            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nnew_project_returns = {}\ncopy_names = {}\nalt_wheel = {}\nbrowser_folder_drop = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\n",
+            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nnew_project_returns = {}\ncopy_names = {}\nalt_wheel = {}\nbrowser_folder_drop = {}\narrangement_toolbar = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\n",
             self.mixer_height,
             self.strip_fader,
             self.detail_layout.param(),
@@ -166,6 +170,7 @@ impl ViewSettings {
             self.copy_suffix(),
             if self.alt_wheel_one { "pointer" } else { "all" },
             self.folder_drop.param(),
+            if self.arrangement_toolbar { "on" } else { "off" },
             if self.clip_halves { "halves" } else { "name_bar" },
             if self.grid_in_clips { "on" } else { "off" },
             f64::from(self.waveform_zoom) / 100.0,
@@ -202,6 +207,7 @@ impl ViewSettings {
             ("browser_folder_drop", drop) if FolderDrop::parse(drop).is_some() => {
                 self.folder_drop = FolderDrop::parse(drop).unwrap_or_default();
             }
+            ("arrangement_toolbar", "on" | "off") => self.arrangement_toolbar = value == "on",
             ("clip_drag", "halves" | "name_bar") => self.clip_halves = value == "halves",
             ("clip_grid", "on" | "off") => self.grid_in_clips = value == "on",
             ("waveform_zoom", zoom) => match zoom.parse::<f32>() {
@@ -242,6 +248,7 @@ mod tests {
             copy_wrapped: false,
             alt_wheel_one: true,
             folder_drop: FolderDrop::Copy,
+            arrangement_toolbar: true,
         };
         let settings = Settings { view, ..Settings::default() };
         let (read, warnings) = Settings::from_text(&settings.to_text());

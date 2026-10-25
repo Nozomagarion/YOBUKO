@@ -2310,6 +2310,17 @@ impl App {
         self.arrangement.grid_in_clips = self.settings.view.grid_in_clips;
         self.arrangement.stretch_alt = self.settings.view.stretch_alt;
         self.arrangement.zoom_one = self.settings.view.alt_wheel_one;
+        // The Arrangement's toolbar (#991): off, its Select tool; the view has the focus while the
+        // piano roll does not.
+        self.arrangement.toolbar = self.settings.view.arrangement_toolbar;
+        if !self.arrangement.toolbar {
+            self.arrangement.tool = arrangement_view::ArrangementTool::Select;
+        }
+        self.arrangement.has_focus = !self.piano_roll.focused;
+        if self.arrangement.toolbar && self.arrangement.tool_keys.is_empty() {
+            self.arrangement.tool_keys =
+                arrangement_view::TOOL_ACTIONS.iter().map(|id| self.keymap.label(id)).collect();
+        }
         // Any press ends a device panel's hold on Delete and the mute key; a click on a panel
         // takes it again when the button comes up, whether or not the detail area is shown.
         if ui.input(|i| i.pointer.primary_pressed()) {

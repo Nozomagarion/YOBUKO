@@ -42,6 +42,7 @@ use self::drawing::*;
 use self::edits::*;
 pub use self::layout::*;
 pub use self::state::*;
+pub use self::toolbar::IconButton;
 pub(crate) use self::toolbar::*;
 
 pub use gestures::start_by;

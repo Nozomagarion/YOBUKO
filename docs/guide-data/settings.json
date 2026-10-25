@@ -1109,6 +1109,31 @@
       "workInProgress": false
     },
     {
+      "id": "Arrangement/Tools/arrangement_toolbar",
+      "page": "Arrangement",
+      "section": "Tools",
+      "name": "Toolbar",
+      "note": "Show a row of tools over the Arrangement and let the number keys choose them.",
+      "keys": [
+        "arrangement_toolbar"
+      ],
+      "sourceFingerprint": "2c8a63c57d07ca0c3df92fe375e5928b1a16bd31af40a3887ee3abfc319bab25",
+      "helpStatus": "reviewed",
+      "description": "With this on, a toolbar runs along the top of the Arrangement with six tools: Select (moves, trims and selects clips, as without the toolbar), Range (a drag selects time anywhere), Split (a click cuts a clip where you click), Erase (a click deletes a clip), Draw (a drag on a lane makes an empty clip as long as the drag) and Mute (a click mutes or unmutes a clip). The keys 1 to 6 choose them while the Arrangement was clicked last; when the piano roll was clicked last, the same keys choose its own tools. The Arrangement is outlined in the accent colour while it has the keys.",
+      "options": [
+        {
+          "name": "Off",
+          "description": "No toolbar; the Arrangement always works as the Select tool. This is the default."
+        },
+        {
+          "name": "On",
+          "description": "The toolbar shows and the keys 1 to 6 choose its tools while the Arrangement has the focus."
+        }
+      ],
+      "whenToChange": "Turn it on if you prefer to pick a tool (split, erase, draw) and click, rather than using menus and modifier keys.",
+      "workInProgress": false
+    },
+    {
       "id": "Session/Launching/select_on_launch",
       "page": "Session",
       "section": "Launching",

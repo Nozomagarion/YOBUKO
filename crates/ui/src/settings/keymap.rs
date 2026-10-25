@@ -110,7 +110,7 @@ pub struct Action {
 }
 
 /// Actions the window does itself or on the selection, with their labels.
-const WINDOW_ACTIONS: [(&str, &str, &str); 73] = [
+const WINDOW_ACTIONS: [(&str, &str, &str); 79] = [
     ("file.new", "New project or open one", "File"),
     ("file.open", "Open a project", "File"),
     ("file.save", "Save the project", "File"),
@@ -180,6 +180,12 @@ const WINDOW_ACTIONS: [(&str, &str, &str); 73] = [
     ("marker.addAtPlayhead", "Add an arrangement marker at the playhead", "Edit"),
     ("selection.takeUp", "Swap the selected comped part for the take above it", "Edit"),
     ("selection.takeDown", "Swap the selected comped part for the take below it", "Edit"),
+    ("arrangement.tool1", "Choose the Arrangement's Select tool", ARRANGEMENT),
+    ("arrangement.tool2", "Choose the Arrangement's Range tool", ARRANGEMENT),
+    ("arrangement.tool3", "Choose the Arrangement's Split tool", ARRANGEMENT),
+    ("arrangement.tool4", "Choose the Arrangement's Erase tool", ARRANGEMENT),
+    ("arrangement.tool5", "Choose the Arrangement's Draw tool", ARRANGEMENT),
+    ("arrangement.tool6", "Choose the Arrangement's Mute tool", ARRANGEMENT),
     ("pianoRoll.tool6", "Choose the Mute tool", PIANO_ROLL),
     ("pianoRoll.gridNarrow", "Make the piano roll's grid finer", PIANO_ROLL),
     ("pianoRoll.gridWiden", "Make the piano roll's grid coarser", PIANO_ROLL),
@@ -192,6 +198,14 @@ const WINDOW_ACTIONS: [(&str, &str, &str); 73] = [
 
 /// The Shortcuts list's group for the piano roll's own actions.
 const PIANO_ROLL: &str = "Piano roll";
+/// The Shortcuts list's group for the Arrangement's tool keys.
+const ARRANGEMENT: &str = "Arrangement";
+
+/// Whether an action works only while the Arrangement has the keyboard, not the piano roll: its
+/// tool keys, which share the piano roll's keys (#991).
+pub fn arrangement_only(action: &str) -> bool {
+    action.starts_with("arrangement.tool")
+}
 
 /// Whether an action works only while the piano roll has the keyboard (after a click in it). Its
 /// keys are left for the rest of the window otherwise: Escape and the arrows mean other things
@@ -210,7 +224,7 @@ pub fn slot_only(action: &str) -> bool {
 /// Whether `action` is left alone while the piano roll has the keyboard: the selected slot's keys,
 /// and selecting every arrangement clip, whose key selects every note there instead.
 pub fn not_in_piano_roll(action: &str) -> bool {
-    slot_only(action) || action == "selection.selectAll"
+    slot_only(action) || action == "selection.selectAll" || arrangement_only(action)
 }
 
 /// Whether `a` and `b` can both run on the same key press, so one key for both is a conflict.
@@ -428,7 +442,7 @@ const PRESET_KEY: &str = "preset";
 /// The duplicate key of Draw-first, and the browser's key otherwise.
 const CTRL_B: Shortcut = Shortcut::new(Modifiers::COMMAND, Key::B);
 
-const DEFAULTS: [(&str, &[&str]); 74] = [
+const DEFAULTS: [(&str, &[&str]); 80] = [
     ("file.new", &["Ctrl+N"]),
     ("track.addAudio", &["Ctrl+T"]),
     ("track.addMidi", &["Ctrl+Shift+T"]),
@@ -477,6 +491,12 @@ const DEFAULTS: [(&str, &[&str]); 74] = [
     ("marker.addAtPlayhead", &["M"]),
     ("selection.takeUp", &["Alt+Up"]),
     ("selection.takeDown", &["Alt+Down"]),
+    ("arrangement.tool1", &["1"]),
+    ("arrangement.tool2", &["2"]),
+    ("arrangement.tool3", &["3"]),
+    ("arrangement.tool4", &["4"]),
+    ("arrangement.tool5", &["5"]),
+    ("arrangement.tool6", &["6"]),
     ("transport.setLoopEnabled", &["Ctrl+L"]),
     ("project.next", &["Ctrl+Tab"]),
     ("project.previous", &["Ctrl+Shift+Tab"]),

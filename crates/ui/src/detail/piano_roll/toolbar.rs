@@ -9,7 +9,7 @@ use super::*;
 /// [`crate::browser::browser_view`]'s icons are. `active` marks the note clipboard's buttons while there
 /// is something to act on, and the quantise block while it is open.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum IconButton {
+pub enum IconButton {
     Select,
     Draw,
     Paint,
@@ -69,7 +69,7 @@ impl IconButton {
 
     /// Our own strokes for the shape, in a 14 px box around `rect`'s centre, scaled with the
     /// toolbar (Toolbar size): `scale` multiplies the shape and its strokes together.
-    pub(super) fn draw(self, painter: &egui::Painter, rect: Rect, color: Color32, scale: f32) {
+    pub fn draw(self, painter: &egui::Painter, rect: Rect, color: Color32, scale: f32) {
         let scale = if scale.is_finite() { scale.clamp(0.5, 2.5) } else { 1.0 };
         let c = rect.center();
         let stroke = Stroke::new(1.1 * scale, color);

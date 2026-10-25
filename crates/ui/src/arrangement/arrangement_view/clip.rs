@@ -253,12 +253,44 @@ pub(super) fn clip_box<'a>(
         }
     });
     let (shift, command) = ui.input(|i| (i.modifiers.shift, i.modifiers.command));
+    let tool = state.tool;
     // A drag that selects time rather than moving the clip: with Ctrl held, or from the clip's
-    // lower half on a lane tall enough to have one, as the setting says.
+    // lower half on a lane tall enough to have one, as the setting says; with the Range tool,
+    // from anywhere (#991).
     let selects_time = response.drag_started_by(egui::PointerButton::Primary)
-        && ui
-            .input(|i| i.pointer.press_origin())
-            .is_some_and(|origin| if state.time_select_ctrl { command } else { selects_at(origin.y) });
+        && (tool == ArrangementTool::Range
+            || (tool == ArrangementTool::Select
+                && ui
+                    .input(|i| i.pointer.press_origin())
+                    .is_some_and(|origin| if state.time_select_ctrl { command } else { selects_at(origin.y) })));
+    // The Split, Erase and Mute tools act on the clip clicked, and nothing else does (#991).
+    let tool_click =
+        response.clicked() && matches!(tool, ArrangementTool::Split | ArrangementTool::Erase | ArrangementTool::Mute);
+    if tool_click && let Some(pointer) = response.interact_pointer_pos() {
+        match tool {
+            ArrangementTool::Split => {
+                let raw = clip.start + f64::from((pointer.x - x_of(clip.start)) / state.beat_width);
+                let on_grid = snapped(raw);
+                let free =
+                    ui.input(|i| i.modifiers.alt) || on_grid <= clip.start || on_grid >= clip.start + clip.length;
+                let at = if free { raw } else { on_grid };
+                actions.push(Action::new("clip.split", json!({ "clip": clip.id.0, "at": at })));
+            }
+            ArrangementTool::Erase => actions.push(Action::new("clip.delete", json!({ "clip": clip.id.0 }))),
+            _ => actions.push(Action::new(
+                "clip.setEnabled",
+                json!({ "clips": [{ "clip": clip.id.0 }], "enabled": !clip.enabled }),
+            )),
+        }
+    }
+    if response.hovered() {
+        match tool {
+            ArrangementTool::Split | ArrangementTool::Draw => ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair),
+            ArrangementTool::Erase | ArrangementTool::Mute => ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand),
+            ArrangementTool::Range => ui.ctx().set_cursor_icon(egui::CursorIcon::Text),
+            ArrangementTool::Select => {}
+        }
+    }
     if selects_time {
         state.marquee = ui.input(|i| i.pointer.press_origin());
         state.marquee_scroll = state.scroll;
@@ -271,7 +303,7 @@ pub(super) fn clip_box<'a>(
     if response.double_clicked() {
         state.clip_opened = true;
     }
-    if response.clicked() {
+    if response.clicked() && !tool_click {
         state.pick_clip(key, shift, command, clip_order);
         state.clip_clicked = true;
         // The clips drawn before this one this frame still show the old selection: one more
@@ -306,7 +338,7 @@ pub(super) fn clip_box<'a>(
         // The track being worked on: a folded group shows this track while it is one of its own.
         state.targeted = Some(lane.track);
     }
-    if response.drag_started_by(egui::PointerButton::Primary) && !selects_time {
+    if response.drag_started_by(egui::PointerButton::Primary) && !selects_time && tool == ArrangementTool::Select {
         state.clip_drag = Some(ClipDrag {
             track: lane.track,
             clip: clip.id,
@@ -519,7 +551,7 @@ pub(super) fn clip_box<'a>(
     // instead (`clip.trim`, `clip.stretch`; `docs/spec/arrangement-editing.md` › Clip edges).
     // An audio clip keeps its top corners for the fade handles.
     let edge_rect = clip_rect(space, live_start, live_length, x_of);
-    if state.clip_drag.is_none_or(|d| !mine(&d)) && edge_rect.width() >= 12.0 {
+    if state.clip_drag.is_none_or(|d| !mine(&d)) && edge_rect.width() >= 12.0 && tool == ArrangementTool::Select {
         const ZONE: f32 = 5.0;
         let top = edge_rect.top() + if clip.audio { FADE_HANDLE + 2.0 } else { 2.0 };
         let (free, stretch_held) = edge_keys(ui);

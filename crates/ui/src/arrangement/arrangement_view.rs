@@ -32,6 +32,7 @@ mod header;
 mod lane_menu;
 mod markers_loop;
 mod state;
+mod tools;
 mod value_controls;
 
 use self::clip::*;
@@ -42,6 +43,7 @@ use self::header::*;
 use self::lane_menu::*;
 use self::markers_loop::*;
 pub use self::state::*;
+pub use self::tools::TOOL_ACTIONS;
 use self::value_controls::*;
 
 /// Width of the track header column: the default and how far it can be dragged.
@@ -285,12 +287,24 @@ pub fn show(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState, 
 fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState, actions: &mut Vec<Action>) {
     // The track lanes shown: every one but the return tracks, or only the focused one.
     let focus = state.focus;
-    let area = ui.available_rect_before_wrap();
-    ui.allocate_rect(area, Sense::hover());
+    let whole = ui.available_rect_before_wrap();
+    ui.allocate_rect(whole, Sense::hover());
     // With the piano roll pulled over the whole window the view has no height: it draws nothing
     // and takes no pointer, so its ruler never sits over the splitter and takes its double-click.
-    if area.height() < 1.0 {
+    if whole.height() < 1.0 {
         return;
+    }
+    // The toolbar along the top, when it is on (#991); the view under it.
+    let area = if state.toolbar && whole.height() > tools::TOOLBAR * 2.0 {
+        let bar = Rect::from_min_size(whole.min, Vec2::new(whole.width(), tools::TOOLBAR));
+        tools::toolbar(ui, bar, state);
+        Rect::from_min_max(Pos2::new(whole.left(), bar.bottom() + 1.0), whole.max)
+    } else {
+        whole
+    };
+    // With the toolbar on, the view says when it has the focus: the tool keys act on it.
+    if state.toolbar && state.has_focus {
+        ui.painter().rect_stroke(whole, 0.0, Stroke::new(1.0, theme::accent()), StrokeKind::Inside);
     }
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
@@ -892,14 +906,52 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         // A drag from an empty spot (#649): from the lane's upper half it paints a time selection
         // over the tracks it crosses, from the lower half it draws a rectangle that picks whole
         // clips (with Ctrl+drag selecting time, Ctrl paints instead).
-        if body.drag_started_by(egui::PointerButton::Primary)
+        // The Draw tool's drag makes a clip as long as itself (#991).
+        let drawing = state.tool == ArrangementTool::Draw && (lane.notes || lane.plays_audio);
+        let grid_now = arrangement_grid(state.grid, state.beat_width, bar_beats);
+        let beat_at = |x: f32, free: bool| {
+            grid_now.place(f64::from((x - time.left() + state.scroll.x) / state.beat_width), free, true)
+        };
+        if drawing
+            && body.drag_started_by(egui::PointerButton::Primary)
+            && let Some(origin) = ui.input(|i| i.pointer.press_origin())
+        {
+            state.draw_drag = Some((clips_lane.track, beat_at(origin.x, ui.input(|i| i.modifiers.alt))));
+        } else if body.drag_started_by(egui::PointerButton::Primary)
             && let Some(origin) = ui.input(|i| i.pointer.press_origin())
         {
             state.marquee = Some(origin);
             state.marquee_scroll = state.scroll;
-            state.marquee_time =
-                if state.time_select_ctrl { ui.input(|i| i.modifiers.command) } else { origin.y < row.time.center().y };
+            state.marquee_time = state.tool == ArrangementTool::Range
+                || if state.time_select_ctrl {
+                    ui.input(|i| i.modifiers.command)
+                } else {
+                    origin.y < row.time.center().y
+                };
             state.marquee_row = None;
+        }
+        if let Some((track, from)) = state.draw_drag.filter(|d| d.0 == clips_lane.track)
+            && let Some(pointer) = ui.ctx().pointer_latest_pos()
+        {
+            let to = beat_at(pointer.x, ui.input(|i| i.modifiers.alt));
+            let (start, end) = (from.min(to), from.max(to));
+            let shown = Rect::from_x_y_ranges(
+                egui::Rangef::new(
+                    time.left() + start as f32 * state.beat_width - state.scroll.x,
+                    time.left() + end as f32 * state.beat_width - state.scroll.x,
+                ),
+                row.time.y_range(),
+            );
+            lanes_painter.rect_filled(shown, 0.0, theme::selection().gamma_multiply(0.25));
+            lanes_painter.rect_stroke(shown, 0.0, Stroke::new(1.0, theme::selection()), StrokeKind::Inside);
+            if body.drag_stopped() || !ui.input(|i| i.pointer.primary_down()) {
+                state.draw_drag = None;
+                if end - start > 1e-6 {
+                    let stack = if lane.notes { state.stack_midi } else { state.stack_audio };
+                    let params = json!({ "track": track.0, "start": start, "length": end - start, "stack": stack });
+                    actions.push(Action::new("clip.create", params));
+                }
+            }
         }
         if !state.time_select_ctrl
             && state.marquee.is_none()
