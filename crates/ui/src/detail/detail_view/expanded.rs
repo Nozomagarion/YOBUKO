@@ -134,9 +134,18 @@ pub(super) fn graph_controls(
     actions: &mut Vec<Action>,
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
+        // The list scrolls under nothing: it is cut at its own top, below the header and buttons.
+        ui.set_clip_rect(ui.clip_rect().intersect(body));
         egui::ScrollArea::both().auto_shrink([false, false]).id_salt(("sd-controls", track.0, at)).show(ui, |ui| {
             let hidden = graph.canvas.as_ref().map_or(&[][..], |c| c.hidden_parameters.as_slice());
-            let width = if graph.canvas.is_some() { body.width() } else { COMPACT_WIDTH };
+            // The generated list keeps its own width in any column, unless the theme sizes the
+            // panel (`.device { width }`): then it follows the panel, its scroll bar aside.
+            let themed = crate::kit::style_class::computed().is_some_and(|c| c.width.is_some());
+            let width = match (&graph.canvas, themed) {
+                (Some(_), _) => body.width(),
+                (None, true) => (body.width() - 8.0).max(120.0),
+                (None, false) => COMPACT_WIDTH,
+            };
             let cells = parameter_layout(&graph.parameters, width, hidden);
             let custom_size = graph.canvas.as_ref().map_or(Vec2::ZERO, |c| Vec2::new(c.size[0], c.size[1]));
             let nodes_height = graph.nodes.len() as f32 * NODE_ROW;

@@ -59,7 +59,16 @@ pub(super) fn parameter_cell(
     }
     let value_height =
         if style.show_value && style.label_position == LabelPosition::Top { style.font_size + 4.0 } else { 0.0 };
-    let value_width = if style.show_value && value_height == 0.0 { (row.width() * 0.24).min(80.0) } else { 0.0 };
+    // `.device .value { width }` sets the value's column; it never takes more than half the row.
+    let sheet_value = {
+        let _value = crate::kit::style_class::enter("value");
+        crate::kit::style_class::computed().and_then(|c| c.width)
+    };
+    let value_width = if style.show_value && value_height == 0.0 {
+        sheet_value.map_or((row.width() * 0.24).min(80.0), |w| w.clamp(0.0, row.width() / 2.0))
+    } else {
+        0.0
+    };
     let control_min = match style.label_position {
         LabelPosition::Left => Pos2::new(name_rect.right(), row.top()),
         LabelPosition::Top => Pos2::new(row.left(), name_rect.bottom()),
@@ -432,15 +441,31 @@ pub(super) fn parameter_height(parameter: &GraphParameter) -> f32 {
 }
 
 pub(super) fn parameter_layout(parameters: &[GraphParameter], width: f32, hidden: &[String]) -> Vec<Rect> {
+    // The theme may lay the parameters a device places nowhere itself side by side, each cell as
+    // tall as it says (`--suhina-param-columns`, `--suhina-param-row`).
+    let (columns, row) = crate::kit::style_class::theme_param_grid();
+    let cell = width / columns as f32;
     let mut bottom = 0.0f32;
+    let mut column = 0usize;
+    let mut line_top = 0.0f32;
     parameters
         .iter()
         .filter(|p| !hidden.contains(&p.id))
         .map(|parameter| {
-            let [x, y] = parameter.ui.position.unwrap_or([0.0, bottom]);
-            let [w, h] = parameter.ui.size.unwrap_or([width, parameter_height(parameter)]);
-            let rect = Rect::from_min_size(Pos2::new(x, y), Vec2::new(w, h));
+            if let Some([x, y]) = parameter.ui.position {
+                let [w, h] = parameter.ui.size.unwrap_or([width, parameter_height(parameter)]);
+                let rect = Rect::from_min_size(Pos2::new(x, y), Vec2::new(w, h));
+                bottom = bottom.max(rect.bottom());
+                return rect;
+            }
+            let height = row.map_or_else(|| parameter_height(parameter), |row| row.max(parameter_height(parameter)));
+            let [w, h] = parameter.ui.size.unwrap_or([cell, height]);
+            if column == 0 {
+                line_top = bottom;
+            }
+            let rect = Rect::from_min_size(Pos2::new(cell * column as f32, line_top), Vec2::new(w, h));
             bottom = bottom.max(rect.bottom());
+            column = (column + 1) % columns;
             rect
         })
         .collect()

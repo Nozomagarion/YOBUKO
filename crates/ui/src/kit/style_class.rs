@@ -112,6 +112,8 @@ pub fn valid_property(key: &str, value: &str) -> bool {
         }
         "--suhina-track-headers" => matches!(value, "left" | "right"),
         "--suhina-header-tint" => value.trim().parse::<u8>().is_ok_and(|v| v <= 100),
+        "--suhina-param-columns" => value.trim().parse::<u8>().is_ok_and(|v| (1..=8).contains(&v)),
+        "--suhina-param-row" => px(value).is_some_and(|v| (16..=160).contains(&v)),
         "--suhina-track-height" => px(value).is_some_and(|v| (MIN_TRACK_HEIGHT..=MAX_TRACK_HEIGHT).contains(&v)),
         "--suhina-header-min-width" => value
             .strip_suffix("px")
@@ -315,6 +317,17 @@ pub fn theme_track_height() -> Option<f32> {
     let skin = skin::current();
     let value = skin.styles.get(".arrangement")?.get("--suhina-track-height")?;
     px(value).filter(|v| (MIN_TRACK_HEIGHT..=MAX_TRACK_HEIGHT).contains(v)).map(f32::from)
+}
+
+/// How a device panel's generated parameter list is laid out (`.device { --suhina-param-columns:
+/// 3; --suhina-param-row: 48px }`): parameters side by side in that many columns, each that tall.
+pub fn theme_param_grid() -> (usize, Option<f32>) {
+    let skin = skin::current();
+    let Some(device) = skin.styles.get(".device") else { return (1, None) };
+    let columns =
+        device.get("--suhina-param-columns").and_then(|v| v.trim().parse::<u8>().ok()).map_or(1, |v| v.clamp(1, 8));
+    let row = device.get("--suhina-param-row").and_then(|v| px(v)).filter(|v| (16..=160).contains(v)).map(f32::from);
+    (usize::from(columns), row)
 }
 
 pub fn theme_header_tint() -> Option<u8> {
