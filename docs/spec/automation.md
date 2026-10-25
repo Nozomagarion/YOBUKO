@@ -107,7 +107,7 @@ mixer) and `param`. Values are in the unit of the parameter's set command.
 
 | Command | What it does |
 |---|---|
-| `automation.addPoint {track, device?, param, beat, value, curve?}` | adds a point, making the lane (enabled) if there is none; answers the point's index in beat order |
+| `automation.addPoint {track, device?, param, beat, value, curve?, shape?}` | adds a point, making the lane (enabled) if there is none; answers the point's index in beat order. With `shape` (a name `automation.insertShape` takes), the segment from the point before to the new one takes that shape between their heights, a repeating one once a beat |
 | `automation.movePoint {track, device?, param, point, beat?, value?, curve?}` | changes a point; answers its new index |
 | `automation.deletePoint {track, device?, param, point}` | removes a point; the lane goes with its last point |
 | `automation.movePoints {track, device?, param, points, beats?, value?, curve?}` | moves several points of one lane together in one undo step: `beats` later (earlier below 0), `value` up or down in the set command's unit (dB for the volume), each value kept in the parameter's range (a silent volume point stays silent, a louder one stops at +6 dB), `curve` given to each; answers the points' new indices in the order given |
@@ -118,7 +118,7 @@ mixer) and `param`. Values are in the unit of the parameter's set command.
 | `automation.paste {track, device?, param, start}` | pastes the copied range from `start` over what is there, making the lane if there is none; on another parameter each value goes to the same height of that lane (the bottom of a pan lane is full left, of a mute lane off); answers the range pasted |
 | `automation.duplicate {track, device?, param, start, end}` | copies a range right after itself, over what is there; answers the copy's range, so the next duplicate goes on from it; the clipboard stays as it was |
 | `automation.deleteRange {track, device?, param, start, end}` | removes the points inside a range |
-| `automation.insertShape {track, device?, param, start, end, shape, cycles?}` | fills a range with a shape over the parameter's whole travel: `sine`, `triangle`, `saw_up`, `saw_down` and `square` repeat `cycles` times (1 to 512, default 1); `ramp_up`, `ramp_down`, `curve_up`, `curve_down` and `swell` play once |
+| `automation.insertShape {track, device?, param, start, end, shape, cycles?}` | fills a range with a shape over the parameter's whole travel: `sine`, `triangle`, `saw_up`, `saw_down` and `square` repeat `cycles` times (1 to 512, default 1); `ramp_up`, `ramp_down`, `curve_up`, `curve_down` and `swell` play once. With `point` in place of `start` and `end`: the segment from the point before it to it (the first point's: to the next), between the two points' heights (the whole travel when they are level), a repeating shape once a beat unless `cycles` says |
 | `automation.list {track}` | the track's lanes: `mixer` and `devices` (index, name, lanes), each with `param`, `enabled` and `points` (`beat`, `value`, `curve`) |
 | `device.setAutomation {track, device, param, points}` | replaces a device lane with straight segments (`points` a flat list of beat and value; `[]` removes it), for built-in devices, `.sd` devices and plug-ins |
 
@@ -189,14 +189,19 @@ the value set on the mixer or the device. Editing (every edit is one undo step):
 
 | Gesture | Command |
 |---|---|
-| Click the lane | `automation.addPoint` at the beat under the pointer (on the nearest line the arrangement's grid draws at this zoom, [arrangement editing](arrangement-editing.md#the-grid); Alt, Option on macOS: free) and the value at its height |
+| Point at the line (within 6 points), or a lane's faint line | the pointer becomes a hand, a dot marks the line under it and its value there shows beside the pointer |
+| Click away from the line | nothing is added: it ends the painted range and the selection of points. With Settings › Arrangement › Automation › **A click anywhere adds a point** on (off by default), it is `automation.addPoint` at the beat under the pointer (on the nearest line the arrangement's grid draws at this zoom, [arrangement editing](arrangement-editing.md#the-grid); Alt, Option on macOS: free) and the value at its height |
+| Double-click away from the line (the setting off) | `automation.addPoint` at the pointer, as above |
 | Click on or near the line (within 6 points), or a lane's faint line | `automation.addPoint` on the envelope: its value at that beat, so the envelope keeps its shape (a level or straight segment stays exactly so). The segment before the new point keeps its curve; the one after gets the curve that passes through the old segment's middle |
 | Drag a point | `automation.movePoint`, its beat on the grid (Alt, Option on macOS: free) and its value following the pointer; points dragged past others keep beat order |
 | Click a point | selects it; Shift or Ctrl adds it to the selection or takes it out. Selecting a clip ends a selection of points |
 | Drag on the lane away from the line | paints a time range over the lane's whole height, its ends on the grid (Alt, Option on macOS: free), and selects the points in it. A click on the lane or a point, a clip or a track header ends it |
 | Ctrl+C, Ctrl+X, Ctrl+D, Delete with a range painted | `automation.copy`; `automation.copy` and `automation.deleteRange`; `automation.duplicate`, the range moving onto the copy so the next Ctrl+D goes on; `automation.deleteRange`. They act on the range before anything else that is selected |
 | Ctrl+V with a range painted | `automation.paste` from the range's start, on that lane: paint a range where the copy should go, then paste |
-| Right-click the lane: **Insert shape** | ten small pictures of shapes; a click runs `automation.insertShape` in the painted range when the click was inside it, otherwise in the bar under the pointer. A repeating shape plays once a beat |
+| Right-click inside a painted range: **Insert shape** | ten small pictures of shapes; a click runs `automation.insertShape` on the range, a repeating shape once a beat |
+| Right-click the lane elsewhere: **Shape for new points** | the same pictures; the one clicked is lit and draws nothing: every point added from then on gives the segment from the point before it that shape (`automation.addPoint` with `shape`). A click on the lit one, or **Straight lines for new points**, goes back to straight lines. It is the window's choice, not saved |
+| Right-click a point: **Shape to this point** | under Delete point, the same pictures: `automation.insertShape` with `point`, the segment from the point before to this one (the first point's: to the next) |
+| Drag the round handle half-way along a sloping segment (one at least 28 points wide) | bends it as dragging the line does; a double-click on it straightens it (curve 0) |
 | Drag a selected point | `automation.movePoints`: the whole selection moves by the same beats (none before beat 0) and the same change of value |
 | Delete (or Backspace) | `automation.deletePoints` for the selection, before any selected clip |
 | Double-click a point, or its menu's Delete point | `automation.deletePoint` (the menu deletes the whole selection when the point is part of one) |

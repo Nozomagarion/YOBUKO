@@ -68,6 +68,9 @@ pub struct ViewSettings {
     pub detail_layout: DetailLayout,
     /// A double-click on an empty slot or an empty spot of a lane makes an empty clip of the track's kind.
     pub double_click_clip: bool,
+    /// A click anywhere on an automation lane adds a point; off (the default), only a click on or
+    /// near the line does, and a double-click adds one anywhere.
+    pub automation_click_anywhere: bool,
     /// Clip menus carry a name field that renames in place, instead of Rename (off by default).
     pub menu_name_field: bool,
     /// Notes moved onto others of the same key and start replace them (on by default).
@@ -121,6 +124,7 @@ impl Default for ViewSettings {
             strip_fader: 0,
             detail_layout: DetailLayout::Beside,
             double_click_clip: true,
+            automation_click_anywhere: false,
             menu_name_field: false,
             notes_replace: true,
             time_select_ctrl: false,
@@ -152,7 +156,7 @@ impl ViewSettings {
     /// The lines this module adds to the settings file.
     pub fn to_text(&self) -> String {
         format!(
-            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nnew_project_returns = {}\ncopy_names = {}\nalt_wheel = {}\nbrowser_folder_drop = {}\narrangement_toolbar = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\n",
+            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nnew_project_returns = {}\ncopy_names = {}\nalt_wheel = {}\nbrowser_folder_drop = {}\narrangement_toolbar = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\nautomation_click = {}\n",
             self.mixer_height,
             self.strip_fader,
             self.detail_layout.param(),
@@ -174,6 +178,7 @@ impl ViewSettings {
             if self.clip_halves { "halves" } else { "name_bar" },
             if self.grid_in_clips { "on" } else { "off" },
             f64::from(self.waveform_zoom) / 100.0,
+            if self.automation_click_anywhere { "anywhere" } else { "line" },
         )
     }
 
@@ -192,6 +197,7 @@ impl ViewSettings {
             ("detail_layout", "beside") => self.detail_layout = DetailLayout::Beside,
             ("detail_layout", "full_width") => self.detail_layout = DetailLayout::FullWidth,
             ("double_click_clip", "on" | "off") => self.double_click_clip = value == "on",
+            ("automation_click", "anywhere" | "line") => self.automation_click_anywhere = value == "anywhere",
             ("menu_name_field", "on" | "off") => self.menu_name_field = value == "on",
             ("notes_replace", "on" | "off") => self.notes_replace = value == "on",
             ("time_select", "ctrl_drag" | "clip_lower_half") => self.time_select_ctrl = value == "ctrl_drag",
@@ -232,6 +238,7 @@ mod tests {
             strip_fader: 90,
             detail_layout: DetailLayout::FullWidth,
             double_click_clip: false,
+            automation_click_anywhere: true,
             menu_name_field: true,
             notes_replace: false,
             time_select_ctrl: true,

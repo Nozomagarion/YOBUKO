@@ -23,6 +23,11 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
                 "value in the unit the parameter's set command takes: volume in dB (at most +6; below -150 is silence), pan -1 to 1, mute 0 or 1, a device's as device.setParam",
             ),
             CURVE,
+            optional(
+                "shape",
+                ParamType::Text,
+                "a shape for the segment from the point before to the new one, between their heights, as automation.insertShape names them (a repeating one once a beat)",
+            ),
         ],
         kind: CommandKind::Edit,
         run: crate::automation::add_point,
@@ -161,13 +166,18 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "automation.insertShape",
-        label: "Fill a time range of a parameter's automation with a shape over the parameter's whole range: sine, triangle, saw_up, saw_down, square (these repeat), ramp_up, ramp_down, curve_up, curve_down or swell; the envelope outside the range stays",
+        label: "Fill a time range of a parameter's automation with a shape over the parameter's whole range, or with point the segment from the point before it to it, between the two points' heights: sine, triangle, saw_up, saw_down, square (these repeat), ramp_up, ramp_down, curve_up, curve_down or swell; the envelope outside stays",
         params: &[
             DEVICE_TRACK,
             AUTOMATED_DEVICE,
             AUTOMATED,
-            RANGE_START,
-            RANGE_END,
+            optional("start", ParamType::Number, "the range's first arrangement beat, from 0 (with end; or point)"),
+            optional("end", ParamType::Number, "the range's end, an arrangement beat after start"),
+            optional(
+                "point",
+                ParamType::Integer,
+                "instead of a range: the point, from 0, whose segment from the point before gets the shape (the first point's: to the next)",
+            ),
             param(
                 "shape",
                 ParamType::Text,
@@ -176,7 +186,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             optional(
                 "cycles",
                 ParamType::Integer,
-                "how many times a repeating shape plays in the range, 1 to 512 (default 1)",
+                "how many times a repeating shape plays, 1 to 512 (default 1 in a range, once a beat on a point's segment)",
             ),
         ],
         kind: CommandKind::Edit,

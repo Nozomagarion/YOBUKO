@@ -1134,6 +1134,31 @@
       "workInProgress": false
     },
     {
+      "id": "Arrangement/Automation/automation_click",
+      "page": "Arrangement",
+      "section": "Automation",
+      "name": "A click anywhere adds a point",
+      "note": "Choose whether a single click anywhere on an automation lane adds a point.",
+      "keys": [
+        "automation_click"
+      ],
+      "sourceFingerprint": "e4aa8ff1ec3d7abe67ca6392d065ff97f75fed1fa2b7a298cd5990d3513163bf",
+      "helpStatus": "reviewed",
+      "description": "Off (the default), a click on an automation lane adds a point only on or near the envelope's line, where the pointer turns into a hand and the line's value shows beside it; a click away from the line only ends the painted range and the selected points, and a double-click there adds a point at the pointer. On, a click anywhere on the lane adds a point at the pointer's beat and height, as before.",
+      "options": [
+        {
+          "name": "Off",
+          "description": "A click adds a point only on or near the line; a double-click adds one anywhere. This is the default."
+        },
+        {
+          "name": "On",
+          "description": "A click anywhere on the lane adds a point at the pointer."
+        }
+      ],
+      "whenToChange": "Turn it on if you mostly draw automation point by point and want every click to add one.",
+      "workInProgress": false
+    },
+    {
       "id": "Session/Launching/select_on_launch",
       "page": "Session",
       "section": "Launching",

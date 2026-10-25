@@ -235,7 +235,7 @@ CHAPTERS = [
      "layered on the same notes, plug-ins inside, latency compensated, groups nested four deep, "
      "moved and duplicated by command, devices inside groups picked and Ctrl+A picking a whole chain. No macros, key/velocity/chain zones, drum pads or group "
      "presets."),
-    (26, "Automation and Editing Envelopes", 22, 0.56, "partial",
+    (26, "Automation and Editing Envelopes", 22, 0.58, "partial",
      "Envelopes for track volume, pan and mute, built-in, .sd and plug-in device parameters: breakpoints "
      "with curved segments and jumps, saved, played in playback and renders (64-frame steps, ramped "
      "mixer gains), a manual change turning a lane off until re-enabled. Lanes under each track in "
@@ -244,7 +244,9 @@ CHAPTERS = [
      "deleted together, curves bent by dragging, re-enabled from the lane, a click near the line adding "
      "a point on it, a faint line at the value of a lane without points; a time range painted on a lane "
      "copied, pasted onto any lane, duplicated right after itself and deleted, and shapes inserted into it "
-     "(sine, triangle, saws, square, ramps, curves, swell). Missing recording, "
+     "(sine, triangle, saws, square, ramps, curves, swell), into a point's segment from its menu or as the "
+     "shape new points take; a curve handle half-way along each segment; a click adds a point on the line "
+     "(anywhere, as a setting). Missing recording, "
      "drawing with a pencil, plug-in lanes in the view, send, master and tempo automation, "
      "locking, simplifying envelopes."),
     (27, "Clip Envelopes", 13, 0.00, "absent", "No clip envelopes."),

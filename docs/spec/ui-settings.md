@@ -47,6 +47,7 @@ is on exactly one page, under one heading.
 | Arrangement | Clips | Allow sample stacking, Allow MIDI stacking |
 | Arrangement | Tracks | Track headers, Return tracks, Returns in new projects (A and B, or None, #898) |
 | Arrangement | Tools | Toolbar (On or Off, Off by default, #991) |
+| Arrangement | Automation | A click anywhere adds a point (On or Off, Off by default: a click adds a point only on or near the line, a double-click anywhere) |
 | Session and mixer | Launching | Select on launch |
 | Session and mixer | Mixer | Mixer controls |
 | Clip editor | Piano roll | Pulled to the top, Piano roll grid, Toolbar size |

@@ -272,7 +272,15 @@ pub(crate) fn add_point(session: &mut Session, params: &Value) -> Result<Value, 
         return Err(format!("a lane holds at most {MAX_POINTS} points").into());
     }
     let index = lane.insert(AutomationPoint { beat, value, curve });
-    Ok(json!({ "param": target.param, "point": index, "points": lane.points.len(), "enabled": lane.enabled }))
+    let enabled = lane.enabled;
+    if let Some(shape) = params.get("shape").and_then(Value::as_str) {
+        if crate::automation_range::shape_points(shape).is_none() {
+            return Err(format!("no shape {shape:?}; automation.insertShape lists them").into());
+        }
+        crate::automation_range::shape_new_segment(session, &target, index, shape)?;
+    }
+    let points = target.lanes(session)?.iter().find(|l| target.matches(l)).map_or(0, |l| l.points.len());
+    Ok(json!({ "param": target.param, "point": index, "points": points, "enabled": enabled }))
 }
 
 pub(crate) fn move_point(session: &mut Session, params: &Value) -> Result<Value, CommandError> {

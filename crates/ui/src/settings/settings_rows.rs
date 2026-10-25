@@ -428,6 +428,14 @@ pub(crate) static ROWS: &[Entry] = &[
         &["arrangement_toolbar"],
         |cx, r| cx.on_off(r, |s| &mut s.view.arrangement_toolbar),
     ),
+    row(
+        Page::Arrangement,
+        "Automation",
+        "A click anywhere adds a point",
+        "On an automation lane; off, a click adds one only on or near the line, and a double-click anywhere",
+        &["automation_click"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.automation_click_anywhere),
+    ),
     // Session view and mixer.
     row(
         Page::Session,

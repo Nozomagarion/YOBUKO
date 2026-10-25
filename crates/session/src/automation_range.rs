@@ -221,23 +221,58 @@ pub fn shape_points(shape: &str) -> Option<(Vec<ShapePoint>, bool)> {
 pub const SHAPES: [&str; 10] =
     ["sine", "triangle", "saw_up", "saw_down", "square", "ramp_up", "ramp_down", "curve_up", "curve_down", "swell"];
 
-/// `automation.insertShape {track, device?, param, start, end, shape, cycles?}`: the range
-/// filled with a shape over the parameter's whole range, a repeating one `cycles` times.
-pub(crate) fn insert_shape(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let target = target(session, params)?;
-    let (start, end) = range(params)?;
-    let name = params.get("shape").and_then(Value::as_str).ok_or("shape must be a shape's name")?;
-    let (cycle, repeats) =
-        shape_points(name).ok_or_else(|| format!("no shape {name:?}; the shapes are {}", SHAPES.join(", ")))?;
-    let cycles = match params.get("cycles") {
-        None | Some(Value::Null) => 1,
+/// The cycles `params["cycles"]` asks for, from 1 to [`MAX_CYCLES`]; `None` when left out.
+fn cycles(params: &Value) -> Result<Option<usize>, CommandError> {
+    match params.get("cycles") {
+        None | Some(Value::Null) => Ok(None),
         Some(v) => v
             .as_u64()
             .and_then(|n| usize::try_from(n).ok())
             .filter(|n| (1..=MAX_CYCLES).contains(n))
-            .ok_or_else(|| format!("cycles must be a whole number from 1 to {MAX_CYCLES}"))?,
+            .map(Some)
+            .ok_or_else(|| format!("cycles must be a whole number from 1 to {MAX_CYCLES}").into()),
+    }
+}
+
+/// A repeating shape's cycles over `start` to `end` when none are asked for: one a beat.
+fn cycles_per_beat(start: f64, end: f64) -> usize {
+    let beats = (end - start).round();
+    if beats.is_finite() && beats >= 1.0 { (beats as usize).min(MAX_CYCLES) } else { 1 }
+}
+
+/// The segment a shape on point `index` of `points` replaces: from the point before it to it (for
+/// the first point, from it to the next), and the two points' places on the lane.
+fn segment(
+    session: &Session,
+    target: &Target,
+    points: &[AutomationPoint],
+    index: usize,
+) -> Result<(f64, f64, f64, f64), CommandError> {
+    let (a, b) = if index == 0 { (0, 1) } else { (index - 1, index) };
+    let (Some(a), Some(b)) = (points.get(a), points.get(b)) else {
+        return Err("the point needs a neighbour: a lane of at least two points".into());
     };
-    let cycles = if repeats { cycles } else { 1 };
+    if b.beat - a.beat <= SAME {
+        return Err("the two points are at one beat: there is no segment between them".into());
+    }
+    Ok((a.beat, b.beat, target.position(session, a.value), target.position(session, b.value)))
+}
+
+/// Fills `start` to `end` of the lane with shape `name` between lane places `low` and `high`, a
+/// repeating shape `cycles` times; answers the lane's point count.
+#[allow(clippy::too_many_arguments)]
+fn fill(
+    session: &mut Session,
+    target: &Target,
+    start: f64,
+    end: f64,
+    (low, high): (f64, f64),
+    name: &str,
+    cycles: usize,
+) -> Result<usize, CommandError> {
+    let (cycle, repeats) =
+        shape_points(name).ok_or_else(|| format!("no shape {name:?}; the shapes are {}", SHAPES.join(", ")))?;
+    let cycles = if repeats { cycles.clamp(1, MAX_CYCLES) } else { 1 };
     let span = (end - start) / cycles as f64;
     let mut inner: Vec<AutomationPoint> = Vec::new();
     for n in 0..cycles {
@@ -245,7 +280,7 @@ pub(crate) fn insert_shape(session: &mut Session, params: &Value) -> Result<Valu
             // A cycle starts where the one before ended: its first point is that end, unless the
             // shape jumps there (a saw).
             let beat = start + (n as f64 + t) * span;
-            let value = target.value_at_position(session, position);
+            let value = target.value_at_position(session, low + position * (high - low));
             if i == 0
                 && let Some(last) = inner.last()
                 && (last.beat - beat).abs() < SAME
@@ -259,9 +294,58 @@ pub(crate) fn insert_shape(session: &mut Session, params: &Value) -> Result<Valu
             inner.push(AutomationPoint { beat, value, curve });
         }
     }
-    let points = points_of(session, &target)?;
-    let count = put(session, &target, replace(&points, start, end, inner, target.stepped()))?;
-    Ok(json!({ "param": target.param, "shape": name, "points": count }))
+    let points = points_of(session, target)?;
+    put(session, target, replace(&points, start, end, inner, target.stepped()))
+}
+
+/// The segment shape `automation.addPoint {shape}` gives the segment that ends at the point it
+/// added (from the point before it), between the two points' heights, a repeating shape once a
+/// beat. Nothing for the lane's first point.
+pub(crate) fn shape_new_segment(
+    session: &mut Session,
+    target: &Target,
+    index: usize,
+    name: &str,
+) -> Result<(), CommandError> {
+    if index == 0 {
+        return Ok(());
+    }
+    let points = points_of(session, target)?;
+    let Ok((start, end, a, b)) = segment(session, target, &points, index) else { return Ok(()) };
+    fill(session, target, start, end, (a.min(b), a.max(b)), name, cycles_per_beat(start, end)).map(|_| ())
+}
+
+/// `automation.insertShape {track, device?, param, start, end, shape, cycles?}`: the range filled
+/// with a shape over the parameter's whole range, a repeating one `cycles` times (default 1). With
+/// `point` in place of the range: the segment from the point before it to it, between the two
+/// points' heights (the whole range when they are level), a repeating shape once a beat unless
+/// `cycles` says.
+pub(crate) fn insert_shape(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let target = target(session, params)?;
+    let name = params.get("shape").and_then(Value::as_str).ok_or("shape must be a shape's name")?;
+    if shape_points(name).is_none() {
+        return Err(format!("no shape {name:?}; the shapes are {}", SHAPES.join(", ")).into());
+    }
+    let asked = cycles(params)?;
+    let (start, end, heights, cycles) = match params.get("point") {
+        None | Some(Value::Null) => {
+            let (start, end) = range(params)?;
+            (start, end, (0.0, 1.0), asked.unwrap_or(1))
+        }
+        Some(v) => {
+            let index =
+                v.as_u64().and_then(|n| usize::try_from(n).ok()).ok_or("point must be a point index, from 0")?;
+            let points = points_of(session, &target)?;
+            if index >= points.len() {
+                return Err(format!("the lane has no point {index}; it has {}", points.len()).into());
+            }
+            let (start, end, a, b) = segment(session, &target, &points, index)?;
+            let heights = if (a - b).abs() < SAME { (0.0, 1.0) } else { (a.min(b), a.max(b)) };
+            (start, end, heights, asked.unwrap_or_else(|| cycles_per_beat(start, end)))
+        }
+    };
+    let count = fill(session, &target, start, end, heights, name, cycles)?;
+    Ok(json!({ "param": target.param, "shape": name, "start": start, "end": end, "points": count }))
 }
 
 #[cfg(test)]

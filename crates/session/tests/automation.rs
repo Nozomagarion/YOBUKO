@@ -426,3 +426,39 @@ fn a_shape_fills_an_automation_range() {
     );
     assert!(run(&mut session, "automation.copy", json!({ "track": 1, "param": "pan", "start": 4, "end": 4 })).is_err());
 }
+
+/// With `point`, a shape fills the segment from the point before it, between the two points'
+/// heights; `automation.addPoint` with `shape` gives the new point's segment that shape (#916).
+#[test]
+fn a_shape_fills_a_points_segment_and_a_new_points_segment() {
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, 0.0), (4.0, 1.0)] {
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    run(&mut session, "automation.insertShape", json!({ "track": 1, "param": "pan", "point": 1, "shape": "square" }))
+        .unwrap();
+    let points = pan_points(&session);
+    assert_eq!(points.first(), Some(&(0.0, 0.0)));
+    assert_eq!(points.last(), Some(&(4.0, 1.0)));
+    assert!(points.iter().all(|&(b, v)| (0.0..=4.0).contains(&b) && (0.0..=1.0).contains(&v)), "{points:?}");
+    assert!(points.len() > 6, "a square once a beat: {points:?}");
+    // A new point at 8 with a falling curve: its segment from 4 takes the bent line.
+    run(
+        &mut session,
+        "automation.addPoint",
+        json!({ "track": 1, "param": "pan", "beat": 8, "value": -1, "shape": "curve_down" }),
+    )
+    .unwrap();
+    let after: Vec<(f64, f64)> = pan_points(&session).into_iter().filter(|(b, _)| *b >= 4.0).collect();
+    assert_eq!(after.last(), Some(&(8.0, -1.0)));
+    assert!(lanes(&session).iter().find(|l| l.param == "pan").is_some_and(|l| l.points.iter().any(|p| p.curve > 0.5)));
+    assert!(
+        run(
+            &mut session,
+            "automation.insertShape",
+            json!({ "track": 1, "param": "pan", "point": 99, "shape": "sine" })
+        )
+        .is_err()
+    );
+}

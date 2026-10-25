@@ -18,9 +18,22 @@ use suhina_ui::{App, kit::theme};
 /// The window the tests draw in, in points.
 const SIZE: (f32, f32) = (1280.0, 800.0);
 
-/// `project` open in the app, in the Arrangement view, with the browser closed.
+/// `project` open in the app, in the Arrangement view, with the browser closed, and a click
+/// anywhere on a lane adding a point (Settings › Arrangement › Automation), which these tests
+/// place points with.
 fn arrangement(project: Project) -> Harness<'static, App> {
-    arrangement_sized(project, SIZE)
+    let mut harness = arrangement_sized(project, SIZE);
+    click_anywhere(&mut harness, true);
+    harness
+}
+
+/// Turns Settings › Arrangement › Automation › A click anywhere adds a point on or off.
+fn click_anywhere(harness: &mut Harness<'static, App>, on: bool) {
+    let ctx = harness.ctx.clone();
+    let mut settings = harness.state().settings().clone();
+    settings.view.automation_click_anywhere = on;
+    harness.state_mut().set_settings(&ctx, settings);
+    harness.run();
 }
 
 /// [`arrangement`] in a window of `size`.
@@ -960,19 +973,103 @@ fn a_painted_range_copies_duplicates_and_pastes() {
     assert_eq!(beats(&harness), pasted);
 }
 
-/// The lane's menu inserts a shape into the bar under the pointer (#916).
+/// A right-click on the line, the menu's shape, and the curve handle (#916).
+fn right_click_at(harness: &mut Harness<'static, App>, at: Pos2) {
+    harness.hover_at(at);
+    harness.run();
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Secondary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    harness.input_mut().events.push(egui::Event::PointerButton {
+        pos: at,
+        button: egui::PointerButton::Secondary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    harness.run();
+}
+
+/// The lane's menu inside a painted range fills it with a shape; away from a range it chooses the
+/// shape the next points' segments take, and draws nothing (#916).
 #[test]
-fn the_lane_menu_inserts_a_shape() {
+fn the_lane_menu_fills_a_range_or_chooses_the_shape_for_new_points() {
     let mut harness = with_lanes();
     let rect = lane(&harness);
-    harness.hover_at(rect.center());
-    harness.run();
-    harness.get_by_label("Volume automation on Drums").click_secondary();
-    harness.run();
+    // Beats 32 to 64, painted.
+    drag(&mut harness, Pos2::new(rect.left() + 256.0, rect.center().y), vec2(256.0, 0.0));
+    right_click_at(&mut harness, Pos2::new(rect.left() + 384.0, rect.center().y));
     harness.get_by_label("Insert sine").click();
     harness.run();
     let points = volume(&harness).0;
     assert!(points.len() > 10, "{}", points.len());
-    let (first, last) = (points.first().map_or(0.0, |p| p.beat), points.last().map_or(0.0, |p| p.beat));
-    assert!(first % 4.0 == 0.0 && (last - first - 4.0).abs() < 1e-9, "one bar: {first} to {last}");
+    assert!(points.iter().all(|p| (32.0..=64.0).contains(&p.beat)), "{points:?}");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert!(volume(&harness).0.is_empty());
+
+    // Away from the range: nothing is drawn, the triangle is the shape for new points.
+    right_click_at(&mut harness, Pos2::new(rect.left() + 700.0, rect.center().y));
+    harness.get_by_label("Insert triangle").click();
+    harness.run();
+    assert!(volume(&harness).0.is_empty(), "choosing it drew nothing");
+    add_point(&mut harness, 100.0);
+    add_point(&mut harness, 200.0);
+    let beats: Vec<f64> = volume(&harness).0.iter().map(|p| p.beat).collect();
+    assert!(beats.len() > 2 && beats.first() == Some(&12.0) && beats.last() == Some(&24.0), "{beats:?}");
+}
+
+/// A point's menu gives the segment from the point before it a shape, between their heights; the
+/// round handle half-way along a segment bends it and a double-click straightens it (#916).
+#[test]
+fn a_points_menu_shapes_its_segment_and_the_handle_bends_it() {
+    let mut harness = with_lanes();
+    let rect = lane(&harness);
+    click_at(&mut harness, Pos2::new(rect.left() + 100.0, rect.bottom() - 6.0));
+    click_at(&mut harness, Pos2::new(rect.left() + 300.0, rect.top() + 6.0));
+    assert_eq!(volume(&harness).0.len(), 2);
+    // The handle half-way: up bends the rising line up.
+    let handle = harness.get_by_label("Volume curve 1 on Drums").rect().center();
+    drag(&mut harness, handle, vec2(0.0, -20.0));
+    let curve = volume(&harness).0.first().map_or(0.0, |p| p.curve);
+    assert!(curve > 0.05, "{curve}");
+    let handle = harness.get_by_label("Volume curve 1 on Drums").rect().center();
+    harness.hover_at(handle);
+    harness.run();
+    for pressed in [true, false, true, false] {
+        harness.input_mut().events.push(egui::Event::PointerButton {
+            pos: handle,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: Modifiers::NONE,
+        });
+    }
+    harness.run();
+    let straight = volume(&harness).0.first().map_or(1.0, |p| p.curve);
+    assert!(straight.abs() < 1e-9, "{straight}");
+    // The second point's menu: the segment from the first takes the square.
+    harness.get_by_label("Volume point 2 on Drums").click_secondary();
+    harness.run();
+    harness.get_by_label("Insert square").click();
+    harness.run();
+    let points = volume(&harness).0;
+    assert!(points.len() > 4, "{points:?}");
+    assert!(points.iter().all(|p| (12.0..=36.0).contains(&p.beat)), "{points:?}");
+}
+
+/// By default a click away from the line takes nothing, a click on the line adds a point on it
+/// and a double-click adds one anywhere (#916).
+#[test]
+fn by_default_only_a_click_on_the_line_adds_a_point() {
+    let mut harness = with_lanes();
+    click_anywhere(&mut harness, false);
+    let rect = lane(&harness);
+    // Half-way up is away from the faint line at 0 dB (85 % up).
+    click_at(&mut harness, Pos2::new(rect.left() + 100.0, rect.center().y));
+    assert!(volume(&harness).0.is_empty(), "a click away from the line adds nothing");
+    let line = rect.bottom() - 0.85 * (rect.height() - 2.0 * 4.0) - 4.0;
+    click_at(&mut harness, Pos2::new(rect.left() + 100.0, line));
+    assert_eq!(volume(&harness).0.len(), 1, "a click on the line adds a point");
 }

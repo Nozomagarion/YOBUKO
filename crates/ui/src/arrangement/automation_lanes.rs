@@ -37,6 +37,9 @@ const POINT_HIT: f32 = 11.0;
 const SEGMENT_HIT: f32 = 6.0;
 /// How much a point of vertical drag bends a segment's curve.
 const CURVE_PER_POINT: f64 = 0.01;
+/// The curve handle's radius, and how wide a segment must be on screen to show one.
+const CURVE_HANDLE: f32 = 3.0;
+const CURVE_HANDLE_MIN: f32 = 28.0;
 /// How strongly a lane without points draws its parameter's value.
 const LEVEL_ALPHA: f32 = 0.4;
 /// Most points one segment of an envelope is drawn with.
@@ -478,6 +481,12 @@ pub struct LanesState {
     box_drag: Option<BoxDrag>,
     /// The time range painted last on a lane, which the edit keys act on.
     pub range: Option<LaneRange>,
+    /// A click anywhere on a lane adds a point (Settings › Arrangement › Automation); off, only a
+    /// click on or near the line does, and a double-click adds one anywhere.
+    pub click_anywhere: bool,
+    /// The shape a point added from now on gives the segment that ends at it, chosen from a lane's
+    /// menu away from a painted range; `None` for a straight line.
+    pub new_shape: Option<&'static str>,
     /// Where a right-click on a lane was: its track, lane and beat, for the shapes its menu
     /// inserts.
     menu_at: Option<(TrackId, LaneKey, f64)>,
@@ -979,28 +988,51 @@ fn lane(
     body.widget_info(|| {
         egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("{label} automation on {}", lanes.name))
     });
-    if body.clicked()
-        && let Some(pos) = body.interact_pointer_pos()
-    {
-        let mut params = key.params(track);
-        let beat = geometry.snap(geometry.beat_of(pos.x), free);
-        params["beat"] = json!(beat);
-        let level = level_points(param);
-        let near = distance_to(&envelope(&level, &param.scale, plot, geometry), pos) <= SEGMENT_HIT;
-        // On a whole-number lane a value between two numbers cannot be kept: the point goes where
-        // the pointer is, as off the line.
-        match splice(&level, beat, param.scale.stepped()).filter(|(value, _)| near && param.scale.keeps(*value)) {
-            Some((value, curve)) => {
-                params["value"] = param.scale.exact(value);
-                if curve != 0.0 {
-                    params["curve"] = json!(curve);
+    let level = level_points(param);
+    let near_line = |pos: Pos2| distance_to(&envelope(&level, &param.scale, plot, geometry), pos) <= SEGMENT_HIT;
+    // A click on or near the line adds a point there; away from it, only with the setting on, or a
+    // double-click (#916). Otherwise a click there lets go of the range and the points.
+    let clicked_at = body.interact_pointer_pos().filter(|_| body.clicked() || body.double_clicked());
+    if let Some(pos) = clicked_at {
+        let near = near_line(pos);
+        let adds = if body.double_clicked() { !state.click_anywhere && !near } else { near || state.click_anywhere };
+        if adds {
+            let mut params = key.params(track);
+            let beat = geometry.snap(geometry.beat_of(pos.x), free);
+            params["beat"] = json!(beat);
+            // On a whole-number lane a value between two numbers cannot be kept: the point goes
+            // where the pointer is, as off the line.
+            match splice(&level, beat, param.scale.stepped()).filter(|(value, _)| near && param.scale.keeps(*value)) {
+                Some((value, curve)) => {
+                    params["value"] = param.scale.exact(value);
+                    if curve != 0.0 {
+                        params["curve"] = json!(curve);
+                    }
                 }
+                None => params["value"] = param.scale.command(param.scale.value_at(position_of(plot, pos.y))),
             }
-            None => params["value"] = param.scale.command(param.scale.value_at(position_of(plot, pos.y))),
+            if let Some(shape) = state.new_shape {
+                params["shape"] = json!(shape);
+            }
+            actions.push(Action::new("automation.addPoint", params));
         }
-        actions.push(Action::new("automation.addPoint", params));
         state.selection = None;
         state.range = None;
+    }
+    // Over the line the pointer is a hand and the line's value there shows beside it, so where a
+    // click takes hold of it is plain.
+    let over_line =
+        body.hover_pos().filter(|pos| state.box_drag.is_none() && state.curve_drag.is_none() && near_line(*pos));
+    if let Some(pos) = over_line {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+        let beat = geometry.beat_of(pos.x);
+        if let Some(value) = suhina_engine::model::automation::value_at(&level, beat, param.scale.stepped()) {
+            let y = y_of(plot, param.scale.position(value));
+            painter.with_clip_rect(visible).circle_filled(Pos2::new(pos.x, y), POINT, color(lanes.color));
+            egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), id.with("value"), egui::PopupAnchor::Pointer)
+                .gap(12.0)
+                .show(|ui| ui.label(param.scale.text(value)));
+        }
     }
     // A drag starts once the pointer has moved a little: it is measured from where it was pressed.
     let pressed_at = ui.input(|i| i.pointer.press_origin());
@@ -1069,24 +1101,33 @@ fn lane(
         let Some(beat) = state.menu_at.as_ref().filter(|(t, k, _)| *t == track && k == key).map(|(_, _, b)| *b) else {
             return;
         };
-        let (start, end) = match state.range.as_ref().filter(|r| r.track == track && &r.key == key) {
-            Some(r) if (r.start..=r.end).contains(&beat) => (r.start, r.end),
-            _ => {
-                let bar = geometry.grid.bar_beats.max(1e-3);
-                let start = (beat / bar).floor() * bar;
-                (start, start + bar)
+        match state.range.as_ref().filter(|r| r.track == track && &r.key == key && (r.start..=r.end).contains(&beat)) {
+            // Inside a painted range: the shape fills it, once a beat for a repeating one.
+            Some(range) => {
+                let (start, end) = (range.start, range.end);
+                if let Some(shape) = shape_menu(ui, "Insert shape", None) {
+                    let mut params = key.params(track);
+                    params["start"] = json!(start);
+                    params["end"] = json!(end);
+                    params["shape"] = json!(shape);
+                    params["cycles"] = json!(((end - start).round() as usize).clamp(1, 512));
+                    actions.push(Action::new("automation.insertShape", params));
+                    state.selection = None;
+                    ui.close();
+                }
             }
-        };
-        if let Some(shape) = shape_menu(ui) {
-            let mut params = key.params(track);
-            params["start"] = json!(start);
-            params["end"] = json!(end);
-            params["shape"] = json!(shape);
-            // A repeating shape plays once a beat.
-            params["cycles"] = json!(((end - start).round() as usize).clamp(1, 512));
-            actions.push(Action::new("automation.insertShape", params));
-            state.selection = None;
-            ui.close();
+            // Elsewhere nothing is drawn: the shape is the one the next points' segments take,
+            // and a click on the chosen one goes back to straight lines.
+            None => {
+                if let Some(shape) = shape_menu(ui, "Shape for new points", state.new_shape) {
+                    state.new_shape = (state.new_shape != Some(shape)).then_some(shape);
+                    ui.close();
+                }
+                if state.new_shape.is_some() && ui.button("Straight lines for new points").clicked() {
+                    state.new_shape = None;
+                    ui.close();
+                }
+            }
         }
     });
 
@@ -1119,6 +1160,66 @@ fn lane(
         let area = Rect::from_x_y_ranges(egui::Rangef::new(a.min(b), a.max(b)), time.y_range());
         lane_painter.rect_filled(area, 0.0, theme::accent().gamma_multiply(0.15));
         lane_painter.rect_stroke(area, 0.0, theme::hairline(theme::accent()), StrokeKind::Inside);
+    }
+
+    // A round handle half-way along each sloping segment wide enough: dragged up or down it bends
+    // the segment as dragging its line does, a double-click straightens it (as a fade's curve
+    // handle).
+    if !param.scale.stepped() && state.point_drag.is_none() {
+        for (index, pair) in points.windows(2).enumerate() {
+            let (a, b) = (pair[0], pair[1]);
+            let (xa, xb) = (geometry.x_of(a.beat), geometry.x_of(b.beat));
+            if xb - xa < CURVE_HANDLE_MIN || a.value == b.value {
+                continue;
+            }
+            let mid = (a.beat + b.beat) / 2.0;
+            let Some(value) = suhina_engine::model::automation::value_at(&points, mid, false) else { continue };
+            let center = Pos2::new((xa + xb) / 2.0, y_of(plot, param.scale.position(value)));
+            let hit = Rect::from_center_size(center, Vec2::splat(POINT_HIT)).intersect(visible);
+            if hit.width() <= 0.0 || hit.height() <= 0.0 {
+                continue;
+            }
+            let response = ui.interact(hit, id.with(("curve", index)), Sense::click_and_drag());
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(
+                    egui::WidgetType::Slider,
+                    true,
+                    format!("{label} curve {} on {}", index + 1, lanes.name),
+                )
+            });
+            let rising = param.scale.position(b.value) >= param.scale.position(a.value);
+            if response.double_clicked() {
+                let mut params = key.params(track);
+                params["point"] = json!(index);
+                params["curve"] = json!(0.0);
+                actions.push(Action::new("automation.movePoint", params));
+            } else if response.drag_started_by(egui::PointerButton::Primary) {
+                let curve = param.points.get(index).map_or(0.0, |p| p.curve);
+                state.curve_drag = Some(CurveDrag { track, key: key.clone(), point: index, curve });
+            }
+            if response.dragged_by(egui::PointerButton::Primary)
+                && let Some(drag) =
+                    state.curve_drag.as_mut().filter(|d| d.track == track && &d.key == key && d.point == index)
+            {
+                let sign = if rising { 1.0 } else { -1.0 };
+                drag.curve =
+                    (drag.curve - f64::from(response.drag_delta().y) * CURVE_PER_POINT * sign).clamp(-1.0, 1.0);
+            }
+            if response.drag_stopped_by(egui::PointerButton::Primary)
+                && let Some(drag) = state.curve_drag.take_if(|d| d.track == track && &d.key == key && d.point == index)
+            {
+                let before = param.points.get(index).map_or(0.0, |p| p.curve);
+                if (drag.curve - before).abs() > 1e-6 {
+                    let mut params = key.params(track);
+                    params["point"] = json!(index);
+                    params["curve"] = json!(round(drag.curve, 1000.0));
+                    actions.push(Action::new("automation.movePoint", params));
+                }
+            }
+            let hover = widgets::hover(ui, &response);
+            lane_painter.circle_filled(center, CURVE_HANDLE + hover, theme::window_background());
+            lane_painter.circle_stroke(center, CURVE_HANDLE + hover, Stroke::new(1.2, ink));
+        }
     }
 
     // The points: a click selects (Shift or Ctrl adds), a drag moves (the selection with it), a
@@ -1218,6 +1319,18 @@ fn lane(
                 state.selection = None;
                 ui.close();
             }
+            // The segment from the point before to this one takes a shape, between their heights.
+            if param.points.len() > 1 && !param.scale.stepped() {
+                ui.separator();
+                if let Some(shape) = shape_menu(ui, "Shape to this point", None) {
+                    let mut params = key.params(track);
+                    params["point"] = json!(index);
+                    params["shape"] = json!(shape);
+                    actions.push(Action::new("automation.insertShape", params));
+                    state.selection = None;
+                    ui.close();
+                }
+            }
         });
         let hover = widgets::hover(ui, &response);
         let radius = POINT + hover;
@@ -1227,9 +1340,10 @@ fn lane(
     }
 }
 
-/// The lane menu's shapes, drawn as small pictures in rows of five; the one clicked, by name.
-fn shape_menu(ui: &mut Ui) -> Option<&'static str> {
-    ui.label(egui::RichText::new("Insert shape").color(theme::text_hint()).size(theme::TEXT_SMALL));
+/// A menu's shapes under `title`, drawn as small pictures in rows of five, `chosen` lit; the one
+/// clicked, by name.
+fn shape_menu(ui: &mut Ui, title: &str, chosen: Option<&str>) -> Option<&'static str> {
+    ui.label(egui::RichText::new(title).color(theme::text_hint()).size(theme::TEXT_SMALL));
     let mut picked = None;
     for row in suhina_session::AUTOMATION_SHAPES.chunks(5) {
         ui.horizontal(|ui| {
@@ -1239,11 +1353,15 @@ fn shape_menu(ui: &mut Ui) -> Option<&'static str> {
                 response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
                 let response = response.on_hover_text(&label);
                 let painter = ui.painter();
-                let fill = crate::kit::motion::mix(
-                    theme::window_background(),
-                    theme::control_hover(),
-                    widgets::hover(ui, &response),
-                );
+                let fill = if chosen == Some(name) {
+                    theme::control_active()
+                } else {
+                    crate::kit::motion::mix(
+                        theme::window_background(),
+                        theme::control_hover(),
+                        widgets::hover(ui, &response),
+                    )
+                };
                 painter.rect_filled(rect, 2.0, fill);
                 let line = shape_icon(name, rect.shrink2(Vec2::new(5.0, 4.0)));
                 painter.add(Shape::line(line, Stroke::new(1.3, theme::text_secondary())));

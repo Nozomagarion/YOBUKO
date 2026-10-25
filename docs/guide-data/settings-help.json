@@ -1728,5 +1728,27 @@
       "crates/ui/src/arrangement/arrangement_view/clip.rs",
       "docs/spec/arrangement-editing.md"
     ]
+  },
+  "Arrangement/Automation/automation_click": {
+    "sourceFingerprint": "e4aa8ff1ec3d7abe67ca6392d065ff97f75fed1fa2b7a298cd5990d3513163bf",
+    "summary": "Choose whether a single click anywhere on an automation lane adds a point.",
+    "description": "Off (the default), a click on an automation lane adds a point only on or near the envelope's line, where the pointer turns into a hand and the line's value shows beside it; a click away from the line only ends the painted range and the selected points, and a double-click there adds a point at the pointer. On, a click anywhere on the lane adds a point at the pointer's beat and height, as before.",
+    "options": [
+      {
+        "name": "Off",
+        "description": "A click adds a point only on or near the line; a double-click adds one anywhere. This is the default."
+      },
+      {
+        "name": "On",
+        "description": "A click anywhere on the lane adds a point at the pointer."
+      }
+    ],
+    "whenToChange": "Turn it on if you mostly draw automation point by point and want every click to add one.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/arrangement/automation_lanes.rs",
+      "docs/spec/automation.md"
+    ]
   }
 }
