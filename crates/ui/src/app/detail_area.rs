@@ -494,6 +494,10 @@ impl App {
                 self.session().and_then(|s| s.player()).map(|p| p.monitor()).filter(|m| m.running()).map(|m| m.beat())
             }
         };
+        // Where playback starts next, for an arrangement clip's piano roll (#951).
+        let start_marker = (self.shown == View::Arrangement)
+            .then(|| self.session().and_then(|s| s.player()).map(|p| p.monitor().start_beat()))
+            .flatten();
         let picks = self.device_picks();
         let piano_roll = &mut self.piano_roll;
         let picked = ui.scope_builder(egui::UiBuilder::new().max_rect(detail), |ui| {
@@ -512,7 +516,8 @@ impl App {
                     };
                     rest = crate::detail::midi_tools::show(ui, rest, &tools, piano_roll, actions);
                 }
-                let cx = piano_roll::Context { options, keymap: &keymap, copied, playhead };
+                let seeks = matches!(piano.address.get("clip"), Some(serde_json::Value::Number(_)));
+                let cx = piano_roll::Context { options, keymap: &keymap, copied, playhead, start_marker, seeks };
                 piano_roll::show(ui, rest, piano, piano_roll, cx, actions);
                 picked
             } else if let (Some((_, _, device, _)), detail_view::Detail::Clip(info, chain)) = (ara, &shown) {

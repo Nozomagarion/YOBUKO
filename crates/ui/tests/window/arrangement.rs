@@ -1651,3 +1651,29 @@ fn renaming_in_place_starts_with_the_whole_name_selected() {
         harness.state().session().unwrap().project().tracks.iter().map(|t| t.name.clone()).collect();
     assert!(names.contains(&"Sub".to_string()), "typing replaced the selected name: {names:?}");
 }
+
+/// A click on the piano roll's ruler sets where playback starts, at that beat of the clip on the
+/// arrangement (#951).
+#[test]
+fn a_click_on_the_piano_rolls_ruler_sets_where_playback_starts() {
+    let mut renderer =
+        suhina_engine::Renderer::stopped(&demo_project(), &suhina_engine::AudioPool::new(), 48_000).unwrap();
+    let mut harness = arrangement_app_with_engine(&mut renderer);
+    let monitor = renderer.monitor();
+    // The clip at bar 17 (beat 64), its piano roll in the detail area.
+    harness.get_by_label("Clip Beat B on Drums at bar 17").click();
+    harness.run_steps(2);
+    let ruler = harness.get_by_label("Piano roll ruler").rect();
+    // Low on the ruler, under the loop row, a little in from the clip's start.
+    let at = egui::pos2(ruler.left() + 40.0, ruler.bottom() - 3.0);
+    harness.hover_at(at);
+    harness.run_steps(2);
+    harness.drag_at(at);
+    harness.drop_at(at);
+    harness.run_steps(2);
+    render_a_block(&mut renderer);
+    let start = monitor.start_beat();
+    assert!((64.0..72.0).contains(&start), "the marker is inside the clip: {start}");
+    harness.run_steps(2);
+    assert!(harness.query_by_label_contains("Play start at beat").is_some(), "and shows in the piano roll");
+}

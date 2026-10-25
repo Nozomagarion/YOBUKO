@@ -174,7 +174,7 @@ pub fn show(
     cx: Context<'_>,
     actions: &mut Vec<Action>,
 ) {
-    let Context { options, keymap, copied, playhead } = cx;
+    let Context { options, keymap, copied, playhead, start_marker, seeks } = cx;
     let scale = options.toolbar_size.scale();
     let fresh = state.shown.as_ref() != Some(&clip.address);
     if fresh {
@@ -231,7 +231,7 @@ pub fn show(
     }
     scroll_and_zoom(ui, state, area, grid_rect, inputs);
     // The ruler: its loop handles and markers, and dragging it to zoom and scroll time.
-    let shape = ruler_view::interact(ui, ruler, grid_rect.left(), clip, state, inputs.alt, actions);
+    let shape = ruler_view::interact(ui, ruler, grid_rect.left(), clip, state, inputs.alt, seeks, actions);
     state.view_width = grid_rect.width();
     let rows_height = rows.len() as f32 * state.key_height;
     state.scroll.y = state.scroll.y.clamp(0.0, (rows_height - grid_rect.height()).max(0.0));
@@ -530,6 +530,10 @@ pub fn show(
     }
     // The playhead: where playback is in the clip's content (through its start, offset and loop),
     // over the ruler, the grid and the velocity lane, as the other views show it.
+    // Where playback starts next, for an arrangement clip: a click on the ruler moves it (#951).
+    if let Some(beat) = start_marker.and_then(|at| clip.placement.content_beat(at)) {
+        drawing::draw_start_marker(ui, &layout, beat);
+    }
     if let Some(beat) = playhead.and_then(|at| clip.placement.content_beat(at)) {
         draw_playhead(ui, &layout, beat);
     }

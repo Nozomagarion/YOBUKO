@@ -571,4 +571,9 @@ pub struct Context<'a> {
     /// The arrangement beat being played while the transport runs, for the playhead; `None`
     /// while it is stopped.
     pub playhead: Option<f64>,
+    /// Where playback starts next, as an arrangement beat, for an arrangement clip: shown in the
+    /// piano roll, which a click on its ruler moves (#951). `None` for a slot's clip.
+    pub start_marker: Option<f64>,
+    /// The clip is on the arrangement: a click on the ruler sets where playback starts (#951).
+    pub seeks: bool,
 }
