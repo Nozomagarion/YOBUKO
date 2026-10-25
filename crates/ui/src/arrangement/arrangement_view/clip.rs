@@ -1434,8 +1434,28 @@ pub(super) fn take_lanes(
         }
         body.context_menu(|ui| menu(ui, actions, piece));
         // A take lane selects: the pointer is the text cursor, a drag picks the part to comp, and
-        // the piece a double-click would take shows under the pointer (#953, #989).
-        if state.take_drag.is_none()
+        // the piece a double-click would take shows under the pointer (#953, #989). With Ctrl
+        // held it is the ordinary pointer: a click picks a piece, a drag comps nothing.
+        let ctrl = ui.input(|i| i.modifiers.command);
+        if let Some((_, _, piece)) = state.take_piece.filter(|(t, n, _)| *t == lane.track && *n == take.number)
+            && let Some(clip) = take.clips.get(piece)
+        {
+            let rect = clip_rect(row, clip.start, clip.length, x_of);
+            painter.rect_stroke(rect, 0.0, Stroke::new(1.5, theme::selection()), StrokeKind::Inside);
+        }
+        if ctrl
+            && body.clicked()
+            && let Some(pointer) = body.interact_pointer_pos()
+        {
+            let beat = f64::from((pointer.x - at.time.min + scroll_x) / beat_width);
+            state.take_piece = take
+                .clips
+                .iter()
+                .position(|c| (c.start..c.start + c.length).contains(&beat))
+                .map(|p| (lane.track, take.number, p));
+        }
+        if !ctrl
+            && state.take_drag.is_none()
             && let Some(pointer) = body.hover_pos()
         {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
@@ -1447,6 +1467,7 @@ pub(super) fn take_lanes(
         }
         // From where the button went down, not where the drag was recognised.
         if body.drag_started()
+            && !ctrl
             && let Some(pointer) = ui.input(|i| i.pointer.press_origin()).or(body.interact_pointer_pos())
         {
             state.take_drag = Some((lane.track, take.number, beat_of(pointer.x)));
@@ -1471,6 +1492,7 @@ pub(super) fn take_lanes(
         }
         // A double-click takes the whole piece under it; a single click takes nothing.
         if body.double_clicked()
+            && !ctrl
             && let Some(pointer) = body.interact_pointer_pos()
         {
             let beat = f64::from((pointer.x - at.time.min + scroll_x) / beat_width);

@@ -1773,3 +1773,54 @@ fn a_take_lanes_edge_drags_its_height() {
     let second = harness.get_by_label("Comp from Drums Take 2").rect().height();
     assert!((second - height(&harness)).abs() < 1.0);
 }
+
+/// With Ctrl held a take lane takes ordinary clicks: a drag comps nothing (#989).
+#[test]
+fn with_ctrl_a_take_lane_drag_comps_nothing() {
+    let mut project = demo_project();
+    let drums = project.tracks.iter().find(|t| t.name == "Drums").map(|t| t.id).unwrap();
+    let clip = project
+        .arrangement
+        .lanes
+        .iter()
+        .find(|l| l.track == Some(drums))
+        .and_then(|l| l.clips.first())
+        .cloned()
+        .unwrap();
+    project.arrangement.takes.push(suhina_engine::model::TakeLane {
+        track: drums,
+        name: "Take 1".into(),
+        clips: vec![suhina_engine::model::Clip { id: suhina_engine::model::ClipId::NONE, ..clip }],
+        color: None,
+    });
+    project.assign_ids().unwrap();
+    let mut app = App::new();
+    app.set_browser_open(false);
+    app.set_session(Session::new(project), &[]);
+    let mut harness = window(app);
+    harness.get_by_label("Arrangement view").click();
+    harness.run();
+    let row = harness.get_by_label("Comp from Drums Take 1").rect();
+    let lanes = |h: &Harness<'static, App>| h.state().session().map(|s| s.project().arrangement.lanes.clone());
+    let before = lanes(&harness);
+    let (from, to) = (row.left_center() + egui::vec2(20.0, 0.0), row.left_center() + egui::vec2(120.0, 0.0));
+    harness.event(egui::Event::ModifiersChanged(Modifiers::COMMAND));
+    harness.hover_at(from);
+    harness.drag_at(from);
+    harness.run();
+    harness.hover_at(to);
+    harness.run();
+    harness.drop_at(to);
+    harness.run();
+    assert_eq!(lanes(&harness), before);
+    // Without Ctrl the same drag comps.
+    harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
+    harness.hover_at(from);
+    harness.drag_at(from);
+    harness.run();
+    harness.hover_at(to);
+    harness.run();
+    harness.drop_at(to);
+    harness.run();
+    assert_ne!(lanes(&harness), before);
+}
