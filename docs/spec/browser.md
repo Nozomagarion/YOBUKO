@@ -352,6 +352,25 @@ sounds (#865). The originals stay where they are; nothing is ever moved or overw
   tracks, slots and devices as before. Windows and macOS; on Linux, where the window toolkit has
   no drag of files out yet, the status line points to Copy to folder… instead.
 
+### Moving and copying samples between folders
+
+Samples dragged in the list and dropped on one of the browser's folders (an added folder or a
+folder inside one) go into that folder (#943). The folder row under the pointer lights up while
+it is a place to drop, and the status line says what a drop there does.
+
+- **Move or copy:** with Settings › Browser › *Samples dropped on a folder* at Ask (the default),
+  a question asks Move, Copy or Cancel. Its *Remember my choice* box sets the setting to the
+  answer, so the next drop does it without asking. The setting can also be Move or Copy. Ctrl
+  held at the drop always copies, Shift always moves, whatever the setting says.
+- **Copy** is `library.copyTo`, as Copy to folder… does. **Move** is `library.moveTo`: each file
+  is renamed into the folder when both are on one drive, or copied and the original removed once
+  the copy is whole. A name taken in the folder gets a number (`Kick 2.wav`); nothing is
+  overwritten. The file's pin, its places among the recent items and its colour tags go with it,
+  and the folders that held it and hold it now are read again, so the list shows it in its new
+  place.
+- A file already in that folder, one that is gone, and one an open project plays (its audio
+  decoded from that path) is left where it is; the status line says how many.
+
 ### Adding without dragging
 
 Enter in the search field or a double-click on an item adds it to the selected track:
@@ -421,6 +440,7 @@ the CLI can do the same.
 | `library.removeTag` | `name` | removes a tag from the list and every item |
 | `library.tag` | `item`, `tag`, `on` | sets or clears a tag on an item |
 | `library.setPluginsView` | `view` | which plug-ins the Plug-ins category lists: `instruments` (default) or `effects` ([plug-in browsing](plugin-browsing.md)) |
+| `library.moveTo` | `items`, `folder` | moves files (at most 4096) into a folder that exists, named as `library.copyTo` names copies; their pins, recent places and tags go with them and the folders are read again; returns what was `moved` (from, to), what is `missing`, what was `kept` (in that folder already, or played by an open project) and what `failed`; not to an agent attached to the app (#943) |
 | `library.copyTo` | `items`, `folder` | copies files (at most 4096) into a folder that exists, under their own names or the first numbered one free (`Kick 2.wav`); never overwrites; returns what was `copied` (from, to), what is `missing` and what `failed` (#865) |
 | `library.findFiles` | `names`, `folder?` | finds files by name for missing files: in the folders' index and the active project's folder, or by walking `folder` ([missing files](missing-files.md)) |
 

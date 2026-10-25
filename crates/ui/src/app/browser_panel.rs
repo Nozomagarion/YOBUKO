@@ -392,6 +392,29 @@ pub(super) fn copied_status(result: Result<Value, suhina_session::CommandError>)
     if missing > 0 { Status::Hint(text) } else { Status::Done(text) }
 }
 
+/// What the status line says after `library.moveTo` (#943).
+pub(super) fn moved_status(result: Result<Value, suhina_session::CommandError>) -> Status {
+    let done = match result {
+        Ok(done) => done,
+        Err(e) => return Status::Error(e.message().to_owned()),
+    };
+    let count = |key: &str| done[key].as_array().map_or(0, Vec::len);
+    let (moved, missing, kept, failed) = (count("moved"), count("missing"), count("kept"), count("failed"));
+    let folder = done["folder"].as_str().unwrap_or_default();
+    let mut text = format!("Moved {moved} {} to {folder}", if moved == 1 { "sample" } else { "samples" });
+    if kept > 0 {
+        text.push_str(&format!("; {kept} left where they are (in that folder already, or played by an open project)"));
+    }
+    if missing > 0 {
+        text.push_str(&format!("; {missing} not found"));
+    }
+    if failed > 0 {
+        text.push_str(&format!("; {failed} could not be moved"));
+        return Status::Error(text);
+    }
+    if missing > 0 || kept > 0 { Status::Hint(text) } else { Status::Done(text) }
+}
+
 /// The map window's level: above Suhina's main window while Suhina is the program in use, so a
 /// click in the main window does not hide it, and an ordinary window once another program is
 /// (#863). egui gives no owner to a viewport, so this stands in for an owned tool window.

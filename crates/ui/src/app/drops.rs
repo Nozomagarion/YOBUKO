@@ -6,6 +6,18 @@
 use super::*;
 
 impl App {
+    /// Moves or copies sample files into a folder of the browser (#943), saying how it went.
+    pub(super) fn files_into_folder(&mut self, files: Vec<PathBuf>, folder: &Path, copy: bool) {
+        let items: Vec<String> = files.iter().map(|p| p.display().to_string()).collect();
+        let params = json!({ "items": items, "folder": folder.display().to_string() });
+        self.status = if copy {
+            copied_status(self.projects.execute("library.copyTo", &params))
+        } else {
+            moved_status(self.projects.execute("library.moveTo", &params))
+        };
+        self.browser.relist();
+    }
+
     /// Handles files dropped from the system: folders, themes and projects here; the samples and
     /// MIDI files are returned, to land where the views say they are dropped.
     pub(super) fn dropped_files(&mut self, ui: &Ui) -> Vec<BrowserItem> {
@@ -67,6 +79,7 @@ impl App {
         let (mut released, mut escape, mut ctrl, mut pointer) = ui.input(|i| {
             (!i.pointer.primary_down(), i.key_pressed(Key::Escape), i.modifiers.command, i.pointer.latest_pos())
         });
+        let shift = ui.input(|i| i.modifiers.shift);
         // A drag from the map's own window: that window has the pointer until the button is let go.
         if let Some(remote) = self.map_window.drag {
             (released, escape, ctrl) = (remote.released, remote.escape, remote.ctrl);
@@ -75,6 +88,32 @@ impl App {
         if escape {
             self.browser.drag = None;
             self.map_window.drag = None;
+            return;
+        }
+        // Samples over a folder of the browser go into it, moved or copied (#943).
+        if let Some(folder) = self.browser.drop_folder.take() {
+            let name = folder.file_name().map_or_else(|| folder.display().to_string(), |n| n.to_string_lossy().into());
+            if !released {
+                self.status = Status::Hint(format!("Drop to move or copy into {name}; Ctrl copies, Shift moves"));
+                return;
+            }
+            self.browser.drag = None;
+            self.map_window.drag = None;
+            let files = drag_out_files(&items);
+            if files.is_empty() {
+                return;
+            }
+            let copy = match (ctrl, shift, self.settings.view.folder_drop) {
+                (true, _, _) => Some(true),
+                (_, true, _) => Some(false),
+                (_, _, FolderDrop::Copy) => Some(true),
+                (_, _, FolderDrop::Move) => Some(false),
+                (_, _, FolderDrop::Ask) => None,
+            };
+            match copy {
+                Some(copy) => self.files_into_folder(files, &folder, copy),
+                None => self.folder_drop = Some((files, folder)),
+            }
             return;
         }
         // Carried out of every Suhina window, samples become a drag of files that the system's

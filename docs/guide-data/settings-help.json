@@ -795,20 +795,20 @@
     ]
   },
   "Arrangement/Clips/stretch_alt_drag": {
-    "sourceFingerprint": "464f35094f035650894ea877d91bd8e6fec95a803c6db97b3eb57d7ddb953e2e",
-    "summary": "Enable pitch-preserving audio stretching with Ctrl+Alt at a clip edge.",
-    "description": "Time-stretching changes an audio clip’s duration while aiming to retain its pitch. With this enabled, hold Ctrl+Alt while dragging an Arrangement audio clip’s left or right edge to stretch its content to the new span. Suhina adjusts the timing markers and gives shared content a separate copy where necessary. With it disabled, the edge uses normal trimming behavior. Alt alone allows free edge positioning; it is not the stretch gesture. On macOS use Cmd+Option. MIDI clip edges are not affected.",
+    "sourceFingerprint": "2db973353ff38b4a3e5d38606e4925662df2aa8b41632653afc0c2f976fb97dc",
+    "summary": "Stretch an audio clip's audio by dragging its edge with Shift held.",
+    "description": "Time-stretching changes an audio clip's duration while keeping its pitch. With this on, hold Shift while dragging an Arrangement audio clip's left or right edge to stretch its audio to the new length, also past where the audio ends. Shift and Alt together stretch off the grid. With it off, the edge moves as a plain drag does (trimming the clip). Shared content gets a copy of its own first, so other clips keep their speed. MIDI clip edges are not affected.",
     "options": [
       {
         "name": "On",
-        "description": "Ctrl+Alt-drag an audio edge to stretch the content. This is the default."
+        "description": "Shift-drag an audio edge to stretch its audio. This is the default."
       },
       {
         "name": "Off",
-        "description": "Do not use the edge gesture to stretch audio; edge dragging trims the clip."
+        "description": "Shift-drag moves the edge like a plain drag; nothing is stretched."
       }
     ],
-    "whenToChange": "Enable it to fit a recorded phrase to a different duration by dragging its edge.",
+    "whenToChange": "Turn it off if you hold Shift while trimming for other reasons and never want an edge drag to stretch audio.",
     "references": [
       "crates/ui/src/settings/settings_rows.rs",
       "crates/ui/src/settings.rs",
@@ -1631,6 +1631,79 @@
       "crates/ui/src/settings.rs",
       "crates/automation/src/workspace.rs",
       "crates/automation/src/server.rs"
+    ]
+  },
+  "Arrangement/Tracks/copy_names": {
+    "sourceFingerprint": "6cd95affc6be1eb1fee3ecef47cb3dcc63ad2207d27a4b42b8fb1a69ab457d86",
+    "summary": "Choose how a duplicated or pasted track is named when its name is taken.",
+    "description": "When a track named Bass is duplicated or pasted and Bass is already taken, the copy gets a number. Wrapped names it Bass (2), Hash names it Bass #2. A name that contains # without a number after it shows the track's number, so it is kept as it is and every copy shows its own number. Tracks that were never renamed are called # MIDI or # Audio and keep that name.",
+    "options": [
+      {
+        "name": "Wrapped (2)",
+        "description": "Copies read Bass (2), Bass (3). This is the default."
+      },
+      {
+        "name": "Hash #2",
+        "description": "Copies read Bass #2, Bass #3."
+      }
+    ],
+    "whenToChange": "Pick Hash if you prefer numbered names without brackets, for example to match how your other projects are named.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/session/src/track_copy.rs",
+      "crates/model/src/names.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Tracks/alt_wheel": {
+    "sourceFingerprint": "05e6863fabc6582f97b6042a9773ae9f59732da499802ffc852ad74b8ac62bb1",
+    "summary": "Choose whether Alt and the mouse wheel resize all tracks or only the one under the pointer.",
+    "description": "In the Arrangement view, holding Alt and turning the mouse wheel over the tracks makes them taller or shorter. All tracks changes every track and its automation lanes together. The one under the pointer changes only the track or the automation lane the pointer is over.",
+    "options": [
+      {
+        "name": "All tracks",
+        "description": "Every track and automation lane changes height together. This is the default."
+      },
+      {
+        "name": "The one under the pointer",
+        "description": "Only the track or automation lane under the pointer changes height."
+      }
+    ],
+    "whenToChange": "Pick The one under the pointer when you want to make one track or one automation lane bigger without changing the others.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/arrangement/arrangement_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Browser/Browser/browser_folder_drop": {
+    "sourceFingerprint": "f3c8a9139f8204766e8670bd68b03baec653d3dead2909e70bcc098ee4f9d637",
+    "summary": "Choose what dragging samples onto a folder in the browser does.",
+    "description": "Samples dragged in the browser and dropped on one of its folders go into that folder. Ask shows a question with Move, Copy and Cancel, and a Remember my choice box that sets this setting. Move takes the files out of where they were; their pins, recent places and colour tags go with them, and a file an open project plays is left where it is. Copy leaves the originals. A name already taken in the folder gets a number (Kick 2.wav); nothing is overwritten. Holding Ctrl while dropping always copies, Shift always moves.",
+    "options": [
+      {
+        "name": "Ask",
+        "description": "Ask each time whether to move or copy. This is the default."
+      },
+      {
+        "name": "Move",
+        "description": "Move the samples into the folder without asking."
+      },
+      {
+        "name": "Copy",
+        "description": "Copy the samples into the folder without asking."
+      }
+    ],
+    "whenToChange": "Set Move or Copy once you always want the same result and the question gets in the way.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/app/drops.rs",
+      "crates/ui/src/app/folder_drop_dialog.rs",
+      "crates/session/src/library.rs",
+      "docs/spec/browser.md"
     ]
   }
 }

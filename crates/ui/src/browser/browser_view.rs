@@ -720,6 +720,10 @@ fn results_view(
     let mut double: Option<usize> = None;
     let mut drag: Option<usize> = None;
     let mut play: Option<usize> = None;
+    // Samples dragged over a folder row go into that folder when dropped (#943).
+    let dragging_samples = state.drag.as_ref().is_some_and(|items| items.iter().any(|i| i.kind == ItemKind::Sample));
+    let pointer = ui.input(|i| i.pointer.latest_pos());
+    state.drop_folder = None;
     for index in first..(first + visible).min(rows.len()) {
         let Some(row) = rows.get(index) else { continue };
         let top = area.top() + index as f32 * ROW - state.scroll;
@@ -733,7 +737,16 @@ fn results_view(
             egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Browser {}", row.item.name))
         });
         let selected = state.selected.iter().any(|s| s.key == row.item.key);
-        let fill = if selected {
+        let drop_here = dragging_samples
+            && row.item.kind == ItemKind::Folder
+            && pointer.is_some_and(|p| shown.contains(p))
+            && row.item.path().is_some_and(|p| p.is_dir());
+        if drop_here {
+            state.drop_folder = row.item.path();
+        }
+        let fill = if drop_here {
+            theme::control_hover()
+        } else if selected {
             theme::control_active()
         } else {
             motion::mix(theme::panel_background(), theme::panel_hover(), widgets::hover(ui, &response))

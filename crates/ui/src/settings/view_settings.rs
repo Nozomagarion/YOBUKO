@@ -28,6 +28,35 @@ impl DetailLayout {
     }
 }
 
+/// What samples dropped on a folder in the browser do (#943).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum FolderDrop {
+    /// A question asks whether to move or copy them, and can remember the answer.
+    #[default]
+    Ask,
+    Move,
+    Copy,
+}
+
+impl FolderDrop {
+    fn param(self) -> &'static str {
+        match self {
+            Self::Ask => "ask",
+            Self::Move => "move",
+            Self::Copy => "copy",
+        }
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        match value {
+            "ask" => Some(Self::Ask),
+            "move" => Some(Self::Move),
+            "copy" => Some(Self::Copy),
+            _ => None,
+        }
+    }
+}
+
 /// The settings this module reads and writes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ViewSettings {
@@ -78,6 +107,8 @@ pub struct ViewSettings {
     /// Alt and the wheel change only the lane under the pointer (a track's or an automation
     /// lane's); off (the default), every lane (#957).
     pub alt_wheel_one: bool,
+    /// What samples dropped on a folder in the browser do: ask, move or copy (#943).
+    pub folder_drop: FolderDrop,
 }
 
 impl Default for ViewSettings {
@@ -102,6 +133,7 @@ impl Default for ViewSettings {
             new_returns: true,
             copy_wrapped: true,
             alt_wheel_one: false,
+            folder_drop: FolderDrop::Ask,
         }
     }
 }
@@ -116,7 +148,7 @@ impl ViewSettings {
     /// The lines this module adds to the settings file.
     pub fn to_text(&self) -> String {
         format!(
-            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nnew_project_returns = {}\ncopy_names = {}\nalt_wheel = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\n",
+            "session_mixer_height = {}\nsession_strip_fader = {}\ndetail_layout = {}\ndouble_click_clip = {}\nmenu_name_field = {}\nnotes_replace = {}\ntime_select = {}\nstretch_alt_drag = {}\nrename_selected_clips = {}\nplay_from_selected_clip = {}\nnew_track_colour = {}\nbrowser_recent = {}\narrangement_returns = {}\nnew_project_returns = {}\ncopy_names = {}\nalt_wheel = {}\nbrowser_folder_drop = {}\nclip_drag = {}\nclip_grid = {}\nwaveform_zoom = {}\n",
             self.mixer_height,
             self.strip_fader,
             self.detail_layout.param(),
@@ -133,6 +165,7 @@ impl ViewSettings {
             if self.new_returns { "two" } else { "none" },
             self.copy_suffix(),
             if self.alt_wheel_one { "pointer" } else { "all" },
+            self.folder_drop.param(),
             if self.clip_halves { "halves" } else { "name_bar" },
             if self.grid_in_clips { "on" } else { "off" },
             f64::from(self.waveform_zoom) / 100.0,
@@ -166,6 +199,9 @@ impl ViewSettings {
             ("new_project_returns", "two" | "none") => self.new_returns = value == "two",
             ("copy_names", "wrapped" | "hash") => self.copy_wrapped = value == "wrapped",
             ("alt_wheel", "pointer" | "all") => self.alt_wheel_one = value == "pointer",
+            ("browser_folder_drop", drop) if FolderDrop::parse(drop).is_some() => {
+                self.folder_drop = FolderDrop::parse(drop).unwrap_or_default();
+            }
             ("clip_drag", "halves" | "name_bar") => self.clip_halves = value == "halves",
             ("clip_grid", "on" | "off") => self.grid_in_clips = value == "on",
             ("waveform_zoom", zoom) => match zoom.parse::<f32>() {
@@ -205,6 +241,7 @@ mod tests {
             new_returns: false,
             copy_wrapped: false,
             alt_wheel_one: true,
+            folder_drop: FolderDrop::Copy,
         };
         let settings = Settings { view, ..Settings::default() };
         let (read, warnings) = Settings::from_text(&settings.to_text());

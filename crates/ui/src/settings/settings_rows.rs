@@ -9,7 +9,7 @@
 //! `cx.on_off(r, |s| &mut s.field)` or `cx.choose(r, &[("Text", value), …], |s| &mut s.field)`.
 
 use crate::settings::settings_view::{Entry, Page, block, row};
-use crate::settings::view_settings::DetailLayout;
+use crate::settings::view_settings::{DetailLayout, FolderDrop};
 use crate::settings::{
     AtStart, DeviceLayout, EditorPlacement, Graphics, MixerControls, OnOpen, PianoRollTop, PlayFrom, Side, StopReturn,
     ToolbarSize, WarpMode,
@@ -538,6 +538,18 @@ pub(crate) static ROWS: &[Entry] = &[
         "Indented: Samples, MIDI and the other kinds of recent items are items under Recent in the sidebar; chips: they are chips over the list while Recent is chosen",
         &["browser_recent"],
         |cx, r| cx.choose(r, &[("Indented", false), ("Chips", true)], |s| &mut s.view.recent_chips),
+    ),
+    row(
+        Page::Browser,
+        "Browser",
+        "Samples dropped on a folder",
+        "What dragging samples onto a folder in the browser does: ask each time (with Remember my choice), move them or copy them; Ctrl while dropping copies and Shift moves, whatever is set",
+        &["browser_folder_drop"],
+        |cx, r| {
+            cx.choose(r, &[("Ask", FolderDrop::Ask), ("Move", FolderDrop::Move), ("Copy", FolderDrop::Copy)], |s| {
+                &mut s.view.folder_drop
+            });
+        },
     ),
     row(
         Page::Browser,

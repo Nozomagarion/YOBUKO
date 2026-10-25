@@ -278,6 +278,9 @@ pub struct BrowserState {
     pub new_folder: Option<String>,
     /// Items being dragged into the project.
     pub drag: Option<Vec<BrowserItem>>,
+    /// The folder row under the pointer while samples are dragged, which a drop moves or
+    /// copies them into (#943); set as the rows are drawn.
+    pub drop_folder: Option<PathBuf>,
     /// The file previewing, by key.
     pub previewing: Option<String>,
     /// A sample waiting to be read whole before it previews.
@@ -324,6 +327,7 @@ impl Default for BrowserState {
             stop_preview: false,
             new_folder: None,
             drag: None,
+            drop_folder: None,
             previewing: None,
             pending_preview: None,
             preview_heard: false,

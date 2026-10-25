@@ -15,6 +15,7 @@ mod detail_area;
 mod drops;
 pub mod export_dialog;
 mod exports;
+pub mod folder_drop_dialog;
 mod keys;
 pub mod loading_dialog;
 mod menu_bar;
@@ -36,6 +37,7 @@ use suhina_engine::model::{ClipId, TrackId};
 use suhina_session::{CommandKind, ExportGather, PluginStatus, ProjectId, Projects, Session};
 
 use crate::app::export_dialog::{ExportChoice, ExportDialog, ExportJob};
+use crate::app::folder_drop_dialog::FolderDropChoice;
 use crate::app::project_dialog::{
     AboutChoice, AgentChoice, AraEditsChoice, Choice, DialogState, Lists, RecoveryChoice, SaveChoice, SavePrompt,
     UnsavedChoice,
@@ -59,6 +61,7 @@ use crate::session::session_view::{self, SessionViewState, Step};
 use crate::settings::keymap::Keymap;
 use crate::settings::settings_view::{self, About, PageState, PluginRequest, PluginsView, Sources};
 use crate::settings::themes::{FileAction, ThemeEntry, Themes};
+use crate::settings::view_settings::FolderDrop;
 use crate::settings::{
     AtStart, DeviceLayout, EditorPlacement, MixerControls, OnOpen, PianoRollTop, PlayFrom, Settings, Side,
 };
@@ -316,6 +319,10 @@ pub struct App {
     /// Clips a plug-in edits about to go to another track, waiting for Keep edits or Copy as
     /// new (ADR 0028 step 6): the move, and the plug-in's name.
     ara_prompt: Option<(Action, String)>,
+    /// Samples dropped on a browser folder, waiting for Move or Copy (#943), and the dialog's
+    /// Remember my choice box.
+    folder_drop: Option<(Vec<PathBuf>, PathBuf)>,
+    folder_drop_remember: bool,
     /// What to do once the project is saved, when Save in that question first asks for a name.
     save_then: Option<Leaving>,
     /// Every project with unsaved changes was answered for: the window may close.
@@ -566,6 +573,8 @@ impl App {
             open_prompt: None,
             unsaved_prompt: None,
             ara_prompt: None,
+            folder_drop: None,
+            folder_drop_remember: false,
             save_then: None,
             quit_confirmed: false,
             quit_now: false,
@@ -1689,7 +1698,8 @@ impl App {
         let other_dialog = self.unsaved_prompt.is_some()
             || self.save_prompt.is_some()
             || self.project_dialog.is_some()
-            || self.ara_prompt.is_some();
+            || self.ara_prompt.is_some()
+            || self.folder_drop.is_some();
         if !other_dialog && let Some(offer) = self.recovery.first().cloned() {
             let written = suhina_session::backup::date_time(offer.written);
             let written = written.get(..16).unwrap_or(&written);
@@ -1837,6 +1847,29 @@ impl App {
                 Some(AraEditsChoice::New) => self.run(&self.with_ara_edits(&action, "new")),
                 Some(AraEditsChoice::Cancel) => {}
                 None => self.ara_prompt = Some((action, plugin)),
+            }
+        }
+        if let Some((files, folder)) = self.folder_drop.take() {
+            let name = folder.file_name().map_or_else(|| folder.display().to_string(), |n| n.to_string_lossy().into());
+            let mut remember = self.folder_drop_remember;
+            let choice = folder_drop_dialog::show(ui, window, files.len(), &name, &mut remember);
+            self.folder_drop_remember = remember;
+            let copy = match choice {
+                Some(FolderDropChoice::Move) => Some(false),
+                Some(FolderDropChoice::Copy) => Some(true),
+                Some(FolderDropChoice::Cancel) | None => None,
+            };
+            if choice.is_none() {
+                self.folder_drop = Some((files, folder));
+            } else if let Some(copy) = copy {
+                if self.folder_drop_remember {
+                    self.settings.view.folder_drop = if copy { FolderDrop::Copy } else { FolderDrop::Move };
+                    self.settings_changed = true;
+                }
+                self.files_into_folder(files, &folder, copy);
+            }
+            if choice.is_some() {
+                self.folder_drop_remember = false;
             }
         }
         if let Some(leaving) = self.unsaved_prompt.take() {
