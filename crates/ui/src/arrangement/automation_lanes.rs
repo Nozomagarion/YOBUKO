@@ -35,6 +35,14 @@ const POINT_HIT: f32 = 11.0;
 /// How near the envelope a drag has to start to bend a segment, and a click has to be to add a
 /// point on it.
 const SEGMENT_HIT: f32 = 6.0;
+/// The line's grip as a share of the lane's height, when that is more than [`SEGMENT_HIT`]: a
+/// click this close above or below it takes hold of it (#916).
+const SEGMENT_HIT_SHARE: f32 = 0.08;
+
+/// How near the line in `plot` a click must be to take hold of it.
+fn segment_hit(plot: Rect) -> f32 {
+    SEGMENT_HIT.max(plot.height() * SEGMENT_HIT_SHARE)
+}
 /// How much a point of vertical drag bends a segment's curve.
 const CURVE_PER_POINT: f64 = 0.01;
 /// The curve handle's radius, and how wide a segment must be on screen to show one.
@@ -499,6 +507,16 @@ fn dragged_to(grab: (f64, f64), beat: f64, position: f64, plot: Rect, geometry: 
     if across > along { (beat, grab.1) } else { (grab.0, grab.1 + (position - grab.1) * 0.25) }
 }
 
+/// A point being made by a drag from the line: where it is now, its beat (on the grid unless
+/// Alt) and its place on the lane (0 … 1). It is added when the button comes up.
+#[derive(Debug, Clone, PartialEq)]
+struct NewPoint {
+    track: TrackId,
+    key: LaneKey,
+    beat: f64,
+    position: f64,
+}
+
 /// A segment's curve being bent: the segment's first point and its curve so far.
 #[derive(Debug, Clone, PartialEq)]
 struct CurveDrag {
@@ -515,6 +533,9 @@ struct BoxDrag {
     key: LaneKey,
     from: Pos2,
     to: Pos2,
+    /// Begun in the lane's lower half: a box that selects the points in it. From the upper half
+    /// the drag paints a time range instead (#916).
+    select: bool,
 }
 
 /// A time range painted on one lane: copy, paste, duplicate, delete and the shapes act on it.
@@ -560,6 +581,8 @@ pub struct LanesState {
     pub grid: Option<suhina_engine::Quantization>,
     /// A point whose value is being typed (its menu's Edit value): track, lane, point and text.
     editing: Option<(TrackId, LaneKey, usize, String)>,
+    /// A point being made by a drag from the line.
+    new_point: Option<NewPoint>,
     /// The lanes whose parameter was chosen in the parameter menu's "Automated" section: the
     /// menu opens there again for them, and on the parameter's own row for the rest.
     from_automated: HashSet<(TrackId, LaneKey)>,
@@ -1027,7 +1050,7 @@ fn segment_at(points: &[AutomationPoint], scale: &Scale, plot: Rect, geometry: &
         return None;
     }
     let value = suhina_engine::model::automation::value_at(points, beat, false)?;
-    ((y_of(plot, scale.position(value)) - pos.y).abs() <= SEGMENT_HIT).then_some(index)
+    ((y_of(plot, scale.position(value)) - pos.y).abs() <= segment_hit(plot)).then_some(index)
 }
 
 /// Draws one lane of `param` in `time` (its envelope, points and drag in progress) and turns
@@ -1061,7 +1084,7 @@ fn lane(
         egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("{label} automation on {}", lanes.name))
     });
     let level = level_points(param);
-    let near_line = |pos: Pos2| distance_to(&envelope(&level, &param.scale, plot, geometry), pos) <= SEGMENT_HIT;
+    let near_line = |pos: Pos2| distance_to(&envelope(&level, &param.scale, plot, geometry), pos) <= segment_hit(plot);
     // A click on or near the line adds a point there; away from it, only with the setting on, or a
     // double-click (#916). Otherwise a click there lets go of the range and the points.
     let clicked_at = body.interact_pointer_pos().filter(|_| body.clicked() || body.double_clicked());
@@ -1093,8 +1116,12 @@ fn lane(
     }
     // Over the line the pointer is a hand and the line's value there shows beside it, so where a
     // click takes hold of it is plain.
-    let over_line =
-        body.hover_pos().filter(|pos| state.box_drag.is_none() && state.curve_drag.is_none() && near_line(*pos));
+    let over_line = body.hover_pos().filter(|pos| {
+        state.box_drag.is_none() && state.curve_drag.is_none() && state.new_point.is_none() && near_line(*pos)
+    });
+    if over_line.is_none() && state.box_drag.is_none() && body.hover_pos().is_some_and(|pos| pos.y <= time.center().y) {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+    }
     if let Some(pos) = over_line {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         // Where a click puts the point: on the grid (at the pointer with Alt, or with Snap to grid
@@ -1116,13 +1143,24 @@ fn lane(
     if body.drag_started_by(egui::PointerButton::Primary)
         && let Some(pos) = pressed_at.or_else(|| body.interact_pointer_pos())
     {
-        // On a segment's line: a drag moves its two points up or down together; with Alt it bends
-        // the segment instead (#916).
-        let alt = ui.input(|i| i.modifiers.alt);
-        match segment_at(&param.points, &param.scale, plot, geometry, pos) {
+        // From the line: a drag makes a point where the guide showed and moves it, added when the
+        // button comes up; with Alt it bends the segment, with Shift it moves the segment's two
+        // points up or down together (#916).
+        let (alt, shift) = ui.input(|i| (i.modifiers.alt, i.modifiers.shift));
+        let segment = segment_at(&param.points, &param.scale, plot, geometry, pos);
+        match segment {
             Some(point) if alt => {
                 let curve = param.points.get(point).map_or(0.0, |p| p.curve);
                 state.curve_drag = Some(CurveDrag { track, key: key.clone(), point, curve });
+            }
+            _ if near_line(pos) && !shift => {
+                let beat = geometry.snap(geometry.beat_of(pos.x), free);
+                let value = suhina_engine::model::automation::value_at(&level, beat, param.scale.stepped())
+                    .unwrap_or(param.current);
+                let position = param.scale.position(value);
+                state.new_point = Some(NewPoint { track, key: key.clone(), beat, position });
+                state.selection = None;
+                state.range = None;
             }
             Some(point) => {
                 let grab = (geometry.beat_of(pos.x), position_of(plot, pos.y));
@@ -1137,8 +1175,20 @@ fn lane(
                 });
                 state.selection = None;
             }
-            None => state.box_drag = Some(BoxDrag { track, key: key.clone(), from: pos, to: pos }),
+            // Away from the line: from the lane's lower half a box selects points, from its upper
+            // half the drag paints a time range, as on the clips' lanes.
+            None => {
+                let select = pos.y > time.center().y;
+                state.box_drag = Some(BoxDrag { track, key: key.clone(), from: pos, to: pos, select });
+            }
         }
+    }
+    if body.dragged_by(egui::PointerButton::Primary)
+        && let Some(pos) = body.interact_pointer_pos()
+        && let Some(made) = state.new_point.as_mut().filter(|d| d.track == track && &d.key == key)
+    {
+        made.beat = geometry.snap(geometry.beat_of(pos.x), free);
+        made.position = position_of(plot, pos.y);
     }
     if body.dragged_by(egui::PointerButton::Primary)
         && let Some(pos) = body.interact_pointer_pos()
@@ -1171,6 +1221,15 @@ fn lane(
         {
             actions.push(action);
         }
+        if let Some(made) = state.new_point.take_if(|d| d.track == track && &d.key == key) {
+            let mut params = key.params(track);
+            params["beat"] = json!(made.beat);
+            params["value"] = param.scale.command(param.scale.value_at(made.position));
+            if let Some(shape) = state.new_shape {
+                params["shape"] = json!(shape);
+            }
+            actions.push(Action::new("automation.addPoint", params));
+        }
         if let Some(drag) = state.curve_drag.take_if(|d| d.track == track && &d.key == key) {
             let before = param.points.get(drag.point).map_or(0.0, |p| p.curve);
             if (drag.curve - before).abs() > 1e-6 {
@@ -1182,6 +1241,20 @@ fn lane(
         }
         // The drag paints a time range on the lane, on the grid (free with Alt): the edit keys and
         // the shapes act on it, and the points in it are selected (#916).
+        if let Some(drag) = state.box_drag.take_if(|d| d.select && d.track == track && &d.key == key) {
+            let area = Rect::from_two_pos(drag.from, drag.to);
+            let points: Vec<usize> = param
+                .points
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| {
+                    area.contains(Pos2::new(geometry.x_of(p.beat), y_of(plot, param.scale.position(p.value))))
+                })
+                .map(|(i, _)| i)
+                .collect();
+            state.selection = (!points.is_empty()).then(|| Selection { track, key: key.clone(), points });
+            state.range = None;
+        }
         if let Some(drag) = state.box_drag.take_if(|d| d.track == track && &d.key == key) {
             let (a, b) =
                 (geometry.snap(geometry.beat_of(drag.from.x), free), geometry.snap(geometry.beat_of(drag.to.x), free));
@@ -1279,8 +1352,23 @@ fn lane(
         let y = y_of(plot, param.scale.position(param.current));
         lane_painter.hline(plot.x_range(), y, Stroke::new(1.0, ink.gamma_multiply(LEVEL_ALPHA)));
     }
+    // The point being made by a drag: a dot where it goes, the guide across the lane, its value.
+    if let Some(made) = state.new_point.as_ref().filter(|d| d.track == track && &d.key == key) {
+        let center = Pos2::new(geometry.x_of(made.beat), y_of(plot, made.position));
+        lane_painter.vline(center.x, time.y_range(), Stroke::new(1.0, theme::text_secondary()));
+        lane_painter.circle_filled(center, POINT + 1.0, theme::text_primary());
+        let text = param.scale.text(param.scale.value_at(made.position));
+        egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), id.with("new-value"), egui::PopupAnchor::Pointer)
+            .gap(12.0)
+            .show(|ui| ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend)));
+    }
     // The range being painted, and the one painted: the lane's whole height between them.
-    let painted = match state.box_drag.as_ref().filter(|d| d.track == track && &d.key == key) {
+    if let Some(drag) = state.box_drag.as_ref().filter(|d| d.select && d.track == track && &d.key == key) {
+        let area = Rect::from_two_pos(drag.from, drag.to);
+        lane_painter.rect_filled(area, 0.0, theme::accent().gamma_multiply(0.15));
+        lane_painter.rect_stroke(area, 0.0, theme::hairline(theme::accent()), StrokeKind::Inside);
+    }
+    let painted = match state.box_drag.as_ref().filter(|d| !d.select && d.track == track && &d.key == key) {
         Some(drag) => Some((
             geometry.x_of(geometry.snap(geometry.beat_of(drag.from.x), free)),
             geometry.x_of(geometry.snap(geometry.beat_of(drag.to.x), free)),

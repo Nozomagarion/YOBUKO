@@ -189,16 +189,18 @@ the value set on the mixer or the device. Editing (every edit is one undo step):
 
 | Gesture | Command |
 |---|---|
-| Point at the line (within 6 points), or a lane's faint line | the pointer becomes a hand; a thin line across the lane and a dot on the envelope mark where a click puts the point (on the grid), and the envelope's value there shows beside the pointer |
+| Point at the line (within 8 % of the lane's height above or below it, at least 6 points), or a lane's faint line | the pointer becomes a hand; a thin line across the lane and a dot on the envelope mark where a click puts the point (on the grid), and the envelope's value there shows beside the pointer |
 | Click away from the line | nothing is added: it ends the painted range and the selection of points. With Settings › Arrangement › Automation › **A click anywhere adds a point** on (off by default), it is `automation.addPoint` at the beat under the pointer (on the nearest line the arrangement's grid draws at this zoom, [arrangement editing](arrangement-editing.md#the-grid); Alt, Option on macOS: free) and the value at its height |
 | Double-click away from the line (the setting off) | `automation.addPoint` at the pointer, as above |
-| Click on or near the line (within 6 points), or a lane's faint line | `automation.addPoint` on the envelope: its value at that beat, so the envelope keeps its shape (a level or straight segment stays exactly so). The segment before the new point keeps its curve; the one after gets the curve that passes through the old segment's middle |
+| Click on or near the line (as near as above), or a lane's faint line | `automation.addPoint` on the envelope: its value at that beat, so the envelope keeps its shape (a level or straight segment stays exactly so). The segment before the new point keeps its curve; the one after gets the curve that passes through the old segment's middle |
 | Drag a point | `automation.movePoint`, its beat on the grid (Alt, Option on macOS: free) and its value following the pointer, a thin line across the lane showing where it is against the grid; with Shift only along the axis the pointer moved further on, and up or down at a quarter of the speed for a finer value. Points dragged past others keep beat order |
 | Right-click the line: **Add value** | `automation.addPoint` on the envelope at that beat, on the grid, as a click on the line does |
 | Right-click a point: **Edit value** | a field beside the point with its value selected (in the set command's unit: dB or `-inf` for the volume; a pan as -1 to 1 or `25L`, `C`, `25R`; `%` and `ms` read for such parameters); Enter or a click elsewhere runs `automation.movePoint` with it, Escape leaves it |
 | The lanes' menus: **Snap to grid** and **Grid** | Snap to grid off (on by default; the window's choice, not saved) places points and ranges where the pointer is, as Alt does; Grid sets the grid value (`launcher.setQuantization`, the control bar's value) |
 | Click a point | selects it; Shift or Ctrl adds it to the selection or takes it out. Selecting a clip ends a selection of points |
-| Drag on the lane away from the line | paints a time range over the lane's whole height, its ends on the grid (Alt, Option on macOS: free), and selects the points in it. A click on the lane or a point, a clip or a track header ends it |
+| Drag from the line | makes a point where the guide showed (on the grid, Alt: free) and moves it with the pointer; letting go runs `automation.addPoint` there, one undo step |
+| Drag on the lane's upper half away from the line (the pointer is the text cursor there) | paints a time range over the lane's whole height, its ends on the grid (Alt, Option on macOS: free), and selects the points in it. A click on the lane or a point, a clip or a track header ends it |
+| Drag on the lane's lower half away from the line | draws a box that selects the points in it, as the clips' lanes select with a box from below; no range |
 | Ctrl+C, Ctrl+X, Ctrl+D, Delete with a range painted | `automation.copy`; `automation.copy` and `automation.deleteRange`; `automation.duplicate`, the range moving onto the copy so the next Ctrl+D goes on; `automation.deleteRange`. They act on the range before anything else that is selected |
 | Ctrl+V with a range painted | `automation.paste` from the range's start, on that lane: paint a range where the copy should go, then paste |
 | Right-click inside a painted range: **Insert shape** | ten small pictures of shapes; a click runs `automation.insertShape` on the range, a repeating shape once a beat |
@@ -208,7 +210,7 @@ the value set on the mixer or the device. Editing (every edit is one undo step):
 | Drag a selected point | `automation.movePoints`: the whole selection moves by the same beats (none before beat 0) and the same change of value |
 | Delete (or Backspace) | `automation.deletePoints` for the selection, before any selected clip |
 | Double-click a point, or its menu's Delete point | `automation.deletePoint` (the menu deletes the whole selection when the point is part of one) |
-| Drag the line between two points up or down | `automation.movePoints` of the two points by the same change of value, their beats kept (Shift: finer) |
+| Shift-drag the line between two points up or down | `automation.movePoints` of the two points by the same change of value, their beats kept (finer than the pointer) |
 | Alt-drag the line between two points up or down (Option on macOS) | `automation.movePoint` with the first point's curve: up bends the line up, from -1 to 1 |
 
 ## In the project file

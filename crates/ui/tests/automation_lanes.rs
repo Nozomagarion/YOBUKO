@@ -946,9 +946,9 @@ fn a_painted_range_copies_duplicates_and_pastes() {
     }
     let beats = |h: &Harness<'static, App>| -> Vec<f64> { volume(h).0.iter().map(|p| p.beat).collect() };
     assert_eq!(beats(&harness), [12.0, 24.0]);
-    // Bars 3 to 8 (beats 8 to 32), on the grid.
+    // Bars 3 to 8 (beats 8 to 32), on the grid, painted from the lane's upper half.
     let rect = lane(&harness);
-    drag(&mut harness, Pos2::new(rect.left() + 60.0, rect.center().y), vec2(180.0, 0.0));
+    drag(&mut harness, Pos2::new(rect.left() + 60.0, rect.top() + rect.height() * 0.25), vec2(180.0, 0.0));
     harness.key_press_modifiers(Modifiers::COMMAND, Key::C);
     harness.run();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::D);
@@ -956,14 +956,14 @@ fn a_painted_range_copies_duplicates_and_pastes() {
     let after = beats(&harness);
     assert!(after.contains(&36.0) && after.contains(&48.0), "the copy is right after the range: {after:?}");
     // A range painted at beat 48: Ctrl+V pastes the copied range from there.
-    drag(&mut harness, Pos2::new(rect.left() + 392.0, rect.center().y), vec2(32.0, 0.0));
+    drag(&mut harness, Pos2::new(rect.left() + 392.0, rect.top() + rect.height() * 0.25), vec2(32.0, 0.0));
     harness.key_press_modifiers(Modifiers::COMMAND, Key::V);
     harness.run();
     let after = beats(&harness);
     assert!(after.contains(&52.0) && after.contains(&64.0), "pasted from beat 48: {after:?}");
     // Delete clears a range (beats 48 to 72), keeping the values at its edges.
     let pasted = beats(&harness);
-    drag(&mut harness, Pos2::new(rect.left() + 392.0, rect.center().y), vec2(192.0, 0.0));
+    drag(&mut harness, Pos2::new(rect.left() + 392.0, rect.top() + rect.height() * 0.25), vec2(192.0, 0.0));
     harness.key_press(Key::Delete);
     harness.run();
     let deleted = beats(&harness);
@@ -999,7 +999,7 @@ fn the_lane_menu_fills_a_range_or_chooses_the_shape_for_new_points() {
     let mut harness = with_lanes();
     let rect = lane(&harness);
     // Beats 32 to 64, painted.
-    drag(&mut harness, Pos2::new(rect.left() + 256.0, rect.center().y), vec2(256.0, 0.0));
+    drag(&mut harness, Pos2::new(rect.left() + 256.0, rect.top() + rect.height() * 0.4), vec2(256.0, 0.0));
     right_click_at(&mut harness, Pos2::new(rect.left() + 384.0, rect.center().y));
     harness.get_by_label("Insert sine").click();
     harness.run();
@@ -1111,10 +1111,10 @@ fn add_value_edit_value_and_snap_to_grid_from_the_menus() {
     assert!(beats.iter().any(|b| (b - 37.875).abs() < 0.01), "off the grid: {beats:?}");
 }
 
-/// A drag on a segment's line moves its two points up or down together; with Alt it bends it
-/// (#916).
+/// A drag from the line makes a point there and moves it; with Shift it moves the segment's two
+/// points up or down together; with Alt it bends the segment (#916).
 #[test]
-fn a_segment_drag_moves_it_and_alt_bends_it() {
+fn a_drag_from_the_line_makes_a_point_shift_moves_the_segment_alt_bends_it() {
     let mut harness = with_lanes();
     let rect = lane(&harness);
     click_at(&mut harness, Pos2::new(rect.left() + 100.0, rect.bottom() - 10.0));
@@ -1124,7 +1124,18 @@ fn a_segment_drag_moves_it_and_alt_bends_it() {
     let b = harness.get_by_label("Volume point 2 on Drums").rect().center();
     // A quarter of the way along the line, away from the curve handle in the middle.
     let on = a.lerp(b, 0.25);
+    // A plain drag: a new point, on the grid where the drag began, at the height it ends.
+    drag(&mut harness, on, vec2(0.0, 12.0));
+    let made = volume(&harness).0;
+    assert_eq!(made.len(), 3, "{made:?}");
+    assert_eq!((made[0].beat, made[2].beat), (before[0].beat, before[1].beat), "the others stay");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_eq!(volume(&harness).0.len(), 2, "one undo step");
+    // With Shift: the segment's two points move down together.
+    harness.event(egui::Event::ModifiersChanged(Modifiers::SHIFT));
     drag(&mut harness, on, vec2(0.0, 8.0));
+    harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
     let after = volume(&harness).0;
     assert_eq!(after.len(), 2);
     assert!(after[0].value < before[0].value && after[1].value < before[1].value, "{before:?} -> {after:?}");
@@ -1136,4 +1147,25 @@ fn a_segment_drag_moves_it_and_alt_bends_it() {
     drag(&mut harness, a.lerp(b, 0.25), vec2(0.0, -20.0));
     harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
     assert!(volume(&harness).0.first().is_some_and(|p| p.curve.abs() > 0.05));
+}
+
+/// From the lane's lower half, away from the line, a drag draws a box that selects the points in
+/// it, painting no range (#916).
+#[test]
+fn a_drag_from_the_lower_half_selects_points_with_a_box() {
+    let mut harness = with_lanes();
+    let rect = lane(&harness);
+    let low = rect.center().y + 4.0;
+    for (x, y) in [(100.0, low), (200.0, low), (300.0, rect.top() + 8.0)] {
+        click_at(&mut harness, Pos2::new(rect.left() + x, y));
+    }
+    assert_eq!(volume(&harness).0.len(), 3);
+    // A box from near the bottom (above the lane's resize edge), well below the line, up over the
+    // two low points only.
+    let from = Pos2::new(rect.left() + 60.0, rect.bottom() - 6.0);
+    drag(&mut harness, from, vec2(300.0, rect.center().y + 1.0 - from.y));
+    harness.key_press(Key::Delete);
+    harness.run();
+    let left: Vec<f64> = volume(&harness).0.iter().map(|p| p.beat).collect();
+    assert_eq!(left, [36.0], "the high point stays");
 }
