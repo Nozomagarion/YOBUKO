@@ -370,6 +370,6 @@ fn a_held_key_toggles_once_and_steps_on_repeat() {
     if let Some((id, _)) = stepping {
         let mut input = egui::InputState::default();
         input.events.push(press(Key::ArrowUp, true));
-        assert_eq!(keymap.pressed(&mut input, |_| true), [id.clone()], "an arrow steps on");
+        assert_eq!(keymap.pressed(&mut input, |_| true), std::slice::from_ref(id), "an arrow steps on");
     }
 }
