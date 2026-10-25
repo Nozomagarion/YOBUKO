@@ -707,6 +707,14 @@ impl Session {
         let end = take.end.unwrap_or(take.start);
         let tempo = self.clock().map_or(self.project.transport.tempo_bpm, |c| c.4);
         let mut passes = passes_of(take.start, end, &take.jumps);
+        suhina_plugins::trace!(
+            "take on track {}: beats {:.3} to {end:.3}, {} jumps, {} passes {:?}",
+            take.track.0,
+            take.start,
+            take.jumps.len(),
+            passes.len(),
+            passes.iter().map(|p| (p.start, p.length, p.from, p.until)).collect::<Vec<_>>()
+        );
         let bar = self.project.transport.meter().position(take.start.max(0.0)).bar_beats;
         if let Some(last) = passes.last_mut()
             && take.file.is_none()
@@ -767,6 +775,12 @@ impl Session {
                 }
                 None => None,
             };
+            suhina_plugins::trace!(
+                "take on track {}: file began at renderer frame {:?}, {:?} frames written",
+                take.track.0,
+                take.began,
+                audio.as_ref().map(|(_, frames, _)| *frames)
+            );
             let mut taken = p.arrangement.takes.iter().filter(|t| t.track == take.track).count();
             for pass in &passes {
                 let (content, offset, length) = match (&audio, audio_content) {
@@ -784,6 +798,13 @@ impl Session {
                         (add_content(p, &name, pass.length, LaneData::Notes(notes))?, 0.0, pass.length)
                     }
                 };
+                suhina_plugins::trace!(
+                    "take on track {}: pass at beat {:.3} for {:.3} beats, file from {offset:.3} for {length:.3}{}",
+                    take.track.0,
+                    pass.start,
+                    pass.length,
+                    if length < MIN_PASS { ", dropped: nothing of it in the file" } else { "" }
+                );
                 if length < MIN_PASS {
                     continue;
                 }

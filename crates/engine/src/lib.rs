@@ -20,6 +20,7 @@ mod chain;
 mod chain_tests;
 mod count_in;
 mod cpu;
+mod crossfade;
 mod cue;
 #[cfg(test)]
 mod cue_tests;
@@ -1419,7 +1420,10 @@ impl Graph {
         let mut stretch_heard = Vec::new();
         let mut hosted = Vec::new();
         for (lane_index, lane) in project.arrangement.lanes.iter().enumerate() {
-            for (clip_index, clip) in lane.clips.iter().enumerate().filter(|(_, c)| c.enabled) {
+            for (clip_index, placed) in lane.clips.iter().enumerate().filter(|(_, c)| c.enabled) {
+                // A part of a comp crossfades with a part of another take it meets (#989).
+                let crossfaded = crossfade::crossfaded(project, lane, placed, bpm);
+                let clip = crossfaded.as_ref();
                 let Some(content) = project.content(clip.content) else { continue };
                 for (content_index, content_lane) in content.lanes.iter().enumerate() {
                     let Some(track) = content_lane.target.or(lane.track) else { continue };

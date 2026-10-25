@@ -137,6 +137,12 @@ content of its own), so nothing extra is stored and a trimmed part keeps its tak
   shorter, each still playing its own take (`take.moveCut`).
 - Splitting a clip on the track (`clip.split`) splits every take lane of the track at the same
   beat, so the takes stay cut where the comp is.
+- Where two parts from different takes meet, they crossfade: the part before the cut plays on
+  5 ms past it and the part after it starts 5 ms before it, each through a 10 ms equal-power fade
+  (the engine works this out from the project when it builds its graph, so trims, swaps, splits
+  and undo keep it right; ARA clips are left out).
+- A take lane's header is drawn in a dark shade of the take's colour with a strip of the colour
+  itself; its pieces are that colour, darkened where the comp does not use them.
 
 Take lanes are saved with the project, a take's own colour with them (the project format,
 [`suhina-format.md`](suhina-format.md)); deleting the track deletes its takes. A part on the

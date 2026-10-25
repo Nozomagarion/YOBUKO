@@ -1371,14 +1371,20 @@ pub(super) fn take_lanes(
             "take": take.number,
             "color": crate::interaction::colour_picker::hex(colour),
         });
-        painter.rect_filled(header, 0.0, theme::window_background());
+        // The header in the take's colour, a darker shade of it, with a strip of the colour itself
+        // at its inner edge, as a track's header has (#989).
+        let swatch = crate::interaction::colour_picker::color32(colour);
+        let shade = motion::mix(theme::window_background(), swatch, 0.35);
+        painter.rect_filled(header, 0.0, shade);
+        let strip = Rect::from_min_size(header.min, Vec2::new(4.0, header.height()));
+        painter.rect_filled(strip, 0.0, swatch);
         widgets::text_in(
             painter,
-            header.shrink2(Vec2::new(8.0, 0.0)),
+            header.shrink2(Vec2::new(10.0, 0.0)),
             Align2::LEFT_CENTER,
             &take.name,
             theme::ui_font(theme::TEXT_SMALL),
-            theme::text_secondary(),
+            ink_on(shade),
         );
         let name = ui.interact(
             header.intersect(at.visible),
@@ -1392,13 +1398,13 @@ pub(super) fn take_lanes(
             take_menu(ui, lane.track, take, piece, &params, actions)
         };
         name.context_menu(|ui| menu(ui, actions, None));
-        // Dimmed like a muted track's, each piece in its colour: a take does not play. The parts
-        // of it on the track are drawn lit (#989).
+        // Each piece in its colour, a dark shade of it where the comp does not use it and lit where
+        // it does (#989): a take keeps its hue either way.
         for clip in &take.clips {
-            let look = Lane { mute: true, color: clip.color, ..lane.clone() };
             let lit = Lane { mute: false, color: clip.color, ..lane.clone() };
             let rect = clip_rect(row, clip.start, clip.length, x_of);
-            paint_clip(painter, rect, &look, clip, Shown::of(clip), clip.start, x_of, beat_width, timeline, false);
+            paint_clip(painter, rect, &lit, clip, Shown::of(clip), clip.start, x_of, beat_width, timeline, false);
+            painter.rect_filled(rect.intersect(row), 0.0, theme::window_background().gamma_multiply(0.6));
             for &(start, end) in &take.used {
                 let span = Rect::from_x_y_ranges(egui::Rangef::new(x_of(start), x_of(end)), row.y_range());
                 let span = span.intersect(rect).intersect(painter.clip_rect());
