@@ -515,7 +515,7 @@ impl Declick {
                 self.left = DECLICK_FRAMES;
             }
         }
-        for frame in frames.chunks_exact_mut(2) {
+        for frame in frames.as_chunks_mut::<2>().0 {
             if self.left == 0 {
                 break;
             }
