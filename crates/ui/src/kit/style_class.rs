@@ -98,6 +98,8 @@ pub const CLASSES: &[&str] = &[
     "track-number",
     "fold",
     "loop-line",
+    "ruler-number",
+    "ruler-tick",
     // Families: one class a group of parts shares, for a rule over all of them (`families`).
     "value-control",
     "track-button",

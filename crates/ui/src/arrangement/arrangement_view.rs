@@ -444,6 +444,24 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     let ruler_ink = crate::kit::style_class::foreground(theme::text_secondary());
     let ruler_line =
         crate::kit::style_class::computed().filter(|c| c.authored.border).map_or_else(theme::border, |c| c.border);
+    // `.ruler-number` (its `color`, `font-size`, `display: none`) and `.ruler-tick` (its `color`
+    // and `width`, `width: 0` hides it) inside `.ruler`.
+    let (number_ink, number_size, number_shown) = {
+        let _number = crate::kit::style_class::enter("ruler-number");
+        let style = crate::kit::style_class::computed();
+        (
+            crate::kit::style_class::foreground(ruler_ink),
+            style.as_ref().filter(|s| s.authored.font_size).map_or(theme::TEXT_SMALL, |s| s.font_size),
+            style.as_ref().is_none_or(|s| s.visible),
+        )
+    };
+    let ruler_tick = {
+        let _tick = crate::kit::style_class::enter("ruler-tick");
+        let style = crate::kit::style_class::computed();
+        let ink = crate::kit::style_class::foreground(ruler_line);
+        let width = style.as_ref().and_then(|s| s.width).map_or(1.0, |w| w.clamp(0.0, 4.0));
+        egui::Stroke::new(width, if style.as_ref().is_some_and(|s| s.authored.color) { ink } else { ruler_line })
+    };
     drop(ruler_style);
     let meter = &timeline.meter;
     let bar_width = bar_beats as f32 * state.beat_width;
@@ -479,16 +497,18 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
             continue;
         }
         let x = x_of(meter.bar_start(bar)).round() + 0.5;
-        ruler_painter.vline(x, ruler.y_range(), theme::hairline(ruler_line));
+        ruler_painter.vline(x, ruler.y_range(), ruler_tick);
         let label = Rect::from_min_max(Pos2::new(x + 3.0, ruler.top()), Pos2::new(x + 40.0, ruler.bottom()));
-        widgets::text_in(
-            &ruler_painter,
-            label,
-            Align2::LEFT_CENTER,
-            &(u64::from(bar) + 1).to_string(),
-            theme::mono_font(theme::TEXT_SMALL),
-            ruler_ink,
-        );
+        if number_shown {
+            widgets::text_in(
+                &ruler_painter,
+                label,
+                Align2::LEFT_CENTER,
+                &(u64::from(bar) + 1).to_string(),
+                theme::mono_font(number_size),
+                number_ink,
+            );
+        }
     }
     // TimelineGrid in the lanes: a line at every step of the grid the control bar's value sets, coarser
     // when zoomed out; bar lines stronger than the lines between them. When the time signature
