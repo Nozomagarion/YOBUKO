@@ -120,6 +120,10 @@ struct Take {
     /// report.
     peak: f32,
     peaks: Vec<f32>,
+    /// The last time the arrangement's playhead jumped while this take was written (a loop
+    /// going back, a click on the ruler): its end is counted from there, so every pass before
+    /// it is kept whole (#909).
+    last_jump: Option<RecordedJump>,
 }
 
 impl Take {
@@ -141,6 +145,14 @@ impl Take {
         let end = self.end?;
         if end.is_nan() || end <= 0.0 {
             return Some(0);
+        }
+        // After a jump the end beat is on the pass that jump began: the frames up to the jump,
+        // then the beats from where it landed. Without one, the beats from the start.
+        if let (Some(jump), Some(first)) = (self.last_jump, self.first) {
+            let step = jump.beats_per_frame;
+            let after = (self.start + end - jump.beat).max(0.0) / step;
+            return (step > 0.0 && after.is_finite())
+                .then(|| jump.position.saturating_sub(first).saturating_add(after.round() as u64));
         }
         let frames = end / self.beats_per_frame;
         (self.beats_per_frame > 0.0 && frames.is_finite()).then(|| frames.round() as u64)
@@ -170,6 +182,7 @@ fn run(mut receiver: RecordReceiver, sample_rate: u32, orders: &Receiver<Order>,
                         error: None,
                         peak: 0.0,
                         peaks: Vec::new(),
+                        last_jump: None,
                     });
                 }
                 Ok(Order::End { track, beats }) => {
@@ -195,6 +208,10 @@ fn run(mut receiver: RecordReceiver, sample_rate: u32, orders: &Receiver<Order>,
             let _ = reports.send(Report::Note(note));
         }
         while let Some(jump) = receiver.next_jump() {
+            // An arrangement take being written counts its end from the last jump.
+            for take in takes.iter_mut().filter(|t| !t.by_clock && t.first.is_some_and(|f| jump.position >= f)) {
+                take.last_jump = Some(jump);
+            }
             let _ = reports.send(Report::Jump(jump));
         }
         while let Some(chunk) = receiver.next_audio() {

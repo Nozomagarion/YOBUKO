@@ -353,12 +353,15 @@ impl Session {
                         }
                     }
                     Report::Jump(jump) => {
-                        // Every arrangement take still recording begins a new pass there.
-                        for take in
-                            self.live.recording.takes.iter_mut().filter(|t| {
-                                t.target == Target::Arrangement && t.end.is_none() && t.jumps.len() < MAX_JUMPS
-                            })
-                        {
+                        // Every arrangement take not yet kept begins a new pass there. The engine
+                        // reports jumps only while recording, so one that reaches us after Stop
+                        // still belongs to the take Stop ended; a take that began after it does
+                        // not get it.
+                        for take in self.live.recording.takes.iter_mut().filter(|t| {
+                            t.target == Target::Arrangement
+                                && t.jumps.len() < MAX_JUMPS
+                                && t.began.is_none_or(|began| jump.position >= began)
+                        }) {
                             take.jumps.push(jump);
                         }
                     }

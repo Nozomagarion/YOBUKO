@@ -107,6 +107,9 @@ impl Rig {
             }
             self.renderer.process(&mut block);
             self.position += BLOCK;
+            // As an audio device's blocks come, a little apart: the recording thread drains the
+            // input between them, or a take of a few beats overflows its ring.
+            std::thread::sleep(Duration::from_micros(200));
         }
     }
 
@@ -377,6 +380,9 @@ fn moving_back_while_recording_keeps_each_pass_as_a_take_and_the_latest_plays() 
     rig.render_to(BEAT * 2, 0.0);
     rig.live.send(LiveEvent::NoteOff { key: 60 });
     rig.render_to(BEAT * 3, 0.0);
+    // The window polls every frame; the notes come through the recording thread.
+    std::thread::sleep(Duration::from_millis(50));
+    rig.session.poll_recording();
     let live = rig.session.live_takes();
     assert_eq!(live.len(), 1, "the take is drawn while it records");
     assert!(close(live[0].start, 0.0) && (live[0].end - 3.0).abs() < 0.02, "{live:?}");
