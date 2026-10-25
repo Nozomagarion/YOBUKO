@@ -291,9 +291,16 @@ Its tests run in CI: `python3 -m unittest discover -s scripts -p 'test_*.py'`.
 ## Discord
 
 Three channels get posts from GitHub Actions, each through a webhook (Discord: channel settings ›
-Integrations › Webhooks) whose URL is a repository secret (GitHub: Settings › Secrets and
-variables › Actions). A channel without its secret gets nothing, and a failed post fails nothing
+Integrations › Webhooks) whose URL is a secret in the environment **`discord`** (GitHub: Settings ›
+Environments › `discord`). A channel without its secret gets nothing, and a failed post fails nothing
 else. No mention in a post pings anyone.
+
+The Discord secrets, `DISCORD_BOT_TOKEN` among them, are environment secrets rather than repository
+secrets, so a workflow pushed to another branch cannot read them. The environment's *Deployment
+branches and tags* allow `main` and tags matching `v*`: `discord.yml` runs on its tag for a release
+event, the other jobs run on `main`. Only maintainers may create `v*` tags (the `release tags`
+ruleset restricts their creation), so no one else can make a ref that reaches them. The jobs say
+`deployment: false`, so the environment adds no deployment to a pull request's timeline.
 
 | Channel | Secret | Posts |
 |---|---|---|
@@ -379,7 +386,7 @@ Secrets that expire, so a release checks them before they stop a bot in the midd
 
 | Secret | Used by | Expires | Renew |
 |---|---|---|---|
-| `PROJECT_TOKEN` | the claim bot and Project sync ([`claim-bot.md`](claim-bot.md)) | fill in | [`claim-bot.md`](claim-bot.md) › Setting it up |
+| `PROJECT_TOKEN` (environment `project-board`) | the claim bot and Project sync ([`claim-bot.md`](claim-bot.md)) | fill in | [`claim-bot.md`](claim-bot.md) › Setting it up |
 
 ## Not yet
 
