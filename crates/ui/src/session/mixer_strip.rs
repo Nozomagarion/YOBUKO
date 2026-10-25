@@ -1312,7 +1312,14 @@ fn send_knobs(
     let painter = painter.with_clip_rect(clip);
     state.scroll_areas.push(row);
     let count = column.sends.len();
-    let width = (row.width() - SEND_GAP) / 2.0;
+    // `.send { width; height }` sizes every send, within the row.
+    let sheet = {
+        let _send = crate::kit::style_class::enter("send");
+        crate::kit::style_class::computed()
+    };
+    let width =
+        sheet.as_ref().and_then(|s| s.width).map_or((row.width() - SEND_GAP) / 2.0, |w| w.clamp(8.0, row.width()));
+    let height = sheet.as_ref().and_then(|s| s.height).map_or(row.height() - 2.0, |h| h.clamp(8.0, row.height()));
     let pitch = width + SEND_GAP;
     let most = (count as f32 * pitch - SEND_GAP - row.width()).max(0.0);
     let mut scroll = state.send_scroll.get(&track).copied().unwrap_or(0.0);
@@ -1335,7 +1342,7 @@ fn send_knobs(
     for (index, send) in column.sends.iter().enumerate() {
         let rect = Rect::from_min_size(
             Pos2::new(row.left() + pitch * index as f32 - scroll, row.top()),
-            Vec2::new(width, row.height() - 2.0),
+            Vec2::new(width, height),
         );
         let name = format!("mixer-send-{}", index + 1);
         if control_layout::placement(&name).hidden {
@@ -1405,23 +1412,10 @@ fn send_knobs(
             widgets::hover(ui, &response),
         ));
         if crate::kit::style_class::knob_preference(false) {
-            let size = (rect.height() - 10.0).min(rect.width()).max(8.0);
-            widgets::knob(
-                &painter,
-                Pos2::new(rect.center().x, rect.top() + size / 2.0),
-                size,
-                position,
-                pointer,
-                Some(&response),
-            );
-            widgets::text_in(
-                &painter,
-                Rect::from_min_max(Pos2::new(rect.left(), rect.top() + size), rect.max),
-                Align2::CENTER_CENTER,
-                &format!("{letter} {}", widgets::format_db(shown)),
-                theme::mono_font(7.0),
-                pointer,
-            );
+            // The value under the knob unless `--suhina-value-position` says otherwise.
+            let text = format!("{letter} {}", widgets::format_db(shown));
+            let under = widgets::ValuePosition::Bottom;
+            widgets::knob_with_value(&painter, rect, position, pointer, Some(&response), &text, pointer, under, 7.0);
         } else {
             let state = crate::kit::skin::State::response(&response, false);
             crate::kit::native_css::surface(&painter, rect, 2.0, egui::Color32::TRANSPARENT);

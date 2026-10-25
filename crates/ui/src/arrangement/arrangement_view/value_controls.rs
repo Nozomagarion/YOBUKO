@@ -211,14 +211,28 @@ pub(super) fn value_control(
 pub(super) fn volume_knob(painter: &egui::Painter, rect: Rect, db: f64, hover: f32, response: Option<&egui::Response>) {
     let pointer = motion::mix(theme::text_value(), theme::text_primary(), hover);
     let text = widgets::format_db(db);
-    widgets::knob_with_value(painter, rect, volume_position(db), pointer, response, &text, theme::text_primary());
+    let right = widgets::ValuePosition::Right;
+    let ink = theme::text_primary();
+    widgets::knob_with_value(
+        painter,
+        rect,
+        volume_position(db),
+        pointer,
+        response,
+        &text,
+        ink,
+        right,
+        theme::TEXT_SMALL,
+    );
 }
 
 /// A pan as a knob with its value where `--suhina-value-position` puts it (beside it by default).
 pub(super) fn pan_knob(painter: &egui::Painter, rect: Rect, pan: f64, response: Option<&egui::Response>) {
     let position = ((pan + 1.0) / 2.0) as f32;
     let text = widgets::format_pan(pan);
-    widgets::knob_with_value(painter, rect, position, theme::text_primary(), response, &text, theme::text_secondary());
+    let (pointer, ink) = (theme::text_primary(), theme::text_secondary());
+    let right = widgets::ValuePosition::Right;
+    widgets::knob_with_value(painter, rect, position, pointer, response, &text, ink, right, theme::TEXT_SMALL);
 }
 
 /// The command a finished volume or pan drag runs: one track is set to the value the drag reached,

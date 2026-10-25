@@ -156,19 +156,27 @@ pub enum ValuePosition {
 impl ValuePosition {
     /// The position the sheet gives the control in scope.
     pub fn current() -> Self {
+        Self::or(Self::Right)
+    }
+
+    /// The position the sheet gives the control in scope, or `default`.
+    pub fn or(default: Self) -> Self {
         match super::style_class::property("--suhina-value-position").as_deref().map(str::trim) {
+            Some("right") => Self::Right,
             Some("left") => Self::Left,
             Some("top") => Self::Top,
             Some("bottom") => Self::Bottom,
             Some("inside" | "center" | "centre") => Self::Inside,
             Some("none" | "hidden") => Self::None,
-            _ => Self::Right,
+            _ => default,
         }
     }
 }
 
 /// A knob in `rect` at `position` (0 to 1) with its value `text` where the sheet puts it
-/// ([`ValuePosition`]), in `ink` unless the sheet's `color` says otherwise, at its `font-size`.
+/// ([`ValuePosition`], `default` where it says nothing), in `ink` unless the sheet's `color` says
+/// otherwise, at its `font-size` (`font_size` where it says none).
+#[allow(clippy::too_many_arguments)]
 pub fn knob_with_value(
     painter: &Painter,
     rect: Rect,
@@ -177,12 +185,14 @@ pub fn knob_with_value(
     response: Option<&Response>,
     text: &str,
     ink: Color32,
+    default: ValuePosition,
+    font_size: f32,
 ) {
     let computed = super::style_class::computed();
-    let size_text = computed.as_ref().filter(|c| c.authored.font_size).map_or(theme::TEXT_SMALL, |c| c.font_size);
+    let size_text = computed.as_ref().filter(|c| c.authored.font_size).map_or(font_size, |c| c.font_size);
     let ink = super::style_class::foreground(ink);
     let line = size_text + 3.0;
-    let place = ValuePosition::current();
+    let place = ValuePosition::or(default);
     let (knob_area, text_area, align) = match place {
         ValuePosition::Right | ValuePosition::Left => {
             let size = rect.height().min(theme::KNOB);

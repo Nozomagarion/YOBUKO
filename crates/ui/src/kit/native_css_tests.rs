@@ -987,6 +987,8 @@ fn a_knob_s_value_goes_where_the_sheet_puts_it() {
                 None,
                 "C",
                 theme::text_secondary(),
+                crate::kit::widgets::ValuePosition::Right,
+                theme::TEXT_SMALL,
             );
         });
         shapes.iter().find_map(|shape| match &shape.shape {
