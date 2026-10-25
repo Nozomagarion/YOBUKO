@@ -281,6 +281,9 @@ pub struct ClipInfo {
     pub at: Option<ClipRef>,
     /// Fade-in and fade-out in beats (`clip.setFades`).
     pub fades: (f64, f64),
+    /// The start and end markers in content beats: where in its content the clip starts and
+    /// stops playing (`clip.setStart`, `clip.setLength`).
+    pub markers: (f64, f64),
     pub notes: usize,
     /// What the piano roll has selected in this clip (› Clip column in
     /// `docs/spec/ui-clip-editor.md`).
@@ -543,6 +546,7 @@ pub fn build_with(
                     None => ClipRef::Arrangement(id, placed.id),
                 }),
                 fades: (placed.fade_in, placed.fade_out),
+                markers: (placed.offset, placed.offset + placed.length),
                 notes,
                 selection: SelectionInfo::default(),
                 switch: None,

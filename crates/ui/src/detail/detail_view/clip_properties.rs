@@ -12,6 +12,9 @@ pub(super) enum ClipEdit {
     Loop,
     LoopStart,
     LoopEnd,
+    /// The start and end markers: where in its content the clip plays from and to.
+    Start,
+    End,
     Gain,
     Warp,
     Mode,
@@ -72,12 +75,16 @@ pub(super) fn clip_properties(
         rows.push(("Loop end", beats_text(end), ClipEdit::LoopEnd));
     }
     if info.audio {
-        // A slot's clip has no gain command of its own yet: its gain is shown, not edited.
-        let gain_edit = if matches!(info.at, Some(ClipRef::Arrangement(..))) { ClipEdit::Gain } else { ClipEdit::None };
+        // Where in the audio the clip plays from and, when it does not loop, to (#699); a looping
+        // clip's end is its length, set on its edge.
+        rows.push(("Start marker", beats_text(info.markers.0), ClipEdit::Start));
+        if !info.looping {
+            rows.push(("End marker", beats_text(info.markers.1), ClipEdit::End));
+        }
         rows.push((
             "Gain",
             info.gain_db.map_or_else(|| "-".into(), |db| format!("{} dB", widgets::format_db(db))),
-            gain_edit,
+            ClipEdit::Gain,
         ));
         rows.push(("Warp", if info.warped { "On".into() } else { "Off".into() }, ClipEdit::Warp));
         let mode = WARP_MODES.iter().find(|(m, _, _)| *m == info.stretch).map_or("Smooth", |(_, _, shown)| shown);
@@ -201,7 +208,7 @@ pub(super) fn transpose_text(semitones: f64) -> String {
 }
 
 /// A row of the clip column that edits the clip: a click switches the loop or warp, or steps
-/// the warp mode; the loop range, gain and transpose are dragged sideways (one command when the
+/// the warp mode; the loop range, the start and end markers, gain and transpose are dragged sideways (one command when the
 /// drag ends, so a drag is one undo step) and a double-click puts gain and transpose back to 0.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn clip_edit_row(
@@ -259,6 +266,8 @@ pub(super) fn clip_edit_row(
     let (stored, per_point, min, max, reset) = match edit {
         ClipEdit::LoopStart => (start, 0.0625, min, max, None),
         ClipEdit::LoopEnd => (end, 0.0625, min, max, None),
+        ClipEdit::Start => (info.markers.0, 0.0625, 0.0, (info.markers.1 - 0.25).max(0.0), None),
+        ClipEdit::End => (info.markers.1, 0.0625, info.markers.0 + 0.25, 120_000.0, None),
         ClipEdit::Gain => {
             (info.gain_db.filter(|db| db.is_finite()).unwrap_or(-70.0).max(-70.0), 0.1, -70.0, 24.0, Some(0.0))
         }
@@ -268,7 +277,7 @@ pub(super) fn clip_edit_row(
     // inside after it too.
     let snap = |v: f64| {
         match edit {
-            ClipEdit::LoopStart | ClipEdit::LoopEnd => (v * 4.0).round() / 4.0,
+            ClipEdit::LoopStart | ClipEdit::LoopEnd | ClipEdit::Start | ClipEdit::End => (v * 4.0).round() / 4.0,
             ClipEdit::Transpose => v.round(),
             _ => (v * 10.0).round() / 10.0,
         }
@@ -306,6 +315,8 @@ pub(super) fn clip_edit_row(
     actions.push(match edit {
         ClipEdit::LoopStart => Action::new("clip.setLoop", on_clip(at, json!({ "start": value }))),
         ClipEdit::LoopEnd => Action::new("clip.setLoop", on_clip(at, json!({ "end": value }))),
+        ClipEdit::Start => Action::new("clip.setStart", on_clip(at, json!({ "offset": value }))),
+        ClipEdit::End => Action::new("clip.setLength", on_clip(at, json!({ "length": value - info.markers.0 }))),
         ClipEdit::Gain => {
             let db = commands::exact_db_param(value, -70.0);
             Action::new("clip.setGain", on_clip(at, json!({ "db": db })))

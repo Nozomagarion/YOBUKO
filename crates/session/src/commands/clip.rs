@@ -71,7 +71,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "clip.setGain",
-        label: "Set an audio clip's gain (every clip that plays the same audio content follows)",
+        label: "Set an audio clip's gain, an arrangement clip's or a slot's (every clip that plays the same audio content follows)",
         params: &[
             CLIP_TRACK,
             CLIP,
@@ -80,6 +80,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
                 ParamType::Integer,
                 "clip index on the track, from project.clips (deprecated, use clip; accepted until the project format's next version (ADR 0025))",
             ),
+            CLIP_SCENE,
             param("db", ParamType::Decibels, "gain in dB, at most +24; \"-inf\" or below -150 is silence"),
         ],
         kind: CommandKind::Edit,
@@ -679,15 +680,7 @@ fn set_clip_gain(session: &mut Session, params: &Value) -> Result<Value, Command
         return Err(format!("db must be at most +24, got {db}").into());
     }
     let gain = if db < -150.0 { 0.0 } else { 10f64.powf(db / 20.0) };
-    let (lane, index) = lane_and_index(&session.project, params)?;
-    let content = session
-        .project
-        .arrangement
-        .lanes
-        .get(lane)
-        .and_then(|l| l.clips.get(index))
-        .map(|c| c.content)
-        .ok_or("the clip is missing")?;
+    let (_, content, _) = crate::notes::locate(&session.project, params)?;
     let content =
         session.project.contents.iter_mut().find(|c| c.id == content).ok_or("the clip's content is missing")?;
     let mut audio = false;

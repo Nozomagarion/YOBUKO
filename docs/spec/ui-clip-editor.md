@@ -697,8 +697,12 @@ one undo step, so Ctrl+Z (Cmd+Z on macOS) takes back exactly what it did.
   - **Loop** is a switch (`clip.setLoop`). An audio clip that loops has **Loop start** and **Loop
     end** rows too, dragged sideways by quarter beats, a quarter beat apart at least; a MIDI clip's
     loop is dragged on the piano roll's ruler instead, so its column keeps room for the selection.
+  - An audio clip has a **Start marker**, where in its audio it starts playing (`clip.setStart`),
+    and, when it does not loop, an **End marker**, where it stops (`clip.setLength` from the start
+    marker); both are dragged by quarter beats in content beats, a quarter beat apart at least.
+    A looping clip's end is its length, set on its edge.
   - An audio clip has **Gain** (dragged by tenths of a dB, a double-click puts it at 0 dB;
-    `clip.setGain`, arrangement clips only), **Warp** (a switch), **Mode** (a click steps through
+    `clip.setGain`, an arrangement clip's or a slot's), **Warp** (a switch), **Mode** (a click steps through
     Re-pitch, Rhythmic, Tonal, Texture, Smooth and High quality) and **Transpose** (dragged by
     semitones, -48 to +48, a double-click puts it at 0), all through `clip.setAudio`. Warp turned
     on for audio without warp markers gives it two, at its start and its end, so it plays as it did

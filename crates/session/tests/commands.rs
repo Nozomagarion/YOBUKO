@@ -812,6 +812,17 @@ fn slot_project_built() -> Project {
     p
 }
 
+/// A slot's audio clip takes a gain by its scene, as the clip column's Gain row sets it (#699).
+#[test]
+fn a_launcher_audio_clip_takes_a_gain_by_scene() {
+    let mut session = Session::new(slot_project());
+    run(&mut session, "clip.setGain", json!({ "track": "Bass", "scene": 1, "db": -6 })).unwrap();
+    let LaneData::Audio(region) = &session.project().content(ContentId(9)).unwrap().lanes[0].data else { panic!() };
+    assert!((region.gain - 0.501).abs() < 1e-3);
+    assert!(run(&mut session, "clip.setGain", json!({ "track": "Bass", "scene": 2, "db": 0 })).is_err(), "notes");
+    assert!(run(&mut session, "clip.setGain", json!({ "track": "Bass", "scene": 3, "db": 0 })).is_err(), "empty");
+}
+
 /// A launcher clip's fades are set by its scene, leave the arrangement as it is, and undo (#104).
 #[test]
 fn a_launcher_clip_takes_fades_by_scene_that_undo() {
