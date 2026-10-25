@@ -555,7 +555,9 @@ fn an_edit_is_heard_from_the_frame_it_takes_over() {
             let mut reference =
                 Renderer::build(&edited, RenderInputs::from_audio(&pool), SR, RenderOptions::PLAYING).unwrap();
             let reference = blocks(&mut reference, 150, 480, |_| {});
-            assert_eq!(max_diff(&out[at * 2..], &reference[at * 2..]), 0.0);
+            // Sample for sample once the step the edit made has been eased away.
+            let eased = (at + crate::DECLICK_FRAMES) * 2;
+            assert_eq!(max_diff(&out[eased..], &reference[eased..]), 0.0);
         }
     }
 }
@@ -1082,4 +1084,28 @@ fn the_cpu_load_is_measured_only_in_real_time() {
         renderer.cpu.measured(started, started + Duration::from_millis(10));
     }
     assert!(controller.cpu_monitor().load_milli() > 200);
+}
+
+/// An edit that jumps the sound (warp turned off moves where a clip reads) does not click: the
+/// step between the old graph's last frame and the new one's first is eased away over a few
+/// frames, and sound that goes on smoothly through an edit is left exact (#916).
+#[test]
+fn an_edit_that_jumps_the_sound_is_eased_and_smooth_sound_is_left_exact() {
+    let (project, pool) = stretched_project(440.0, 4.0, 8.0, 110.0, StretchMode::Repitch);
+    let mut silent = project.clone();
+    silent.channels[0].volume = 0.0;
+    let mut renderer = Renderer::build(&project, RenderInputs::from_audio(&pool), SR, RenderOptions::PLAYING).unwrap();
+    let mut controller = renderer.controller();
+    let mut out = blocks(&mut renderer, 50, 480, |_| {});
+    controller.update(&silent).unwrap();
+    out.extend(blocks(&mut renderer, 10, 480, |_| {}));
+    let at = 50 * 480;
+    // The largest step between two frames around the edit stays near the sine's own.
+    let steps =
+        |from: usize, to: usize| (from..to).map(|f| (out[(f + 1) * 2] - out[f * 2]).abs()).fold(0.0f32, f32::max);
+    let before = steps(at - 960, at - 1);
+    let around = steps(at - 1, at + crate::DECLICK_FRAMES);
+    assert!(around <= before * 1.5 + 1e-3, "a step of {around} at the edit, {before} before it");
+    // And silence after it.
+    assert!(out[(at + crate::DECLICK_FRAMES + 1) * 2..].iter().all(|s| s.abs() < 1e-6));
 }

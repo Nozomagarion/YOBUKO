@@ -360,8 +360,14 @@ pub(crate) fn gains_until(
     let mut volume = 1.0;
     let mut visited = Vec::new();
     let mut next = Some(channel);
+    // A main channel with a chain applies its volume after it (#687).
+    let main_chain = main_runs_chain(project);
     while let Some(c) = next.take() {
-        if Some(c.id) == until || visited.len() > MAX_HOPS || visited.contains(&c.id) {
+        if Some(c.id) == until
+            || visited.len() > MAX_HOPS
+            || visited.contains(&c.id)
+            || (main_chain && c.role == ChannelRole::Master)
+        {
             break;
         }
         visited.push(c.id);

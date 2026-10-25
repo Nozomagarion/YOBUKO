@@ -406,6 +406,10 @@ pub struct Renderer {
     block_frame: usize,
     /// Rendering offline: plug-ins are waited for without a real-time deadline (ADR 0006).
     offline: bool,
+    /// The last frame written, and the step a new graph made from it, eased away over
+    /// [`DECLICK_FRAMES`] frames so an edit while playing (warp turned on, a clip moved) does not
+    /// click where the old graph's sound ends and the new one's begins.
+    declick: Declick,
     /// What the device has queued ahead of the next block and how much it takes at once, in
     /// frames ([`Renderer::set_render_lead`]): how long the block's plug-ins may take.
     render_lead: Option<(usize, usize)>,
@@ -479,6 +483,55 @@ impl RenderOptions {
     pub const STOPPED: Self = Self { stopped: true, source: None };
 }
 
+/// Frames over which the step a new graph makes is eased away (about 1.5 ms at 44.1 kHz).
+pub(crate) const DECLICK_FRAMES: usize = 64;
+/// How far the new graph's first frame may be from where the old graph's sound was heading
+/// before it counts as a step and is eased: sound that goes on through an edit is left exact.
+const DECLICK_STEP: f32 = 0.05;
+
+/// Eases away the step between the last frame of one graph and the first of the next.
+#[derive(Debug, Default)]
+struct Declick {
+    /// The last two frames written, the latest first.
+    last: [[f32; 2]; 2],
+    step: [f32; 2],
+    left: usize,
+    /// A new graph took over: the next frame written measures the step.
+    pending: bool,
+}
+
+impl Declick {
+    /// Corrects `frames` (interleaved stereo) for a step still being eased, and remembers their
+    /// last frames. Never allocates.
+    fn ease(&mut self, frames: &mut [f32]) {
+        if self.pending && frames.len() >= 2 {
+            self.pending = false;
+            // Where the old sound was heading: on along its last slope.
+            let [latest, before] = self.last;
+            let heading = [2.0 * latest[0] - before[0], 2.0 * latest[1] - before[1]];
+            let step = [heading[0] - frames[0], heading[1] - frames[1]];
+            if step.iter().all(|s| s.is_finite()) && step.iter().any(|s| s.abs() > DECLICK_STEP) {
+                self.step = step;
+                self.left = DECLICK_FRAMES;
+            }
+        }
+        for frame in frames.chunks_exact_mut(2) {
+            if self.left == 0 {
+                break;
+            }
+            let weight = self.left as f32 / DECLICK_FRAMES as f32;
+            frame[0] += self.step[0] * weight;
+            frame[1] += self.step[1] * weight;
+            self.left -= 1;
+        }
+        match frames {
+            [.., l0, r0, l1, r1] => self.last = [[*l1, *r1], [*l0, *r0]],
+            [l, r] => self.last = [[*l, *r], self.last[0]],
+            _ => {}
+        }
+    }
+}
+
 impl Renderer {
     /// A renderer for the project's notes; audio clips stay silent. See [`Renderer::build`].
     pub fn new(project: &Project, sample_rate: u32) -> Result<Self, RenderError> {
@@ -532,6 +585,7 @@ impl Renderer {
             metronome: metronome::Metronome::new(sample_rate),
             block_frame: 0,
             offline: false,
+            declick: Declick::default(),
             render_lead: None,
             plugin_info: plugins.info,
             preview: preview::Preview::new(sample_rate),
@@ -751,8 +805,10 @@ impl Renderer {
                     let (cue_before, cue_after) = split_cue(cue_rest, split);
                     if !before.is_empty() {
                         self.process_block(before, cue_before);
+                        self.declick.ease(before);
                     }
                     self.apply_swap();
+                    self.declick.pending = true;
                     rest = after;
                     cue_rest = cue_after;
                 }
@@ -761,6 +817,7 @@ impl Renderer {
         }
         if !rest.is_empty() {
             self.process_block(rest, cue_rest);
+            self.declick.ease(rest);
         }
         self.publish_position();
         self.publish_plugin_misses();
@@ -1627,8 +1684,14 @@ pub(crate) fn track_gains(project: &Project, track: TrackId) -> Option<(f32, f32
     let mut volume = 1.0;
     let mut visited = Vec::new();
     let mut next = Some(channel);
+    // A main channel with a chain of its own applies its volume and mute after it (#687), also
+    // for a track routed to it by name.
+    let main_chain = buses::main_runs_chain(project);
     // Bounded, so a routing cycle in a malformed project cannot loop forever.
     while let Some(c) = next.take() {
+        if main_chain && c.role == ChannelRole::Master {
+            break;
+        }
         if c.mute || visited.len() > 64 || visited.contains(&c.id) {
             return None;
         }
