@@ -120,6 +120,8 @@ greyed. They are where the best parts of each pass are picked and put together o
   `piece`); **Delete take** removes the lane, and the track's clips stay.
 - **Hide take lanes** / **Show take lanes** in the right-click menu of the track's lane folds
   them away and back.
+- Dragging the line under a take lane makes the track's take lanes taller or shorter, all alike
+  (20 to 240 px); a double-click on the line puts them back to 36 px.
 
 The track's lane reads as the comp (#989). A clip on the track that plays a take's content from
 the same place is a **part** of that take, found by its content and by where in it each beat lands

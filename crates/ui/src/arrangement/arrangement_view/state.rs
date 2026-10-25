@@ -158,6 +158,8 @@ pub struct ArrangementViewState {
     /// The take piece a right-click on a take lane was over (track, take number, piece from 0),
     /// which the lane's Recolor colours (#989).
     pub(super) take_piece: Option<(TrackId, usize, usize)>,
+    /// The height `track`'s take lanes were dragged to (#989); the default for the rest.
+    pub(super) take_heights: HashMap<TrackId, f32>,
     /// Moved clips stack on others instead of replacing them: audio clips, MIDI clips.
     pub stack_audio: bool,
     pub stack_midi: bool,
@@ -331,6 +333,7 @@ impl Default for ArrangementViewState {
             takes_hidden: HashSet::new(),
             take_drag: None,
             take_piece: None,
+            take_heights: HashMap::new(),
             stack_audio: false,
             stack_midi: false,
             time_select_ctrl: false,
@@ -678,7 +681,13 @@ impl ArrangementViewState {
         // The kept takes, and the passes of a take still recording that are already done.
         let kept = timeline.takes.iter().filter(|t| t.track == track).count();
         let recording = timeline.live_takes.iter().filter(|t| t.track == track && t.finished).count();
-        (kept + recording) as f32 * (TAKE_ROW + 1.0)
+        (kept + recording) as f32 * (self.take_row(track) + 1.0)
+    }
+
+    /// How tall each of `track`'s take lanes is: the height its edge was dragged to, or the
+    /// default (#989).
+    pub(super) fn take_row(&self, track: TrackId) -> f32 {
+        self.take_heights.get(&track).copied().unwrap_or(TAKE_ROW)
     }
 
     /// What is drawn under `track`'s own row: its take lanes, then its automation lanes.

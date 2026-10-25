@@ -1330,10 +1330,33 @@ pub(super) fn take_lanes(
     let (scroll_x, beat_width) = (state.scroll.x, state.beat_width);
     let beat_of = |x: f32| ruler_beat(f64::from((x - at.time.min + scroll_x) / beat_width), grid, free);
     let mut y = at.top;
+    let take_row = state.take_row(lane.track);
     for take in timeline.takes.iter().filter(|t| t.track == lane.track) {
-        let row = Rect::from_x_y_ranges(at.time, egui::Rangef::new(y, y + TAKE_ROW));
+        let row = Rect::from_x_y_ranges(at.time, egui::Rangef::new(y, y + take_row));
         let header = Rect::from_x_y_ranges(at.headers, row.y_range());
-        y += TAKE_ROW + 1.0;
+        y += take_row + 1.0;
+        // The line under a take lane resizes the track's take lanes, all alike; a double-click
+        // puts them back to the default height (#989).
+        let edge = Rect::from_x_y_ranges(
+            egui::Rangef::new(at.time.min.min(at.headers.min), at.time.max.max(at.headers.max)),
+            egui::Rangef::new(row.bottom() - 2.0, row.bottom() + 3.0),
+        )
+        .intersect(at.visible);
+        if edge.height() > 0.0 {
+            let resize = ui
+                .interact(edge, Id::new(("take-lane-edge", lane.track.0, take.number)), Sense::click_and_drag())
+                .on_hover_cursor(egui::CursorIcon::ResizeVertical);
+            resize.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Slider, true, format!("Height of {}", take.name))
+            });
+            if resize.double_clicked() {
+                state.take_heights.remove(&lane.track);
+            } else if resize.dragged() {
+                let height =
+                    (state.take_row(lane.track) + resize.drag_delta().y).clamp(TAKE_ROW_RANGE.0, TAKE_ROW_RANGE.1);
+                state.take_heights.insert(lane.track, height);
+            }
+        }
         painter.hline(
             egui::Rangef::new(at.time.min.min(at.headers.min), at.time.max.max(at.headers.max)),
             row.bottom() + 0.5,
@@ -1457,9 +1480,9 @@ pub(super) fn take_lanes(
     // at once, numbered after the kept ones, so each pass shows as soon as it is done (#909).
     let kept = timeline.takes.iter().filter(|t| t.track == lane.track).count();
     for (index, pass) in timeline.live_takes.iter().filter(|t| t.track == lane.track && t.finished).enumerate() {
-        let row = Rect::from_x_y_ranges(at.time, egui::Rangef::new(y, y + TAKE_ROW));
+        let row = Rect::from_x_y_ranges(at.time, egui::Rangef::new(y, y + take_row));
         let header = Rect::from_x_y_ranges(at.headers, row.y_range());
-        y += TAKE_ROW + 1.0;
+        y += take_row + 1.0;
         painter.hline(
             egui::Rangef::new(at.time.min.min(at.headers.min), at.time.max.max(at.headers.max)),
             row.bottom() + 0.5,

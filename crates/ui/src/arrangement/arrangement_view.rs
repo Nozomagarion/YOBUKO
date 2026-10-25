@@ -59,6 +59,8 @@ const LANE_ZOOM_PER_POINT: f32 = 0.004;
 const SHOWS_MIXER: f32 = 48.0;
 /// A take lane's height under its track (`docs/spec/recording.md` › Take lanes).
 const TAKE_ROW: f32 = 36.0;
+/// The least and the most a take lane's height may be dragged to (#989).
+const TAKE_ROW_RANGE: (f32, f32) = (20.0, 240.0);
 const SHOWS_ROUTING: f32 = 70.0;
 /// A track that plays notes shows its MIDI input under its routing from this height.
 const SHOWS_MIDI_INPUT: f32 = 90.0;

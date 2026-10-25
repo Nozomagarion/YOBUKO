@@ -1729,3 +1729,47 @@ fn the_arrangement_toolbar_tools_act_on_clips_and_its_keys_choose_them() {
     harness.run();
     assert_eq!(clips(&harness), before - 1);
 }
+
+/// The line under a take lane makes the track's take lanes taller; a double-click puts them back
+/// (#989).
+#[test]
+fn a_take_lanes_edge_drags_its_height() {
+    let mut project = demo_project();
+    let drums = project.tracks.iter().find(|t| t.name == "Drums").map(|t| t.id).unwrap();
+    let clip = project
+        .arrangement
+        .lanes
+        .iter()
+        .find(|l| l.track == Some(drums))
+        .and_then(|l| l.clips.first())
+        .cloned()
+        .unwrap();
+    for n in 1..=2 {
+        project.arrangement.takes.push(suhina_engine::model::TakeLane {
+            track: drums,
+            name: format!("Take {n}"),
+            clips: vec![suhina_engine::model::Clip { id: suhina_engine::model::ClipId::NONE, ..clip.clone() }],
+            color: None,
+        });
+    }
+    project.assign_ids().unwrap();
+    let mut app = App::new();
+    app.set_browser_open(false);
+    app.set_session(Session::new(project), &[]);
+    let mut harness = window(app);
+    harness.get_by_label("Arrangement view").click();
+    harness.run();
+    let height = |h: &Harness<'static, App>| h.get_by_label("Comp from Drums Take 1").rect().height();
+    let before = height(&harness);
+    let edge = harness.get_by_label("Height of Drums Take 1").rect().center();
+    harness.drag_at(edge);
+    harness.run();
+    harness.hover_at(edge + egui::vec2(0.0, 30.0));
+    harness.run();
+    harness.drop_at(edge + egui::vec2(0.0, 30.0));
+    harness.run();
+    assert!(height(&harness) > before + 20.0, "{before} -> {}", height(&harness));
+    // Every take lane of the track alike.
+    let second = harness.get_by_label("Comp from Drums Take 2").rect().height();
+    assert!((second - height(&harness)).abs() < 1.0);
+}
