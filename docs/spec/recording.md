@@ -188,6 +188,10 @@ of the speaker. A take is placed where what was played lines up with what was he
 
 Notes before the take's start (a key a little early) are not kept, nor is sound before it.
 
+After a stop, or when recording is turned off while playing, the input goes on being recorded for
+that latency, so the last frames played reach the take; before, the take's end was cut by the
+latency, and on a loop the later passes found nothing of themselves in the file and were dropped.
+
 ## Audio files
 
 Audio takes are written to `Recorded/` in the folder of the project file, one WAV file per take,

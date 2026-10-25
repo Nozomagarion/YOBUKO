@@ -321,6 +321,12 @@ fn input_is_recorded_only_from_armed_tracks_while_recording_and_playing() {
     assert!(chunks.iter().all(|c| c.samples().iter().all(|s| *s == 0.25)));
     assert_eq!(chunks.iter().map(|c| usize::from(c.frames)).sum::<usize>(), BLOCK);
     controller.send(LaunchCommand::Stop).unwrap();
+    // After the stop only the latency's frames still on their way come in (#989), then nothing.
+    for _ in 0..8 {
+        feed(&mut ring);
+        blocks(&mut renderer, 1, BLOCK);
+    }
+    while recorder.next_audio().is_some() {}
     feed(&mut ring);
     blocks(&mut renderer, 1, BLOCK);
     assert!(recorder.next_audio().is_none(), "stopped");
@@ -362,4 +368,43 @@ fn a_jump_of_the_playhead_while_recording_goes_out_with_its_frame_and_beats() {
     blocks(&mut renderer, 1, BLOCK);
     let got = notes(&mut recorder);
     assert!(got.first().is_some_and(|n| n.position >= jump.position), "{got:?}");
+}
+
+/// After a stop the input goes on being recorded for the latency, so the last frames played reach
+/// the take; the frames go on from where the recording stopped, and then nothing more comes.
+#[test]
+fn the_last_frames_played_are_recorded_after_a_stop() {
+    let (output, input) = (BLOCK as u32 * 2, 0u32);
+    let mut renderer = Renderer::stopped(&input_track(), &AudioPool::new(), SR).unwrap();
+    let (mut ring, consumer) = rtrb::RingBuffer::new(BLOCK * 64);
+    renderer.set_audio_input(consumer, 1, Arc::new(AtomicU64::new(0)));
+    let mut controller = renderer.controller();
+    let mut recorder = controller.take_recorder().unwrap();
+    arm(&mut controller, 1);
+    controller.send(LaunchCommand::SetRecording { on: true }).unwrap();
+    controller.send(LaunchCommand::Play).unwrap();
+    let mut block = vec![0.0f32; BLOCK * 2];
+    let mut run = |renderer: &mut Renderer, ring: &mut rtrb::Producer<f32>, count: usize| {
+        for _ in 0..count {
+            for _ in 0..BLOCK {
+                ring.push(0.25).unwrap();
+            }
+            renderer.set_record_latency(output, input);
+            renderer.process(&mut block);
+        }
+    };
+    run(&mut renderer, &mut ring, 8);
+    controller.send(LaunchCommand::Stop).unwrap();
+    run(&mut renderer, &mut ring, 6);
+    let chunks: Vec<_> = std::iter::from_fn(|| recorder.next_audio()).collect();
+    let frames: usize = chunks.iter().map(|c| c.samples().len()).sum();
+    // Eight blocks played, and the latency after the stop: two more blocks' worth (and the
+    // block that waited in the ring).
+    let latency = output as usize + input as usize + BLOCK;
+    assert_eq!(frames, 8 * BLOCK + latency, "{frames}");
+    // In order, with no gap: each chunk starts where the last ended (from where the latency is
+    // past, before which they count from the start).
+    for pair in chunks.windows(2).filter(|p| p[0].position > 0) {
+        assert_eq!(pair[1].position, pair[0].position + pair[0].samples().len() as u64);
+    }
 }

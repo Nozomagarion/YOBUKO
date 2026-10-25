@@ -162,6 +162,10 @@ pub(crate) struct Recorder {
     /// the beat heard when it was captured.
     note_latency: u64,
     audio_latency: u64,
+    /// Frames still to record after the transport stopped or recording went off: what was
+    /// played before is still on its way through the output and the input (`audio_latency`),
+    /// and a take ends where it was heard, so its last frames come in after the stop.
+    tail: u64,
 }
 
 impl Recorder {
@@ -182,6 +186,7 @@ impl Recorder {
             beats_per_frame: 0.0,
             note_latency: 0,
             audio_latency: 0,
+            tail: 0,
         }
     }
 
@@ -204,6 +209,9 @@ impl Recorder {
     }
 
     pub(crate) fn set(&mut self, on: bool) {
+        if self.on && !on && self.running {
+            self.tail = self.audio_latency;
+        }
         self.on = on;
     }
 
@@ -212,9 +220,10 @@ impl Recorder {
         self.input_latency = u64::from(input);
     }
 
-    /// Whether this block's input is recorded.
+    /// Whether this block's input is recorded: while recording, and for the latency after it
+    /// stops, so a take gets its last frames.
     pub(crate) fn takes_audio(&self) -> bool {
-        self.on && self.running && self.audio.is_some()
+        (self.on && self.running || self.tail > 0) && self.audio.is_some()
     }
 
     /// Where a block starting at renderer frame `position` is: the launcher clock's beat and the
@@ -242,13 +251,30 @@ impl Recorder {
                 let _full = ring.push(jump);
             }
         }
+        let elapsed = position.saturating_sub(self.position);
+        if self.on && self.running && !running {
+            // The transport stopped: the last frames played are still to come in.
+            self.tail = self.audio_latency;
+        } else if self.on && running {
+            self.tail = 0;
+        } else {
+            self.tail = self.tail.saturating_sub(elapsed);
+        }
+        let tailing = self.tail > 0 && !(self.on && running);
         self.running = running;
+        if tailing {
+            // The beats go on from where recording stopped, for the frames that come in after.
+            let step = elapsed as f64 * self.beats_per_frame;
+            self.clock += step;
+            self.beat += step;
+        } else {
+            self.clock = clock;
+            self.beat = beat;
+            self.beats_per_frame = if beats_per_frame.is_finite() { beats_per_frame.max(0.0) } else { 0.0 };
+            self.note_latency = live_delay.saturating_add(self.output_latency);
+            self.audio_latency = self.output_latency.saturating_add(self.input_latency).saturating_add(input_waiting);
+        }
         self.position = position;
-        self.clock = clock;
-        self.beat = beat;
-        self.beats_per_frame = if beats_per_frame.is_finite() { beats_per_frame.max(0.0) } else { 0.0 };
-        self.note_latency = live_delay.saturating_add(self.output_latency);
-        self.audio_latency = self.output_latency.saturating_add(self.input_latency).saturating_add(input_waiting);
     }
 
     /// The beats at renderer frame `position` less `latency` frames, counted from this block.
@@ -286,6 +312,9 @@ impl Recorder {
         if !self.takes_audio() {
             return;
         }
+        // After a stop, only the frames still to come in.
+        let frames =
+            if self.on && self.running { frames } else { frames.min(usize::try_from(self.tail).unwrap_or(usize::MAX)) };
         let channels = channels.clamp(1, 2);
         let mut done = 0;
         while done < frames {
