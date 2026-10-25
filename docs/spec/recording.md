@@ -200,6 +200,15 @@ step.
 - The control bar has a record button right of play and stop (**Record into the
   arrangement**, **Stop recording** while lit), and a **Count-in** menu right of the launch
   quantisation (Off, 1 bar, 2 bars, 4 bars). It has no default shortcut yet.
+- Without a MIDI keyboard, the computer keyboard plays notes (#944): the control bar's **Keys**
+  button, or Ctrl+K (`view.computerKeyboard`), turns it on. A W S E D F T G Y H U J K play C to
+  the C above (the black keys on the upper row), O L P ; go on up; Z and X move the octave
+  (A is C3 at first, C-2 to C8), C and V the velocity in tenths. The notes go through the same
+  live input a controller's notes take ([ADR 0017](../decisions/0017-inputs-and-latency.md)),
+  so they sound on the armed tracks, monitor and record alike. A held key plays one note; its
+  repeats play nothing. While it is on those keys run no shortcut, and a text field with the
+  keyboard takes them as typing; turning it off, or a field taking the keyboard, ends the
+  notes held.
 
 ## Not yet
 

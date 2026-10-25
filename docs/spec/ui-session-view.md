@@ -52,7 +52,9 @@ From top to bottom:
      Count-in menu right of the launch quantisation; an armed track's empty slots show a record
      button ([recording](recording.md) › In the window)
     - draw mode, computer-keyboard MIDI, MIDI and audio activity, sample rate, CPU load
-      (**Suhina:** the CPU load is built, left of the view switch; `launcher.state`
+      (**Suhina:** computer-keyboard MIDI is the **Keys** button right of the time signature,
+      lit while two rows of letters play the armed tracks, with the octave of A on it ("C3");
+      Ctrl+K does the same (`view.computerKeyboard`, #944). The CPU load is built, left of the view switch; `launcher.state`
       reports it as `cpu`; the rest is not). Left of the CPU load, the program's RAM
       (its resident memory, in MB or GB), shown always; **Suhina:** the number adds
       the resident memory every plug-in host process reports to the engine once

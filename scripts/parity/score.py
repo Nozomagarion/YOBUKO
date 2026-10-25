@@ -50,13 +50,14 @@ CHAPTERS = [
     (3, "Live Concepts", 27, 0.50, "partial",
      "Control bar, browser, sets, arrangement/session, tracks, audio/MIDI clips, devices, mixer "
      "concepts exist. Routing, recording, racks, clip/device view and presets are missing or thin."),
-    (4, "Working with the Browser", 60, 0.50, "partial",
+    (4, "Working with the Browser", 60, 0.52, "partial",
      "Search, categories, folders watched on disk, pins, recent, colour tags, preview through the "
      "engine, sample map by sound similarity (smooth with 200 000 items, also while its window is resized) with kinds recognised from the sound and set by hand; samples and MIDI files dragged from the system's file "
      "manager land like a browser drag; dropping one sample on an empty MIDI track adds Sampler (exact placement waits for pointer positions from the "
      "windowing layer); installed plug-ins grouped by vendor in the tree, and in the Plug-ins "
      "category as the instruments or the effects by name and format, with pins and tags on them. "
-     "Samples copied out to a folder (Copy to folder…, library.copyTo) or dragged out to the file manager as copies. "
+     "Samples copied out to a folder (Copy to folder…, library.copyTo) or dragged out to the file manager as copies; "
+     "samples dragged onto a browser folder moved or copied there (asked, or as a setting says; library.moveTo keeps their pins, recent places and tags). "
      "Missing collections/tag editor depth, packs, Splice, "
      "Cloud, Push transfer, filter groups, browser history."),
     (5, "Managing Files and Sets", 43, 0.40, "partial",
@@ -71,9 +72,10 @@ CHAPTERS = [
      "attached MCP exports prepare over frames and render off the window thread. "
      "Missing project folders/collect, unused files, packing, .asd, decoding cache, set "
      "merging, file-reference view, the export dialog's source and range rows."),
-    (6, "Arrangement View", 22, 0.62, "partial",
+    (6, "Arrangement View", 22, 0.64, "partial",
      "Layout, zoom, transport, track headers with a band of the track colour that opens the colour palette, ruler/play start, a click in the tracks setting the next start without moving playback and a ruler seek quantized to the launch grid, play from the selected clip, clip drag+move, "
      "whole tracks cut, copied, pasted (between project tabs too) and duplicated with their devices, automation and clips, "
+     "track names with # shown as the track's number, an empty track taking the kind of the clip dropped on it, several clips' edges dragged together, a MIDI clip's left edge drawn out before its notes, "
      "overlap replace/stack, fades and fade shapes, the control bar's grid value (bars to "
      "triplets, or none) drawn as lines that adapt to the zoom and snapping moves, drops, fades "
      "and ruler clicks (Alt for off the grid), nested groups folded and unfolded, "
@@ -99,14 +101,14 @@ CHAPTERS = [
      "scenes inserted, duplicated, deleted and renamed from a menu, with a tempo and time signature "
      "each. A launched clip is selected and the detail area shows its follow-action controls. "
      "Missing capture-and-insert scene, moving clips between slots, select-on-launch options."),
-    (8, "Clip View", 34, 0.22, "started",
+    (8, "Clip View", 34, 0.24, "started",
      "Detail area shows clip properties and, for a MIDI clip in the Arrangement, a first piano roll "
      "(docs/spec/ui-clip-editor.md): keys, ruler, note grid, velocity lane, zoom and scroll, a toolbar of "
      "tool icons with the note clipboard and a toolbar size, a MIDI tools column beside the notes, "
      "and the selection described in the clip column (count, span, pitch and velocity range); the "
      "editor keeps a least height with its notes in view and closes by its splitter, an x or View > "
      "Hide editor, opening again when a clip is selected. The clip column edits the clip: loop on "
-     "or off, an audio clip's loop start and end, gain, warp on or off, warp mode and transpose. "
+     "or off, an audio clip's loop start and end, start and end markers, gain (a slot's too), warp on or off, warp mode and transpose. "
      "No clip panels, no sample editor, no groove/scale panels."),
     (9, "Audio Clips, Tempo, and Warping", 18, 0.42, "partial",
      "Real-time time-stretching along warp markers read from Live Sets, clip gain, transpose, "
@@ -116,7 +118,7 @@ CHAPTERS = [
      "every mode except Re-pitch, so the mode names are not yet different algorithms, and rates "
      "outside 0.25x-4x fall back to Re-pitch. Tempo changes over the song (steps and ramps, a tempo "
      "map every clip follows, read from a set's tempo envelope; a scene tempo overrides it until "
-     "transport.followTempoMap or the next start). Missing tap tempo, tempo follower/leader, "
+     "transport.followTempoMap or the next start); the tempo field typed or dragged to a thousandth of a BPM by the place grabbed, clips following while it moves. Missing tap tempo, tempo follower/leader, "
      "auto-warp of long samples, warp-marker editing, quantise audio, drawing the tempo as an "
      "automation envelope."),
     (10, "Editing MIDI", 41, 0.44, "started",
@@ -178,13 +180,13 @@ CHAPTERS = [
      "meters (peak, RMS, clip) per track, group, return and main, also over MCP, and a cue output "
      "on a second pair of the device (previews, per-track cue, cue volume); return tracks "
      "imported and drawn. Missing crossfader, track delay, send fields in the Arrangement headers."),
-    (19, "Recording New Clips", 13, 0.50, "partial",
+    (19, "Recording New Clips", 13, 0.54, "partial",
      "Independent record arm and Auto / In / Off input monitoring (MIDI controllers, audio inputs); MIDI and audio recording into "
      "an empty slot from the next launch boundary (ended on the next one, then played looped) or "
      "into the arrangement, several armed tracks at once, a count-in of 1, 2 or 4 bars, takes lined "
      "up with what was heard, audio written to WAV files off the audio thread, one undo step per "
      "take; the take drawn growing with its notes or waveform while it records, every loop pass or "
-     "jump back kept as a take of its own. Missing overdub, punch in/out, recording automation, capture MIDI, session record button."),
+     "jump back kept as a take of its own; notes played from the computer keyboard (Ctrl+K). Missing overdub, punch in/out, recording automation, capture MIDI, session record button."),
     (20, "Bounce to Audio", 6, 0.15, "partial",
      "Whole-project offline render to 32-bit float WAV (CLI/MCP), from an open project with its "
      "running plug-ins' state as heard; no per-track or group bounce, no paste."),

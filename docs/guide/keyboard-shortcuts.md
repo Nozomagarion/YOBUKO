@@ -82,6 +82,7 @@ The project you leave stops playing.
 | Ctrl+F | `browser.search` | Anywhere | Puts the cursor in the browser's search field, and shows the browser when it is hidden. In the field, Up and Down move through the results, Enter adds the selected result to the selected track, and Escape clears the search and then leaves the field. |
 | Ctrl+Alt+Shift+M | `view.sampleMap` | Anywhere | Shows or hides the sample map in the main area. The sample map places your samples on a map by how they sound, so similar sounds are close together. Escape on the map closes it too. |
 | Ctrl+Alt+M | `view.sampleMapWindow` | Anywhere | Opens the sample map in a window of its own, or puts it back in the main window. |
+| Ctrl+K | `view.computerKeyboard` | Anywhere | Turns the computer keyboard's notes on or off. While on, A W S E D F T G Y H U J K (and O L P ;) play the armed tracks like a piano's keys, Z and X move the octave and C and V the velocity, and those keys run no shortcut. The control bar's **Keys** button does the same. |
 | Ctrl+M | `view.mappingMode` | Anywhere | Starts or stops key mapping. While mapping, you click a clip slot, a scene or a stop button and press a key to launch it with. While the Session view is shown, a key mapped this way wins over its shortcut. |
 | Ctrl+, | `settings.open` | Anywhere | Opens Settings, or closes it when it is open. |
 | Ctrl+Plus or Ctrl+= | `view.zoomIn` | Anywhere | Makes everything in the window larger, in 10 % steps up to 200 %. Both keys work because on some keyboards Plus needs Shift. |
