@@ -58,7 +58,20 @@ and is deleted with its device. One lane per parameter.
   or Utility's gain law, [utility.md](utility.md#the-gain-knob)), a data-only device's along its
   control (logarithmic for a log slider or knob), pan and plug-in parameters in their value. What
   a lane draws straight is what plays: half-way from 50 Hz to 500 Hz on a logarithmic knob is
-  158 Hz. A whole-number parameter moves along the line between its points and the device rounds.
+  158 Hz.
+- **A whole-number parameter** (`ParamKind::Integer`) moves along the line like any other, and
+  takes the lane's value with its **fraction cut off toward zero** (`ParamInfo::played`): 36.98
+  plays 36, 0.94 plays 0 and -2.97 plays -2. It is not rounded or floored: a lane from 40 to 41
+  plays 40 until its last point, one from 41 to 40 plays 40 from its first step, and one from 3
+  to -3 spends twice as long on 0 as on each other number. A point may hold a value between two
+  numbers (a split on a slope leaves one; a file can hold one): it sits where it falls between
+  them, unrounded (`ParamInfo::to_normalized`), and plays cut toward zero, so 40.5 plays 40.
+  This follows how Live 12.4.6 plays integer lanes, read through its API with the playhead
+  stepped across them (`measurements/automation/kinds/`, #914); whether a device's sound follows
+  the value the same way was not heard. A value typed for a point (`automation.addPoint` with a
+  `value`) is kept as `device.setParam` keeps it, a whole number. The lane draws the line the
+  lane moves along; the header, the point's tooltip and the panel while it plays show the number
+  played.
 - The movement follows the first point's **curve** (`automation::Curve`): a cubic Bezier from
   (0, 0) to (1, 1) in (share of the segment's time, share of the way in position) through two
   inner control points (x1, y1) and (x2, y2). Bending and dragging keep each anywhere from 0 to 1;
@@ -79,8 +92,7 @@ and is deleted with its device. One lane per parameter.
 - **Two points at one beat make a jump**: the value reaches the first, then leaves from the second.
   A new point at a beat that has points goes after them.
 - On/off and choice parameters, and the mute, are **steps**: each point's value holds until the
-  next point; curves do not apply. Whole-number parameters move along the line and the device
-  rounds.
+  next point; curves do not apply. Whole-number parameters move along the line, as above.
 - A lane is **enabled** or not. One that is off does not play: the parameter keeps the value set on
   it (the channel's volume, the device's `params`).
 

@@ -70,6 +70,45 @@ fn a_device_lane_moves_evenly_along_its_parameters_knob() {
     assert!((middle - want).abs() < 1e-9 && middle > -20.0, "{middle} against {want}");
 }
 
+/// A whole-number parameter takes the lane's value with its fraction cut off toward zero
+/// (`docs/spec/automation.md` › Lanes and points): not rounded, not floored.
+#[test]
+fn a_whole_number_lane_cuts_its_fraction_toward_zero() {
+    // Eight frames a beat: one frame is the measurement's 0.125-beat step.
+    let transpose = ParamInfo::integer("t", "T", (-48, 48), 0, suhina_device_api::Unit::Semitones);
+    let read = |points: &[(f64, f64)], beat: f64| {
+        let envelope = Envelope::new(&lane("t", points), 8.0, false, Position::Param(transpose)).unwrap();
+        envelope.value_at((beat * 8.0) as u64)
+    };
+    let through_zero = [(0.0, 3.0), (12.0, -3.0)];
+    // 2.94 at the first step plays 2; 0.94 at beat 4.125 plays 0, until -1.0 at beat 8.
+    let plays: Vec<f64> =
+        [0.0, 0.125, 4.0, 4.125, 6.0, 7.875, 8.0, 11.875, 12.0].iter().map(|&b| read(&through_zero, b)).collect();
+    assert_eq!(plays, [3.0, 2.0, 1.0, 0.0, 0.0, 0.0, -1.0, -2.0, -3.0]);
+    // Twice as long on 0 as on any other number less one step: 0.94 to -0.94 against 1.94 to 1.
+    let steps_on = |n: f64| (0..=96).filter(|&s| read(&through_zero, f64::from(s) / 8.0) == n).count();
+    assert_eq!((steps_on(0.0), steps_on(1.0), steps_on(-1.0)), (31, 16, 16));
+    // Nothing is rounded to the nearest: 40 to 41 stays at 40 until the last point, 41 to 40
+    // plays 40 from the first step, and 40.5 held plays 40.
+    assert_eq!(read(&[(0.0, 40.0), (8.0, 41.0)], 7.875), 40.0);
+    assert_eq!(read(&[(0.0, 40.0), (8.0, 41.0)], 8.0), 41.0);
+    assert_eq!(read(&[(0.0, 41.0), (8.0, 40.0)], 0.125), 40.0);
+    assert_eq!(read(&[(0.0, 40.0), (8.0, 40.5)], 8.0), 40.0);
+    assert_eq!(read(&[(0.0, 40.5)], 3.0), 40.0);
+
+    // What a device gets: the pitch MIDI effect's semitones, cut toward zero.
+    let device = suhina_device_registry::create("pitch").unwrap();
+    let mut lanes = DeviceLanes::none();
+    lanes.add(0, device.as_ref(), &[lane("pitch", &[(0.0, 3.0), (12.0, -3.0)])], 8.0);
+    let index = device.info().param_index("pitch").unwrap();
+    let mut got = |frame: u64| {
+        lanes.plan(Some(frame), 1);
+        lanes.changes(0, 0, 1).find(|c| c.param == index).map(|c| c.value)
+    };
+    assert_eq!(got(33), Some(0.0), "0.94 at beat 4.125 plays 0");
+    assert_eq!(got(79), Some(-1.0), "-1.94 at beat 9.875 plays -1, not -2");
+}
+
 #[test]
 fn hostile_device_lanes_stay_within_bounds() {
     let device = suhina_device_registry::create("utility").unwrap();

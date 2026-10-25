@@ -453,7 +453,8 @@ impl Detail {
                     };
                     let Some(scale) = scale else { continue };
                     let Some(value) = lane.value_at(beat, scale.stepped(), &scale) else { continue };
-                    let value = spec.map_or(value, |spec| spec.clamp(value));
+                    // A whole-number parameter shows what it plays, the fraction cut off toward zero.
+                    let value = spec.map_or(value, |spec| spec.played(value));
                     for (id, v) in &mut device_box.values {
                         if *id == lane.param {
                             *v = value;

@@ -203,7 +203,8 @@ impl Taper for Kind {
     fn value(&self, position: f64) -> f64 {
         match self {
             Kind::Volume => VolumeTaper.value(position),
-            // A whole-number parameter moves along the line and the device rounds.
+            // A whole-number parameter moves along the line, through values between its numbers;
+            // the engine cuts the fraction off as it plays (`ParamInfo::played`).
             Kind::Builtin(info) if matches!(info.kind, suhina_device_api::ParamKind::Integer) => {
                 info.min + position.clamp(0.0, 1.0) * (info.max - info.min)
             }

@@ -1009,3 +1009,27 @@ fn alt_drags_a_point_off_the_grid() {
     assert_eq!(points.len(), 1);
     assert!((points[0].beat - 16.5).abs() < 0.2, "{points:?}");
 }
+
+/// A click on a whole-number lane's slope adds a point on it, holding the value between two
+/// numbers, so the envelope keeps its shape (the engine plays it with the fraction cut off).
+#[test]
+fn a_click_on_a_whole_number_slope_adds_a_point_between_numbers() {
+    let mut harness = with_automation_of(&["op1.rate1"]);
+    let rate = |harness: &Harness<'static, App>| {
+        let session = harness.state().session().expect("a session");
+        let project = session.project();
+        let channel = project.tracks.iter().find(|t| t.name == "Drums").and_then(|t| t.channel);
+        let channel = project.channels.iter().find(|c| Some(c.id) == channel).expect("the Drums channel");
+        let device = channel.devices.iter().find(|d| d.name == "FM Synth").expect("the FM synth");
+        device.automation.iter().find(|l| l.param == "op1.rate1").map(|l| l.points.clone()).unwrap_or_default()
+    };
+    let lane = harness.get_by_label("FM Synth: Op 1 Rate 1 automation on Drums").rect();
+    let a = harness.get_by_label("FM Synth: Op 1 Rate 1 point 1 on Drums").rect().center();
+    let b = harness.get_by_label("FM Synth: Op 1 Rate 1 point 2 on Drums").rect().center();
+    let x = (a.x + b.x) / 2.0;
+    let y = envelope_y_at(&harness, lane, x).expect("the envelope is drawn");
+    click_at(&mut harness, Pos2::new(x, y));
+    let points = rate(&harness);
+    assert_eq!(points.len(), 3, "{points:?}");
+    assert_eq!((points[1].beat, points[1].value), (4.0, 0.5), "{points:?}");
+}

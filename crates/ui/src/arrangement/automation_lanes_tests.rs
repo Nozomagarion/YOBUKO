@@ -50,13 +50,17 @@ fn volume_positions_and_values_are_inverses() {
     }
 }
 
-/// A whole-number lane cannot keep a value between two numbers; a whole number is kept.
+/// A whole-number lane places a value between two numbers where it falls, unrounded, and shows
+/// what it plays: the value with its fraction cut off toward zero.
 #[test]
-fn a_whole_number_lane_keeps_only_whole_numbers() {
+fn a_whole_number_lane_places_values_between_numbers_and_shows_what_plays() {
     let integer = Scale::Device(ParamInfo::integer("steps", "Steps", (0, 3), 0, Unit::None));
-    assert!(!integer.keeps(1.5));
-    assert!(integer.keeps(1.0));
-    assert!(Scale::Pan.keeps(0.123_456));
+    assert_eq!(integer.position(1.5), 0.5);
+    assert_eq!(integer.text(1.5), "1");
+    assert_eq!(integer.text(2.999), "2");
+    let semitones = Scale::Device(ParamInfo::integer("t", "T", (-48, 48), 0, Unit::Semitones));
+    assert_eq!(semitones.text(-0.94), "+0 st");
+    assert_eq!(semitones.text(-2.97), "-2 st");
 }
 
 /// The distance to a line is to its nearest segment, end or corner.

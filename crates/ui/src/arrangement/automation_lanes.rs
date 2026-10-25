@@ -136,16 +136,6 @@ impl Scale {
         }
     }
 
-    /// Whether `automation.addPoint` keeps `value` as it is: a whole-number parameter (an integer,
-    /// a toggle, a choice) rounds it, which would move a point spliced onto a slope.
-    fn keeps(&self, value: f64) -> bool {
-        match self {
-            Self::Device(info) => info.clamp(value) == value,
-            Self::Sd(parameter) => parameter.clamp(value) == value,
-            Self::Volume | Self::Pan | Self::Mute => true,
-        }
-    }
-
     /// A value in the unit of the set command, as a number: the volume's silence is its floor.
     fn number(&self, value: f64) -> f64 {
         match self {
@@ -191,8 +181,9 @@ impl Scale {
                 ParamKind::Choice(options) => {
                     options.get(info.clamp(value) as usize).map_or_else(String::new, |o| (*o).to_string())
                 }
+                // What the parameter plays: a lane between two numbers cuts the fraction off.
                 ParamKind::Integer => {
-                    let value = info.clamp(value);
+                    let value = info.played(value);
                     match info.unit {
                         Unit::Semitones => format!("{value:+} st"),
                         Unit::ScaleDegrees => format!("{value:+} sd"),
@@ -801,8 +792,8 @@ impl automation::Taper for Scale {
         Scale::position(self, value)
     }
     fn value(&self, position: f64) -> f64 {
-        // A whole-number parameter moves along the line between its points and the device
-        // rounds, as the engine plays it.
+        // A whole-number parameter moves along the line between its points, through values
+        // between its numbers, as the engine moves it (it plays them with the fraction cut off).
         match self {
             Self::Device(info) if matches!(info.kind, ParamKind::Integer) => {
                 info.min + position.clamp(0.0, 1.0) * (info.max - info.min)
@@ -885,9 +876,8 @@ fn lane(
         let near = distance_to(&envelope(&level, &param.scale, plot, geometry), pos) <= SEGMENT_HIT;
         let on_line = automation::value_at(&level, beat, param.scale.stepped(), &param.scale);
         // Near the line the point goes on the envelope, and the command splits a bent segment so
-        // it plays as before. On a whole-number lane a value between two numbers cannot be kept:
-        // the point goes where the pointer is, as off the line.
-        match on_line.filter(|value| near && param.scale.keeps(*value)) {
+        // it plays as before; on a whole-number lane it keeps a value between two numbers.
+        match on_line.filter(|_| near) {
             // Without points, on the faint line at the parameter's value.
             Some(value) if param.points.is_empty() => params["value"] = param.scale.exact(value),
             Some(_) => {}

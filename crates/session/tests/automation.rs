@@ -215,6 +215,55 @@ fn mixer_points_are_added_moved_and_deleted_with_undo() {
     assert_eq!(session.project(), &project());
 }
 
+/// A whole-number parameter's lane, placed as the engine places it: a value between two whole
+/// numbers sits where it falls, unrounded.
+struct WholeNumbers(suhina_device_api::ParamInfo);
+
+impl automation::Taper for WholeNumbers {
+    fn position(&self, value: f64) -> f64 {
+        self.0.to_normalized(value)
+    }
+    fn value(&self, position: f64) -> f64 {
+        self.0.min + position * (self.0.max - self.0.min)
+    }
+}
+
+/// A point added without a value on a whole-number lane keeps the envelope: it stores the value
+/// between two numbers (the engine cuts the fraction off only as it plays), and the segments on
+/// either side move toward it, not toward a rounded one.
+#[test]
+fn a_point_added_on_a_whole_number_lane_keeps_the_envelope() {
+    let mut session = Session::new(project());
+    run(&mut session, "device.add", json!({ "track": 1, "id": "sampler" })).unwrap();
+    let poly = suhina_device_registry::info("sampler")
+        .and_then(|info| info.params.iter().find(|p| p.id == "poly").copied())
+        .unwrap();
+    assert!(matches!(poly.kind, suhina_device_api::ParamKind::Integer));
+    let taper = WholeNumbers(poly);
+    let point = |beat: f64, value: Option<f64>| {
+        let mut params = json!({ "track": 1, "device": 0, "param": "poly", "beat": beat });
+        if let Some(value) = value {
+            params["value"] = json!(value);
+        }
+        params
+    };
+    for (beat, value) in [(0.0, 1.0), (8.0, 4.0)] {
+        run(&mut session, "automation.addPoint", point(beat, Some(value))).unwrap();
+    }
+    let lane = |session: &Session| session.project().channels[0].devices[0].automation[0].clone();
+    let before = lane(&session);
+    run(&mut session, "automation.addPoint", point(4.0, None)).unwrap();
+    let after = lane(&session);
+    assert_eq!(after.points.iter().map(|p| p.value).collect::<Vec<_>>(), [1.0, 2.5, 4.0]);
+    for beat in [1.0, 2.0, 4.0, 6.0, 7.5] {
+        let (old, new) = (before.value_at(beat, false, &taper), after.value_at(beat, false, &taper));
+        assert!((old.unwrap() - new.unwrap()).abs() < 1e-9, "{beat}: {old:?} against {new:?}");
+    }
+    assert!((after.value_at(2.0, false, &taper).unwrap() - 1.75).abs() < 1e-9);
+    let list = run(&mut session, "automation.list", json!({ "track": 1 })).unwrap();
+    assert_eq!(list["devices"][0]["lanes"][0]["points"][1]["value"], json!(2.5), "{list}");
+}
+
 #[test]
 fn a_manual_change_turns_a_lane_off_until_it_is_on_again() {
     let mut session = Session::new(project());
