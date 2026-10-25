@@ -53,6 +53,7 @@ pub const LAYOUT_FILES: &[(&str, &str)] = &[
     ("dj-eq", include_str!("../../../devices/dj-eq/panel.json")),
     ("auto-pan", include_str!("../../../devices/auto-pan/panel.json")),
     ("vinyl-distortion", include_str!("../../../devices/vinyl-distortion/panel.json")),
+    ("delay", include_str!("../../../devices/delay/panel.json")),
 ];
 
 /// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
