@@ -170,3 +170,18 @@ fn copied_tracks_paste_into_another_open_project() {
     let listed: Vec<&str> = tracks.as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
     assert!(listed.contains(&"Bass"), "{listed:?}");
 }
+
+/// Clips copied in one tab paste onto a track of another, with ids of that project (#919).
+#[test]
+fn copied_clips_paste_into_another_open_project() {
+    let mut projects = suhina_session::Projects::new();
+    let first = projects.add(session(), None).unwrap();
+    let second = projects.add(Session::new(ProjectBuilder::new().midi_track(1, "Keys").build()), None).unwrap();
+    projects.execute_in(Some(first), "clip.copy", &json!({ "clips": [{ "track": "Bass", "index": 0 }] })).unwrap();
+    let pasted = projects.execute_in(Some(second), "clip.paste", &json!({ "track": "Keys", "start": 8.0 })).unwrap();
+    assert_eq!(pasted["clips"].as_array().map(Vec::len), Some(1), "{pasted}");
+    let clips = projects.execute_in(Some(second), "project.clips", &json!({})).unwrap();
+    assert_eq!(clips.as_array().map(Vec::len), Some(1), "{clips}");
+    // The source tracks are the first project's: a paste without a track asks for one.
+    assert!(projects.execute_in(Some(second), "clip.paste", &json!({ "start": 0.0 })).is_err());
+}

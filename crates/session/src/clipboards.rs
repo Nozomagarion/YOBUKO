@@ -8,7 +8,7 @@ use suhina_model::{Clip, ClipContent, Device, TrackId};
 use crate::notes::NoteClipboard;
 
 /// Copied clips, devices and notes, each for its own paste.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Clipboards {
     /// The arrangement clips copied for `clip.paste`, with the content each plays.
     pub(crate) clips: Vec<(Clip, ClipContent)>,

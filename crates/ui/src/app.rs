@@ -2156,9 +2156,9 @@ impl App {
         };
         match session.execute(action.id, params) {
             Ok(result) => {
-                // Copied tracks paste into every open tab (#919).
-                if matches!(action.id, "track.copy" | "track.cut") {
-                    self.projects.share_copied_tracks(None);
+                // What is copied pastes into every open tab (#919).
+                if Projects::copies(action.id) {
+                    self.projects.share_clipboards(None);
                 }
                 // Duplicated or pasted tracks are selected in both views, so the next Ctrl+D
                 // copies the copies (#919).
