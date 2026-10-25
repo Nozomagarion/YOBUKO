@@ -3,7 +3,7 @@ description: Scope comparison between plugdata's documented object ecosystem and
 read_when: plugdata, Pure Data parity, device SDK node coverage, patch devices
 type: system
 status: current
-last_verified: 2026-10-15
+last_verified: 2026-10-22
 covers:
   - crates/device-sdk/src/nodes.rs
   - crates/device-sdk/src/runtime.rs

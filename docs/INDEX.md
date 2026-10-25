@@ -108,6 +108,7 @@ for the documents about something, `python scripts/docs.py covers PATH` for thos
 | [Keyboard shortcuts](guide/keyboard-shortcuts.md) | howto | current | User guide to the keyboard shortcuts, one entry per action with its default key, where it works and what it does, written for users and for agents |
 | [How to check it](how-to-check.md) | howto | current | How to write a pull request's "How to check it" section, steps a newcomer can follow from the test build to check a change in what Suhina does |
 | [Releasing](releasing.md) | howto | current | How versions are numbered, how release builds, the nightly and test builds of pull requests are made, and how many pull requests are merged through the merge queue |
+| [Sampler graph verification](sdk-sampler-verification.md) | howto | current | Reproduce sampler graph project relocation, runtime and desktop checks |
 | [Keyboard shortcuts](shortcuts.md) | howto | current | Keyboard shortcuts in the desktop app: the default keys, the keymap presets, the keymap file and how to change them |
 | [Making the `.als` test corpus](spec/als-corpus.md) | howto | current | How to author the Live Sets used to learn the .als format and test the importer, series by series, including the device series with bounces |
 | [Making the `.flp` test corpus](spec/flp-corpus.md) | howto | draft | How to author the FL Studio projects (.flp) that confirm the format spec and test crates/flp, series by series |
