@@ -5,6 +5,9 @@
 
 use super::*;
 
+/// Seconds between the tempo sent while the tempo field is dragged.
+const TEMPO_SEND: f64 = 0.1;
+
 impl App {
     pub(super) fn control_bar(
         &mut self,
@@ -66,9 +69,27 @@ impl App {
         let response = widgets::value_area(ui, tempo_rect, Id::new("tempo"), "Tempo", format!("{tempo_shown:.2}"));
         match widgets::drag_value(ui, &response, &mut self.tempo_drag, grid.tempo_bpm, 0.1, 1.0, (20.0, 999.0), 120.0) {
             Drag::Done(bpm) => {
-                actions.push(Action::new("transport.setTempo", json!({ "bpm": (bpm * 100.0).round() / 100.0 })))
+                // The drag's last value joins the step its moves made.
+                let more = self.tempo_sent.take().is_some();
+                actions.push(Action::new(
+                    "transport.setTempo",
+                    json!({ "bpm": (bpm * 100.0).round() / 100.0, "continue": more }),
+                ));
             }
-            Drag::Moving(_) | Drag::None => {}
+            // While it moves the project follows, a few times a second, in one undo step, so
+            // clips that follow the tempo change length as it moves (#916).
+            Drag::Moving(bpm) => {
+                let now = ui.input(|i| i.time);
+                if self.tempo_sent.is_none_or(|sent| now - sent >= TEMPO_SEND) {
+                    let more = self.tempo_sent.is_some();
+                    self.tempo_sent = Some(now);
+                    actions.push(Action::new(
+                        "transport.setTempo",
+                        json!({ "bpm": (bpm * 100.0).round() / 100.0, "continue": more }),
+                    ));
+                }
+            }
+            Drag::None => {}
         }
         painter.rect_filled(
             tempo_rect,

@@ -9,7 +9,14 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         id: "transport.setTempo",
         label: "Set the project tempo",
-        params: &[param("bpm", ParamType::Number, "beats per minute, 20 to 999")],
+        params: &[
+            param("bpm", ParamType::Number, "beats per minute, 20 to 999"),
+            optional(
+                "continue",
+                ParamType::Bool,
+                "true adds the change to the undo step of the previous transport.setTempo, when no other edit came between (one drag of the tempo field, one step)",
+            ),
+        ],
         kind: CommandKind::Edit,
         run: set_tempo,
         policy: Policy::DEFAULT,

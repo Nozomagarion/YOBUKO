@@ -107,7 +107,7 @@ plug-ins keep running and their state across the reopen.
 ## Amendment: edits in the next block (2026-10-12)
 
 In a DAW an edit should be heard at once; with a graph per edit taken one per audio block and
-0.15 s ahead, two edits in a row took two blocks, and a fader moved only the next note. As in
+0.08 s ahead (0.15 s until #916), two edits in a row took two blocks, and a fader moved only the next note. As in
 other real-time audio graphs (structural changes built off the audio thread and swapped
 atomically, parameter changes as lock-free messages applied at a block boundary, as Firewheel,
 klingt and JUCE's graph do), now:
@@ -115,7 +115,7 @@ klingt and JUCE's graph do), now:
 1. **Every graph due in a block is taken in that block,** at its frame, in order; the swap
    queue holds 16 graphs.
 2. **`SWAP_AHEAD_SECONDS` only when it is needed:** a graph with stretched arrangement clips still
-   takes over 0.15 s ahead, so their stretch voices are moved and their rings filled first; any
+   takes over 0.08 s ahead, so their stretch voices are moved and their rings filled first; any
    other graph takes over at the start of the next block.
 3. **Device parameters are messages, not graphs.** `Controller::set_device_param(track,
    device, param, value)` sends a numbered message through a lock-free queue; the renderer
@@ -136,7 +136,7 @@ klingt and JUCE's graph do), now:
 ## Consequences
 
 - An edit is rendered from the next engine block after the command returns, plus the time to
-  build the graph (with stretched arrangement clips, 0.15 s after), and heard once that block
+  build the graph (with stretched arrangement clips, 0.08 s after), and heard once that block
   leaves the output's ring, which runs up to two blocks ahead of the device (`crates/output`). A
   device parameter is rendered from the next block without building anything.
 - Structural edits still rebuild the whole graph. Building did become too slow for knob drags in

@@ -338,6 +338,9 @@ pub struct App {
     arrangement: ArrangementViewState,
     status: Status,
     tempo_drag: Option<f64>,
+    /// While the tempo field is dragged: when it last sent the tempo, so clips that follow the
+    /// tempo change on screen as it moves (#916), a few times a second.
+    tempo_sent: Option<f64>,
     open_request: Option<(PathBuf, OpenAs)>,
     /// Counts changes to the project, so views derived from it are rebuilt only when it changed.
     revision: u64,
@@ -572,6 +575,7 @@ impl App {
             arrangement: ArrangementViewState::default(),
             status: Status::Hint(start_panel::DROP_HINT.into()),
             tempo_drag: None,
+            tempo_sent: None,
             open_request: None,
             revision: 0,
             timeline: None,

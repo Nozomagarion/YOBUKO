@@ -526,7 +526,7 @@ fn rms(out: &[f32], from: usize, to: usize) -> f64 {
 /// Frame where an update sent after `blocks` blocks of 480 frames takes over, for a project
 /// with stretched clips; one without takes over at the next block, `blocks * 480`.
 fn swap_frame(blocks: usize) -> usize {
-    blocks * 480 + (0.15 * f64::from(SR)) as usize
+    blocks * 480 + (0.08 * f64::from(SR)) as usize
 }
 
 #[test]
@@ -802,7 +802,7 @@ fn edits_sent_together_all_take_the_next_block() {
 
 #[test]
 fn a_device_parameter_is_heard_from_the_next_block_and_outlives_an_older_graph() {
-    // Stretched audio, so a new graph waits 0.15 s before it takes over.
+    // Stretched audio, so a new graph waits 0.08 s before it takes over.
     let (mut project, pool) = stretched_project(440.0, 4.0, 8.0, 110.0, StretchMode::Smooth);
     with_utility(&mut project);
     let mut renderer = Renderer::build(&project, RenderInputs::from_audio(&pool), SR, RenderOptions::PLAYING).unwrap();
@@ -819,7 +819,7 @@ fn a_device_parameter_is_heard_from_the_next_block_and_outlives_an_older_graph()
     // Heard from the next block, after the utility's 20 ms ramp...
     let soon = rms(&out, now + 1_200, now + 6_000) / rms(&reference, now + 1_200, now + 6_000);
     assert!((soon - 0.5).abs() < 0.01, "{soon}");
-    // ... and still after the older graph took over at 0.15 s.
+    // ... and still after the older graph took over at 0.08 s.
     let at = swap_frame(50);
     let later = rms(&out, at + 2_400, at + 12_000) / rms(&reference, at + 2_400, at + 12_000);
     assert!((later - 0.5).abs() < 0.01, "{later}");

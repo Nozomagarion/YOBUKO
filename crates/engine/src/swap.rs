@@ -37,7 +37,7 @@ use crate::{Graph, MAX_AUDIO_VOICES, Renderer};
 /// How far ahead of the playhead a new graph with stretched clips takes over, in seconds: time
 /// to move its stretch voices and fill their rings before the audio thread reaches it. A graph
 /// without stretched clips takes over at the next block.
-const SWAP_AHEAD_SECONDS: f64 = 0.15;
+const SWAP_AHEAD_SECONDS: f64 = 0.08;
 /// How far, in frames, a swap may land from where its stretch voices were rendered for and
 /// still play them as they are.
 const SWAP_TOLERANCE: u64 = 1024;
