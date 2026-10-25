@@ -239,3 +239,22 @@ fn a_package_brought_in_again_asks_then_replaces_or_copies() {
     assert_eq!(copied.ids, ["night-2"], "a copy even of the same look, as asked");
     let _clean = std::fs::remove_dir_all(&dir);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_theme_folder_linked_from_elsewhere_is_read_and_written() {
+    let dir = folder("linked");
+    let mut elsewhere = ThemeFiles::new(Some(dir.join("work")));
+    assert_eq!(elsewhere.write("night", &night()), Ok(()));
+    std::fs::create_dir_all(dir.join("themes")).unwrap();
+    std::os::unix::fs::symlink(dir.join("work/night"), dir.join("themes/night")).unwrap();
+    let mut files = ThemeFiles::new(Some(dir.join("themes")));
+    let (themes, warnings) = files.read_all();
+    assert!(themes.iter().any(|e| e.id == "night"), "{warnings:?}");
+    // A variant is written into the linked folder; a link inside it is still refused.
+    let mut edited = night();
+    edited.colors.accent = eframe::egui::Color32::from_rgb(1, 2, 3);
+    assert_eq!(files.write("night@custom", &edited), Ok(()));
+    assert!(dir.join("work/night/variants/custom.json").is_file());
+    let _clean = std::fs::remove_dir_all(&dir);
+}

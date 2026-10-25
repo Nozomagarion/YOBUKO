@@ -577,7 +577,9 @@ impl ThemeFiles {
         for entry in dir.filter_map(Result::ok).take(4096) {
             let path = entry.path();
             let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
-            let found = if meta.is_dir() {
+            // A theme's own folder may be a link (a junction on Windows) to a folder elsewhere,
+            // such as one in Documents an editor can reach; what is inside it may not be.
+            let found = if meta.is_dir() || linked_folder(&path) {
                 let css = path.join(THEME_CSS);
                 let file = std::fs::symlink_metadata(&css).is_ok_and(|m| m.is_file());
                 let name = path.file_name().and_then(|n| n.to_str());
@@ -1171,8 +1173,12 @@ fn write_files(folder: &Path, mut files: Vec<(String, Vec<u8>)>) -> Result<(), S
         let path = folder.join(&name);
         let mut current = folder.to_path_buf();
         std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
-        for component in name.split('/') {
+        for (depth, component) in name.split('/').enumerate() {
             current.push(component);
+            // The theme's own folder may be a linked one (see `list`); nothing under it may.
+            if depth == 0 && linked_folder(&current) {
+                continue;
+            }
             if std::fs::symlink_metadata(&current).is_ok_and(|m| m.file_type().is_symlink()) {
                 return Err("theme destination may not be a symlink".into());
             }
@@ -1460,6 +1466,12 @@ fn read_zip(path: &Path) -> Result<Vec<LoadedTheme>, String> {
         return Err("there are no themes in this package".into());
     }
     Ok(themes)
+}
+
+/// Whether `path` is a link (a symbolic link, or a junction on Windows) to a folder.
+fn linked_folder(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink())
+        && std::fs::metadata(path).is_ok_and(|m| m.is_dir())
 }
 
 #[cfg(test)]

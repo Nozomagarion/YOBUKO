@@ -841,6 +841,17 @@ pub(crate) static ROWS: &[Entry] = &[
         &["theme"],
         crate::settings::settings_view::theme_block,
     ),
+    row(
+        Page::Theme,
+        "Folder",
+        "Themes folder",
+        "Where themes are kept and read from; empty for the folder in Suhina's data",
+        &["themes_folder"],
+        |cx, r| {
+            let default = cx.about.themes_default.clone();
+            cx.folder(r, &default, crate::interaction::pick::PickField::ThemesFolder, |s| &mut s.themes_folder);
+        },
+    ),
     // Shortcuts.
     block(
         Page::Shortcuts,

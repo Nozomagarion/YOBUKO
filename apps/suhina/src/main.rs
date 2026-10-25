@@ -29,7 +29,7 @@ use suhina_ui::{App, NewProject, OpenAs, Status};
 
 const USAGE: &str = "\
 usage: suhina [<project.suhina> | <project.als> | --demo] [--renderer wgpu|glow] [--no-animations]
-              [--new-instance] [--trace <file>]
+              [--new-instance] [--trace <file>] [--data-dir <folder>]
 
   <project.suhina>   a Suhina project to open, or a Live Set (.als) to import
   --demo             open a small built-in project
@@ -38,6 +38,8 @@ usage: suhina [<project.suhina> | <project.als> | --demo] [--renderer wgpu|glow]
   --no-animations    turn the interface's animations off this time
   --new-instance     start another window even though this build is running (for
                      development); it serves no agents
+  --data-dir <folder>  keep the settings, keys, themes and recent projects in <folder> this
+                     time, for a portable or test install; SUHINA_DATA=<folder> does the same
   --trace <file>     append a diagnostic log to <file>, the plug-in hosts' too (for
                      development, docs/debugging.md); SUHINA_TRACE=<file> does the same
 While this build of Suhina is running, starting it again opens the project in the running
@@ -46,8 +48,9 @@ Options > Settings > General > Let agents work on open projects is on.
 Without a project the window opens what Options > Settings > General > At start says (the
 New or open dialog unless changed); Ctrl+T makes a new one or opens one, and a .suhina
 or .als file dropped on it opens.
-Settings are kept in settings.txt, the keys in keymap.json and themes in themes/<name>.json,
-in Suhina's folder of the user's app data.";
+Settings are kept in settings.txt, the keys in keymap.json and themes in themes/<name>/,
+in Suhina's folder of the user's app data (or --data-dir). Themes can be kept elsewhere:
+Options > Settings > Theme > Themes folder, or SUHINA_THEMES=<folder>, which wins over it.";
 
 /// The folder eframe keeps Suhina's window state in; the settings file lives beside it.
 const APP_ID: &str = "Suhina";
@@ -127,7 +130,7 @@ fn main() -> ExitCode {
         }
     };
     // A crash leaves a file in <data>/crashes/, which a start from the desktop otherwise loses.
-    if let Some(folder) = eframe::storage_dir(app_id()) {
+    if let Some(folder) = data_dir() {
         crash_log::install(folder.join("crashes"));
     }
     // One app per build: a second start hands its project to the first and exits.
@@ -160,10 +163,15 @@ fn main() -> ExitCode {
     // bar, which has to be chosen before the window opens.
     let see_through_asked = renderer == eframe::Renderer::Wgpu;
     let under_title_bar = cfg!(target_os = "macos") && see_through_asked;
-    let mut themes = theme_files::ThemeFiles::new(eframe::storage_dir(app_id()).map(|d| d.join(THEMES_FOLDER)));
+    let default_themes = data_dir().map(|d| d.join(THEMES_FOLDER));
+    let themes_folder = themes_env().or_else(|| match settings.themes_folder.trim() {
+        "" => default_themes.clone(),
+        folder => Some(PathBuf::from(folder)),
+    });
+    let mut themes = theme_files::ThemeFiles::new(themes_folder.clone());
     let (theme_list, theme_warnings) = themes.read_all();
     settings_warnings.extend(theme_warnings);
-    let recent = recent::Recent::load(eframe::storage_dir(app_id()).map(|d| d.join(RECENT_FILE)));
+    let recent = recent::Recent::load(data_dir().map(|d| d.join(RECENT_FILE)));
     let themes = match theme_io::ThemeIo::new(themes) {
         Ok(themes) => themes,
         Err(error) => {
@@ -179,6 +187,7 @@ fn main() -> ExitCode {
         see_through: if see_through_asked { None } else { Some(false) },
         blurred: false,
         themes,
+        themes_folder,
         theme_error: None,
         recent,
         #[cfg(target_os = "macos")]
@@ -206,6 +215,7 @@ fn main() -> ExitCode {
     }
     let (projects, templates) = default_folders();
     window.app.set_default_folders(projects, templates);
+    window.app.set_default_themes_folder(themes_env().or(default_themes).unwrap_or_default());
     // The NAM devices' folders: the defaults exist from the start, so a user's first step is
     // only to drop files in ([docs/spec/nam-amp-and-cab.md]).
     let nam_base = documents_base();
@@ -215,7 +225,7 @@ fn main() -> ExitCode {
     window.app.set_nam_default_folders(nam_models, irs);
     // Backups of projects never saved, and the journal of the newest backups, beside the
     // settings; what a crash left there is offered once the window starts (`docs/spec/backups.md`).
-    let backups = eframe::storage_dir(app_id()).map(|d| d.join(suhina_session::backup::SETTINGS_SUBFOLDER));
+    let backups = data_dir().map(|d| d.join(suhina_session::backup::SETTINGS_SUBFOLDER));
     window.app.projects_mut().set_backup_folder(backups);
 
     let options = eframe::NativeOptions {
@@ -298,6 +308,11 @@ fn parse_args(args: &[String]) -> Result<Option<Args>, String> {
                 parsed.animations = false;
                 continue;
             }
+            "--data-dir" => {
+                let folder = it.next().ok_or("--data-dir takes the folder to keep Suhina's data in")?;
+                let _first = DATA_DIR.set(PathBuf::from(folder));
+                continue;
+            }
             "--trace" => {
                 let file = it.next().ok_or("--trace takes the file to write the log to")?;
                 suhina_plugins::trace::start(std::path::Path::new(file));
@@ -340,6 +355,8 @@ struct Window {
     /// The system blurs what shows through: on while the theme has a see-through background.
     blurred: bool,
     themes: theme_io::ThemeIo,
+    /// The folder `themes` reads, to start reading another when the setting changes.
+    themes_folder: Option<PathBuf>,
     /// The theme files' last error in the status bar, cleared once they read without one.
     theme_error: Option<String>,
     /// The projects opened and saved lately, for the project dialog.
@@ -582,7 +599,7 @@ impl Window {
     fn start(&mut self, start_up: StartUp) {
         let StartUp { source, output_choice, mut warnings } = start_up;
         // The browser's library: browser.json and the folder indexes beside the settings (ADR 0012).
-        let mut library = suhina_library::Library::new(eframe::storage_dir(app_id()));
+        let mut library = suhina_library::Library::new(data_dir());
         warnings.extend(library.take_warnings());
         if let Err(e) = library.start() {
             warnings.push(e);
@@ -678,6 +695,23 @@ impl Window {
     /// the template, bring in a dropped file, show the folder) and reads a theme file saved
     /// elsewhere. While a theme file is in use the folder is looked at every second.
     fn sync_themes(&mut self, ctx: &eframe::egui::Context) {
+        // Settings › Theme › Themes folder changed: the themes are read from the new one.
+        let wanted = themes_env().or_else(|| Some(self.app.themes_folder()));
+        // A folder that is not there (a path half typed) is not read; the default is made.
+        let default = self.app.settings().themes_folder.trim().is_empty();
+        if wanted != self.themes_folder && (default || wanted.as_ref().is_some_and(|f| f.is_dir())) {
+            match theme_io::ThemeIo::new(theme_files::ThemeFiles::new(wanted.clone())) {
+                Ok(themes) => {
+                    self.themes = themes;
+                    self.themes.queue(suhina_ui::settings::themes::FileAction::Reload);
+                    if let Some(folder) = &wanted {
+                        self.app.set_status(Status::Done(format!("Reading themes from {}", folder.display())));
+                    }
+                }
+                Err(error) => self.app.set_status(Status::Error(error)),
+            }
+            self.themes_folder = wanted;
+        }
         for action in self.app.take_theme_actions() {
             self.themes.queue(action);
         }
@@ -750,6 +784,23 @@ fn saved(path: &Path, what: &str) -> String {
 
 /// The app id whose folder holds the settings: the old one while only its folder exists
 /// (copying it under the new name failed), so the settings stay readable.
+/// The data folder `--data-dir` chose for this run.
+static DATA_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+/// Suhina's data folder: `--data-dir`, `SUHINA_DATA`, or Suhina's folder of the user's app data.
+fn data_dir() -> Option<PathBuf> {
+    DATA_DIR
+        .get()
+        .cloned()
+        .or_else(|| std::env::var_os("SUHINA_DATA").filter(|v| !v.is_empty()).map(PathBuf::from))
+        .or_else(|| eframe::storage_dir(app_id()))
+}
+
+/// The themes folder `SUHINA_THEMES` names, which wins over the setting.
+fn themes_env() -> Option<PathBuf> {
+    std::env::var_os("SUHINA_THEMES").filter(|v| !v.is_empty()).map(PathBuf::from)
+}
+
 fn app_id() -> &'static str {
     match (eframe::storage_dir(APP_ID), eframe::storage_dir(OLD_APP_ID)) {
         (Some(new), Some(old)) if !new.exists() && old.is_dir() => OLD_APP_ID,
@@ -849,7 +900,7 @@ fn mac_window_frame() -> (f32, u8) {
 }
 
 fn settings_path() -> Option<PathBuf> {
-    eframe::storage_dir(app_id()).map(|dir| dir.join(SETTINGS_FILE))
+    data_dir().map(|dir| dir.join(SETTINGS_FILE))
 }
 
 /// The saved settings, or the defaults when there are none yet.
@@ -878,7 +929,7 @@ fn save_settings(settings: &Settings) -> Result<(), String> {
 
 /// The saved keymap over the default keys, or the defaults when there is none yet.
 fn load_keymap() -> (Keymap, Vec<String>) {
-    let path = eframe::storage_dir(app_id()).map(|dir| dir.join(KEYMAP_FILE));
+    let path = data_dir().map(|dir| dir.join(KEYMAP_FILE));
     match path.map(std::fs::read_to_string) {
         Some(Ok(text)) => Keymap::from_json(&text),
         Some(Err(e)) if e.kind() != std::io::ErrorKind::NotFound => {
@@ -890,7 +941,7 @@ fn load_keymap() -> (Keymap, Vec<String>) {
 
 /// Writes one of Suhina's files in its app-data folder.
 fn save_file(name: &str, text: &str) -> Result<(), String> {
-    let dir = eframe::storage_dir(app_id()).ok_or("there is no folder to keep settings in")?;
+    let dir = data_dir().ok_or("there is no folder to keep settings in")?;
     std::fs::create_dir_all(&dir).map_err(|e| save_error::message(name, &e))?;
     write_whole(&dir.join(name), text).map_err(|e| save_error::message(name, &e))
 }

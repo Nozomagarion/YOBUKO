@@ -2168,6 +2168,22 @@
       "workInProgress": false
     },
     {
+      "id": "Theme/Folder/themes_folder",
+      "page": "Theme",
+      "section": "Folder",
+      "name": "Themes folder",
+      "note": "Choose the folder Suhina keeps its themes in and reads them from.",
+      "keys": [
+        "themes_folder"
+      ],
+      "sourceFingerprint": "3d6f208565c8cbb83a69e607f97a5e59107557bd98d0061b8b427b96ee805209",
+      "helpStatus": "reviewed",
+      "description": "Every theme you make, duplicate or bring in is a folder inside this one, and Suhina watches it, so a theme edited in another program changes the window within about a second. Type a path or use Browse; leave the field empty to use the themes folder in Suhina's data, shown as the default. When you choose another folder, Suhina reads the themes from it at once; it does not move or copy the themes in the old folder, so copy them across first if you want them there. A folder that does not exist yet is not read. Inside the folder, a theme's own folder may be a link (a symbolic link, or a junction on Windows) to a folder elsewhere. The SUHINA_THEMES environment variable, when it is set, wins over this setting.",
+      "options": [],
+      "whenToChange": "Change this when you want to edit themes in a folder another program can reach, such as one in Documents. Apps installed from the Microsoft Store may only see their own copy of the app data folder, so a folder outside it lets them edit your themes. It also helps when you keep themes on another drive or share one folder between test builds.",
+      "workInProgress": false
+    },
+    {
       "id": "Shortcuts/Keys/keymap.json",
       "page": "Shortcuts",
       "section": "Keys",
