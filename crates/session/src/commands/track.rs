@@ -281,7 +281,16 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         label: "Add an audio or MIDI track with its mixer channel, clip slots and arrangement lane, optionally with a device (an instrument or MIDI effect makes a MIDI track, an effect an audio track)",
         params: &[
             optional("kind", ParamType::Text, "audio or midi (default: from the device)"),
-            optional("name", ParamType::Text, "the track's name (default: the device's, or Audio n / MIDI n)"),
+            optional(
+                "name",
+                ParamType::Text,
+                "the track's name (default: the device's, or # Audio / # MIDI, # reading as the track's number)",
+            ),
+            optional(
+                "count",
+                ParamType::Integer,
+                "how many empty tracks to add, one after another (1 to 64, default 1)",
+            ),
             optional(
                 "after",
                 ParamType::Track,

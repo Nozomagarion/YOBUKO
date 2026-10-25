@@ -257,6 +257,32 @@ pub(crate) fn add_track(session: &mut Session, params: &Value) -> Result<Value, 
         },
     };
     let name = if name.trim().is_empty() { numbered_name(kind) } else { name };
+    // Several empty tracks at once, one after another, in one undo step (Insert multiple, #947).
+    let count = match params.get("count") {
+        None | Some(Value::Null) => 1,
+        Some(v) => v
+            .as_u64()
+            .filter(|n| (1..=MAX_INSERT).contains(n))
+            .and_then(|n| usize::try_from(n).ok())
+            .ok_or_else(|| format!("count must be a whole number from 1 to {MAX_INSERT}"))?,
+    };
+    if count > 1 {
+        if device.is_some() || preset.is_some() || sd.is_some() {
+            return Err("count adds empty tracks; leave out device, preset and sd".into());
+        }
+        let mut tracks = Vec::with_capacity(count);
+        let mut after = after;
+        for _ in 0..count {
+            let track = insert_track(&mut session.project, kind, &name, after)?;
+            tracks.push(track.0);
+            after = Some(track);
+        }
+        let kind = match kind {
+            TrackKind::Audio => "audio",
+            TrackKind::Midi => "midi",
+        };
+        return Ok(json!({ "track": tracks.first(), "tracks": tracks, "name": name, "kind": kind }));
+    }
     let track = insert_track(&mut session.project, kind, &name, after)?;
     let mut added = Value::Null;
     if device.is_some() || preset.is_some() || sd.is_some() {
@@ -287,6 +313,9 @@ pub(crate) fn add_track(session: &mut Session, params: &Value) -> Result<Value, 
         json!({ "track": track.0, "name": name, "kind": match kind { TrackKind::Audio => "audio", TrackKind::Midi => "midi" }, "device": added }),
     )
 }
+
+/// Most tracks one `track.add` adds with `count`.
+const MAX_INSERT: u64 = 64;
 
 /// A file's name without its extension.
 fn file_stem(path: &Path) -> String {

@@ -140,7 +140,7 @@ no colour of its own (`Clip::color` is `None`) shows its track's, so a new clip 
 track's colour and follows it. Moved to another track, a clip keeps the colour it showed
 (`clip.move` and `clip.moveMany` take `color`). The track menu's *Assign track color to all
 clips* (`clip.setColor {track, color: "none"}`) hands every clip of the track back to the
-track's colour; *Rename all clips* (`track.renameClips`) names them after the track. The track
+track's colour; *Assign track name to clips* (`track.renameClips`) names them after the track. The track
 headers are tinted with their track's colour, deeper while selected.
 
 A clip on a lane at least 36 px tall has a name bar along its top. By default (Settings ›

@@ -44,3 +44,15 @@ fn a_track_never_renamed_takes_its_instruments_name_until_the_user_names_it() {
     run(&mut session, "device.add", json!({ "track": "Lead", "id": "fm-synth" })).unwrap();
     assert_eq!(name(&session), "Lead");
 }
+
+#[test]
+fn several_empty_tracks_are_added_at_once_in_one_undo_step() {
+    let mut session = Session::new(blank_project());
+    let added = run(&mut session, "track.add", json!({ "kind": "audio", "count": 3, "after": "1 MIDI" })).unwrap();
+    assert_eq!(added["tracks"].as_array().map(Vec::len), Some(3));
+    assert_eq!(shown(&session)[..5], ["1 MIDI", "2 Audio", "3 Audio", "4 Audio", "5 MIDI"]);
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(shown(&session)[..2], ["1 MIDI", "2 MIDI"]);
+    assert!(run(&mut session, "track.add", json!({ "kind": "audio", "count": 65 })).is_err());
+    assert!(run(&mut session, "track.add", json!({ "device": "fm-synth", "count": 2 })).is_err());
+}

@@ -280,7 +280,7 @@ pub fn track_menu(ui: &mut Ui, menu: &TrackMenu<'_>, actions: &mut Vec<Action>) 
         actions.push(Action::new("clip.setColor", json!({ "track": track, "color": "none" })));
         ui.close();
     }
-    if ui.button("Rename all clips").clicked() {
+    if ui.button("Assign track name to clips").clicked() {
         actions.push(Action::new("track.renameClips", json!({ "track": track })));
         ui.close();
     }

@@ -362,7 +362,10 @@ pub fn show(
     if empty.width() > 24.0 {
         // Under the buttons, so they keep their clicks; a right-click there inserts tracks.
         let space = ui.interact(empty, Id::new("session-empty-space"), Sense::click());
-        crate::interaction::empty_space::empty_space_menu(&space, actions);
+        let selection = state.header_tracks();
+        let menu =
+            crate::interaction::empty_space::EmptyMenu { selection: &selection, tracks_copied: state.tracks_copied };
+        crate::interaction::empty_space::empty_space_menu(&space, &menu, actions);
         empty_space(ui, &painter, empty, actions);
     }
     if let Some(probe) = state.drop.as_mut() {

@@ -1380,7 +1380,11 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
         if space.clicked() {
             state.clear_selected_clip();
         }
-        crate::interaction::empty_space::empty_space_menu(&space, actions);
+        let menu = crate::interaction::empty_space::EmptyMenu {
+            selection: &state.selected_tracks,
+            tracks_copied: state.tracks_copied,
+        };
+        crate::interaction::empty_space::empty_space_menu(&space, &menu, actions);
     }
     if empty.height() > theme::ROW + 4.0 {
         let buttons = Rect::from_x_y_ranges(time.x_range(), empty.y_range());

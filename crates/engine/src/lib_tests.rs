@@ -823,6 +823,35 @@ fn a_device_parameter_is_heard_from_the_next_block_and_outlives_an_older_graph()
     assert!((later - 0.5).abs() < 0.01, "{later}");
 }
 
+/// A Utility on the main channel hears its gain turned while playing, as a track's does (#687).
+#[test]
+fn a_device_parameter_on_the_main_channel_is_heard_from_the_next_block() {
+    let (mut project, pool) = stretched_project(440.0, 4.0, 8.0, 110.0, StretchMode::Smooth);
+    let mut main = Channel { id: ChannelId(9), role: ChannelRole::Master, ..project.channels[0].clone() };
+    main.devices.clear();
+    main.output = None;
+    project.channels.push(main);
+    if let Some(main) = project.channels.last_mut() {
+        main.devices.push(Device {
+            name: "Utility".into(),
+            kind: DeviceKind::Builtin("utility".into()),
+            enabled: true,
+            state: None,
+            params: Vec::new(),
+            automation: Vec::new(),
+            extensions: Extensions::default(),
+        });
+    }
+    let mut renderer = Renderer::build(&project, RenderInputs::from_audio(&pool), SR, RenderOptions::PLAYING).unwrap();
+    let mut controller = renderer.controller();
+    let mut out = blocks(&mut renderer, 50, 480, |_| {});
+    controller.set_device_param(TrackId::MAIN, 0, 0, -6.0206).unwrap();
+    out.extend(blocks(&mut renderer, 50, 480, |_| {}));
+    let now = 50 * 480;
+    let ratio = rms(&out, now + 1_200, now + 6_000) / rms(&out, now - 6_000, now - 1_200);
+    assert!((ratio - 0.5).abs() < 0.02, "{ratio}");
+}
+
 #[test]
 fn a_mix_edit_reaches_a_sounding_note_at_the_next_block() {
     let project = project_with(untargeted(vec![note(0.0, 8.0, 69)]), vec![clip(0.0, 8.0)], 1);

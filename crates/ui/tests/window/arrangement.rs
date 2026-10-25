@@ -1546,3 +1546,36 @@ fn delete_and_cut_select_the_next_track_and_ctrl_v_pastes_back() {
     harness.run();
     assert_eq!(selected(&harness).as_deref(), Some("# MIDI"));
 }
+
+/// The empty area below the tracks has a menu with the insert items and the track clipboard, and
+/// a right-click on + Audio track inserts several tracks at once (#947).
+#[test]
+fn the_empty_area_menu_pastes_tracks_and_insert_multiple_adds_several() {
+    let mut harness = arrangement_app();
+    let count = |h: &Harness<'static, App>| h.state().session().map_or(0, |s| s.project().tracks.len());
+    let before = count(&harness);
+    harness.get_by_label("Empty space").click_secondary();
+    harness.run();
+    assert!(harness.query_by_label_contains("Insert MIDI track").is_some());
+    harness.key_press(Key::Escape);
+    harness.run();
+    // Copy a track, then Paste from the empty area's menu.
+    harness.get_by_label("Track Drums").click();
+    harness.run();
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::C);
+    harness.run();
+    harness.get_by_label("Empty space").click_secondary();
+    harness.run();
+    harness.get_by_label_contains("Paste").click();
+    harness.run();
+    assert_eq!(count(&harness), before + 1);
+    // Insert multiple: four audio tracks in one go, one undo step.
+    harness.get_by_label("+ Audio track").click_secondary();
+    harness.run();
+    harness.get_by_label("Insert").click();
+    harness.run();
+    assert_eq!(count(&harness), before + 5);
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+    harness.run();
+    assert_eq!(count(&harness), before + 1);
+}

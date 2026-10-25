@@ -2115,10 +2115,13 @@ impl App {
                     self.select_tracks(tracks);
                 }
                 // A new track is selected and scrolled into view (#918).
-                if action.id == "track.add"
-                    && let Some(track) = result["track"].as_u64().and_then(|t| u32::try_from(t).ok()).map(TrackId)
-                {
-                    self.select_tracks(vec![track]);
+                if action.id == "track.add" {
+                    let id = |t: &serde_json::Value| t.as_u64().and_then(|t| u32::try_from(t).ok()).map(TrackId);
+                    let tracks: Vec<TrackId> = match result["tracks"].as_array() {
+                        Some(added) => added.iter().filter_map(id).collect(),
+                        None => id(&result["track"]).into_iter().collect(),
+                    };
+                    self.select_tracks(tracks);
                 }
                 // After a delete or a cut the next track is selected, so the keys go on (#918).
                 if let Some(next) = next_track {
