@@ -154,6 +154,16 @@ refused or suspended, never by losing its edits.
 - Theme customization includes independent Browser/coloured-surface text, alpha-preserving gradients, editable liquid strengths, a private image backdrop and configurable application-bar identity/project information.
 - Private image backgrounds retain image compositing on transparent GPU windows; narrow Arrangement headers keep names, recording controls and meters separate.
 
+- SDK sampler graphs can bind a sample while being added to a track; project saving,
+  relocation and missing-file relinking retain the graph and its source separately.
+
+- **Sampler graph building blocks:** typed sample resources, routed events, private voice/grain
+  graphs, envelopes, loops, slicing, deterministic modulation, native stretch, versioned components
+  and editable sampler/granular templates are executable through the Rust SDK host API.
+
+- **Composable SDK sample source:** Rust-authored instrument graphs can bind PCM to
+  independent polyphonic `sampler` nodes and process their audio with ordinary SDK nodes.
+
 - **Device SDK authoring:** checked Rust graph handles, parameter-source helpers and standard
   panel-control constructors produce the same data-only `.sd` devices and use the existing runtime.
 
