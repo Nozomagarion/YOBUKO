@@ -27,15 +27,15 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "take.setColor",
-        label: "Set a take lane's colour and the colour of its parts on the track (Recolor lane); null gives it the palette's again",
+        label: "Set a take lane's colour and the colour of its parts on the track (Recolor lane), or one piece of the take's and its parts' (Recolor); null gives them the lane's or the palette's again",
         params: &[
             TRACK,
             param("take", ParamType::Integer, "the take's number on the track, from 1"),
             param("color", ParamType::Text, "\"#rrggbb\", or null"),
             optional(
-                "clips",
-                ParamType::Clips,
-                "only these parts of the take on the track (Recolor selected take), each { \"clip\": id }; the lane keeps its colour",
+                "piece",
+                ParamType::Integer,
+                "only this piece of the take, from 1 in time order (a split take has several), and its parts on the track",
             ),
         ],
         kind: CommandKind::Edit,
@@ -173,27 +173,26 @@ fn comp_part(
     Ok(clips)
 }
 
-/// `take.setColor {track, take, color, clips?}`: the take lane's colour, and the parts of it on
-/// the track (Recolor lane, #989); `null` gives the lane the palette's colour again and the parts
-/// follow it. With `clips`, only those parts of it (Recolor selected take), the lane left as it is.
+/// `take.setColor {track, take, color, piece?}`: the take lane's colour and its parts' on the
+/// track (Recolor lane, #989), its pieces' own colours given up; with `piece` (from 1, a split
+/// take has several), that piece's colour and its parts' alone (Recolor). `null` gives them the
+/// lane's or the palette's colour again.
 fn set_take_color(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let p = &mut session.project;
     let track = track_id(p, params)?;
     let index = take_index(p, track, params)?;
     let color = crate::clip_color::parse_color(params, "color")?;
-    let only: Option<Vec<u64>> = match params.get("clips") {
+    let piece = match params.get("piece") {
         None | Some(Value::Null) => None,
-        Some(v) => Some(
-            v.as_array()
-                .ok_or("clips must be a list of clip ids")?
-                .iter()
-                .map(|c| {
-                    c.as_u64()
-                        .or_else(|| c.get("clip").and_then(Value::as_u64))
-                        .ok_or("clips must be a list of clip ids")
-                })
-                .collect::<Result<_, _>>()?,
-        ),
+        Some(v) => {
+            let n = v.as_u64().filter(|n| *n >= 1).ok_or("piece must be a number from 1")?;
+            let n = usize::try_from(n - 1).map_err(|_| "piece is out of range")?;
+            let pieces = p.arrangement.takes.get(index).map_or(0, |t| t.clips.len());
+            if n >= pieces {
+                return Err(format!("the take has {pieces} pieces").into());
+            }
+            Some(n)
+        }
     };
     let parts: Vec<suhina_model::ClipId> = p
         .arrangement
@@ -201,14 +200,26 @@ fn set_take_color(session: &mut Session, params: &Value) -> Result<Value, Comman
         .iter()
         .filter(|l| l.track == Some(track))
         .flat_map(|l| &l.clips)
-        .filter(|c| p.comp_source(track, c) == Some(index))
-        .filter(|c| only.as_ref().is_none_or(|ids| ids.contains(&u64::from(c.id.0))))
+        .filter(|c| match piece {
+            Some(n) => p.comp_piece(track, c) == Some((index, n)),
+            None => p.comp_source(track, c) == Some(index),
+        })
         .map(|c| c.id)
         .collect();
-    if only.is_none()
-        && let Some(take) = p.arrangement.takes.get_mut(index)
-    {
-        take.color = color;
+    if let Some(take) = p.arrangement.takes.get_mut(index) {
+        match piece {
+            Some(n) => {
+                if let Some(clip) = take.clips.get_mut(n) {
+                    clip.color = color;
+                }
+            }
+            None => {
+                take.color = color;
+                for clip in &mut take.clips {
+                    clip.color = None;
+                }
+            }
+        }
     }
     for clip in p.arrangement.lanes.iter_mut().flat_map(|l| l.clips.iter_mut()).filter(|c| parts.contains(&c.id)) {
         clip.color = color;

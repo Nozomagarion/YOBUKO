@@ -1607,22 +1607,34 @@ fn the_take_lanes_button_hides_them_and_a_comped_part_takes_the_takes_colour() {
     let mut harness = window(app);
     harness.get_by_label("Arrangement view").click();
     harness.run();
-    assert!(harness.query_by_label("Take 1 of Drums").is_some());
+    assert!(harness.query_by_label("Drums Take 1").is_some());
     harness.get_by_label("Hide take lanes of Drums").click();
     harness.run();
-    assert!(harness.query_by_label("Take 1 of Drums").is_none());
+    assert!(harness.query_by_label("Drums Take 1").is_none());
     harness.get_by_label("Show take lanes of Drums").click();
     harness.run();
     // The track's clip is the take's own pass, so it reads as a part of Take 1 (#989). A click on
     // the take's clip comps it, coloured: at the clip's own place on the row, the same as on the
     // track's lane.
-    let lane = harness.get_by_label("Clip Take 1 on Drums at bar 1").rect();
-    let row = harness.get_by_label("Comp from Take 1 of Drums").rect();
+    let lane = harness.get_by_label("Clip Drums Take 1 on Drums at bar 1").rect();
+    let row = harness.get_by_label("Comp from Drums Take 1").rect();
     let at = egui::pos2(lane.center().x, row.center().y);
     harness.hover_at(at);
     harness.run();
+    // One click takes nothing (a double-click takes the whole piece).
+    let before = harness.state().session().map(|s| s.project().arrangement.lanes.clone());
     harness.drag_at(at);
     harness.drop_at(at);
+    harness.run();
+    let after = harness.state().session().map(|s| s.project().arrangement.lanes.clone());
+    assert_eq!(after, before, "a click takes nothing");
+    // A drag across part of it puts that part on the track.
+    let to = egui::pos2(lane.left() + lane.width() * 0.75, row.center().y);
+    harness.drag_at(at);
+    harness.run();
+    harness.hover_at(to);
+    harness.run();
+    harness.drop_at(to);
     harness.run();
     let coloured = harness.state().session().is_some_and(|s| {
         s.project()
@@ -1635,12 +1647,12 @@ fn the_take_lanes_button_hides_them_and_a_comped_part_takes_the_takes_colour() {
     });
     assert!(coloured, "the comped part shows the take's colour");
     // The part is still named after its take, and the take lane's menu recolours it.
-    harness.get_by_label("Clip Take 1 on Drums at bar 1");
-    harness.get_by_label("Comp from Take 1 of Drums").click_secondary();
+    harness.get_by_label("Clip Drums Take 1 on Drums at bar 1");
+    harness.get_by_label("Comp from Drums Take 1").click_secondary();
     harness.run();
     // Submenus: their buttons carry an arrow after the name.
     harness.get_by_label_contains("Recolor lane");
-    harness.get_by_label_contains("Recolor selected take");
+    assert_eq!(harness.query_all_by_label_contains("Recolor").count(), 2, "Recolor lane, and Recolor for the piece");
     harness.get_by_label("Delete take");
 }
 

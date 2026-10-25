@@ -249,11 +249,19 @@ pub fn take_colour(number: usize) -> Rgb {
     swatches[number.saturating_mul(3) % swatches.len()]
 }
 
-/// The number on its track (from 1), name and colour of take `index` of `arrangement.takes`.
-fn take_of(project: &Project, index: usize) -> Option<(usize, String, Rgb)> {
+/// A take as it is shown: its track's name and its own, "Bass Take 2" (#989), so a renamed
+/// track's takes follow it.
+fn take_name(project: &Project, take: &suhina_engine::model::TakeLane) -> String {
+    format!("{} {}", project.shown_track_name(take.track), take.name)
+}
+
+/// The number on its track (from 1), name and colour of piece `piece` of take `index` of
+/// `arrangement.takes`: the piece's own colour, else the take's, else the palette's in turn.
+fn take_of(project: &Project, index: usize, piece: usize) -> Option<(usize, String, Rgb)> {
     let take = project.arrangement.takes.get(index)?;
     let number = project.arrangement.takes.iter().take(index + 1).filter(|t| t.track == take.track).count();
-    Some((number, take.name.clone(), take.color.unwrap_or_else(|| take_colour(number))))
+    let colour = take.clips.get(piece).and_then(|c| c.color).or(take.color).unwrap_or_else(|| take_colour(number));
+    Some((number, take_name(project, take), colour))
 }
 
 /// How many take lanes a track needs before they are shown.
@@ -357,7 +365,7 @@ impl Timeline {
                             let mut shown = clip_box(project, clip, index, track_color);
                             // A part of a comp: named and coloured after its take (#989).
                             if let Some((number, name, color)) =
-                                project.comp_source(track.id, clip).and_then(|i| take_of(project, i))
+                                project.comp_piece(track.id, clip).and_then(|(i, piece)| take_of(project, i, piece))
                             {
                                 shown.take = Some(number);
                                 shown.name = name;
@@ -621,23 +629,37 @@ pub(crate) fn inside_lanes<T: std::borrow::Borrow<Lane>>(lanes: &[T], index: usi
 /// The take lanes of tracks with at least [`TAKES_SHOWN_FROM`] takes, numbered per track.
 fn take_rows(project: &Project) -> Vec<TakeRow> {
     let mut rows = Vec::new();
-    for (position, track) in project.tracks.iter().enumerate() {
+    for track in &project.tracks {
         let takes: Vec<&suhina_engine::model::TakeLane> =
             project.arrangement.takes.iter().filter(|t| t.track == track.id).collect();
         if takes.len() < TAKES_SHOWN_FROM {
             continue;
         }
-        let color = track.color.unwrap_or_else(|| default_track_colour(position));
         let indices: Vec<usize> = (0..project.arrangement.takes.len())
             .filter(|&i| project.arrangement.takes.get(i).is_some_and(|t| t.track == track.id))
             .collect();
-        rows.extend(takes.into_iter().zip(indices).enumerate().map(|(i, (take, index))| TakeRow {
-            track: track.id,
-            number: i + 1,
-            name: take.name.clone(),
-            clips: take.clips.iter().enumerate().map(|(index, clip)| clip_box(project, clip, index, color)).collect(),
-            color: take.color.unwrap_or_else(|| take_colour(i + 1)),
-            used: project.comp_used(index),
+        rows.extend(takes.into_iter().zip(indices).enumerate().map(|(i, (take, index))| {
+            TakeRow {
+                track: track.id,
+                number: i + 1,
+                name: take_name(project, take),
+                // Each piece in its own colour or the take's, named after the take.
+                clips: take
+                    .clips
+                    .iter()
+                    .enumerate()
+                    .map(|(piece, clip)| {
+                        let own = take.color.unwrap_or_else(|| take_colour(i + 1));
+                        ClipBox {
+                            name: take_name(project, take),
+                            take: Some(i + 1),
+                            ..clip_box(project, clip, piece, clip.color.unwrap_or(own))
+                        }
+                    })
+                    .collect(),
+                color: take.color.unwrap_or_else(|| take_colour(i + 1)),
+                used: project.comp_used(index),
+            }
         }));
     }
     rows

@@ -76,6 +76,21 @@ fn recolouring_a_take_colours_its_parts_and_a_split_cuts_the_takes() {
     assert_eq!(s.project().arrangement.takes[1].color, Some(Rgb(0xff, 0x00, 0xaa)));
     assert_eq!(lane(&s)[0].color, Some(Rgb(0xff, 0x00, 0xaa)));
     assert_eq!(s.project().arrangement.takes[0].color, None, "other takes keep theirs");
+    // One piece of a split take, and its part on the track, alone (Recolor).
+    run(&mut s, "clip.split", json!({ "track": 1, "index": 0, "at": 4.0 })).unwrap();
+    run(&mut s, "take.setColor", json!({ "track": 1, "take": 2, "color": "#00ff00", "piece": 2 })).unwrap();
+    let take = &s.project().arrangement.takes[1];
+    assert_eq!((take.clips[0].color, take.clips[1].color), (None, Some(Rgb(0, 0xff, 0))));
+    let colours: Vec<Option<Rgb>> = lane(&s).iter().map(|c| c.color).collect();
+    assert_eq!(colours, [Some(Rgb(0xff, 0x00, 0xaa)), Some(Rgb(0, 0xff, 0))]);
+    // Recolor lane gives every piece the lane's colour again.
+    run(&mut s, "take.setColor", json!({ "track": 1, "take": 2, "color": "#123456" })).unwrap();
+    let take = &s.project().arrangement.takes[1];
+    assert!(take.clips.iter().all(|c| c.color.is_none()));
+    assert!(lane(&s).iter().all(|c| c.color == Some(Rgb(0x12, 0x34, 0x56))));
+    run(&mut s, "edit.undo", json!({})).unwrap();
+    run(&mut s, "edit.undo", json!({})).unwrap();
+    run(&mut s, "edit.undo", json!({})).unwrap();
     // A split of the track's clip at beat 2 cuts every take there too.
     run(&mut s, "clip.split", json!({ "track": 1, "index": 0, "at": 2.0 })).unwrap();
     for take in &s.project().arrangement.takes {

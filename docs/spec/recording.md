@@ -104,18 +104,20 @@ or, for audio, its waveform drawn as they come in. After a jump it starts again 
 ### Take lanes
 
 A track that recorded into the arrangement has its passes as **take lanes** under it, oldest
-first, named **Take 1**, **Take 2** and so on. Take lanes do not play: their clips are drawn
+first, shown with the track's name: **Drums Take 1**, **Drums Take 2** and so on (the project keeps
+"Take 1", so the names follow a renamed track). Take lanes do not play: their clips are drawn
 greyed. They are where the best parts of each pass are picked and put together on the track
 (comping):
 
-- **Click** a take's clip: the whole clip is copied onto the track over what is there.
+- The pointer over a take lane is the text cursor, as for selecting. A single click takes nothing;
+  a **double-click** on a piece of a take copies the whole piece onto the track over what is there.
 - **Drag** across a take: the part dragged over (on the grid; Alt for no grid) is copied onto the
   track over what is there, as new clips that start in the take where the part does. Each copy is
   one undo step.
-- **Right-click** a take's name or lane: **Recolor lane** gives the take a colour of its own and
-  its parts on the track with it (`take.setColor`); **Recolor selected take** colours only the
-  parts of it selected on the track (`take.setColor` with `clips`); **Delete take** removes the
-  lane, and the track's clips stay.
+- **Right-click** a take's name or lane: **Recolor lane** gives the whole take a colour of its own
+  and its parts on the track with it (`take.setColor`); **Recolor** colours only the piece of the
+  take the right-click was over (a split take has several) and its parts (`take.setColor` with
+  `piece`); **Delete take** removes the lane, and the track's clips stay.
 - **Hide take lanes** / **Show take lanes** in the right-click menu of the track's lane folds
   them away and back.
 
@@ -124,8 +126,8 @@ the same place is a **part** of that take, found by its content and by where in 
 (the passes of an audio take are clips of one file at different offsets; each MIDI pass has a
 content of its own), so nothing extra is stored and a trimmed part keeps its take:
 
-- A part is named after its take ("Take 4") and shows the take's colour unless it has one of its
-  own; the track's own copy of the last pass is a part of that take too.
+- Each take lane has a colour of its own, the palette's in turn until recoloured, and a part is
+  named after its take ("Drums Take 4") and shows its piece's colour unless it has one of its own; the track's own copy of the last pass is a part of that take too.
 - On each take lane the spans that are on the track are drawn lit and the rest dimmed.
 - **Alt+Up** / **Alt+Down** swap every selected part for the same span of the take above or below,
   in turn round the takes that have something there (`take.swap`), each one undo step.
@@ -203,7 +205,7 @@ file's frames.
 | `transport.setCountIn` | `bars`: 0, 1, 2 or 4 |
 | `take.comp` | `track`, `take` (from 1), `start?`, `end?`: copies the take, or its part from `start` to `end` beats, onto the track over what is there; one undo step |
 | `take.delete` | `track`, `take`: deletes the take lane; one undo step |
-| `take.setColor` | `track`, `take`, `color` (`"#rrggbb"` or null), `clips?`: the take's colour and its parts', or only the parts in `clips`; one undo step |
+| `take.setColor` | `track`, `take`, `color` (`"#rrggbb"` or null), `piece?` (from 1): the take's colour and its parts', or one piece's and its parts'; one undo step |
 | `take.swap` | `clip`, `direction` (`up` or `down`): the part replaced by the same span of the next take that has something there; one undo step |
 | `take.moveCut` | `clip`, `to`: moves the cut between the part and the one right after it; one undo step |
 | `record.state` | Whether the arrangement records, the takes running (track, slot or arrangement, audio or MIDI, start and end beat, notes so far, frames written, file), the count-in setting and the beats it has left, notices |

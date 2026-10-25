@@ -393,8 +393,14 @@ fn a_tracks_take_lanes_show_under_it_and_fold_away() {
     };
     project.arrangement.takes = vec![take("Take 1"), take("Take 2")];
     let timeline = Timeline::build(&project, None);
-    let rows: Vec<(usize, &str)> = timeline.takes.iter().map(|t| (t.number, t.name.as_str())).collect();
-    assert_eq!(rows, [(1, "Take 1"), (2, "Take 2")], "numbered as take.comp names them");
+    let rows: Vec<(usize, String)> = timeline.takes.iter().map(|t| (t.number, t.name.clone())).collect();
+    // Shown with their track's name, "Drums Take 1" (#989).
+    let shown = project.shown_track_name(track);
+    assert_eq!(
+        rows,
+        [(1, format!("{shown} Take 1")), (2, format!("{shown} Take 2"))],
+        "numbered as take.comp names them"
+    );
     assert_eq!(timeline.takes[0].clips.len(), 1);
     let mut state = ArrangementViewState::default();
     let automation = state.automation.height(track, &timeline.automation);

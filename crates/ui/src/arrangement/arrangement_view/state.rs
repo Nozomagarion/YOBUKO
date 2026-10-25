@@ -155,6 +155,9 @@ pub struct ArrangementViewState {
     /// A drag across a take lane that picks the part to comp: the track, the take's number and
     /// the beat it started at.
     pub(super) take_drag: Option<(TrackId, usize, f64)>,
+    /// The take piece a right-click on a take lane was over (track, take number, piece from 0),
+    /// which the lane's Recolor colours (#989).
+    pub(super) take_piece: Option<(TrackId, usize, usize)>,
     /// Moved clips stack on others instead of replacing them: audio clips, MIDI clips.
     pub stack_audio: bool,
     pub stack_midi: bool,
@@ -327,6 +330,7 @@ impl Default for ArrangementViewState {
             tracks_copied: false,
             takes_hidden: HashSet::new(),
             take_drag: None,
+            take_piece: None,
             stack_audio: false,
             stack_midi: false,
             time_select_ctrl: false,

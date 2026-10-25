@@ -1362,24 +1362,18 @@ pub(super) fn take_lanes(
             Id::new(("take-name", lane.track.0, take.number)),
             Sense::click(),
         );
-        name.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{} of {}", take.name, lane.name))
-        });
-        // The parts of this take selected on the track, which Recolor selected take colours.
-        let selected: Vec<u32> = lane
-            .clips
-            .iter()
-            .filter(|c| c.take == Some(take.number) && state.selected_clips().iter().any(|(_, id)| *id == c.id))
-            .map(|c| c.id.0)
-            .collect();
-        let menu =
-            |ui: &mut Ui, actions: &mut Vec<Action>| take_menu(ui, lane.track, take, &selected, &params, actions);
-        name.context_menu(|ui| menu(ui, actions));
-        // Dimmed like a muted track's, in the take's colour: a take does not play. The parts of
-        // it on the track are drawn lit (#989).
-        let look = Lane { mute: true, color: colour, ..lane.clone() };
-        let lit = Lane { mute: false, color: colour, ..lane.clone() };
+        name.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, take.name.clone()));
+        // The piece a right-click on the lane was over, which Recolor colours alone (#989).
+        let piece = state.take_piece.filter(|(t, n, _)| *t == lane.track && *n == take.number).map(|(_, _, p)| p);
+        let menu = |ui: &mut Ui, actions: &mut Vec<Action>, piece: Option<usize>| {
+            take_menu(ui, lane.track, take, piece, &params, actions)
+        };
+        name.context_menu(|ui| menu(ui, actions, None));
+        // Dimmed like a muted track's, each piece in its colour: a take does not play. The parts
+        // of it on the track are drawn lit (#989).
         for clip in &take.clips {
+            let look = Lane { mute: true, color: clip.color, ..lane.clone() };
+            let lit = Lane { mute: false, color: clip.color, ..lane.clone() };
             let rect = clip_rect(row, clip.start, clip.length, x_of);
             paint_clip(painter, rect, &look, clip, Shown::of(clip), clip.start, x_of, beat_width, timeline, false);
             for &(start, end) in &take.used {
@@ -1397,27 +1391,34 @@ pub(super) fn take_lanes(
             Sense::click_and_drag(),
         );
         body.widget_info(|| {
-            egui::WidgetInfo::labeled(
-                egui::WidgetType::Button,
-                true,
-                format!("Comp from {} of {}", take.name, lane.name),
-            )
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Comp from {}", take.name))
         });
-        body.context_menu(|ui| menu(ui, actions));
-        // The clip a click would take, under the pointer, before the click (#953).
+        if body.secondary_clicked()
+            && let Some(pointer) = body.interact_pointer_pos()
+        {
+            let beat = f64::from((pointer.x - at.time.min + scroll_x) / beat_width);
+            state.take_piece = take
+                .clips
+                .iter()
+                .position(|c| (c.start..c.start + c.length).contains(&beat))
+                .map(|p| (lane.track, take.number, p));
+        }
+        body.context_menu(|ui| menu(ui, actions, piece));
+        // A take lane selects: the pointer is the text cursor, a drag picks the part to comp, and
+        // the piece a double-click would take shows under the pointer (#953, #989).
         if state.take_drag.is_none()
             && let Some(pointer) = body.hover_pos()
         {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
             let beat = f64::from((pointer.x - at.time.min + scroll_x) / beat_width);
             if let Some(clip) = take.clips.iter().find(|c| (c.start..c.start + c.length).contains(&beat)) {
                 let rect = clip_rect(row, clip.start, clip.length, x_of);
-                painter.rect_filled(rect, 0.0, theme::selection().gamma_multiply(0.18));
                 painter.rect_stroke(rect, 0.0, Stroke::new(1.0, theme::selection()), StrokeKind::Inside);
-                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
             }
         }
+        // From where the button went down, not where the drag was recognised.
         if body.drag_started()
-            && let Some(pointer) = body.interact_pointer_pos()
+            && let Some(pointer) = ui.input(|i| i.pointer.press_origin()).or(body.interact_pointer_pos())
         {
             state.take_drag = Some((lane.track, take.number, beat_of(pointer.x)));
         }
@@ -1439,7 +1440,8 @@ pub(super) fn take_lanes(
                 }
             }
         }
-        if body.clicked()
+        // A double-click takes the whole piece under it; a single click takes nothing.
+        if body.double_clicked()
             && let Some(pointer) = body.interact_pointer_pos()
         {
             let beat = f64::from((pointer.x - at.time.min + scroll_x) / beat_width);
@@ -1480,13 +1482,14 @@ pub(super) fn take_lanes(
     }
 }
 
-/// A take lane's menu (#989): Recolor lane colours the take and its parts on the track; Recolor
-/// selected take only the parts of it selected on the track; Delete take.
+/// A take lane's menu (#989): Recolor lane colours the whole take and its parts on the track;
+/// Recolor only the piece of it the right-click was over (`piece`, from 0) and its parts; Delete
+/// take.
 fn take_menu(
     ui: &mut Ui,
     track: TrackId,
     take: &crate::arrangement::timeline::TakeRow,
-    selected: &[u32],
+    piece: Option<usize>,
     params: &serde_json::Value,
     actions: &mut Vec<Action>,
 ) {
@@ -1497,12 +1500,12 @@ fn take_menu(
             ui.close();
         }
     });
-    ui.add_enabled_ui(!selected.is_empty(), |ui| {
-        ui.menu_button("Recolor selected take", |ui| {
-            if let Some(colour) = crate::interaction::colour_picker::swatch_row(ui, None) {
+    ui.add_enabled_ui(piece.is_some(), |ui| {
+        ui.menu_button("Recolor", |ui| {
+            let current = piece.and_then(|p| take.clips.get(p)).map(|c| c.color);
+            if let (Some(colour), Some(piece)) = (crate::interaction::colour_picker::swatch_row(ui, current), piece) {
                 let hex = crate::interaction::colour_picker::hex(colour);
-                let clips: Vec<serde_json::Value> = selected.iter().map(|id| json!({ "clip": id })).collect();
-                let params = json!({ "track": track.0, "take": take.number, "color": hex, "clips": clips });
+                let params = json!({ "track": track.0, "take": take.number, "color": hex, "piece": piece + 1 });
                 actions.push(Action::new("take.setColor", params));
                 ui.close();
             }

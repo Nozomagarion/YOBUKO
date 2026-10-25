@@ -15,16 +15,28 @@ const ALIGNED: f64 = 1e-6;
 impl Project {
     /// The index in `arrangement.takes` of the take of `track` that `clip` was comped from.
     pub fn comp_source(&self, track: TrackId, clip: &Clip) -> Option<usize> {
+        self.comp_piece(track, clip).map(|(take, _)| take)
+    }
+
+    /// The take of `track` that `clip` was comped from and the piece of it (its index among the
+    /// take's clips: a split take has several) the clip starts in.
+    pub fn comp_piece(&self, track: TrackId, clip: &Clip) -> Option<(usize, usize)> {
         let end = clip.start + clip.length;
         let aligned = clip.offset - clip.start;
-        self.arrangement.takes.iter().position(|take| {
-            take.track == track
-                && take.clips.iter().any(|t| {
-                    t.content == clip.content
-                        && (t.offset - t.start - aligned).abs() < ALIGNED
-                        && t.start < end
-                        && clip.start < t.start + t.length
-                })
+        self.arrangement.takes.iter().enumerate().filter(|(_, take)| take.track == track).find_map(|(index, take)| {
+            let matches = |t: &Clip| {
+                t.content == clip.content
+                    && (t.offset - t.start - aligned).abs() < ALIGNED
+                    && t.start < end
+                    && clip.start < t.start + t.length
+            };
+            // The piece the clip starts in, else the first it overlaps.
+            let piece = take
+                .clips
+                .iter()
+                .position(|t| matches(t) && t.start <= clip.start + ALIGNED && clip.start < t.start + t.length)
+                .or_else(|| take.clips.iter().position(matches))?;
+            Some((index, piece))
         })
     }
 
