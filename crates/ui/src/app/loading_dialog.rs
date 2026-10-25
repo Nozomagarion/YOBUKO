@@ -70,13 +70,21 @@ fn draw(ui: &Ui, area: Rect, project: &str, progress: &PluginProgress) -> bool {
         Pos2::new(rect.right() - PAD, rect.bottom() - PAD),
     );
     let bar = Rect::from_min_size(inner.min, Vec2::new(inner.width(), BAR));
-    painter.fill_background(bar, 0.0, theme::control_background());
+    // `.progress` (its background and radius) and `.progress-fill` (its background) style the bar.
+    let progress_style = crate::kit::style_class::enter("progress");
+    let radius = crate::kit::style_class::radius(0.0);
+    painter.fill_background(bar, radius, crate::kit::style_class::background(theme::control_background()));
     let share = if progress.total == 0 { 1.0 } else { progress.ready as f32 / progress.total as f32 };
+    let fill = {
+        let _fill = crate::kit::style_class::enter("progress-fill");
+        crate::kit::style_class::background(theme::accent())
+    };
     painter.rect_filled(
         Rect::from_min_size(bar.min, Vec2::new(bar.width() * share.clamp(0.0, 1.0), BAR)),
-        0.0,
-        theme::accent(),
+        radius,
+        fill,
     );
+    drop(progress_style);
 
     let mut y = bar.bottom() + PAD;
     let mut line = |label: &str, color: Color32| {

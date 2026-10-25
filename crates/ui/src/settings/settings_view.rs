@@ -940,12 +940,21 @@ fn page_list(ui: &Ui, painter: &egui::Painter, rect: Rect, shown: Option<Page>) 
         }
         let selected = motion::toward(ui.ctx(), response.id.with("selected"), Some(page) == shown, motion::VALUE);
         let hover = widgets::hover(ui, &response);
-        painter.rect_filled(row, 0.0, theme::panel_hover().gamma_multiply(0.25 * hover));
-        painter.rect_filled(row, 0.0, theme::control_background().gamma_multiply(0.8 * selected));
+        // `.settings-nav`, one row per page: `:hover`, and `:checked` for the page shown.
+        let _nav = crate::kit::style_class::enter_response("settings-nav", &response);
+        crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, Some(page) == shown);
+        let own = crate::kit::style_class::computed().filter(|c| c.authored.background);
+        if let Some(own) = &own {
+            painter.rect_filled(row, own.radius, own.background);
+        } else {
+            painter.rect_filled(row, 0.0, theme::panel_hover().gamma_multiply(0.25 * hover));
+            painter.rect_filled(row, 0.0, theme::control_background().gamma_multiply(0.8 * selected));
+        }
         // A page under another (Theme under Appearance) is stepped in.
         let indent = if page == Page::Theme { PAD * 2.0 } else { 0.0 };
         let text = Rect::from_min_max(Pos2::new(row.left() + PAD + indent, row.top()), row.max);
-        let color = motion::mix(theme::text_secondary(), theme::text_primary(), selected);
+        let color =
+            crate::kit::style_class::foreground(motion::mix(theme::text_secondary(), theme::text_primary(), selected));
         widgets::text_in(painter, text, Align2::LEFT_CENTER, name, theme::ui_font(theme::TEXT), color);
     }
     picked

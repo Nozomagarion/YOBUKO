@@ -100,6 +100,9 @@ pub const CLASSES: &[&str] = &[
     "loop-line",
     "ruler-number",
     "ruler-tick",
+    "settings-nav",
+    "progress",
+    "progress-fill",
     // Families: one class a group of parts shares, for a rule over all of them (`families`).
     "value-control",
     "track-button",
