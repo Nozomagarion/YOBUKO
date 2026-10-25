@@ -284,3 +284,25 @@ fn a_search_finds_shortcuts_and_the_shortcuts_page_filters_its_list() {
     assert!(harness.query_by_label("Change keys of view.waveformZoomIn").is_some());
     assert!(harness.query_by_label("Change keys of file.save").is_none());
 }
+
+/// Help, beside Close, opens a dialog that chooses how a setting's description is shown; the
+/// choice is kept.
+#[test]
+fn help_chooses_how_descriptions_are_shown() {
+    use suhina_ui::settings::Descriptions;
+    let mut harness = short_window();
+    assert_eq!(harness.state().settings().setting_descriptions, Descriptions::Tooltip, "a tooltip by default");
+    harness.get_by_label("Settings help").click();
+    harness.run();
+    harness.get_by_label("Below the name: each setting's description is always shown").click();
+    harness.run();
+    assert_eq!(harness.state().settings().setting_descriptions, Descriptions::Shown);
+    harness.get_by_label("? icon: point at the ? next to a setting to read what it does").click();
+    harness.run();
+    let settings = harness.state().settings().clone();
+    assert_eq!(settings.setting_descriptions, Descriptions::Icon);
+    assert_eq!(
+        suhina_ui::settings::Settings::from_text(&settings.to_text()).0.setting_descriptions,
+        Descriptions::Icon
+    );
+}

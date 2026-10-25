@@ -137,8 +137,9 @@ checks the ones a machine can check and names this section when one fails.
      samples: Rhythmic*). A noun for a choice, what it makes happen for a switch; not a sentence cut
      off before its buttons (*Grab a clip by*), not only the topic (*Moving clips*).
    - The **description** is one whole sentence that says what changes when the setting is on or
-     chosen. By default it is the name's tooltip; **Setting descriptions** on the Appearance page
-     shows it as a ? after the name, or under the name. It holds one thought: no semicolon, no second clause about the off state
+     chosen. How it is shown is chosen in **Help**, the button beside Close at the top of the window: as
+     the name's tooltip (the default), as a ? after the name to point at, or under the name. The
+     choice is kept as `setting_descriptions` (`tooltip`, `icon`, `shown`). It holds one thought: no semicolon, no second clause about the off state
      (the switch shows that), no shortcut keys (the Keys page lists them), and it does not end with
      a full stop.
    - **Plain words:** the effect, not the mechanism. Not *underruns* but dropouts, not *IR* but

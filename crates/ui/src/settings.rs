@@ -283,8 +283,8 @@ impl Descriptions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
     pub animations: bool,
-    /// How the Settings window explains each setting (Settings › Appearance › Setting
-    /// descriptions): a tooltip on its name, a ? beside it, or the sentence under it.
+    /// How the Settings window explains each setting (Help, beside Close): a tooltip on its name,
+    /// a ? beside it, or the sentence under it.
     pub setting_descriptions: Descriptions,
     pub track_headers: Side,
     pub graphics: Graphics,

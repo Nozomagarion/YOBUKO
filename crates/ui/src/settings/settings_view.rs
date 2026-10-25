@@ -271,6 +271,8 @@ pub struct PageState {
     pub key_filter: String,
     /// The pages whose Advanced group is unfolded.
     pub advanced: Vec<Page>,
+    /// The Help dialog over the window is open: how the settings are explained.
+    pub help_open: bool,
 }
 
 impl PageState {
@@ -613,6 +615,15 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
         theme::text_primary(),
     );
     let close = Rect::from_min_max(Pos2::new(title.right() - 52.0, title.top()), title.max);
+    // Help, beside Close: how each setting's description is shown.
+    let help = Rect::from_min_size(Pos2::new(close.left() - 58.0, close.top()), Vec2::new(52.0, close.height()));
+    let help_response = widgets::button_area(ui, help, Id::new("settings-help"), "Settings help");
+    let help_hover = widgets::hover(ui, &help_response);
+    painter.rect_filled(help, 0.0, motion::mix(theme::control_background(), theme::control_hover(), help_hover));
+    widgets::text_in(&painter, help, Align2::CENTER_CENTER, "Help", theme::ui_font(theme::TEXT), theme::text_primary());
+    if help_response.clicked() {
+        state.help_open = true;
+    }
     let response = widgets::button_area(ui, close, Id::new("settings-close"), "Close settings");
     let hover = widgets::hover(ui, &response);
     painter.rect_filled(close, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
@@ -640,9 +651,14 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
         state.search.clear();
     }
     let searching = !state.search.trim().is_empty();
-    // Escape closes the page, unless it is cancelling a key being set or a search.
-    if response.clicked() || (!escaped && state.capture.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
+    // Escape closes the page, unless it is cancelling a key being set or a search, or closing Help.
+    let escape =
+        !escaped && state.capture.is_none() && !state.help_open && ui.input(|i| i.key_pressed(egui::Key::Escape));
+    if response.clicked() || escape {
         outcome.close = true;
+    }
+    if state.help_open {
+        help_dialog(ui, settings, state, &mut outcome);
     }
 
     // The pages down the left, the one shown beside them; none is lit while searching.
@@ -681,6 +697,40 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
         });
     });
     outcome
+}
+
+/// The ways a setting's description can be shown, as the Help dialog offers them.
+const DESCRIPTION_CHOICES: [(Descriptions, &str); 3] = [
+    (Descriptions::Tooltip, "Tooltip: point at a setting's name to read what it does"),
+    (Descriptions::Icon, "? icon: point at the ? next to a setting to read what it does"),
+    (Descriptions::Shown, "Below the name: each setting's description is always shown"),
+];
+
+/// Help over the Settings window: what the names and descriptions are, and how a description is
+/// shown, one choice per line. Escape or Close closes it.
+fn help_dialog(ui: &Ui, settings: &mut Settings, state: &mut PageState, outcome: &mut Outcome) {
+    let modal = egui::Modal::new(Id::new("settings-help-dialog")).show(ui.ctx(), |ui| {
+        ui.set_width(360.0);
+        ui.label(egui::RichText::new("Help").font(theme::ui_font(theme::TEXT + 2.0)).color(theme::text_primary()));
+        ui.add_space(6.0);
+        let text = "Each setting's name says what it does. Choose how to see the longer description of each setting:";
+        ui.label(egui::RichText::new(text).font(theme::ui_font(theme::TEXT_SMALL)).color(theme::text_secondary()));
+        ui.add_space(6.0);
+        for (choice, label) in DESCRIPTION_CHOICES {
+            let text = egui::RichText::new(label).font(theme::ui_font(theme::TEXT_SMALL));
+            if ui.radio(settings.setting_descriptions == choice, text).clicked()
+                && settings.setting_descriptions != choice
+            {
+                settings.setting_descriptions = choice;
+                outcome.changed = true;
+            }
+        }
+        ui.add_space(8.0);
+        ui.button(egui::RichText::new("Close").font(theme::ui_font(theme::TEXT))).clicked()
+    });
+    if modal.inner || modal.should_close() {
+        state.help_open = false;
+    }
 }
 
 /// A control that takes the keyboard focus (Tab) is scrolled into view.
@@ -1883,7 +1933,7 @@ fn wrapped_label(painter: &egui::Painter, row: Rect, name_rect: Rect, name: &str
     LINE_ROW.max(18.0 + height + 6.0)
 }
 
-/// The description of the setting named `name`, as Settings › Appearance › Setting descriptions
+/// The description of the setting named `name`, as Settings › Help
 /// asks: a tooltip on its name, or on a ? drawn after the name. (Shown under the name, it is the
 /// row's second line instead, drawn by [`wrapped_label`].)
 fn describe(ui: &Ui, painter: &egui::Painter, row: Rect, name: &str, description: &str, how: Descriptions) {

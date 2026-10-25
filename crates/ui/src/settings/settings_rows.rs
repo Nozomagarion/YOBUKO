@@ -524,19 +524,6 @@ pub(crate) static ROWS: &[Entry] = &[
     row(
         Page::Appearance,
         "Window",
-        "Setting descriptions",
-        "How this window explains a setting: when you point at its name, with a question mark beside it, or under it",
-        &["setting_descriptions"],
-        |cx, r| {
-            use crate::settings::Descriptions;
-            let options =
-                [("Tooltip", Descriptions::Tooltip), ("? icon", Descriptions::Icon), ("Shown", Descriptions::Shown)];
-            cx.choose(r, &options, |s| &mut s.setting_descriptions);
-        },
-    ),
-    row(
-        Page::Appearance,
-        "Window",
         "Animations",
         "Things fade and slide briefly when they change",
         &["animations"],
@@ -632,7 +619,8 @@ mod tests {
 
     /// Kept in `settings.json` but changed outside the Settings window: the browser and the map
     /// window as they were left.
-    const NOT_IN_THE_WINDOW: [&str; 7] = [
+    const NOT_IN_THE_WINDOW: [&str; 8] = [
+        "setting_descriptions",
         "browser",
         "browser_width",
         "map_dot_size",

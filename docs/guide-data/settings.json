@@ -1427,35 +1427,6 @@
       "workInProgress": false
     },
     {
-      "id": "Appearance/Window/setting_descriptions",
-      "page": "Appearance",
-      "section": "Window",
-      "name": "Setting descriptions",
-      "note": "Choose how the Settings window explains each setting.",
-      "keys": [
-        "setting_descriptions"
-      ],
-      "sourceFingerprint": "d7ba2cf68b511084ba78a711df53f1939931acddc23d0f305eb306b4d42abada",
-      "helpStatus": "reviewed",
-      "description": "Every setting's name says what it does. Its one-sentence description can show as a tooltip when you point at the name, as a question mark beside the name that shows it when you point at it, or under the name all the time.",
-      "options": [
-        {
-          "name": "Tooltip",
-          "description": "Point at a setting's name to read what it does. This is the default."
-        },
-        {
-          "name": "? icon",
-          "description": "A question mark beside each name shows the description when you point at it."
-        },
-        {
-          "name": "Shown",
-          "description": "The description is written under each name."
-        }
-      ],
-      "whenToChange": "Choose Shown while you learn the settings, and Tooltip once the names are enough.",
-      "workInProgress": false
-    },
-    {
       "id": "Appearance/Window/animations",
       "page": "Appearance",
       "section": "Window",
