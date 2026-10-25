@@ -9,10 +9,11 @@
 use std::cell::Cell;
 use std::sync::{Arc, Mutex};
 
-use rtrb::Producer;
 use vst3::Steinberg::Vst::*;
 use vst3::Steinberg::*;
 use vst3::{Class, ComPtr, ComWrapper};
+
+use crate::param_notes::Notes;
 
 /// Most parameter changes one block carries; more wait for the next block.
 pub(crate) const MAX_CHANGES: usize = 4096;
@@ -127,16 +128,16 @@ pub(crate) struct BlockChanges {
     pending: Pending,
     /// What the editor changed and a block took in, for the main thread to report to the
     /// session (which keeps the project's values in step with it).
-    applied: Producer<(u32, f64)>,
+    applied: Notes,
     /// What the engine sent with a block (a panel set, automation): the last value each
     /// parameter got, for the main thread to give the controller too, so the plug-in's editor
     /// follows the panel and automation.
-    engine: Producer<(u32, f64)>,
+    engine: Notes,
 }
 
 impl BlockChanges {
     /// Made before processing starts; allocates the list for [`MAX_CHANGES`] parameters.
-    pub(crate) fn new(pending: Pending, applied: Producer<(u32, f64)>, engine: Producer<(u32, f64)>) -> Self {
+    pub(crate) fn new(pending: Pending, applied: Notes, engine: Notes) -> Self {
         let queues: Vec<ComWrapper<Queue>> = (0..MAX_CHANGES).map(|_| ComWrapper::new(Queue::new())).collect();
         let pointers = queues.iter().filter_map(|q| q.to_com_ptr::<IParamValueQueue>()).collect();
         let changes = ComWrapper::new(Changes { queues, pointers, count: Cell::new(0) });
@@ -172,7 +173,7 @@ impl BlockChanges {
             for (id, value) in pending.drain(..room) {
                 add(id, 0, value);
                 // Past the room the report loses the rest; the next edit reports again.
-                let _ = self.applied.push((id, value));
+                self.applied.note(id, value);
             }
         }
         for (id, offset, value) in extra {
@@ -183,7 +184,7 @@ impl BlockChanges {
             let id = queue.id.get();
             let last = (0..queue.count.get()).next_back().and_then(|i| queue.points.get(i)).map(|p| p.get().1);
             if let Some(value) = last {
-                let _ = self.engine.push((id, value));
+                self.engine.note(id, value);
             }
         }
         self.changes.count.set(count);
@@ -202,10 +203,10 @@ impl BlockChanges {
 
 #[cfg(test)]
 mod tests {
-    use rtrb::RingBuffer;
     use vst3::ComRef;
 
     use super::*;
+    use crate::param_notes::ParamNotes;
 
     #[test]
     fn a_parameter_changed_several_times_in_a_block_gets_each_value() {
@@ -213,9 +214,11 @@ mod tests {
         if let Ok(mut list) = pending.lock() {
             list.push((5, 0.1));
         }
-        let (applied_producer, mut applied_taken) = RingBuffer::new(8);
-        let (engine_producer, mut engine_taken) = RingBuffer::new(8);
-        let mut changes = BlockChanges::new(pending, applied_producer, engine_producer);
+        let applied = Notes::new(ParamNotes::new());
+        let engine = Notes::new(ParamNotes::new());
+        let mut applied_read = ParamNotes::fresh_reads();
+        let mut engine_read = ParamNotes::fresh_reads();
+        let mut changes = BlockChanges::new(pending, applied.clone(), engine.clone());
         // In frame order; a second value at frame 20 replaces the first, and one before the
         // last point is moved to it.
         let extra = [(5, 10, 0.2), (5, 20, 0.4), (5, 20, 0.5), (7, 3, 0.9), (5, 15, 0.6)];
@@ -243,14 +246,7 @@ mod tests {
         // The next block starts empty.
         assert!(changes.take(std::iter::empty()).is_null());
         // The editor's edit was reported and the engine's last value recorded.
-        let take = |consumer: &mut rtrb::Consumer<(u32, f64)>| {
-            let mut taken = Vec::new();
-            while let Ok(pair) = consumer.pop() {
-                taken.push(pair);
-            }
-            taken
-        };
-        assert_eq!(take(&mut applied_taken), [(5, 0.1)]);
-        assert_eq!(take(&mut engine_taken).into_iter().find(|(id, _)| *id == 5), Some((5, 0.6)));
+        assert_eq!(applied.take(&mut applied_read), [(5, 0.1)]);
+        assert_eq!(engine.take(&mut engine_read).into_iter().find(|(id, _)| *id == 5), Some((5, 0.6)));
     }
 }

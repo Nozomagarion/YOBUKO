@@ -34,6 +34,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
+use crate::param_notes::{Notes, ParamNotes, Reads};
 use clack_extensions::audio_ports::{AudioPortFlags, AudioPortInfoBuffer, PluginAudioPorts};
 use clack_extensions::gui::{GuiApiType, GuiConfiguration, GuiSize, HostGui, HostGuiImpl, PluginGui};
 use clack_extensions::latency::{HostLatency, HostLatencyImpl, PluginLatency};
@@ -51,7 +52,6 @@ use clack_host::events::spaces::CoreEventSpace;
 use clack_host::events::{EventFlags, EventHeader};
 use clack_host::prelude::*;
 use clack_host::utils::{BeatTime, SecondsTime};
-use rtrb::{Consumer, Producer, RingBuffer};
 use suhina_ipc::{Event, EventKind, MAX_EVENTS, Served};
 use suhina_plugins::ParamInfo;
 
@@ -182,11 +182,6 @@ impl Ports {
 type PendingParams = Arc<Mutex<Vec<(u32, f64)>>>;
 /// Most values one block carries; more wait for the next.
 const MAX_PARAM_CHANGES: usize = 1024;
-
-/// The values the audio thread's report of what the plug-in changed itself holds before the
-/// main thread reads it: a burst past it loses the oldest value, which the next change of
-/// that parameter reports again.
-const REPORT_ROOM: usize = 256;
 
 impl<'a> SharedHandler<'a> for Shared {
     fn initializing(&self, instance: InitializingPluginHandle<'a>) {
@@ -331,7 +326,10 @@ pub(crate) struct ClapPlugin {
     pending: PendingParams,
     /// What the plug-in changed itself (its own editor, its internal mapping), taken out of
     /// the blocks' output parameter events, for [`ClapPlugin::tick`] to report to the session.
-    edited: Consumer<(u32, f64)>,
+    edited: Notes,
+    /// What each of its slots said at the last [`ClapPlugin::tick`], so a value is reported
+    /// once ([`Reads`]).
+    edited_reads: Reads,
     editor: Option<ClapEditor>,
     /// The plug-in's name, for its editor's window.
     name: String,
@@ -445,8 +443,8 @@ impl ClapPlugin {
             ports,
             number,
             pending: PendingParams::default(),
-            // Replaced when the audio thread starts (which gets its queue's producer).
-            edited: RingBuffer::new(1).1,
+            edited: Notes::new(ParamNotes::new()),
+            edited_reads: ParamNotes::fresh_reads(),
             editor: None,
             name,
         };
@@ -457,20 +455,14 @@ impl ClapPlugin {
     /// Starts an audio thread that serves blocks from `served` through the activated plug-in.
     fn start_audio(&mut self, stopped: StoppedPluginAudioProcessor<Host>, served: Served) -> Result<(), String> {
         self.stop = Arc::new(AtomicBool::new(false));
-        let (audio_stop, audio_pending, ports, number) =
-            (self.stop.clone(), self.pending.clone(), self.ports.clone(), self.number);
-        // The report the audio thread fills (what the plug-in changed itself) gets a queue of
-        // its own, its producer handed to the audio thread and the consumer kept here; the
-        // room is fixed, so the audio thread pushes without locking, waiting or allocating,
-        // and a burst past it loses the oldest value.
-        let (edited_producer, edited) = RingBuffer::new(REPORT_ROOM);
-        self.edited = edited;
+        let (audio_stop, audio_pending, audio_edited, ports, number) =
+            (self.stop.clone(), self.pending.clone(), self.edited.clone(), self.ports.clone(), self.number);
         let sample_rate = self.configuration.sample_rate;
         let audio = thread::Builder::new()
             .name("plug-in audio".into())
             .spawn(move || {
                 let _realtime = crate::real_time_thread();
-                serve(number, stopped, served, ports, (audio_pending, edited_producer, sample_rate), &audio_stop)
+                serve(number, stopped, served, ports, (audio_pending, audio_edited, sample_rate), &audio_stop)
             })
             .map_err(|e| e.to_string())?;
         self.audio = Some(audio);
@@ -540,11 +532,7 @@ impl ClapPlugin {
             self.instance.call_on_main_thread_callback();
         }
         self.run_loop();
-        let mut taken = Vec::new();
-        while let Ok(pair) = self.edited.pop() {
-            taken.push(pair);
-        }
-        taken
+        self.edited.take(&mut self.edited_reads)
     }
 
     /// Calls the plug-in back for the timers that are due and (on Unix) the descriptors that
@@ -782,7 +770,7 @@ fn serve(
     stopped: StoppedPluginAudioProcessor<Host>,
     mut served: Served,
     (input_ports, output_ports): (Ports, Ports),
-    (pending, edited, sample_rate): (PendingParams, Producer<(u32, f64)>, f64),
+    (pending, edited, sample_rate): (PendingParams, Notes, f64),
     stop: &AtomicBool,
 ) -> Option<Stopped> {
     let processor = match stopped.start_processing() {
@@ -808,7 +796,7 @@ struct ClapBlock {
     pending: PendingParams,
     /// Where the block's output parameter events go: what the plug-in changed itself, for the
     /// main thread to report to the session.
-    edited: Producer<(u32, f64)>,
+    edited: Notes,
     steady_time: u64,
     /// Where the song is, as the engine last said: given with every block.
     transport: TransportEvent,
@@ -875,7 +863,7 @@ impl ClapBlock {
         processor: StartedPluginAudioProcessor<Host>,
         served: &Served,
         (input_ports, output_ports): (Ports, Ports),
-        (pending, edited): (PendingParams, Producer<(u32, f64)>),
+        (pending, edited): (PendingParams, Notes),
         sample_rate: f64,
     ) -> Self {
         let max_frames = served.max_frames() as usize;
@@ -975,13 +963,13 @@ impl crate::audio::Block for ClapBlock {
         // What the plug-in changed itself (its own editor, its internal mapping) comes out with
         // the block as parameter events (CLAP's way of telling the host), for the main thread to
         // report to the session (#828). Real-time safe: no lock, no allocation, it never waits,
-        // and past the queue's room the oldest value is lost until the parameter changes again.
+        // and past the report's room the oldest value is lost until the parameter changes again.
         for event in out_events.iter() {
             if let Some(CoreEventSpace::ParamValue(param)) = event.as_core_event()
                 && let Some(id) = param.param_id().map(ClapId::get)
                 && param.value().is_finite()
             {
-                let _ = edited.push((id, param.value()));
+                edited.note(id, param.value());
             }
         }
         // A failed block stays silent (the output starts zeroed). The link's channels come from

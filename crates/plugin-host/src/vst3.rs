@@ -33,8 +33,7 @@ use suhina_ipc::Served;
 use suhina_plugins::ParamInfo;
 use suhina_plugins::scan::PluginInfo;
 
-use rtrb::{Consumer, Producer, RingBuffer};
-
+use crate::param_notes::{Notes, ParamNotes, Reads};
 use crate::vst3_events::{BlockEvents, MidiMapping, Shown};
 use crate::vst3_params::{BlockChanges, Pending};
 use vst3::Steinberg::Vst::*;
@@ -47,15 +46,6 @@ const AUDIO_CLASS: &str = "Audio Module Class";
 const COMPATIBILITY_CLASS: &str = "Plugin Compatibility Class";
 /// Bytes of compatibility list read, at most.
 const MAX_COMPATIBILITY: usize = 1024 * 1024;
-
-/// The values one of the audio thread's reports holds before the main thread reads it: a
-/// burst past it loses the oldest value, which the next change of that parameter reports
-/// again.
-const REPORT_ROOM: usize = 256;
-
-/// The audio thread's two reports to the main thread: what the editor changed (reported to the
-/// session), and the last value per parameter the engine sent (given to the controller).
-type Reports = (Producer<(u32, f64)>, Producer<(u32, f64)>);
 
 /// The byte order of a class id's canonical text form. On Windows the SDK lays ids out as COM
 /// GUIDs, whose first three fields (4, 2 and 2 bytes) are stored little-endian, and its text
@@ -617,10 +607,13 @@ pub(crate) struct Vst3Plugin {
     pending: Pending,
     /// What the editor changed and the audio thread took in, for [`Vst3Plugin::tick`] to give
     /// the controller and report to the session.
-    applied: Consumer<(u32, f64)>,
+    applied: Notes,
     /// What the engine sent with a block (a panel set, automation): the last value per
     /// parameter, for [`Vst3Plugin::tick`] to give the controller so its editor follows.
-    engine: Consumer<(u32, f64)>,
+    engine: Notes,
+    /// What each report's slots said at the last [`Vst3Plugin::tick`], so a value is reported
+    /// once ([`Reads`]).
+    reads: (Reads, Reads),
     /// The values the audio thread gave mapped MIDI controllers, given to the controller too
     /// on the main thread ([`Vst3Plugin::tick`]) so the editor shows them.
     shown: Option<Shown>,
@@ -671,6 +664,9 @@ impl Vst3Plugin {
         let component = module.create::<IComponent>(&cid).ok_or("could not make the plug-in's component")?;
         let host = ComWrapper::new(HostApplication);
         let pending = Pending::default();
+        let applied = Notes::new(ParamNotes::new());
+        let engine = Notes::new(ParamNotes::new());
+        let reads = (ParamNotes::fresh_reads(), ParamNotes::fresh_reads());
         let restart = Arc::new(AtomicI32::new(0));
         let handler = ComWrapper::new(ComponentHandler { pending: pending.clone(), restart: restart.clone() });
         let context = host.to_com_ptr::<FUnknown>().ok_or("host object")?;
@@ -705,9 +701,9 @@ impl Vst3Plugin {
             controller,
             separate_controller,
             pending,
-            // Replaced when the audio thread starts (which gets each queue's producer).
-            applied: RingBuffer::new(1).1,
-            engine: RingBuffer::new(1).1,
+            applied,
+            engine,
+            reads,
             shown: None,
             midi_watch: None,
             name,
@@ -767,15 +763,7 @@ impl Vst3Plugin {
         self.stop = Arc::new(AtomicBool::new(false));
         self.flush = Arc::new(AtomicBool::new(false));
         let (stop, flush) = (self.stop.clone(), self.flush.clone());
-        let pending = self.pending.clone();
-        // The two reports the audio thread fills (what the editor changed, and the last value
-        // per parameter the engine sent) get a queue each, its producer handed to the audio
-        // thread and the consumer kept here; the room is fixed, so the audio thread pushes
-        // without locking, waiting or allocating, and a burst past it loses the oldest value.
-        let (applied_producer, applied) = RingBuffer::new(REPORT_ROOM);
-        let (engine_producer, engine) = RingBuffer::new(REPORT_ROOM);
-        self.applied = applied;
-        self.engine = engine;
+        let (pending, applied, engine) = (self.pending.clone(), self.applied.clone(), self.engine.clone());
         let mapping = MidiMapping::of(self.controller.as_ref());
         self.shown = Some(mapping.shown());
         self.midi_watch = suhina_plugins::trace::on().then(|| Arc::new(MidiWatch::default()));
@@ -793,7 +781,7 @@ impl Vst3Plugin {
                     served,
                     buses,
                     sample_rate,
-                    (pending, (applied_producer, engine_producer), mapping, midi_watch),
+                    (pending, applied, engine, mapping, midi_watch),
                     (&stop, &flush),
                     watch,
                 )
@@ -1037,12 +1025,13 @@ impl Vst3Plugin {
             ara.tick();
             self.trace_output();
         }
-        // Take both reports out at once; the controller updates below run with no report held,
-        // so the audio thread's next block never waits on one (the audio thread pushes without
-        // locking, waiting or allocating).
+        // Take both reports out at once; the controller updates below run with no report
+        // held (the audio thread never locks at all, so its next block never waits on one).
         let mut made_in_the_editor = Vec::new();
-        for (taken, to_session) in [(&mut self.applied, true), (&mut self.engine, false)] {
-            while let Ok((id, value)) = taken.pop() {
+        for (taken, to_session) in
+            [(self.applied.take(&mut self.reads.0), true), (self.engine.take(&mut self.reads.1), false)]
+        {
+            for (id, value) in taken {
                 if let Some(controller) = &self.controller {
                     // The audio thread took it in; the controller's own cache keeps the value,
                     // which a parameter listing reads and the editor draws.
@@ -1345,7 +1334,7 @@ fn serve(
     mut served: Served,
     buses: (Vec<usize>, Vec<usize>),
     sample_rate: f64,
-    (pending, reports, mapping, midi_watch): (Pending, Reports, MidiMapping, Option<Arc<MidiWatch>>),
+    (pending, applied, engine, mapping, midi_watch): (Pending, Notes, Notes, MidiMapping, Option<Arc<MidiWatch>>),
     (stop, flush): (&AtomicBool, &AtomicBool),
     watch: Option<Arc<Watch>>,
 ) -> Served {
@@ -1353,7 +1342,7 @@ fn serve(
     let waiting = pending.clone();
     // SAFETY: a live, active processor, on the audio thread.
     let _ = unsafe { processor.setProcessing(1) };
-    let mut block = Vst3Block::new(processor, &served, buses, sample_rate, (pending, reports, mapping));
+    let mut block = Vst3Block::new(processor, &served, buses, sample_rate, (pending, applied, engine, mapping));
     block.watch = watch;
     block.midi_watch = midi_watch;
     if let Some(mut block) = crate::audio::serve(instance, block, &mut served, stop) {
@@ -1499,7 +1488,7 @@ impl Vst3Block {
         served: &Served,
         buses: (Vec<usize>, Vec<usize>),
         sample_rate: f64,
-        (pending, reports, mapping): (Pending, Reports, MidiMapping),
+        (pending, applied, engine, mapping): (Pending, Notes, Notes, MidiMapping),
     ) -> Self {
         let max_frames = served.max_frames() as usize;
         let (in_channels, out_channels) = buses;
@@ -1529,7 +1518,7 @@ impl Vst3Block {
         context.timeSigDenominator = 4;
         Self {
             processor,
-            changes: BlockChanges::new(pending, reports.0, reports.1),
+            changes: BlockChanges::new(pending, applied, engine),
             notes: BlockEvents::new(),
             mapping,
             max_frames,
