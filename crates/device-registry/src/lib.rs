@@ -55,6 +55,7 @@ pub const LAYOUT_FILES: &[(&str, &str)] = &[
     ("vinyl-distortion", include_str!("../../../devices/vinyl-distortion/panel.json")),
     ("delay", include_str!("../../../devices/delay/panel.json")),
     ("pitch", include_str!("../../../devices/pitch/panel.json")),
+    ("fm-synth", include_str!("../../../devices/fm-synth/panel.json")),
 ];
 
 /// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
