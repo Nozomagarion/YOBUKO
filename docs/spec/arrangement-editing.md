@@ -669,8 +669,9 @@ under `transport.loop` ([format](suhina-format.md)); a Live Set's arrangement lo
 
 **In the Arrangement view** the loop brace sits in a row of its own between the ruler and the
 marker row: a bar from the loop start to the loop end, bright while looping is on and dim while
-it is off. While looping is on, a line in the accent colour runs down every lane at the loop start
-and at the loop end, so the region reads in the lanes too. Dragging along an empty part of the row draws a new region on the grid a ruler click
+it is off. While looping is on, a line in the accent colour runs down every lane, the return tracks and
+Main at the loop start and at the loop end, so the region reads in the lanes too; while the
+brace is dragged the lines follow it. Dragging along an empty part of the row draws a new region on the grid a ruler click
 uses (Alt held: free) and turns looping on. Dragging within 4 px of an end of the brace moves that
 end; dragging its middle moves the whole region, keeping its length. A click on the brace, the key
 **Ctrl+L** (`transport.setLoopEnabled`, in the keymap) and a right-click on the row (**Turn loop

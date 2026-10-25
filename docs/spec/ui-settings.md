@@ -164,6 +164,12 @@ Premultiplied interpolation preserves transparency, including the liquid body gr
 Opacity changes apply live and save with the theme; holding their slider previews the
 background without dimming, as with the other colour controls.
 
+Under the gallery, *Themes folder* (`themes_folder`) is where themes are kept and read from: a
+path typed or chosen with Browse, or empty for `themes` in Suhina's data folder, shown as the
+default. Changing it reads the themes of the new folder at once; one that does not exist yet
+is not read, and the themes of the old folder are neither moved nor copied. `SUHINA_THEMES`
+wins over it, and `--data-dir` or `SUHINA_DATA` moves the whole data folder.
+
 ## Scrolling
 
 Liquid panel refraction samples the current frame's captured backdrop through a bounded

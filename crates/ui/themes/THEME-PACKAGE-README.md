@@ -10,9 +10,17 @@ Use this guide when creating, editing, explaining or sharing a theme, including 
 asking an AI assistant to modify one. Inspect the supplied files before making changes.
 
 The themes folder is `themes` in Suhina's data folder (`%APPDATA%\Suhina\data` on
-Windows). Programs installed from the Microsoft Store (MSIX), such as some editors and AI
-apps, may see their own private copy of `%APPDATA%` and not Suhina's: open the folder from
-Suhina (**More › Open the themes folder**) or edit it from a terminal.
+Windows) unless you choose another: **Settings › Theme › Themes folder** (Browse, or empty for
+the default), the `SUHINA_THEMES` environment variable (which wins over the setting), or
+`suhina --data-dir <folder>` / `SUHINA_DATA`, which moves all of Suhina's data for a portable
+or test install. Programs installed from the Microsoft Store (MSIX), such as some editors and
+AI apps, may see their own private copy of `%APPDATA%` and not Suhina's: choose a themes folder
+in Documents, or link a theme's folder there. A theme's own folder inside the themes folder may
+be a symbolic link or a junction (`mklink /J`) to a folder elsewhere; links inside a theme are
+still refused.
+
+Bringing in a package whose theme is one of yours already asks: **Replace** writes the
+package in its place (its variants go with it), **Copy** brings it in under a new id.
 
 ## Files and why they are separate
 
@@ -627,6 +635,13 @@ tints its Arrangement header, over the user's header colour strength: 0 leaves t
 
 `border-radius` takes a percentage: `50%` makes a control round, and its `box-shadow` follows.
 
+### Which file wins
+
+`layout.css` is read after `theme.css`, so where both set the same thing (a placement, or the
+artwork of one role such as `solo` or `track.body.arrangement`) the value in `layout.css` wins.
+Suhina writes `layout.css` when you place controls or choose artwork in the app; delete a rule
+from it to let your sheet's value show.
+
 ### Placement names
 
 Edit interface shows each control's name; a placement rule is `.control-NAME`, and a list of
@@ -634,7 +649,9 @@ them (`.control-a, .control-b`) places each. The Arrangement header has `arrange
 `arrangement-volume`, `arrangement-pan`, `arrangement-send-1`, `arrangement-send-2`,
 `arrangement-sends-previous`, `arrangement-sends-next`, `arrangement-meter`,
 `arrangement-input`, `arrangement-output`, `arrangement-automation`, `arrangement-color`,
-`arrangement-enable`, `arrangement-fold`, `solo`, `cue`, `arm` and `track-type`; a mixer strip
+`arrangement-enable`, `arrangement-fold`, `arrangement-monitor` (the MIDI monitoring chip),
+`arrangement-number` (the track number, drawn as a label of its own while `arrangement-enable`
+is hidden), `solo`, `cue`, `arm` and `track-type`; a mixer strip
 `mixer-name`, `mixer-color`, `mixer-enable` (the track number), `mixer-toggles`,
 `mixer-devices`, `mixer-divider`, `mixer-input`, `mixer-input-caption`, `mixer-monitor`, `mixer-output`,
 `mixer-sends` (all of a strip's sends), `mixer-pan`, `mixer-volume`, `mixer-volume-readout`,
@@ -647,6 +664,44 @@ points: names move to the lower row, the pan and then names are dropped, the vol
 Placements made at one width do not hold at another. Keep the column as wide as your
 placements need with `.arrangement { --suhina-header-min-width: 330px; }` (160 to 520). A
 control with no room left is not drawn, without a notice: check narrow tracks and strips too.
+
+### Round 5 additions
+
+- **Opaque themes never show the desktop.** Backgrounds write their alpha into the window only
+  while `--window-background` has alpha; otherwise the window clears to its colour and every
+  alpha in the theme blends with Suhina's own surfaces. A clip's body, the edited track's
+  highlight and a control's surface always blend.
+- **The Arrangement header:** the track-on toggle is `#control-track-on` as in the mixer
+  (`:checked` on, `:muted` off, artwork `track-on`); its number is `.track-number` (`color`,
+  `font-size`, `display: none`, `:muted`). `#control-automation` (`:checked` while its lanes
+  show, artwork `automation`), `.fold` (`:checked` while folded, artwork `fold`) and
+  `#control-monitor` (`:checked` while monitoring is In, artwork `monitor`).
+- **Artwork reads scope variables:** `var(--track-colour)`, `var(--track-fill)` and
+  `var(--clip-colour)` in an SVG take the track's or clip's value.
+- **Values:** `--suhina-value-position: right | left | top | bottom | inside | none` on a knob
+  (`.pan`, a volume knob, `.send`, the MIDI tools knob) places its value or hides it; `none` on
+  a level bar hides its value.
+- **Sizes:** `.send { width; height }` for the mixer's sends; `.arrangement {
+  --suhina-track-height: 96px }` (20–400) for tracks without a height of their own, in place
+  of the default size; `.piano-tool { height }` grows the piano roll's toolbar.
+- **Device panels:** with `.device { width }` the generated list follows the panel;
+  `.device .value { width }` sets the value column (at most half the row);
+  `.device { --suhina-param-columns: 3; --suhina-param-row: 48px; }` lays parameters side by
+  side (1–8 columns, rows 16–160 points).
+- **Browser:** `.browser-place` (a place or kind on the left: `:hover`, `:checked` and
+  `:selected` while shown) and `.browser-row` (`:hover`, `:active`, `:selected`; its `color` is
+  the name's).
+- **Loop lines:** `.loop-line { color; width }`; the lines reach the returns and Main and
+  follow the brace while it is dragged.
+- **MIDI tools:** `.midi-tools .slider { --suhina-appearance: knob }` (or `#quantise-amount`)
+  draws the quantise amount as a knob.
+- **Piano roll tools:** artwork roles `piano.select`, `piano.draw`, `piano.paint`,
+  `piano.slice`, `piano.erase`, `piano.mute`, `piano.cut`, `piano.copy`, `piano.paste`,
+  `piano.duplicate`, `piano.quantise`, `piano.midi-tools`, `piano.audition` and `piano.hide`,
+  each with `.hover` and `.on` (the chosen tool; `.checked` is not a state name). Their
+  artwork keeps its aspect ratio.
+- **Nine-slice:** the stretched edges and centre sample only their own pixels, so a hard edge
+  stays hard.
 
 ## What a theme cannot set
 

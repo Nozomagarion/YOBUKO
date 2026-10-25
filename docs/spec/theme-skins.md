@@ -832,3 +832,40 @@ audio track while the audio device has no input says so in the status bar.
 
 Not built yet: a background attached to the desktop's wallpaper, one gradient across the stack
 of bars, and a slider id per parameter.
+
+## Round 5 additions
+
+- **Window alpha:** backgrounds set the window's pixels only while the theme's
+  `--window-background` has alpha below 255; the window otherwise clears to an opaque colour and
+  every fill blends. A clip's body, the focused track's lane highlight and a control's surface
+  (`native_css::surface`) blend in every theme.
+- **Themes folder:** Settings › Theme › Themes folder (`themes_folder`), `SUHINA_THEMES` over
+  it, or `--data-dir` / `SUHINA_DATA` for the whole data folder. Changing the setting reads the
+  new folder at once; a folder that does not exist is not read. A theme's own folder may be a
+  link to a folder (a junction on Windows); links below it are refused.
+- **Packages brought in again:** a package whose id names a theme here is not written; the app
+  asks **Replace** (the theme's folder goes, the package is written under its id) or **Copy**
+  (a new id, even when it looks the same).
+- **Arrangement header:** `#control-track-on` (`:checked`, `:muted`, artwork `track-on`),
+  `.track-number` (placed as `arrangement-number` when `arrangement-enable` is hidden),
+  `#control-automation` (artwork `automation`), `.fold` (artwork `fold`), `#control-monitor`
+  (artwork `monitor`, placed as `arrangement-monitor`).
+- **Artwork variables:** before rasterising, the variables Suhina sets in scope
+  (`--track-colour`, `--track-fill`, `--clip-colour`) are laid over the theme's root variables;
+  the texture cache keys on them.
+- **Knob values:** `--suhina-value-position` (`right` by default, `left`, `top`, `bottom`,
+  `inside`, `none`); `none` hides a level bar's value. Mixer sends default to `bottom`.
+- **Sizes:** `.send { width; height }` within the sends row; `--suhina-track-height` (20–400
+  points) on `.arrangement` for tracks without a height of their own; `.piano-tool { height }`
+  grows the toolbar band to the height plus 6 points.
+- **Device panels:** a themed panel's generated list follows its width; `.device .value
+  { width }`; `--suhina-param-columns` (1–8) and `--suhina-param-row` (16–160 points) on
+  `.device` lay parameters a device places nowhere itself in columns. A plug-in's list is
+  clipped below its header and buttons.
+- **Browser:** `.browser-place` and `.browser-row` with their states.
+- **Loop lines:** `.loop-line` (`color`, `width` 0.5–6), from the top of the lanes to the bottom
+  of the fixed rows, at the dragged brace while it moves.
+- **Nine-slice sampling:** the middle column and row sample half a texel inside their pixels.
+- **File order:** `layout.css` is applied after `theme.css`; where both set one role or
+  placement, `layout.css` wins.
+
