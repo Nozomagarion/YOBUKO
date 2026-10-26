@@ -1280,3 +1280,36 @@ fn the_arrow_keys_move_selected_points() {
     let db = |g: f64| 20.0 * g.log10();
     assert!((db(up.value) - db(moved.value) - 1.0).abs() < 0.01, "{moved:?} -> {up:?}");
 }
+
+/// In a range's menu, Intensity let go of puts the shape put in last in again, swinging less
+/// (#916).
+#[test]
+fn intensity_puts_the_last_shape_in_again_with_less_swing() {
+    let mut harness = with_lanes();
+    let rect = lane(&harness);
+    let y = rect.top() + rect.height() * 0.4;
+    drag(&mut harness, Pos2::new(rect.left() + 256.0, y), vec2(256.0, 0.0));
+    right_click_at(&mut harness, Pos2::new(rect.left() + 384.0, y));
+    harness.get_by_label("Insert square").click();
+    harness.run();
+    // The swing in decibels, the quietest held at -70 dB.
+    let swing = |h: &Harness<'static, App>| {
+        let db: Vec<f64> = volume(h)
+            .0
+            .iter()
+            .filter(|p| (32.0..=64.0).contains(&p.beat))
+            .map(|p| if p.value > 0.0 { (20.0 * p.value.log10()).max(-70.0) } else { -70.0 })
+            .collect();
+        db.iter().copied().fold(f64::NEG_INFINITY, f64::max) - db.iter().copied().fold(f64::INFINITY, f64::min)
+    };
+    let full = swing(&harness);
+    right_click_at(&mut harness, Pos2::new(rect.left() + 384.0, y));
+    let slider = harness
+        .query_all_by_label("Intensity")
+        .map(|n| n.rect())
+        .max_by(|a, b| a.width().total_cmp(&b.width()))
+        .unwrap();
+    drag(&mut harness, slider.center(), vec2(-slider.width() * 0.3, 0.0));
+    let less = swing(&harness);
+    assert!(less < full * 0.9, "{full} -> {less}");
+}

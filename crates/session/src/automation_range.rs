@@ -227,76 +227,76 @@ pub(crate) fn duplicate(session: &mut Session, params: &Value) -> Result<Value, 
     Ok(json!({ "param": target.param, "start": end, "end": end + length, "points": count }))
 }
 
-/// The points of `points` (time as a share of the span, place on the lane) that keep the line
-/// within `tolerance` of the lane's height, the first and the last always: Ramer-Douglas-Peucker.
-fn keep(points: &[(f64, f64)], tolerance: f64) -> Vec<usize> {
-    fn walk(points: &[(f64, f64)], from: usize, to: usize, tolerance: f64, out: &mut Vec<usize>) {
-        let (Some(&(x0, y0)), Some(&(x1, y1))) = (points.get(from), points.get(to)) else { return };
-        let mut worst = (0.0, from);
-        for (i, &(x, y)) in points.iter().enumerate().take(to).skip(from + 1) {
-            let t = if x1 > x0 { (x - x0) / (x1 - x0) } else { 0.0 };
-            let off = (y - (y0 + (y1 - y0) * t)).abs();
-            if off > worst.0 {
-                worst = (off, i);
-            }
-        }
-        if worst.0 > tolerance {
-            walk(points, from, worst.1, tolerance, out);
-            out.push(worst.1);
-            walk(points, worst.1, to, tolerance, out);
-        }
-    }
-    let Some(last) = points.len().checked_sub(1) else { return Vec::new() };
-    let mut out = vec![0];
-    walk(points, 0, last, tolerance, &mut out);
-    if last > 0 {
-        out.push(last);
-    }
-    out
+/// How many places along a segment a fit is checked at.
+const FIT_SAMPLES: usize = 24;
+
+/// The curve of one segment from `a` to `b` that follows `line` (the old envelope, as places on
+/// the lane at beats) best, and how far from it the segment goes at worst: the curve passes
+/// through the line half-way along, and the line is checked at [`FIT_SAMPLES`] places.
+fn fit(a: (f64, f64), b: (f64, f64), line: &impl Fn(f64) -> f64) -> (f64, f64) {
+    let ((ta, pa), (tb, pb)) = (a, b);
+    let rise = pb - pa;
+    let curve =
+        if rise.abs() > SAME { curve_through(0.5, (line((ta + tb) / 2.0) - pa) / rise).unwrap_or(0.0) } else { 0.0 };
+    let worst = (1..FIT_SAMPLES)
+        .map(|i| {
+            let t = i as f64 / FIT_SAMPLES as f64;
+            let place = pa + rise * suhina_model::automation::shape(t, curve);
+            (line(ta + (tb - ta) * t) - place).abs()
+        })
+        .fold(0.0, f64::max);
+    (curve, worst)
 }
 
 /// `automation.simplify {track, device?, param, start, end, tolerance?}`: the points inside the
-/// range thinned to those the line needs, within `tolerance` of the lane's height (default 2 %),
-/// each segment left given the curve that passes through the old line half-way along, so the
-/// shape stays.
+/// range thinned to those the line needs: from each kept point, the segment reaches as far as one
+/// bent segment can follow the old line, curves and all, within `tolerance` of the lane's height
+/// (default 2 %), so a sine stays a sine.
 pub(crate) fn simplify(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let target = target(session, params)?;
     let (start, end) = range(params)?;
     let tolerance = share(params, "tolerance")?.unwrap_or(0.02);
     let points = points_of(session, &target)?;
-    let inside: Vec<usize> =
-        (0..points.len()).filter(|&i| points.get(i).is_some_and(|p| p.beat >= start && p.beat <= end)).collect();
+    let inside: Vec<AutomationPoint> = points.iter().filter(|p| p.beat >= start && p.beat <= end).copied().collect();
     if inside.len() < 3 || target.stepped() {
         return Ok(json!({ "param": target.param, "points": points.len(), "removed": 0 }));
     }
     let lane = Lane { target: &target, session };
-    let span = end - start;
-    let placed: Vec<(f64, f64)> = inside
-        .iter()
-        .filter_map(|&i| points.get(i))
-        .map(|p| ((p.beat - start) / span, lane.position(p.value)))
-        .collect();
-    let kept: Vec<AutomationPoint> = keep(&placed, tolerance)
-        .windows(2)
-        .filter_map(|pair| {
-            let a = points.get(*inside.get(*pair.first()?)?)?;
-            let b = points.get(*inside.get(*pair.get(1)?)?)?;
-            let (pa, pb) = (lane.position(a.value), lane.position(b.value));
-            let mid = value_at(&points, (a.beat + b.beat) / 2.0, false, &lane).map(|v| lane.position(v))?;
-            let curve =
-                if (pb - pa).abs() > SAME { curve_through(0.5, (mid - pa) / (pb - pa)).unwrap_or(0.0) } else { 0.0 };
-            Some(AutomationPoint { curve: (curve * 1000.0).round() / 1000.0, ..*a })
-        })
-        .collect();
-    let (Some(first), Some(last)) =
-        (inside.first().and_then(|&i| points.get(i)).copied(), inside.last().and_then(|&i| points.get(i)).copied())
-    else {
-        return Err("the range has no points".into());
-    };
-    let mut merged: Vec<AutomationPoint> = points.iter().filter(|p| p.beat < first.beat).copied().collect();
+    let line = |beat: f64| value_at(&points, beat, false, &lane).map_or(0.0, |v| lane.position(v));
+    let place = |p: &AutomationPoint| (p.beat, lane.position(p.value));
+    let mut kept: Vec<AutomationPoint> = Vec::new();
+    let mut from = 0;
+    while from + 1 < inside.len() {
+        let Some(anchor) = inside.get(from).copied() else { break };
+        // The farthest point one segment from the anchor can reach and stay on the old line; a
+        // jump (two points at one beat) is never passed.
+        let mut reach = from + 1;
+        let mut curve = anchor.curve;
+        for to in from + 1..inside.len() {
+            let Some(next) = inside.get(to) else { break };
+            if next.beat - anchor.beat <= SAME {
+                break;
+            }
+            let (bent, worst) = fit(place(&anchor), place(next), &line);
+            if to == from + 1 || worst <= tolerance {
+                reach = to;
+                curve = if to == from + 1 { anchor.curve } else { bent };
+                if worst > tolerance {
+                    break;
+                }
+            } else {
+                break;
+            }
+        }
+        kept.push(AutomationPoint { curve: (curve * 1000.0).round() / 1000.0, ..anchor });
+        from = reach;
+    }
+    if let Some(last) = inside.last() {
+        kept.push(*last);
+    }
+    let mut merged: Vec<AutomationPoint> = points.iter().filter(|p| p.beat < start).copied().collect();
     merged.extend(kept);
-    merged.push(last);
-    merged.extend(points.iter().filter(|p| p.beat > last.beat).copied());
+    merged.extend(points.iter().filter(|p| p.beat > end).copied());
     let removed = points.len().saturating_sub(merged.len());
     let count = put(session, &target, merged)?;
     Ok(json!({ "param": target.param, "points": count, "removed": removed }))

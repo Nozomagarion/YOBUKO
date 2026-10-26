@@ -608,3 +608,30 @@ fn stretching_picked_points_moves_only_them() {
     let values: Vec<f64> = pan_points(&session).iter().map(|p| p.1).collect();
     assert_eq!(values, [0.5, -1.0, 0.5, -1.0, 0.5]);
 }
+
+/// Smooth points keeps a sine a sine: the line after it stays within a few hundredths of the
+/// line before it everywhere, curves and all, with fewer points (#916).
+#[test]
+fn smoothing_a_sine_keeps_its_shape() {
+    use suhina_model::automation::{Plain, value_at};
+    let mut session = Session::new(project());
+    // A sine of 16 straight points a beat, over 4 beats.
+    for i in 0..=64 {
+        let beat = f64::from(i) / 16.0;
+        let value = (std::f64::consts::TAU * beat).sin() * 0.8;
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    let lane = |s: &Session| lanes(s).iter().find(|l| l.param == "pan").unwrap().points.clone();
+    let before = lane(&session);
+    run(&mut session, "automation.simplify", json!({ "track": 1, "param": "pan", "start": 0, "end": 4 })).unwrap();
+    let after = lane(&session);
+    assert!(after.len() < before.len() / 2, "{} -> {}", before.len(), after.len());
+    for i in 0..=400 {
+        let beat = f64::from(i) / 100.0;
+        let (old, new) =
+            (value_at(&before, beat, false, &Plain).unwrap(), value_at(&after, beat, false, &Plain).unwrap());
+        // 2 % of the pan's travel (-1 to 1) is 0.04; a little more for the old straight pieces.
+        assert!((old - new).abs() < 0.06, "at beat {beat}: {old} -> {new}");
+    }
+}

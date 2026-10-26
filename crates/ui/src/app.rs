@@ -2746,6 +2746,7 @@ impl App {
                             // project keeps (`launcher.setQuantization`).
                             self.arrangement.grid = session.quantization();
                             self.arrangement.automation.grid = Some(session.quantization());
+                            self.arrangement.automation.revision = self.revision;
                             let mut timeline = timeline;
                             timeline.follow_automation(session.project());
                             timeline.midi_ports = self.projects.midi_ports().to_vec();
