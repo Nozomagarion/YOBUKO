@@ -228,8 +228,9 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   linear mix law ([delay](docs/spec/delay.md), [reverb](docs/spec/reverb.md),
   [import](docs/spec/device-import.md))
 - the Pitch MIDI effect, with its settings ([pitch](docs/spec/pitch.md))
-- an eight-band EQ; a Live Set's EQ Eight comes in as it with both curves of every band, its mode,
-  Scale and Adaptive Q; its oversampling option is noted and not used ([EQ](docs/spec/eq.md))
+- an eight-band EQ; the matching device in a Live Set comes in as it with both curves of every
+  band, its mode, Scale and Adaptive Q; its oversampling option is noted and not used
+  ([EQ](docs/spec/eq.md), [import](docs/spec/device-import.md))
 - a MIDI clip's scale (root and mode), which Pitch follows; a scale Suhina has no mode for comes
   in as none, with a warning
 - anything not understood yet is skipped with a warning; the project still opens

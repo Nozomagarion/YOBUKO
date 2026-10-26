@@ -158,6 +158,25 @@ fn scale_multiplies_the_gains() {
 }
 
 #[test]
+fn a_band_switched_on_after_scale_moved_plays_at_the_new_scale() {
+    // Band 3 is off while Scale moves and settles, so nothing retunes it; switching it on must
+    // tune it with the settled Scale before it fades in.
+    let mut off = all_off();
+    off.extend([
+        a(3, param::TYPE, 3.0),
+        a(3, param::FREQUENCY, 1_000.0),
+        a(3, param::Q, 0.71),
+        a(3, param::GAIN, 12.0),
+    ]);
+    let mut e = eq(&off);
+    e.set_param(param::SCALE, 0.0);
+    let mut settle = vec![[0.0f32; 2]; 4_096].concat();
+    e.process(&ProcessContext::default(), &mut settle);
+    e.set_param(a(3, param::ON, 1.0).0, 1.0);
+    assert!(gain_db(&mut e, 1_000.0).abs() < 0.05, "the woken band plays at the Scale it now has");
+}
+
+#[test]
 fn defaults_and_bands_off_leave_the_sound_alone() {
     // At its defaults every band that is on has no gain, and Output is 0 dB.
     let input = test_signal(4_096);

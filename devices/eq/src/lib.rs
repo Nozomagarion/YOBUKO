@@ -469,8 +469,14 @@ impl Eq {
             b.amount.set_target(0.0);
         } else {
             b.pending = false;
+            // A band that was off was not retuned while it was silent (Scale may have moved
+            // since): retune it before it fades in, so it never plays with stale coefficients.
+            let wakes = !b.active;
             b.active = true;
             b.amount.set_target(1.0);
+            if wakes {
+                self.tune(curve, band);
+            }
         }
     }
 
