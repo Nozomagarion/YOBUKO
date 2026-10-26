@@ -404,3 +404,67 @@ fn a_closed_worker_retains_its_last_verified_operations_until_the_ui_takes_them(
     assert_eq!(operations, vec![operation]);
     assert!(service.execute("multiplayer.state", &json!({})).unwrap()["operations"].as_array().unwrap().is_empty());
 }
+
+#[test]
+fn creating_a_clip_cannot_overrun_the_content_quota_or_consume_an_operation_number() {
+    use suhina_model::{ClipContent, ContentId};
+    let mut p = crate::starter_project();
+    for i in p.contents.len()..512 {
+        p.contents.push(ClipContent {
+            id: ContentId(2000 + i as u32),
+            name: "Empty".into(),
+            length: 4.0,
+            lanes: vec![],
+            extensions: Default::default(),
+            scale: None,
+        });
+    }
+    let (p, _) = crate::midi::encode(&p).unwrap();
+    let mut state = canonical(p);
+    let before = state.host.project().clone();
+    assert!(state.submit(Host::owner(), 1, 0, WireEdit::ClipCreate { track: 1, start: 0.0, length: 4.0 }).is_err());
+    assert_eq!(state.host.project(), &before);
+    assert_eq!(state.host.revision(), 0);
+    state.submit(Host::owner(), 1, 0, WireEdit::Rename { track: 1, name: "Still usable".into() }).unwrap();
+}
+
+#[test]
+fn duplicate_placement_quota_is_checked_before_allocating_canonical_ids() {
+    use suhina_model::Clip;
+    let mut p = crate::starter_project();
+    let content = p.contents[0].id;
+    for lane in &mut p.arrangement.lanes {
+        lane.clips.clear();
+    }
+    p.arrangement.lanes[0].clips = (0..4096).map(|i| Clip::new(content, f64::from(i) * 4.0, 4.0)).collect();
+    let (p, _) = crate::midi::encode(&p).unwrap();
+    let clip = p.arrangement.lanes[0].clips[0].id.0;
+    let mut state = canonical(p);
+    let before = state.host.project().clone();
+    assert!(state.submit(Host::owner(), 1, 0, WireEdit::ClipDuplicate { clip }).is_err());
+    assert_eq!(state.host.project(), &before);
+    assert_eq!(state.host.revision(), 0);
+    let last = before.arrangement.lanes[0].clips.last().unwrap().id.0;
+    state.submit(Host::owner(), 1, 0, WireEdit::ClipDelete { clip: last }).unwrap();
+    state.submit(Host::owner(), 2, 1, WireEdit::ClipDuplicate { clip }).unwrap();
+    assert_eq!(state.host.project().arrangement.lanes[0].clips.len(), 4096);
+}
+
+#[test]
+fn clip_wire_shapes_are_exact_and_old_protocol_invitations_are_refused() {
+    for text in [
+        r#"{"command":"clip.move","clip":1,"start":0,"track":2,"stack":false}"#,
+        r#"{"command":"clip.delete","clip":1,"path":"/private"}"#,
+        r#"{"command":"clip.create","track":1,"start":0,"length":4,"scene":1}"#,
+        r#"{"command":"clip.duplicate","clips":[1,2]}"#,
+    ] {
+        assert!(serde_json::from_str::<WireEdit>(text).is_err());
+    }
+    assert!(WireEdit::ClipMove { clip: 0, start: 0.0, track: 1 }.edit().is_err());
+    assert!(WireEdit::ClipTrim { clip: 1, start: 4.0, end: 2.0 }.edit().is_err());
+    assert!(WireEdit::ClipCreate { track: 1, start: f64::NAN, length: 4.0 }.edit().is_err());
+    let mut service = Service::default();
+    let mut invitation = invitation_from(&mut service);
+    invitation.protocol = PROTOCOL - 1;
+    assert!(Invitation::decode(&invitation.encode().unwrap()).is_err());
+}

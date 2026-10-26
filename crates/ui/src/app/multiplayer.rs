@@ -5,6 +5,14 @@
 
 use super::*;
 
+#[derive(Default, PartialEq)]
+enum SharedPage {
+    #[default]
+    Mixer,
+    Notes,
+    Clips,
+}
+
 pub(super) struct MultiplayerPanel {
     pub open: bool,
     pub bound: Option<ProjectId>,
@@ -19,7 +27,8 @@ pub(super) struct MultiplayerPanel {
     submitted: bool,
     applied_revision: u64,
     pub(super) notes: super::multiplayer_notes::NoteEditor,
-    show_notes: bool,
+    page: SharedPage,
+    pub(super) clips: super::multiplayer_clips::ClipEditor,
 }
 impl Default for MultiplayerPanel {
     fn default() -> Self {
@@ -37,7 +46,8 @@ impl Default for MultiplayerPanel {
             submitted: false,
             applied_revision: 0,
             notes: Default::default(),
-            show_notes: false,
+            page: SharedPage::Mixer,
+            clips: Default::default(),
         }
     }
 }
@@ -60,6 +70,7 @@ impl App {
                     self.multiplayer.state = serde_json::Value::Null;
                     self.multiplayer.submitted = false;
                     self.multiplayer.notes = Default::default();
+                    self.multiplayer.clips = Default::default();
                     self.multiplayer.applied_revision = 0;
                 } else if id == "multiplayer.edit" {
                     self.multiplayer.submitted = true;
@@ -206,7 +217,7 @@ impl App {
         ui.add_space(theme::PAD);
         ui.heading("Multiplayer · LAN session");
         ui.label("Create a session, copy its invitation, and join from the same local network.");
-        ui.weak("Share a MIDI copy of your project, or create the four-track demo. MIDI notes, track names, volumes and pan are shared; each computer has its own playback.");
+        ui.weak("Share a MIDI copy of your project, or create the four-track demo. MIDI notes, clips and mixer controls are shared; each computer has its own playback.");
         if !active {
             ui.horizontal(|ui| {
                 ui.label("Host address");
@@ -283,16 +294,19 @@ impl App {
                     })
                     .sum();
                 ui.label(format!(
-                    "Shared copy: {} tracks · {} MIDI notes. Edit notes below; clip placement remains fixed while connected.",
+                    "Shared copy: {} tracks · {} MIDI notes. Edit notes and clip placement below.",
                     project.tracks.len(),
                     notes
                 ));
             }
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.multiplayer.show_notes, false, "Mixer");
-                ui.selectable_value(&mut self.multiplayer.show_notes, true, "MIDI notes");
+                ui.selectable_value(&mut self.multiplayer.page, SharedPage::Mixer, "Mixer");
+                ui.selectable_value(&mut self.multiplayer.page, SharedPage::Notes, "MIDI notes");
+                ui.selectable_value(&mut self.multiplayer.page, SharedPage::Clips, "Clips");
             });
-            if self.multiplayer.show_notes {
+            if self.multiplayer.page == SharedPage::Clips {
+                self.show_shared_clips(ui);
+            } else if self.multiplayer.page == SharedPage::Notes {
                 self.show_shared_notes(ui);
             } else {
                 let base = self.multiplayer.draft.as_ref().map_or(0, |c| c.revision);

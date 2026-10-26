@@ -78,7 +78,9 @@ The desktop owns a locked dedicated project and applies host-confirmed controls 
 The [note-editing contract](../spec/lan-note-editing.md) adds atomic absolute note updates,
 revision-bound indices, detached quota preflight and a 32-operation delivery journal. Native
 copy-on-write content IDs are allocated deterministically by the same host-confirmed command
-on each replica; arbitrary creation/deletion of tracks or clips is still closed. Admission
+on each replica; the [clip contract](../spec/lan-clip-editing.md) extends the same approach to six bounded
+arrangement operations under protocol 4. Stack-only placement protects neighbours; new tracks
+and arbitrary project mutations remain closed. Admission
 snapshots current music with its revision. Existing projects and private playback are retained. Arbitrary project/media exchange remains
 closed; this is a fork prototype, not an accepted upstream architecture or external security review.
 

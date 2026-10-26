@@ -21,7 +21,7 @@ The separate `multiplayer` adapter exposes only the [LAN starter contract](../sp
 Its [MIDI-copy decoder](../spec/lan-midi-copy.md) is the only remote initial-project boundary;
 arbitrary native projects, assets, plugin/microphone state and file paths remain refused.
 
-The host retains its canonical project and accepts only track rename, volume, pan and single-note add/update/delete on
+The host retains its canonical project and accepts only track rename, volume, pan and single-note add/update/delete and bounded clip placement operations on
 at most 64 verified project tracks. Membership, role, exact parameter keys, IDs, numeric ranges and sequence/revision
 checks precede execution. The adapter allocates the guest's PeerId after admission. A guest
 cannot claim the owner's identity or change roles. Transport, history, files, commands/batches,
@@ -56,7 +56,7 @@ guest polls every 100 ms and the server enforces at least 50 ms per request. UI 
 TLS, canonical execution and I/O run on workers, never the audio thread. A local peer can still
 occupy pending slots until timeout; availability against a sustained LAN flood is not guaranteed.
 
-Protocol 3 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
+Protocol 4 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
 A separate draft base revision prevents shifted note indices from being silently reused. Before
 canonical mutation the native command is preflighted on a detached copy and the complete MIDI
 quota/document boundary is checked, including copy-on-write growth. The guest verifies contiguous
@@ -65,9 +65,16 @@ expired cursors disconnect; no snapshot replacement hides divergence. The servic
 UI operations at 128 and fails visibly on overflow. Admission snapshots current music and its
 revision, so an old document cannot be combined with a new note history.
 
+The [clip contract](../spec/lan-clip-editing.md) adds create/move/trim/duplicate/delete/setEnabled.
+All creation, move, trim and duplication operations explicitly stack; a peer cannot request
+implicit replacement of neighbours. Stable clip IDs replace positional addressing. Native ID
+allocation and content copy-on-write are replayed deterministically and their quota growth is
+preflighted before canonical mutation. No clipboard, arbitrary batch, new track, file import,
+audio stretch or consolidation is exposed. The editor lists bounded pages of arrangement clips.
+
 The desktop creates a dedicated starter or verified MIDI copy, preserving the original project. A Projects mutation gate prevents
 normal UI and attached-agent commands from changing its shared model/history outside confirmed
-operations. Its host-owned API admits only six exact control/note command IDs; it is not a registered
+operations. Its host-owned API admits only twelve exact control/note/clip command IDs; it is not a registered
 agent command. Other project tabs stay local. Local audition and explicit save/export remain
 available. Disconnect retains and unlocks the last local project; a failed authoritative apply
 leaves the session rather than silently continuing with divergent state.

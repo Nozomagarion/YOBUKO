@@ -37,7 +37,8 @@
         },
         {
           "name": "Placement des clips en commun",
-          "done": false
+          "done": true,
+          "evidence": "crates/multiplayer/tests/lan.rs"
         },
         {
           "name": "Partage d’un projet existant et de ses fichiers",

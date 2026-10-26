@@ -329,3 +329,48 @@ fn single_note_commands_converge_and_stale_indices_never_edit_another_note() {
     }
     assert!(Edit::new("note.move", json!({"clip":clip,"notes":[0],"beats":1})).is_err());
 }
+
+#[test]
+fn clip_edits_allocate_identical_ids_and_keep_neighbours_on_each_replica() {
+    let mut host = Host::new(project()).unwrap();
+    let mut replica = Replica::new(host.snapshot());
+    let original = host.project().arrangement.lanes[0].clips[0].id.0;
+    let operations = [
+        ("clip.create", json!({"track":1,"start":2,"length":4,"stack":true})),
+        ("clip.move", json!({"clip":original,"start":4,"toTrack":2,"stack":true})),
+        ("clip.trim", json!({"clip":original,"start":4,"end":12,"stack":true})),
+        ("clip.duplicate", json!({"clips":[{"clip":original}],"stack":true})),
+        ("clip.setEnabled", json!({"clips":[{"clip":original}],"enabled":false})),
+        ("clip.delete", json!({"clip":original})),
+    ];
+    for (i, (command, params)) in operations.into_iter().enumerate() {
+        let ack = host.submit(Host::owner(), request(i as u64 + 1, i as u64, command, params)).unwrap();
+        replica.apply(&ack).unwrap();
+        assert_eq!(replica.project(), host.project());
+        assert_eq!(replica.project().next_id, host.project().next_id);
+    }
+    assert_eq!(host.project().arrangement.lanes[0].clips.len(), 1, "the new clip survives other edits");
+    assert_eq!(host.project().arrangement.lanes[1].clips.len(), 1, "the duplicate survives deleting its original");
+}
+
+#[test]
+fn clip_admission_refuses_overwrite_batches_paths_and_legacy_index_addressing() {
+    for (command, params) in [
+        ("clip.move", json!({"clip":1,"start":0,"toTrack":2,"stack":false})),
+        ("clip.move", json!({"track":1,"index":0,"start":0,"toTrack":2,"stack":true})),
+        ("clip.trim", json!({"clip":1,"start":4,"end":4,"stack":true})),
+        ("clip.trim", json!({"clip":1,"start":0,"end":4,"stack":true,"loop":true})),
+        ("clip.create", json!({"track":1,"scene":1,"length":4,"stack":true})),
+        ("clip.create", json!({"track":0,"start":0,"length":4,"stack":true})),
+        ("clip.create", json!({"track":1,"start":0,"length":0,"stack":true})),
+        ("clip.duplicate", json!({"clips":[{"clip":1},{"clip":2}],"stack":true})),
+        ("clip.duplicate", json!({"clips":[{"clip":1}],"stack":false})),
+        ("clip.delete", json!({"clip":1,"path":"/private"})),
+        ("clip.setEnabled", json!({"clips":[{"clip":1}],"enabled":1})),
+    ] {
+        assert!(Edit::new(command, params).is_err(), "{command}");
+    }
+    for command in ["clip.paste", "clip.addFile", "clip.stretch", "clip.consolidate", "clip.moveMany"] {
+        assert!(Edit::new(command, json!({})).is_err());
+    }
+}

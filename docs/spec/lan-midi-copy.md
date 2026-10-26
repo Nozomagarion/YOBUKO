@@ -1,6 +1,6 @@
 ---
 description: Bounded MIDI-only copies of an open project over authenticated LAN, preserving the original and refusing audio and opaque devices
-read_when: share current MIDI project, LAN project transfer, multiplayer protocol 3, MIDI copy limits
+read_when: share current MIDI project, LAN project transfer, multiplayer protocol 4, MIDI copy limits
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -21,9 +21,10 @@ starter. The original remains open and unchanged; both participants get a separa
 session tab. A copy has no source path and is marked unsaved, so closing prompts for a first
 save even before a control edit; saving cannot target the original implicitly. Arrangement and
 launcher clips, notes, stable IDs, tempo/meter, routing and mixer
-state are retained. Track name, volume, pan and single MIDI notes are live shared edits;
+state are retained. Track name, volume, pan, MIDI notes and arrangement clips are live shared edits;
 [the note-editing contract](lan-note-editing.md) defines their revision checks and delivery.
-Clip placement, audio, plugins and publishing recordings remain separate capabilities.
+[The clip contract](lan-clip-editing.md) adds bounded arrangement operations. Audio, plugins
+and publishing recordings remain separate capabilities.
 
 A supported source has 1–64 tracks, at most 128 channels, 512 contents, 4096 clips and 16384 notes.
 Only the file-free FM synth and Utility built-ins, with parameters but no opaque state, are
@@ -37,7 +38,8 @@ in that copy. The source project, its files and its settings are never changed.
 
 ## Document and admission
 
-Protocol 3 retains MIDI-copy format 1 and adds live note operations and snapshot revisions. Old invitations
+Protocol 4 retains MIDI-copy format 1, live note operations and snapshot revisions, and adds
+revision-checked arrangement clip operations. Old invitations
 are refused; both apps need this protocol. The existing certificate-bound TLS admission, expiry,
 one-use secret, owner-ordered controls and local transport rules remain in force.
 

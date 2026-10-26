@@ -131,6 +131,13 @@ fn render_multiplayer_panel_for_review() {
     harness.get_by_label("MIDI notes").click();
     harness.run_steps(2);
     harness.render().unwrap().save(folder.join("multiplayer-midi-notes.png")).unwrap();
+    harness.get_by_label("Clips").click();
+    harness.run_steps(2);
+    let shared = harness.state().multiplayer.bound.unwrap();
+    let clip = harness.state().projects.get(shared).unwrap().project().arrangement.lanes[0].clips[0].id.0;
+    harness.get_by_label(&format!("Edit clip {clip}")).click();
+    harness.run_steps(2);
+    harness.render().unwrap().save(folder.join("multiplayer-clips.png")).unwrap();
 }
 
 #[test]
@@ -285,5 +292,74 @@ fn visible_note_buttons_edit_the_shared_music_and_refuse_a_stale_draft() {
             .execute_in(Some(shared), "note.delete", &json!({"clip":clip,"notes":[0]}))
             .is_err()
     );
+    assert_eq!(harness.state().projects.get(original).unwrap().project(), &before);
+}
+
+#[test]
+fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_rebound() {
+    let mut app = App::new();
+    let mut project = suhina_multiplayer::starter_project();
+    project.tracks[0].name = "T".repeat(256);
+    project.contents[0].name = "N".repeat(1024);
+    app.set_session(Session::new(project), &[]);
+    let original = app.projects.active().unwrap();
+    app.multiplayer.open = true;
+    app.multiplayer.address = "127.0.0.1:0".into();
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 900.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run();
+    let before = harness.state().projects.get(original).unwrap().project().clone();
+    harness.get_by_label("Share current MIDI project").click();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let shared = harness.state().multiplayer.bound.unwrap();
+    let clip = harness.state().projects.get(shared).unwrap().project().arrangement.lanes[0].clips[0].id.0;
+    harness.get_by_label("MIDI notes").click();
+    harness.run_steps(2);
+    harness.get_by_label("Edit note 1").click();
+    harness.run_steps(2);
+    harness.get_by_label("Clips").click();
+    harness.run_steps(2);
+    assert!(
+        harness.get_by_label("Create MIDI clip").rect().right() < 1280.0,
+        "long names must not push actions outside the viewport"
+    );
+    for (base, button) in [
+        (0, "Create MIDI clip"),
+        (1, "Duplicate clip"),
+        (2, "Silence clip"),
+        (3, "Enable clip"),
+        (4, "Move clip"),
+        (5, "Trim clip edges"),
+        (6, "Delete clip"),
+    ] {
+        if base > 0 {
+            harness.get_by_label(&format!("Edit clip {clip}")).click();
+            harness.run_steps(2);
+        }
+        harness.get_by_label(button).click();
+        while harness.state().multiplayer.controls.as_ref().unwrap().revision < base + 1 && Instant::now() < deadline {
+            harness.run_steps(2);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(harness.state().multiplayer.controls.as_ref().unwrap().revision, base + 1, "{button}");
+        harness.run_steps(2);
+        assert!(harness.query_by_label("Refresh clip draft").is_some());
+        assert!(harness.get_by_label("Create MIDI clip").accesskit_node().is_disabled());
+    }
+    let project = harness.state().projects.get(shared).unwrap().project();
+    assert_eq!(project.arrangement.lanes[0].clips.len(), 2, "new and duplicate clips survive deleting their source");
+    assert_eq!(project.arrangement.lanes[1].clips, before.arrangement.lanes[1].clips, "neighbour track is untouched");
+    harness.get_by_label("MIDI notes").click();
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Choose another MIDI clip").is_some());
+    assert!(harness.query_by_label("Apply note").is_none());
+    harness.get_by_label("Choose another MIDI clip").click();
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Add note").is_some());
     assert_eq!(harness.state().projects.get(original).unwrap().project(), &before);
 }

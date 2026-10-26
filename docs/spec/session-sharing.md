@@ -35,7 +35,8 @@ a live instance is never silently replaced to conceal an ordering error.
 
 ## Allowed shared edits
 
-`track.rename`, `track.setVolume`, `track.setPan`, `note.add`, `note.update` and `note.delete` are accepted. The command registry
+`track.rename`, `track.setVolume`, `track.setPan`, `note.add`, `note.update`, `note.delete` and
+the six [clip commands](lan-clip-editing.md) are accepted. The command registry
 must also identify each as an Edit. Parameters have the exact keys needed by that command:
 
 - `track.rename`: `track` is a nonzero `u32` id and `name` is nonempty text of at most 256 bytes.
@@ -47,7 +48,7 @@ must also identify each as an Edit. Parameters have the exact keys needed by tha
 - `note.delete`: `clip` and exactly one index in `notes`.
 
 The [note contract](lan-note-editing.md) defines ranges and the remote journal/preflight boundary.
-Native copy-on-write can allocate one new content ID; the same deterministic command and
+Clip creation/duplication and native copy-on-write allocate native clip/content IDs; the same deterministic command and
 unchanged initial IDs/order produce the same ID on every replica. Note indices are revision-bound.
 
 Unknown keys, name-based addressing, batches, files, plugins, history and local transport are

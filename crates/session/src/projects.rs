@@ -660,7 +660,7 @@ impl Projects {
         Ok(())
     }
 
-    /// Apply only an authoritative track control or MIDI note edit to the tab bound by the host application.
+    /// Apply only an authoritative track control, MIDI note or clip edit to the tab bound by the host application.
     pub fn apply_shared_control(
         &mut self,
         project: ProjectId,
@@ -670,7 +670,18 @@ impl Projects {
         if !self.shared_controls.contains(&project)
             || !matches!(
                 id,
-                "track.rename" | "track.setVolume" | "track.setPan" | "note.add" | "note.update" | "note.delete"
+                "track.rename"
+                    | "track.setVolume"
+                    | "track.setPan"
+                    | "note.add"
+                    | "note.update"
+                    | "note.delete"
+                    | "clip.create"
+                    | "clip.move"
+                    | "clip.trim"
+                    | "clip.duplicate"
+                    | "clip.delete"
+                    | "clip.setEnabled"
             )
         {
             return Err("this is not an authoritative shared control".into());

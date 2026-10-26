@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 3;
+pub const PROTOCOL: u16 = 4;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -107,6 +107,18 @@ pub enum WireEdit {
     NoteUpdate { clip: u32, note: usize, time: f64, length: f64, key: u8, velocity: f64, muted: bool },
     #[serde(rename = "note.delete")]
     NoteDelete { clip: u32, note: usize },
+    #[serde(rename = "clip.create")]
+    ClipCreate { track: u32, start: f64, length: f64 },
+    #[serde(rename = "clip.move")]
+    ClipMove { clip: u32, start: f64, track: u32 },
+    #[serde(rename = "clip.trim")]
+    ClipTrim { clip: u32, start: f64, end: f64 },
+    #[serde(rename = "clip.duplicate")]
+    ClipDuplicate { clip: u32 },
+    #[serde(rename = "clip.delete")]
+    ClipDelete { clip: u32 },
+    #[serde(rename = "clip.setEnabled")]
+    ClipEnabled { clip: u32, enabled: bool },
 }
 
 impl WireEdit {
@@ -132,6 +144,20 @@ impl WireEdit {
                 json!({"clip":clip,"note":note,"time":time,"length":length,"key":key,"velocity":velocity,"muted":muted}),
             ),
             Self::NoteDelete { clip, note } => ("note.delete", json!({"clip":clip,"notes":[note]})),
+            Self::ClipCreate { track, start, length } => {
+                ("clip.create", json!({"track":track,"start":start,"length":length,"stack":true}))
+            }
+            Self::ClipMove { clip, start, track } => {
+                ("clip.move", json!({"clip":clip,"start":start,"toTrack":track,"stack":true}))
+            }
+            Self::ClipTrim { clip, start, end } => {
+                ("clip.trim", json!({"clip":clip,"start":start,"end":end,"stack":true}))
+            }
+            Self::ClipDuplicate { clip } => ("clip.duplicate", json!({"clips":[{"clip":clip}],"stack":true})),
+            Self::ClipDelete { clip } => ("clip.delete", json!({"clip":clip})),
+            Self::ClipEnabled { clip, enabled } => {
+                ("clip.setEnabled", json!({"clips":[{"clip":clip}],"enabled":enabled}))
+            }
         }
     }
 }

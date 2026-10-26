@@ -76,8 +76,17 @@ impl App {
             editor.clip = clips.first().map(|c| c.0);
             editor.base = revision;
         }
+        if editor.clip.is_some_and(|id| !clips.iter().any(|clip| clip.0 == id)) {
+            ui.weak("The selected MIDI clip was deleted. Its note draft will not be applied to another clip.");
+            if ui.button("Choose another MIDI clip").clicked() {
+                *editor = Default::default();
+            }
+            return;
+        }
         let before = editor.clip;
         egui::ComboBox::from_id_salt("shared-midi-clip")
+            .width(420.0)
+            .wrap_mode(egui::TextWrapMode::Truncate)
             .selected_text(clips.iter().find(|c| Some(c.0) == editor.clip).map_or("Choose clip", |c| c.1.as_str()))
             .show_ui(ui, |ui| {
                 for (id, label) in &clips {

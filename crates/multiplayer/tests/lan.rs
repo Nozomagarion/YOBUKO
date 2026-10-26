@@ -286,3 +286,173 @@ fn joining_after_more_than_one_journal_receives_the_current_music_snapshot() {
     let notes = session.execute("note.list", &json!({"clip":clip})).unwrap();
     assert_eq!(notes[0]["key"], 79);
 }
+
+struct ClipPair {
+    host: Service,
+    guest: Service,
+    local: suhina_session::Session,
+    remote: suhina_session::Session,
+    revision: u64,
+}
+impl ClipPair {
+    fn new(project: &suhina_model::Project) -> Self {
+        let mut host = Service::default();
+        host.select_project(project).unwrap();
+        host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+        let ready = wait(&mut host, |s| s["mode"] == "hosting");
+        let local = suhina_session::Session::new(host.take_project().unwrap());
+        let mut guest = Service::default();
+        guest.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
+        wait(&mut guest, |s| s["mode"] == "connected");
+        let remote = suhina_session::Session::new(guest.take_project().unwrap());
+        Self { host, guest, local, remote, revision: 0 }
+    }
+    fn step(&mut self, from_guest: bool, edit: suhina_multiplayer::WireEdit) {
+        submit(if from_guest { &mut self.guest } else { &mut self.host }, self.revision, edit);
+        let next = self.revision + 1;
+        let local = wait(&mut self.host, |v| v["controls"]["revision"] == next);
+        let remote = wait(&mut self.guest, |v| v["controls"]["revision"] == next);
+        let (mut a, mut b) = (self.revision, self.revision);
+        apply(&mut self.local, &mut a, &local);
+        apply(&mut self.remote, &mut b, &remote);
+        assert_eq!(self.local.project(), self.remote.project());
+        self.revision = next;
+    }
+}
+
+#[test]
+fn clip_creation_movement_trim_duplicate_notes_and_delete_converge_over_tls() {
+    use suhina_engine::{AudioPool, Renderer};
+    use suhina_multiplayer::WireEdit;
+    use suhina_session::Player;
+    let mut source = suhina_multiplayer::starter_project();
+    for lane in &mut source.arrangement.lanes {
+        for clip in &mut lane.clips {
+            clip.length = 8.0;
+        }
+    }
+    let before = source.clone();
+    let clip = source.arrangement.lanes[0].clips[0].id.0;
+    let neighbour = source.arrangement.lanes[1].clips[0].clone();
+    let mut pair = ClipPair::new(&source);
+    let mut ra = Renderer::stopped(pair.local.project(), &AudioPool::default(), 8000).unwrap();
+    let mut rb = Renderer::stopped(pair.remote.project(), &AudioPool::default(), 8000).unwrap();
+    pair.local.attach_player(Player::new(ra.controller(), None));
+    pair.remote.attach_player(Player::new(rb.controller(), None));
+    pair.local.execute("transport.setPosition", &json!({"beats":1})).unwrap();
+    pair.remote.execute("transport.setPosition", &json!({"beats":5})).unwrap();
+    pair.local.execute("transport.play", &json!({})).unwrap();
+    pair.remote.execute("transport.play", &json!({})).unwrap();
+    pair.step(true, WireEdit::ClipCreate { track: 1, start: 2.0, length: 4.0 });
+    let new = pair.local.project().arrangement.lanes[0].clips.iter().find(|c| c.id.0 != clip).unwrap().id.0;
+    pair.step(false, WireEdit::NoteAdd { clip: new, time: 0.0, length: 0.5, key: 90, velocity: 100.0 });
+    pair.step(true, WireEdit::ClipMove { clip, start: 4.0, track: 2 });
+    assert!(
+        pair.local.project().arrangement.lanes[1].clips.contains(&neighbour),
+        "moving never overwrites the neighbour"
+    );
+    pair.step(false, WireEdit::ClipTrim { clip, start: 4.0, end: 8.0 });
+    pair.step(true, WireEdit::ClipDuplicate { clip });
+    let copy = pair.local.project().arrangement.lanes[1]
+        .clips
+        .iter()
+        .find(|c| c.id.0 != clip && c.id != neighbour.id)
+        .unwrap()
+        .id
+        .0;
+    pair.step(
+        false,
+        WireEdit::NoteUpdate { clip: copy, note: 0, time: 0.0, length: 0.5, key: 95, velocity: 100.0, muted: false },
+    );
+    let original = pair.local.execute("note.list", &json!({"clip":clip})).unwrap();
+    assert_eq!(original[0]["key"], 48, "editing the duplicate protects its source");
+    pair.step(true, WireEdit::ClipEnabled { clip: copy, enabled: false });
+    let before_stale = pair.local.project().clone();
+    submit(&mut pair.guest, 1, WireEdit::ClipDelete { clip });
+    let refused = wait(&mut pair.guest, |s| s["error"].is_string());
+    assert_eq!(refused["controls"]["revision"], 7);
+    assert_eq!(pair.local.project(), &before_stale);
+    pair.step(false, WireEdit::ClipDelete { clip });
+    let mut out = [0.0; 512];
+    ra.process(&mut out);
+    rb.process(&mut out);
+    assert!(ra.monitor().running() && rb.monitor().running());
+    assert!((ra.monitor().beat() - rb.monitor().beat()).abs() > 3.0);
+    pair.local.execute("transport.stop", &json!({})).unwrap();
+    ra.process(&mut out);
+    rb.process(&mut out);
+    assert!(!ra.monitor().running() && rb.monitor().running());
+    let a = suhina_engine::render_offline(pair.local.project(), 8000, 512).unwrap();
+    let b = suhina_engine::render_offline(pair.remote.project(), 8000, 512).unwrap();
+    assert_eq!(a, b);
+    assert!(a.iter().any(|s| s.abs() > 0.00001));
+    assert_ne!(a, suhina_engine::render_offline(&before, 8000, 512).unwrap());
+    assert_eq!(source, before, "the original is untouched");
+}
+
+#[test]
+fn late_admission_receives_the_edited_arrangement_and_its_new_ids() {
+    use suhina_multiplayer::WireEdit;
+    let (mut host, invitation) = host();
+    let (initial, _) = host.take_snapshot().unwrap();
+    let clip = initial.arrangement.lanes[0].clips[0].id.0;
+    let mut expected = suhina_session::Session::new(initial);
+    let mut expected_revision = 0;
+    for (base, edit) in [
+        WireEdit::ClipMove { clip, start: 4.0, track: 2 },
+        WireEdit::ClipTrim { clip, start: 4.0, end: 8.0 },
+        WireEdit::ClipDuplicate { clip },
+        WireEdit::ClipCreate { track: 1, start: 0.0, length: 4.0 },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        submit(&mut host, base as u64, edit);
+        let state = wait(&mut host, |s| s["controls"]["revision"] == base + 1);
+        apply(&mut expected, &mut expected_revision, &state);
+    }
+    let deleted = expected.project().arrangement.lanes[0].clips[0].id.0;
+    submit(&mut host, 4, WireEdit::ClipDelete { clip: deleted });
+    let state = wait(&mut host, |s| s["controls"]["revision"] == 5);
+    apply(&mut expected, &mut expected_revision, &state);
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let (project, revision) = guest.take_snapshot().unwrap();
+    assert_eq!(revision, 5);
+    assert!(project.arrangement.lanes[0].clips.is_empty());
+    assert_eq!(project.arrangement.lanes[1].clips.len(), 3);
+    assert!(project.arrangement.lanes[1].clips.iter().any(|c| c.id.0 == clip && c.start == 4.0 && c.length == 4.0));
+    assert!(project.validate().is_ok());
+    assert_eq!(&project, expected.project());
+    let mut received = suhina_session::Session::new(project);
+    let mut received_revision = revision;
+    submit(&mut guest, 5, WireEdit::ClipCreate { track: 1, start: 0.0, length: 4.0 });
+    let local = wait(&mut host, |s| s["controls"]["revision"] == 6);
+    let remote = wait(&mut guest, |s| s["controls"]["revision"] == 6);
+    apply(&mut expected, &mut expected_revision, &local);
+    apply(&mut received, &mut received_revision, &remote);
+    assert_eq!(received.project(), expected.project());
+    assert!(
+        received.project().arrangement.lanes[0].clips[0].id.0 > deleted,
+        "deleted IDs are not reused after admission"
+    );
+}
+
+#[test]
+fn an_empty_midi_project_can_be_composed_together_without_a_demo_clip() {
+    use suhina_multiplayer::WireEdit;
+    let mut source = suhina_multiplayer::starter_project();
+    source.contents.clear();
+    for lane in &mut source.arrangement.lanes {
+        lane.clips.clear();
+    }
+    let mut pair = ClipPair::new(&source);
+    assert!(pair.local.project().contents.is_empty());
+    pair.step(true, WireEdit::ClipCreate { track: 1, start: 0.0, length: 4.0 });
+    let clip = pair.local.project().arrangement.lanes[0].clips[0].id.0;
+    pair.step(false, WireEdit::NoteAdd { clip, time: 0.0, length: 1.0, key: 60, velocity: 100.0 });
+    let audio = suhina_engine::render_offline(pair.remote.project(), 8000, 512).unwrap();
+    assert!(audio.iter().any(|s| s.abs() > 0.00001));
+    assert!(source.contents.is_empty());
+}

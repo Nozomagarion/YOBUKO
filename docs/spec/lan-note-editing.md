@@ -1,6 +1,6 @@
 ---
 description: Revision-checked shared MIDI note commands and bounded operation delivery over LAN
-read_when: shared notes, multiplayer protocol 3, operation journal, note.update
+read_when: shared notes, multiplayer protocol 4, operation journal, note.update
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -42,7 +42,8 @@ them. The UI applies the same native commands to the existing session and its at
 Admission transfers a current canonical MIDI snapshot with its revision, then operations since
 that snapshot. Changes during download are either delivered contiguously or fail before a tab
 opens. The original project, independent transports, native file version 3 and MIDI-copy format
-1 stay as specified in lan-midi-copy.md. Both installations need protocol 3.
+1 stay as specified in lan-midi-copy.md. Both installations now need protocol 4, which also admits the
+[clip operations](lan-clip-editing.md). The journal was introduced by protocol 3.
 
 Before accepting a native command, preflight it on a detached canonical copy and verify all MIDI
 copy quotas and the 2 MiB canonical document limit. Failed/stale/oversized edits change neither

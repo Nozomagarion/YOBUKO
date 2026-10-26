@@ -25,7 +25,7 @@ and USB export are future work. There is no common public release channel yet.
 |---|---|---|
 | Produce with Suhina's engine, instruments and clip workflow. | Render a project into the DJ library; analyse tempo and key with rbxport code. | Build toward set preparation and live performance in the same app. |
 | Collaborate on a common project while listening independently. | Keep the connection between your production and its rendered audio. | Keep everyone on the same tested combined version. |
-| **Today:** restricted LAN MIDI note editing and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** product direction; decks and hardware export remain planned. |
+| **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** product direction; decks and hardware export remain planned. |
 
 ## What you can try
 
@@ -41,7 +41,9 @@ and USB export are future work. There is no common public release channel yet.
 
 The network exchange is tested with real TLS loopback connections and two desktop project
 instances. **A physical two-computer session has not yet been verified.** Audio files, your
-audio assets, plugins and microphone recordings are not shared by this slice. MIDI notes can be edited while connected; clip placement remains fixed. Both apps need protocol 3.
+audio assets, plugins and microphone recordings are not shared by this slice. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
+move, trim, duplicate, enable and delete with revision checks and stack-only placement.
+Both apps need protocol 4.
 [LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-lan-prototype)
 
 ## Progress you can audit

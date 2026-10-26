@@ -24,6 +24,12 @@ impl Edit {
             "note.add" => "note.add",
             "note.update" => "note.update",
             "note.delete" => "note.delete",
+            "clip.create" => "clip.create",
+            "clip.move" => "clip.move",
+            "clip.trim" => "clip.trim",
+            "clip.duplicate" => "clip.duplicate",
+            "clip.delete" => "clip.delete",
+            "clip.setEnabled" => "clip.setEnabled",
             _ => return Err(Error::UnsupportedCommand),
         };
         if !commands().iter().any(|spec| spec.id == command && spec.kind == CommandKind::Edit && !spec.policy.critical)
@@ -75,6 +81,35 @@ impl Edit {
                         .and_then(Value::as_array)
                         .is_some_and(|notes| notes.len() == 1 && valid_index(notes.first()))
             }
+            "clip.create" => {
+                keys(object, &["track", "start", "length", "stack"])
+                    && object.get("track").is_some_and(valid_id)
+                    && stacked(object)
+                    && number_in(object.get("start"), 0.0, 120_000.0)
+                    && number_in(object.get("length"), f64::MIN_POSITIVE, 120_000.0)
+            }
+            "clip.move" => {
+                keys(object, &["clip", "start", "toTrack", "stack"])
+                    && object.get("clip").is_some_and(valid_id)
+                    && stacked(object)
+                    && object.get("toTrack").is_some_and(valid_id)
+                    && number_in(object.get("start"), 0.0, 120_000.0)
+            }
+            "clip.trim" => {
+                keys(object, &["clip", "start", "end", "stack"])
+                    && object.get("clip").is_some_and(valid_id)
+                    && stacked(object)
+                    && number_in(object.get("start"), 0.0, 120_000.0)
+                    && number_in(object.get("end"), 0.0, 120_000.0)
+                    && object.get("end").and_then(Value::as_f64) > object.get("start").and_then(Value::as_f64)
+            }
+            "clip.duplicate" => keys(object, &["clips", "stack"]) && stacked(object) && one_clip(object),
+            "clip.delete" => keys(object, &["clip"]) && object.get("clip").is_some_and(valid_id),
+            "clip.setEnabled" => {
+                keys(object, &["clips", "enabled"])
+                    && one_clip(object)
+                    && object.get("enabled").is_some_and(Value::is_boolean)
+            }
             _ => false,
         };
         if !valid {
@@ -82,6 +117,19 @@ impl Edit {
         }
         Ok(Self { command, params })
     }
+}
+
+fn stacked(object: &Map<String, Value>) -> bool {
+    object.get("stack").and_then(Value::as_bool) == Some(true)
+}
+fn one_clip(object: &Map<String, Value>) -> bool {
+    object.get("clips").and_then(Value::as_array).is_some_and(|clips| {
+        clips.len() == 1
+            && clips
+                .first()
+                .and_then(Value::as_object)
+                .is_some_and(|clip| keys(clip, &["clip"]) && clip.get("clip").is_some_and(valid_id))
+    })
 }
 
 fn valid_index(value: Option<&Value>) -> bool {

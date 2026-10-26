@@ -80,9 +80,13 @@ source tab. FM Synth and Utility parameters are supported; audio, other instrume
 and opaque device states are refused with an error. Names/volume/pan and single notes are live shared edits. In **MIDI notes**, choose a clip,
 select a note and use **Apply note** or **Delete note**; **New note draft → Add note** adds one.
 A newer shared revision makes the draft stale; **Refresh note draft** clears selection so a
-shifted index cannot silently target another note. Clip placement remains fixed while connected. Local metadata, hardware
+shifted index cannot silently target another note. In **Clips**, create an empty MIDI clip or select an arrangement clip to move it, trim its
+edges, duplicate, silence/enable or delete it. Move/trim/duplicate preserve overlapping neighbours.
+The destination track selector applies to Move; Trim follows native edge/offset semantics.
+A newer revision disables a pending clip draft; refresh or select the current clip again.
+A deleted note editor selection cannot silently switch to another clip. Local metadata, hardware
 input settings and launch mappings are omitted. See the [copy contract](spec/lan-midi-copy.md).
-Both participants need the new protocol-3 build; old demo invitations no longer work.
+Both participants need the new protocol-4 build; old demo invitations no longer work.
 
 Network and UI regression checks:
 
