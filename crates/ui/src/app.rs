@@ -2082,7 +2082,7 @@ impl App {
         self.device_picks = picks;
         self.device_focus = true;
         // The devices, not a range of automation, are what the edit keys act on now.
-        self.arrangement.automation.range = None;
+        self.arrangement.automation.let_go();
         // A fresh pick says where the user is now: a removal's undo or redo no longer moves the
         // selection for them.
         self.pending_device_remove = None;

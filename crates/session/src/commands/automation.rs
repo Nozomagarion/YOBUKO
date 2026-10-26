@@ -129,8 +129,19 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "automation.copy",
-        label: "Copy a time range of a parameter's automation, its values at the range's edges with it, for automation.paste",
-        params: &[DEVICE_TRACK, AUTOMATED_DEVICE, AUTOMATED, RANGE_START, RANGE_END],
+        label: "Copy a time range of a parameter's automation, its values at the range's edges with it, or picked points, for automation.paste",
+        params: &[
+            DEVICE_TRACK,
+            AUTOMATED_DEVICE,
+            AUTOMATED,
+            optional("start", ParamType::Number, "the range's first arrangement beat, from 0 (with end; or points)"),
+            optional("end", ParamType::Number, "the range's end, an arrangement beat after start"),
+            optional(
+                "points",
+                ParamType::Integers,
+                "instead of a range: point indices, from 0, as in automation.list; pasted, they go in among the lane's points from the first of them",
+            ),
+        ],
         kind: CommandKind::Read,
         run: crate::automation_range::copy,
         policy: Policy::DEFAULT,

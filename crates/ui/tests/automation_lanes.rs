@@ -1124,14 +1124,18 @@ fn a_drag_from_the_line_makes_a_point_shift_moves_the_segment_alt_bends_it() {
     let b = harness.get_by_label("Volume point 2 on Drums").rect().center();
     // A quarter of the way along the line, away from the curve handle in the middle.
     let on = a.lerp(b, 0.25);
-    // A plain drag: a new point, on the grid where the drag began, at the height it ends.
+    // A plain drag: a point made at once where the press was, on the grid, then moved to where the
+    // drag ends.
     drag(&mut harness, on, vec2(0.0, 12.0));
     let made = volume(&harness).0;
     assert_eq!(made.len(), 3, "{made:?}");
     assert_eq!((made[0].beat, made[2].beat), (before[0].beat, before[1].beat), "the others stay");
-    harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
-    harness.run();
-    assert_eq!(volume(&harness).0.len(), 2, "one undo step");
+    // The press added it at once (one step), the drag moved it (another).
+    for _ in 0..2 {
+        harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
+        harness.run();
+    }
+    assert_eq!(volume(&harness).0.len(), 2);
     // With Shift: the segment's two points move down together.
     harness.event(egui::Event::ModifiersChanged(Modifiers::SHIFT));
     drag(&mut harness, on, vec2(0.0, 8.0));
@@ -1168,4 +1172,29 @@ fn a_drag_from_the_lower_half_selects_points_with_a_box() {
     harness.run();
     let left: Vec<f64> = volume(&harness).0.iter().map(|p| p.beat).collect();
     assert_eq!(left, [36.0], "the high point stays");
+}
+
+/// Selected points cut with Ctrl+X come back with Ctrl+V from the play position, on the lane
+/// clicked last (#916).
+#[test]
+fn selected_points_cut_and_paste_from_the_play_position() {
+    let mut harness = with_lanes();
+    let rect = lane(&harness);
+    let low = rect.center().y + 4.0;
+    for x in [200.0, 300.0] {
+        click_at(&mut harness, Pos2::new(rect.left() + x, low));
+    }
+    let beats = |h: &Harness<'static, App>| -> Vec<f64> { volume(h).0.iter().map(|p| p.beat).collect() };
+    assert_eq!(beats(&harness), [24.0, 36.0]);
+    let from = Pos2::new(rect.left() + 150.0, rect.bottom() - 6.0);
+    drag(&mut harness, from, vec2(200.0, rect.center().y + 1.0 - from.y));
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::X);
+    harness.run();
+    assert!(beats(&harness).is_empty(), "cut");
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::V);
+    harness.run();
+    let play = harness.state().session().and_then(|s| s.player().map(|p| p.monitor().start_beat())).unwrap_or(0.0);
+    let pasted = beats(&harness);
+    assert_eq!(pasted.len(), 2, "{pasted:?}");
+    assert!((pasted[1] - pasted[0] - 12.0).abs() < 1e-9 && pasted[0] >= play - 1e-9, "{pasted:?} from {play}");
 }

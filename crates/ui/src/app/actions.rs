@@ -198,6 +198,17 @@ impl App {
                 }
                 actions.extend(self.arrangement.automation.range_actions(edit));
             }
+            // Points selected on an automation lane, with no range: copy and cut take them, and
+            // paste puts copied automation on the lane clicked last from the play position (#916).
+            "selection.copy" | "selection.cut" | "selection.paste"
+                if self.shown == View::Arrangement
+                    && self.arrangement.automation.range.is_none()
+                    && self.arrangement.automation.takes_point_keys(action.trim_start_matches("selection."))
+                    && (action != "selection.paste" || self.session().is_some_and(Session::copied_automation)) =>
+            {
+                let at = self.timeline.as_ref().map_or(0.0, |(_, _, t)| t.beat);
+                actions.extend(self.arrangement.automation.point_actions(action.trim_start_matches("selection."), at));
+            }
             // In the Session view copy and paste act on the selected clip slot.
             // Picked devices (a click on a strip's device or a panel of the chain): copy, cut
             // and paste act on them, before any clip.

@@ -21,6 +21,9 @@ use crate::{CommandError, Session};
 pub(crate) struct AutomationClip {
     pub(crate) length: f64,
     pub(crate) points: Vec<(f64, f64, f64)>,
+    /// Copied as picked points, not a range: pasted, they go in among the lane's points without
+    /// edge points, replacing only those between the first and the last.
+    pub(crate) picked: bool,
 }
 
 /// Values closer than this are one, for an edge point that would repeat its neighbour.
@@ -115,6 +118,28 @@ fn points_of(session: &mut Session, target: &Target) -> Result<Vec<AutomationPoi
 /// `automation.paste`.
 pub(crate) fn copy(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let target = target(session, params)?;
+    // Picked points (`points`): copied as they are, from the first of them.
+    if let Some(list) = params.get("points").filter(|v| !v.is_null()) {
+        let lane = points_of(session, &target)?;
+        let mut picked: Vec<AutomationPoint> = Vec::new();
+        for value in list.as_array().ok_or("points must be a list of point indices")? {
+            let index = value
+                .as_u64()
+                .and_then(|n| usize::try_from(n).ok())
+                .ok_or("each point is a point index, from 0, as in automation.list")?;
+            picked
+                .push(*lane.get(index).ok_or_else(|| format!("the lane has no point {index}; it has {}", lane.len()))?);
+        }
+        picked.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        let (Some(first), Some(last)) = (picked.first().map(|p| p.beat), picked.last().map(|p| p.beat)) else {
+            return Err("points must name at least one point".into());
+        };
+        let points: Vec<(f64, f64, f64)> =
+            picked.iter().map(|p| (p.beat - first, target.position(session, p.value), p.curve)).collect();
+        let count = points.len();
+        session.clipboards.automation = Some(AutomationClip { length: last - first, points, picked: true });
+        return Ok(json!({ "param": target.param, "points": count, "length": last - first }));
+    }
     let (start, end) = range(params)?;
     let points = points_of(session, &target)?;
     let stepped = target.stepped();
@@ -125,7 +150,7 @@ pub(crate) fn copy(session: &mut Session, params: &Value) -> Result<Value, Comma
     let points: Vec<(f64, f64, f64)> =
         cut.iter().map(|p| (p.beat - start, target.position(session, p.value), p.curve)).collect();
     let count = points.len();
-    session.clipboards.automation = Some(AutomationClip { length: end - start, points });
+    session.clipboards.automation = Some(AutomationClip { length: end - start, points, picked: false });
     Ok(json!({ "param": target.param, "points": count, "length": end - start }))
 }
 
@@ -150,7 +175,16 @@ pub(crate) fn paste(session: &mut Session, params: &Value) -> Result<Value, Comm
         })
         .collect();
     let points = points_of(session, &target)?;
-    let count = put(session, &target, replace(&points, start, end, inner, target.stepped()))?;
+    let merged = if clip.picked {
+        // Picked points go in among the lane's, replacing those from the first to the last.
+        let mut merged: Vec<AutomationPoint> =
+            points.into_iter().filter(|p| p.beat < start || p.beat > end).chain(inner).collect();
+        merged.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        merged
+    } else {
+        replace(&points, start, end, inner, target.stepped())
+    };
+    let count = put(session, &target, merged)?;
     Ok(json!({ "param": target.param, "start": start, "end": end, "points": count }))
 }
 
