@@ -1470,7 +1470,7 @@ fn theme_editor(ui: &mut Ui, themes: &ThemesView, state: &mut PageState) -> Opti
         ui.label(egui::RichText::new(group).strong());
         ui.separator();
         for &(key, purpose, color) in tokens.iter().filter(|(key, _, _)| {
-            colour_group(key) == group && !key.strip_prefix("track.").is_some_and(|suffix| suffix.parse::<u8>().is_ok())
+            colour_group(key) == group && key.strip_prefix("track.").is_none_or(|suffix| suffix.parse::<u8>().is_err())
         }) {
             ui.push_id(("theme-colour", key), |ui| {
                 let mut rgba = color.to_srgba_unmultiplied();

@@ -162,7 +162,7 @@ impl Panel {
         let place = Self::place(state);
         let scope_changed = self.stale
             || self.shown.as_ref().is_none_or(|s| s.place != place || s.max_seconds != settings.map_max_seconds);
-        if !scope_changed && !(analysed && now - self.last_layout >= RELAYOUT_SECONDS) {
+        if !(scope_changed || analysed && now - self.last_layout >= RELAYOUT_SECONDS) {
             if analysed {
                 ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64(RELAYOUT_SECONDS));
             }

@@ -328,7 +328,7 @@ pub fn show(
     if response.clicked_by(PointerButton::Secondary)
         && !state.right_stepped
         && !state.right_playing
-        && !(workflow.alt_right_plays && inputs.alt)
+        && (!workflow.alt_right_plays || !inputs.alt)
         && let Some(pos) = pointer
         && let Some((index, _)) = note_at(&layout, &clip.notes, pos)
         && right_deletes

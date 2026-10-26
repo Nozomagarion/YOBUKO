@@ -1140,10 +1140,10 @@ pub(crate) fn show(
                 .iter()
                 .chain(control.y.iter())
                 .any(|binding| matches!(binding.parameter.as_str(), "warp" | "warp_mode" | "warp_beats" | "source_bpm"))
-            && !ui
+            && ui
                 .ctx()
                 .data(|data| data.get_temp::<Arc<suhina_engine::AudioData>>(sample_source_id(track, device)))
-                .is_some_and(|source| !source.samples.is_empty())
+                .is_none_or(|source| source.samples.is_empty())
         {
             continue;
         }
