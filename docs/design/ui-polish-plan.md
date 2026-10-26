@@ -3,7 +3,7 @@ description: Local UI usability audit and incremental visual polish, preserving 
 read_when: UI polish, Studio themes, skinning, gradients, glass, panel customization
 type: plan
 status: draft
-last_verified: 2026-10-20
+last_verified: 2026-10-22
 covers:
   - crates/ui/src/kit/theme.rs
   - crates/ui/themes/**

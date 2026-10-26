@@ -3,7 +3,7 @@ description: Themes become style sheets in a CSS dialect of Suhina's own (elemen
 read_when: theme, style sheet, CSS, selector, cascade, media query, layout, taffy, glass, blur, transparent window, artwork, SVG controls, meter style, edit interface, theme package
 type: decision
 status: draft
-last_verified: 2026-10-22
+last_verified: 2026-10-25
 covers:
   - crates/style/
   - crates/ui/src/kit/theme.rs

@@ -3,7 +3,7 @@ description: Why the UI is built with egui, and how close it may get to Live: sa
 read_when: UI toolkit, egui, look and feel, trade dress, design rights, screenshots, how close to Ableton
 type: decision
 status: current
-last_verified: 2026-10-14
+last_verified: 2026-10-22
 covers:
   - apps/suhina/Cargo.toml
   - crates/ui/Cargo.toml
