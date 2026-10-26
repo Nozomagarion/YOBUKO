@@ -144,7 +144,7 @@ impl Target {
     /// draw it.
     pub(crate) fn position(&self, session: &Session, value: f64) -> f64 {
         let position = match &self.kind {
-            Kind::Volume => suhina_model::automation::volume_lane_position(value),
+            Kind::Volume => suhina_model::automation::Taper::position(&suhina_model::automation::VolumeTaper, value),
             Kind::Plain => match mixer_range(&self.param) {
                 Some((min, max)) if max > min => (value - min) / (max - min),
                 _ => value,
@@ -164,11 +164,16 @@ impl Target {
     pub(crate) fn value_at_position(&self, session: &Session, position: f64) -> f64 {
         let position = if position.is_finite() { position.clamp(0.0, 1.0) } else { 0.0 };
         match &self.kind {
-            Kind::Volume => suhina_model::automation::volume_lane_gain(position),
+            Kind::Volume => suhina_model::automation::Taper::value(&suhina_model::automation::VolumeTaper, position),
             Kind::Plain => {
                 let (min, max) = mixer_range(&self.param).unwrap_or((0.0, 1.0));
                 let value = min + position * (max - min);
                 if self.param == MUTE { value.round() } else { value }
+            }
+            // A whole-number parameter moves along the line and the device rounds, as the
+            // engine plays it.
+            Kind::Builtin(spec) if matches!(spec.kind, suhina_device_api::ParamKind::Integer) => {
+                spec.min + position * (spec.max - spec.min)
             }
             Kind::Builtin(spec) => spec.clamp(spec.from_normalized(position)),
             Kind::Sd(parameter) => parameter.lane_value(position),
@@ -300,7 +305,7 @@ pub(crate) fn move_point(session: &mut Session, params: &Value) -> Result<Value,
     point.beat = new_beat.unwrap_or(point.beat);
     point.value = new_value.unwrap_or(point.value);
     point.curve = new_curve.unwrap_or(point.curve);
-    let index = lane.insert(point);
+    let index = lane.insert_near(point, index);
     Ok(
         json!({ "param": target.param, "point": index, "beat": point.beat, "value": target.show(point.value), "curve": point.curve }),
     )
@@ -396,16 +401,34 @@ pub(crate) fn move_points(session: &mut Session, params: &Value) -> Result<Value
         point.curve = curve.unwrap_or(point.curve);
         moved.push(point);
     }
-    // The points left in place, then the moved ones in the order given, each after any point
-    // already at its beat; `None` marks a point that stayed.
+    // The points left in place, then the moved ones in their order in the lane, so points that
+    // shared a beat keep their order (the jump between them). Moved later, they go before the
+    // points that stayed at their beat (they come from before them); moved earlier, after them;
+    // moved only in value, each stays where it was. A tag is the point's place in the request,
+    // `None` a point that stayed.
+    if beats == 0.0 {
+        let lane = target.lane(session)?;
+        for (&index, point) in indices.iter().zip(moved) {
+            if let Some(slot) = lane.points.get_mut(index) {
+                *slot = point;
+            }
+        }
+        return Ok(json!({ "param": target.param, "points": indices }));
+    }
     let mut sorted = indices.clone();
     sorted.sort_unstable();
     for index in sorted.into_iter().rev() {
         points.remove(index);
     }
     let mut tagged: Vec<(AutomationPoint, Option<usize>)> = points.into_iter().map(|p| (p, None)).collect();
-    for (order, point) in moved.into_iter().enumerate() {
-        let at = tagged.partition_point(|(p, _)| p.beat <= point.beat);
+    let mut in_lane: Vec<(usize, AutomationPoint)> = moved.into_iter().enumerate().collect();
+    in_lane.sort_by_key(|(order, _)| indices.get(*order).copied().unwrap_or(usize::MAX));
+    for (order, point) in in_lane {
+        let at = if beats > 0.0 {
+            tagged.partition_point(|(p, tag)| p.beat < point.beat || (p.beat == point.beat && tag.is_some()))
+        } else {
+            tagged.partition_point(|(p, _)| p.beat <= point.beat)
+        };
         tagged.insert(at, (point, Some(order)));
     }
     let mut now = vec![0; indices.len()];

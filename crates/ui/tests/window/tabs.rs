@@ -7,8 +7,7 @@ use super::*;
 
 #[test]
 fn ctrl_n_asks_for_a_new_project_and_ctrl_s_saves_one() {
-    let dir = std::env::temp_dir().join(format!("suhina-ui-save-{}", std::process::id()));
-    let _fresh = std::fs::remove_dir_all(&dir);
+    let dir = crate::temp_dir::TempDir::new("ui-save");
     let mut app = demo_app();
     app.set_default_folders(dir.join("Projects"), dir.join("Templates"));
     let mut harness = window(app);
@@ -49,7 +48,6 @@ fn ctrl_n_asks_for_a_new_project_and_ctrl_s_saves_one() {
     harness.run();
     assert!(dir.join("Templates").join("Night drive.suhina").is_file());
     assert_eq!(harness.state().session().and_then(|s| s.source()), Some(saved.as_path()));
-    let _clean = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -178,8 +176,7 @@ fn asked_to_close(harness: &Harness<'static, App>) -> bool {
 
 #[test]
 fn closing_or_quitting_with_unsaved_changes_asks_first() {
-    let dir = std::env::temp_dir().join(format!("suhina-ui-unsaved-{}", std::process::id()));
-    let _fresh = std::fs::remove_dir_all(&dir);
+    let dir = crate::temp_dir::TempDir::new("ui-unsaved");
     let mut app = demo_app();
     app.set_default_folders(dir.join("Projects"), dir.join("Templates"));
     app.open_project(Session::new(demo_project()), &[], OpenAs::NewTab);
@@ -247,7 +244,6 @@ fn closing_or_quitting_with_unsaved_changes_asks_first() {
     }
     assert!(closed, "the window closes once its projects are let go of");
     assert!(harness.state().projects().ids().is_empty());
-    let _clean = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

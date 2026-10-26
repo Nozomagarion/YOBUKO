@@ -31,8 +31,7 @@ fn long_demo_app() -> App {
 #[test]
 fn the_export_dialog_writes_the_wav_the_demo_names() {
     let mut harness = window(demo_app());
-    let dir = std::env::temp_dir().join(format!("suhina-export-dialog-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = crate::temp_dir::TempDir::new("export-dialog");
     let path = dir.join("Demo mix.wav");
 
     // File › Export… opens the dialog over the window.
@@ -90,14 +89,12 @@ fn the_export_dialog_writes_the_wav_the_demo_names() {
         "{:?}",
         harness.state().status()
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn a_file_named_mp3_shows_the_mp3_rate_and_exports_an_mp3() {
     let mut harness = window(demo_app());
-    let dir = std::env::temp_dir().join(format!("suhina-export-mp3-dialog-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = crate::temp_dir::TempDir::new("export-mp3-dialog");
     let path = dir.join("Demo mix.mp3");
 
     harness.get_by_label("File").click();
@@ -130,7 +127,6 @@ fn a_file_named_mp3_shows_the_mp3_rate_and_exports_an_mp3() {
     let bytes = std::fs::read(&path).unwrap();
     assert_eq!(bytes[0], 0xFF);
     assert_eq!(bytes[1] & 0xE0, 0xE0);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// Runs frames until the export's result is in the status (the export renders on a real
@@ -199,8 +195,7 @@ fn wav_frames(path: &std::path::Path) -> u64 {
 #[test]
 fn a_closed_export_dialogs_worker_still_runs_and_the_reopened_dialog_shows_it() {
     let mut harness = window(long_demo_app());
-    let dir = std::env::temp_dir().join(format!("suhina-export-running-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = crate::temp_dir::TempDir::new("export-running");
     let path = dir.join("Demo mix.wav");
 
     // File › Export…, the file typed, Export clicked: the dialog turns into Exporting….
@@ -249,7 +244,6 @@ fn a_closed_export_dialogs_worker_still_runs_and_the_reopened_dialog_shows_it() 
         "{:?}",
         harness.state().status()
     );
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// Switching to another project while the export renders changes nothing about it: the
@@ -270,8 +264,7 @@ fn switching_projects_while_the_export_renders_keeps_the_export_and_names_it() {
     // The export belongs to the project active when Export was clicked (the second tab); its
     // name is what the feedback carries.
     let export_name = harness.state().projects().name(ids.get(1).copied().unwrap_or(ids[0])).unwrap_or("").to_string();
-    let dir = std::env::temp_dir().join(format!("suhina-export-switch-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = crate::temp_dir::TempDir::new("export-switch");
     let path = dir.join("Long mix.wav");
 
     // File › Export…, the file typed, Export clicked: Exporting…, and the name is the long
@@ -323,5 +316,4 @@ fn switching_projects_while_the_export_renders_keeps_the_export_and_names_it() {
         .length();
     let frames = wav_frames(&path);
     assert_eq!(frames, expected, "the exported file is the second project's render");
-    let _ = std::fs::remove_dir_all(&dir);
 }

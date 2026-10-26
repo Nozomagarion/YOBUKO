@@ -158,7 +158,10 @@ pub(super) fn parameter_widget(
         ParameterControl::Toggle => {
             let mut checked = *value >= 0.5;
             let response = ui.checkbox(&mut checked, "");
-            *value = f64::from(checked);
+            // Only a click writes: a value automation plays between off and on stays as it is.
+            if response.changed() {
+                *value = f64::from(checked);
+            }
             response
         }
         ParameterControl::Button => {
@@ -204,6 +207,7 @@ pub(super) fn parameter_widget(
                 ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(egui::Layout::top_down(egui::Align::Center)));
             slider_ui.add(
                 egui::Slider::new(value, parameter.min..=parameter.max)
+                    .clamping(egui::SliderClamping::Edits)
                     .vertical()
                     .show_value(false)
                     .trailing_fill(style.accent.is_some())
@@ -211,8 +215,12 @@ pub(super) fn parameter_widget(
                     .step_by(style.step),
             )
         }
+        // Edits clamping: the slider rounds a value to its step and decimals only when it is
+        // edited, not every time it is drawn, so a value automation plays between steps is not
+        // sent back as an edit (which turns the lane off).
         control => ui.add(
             egui::Slider::new(value, parameter.min..=parameter.max)
+                .clamping(egui::SliderClamping::Edits)
                 .show_value(false)
                 .trailing_fill(style.accent.is_some())
                 .max_decimals(style.decimals)

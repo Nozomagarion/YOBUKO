@@ -513,6 +513,23 @@ mod from_the_tool_lists {
         let narrow = Workspace::new(Some(&dir.join("inside")), Some(&dir.join("inside/out"))).unwrap();
         let out = dir.join("inside/out").display().to_string();
         assert!(confine(&narrow, "library.moveTo", json!({ "items": [kick], "folder": out }), None).is_err());
+    }
+
+    #[test]
+    fn sd_sample_path_obeys_the_same_read_boundary_as_the_graph() {
+        let (dir, workspace) = roots("sd-sample");
+        std::fs::write(dir.join("inside/graph.sd"), b"{}").unwrap();
+        std::fs::write(dir.join("inside/sample.wav"), b"wav").unwrap();
+        std::fs::write(dir.join("outside/private.wav"), b"private").unwrap();
+        let graph = dir.join("inside/graph.sd");
+        for (id, key) in [("device.addSd", "path"), ("track.add", "sd")] {
+            let mut request = json!({"sample":dir.join("outside/private.wav")});
+            request[key] = json!(graph);
+            assert!(confine(&workspace, id, request.clone(), None).is_err());
+            request["sample"] = json!(dir.join("inside/sample.wav"));
+            let ok = confine(&workspace, id, request, None).unwrap();
+            assert!(Path::new(ok["sample"].as_str().unwrap()).is_absolute());
+        }
         let _ = std::fs::remove_dir_all(dir);
     }
 }

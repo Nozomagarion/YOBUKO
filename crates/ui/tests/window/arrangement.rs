@@ -1104,8 +1104,7 @@ fn a_double_click_on_an_empty_spot_of_a_midi_lane_makes_a_bar_long_clip_on_the_g
 
 #[test]
 fn a_critical_command_from_the_window_is_backed_up_first() {
-    let dir = std::env::temp_dir().join(format!("suhina-ui-critical-{}", std::process::id()));
-    let _fresh = std::fs::remove_dir_all(&dir);
+    let dir = crate::temp_dir::TempDir::new("ui-critical");
     let file = dir.join("Song.suhina");
     Session::new(demo_project()).save(&file, false).unwrap();
     let mut app = App::new();
@@ -1125,7 +1124,6 @@ fn a_critical_command_from_the_window_is_backed_up_first() {
         .collect();
     kept.sort();
     assert_eq!(kept, [tracks, tracks + 1]);
-    let _clean = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

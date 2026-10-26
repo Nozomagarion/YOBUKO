@@ -9,7 +9,7 @@
 use serde_json::{Value, json};
 use suhina_engine::MAX_START_BEAT;
 use suhina_model::AutomationPoint;
-use suhina_model::automation::{MAX_POINTS, value_at};
+use suhina_model::automation::{MAX_POINTS, Taper, value_at};
 
 use crate::automation::{Target, target};
 use crate::commands::number;
@@ -24,6 +24,22 @@ pub(crate) struct AutomationClip {
     /// Copied as picked points, not a range: pasted, they go in among the lane's points without
     /// edge points, replacing only those between the first and the last.
     pub(crate) picked: bool,
+}
+
+/// A lane's taper as the engine plays it, from the parameter `target` names: segments move
+/// evenly in its position.
+struct Lane<'a> {
+    target: &'a Target,
+    session: &'a Session,
+}
+
+impl Taper for Lane<'_> {
+    fn position(&self, value: f64) -> f64 {
+        self.target.position(self.session, value)
+    }
+    fn value(&self, position: f64) -> f64 {
+        self.target.value_at_position(self.session, position)
+    }
 }
 
 /// Values closer than this are one, for an edge point that would repeat its neighbour.
@@ -47,9 +63,9 @@ fn range(params: &Value) -> Result<(f64, f64), CommandError> {
 
 /// The envelope of `points` from `start` to `end`: its value at each edge and the points
 /// between. Empty when the lane has no points.
-fn slice(points: &[AutomationPoint], start: f64, end: f64, stepped: bool) -> Vec<AutomationPoint> {
-    let Some(first) = value_at(points, start, stepped) else { return Vec::new() };
-    let last = value_at(points, end, stepped).unwrap_or(first);
+fn slice(points: &[AutomationPoint], start: f64, end: f64, stepped: bool, taper: &impl Taper) -> Vec<AutomationPoint> {
+    let Some(first) = value_at(points, start, stepped, taper) else { return Vec::new() };
+    let last = value_at(points, end, stepped, taper).unwrap_or(first);
     let curve_at = |beat: f64| {
         let index = points.partition_point(|p| p.beat <= beat);
         index.checked_sub(1).and_then(|i| points.get(i)).map_or(0.0, |p| p.curve)
@@ -68,8 +84,9 @@ fn replace(
     end: f64,
     inner: Vec<AutomationPoint>,
     stepped: bool,
+    taper: &impl Taper,
 ) -> Vec<AutomationPoint> {
-    let edges = value_at(points, start, stepped).zip(value_at(points, end, stepped));
+    let edges = value_at(points, start, stepped, taper).zip(value_at(points, end, stepped, taper));
     let after_curve = {
         let index = points.partition_point(|p| p.beat <= end);
         index.checked_sub(1).and_then(|i| points.get(i)).map_or(0.0, |p| p.curve)
@@ -143,7 +160,7 @@ pub(crate) fn copy(session: &mut Session, params: &Value) -> Result<Value, Comma
     let (start, end) = range(params)?;
     let points = points_of(session, &target)?;
     let stepped = target.stepped();
-    let cut = slice(&points, start, end, stepped);
+    let cut = slice(&points, start, end, stepped, &Lane { target: &target, session });
     if cut.is_empty() {
         return Err(format!("{} has no automation to copy", target.param).into());
     }
@@ -182,7 +199,7 @@ pub(crate) fn paste(session: &mut Session, params: &Value) -> Result<Value, Comm
         merged.sort_by(|a, b| a.beat.total_cmp(&b.beat));
         merged
     } else {
-        replace(&points, start, end, inner, target.stepped())
+        replace(&points, start, end, inner, target.stepped(), &Lane { target: &target, session })
     };
     let count = put(session, &target, merged)?;
     Ok(json!({ "param": target.param, "start": start, "end": end, "points": count }))
@@ -200,12 +217,13 @@ pub(crate) fn duplicate(session: &mut Session, params: &Value) -> Result<Value, 
     }
     let points = points_of(session, &target)?;
     let stepped = target.stepped();
-    let cut = slice(&points, start, end, stepped);
+    let cut = slice(&points, start, end, stepped, &Lane { target: &target, session });
     if cut.is_empty() {
         return Err(format!("{} has no automation to duplicate", target.param).into());
     }
     let inner: Vec<AutomationPoint> = cut.into_iter().map(|p| AutomationPoint { beat: p.beat + length, ..p }).collect();
-    let count = put(session, &target, replace(&points, end, end + length, inner, stepped))?;
+    let merged = replace(&points, end, end + length, inner, stepped, &Lane { target: &target, session });
+    let count = put(session, &target, merged)?;
     Ok(json!({ "param": target.param, "start": end, "end": end + length, "points": count }))
 }
 
@@ -218,7 +236,8 @@ pub(crate) fn delete_range(session: &mut Session, params: &Value) -> Result<Valu
     if points.is_empty() {
         return Err(format!("{} has no automation", target.param).into());
     }
-    let count = put(session, &target, replace(&points, start, end, Vec::new(), target.stepped()))?;
+    let merged = replace(&points, start, end, Vec::new(), target.stepped(), &Lane { target: &target, session });
+    let count = put(session, &target, merged)?;
     Ok(json!({ "param": target.param, "points": count }))
 }
 
@@ -329,7 +348,8 @@ fn fill(
         }
     }
     let points = points_of(session, target)?;
-    put(session, target, replace(&points, start, end, inner, target.stepped()))
+    let merged = replace(&points, start, end, inner, target.stepped(), &Lane { target, session });
+    put(session, target, merged)
 }
 
 /// The segment shape `automation.addPoint {shape}` gives the segment that ends at the point it
@@ -385,6 +405,7 @@ pub(crate) fn insert_shape(session: &mut Session, params: &Value) -> Result<Valu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use suhina_model::automation::Plain;
 
     fn p(beat: f64, value: f64) -> AutomationPoint {
         AutomationPoint { beat, value, curve: 0.0 }
@@ -393,20 +414,23 @@ mod tests {
     #[test]
     fn a_replaced_range_keeps_the_envelope_outside_it() {
         let points = vec![p(0.0, 0.0), p(8.0, 1.0)];
-        let out = replace(&points, 2.0, 4.0, vec![p(3.0, 0.5)], false);
+        let out = replace(&points, 2.0, 4.0, vec![p(3.0, 0.5)], false, &Plain);
         let beats: Vec<(f64, f64)> = out.iter().map(|p| (p.beat, p.value)).collect();
         assert_eq!(beats, [(0.0, 0.0), (2.0, 0.25), (3.0, 0.5), (4.0, 0.5), (8.0, 1.0)]);
         for beat in [1.0, 5.0, 7.0] {
-            assert!((value_at(&out, beat, false).unwrap() - value_at(&points, beat, false).unwrap()).abs() < 1e-9);
+            assert!(
+                (value_at(&out, beat, false, &Plain).unwrap() - value_at(&points, beat, false, &Plain).unwrap()).abs()
+                    < 1e-9
+            );
         }
     }
 
     #[test]
     fn a_slice_has_the_values_at_its_edges() {
         let points = vec![p(0.0, 0.0), p(4.0, 1.0), p(8.0, 0.0)];
-        let cut: Vec<(f64, f64)> = slice(&points, 2.0, 6.0, false).iter().map(|p| (p.beat, p.value)).collect();
+        let cut: Vec<(f64, f64)> = slice(&points, 2.0, 6.0, false, &Plain).iter().map(|p| (p.beat, p.value)).collect();
         assert_eq!(cut, [(2.0, 0.5), (4.0, 1.0), (6.0, 0.5)]);
-        assert!(slice(&[], 0.0, 1.0, false).is_empty());
+        assert!(slice(&[], 0.0, 1.0, false, &Plain).is_empty());
     }
 
     #[test]

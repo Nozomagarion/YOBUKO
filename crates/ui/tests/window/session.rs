@@ -5,6 +5,37 @@
 
 use super::*;
 
+/// With more tracks than the view shows, the buttons that add a track stay whole at the end of
+/// the sideways scroll instead of shrinking to nothing (reported on Discord).
+#[test]
+fn the_add_track_buttons_keep_their_width_with_many_tracks() {
+    let mut session = Session::new(demo_project());
+    for _ in 0..40 {
+        session.execute("track.add", &json!({ "kind": "midi" })).unwrap();
+    }
+    let many = SessionHarness {
+        grid: TrackGrid::build(session.project(), None),
+        state: SessionViewState::default(),
+        actions: Vec::new(),
+    };
+    let mut harness = Harness::builder().with_size(SIZE).build_ui_state(
+        |ui, v: &mut SessionHarness| session_view::show(ui, &v.grid, &[], &mut v.state, &mut v.actions),
+        many,
+    );
+    theme::install(&harness.ctx);
+    harness.run();
+    // Scrolled as far right as it goes.
+    harness.state_mut().state.scroll.x = f32::MAX;
+    harness.run();
+    // As wide as with a few tracks.
+    let few = view();
+    for label in ["+ MIDI track", "+ Audio track", "+ Return track"] {
+        let (width, wanted) = (harness.get_by_label(label).rect().width(), few.get_by_label(label).rect().width());
+        assert!(width >= wanted - 0.5, "{label} is {width} px wide, not {wanted}");
+    }
+    assert_eq!(clicked(&mut harness, "+ MIDI track")[0].id, "track.add");
+}
+
 #[test]
 fn clicking_a_clip_launches_it() {
     let mut harness = view();

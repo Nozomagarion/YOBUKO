@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2};
 use serde_json::{Value, json};
 use suhina_device_api::{ParamInfo, ParamKind, Unit};
-use suhina_engine::model::automation::{MUTE, PAN, VOLUME};
+use suhina_engine::model::automation::{self, MUTE, PAN, Taper, VOLUME};
 use suhina_engine::model::{AutomationLane, AutomationPoint, ClipId, DeviceKind, Project, Rgb, TrackId};
 
 use crate::interaction::timeline_grid::TimelineGrid;
@@ -63,7 +63,7 @@ const MENU_WIDTH: f32 = 240.0;
 /// Space the parameter menu leaves between itself and the window's edge.
 const MENU_EDGE: f32 = 8.0;
 /// The bottom of the volume's travel, as the mixer's fields show it.
-const VOLUME_FLOOR: f64 = suhina_engine::model::automation::VOLUME_LANE_FLOOR;
+const VOLUME_FLOOR: f64 = -70.0;
 
 /// A lane: the device it belongs to (`None` for the track's mixer) and the parameter's id.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -107,7 +107,7 @@ impl Scale {
     /// Where `value` (as the lane keeps it) sits on the lane, 0 at the bottom to 1 at the top.
     pub fn position(&self, value: f64) -> f64 {
         let position = match self {
-            Self::Volume => volume_position(gain_to_db(value)),
+            Self::Volume => automation::volume_position(gain_to_db(value)),
             Self::Pan => (value + 1.0) / 2.0,
             Self::Mute => value,
             Self::Device(info) => info.to_normalized(value),
@@ -120,7 +120,7 @@ impl Scale {
     pub fn value_at(&self, position: f64) -> f64 {
         let position = if position.is_finite() { position.clamp(0.0, 1.0) } else { 0.0 };
         match self {
-            Self::Volume => db_at(position).map_or(0.0, |db| 10f64.powf(db / 20.0)),
+            Self::Volume => automation::VolumeTaper.value(position),
             Self::Pan => (position * 2.0 - 1.0).clamp(-1.0, 1.0),
             Self::Mute => position.round(),
             Self::Device(info) => info.from_normalized(position),
@@ -310,16 +310,6 @@ fn round(value: f64, per: f64) -> f64 {
 /// A linear gain in decibels; minus infinity for silence (a gain of 0 or less).
 fn gain_to_db(gain: f64) -> f64 {
     if gain > 0.0 { 20.0 * gain.log10() } else { f64::NEG_INFINITY }
-}
-
-/// Where a volume in decibels sits on a lane, 0 … 1 (`automation::volume_lane_position`).
-fn volume_position(db: f64) -> f64 {
-    suhina_engine::model::automation::volume_lane_position(10f64.powf(db / 20.0))
-}
-
-/// The volume in decibels at `position` on a lane; `None` for silence at the bottom.
-fn db_at(position: f64) -> Option<f64> {
-    suhina_engine::model::automation::volume_lane_db(position)
 }
 
 /// A parameter a track's lanes can show: what it is called, how its values map, and its lane's
@@ -1033,14 +1023,15 @@ fn envelope(points: &[AutomationPoint], scale: &Scale, plot: Rect, geometry: &Ge
         if scale.stepped() {
             line.push(at(b.beat, a.value));
         } else {
-            // Sampled even when straight: a straight segment of the volume is straight in gain,
-            // which is not straight on the lane.
-            let steps = (((xb - xa) / 2.0).ceil() as usize).clamp(2, SEGMENT_POINTS);
+            // Evenly in the lane's position, as the engine plays it: a straight segment is a
+            // straight line; a bent one is sampled along its curve.
+            let (ya, yb) = (scale.position(a.value), scale.position(b.value));
+            let steps = if a.curve == 0.0 { 1 } else { (((xb - xa) / 2.0).ceil() as usize).clamp(2, SEGMENT_POINTS) };
             for step in 1..steps {
                 let t = step as f64 / steps as f64;
                 let shaped = suhina_engine::model::automation::shape(t, a.curve);
-                let value = a.value + (b.value - a.value) * shaped;
-                line.push(at(a.beat + (b.beat - a.beat) * t, value));
+                let x = geometry.x_of(a.beat + (b.beat - a.beat) * t);
+                line.push(Pos2::new(x, y_of(plot, ya + (yb - ya) * shaped)));
             }
         }
         line.push(at(b.beat, b.value));
@@ -1051,6 +1042,23 @@ fn envelope(points: &[AutomationPoint], scale: &Scale, plot: Rect, geometry: &Ge
 
 /// The points a click on a lane is measured against: the lane's own, or for a lane without
 /// points one at the parameter's value, its faint line.
+/// A lane moves evenly in its position, as the engine plays it.
+impl automation::Taper for Scale {
+    fn position(&self, value: f64) -> f64 {
+        Scale::position(self, value)
+    }
+    fn value(&self, position: f64) -> f64 {
+        // A whole-number parameter moves along the line between its points and the device
+        // rounds, as the engine plays it.
+        match self {
+            Self::Device(info) if matches!(info.kind, ParamKind::Integer) => {
+                info.min + position.clamp(0.0, 1.0) * (info.max - info.min)
+            }
+            _ => self.value_at(position),
+        }
+    }
+}
+
 fn level_points(param: &Param) -> Vec<AutomationPoint> {
     if param.points.is_empty() { vec![AutomationPoint::new(0.0, param.current)] } else { param.points.clone() }
 }
@@ -1070,13 +1078,15 @@ fn distance_to(line: &[Pos2], pos: Pos2) -> f32 {
         .fold(f32::INFINITY, f32::min)
 }
 
-/// A point at `beat` that leaves the envelope of `points` as it is: the envelope's value there,
-/// and the curve of the segment it starts. The segment before it keeps its curve, which is exact
-/// (a power curve cut short is the same power curve); the one after it gets the curve through
-/// the old segment's middle, exact for a straight segment. `None` for no points.
-fn splice(points: &[AutomationPoint], beat: f64, stepped: bool) -> Option<(f64, f64)> {
-    use suhina_engine::model::automation::{shape, value_at};
-    let value = value_at(points, beat, stepped)?;
+/// A point at `beat` that leaves the envelope of `points` (on `scale`) as it is: the envelope's
+/// value there, and the curve of the segment it starts. The segment before it keeps its curve and
+/// the one after it gets the curve through the old segment's middle: exact for a straight or
+/// level segment, close for a bent one (a bend cut in two is not two bends of the same kind).
+/// `None` for no points.
+fn splice(points: &[AutomationPoint], beat: f64, scale: &Scale) -> Option<(f64, f64)> {
+    use suhina_engine::model::automation::{curve_through, shape, value_at};
+    let stepped = scale.stepped();
+    let value = value_at(points, beat, stepped, scale)?;
     let index = points.partition_point(|p| p.beat <= beat).checked_sub(1);
     let segment = index.and_then(|i| Some((points.get(i)?, points.get(i + 1)?)));
     let Some((a, b)) = segment.filter(|(a, b)| !stepped && a.curve != 0.0 && b.beat > a.beat) else {
@@ -1085,10 +1095,7 @@ fn splice(points: &[AutomationPoint], beat: f64, stepped: bool) -> Option<(f64, 
     let t = (beat - a.beat) / (b.beat - a.beat);
     let start = shape(t, a.curve);
     let middle = (shape(t + (1.0 - t) / 2.0, a.curve) - start) / (1.0 - start);
-    // `shape(0.5, c)` is 0.5 to the power of 4^-c.
-    let curve = -(middle.ln() / 0.5f64.ln()).ln() / 4f64.ln();
-    let curve =
-        if middle > 0.0 && middle < 1.0 && curve.is_finite() { round(curve.clamp(-1.0, 1.0), 1000.0) } else { 0.0 };
+    let curve = curve_through(0.5, middle).map_or(0.0, |c| round(c.clamp(-1.0, 1.0), 1000.0));
     Some((value, curve))
 }
 
@@ -1104,7 +1111,7 @@ fn segment_at(points: &[AutomationPoint], scale: &Scale, plot: Rect, geometry: &
     if b.beat <= a.beat || a.value == b.value {
         return None;
     }
-    let value = suhina_engine::model::automation::value_at(points, beat, false)?;
+    let value = suhina_engine::model::automation::value_at(points, beat, false, scale)?;
     ((y_of(plot, scale.position(value)) - pos.y).abs() <= segment_hit(plot)).then_some(index)
 }
 
@@ -1157,7 +1164,7 @@ fn lane(
         let beat = geometry.snap(geometry.beat_of(pos.x), free);
         let mut params = key.params(track);
         params["beat"] = json!(beat);
-        match splice(&level, beat, param.scale.stepped()).filter(|(value, _)| param.scale.keeps(*value)) {
+        match splice(&level, beat, &param.scale).filter(|(value, _)| param.scale.keeps(*value)) {
             Some((value, curve)) => {
                 params["value"] = param.scale.exact(value);
                 if curve != 0.0 {
@@ -1165,8 +1172,9 @@ fn lane(
                 }
             }
             None => {
-                let value = suhina_engine::model::automation::value_at(&level, beat, param.scale.stepped())
-                    .unwrap_or(param.current);
+                let value =
+                    suhina_engine::model::automation::value_at(&level, beat, param.scale.stepped(), &param.scale)
+                        .unwrap_or(param.current);
                 params["value"] = param.scale.command(value);
             }
         }
@@ -1211,7 +1219,7 @@ fn lane(
             params["beat"] = json!(beat);
             // On a whole-number lane a value between two numbers cannot be kept: the point goes
             // where the pointer is, as off the line.
-            match splice(&level, beat, param.scale.stepped()).filter(|(value, _)| near && param.scale.keeps(*value)) {
+            match splice(&level, beat, &param.scale).filter(|(value, _)| near && param.scale.keeps(*value)) {
                 Some((value, curve)) => {
                     params["value"] = param.scale.exact(value);
                     if curve != 0.0 {
@@ -1246,7 +1254,9 @@ fn lane(
         // Where a click puts the point: on the grid (at the pointer with Alt, or with Snap to grid
         // off), marked by a line across the lane.
         let beat = geometry.snap(geometry.beat_of(pos.x), free);
-        if let Some(value) = suhina_engine::model::automation::value_at(&level, beat, param.scale.stepped()) {
+        if let Some(value) =
+            suhina_engine::model::automation::value_at(&level, beat, param.scale.stepped(), &param.scale)
+        {
             let y = y_of(plot, param.scale.position(value));
             let x = geometry.x_of(beat);
             let guide = painter.with_clip_rect(visible);
@@ -1333,15 +1343,6 @@ fn lane(
             actions.push(action);
         }
         state.new_point.take_if(|d| d.track == track && &d.key == key);
-        if let Some(drag) = state.curve_drag.take_if(|d| d.track == track && &d.key == key) {
-            let before = param.points.get(drag.point).map_or(0.0, |p| p.curve);
-            if (drag.curve - before).abs() > 1e-6 {
-                let mut params = key.params(track);
-                params["point"] = json!(drag.point);
-                params["curve"] = json!(round(drag.curve, 1000.0));
-                actions.push(Action::new("automation.movePoint", params));
-            }
-        }
         // The drag paints a time range on the lane, on the grid (free with Alt): the edit keys and
         // the shapes act on it, and the points in it are selected (#916).
         if let Some(drag) = state.box_drag.take_if(|d| d.select && d.track == track && &d.key == key) {
@@ -1389,7 +1390,7 @@ fn lane(
             if ui.button("Add value").clicked() {
                 let mut params = key.params(track);
                 params["beat"] = json!(at);
-                match splice(&level, at, param.scale.stepped()).filter(|(value, _)| param.scale.keeps(*value)) {
+                match splice(&level, at, &param.scale).filter(|(value, _)| param.scale.keeps(*value)) {
                     Some((value, curve)) => {
                         params["value"] = param.scale.exact(value);
                         if curve != 0.0 {
@@ -1397,8 +1398,9 @@ fn lane(
                         }
                     }
                     None => {
-                        let value = suhina_engine::model::automation::value_at(&level, at, param.scale.stepped())
-                            .unwrap_or(param.current);
+                        let value =
+                            suhina_engine::model::automation::value_at(&level, at, param.scale.stepped(), &param.scale)
+                                .unwrap_or(param.current);
                         params["value"] = param.scale.command(value);
                     }
                 }
@@ -1448,6 +1450,20 @@ fn lane(
     let points = shown_points(param, track, geometry, free, state);
     let ink = if param.enabled { color(lanes.color) } else { theme::text_hint() };
     let line = envelope(&points, &param.scale, plot, geometry);
+    // A finished bend asks for its command only now, after the envelope above drew it: the
+    // project has the new curve only once the command has run, after this frame, so dropping
+    // the drag before drawing showed the old curve for one frame.
+    if body.drag_stopped_by(egui::PointerButton::Primary)
+        && let Some(drag) = state.curve_drag.take_if(|d| d.track == track && &d.key == key)
+    {
+        let before = param.points.get(drag.point).map_or(0.0, |p| p.curve);
+        if (drag.curve - before).abs() > 1e-6 {
+            let mut params = key.params(track);
+            params["point"] = json!(drag.point);
+            params["curve"] = json!(round(drag.curve, 1000.0));
+            actions.push(Action::new("automation.movePoint", params));
+        }
+    }
     if line.len() > 1 {
         lane_painter.add(Shape::line(line, Stroke::new(1.5, ink)));
     } else if points.is_empty() {
@@ -1489,7 +1505,9 @@ fn lane(
                 continue;
             }
             let mid = (a.beat + b.beat) / 2.0;
-            let Some(value) = suhina_engine::model::automation::value_at(&points, mid, false) else { continue };
+            let Some(value) = suhina_engine::model::automation::value_at(&points, mid, false, &param.scale) else {
+                continue;
+            };
             let center = Pos2::new((xa + xb) / 2.0, y_of(plot, param.scale.position(value)));
             let hit = Rect::from_center_size(center, Vec2::splat(POINT_HIT)).intersect(visible);
             if hit.width() <= 0.0 || hit.height() <= 0.0 {

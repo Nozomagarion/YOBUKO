@@ -49,6 +49,7 @@ mod sends;
 mod soundmap;
 mod stems;
 mod support;
+mod temp_dir;
 mod tempo;
 mod track_copy;
 mod track_names;
