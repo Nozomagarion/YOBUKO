@@ -5,6 +5,7 @@
 //! update channel, and downloading it, checking it and putting it in place of the running one.
 //! The work runs on a thread of its own; [`Updater::phase`] says where it is.
 
+pub mod distribution;
 pub mod github;
 pub mod install;
 pub mod net;
@@ -138,6 +139,7 @@ impl Updater {
         if build.needs_sign_in && token.is_none() {
             return Err("downloading a test build needs Suhina connected to your gh".to_string());
         }
+        distribution::validate_build(build)?;
         // Staged beside the program, or beside its app bundle, so moving it in place is a rename on
         // one disk.
         let staging = install::staging_folder(dir);
@@ -162,6 +164,7 @@ impl Updater {
         }
         std::fs::create_dir(&unpacked).map_err(|e| format!("could not unpack: {e}"))?;
         let program = install::unpack(&archive, &unpacked)?;
+        distribution::validate_package(&program, build)?;
         install::put_in_place(&program, dir)
     }
 }
@@ -172,12 +175,14 @@ fn check(channel: Channel, current: &str) -> Result<(Option<Build>, Vec<Build>),
     match channel {
         Channel::Nightly => {
             let nightly = github::nightly(&net::get(github::NIGHTLY_URL, None)?, platform)?;
+            distribution::validate_build(&nightly)?;
             let newer = version::nightly_is_newer(current, &nightly.version).then(|| nightly.clone());
             Ok((newer, vec![nightly]))
         }
         Channel::TestBuilds => {
             let builds =
                 github::test_builds(&net::get(github::ARTIFACTS_URL, None)?, platform, &version::core(current))?;
+            let builds: Vec<_> = builds.into_iter().filter(|b| distribution::validate_build(b).is_ok()).collect();
             Ok((newer_test_build(current, &builds), builds))
         }
     }
@@ -239,5 +244,17 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("suhina-update-sign-in-{}", std::process::id()));
         let result = updater.download_and_replace(&build(663, "10d7891"), &dir, None, &|| {});
         assert!(result.is_err_and(|e| e.contains("gh")));
+    }
+
+    #[test]
+    fn an_official_build_is_refused_before_staging_or_replacing_any_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let program = dir.path().join("suhina");
+        std::fs::write(&program, b"custom fork").unwrap();
+        let build = Build { url: "https://github.com/suhina-daw/suhina-daw/releases/download/nightly/suhina-nightly-macos-universal.tar.gz".into(),
+            ..Build::default() };
+        assert!(Updater::default().download_and_replace(&build, dir.path(), None, &|| {}).is_err());
+        assert_eq!(std::fs::read(&program).unwrap(), b"custom fork");
+        assert!(!dir.path().join(install::STAGING).exists());
     }
 }

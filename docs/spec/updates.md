@@ -16,6 +16,19 @@ covers:
 
 # Updates
 
+## Multiplayer fork channel
+
+In this fork all endpoints refer to `Nozomagarion/suhina-daw`. The regular channel is labelled
+**Multiplayer + DJ**, uses release tag `multiplayer`, and accepts only its own package namespace
+with a SHA-256 digest. The legacy saved setting `nightly` still selects this regular channel.
+Every package must carry all three executables and a matching DISTRIBUTION.json beside them,
+including inside Contents/MacOS in a Mac app. Validation runs before any replacement. Official
+Suhina and standalone rbxport packages are refused; no fallback endpoint exists.
+
+The remainder describes the inherited check/download/restart mechanism. Source integration,
+package identities and pending channel activation are in [fork distribution](../fork-distribution.md).
+
+
 Nightlies change twice a day (see [releasing.md › Nightly](../releasing.md#nightly)), and a
 tester who has to visit the releases page to find out is usually a few builds behind. The start
 panel says when a newer build is out, and one button downloads it, puts it in place of the

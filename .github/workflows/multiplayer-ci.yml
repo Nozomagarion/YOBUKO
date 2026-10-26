@@ -55,12 +55,15 @@ jobs:
       - name: Formatting
         run: cargo fmt --all --check
       - name: Collaboration tests
-        run: cargo test --locked -p suhina-collaboration
+        run: cargo test --locked -p suhina-collaboration -p suhina-dj -p suhina-update
       - name: Two independent local players
         run: cargo run --locked --profile test -p suhina-collaboration --example two_peers
       - name: Documentation and source rules
         if: runner.os == 'Linux'
         run: |
+          python3 scripts/fork_sources.py check
+          python3 -m unittest discover -s scripts -p 'test_fork*.py'
+          python3 scripts/settings_guide.py --check
           python3 scripts/docs.py check
           python3 scripts/license_header.py --check
           python3 scripts/rename_suhina.py --check
@@ -96,6 +99,8 @@ jobs:
           done
           cp LICENSE NOTICE ATTRIBUTION.md README.md "$package/"
           cp devices/fm-synth/LICENSE-APACHE crates/stretch/LICENSE-signalsmith.txt "$package/"
+          version=$("$package/suhina-cli${{ runner.os == 'Windows' && '.exe' || '' }}" --version | awk '{print $2}')
+          python3 scripts/fork_package.py "$package" "$version"
           cp docs/multiplayer-fork.md "$package/MULTIPLAYER-STATUS.md"
           git rev-parse HEAD > "$package/SOURCE-COMMIT.txt"
           rustc -vV > "$package/BUILD-HOST.txt"

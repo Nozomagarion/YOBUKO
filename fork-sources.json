@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "distribution": "suhina-multiplayer-dj",
+  "suhina": {
+    "repository": "https://github.com/suhina-daw/suhina-daw.git",
+    "commit": "3b242ba649c5200d6a41ba6b64943a2752013b35"
+  },
+  "rbxport": {
+    "repository": "https://github.com/chrisle/rbxport.git",
+    "commit": "b739d369665b492534dc2eae0733322c040a26d5",
+    "path": "crates/rbl-analysis/src",
+    "version": "1.9.0",
+    "files": {
+      "attack.rs": "741b2c7715155d943e944505b8e8f159ff76278425c95be66cfc6322525cdc4d",
+      "downbeat.rs": "6189aff6a4c6dbcef79852d0be9e3576b19016401e964220bed87f0ebd636012",
+      "key.rs": "2a7a85b755d945d7ac13acde58656f023a66d662036f86fe8856b9ca540d07cb",
+      "lib.rs": "fdc8f563890063ad0bfc9ca24c788d053b7523922c8c2a1c934ee057098b5897",
+      "onset.rs": "280c9bf7c694febe0db7aba28878eceddca009184e33df93b38b3b8ee80feabb",
+      "phrase.rs": "4b04ed4e3f7fa47c2776aff67336101a9d6f302563b5f19bf10a22a366ffb989",
+      "tempo.rs": "ee692658004a7c8ba4e0a79e8c331a6d620875741d68122ae6a8b51765dce1a5",
+      "vocal.rs": "e20cc2b95fa6895981993aa2598a2f68219dc12a2bf78fe8938c160741e0ae56",
+      "waveform.rs": "836e81388d56391265063254ae14abc01f9de9d4ace8f357c81dbb3c3497cf4c"
+    }
+  }
+}

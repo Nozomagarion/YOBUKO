@@ -548,3 +548,10 @@ through, and fails for a text parameter named like a file or a folder (`path`, `
 `file`, `to`, `item`, `preset`, `sd`, `output`, `place`) that is not a `Path`, so a new command
 cannot take a path unchecked. Which commands an agent may not run is on each command's spec
 (`Policy::agents`: denied, or not to an agent attached to the app).
+
+## Fork DJ library
+
+The fork registers dj.library and dj.import as app-level Library commands. Both are denied
+to MCP agents: the local DJ collection is managed by the person. Its import path and optional
+sourceProject retain typed file parameters. The [DJ workspace](spec/dj-workspace.md) describes
+its asynchronous worker and separate catalog. The prototype adds no network collaboration tools.

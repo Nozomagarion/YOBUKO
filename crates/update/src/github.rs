@@ -7,13 +7,13 @@
 use serde_json::Value;
 
 /// The repository the builds come from.
-pub const REPOSITORY: &str = "suhina-daw/suhina-daw";
+pub const REPOSITORY: &str = "Nozomagarion/suhina-daw";
 /// The nightly release, as the API lists it.
-pub const NIGHTLY_URL: &str = "https://api.github.com/repos/suhina-daw/suhina-daw/releases/tags/nightly";
+pub const NIGHTLY_URL: &str = "https://api.github.com/repos/Nozomagarion/suhina-daw/releases/tags/multiplayer";
 /// The nightly release's page, for a person.
-pub const NIGHTLY_PAGE: &str = "https://github.com/suhina-daw/suhina-daw/releases/tag/nightly";
+pub const NIGHTLY_PAGE: &str = "https://github.com/Nozomagarion/suhina-daw/releases/tag/multiplayer";
 /// The newest workflow artifacts: the test builds among them.
-pub const ARTIFACTS_URL: &str = "https://api.github.com/repos/suhina-daw/suhina-daw/actions/artifacts?per_page=100";
+pub const ARTIFACTS_URL: &str = "https://api.github.com/repos/Nozomagarion/suhina-daw/actions/artifacts?per_page=100";
 
 /// The package name's platform part for the platform Suhina was built for, as the release
 /// workflow names its packages (`docs/releasing.md` › Packages); `None` where there is no package.
@@ -65,7 +65,7 @@ pub fn nightly(json: &[u8], platform: &str) -> Result<Build, String> {
     // The workflow titles it "Suhina nightly <version>".
     let name = release["name"].as_str().unwrap_or_default();
     let version = name.rsplit(' ').next().filter(|v| !v.is_empty()).ok_or("the nightly release has no version")?;
-    let wanted = format!("suhina-nightly-{platform}.");
+    let wanted = format!("suhina-multiplayer-{platform}.");
     let asset = release["assets"]
         .as_array()
         .into_iter()
@@ -137,11 +137,11 @@ mod tests {
         "tag_name": "nightly",
         "target_commitish": "c176a332f9c24c927717e1fd964fc2a147f15c7b",
         "assets": [
-            {"name": "suhina-nightly-windows-x86_64.zip.sha256", "size": 100,
+            {"name": "suhina-multiplayer-windows-x86_64.zip.sha256", "size": 100,
              "browser_download_url": "https://example.invalid/w.sha256", "digest": "sha256:7b36b58066fc5db9db028d7807797a0762f3c385f0bbcc943a26d089db72fe18"},
-            {"name": "suhina-nightly-windows-x86_64.zip", "size": 17954272, "updated_at": "2026-10-18T07:32:16Z",
+            {"name": "suhina-multiplayer-windows-x86_64.zip", "size": 17954272, "updated_at": "2026-10-18T07:32:16Z",
              "browser_download_url": "https://example.invalid/w.zip", "digest": "sha256:4D6D371FB9A69598531690942F8F0EF495E518FDAB4D3CC6E4ABCB84F00F056B"},
-            {"name": "suhina-nightly-linux-x86_64.tar.gz", "size": 23335868,
+            {"name": "suhina-multiplayer-linux-x86_64.tar.gz", "size": 23335868,
              "browser_download_url": "https://example.invalid/l.tar.gz"}
         ]
     }"#;
@@ -186,6 +186,6 @@ mod tests {
         assert_eq!(listed, [(Some(672), "0.0.1-pr.672+f35ecdd"), (Some(663), "0.0.1-pr.663+10d7891")]);
         assert_eq!(builds[1].url, "https://api.example.invalid/2/zip");
         assert!(builds[1].needs_sign_in);
-        assert_eq!(builds[1].page, "https://github.com/suhina-daw/suhina-daw/pull/663");
+        assert_eq!(builds[1].page, "https://github.com/Nozomagarion/suhina-daw/pull/663");
     }
 }

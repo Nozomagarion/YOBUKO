@@ -3997,6 +3997,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rbl-analysis"
+version = "1.9.0"
+dependencies = [
+ "realfft",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
 name = "read-fonts"
 version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4970,6 +4979,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "suhina-dj"
+version = "0.0.1"
+dependencies = [
+ "rbl-analysis",
+ "serde",
+ "serde_json",
+ "suhina-media",
+ "tempfile",
+]
+
+[[package]]
 name = "suhina-dsp"
 version = "0.0.1"
 dependencies = [
@@ -5146,6 +5166,7 @@ dependencies = [
  "suhina-device-nam-cab-loader",
  "suhina-device-registry",
  "suhina-device-sdk",
+ "suhina-dj",
  "suhina-engine",
  "suhina-library",
  "suhina-media",
@@ -5231,6 +5252,7 @@ dependencies = [
  "suhina-style",
  "suhina-test-support",
  "suhina-update",
+ "tempfile",
  "tiny-skia",
 ]
 
@@ -5243,6 +5265,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tar",
+ "tempfile",
  "zip",
 ]
 

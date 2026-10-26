@@ -106,6 +106,7 @@ crates/
   session  L2 open projects (tabs, ADR 0007), undo history, the command registry (ADR 0002), the
            attached player, each project's decoded audio and previews (ADR 0011), backups
            (autosave and the offer after a crash, ADR 0010)
+  dj       L2 fork-only local DJ catalog and offline rbxport analysis; no GUI or network
   collaboration L3 fork-only offline host/replica experiment over session commands; no network or app wiring
   automation L3 MCP server (rmcp) over a session, file roots, WAV rendering (docs/mcp.md); the app's
            endpoints: one instance per build, agents attached to the open projects (ADR 0028)

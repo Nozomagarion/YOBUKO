@@ -66,3 +66,11 @@ samples, presets or Packs that ship with a commercial DAW.
 | Path | Title | Author | Source | License |
 |---|---|---|---|---|
 | _(none yet)_ | | | | |
+
+## rbxport analysis
+
+The offline DJ analyser in `third_party/rbxport-analysis/src` is copied from
+Chris Le's rbxport at the exact revision in `fork-sources.json`.
+Copyright (c) 2026 Chris Le, GPL-2.0-or-later (used under GPLv3 with Suhina).
+The original source is unchanged; only the crate manifest is adapted.
+See its LICENSE, COPYING and VENDORED.md. No proprietary resources are included.

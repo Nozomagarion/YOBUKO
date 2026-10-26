@@ -13,6 +13,7 @@ impl App {
         // Whether the File menu showed last frame, so its recent list is read once as it opens.
         let file_menu_was_open = std::mem::take(&mut self.file_menu_open);
         let shown = menus::show(ui, &self.menus());
+        self.workspace_modes(ui, actions);
         if shown.open.contains(&"File") {
             self.file_menu_open = true;
             if !file_menu_was_open {
@@ -21,6 +22,24 @@ impl App {
         }
         if let Some(id) = shown.picked {
             self.run_menu_item(&id, ui.ctx(), actions);
+        }
+    }
+
+    pub(super) fn workspace_modes(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
+        let row = ui.max_rect();
+        let width = 58.0;
+        let dj = Rect::from_min_size(Pos2::new(row.right() - width, row.top()), Vec2::new(width, row.height()));
+        let studio = dj.translate(Vec2::new(-width - 4.0, 0.0));
+        if ui.put(studio, egui::Button::selectable(!self.dj.active, "Studio")).clicked() {
+            self.dj.active = false;
+        }
+        if ui.put(dj, egui::Button::selectable(self.dj.active, "DJ")).clicked() {
+            self.dj.active = true;
+            self.settings_open = false;
+            if self.session().is_some() {
+                actions.push(Action::new("transport.stop", json!({})));
+            }
+            actions.push(Action::new("preview.stop", json!({})));
         }
     }
 
@@ -67,6 +86,9 @@ impl App {
         let devices = self.detail_open && self.detail_showing == detail_view::Showing::Devices;
         let (zoom, limits) = (self.settings.zoom, crate::settings::ZOOMS);
         let view = vec![
+            Item::new("workspace.studio", "Studio workspace").into(),
+            Item::new("workspace.dj", "DJ library").into(),
+            Entry::Separator,
             item("view.session", "Session").enabled(has_project).into(),
             item("view.arrangement", "Arrangement").enabled(has_project).into(),
             item(
@@ -128,6 +150,15 @@ impl App {
     pub fn run_menu_item(&mut self, id: &str, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let has_project = self.session().is_some();
         match id {
+            "workspace.studio" => self.dj.active = false,
+            "workspace.dj" => {
+                self.dj.active = true;
+                self.settings_open = false;
+                if has_project {
+                    actions.push(Action::new("transport.stop", json!({})));
+                }
+                actions.push(Action::new("preview.stop", json!({})));
+            }
             // The start panel already offers new and open; the dialog would only cover it.
             "file.new" if !self.start_panel_open() => self.open_project_dialog(false),
             "file.new" => {}
@@ -143,10 +174,12 @@ impl App {
             "project.next" => actions.push(Action::new("project.next", json!({}))),
             "project.previous" => actions.push(Action::new("project.previous", json!({}))),
             "view.session" if has_project => {
+                self.dj.active = false;
                 self.shown = View::Session;
                 self.settings_open = false;
             }
             "view.arrangement" if has_project => {
+                self.dj.active = false;
                 self.shown = View::Arrangement;
                 self.settings_open = false;
             }

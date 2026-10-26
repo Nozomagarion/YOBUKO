@@ -227,3 +227,12 @@ The Rust SDK also offers prepared sample resources, private polyphonic voice/gra
 slicing, native stretch and editable sampler/granular templates. Run the
 [`sampler_composition` example](crates/device-sdk/examples/sampler_composition.rs) to save and
 render loop, reverse, slice, granular and tempo graphs using one shared resident sample.
+
+## Multiplayer + DJ fork
+
+This fork adds a native Studio/DJ switch, a separate persistent DJ library, offline tempo/key
+analysis from pinned rbxport sources, and rendering a project into that library. USB export,
+LINK and DJ performance controls are not integrated yet. Multiplayer is still an internal local
+prototype, without invitations or network UI. See [DJ workspace](docs/spec/dj-workspace.md),
+[multiplayer status](docs/multiplayer-fork.md) and [fork updates](docs/fork-distribution.md).
+The updater only accepts this fork's complete distribution; no shared public release is activated.

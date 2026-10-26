@@ -11,6 +11,8 @@ use std::path::PathBuf;
 /// The field a chosen path goes into.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PickField {
+    /// Audio for the fork's DJ library.
+    DjAudio,
     /// User-owned background PNG; no desktop capture.
     BackgroundImage,
     /// Settings › General › Projects folder.
@@ -42,12 +44,16 @@ pub enum PickField {
 impl PickField {
     /// Whether a folder is picked rather than a file.
     pub fn folder(self) -> bool {
-        !matches!(self, Self::StartTemplate | Self::OpenProject | Self::ExportFile | Self::BackgroundImage)
+        !matches!(
+            self,
+            Self::StartTemplate | Self::OpenProject | Self::ExportFile | Self::BackgroundImage | Self::DjAudio
+        )
     }
 
     /// The dialog's title.
     pub fn title(self) -> &'static str {
         match self {
+            Self::DjAudio => "Import audio into DJ library",
             Self::BackgroundImage => "Background image (PNG)",
             Self::ProjectsFolder => "Projects folder",
             Self::TemplatesFolder => "Templates folder",
@@ -68,6 +74,7 @@ impl PickField {
     pub fn extensions(self) -> &'static [&'static str] {
         match self {
             Self::ExportFile => &["wav", "flac", "ogg", "mp3"],
+            Self::DjAudio => &["wav", "aif", "aiff", "flac", "mp3", "ogg"],
             Self::BackgroundImage => &["png"],
             field if field.folder() => &[],
             _ => &["suhina", "als"],
@@ -77,7 +84,7 @@ impl PickField {
     /// The name the file dialog's filter carries.
     pub fn filter_label(self) -> &'static str {
         match self {
-            Self::ExportFile => "Audio",
+            Self::ExportFile | Self::DjAudio => "Audio",
             Self::BackgroundImage => "PNG image",
             _ => "Projects",
         }

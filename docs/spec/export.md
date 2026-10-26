@@ -295,3 +295,11 @@ New file formats and new options plug into the writer and the render job without
 core: the format table above is where an encoder joins, and a render job's settings are the same
 command's params whatever the file. Stems — what the matrix's presets produce — stay out of
 #601, with video, MIDI files and cloud places.
+
+## Fork DJ library bridge
+
+The fork's DJ workspace can open this dialog with an explicit request to add a successful
+render to its separate library. Normal File > Export keeps its existing behavior. The render
+command and file writer are unchanged; the UI queues only the completed path and original
+source project through dj.import. A later analysis error preserves the exported file. See
+[DJ workspace](dj-workspace.md).

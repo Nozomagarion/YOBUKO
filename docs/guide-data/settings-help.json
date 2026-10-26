@@ -297,7 +297,7 @@
   "General/Updates/check_updates": {
     "sourceFingerprint": "15f60b9678d146ee771d274a3cf5e620b4f1e5609b8f0c4b47b0379b91b8026f",
     "summary": "Check once at startup whether a newer build is available.",
-    "description": "Suhina asks GitHub about the selected update channel once after starting. A newer build can be offered for you to download; enabling the check does not install or restart anything automatically. Help → Check for updates can still check manually when this is off.",
+    "description": "Suhina asks GitHub about the selected update channel once after starting. A newer build can be offered for you to download; enabling the check does not install or restart anything automatically. Help → Check for updates can still check manually when this is off. In this fork the check only reads the Multiplayer + DJ distribution; upstream source changes do not directly trigger installation.",
     "options": [
       {
         "name": "On",
@@ -318,20 +318,20 @@
     ]
   },
   "General/Updates/update_channel": {
-    "sourceFingerprint": "8e7651184988cb78e6001c1549664463fb2cdcd6d6d641b0de161a6b6581d0b9",
+    "sourceFingerprint": "cf5aa9daceed8902f58156f0365aecb524b7bf9bac18d85081e64a665b326a3a",
     "summary": "Choose the builds offered by the update checker.",
-    "description": "An update channel chooses which Suhina builds the checker looks for. Nightly builds follow ongoing development. Test builds are produced for proposed changes and appear as a choice only in Developer mode or when Suhina itself is a test build. Without either condition, the effective channel is Nightly. Checking and installation are separate actions.",
+    "description": "This fork only checks Nozomagarion/suhina-daw for complete Multiplayer + DJ builds. Official Suhina and standalone rbxport binaries cannot replace it. The Multiplayer + DJ channel is the default; Test builds lists eligible fork pull-request artifacts in Developer mode. Source updates from both upstream projects must first be integrated and tested in the fork. Checking and installation are separate actions.",
     "options": [
       {
-        "name": "Nightly",
-        "description": "Look for the nightly build. This is the default channel."
+        "name": "Multiplayer + DJ",
+        "description": "Look for a validated combined build published on the fork's multiplayer release channel. This is the default. No release is available until one is published."
       },
       {
         "name": "Test builds",
-        "description": "List pull-request test builds for your platform when this channel is available. Downloading one requires signing in through the GitHub CLI."
+        "description": "List eligible pull-request artifacts from the fork. Downloading requires the GitHub CLI; packages must include the distribution manifest and checksum."
       }
     ],
-    "whenToChange": "Use Test builds when testing a particular proposed change, and return to Nightly for the regular development builds.",
+    "whenToChange": "Use Test builds to try a proposed fork change; use Multiplayer + DJ for the common distribution shared with your friends.",
     "references": [
       "crates/ui/src/settings/settings_rows.rs",
       "crates/ui/src/settings.rs",
@@ -343,7 +343,7 @@
   "General/Updates/developer_mode": {
     "sourceFingerprint": "09b657ceed60247a2662f8e45b433a96140560b1730764bb68680a3011e7d9fd",
     "summary": "Expose test builds in the update channel choices.",
-    "description": "Developer mode makes the Test builds update channel available. It does not select that channel or download a build on its own. Downloading a test build requires the GitHub CLI and an explicit connection from the update dialog. A running test build already exposes Test builds even with Developer mode off.",
+    "description": "Developer mode makes the Test builds update channel available. It does not select that channel or download a build on its own. Downloading a test build requires the GitHub CLI and an explicit connection from the update dialog. A running test build already exposes Test builds even with Developer mode off. This lists fork test builds only, and does not bypass distribution-manifest or checksum checks.",
     "options": [
       {
         "name": "On",

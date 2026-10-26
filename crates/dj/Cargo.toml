@@ -1,0 +1,17 @@
+[package]
+name = "suhina-dj"
+description = "The fork's DJ catalog and offline rbxport analysis bridge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+suhina-media.workspace = true
+rbl-analysis = { path = "../../third_party/rbxport-analysis" }
+tempfile = "3"
+
+[lints]
+workspace = true

@@ -14,6 +14,7 @@ mod browser_panel;
 pub mod closing_dialog;
 mod control_bar;
 mod detail_area;
+mod dj;
 mod drops;
 pub use drops::is_theme_package;
 pub mod export_dialog;
@@ -306,6 +307,7 @@ struct AutoArm {
 }
 
 pub struct App {
+    dj: dj::DjPanel,
     background: background::Background,
     /// When the level meters last showed something new (`ui.input` time).
     meters_moved_at: f64,
@@ -644,6 +646,7 @@ impl App {
             forget_request: None,
             pick_request: None,
             save_prompt: None,
+            dj: dj::DjPanel::default(),
             export_dialog: None,
             export: None,
             export_project: None,
@@ -1506,7 +1509,9 @@ impl App {
                 .map(|d| d.path.trim().to_string())
                 .filter(|text| !text.is_empty())
                 .and_then(|text| Path::new(&text).parent().map(Path::to_path_buf)),
-            PickField::BrowserFolder | PickField::McpWriteFolder | PickField::BackgroundImage => None,
+            PickField::BrowserFolder | PickField::McpWriteFolder | PickField::BackgroundImage | PickField::DjAudio => {
+                None
+            }
         };
         self.pick_request = Some(PickRequest { field, start });
     }
@@ -1522,6 +1527,10 @@ impl App {
     pub fn set_picked(&mut self, field: PickField, path: PathBuf) {
         let text = path.display().to_string();
         match field {
+            PickField::DjAudio => {
+                self.dj.pending = Some((path, None));
+                return;
+            }
             PickField::ProjectsFolder => self.settings.projects_folder = text,
             PickField::BackgroundImage => {
                 self.settings.background_image = text;
@@ -2349,6 +2358,7 @@ impl App {
         self.poll_scan(ui.ctx());
         self.frame_trace.mark("plug-in scan");
         self.poll_export(ui.ctx());
+        self.poll_dj(ui.ctx());
         self.frame_trace.mark("export");
         self.poll_plugins(ui.ctx());
         self.frame_trace.mark("plug-ins");
@@ -2374,7 +2384,7 @@ impl App {
                 self.run_menu_item(&id, ui.ctx(), &mut actions);
             }
         }
-        if !placing {
+        if !placing && !self.dj.active {
             self.shortcuts(ui, &mut actions);
         }
         self.apply_zoom(ui.ctx());
@@ -2503,6 +2513,12 @@ impl App {
                     })
             });
         }
+        if !self.settings.view.menu_bar {
+            egui::Panel::top("workspace-mode")
+                .exact_size(theme::MENU_BAR)
+                .frame(egui::Frame::NONE.fill(theme::panel_background()))
+                .show(ui, |ui| self.workspace_modes(ui, &mut actions));
+        }
         self.frame_trace.mark("menu bar");
         if self.projects.len() >= 2 {
             egui::Panel::top("tabs").exact_size(TABS).frame(egui::Frame::NONE).show(ui, |ui| {
@@ -2542,6 +2558,10 @@ impl App {
         };
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(workspace_base)).show(ui, |ui| {
             let _workspace_style = crate::kit::style_class::enter_named("workspace", "workspace");
+            if self.dj.active {
+                self.show_dj(ui);
+                return;
+            }
             let area = ui.available_rect_before_wrap();
             // A 1 px gap shows the line colour between the bars and the view.
             let inner = Rect::from_min_max(area.min + Vec2::new(0.0, 1.0), area.max - Vec2::new(0.0, 1.0));
@@ -3187,3 +3207,7 @@ fn headers_left(side: Option<Side>) -> bool {
 #[cfg(test)]
 #[path = "app_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "app/dj_tests.rs"]
+mod dj_tests;

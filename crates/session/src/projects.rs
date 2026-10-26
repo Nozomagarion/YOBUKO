@@ -87,6 +87,7 @@ struct Devices {
 /// belongs to Suhina rather than to any one project.
 #[derive(Default)]
 pub struct Projects {
+    pub(crate) dj: crate::dj::Dj,
     /// Host-owned MCP write permissions, never exposed through project commands.
     mcp_write_folders: Vec<PathBuf>,
     /// Defaults to allowing the saved project's folder, preserving attached MCP behaviour.
@@ -502,6 +503,7 @@ impl Projects {
     /// Uses `library` for the browser and the `library.*` commands: the desktop app and the
     /// MCP server give it Suhina's settings folder.
     pub fn set_file_library(&mut self, library: suhina_library::Library) {
+        self.dj = crate::dj::Dj::default();
         self.browser.files = library;
         // The sound map keeps its caches beside the library's indexes.
         self.browser.sound_map = None;
@@ -770,6 +772,7 @@ fn projects_commands() -> impl Iterator<Item = &'static CommandSpec<Projects>> {
         .iter()
         .chain(plugin_commands())
         .chain(crate::library_commands())
+        .chain(crate::dj::commands())
         .chain(crate::sound_map_commands())
         .chain(crate::audio_commands())
         .chain(crate::backup::backup_commands())

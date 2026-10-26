@@ -950,3 +950,14 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 - Project-open audio references stay inside the project folder; external files require explicit relinking.
 
 - Sampler Loop playback uses Fade in and Fade out for its edges, without a separate Loop fade field or a shortened loop.
+
+## Fork-only additions
+
+- Studio/DJ workspace switch, local persistent audio catalog, rbxport tempo/key analysis and
+  rendering a project into the DJ library ([spec](docs/spec/dj-workspace.md)).
+- A guarded fork update channel and source integration candidate tooling; common publication
+  is pending ([distribution](docs/fork-distribution.md)).
+- The existing multiplayer experiment stays local and headless; network sessions remain pending.
+
+Parity: no change. These fork additions cover DJ preparation and distribution, outside the
+production feature chapters measured by scripts/parity.

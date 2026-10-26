@@ -181,14 +181,14 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::General,
         "Updates",
         "Channel",
-        "Which builds an update comes from: the nightly, or in developer mode a pull request's test build",
+        "Updates from the Multiplayer + DJ distribution, or its pull request test builds in developer mode",
         &["update_channel"],
         |cx, r| {
             if cx.settings.updates.test_builds_listed() {
-                let options = [("Nightly", Channel::Nightly), ("Test builds", Channel::TestBuilds)];
+                let options = [("Multiplayer + DJ", Channel::Nightly), ("Test builds", Channel::TestBuilds)];
                 cx.choose(r, &options, |s| &mut s.updates.channel);
             } else {
-                cx.choose(r, &[("Nightly", Channel::Nightly)], |s| &mut s.updates.channel);
+                cx.choose(r, &[("Multiplayer + DJ", Channel::Nightly)], |s| &mut s.updates.channel);
             }
         },
     ),

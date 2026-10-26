@@ -226,7 +226,7 @@ impl Updates {
         };
         fact(line(&mut y), "This build", VERSION);
         let channel_name = match channel {
-            Channel::Nightly => "Nightly (Settings › General › Updates)",
+            Channel::Nightly => "Multiplayer + DJ (Settings › General › Updates)",
             Channel::TestBuilds => "Test builds (Settings › General › Updates)",
         };
         fact(line(&mut y), "Channel", channel_name);
@@ -242,17 +242,17 @@ impl Updates {
             ),
             Phase::Checked { newer: None, builds } => match (builds.first(), self.channel) {
                 (Some(nightly), Channel::Nightly) if nightly.version == VERSION => {
-                    ("This is the newest nightly".into(), None)
+                    ("This is the newest Multiplayer + DJ build".into(), None)
                 }
                 (Some(nightly), Channel::Nightly) => match BuildKind::of(VERSION) {
                     BuildKind::TestBuild { .. } | BuildKind::Local => (
-                        format!("This is not a nightly; the newest nightly is {}", nightly.version),
-                        Some(("Install the nightly", Choice::Install(nightly.clone()))),
+                        format!("The newest Multiplayer + DJ build is {}", nightly.version),
+                        Some(("Install Multiplayer + DJ", Choice::Install(nightly.clone()))),
                     ),
-                    _ => (format!("Up to date (the newest nightly is {})", nightly.version), None),
+                    _ => (format!("Up to date (Multiplayer + DJ {})", nightly.version), None),
                 },
                 (_, Channel::TestBuilds) => (format!("{} test builds for this platform", builds.len()), None),
-                (None, Channel::Nightly) => ("No nightly found".into(), None),
+                (None, Channel::Nightly) => ("No Multiplayer + DJ release published yet".into(), None),
             },
             Phase::Downloading { build, done } => {
                 (format!("Downloading {}: {} of {} MB", build.version, done / 1_000_000, build.size / 1_000_000), None)

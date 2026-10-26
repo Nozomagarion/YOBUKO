@@ -35,6 +35,8 @@ confidence-threshold = 0.93
 
 # Licences outside rule 9's list, each GPLv3-compatible, each for named crates only.
 exceptions = [
+    # rbxport permits any later GPL version; distributed with Suhina under GPLv3.
+    { crate = "rbl-analysis", allow = ["GPL-2.0-or-later"] },
     # Unicode License v3: a permissive licence for Unicode data tables, GPL-compatible. The ICU4X
     # crates (pulled in through url/idna) and unicode-ident (whose other part is MIT OR Apache-2.0)
     # carry it.

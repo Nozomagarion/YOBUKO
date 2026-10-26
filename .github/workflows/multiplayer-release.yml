@@ -1,0 +1,139 @@
+name: Multiplayer DJ distribution candidate
+
+# An explicit version tag builds a candidate; no schedule publishes unreviewed source merges.
+on:
+  push:
+    tags: ['multiplayer-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: multiplayer-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#multiplayer-v}"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{14}\+[0-9a-f]{7}$ ]]; then
+            echo 'Use multiplayer-vMAJOR.MINOR.PATCH-nightly.YYYYMMDDHHMMSS+COMMIT7' >&2
+            exit 1
+          fi
+          if [ "${version##*+}" != "${GITHUB_SHA:0:7}" ]; then exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: macos-universal
+          - os: windows-latest
+            platform: windows-x86_64
+          - os: ubuntu-22.04
+            platform: linux-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      PLATFORM: ${{ matrix.platform }}
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
+        with:
+          components: rustfmt, clippy
+      - name: Linux prerequisites
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb
+      - name: Source and regression gates
+        run: |
+          python3 scripts/fork_sources.py check
+          python3 -m unittest discover -s scripts -p 'test_fork*.py'
+          python3 scripts/docs.py check
+          python3 scripts/settings_guide.py --check
+          cargo fmt --all --check
+          cargo clippy --locked --workspace --all-targets -- -D warnings
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a cargo test --locked --workspace --no-fail-fast
+          else
+            cargo test --locked --workspace --no-fail-fast
+          fi
+          cargo install cargo-deny --version 0.20.2 --locked
+          cargo deny check
+      - name: Set the common distribution version
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          p = pathlib.Path('Cargo.toml')
+          p.write_text(re.sub(r'^version = "[^"]+"', 'version = "' + os.environ['VERSION'] + '"', p.read_text(), count=1, flags=re.M))
+          PY
+          cargo check -p suhina-update
+      - name: Build the three programs
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+            for target in aarch64-apple-darwin x86_64-apple-darwin; do
+              cargo build --release --locked -p suhina -p suhina-cli -p suhina-plugin-host --target "$target"
+            done
+          else
+            cargo build --release --locked -p suhina -p suhina-cli -p suhina-plugin-host
+          fi
+      - name: Package the complete distribution
+        run: |
+          package="dist/suhina-multiplayer-$PLATFORM"
+          mkdir -p "$package"
+          for bin in suhina suhina-cli suhina-plugin-host; do
+            case "$RUNNER_OS" in
+              macOS) lipo -create "target/aarch64-apple-darwin/release/$bin" "target/x86_64-apple-darwin/release/$bin" -output "$package/$bin" ;;
+              Windows) cp "target/release/$bin.exe" "$package/" ;;
+              *) cp "target/release/$bin" "$package/" ;;
+            esac
+          done
+          cp LICENSE NOTICE ATTRIBUTION.md "$package/"
+          cp devices/fm-synth/LICENSE-APACHE crates/stretch/LICENSE-signalsmith.txt "$package/"
+          if [ "$RUNNER_OS" = macOS ]; then
+            bash scripts/macos_app.sh "$package" "$VERSION"
+            python3 scripts/fork_package.py "$package/Suhina.app/Contents/MacOS" "$VERSION"
+            codesign --force --deep --sign - "$package/Suhina.app"
+          else
+            python3 scripts/fork_package.py "$package" "$VERSION"
+          fi
+          cli="$package/suhina-cli"
+          if [ "$RUNNER_OS" = Windows ]; then cli="$cli.exe"; fi
+          "$cli" --version
+          if [ "$RUNNER_OS" = Windows ]; then
+            (cd dist && 7z a "suhina-multiplayer-$PLATFORM.zip" "suhina-multiplayer-$PLATFORM")
+          else
+            tar -czf "dist/suhina-multiplayer-$PLATFORM.tar.gz" -C dist "suhina-multiplayer-$PLATFORM"
+          fi
+          # Corresponding source at the exact tagged commit, including pinned rbxport code.
+          git archive --format=tar.gz --prefix=suhina-source/ HEAD > "dist/source-$PLATFORM.tar.gz"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: multiplayer-distribution-${{ matrix.platform }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          retention-days: 14
+          if-no-files-found: error
+
+  # Upload-only artifacts are intentional. Publishing the shared `multiplayer` channel is a
+  # separate reviewed action after testing installation on Mac and Windows. No write token
+  # is available to any build script, and creating this workflow does not activate a release.

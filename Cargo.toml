@@ -1,5 +1,6 @@
 [workspace]
 resolver = "3"
+exclude = ["third_party/rbxport-analysis"]
 members = ["crates/*", "devices/*", "apps/*"]
 
 [workspace.package]
@@ -16,6 +17,7 @@ suhina-als = { path = "crates/als" }
 suhina-flp = { path = "crates/flp" }
 suhina-project-file = { path = "crates/project-file" }
 suhina-session = { path = "crates/session" }
+suhina-dj = { path = "crates/dj" }
 suhina-collaboration = { path = "crates/collaboration" }
 suhina-automation = { path = "crates/automation" }
 suhina-media = { path = "crates/media" }

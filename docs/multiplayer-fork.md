@@ -63,10 +63,12 @@ No scheduled workflow is added to main. Schedules run on the default branch; wri
 automation there would violate the mirror. Start with manual synchronization. Any later scheduler
 must live elsewhere or use an explicitly chosen different default branch, after reviewing effects.
 
-Before distributing an app with multiplayer UI, audit `crates/update`: the normal upstream binary
-updater must not overwrite a fork build with an official build that lacks its changes. Choose an
-explicit fork channel or disable replacement in fork builds and test that behavior. Source updates
-continue through upstream merges; they are separate from installing upstream binary packages.
+The fork updater now uses a dedicated Multiplayer + DJ channel and rejects packages without
+the matching distribution marker and checksum. Official binaries cannot replace this fork.
+The shared release channel still needs a reviewed publication before friends can use it.
+[Source integration and distribution](fork-distribution.md) gives the source pins, isolated
+candidate script and packaging workflow. [DJ workspace](spec/dj-workspace.md) describes the
+first native DJ library and render bridge; it does not add remote multiplayer.
 
 ## Validation and builds
 
