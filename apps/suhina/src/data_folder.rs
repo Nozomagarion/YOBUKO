@@ -48,7 +48,8 @@ pub fn copy_over(from: &Path, to: &Path) -> Result<usize, String> {
     copy_over_keeping(from, to, &mut Vec::new())
 }
 
-/// [`copy_over`], adding to `links` each link it leaves where it is.
+/// Copies the settings, keys, recent projects and themes from `from` into `to`, as `copy_over`
+/// does, adding to `links` each link it leaves where it is.
 fn copy_over_keeping(from: &Path, to: &Path, links: &mut Vec<PathBuf>) -> Result<usize, String> {
     if from == to {
         return Ok(0);
