@@ -109,8 +109,10 @@ fn a_dropped_clip_replaces_what_it_covers_unless_midi_stacking_is_on() {
 fn dragging_a_clip_down_moves_it_to_the_next_track() {
     let mut harness = arrangement_app();
     let from = harness.get_by_label("Clip Beat B on Drums at bar 17").rect().center_top() + egui::vec2(0.0, 6.0);
-    // Lanes are 48 points high with a line between them.
-    let to = from + egui::vec2(0.0, 49.0);
+    // Move to the next track using the drawn geometry, independent of UI density.
+    let drums = harness.get_by_label("Track Drums").rect();
+    let bass = harness.get_by_label("Track Bass").rect();
+    let to = from + egui::vec2(0.0, bass.top() - drums.top());
     harness.hover_at(from);
     harness.run();
     harness.drag_at(from);
@@ -642,8 +644,9 @@ fn menus_delete_a_track_and_duplicate_a_clip() {
 fn dragging_a_header_moves_the_track() {
     let mut harness = arrangement_app();
     let from = harness.get_by_label("Track Vox").rect().center();
-    // Three lanes up (49 points each), into the upper half of Drums.
-    let to = from - egui::vec2(0.0, 3.0 * 49.0 + 14.0);
+    // Target the upper half of the first track, independent of lane height.
+    let drums = harness.get_by_label("Track Drums").rect();
+    let to = egui::pos2(from.x, drums.top() + drums.height() * 0.2);
     harness.hover_at(from);
     harness.run();
     harness.drag_at(from);
@@ -678,6 +681,14 @@ fn groups_nest_fold_and_take_tracks_from_the_menu_and_by_dragging() {
     harness.run();
     assert_eq!(names(&harness)[..3], ["Group", "Group", "Drums"]);
     assert_eq!(parent_name(&harness, "Drums").as_deref(), Some("Group"));
+
+    // Ancestor bands stay aligned while each deeper level becomes thinner.
+    let groups: Vec<_> = harness.get_all_by_label("Group colour").map(|node| node.rect()).collect();
+    let drums = harness.get_by_label("Drums colour").rect();
+    assert_eq!(groups.len(), 2);
+    assert_eq!((groups[0].width(), groups[1].width(), drums.width()), (6.0, 4.0, 3.0));
+    assert_eq!(groups[1].left() - groups[0].left(), 8.0);
+    assert_eq!(drums.left() - groups[1].left(), 6.0);
 
     // Keys into the outer group from its menu.
     harness.get_by_label("Track Keys").click_secondary();

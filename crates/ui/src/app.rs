@@ -7,30 +7,36 @@
 //! project and the engine's monitor to draw them.
 
 mod actions;
+mod application_bar;
 mod audio_settings;
+mod background;
 mod browser_panel;
 pub mod closing_dialog;
 mod control_bar;
 mod detail_area;
 mod drops;
+pub use drops::is_theme_package;
 pub mod export_dialog;
 mod exports;
 pub mod folder_drop_dialog;
 mod keys;
 pub mod loading_dialog;
 mod menu_bar;
+pub mod menus;
 pub mod missing_files;
 mod plugin_host;
 pub mod project_dialog;
 pub mod splash;
 pub mod start_panel;
 mod tabs;
+mod themed_toolbar;
 mod typing_keys;
 pub mod updates;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use crate::kit::surface::Backgrounds;
 use egui::{Align2, Id, Key, Pos2, Rect, Sense, Ui, Vec2};
 use serde_json::{Value, json};
 use suhina_engine::model::{ClipId, TrackId};
@@ -305,6 +311,7 @@ struct AutoArm {
 }
 
 pub struct App {
+    background: background::Background,
     /// When the level meters last showed something new (`ui.input` time).
     meters_moved_at: f64,
     projects: Projects,
@@ -401,6 +408,8 @@ pub struct App {
     device_picks: Vec<(TrackId, detail_view::DeviceAt)>,
     /// Actions picked outside the window (the macOS menu bar), run at the start of the next frame.
     queued: Vec<String>,
+    /// Items picked from the system's menu bar, run with the next frame (`run_menu_item`).
+    queued_menu_items: Vec<String>,
     /// A device removal awaiting its undo or redo: the track, the index it left, how long the
     /// chain was, and where the selection pointed before it followed the removal. Window state.
     pending_device_remove: Option<(TrackId, usize, usize, usize)>,
@@ -435,6 +444,12 @@ pub struct App {
     /// The app's own window (`set_editor_owner`): a press on its controls takes the keyboard
     /// back from an embedded plug-in editor (`kit::keyboard`).
     window: Option<u64>,
+    /// The height of the system's title bar drawn over the top of the window (macOS, when the
+    /// window is see-through), kept free and given a background; 0 when it is outside the window.
+    title_bar: f32,
+    /// The radius of the window's rounded corners, which a see-through window does not clip to:
+    /// the bars at the top and bottom round theirs to match. 0 when the system clips them.
+    window_corner: u8,
     /// The detail area was closed as an editor (the splitter dragged down, the toolbar's ×, View ›
     /// Hide editor): selecting a clip opens it again. And the clip shown last frame, to tell when
     /// another is selected (`docs/spec/ui-clip-editor.md` › Least height and closing).
@@ -487,6 +502,14 @@ pub struct App {
     export_gather: Option<(suhina_session::ProjectId, ExportJob, std::time::Instant, String)>,
     /// Help › About Suhina is open.
     about_open: bool,
+    /// A theme package whose theme is here already, by its file and the theme's name, waiting
+    /// for the answer: replace it or bring in a copy.
+    theme_import: Option<(PathBuf, String)>,
+    /// A folder whose files move with it (the settings, the themes), chosen and waiting for the
+    /// answer to "move them there?": the new folder, or `None` for the default.
+    folder_move: Option<(PickField, Option<PathBuf>)>,
+    /// The themes moved from one folder to another, for the app to move their files.
+    theme_move: Option<(PathBuf, PathBuf)>,
     /// The update check, Help › Check for updates… and the start panel's update line.
     updates: crate::app::updates::Updates,
     /// Restart now was pressed: the window starts the updated build as it closes.
@@ -496,6 +519,10 @@ pub struct App {
     saved_path: Option<PathBuf>,
     /// Where projects are saved and templates kept when the settings leave them empty.
     default_folders: (PathBuf, PathBuf),
+    /// The themes folder used while Settings › Theme › Themes folder is empty.
+    themes_default_folder: PathBuf,
+    /// Suhina's default data folder, shown while Settings folder is empty.
+    data_default_folder: PathBuf,
     /// The NAM models' and IR folders while the settings leave them empty.
     nam_default_folders: (PathBuf, PathBuf),
     /// The NAM folders' files, read again when either folder's writes change
@@ -568,6 +595,7 @@ impl App {
         projects.read_local_audio(true);
         Self {
             projects,
+            background: background::Background::default(),
             shown_project: None,
             stashes: HashMap::new(),
             open_prompt: None,
@@ -613,6 +641,7 @@ impl App {
             device_focus: false,
             device_picks: Vec::new(),
             queued: Vec::new(),
+            queued_menu_items: Vec::new(),
             pending_device_remove: None,
             detail_open: true,
             detail_height: DETAIL_HEIGHT,
@@ -627,6 +656,8 @@ impl App {
             detail_max: false,
             detail_drag: None,
             window: None,
+            title_bar: 0.0,
+            window_corner: 0,
             editor_closed: false,
             last_clip: None,
             piano_grid: crate::detail::piano_roll_grid::PianoGrid::default(),
@@ -653,11 +684,16 @@ impl App {
             export_project: None,
             export_gather: None,
             about_open: false,
+            theme_import: None,
+            folder_move: None,
+            theme_move: None,
             updates: crate::app::updates::Updates::default(),
             restart: false,
             new_request: None,
             saved_path: None,
             default_folders: (PathBuf::from("Projects"), PathBuf::from("Templates")),
+            themes_default_folder: PathBuf::from("themes"),
+            data_default_folder: PathBuf::new(),
             nam_default_folders: (PathBuf::from("NAM models"), PathBuf::from("IRs")),
             nam_cache: NamCache::default(),
             window_title: String::new(),
@@ -814,6 +850,13 @@ impl App {
         self.projects.set_editor_owner(owner);
     }
 
+    /// The height of the system's title bar over the top of the window (0 when it is not in it)
+    /// and the radius of the window's corners, when the window does not clip to them.
+    pub fn set_window_frame(&mut self, title_bar: f32, corner: u8) {
+        self.title_bar = title_bar.max(0.0);
+        self.window_corner = corner;
+    }
+
     /// The open projects.
     pub fn projects(&self) -> &Projects {
         &self.projects
@@ -839,6 +882,12 @@ impl App {
     /// Asks to open `path`, as a dropped file does: at once when nothing is open or the
     /// settings say how, otherwise after the user chose in the window.
     pub fn request_open(&mut self, path: PathBuf) {
+        // A theme package opened with Suhina (a double-click on it) is brought in, not opened.
+        if is_theme_package(&path) {
+            self.status = Status::Hint(format!("Bringing in the theme {}", path.display()));
+            self.themes.import(path);
+            return;
+        }
         if self.projects.is_empty() {
             self.open_request = Some((path, OpenAs::NewTab));
             return;
@@ -1145,9 +1194,12 @@ impl App {
     pub fn set_settings(&mut self, ctx: &egui::Context, settings: Settings) {
         self.projects.set_backup_settings(settings.backup, settings.backup_clean_up);
         motion::set_enabled(ctx, settings.animations);
-        self.arrangement.headers_left = settings.track_headers == Side::Left;
+        self.arrangement.headers_left = headers_left(settings.track_headers);
         self.arrangement.returns_hidden = settings.view.returns_hidden;
         self.arrangement.waveform_zoom = settings.view.waveform_zoom as f32 / 100.0;
+        self.arrangement.waveform_appearance = settings.view.waveform;
+        self.arrangement.audio_colour_strength = settings.view.audio_colour_strength;
+        self.arrangement.header_colour_strength = settings.view.header_colour_strength;
         if settings.map_window {
             self.sample_map.set_window(true, &mut self.browser);
         }
@@ -1159,11 +1211,30 @@ impl App {
     /// name (the built-in one when there is no such file).
     pub fn set_themes(&mut self, ctx: &egui::Context, files: Vec<ThemeEntry>, folder: Option<String>) {
         self.themes.set(files, folder);
+        // A variant in use whose file went: its theme's own values take its place.
+        if self.themes.get(&self.settings.theme).is_none()
+            && let Some((base, _)) = self.settings.theme.split_once('@')
+            && self.themes.get(base).is_some()
+        {
+            self.settings.theme = base.to_owned();
+            self.settings_changed = true;
+        }
         theme::set_palette(ctx, self.themes.palette(&self.settings.theme));
     }
 
     /// Draws with the theme `id` from now on and saves that in the settings, if there is such a
     /// theme.
+    /// Asks whether the theme package at `path`, whose theme `name` is here already, replaces it
+    /// or comes in as a copy.
+    /// The themes folder that changed after the person agreed to move them: from and to.
+    pub fn take_theme_move(&mut self) -> Option<(PathBuf, PathBuf)> {
+        self.theme_move.take()
+    }
+
+    pub fn ask_theme_import(&mut self, path: PathBuf, name: String) {
+        self.theme_import = Some((path, name));
+    }
+
     pub fn use_theme(&mut self, ctx: &egui::Context, id: &str) {
         if self.themes.get(id).is_some() {
             self.settings.theme = id.to_string();
@@ -1277,6 +1348,31 @@ impl App {
     }
 
     /// The folder templates are kept in: the setting, or the default.
+    /// The themes folder used while Settings › Theme › Themes folder is empty.
+    pub fn set_default_themes_folder(&mut self, folder: PathBuf) {
+        self.themes_default_folder = folder;
+    }
+
+    /// Suhina's default data folder, shown while Settings › General › Settings folder is empty.
+    pub fn set_default_data_folder(&mut self, folder: PathBuf) {
+        self.data_default_folder = folder;
+    }
+
+    /// Settings › General › Settings folder back to `folder` after a move to another one failed
+    /// or was refused, so the field shows where the data is and no later change of settings
+    /// tries the move again.
+    pub fn revert_data_folder(&mut self, folder: String) {
+        self.settings.data_folder = folder;
+    }
+
+    /// Where themes are kept: Settings › Theme › Themes folder, or the default.
+    pub fn themes_folder(&self) -> PathBuf {
+        match self.settings.themes_folder.trim() {
+            "" => self.themes_default_folder.clone(),
+            folder => PathBuf::from(folder),
+        }
+    }
+
     pub fn templates_folder(&self) -> PathBuf {
         match self.settings.templates_folder.trim() {
             "" => self.default_folders.1.clone(),
@@ -1447,6 +1543,11 @@ impl App {
         let start = match field {
             PickField::ProjectsFolder | PickField::OpenProject => Some(self.projects_folder()),
             PickField::NamModelsFolder => Some(self.nam_models_folder()),
+            PickField::ThemesFolder => Some(self.themes_folder()),
+            PickField::DataFolder => Some(match self.settings.data_folder.trim() {
+                "" => self.data_default_folder.clone(),
+                folder => PathBuf::from(folder),
+            }),
             PickField::IrFolder => Some(self.ir_folder()),
             PickField::TemplatesFolder | PickField::StartTemplate => Some(self.templates_folder()),
             PickField::SaveFolder => self.save_prompt.as_ref().and_then(|p| folder_of(&p.folder)),
@@ -1457,7 +1558,10 @@ impl App {
                 .map(|d| d.path.trim().to_string())
                 .filter(|text| !text.is_empty())
                 .and_then(|text| Path::new(&text).parent().map(Path::to_path_buf)),
-            PickField::BrowserFolder | PickField::McpWriteFolder | PickField::CopyToFolder => None,
+            PickField::BrowserFolder
+            | PickField::McpWriteFolder
+            | PickField::CopyToFolder
+            | PickField::BackgroundImage => None,
         };
         self.pick_request = Some(PickRequest { field, start });
     }
@@ -1474,12 +1578,18 @@ impl App {
         let text = path.display().to_string();
         match field {
             PickField::ProjectsFolder => self.settings.projects_folder = text,
+            PickField::BackgroundImage => {
+                self.settings.background_image = text;
+                self.background.retry_failed();
+            }
             PickField::McpWriteFolder => {
                 if !self.settings.mcp_write_folders.contains(&text) {
                     self.settings.mcp_write_folders.push(text);
                 }
             }
             PickField::NamModelsFolder => self.settings.nam_models_folder = text,
+            // A folder whose files move with it asks first.
+            PickField::ThemesFolder | PickField::DataFolder => self.folder_move = Some((field, Some(path))),
             PickField::IrFolder => self.settings.irs_folder = text,
             PickField::TemplatesFolder => self.settings.templates_folder = text,
             PickField::StartTemplate => self.settings.start_template = text,
@@ -1747,7 +1857,9 @@ impl App {
                         .order(egui::Order::Foreground)
                         .fixed_pos(rect.min)
                         .show(ui.ctx(), |ui| {
-                            ui.painter().rect_filled(rect, 0.0, spot.fill);
+                            // An opaque back in the name's own colour, so the name the view drew
+                            // under the field does not show through it.
+                            let back = ui.painter().add(egui::Shape::Noop);
                             let field_id = egui::Id::new("inline-rename-field");
                             let field = ui.put(
                                 rect,
@@ -1760,6 +1872,8 @@ impl App {
                                     .desired_width(rect.width()),
                             );
                             field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, what));
+                            let covered = field.rect.union(rect);
+                            ui.painter().set(back, egui::Shape::rect_filled(covered, 2.0, spot.fill.to_opaque()));
                             if !focused {
                                 field.request_focus();
                                 if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), field_id) {
@@ -1809,6 +1923,47 @@ impl App {
         {
             self.updates_wanted(ui.ctx(), wanted);
         }
+        if let Some((field, to)) = self.folder_move.clone() {
+            let what =
+                if field == PickField::DataFolder { "settings, keys, recent projects and themes" } else { "themes" };
+            let target = to.clone().unwrap_or_else(|| {
+                if field == PickField::DataFolder {
+                    self.data_default_folder.clone()
+                } else {
+                    self.themes_default_folder.clone()
+                }
+            });
+            match project_dialog::show_folder_move(ui, window, what, &target.display().to_string()) {
+                Some(true) => {
+                    let text = to.map_or_else(String::new, |p| p.display().to_string());
+                    if field == PickField::ThemesFolder {
+                        let from = self.themes_folder();
+                        self.settings.themes_folder = text;
+                        self.theme_move = Some((from, self.themes_folder()));
+                    } else {
+                        self.settings.data_folder = text;
+                    }
+                    self.settings_changed = true;
+                    self.folder_move = None;
+                }
+                Some(false) => self.folder_move = None,
+                None => {}
+            }
+        }
+        if let Some((path, name)) = self.theme_import.clone() {
+            match project_dialog::show_theme_import(ui, window, &name) {
+                Some(project_dialog::ImportChoice::Replace) => {
+                    self.themes.import_again(path, true);
+                    self.theme_import = None;
+                }
+                Some(project_dialog::ImportChoice::Copy) => {
+                    self.themes.import_again(path, false);
+                    self.theme_import = None;
+                }
+                Some(project_dialog::ImportChoice::Cancel) => self.theme_import = None,
+                None => {}
+            }
+        }
         if self.about_open {
             match project_dialog::show_about(ui, window) {
                 Some(AboutChoice::Copy) => {
@@ -1825,6 +1980,8 @@ impl App {
             || self.unsaved_prompt.is_some()
             || !self.recovery.is_empty()
             || self.about_open
+            || self.theme_import.is_some()
+            || self.folder_move.is_some()
             || self.settings_open;
         if !other_dialog && let Some((connection, client)) = self.agent_asks.first().cloned() {
             match project_dialog::show_agent(ui, window, &client) {
@@ -2028,6 +2185,13 @@ impl App {
         self.status = status;
     }
 
+    /// Takes `error` off the status bar if it is still what it shows.
+    pub fn clear_error(&mut self, error: &str) {
+        if matches!(&self.status, Status::Error(shown) if shown == error) {
+            self.status = Status::Hint(String::new());
+        }
+    }
+
     /// The devices picked now: the picks on the selected device's track, or that device alone.
     fn device_picks(&self) -> Vec<(TrackId, detail_view::DeviceAt)> {
         let Some(primary) = self.selected_device.clone() else { return Vec::new() };
@@ -2134,6 +2298,7 @@ impl App {
         };
         // A critical operation is backed up first, when the settings say so.
         self.projects.back_up_before(action.id);
+        let mut no_input = false;
         let Ok(session) = self.projects.session_mut(None) else { return };
         // An audio track armed while it hears no input gets the device's first input (a stereo
         // pair where there are two channels), so Record has something to record and stays on
@@ -2153,6 +2318,9 @@ impl App {
             };
             if let Some(input) = input {
                 let _ = session.execute("track.setAudioInput", &json!({ "track": track.0, "input": input }));
+            } else {
+                // Armed with nothing to hear: say so, rather than a button that seems not to work.
+                no_input = true;
             }
         }
         suhina_plugins::trace!("action {} {}", action.id, action.params);
@@ -2160,11 +2328,12 @@ impl App {
         // when they were the last (#918). Known before the command, while they are there.
         let next_track = match action.id {
             "track.delete" | "track.cut" => {
-                let removed: Vec<TrackId> = params
+                let removed: Vec<TrackId> = action
+                    .params
                     .get("tracks")
                     .and_then(serde_json::Value::as_array)
                     .map(|t| t.iter().collect::<Vec<_>>())
-                    .unwrap_or_else(|| params.get("track").into_iter().collect())
+                    .unwrap_or_else(|| action.params.get("track").into_iter().collect())
                     .into_iter()
                     .filter_map(|t| t.as_u64().and_then(|t| u32::try_from(t).ok()).map(TrackId))
                     .collect();
@@ -2173,6 +2342,13 @@ impl App {
             _ => None,
         };
         match session.execute(action.id, params) {
+            Ok(_) if no_input => {
+                self.revision += 1;
+                self.status = Status::Hint(
+                    "Armed, but the audio device has no input: choose an input device in Settings › Audio, then pick it under Audio From"
+                        .into(),
+                );
+            }
             Ok(result) => {
                 // What is copied pastes into every open tab (#919).
                 if Projects::copies(action.id) {
@@ -2299,6 +2475,44 @@ impl App {
 
     /// Draws the window into `ui` and runs what the user asked for.
     pub fn ui(&mut self, ui: &mut Ui) {
+        // Following the theme, the headers move when the theme does.
+        if self.settings.track_headers.is_none() {
+            self.arrangement.headers_left = headers_left(None);
+        }
+        // The frame's placed controls, for anchors between them (`--suhina-anchor-*`).
+        let _capture = crate::kit::control_layout::Capture::begin(ui.ctx());
+        self.ui_content(ui);
+    }
+
+    fn ui_content(&mut self, ui: &mut Ui) {
+        application_bar::resize_edges(ui);
+        if let Some(theme) = self.themes.get(&self.settings.theme) {
+            crate::kit::skin::configure(&theme.skin);
+        } else {
+            crate::kit::skin::configure(&crate::kit::skin::Skin::default());
+        }
+        let _css_frame = crate::kit::native_css::frame_with_motion(
+            ui,
+            self.settings.animations && self.settings.theme != "high-contrast",
+        );
+        let _window_style = crate::kit::style_class::enter("window");
+        let mut styled_ui = crate::kit::style_class::ui(ui);
+        let ui = &mut *styled_ui;
+        if let Err(error) = self.background.update(ui, &self.settings, self.themes.palette(&self.settings.theme)) {
+            self.status = Status::Error(error);
+        }
+        let liquid =
+            self.themes.get(&self.settings.theme).and_then(|theme| theme.liquid).unwrap_or(self.settings.view.liquid);
+        crate::kit::liquid::configure(ui.ctx(), liquid);
+        crate::kit::surface::begin_frame(ui.ctx());
+        crate::kit::liquid::begin_frame(
+            ui.ctx(),
+            self.themes.get(&self.settings.theme).map(|theme| theme.gradients.clone()).unwrap_or_default(),
+        );
+        crate::kit::liquid::set_effects_allowed(
+            ui.ctx(),
+            self.settings.animations && self.settings.theme != "high-contrast",
+        );
         self.frame_trace.start();
         self.frame_trace.causes(ui.ctx());
         // Closing: the dialog alone, so nothing of the window without its projects shows behind.
@@ -2324,6 +2538,10 @@ impl App {
         self.arrangement.time_select_ctrl = self.settings.view.time_select_ctrl;
         self.arrangement.name_bar_moves = !self.settings.view.clip_halves;
         self.arrangement.grid_in_clips = self.settings.view.grid_in_clips;
+        self.arrangement.set_size_settings(self.settings.view.track_sizes);
+        if let Some((_, _, timeline)) = &self.timeline {
+            self.arrangement.apply_size_defaults(timeline);
+        }
         self.arrangement.stretch_alt = self.settings.view.stretch_alt;
         self.arrangement.zoom_one = self.settings.view.alt_wheel_one;
         // The Arrangement's toolbar (#991): off, its Select tool; the view has the focus while the
@@ -2358,16 +2576,25 @@ impl App {
         suhina_plugins::trace::timed("sample map analysis poll", || self.projects.poll_sound_map());
         self.frame_trace.mark("sample map analysis");
         let dropped = self.dropped_files(ui);
-        keys_for_shortcuts(ui.ctx());
-        self.launch_keys(ui, &mut actions);
+        let placing = crate::kit::control_layout::editing(ui.ctx());
+        if !placing {
+            keys_for_shortcuts(ui.ctx());
+            self.launch_keys(ui, &mut actions);
+        }
         // A menu bar item chosen while a dialog asks something is passed over, as its key is.
         let queued = std::mem::take(&mut self.queued);
+        let menu_items = std::mem::take(&mut self.queued_menu_items);
         if !self.dialog_holds_actions() {
             for id in queued {
                 self.do_action(&id, &mut actions);
             }
+            for id in menu_items {
+                self.run_menu_item(&id, ui.ctx(), &mut actions);
+            }
         }
-        self.shortcuts(ui, &mut actions);
+        if !placing {
+            self.shortcuts(ui, &mut actions);
+        }
         self.apply_zoom(ui.ctx());
         self.frame_trace.mark("keys");
         self.sample_map_window(ui.ctx(), &mut actions);
@@ -2439,26 +2666,82 @@ impl App {
         }
         self.frame_trace.mark("plug-in requests");
 
-        egui::Panel::top("menu-bar")
-            .exact_size(theme::MENU_BAR)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()).inner_margin(egui::Margin::symmetric(4, 0)))
-            .show(ui, |ui| self.menu_bar(ui, &mut actions));
+        // Under the system's title bar: the window's background, as behind the bars below it.
+        // Full screen hides the title bar, and the room with it.
+        let full_screen = ui.ctx().input(|i| i.viewport().fullscreen.unwrap_or(false));
+        let corner = if full_screen { 0 } else { self.window_corner };
+        if self.title_bar > 0.0 && !full_screen {
+            egui::Panel::top("title-bar").exact_size(self.title_bar).frame(egui::Frame::NONE).show(ui, |ui| {
+                let top = egui::CornerRadius { nw: corner, ne: corner, sw: 0, se: 0 };
+                ui.painter().fill_background(ui.max_rect(), top, theme::panel_background());
+            });
+        }
+        let project_info = self
+            .projects
+            .active()
+            .map(|id| {
+                let name = self.projects.name(id).unwrap_or("Untitled");
+                let dirty = self.projects.get(id).is_some_and(Session::has_unsaved_changes);
+                format!("{name}{}", if dirty { " •" } else { "" })
+            })
+            .unwrap_or_default();
+        let timing = self
+            .session()
+            .map(|session| {
+                let transport = &session.project().transport;
+                format!(
+                    "{:.1} BPM · {}/{}",
+                    transport.tempo_bpm, transport.time_signature.numerator, transport.time_signature.denominator
+                )
+            })
+            .unwrap_or_default();
+        // The application bar is the window's title bar where Suhina draws its own (Windows); where
+        // the system draws one, it would be a second.
+        if cfg!(target_os = "windows") {
+            with_bar_line(ui, "application-bar", |ui| {
+                egui::Panel::top("application-bar")
+                    .exact_size(28.0)
+                    .frame(egui::Frame::NONE)
+                    .show(ui, |ui| application_bar::show(ui, self.settings.view, &project_info, &timing))
+            });
+        }
+        // The window's own menu bar, unless Settings turns it off (by default on macOS, whose bar
+        // at the top of the screen has the same menus).
+        if self.settings.view.menu_bar {
+            with_bar_line(ui, "menu-bar", |ui| {
+                egui::Panel::top("menu-bar")
+                    .exact_size(theme::MENU_BAR)
+                    .frame(egui::Frame::NONE.inner_margin(egui::Margin::symmetric(4, 0)))
+                    .show(ui, |ui| {
+                        let _style_class = crate::kit::style_class::enter("menu-bar");
+                        let bar = ui.max_rect().expand2(Vec2::new(4.0, 0.0));
+                        ui.painter().fill_background(bar, 0.0, theme::panel_background());
+                        crate::kit::native_css::background(ui.painter(), bar);
+                        self.menu_bar(ui, &mut actions)
+                    })
+            });
+        }
         self.frame_trace.mark("menu bar");
         if self.projects.len() >= 2 {
-            egui::Panel::top("tabs")
-                .exact_size(TABS)
-                .frame(egui::Frame::NONE.fill(theme::window_background()))
-                .show(ui, |ui| self.tab_row(ui, &mut actions));
+            egui::Panel::top("tabs").exact_size(TABS).frame(egui::Frame::NONE).show(ui, |ui| {
+                ui.painter().fill_background(ui.max_rect(), 0.0, theme::window_background());
+                self.tab_row(ui, &mut actions)
+            });
         }
-        egui::Panel::top("control-bar")
-            .exact_size(theme::CONTROL_BAR)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()))
-            .show(ui, |ui| self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions));
+        with_bar_line(ui, "toolbar", |ui| {
+            egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+                let _style_class = crate::kit::style_class::enter("toolbar");
+                ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
+                crate::kit::native_css::background(ui.painter(), ui.max_rect());
+                self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions)
+            })
+        });
         self.frame_trace.mark("control bar");
-        egui::Panel::bottom("status-bar")
-            .exact_size(theme::STATUS_BAR)
-            .frame(egui::Frame::NONE.fill(theme::panel_background()))
-            .show(ui, |ui| self.status_bar(ui, grid.as_ref()));
+        egui::Panel::bottom("status-bar").exact_size(theme::STATUS_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+            let bottom = egui::CornerRadius { nw: 0, ne: 0, sw: corner, se: corner };
+            ui.painter().fill_background(ui.max_rect(), bottom, theme::panel_background());
+            self.status_bar(ui, grid.as_ref())
+        });
         self.frame_trace.mark("bars");
         // Samples and MIDI files from the system: dropped this frame, or still over the window.
         let system = match (self.browser.drag.is_some(), dropped.is_empty()) {
@@ -2466,7 +2749,17 @@ impl App {
             (false, false) => Some((dropped, true)),
             (false, true) => Some((self.hovered_files(ui), false)).filter(|(items, _)| !items.is_empty()),
         };
-        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(theme::border())).show(ui, |ui| {
+        // A private image is already painted underneath the workspace. Keep its
+        // transparent regions visible instead of covering them with separator ink.
+        let workspace_base = if crate::kit::liquid::background_image(ui.ctx()).is_some() {
+            egui::Color32::TRANSPARENT
+        } else {
+            // `#workspace { border-color }` is this line's own colour.
+            let _workspace = crate::kit::style_class::enter_named("workspace", "workspace");
+            theme::border()
+        };
+        egui::CentralPanel::default().frame(egui::Frame::NONE.fill(workspace_base)).show(ui, |ui| {
+            let _workspace_style = crate::kit::style_class::enter_named("workspace", "workspace");
             let area = ui.available_rect_before_wrap();
             // A 1 px gap shows the line colour between the bars and the view.
             let inner = Rect::from_min_max(area.min + Vec2::new(0.0, 1.0), area.max - Vec2::new(0.0, 1.0));
@@ -2493,8 +2786,27 @@ impl App {
             // It slides in and out from its side, with animations on (#708).
             self.browser_part = motion::toward(ui.ctx(), Id::new("browser-shown"), browser_wanted, BROWSER_SLIDE);
             let browser_shown = self.browser_part > 0.001;
+            let stacked = self.settings.device_layout == DeviceLayout::Stack;
+            let css_workspace = crate::kit::native_css::workspace(
+                inner.size(),
+                browser_shown.then_some(self.settings.browser_width as f32),
+                (grid.is_some() && self.detail_open)
+                    .then_some((stacked, if stacked { self.detail_width } else { self.detail_height })),
+            )
+            .map(|layout| layout.translated(inner.min.to_vec2()));
             self.frame_trace.mark("bars");
-            let inner = if browser_shown && !full_width { self.browser_panel(ui, inner) } else { inner };
+            let inner = if let Some(layout) = &css_workspace {
+                if let Some(panel) = layout.browser {
+                    over_view(ui, "panel-browser", panel, layout.main, |ui| {
+                        self.browser_panel(ui, inner, Some((panel, layout.main)));
+                    });
+                }
+                inner
+            } else if browser_shown && !full_width {
+                self.browser_panel(ui, inner, None)
+            } else {
+                inner
+            };
             self.frame_trace.mark("browser");
             let mut view_area = inner;
             self.detail_drop = None;
@@ -2522,8 +2834,18 @@ impl App {
             }
             self.last_clip = shown_clip;
             self.expanded_panel = None;
-            let inner = if grid.is_some() && self.detail_open {
-                self.detail_area(ui, inner, &mut actions)
+            let inner = if grid.is_some()
+                && self.detail_open
+                && css_workspace.as_ref().is_none_or(|layout| layout.detail.is_some())
+            {
+                let geometry =
+                    css_workspace.as_ref().and_then(|layout| layout.detail.map(|detail| (layout.main, detail)));
+                match geometry {
+                    Some((main, detail)) => over_view(ui, "panel-detail", detail, main, |ui| {
+                        self.detail_area(ui, inner, &mut actions, geometry)
+                    }),
+                    None => self.detail_area(ui, inner, &mut actions, geometry),
+                }
             } else {
                 self.place_editors(&[]);
                 // A hidden piano roll does not keep the keyboard, nor the view to one track, and
@@ -2532,15 +2854,17 @@ impl App {
                 actions.extend(self.piano_roll.stop_audition());
                 self.arrangement.focus = None;
                 // In a row under the view, the splitter stays along the bottom, to drag it open.
-                if grid.is_some() && self.settings.device_layout != DeviceLayout::Stack {
+                if let Some(layout) = &css_workspace {
+                    layout.main
+                } else if grid.is_some() && self.settings.device_layout != DeviceLayout::Stack {
                     self.collapsed_splitter(ui, inner)
                 } else {
                     inner
                 }
             };
             self.frame_trace.mark("detail");
-            let inner = if browser_shown && full_width {
-                let rest = self.browser_panel(ui, inner);
+            let inner = if browser_shown && full_width && css_workspace.is_none() {
+                let rest = self.browser_panel(ui, inner, None);
                 view_area = Rect::from_min_max(
                     Pos2::new(rest.left(), view_area.top()),
                     Pos2::new(rest.right(), view_area.bottom()),
@@ -2549,7 +2873,11 @@ impl App {
             } else {
                 inner
             };
+            if css_workspace.is_some() {
+                view_area = inner;
+            }
             self.frame_trace.mark("browser");
+            let _main_style = crate::kit::style_class::enter_named("workspace-panel", "panel-main");
             // A drag from the browser, or files from the system: the views say what is under the
             // pointer.
             let dragged = self.browser.drag.as_ref().or(system.as_ref().map(|(items, _)| items));
@@ -2593,7 +2921,10 @@ impl App {
             self.arrangement.meters = meters;
             // The large sample map takes the main area, except while something is dragged, so
             // the drop can land on a track.
-            if self.sample_map.view.large && dragged.is_none() {
+            let styled_ui = crate::kit::style_class::ui(ui);
+            let mut styled_ui = if css_workspace.is_some() { styled_ui.clipped_to(inner) } else { styled_ui };
+            let ui = &mut *styled_ui;
+            if self.sample_map.view.large && dragged.is_none() && inner.is_positive() {
                 let (panel, browser, projects, settings) =
                     (&mut self.sample_map, &mut self.browser, &mut self.projects, &mut self.settings);
                 if panel.show(ui, inner, browser, projects, settings, self.revision) {
@@ -2608,7 +2939,7 @@ impl App {
                     .on_hover_text("Close the sample map (Esc)");
                 let fill =
                     motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-                over.rect_filled(close, 0.0, fill);
+                over.fill_background(close, 0.0, fill);
                 let ink = theme::text_primary();
                 for (from, to) in
                     [(Vec2::new(-4.0, -4.0), Vec2::new(4.0, 4.0)), (Vec2::new(-4.0, 4.0), Vec2::new(4.0, -4.0))]
@@ -2749,6 +3080,7 @@ impl App {
                             self.arrangement.automation.revision = self.revision;
                             let mut timeline = timeline;
                             timeline.follow_automation(session.project());
+                            timeline.recording_spans = session.arrangement_recording_spans();
                             timeline.midi_ports = self.projects.midi_ports().to_vec();
                             // What ARA plug-ins found in the audio clips, as it is now (#720).
                             timeline.ara_notes = timeline
@@ -2822,9 +3154,10 @@ impl App {
                             self.devices_asked();
                             self.timeline = Some((self.revision, self.arrangement.folds.clone(), timeline));
                             // The headers can be moved from the view itself; that is the setting too.
-                            let side = if self.arrangement.headers_left { Side::Left } else { Side::Right };
-                            if side != self.settings.track_headers {
-                                self.settings.track_headers = side;
+                            // Moved there by hand: the user's side from now on, not the theme's.
+                            if self.arrangement.headers_left != headers_left(self.settings.track_headers) {
+                                let side = if self.arrangement.headers_left { Side::Left } else { Side::Right };
+                                self.settings.track_headers = Some(side);
                                 self.settings_changed = true;
                             }
                             if self.arrangement.returns_hidden != self.settings.view.returns_hidden {
@@ -2857,6 +3190,7 @@ impl App {
         suhina_plugins::trace::timed("drop poll", || self.poll_drop(ui.ctx()));
         self.frame_trace.mark("drags");
 
+        crate::kit::liquid::finish_surfaces(ui.ctx());
         // Actions collected above wait for a dialog that asks something, as the keys and the menu
         // bar's queue do: they are dropped while one is open, and once an action opens one.
         let actions_held = self.dialog_holds_actions();
@@ -2864,7 +3198,10 @@ impl App {
         self.project_dialogs(ui, window);
         if self.settings_open {
             // Embedded plug-in editors are windows of their own and would cover the dialog.
-            self.place_editors(&[]);
+            if !self.page.window {
+                self.place_editors(&[]);
+                crate::kit::liquid::prepare(ui.ctx());
+            }
             self.settings_dialog(ui, window);
         }
         self.update_title(ui.ctx());
@@ -3022,14 +3359,14 @@ fn drag_label(ctx: &egui::Context, pointer: Pos2, text: &str, lands: bool) {
     let font = theme::ui_font(theme::TEXT_SMALL);
     let galley = widgets::fitted(&painter, text, font, theme::text_primary(), 280.0);
     let rect = Rect::from_min_size(pointer + Vec2::new(14.0, 10.0), galley.size() + Vec2::new(PAD * 2.0, 6.0));
-    painter.rect_filled(rect, 0.0, theme::control_active());
+    painter.fill_background(rect, 0.0, theme::control_active());
     painter.rect_stroke(
         rect,
         0.0,
         theme::hairline(if lands { theme::accent() } else { theme::border_strong() }),
         egui::StrokeKind::Inside,
     );
-    painter.galley(rect.min + Vec2::new(PAD, 3.0), galley, theme::text_primary());
+    widgets::paint_text(&painter, rect.min + Vec2::new(PAD, 3.0), galley, theme::text_primary());
     ctx.request_repaint();
 }
 
@@ -3043,11 +3380,55 @@ pub(crate) const NAME_RECT_TRACK: &str = "track-name-rect";
 /// Where a view drew a name last frame, for a rename in place: its place, the pass it was drawn
 /// in, and the colours behind and of the text, so the field reads as the name itself (#916).
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct NameSpot {
+pub struct NameSpot {
     pub rect: Rect,
     pub pass: u64,
     pub fill: egui::Color32,
     pub text: egui::Color32,
+}
+
+/// Shows a bar with `show`, its separator line in the bar's own `border-color` (`.toolbar {
+/// border-color }`), else the theme's border.
+fn with_bar_line<R>(ui: &mut Ui, class: &str, show: impl FnOnce(&mut Ui) -> R) -> R {
+    let line = {
+        let _bar = crate::kit::style_class::enter(class);
+        let own = crate::kit::style_class::computed();
+        // A bar with no line (`border-width: 0`, or a transparent border) fills the line's pixel
+        // with its own background, so no gap shows the window behind it.
+        let lineless = own.as_ref().is_some_and(|c| {
+            (c.authored.border_width && c.border_width <= 0.0) || (c.authored.border && c.border.a() == 0)
+        });
+        if lineless {
+            own.as_ref().filter(|c| c.authored.background).map_or_else(theme::panel_background, |c| c.background)
+        } else {
+            theme::border()
+        }
+    };
+    let saved = ui.visuals().widgets.noninteractive.bg_stroke;
+    ui.visuals_mut().widgets.noninteractive.bg_stroke.color = line;
+    let shown = show(ui);
+    ui.visuals_mut().widgets.noninteractive.bg_stroke = saved;
+    shown
+}
+
+/// Draws a workspace panel with `draw`; when the theme's grid lays `panel` over the `main` view
+/// (both in the same cells), on a layer above the view, so it shows and takes the pointer there.
+fn over_view<R>(ui: &mut Ui, name: &str, panel: Rect, main: Rect, draw: impl FnOnce(&mut Ui) -> R) -> R {
+    if panel.intersect(main).is_positive() {
+        let layer = egui::LayerId::new(egui::Order::Middle, Id::new(("workspace-overlay", name)));
+        ui.scope_builder(egui::UiBuilder::new().layer_id(layer), draw).inner
+    } else {
+        draw(ui)
+    }
+}
+
+/// Whether the track headers are on the left: on the user's side, or else on the theme's, or else
+/// on the right.
+fn headers_left(side: Option<Side>) -> bool {
+    match side {
+        Some(side) => side == Side::Left,
+        None => crate::kit::style_class::theme_track_headers_left().unwrap_or(false),
+    }
 }
 
 #[cfg(test)]
