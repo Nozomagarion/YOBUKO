@@ -938,6 +938,20 @@ fn checked_and_selected_states_reach_the_sheet() {
 }
 
 #[test]
+fn a_menu_opened_from_a_light_text_bar_reads_on_its_own_background() {
+    let mut seen = None;
+    painted(".menu-bar { background-color: #217346; color: #ffffff; }", |_| {
+        let _bar = super::super::style_class::enter("menu-bar");
+        let _menu = super::super::style_class::enter("menu");
+        let ink = super::super::style_class::readable_on(egui::Color32::WHITE);
+        seen = Some((ink, theme::text_primary()));
+    });
+    let (ink, text) = seen.unwrap();
+    assert!(ink.is_some(), "the bar's white text is replaced in the menu");
+    assert!(theme::contrast(text, egui::Color32::WHITE) >= 3.0, "{text:?}");
+}
+
+#[test]
 fn a_selected_header_s_background_never_fills_its_buttons() {
     let mut seen = None;
     painted(".track-header:selected { background-color: #304050; }", |_| {

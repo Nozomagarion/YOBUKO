@@ -122,6 +122,12 @@ fn bar_menu<R>(ui: &mut Ui, title: &str, content: impl FnOnce(&mut Ui) -> R) -> 
     let shown = ui.menu_button(title, |ui| {
         // `.menu` styles the open menu: its background, text colour, corner radius and font size.
         let _menu = crate::kit::style_class::enter("menu");
+        // The menu opens over the window, not the bar: text it inherits from the bar (Suhina
+        // Sheet's white on green) must still read on the menu's own background.
+        let background = crate::kit::style_class::computed()
+            .filter(|style| style.authored.background)
+            .map_or(ui.visuals().window_fill, |style| style.background);
+        let ink = crate::kit::style_class::readable_on(background);
         // The background covers the menu as it was laid out last frame: its own rect, never the
         // layer's clip, which is the whole window.
         let id = ui.id().with("menu-rect");
@@ -129,6 +135,9 @@ fn bar_menu<R>(ui: &mut Ui, title: &str, content: impl FnOnce(&mut Ui) -> R) -> 
             crate::kit::native_css::surface(ui.painter(), rect, 0.0, egui::Color32::TRANSPARENT);
         }
         let mut styled = crate::kit::style_class::ui(ui);
+        if let Some(ink) = ink {
+            styled.visuals_mut().override_text_color = Some(ink);
+        }
         let inner = content(&mut styled);
         drop(styled);
         let rect = ui.min_rect() + ui.style().spacing.menu_margin;

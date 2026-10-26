@@ -317,6 +317,25 @@ fn set_background(palette: &mut theme::Palette, color: egui::Color32, class: &st
     }
 }
 
+/// Keeps the text of the element in scope readable on `background`: when the colour it inherited
+/// (a bar's light text in a menu that opens over a light window) has too little contrast, its
+/// text takes the ink that reads on `background`. Lasts until the scope ends. Returns that ink
+/// when it changed the text, for widgets styled from the inherited colour.
+pub(crate) fn readable_on(background: egui::Color32) -> Option<egui::Color32> {
+    let inherited = computed().filter(|style| style.authored.color).map_or_else(theme::text_primary, |s| s.color);
+    if theme::contrast(inherited, background) >= 3.0 {
+        return None;
+    }
+    // Near black or near white, whichever reads on it: the palette's own text colours are the
+    // inherited ones by now.
+    let (dark, light) = (egui::Color32::from_rgb(0x1a, 0x1a, 0x1a), egui::Color32::from_rgb(0xf4, 0xf4, 0xf4));
+    let ink = if theme::contrast(dark, background) >= theme::contrast(light, background) { dark } else { light };
+    let mut palette = theme::palette();
+    set_foreground(&mut palette, ink, "");
+    theme::local_palette(palette);
+    Some(ink)
+}
+
 fn set_foreground(palette: &mut theme::Palette, color: egui::Color32, class: &str) {
     palette.text_primary = color;
     palette.text_inverse = color;
