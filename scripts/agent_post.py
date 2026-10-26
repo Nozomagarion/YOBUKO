@@ -44,6 +44,12 @@ NUMBER = re.compile(r"^[0-9]{1,7}$")
 
 AGENT_NOTE = "*AI-assisted: written by an agent and posted from this account.*"
 
+# Seconds a `gh` call may take: the plain ones answer at once, `run watch` may wait out tens of
+# minutes of CI. A call that outlives its timeout comes back as a failed result, which the
+# existing error paths report; nothing is retried, and nothing is posted twice.
+GH_TIMEOUT = 120
+RUN_WATCH_TIMEOUT = 3600
+
 
 class RequestError(Exception):
     """The request is not one the workflow would take."""
@@ -64,7 +70,11 @@ Runner = Callable[[list[str], str | None], Result]
 
 
 def run_gh(args: list[str], stdin: str | None = None) -> Result:
-    done = subprocess.run(["gh", *args], input=stdin, capture_output=True, text=True, check=False)
+    timeout = RUN_WATCH_TIMEOUT if args[:2] == ["run", "watch"] else GH_TIMEOUT
+    try:
+        done = subprocess.run(["gh", *args], input=stdin, capture_output=True, text=True, check=False, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return Result(124, "", f"gh {' '.join(args)} gave no answer within {timeout} s")
     return Result(done.returncode, done.stdout, done.stderr)
 
 
@@ -202,7 +212,9 @@ def link_parent(gh: Runner, number: str, parent: str) -> None:
 
 def as_user_comment(gh: Runner, request: dict) -> str:
     body = request["body"].rstrip("\n")
-    if "AI-assisted" not in body:
+    # The note itself, not the phrase alone: a body that quotes the "AI-assisted" rule is not
+    # a note, and would post unlabelled.
+    if AGENT_NOTE not in body:
         body += f"\n\n{AGENT_NOTE}"
     path = body_file(body + "\n")
     try:

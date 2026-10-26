@@ -4,9 +4,12 @@
 """Tests for agent_post.py: python3 -m unittest discover -s scripts -p 'test_*.py'"""
 
 import json
+import subprocess
 import unittest
+from unittest import mock
 
 import agent_post as ap
+
 
 def setUpModule():
     ap.say = lambda message: None
@@ -141,10 +144,44 @@ class WithoutWriteAccess(unittest.TestCase):
         self.assertTrue(gh.bodies[0].startswith("Two findings."))
         self.assertIn(ap.AGENT_NOTE, gh.bodies[0])
 
+    def test_a_body_that_mentions_the_phrase_without_the_note_still_gets_the_note(self):
+        for body in [
+            'The guide says an "AI-assisted" note is required for agent feedback.',
+            f'Reviewed. {ap.AGENT_NOTE}',
+        ]:
+            gh = FakeGh(
+                {"push": False},
+                [(["pr", "comment"], ap.Result(0, f"https://github.com/{ap.REPO}/pull/600#issuecomment-2\n", ""))],
+            )
+            ap.post("comment", {"pr": "600", "body": body}, gh)
+            self.assertEqual(gh.bodies[0].count(ap.AGENT_NOTE), 1, gh.bodies[0])
+
     def test_a_refused_create_is_an_error(self):
         gh = FakeGh({"push": False}, [(["issue", "create"], ap.Result(1, "", "HTTP 410: Issues are disabled"))])
         with self.assertRaises(ap.PostError):
             ap.post("issue", ISSUE, gh)
+
+
+class GhCalls(unittest.TestCase):
+    def test_a_hung_gh_comes_back_as_a_failed_result(self):
+        def hung(args, input=None, stdin=None, capture_output=None, text=None, check=None, timeout=None):
+            raise subprocess.TimeoutExpired(args, timeout)
+
+        with mock.patch.object(ap.subprocess, "run", hung):
+            done = ap.run_gh(["api", f"repos/{ap.REPO}"])
+        self.assertEqual(done.returncode, 124)
+        self.assertIn("gave no answer within 120 s", done.stderr)
+
+    def test_the_watch_timeout_is_the_long_one(self):
+        captured = {}
+
+        def watching(args, input=None, stdin=None, capture_output=None, text=None, check=None, timeout=None):
+            captured["timeout"] = timeout
+            return ap.Result(0, "", "")
+
+        with mock.patch.object(ap.subprocess, "run", watching):
+            ap.run_gh(["run", "watch", "42", "--exit-status"])
+        self.assertEqual(captured["timeout"], ap.RUN_WATCH_TIMEOUT)
 
 
 class Requests(unittest.TestCase):
