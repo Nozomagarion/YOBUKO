@@ -11,6 +11,18 @@ the documents about something, best first, and `python scripts/docs.py covers PA
 that describe a file. [`docs/INDEX.md`](docs/INDEX.md) lists every document in a line. Read only
 the documents that match your task.
 
+## Fork owner progress updates
+
+The owner requested one plain-French progress file: [`SUIVI_PROJET.md`](SUIVI_PROJET.md).
+Read it when continuing fork development. Update that same file at each meaningful milestone,
+priority change or blocker; do not create another milestone audit as the main status report.
+Explain the user-visible change and its purpose, current limitations, verified checks and the
+next acceptance criterion. Separate planned work, implemented code, packaged builds and actual
+physical-machine validation. Date external CI observations and name the software revision they
+cover; never infer success from a queued or running job. Summarize the same concrete delta in
+conversation and link this file. Updating this file during work does not imply unattended
+background monitoring. Preserve the owner's decision to defer physical two-computer tests.
+
 ## 1. Golden rules
 
 1. **Clean-room (outranks everything).** Follow [`CONTRIBUTING.md`](CONTRIBUTING.md) › Clean-room.

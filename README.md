@@ -13,6 +13,8 @@
 
 <p align="center"><a href="#la-vision">La vision</a> · <a href="#où-en-est-le-projet">Avancement</a> · <a href="#essayer-la-version-actuelle">Essayer</a> · <a href="#les-projets-qui-rendent-cela-possible">Suhina &amp; rbxport</a> · <a href="README.en.md">English / technical overview</a></p>
 
+**Pour suivre le travail en cours : [état du projet, limites et prochaine étape](SUIVI_PROJET.md).**
+
 ## La vision
 
 **Je construis le logiciel dans lequel j'aimerais faire toute ma musique.**
