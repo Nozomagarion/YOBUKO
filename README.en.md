@@ -25,15 +25,15 @@ and USB export are future work. There is no common public release channel yet.
 |---|---|---|
 | Produce with Suhina's engine, instruments and clip workflow. | Render a project into the DJ library; analyse tempo and key with rbxport code. | Build toward set preparation and live performance in the same app. |
 | Collaborate on a common project while listening independently. | Keep the connection between your production and its rendered audio. | Keep everyone on the same tested combined version. |
-| **Today:** restricted LAN starter controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** product direction; decks and hardware export remain planned. |
+| **Today:** restricted LAN MIDI note editing and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** product direction; decks and hardware export remain planned. |
 
 ## What you can try
 
 - **Studio / Multiplayer / DJ** entry points in the native app.
 - **Create LAN session / Join LAN session:** a private invitation connects one host and one guest.
   Share the current MIDI project (up to 64 tracks, FM Synth/Utility parameters only) or use the
-  generated starter. Notes/clips arrive in the verified initial copy; track names, volume and pan
-  are live shared controls. Play, stop and listening position stay local to each computer.
+  generated starter. Clips arrive in the verified initial copy; single-note add/update/delete, track names, volume
+  and pan are live shared edits. The **MIDI notes** editor rejects stale drafts before indices shift. Play, stop and listening position stay local to each computer.
 - **DJ library:** import audio, keep a persistent local catalog, analyse tempo/key and render a
   Studio project into the library.
 - **Settings → General → GitHub updates…:** inspect the three GitHub source identities and check
@@ -41,8 +41,7 @@ and USB export are future work. There is no common public release channel yet.
 
 The network exchange is tested with real TLS loopback connections and two desktop project
 instances. **A physical two-computer session has not yet been verified.** Audio files, your
-audio assets, plugins and microphone recordings are not shared by this slice. Notes/clips are
-transferred in the initial MIDI copy and are read-only while connected. Both apps need protocol 2.
+audio assets, plugins and microphone recordings are not shared by this slice. MIDI notes can be edited while connected; clip placement remains fixed. Both apps need protocol 3.
 [LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-lan-prototype)
 
 ## Progress you can audit

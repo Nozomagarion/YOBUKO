@@ -25,6 +25,7 @@ mod menu_bar;
 pub mod menus;
 pub mod missing_files;
 mod multiplayer;
+mod multiplayer_notes;
 mod plugin_host;
 pub mod project_dialog;
 pub mod splash;

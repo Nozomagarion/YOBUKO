@@ -35,18 +35,25 @@ a live instance is never silently replaced to conceal an ordering error.
 
 ## Allowed shared edits
 
-Only `track.rename`, `track.setVolume` and `track.setPan` are accepted. The command registry
+`track.rename`, `track.setVolume`, `track.setPan`, `note.add`, `note.update` and `note.delete` are accepted. The command registry
 must also identify each as an Edit. Parameters have the exact keys needed by that command:
 
 - `track.rename`: `track` is a nonzero `u32` id and `name` is nonempty text of at most 256 bytes.
 - `track.setVolume`: `tracks` is one to 64 nonzero `u32` ids; `db` is a finite number from -150
   to +6. The prototype does not accept the textual silence shortcut.
 - `track.setPan`: the same `tracks`, and finite `pan` from -1 to +1.
+- `note.add`: nonzero stable `clip` ID and exactly one note with explicit time, length, key and velocity.
+- `note.update`: `clip`, one zero-based `note` index, absolute time/length/key/velocity and boolean muted.
+- `note.delete`: `clip` and exactly one index in `notes`.
+
+The [note contract](lan-note-editing.md) defines ranges and the remote journal/preflight boundary.
+Native copy-on-write can allocate one new content ID; the same deterministic command and
+unchanged initial IDs/order produce the same ID on every replica. Note indices are revision-bound.
 
 Unknown keys, name-based addressing, batches, files, plugins, history and local transport are
 refused as shared edits. No `continue` gesture is admitted. Normal session validation still
 checks object existence and model invariants. Refused preconditions do not execute a command.
-This subset creates no new IDs and performs no file I/O. An accepted no-op still advances the
+This subset performs no file I/O. An accepted no-op still advances the
 protocol revision, but records no extra undo step in the underlying session.
 
 ## Ordering and retries

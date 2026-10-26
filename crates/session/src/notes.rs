@@ -307,6 +307,31 @@ pub(crate) fn add(session: &mut Session, params: &Value) -> Result<Value, Comman
     append(session, params, added)
 }
 
+/// One atomic absolute update, preserving expression fields the editor does not expose.
+pub(crate) fn update(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let index = params
+        .get("note")
+        .and_then(Value::as_u64)
+        .and_then(|i| usize::try_from(i).ok())
+        .ok_or("note must be a whole index from note.list")?;
+    let value = json!({"time":params.get("time"),"length":params.get("length"),
+        "key":params.get("key"),"velocity":params.get("velocity")});
+    let edited = new_note(&value, index)?;
+    let muted = params.get("muted").and_then(Value::as_bool).ok_or("muted must be a boolean")?;
+    edit_notes(&mut session.project, params, |notes| {
+        let old = notes.get_mut(index).ok_or("the note index no longer exists")?;
+        *old = Note {
+            time: edited.time,
+            duration: edited.duration,
+            key: edited.key,
+            velocity: edited.velocity,
+            muted,
+            ..*old
+        };
+        Ok(note_json(index, old))
+    })
+}
+
 pub(crate) fn delete(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     edit_notes(&mut session.project, params, |notes| {
         let gone = indices(params, notes.len())?;

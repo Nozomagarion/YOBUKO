@@ -1,6 +1,6 @@
 ---
 description: Bounded MIDI-only copies of an open project over authenticated LAN, preserving the original and refusing audio and opaque devices
-read_when: share current MIDI project, LAN project transfer, multiplayer protocol 2, MIDI copy limits
+read_when: share current MIDI project, LAN project transfer, multiplayer protocol 3, MIDI copy limits
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -21,8 +21,9 @@ starter. The original remains open and unchanged; both participants get a separa
 session tab. A copy has no source path and is marked unsaved, so closing prompts for a first
 save even before a control edit; saving cannot target the original implicitly. Arrangement and
 launcher clips, notes, stable IDs, tempo/meter, routing and mixer
-state are retained. Only existing track name, volume and pan are live shared edits in this slice.
-Note/clip editing, audio, plugins and publishing recordings remain separate capabilities.
+state are retained. Track name, volume, pan and single MIDI notes are live shared edits;
+[the note-editing contract](lan-note-editing.md) defines their revision checks and delivery.
+Clip placement, audio, plugins and publishing recordings remain separate capabilities.
 
 A supported source has 1–64 tracks, at most 128 channels, 512 contents, 4096 clips and 16384 notes.
 Only the file-free FM synth and Utility built-ins, with parameters but no opaque state, are
@@ -36,7 +37,7 @@ in that copy. The source project, its files and its settings are never changed.
 
 ## Document and admission
 
-Protocol 2 and MIDI-copy format 1 replace the fixed protocol-1 starter assumption. Old invitations
+Protocol 3 retains MIDI-copy format 1 and adds live note operations and snapshot revisions. Old invitations
 are refused; both apps need this protocol. The existing certificate-bound TLS admission, expiry,
 one-use secret, owner-ordered controls and local transport rules remain in force.
 
@@ -48,17 +49,19 @@ the writer. This rejects unknown/duplicate fields and normalization loss, includ
 formats. The MIDI-copy format must change if its canonical encoding/subset changes incompatibly.
 No network-supplied path, extension blob or plugin state reaches project preparation.
 
-After authentication the host offers the document's byte length and SHA-256. The guest pulls
+After authentication the host offers a current snapshot's revision, byte length and SHA-256. The guest pulls
 4096-byte chunks at exact offsets, inside typed bounded frames; it verifies length, hash, native
 format and the allowed subset before creating any session tab. A transfer has an absolute
 30-second deadline and cancellation shuts down its socket. Each control frame is capped at
 64 KiB, enough for 64 bounded track names. A bad length/hash/offset/version or an incomplete
 transfer fails visibly and opens no partial project. There are no temporary files or assets.
 
-The immutable initial document is separate from changing controls. The host can change controls
-while a guest downloads; the final authoritative control snapshot is applied to the new copy.
-The guest verifies that subsequent track IDs/order match its verified project before accepting
-any snapshot. The UI does not replace another open project or silently fall back to the starter.
+The document is an immutable snapshot of the current canonical music at admission, with its
+revision. Controls and notes can change during download: a contiguous, bounded operation suffix
+is verified and applied to the detached receiver before a tab opens. A journal gap fails the
+join. Subsequent operations go through the same native commands on the existing local session;
+its player is never replaced to synchronize edits. Track IDs/order stay fixed and are checked
+against the control snapshot. No silent fallback to the starter is allowed.
 
 ## Validation
 

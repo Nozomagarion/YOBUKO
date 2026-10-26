@@ -23,7 +23,7 @@ impl Write for Script {
     }
 }
 fn header(bytes: usize, sha256: String) -> ServerMessage {
-    ServerMessage::Project { protocol: PROTOCOL, format: 1, bytes, sha256 }
+    ServerMessage::Project { protocol: PROTOCOL, format: 1, revision: 0, bytes, sha256 }
 }
 
 #[test]
@@ -53,5 +53,5 @@ fn the_sender_refuses_a_guest_that_requests_a_different_offset() {
     let mut input = vec![];
     protocol::write(&mut input, &ClientMessage::Download { protocol: PROTOCOL, offset: 1 }).unwrap();
     let mut io = Script { input: Cursor::new(input), output: vec![] };
-    assert!(send(&mut io, b"abc", &AtomicBool::new(false)).is_err());
+    assert!(send(&mut io, b"abc", 0, &AtomicBool::new(false)).is_err());
 }

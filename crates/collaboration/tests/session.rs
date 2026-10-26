@@ -274,3 +274,58 @@ fn a_failed_player_update_requires_explicit_recovery_instead_of_silent_retry() {
     assert_eq!(recovered.project(), host.project());
     assert_eq!(recovered.revision(), host.revision());
 }
+
+#[test]
+fn single_note_commands_converge_and_stale_indices_never_edit_another_note() {
+    let mut host = Host::new(project()).unwrap();
+    let peer = host.add_peer(Role::Editor).unwrap();
+    let mut replica = Replica::new(host.snapshot());
+    let clip = host.project().arrangement.lanes[0].clips[0].id.0;
+    let add = host
+        .submit(
+            peer,
+            request(
+                1,
+                0,
+                "note.add",
+                json!({"clip":clip,
+        "notes":[{"time":2,"length":1,"key":70,"velocity":95}]}),
+            ),
+        )
+        .unwrap();
+    replica.apply(&add).unwrap();
+    let delete = host.submit(Host::owner(), request(1, 1, "note.delete", json!({"clip":clip,"notes":[0]}))).unwrap();
+    replica.apply(&delete).unwrap();
+    let before = host.project().clone();
+    let stale = request(
+        2,
+        1,
+        "note.update",
+        json!({"clip":clip,"note":0,
+        "time":3,"length":2,"key":40,"velocity":80,"muted":false}),
+    );
+    assert!(matches!(host.submit(peer, stale), Err(Error::StaleRevision { .. })));
+    assert_eq!(host.project(), &before);
+    let update = host
+        .submit(
+            peer,
+            request(
+                2,
+                2,
+                "note.update",
+                json!({"clip":clip,"note":0,
+        "time":3,"length":2,"key":40,"velocity":80,"muted":false}),
+            ),
+        )
+        .unwrap();
+    replica.apply(&update).unwrap();
+    assert_eq!(replica.project(), host.project());
+    for params in [
+        json!({"clip":clip,"notes":[0,1]}),
+        json!({"track":1,"index":0,"notes":[0]}),
+        json!({"clip":clip,"notes":[0],"continue":true}),
+    ] {
+        assert!(Edit::new("note.delete", params).is_err());
+    }
+    assert!(Edit::new("note.move", json!({"clip":clip,"notes":[0],"beats":1})).is_err());
+}

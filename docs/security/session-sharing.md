@@ -21,7 +21,7 @@ The separate `multiplayer` adapter exposes only the [LAN starter contract](../sp
 Its [MIDI-copy decoder](../spec/lan-midi-copy.md) is the only remote initial-project boundary;
 arbitrary native projects, assets, plugin/microphone state and file paths remain refused.
 
-The host retains its canonical project and accepts only track rename, volume and pan on
+The host retains its canonical project and accepts only track rename, volume, pan and single-note add/update/delete on
 at most 64 verified project tracks. Membership, role, exact parameter keys, IDs, numeric ranges and sequence/revision
 checks precede execution. The adapter allocates the guest's PeerId after admission. A guest
 cannot claim the owner's identity or change roles. Transport, history, files, commands/batches,
@@ -56,9 +56,18 @@ guest polls every 100 ms and the server enforces at least 50 ms per request. UI 
 TLS, canonical execution and I/O run on workers, never the audio thread. A local peer can still
 occupy pending slots until timeout; availability against a sustained LAN flood is not guaranteed.
 
+Protocol 3 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
+A separate draft base revision prevents shifted note indices from being silently reused. Before
+canonical mutation the native command is preflighted on a detached copy and the complete MIDI
+quota/document boundary is checked, including copy-on-write growth. The guest verifies contiguous
+operations on its detached mirror and checks the same boundary before notifying the UI. Ahead or
+expired cursors disconnect; no snapshot replacement hides divergence. The service caps pending
+UI operations at 128 and fails visibly on overflow. Admission snapshots current music and its
+revision, so an old document cannot be combined with a new note history.
+
 The desktop creates a dedicated starter or verified MIDI copy, preserving the original project. A Projects mutation gate prevents
 normal UI and attached-agent commands from changing its shared model/history outside confirmed
-controls. Its host-owned API admits only the three control command IDs; it is not a registered
+operations. Its host-owned API admits only six exact control/note command IDs; it is not a registered
 agent command. Other project tabs stay local. Local audition and explicit save/export remain
 available. Disconnect retains and unlocks the last local project; a failed authoritative apply
 leaves the session rather than silently continuing with divergent state.

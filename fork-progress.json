@@ -31,7 +31,12 @@
           "evidence": "crates/multiplayer/tests/lan.rs"
         },
         {
-          "name": "Édition commune des notes et clips",
+          "name": "Édition commune des notes MIDI",
+          "done": true,
+          "evidence": "crates/ui/src/app/multiplayer_tests.rs"
+        },
+        {
+          "name": "Placement des clips en commun",
           "done": false
         },
         {

@@ -666,3 +666,55 @@ fn malformed_splits_are_refused_and_change_nothing() {
     assert_eq!(session.project(), &before);
     assert!(!session.can_undo());
 }
+
+#[test]
+fn atomic_note_update_preserves_expression_copies_shared_content_and_undoes_once() {
+    let mut p = project();
+    let LaneData::Notes(initial_notes) = &mut p.contents[0].lanes[0].data else { panic!("MIDI") };
+    initial_notes[0].channel = 7;
+    initial_notes[0].release_velocity = 0.37;
+    let duplicate = Clip { id: Default::default(), start: 16.0, ..p.arrangement.lanes[0].clips[0].clone() };
+    p.arrangement.lanes[0].clips.push(duplicate);
+    let mut session = Session::new(p);
+    let before = session.project().clone();
+    let clip = before.arrangement.lanes[0].clips[0].id.0;
+    let result = run(
+        &mut session,
+        "note.update",
+        json!({"clip":clip,"note":0,
+        "time":0.5,"length":2.5,"key":72,"velocity":80,"muted":true}),
+    )
+    .unwrap();
+    assert_eq!(result["key"], 72);
+    let changed_id = session.project().arrangement.lanes[0].clips[0].content.0;
+    assert_ne!(changed_id, 1, "copy-on-write protects the other placement");
+    let changed = notes(&session, changed_id)[0];
+    assert_eq!((changed.time, changed.duration, changed.key, changed.muted), (0.5, 2.5, 72, true));
+    assert_eq!(changed.channel, 7);
+    assert_eq!(changed.release_velocity, 0.37);
+    assert_eq!(notes(&session, 1)[0].key, 60);
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(session.project(), &before);
+}
+
+#[test]
+fn atomic_note_update_refuses_bad_fields_without_partial_mutation() {
+    let mut session = Session::new(project());
+    let clip = session.project().arrangement.lanes[0].clips[0].id.0;
+    let before = session.project().clone();
+    let valid = json!({"clip":clip,"note":0,"time":1,"length":2,"key":72,"velocity":80,"muted":true});
+    for (key, value) in [
+        ("time", json!(-1)),
+        ("length", json!(0)),
+        ("key", json!(128)),
+        ("velocity", json!(0)),
+        ("muted", json!(1)),
+        ("note", json!(999)),
+        ("time", json!(1e300)),
+    ] {
+        let mut invalid = valid.clone();
+        invalid[key] = value;
+        assert!(run(&mut session, "note.update", invalid).is_err(), "{key}");
+        assert_eq!(session.project(), &before);
+    }
+}

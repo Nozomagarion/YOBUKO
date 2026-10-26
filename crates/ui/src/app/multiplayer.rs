@@ -13,10 +13,13 @@ pub(super) struct MultiplayerPanel {
     join: String,
     invitation: String,
     state: serde_json::Value,
-    controls: Option<suhina_multiplayer::Controls>,
+    pub(super) controls: Option<suhina_multiplayer::Controls>,
     draft: Option<suhina_multiplayer::Controls>,
     error: Option<String>,
     submitted: bool,
+    applied_revision: u64,
+    pub(super) notes: super::multiplayer_notes::NoteEditor,
+    show_notes: bool,
 }
 impl Default for MultiplayerPanel {
     fn default() -> Self {
@@ -32,6 +35,9 @@ impl Default for MultiplayerPanel {
             draft: None,
             error: None,
             submitted: false,
+            applied_revision: 0,
+            notes: Default::default(),
+            show_notes: false,
         }
     }
 }
@@ -44,7 +50,7 @@ impl App {
                     .bound
                     .is_some_and(|id| Some(id) == self.projects.active() && self.multiplayer.service.active()))
     }
-    fn multiplayer_command(&mut self, id: &str, params: serde_json::Value) {
+    pub(super) fn multiplayer_command(&mut self, id: &str, params: serde_json::Value) {
         match self.multiplayer.service.execute(id, &params) {
             Ok(_) => {
                 self.multiplayer.error = None;
@@ -53,6 +59,8 @@ impl App {
                     self.multiplayer.draft = None;
                     self.multiplayer.state = serde_json::Value::Null;
                     self.multiplayer.submitted = false;
+                    self.multiplayer.notes = Default::default();
+                    self.multiplayer.applied_revision = 0;
                 } else if id == "multiplayer.edit" {
                     self.multiplayer.submitted = true;
                 }
@@ -81,10 +89,7 @@ impl App {
         self.multiplayer.join.clear();
     }
     pub(super) fn poll_multiplayer(&mut self, ctx: &egui::Context) {
-        if !self.multiplayer.service.active() {
-            if let Some(id) = self.multiplayer.bound.take() {
-                let _ = self.projects.restrict_shared_project(id, false);
-            }
+        if !self.multiplayer.service.active() && self.multiplayer.bound.is_none() {
             return;
         }
         ctx.request_repaint_after(std::time::Duration::from_millis(100));
@@ -103,14 +108,15 @@ impl App {
         }
         self.multiplayer.error = error;
         self.multiplayer.state = state.clone();
-        if !self.multiplayer.service.active() {
-            if let Some(id) = self.multiplayer.bound.take() {
-                let _ = self.projects.restrict_shared_project(id, false);
-            }
+        let disconnected = !self.multiplayer.service.active();
+        if disconnected && self.multiplayer.bound.is_none() {
             self.multiplayer.invitation.clear();
             return;
         }
         let Ok(controls) = serde_json::from_value::<suhina_multiplayer::Controls>(state["controls"].clone()) else {
+            if disconnected {
+                self.leave_multiplayer();
+            }
             return;
         };
         if let Err(e) = controls.validate() {
@@ -119,7 +125,7 @@ impl App {
             return;
         }
         if self.multiplayer.bound.is_none() {
-            let Some(project) = self.multiplayer.service.take_project() else {
+            let Some((project, revision)) = self.multiplayer.service.take_snapshot() else {
                 self.multiplayer.error = Some("the verified MIDI project is missing; no project was opened".into());
                 self.leave_multiplayer();
                 return;
@@ -132,6 +138,7 @@ impl App {
                         return;
                     }
                     self.multiplayer.bound = Some(id);
+                    self.multiplayer.applied_revision = revision;
                     self.multiplayer.controls = None;
                 }
                 Err(e) => {
@@ -144,35 +151,42 @@ impl App {
         let Some(id) = self.multiplayer.bound else {
             return;
         };
-        let Some(session) = self.projects.get(id) else {
+        let operations = serde_json::from_value::<Vec<suhina_multiplayer::Operation>>(state["operations"].clone());
+        let result = (|| -> Result<(), String> {
+            let operations = operations.map_err(|_| "invalid shared operation list")?;
+            if operations.len() > 128 {
+                return Err("shared operation queue overflow".into());
+            }
+            for operation in operations {
+                if operation.revision <= self.multiplayer.applied_revision {
+                    continue;
+                }
+                if self.multiplayer.applied_revision.checked_add(1) != Some(operation.revision) {
+                    return Err("shared operation revision gap".into());
+                }
+                operation.edit.edit()?;
+                let (command, params) = operation.edit.command();
+                self.projects.apply_shared_control(id, command, &params).map_err(|e| e.to_string())?;
+                self.multiplayer.applied_revision = operation.revision;
+            }
+            let session = self.projects.get(id).ok_or("shared project is closed")?;
+            if controls.revision != self.multiplayer.applied_revision
+                || !controls.changes(session.project())?.is_empty()
+            {
+                return Err("shared operations do not match the host snapshot".into());
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            self.multiplayer.error = Some(format!("{error}; the last local copy was preserved"));
             self.leave_multiplayer();
             return;
-        };
-        if let Some(previous) = &self.multiplayer.controls {
-            if controls.revision < previous.revision || controls.revision == previous.revision && controls != *previous
-            {
-                self.multiplayer.error = Some("shared revision mismatch; the session was left".into());
-                self.leave_multiplayer();
-                return;
-            }
-            if controls == *previous {
-                return;
-            }
         }
-        let changes = match controls.changes(session.project()) {
-            Ok(changes) => changes,
-            Err(e) => {
-                self.multiplayer.error = Some(e);
+        if self.multiplayer.controls.as_ref() == Some(&controls) {
+            if disconnected {
                 self.leave_multiplayer();
-                return;
             }
-        };
-        for (command, params) in changes {
-            if let Err(e) = self.projects.apply_shared_control(id, command, &params) {
-                self.multiplayer.error = Some(format!("shared control failed: {e}; rejoin with a new invitation"));
-                self.leave_multiplayer();
-                return;
-            }
+            return;
         }
         self.revision = self.revision.saturating_add(1);
         if self.multiplayer.submitted
@@ -183,13 +197,16 @@ impl App {
         }
         self.multiplayer.submitted = false;
         self.multiplayer.controls = Some(controls);
+        if disconnected {
+            self.leave_multiplayer();
+        }
     }
     pub(super) fn show_multiplayer(&mut self, ui: &mut Ui) {
         let active = self.multiplayer.service.active();
         ui.add_space(theme::PAD);
         ui.heading("Multiplayer · LAN session");
         ui.label("Create a session, copy its invitation, and join from the same local network.");
-        ui.weak("Share a MIDI copy of your project, or create the four-track demo. Track names, volumes and pan are shared; each computer has its own playback.");
+        ui.weak("Share a MIDI copy of your project, or create the four-track demo. MIDI notes, track names, volumes and pan are shared; each computer has its own playback.");
         if !active {
             ui.horizontal(|ui| {
                 ui.label("Host address");
@@ -266,68 +283,77 @@ impl App {
                     })
                     .sum();
                 ui.label(format!(
-                    "Shared copy: {} tracks · {} MIDI notes. Notes and clips are read-only while connected.",
+                    "Shared copy: {} tracks · {} MIDI notes. Edit notes below; clip placement remains fixed while connected.",
                     project.tracks.len(),
                     notes
                 ));
             }
-            let base = self.multiplayer.draft.as_ref().map_or(0, |c| c.revision);
-            let confirmed = self.multiplayer.controls.as_ref().map_or(0, |c| c.revision);
-            if base != confirmed {
-                ui.horizontal(|ui| {
-                    ui.label(format!(
-                        "New controls arrived (revision {confirmed}). Your pending edit still uses revision {base}."
-                    ));
-                    if ui.button("Refresh controls").clicked() {
-                        self.multiplayer.draft = self.multiplayer.controls.clone();
-                    }
-                });
-            }
-            let mut edit = None;
-            if let Some(draft) = self.multiplayer.draft.as_mut() {
-                ui.separator();
-                egui::ScrollArea::vertical()
-                    .id_salt("lan-controls-scroll")
-                    .max_height((ui.available_height() - 80.0).max(120.0))
-                    .show(ui, |ui| {
-                        egui::Grid::new("lan-track-controls").striped(true).spacing(Vec2::new(12.0, 10.0)).show(
-                            ui,
-                            |ui| {
-                                for title in ["Track name", "", "Volume (dB)", "", "Pan", ""] {
-                                    ui.strong(title);
-                                }
-                                ui.end_row();
-                                for track in &mut draft.tracks {
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut track.name)
-                                            .desired_width(180.0)
-                                            .char_limit(256),
-                                    );
-                                    if ui.button("Rename").clicked() {
-                                        edit = Some(
-                                            json!({"command":"track.rename","track":track.track,"name":track.name}),
-                                        );
-                                    }
-                                    ui.add(egui::DragValue::new(&mut track.db).range(-150.0..=6.0).speed(0.1));
-                                    if ui.button("Set volume").clicked() {
-                                        edit = Some(
-                                            json!({"command":"track.setVolume","track":track.track,"db":track.db}),
-                                        );
-                                    }
-                                    ui.add(egui::DragValue::new(&mut track.pan).range(-1.0..=1.0).speed(0.01));
-                                    if ui.button("Set pan").clicked() {
-                                        edit =
-                                            Some(json!({"command":"track.setPan","track":track.track,"pan":track.pan}));
+            ui.horizontal(|ui| {
+                ui.selectable_value(&mut self.multiplayer.show_notes, false, "Mixer");
+                ui.selectable_value(&mut self.multiplayer.show_notes, true, "MIDI notes");
+            });
+            if self.multiplayer.show_notes {
+                self.show_shared_notes(ui);
+            } else {
+                let base = self.multiplayer.draft.as_ref().map_or(0, |c| c.revision);
+                let confirmed = self.multiplayer.controls.as_ref().map_or(0, |c| c.revision);
+                if base != confirmed {
+                    ui.horizontal(|ui| {
+                        ui.label(format!(
+                            "New controls arrived (revision {confirmed}). Your pending edit still uses revision {base}."
+                        ));
+                        if ui.button("Refresh controls").clicked() {
+                            self.multiplayer.draft = self.multiplayer.controls.clone();
+                        }
+                    });
+                }
+                let mut edit = None;
+                if let Some(draft) = self.multiplayer.draft.as_mut() {
+                    ui.separator();
+                    egui::ScrollArea::vertical()
+                        .id_salt("lan-controls-scroll")
+                        .max_height((ui.available_height() - 80.0).max(120.0))
+                        .show(ui, |ui| {
+                            egui::Grid::new("lan-track-controls").striped(true).spacing(Vec2::new(12.0, 10.0)).show(
+                                ui,
+                                |ui| {
+                                    for title in ["Track name", "", "Volume (dB)", "", "Pan", ""] {
+                                        ui.strong(title);
                                     }
                                     ui.end_row();
-                                }
-                            },
-                        );
-                    });
-                ui.weak(format!("Confirmed revision {confirmed}. Apply one control at a time; the host confirms or refuses concurrent edits."));
-            }
-            if let Some(edit) = edit {
-                self.multiplayer_command("multiplayer.edit", json!({"base_revision":base,"edit":edit.to_string()}));
+                                    for track in &mut draft.tracks {
+                                        ui.add(
+                                            egui::TextEdit::singleline(&mut track.name)
+                                                .desired_width(180.0)
+                                                .char_limit(256),
+                                        );
+                                        if ui.button("Rename").clicked() {
+                                            edit = Some(
+                                                json!({"command":"track.rename","track":track.track,"name":track.name}),
+                                            );
+                                        }
+                                        ui.add(egui::DragValue::new(&mut track.db).range(-150.0..=6.0).speed(0.1));
+                                        if ui.button("Set volume").clicked() {
+                                            edit = Some(
+                                                json!({"command":"track.setVolume","track":track.track,"db":track.db}),
+                                            );
+                                        }
+                                        ui.add(egui::DragValue::new(&mut track.pan).range(-1.0..=1.0).speed(0.01));
+                                        if ui.button("Set pan").clicked() {
+                                            edit = Some(
+                                                json!({"command":"track.setPan","track":track.track,"pan":track.pan}),
+                                            );
+                                        }
+                                        ui.end_row();
+                                    }
+                                },
+                            );
+                        });
+                    ui.weak(format!("Confirmed revision {confirmed}. Apply one control at a time; the host confirms or refuses concurrent edits."));
+                }
+                if let Some(edit) = edit {
+                    self.multiplayer_command("multiplayer.edit", json!({"base_revision":base,"edit":edit.to_string()}));
+                }
             }
         }
         if let Some(error) = &self.multiplayer.error {

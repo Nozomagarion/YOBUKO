@@ -167,3 +167,122 @@ fn an_actual_midi_project_crosses_tls_in_chunks_and_keeps_its_ids_notes_and_soun
     assert_eq!(confirmed["controls"]["tracks"][0]["name"], "Shared real lead");
     assert_eq!(before.tracks[0].name, "My own lead");
 }
+
+fn submit(service: &mut Service, base: u64, edit: suhina_multiplayer::WireEdit) {
+    service
+        .execute(
+            "multiplayer.edit",
+            &json!({"base_revision":base,
+        "edit":serde_json::to_string(&edit).unwrap()}),
+        )
+        .unwrap();
+}
+fn apply(session: &mut suhina_session::Session, revision: &mut u64, state: &Value) {
+    let operations: Vec<suhina_multiplayer::Operation> = serde_json::from_value(state["operations"].clone()).unwrap();
+    for op in operations {
+        assert_eq!(op.revision, *revision + 1);
+        let (id, params) = op.edit.command();
+        session.execute(id, &params).unwrap();
+        *revision = op.revision;
+    }
+    assert_eq!(state["controls"]["revision"], *revision);
+}
+
+#[test]
+fn live_notes_cross_tls_in_both_directions_keep_players_and_reject_stale_indices() {
+    use suhina_engine::{AudioPool, Renderer};
+    use suhina_multiplayer::WireEdit;
+    use suhina_session::{Player, Session};
+    let (mut host, invitation) = host();
+    let (project, mut host_revision) = host.take_snapshot().unwrap();
+    let original = project.clone();
+    let clip = project.arrangement.lanes[0].clips[0].id.0;
+    let mut local = Session::new(project);
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut guest, |v| v["mode"] == "connected");
+    let (project, mut guest_revision) = guest.take_snapshot().unwrap();
+    let mut remote = Session::new(project);
+    let mut ra = Renderer::stopped(local.project(), &AudioPool::default(), 8000).unwrap();
+    let mut rb = Renderer::stopped(remote.project(), &AudioPool::default(), 8000).unwrap();
+    local.attach_player(Player::new(ra.controller(), None));
+    remote.attach_player(Player::new(rb.controller(), None));
+    local.execute("transport.setPosition", &json!({"beats":4})).unwrap();
+    remote.execute("transport.setPosition", &json!({"beats":20})).unwrap();
+    local.execute("transport.play", &json!({})).unwrap();
+    remote.execute("transport.play", &json!({})).unwrap();
+    submit(&mut guest, 0, WireEdit::NoteAdd { clip, time: 0.0, length: 0.75, key: 90, velocity: 110.0 });
+    apply(&mut local, &mut host_revision, &wait(&mut host, |v| v["controls"]["revision"] == 1));
+    apply(&mut remote, &mut guest_revision, &wait(&mut guest, |v| v["controls"]["revision"] == 1));
+    submit(
+        &mut host,
+        1,
+        WireEdit::NoteUpdate { clip, note: 4, time: 1.5, length: 1.0, key: 85, velocity: 65.0, muted: false },
+    );
+    apply(&mut local, &mut host_revision, &wait(&mut host, |v| v["controls"]["revision"] == 2));
+    apply(&mut remote, &mut guest_revision, &wait(&mut guest, |v| v["controls"]["revision"] == 2));
+    submit(&mut guest, 2, WireEdit::NoteDelete { clip, note: 0 });
+    apply(&mut local, &mut host_revision, &wait(&mut host, |v| v["controls"]["revision"] == 3));
+    apply(&mut remote, &mut guest_revision, &wait(&mut guest, |v| v["controls"]["revision"] == 3));
+    let before = local.project().clone();
+    submit(
+        &mut host,
+        2,
+        WireEdit::NoteUpdate { clip, note: 0, time: 0.0, length: 1.0, key: 1, velocity: 1.0, muted: true },
+    );
+    let refused = wait(&mut host, |v| v["error"].is_string());
+    assert_eq!(refused["controls"]["revision"], 3);
+    assert_eq!(local.project(), &before);
+    assert_eq!(local.project(), remote.project());
+    let mut out = [0.0; 512];
+    ra.process(&mut out);
+    rb.process(&mut out);
+    assert!(ra.monitor().running() && rb.monitor().running());
+    assert!((ra.monitor().beat() - rb.monitor().beat()).abs() > 10.0);
+    local.execute("transport.stop", &json!({})).unwrap();
+    ra.process(&mut out);
+    rb.process(&mut out);
+    assert!(!ra.monitor().running() && rb.monitor().running());
+    let a = suhina_engine::render_offline(local.project(), 8000, 512).unwrap();
+    let b = suhina_engine::render_offline(remote.project(), 8000, 512).unwrap();
+    assert_eq!(a, b);
+    assert!(a.iter().any(|s| s.abs() > 0.00001));
+    assert_ne!(
+        a,
+        suhina_engine::render_offline(&original, 8000, 512).unwrap(),
+        "shared notes actually change the sound"
+    );
+}
+
+#[test]
+fn joining_after_more_than_one_journal_receives_the_current_music_snapshot() {
+    use suhina_multiplayer::WireEdit;
+    let (mut host, invitation) = host();
+    let (project, _) = host.take_snapshot().unwrap();
+    let clip = project.arrangement.lanes[0].clips[0].id.0;
+    for base in 0..40 {
+        submit(
+            &mut host,
+            base,
+            WireEdit::NoteUpdate {
+                clip,
+                note: 0,
+                time: 0.0,
+                length: 0.5,
+                key: 40 + base as u8,
+                velocity: 90.0,
+                muted: false,
+            },
+        );
+        wait(&mut host, |v| v["controls"]["revision"] == base + 1);
+    }
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    let state = wait(&mut guest, |v| v["mode"] == "connected");
+    let (project, revision) = guest.take_snapshot().unwrap();
+    assert_eq!(revision, 40);
+    assert_eq!(state["controls"]["revision"], 40);
+    let mut session = suhina_session::Session::new(project);
+    let notes = session.execute("note.list", &json!({"clip":clip})).unwrap();
+    assert_eq!(notes[0]["key"], 79);
+}

@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 2;
+pub const PROTOCOL: u16 = 3;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -92,7 +92,7 @@ impl Controls {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "command", deny_unknown_fields)]
 pub enum WireEdit {
     #[serde(rename = "track.rename")]
@@ -101,6 +101,12 @@ pub enum WireEdit {
     Volume { track: u32, db: f64 },
     #[serde(rename = "track.setPan")]
     Pan { track: u32, pan: f64 },
+    #[serde(rename = "note.add")]
+    NoteAdd { clip: u32, time: f64, length: f64, key: u8, velocity: f64 },
+    #[serde(rename = "note.update")]
+    NoteUpdate { clip: u32, note: usize, time: f64, length: f64, key: u8, velocity: f64, muted: bool },
+    #[serde(rename = "note.delete")]
+    NoteDelete { clip: u32, note: usize },
 }
 
 impl WireEdit {
@@ -108,16 +114,59 @@ impl WireEdit {
         if matches!(self,Self::Rename{name,..} if name.chars().any(char::is_control)) {
             return Err("shared track names cannot contain control characters".into());
         }
-        let (id, params, track) = match self {
-            Self::Rename { track, name } => ("track.rename", json!({"track":track,"name":name}), *track),
-            Self::Volume { track, db } => ("track.setVolume", json!({"tracks":[track],"db":db}), *track),
-            Self::Pan { track, pan } => ("track.setPan", json!({"tracks":[track],"pan":pan}), *track),
-        };
-        if track == 0 {
-            return Err("a shared track needs a nonzero ID".into());
-        }
+        let (id, params) = self.command();
         Edit::new(id, params).map_err(|e| e.to_string())
     }
+    pub fn command(&self) -> (&'static str, Value) {
+        match self {
+            Self::Rename { track, name } => ("track.rename", json!({"track":track,"name":name})),
+            Self::Volume { track, db } => ("track.setVolume", json!({"tracks":[track],"db":db})),
+            Self::Pan { track, pan } => ("track.setPan", json!({"tracks":[track],"pan":pan})),
+            Self::NoteAdd { clip, time, length, key, velocity } => (
+                "note.add",
+                json!({"clip":clip,
+                "notes":[{"time":time,"length":length,"key":key,"velocity":velocity}]}),
+            ),
+            Self::NoteUpdate { clip, note, time, length, key, velocity, muted } => (
+                "note.update",
+                json!({"clip":clip,"note":note,"time":time,"length":length,"key":key,"velocity":velocity,"muted":muted}),
+            ),
+            Self::NoteDelete { clip, note } => ("note.delete", json!({"clip":clip,"notes":[note]})),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct Operation {
+    pub revision: u64,
+    pub edit: WireEdit,
+}
+
+/// Verify contiguous history against a detached session before the UI sees any operation.
+pub fn apply_operations(
+    session: &mut suhina_session::Session,
+    revision: &mut u64,
+    controls: &Controls,
+    operations: &[Operation],
+) -> Result<(), String> {
+    if operations.len() > 32 {
+        return Err("too many shared operations".into());
+    }
+    for operation in operations {
+        if revision.checked_add(1) != Some(operation.revision) {
+            return Err("shared operation revision gap".into());
+        }
+        operation.edit.edit()?;
+        let (id, params) = operation.edit.command();
+        session.execute(id, &params).map_err(|e| e.to_string())?;
+        crate::midi::encode(session.project())?;
+        *revision = operation.revision;
+    }
+    if controls.revision != *revision || !controls.changes(session.project())?.is_empty() {
+        return Err("shared operations do not match the host snapshot".into());
+    }
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -125,17 +174,33 @@ impl WireEdit {
 pub enum ClientMessage {
     Hello { protocol: u16, format: u16, secret: String },
     Download { protocol: u16, offset: usize },
-    Poll { protocol: u16 },
-    Edit { protocol: u16, sequence: u64, base_revision: u64, edit: WireEdit },
+    Poll { protocol: u16, seen_revision: u64 },
+    Edit { protocol: u16, sequence: u64, base_revision: u64, seen_revision: u64, edit: WireEdit },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ServerMessage {
     Denied,
-    Project { protocol: u16, format: u16, bytes: usize, sha256: String },
-    Chunk { protocol: u16, offset: usize, data: String },
-    State { protocol: u16, controls: Box<Controls>, accepted: Option<bool>, error: Option<String> },
+    Project {
+        protocol: u16,
+        format: u16,
+        revision: u64,
+        bytes: usize,
+        sha256: String,
+    },
+    Chunk {
+        protocol: u16,
+        offset: usize,
+        data: String,
+    },
+    State {
+        protocol: u16,
+        controls: Box<Controls>,
+        operations: Vec<Operation>,
+        accepted: Option<bool>,
+        error: Option<String>,
+    },
 }
 
 pub fn read<T: for<'de> Deserialize<'de>>(io: &mut impl Read) -> Result<T, String> {

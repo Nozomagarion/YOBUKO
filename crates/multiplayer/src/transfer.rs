@@ -12,13 +12,13 @@ fn hash(bytes: &[u8]) -> String {
     Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 
-pub fn send(io: &mut (impl Read + Write), bytes: &[u8], stop: &AtomicBool) -> Result<(), String> {
+pub fn send(io: &mut (impl Read + Write), bytes: &[u8], revision: u64, stop: &AtomicBool) -> Result<(), String> {
     if bytes.is_empty() || bytes.len() > crate::midi::MAX_DOCUMENT {
         return Err("invalid MIDI document size".into());
     }
     protocol::write(
         io,
-        &ServerMessage::Project { protocol: PROTOCOL, format: 1, bytes: bytes.len(), sha256: hash(bytes) },
+        &ServerMessage::Project { protocol: PROTOCOL, format: 1, revision, bytes: bytes.len(), sha256: hash(bytes) },
     )?;
     for (index, chunk) in bytes.chunks(CHUNK).enumerate() {
         if stop.load(Ordering::Relaxed) {
@@ -39,8 +39,8 @@ pub fn receive(
     header: ServerMessage,
     stop: &AtomicBool,
     mut progress: impl FnMut(usize, usize),
-) -> Result<Vec<u8>, String> {
-    let ServerMessage::Project { protocol: PROTOCOL, format: 1, bytes, sha256 } = header else {
+) -> Result<(Vec<u8>, u64), String> {
+    let ServerMessage::Project { protocol: PROTOCOL, format: 1, revision, bytes, sha256 } = header else {
         return Err("invitation refused or incompatible MIDI format".into());
     };
     if bytes == 0
@@ -77,7 +77,7 @@ pub fn receive(
     if hash(&document) != sha256 {
         return Err("MIDI document checksum mismatch".into());
     }
-    Ok(document)
+    Ok((document, revision))
 }
 
 #[cfg(test)]

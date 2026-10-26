@@ -71,11 +71,15 @@ socket as though this prototype provided authentication or safe untrusted docume
 
 Fork-owner continuation of feature/multiplayer amends decisions 1 and 5. A separate layer-3
 `multiplayer` crate uses the trusted host without exposing its project clone API. A generated MIDI starter or an explicitly validated, bounded MIDI-only copy can participate,
-with three live track controls. The [MIDI-copy contract](../spec/lan-midi-copy.md) adds the native
+with three live track controls and single-note add/update/delete. The [MIDI-copy contract](../spec/lan-midi-copy.md) adds the native
 format/subset, canonical encoding, hash/chunk/deadline bounds and original-project preservation. The adapter
 owns authenticated TLS, bearer invitation lifetime, frame/deadline/queue bounds and guest identity.
 The desktop owns a locked dedicated project and applies host-confirmed controls through commands.
-Existing projects and private playback are retained. Arbitrary project/media exchange remains
+The [note-editing contract](../spec/lan-note-editing.md) adds atomic absolute note updates,
+revision-bound indices, detached quota preflight and a 32-operation delivery journal. Native
+copy-on-write content IDs are allocated deterministically by the same host-confirmed command
+on each replica; arbitrary creation/deletion of tracks or clips is still closed. Admission
+snapshots current music with its revision. Existing projects and private playback are retained. Arbitrary project/media exchange remains
 closed; this is a fork prototype, not an accepted upstream architecture or external security review.
 
 ## Sources

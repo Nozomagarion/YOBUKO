@@ -21,6 +21,9 @@ impl Edit {
             "track.rename" => "track.rename",
             "track.setVolume" => "track.setVolume",
             "track.setPan" => "track.setPan",
+            "note.add" => "note.add",
+            "note.update" => "note.update",
+            "note.delete" => "note.delete",
             _ => return Err(Error::UnsupportedCommand),
         };
         if !commands().iter().any(|spec| spec.id == command && spec.kind == CommandKind::Edit && !spec.policy.critical)
@@ -47,6 +50,31 @@ impl Edit {
                     && object.get("tracks").is_some_and(valid_tracks)
                     && number_in(object.get("pan"), -1.0, 1.0)
             }
+            "note.add" => {
+                keys(object, &["clip", "notes"])
+                    && object.get("clip").is_some_and(valid_id)
+                    && object.get("notes").and_then(Value::as_array).is_some_and(|notes| {
+                        notes.len() == 1
+                            && notes.first().and_then(Value::as_object).is_some_and(|note| {
+                                keys(note, &["time", "length", "key", "velocity"]) && valid_note(note)
+                            })
+                    })
+            }
+            "note.update" => {
+                keys(object, &["clip", "note", "time", "length", "key", "velocity", "muted"])
+                    && object.get("clip").is_some_and(valid_id)
+                    && valid_index(object.get("note"))
+                    && valid_note(object)
+                    && object.get("muted").is_some_and(Value::is_boolean)
+            }
+            "note.delete" => {
+                keys(object, &["clip", "notes"])
+                    && object.get("clip").is_some_and(valid_id)
+                    && object
+                        .get("notes")
+                        .and_then(Value::as_array)
+                        .is_some_and(|notes| notes.len() == 1 && valid_index(notes.first()))
+            }
             _ => false,
         };
         if !valid {
@@ -54,6 +82,16 @@ impl Edit {
         }
         Ok(Self { command, params })
     }
+}
+
+fn valid_index(value: Option<&Value>) -> bool {
+    value.and_then(Value::as_u64).is_some_and(|i| i < 16_384)
+}
+fn valid_note(object: &Map<String, Value>) -> bool {
+    number_in(object.get("time"), 0.0, 120_000.0)
+        && number_in(object.get("length"), f64::MIN_POSITIVE, 120_000.0)
+        && object.get("key").and_then(Value::as_u64).is_some_and(|key| key <= 127)
+        && number_in(object.get("velocity"), 1.0, 127.0)
 }
 
 fn keys(object: &Map<String, Value>, permitted: &[&str]) -> bool {

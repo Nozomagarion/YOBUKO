@@ -8,6 +8,7 @@ fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
     let now = Instant::now();
     let secret = "a".repeat(64);
     let mut host = Canonical {
+        journal: VecDeque::new(),
         host: Host::new(crate::starter_project()).unwrap(),
         secret: secret_hash(&secret),
         expires: now + Duration::from_secs(1),
@@ -156,9 +157,10 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
     .unwrap();
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     let document = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
-    assert!(crate::midi::decode(&document).is_ok());
+    assert!(crate::midi::decode(&document.0).is_ok());
     assert!(matches!(protocol::read::<ServerMessage>(&mut io).unwrap(), ServerMessage::State { .. }));
     let edit = ClientMessage::Edit {
+        seen_revision: 0,
         protocol: PROTOCOL,
         sequence: 1,
         base_revision: 0,
@@ -175,6 +177,7 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
     protocol::write(
         &mut io,
         &ClientMessage::Edit {
+            seen_revision: 0,
             protocol: PROTOCOL,
             sequence: 1,
             base_revision: 0,
@@ -188,7 +191,7 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
     assert_eq!(controls.revision, 1);
     assert_eq!(controls.tracks[0].name, "One revision only");
     assert_eq!(accepted, Some(false));
-    protocol::write(&mut io, &ClientMessage::Poll { protocol: PROTOCOL + 1 }).unwrap();
+    protocol::write(&mut io, &ClientMessage::Poll { protocol: PROTOCOL + 1, seen_revision: 0 }).unwrap();
     assert!(protocol::read::<ServerMessage>(&mut io).is_err());
 }
 
@@ -224,7 +227,15 @@ fn sixty_four_tracks_with_json_escaped_names_fit_a_control_frame() {
     let mut bytes = vec![];
     protocol::write(
         &mut bytes,
-        &ServerMessage::State { protocol: PROTOCOL, controls: Box::new(controls.clone()), accepted: None, error: None },
+        &ServerMessage::State {
+            protocol: PROTOCOL,
+            controls: Box::new(controls.clone()),
+            operations: (1..=32)
+                .map(|revision| Operation { revision, edit: WireEdit::Rename { track: 1, name: "\\".repeat(256) } })
+                .collect(),
+            accepted: None,
+            error: None,
+        },
     )
     .unwrap();
     assert!(bytes.len() <= protocol::MAX_FRAME + 4);
@@ -246,4 +257,150 @@ fn an_invalid_new_selection_cannot_leave_an_old_project_staged_for_sharing() {
     assert!(service.select_project(&invalid).is_err());
     assert!(service.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).is_err());
     assert!(!service.active());
+}
+
+fn canonical(project: Project) -> Canonical {
+    Canonical {
+        host: Host::new(project).unwrap(),
+        journal: VecDeque::new(),
+        secret: [0; 32],
+        expires: Instant::now() + Duration::from_secs(300),
+        redeemed: false,
+        guest: false,
+    }
+}
+
+#[test]
+fn journal_is_bounded_retries_are_not_duplicated_and_bad_cursors_fail() {
+    let mut state = canonical(crate::starter_project());
+    let edit = WireEdit::Rename { track: 1, name: "once".into() };
+    state.submit(Host::owner(), 1, 0, edit.clone()).unwrap();
+    state.submit(Host::owner(), 1, 0, edit).unwrap();
+    assert_eq!(state.journal.len(), 1);
+    assert!(state.since(2).is_err());
+    for sequence in 2..=34 {
+        state.submit(Host::owner(), sequence, sequence - 1, WireEdit::Pan { track: 1, pan: 0.1 }).unwrap();
+    }
+    assert_eq!(state.journal.len(), 32);
+    assert!(state.since(1).is_err());
+    let ops = state.since(2).unwrap();
+    assert_eq!(ops.first().unwrap().revision, 3);
+    assert_eq!(ops.last().unwrap().revision, 34);
+    assert!(state.since(34).unwrap().is_empty());
+}
+
+#[test]
+fn quota_preflight_refuses_copy_on_write_growth_before_the_host_or_sequence_changes() {
+    use suhina_model::{Clip, ClipContent, ContentId};
+    let mut p = crate::starter_project();
+    let duplicate = Clip { id: Default::default(), start: 70.0, ..p.arrangement.lanes[0].clips[0].clone() };
+    p.arrangement.lanes[0].clips.push(duplicate);
+    for i in p.contents.len()..512 {
+        p.contents.push(ClipContent {
+            id: ContentId(2000 + i as u32),
+            name: "Empty".into(),
+            length: 4.0,
+            lanes: vec![],
+            extensions: Default::default(),
+            scale: None,
+        });
+    }
+    p.assign_ids().unwrap();
+    crate::midi::validate(&p).unwrap();
+    let mut state = canonical(p);
+    let before = state.host.project().clone();
+    let clip = before.arrangement.lanes[0].clips[0].id.0;
+    assert!(
+        state
+            .submit(Host::owner(), 1, 0, WireEdit::NoteAdd { clip, time: 0., length: 1., key: 60, velocity: 90. })
+            .is_err()
+    );
+    assert!(
+        state
+            .submit(
+                Host::owner(),
+                1,
+                0,
+                WireEdit::NoteUpdate { clip, note: 0, time: 1., length: 1., key: 60, velocity: 90., muted: false }
+            )
+            .is_err(),
+        "COW also counts toward quotas"
+    );
+    assert_eq!(state.host.project(), &before);
+    assert_eq!(state.host.revision(), 0);
+    assert!(state.journal.is_empty());
+    state.submit(Host::owner(), 1, 0, WireEdit::Rename { track: 1, name: "still usable".into() }).unwrap();
+    assert_eq!(state.host.revision(), 1);
+}
+
+#[test]
+fn malformed_operation_gaps_and_unconfirmed_controls_are_never_accepted() {
+    use suhina_session::Session;
+    let mut session = Session::new(crate::starter_project());
+    let before = session.project().clone();
+    let controls = Controls::from_project(&before, 1).unwrap();
+    let mut revision = 0;
+    let op = Operation { revision: 2, edit: WireEdit::Pan { track: 1, pan: 0.1 } };
+    assert!(protocol::apply_operations(&mut session, &mut revision, &controls, &[op]).is_err());
+    assert_eq!(session.project(), &before);
+    assert!(protocol::apply_operations(&mut session, &mut revision, &controls, &[]).is_err());
+}
+
+#[test]
+fn notes_changed_during_download_are_applied_after_the_snapshot_before_joining() {
+    let mut host = Service::default();
+    let invitation = invitation_from(&mut host);
+    let clip = host.project.as_ref().unwrap().0.arrangement.lanes[0].clips[0].id.0;
+    let mut io = connect(&invitation);
+    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 1, secret: invitation.secret })
+        .unwrap();
+    let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
+    assert!(matches!(offer, ServerMessage::Project { revision: 0, .. }));
+    host.execute(
+        "multiplayer.edit",
+        &json!({"base_revision":0,"edit":serde_json::to_string(
+        &WireEdit::NoteAdd {clip,time:0.5,length:1.0,key:95,velocity:100.0}).unwrap()}),
+    )
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while host.controls.as_ref().unwrap().revision < 1 && Instant::now() < deadline {
+        host.poll();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let (document, mut revision) =
+        crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
+    assert_eq!(revision, 0);
+    let mut mirror = suhina_session::Session::new(crate::midi::decode(&document).unwrap());
+    let ServerMessage::State { controls, operations, .. } = protocol::read::<ServerMessage>(&mut io).unwrap() else {
+        panic!("state")
+    };
+    assert_eq!(operations.len(), 1);
+    protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations).unwrap();
+    assert_eq!(revision, 1);
+    let notes = mirror.execute("note.list", &json!({"clip":clip})).unwrap();
+    assert_eq!(notes[4]["key"], 95);
+}
+
+#[test]
+fn a_closed_worker_retains_its_last_verified_operations_until_the_ui_takes_them() {
+    let (send, events) = mpsc::sync_channel(32);
+    let (inputs, _) = mpsc::sync_channel(16);
+    let stop = Arc::new(AtomicBool::new(false));
+    let mut service = Service {
+        running: Some(Running { stop, sockets: Arc::new(Mutex::new(vec![])), inputs, events }),
+        ..Default::default()
+    };
+    let mut controls = Controls::from_project(&crate::starter_project(), 1).unwrap();
+    controls.tracks[0].name = "Last confirmed change".into();
+    let operation =
+        Operation { revision: 1, edit: WireEdit::Rename { track: 1, name: controls.tracks[0].name.clone() } };
+    assert!(send.try_send(Event::State(controls, vec![operation.clone()], true)).is_ok());
+    assert!(send.try_send(Event::Failed("connection closed".into())).is_ok());
+    service.poll();
+    assert!(!service.active());
+    let value = service.execute("multiplayer.state", &json!({})).unwrap();
+    assert_eq!(value["controls"]["revision"], 1);
+    let operations: Vec<Operation> = serde_json::from_value(value["operations"].clone()).unwrap();
+    assert_eq!(operations, vec![operation]);
+    assert!(service.execute("multiplayer.state", &json!({})).unwrap()["operations"].as_array().unwrap().is_empty());
 }

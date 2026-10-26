@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use super::*;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 use std::time::{Duration, Instant};
 
 #[test]
@@ -65,6 +65,32 @@ fn two_desktop_projects_apply_confirmed_controls_and_unlock_on_disconnect() {
     }
     assert_eq!(host.projects.get(local).unwrap().project().tracks[0].name, "From the other computer");
     assert!(host.projects.execute("track.rename", &json!({"track":1,"name":"Bypass"})).is_err());
+    let clip = host.projects.get(local).unwrap().project().arrangement.lanes[0].clips[0].id.0;
+    for (base, from_guest, edit) in [
+        (1, true, json!({"command":"note.add","clip":clip,"time":0.5,"length":1,"key":90,"velocity":100})),
+        (
+            2,
+            false,
+            json!({"command":"note.update","clip":clip,"note":4,"time":1.5,"length":0.75,"key":80,"velocity":60,"muted":true}),
+        ),
+        (3, true, json!({"command":"note.delete","clip":clip,"note":0})),
+    ] {
+        let author = if from_guest { &mut guest } else { &mut host };
+        author.multiplayer_command("multiplayer.edit", json!({"base_revision":base,"edit":edit.to_string()}));
+        while (host.multiplayer.controls.as_ref().unwrap().revision < base + 1
+            || guest.multiplayer.controls.as_ref().unwrap().revision < base + 1)
+            && Instant::now() < deadline
+        {
+            host.poll_multiplayer(&ctx);
+            guest.poll_multiplayer(&ctx);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(host.multiplayer.controls.as_ref().unwrap().revision, base + 1);
+        assert_eq!(
+            host.projects.get(local).unwrap().project().contents,
+            guest.projects.get(remote).unwrap().project().contents
+        );
+    }
     host.leave_multiplayer();
     assert!(host.projects.execute("track.rename", &json!({"track":1,"name":"Local"})).is_ok());
     while guest.multiplayer.service.active() && Instant::now() < deadline {
@@ -102,6 +128,9 @@ fn render_multiplayer_panel_for_review() {
     assert!(harness.state().multiplayer.bound.is_some());
     harness.run_steps(2);
     harness.render().unwrap().save(folder.join("multiplayer-midi-copy.png")).unwrap();
+    harness.get_by_label("MIDI notes").click();
+    harness.run_steps(2);
+    harness.render().unwrap().save(folder.join("multiplayer-midi-notes.png")).unwrap();
 }
 
 #[test]
@@ -177,4 +206,84 @@ fn an_audio_project_is_refused_without_opening_a_listener_or_replacing_its_tab()
     assert!(app.multiplayer.bound.is_none());
     assert_eq!(app.projects.active(), Some(original));
     assert_eq!(app.projects.get(original).unwrap().project(), &before);
+}
+
+#[test]
+fn visible_note_buttons_edit_the_shared_music_and_refuse_a_stale_draft() {
+    let mut app = App::new();
+    app.set_session(Session::new(suhina_multiplayer::starter_project()), &[]);
+    let original = app.projects.active().unwrap();
+    app.multiplayer.open = true;
+    app.multiplayer.address = "127.0.0.1:0".into();
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 900.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run();
+    let before = harness.state().projects.get(original).unwrap().project().clone();
+    harness.get_by_label("Share current MIDI project").click();
+    let deadline = Instant::now() + Duration::from_secs(8);
+    while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    harness.get_by_label("MIDI notes").click();
+    harness.run_steps(2);
+    let shared = harness.state().multiplayer.bound.unwrap();
+    let clip = harness.state().projects.get(shared).unwrap().project().arrangement.lanes[0].clips[0].id.0;
+    harness.get_by_label("Add note").click();
+    while harness.state().multiplayer.controls.as_ref().is_none_or(|c| c.revision < 1) && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(harness.state().multiplayer.controls.as_ref().unwrap().revision, 1);
+    let list = harness.state_mut().projects.execute_in(Some(shared), "note.list", &json!({"clip":clip})).unwrap();
+    assert_eq!(list.as_array().unwrap().len(), 5);
+    assert!(harness.query_by_label("Refresh note draft").is_some());
+    harness.get_by_label("Edit note 1").click();
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Apply note").is_some());
+    assert!(harness.query_by_label("Delete note").is_some());
+    // Another participant's accepted operation arrives while this draft still names note 0.
+    harness.state_mut().multiplayer_command(
+        "multiplayer.edit",
+        json!({"base_revision":1,
+        "edit":json!({"command":"note.delete","clip":clip,"note":0}).to_string()}),
+    );
+    while harness.state().multiplayer.controls.as_ref().unwrap().revision < 2 && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Refresh note draft").is_some());
+    assert!(harness.get_by_label("Apply note").accesskit_node().is_disabled());
+    assert!(harness.get_by_label("Delete note").accesskit_node().is_disabled());
+    harness.get_by_label("Refresh note draft").click();
+    harness.run_steps(2);
+    assert!(harness.query_by_label("Apply note").is_none(), "refresh must not rebind the shifted index");
+    harness.get_by_label("Edit note 1").click();
+    harness.run_steps(2);
+    harness.get_by_label("Apply note").click();
+    while harness.state().multiplayer.controls.as_ref().unwrap().revision < 3 && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(harness.state().multiplayer.controls.as_ref().unwrap().revision, 3);
+    harness.get_by_label("Edit note 1").click();
+    harness.run_steps(2);
+    harness.get_by_label("Delete note").click();
+    while harness.state().multiplayer.controls.as_ref().unwrap().revision < 4 && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(harness.state().multiplayer.controls.as_ref().unwrap().revision, 4);
+    let list = harness.state_mut().projects.execute_in(Some(shared), "note.list", &json!({"clip":clip})).unwrap();
+    assert_eq!(list.as_array().unwrap().len(), 3);
+    assert!(
+        harness
+            .state_mut()
+            .projects
+            .execute_in(Some(shared), "note.delete", &json!({"clip":clip,"notes":[0]}))
+            .is_err()
+    );
+    assert_eq!(harness.state().projects.get(original).unwrap().project(), &before);
 }

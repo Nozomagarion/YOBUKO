@@ -7,6 +7,7 @@ use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
 };
 use serde_json::{Value, json};
+use std::collections::VecDeque;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::{
@@ -21,19 +22,64 @@ use suhina_model::Project;
 use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, ParamType, Policy};
 
 use crate::invitation::{Invitation, new_secret, private, secret_hash};
-use crate::protocol::{self, ClientMessage, Controls, PROTOCOL, ServerMessage, WireEdit};
+use crate::protocol::{self, ClientMessage, Controls, Operation, PROTOCOL, ServerMessage, WireEdit};
 
 const TIMEOUT: Duration = Duration::from_secs(3);
 const POLL: Duration = Duration::from_millis(100);
 
 struct Canonical {
     host: Host,
+    journal: VecDeque<Operation>,
     secret: [u8; 32],
     expires: Instant,
     redeemed: bool,
     guest: bool,
 }
 impl Canonical {
+    fn since(&self, seen: u64) -> Result<Vec<Operation>, String> {
+        let revision = self.host.revision();
+        if seen > revision || revision - seen > self.journal.len() as u64 {
+            return Err("shared history is no longer available; rejoin with a new invitation".into());
+        }
+        Ok(self.journal.iter().filter(|op| op.revision > seen).cloned().collect())
+    }
+    fn submit(
+        &mut self,
+        author: suhina_collaboration::PeerId,
+        sequence: u64,
+        base: u64,
+        wire: WireEdit,
+    ) -> Result<(), String> {
+        let edit = wire.edit()?;
+        // Pure commands only: preflight quotas before the canonical host can mutate anything.
+        if base == self.host.revision() {
+            let mut candidate = suhina_session::Session::new(self.host.project().clone());
+            let (id, params) = wire.command();
+            candidate.execute(id, &params).map_err(|e| e.to_string())?;
+            crate::midi::encode(candidate.project())?;
+        }
+        let before = self.host.revision();
+        self.host.submit(author, Request { sequence, base_revision: base, edit }).map_err(|e| e.to_string())?;
+        if self.host.revision() != before {
+            if self.journal.len() == 32 {
+                self.journal.pop_front();
+            }
+            self.journal.push_back(Operation { revision: self.host.revision(), edit: wire });
+        }
+        Ok(())
+    }
+    fn response(&self, seen: u64, outcome: Option<Result<(), String>>) -> Result<ServerMessage, String> {
+        let operations = self.since(seen)?;
+        let accepted = outcome.as_ref().map(Result::is_ok);
+        let error = outcome.and_then(Result::err);
+        Ok(ServerMessage::State {
+            protocol: PROTOCOL,
+            controls: Box::new(Controls::from_project(self.host.project(), self.host.revision())?),
+            operations,
+            accepted,
+            error,
+        })
+    }
     fn admit(&mut self, secret: &str, now: Instant) -> Result<suhina_collaboration::PeerId, String> {
         if secret.len() != 64
             || !bool::from(self.secret.ct_eq(&secret_hash(secret)))
@@ -52,7 +98,7 @@ enum Event {
     Ready(String, Controls, Box<Project>),
     Connected(Controls, Box<Project>),
     Receiving(usize, usize),
-    State(Controls, bool),
+    State(Controls, Vec<Operation>, bool),
     Rejected(String),
     Failed(String),
     Closed,
@@ -86,7 +132,8 @@ pub struct Service {
     error: Option<String>,
     guest: bool,
     selected: Option<Project>,
-    project: Option<Project>,
+    project: Option<(Project, u64)>,
+    operations: Vec<Operation>,
     receiving: Option<(usize, usize)>,
 }
 
@@ -103,6 +150,10 @@ impl Service {
     }
     /// The verified initial music, consumed once by the desktop when it creates a new tab.
     pub fn take_project(&mut self) -> Option<Project> {
+        self.project.take().map(|(project, _)| project)
+    }
+    /// Verified initial music and the revision it represents, consumed once.
+    pub fn take_snapshot(&mut self) -> Option<(Project, u64)> {
         self.project.take()
     }
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value, CommandError> {
@@ -120,20 +171,30 @@ impl Service {
             loop {
                 match running.events.try_recv() {
                     Ok(Event::Ready(invitation, controls, project)) => {
-                        self.project = Some(*project);
+                        self.project = Some((*project, controls.revision));
+                        self.operations.clear();
                         self.receiving = None;
                         self.mode = "hosting".into();
                         self.invitation = Some(invitation);
                         self.controls = Some(controls);
                     }
                     Ok(Event::Connected(controls, project)) => {
-                        self.project = Some(*project);
+                        self.project = Some((*project, controls.revision));
+                        self.operations.clear();
                         self.receiving = None;
                         self.mode = "connected".into();
                         self.controls = Some(controls);
                     }
                     Ok(Event::Receiving(done, total)) => self.receiving = Some((done, total)),
-                    Ok(Event::State(controls, guest)) => {
+                    Ok(Event::State(controls, operations, guest)) => {
+                        if self.operations.len() + operations.len() > 128 {
+                            self.error =
+                                Some("shared editor is not keeping up; the last local copy was preserved".into());
+                            self.mode = "error".into();
+                            closed = true;
+                            break;
+                        }
+                        self.operations.extend(operations);
                         self.controls = Some(controls);
                         self.guest = guest;
                     }
@@ -188,6 +249,7 @@ impl Service {
         self.invitation = None;
         self.guest = false;
         self.project = None;
+        self.operations.clear();
         self.receiving = None;
         self.running = Some(Running { stop, sockets, inputs, events });
         Ok(json!({"queued":true}))
@@ -257,7 +319,7 @@ pub fn commands() -> &'static [CommandSpec<Service>] {
 fn state(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.poll();
     Ok(
-        json!({"mode":s.mode,"controls":s.controls,"invitation":s.invitation,"error":s.error,"guest_connected":s.guest,"receiving":s.receiving}),
+        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"error":s.error,"guest_connected":s.guest,"receiving":s.receiving}),
     )
 }
 fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
@@ -402,8 +464,7 @@ fn host(
     inputs: Receiver<Input>,
     events: &SyncSender<Event>,
 ) -> Result<(), String> {
-    let (source, document) = crate::midi::encode(&source)?;
-    let document = Arc::new(document);
+    let (source, _) = crate::midi::encode(&source)?;
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let key = rcgen::generate_simple_self_signed(vec!["suhina.local".into()])
         .map_err(|_| "could not create the host certificate")?;
@@ -432,6 +493,7 @@ fn host(
     let initial = Controls::from_project(host.project(), 0)?;
     let canonical = Arc::new(Mutex::new(Canonical {
         host,
+        journal: VecDeque::new(),
         secret: secret_hash(&secret),
         expires: Instant::now() + Duration::from_secs(300),
         redeemed: false,
@@ -445,8 +507,7 @@ fn host(
     while !stop.load(Ordering::Relaxed) {
         while let Ok(Input::Edit { base, edit }) = inputs.try_recv() {
             let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-            let request = Request { sequence, base_revision: base, edit: edit.edit()? };
-            match state.host.submit(Host::owner(), request) {
+            match state.submit(Host::owner(), sequence, base, edit) {
                 Ok(_) => sequence = sequence.checked_add(1).ok_or("operation counter exhausted")?,
                 Err(e) => {
                     let _ = events.try_send(Event::Rejected(e.to_string()));
@@ -458,7 +519,11 @@ fn host(
             let current = (state.host.revision(), state.guest);
             if current != last
                 && events
-                    .try_send(Event::State(Controls::from_project(state.host.project(), current.0)?, current.1))
+                    .try_send(Event::State(
+                        Controls::from_project(state.host.project(), current.0)?,
+                        state.since(last.0)?,
+                        current.1,
+                    ))
                     .is_ok()
             {
                 last = current;
@@ -486,11 +551,10 @@ fn host(
                     Arc::clone(&pending),
                     Arc::clone(sockets),
                 );
-                let document = Arc::clone(&document);
                 pending.fetch_add(1, Ordering::Relaxed);
                 match std::thread::Builder::new().name("suhina-lan-peer".into()).spawn(move || {
                     let _guard = ConnectionGuard { sockets: registry, peer: stream.peer_addr().ok() };
-                    let _ = serve(stream, tls, &canonical, &stop, &document);
+                    let _ = serve(stream, tls, &canonical, &stop);
                     pending.fetch_sub(1, Ordering::Relaxed);
                 }) {
                     Ok(handle) => handlers.push(handle),
@@ -514,7 +578,6 @@ fn serve(
     tls: Arc<ServerConfig>,
     canonical: &Mutex<Canonical>,
     stop: &AtomicBool,
-    document: &[u8],
 ) -> Result<(), String> {
     let connection = ServerConnection::new(tls).map_err(|e| e.to_string())?;
     let mut io = StreamOwned::new(connection, DeadlineSocket::new(stream));
@@ -536,38 +599,32 @@ fn serve(
     };
     let result = (|| {
         io.sock.deadline = Instant::now() + Duration::from_secs(30);
-        crate::transfer::send(&mut io, document, stop)?;
-        io.sock.renew();
-        let initial = {
+        let (snapshot, revision) = {
             let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-            Controls::from_project(state.host.project(), state.host.revision())?
+            (state.host.project().clone(), state.host.revision())
         };
-        protocol::write(
-            &mut io,
-            &ServerMessage::State { protocol: PROTOCOL, controls: Box::new(initial), accepted: None, error: None },
-        )?;
+        let (_, document) = crate::midi::encode(&snapshot)?;
+        crate::transfer::send(&mut io, &document, revision, stop)?;
+        io.sock.renew();
+        let initial = canonical.lock().unwrap_or_else(PoisonError::into_inner).response(revision, None)?;
+        protocol::write(&mut io, &initial)?;
         while !stop.load(Ordering::Relaxed) {
             io.sock.renew();
             let message: ClientMessage = protocol::read(&mut io)?;
             let response = {
                 let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-                let outcome = match message {
-                    ClientMessage::Poll { protocol } if protocol == PROTOCOL => None,
-                    ClientMessage::Edit { protocol, sequence, base_revision, edit }
-                        if protocol == PROTOCOL && sequence > 0 =>
+                let (seen, outcome) = match message {
+                    ClientMessage::Poll { protocol: PROTOCOL, seen_revision } => (seen_revision, None),
+                    ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision, seen_revision, edit }
+                        if sequence > 0 =>
                     {
-                        Some(state.host.submit(peer, Request { sequence, base_revision, edit: edit.edit()? }))
+                        // Validate delivery cursor before allowing a mutation.
+                        state.since(seen_revision)?;
+                        (seen_revision, Some(state.submit(peer, sequence, base_revision, edit)))
                     }
                     _ => return Err("unsupported LAN protocol message".into()),
                 };
-                let accepted = outcome.as_ref().map(Result::is_ok);
-                let error = outcome.and_then(Result::err).map(|e| e.to_string());
-                ServerMessage::State {
-                    protocol: PROTOCOL,
-                    controls: Box::new(Controls::from_project(state.host.project(), state.host.revision())?),
-                    accepted,
-                    error,
-                }
+                state.response(seen, outcome)?
             };
             protocol::write(&mut io, &response)?;
             // Rate bound also applies to a guest bypassing our client's polling cadence.
@@ -607,19 +664,21 @@ fn guest(
     protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 1, secret: invitation.secret })?;
     io.sock.deadline = Instant::now() + Duration::from_secs(30);
     let offer: ServerMessage = protocol::read(&mut io)?;
-    let document = crate::transfer::receive(&mut io, offer, stop, |done, total| {
+    let (document, mut revision) = crate::transfer::receive(&mut io, offer, stop, |done, total| {
         let _ = events.try_send(Event::Receiving(done, total));
     })?;
-    let project = crate::midi::decode(&document)?;
+    let mut mirror = suhina_session::Session::new(crate::midi::decode(&document)?);
     io.sock.renew();
     let first: ServerMessage = protocol::read(&mut io)?;
-    let ServerMessage::State { protocol: PROTOCOL, controls, .. } = first else {
+    let ServerMessage::State { protocol: PROTOCOL, controls, operations, accepted: None, error: None } = first else {
         return Err("invitation refused, expired or already used".into());
     };
     let controls = *controls;
-    controls.changes(&project)?;
+    protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations)?;
     let mut previous = controls.clone();
-    events.try_send(Event::Connected(controls, Box::new(project.clone()))).map_err(|_| "multiplayer view closed")?;
+    events
+        .try_send(Event::Connected(controls, Box::new(mirror.project().clone())))
+        .map_err(|_| "multiplayer view closed")?;
     let mut sequence = 1u64;
     while !stop.load(Ordering::Relaxed) {
         io.sock.renew();
@@ -627,17 +686,17 @@ fn guest(
         let edited = input.is_some();
         let request = match input {
             Some(Input::Edit { base, edit }) => {
-                ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision: base, edit }
+                ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision: base, seen_revision: revision, edit }
             }
-            None => ClientMessage::Poll { protocol: PROTOCOL },
+            None => ClientMessage::Poll { protocol: PROTOCOL, seen_revision: revision },
         };
         protocol::write(&mut io, &request)?;
         let response: ServerMessage = protocol::read(&mut io)?;
-        let ServerMessage::State { protocol: PROTOCOL, controls, accepted, error } = response else {
+        let ServerMessage::State { protocol: PROTOCOL, controls, operations, accepted, error } = response else {
             return Err("invalid host response".into());
         };
         let controls = *controls;
-        controls.changes(&project)?;
+        protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations)?;
         if controls.revision < previous.revision || controls.revision == previous.revision && controls != previous {
             return Err("host control revision mismatch".into());
         }
@@ -652,7 +711,9 @@ fn guest(
             }
         }
         if controls != previous {
-            events.try_send(Event::State(controls.clone(), true)).map_err(|_| "multiplayer view is not keeping up")?;
+            events
+                .try_send(Event::State(controls.clone(), operations, true))
+                .map_err(|_| "multiplayer view is not keeping up")?;
             previous = controls;
         }
         std::thread::sleep(POLL);

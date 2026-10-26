@@ -57,7 +57,7 @@ still to perform. No personal project or audio file is needed.
    useful only for two app instances on the same computer, not for a second computer.
 3. Click **Copy invitation** and send it privately to the guest. On the guest computer, open
    **Multiplayer**, paste it into **Invitation from the host**, and click **Join LAN session**.
-   Both should show four tracks; the host should say **Guest connected**. Allow local-network
+   Both should show four MIDI tracks and two return tracks; the host should say **Guest connected**. Allow local-network
    access in the OS if requested. A failed connection must display an error, not a joined state.
 4. On the host, change **Pulse** to **Shared pulse**, then click its **Rename** button. The guest
    should receive the new name and confirmed revision. On the guest, change that track's
@@ -77,10 +77,12 @@ still to perform. No personal project or audio file is needed.
 To use your own music, first open a MIDI project in Studio. Choose **Multiplayer → Share current
 MIDI project**, then use the same invitation flow. It creates a new musical copy, retaining the
 source tab. FM Synth and Utility parameters are supported; audio, other instruments, plugins
-and opaque device states are refused with an error. Names/volume/pan remain live shared controls;
-notes/clips arrive in the initial copy and are read-only until leaving. Local metadata, hardware
+and opaque device states are refused with an error. Names/volume/pan and single notes are live shared edits. In **MIDI notes**, choose a clip,
+select a note and use **Apply note** or **Delete note**; **New note draft → Add note** adds one.
+A newer shared revision makes the draft stale; **Refresh note draft** clears selection so a
+shifted index cannot silently target another note. Clip placement remains fixed while connected. Local metadata, hardware
 input settings and launch mappings are omitted. See the [copy contract](spec/lan-midi-copy.md).
-Both participants need the new protocol-2 build; old demo invitations no longer work.
+Both participants need the new protocol-3 build; old demo invitations no longer work.
 
 Network and UI regression checks:
 
