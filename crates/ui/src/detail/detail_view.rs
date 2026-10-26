@@ -476,7 +476,9 @@ pub fn show_ara_editor(
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
     painter.rect_filled(area, 0.0, theme::window_background());
-    let Some(device) = chain.devices.iter().find(|d| d.index == device) else { return };
+    // The clip host is not among the chain's devices (#990): its editor is found as the host.
+    let found = chain.devices.iter().find(|d| d.index == device && d.at.top());
+    let Some(device) = found.or(chain.host.as_ref().filter(|h| h.index == device)) else { return };
     let Some(plugin) = &device.plugin else { return };
     let response = ui.interact(area, egui::Id::new(("ara-editor", chain.track.0)), Sense::hover());
     let label = format!("Clip editor {}", device.name);

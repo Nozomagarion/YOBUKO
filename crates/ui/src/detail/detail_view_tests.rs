@@ -191,6 +191,21 @@ fn a_selected_slot_clip_shows_its_scene_loop_and_fades() {
     assert_eq!(build(&project, None, Some(ClipRef::Slot(TrackId(10), 0))), Detail::Nothing);
 }
 
+/// The clip host (the plug-in that edits a track's clips) is not in the chain's devices but is
+/// its host, so the clip editor finds it (#990).
+#[test]
+fn a_clip_host_is_the_chains_host_not_one_of_its_devices() {
+    let mut project = demo_project();
+    project.channels[0]
+        .devices
+        .insert(0, Device { clip_host: true, ..Device::new("Melodyne", DeviceKind::Builtin("utility".into())) });
+    project.channels[0].devices.push(Device::new("Utility", DeviceKind::Builtin("utility".into())));
+    let Detail::Devices(chain) = build(&project, Some(TrackId(1)), None) else { panic!() };
+    assert_eq!(chain.devices.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), ["Utility"]);
+    let host = chain.host.as_ref().expect("the clip host");
+    assert_eq!((host.name.as_str(), host.index), ("Melodyne", 0));
+}
+
 #[test]
 fn a_selected_track_shows_its_devices() {
     let mut project = demo_project();

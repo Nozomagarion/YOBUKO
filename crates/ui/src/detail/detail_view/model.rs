@@ -420,6 +420,9 @@ pub struct Chain {
     pub track: TrackId,
     pub name: String,
     pub devices: Vec<DeviceBox>,
+    /// The channel's clip host, the plug-in that edits its clips (#990): not among `devices`, as
+    /// it belongs to the clips, but its editor shows in the clip's place.
+    pub host: Option<DeviceBox>,
     /// The NAM panels' folders' files and a file's names and notes
     /// ([docs/spec/nam-amp-and-cab.md] › Folders).
     pub nam: crate::detail::nam_panel::Lists,
@@ -613,7 +616,10 @@ pub(super) fn chain(
                 .collect()
         })
         .unwrap_or_default();
-    Chain { track: id, name: track_name, devices, nam }
+    let host = channel.and_then(|c| {
+        c.devices.iter().enumerate().find(|(_, d)| d.clip_host).map(|(index, d)| device_box(d, &[index], id, plugins))
+    });
+    Chain { track: id, name: track_name, devices, host, nam }
 }
 
 /// One device as the detail area shows it, at `path` on track `id`; a group with its branches.
