@@ -1336,13 +1336,17 @@ fn lane(
             drag.to = pos;
         }
     }
-    if body.drag_stopped_by(egui::PointerButton::Primary) {
+    // The button up ends a point held from the lane however it was held: a press held still
+    // and let go is neither a click nor the end of a drag, and would leave the point held.
+    if body.drag_stopped_by(egui::PointerButton::Primary) || ui.input(|i| i.pointer.primary_released()) {
         if let Some(drag) = state.point_drag.take_if(|d| d.body && d.track == track && &d.key == key)
             && let Some(action) = drop_points(&drag, param, geometry, free)
         {
             actions.push(action);
         }
         state.new_point.take_if(|d| d.track == track && &d.key == key);
+    }
+    if body.drag_stopped_by(egui::PointerButton::Primary) {
         // The drag paints a time range on the lane, on the grid (free with Alt): the edit keys and
         // the shapes act on it, and the points in it are selected (#916).
         if let Some(drag) = state.box_drag.take_if(|d| d.select && d.track == track && &d.key == key) {
