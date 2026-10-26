@@ -1,6 +1,6 @@
 # Où en est notre application ?
 
-**Bilan vérifié le 26 octobre 2026 à 21 h 19 (heure de Paris).**
+**Bilan vérifié le 26 octobre 2026 à 21 h 21 (heure de Paris).**
 Version du logiciel décrite : `65d031f8` — la dernière étape de code livrée.
 
 ## À retenir
@@ -77,10 +77,12 @@ Son créneau sera décidé avec toi ; ce suivi ne le présente pas comme déjà 
 | Paquet Mac Apple Silicon | **Compilé et vérifié après extraction**, avec les trois programmes et les sources correspondantes. |
 | Dernier contrôle GitHub Linux | **Réussi.** |
 | Dernier contrôle GitHub Windows | **Réussi.** |
-| Dernier contrôle GitHub Mac Universal | **Encore en cours lors de cette vérification.** |
+| Dernier contrôle GitHub Mac Universal | **Réussi.** |
 | Deux ordinateurs physiques | **Pas encore testé.** |
 
 [Contrôles GitHub de la version décrite](https://github.com/Nozomagarion/suhina-daw/actions/runs/40387496818).
+Les trois contrôles automatiques de cette version sont réussis. La validation en conditions
+réelles sur deux ordinateurs et la publication d’une version commune restent à faire.
 Les états ci-dessus sont un relevé daté ; ce fichier ne se rafraîchit pas tout seul.
 
 ## Où trouver la version actuelle
