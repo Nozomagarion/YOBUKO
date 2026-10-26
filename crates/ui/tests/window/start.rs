@@ -307,8 +307,10 @@ fn help_about_shows_the_version_and_copies_it() {
     let version = suhina_ui::app::project_dialog::VERSION;
     let build = suhina_ui::app::project_dialog::BUILD;
     assert!(!build.is_empty(), "the build script sets the build string");
-    // The night and the commit, as a nightly's version ends: 20261016+a15ad35.
-    if build != "unknown" && std::env::var_os("SUHINA_BUILD").is_none() {
+    // The night and the commit, as a nightly's version ends: 20261016+a15ad35. A build whose
+    // value came from the environment skips this: its value is what that build was told, not
+    // the form git gives — build.rs says which happened, read here at compile time.
+    if build != "unknown" && option_env!("SUHINA_BUILD_FROM_ENVIRONMENT").is_none() {
         let (date, hash) = build.split_once('+').unwrap_or_default();
         assert!(date.len() == 8 && date.bytes().all(|b| b.is_ascii_digit()), "{build}");
         assert!(hash.len() == 7 && hash.bytes().all(|b| b.is_ascii_hexdigit()), "{build}");

@@ -22,15 +22,25 @@ fn main() {
         }
         println!("cargo:rerun-if-changed={}", git_dir.join("refs").display());
     }
-    let build = std::env::var("SUHINA_BUILD").ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| {
-        match (
-            one(&["rev-parse", "--short=7", "HEAD"]),
+    // A release build may set the environment itself; that value wins over what git says, and
+    // the crate is told which of the two happened (`SUHINA_BUILD_FROM_ENVIRONMENT`), so tests
+    // skip the generated form's checks when the value is not the one git gave.
+    let from_environment = std::env::var("SUHINA_BUILD").ok().filter(|s| !s.trim().is_empty());
+    if from_environment.is_some() {
+        println!("cargo:rustc-env=SUHINA_BUILD_FROM_ENVIRONMENT=1");
+    }
+    let build = match from_environment {
+        Some(set) => set,
+        None => match (
+            // The full hash, cut to seven characters: `--short=7` is a minimum, so a shared
+            // prefix would give a longer abbreviation and the format would not hold.
+            one(&["rev-parse", "HEAD"]).and_then(|hash| hash.get(..7).map(str::to_owned)),
             one(&["-c", "log.showSignature=false", "log", "-1", "--date=format-local:%Y%m%d", "--format=%cd"]),
         ) {
             (Some(hash), Some(date)) => format!("{date}+{hash}"),
             _ => String::from("unknown"),
-        }
-    });
+        },
+    };
     println!("cargo:rustc-env=SUHINA_BUILD={build}");
 }
 
