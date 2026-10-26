@@ -234,11 +234,14 @@ impl Scale {
     }
 
     /// `value` moved by `delta` in the unit of the set command, as `automation.movePoints`
-    /// moves it: kept in range, and a silent volume stays silent.
+    /// moves it: kept in range, and a silent volume moves from the lane's bottom (a level moved
+    /// down to the bottom is silent).
     fn shift(&self, value: f64, delta: f64) -> f64 {
         match self {
-            Self::Volume if value <= 0.0 => 0.0,
-            Self::Volume => 10f64.powf((gain_to_db(value) + delta).min(6.0) / 20.0),
+            Self::Volume => {
+                let db = (if value <= 0.0 { VOLUME_FLOOR } else { gain_to_db(value).max(VOLUME_FLOOR) }) + delta;
+                if db <= VOLUME_FLOOR { 0.0 } else { 10f64.powf(db.min(6.0) / 20.0) }
+            }
             Self::Pan => (value + delta).clamp(-1.0, 1.0),
             Self::Mute => (value + delta).clamp(0.0, 1.0).round(),
             Self::Device(info) => info.clamp(value + delta),
@@ -1396,7 +1399,7 @@ fn lane(
     if let Some(pos) = over_line {
         ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
         // Where a click puts the point: on the grid (at the pointer with Alt, or with Snap to grid
-        // off), marked by a line across the lane.
+        // off), marked by a dot on the line.
         let beat = geometry.snap(geometry.beat_of(pos.x), free);
         if let Some(value) =
             suhina_engine::model::automation::value_at(&level, beat, param.scale.stepped(), &param.scale)
@@ -1404,7 +1407,6 @@ fn lane(
             let y = y_of(plot, param.scale.position(value));
             let x = geometry.x_of(beat);
             let guide = painter.with_clip_rect(visible);
-            guide.vline(x, time.y_range(), Stroke::new(1.0, theme::text_secondary()));
             guide.circle_filled(Pos2::new(x, y), POINT, color(lanes.color));
             egui::Tooltip::always_open(ui.ctx().clone(), ui.layer_id(), id.with("value"), egui::PopupAnchor::Pointer)
                 .gap(12.0)
@@ -1717,10 +1719,6 @@ fn lane(
             None => (point.beat, point.value),
         };
         let center = Pos2::new(geometry.x_of(shown.0), y_of(plot, param.scale.position(shown.1)));
-        // The point being dragged by itself shows a thin line across the lane, against the grid.
-        if dragging == Some(index) && state.point_drag.as_ref().is_some_and(|d| !d.segment) {
-            lane_painter.vline(center.x, time.y_range(), Stroke::new(1.0, theme::text_secondary()));
-        }
         if !visible.expand(POINT_HIT).contains(center) {
             continue;
         }

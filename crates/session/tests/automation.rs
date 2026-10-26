@@ -758,3 +758,35 @@ fn replacing_live_values_starts_from_the_line_as_it_was() {
     run(&mut session, "edit.undo", json!({})).unwrap();
     assert_eq!(lane(&session), line);
 }
+
+/// Volume points picked at the bottom of the lane (silent) rise with the rest when moved up
+/// together, from -70 dB; moved back down to the bottom they are silent again (#916).
+#[test]
+fn silent_volume_points_move_up_with_the_rest() {
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, json!("-inf")), (1.0, json!(-6)), (2.0, json!("-inf"))] {
+        run(
+            &mut session,
+            "automation.addPoint",
+            json!({ "track": 1, "param": "volume", "beat": beat, "value": value }),
+        )
+        .unwrap();
+    }
+    let volume = |s: &Session| lanes(s).iter().find(|l| l.param == "volume").unwrap().points.clone();
+    run(
+        &mut session,
+        "automation.movePoints",
+        json!({ "track": 1, "param": "volume", "points": [0, 1, 2], "value": 40 }),
+    )
+    .unwrap();
+    let db: Vec<f64> = volume(&session).iter().map(|p| (20.0 * p.value.log10() * 100.0).round() / 100.0).collect();
+    assert_eq!(db, [-30.0, 6.0, -30.0]);
+    run(
+        &mut session,
+        "automation.movePoints",
+        json!({ "track": 1, "param": "volume", "points": [0, 2], "value": -40 }),
+    )
+    .unwrap();
+    let points = volume(&session);
+    assert_eq!((points[0].value, points[2].value), (0.0, 0.0));
+}

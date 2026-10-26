@@ -18,6 +18,9 @@ use crate::{CommandError, Session};
 
 /// Below this many decibels a volume point is silence, as for `track.setVolume`.
 const SILENCE_DB: f64 = -150.0;
+/// The bottom of a volume lane as the arrangement shows it: points moved together leave silence
+/// from here, and a level moved down to it or below is silent.
+const LANE_FLOOR_DB: f64 = -70.0;
 
 /// The parameter a command names, checked.
 pub(crate) struct Target {
@@ -359,11 +362,12 @@ impl Target {
     /// A lane value moved by `delta` in the unit of the parameter's set command, kept in range.
     fn shift(&self, session: &Session, value: f64, delta: f64) -> Result<f64, CommandError> {
         match &self.kind {
-            // Silence stays silent; a level never goes past the fader's top.
-            Kind::Volume => match to_db(value) {
-                None => Ok(0.0),
-                Some(db) => self.store(session, (db + delta).min(6.0)),
-            },
+            // Silence moves from the lane's bottom, so points picked at the bottom rise with the
+            // rest; a level moved down to the bottom is silent, and none goes past the fader's top.
+            Kind::Volume => {
+                let db = to_db(value).unwrap_or(LANE_FLOOR_DB).max(LANE_FLOOR_DB) + delta;
+                if db <= LANE_FLOOR_DB { Ok(0.0) } else { self.store(session, db.min(6.0)) }
+            }
             Kind::Plain => {
                 let (min, max) = mixer_range(&self.param).unwrap_or((value, value));
                 self.store(session, (value + delta).clamp(min, max))
