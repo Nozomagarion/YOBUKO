@@ -43,6 +43,7 @@ pub fn point(default: &Path, folder: Option<&Path>) -> Result<(), String> {
 /// Copies the settings, keys, recent projects and themes from `from` into `to`, made first,
 /// leaving every file `to` has already as it is. Links are not followed. Returns how many files
 /// were copied.
+#[cfg(test)]
 pub fn copy_over(from: &Path, to: &Path) -> Result<usize, String> {
     copy_over_keeping(from, to, &mut Vec::new())
 }
