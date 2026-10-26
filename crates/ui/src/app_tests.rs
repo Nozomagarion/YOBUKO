@@ -840,3 +840,36 @@ fn css_workspace_moves_native_controls_and_preserves_project_state() {
     assert_eq!(harness.state().session().unwrap().project(), &before);
     crate::kit::skin::configure(&crate::kit::skin::Skin::default());
 }
+
+/// A rename in the session view's header reads as the name itself: the name's size, centred in
+/// the header as the name is, and no selection colour of the theme's, which reads as a box of
+/// its own on a coloured header (#916).
+#[test]
+fn a_rename_in_a_session_header_reads_as_the_name() {
+    use egui_kittest::kittest::Queryable;
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    app.settings.animations = false;
+    app.shown = View::Session;
+    let track = app.session().unwrap().project().tracks[0].id.0;
+    let mut harness =
+        egui_kittest::Harness::builder().with_size((1280.0, 800.0)).build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run();
+    harness.state_mut().rename = Some((json!({ "rename_track": track }), "Renamed".into(), false));
+    harness.run();
+    harness.run();
+    let field = harness.get_by_label("Track name").rect();
+    let text = harness
+        .output()
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.text() == "Renamed" => Some(text.clone()),
+            _ => None,
+        })
+        .expect("the field's text");
+    let size = text.galley.job.sections.first().map(|s| s.format.font_id.size);
+    assert_eq!(size, Some(theme::TEXT), "the name's own size");
+    let middle = text.pos.y + text.galley.size().y / 2.0;
+    assert!((middle - field.center().y).abs() <= 1.5, "centred: text at {middle}, field {field:?}");
+}

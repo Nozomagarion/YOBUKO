@@ -600,28 +600,28 @@ pub(super) fn track_header(
         );
         name.min.x = (type_rect.right() + 3.0).min(name.right());
     }
+    let name_size = if tiny {
+        10.0
+    } else if spacious {
+        theme::TEXT + 2.0
+    } else {
+        theme::TEXT
+    };
     if name_visible {
-        widgets::text_in(
-            painter,
-            name,
-            Align2::LEFT_CENTER,
-            &lane.name,
-            theme::ui_font(if tiny {
-                10.0
-            } else if spacious {
-                theme::TEXT + 2.0
-            } else {
-                theme::TEXT
-            }),
-            name_color,
-        );
+        widgets::text_in(painter, name, Align2::LEFT_CENTER, &lane.name, theme::ui_font(name_size), name_color);
     }
     work_trace.mark("layout and name");
     // The name's place, for a rename in place (Ctrl+R, #696).
     drop(name_style);
     let pass = ui.ctx().cumulative_pass_nr();
     ui.ctx().data_mut(|d| {
-        let spot = crate::app::NameSpot { rect: name.intersect(clip), pass, fill: header_fill, text: name_color };
+        let spot = crate::app::NameSpot {
+            rect: name.intersect(clip),
+            pass,
+            fill: header_fill,
+            text: name_color,
+            size: name_size,
+        };
         d.insert_temp(Id::new((crate::app::NAME_RECT_TRACK, u64::from(lane.track.0))), spot);
     });
     if solo.intersects(clip)

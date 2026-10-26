@@ -1860,6 +1860,12 @@ impl App {
                             // An opaque back in the name's own colour, so the name the view drew
                             // under the field does not show through it.
                             let back = ui.painter().add(egui::Shape::Noop);
+                            // The selected name is a shade of its own ink on its own colour, not
+                            // the theme's selection colour, which on a coloured header reads as a
+                            // box of its own.
+                            let selection = &mut ui.visuals_mut().selection;
+                            selection.bg_fill = motion::mix(spot.fill.to_opaque(), spot.text, 0.28);
+                            selection.stroke.color = spot.text;
                             let field_id = egui::Id::new("inline-rename-field");
                             let field = ui.put(
                                 rect,
@@ -1867,8 +1873,10 @@ impl App {
                                     .id(field_id)
                                     .frame(egui::Frame::NONE)
                                     .margin(egui::Margin::ZERO)
-                                    .font(theme::ui_font(theme::TEXT_SMALL))
+                                    .font(theme::ui_font(spot.size))
                                     .text_color(spot.text)
+                                    .vertical_align(egui::Align::Center)
+                                    .min_size(rect.size())
                                     .desired_width(rect.width()),
                             );
                             field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, what));
@@ -3378,13 +3386,15 @@ pub(crate) const NAME_RECT_SLOT: &str = "slot-name-rect";
 pub(crate) const NAME_RECT_TRACK: &str = "track-name-rect";
 
 /// Where a view drew a name last frame, for a rename in place: its place, the pass it was drawn
-/// in, and the colours behind and of the text, so the field reads as the name itself (#916).
+/// in, the colours behind and of the text and the text's size, so the field reads as the name
+/// itself (#916).
 #[derive(Debug, Clone, Copy)]
 pub struct NameSpot {
     pub rect: Rect,
     pub pass: u64,
     pub fill: egui::Color32,
     pub text: egui::Color32,
+    pub size: f32,
 }
 
 /// Shows a bar with `show`, its separator line in the bar's own `border-color` (`.toolbar {

@@ -1206,7 +1206,8 @@ pub(super) fn paint_clip(
     painter.ctx().data_mut(|d| {
         // The name bar's colour, as it is drawn above (a hair lighter or darker than the body).
         let fill = if bar.is_some() { motion::mix(body, ink_on(body), 0.045) } else { body };
-        let spot = crate::app::NameSpot { rect: strip, pass, fill, text: text_color };
+        let size = crate::kit::style_class::font_size(theme::TEXT);
+        let spot = crate::app::NameSpot { rect: strip, pass, fill, text: text_color, size };
         d.insert_temp(Id::new((crate::app::NAME_RECT_CLIP, u64::from(clip.id.0))), spot);
     });
     let has_name = bar.is_some();

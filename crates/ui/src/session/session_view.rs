@@ -859,7 +859,7 @@ fn column_header(
     // The name's place, for a rename in place (Ctrl+R, #696).
     let pass = ui.ctx().cumulative_pass_nr();
     ui.ctx().data_mut(|d| {
-        let spot = crate::app::NameSpot { rect: text, pass, fill, text: color };
+        let spot = crate::app::NameSpot { rect: text, pass, fill, text: color, size: theme::TEXT };
         d.insert_temp(Id::new((crate::app::NAME_RECT_TRACK, u64::from(column.track.0))), spot);
     });
 }
@@ -1077,6 +1077,7 @@ fn column_body(
                     pass,
                     fill: colour_picker::fill(slot.color.unwrap_or(column.color), false),
                     text: theme::text_on(colour_picker::fill(slot.color.unwrap_or(column.color), false)),
+                    size: theme::TEXT,
                 },
             );
         });
