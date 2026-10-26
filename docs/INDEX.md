@@ -56,7 +56,7 @@ for the documents about something, `python scripts/docs.py covers PATH` for thos
 | [Design brief](design/brief.md) | spec | draft | Suhina's visual language: principles, what stays familiar and what is our own, layout decisions and design tokens |
 | [Components](design/components.md) | spec | draft | Measurements, states and tokens of every UI component, from the minimal v3 mockups |
 | [Specs](spec/README.md) | spec | current | What the specs are and how they are written (clean-room, observed version, test files) |
-| [About Suhina](spec/about.md) | spec | draft | Help › About Suhina, the dialog that says which build this is (version, platform, licence) and copies one line naming it for a bug report |
+| [About Suhina](spec/about.md) | spec | draft | Help › About Suhina, the dialog that says which build this is (logo, version, platform, licence) and copies one line naming it for a bug report; and macOS's own Suhina › About Suhina panel |
 | [Live Set (`.als`) format](spec/als-format.md) | spec | current | The Live Set (.als) format as observed: container, tracks, clips, notes, a clip's scale, audio, warp markers, devices and MIDI effects, locators |
 | [Arrangement editing](spec/arrangement-editing.md) | spec | draft | How arrangement clips behave when moved (along a lane, to another track, over other clips), how audio clips fade in and out, how a group's tracks fold away, where playback starts and stops (the play start marker), how clips are split and consolidated, and named markers on the timeline |
 | [Audio to MIDI](spec/audio-to-midi.md) | spec | planned | How slicing audio to a MIDI track and converting drums, bass, melody and chords to MIDI behave |
