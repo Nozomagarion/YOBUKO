@@ -1593,6 +1593,13 @@ fn lane(
     // The envelope: in the track colour while it plays, dimmed while a manual change has turned
     // it off.
     let lane_painter = painter.with_clip_rect(visible);
+    // A point being dragged is drawn where the pointer is now: its own response, read further
+    // down, would only move it after this frame's line and dots, a frame behind the pointer.
+    if let Some(drag) = state.point_drag.as_mut().filter(|d| !d.segment && d.track == track && &d.key == key)
+        && let Some(pos) = ui.input(|i| i.pointer.primary_down().then(|| i.pointer.latest_pos()).flatten())
+    {
+        drag.now = dragged_to(drag.grab, geometry.beat_of(pos.x), position_of(plot, pos.y), plot, geometry, shift);
+    }
     let points = shown_points(param, track, geometry, free, state);
     let ink = if param.enabled { color(lanes.color) } else { theme::text_hint() };
     let line = envelope(&points, &param.scale, plot, geometry);

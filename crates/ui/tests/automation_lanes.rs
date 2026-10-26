@@ -1281,10 +1281,10 @@ fn the_arrow_keys_move_selected_points() {
     assert!((db(up.value) - db(moved.value) - 1.0).abs() < 0.01, "{moved:?} -> {up:?}");
 }
 
-/// In a range's menu, Intensity let go of puts the shape put in last in again, swinging less
+/// In a range's menu, Depth puts the shape put in last in again, swinging less
 /// (#916).
 #[test]
-fn intensity_puts_the_last_shape_in_again_with_less_swing() {
+fn depth_puts_the_last_shape_in_again_with_less_swing() {
     let mut harness = with_lanes();
     let rect = lane(&harness);
     let y = rect.top() + rect.height() * 0.4;
@@ -1304,11 +1304,8 @@ fn intensity_puts_the_last_shape_in_again_with_less_swing() {
     };
     let full = swing(&harness);
     right_click_at(&mut harness, Pos2::new(rect.left() + 384.0, y));
-    let slider = harness
-        .query_all_by_label("Intensity")
-        .map(|n| n.rect())
-        .max_by(|a, b| a.width().total_cmp(&b.width()))
-        .unwrap();
+    let slider =
+        harness.query_all_by_label("Depth").map(|n| n.rect()).max_by(|a, b| a.width().total_cmp(&b.width())).unwrap();
     drag(&mut harness, slider.center(), vec2(-slider.width() * 0.3, 0.0));
     let less = swing(&harness);
     assert!(less < full * 0.9, "{full} -> {less}");
