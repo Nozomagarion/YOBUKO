@@ -41,11 +41,12 @@ require review of the adapter. Commit the refreshed pins/vendor/lock after revie
 quality gates, then merge that candidate into feature/multiplayer preserving ancestry.
 
 `main` remains the upstream mirror. No scheduled workflow is silently installed on it.
-**Periodic source integration is not activated by this change.** A scheduler must run the
-prepare command from a dedicated maintenance host/repository, or the repository default branch
-must be deliberately changed to the integration branch. Merely adding `schedule` to a file on
-feature/multiplayer while main is default does not run it. Failed candidates must never be
-promoted by the scheduler. Main is only advanced by verified fast-forward, never force/reset.
+**Periodic source integration is not activated.** The owner selected feature/multiplayer as
+the repository default branch on 2026-10-26 so the combined app is visible on the repository home.
+A future reviewed schedule can therefore live on that branch, or run the prepare command from
+a dedicated maintenance host/repository. Changing the default alone does not schedule any work.
+Failed candidates must never be promoted by the scheduler. Main is only advanced by verified
+fast-forward, never force/reset.
 
 ## Binary channel
 

@@ -98,8 +98,8 @@ prises micro ne sont pas encore échangés par le multijoueur.
 
 ## Essayer la version actuelle
 
-La version combinée se trouve sur **`feature/multiplayer`**. La branche `main` reste le miroir
-du projet Suhina d'origine. Ouvrir directement [la branche du projet](https://github.com/Nozomagarion/suhina-daw/tree/feature/multiplayer#readme)
+Le dépôt s’ouvre directement sur **`feature/multiplayer`**, la branche de cette application.
+La branche `main` reste le miroir intact du projet Suhina d’origine. [Ouvrir la branche du projet](https://github.com/Nozomagarion/suhina-daw/tree/feature/multiplayer#readme)
 pour voir cette présentation et les ajouts.
 
 Dans l'application, trois accès : **Studio**, **Multiplayer** et **DJ**.

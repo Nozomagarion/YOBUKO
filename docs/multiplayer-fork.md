@@ -101,9 +101,11 @@ git merge-base --is-ancestor upstream/main feature/multiplayer
 git diff --stat upstream/main...feature/multiplayer
 ```
 
-No scheduled workflow is added to main. Schedules run on the default branch; writing fork-only
-automation there would violate the mirror. Start with manual synchronization. Any later scheduler
-must live elsewhere or use an explicitly chosen different default branch, after reviewing effects.
+The owner selected `feature/multiplayer` as the repository default branch on 2026-10-26, so
+the repository home shows the combined application and its README. `main` remains the unchanged
+upstream mirror. Schedules run on the default branch: any later reviewed fork scheduler can live
+on feature/multiplayer without modifying main. Synchronization is still manual; no periodic
+integration is activated merely by changing the repository default.
 
 The fork updater now uses a dedicated Multiplayer + DJ channel and rejects packages without
 the matching distribution marker and checksum. Official binaries cannot replace this fork.
