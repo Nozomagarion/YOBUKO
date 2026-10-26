@@ -719,6 +719,9 @@ impl Window {
         }
         let to = if chosen.is_empty() { default.clone() } else { PathBuf::from(chosen) };
         if !to.is_absolute() {
+            self.app
+                .set_status(Status::Error(format!("{} is not a whole path; the settings folder stays", to.display())));
+            self.app.revert_data_folder(previous.clone());
             self.data_folder = previous;
             return;
         }
@@ -747,6 +750,9 @@ impl Window {
                 )));
             }
             Err(error) => {
+                // The setting goes back too: left at the folder refused, every later change of
+                // settings would try the move again, each time with a backup of its own.
+                self.app.revert_data_folder(previous.clone());
                 self.data_folder = previous;
                 self.app.set_status(Status::Error(error));
             }

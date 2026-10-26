@@ -1315,6 +1315,13 @@ impl App {
         self.data_default_folder = folder;
     }
 
+    /// Settings › General › Settings folder back to `folder` after a move to another one failed
+    /// or was refused, so the field shows where the data is and no later change of settings
+    /// tries the move again.
+    pub fn revert_data_folder(&mut self, folder: String) {
+        self.settings.data_folder = folder;
+    }
+
     /// Where themes are kept: Settings › Theme › Themes folder, or the default.
     pub fn themes_folder(&self) -> PathBuf {
         match self.settings.themes_folder.trim() {

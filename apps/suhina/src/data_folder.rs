@@ -44,6 +44,11 @@ pub fn point(default: &Path, folder: Option<&Path>) -> Result<(), String> {
 /// leaving every file `to` has already as it is. Links are not followed. Returns how many files
 /// were copied.
 pub fn copy_over(from: &Path, to: &Path) -> Result<usize, String> {
+    copy_over_keeping(from, to, &mut Vec::new())
+}
+
+/// [`copy_over`], adding to `links` each link it leaves where it is.
+fn copy_over_keeping(from: &Path, to: &Path, links: &mut Vec<PathBuf>) -> Result<usize, String> {
     if from == to {
         return Ok(0);
     }
@@ -53,7 +58,7 @@ pub fn copy_over(from: &Path, to: &Path) -> Result<usize, String> {
     for name in FILES {
         copied += copy_file(&from.join(name), &to.join(name))?;
     }
-    copy_tree(&from.join(THEMES), &to.join(THEMES), &mut copied, &mut seen)?;
+    copy_tree(&from.join(THEMES), &to.join(THEMES), &mut copied, &mut seen, links)?;
     Ok(copied)
 }
 
@@ -71,21 +76,27 @@ pub fn move_data(from: &Path, to: &Path, only_themes: bool) -> Result<(PathBuf, 
     let backup = from.with_file_name(format!("{name}-backup-{stamp}"));
     let mut copied = 0;
     let mut seen = 0;
+    // Links (a theme folder that is a junction or symlink elsewhere) are not copied, so they stay
+    // where they are: nothing is taken out of `from` that `to` and the backup do not hold.
+    let mut links = Vec::new();
     if only_themes {
-        copy_tree(from, &backup, &mut copied, &mut seen)?;
+        copy_tree(from, &backup, &mut copied, &mut seen, &mut Vec::new())?;
         copied = 0;
         seen = 0;
-        copy_tree(from, to, &mut copied, &mut seen)?;
-        remove_children(from)?;
+        copy_tree(from, to, &mut copied, &mut seen, &mut links)?;
+        remove_except(from, &links)?;
     } else {
-        copy_over(from, &backup)?;
-        copied = copy_over(from, to)?;
+        copy_over_keeping(from, &backup, &mut Vec::new())?;
+        copied = copy_over_keeping(from, to, &mut links)?;
         for name in FILES {
             remove_file(&from.join(name))?;
         }
         let themes = from.join(THEMES);
         if std::fs::symlink_metadata(&themes).is_ok_and(|m| m.is_dir()) {
-            std::fs::remove_dir_all(&themes).map_err(|e| format!("could not remove {}: {e}", themes.display()))?;
+            remove_except(&themes, &links)?;
+            if !links.iter().any(|link| link.starts_with(&themes)) {
+                std::fs::remove_dir(&themes).map_err(|e| format!("could not remove {}: {e}", themes.display()))?;
+            }
         }
     }
     Ok((backup, copied))
@@ -98,15 +109,23 @@ fn remove_file(path: &Path) -> Result<(), String> {
     }
 }
 
-/// Empties `folder`, keeping the folder itself; links are removed, never followed.
-fn remove_children(folder: &Path) -> Result<(), String> {
-    let Ok(entries) = std::fs::read_dir(folder) else { return Ok(()) };
-    for entry in entries.filter_map(Result::ok) {
-        let path = entry.path();
-        let removed = match std::fs::symlink_metadata(&path) {
-            Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(&path),
-            Ok(_) => std::fs::remove_file(&path),
-            Err(_) => continue,
+/// Empties `folder`, keeping the folder itself and every path in `keep` (with the folders that
+/// hold one); links are never followed.
+fn remove_except(folder: &Path, keep: &[PathBuf]) -> Result<(), String> {
+    let entries = std::fs::read_dir(folder).map_err(|e| format!("could not read {}: {e}", folder.display()))?;
+    for entry in entries {
+        let path = entry.map_err(|e| format!("could not read {}: {e}", folder.display()))?.path();
+        if keep.iter().any(|kept| kept == &path) {
+            continue;
+        }
+        let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
+        let removed = if meta.is_dir() && keep.iter().any(|kept| kept.starts_with(&path)) {
+            remove_except(&path, keep)?;
+            continue;
+        } else if meta.is_dir() {
+            std::fs::remove_dir_all(&path)
+        } else {
+            std::fs::remove_file(&path)
         };
         removed.map_err(|e| format!("could not remove {}: {e}", path.display()))?;
     }
@@ -121,24 +140,35 @@ fn copy_file(from: &Path, to: &Path) -> Result<usize, String> {
     std::fs::copy(from, to).map(|_| 1).map_err(|e| format!("could not copy {}: {e}", from.display()))
 }
 
-fn copy_tree(from: &Path, to: &Path, copied: &mut usize, seen: &mut usize) -> Result<(), String> {
+/// Copies the folder `from` into `to`. An entry it cannot read stops the copy, before anything
+/// is removed; a link is not followed or copied, and is added to `links` to stay where it is.
+fn copy_tree(
+    from: &Path,
+    to: &Path,
+    copied: &mut usize,
+    seen: &mut usize,
+    links: &mut Vec<PathBuf>,
+) -> Result<(), String> {
     if !std::fs::symlink_metadata(from).is_ok_and(|m| m.is_dir()) {
         return Ok(());
     }
     std::fs::create_dir_all(to).map_err(|e| format!("could not make {}: {e}", to.display()))?;
     let entries = std::fs::read_dir(from).map_err(|e| format!("could not read {}: {e}", from.display()))?;
-    for entry in entries.filter_map(Result::ok) {
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("could not read {}: {e}", from.display()))?;
         *seen += 1;
         if *seen > MAX_ENTRIES {
             return Err(format!("{} holds too many files to copy", from.display()));
         }
         let path = entry.path();
         let target = to.join(entry.file_name());
-        let Ok(meta) = std::fs::symlink_metadata(&path) else { continue };
+        let meta = std::fs::symlink_metadata(&path).map_err(|e| format!("could not read {}: {e}", path.display()))?;
         if meta.is_dir() {
-            copy_tree(&path, &target, copied, seen)?;
+            copy_tree(&path, &target, copied, seen, links)?;
         } else if meta.is_file() {
             *copied += copy_file(&path, &target)?;
+        } else {
+            links.push(path);
         }
     }
     Ok(())
@@ -176,6 +206,37 @@ mod tests {
         // A folder that is gone is not used.
         point(&default, Some(&base.join("gone"))).unwrap();
         assert_eq!(pointed(&default), None);
+        let _clean = std::fs::remove_dir_all(&base);
+    }
+
+    /// A theme folder that is a link stays where it is when the folder moves, and what it points
+    /// at is never touched; the rest moves.
+    #[cfg(unix)]
+    #[test]
+    fn a_linked_theme_stays_where_it_is_when_the_folder_moves() {
+        let base = std::env::temp_dir().join(format!("suhina-data-link-{}", std::process::id()));
+        let _gone = std::fs::remove_dir_all(&base);
+        let (themes, elsewhere) = (base.join("themes"), base.join("elsewhere"));
+        std::fs::create_dir_all(themes.join("night")).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::fs::write(themes.join("night/theme.css"), ":root {}").unwrap();
+        std::fs::write(elsewhere.join("theme.css"), ":root {}").unwrap();
+        std::os::unix::fs::symlink(&elsewhere, themes.join("linked")).unwrap();
+        let moved = base.join("moved");
+        let (backup, _) = move_data(&themes, &moved, true).unwrap();
+        assert!(moved.join("night/theme.css").is_file() && backup.join("night/theme.css").is_file());
+        assert!(!themes.join("night").exists(), "what was copied leaves");
+        assert!(std::fs::symlink_metadata(themes.join("linked")).is_ok_and(|m| m.file_type().is_symlink()));
+        assert!(elsewhere.join("theme.css").is_file(), "the linked folder is never touched");
+        // The whole data folder: the link stays in its themes folder, which stays for it.
+        let data = base.join("data");
+        std::fs::create_dir_all(data.join("themes")).unwrap();
+        std::fs::write(data.join("settings.txt"), "theme = night\n").unwrap();
+        std::os::unix::fs::symlink(&elsewhere, data.join("themes/linked")).unwrap();
+        move_data(&data, &base.join("data-moved"), false).unwrap();
+        assert!(!data.join("settings.txt").exists());
+        assert!(std::fs::symlink_metadata(data.join("themes/linked")).is_ok_and(|m| m.file_type().is_symlink()));
+        assert!(elsewhere.join("theme.css").is_file());
         let _clean = std::fs::remove_dir_all(&base);
     }
 }
