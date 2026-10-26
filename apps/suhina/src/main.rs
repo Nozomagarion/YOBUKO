@@ -234,18 +234,22 @@ fn main() -> ExitCode {
     let backups = data_dir().map(|d| d.join(suhina_session::backup::SETTINGS_SUBFOLDER));
     window.app.projects_mut().set_backup_folder(backups);
 
+    let mut viewport = eframe::egui::ViewportBuilder::default()
+        .with_title("Suhina")
+        .with_decorations(!cfg!(target_os = "windows"))
+        .with_inner_size([1280.0, 800.0])
+        .with_min_inner_size([640.0, 400.0])
+        .with_drag_and_drop(true)
+        .with_transparent(see_through_asked)
+        // A see-through window's title bar would show the desktop bare: the content goes under
+        // it instead, and the app gives it the window's background.
+        .with_fullsize_content_view(under_title_bar)
+        .with_titlebar_shown(!under_title_bar);
+    if let Some(icon) = app_icon() {
+        viewport = viewport.with_icon(icon);
+    }
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("Suhina")
-            .with_decorations(!cfg!(target_os = "windows"))
-            .with_inner_size([1280.0, 800.0])
-            .with_min_inner_size([640.0, 400.0])
-            .with_drag_and_drop(true)
-            .with_transparent(see_through_asked)
-            // A see-through window's title bar would show the desktop bare: the content goes under
-            // it instead, and the app gives it the window's background.
-            .with_fullsize_content_view(under_title_bar)
-            .with_titlebar_shown(!under_title_bar),
+        viewport,
         renderer,
         wgpu_options: wgpu_options(),
         event_loop_builder: x11_first(),
@@ -853,6 +857,16 @@ fn pick(request: &suhina_ui::interaction::pick::PickRequest) -> Option<PathBuf> 
 fn saved(path: &Path, what: &str) -> String {
     let _shown = theme_files::reveal(path, true);
     format!("{what} {}", path.display())
+}
+
+/// Suhina's icon for the window: without one eframe shows its own. On macOS the empty icon tells
+/// eframe to leave the Dock alone, so it keeps the icon of `Suhina.app`, which macOS draws with
+/// rounded corners; an image set at run time is drawn square as it is (#799).
+fn app_icon() -> Option<eframe::egui::IconData> {
+    if cfg!(target_os = "macos") {
+        return Some(eframe::egui::IconData::default());
+    }
+    eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/brand/suhina-icon.png")).ok()
 }
 
 /// The app id whose folder holds the settings: the old one while only its folder exists
