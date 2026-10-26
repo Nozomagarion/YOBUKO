@@ -1,48 +1,73 @@
 ---
-description: Security boundary of the offline multiplayer experiment and requirements before any remote session is exposed
+description: Security boundary of trusted collaboration and the restricted certificate-bound LAN starter adapter
 read_when: multiplayer threat model, invitation security, peer authorization, session network boundary
 type: system
 status: draft
 last_verified: 2026-10-25
 covers:
   - crates/collaboration
+  - crates/multiplayer
+  - crates/session/src/projects.rs
+  - crates/ui/src/app/multiplayer.rs
 ---
 
 # Session sharing threat model
 
-## Current boundary
+## Trusted core and remote boundary
 
-The experiment is an in-process API for trusted local Rust callers. It has no listener, remote
-messages, token generator, files, relay or application entry point. Peer handles establish only
-local bookkeeping, not remote identities. A caller already owns the host and project. Tests
-exercise refusal rules; they do not establish network safety.
+`collaboration` remains a trusted in-process API. Its full Project clones and opaque
+acknowledgements are not wire formats. Numeric PeerIds are local bookkeeping, never credentials.
+The separate `multiplayer` adapter exposes only the [LAN starter contract](../spec/lan-starter-session.md).
+No arbitrary project, asset, device, plugin or microphone state crosses that boundary.
 
-The host retains its canonical project and accepts only a tiny, audited subset of commands.
-Membership, role, IDs, parameter keys, numeric ranges and sequence/revision checks precede
-execution. Peers and acknowledgement caches are bounded. A removed peer cannot retry through
-the cache. The owner's permissions cannot be downgraded by the guest API. The low-level audio
-path is unchanged. All API calls run on a control thread, never a render or device callback.
+The host retains its canonical project and accepts only track rename, volume and pan on four
+fixed tracks. Membership, role, exact parameter keys, IDs, numeric ranges and sequence/revision
+checks precede execution. The adapter allocates the guest's PeerId after admission. A guest
+cannot claim the owner's identity or change roles. Transport, history, files, commands/batches,
+settings and library/plugin operations have no remote representation.
 
-## Before remote inputs
+## Admission and confidentiality
 
-A separate reviewed design and implementation must provide all of the following:
+Only an explicit Create LAN session action starts a listener, on one private/loopback/link-local
+IPv4 address. There is no discovery, relay, DNS target, public binding or internet service.
+Joining trusts the certificate embedded in the private invitation with normal rustls TLS 1.3
+verification for suhina.local. A 256-bit OS-random secret is proven inside TLS, compared by
+constant-time hash equality, expires after five minutes and is redeemed once. Stopping revokes
+all admission. Disconnect cannot resume a used invitation. One host and one guest are supported.
 
-- Authenticated encrypted channels and host identity bound to an invitation, using reviewed
-  cryptography; an unpredictable expiring/revocable invitation, no secrets in diagnostics.
-- A capability map for every exposed command and read. Guests cannot change policy, local
-  settings, plugins, library folders or microphones. Batch/nested execution must preserve policy.
-- A bounded, version-negotiated wire schema; limits before parsing/allocating; rates, timeouts,
-  resource quotas and saturation handling. The trusted project clone API is not a wire decoder.
-- Replay and reconnect rules tied to authenticated session identity, not guessable numeric handles.
-  Persistent or expiring credentials and a bounded journal need an explicit lifetime contract.
-- A project/asset boundary with path and symlink confinement, size/hash checks, atomic finalization,
-  disk quotas and recovery, aligned with the project folder/manifest work (#606).
-- Tests of forged/replayed invitations, incompatible versions, malformed/flooded requests,
-  revoked peers, hostile paths and media, interruption and partial recovery.
-- An explicit LAN/direct/NAT/relay policy. No account requirement or implicit public infrastructure;
-  a discovery result does not authorize admission. No network work on an audio thread.
+The invitation is a bearer capability: a person with its complete contents can join during its
+lifetime. Send it privately. Certificate mismatch, malformed data and failed admission do not
+consume a legitimate invitation. Debug output is redacted; neither the invitation nor its secret
+is written to application logs or project files. The user's explicit clipboard copy is intentional.
+An attacker controlling that clipboard or either computer is outside this boundary.
 
-No application should expose this prototype over a socket until these requirements and the
-[session sharing spec](../spec/session-sharing.md) are implemented and reviewed. Recording media,
-plugins and arbitrary project snapshots can contain private paths or untrusted state; they are
-not permitted remote inputs of this experiment.
+## Resource and mutation limits
+
+Length-prefixed typed JSON is capped at 8192 bytes before body allocation, with exact fields,
+fixed track count and bounded names/ranges. Read/write/handshake exchanges have absolute three
+second deadlines. The host has at most four pending connection handlers; the normal authenticated
+guest polls every 100 ms and the server enforces at least 50 ms per request. UI queues are bounded.
+TLS, canonical execution and I/O run on workers, never the audio thread. A local peer can still
+occupy pending slots until timeout; availability against a sustained LAN flood is not guaranteed.
+
+The desktop creates a dedicated deterministic MIDI project. A Projects mutation gate prevents
+normal UI and attached-agent commands from changing its shared model/history outside confirmed
+controls. Its host-owned API admits only the three control command IDs; it is not a registered
+agent command. Other project tabs stay local. Local audition and explicit save/export remain
+available. Disconnect retains and unlocks the last local project; a failed authoritative apply
+leaves the session rather than silently continuing with divergent state.
+
+## Evidence and remaining boundaries
+
+Automated tests cover real TLS loopback exchange, wrong certificate/secret/version, one-use and
+expiry rules, replayed edits, stale revisions, malformed/duplicate fields, an incomplete handshake
+timeout, stopped connections, desktop application of controls, mutation refusal and independent
+real audio renderers. Physical two-computer/firewall and cross-platform session acceptance remain
+unverified. This prototype has not had an independent security audit.
+
+Sharing arbitrary projects/media remains closed until portable asset manifests, path/symlink
+confinement, size/hash/disk quotas, atomic finalization and interruption recovery are designed and
+tested, aligned with project folder work (#606). Wider edits require identity allocation and
+side-effect review. Recording publication, linked transport, presence, reconnect/resume, host
+migration and internet routing need separate contracts. The restricted starter is not evidence
+that these wider boundaries are safe or implemented.

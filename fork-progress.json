@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "areas": [
+    {"name": "Create together", "color": "#63e5c1", "milestones": [
+      {"name": "Host ordering and bounded allowed edits", "done": true, "evidence": "crates/collaboration/tests/session.rs"},
+      {"name": "Independent local audio players", "done": true, "evidence": "crates/multiplayer/tests/lan.rs"},
+      {"name": "Encrypted LAN and single-use invitations", "done": true, "evidence": "crates/multiplayer/src/transport_tests.rs"},
+      {"name": "Desktop host/join and confirmed track controls", "done": true, "evidence": "crates/ui/src/app/multiplayer_tests.rs"},
+      {"name": "Physical two-computer acceptance test", "done": false},
+      {"name": "Share an existing project and its media", "done": false},
+      {"name": "Coedit notes and clips", "done": false},
+      {"name": "Publish shared recordings", "done": false},
+      {"name": "Internet sessions and reconnect", "done": false}
+    ]},
+    {"name": "Prepare the set", "color": "#b9a1ff", "milestones": [
+      {"name": "Native Studio / DJ workspace", "done": true, "evidence": "crates/ui/src/app/dj_tests.rs"},
+      {"name": "Persistent local audio catalog", "done": true, "evidence": "crates/dj/src/tests.rs"},
+      {"name": "Pinned rbxport tempo and key analysis", "done": true, "evidence": "third_party/rbxport-analysis/VENDORED.md"},
+      {"name": "Render a project into the DJ library", "done": true, "evidence": "crates/ui/src/app/dj_tests.rs"},
+      {"name": "Playlists and set preparation", "done": false},
+      {"name": "Cue and beatgrid editing", "done": false},
+      {"name": "Deck and performance workspace", "done": false},
+      {"name": "USB export and hardware compatibility", "done": false}
+    ]},
+    {"name": "Stay together", "color": "#ffb18d", "milestones": [
+      {"name": "Pinned source origins and isolated integration", "done": true, "evidence": "scripts/test_fork_distribution.py"},
+      {"name": "Visible GitHub source and app update controls", "done": true, "evidence": "crates/ui/src/app/updates_tests.rs"},
+      {"name": "Combined distribution checks before replacement", "done": true, "evidence": "crates/update/src/distribution/tests.rs"},
+      {"name": "Complete packages, notices and source identity", "done": true, "evidence": "scripts/fork_package.py"},
+      {"name": "Latest combined build validated on every platform", "done": false},
+      {"name": "Published common release channel", "done": false},
+      {"name": "Scheduled upstream integration and promotion", "done": false}
+    ]}
+  ]
+}

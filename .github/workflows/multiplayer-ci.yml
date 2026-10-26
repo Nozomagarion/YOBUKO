@@ -39,6 +39,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Linux prerequisites
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb
@@ -55,13 +56,14 @@ jobs:
       - name: Formatting
         run: cargo fmt --all --check
       - name: Collaboration tests
-        run: cargo test --locked -p suhina-collaboration -p suhina-dj -p suhina-update
+        run: cargo test --locked -p suhina-collaboration -p suhina-multiplayer -p suhina-dj -p suhina-update
       - name: Two independent local players
         run: cargo run --locked --profile test -p suhina-collaboration --example two_peers
       - name: Documentation and source rules
         if: runner.os == 'Linux'
         run: |
           python3 scripts/fork_sources.py check
+          python3 scripts/fork_readme.py --check
           python3 -m unittest discover -s scripts -p 'test_fork*.py'
           python3 scripts/settings_guide.py --check
           python3 scripts/docs.py check

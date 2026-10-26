@@ -26,7 +26,8 @@ edits in host order while their existing players keep independent positions?
 ## Decision
 
 1. **Isolate the experiment.** A layer-3 `collaboration` crate depends on `session` and the model;
-   no existing application depends on it. It has no sockets, wire parser or invitation code.
+   applications may use it only through the separate restricted LAN adapter. The core has no
+   sockets, wire parser or invitation code.
    Its trusted in-process callers are not authenticated network peers.
 2. **Reuse commands.** Supported edits call `Session::execute` on the host and each replica.
    Begin with track names, volume and pan only. No allocation of new object identities,
@@ -39,10 +40,12 @@ edits in host order while their existing players keep independent positions?
    instance. Replica edits update its existing session and player. No replacement of the session
    or remote transport state is needed for this subset. Test actual renderers, not just numbers
    in a presence struct.
-5. **Keep the remote boundary closed.** Before any network adapter, decide and review the
-   invitation, transport, permissions and replay protocol in a separate ADR/spec, including the
-   [threat model](../security/session-sharing.md). Before media exchange, reuse #606 instead of
-   inventing another manifest. Before wider edits, address ID allocation and side effects.
+5. **Separate the remote boundary.** The [LAN starter spec](../spec/lan-starter-session.md)
+   defines authenticated TLS, expiring single-use invitations and typed four-track controls.
+   The [threat model](../security/session-sharing.md) defines its limits. Full Project snapshots
+   remain trusted-only. Before media exchange, reuse #606 instead of inventing another manifest.
+   Before wider edits, address ID allocation and side effects.
+   *Amended 2026-10-26, see Amendment: restricted LAN adapter.*
 
 What is built: [session sharing specification](../spec/session-sharing.md) and
 [the fork guide](../multiplayer-fork.md).
@@ -50,9 +53,9 @@ What is built: [session sharing specification](../spec/session-sharing.md) and
 ## Consequences
 
 The experiment can test command convergence, permission refusals, duplicates, stale requests and
-independent renderers entirely offline. It is not a usable multiplayer application yet. There
-is no UI, Internet connection, secure invitation, media exchange, recording publication or linked
-transport. These remain explicit later slices. No user data or project schema migration is needed.
+independent renderers entirely offline. The separate starter adapter adds desktop LAN control
+sessions, but no Internet connection, media exchange, recording publication or linked transport.
+These remain explicit later slices. No user data or project schema migration is needed.
 
 The command subset is intentionally exact, including its accepted parameter keys. New commands
 must be audited rather than admitted by a namespace prefix. The crate must not be wired to a
@@ -63,6 +66,16 @@ socket as though this prototype provided authentication or safe untrusted docume
 - A network listener immediately: deferred until the security and transport decisions are ready.
 - A new command engine or a CRDT: unnecessary for this test and much harder to integrate upstream.
 - Replacing each replica's session after every edit: would discard its live player and local state.
+
+## Amendment: restricted LAN adapter (2026-10-26)
+
+Fork-owner continuation of feature/multiplayer amends decisions 1 and 5. A separate layer-3
+`multiplayer` crate uses the trusted host without exposing its project clone API. Only a
+locally generated fixed MIDI starter and three bounded track controls participate. The adapter
+owns authenticated TLS, bearer invitation lifetime, frame/deadline/queue bounds and guest identity.
+The desktop owns a locked dedicated project and applies host-confirmed controls through commands.
+Existing projects and private playback are retained. Arbitrary project/media exchange remains
+closed; this is a fork prototype, not an accepted upstream architecture or external security review.
 
 ## Sources
 

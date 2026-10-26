@@ -65,6 +65,7 @@ jobs:
       - name: Source and regression gates
         run: |
           python3 scripts/fork_sources.py check
+          python3 scripts/fork_readme.py --check
           python3 -m unittest discover -s scripts -p 'test_fork*.py'
           python3 scripts/docs.py check
           python3 scripts/settings_guide.py --check

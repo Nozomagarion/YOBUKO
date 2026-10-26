@@ -87,6 +87,7 @@ struct Devices {
 /// belongs to Suhina rather than to any one project.
 #[derive(Default)]
 pub struct Projects {
+    shared_controls: std::collections::BTreeSet<ProjectId>,
     pub(crate) dj: crate::dj::Dj,
     /// Host-owned MCP write permissions, never exposed through project commands.
     mcp_write_folders: Vec<PathBuf>,
@@ -646,6 +647,34 @@ impl Projects {
         notices
     }
 
+    /// Host-owned gate for a restricted shared tab; never exposed as a command.
+    pub fn restrict_shared_project(&mut self, id: ProjectId, on: bool) -> Result<(), CommandError> {
+        if on && self.get(id).is_none() {
+            return Err("shared project is not open".into());
+        }
+        if on {
+            self.shared_controls.insert(id);
+        } else {
+            self.shared_controls.remove(&id);
+        }
+        Ok(())
+    }
+
+    /// Apply only an authoritative track control to the tab bound by the host application.
+    pub fn apply_shared_control(
+        &mut self,
+        project: ProjectId,
+        id: &str,
+        params: &Value,
+    ) -> Result<Value, CommandError> {
+        if !self.shared_controls.contains(&project)
+            || !matches!(id, "track.rename" | "track.setVolume" | "track.setPan")
+        {
+            return Err("this is not an authoritative shared control".into());
+        }
+        self.get_mut(project).ok_or("shared project is not open")?.execute(id, params)
+    }
+
     /// Runs command `id`: a `project.*` (on the open projects) or `plugin.*` command on the open projects (and the
     /// plug-in library), anything else on the active project. `command.list` lists every kind.
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value, CommandError> {
@@ -673,6 +702,25 @@ impl Projects {
                 return Ok(json!({ "stopped": true }));
             }
             return self.preview_session_mut()?.execute(id, params);
+        }
+        if project.or(self.tabs.active).is_some_and(|p| self.shared_controls.contains(&p)) {
+            let read = commands().iter().find(|s| s.id == id).is_some_and(|s| s.kind == CommandKind::Read);
+            if !read
+                && !matches!(
+                    id,
+                    "transport.play"
+                        | "transport.stop"
+                        | "transport.setPosition"
+                        | "preview.stop"
+                        | "project.save"
+                        | "project.export"
+                )
+            {
+                return Err(
+                    "this shared starter tab only accepts confirmed multiplayer controls; leave to edit it freely"
+                        .into(),
+                );
+            }
         }
         // A command may need a plug-in that has started meanwhile, or add one.
         self.poll_plugins();

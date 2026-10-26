@@ -9,6 +9,7 @@ rust-version.workspace = true
 autotests = false
 
 [dependencies]
+suhina-multiplayer.workspace = true
 suhina-engine.workspace = true
 suhina-session.workspace = true
 suhina-plugins.workspace = true

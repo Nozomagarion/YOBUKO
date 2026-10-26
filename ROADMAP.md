@@ -957,7 +957,10 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   rendering a project into the DJ library ([spec](docs/spec/dj-workspace.md)).
 - A guarded fork update channel and source integration candidate tooling; common publication
   is pending ([distribution](docs/fork-distribution.md)).
-- The existing multiplayer experiment stays local and headless; network sessions remain pending.
+- Restricted desktop LAN starter sessions: one host and one guest, certificate-bound invitations,
+  shared four-track names/volume/pan and independent local audio. Real TLS loopback and desktop
+  projects are tested; physical two-computer acceptance and personal project/media exchange remain
+  pending ([contract](docs/spec/lan-starter-session.md)).
 
-Parity: no change. These fork additions cover DJ preparation and distribution, outside the
-production feature chapters measured by scripts/parity.
+Parity: no change. These fork additions cover restricted starter networking, DJ preparation and
+distribution; full project coediting remains absent and no production feature chapter gains coverage.

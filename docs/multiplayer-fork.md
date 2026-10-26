@@ -1,11 +1,13 @@
 ---
-description: Develop and validate the multiplayer fork while keeping main identical to upstream, and run the offline experiment
+description: Develop and validate the multiplayer fork while keeping main identical to upstream, and try the restricted LAN prototype
 read_when: multiplayer fork development, upstream synchronization, run collaboration experiment, fork CI
 type: howto
 status: draft
 last_verified: 2026-10-25
 covers:
   - crates/collaboration
+  - crates/multiplayer
+  - crates/ui/src/app/multiplayer.rs
   - .github/workflows/multiplayer-ci.yml
 ---
 
@@ -15,8 +17,9 @@ covers:
 
 This fork is an exploratory implementation requested by its owner. It does not claim an official
 upstream issue or represent accepted upstream collaboration architecture. It begins with an
-offline host/replica experiment; it does not yet provide usable multiplayer in the desktop app.
-The [specification](spec/session-sharing.md) states the supported subset and missing features.
+offline host/replica core and now has a restricted desktop LAN starter session.
+The [core specification](spec/session-sharing.md) and [LAN contract](spec/lan-starter-session.md)
+state the supported subset and missing features. Physical two-computer acceptance remains pending.
 No comments, claims or pull requests have been sent to upstream on the owner's behalf.
 
 Issue #568 is complete; reuse the stable object identities. Issue #606 remains the dependency
@@ -38,6 +41,45 @@ cargo run --locked -p suhina-collaboration --example two_peers
 The example creates two sessions with separate real renderers, changes shared track parameters,
 then prints their different playhead positions. It opens no window, socket or audio device and
 writes no project or audio file. It is a headless test of the first building block.
+
+
+## Try the desktop LAN prototype
+
+Use the same combined build commit on both computers. These labels and preservation checks are
+covered by automated UI tests; the physical two-computer procedure below is an acceptance test
+still to perform. No personal project or audio file is needed.
+
+1. Open Suhina. Click **Multiplayer** at the top, beside **Studio** and **DJ**; it is also in
+   **View → Multiplayer LAN**. You should see **Create LAN session** and **Join LAN session**.
+2. On the host, **Host address** should contain its private local IPv4 address followed by `:0`.
+   Click **Create LAN session**. A new **LAN starter session** tab opens, preserving other tabs.
+   Four generated MIDI tracks appear; **Copy invitation** becomes available. `127.0.0.1:0` is
+   useful only for two app instances on the same computer, not for a second computer.
+3. Click **Copy invitation** and send it privately to the guest. On the guest computer, open
+   **Multiplayer**, paste it into **Invitation from the host**, and click **Join LAN session**.
+   Both should show four tracks; the host should say **Guest connected**. Allow local-network
+   access in the OS if requested. A failed connection must display an error, not a joined state.
+4. On the host, change **Pulse** to **Shared pulse**, then click its **Rename** button. The guest
+   should receive the new name and confirmed revision. On the guest, change that track's
+   **Volume (dB)** to `-12`, then click **Set volume**. The host should receive it. Pan controls
+   move sound between left and right. Concurrent stale edits should display a refusal; use
+   **Refresh controls** if a newer revision arrived while you were typing, then submit again.
+5. Click **Play locally** on both computers. The starter should sound on each one's configured
+   audio output. On one, click **Listen from beat 16**, then **Stop locally**. The other should
+   continue from its own position. Transport is deliberately private.
+6. Click **Leave session**. The starter project remains open and can be edited normally. Other
+   projects remain intact. A reused invitation must be refused. Create a fresh host session for
+   another invitation; it expires after five minutes and admits one guest only.
+7. To check disconnect recovery, create/join again, change a name, then quit the host. The guest
+   should report disconnection within the exchange deadline and retain the last confirmed local
+   starter. Saving it is local; your files and microphone recordings were never shared.
+
+Network and UI regression checks:
+
+```sh
+cargo test --locked -p suhina-multiplayer
+cargo test --locked -p suhina-ui multiplayer --lib
+```
 
 ## Git invariants
 
@@ -68,14 +110,15 @@ the matching distribution marker and checksum. Official binaries cannot replace 
 The shared release channel still needs a reviewed publication before friends can use it.
 [Source integration and distribution](fork-distribution.md) gives the source pins, isolated
 candidate script and packaging workflow. [DJ workspace](spec/dj-workspace.md) describes the
-first native DJ library and render bridge; it does not add remote multiplayer.
+first native DJ library and render bridge, separate from the LAN adapter.
 
 ## Validation and builds
 
 Run the upstream quality gates: fmt, workspace clippy/tests, docs checks, licence/rename checks,
 and cargo-deny when Cargo.lock changes. Existing documentation structure warnings belong to the
 upstream cleanup; do not hide or mass-edit them. Add a `Parity: no change` explanation for this
-unexposed experiment: it adds no desktop/CLI/MCP capability and changes no DSP.
+restricted LAN addition: no existing production-parity chapter is covered; full project coediting
+is still absent and DSP is unchanged.
 
 The fork's CI workflow has read-only permissions, no secrets, and targets only the multiplayer
 and integration branches. It tests and builds on Linux, macOS and Windows. It produces development

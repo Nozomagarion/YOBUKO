@@ -30,8 +30,18 @@ impl App {
         let width = 58.0;
         let dj = Rect::from_min_size(Pos2::new(row.right() - width, row.top()), Vec2::new(width, row.height()));
         let studio = dj.translate(Vec2::new(-width - 4.0, 0.0));
-        if ui.put(studio, egui::Button::selectable(!self.dj.active, "Studio")).clicked() {
+        let multiplayer =
+            Rect::from_min_size(Pos2::new(studio.left() - 104.0, row.top()), Vec2::new(100.0, row.height()));
+        if ui.put(multiplayer, egui::Button::selectable(self.multiplayer_visible(), "Multiplayer")).clicked() {
             self.dj.active = false;
+            self.multiplayer.open = true;
+            self.settings_open = false;
+        }
+
+        if ui.put(studio, egui::Button::selectable(!self.dj.active && !self.multiplayer_visible(), "Studio")).clicked()
+        {
+            self.dj.active = false;
+            self.multiplayer.open = false;
         }
         if ui.put(dj, egui::Button::selectable(self.dj.active, "DJ")).clicked() {
             self.dj.active = true;
@@ -87,6 +97,7 @@ impl App {
         let (zoom, limits) = (self.settings.zoom, crate::settings::ZOOMS);
         let view = vec![
             Item::new("workspace.studio", "Studio workspace").into(),
+            Item::new("workspace.multiplayer", "Multiplayer LAN").into(),
             Item::new("workspace.dj", "DJ library").into(),
             Entry::Separator,
             item("view.session", "Session").enabled(has_project).into(),
@@ -150,7 +161,15 @@ impl App {
     pub fn run_menu_item(&mut self, id: &str, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let has_project = self.session().is_some();
         match id {
-            "workspace.studio" => self.dj.active = false,
+            "workspace.studio" => {
+                self.dj.active = false;
+                self.multiplayer.open = false;
+            }
+            "workspace.multiplayer" => {
+                self.dj.active = false;
+                self.multiplayer.open = true;
+                self.settings_open = false;
+            }
             "workspace.dj" => {
                 self.dj.active = true;
                 self.settings_open = false;

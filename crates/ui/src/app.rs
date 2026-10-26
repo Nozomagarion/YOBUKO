@@ -24,6 +24,7 @@ pub mod loading_dialog;
 mod menu_bar;
 pub mod menus;
 pub mod missing_files;
+mod multiplayer;
 mod plugin_host;
 pub mod project_dialog;
 pub mod splash;
@@ -307,6 +308,7 @@ struct AutoArm {
 }
 
 pub struct App {
+    multiplayer: multiplayer::MultiplayerPanel,
     dj: dj::DjPanel,
     background: background::Background,
     /// When the level meters last showed something new (`ui.input` time).
@@ -647,6 +649,7 @@ impl App {
             pick_request: None,
             save_prompt: None,
             dj: dj::DjPanel::default(),
+            multiplayer: multiplayer::MultiplayerPanel::default(),
             export_dialog: None,
             export: None,
             export_project: None,
@@ -2359,6 +2362,7 @@ impl App {
         self.frame_trace.mark("plug-in scan");
         self.poll_export(ui.ctx());
         self.poll_dj(ui.ctx());
+        self.poll_multiplayer(ui.ctx());
         self.frame_trace.mark("export");
         self.poll_plugins(ui.ctx());
         self.frame_trace.mark("plug-ins");
@@ -2384,7 +2388,7 @@ impl App {
                 self.run_menu_item(&id, ui.ctx(), &mut actions);
             }
         }
-        if !placing && !self.dj.active {
+        if !placing && !self.dj.active && !self.multiplayer_visible() {
             self.shortcuts(ui, &mut actions);
         }
         self.apply_zoom(ui.ctx());
@@ -2560,6 +2564,10 @@ impl App {
             let _workspace_style = crate::kit::style_class::enter_named("workspace", "workspace");
             if self.dj.active {
                 self.show_dj(ui);
+                return;
+            }
+            if self.multiplayer_visible() {
+                self.show_multiplayer(ui);
                 return;
             }
             let area = ui.available_rect_before_wrap();

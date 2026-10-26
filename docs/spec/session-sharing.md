@@ -12,9 +12,10 @@ covers:
 
 ## Status
 
-The multiplayer fork contains a trusted in-process experiment only. Two existing Suhina sessions
-can exchange permitted edits through a host; no application UI or network endpoint exposes it.
-The experiment is specified by [ADR 0030](../decisions/0030-multiplayer-local-spike.md).
+This document describes the trusted in-process collaboration core. Two existing Suhina sessions
+can exchange permitted edits through a host. The separate [LAN starter adapter](lan-starter-session.md)
+now reuses its allowed edits behind authenticated TLS, without serializing Project snapshots.
+The original core experiment is specified by [ADR 0030](../decisions/0030-multiplayer-local-spike.md).
 
 ## Project and peers
 
@@ -85,7 +86,8 @@ stopped locally; automatic seamless recovery is not implemented.
 
 ## Not yet
 
-Authentication, secure invitations, wire schema and bounds, persistent resume, presence UI, linked
-transport, project assets, recording publication, file confinement, host migration and offline
-multi-master editing are absent. Neither local peer handles nor role checks make a network listener
-safe. The [threat model](../security/session-sharing.md) lists the boundary that remains closed.
+Authentication, invitation and wire bounds exist only in the separate restricted LAN adapter.
+Persistent resume, presence, linked transport, project assets, recording publication, file
+confinement, host migration and offline multi-master editing remain absent. The trusted core
+alone does not make a listener safe. The [threat model](../security/session-sharing.md) distinguishes
+the starter boundary from the project/media boundary that remains closed.

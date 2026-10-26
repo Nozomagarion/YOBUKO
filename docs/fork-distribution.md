@@ -26,7 +26,7 @@ then passes regression gates and platform checks before a combined package can b
 
 `fork-sources.json` records both repositories and full commits, plus hashes of every imported
 rbxport analysis source. The Suhina commit must be an ancestor of the fork; rbxport is vendored
-as the analysis subset only. `crates/collaboration` and `crates/dj` stay outside that tree.
+as the analysis subset only. `crates/collaboration`, `crates/multiplayer` and `crates/dj` stay outside that tree.
 
 ```sh
 python3 scripts/fork_sources.py check
@@ -88,10 +88,10 @@ remaining operational step before friends can receive combined in-app updates.
 
 ## Compatibility
 
-The marker's multiplayer_api=1 describes the existing trusted local experiment, not a working
-network protocol. Different future network protocol versions will require an explicit join
-handshake. Shared distribution updates do not imply that existing invitation, media transfer
-or remote collaboration features already work.
+The marker's multiplayer_api=1 preserves the trusted collaboration contract. The separate LAN
+adapter has protocol 1 and starter version 1, checked during invitation decoding and the TLS
+hello. Future wire changes must change that handshake contract. Combined distribution updates
+do not imply that full project/media transfer or broader remote collaboration exists.
 
 ## Visible GitHub update button
 
