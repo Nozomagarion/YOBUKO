@@ -32,6 +32,17 @@ covers:
 
 # Arrangement editing
 
+### Pasting and pane-local scrolling
+
+A click in an empty track lane sets the paste destination to that track and beat.
+Settings > Arrangement > Replace clip defaults off (paste after the selected clip).
+When enabled, pasting onto a selected clip removes that whole destination clip and
+places the copy at its start, as one undoable `clip.paste` command with `replace` set
+to the destination clip id. Command clients may also use an unambiguous clip name; missing, ambiguous or other-track targets fail without changing the project. Other clips follow the existing stacking setting.
+Creation-only theme colours never recolour pasted or consolidated clips.
+Horizontal scrolling over the track-control pane stays in that pane; only scrolling
+over the timeline moves the arrangement horizontally. Vertical lane scrolling stays linked.
+
 How arrangement clips behave when they are moved. The familiar behaviour (observed in Live 12.4,
 which this follows) is that a clip placed over others **replaces** what it covers. Some users come
 from pattern-based DAWs where clips **stack** and all play; two settings allow that.
@@ -200,7 +211,7 @@ Let go, it is
 - A looping clip goes on as far as its edge is dragged, its loop repeating: its right edge into
   later passes, its left edge back into earlier ones (to the song's start). Its repeats are
   drawn as the clip itself, in its colour, one colour all along; where each pass starts it has a
-  notch cut into its top and bottom edges and a dashed line between them, so the repeats read as
+  small notch at its top edge and a continuous vertical line in the leading edge's shade, so the repeats read as
   blocks even in an empty clip (#700). A MIDI clip's notes are drawn in every pass.
 - The right edge is one handle over the clip's full height; there is no separate loop handle
   at the corner (#700). The loop is turned on in the clip column (› Clip column in
@@ -658,8 +669,9 @@ under `transport.loop` ([format](suhina-format.md)); a Live Set's arrangement lo
 
 **In the Arrangement view** the loop brace sits in a row of its own between the ruler and the
 marker row: a bar from the loop start to the loop end, bright while looping is on and dim while
-it is off. While looping is on, a line in the accent colour runs down every lane at the loop start
-and at the loop end, so the region reads in the lanes too. Dragging along an empty part of the row draws a new region on the grid a ruler click
+it is off. While looping is on, a line in the accent colour runs down every lane, the return tracks and
+Main at the loop start and at the loop end, so the region reads in the lanes too; while the
+brace is dragged the lines follow it. Dragging along an empty part of the row draws a new region on the grid a ruler click
 uses (Alt held: free) and turns looping on. Dragging within 4 px of an end of the brace moves that
 end; dragging its middle moves the whole region, keeping its length. A click on the brace, the key
 **Ctrl+L** (`transport.setLoopEnabled`, in the keymap) and a right-click on the row (**Turn loop
@@ -671,6 +683,11 @@ real-time playback, until the stretch worker has caught up with the loop start, 
 while playing; offline it plays without a gap.
 
 ## Tracks
+
+At narrow header widths, lanes at least 40 px tall place the name and automation button above
+compact track-on, solo, cue, arm and volume controls. The meter stays separate at the right edge.
+Pan and sends reappear when the header is widened. Group indentation compresses when necessary
+to keep those controls usable, including at the 160 px minimum header width.
 
 | Command | Does |
 |---|---|
@@ -715,13 +732,15 @@ output; each group's volume, mute and devices apply on the way ([ADR 0004](../de
 › 10), and solo follows the nesting: a soloed track is heard through every group above it, a
 soloed group plays everything inside it at any depth.
 
-A header shows its nesting by stepping in 16 px per level; every header keeps the fold triangle's
-room, so a group's tracks start clearly to the right of their group, and each level of the indent
-is filled with that group's colour, so a group and its tracks read as one block. A group's menu
+A header shows its nesting with full-height colour bands, outermost group first and the track's
+own band last. Bands narrow with depth: 6, 4, 3, then 2 px at every deeper level, with 2 px between
+bands. Descendants keep each ancestor's band aligned with its header, so a group reads as one
+block without deep nesting crowding the controls. Every header keeps the fold triangle's room.
+A group's menu
 has **Assign track color to all tracks and clips**, which gives every track inside it, at any depth,
 the colour the group shows, and turns the clips of the group and of those tracks back to their
-track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's notches are a
-tenth of a pass wide, from a point and a half to four points, so a zoomed-out clip keeps its body. A group that holds tracks has
+track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's top notches are at most 2.5 px wide on each side of the boundary and
+shrink with the lane height. Its 1 px boundary line uses half the leading edge's contrast; the top notch cuts through to the canvas colour for a clearer silhouette. A group that holds tracks has
 the fold triangle at the start of its header (Folded groups): the lanes of every track inside it, at any
 depth, are hidden while it is folded, and the Session view hides their columns; both views fold
 the same groups, and folding is part of the view, not an edit, so it does not undo. A dragged
@@ -767,7 +786,7 @@ off or on, and the whole list is one undo step. With one track selected, or with
 the selection, they act on that track alone, and it is heard while it is dragged: each frame sets
 the value with `continue`, so the drag is one undo step.
 
-**Alt and the wheel over a field** change its value instead of scrolling the view: one tick of a
+**Ctrl (Cmd on macOS) and the wheel over a field** change its value instead of scrolling the view: one tick of a
 wheel is one step (1 dB, or 0.02 of pan), Shift as well makes it ten times finer, and the view
 stays where it is. The wheel alone scrolls the view over a field too, so scrolling down the track
 headers never moves a fader. The same holds for a clip's gain field, a send's knob, the main
@@ -837,6 +856,67 @@ them is drawn.
 - Dragging along the ruler to scrub (a drag there selects time now).
 - Closing or opening a gap with a time selection (Delete Time, Insert Time).
 - A consolidated audio clip warped to the project, so it follows a later tempo change.
+
+## Compact rows and quick expansion
+
+New regular tracks start at 40 px; return rows start at the compact 20 px height. A leading arrow on an ordinary
+track or return toggles between that compact row and 40 px (or its last manually expanded
+height). Group arrows retain their existing child-folding behavior. Automation remains visible
+at the left and a compact volume field follows the name when the header has sufficient width.
+Row height is view state, not an edit to the music project.
+
+## Named row sizes
+
+Settings › Arrangement › Track sizes chooses independent named defaults for ordinary tracks
+and returns: Tiny, Compact, Small, Medium and Large. Initial heights are 14, 20, 40, 64 and 104 px,
+respectively; the defaults are Small for tracks and Compact for returns. Sliders customize each
+size without showing units. Advanced track sizes replaces the sliders with directly editable pixel fields.
+Sizes are strictly ordered and bounded to 14–400 px, including when loading hand-edited settings.
+Tiny keeps a single 12 px control row with 1 px padding; automation, volume and track controls
+remain accessible. Existing four-size settings retain their heights and gain Tiny at 14 px.
+Changing a default updates all rows of that kind, replacing their earlier height overrides. Changing a preset updates matching
+preset heights, preserving other manual sizes.
+
+Resize all, beside Hide returns and waveform zoom above the track headers, sets every track
+and return to one of the five named heights (including hidden returns and folded children).
+It changes view state, not the project or its undo history. Subsequent tracks still use the
+independent defaults. Quick-expand restores the last expanded height or the customized Small
+height; collapse uses the customized Compact height. No Minimal size is offered.
+
+Loop boundaries follow the live right-edge resize span before release. They are calculated from
+the loop's source timing, not limited to marks cached at the committed clip length. Non-looping
+clips gain no repeat marks. Top notches are suppressed below 64 px per loop pass; above that,
+their radius scales with pass width, up to 2.5 px and 10 percent of the row height. Only the
+lowest half of the lower semicircle cuts into the clip, making a shallow curved dip at most
+1.25 px deep. This avoids a sawtooth edge when zoomed out.
+
+Searching for a track-size setting keeps the entire Track sizes section visible, including
+Advanced and the height controls. Changing a default applies immediately to all rows of that
+kind, replacing earlier Resize all/manual height overrides for those rows. The other kind's
+heights stay as they are. Editing a named height updates matching sizes live, including while
+Settings remains open.
+
+## Waveform colour
+
+Settings › Arrangement › Clips offers Waveform and note colour: Auto, Light, Dark (the default) or
+Custom. Dark gives existing settings files without a waveform preference uniform dark ink.
+Auto chooses contrasting light or dark ink from each clip's background; the other
+modes give every audio waveform, MIDI preview and ARA note overlay the same chosen ink.
+Custom reveals an opaque colour picker.
+The choice and custom RGB colour persist in application settings and update existing clips
+immediately, including while Settings is open. Clip names retain their own
+automatic contrast. Waveforms under ARA note overlays are
+dimmed from the chosen waveform colour as before. No audio or project data changes.
+
+Audio clip colour strength and Track header colour strength are independent 0–100 percent
+sliders in Arrangement settings. Both start at 82 percent, matching the existing MIDI clip
+strength. Their fills mix their theme surface with the original clip or track RGB colour;
+muting reduces that strength to 55 percent of its chosen value, preserving hue rather than
+mixing grey into the source colour. Disabled clips dim the same way. Selected clips lift
+their strength by 12 percentage points (capped at 100); selected headers retain a subtle
+brightness lift. Header names, fold indicators, routing and send labels maintain contrast on
+the resulting surface. Explicit clip colours continue to override track colours. Changes
+apply live and persist as application settings without modifying project data.
 
 ## MIDI input monitoring
 

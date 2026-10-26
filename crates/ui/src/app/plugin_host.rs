@@ -70,10 +70,20 @@ impl App {
         }
         self.projects.set_editor_embedding(self.settings.plugin_editors == EditorPlacement::DeviceView);
         // Tracks keep the colour they show when others come and go (#690, #709).
-        if let Ok(session) = self.projects.session_mut(None) {
+        for id in self.projects.ids() {
+            let Ok(session) = self.projects.session_mut(Some(id)) else { continue };
             let palette = crate::interaction::grid::track_palette();
-            let fixed = self.settings.view.fixed_track_colour.then(|| palette[0]);
+            let fixed = self
+                .settings
+                .view
+                .fixed_track_colour
+                .then(|| crate::interaction::grid::to_rgb(theme::midi_clip_default()));
             session.set_track_colours(palette.to_vec(), fixed);
+            session.set_track_type_colours(
+                crate::interaction::grid::to_rgb(theme::midi_clip_default()),
+                crate::interaction::grid::to_rgb(theme::audio_clip_default()),
+            );
+            session.set_new_clips_take_track_colour(self.settings.view.new_clip_track_colour);
         }
         let notices = self.projects.poll_plugins();
         if let Some(last) = notices.last() {
@@ -107,8 +117,9 @@ impl App {
     /// Whether something drawn over the whole window is open (Settings or a dialog): an embedded
     /// plug-in editor is a native window egui cannot draw over, so it is hidden meanwhile (#723).
     pub(super) fn over_the_window(&self) -> bool {
-        self.settings_open
+        (self.settings_open && !self.page.window)
             || self.about_open
+            || self.theme_import.is_some()
             || self.updates.open
             || self.project_dialog.is_some()
             || self.save_prompt.is_some()

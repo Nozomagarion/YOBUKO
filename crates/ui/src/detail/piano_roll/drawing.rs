@@ -150,6 +150,29 @@ pub(super) fn dashed_outline(painter: &egui::Painter, rect: Rect, color: Color32
     }
 }
 
+/// What the theme's sheet says for one part of the piano roll (`docs/spec/theme-skins.md` ›
+/// Piano roll): its background, border, text colour and radius, each only when the sheet sets it.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct PartStyle {
+    pub(crate) background: Option<Color32>,
+    pub(crate) border: Option<Color32>,
+    pub(crate) color: Option<Color32>,
+    pub(crate) radius: Option<f32>,
+}
+
+pub(crate) fn part_style(class: &str, states: &[crate::kit::native_css::HostState]) -> PartStyle {
+    let _style = crate::kit::style_class::enter(class);
+    for state in states {
+        crate::kit::native_css::mark(*state, true);
+    }
+    crate::kit::style_class::computed().map_or_else(PartStyle::default, |c| PartStyle {
+        background: c.authored.background.then_some(c.background),
+        border: c.authored.border.then_some(c.border),
+        color: c.authored.color.then_some(c.color),
+        radius: c.authored.radius.then_some(c.radius),
+    })
+}
+
 /// Draws the grid, the notes, the velocity lane, the key column and the ruler's bar numbers;
 /// `played` is the part of the content the clip plays (› Ruler): the grid and the notes outside
 /// it are shaded.
@@ -167,8 +190,31 @@ pub(super) fn draw(
     let first_key = layout.key_at(layout.grid.bottom() - 0.5).unwrap_or(0);
     let last_key = layout.key_at(layout.grid.top() + 0.5).unwrap_or(127);
 
+    use crate::kit::native_css::HostState;
+    // The theme's parts: `.piano-grid` (its border-color for the lines), `.piano-row` and
+    // `.piano-row-black`, `.piano-key` and `.piano-key-black`, `.piano-note` (`:selected`,
+    // `:muted`; `--clip-colour` is the clip's colour), `.velocity`.
+    let grid_style = part_style("piano-grid", &[]);
+    let row_style = part_style("piano-row", &[]);
+    let black_row_style = part_style("piano-row-black", &[]);
+    let key_style = part_style("piano-key", &[]);
+    let black_key_style = part_style("piano-key-black", &[]);
+    crate::kit::native_css::set_variable("--clip-colour", crate::kit::native_css::hex(clip.color));
+    let note_style = part_style("piano-note", &[]);
+    let selected_style = part_style("piano-note", &[HostState::Selected]);
+    let muted_style = part_style("piano-note", &[HostState::Muted]);
+    let velocity_style = part_style("velocity", &[]);
+    let line_colour = |strong: bool| {
+        grid_style.border.map_or_else(
+            || if strong { theme::border_strong() } else { theme::border() },
+            |c| {
+                if strong { c } else { c.gamma_multiply(0.6) }
+            },
+        )
+    };
     // Rows: black keys darker, a stronger line under each C.
-    painter.rect_filled(layout.grid, 0.0, theme::window_background());
+    painter.fill_background(layout.grid, 0.0, grid_style.background.unwrap_or_else(theme::window_background));
+    crate::kit::native_css::background(&painter, layout.grid);
     for key in (first_key..=last_key).filter(|k| layout.rows.shows(*k)) {
         let top = layout.y_of(key);
         let row = Rect::from_min_max(
@@ -176,21 +222,28 @@ pub(super) fn draw(
             Pos2::new(layout.grid.right(), top + layout.key_height),
         );
         // With a scale, its keys are lighter; without one, the white keys are (› Scale and key).
-        let fill = scale_view::row_fill(clip.scale, key, is_black(key));
-        grid_painter.rect_filled(row, 0.0, fill);
-        let line = if key % 12 == 0 { theme::border_strong() } else { theme::border() };
-        grid_painter.hline(row.x_range(), row.bottom() - 0.5, theme::hairline(line));
+        let own = if is_black(key) { black_row_style.background } else { row_style.background };
+        let fill = match (clip.scale, own) {
+            (None, Some(own)) => own,
+            _ => scale_view::row_fill(clip.scale, key, is_black(key)),
+        };
+        grid_painter.fill_background(row, 0.0, fill);
+        grid_painter.hline(row.x_range(), row.bottom() - 0.5, theme::hairline(line_colour(key % 12 == 0)));
     }
 
     // Vertical lines: the grid, bars stronger; the ruler's bar numbers.
     let first_beat = layout.beat_at(layout.grid.left()).max(0.0);
     let last_beat = layout.beat_at(layout.grid.right());
     let bar = clip.bar_beats.max(EPSILON);
-    painter.rect_filled(layout.ruler, 0.0, theme::panel_background());
+    painter.fill_background(
+        layout.ruler,
+        0.0,
+        part_style("ruler", &[]).background.unwrap_or_else(theme::panel_background),
+    );
     let lane_painter = painter.with_clip_rect(layout.lane);
     for (beat, on_bar) in grid.lines(first_beat, last_beat, MAX_LINES) {
         let x = layout.x_of(beat).round() + 0.5;
-        let color = if on_bar { theme::border_strong() } else { theme::border() };
+        let color = line_colour(on_bar);
         grid_painter.vline(x, layout.grid.y_range(), theme::hairline(color));
         lane_painter.vline(x, layout.lane.y_range(), theme::hairline(color));
     }
@@ -301,13 +354,24 @@ pub(super) fn draw(
             0.4 + 0.6 * velocity / 127.0
         };
         let alpha = if outside(&note) { alpha * 0.45 } else { alpha };
-        grid_painter.rect_filled(rect, 0.0, clip.color.gamma_multiply(alpha));
+        let selected = state.selected.contains(&i) || selecting.is_some_and(|r| r.intersects(rect));
+        let style = if selected {
+            selected_style
+        } else if muted {
+            muted_style
+        } else {
+            note_style
+        };
+        let radius = style.radius.unwrap_or(0.0);
+        grid_painter.rect_filled(rect, radius, style.background.unwrap_or(clip.color).gamma_multiply(alpha));
+        if let Some(border) = style.border {
+            grid_painter.rect_stroke(rect, radius, Stroke::new(1.0, border), StrokeKind::Inside);
+        }
         if muted {
             dashed_outline(&grid_painter, rect, theme::text_hint());
         }
-        let selected = state.selected.contains(&i) || selecting.is_some_and(|r| r.intersects(rect));
-        if selected {
-            grid_painter.rect_stroke(rect, 0.0, Stroke::new(1.0, theme::text_primary()), StrokeKind::Inside);
+        if selected && style.border.is_none() {
+            grid_painter.rect_stroke(rect, radius, Stroke::new(1.0, theme::text_primary()), StrokeKind::Inside);
         }
         if unmuting {
             // The stroke is bringing this note back: a solid edge says so before the button is up.
@@ -320,7 +384,7 @@ pub(super) fn draw(
                 Align2::LEFT_CENTER,
                 &key_name(note.key),
                 theme::mono_font(theme::TEXT_TINY),
-                theme::window_background(),
+                style.color.unwrap_or_else(theme::text_inverse),
             );
         }
         // Its velocity stem.
@@ -331,7 +395,7 @@ pub(super) fn draw(
         } else if selected {
             theme::text_primary()
         } else {
-            clip.color
+            velocity_style.color.unwrap_or(clip.color)
         };
         lane_painter.vline(x, egui::Rangef::new(top, layout.lane.bottom()), Stroke::new(1.0, stem));
         lane_painter.rect_filled(Rect::from_min_size(Pos2::new(x - 2.5, top), Vec2::new(5.0, 2.0)), 0.0, stem);
@@ -364,7 +428,7 @@ pub(super) fn draw(
 
     // The key column: keys, every C named.
     let key_painter = painter.with_clip_rect(layout.keys);
-    key_painter.rect_filled(layout.keys, 0.0, theme::window_background());
+    key_painter.fill_background(layout.keys, 0.0, black_key_style.background.unwrap_or_else(theme::window_background));
     for key in (first_key..=last_key).filter(|k| layout.rows.shows(*k)) {
         let top = layout.y_of(key);
         let row = Rect::from_min_max(
@@ -373,14 +437,17 @@ pub(super) fn draw(
         );
         // The key under the pointer and the key that is playing are lit.
         let lit = state.hover_key() == Some(key) || state.playing_key() == Some(key);
+        let own = if is_black(key) { black_key_style } else { key_style };
         let fill = if lit {
             theme::control_hover()
+        } else if let Some(own) = own.background {
+            own
         } else if is_black(key) {
             theme::window_background()
         } else {
             theme::control_background()
         };
-        key_painter.rect_filled(row.shrink2(Vec2::new(0.0, 0.5)), 0.0, fill);
+        key_painter.fill_background(row.shrink2(Vec2::new(0.0, 0.5)), 0.0, fill);
         scale_view::key_mark(&key_painter, clip.scale, key, row);
         // Folded, every row is named: the keys beside each other are no longer neighbours.
         if (key % 12 == 0 || layout.rows.folded()) && layout.key_height >= 8.0 {
@@ -390,7 +457,7 @@ pub(super) fn draw(
                 Align2::LEFT_CENTER,
                 &key_name(key),
                 theme::mono_font(theme::TEXT_TINY),
-                theme::text_secondary(),
+                own.color.unwrap_or_else(theme::text_secondary),
             );
         }
     }
@@ -398,12 +465,12 @@ pub(super) fn draw(
         Pos2::new(layout.keys.left(), layout.ruler.top()),
         Pos2::new(layout.keys.right(), layout.ruler.bottom()),
     );
-    painter.rect_filled(corner, 0.0, theme::panel_background());
+    painter.fill_background(corner, 0.0, theme::panel_background());
     let lane_keys = Rect::from_min_max(
         Pos2::new(layout.keys.left(), layout.lane.top()),
         Pos2::new(layout.keys.right(), layout.lane.bottom()),
     );
-    painter.rect_filled(lane_keys, 0.0, theme::panel_background());
+    painter.fill_background(lane_keys, 0.0, theme::panel_background());
     if lane_keys.height() >= 24.0 {
         let font = theme::mono_font(theme::TEXT_TINY);
         widgets::text_in(
