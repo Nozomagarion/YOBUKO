@@ -709,3 +709,52 @@ fn continued_scaling_is_one_undo_step() {
     run(&mut session, "edit.undo", json!({})).unwrap();
     assert_eq!(pan_points(&session), before);
 }
+
+/// A slider's live values replace one another (`continue` with `replace`): each runs on the line
+/// as the step found it, a value that changes nothing (Smooth on a sine) leaves the line and the
+/// history as they were, and one undo takes the whole drag back (#916).
+#[test]
+fn replacing_live_values_starts_from_the_line_as_it_was() {
+    let mut session = Session::new(project());
+    let lane = |s: &Session| lanes(s).iter().find(|l| l.param == "pan").unwrap().points.clone();
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 0, "value": 0 })).unwrap();
+    run(
+        &mut session,
+        "automation.insertShape",
+        json!({ "track": 1, "param": "pan", "start": 0, "end": 4, "shape": "sine", "cycles": 2 }),
+    )
+    .unwrap();
+    let sine = lane(&session);
+    let smooth = |amount: f64, continued: bool| {
+        json!({ "track": 1, "param": "pan", "start": 0, "end": 4, "amount": amount,
+                "continue": continued, "replace": continued })
+    };
+    // A sine's segments are bent already: Smooth leaves it, however often it is asked.
+    for (i, amount) in [0.2, 0.5, 0.9].into_iter().enumerate() {
+        run(&mut session, "automation.smooth", smooth(amount, i > 0)).unwrap();
+        assert_eq!(lane(&session), sine);
+    }
+    // Undo takes the sine back out, as nothing was smoothed in between.
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_ne!(lane(&session), sine);
+    run(&mut session, "edit.redo", json!({})).unwrap();
+    assert_eq!(lane(&session), sine);
+
+    // Shapes put in again with replace: each from the line before the first, one undo for all.
+    let mut session = Session::new(project());
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 0, "value": 0 })).unwrap();
+    let line = lane(&session);
+    let shape = |depth: f64, continued: bool| {
+        json!({ "track": 1, "param": "pan", "start": 0, "end": 4, "shape": "square", "depth": depth,
+                "center": 0.5, "continue": continued, "replace": continued })
+    };
+    run(&mut session, "automation.insertShape", shape(1.0, false)).unwrap();
+    run(&mut session, "automation.insertShape", shape(0.5, true)).unwrap();
+    run(&mut session, "automation.insertShape", shape(0.25, true)).unwrap();
+    let mut once = Session::new(project());
+    run(&mut once, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 0, "value": 0 })).unwrap();
+    run(&mut once, "automation.insertShape", shape(0.25, false)).unwrap();
+    assert_eq!(lane(&session), lane(&once), "the last value, from the line as it was");
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(lane(&session), line);
+}

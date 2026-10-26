@@ -253,6 +253,14 @@ const CONTINUE: Param = optional(
     "true adds the change to the undo step of the previous call of this command on this track, \
      when no other edit came between (one drag, one step)",
 );
+/// With `continue`, starts each call from the project as it was before the step it continues, so
+/// a slider's live value replaces the one before instead of adding to it.
+const REPLACE: Param = optional(
+    "replace",
+    ParamType::Bool,
+    "with continue: the change starts from where the step it continues began, so each call replaces \
+     the last (a slider's live value) instead of adding to it",
+);
 const TRACKS: Param = param("tracks", ParamType::Tracks, "the tracks to act on (ids or names), at least one");
 const RANGE_START: Param =
     param("start", ParamType::Number, "where the time selection starts, in beats from the beginning, at least 0");

@@ -536,7 +536,6 @@ struct LastShape {
     end: f64,
     shape: &'static str,
     center: f64,
-    after: u64,
 }
 
 /// How often a slider being dragged puts its value in, in seconds: once a frame at 60 frames a
@@ -603,13 +602,11 @@ fn stretch_slider(ui: &mut Ui, state: &mut LanesState, of: String) -> Option<(f6
     Some((factor, joined))
 }
 
-/// The Smooth slider's amount kept for one range, and the edit count after the smoothing it put
-/// in last: a change takes that one back first when nothing else changed since.
+/// The Smooth slider's amount kept for one range.
 #[derive(Debug, Clone, PartialEq)]
 struct Smoothed {
     of: String,
     amount: f64,
-    after: Option<u64>,
 }
 
 /// A segment's curve being bent: the segment's first point and its curve so far.
@@ -695,9 +692,6 @@ pub struct LanesState {
     /// The shape put in a range last (track, lane, start, end, shape), which the menu's sliders
     /// put in again as they change.
     last_shape: Option<LastShape>,
-    /// The window's count of edits to the project, set before each frame: a shape put in again
-    /// takes the one before it back first when nothing else changed since.
-    pub revision: u64,
     /// The lanes whose parameter was chosen in the parameter menu's "Automated" section: the
     /// menu opens there again for them, and on the parameter's own row for the rest.
     from_automated: HashSet<(TrackId, LaneKey)>,
@@ -1920,22 +1914,18 @@ fn range_menu(
         params["cycles"] = json!(((rate * bars).round() as usize).clamp(1, 512));
         params["depth"] = json!(state.shape_depth.unwrap_or(1.0));
         // Put in again in the same range, the shape swings around the place the first one did,
-        // and when nothing changed since, the one before is taken back first, so the range's
-        // edges come from the line as it was, not from the shape before.
+        // and replaces it when nothing else changed since (`continue` with `replace`), so the
+        // range's edges come from the line as it was, not from the shape before.
         let again =
             state.last_shape.clone().filter(|l| l.track == track && &l.key == key && l.start == start && l.end == end);
         let center = again.as_ref().map_or(center, |l| l.center);
         params["center"] = json!(center.clamp(0.0, 1.0));
-        let mut edits = 1;
-        if again.is_some_and(|l| l.after == state.revision) {
-            actions.push(Action::new("edit.undo", json!({})));
-            edits += 1;
-        }
+        params["continue"] = json!(again.is_some());
+        params["replace"] = json!(again.is_some());
         actions.push(Action::new("automation.insertShape", params));
         state.selection = None;
         state.smooth = None;
-        state.last_shape =
-            Some(LastShape { track, key: key.clone(), start, end, shape, center, after: state.revision + edits });
+        state.last_shape = Some(LastShape { track, key: key.clone(), start, end, shape, center });
     };
     if let Some(shape) = shape_menu(ui, "Insert shape", None) {
         put(state, shape, actions);
@@ -1987,23 +1977,15 @@ fn range_menu(
              to the next, a triangle's tips turn round. 0 % leaves them sharp.",
         );
     let amount = amount / 100.0;
-    let after = kept.and_then(|s| s.after);
-    state.smooth = Some(Smoothed { of: of.clone(), amount, after });
+    state.smooth = Some(Smoothed { of, amount });
     if live(ui, state, &smooth_slider) {
-        // The smoothing before is taken back first, so each amount rounds the line as it was.
-        let mut edits = 0;
-        if after == Some(state.revision) {
-            actions.push(Action::new("edit.undo", json!({})));
-            edits += 1;
-        }
-        if amount > 0.0 {
-            let mut params = ranged();
-            params["amount"] = json!(amount.clamp(0.0, 1.0));
-            actions.push(Action::new("automation.smooth", params));
-            edits += 1;
-        }
-        let after = (amount > 0.0).then_some(state.revision + edits);
-        state.smooth = Some(Smoothed { of, amount, after });
+        // Each amount replaces the one before in this range's step (`continue` with `replace`),
+        // so it rounds the line as it was; a line it does not change (a sine's) stays as it is.
+        let mut params = ranged();
+        params["amount"] = json!(amount.clamp(0.0, 1.0));
+        params["continue"] = json!(kept.is_some());
+        params["replace"] = json!(kept.is_some());
+        actions.push(Action::new("automation.smooth", params));
         state.selection = None;
     }
     if ui

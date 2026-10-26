@@ -3085,7 +3085,6 @@ impl App {
                             // project keeps (`launcher.setQuantization`).
                             self.arrangement.grid = session.quantization();
                             self.arrangement.automation.grid = Some(session.quantization());
-                            self.arrangement.automation.revision = self.revision;
                             let mut timeline = timeline;
                             timeline.follow_automation(session.project());
                             timeline.recording_spans = session.arrangement_recording_spans();
