@@ -40,7 +40,7 @@ pub struct AudioSource {
 impl AudioSource {
     /// Puts `samples` (interleaved, `channels` per frame, at `sample_rate`) into a new region.
     pub fn from_interleaved(samples: &[f32], channels: u32, sample_rate: f64) -> Result<Self, IpcError> {
-        if !(1..=MAX_CHANNELS).contains(&channels) || !(sample_rate.is_finite() && sample_rate > 0.0) {
+        if !((1..=MAX_CHANNELS).contains(&channels) && sample_rate.is_finite() && sample_rate > 0.0) {
             return Err(IpcError::BadLink("not a usable audio source"));
         }
         let frames = (samples.len() / channels as usize) as u64;

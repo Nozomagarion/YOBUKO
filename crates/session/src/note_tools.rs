@@ -397,7 +397,7 @@ pub(crate) fn stretch(session: &mut Session, params: &Value) -> Result<Value, Co
             let note = notes.get(index).ok_or("a note is missing")?;
             let time = base + (note.time - base) * factor;
             let length = note.duration * factor;
-            if !(0.0..=MAX_BEAT).contains(&time) || !(length > 0.0 && length <= MAX_BEAT) {
+            if !((0.0..=MAX_BEAT).contains(&time) && length > 0.0 && length <= MAX_BEAT) {
                 return Err(format!(
                     "note {index} would start at beat {time} and be {length} beats long; both must be within 0 to {MAX_BEAT}, and a length above 0"
                 )
