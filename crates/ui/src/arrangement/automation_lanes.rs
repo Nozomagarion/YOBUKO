@@ -539,9 +539,10 @@ struct LastShape {
     after: u64,
 }
 
-/// How often a slider being dragged puts its value in, in seconds: often enough that the line
-/// follows the slider, seldom enough that a drag is not hundreds of edits.
-const LIVE_EVERY: f64 = 0.1;
+/// How often a slider being dragged puts its value in, in seconds: once a frame at 60 frames a
+/// second, so the line follows the slider without steps (an edit takes well under a frame), and
+/// no more often on a faster screen.
+const LIVE_EVERY: f64 = 1.0 / 60.0;
 
 /// Whether a menu slider's value goes in now: when it is let go of, clicked or typed into, and
 /// while it is dragged, at most every [`LIVE_EVERY`] seconds.
