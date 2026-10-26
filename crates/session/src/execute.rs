@@ -127,6 +127,9 @@ impl Session {
         // A lane, clip or scene the command added without an id gets one now.
         self.project.assign_ids()?;
         self.keep_track_colours(before);
+        if matches!(prepared.spec.id, "clip.create" | "clip.addFiles") {
+            self.colour_new_clips(before);
+        }
         match self.project.validate() {
             Ok(()) => Ok(value),
             Err(errors) => {

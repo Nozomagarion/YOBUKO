@@ -169,6 +169,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
                 "instead of start: the scene, from 1, whose slot on the track takes the clip",
             ),
             optional("stack", ParamType::Bool, "with start, true leaves clips under it as they are"),
+            optional("replace", ParamType::Clip, "with track and start, remove this destination clip before pasting"),
         ],
         kind: CommandKind::Edit,
         run: paste_clip,
@@ -853,6 +854,10 @@ fn paste_clip(session: &mut Session, params: &Value) -> Result<Value, CommandErr
         None => false,
         Some(v) => v.as_bool().ok_or("stack must be true or false")?,
     };
+    let replace = params.get("replace").map(|value| clip_param(&session.project, value)).transpose()?;
+    if replace.is_some() && (params.get("track").is_none() || !matches!(at, PasteAt::Beat(_))) {
+        return Err("replace requires an arrangement track and start".into());
+    }
     // No track: each copied clip goes back to the track it came from.
     if params.get("track").is_none()
         && let PasteAt::Beat(start) = at
@@ -916,6 +921,14 @@ fn paste_clip(session: &mut Session, params: &Value) -> Result<Value, CommandErr
             p.arrangement.lanes.len() - 1
         }
     };
+    if let Some(replace) = replace {
+        let clips = &mut p.arrangement.lanes.get_mut(lane).ok_or("the lane is missing")?.clips;
+        let index = clips
+            .iter()
+            .position(|clip| clip.id == replace)
+            .ok_or("the replacement clip is not on the destination track")?;
+        clips.remove(index);
+    }
     let mut placed: Vec<Value> = Vec::with_capacity(copied.len());
     for (clip, content) in copied {
         // The copy plays its own content, so editing one does not change the other.

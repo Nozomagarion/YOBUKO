@@ -776,3 +776,19 @@ fn the_editor_button_asks_for_the_device_command() {
         assert_eq!(actions[0].params, json!({ "track": 1, "device": 0 }));
     }
 }
+
+#[test]
+fn a_theme_lays_a_generated_list_side_by_side() {
+    let mut project = demo_project();
+    project.channels[0].devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into()))];
+    let Detail::Devices(chain) = build(&project, Some(TrackId(1)), None) else { panic!() };
+    let graph = chain.devices[0].graph.as_ref().unwrap();
+    let (theme, _) =
+        crate::kit::theme::from_sheet(".device { --suhina-param-columns: 3; --suhina-param-row: 48px; }", "");
+    crate::kit::skin::configure(&theme.skin);
+    let cells = parameter_layout(&graph.parameters, 300.0, &[]);
+    crate::kit::skin::configure(&crate::kit::skin::Skin::default());
+    let lefts: Vec<f32> = cells.iter().take(4).map(|c| c.left()).collect();
+    assert_eq!(lefts, [0.0, 100.0, 200.0, 0.0], "three to a line, then the next line");
+    assert!(cells[0].height() >= 48.0 && cells[3].top() >= 48.0, "{cells:?}");
+}

@@ -4,19 +4,100 @@
 use super::*;
 
 #[test]
-fn every_theme_that_comes_with_suhina_sets_every_token() {
-    let tokens: Vec<&str> = Palette::DARK.tokens().iter().map(|(key, _, _)| *key).collect();
-    for (id, text) in BUILT_IN_FILES {
-        let (_, warnings) = Theme::from_json(text);
-        assert!(warnings.is_empty(), "{id}: {warnings:?}");
-        let colors = match serde_json::from_str::<Value>(text) {
-            Ok(Value::Object(root)) => root.get("colors").and_then(Value::as_object).cloned().unwrap_or_default(),
-            _ => Map::new(),
-        };
-        for token in &tokens {
-            assert!(colors.contains_key(*token), "{id} leaves out {token}");
-        }
+fn transparent_rgb_survives_theme_round_trip() {
+    let (theme, warnings) = Theme::from_json(r##"{"colors":{"text.primary":"#FF804000"}}"##);
+    assert!(warnings.is_empty());
+    assert_eq!(theme.rgba("text.primary", theme.colors.text_primary), [255, 128, 64, 0]);
+    let (restored, warnings) = Theme::from_json(&theme.to_json());
+    assert!(warnings.is_empty());
+    assert_eq!(restored, theme);
+}
+
+#[test]
+fn legacy_and_inherited_transparent_colours_keep_rgb_when_saved() {
+    let (theme, warnings) = Theme::from_json(r##"{"colors":{"surface.0":"#FF804000","text.primary":"#20A04000"}}"##);
+    assert!(warnings.is_empty());
+    let saved: Value = serde_json::from_str(&theme.to_json()).unwrap();
+    assert_eq!(saved["colors"]["window.background"], "#FF804000");
+    // Text inherits the background's colour but never its alpha: it would vanish.
+    assert_eq!(saved["colors"]["text.onColorDark"], "#FF8040");
+    for key in ["text.primary", "browser.text.primary", "text.onColorLight"] {
+        assert_eq!(saved["colors"][key], "#20A04000");
     }
+    assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
+    let (theme, warnings) =
+        Theme::from_json(r##"{"colors":{"surface.0":"#FF804000","window.background":"#00000000"}}"##);
+    assert!(warnings.is_empty());
+    assert_eq!(theme.rgba("window.background", theme.colors.window_background), [0, 0, 0, 0]);
+}
+
+#[test]
+fn translucent_theme_colours_preserve_alpha_in_files() {
+    for colour in [Color32::from_rgba_unmultiplied(100, 150, 200, 128), Color32::TRANSPARENT, rgb(0xAABBCC)] {
+        assert_eq!(parse_hex(&hex(colour)), Some(colour));
+        let mut theme = Theme::default();
+        theme.colors.grid_major = colour;
+        assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
+    }
+    assert!(parse_hex("#1234567").is_none());
+    assert!(parse_hex("#112233GG").is_none());
+}
+
+#[test]
+fn old_clip_defaults_migrate_and_explicit_defaults_and_materials_round_trip() {
+    let (old, warnings) = Theme::from_json(r##"{"colors":{"track.1":"#123456","track.3":"#ABCDEF"}}"##);
+    assert!(warnings.is_empty());
+    assert_eq!(old.colors.audio_clip_default, rgb(0x123456));
+    assert_eq!(old.colors.midi_clip_default, rgb(0xABCDEF));
+    assert_eq!(old.liquid, None);
+    let (theme, warnings) = Theme::from_json(
+        r##"{"colors":{"clip.midiDefault":"#010203","clip.audioDefault":"#040506"},"liquid":{"panels":38,"tracks":52,"clips":40}}"##,
+    );
+    assert!(warnings.is_empty());
+    assert_eq!(theme.colors.midi_clip_default, rgb(0x010203));
+    assert_eq!(theme.colors.audio_clip_default, rgb(0x040506));
+    assert_eq!(theme.liquid, Some(super::super::liquid::Options { panels: 38, tracks: 52, clips: 40 }));
+    assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
+    let (invalid, warnings) = Theme::from_json(r#"{"liquid":{"panels":999,"tracks":-1,"clips":"bad"}}"#);
+    assert_eq!(warnings.len(), 3);
+    assert_eq!(invalid.liquid, Some(super::super::liquid::Options::default()));
+}
+
+#[test]
+fn example_themes_embed_their_paint_and_all_editable_artwork() {
+    for (id, width) in [("suhina-sheet", 88), ("suhina-meadow", 92), ("suhina-blocks", 92)] {
+        let (_, sheet) = built_in_themes().into_iter().find(|(key, _)| *key == id).unwrap();
+        assert!(sheet.skin.assets.len() >= super::super::skin::ROLES.len());
+        for role in super::super::skin::ROLES {
+            let svg = &sheet.skin.assets[*role];
+            assert!(super::super::skin::validate_artwork(svg).is_ok(), "{role}");
+        }
+        for (role, svg) in &sheet.skin.assets {
+            assert!(super::super::skin::validate_artwork(svg).is_ok(), "{role}");
+        }
+        assert!(super::super::native_css::inspect(sheet.skin.css.as_deref().unwrap()).unwrap().is_empty());
+        assert_eq!(sheet.skin.session.track_width, Some(width));
+        assert_eq!(sheet.skin.background.is_some(), id == "suhina-meadow");
+        // A JSON theme from an earlier version holds the same values.
+        let (restored, warnings) = Theme::from_json(&sheet.to_json());
+        assert!(warnings.is_empty(), "{warnings:?}");
+        let values = super::super::theme_vars::core_values;
+        assert_eq!(values(&restored), values(&sheet));
+        assert_eq!((&restored.skin.controls, &restored.skin.styles), (&sheet.skin.controls, &sheet.skin.styles));
+        let mut native = sheet.clone();
+        assert!(super::super::theme_css::apply(&mut native, &super::super::theme_css::export(&sheet)).is_empty());
+        assert_eq!(native.skin.session, sheet.skin.session);
+        assert_eq!(native.skin.controls, sheet.skin.controls);
+        assert_eq!(native.skin.meter_intensity, sheet.skin.meter_intensity);
+        assert_eq!(native.skin.styles, sheet.skin.styles);
+    }
+    let first = meadow_background().unwrap();
+    let second = meadow_background().unwrap();
+    assert!(std::sync::Arc::ptr_eq(&first, &second));
+    let bytes = super::super::skin::decode_png(&first).unwrap();
+    let image = image::load_from_memory(&bytes).unwrap();
+    assert!(image.width() >= 1024 && image.width() <= 4096);
+    assert!(image.height() >= 512 && image.height() <= 4096);
 }
 
 #[test]
@@ -43,7 +124,15 @@ fn track_and_kind_colours_keep_their_values_in_suhina_dark() {
 
 #[test]
 fn a_theme_survives_a_round_trip() {
-    let mut theme = Theme { name: "Night".into(), colors: Palette::DARK };
+    let mut theme = Theme {
+        name: "Night".into(),
+        colors: Palette::DARK,
+        liquid: None,
+        gradients: Default::default(),
+        transparent_rgb: Default::default(),
+        skin: Default::default(),
+        vars: Default::default(),
+    };
     theme.colors.accent = rgb(0x12AB9F);
     theme.colors.window_background = rgb(0x000000);
     assert_eq!(Theme::from_json(&theme.to_json()), (theme, Vec::new()));
@@ -56,6 +145,8 @@ fn a_theme_file_needs_only_the_colours_it_changes() {
     assert_eq!(theme.name, "Blue");
     assert_eq!(theme.colors.accent, rgb(0x3366FF));
     assert_eq!(theme.colors.window_background, Palette::DARK.window_background);
+    assert_eq!(theme.colors.track_header_background, Palette::DARK.track_header_background);
+    assert_eq!(theme.colors.track_header_selected, Palette::DARK.track_header_selected);
 }
 
 #[test]
@@ -98,12 +189,15 @@ fn files_with_the_first_token_names_still_read() {
 fn the_themes_that_come_with_suhina_read_whole() {
     let themes = built_in_themes();
     assert_eq!(themes.first().map(|(id, _)| *id), Some(BUILT_IN));
-    for (id, text) in BUILT_IN_FILES {
-        let (theme, warnings) = Theme::from_json(text);
+    for (id, sheet, layout) in BUILT_IN_FILES {
+        let (theme, warnings) = from_sheet(sheet, layout);
         assert!(warnings.is_empty(), "{id}: {warnings:?}");
         // Every colour is written out, so none falls back to Suhina Dark by mistake.
-        let listed = serde_json::from_str::<Value>(text).ok().and_then(|v| v.get("colors").cloned());
-        assert_eq!(listed.and_then(|c| c.as_object().map(Map::len)), Some(Palette::DARK.tokens().len()), "{id}");
+        for (key, _, _) in Palette::DARK.tokens() {
+            assert!(sheet.contains(&format!("  --{}: ", key.replace('.', "-"))), "{id} leaves out {key}");
+        }
+        // The sheet holds the theme's own values: nothing is a variant's.
+        assert!(theme.vars.values.is_empty() && theme.skin.variant.is_none(), "{id}");
         assert!(is_built_in(id));
         assert_ne!(theme.name, Theme::default().name);
     }
@@ -111,8 +205,71 @@ fn the_themes_that_come_with_suhina_read_whole() {
 }
 
 #[test]
+fn default_ui_font_is_manrope_and_previous_font_remains_available() {
+    let definitions = fonts();
+    assert_eq!(definitions.families[&FontFamily::Proportional].first().map(String::as_str), Some("manrope"));
+    assert!(definitions.font_data.contains_key("encode-sans"));
+    assert_eq!(
+        definitions.font_data["manrope"].tweak.coords,
+        egui::epaint::text::VariationCoords::new([(b"wght", 500.0)])
+    );
+    assert!(definitions.families.contains_key(&FontFamily::Name("encode-sans".into())));
+}
+
+#[test]
+fn studio_themes_keep_text_readable_and_round_trip() {
+    for (id, theme) in built_in_themes().into_iter().filter(|(id, _)| id.starts_with("suhina-studio-")) {
+        let p = theme.colors;
+        for background in [p.window_background, p.panel_background, p.control_background] {
+            assert!(contrast(p.text_primary, background) >= 7.0, "{id}: primary text");
+            assert!(contrast(p.text_secondary, background) >= 4.5, "{id}: secondary text");
+            assert!(contrast(p.accent, background) >= 3.0, "{id}: accent");
+        }
+        // Its own sheet, as a copy of it is saved, reads back as the same theme.
+        let (restored, warnings) = from_sheet(&super::super::theme_css::sheet(&theme, None), "");
+        assert!(warnings.is_empty(), "{id}: {warnings:?}");
+        let values = super::super::theme_vars::core_values;
+        assert_eq!(values(&restored), values(&theme), "{id}: custom colors must survive saving");
+    }
+}
+
+#[test]
+fn text_never_takes_a_background_colour_in_files_from_before_text_inverse() {
+    let (old, warnings) = Theme::from_json(r##"{"colors":{"window.background":"#10203080","text.value":"#ABCDEF"}}"##);
+    assert!(warnings.is_empty());
+    // Text on lit fills keeps the window's colour, opaque, and the chosen option its fill.
+    assert_eq!(old.colors.text_inverse, rgb(0x102030));
+    assert_eq!(old.colors.control_selected, rgb(0xABCDEF));
+    let (new, _) = Theme::from_json(
+        r##"{"colors":{"window.background":"#102030","text.inverse":"#FFFFFF","control.selectedBackground":"#00FF00"}}"##,
+    );
+    assert_eq!((new.colors.text_inverse, new.colors.control_selected), (rgb(0xFFFFFF), rgb(0x00FF00)));
+}
+
+#[test]
+fn a_theme_is_see_through_when_a_background_has_alpha() {
+    let ctx = egui::Context::default();
+    set_palette(&ctx, Palette::DARK);
+    assert!(!see_through());
+    let mut glass = Palette::DARK;
+    glass.panel_background = Color32::from_rgba_unmultiplied(10, 20, 30, 200);
+    set_palette(&ctx, glass);
+    assert!(see_through());
+    // A see-through border is not a background.
+    let mut lines = Palette::DARK;
+    lines.border = Color32::from_rgba_unmultiplied(255, 255, 255, 40);
+    set_palette(&ctx, lines);
+    assert!(!see_through());
+}
+
+#[test]
 fn the_readme_names_every_token() {
     let readme = template_readme();
+    for rule in
+        ["Backgrounds on the see-through window", "Closed-panel Grid tracks", "Value text on lit controls", "4:1"]
+    {
+        assert!(readme.contains(rule), "missing authoring rule: {rule}");
+    }
     for (key, purpose, color) in Palette::DARK.tokens() {
         assert!(readme.contains(&format!("| `{key}` | `{}` | {purpose} |", hex(color))), "{key}");
     }
@@ -136,6 +293,27 @@ fn text_on_a_colour_is_the_text_token_that_stands_out_more() {
     }
     assert_eq!(text_on(rgb(0x202020)), text_primary());
     assert!((contrast(rgb(0x000000), rgb(0xFFFFFF)) - 21.0).abs() < 0.01);
+}
+
+#[test]
+fn independent_text_roles_round_trip_and_old_themes_keep_their_colours() {
+    let (mut theme, warnings) = Theme::from_json(
+        r##"{"colors":{"text.primary":"#EEDDAA","text.secondary":"#998877","window.background":"#112233"}}"##,
+    );
+    assert!(warnings.is_empty());
+    assert_eq!(theme.colors.browser_text_primary, theme.colors.text_primary);
+    assert_eq!(theme.colors.browser_text_secondary, theme.colors.text_secondary);
+    assert_eq!(theme.colors.text_on_color_dark, theme.colors.window_background);
+    theme.colors.browser_text_primary = rgb(0x55AAFF);
+    theme.colors.text_on_color_dark = rgb(0x445566);
+    let (restored, warnings) = Theme::from_json(&theme.to_json());
+    assert!(warnings.is_empty());
+    assert_eq!(restored.colors, theme.colors);
+    let ctx = egui::Context::default();
+    set_palette(&ctx, restored.colors);
+    assert_eq!(text_on(rgb(0xFFFFFF)), rgb(0x445566));
+    assert_eq!(browser_text_primary(), rgb(0x55AAFF));
+    set_palette(&ctx, Palette::DARK);
 }
 
 #[test]

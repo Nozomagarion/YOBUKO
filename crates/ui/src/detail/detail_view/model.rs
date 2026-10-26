@@ -41,6 +41,9 @@ pub struct DeviceBox {
     pub name: String,
     /// What it is: a built-in effect or instrument, a plug-in format, or one Suhina cannot run.
     pub kind: String,
+    /// What a theme selects its panel by, after `#device-`: a built-in device's id
+    /// (`#device-compressor`), `sd` for a device file, `plugin` for a plug-in.
+    pub theme_id: String,
     pub enabled: bool,
     /// Parameter ids and values as text.
     pub params: Vec<(String, String)>,
@@ -586,6 +589,12 @@ pub(super) fn device_box(
         at: DeviceAt(path.to_vec()),
         group: d.as_group().map(|g| group_box(g, d, path, id, plugins)),
         name: device_display_name(d),
+        theme_id: match &d.kind {
+            DeviceKind::Builtin(id) => id.to_ascii_lowercase(),
+            DeviceKind::Sd => "sd".into(),
+            DeviceKind::Clap { .. } | DeviceKind::Vst3 { .. } | DeviceKind::Vst2 { .. } => "plugin".into(),
+            _ => "unsupported".into(),
+        },
         kind: match &d.kind {
             DeviceKind::Builtin(_) => "Suhina".into(),
             DeviceKind::Sd => d

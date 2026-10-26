@@ -4,8 +4,9 @@
 //! Build, validate, save, and run data-only Suhina device graphs (`.sd`).
 //!
 //! Version 4 separates device revisions from the file format version; version 5 adds an
-//! optional expanded panel. A validated graph compiles off the audio thread into a processor
-//! whose `process` method performs no allocation. File versions 1 through 5 remain readable.
+//! optional expanded panel; version 6 a panel style sheet. A validated graph compiles off the
+//! audio thread into a processor whose `process` method performs no allocation. File versions
+//! 1 through 6 remain readable.
 
 use std::fmt;
 use std::io::Read;
@@ -39,8 +40,8 @@ pub const FORMAT: &str = "suhina-device";
 /// The version every file is written as, and the newest this crate reads. It rises with every
 /// change to what a file holds, so an older Suhina refuses a newer file rather than dropping
 /// what it does not know (ADR 0010 › Amendment: format versions, `docs/spec/sd-device-format.md`
-/// › Versions). Files of every earlier version are still read.
-pub const VERSION: u32 = 5;
+/// › Versions). Files of every earlier version are still read. Version 6 adds a panel's style sheet.
+pub const VERSION: u32 = 6;
 pub const MAX_FILE_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_NODES: usize = 128;
 pub const MAX_CONNECTIONS: usize = MAX_NODES * 5;
@@ -431,6 +432,9 @@ impl DeviceGraph {
         }
         if file.version < 5 && file.device.expanded.is_some() {
             return Err(DeviceSdkError("an expanded panel requires .sd version 5".into()));
+        }
+        if file.version < 6 && file.device.ui.iter().chain(file.device.expanded.iter()).any(|ui| ui.style.is_some()) {
+            return Err(DeviceSdkError("a panel style sheet requires .sd version 6".into()));
         }
         if file.version == 1
             && (file
@@ -884,16 +888,35 @@ mod tests {
     }
 
     #[test]
-    fn an_expanded_panel_round_trips_as_version_5_and_older_versions_refuse_it() {
+    fn a_panel_style_sheet_round_trips_as_version_6_and_older_versions_refuse_it() {
+        let mut graph = gain_graph();
+        let style = "#gain { color: #ff8800; }\n";
+        graph.ui = Some(ui::DeviceUi { style: Some(style.into()), ..ui::DeviceUi::default() });
+        let encoded = graph.to_sd().unwrap();
+        let json: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(json["version"], 6);
+        assert_eq!(json["device"]["ui"]["style"], style);
+        assert_eq!(DeviceGraph::from_sd(&encoded), Ok(graph.clone()));
+        assert!(DeviceGraph::from_sd(&encoded.replace("\"version\": 6", "\"version\": 5")).is_err());
+        // Without a style sheet the file stays version 4, and the key is not written.
+        let plain = gain_graph().to_sd().unwrap();
+        assert!(!plain.contains("\"style\""));
+        let mut huge = graph;
+        huge.ui = Some(ui::DeviceUi { style: Some("a".repeat(ui::MAX_STYLE_BYTES + 1)), ..ui::DeviceUi::default() });
+        assert!(huge.validate().is_err());
+    }
+
+    #[test]
+    fn an_expanded_panel_round_trips_and_older_versions_refuse_it() {
         let mut graph = gain_graph();
         graph.ui = Some(ui::DeviceUi { size: [260., 168.], ..ui::DeviceUi::default() });
         graph.expanded = Some(ui::DeviceUi { size: [720., 400.], ..ui::DeviceUi::default() });
         let encoded = graph.to_sd().unwrap();
         let json: serde_json::Value = serde_json::from_str(&encoded).unwrap();
-        assert_eq!(json["version"], 5);
+        assert_eq!(json["version"], VERSION);
         assert_eq!(json["device"]["expanded"]["size"], serde_json::json!([720.0, 400.0]));
         assert_eq!(DeviceGraph::from_sd(&encoded), Ok(graph.clone()));
-        assert!(DeviceGraph::from_sd(&encoded.replace("\"version\": 5", "\"version\": 4")).is_err());
+        assert!(DeviceGraph::from_sd(&encoded.replace("\"version\": 6", "\"version\": 4")).is_err());
         // The expanded panel is checked against the parameters like the compact one.
         let mut bad = graph;
         bad.expanded = Some(ui::DeviceUi { hidden_parameters: vec!["missing".into()], ..ui::DeviceUi::default() });

@@ -10,6 +10,7 @@
 //! takes the room under that line, and where it lands in the window is reported each frame
 //! ([`EditorPlace`]) for the host process to put it there.
 
+use crate::kit::surface::Backgrounds as _;
 use egui::{Align2, Id, Pos2, Rect, Sense, Ui, Vec2};
 use serde_json::json;
 use suhina_device_sdk::builtin::{COMPACT_HEIGHT, COMPACT_WIDTH};
@@ -35,6 +36,8 @@ pub use self::expanded::*;
 use self::group_panel::*;
 pub use self::model::*;
 use self::parameters::*;
+#[cfg(test)]
+pub(crate) use self::parameters::{slider_as_knob, themed_slider};
 
 /// Width of one device in a row, at least.
 pub const DEVICE_WIDTH: f32 = 220.0;
@@ -73,10 +76,14 @@ pub fn show_row(
     actions: &mut Vec<Action>,
     places: &mut Vec<EditorPlace>,
 ) -> Picked {
+    let _style_class = crate::kit::style_class::enter("detail");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
+    crate::kit::native_css::background(&painter, area);
     match detail {
         Detail::Nothing => hint(&painter, area, "Select a track or a clip to see it here"),
         Detail::Devices(chain) => return chain_row(ui, &painter, area, chain, selected, actions, places),
@@ -148,8 +155,24 @@ fn chain_row(
                 )
             });
             let width = editor.map_or(authored_width, |e| authored_width.max(e.x + PAD * 2.0));
+            // `.device { width }` or `#device-<id> { width }` widens the panel (up to 1600 points).
+            let (width, themed_height) = {
+                let _style = crate::kit::style_class::enter_named("device", &format!("device-{}", device.theme_id));
+                let computed = crate::kit::style_class::computed();
+                let width = computed
+                    .as_ref()
+                    .and_then(|c| c.width)
+                    .map_or(width, |themed| width.max(themed.clamp(120.0, 1600.0)));
+                (width, computed.and_then(|c| c.height))
+            };
             let height = sdk_viewport(device)
                 .map_or_else(|| panel_height(device, width - PAD * 2.0, editor), |v| ROW + PAD * 2.0 + v[1]);
+            // `.device { height }` or `#device-<id> { height }` sets the panel's height (60 to 1200
+            // points); what does not fit scrolls. An embedded editor keeps its own room.
+            let height = match (themed_height, editor) {
+                (Some(themed), None) => themed.clamp(60.0, 1200.0),
+                _ => height,
+            };
             (width, height)
         })
         .collect();
@@ -212,7 +235,7 @@ fn chain_row(
     }
     ui.set_clip_rect(outer_clip);
     if let Some(bar) = bar {
-        painter.rect_filled(bar, 0.0, theme::control_background());
+        painter.fill_background(bar, 0.0, theme::control_background());
         let thumb_width = (area.width() / total * bar.width()).max(24.0);
         let thumb_left = bar.left() + offset / most * (bar.width() - thumb_width);
         let thumb =
@@ -282,10 +305,14 @@ pub fn show_stack(
     actions: &mut Vec<Action>,
     places: &mut Vec<EditorPlace>,
 ) -> Picked {
+    let _style_class = crate::kit::style_class::enter("detail");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
+    crate::kit::native_css::background(&painter, area);
     match detail {
         Detail::Nothing => hint(&painter, area, "Select a track or a clip"),
         Detail::Devices(chain) => return chain_stack(ui, &painter, area, chain, selected, actions, places),
@@ -312,10 +339,14 @@ pub fn show_stack(
 /// (› Other note tools in `docs/spec/ui-clip-editor.md`). With it, the part the Clip / Devices
 /// switch was clicked to, if it was.
 pub fn show_clip_column(ui: &mut Ui, info: &ClipInfo, stacked: bool, actions: &mut Vec<Action>) -> (Rect, Picked) {
+    let _style_class = crate::kit::style_class::enter("clip-editor");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
+    crate::kit::native_css::background(&painter, area);
     let (column, picked) = clip_properties(ui, &painter, area, info, stacked, actions);
     clip_for_readers(ui, column, info);
     let rest = if stacked {
@@ -446,7 +477,7 @@ fn plugin_button(
     );
     let hover = widgets::hover(ui, &response);
     let fill = crate::kit::motion::mix(theme::control_background(), theme::control_hover(), hover);
-    painter.rect_filled(button, 0.0, fill);
+    painter.fill_background(button, 0.0, fill);
     painter.rect_stroke(button, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
     widgets::text_in(
         painter,
@@ -475,7 +506,7 @@ pub fn show_ara_editor(
 ) {
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    painter.rect_filled(area, 0.0, theme::window_background());
+    painter.fill_background(area, 0.0, theme::window_background());
     let Some(device) = chain.devices.iter().find(|d| d.index == device) else { return };
     let Some(plugin) = &device.plugin else { return };
     let response = ui.interact(area, egui::Id::new(("ara-editor", chain.track.0)), Sense::hover());
@@ -554,7 +585,11 @@ fn ara_button(
     let response =
         widgets::button_area(ui, rect, egui::Id::new(("ara-button", id.0.0, id.1)), format!("{label} {plugin}"));
     let hover = widgets::hover(ui, &response);
-    painter.rect_filled(rect, 0.0, crate::kit::motion::mix(theme::control_background(), theme::control_hover(), hover));
+    painter.fill_background(
+        rect,
+        0.0,
+        crate::kit::motion::mix(theme::control_background(), theme::control_hover(), hover),
+    );
     painter.rect_stroke(rect, 0.0, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
     widgets::text_in(
         painter,
@@ -618,9 +653,20 @@ fn device_panel(
             painter.rect_stroke(rect, 1.0, theme::hairline(theme::selection()), egui::StrokeKind::Inside);
         }
     };
-    painter.rect_filled(rect, 0.0, theme::panel_background());
+    // `.device` styles every device's panel and `#device-compressor` (a built-in device's id)
+    // one kind of them; `.device-header` its header row. Everything inside (`.device-control`,
+    // the generated parameter list's widgets) is in that scope.
+    let _device_style = crate::kit::style_class::enter_named("device", &format!("device-{}", device.theme_id));
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, selected);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, !device.enabled);
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
+    crate::kit::native_css::surface(painter, rect, 0.0, theme::panel_background());
     let header = Rect::from_min_size(rect.min, Vec2::new(rect.width(), ROW));
-    painter.rect_filled(header, 0.0, theme::control_background());
+    {
+        let _header = crate::kit::style_class::enter("device-header");
+        crate::kit::native_css::surface(painter, header, 0.0, theme::control_background());
+    }
     let switch = Rect::from_min_size(
         Pos2::new(header.left() + PAD, header.center().y - ON_SWITCH / 2.0),
         Vec2::splat(ON_SWITCH),
