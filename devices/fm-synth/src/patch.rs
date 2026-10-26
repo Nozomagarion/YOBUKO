@@ -350,7 +350,10 @@ const FORMAT_BANK: u8 = 9;
 
 /// The DX7 checksum: the two's complement of the sum of the data, 7 bits.
 pub fn checksum(data: &[u8]) -> u8 {
-    data.iter().fold(0u8, |sum, &b| sum.wrapping_sub(b)) & 0x7f
+    // Sum in a wider unsigned accumulator before reducing to seven bits. This also avoids
+    // the optimized byte-subtraction reduction that disagreed between call sites on ARM64.
+    let sum = data.iter().fold(0u32, |sum, &byte| sum.wrapping_add(u32::from(byte)));
+    (sum.wrapping_neg() & 0x7f) as u8
 }
 
 /// Reads a single-voice message (163 bytes), a bank message (4104 bytes) or a bank's bare

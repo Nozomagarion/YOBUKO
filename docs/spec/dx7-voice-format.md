@@ -25,7 +25,11 @@ Both messages are system exclusive: `F0 43 0n <format> <length high> <length low
 | One voice | 0 | `01 1B` (155) | 155 bytes, the voice layout below | 163 bytes |
 | Bank of 32 voices | 9 | `20 00` (4096) | 32 × 128 packed bytes | 4104 bytes |
 
-The checksum is the two's complement of the sum of the data bytes, low 7 bits. A bank is also
+The checksum is the two's complement of the sum of the data bytes, low 7 bits.
+The implementation accumulates unsigned bytes in a wrapping 32-bit sum, then negates and masks
+to seven bits. This preserves the format while avoiding a byte-subtraction reduction that
+produced inconsistent results between call sites in an optimized ARM64 build. Regression tests
+check known values, 155/4096-byte payloads, vector boundaries and different header offsets. A bank is also
 accepted as its bare 4096 bytes of packed voices, as some files hold it.
 
 ## The voice layout (155 bytes)

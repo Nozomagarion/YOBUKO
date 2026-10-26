@@ -185,6 +185,25 @@ fn sample_patch() -> Patch {
 }
 
 #[test]
+fn sysex_checksums_match_known_values_at_vector_boundaries_and_payload_offsets() {
+    use crate::patch::checksum;
+    assert_eq!(checksum(&[]), 0);
+    assert_eq!(checksum(&[1, 2, 3]), 122);
+    assert_eq!(checksum(&[127, 1]), 0);
+    for (length, expected) in
+        [(1, 1), (15, 15), (16, 16), (17, 17), (127, 127), (128, 0), (129, 1), (155, 27), (4096, 0)]
+    {
+        for offset in 0..16 {
+            let mut message = vec![0x43; offset];
+            message.extend(std::iter::repeat_n(127, length));
+            assert_eq!(checksum(&message[offset..]), expected, "length {length}, offset {offset}");
+        }
+    }
+    let data: Vec<u8> = (0..155).map(|i| (i % 128) as u8).collect();
+    assert_eq!(checksum(&data), 97);
+}
+
+#[test]
 fn a_voice_survives_a_single_voice_dump_and_a_bank() {
     let p = sample_patch();
     let dump = write_voice(&p);
@@ -198,6 +217,7 @@ fn a_voice_survives_a_single_voice_dump_and_a_bank() {
     let bank = write_bank(&[Patch::default(), p]);
     assert_eq!(bank.len(), 4_104);
     let back = read(&bank).unwrap_or_else(|e| panic!("{e}"));
+    assert!(back.checksum_ok);
     assert_eq!(back.patches.len(), 32);
     assert_eq!(back.patches[1].to_voice(), p.to_voice());
     assert_eq!(back.patches[0], Patch::default());
