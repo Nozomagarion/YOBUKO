@@ -162,12 +162,7 @@ impl Updater {
         }
         std::fs::create_dir(&unpacked).map_err(|e| format!("could not unpack: {e}"))?;
         let program = install::unpack(&archive, &unpacked)?;
-        // A bundle replaces a bundle whole; a package without one (or a program outside one) has
-        // its files put in place one by one.
-        match (install::bundle_of(&program), install::bundle_of(dir)) {
-            (Some(new), Some(old)) => install::replace_bundle(&new, &old),
-            _ => install::replace(&program, dir).map(|_| ()),
-        }
+        install::put_in_place(&program, dir)
     }
 }
 

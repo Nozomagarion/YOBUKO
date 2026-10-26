@@ -5,6 +5,7 @@
 //! column, a ruler, the note grid and a velocity lane. Every edit is a `note.*` command; the view
 //! keeps only what is on screen: zoom, scroll, the selected notes and a gesture in progress.
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::BTreeSet;
 
 use egui::{Align2, Color32, CursorIcon, Id, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
@@ -17,7 +18,7 @@ use crate::detail::piano_roll_ghosts::{self as ghost_view, GhostSource, Ghosts};
 use crate::detail::piano_roll_grid::{FIXED_VALUES, GridMode, PianoGrid, Width};
 use crate::detail::piano_roll_ruler::{self as ruler_view, ClipShape, RulerState};
 use crate::detail::piano_roll_scale::{self as scale_view, Fold, KeyRows};
-use crate::interaction::grid::default_track_colour;
+use crate::interaction::grid::track_colour;
 use crate::interaction::timeline_grid::TimelineGrid;
 use crate::kit::theme;
 use crate::kit::widgets::{self, Action};
@@ -38,6 +39,8 @@ mod state;
 mod toolbar;
 
 pub use self::clip::*;
+#[cfg(test)]
+pub(crate) use self::drawing::part_style;
 use self::drawing::*;
 use self::edits::*;
 pub use self::layout::*;
@@ -174,6 +177,9 @@ pub fn show(
     cx: Context<'_>,
     actions: &mut Vec<Action>,
 ) {
+    let _style_class = crate::kit::style_class::enter("piano-roll");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let Context { options, keymap, copied, playhead } = cx;
     let scale = options.toolbar_size.scale();
     let fresh = state.shown.as_ref() != Some(&clip.address);
@@ -190,7 +196,12 @@ pub fn show(
     }
     // The toolbar along the top; the editor under it. The toolbar's height follows Settings ›
     // Clip editor › Piano roll › Toolbar size, and never takes more than the room the editor has.
-    let band = (TOOLBAR * scale).min(area.height());
+    // A theme's taller tool buttons (`.piano-tool { height }`) grow the band to hold them.
+    let tool_height = {
+        let _style = crate::kit::style_class::enter("piano-tool");
+        crate::kit::style_class::computed().and_then(|c| c.height).map_or(0.0, |h| h.clamp(8.0, 96.0) + 6.0)
+    };
+    let band = (TOOLBAR * scale).max(tool_height).min(area.height());
     let toolbar_rect = Rect::from_min_max(area.min, Pos2::new(area.right(), area.top() + band));
     let whole = area;
     let area = Rect::from_min_max(Pos2::new(area.left(), toolbar_rect.bottom()), area.max);

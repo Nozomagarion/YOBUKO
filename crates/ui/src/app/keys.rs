@@ -20,7 +20,8 @@ impl App {
             || !self.agent_asks.is_empty();
         let session_view = self.shown == View::Session && !self.sample_map.view.large;
         // A clicked slot or button keeps the focus; only a text field takes the keys away.
-        let focused = session_view && !dialog && !self.settings_open && !ui.ctx().text_edit_focused();
+        let focused =
+            session_view && !dialog && !(self.settings_open && !self.page.window) && !ui.ctx().text_edit_focused();
         let lost = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::WindowFocused(false))));
         let Some(project) = self.projects.active().and_then(|id| self.projects.get(id)).map(Session::project) else {
             return;
@@ -80,6 +81,7 @@ impl App {
             || self.ara_prompt.is_some()
             || self.missing.open
             || self.about_open
+            || self.theme_import.is_some()
             || !self.agent_asks.is_empty()
             || self.updates.open
     }

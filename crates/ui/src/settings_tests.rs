@@ -62,7 +62,7 @@ fn a_settings_file_from_before_the_regrouping_loads_with_the_same_values() {
     #[allow(clippy::needless_update)]
     let expected = Settings {
         animations: false,
-        track_headers: Side::Left,
+        track_headers: Some(Side::Left),
         graphics: Graphics::OpenGl,
         sample_stacking: true,
         midi_stacking: true,
@@ -120,7 +120,7 @@ fn a_settings_file_from_before_the_regrouping_loads_with_the_same_values() {
 fn settings_survive_a_round_trip() {
     let settings = Settings {
         animations: false,
-        track_headers: Side::Left,
+        track_headers: Some(Side::Left),
         graphics: Graphics::OpenGl,
         sample_stacking: true,
         midi_stacking: false,
@@ -139,10 +139,13 @@ fn settings_survive_a_round_trip() {
         mixer_controls: MixerControls::Knob,
         plugin_editors: EditorPlacement::DeviceView,
         theme: "Night blue".into(),
+        background_image: "C:/Pictures/background.png".into(),
         projects_folder: "C:/Music/Songs = mine".into(),
         templates_folder: "/home/me/templates".into(),
         nam_models_folder: "/home/me/nam models".into(),
         irs_folder: "/home/me/irs".into(),
+        themes_folder: "/home/me/Documents/themes".into(),
+        data_folder: String::new(),
         browser_open: false,
         browser_side: Side::Right,
         browser_width: 420,

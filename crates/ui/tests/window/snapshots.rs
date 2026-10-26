@@ -122,7 +122,7 @@ fn render_the_session_window() {
     harness.run();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
     harness.run();
-    harness.get_by_label("Settings page: Theme").click();
+    harness.get_by_label("Settings page: Themes").click();
     harness.run();
     harness.remove_cursor();
     harness.run();

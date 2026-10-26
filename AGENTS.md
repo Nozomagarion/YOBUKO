@@ -83,6 +83,7 @@ the documents that match your task.
 ```text
 crates/
   model    L0 DAW-neutral project as pure data (tracks, channels, clip contents, clips, launcher)
+  style    L0 native style sheets, scoped selectors, typed values, cascade, Taffy layout and source edits; no GUI or I/O
   stretch  L0 time-stretching and pitch-shifting DSP: a pure-Rust port of Signalsmith Stretch (MIT)
   engine   L1 offline/real-time rendering of notes and audio clips, real-time time-stretching (ADR 0003)
            and the clip launcher; no file I/O
@@ -98,6 +99,8 @@ crates/
   soundmap L2 the sample map: features of samples, layouts by how they sound (t-SNE), grids, kinds, the feature cache
   update   L2 updates: whether a newer nightly or test build is out (GitHub, through the system's
            curl), downloading it, checking its SHA-256 and putting it in place of the running build
+  theme-package L1 theme packages (.theme.suhina): a theme's files with a SHA-256 manifest, packed, read
+           and validated; used by the app's export and import and suhina-cli theme
   separation L2 stem separation: chunking, weighted overlap-add and resampling around an inference backend
              trait, and a deterministic test backend (a band splitter); no model or commands yet (#146)
   session  L2 open projects (tabs, ADR 0007), undo history, the command registry (ADR 0002), the
@@ -139,7 +142,8 @@ devices/
   pitch    MIDI effect: transposes notes by semitones or scale degrees, keeps them in a key window (Block, Fold, Limit)
 apps/
   suhina-cli   headless CLI: render, play, mcp, commands, audio, plugins, plugin, fm-synth
-  suhina       the desktop app (eframe): opens a project and shows it in the ui
+  suhina       the desktop app (eframe): opens a project and shows it in the ui;
+               theme file operations and live reload run on one background worker
 docs/
   architecture.md  how the crates, threads and commands fit together
   decisions/  architecture decision records; read 0001 before changing the model, 0004 before a device
@@ -387,6 +391,25 @@ pull request leaves them alone, even when it adds a command. A pull request that
 coverage writes `Parity: no change` and the reason in its description ("Parity: no change, a
 refactor"). When a pull request changes `crates/`, `devices/` or `apps/` and does neither, the
 [Parity notice](.github/workflows/parity-notice.yml) check warns; it does not fail.
+
+**Settings include their website help.** Whenever you add, remove, move, rename or change a
+setting, complete its guide update automatically in the same pull request. Read
+[`docs/spec/settings-guide-export.md`](docs/spec/settings-guide-export.md), the control in
+`crates/ui/src/settings/settings_rows.rs` and its implementation. Update
+`docs/guide-data/settings-help.json`: description, summary when present, every choice's name
+and explanation, when to change it, implementation references and any work-in-progress status.
+Explain grouped controls, defaults, dependencies and when a control has no effect. Migrate IDs
+for moved settings and remove help for deleted settings. Review behavior changes even when
+the registry metadata and fingerprint stay unchanged. Copy the current source fingerprint
+only after reviewing the text; never refresh fingerprints merely to make CI pass.
+
+Run `python scripts/settings_guide.py` and commit `docs/guide-data/settings.json` with the
+authored help. This export is intentionally committed, unlike the generated files below.
+Then run `python scripts/settings_guide.py --check` and
+`python -m unittest discover -s scripts -p 'test_settings_guide.py'`. Check every changed
+setting, not just the first error: the exporter stops at the first missing or stale entry.
+Do not defer the guide to another repository or a follow-up, and do not wait for a separate
+request to document a setting.
 
 **Documentation is part of the change.** A pull request that changes how something works updates,
 in the same pull request, every document that describes it, so the docs never describe code

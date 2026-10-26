@@ -260,6 +260,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
                 ParamType::Path(PathKind::File),
                 "a data-only .sd AudioEffect graph to add to the new audio track",
             ),
+            optional("sample", ParamType::Path(PathKind::File), "audio file for the SDK graph resource named sample"),
             optional("voice", ParamType::Integer, "which voice of a preset bank, from 1"),
         ],
         kind: CommandKind::Edit,
