@@ -2,6 +2,95 @@
   "schemaVersion": 1,
   "entries": [
     {
+      "id": "General/Updates/GitHub updates",
+      "page": "General",
+      "section": "Updates",
+      "name": "GitHub updates",
+      "note": "Compare the GitHub sources and check for a complete app update.",
+      "keys": [],
+      "sourceFingerprint": "d3677c61e49c051d22b0d0bbdbd5b596b129042534059b10e4e668acbbad032c",
+      "helpStatus": "reviewed",
+      "description": "Opens the GitHub updates dialog from the top of General settings. It checks the combined Multiplayer + DJ release and compares the included Suhina, rbxport and fork revisions with their GitHub branches. Upstream differences are marked Integration needed; a newer fork commit is not necessarily a published release. Only complete validated fork packages can be installed. Each component can report an unavailable check independently. This button saves no preference and does not install or restart anything until you choose the installation action.",
+      "options": [],
+      "whenToChange": "Use this button to look for a new combined version or inspect which project has source changes waiting to be integrated.",
+      "workInProgress": false
+    },
+    {
+      "id": "General/Updates/check_updates",
+      "page": "General",
+      "section": "Updates",
+      "name": "Check for updates",
+      "note": "Check once at startup whether a newer build is available.",
+      "keys": [
+        "check_updates"
+      ],
+      "sourceFingerprint": "15f60b9678d146ee771d274a3cf5e620b4f1e5609b8f0c4b47b0379b91b8026f",
+      "helpStatus": "reviewed",
+      "description": "Suhina asks GitHub about the selected update channel once after starting. A newer build can be offered for you to download; enabling the check does not install or restart anything automatically. Help → Check for updates can still check manually when this is off. In this fork the check only reads the Multiplayer + DJ distribution; upstream source changes do not directly trigger installation.",
+      "options": [
+        {
+          "name": "On",
+          "description": "Make the startup update check. This is the default."
+        },
+        {
+          "name": "Off",
+          "description": "Skip the automatic startup check; manual checking remains available."
+        }
+      ],
+      "whenToChange": "Turn this off if you prefer to check for updates manually, for example when working offline.",
+      "workInProgress": false
+    },
+    {
+      "id": "General/Updates/update_channel",
+      "page": "General",
+      "section": "Updates",
+      "name": "Channel",
+      "note": "Choose the builds offered by the update checker.",
+      "keys": [
+        "update_channel"
+      ],
+      "sourceFingerprint": "cf5aa9daceed8902f58156f0365aecb524b7bf9bac18d85081e64a665b326a3a",
+      "helpStatus": "reviewed",
+      "description": "This fork only checks Nozomagarion/suhina-daw for complete Multiplayer + DJ builds. Official Suhina and standalone rbxport binaries cannot replace it. The Multiplayer + DJ channel is the default; Test builds lists eligible fork pull-request artifacts in Developer mode. Source updates from both upstream projects must first be integrated and tested in the fork. Checking and installation are separate actions.",
+      "options": [
+        {
+          "name": "Multiplayer + DJ",
+          "description": "Look for a validated combined build published on the fork's multiplayer release channel. This is the default. No release is available until one is published."
+        },
+        {
+          "name": "Test builds",
+          "description": "List eligible pull-request artifacts from the fork. Downloading requires the GitHub CLI; packages must include the distribution manifest and checksum."
+        }
+      ],
+      "whenToChange": "Use Test builds to try a proposed fork change; use Multiplayer + DJ for the common distribution shared with your friends.",
+      "workInProgress": false
+    },
+    {
+      "id": "General/Updates/developer_mode",
+      "page": "General",
+      "section": "Updates",
+      "name": "Developer mode",
+      "note": "Expose test builds in the update channel choices.",
+      "keys": [
+        "developer_mode"
+      ],
+      "sourceFingerprint": "09b657ceed60247a2662f8e45b433a96140560b1730764bb68680a3011e7d9fd",
+      "helpStatus": "reviewed",
+      "description": "Developer mode makes the Test builds update channel available. It does not select that channel or download a build on its own. Downloading a test build requires the GitHub CLI and an explicit connection from the update dialog. A running test build already exposes Test builds even with Developer mode off. This lists fork test builds only, and does not bypass distribution-manifest or checksum checks.",
+      "options": [
+        {
+          "name": "On",
+          "description": "Add Test builds to the channel choices."
+        },
+        {
+          "name": "Off",
+          "description": "Keep the usual channel choices unless the running app is itself a test build. This is the default."
+        }
+      ],
+      "whenToChange": "Enable this when you have been asked to try a test build for a fix or feature.",
+      "workInProgress": false
+    },
+    {
       "id": "General/Projects/open_projects",
       "page": "General",
       "section": "Projects",
@@ -339,81 +428,6 @@
       ],
       "whenToChange": "Choose Re-pitch if you want speed and pitch to change together. Keep a pitch-preserving choice when a loop should follow your song tempo without changing its key.",
       "workInProgress": true
-    },
-    {
-      "id": "General/Updates/check_updates",
-      "page": "General",
-      "section": "Updates",
-      "name": "Check for updates",
-      "note": "Check once at startup whether a newer build is available.",
-      "keys": [
-        "check_updates"
-      ],
-      "sourceFingerprint": "15f60b9678d146ee771d274a3cf5e620b4f1e5609b8f0c4b47b0379b91b8026f",
-      "helpStatus": "reviewed",
-      "description": "Suhina asks GitHub about the selected update channel once after starting. A newer build can be offered for you to download; enabling the check does not install or restart anything automatically. Help → Check for updates can still check manually when this is off. In this fork the check only reads the Multiplayer + DJ distribution; upstream source changes do not directly trigger installation.",
-      "options": [
-        {
-          "name": "On",
-          "description": "Make the startup update check. This is the default."
-        },
-        {
-          "name": "Off",
-          "description": "Skip the automatic startup check; manual checking remains available."
-        }
-      ],
-      "whenToChange": "Turn this off if you prefer to check for updates manually, for example when working offline.",
-      "workInProgress": false
-    },
-    {
-      "id": "General/Updates/update_channel",
-      "page": "General",
-      "section": "Updates",
-      "name": "Channel",
-      "note": "Choose the builds offered by the update checker.",
-      "keys": [
-        "update_channel"
-      ],
-      "sourceFingerprint": "cf5aa9daceed8902f58156f0365aecb524b7bf9bac18d85081e64a665b326a3a",
-      "helpStatus": "reviewed",
-      "description": "This fork only checks Nozomagarion/suhina-daw for complete Multiplayer + DJ builds. Official Suhina and standalone rbxport binaries cannot replace it. The Multiplayer + DJ channel is the default; Test builds lists eligible fork pull-request artifacts in Developer mode. Source updates from both upstream projects must first be integrated and tested in the fork. Checking and installation are separate actions.",
-      "options": [
-        {
-          "name": "Multiplayer + DJ",
-          "description": "Look for a validated combined build published on the fork's multiplayer release channel. This is the default. No release is available until one is published."
-        },
-        {
-          "name": "Test builds",
-          "description": "List eligible pull-request artifacts from the fork. Downloading requires the GitHub CLI; packages must include the distribution manifest and checksum."
-        }
-      ],
-      "whenToChange": "Use Test builds to try a proposed fork change; use Multiplayer + DJ for the common distribution shared with your friends.",
-      "workInProgress": false
-    },
-    {
-      "id": "General/Updates/developer_mode",
-      "page": "General",
-      "section": "Updates",
-      "name": "Developer mode",
-      "note": "Expose test builds in the update channel choices.",
-      "keys": [
-        "developer_mode"
-      ],
-      "sourceFingerprint": "09b657ceed60247a2662f8e45b433a96140560b1730764bb68680a3011e7d9fd",
-      "helpStatus": "reviewed",
-      "description": "Developer mode makes the Test builds update channel available. It does not select that channel or download a build on its own. Downloading a test build requires the GitHub CLI and an explicit connection from the update dialog. A running test build already exposes Test builds even with Developer mode off. This lists fork test builds only, and does not bypass distribution-manifest or checksum checks.",
-      "options": [
-        {
-          "name": "On",
-          "description": "Add Test builds to the channel choices."
-        },
-        {
-          "name": "Off",
-          "description": "Keep the usual channel choices unless the running app is itself a test build. This is the default."
-        }
-      ],
-      "whenToChange": "Enable this when you have been asked to try a test build for a fix or feature.",
-      "workInProgress": false
     },
     {
       "id": "Export/MCP write permissions/mcp_project_folder",

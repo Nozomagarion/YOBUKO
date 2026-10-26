@@ -17,7 +17,7 @@ use crate::kit::theme::{self, PAD, ROW};
 use crate::kit::widgets::{self, button};
 use crate::settings::update_settings::UpdateSettings;
 
-const WIDTH: f32 = 560.0;
+const WIDTH: f32 = 720.0;
 const WIDE_BUTTON: Vec2 = Vec2::new(150.0, 18.0);
 /// How many test builds the dialog lists.
 const LISTED: usize = 8;
@@ -30,6 +30,10 @@ pub enum Wanted {
     /// Open a page in the browser.
     Open(String),
 }
+
+#[cfg(test)]
+#[path = "updates_tests.rs"]
+mod tests;
 
 /// What was chosen in the dialog.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,9 +69,49 @@ pub struct Updates {
     note: Option<String>,
     /// The channel the last check asked.
     channel: Channel,
+    sources: Vec<suhina_update::components::Component>,
+    source_check: Option<std::sync::mpsc::Receiver<Vec<suhina_update::components::Component>>>,
 }
 
 impl Updates {
+    /// Explicit action from Settings or Help: check the combined release and each source.
+    pub fn open_and_check(&mut self, ctx: &egui::Context, settings: &UpdateSettings) {
+        self.open_dialog();
+        self.check(ctx, settings);
+        self.check_sources(ctx);
+    }
+
+    fn check_sources(&mut self, ctx: &egui::Context) {
+        if self.source_check.is_some() {
+            return;
+        }
+        let (send, receive) = std::sync::mpsc::channel();
+        let ctx = ctx.clone();
+        let build = env!("SUHINA_BUILD").rsplit('_').next().unwrap_or("unknown").to_owned();
+        match std::thread::Builder::new().name("suhina-source-updates".into()).spawn(move || {
+            let _ = send.send(suhina_update::components::check(&build));
+            ctx.request_repaint();
+        }) {
+            Ok(_) => self.source_check = Some(receive),
+            Err(e) => self.note = Some(format!("could not check GitHub components: {e}")),
+        }
+    }
+
+    fn poll_sources(&mut self, ctx: &egui::Context) {
+        let Some(receive) = self.source_check.take() else {
+            return;
+        };
+        match receive.try_recv() {
+            Ok(sources) => self.sources = sources,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                self.source_check = Some(receive);
+                ctx.request_repaint_after(std::time::Duration::from_millis(100));
+            }
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.note = Some("the GitHub component check stopped".into())
+            }
+        }
+    }
     /// Once per start: deletes what an earlier update left, and checks when the setting says so.
     pub fn at_start(&mut self, ctx: &egui::Context, settings: &UpdateSettings) {
         if std::mem::replace(&mut self.started, true) {
@@ -169,6 +213,7 @@ impl Updates {
 
     /// Draws Help › Check for updates… over `area`.
     pub fn show(&mut self, ui: &Ui, area: Rect, settings: &UpdateSettings) -> Option<Wanted> {
+        self.poll_sources(ui.ctx());
         let channel = settings.channel();
         let choice = egui::Area::new(Id::new("updates-dialog"))
             .order(egui::Order::Foreground)
@@ -180,7 +225,10 @@ impl Updates {
             .inner;
         match choice? {
             Choice::Close => self.open = false,
-            Choice::Check => self.check(ui.ctx(), settings),
+            Choice::Check => {
+                self.check(ui.ctx(), settings);
+                self.check_sources(ui.ctx());
+            }
             Choice::Install(build) => self.install(ui.ctx(), build),
             Choice::Restart => return Some(Wanted::Restart),
             Choice::Connect => match self.gh.as_deref().map(suhina_update::net::gh_token) {
@@ -207,7 +255,7 @@ impl Updates {
             _ => Vec::new(),
         };
         let gh_lines = if channel == Channel::TestBuilds { 1.0 } else { 0.0 };
-        let lines = 4.0 + gh_lines + test_builds.len() as f32 + f32::from(u8::from(self.note.is_some()));
+        let lines = 9.0 + gh_lines + test_builds.len() as f32 + f32::from(u8::from(self.note.is_some()));
         let height = ROW + lines * LINE + BUTTON.y + 4.0 * PAD;
         let panel = project_dialog::panel(ui, area, Vec2::new(WIDTH, height), "Updates", &mut chosen);
         let painter = ui.painter_at(area);
@@ -221,7 +269,7 @@ impl Updates {
         };
         let fact = |rect: Rect, name: &str, value: &str| {
             widgets::text_in(&painter, rect, Align2::LEFT_CENTER, name, font.clone(), theme::text_hint());
-            let value_at = Rect::from_min_max(Pos2::new(rect.left() + 90.0, rect.top()), rect.max);
+            let value_at = Rect::from_min_max(Pos2::new(rect.left() + 140.0, rect.top()), rect.max);
             widgets::text_in(&painter, value_at, Align2::LEFT_CENTER, value, font.clone(), theme::text_primary());
         };
         fact(line(&mut y), "This build", VERSION);
@@ -230,6 +278,48 @@ impl Updates {
             Channel::TestBuilds => "Test builds (Settings › General › Updates)",
         };
         fact(line(&mut y), "Channel", channel_name);
+
+        widgets::text_in(
+            &painter,
+            line(&mut y),
+            Align2::LEFT_CENTER,
+            "GitHub components · included revision → latest source",
+            font.clone(),
+            theme::text_primary(),
+        );
+        if self.sources.is_empty() {
+            let text = if self.source_check.is_some() {
+                "Checking GitHub components…"
+            } else {
+                "Use Check now to compare source versions"
+            };
+            widgets::text_in(&painter, line(&mut y), Align2::LEFT_CENTER, text, font.clone(), theme::text_secondary());
+            y += 2.0 * LINE;
+        } else {
+            for component in &self.sources {
+                let row = line(&mut y);
+                let latest = component.latest.as_ref().map(|s| s.get(..8).unwrap_or(s)).unwrap_or("unavailable");
+                let installed = component.installed.get(..8).unwrap_or(&component.installed);
+                fact(row, component.name, &format!("{installed} → {latest} · {}", component.status()));
+                let link = Rect::from_min_size(Pos2::new(row.right() - 58.0, row.top()), Vec2::new(58.0, LINE));
+                let hint = format!(
+                    "Open {} on GitHub{}",
+                    component.name,
+                    component.latest.as_ref().err().map(|e| format!(": {e}")).unwrap_or_default()
+                );
+                if button(ui, &painter, link, "GitHub", &hint) {
+                    chosen = Some(Choice::Open(component.page.into()));
+                }
+            }
+        }
+        widgets::text_in(
+            &painter,
+            line(&mut y),
+            Align2::LEFT_CENTER,
+            "Install the combined app below; source changes are integrated and tested before publication.",
+            font.clone(),
+            theme::text_hint(),
+        );
 
         // What the last check found, and the one action it leads to.
         let (status, action): (String, Option<(&str, Choice)>) = match &phase {

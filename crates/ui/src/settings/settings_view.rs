@@ -355,6 +355,8 @@ impl PageState {
 /// What the user did on the page this frame.
 #[derive(Debug, Default, PartialEq)]
 pub struct Outcome {
+    /// Open the component-aware GitHub update dialog.
+    pub check_updates: bool,
     pub changed: bool,
     /// A value control is being held or dragged, even if its value did not move this frame.
     pub adjusting: bool,
@@ -488,6 +490,19 @@ pub struct Cx<'a> {
 }
 
 impl Cx<'_> {
+    pub fn github_updates(&mut self, row: Rect) {
+        let rect = Rect::from_min_size(Pos2::new(row.right() - 170.0, row.top()), Vec2::new(170.0, SEGMENT));
+        if crate::kit::widgets::button(
+            self.ui,
+            self.painter,
+            rect,
+            "GitHub updates…",
+            "Check GitHub components and app updates",
+        ) {
+            self.outcome.check_updates = true;
+        }
+    }
+
     /// The person's explicit MCP write grants; each includes all its subfolders.
     pub fn mcp_write_folders(&mut self, y: &mut f32) {
         let row = setting_row(self.page, y);

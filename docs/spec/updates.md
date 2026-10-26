@@ -7,6 +7,7 @@ last_verified: 2026-10-23
 covers:
   - crates/update/src/lib.rs
   - crates/update/src/version.rs
+  - crates/update/src/components.rs
   - crates/update/src/github.rs
   - crates/update/src/net.rs
   - crates/update/src/install.rs
@@ -18,12 +19,16 @@ covers:
 
 ## Multiplayer fork channel
 
-In this fork all endpoints refer to `Nozomagarion/suhina-daw`. The regular channel is labelled
+In this fork all binary update endpoints refer to `Nozomagarion/suhina-daw`. The regular channel is labelled
 **Multiplayer + DJ**, uses release tag `multiplayer`, and accepts only its own package namespace
 with a SHA-256 digest. The legacy saved setting `nightly` still selects this regular channel.
 Every package must carry all three executables and a matching DISTRIBUTION.json beside them,
 including inside Contents/MacOS in a Mac app. Validation runs before any replacement. Official
 Suhina and standalone rbxport packages are refused; no fallback endpoint exists.
+
+Settings > General begins with GitHub updates…, which opens the combined update dialog and
+compares included Suhina, rbxport and multiplayer fork revisions with their GitHub branches.
+These source comparisons run only after an explicit check; they never install individual components.
 
 The remainder describes the inherited check/download/restart mechanism. Source integration,
 package identities and pending channel activation are in [fork distribution](../fork-distribution.md).

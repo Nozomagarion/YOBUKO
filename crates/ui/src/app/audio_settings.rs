@@ -244,6 +244,11 @@ impl App {
             tag_limit,
         };
         let outcome = settings_view::show(ui, &mut self.settings, sources, &mut self.page);
+        if outcome.check_updates {
+            self.settings_open = false;
+            self.updates.open_and_check(ui.ctx(), &self.settings.updates);
+        }
+
         if let Some(request) = outcome.themes.clone() {
             if let Some(id) = self.themes.request(&self.settings.theme, request) {
                 self.settings.theme = id;

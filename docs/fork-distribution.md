@@ -9,6 +9,7 @@ covers:
   - scripts/fork_sources.py
   - scripts/fork_package.py
   - scripts/test_fork_distribution.py
+  - crates/update/src/components.rs
   - crates/update/src/distribution.rs
   - crates/update/src/distribution/tests.rs
   - .github/workflows/multiplayer-release.yml
@@ -91,3 +92,23 @@ The marker's multiplayer_api=1 describes the existing trusted local experiment, 
 network protocol. Different future network protocol versions will require an explicit join
 handshake. Shared distribution updates do not imply that existing invitation, media transfer
 or remote collaboration features already work.
+
+## Visible GitHub update button
+
+Settings > General starts with an Updates section and **GitHub updates…**. The button opens
+and checks the combined release plus three source components: Suhina main, rbxport main and
+the fork's feature/multiplayer branch. Each row compares the included commit with GitHub and
+links to that project. Upstream differences say Integration needed; a newer fork source says
+New development commit, which does not imply that a binary release exists. Failed source
+checks say Unavailable independently of the others and of the combined release check.
+
+These three additional anonymous branch requests occur only after an explicit action from
+Settings or Check now. They run on a background thread with the inherited connection
+and request timeouts. Local fork revisions come from the existing build identity; the two
+upstream revisions come from the pinned source file. The install action always uses the
+combined fork distribution. The dialog never installs an upstream component separately.
+
+To check: open Options > Settings (Cmd+, on Mac), choose General, and click GitHub updates…
+at the top. The dialog shows all three projects and a combined-release status. Check now
+refreshes them. GitHub links open the matching repositories. If no combined release is
+published the dialog says so; turning off startup checks leaves this button available.

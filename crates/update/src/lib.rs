@@ -5,6 +5,7 @@
 //! update channel, and downloading it, checking it and putting it in place of the running one.
 //! The work runs on a thread of its own; [`Updater::phase`] says where it is.
 
+pub mod components;
 pub mod distribution;
 pub mod github;
 pub mod install;
@@ -174,7 +175,12 @@ fn check(channel: Channel, current: &str) -> Result<(Option<Build>, Vec<Build>),
     let platform = github::platform().ok_or("there are no packages for this platform")?;
     match channel {
         Channel::Nightly => {
-            let nightly = github::nightly(&net::get(github::NIGHTLY_URL, None)?, platform)?;
+            let bytes = match net::get(github::NIGHTLY_URL, None) {
+                Ok(bytes) => bytes,
+                Err(reason) if reason.contains("404") => return Ok((None, Vec::new())),
+                Err(reason) => return Err(reason),
+            };
+            let nightly = github::nightly(&bytes, platform)?;
             distribution::validate_build(&nightly)?;
             let newer = version::nightly_is_newer(current, &nightly.version).then(|| nightly.clone());
             Ok((newer, vec![nightly]))

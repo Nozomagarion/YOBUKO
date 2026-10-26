@@ -498,3 +498,8 @@ source project. The [DJ specification](spec/dj-workspace.md) gives the storage a
 The updater is confined to the fork distribution, validates the complete package marker before
 replacement, and embeds the two source pins. [Fork distribution](fork-distribution.md) describes
 candidate integration and the publication step still needed to activate the shared channel.
+
+The explicit Settings GitHub updates button also starts `suhina-source-updates`, a worker
+that compares the pinned Suhina/rbxport commits and build identity with public GitHub branch
+heads. Its source results reach the update dialog through a channel; availability failures
+are per component. These checks do not install individual upstream binaries.

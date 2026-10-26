@@ -236,3 +236,6 @@ LINK and DJ performance controls are not integrated yet. Multiplayer is still an
 prototype, without invitations or network UI. See [DJ workspace](docs/spec/dj-workspace.md),
 [multiplayer status](docs/multiplayer-fork.md) and [fork updates](docs/fork-distribution.md).
 The updater only accepts this fork's complete distribution; no shared public release is activated.
+
+Settings > General > GitHub updates… compares all three GitHub sources and offers eligible
+combined-app updates. New upstream commits need integration before distribution.

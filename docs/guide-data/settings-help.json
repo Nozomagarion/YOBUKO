@@ -2070,5 +2070,20 @@
       "apps/suhina/src/main.rs::move_data_folder",
       "docs/spec/ui-settings.md"
     ]
+  },
+  "General/Updates/GitHub updates": {
+    "sourceFingerprint": "d3677c61e49c051d22b0d0bbdbd5b596b129042534059b10e4e668acbbad032c",
+    "summary": "Compare the GitHub sources and check for a complete app update.",
+    "description": "Opens the GitHub updates dialog from the top of General settings. It checks the combined Multiplayer + DJ release and compares the included Suhina, rbxport and fork revisions with their GitHub branches. Upstream differences are marked Integration needed; a newer fork commit is not necessarily a published release. Only complete validated fork packages can be installed. Each component can report an unavailable check independently. This button saves no preference and does not install or restart anything until you choose the installation action.",
+    "options": [],
+    "whenToChange": "Use this button to look for a new combined version or inspect which project has source changes waiting to be integrated.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "crates/ui/src/app/audio_settings.rs",
+      "crates/ui/src/app/updates.rs",
+      "crates/update/src/components.rs",
+      "docs/fork-distribution.md"
+    ]
   }
 }

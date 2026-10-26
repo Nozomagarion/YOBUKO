@@ -320,3 +320,11 @@ Holding the Background blur slider keeps the Settings live preview active even w
 Global liquid strength sliders are disabled while the active theme supplies liquid overrides. Their notes explain how to enable Use global liquid settings in the theme editor. Stored global values remain unchanged and become editable again when inheritance is restored.
 
 The gradient editor uses a single horizontal colour ramp with numbered draggable stops. Selecting a stop exposes only its colour, position and opacity; Add inserts and selects a midpoint in the largest gap, and Remove acts on the selected stop (at least two remain). Stops cannot cross their neighbours. Surface direction is a separate control below the stop editor. Colour-picker popups use an opaque readable surface even when Settings uses liquid transparency.
+
+## Fork GitHub updates
+
+General begins with an Updates section. GitHub updates… requests a combined-release check
+and separate source comparisons for Suhina, rbxport and the multiplayer fork. It closes the
+settings panel and opens the update dialog. It changes no preference and performs no install
+until the person chooses an eligible combined package. [Fork distribution](../fork-distribution.md)
+describes the source states and installation boundary.

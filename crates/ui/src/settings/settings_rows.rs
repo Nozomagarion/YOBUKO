@@ -25,6 +25,45 @@ pub(crate) static ROWS: &[Entry] = &[
     // General.
     row(
         Page::General,
+        "Updates",
+        "GitHub updates",
+        "Check Suhina, rbxport and Multiplayer + DJ; install a validated combined app",
+        &[],
+        |cx, r| cx.github_updates(r),
+    ),
+    row(
+        Page::General,
+        "Updates",
+        "Check for updates",
+        "Once per start, asks GitHub whether a newer build is out; sends nothing about you",
+        &["check_updates"],
+        |cx, r| cx.on_off(r, |s| &mut s.updates.check),
+    ),
+    row(
+        Page::General,
+        "Updates",
+        "Channel",
+        "Updates from the Multiplayer + DJ distribution, or its pull request test builds in developer mode",
+        &["update_channel"],
+        |cx, r| {
+            if cx.settings.updates.test_builds_listed() {
+                let options = [("Multiplayer + DJ", Channel::Nightly), ("Test builds", Channel::TestBuilds)];
+                cx.choose(r, &options, |s| &mut s.updates.channel);
+            } else {
+                cx.choose(r, &[("Multiplayer + DJ", Channel::Nightly)], |s| &mut s.updates.channel);
+            }
+        },
+    ),
+    row(
+        Page::General,
+        "Updates",
+        "Developer mode",
+        "Lists test builds of pull requests as an update channel; downloading one needs the GitHub CLI",
+        &["developer_mode"],
+        |cx, r| cx.on_off(r, |s| &mut s.updates.developer),
+    ),
+    row(
+        Page::General,
         "Projects",
         "When opening a project",
         "While another is open: ask, open it in a new tab, or replace it",
@@ -168,37 +207,6 @@ pub(crate) static ROWS: &[Entry] = &[
             let options: Vec<(&str, WarpMode)> = WarpMode::ALL.iter().map(|m| (m.title(), *m)).collect();
             cx.choose(r, &options, |s| &mut s.warp_mode);
         },
-    ),
-    row(
-        Page::General,
-        "Updates",
-        "Check for updates",
-        "Once per start, asks GitHub whether a newer build is out; sends nothing about you",
-        &["check_updates"],
-        |cx, r| cx.on_off(r, |s| &mut s.updates.check),
-    ),
-    row(
-        Page::General,
-        "Updates",
-        "Channel",
-        "Updates from the Multiplayer + DJ distribution, or its pull request test builds in developer mode",
-        &["update_channel"],
-        |cx, r| {
-            if cx.settings.updates.test_builds_listed() {
-                let options = [("Multiplayer + DJ", Channel::Nightly), ("Test builds", Channel::TestBuilds)];
-                cx.choose(r, &options, |s| &mut s.updates.channel);
-            } else {
-                cx.choose(r, &[("Multiplayer + DJ", Channel::Nightly)], |s| &mut s.updates.channel);
-            }
-        },
-    ),
-    row(
-        Page::General,
-        "Updates",
-        "Developer mode",
-        "Lists test builds of pull requests as an update channel; downloading one needs the GitHub CLI",
-        &["developer_mode"],
-        |cx, r| cx.on_off(r, |s| &mut s.updates.developer),
     ),
     // Export.
     row(
