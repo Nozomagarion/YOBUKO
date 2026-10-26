@@ -19,7 +19,8 @@ covers:
 acknowledgements are not wire formats. Numeric PeerIds are local bookkeeping, never credentials.
 The separate `multiplayer` adapter exposes only the [LAN starter contract](../spec/lan-starter-session.md).
 Its [MIDI-copy decoder](../spec/lan-midi-copy.md) is the only remote initial-project boundary;
-arbitrary native projects, assets, plugin/microphone state and file paths remain refused.
+arbitrary native projects, plugin/microphone state and source/destination file paths remain refused.
+The separate [audio contract](../spec/lan-audio-assets.md) admits only verified portable audio copies.
 
 The host retains its canonical project and accepts only track rename, volume, pan and single-note add/update/delete and bounded clip placement operations on
 at most 64 verified project tracks. Membership, role, exact parameter keys, IDs, numeric ranges and sequence/revision
@@ -48,7 +49,7 @@ Length-prefixed typed JSON is capped at 65536 bytes before body allocation, with
 a maximum of 64 tracks and bounded names/ranges. Control characters in track names are refused.
 Initial music has a separate 2 MiB quota and a 30-second transfer deadline: exact-offset chunks,
 SHA-256, JSON-tree/count limits, native-version pinning and exact canonical round-trip bytes all
-precede session construction. Opaque state and extensions, files, SDK graphs and external/foreign
+precede session construction. Opaque state and extensions, arbitrary file references, SDK graphs and external/foreign
 devices are refused; only parameter-only FM Synth and Utility are allowed. Hardware inputs and
 launch mappings are removed from the local copy and verified off at the receiver. Outside the document transfer, read/write/handshake exchanges have absolute three-second
 deadlines. The host has at most four pending connection handlers; the normal authenticated
@@ -56,7 +57,7 @@ guest polls every 100 ms and the server enforces at least 50 ms per request. UI 
 TLS, canonical execution and I/O run on workers, never the audio thread. A local peer can still
 occupy pending slots until timeout; availability against a sustained LAN flood is not guaranteed.
 
-Protocol 4 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
+Protocol 5 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
 A separate draft base revision prevents shifted note indices from being silently reused. Before
 canonical mutation the native command is preflighted on a detached copy and the complete MIDI
 quota/document boundary is checked, including copy-on-write growth. The guest verifies contiguous
@@ -88,9 +89,23 @@ documents, stopped connections, desktop application of controls, original-projec
 mutation refusal and independent real audio renderers. Physical two-computer/firewall and cross-platform session acceptance remain
 unverified. This prototype has not had an independent security audit.
 
-Sharing arbitrary projects/media beyond the explicit MIDI subset remains closed until portable asset manifests, path/symlink
+Sharing arbitrary projects/media beyond the explicit portable MIDI/audio subset remains closed until portable asset manifests, path/symlink
 confinement, size/hash/disk quotas, atomic finalization and interruption recovery are designed and
 tested, aligned with project folder work (#606). Wider edits require identity allocation and
 side-effect review. Recording publication, linked transport, presence, reconnect/resume, host
 migration and internet routing need separate contracts. The restricted starter is not evidence
 that these wider boundaries are safe or implemented.
+
+## Initial audio asset boundary
+
+Only sounds already loaded in the locally selected session are collected. Original source paths
+do not reach guest file I/O: references use generated Audio/<BLAKE3>.wav paths, backed by an exact
+manifest. Assets are canonical float32 WAV, mono/stereo 8000..192000 Hz, finite and bounded; RIFF
+chunk lengths are checked before hound. Hash, size, metadata, canonical re-encoding and reference
+coverage are all required. Budgets: 64 files, 64 MiB each, 256 MiB total and a 180-second deadline.
+A receiver writes create-new files in a fresh private directory at a trusted local root, then
+finalizes the document after the assets. Temporary-directory ownership crosses into the pending
+snapshot; failures and unclaimed snapshots remove it. The desktop retains the completed folder
+only after adding its tab. Tests exercise paths, hash/offset/size/metadata errors, malformed WAV,
+cancellation, quota rejection, non-overwrite, cleanup, save/reopen and real TLS/audio equality.
+Sharing new files/recordings during a connected session remains a separate closed boundary.

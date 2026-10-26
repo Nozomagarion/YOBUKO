@@ -145,19 +145,20 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
     let mut incompatible = connect(&invitation);
     protocol::write(
         &mut incompatible,
-        &ClientMessage::Hello { protocol: PROTOCOL + 1, format: 1, secret: invitation.secret.clone() },
+        &ClientMessage::Hello { protocol: PROTOCOL + 1, format: 2, secret: invitation.secret.clone() },
     )
     .unwrap();
     assert!(matches!(protocol::read::<ServerMessage>(&mut incompatible).unwrap(), ServerMessage::Denied));
     let mut io = connect(&invitation);
     protocol::write(
         &mut io,
-        &ClientMessage::Hello { protocol: PROTOCOL, format: 1, secret: invitation.secret.clone() },
+        &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: invitation.secret.clone() },
     )
     .unwrap();
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     let document = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
-    assert!(crate::midi::decode(&document.0).is_ok());
+    let project = crate::midi::decode_portable(&document.0).unwrap();
+    let _snapshot = assets::receive(&mut io, project, document.1, None, &AtomicBool::new(false), |_, _| {}).unwrap();
     assert!(matches!(protocol::read::<ServerMessage>(&mut io).unwrap(), ServerMessage::State { .. }));
     let edit = ClientMessage::Edit {
         seen_revision: 0,
@@ -350,9 +351,9 @@ fn malformed_operation_gaps_and_unconfirmed_controls_are_never_accepted() {
 fn notes_changed_during_download_are_applied_after_the_snapshot_before_joining() {
     let mut host = Service::default();
     let invitation = invitation_from(&mut host);
-    let clip = host.project.as_ref().unwrap().0.arrangement.lanes[0].clips[0].id.0;
+    let clip = host.project.as_ref().unwrap().project.arrangement.lanes[0].clips[0].id.0;
     let mut io = connect(&invitation);
-    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 1, secret: invitation.secret })
+    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: invitation.secret })
         .unwrap();
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     assert!(matches!(offer, ServerMessage::Project { revision: 0, .. }));
@@ -370,7 +371,9 @@ fn notes_changed_during_download_are_applied_after_the_snapshot_before_joining()
     let (document, mut revision) =
         crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
     assert_eq!(revision, 0);
-    let mut mirror = suhina_session::Session::new(crate::midi::decode(&document).unwrap());
+    let project = crate::midi::decode_portable(&document).unwrap();
+    let snapshot = assets::receive(&mut io, project, revision, None, &AtomicBool::new(false), |_, _| {}).unwrap();
+    let mut mirror = snapshot.session();
     let ServerMessage::State { controls, operations, .. } = protocol::read::<ServerMessage>(&mut io).unwrap() else {
         panic!("state")
     };

@@ -325,11 +325,11 @@ fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_reboun
     harness.get_by_label("Clips").click();
     harness.run_steps(2);
     assert!(
-        harness.get_by_label("Create MIDI clip").rect().right() < 1280.0,
+        harness.get_by_label("Create clip").rect().right() < 1280.0,
         "long names must not push actions outside the viewport"
     );
     for (base, button) in [
-        (0, "Create MIDI clip"),
+        (0, "Create clip"),
         (1, "Duplicate clip"),
         (2, "Silence clip"),
         (3, "Enable clip"),
@@ -349,7 +349,7 @@ fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_reboun
         assert_eq!(harness.state().multiplayer.controls.as_ref().unwrap().revision, base + 1, "{button}");
         harness.run_steps(2);
         assert!(harness.query_by_label("Refresh clip draft").is_some());
-        assert!(harness.get_by_label("Create MIDI clip").accesskit_node().is_disabled());
+        assert!(harness.get_by_label("Create clip").accesskit_node().is_disabled());
     }
     let project = harness.state().projects.get(shared).unwrap().project();
     assert_eq!(project.arrangement.lanes[0].clips.len(), 2, "new and duplicate clips survive deleting their source");
@@ -362,4 +362,126 @@ fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_reboun
     harness.run_steps(2);
     assert!(harness.query_by_label("Add note").is_some());
     assert_eq!(harness.state().projects.get(original).unwrap().project(), &before);
+}
+
+#[test]
+fn the_audio_share_button_opens_a_collected_copy_and_keeps_the_original_file() {
+    use suhina_engine::model::{AudioRegion, ContentKinds, LaneData};
+    use suhina_engine::{AudioData, AudioPool};
+    let root = tempfile::tempdir().unwrap();
+    let original_file = root.path().join("Original.wav");
+    let data = std::sync::Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.25; 8000] });
+    let mut writer = hound::WavWriter::create(
+        &original_file,
+        hound::WavSpec {
+            channels: 1,
+            sample_rate: 8000,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        },
+    )
+    .unwrap();
+    for s in &data.samples {
+        writer.write_sample(*s).unwrap();
+    }
+    writer.finalize().unwrap();
+    let original_bytes = std::fs::read(&original_file).unwrap();
+    let mut project = suhina_multiplayer::starter_project();
+    project.tracks[0].content = ContentKinds { notes: false, audio: true };
+    project.contents[0].lanes[0].data = LaneData::Audio(AudioRegion::new(original_file.display().to_string()));
+    let mut session = Session::new(project);
+    let mut pool = AudioPool::new();
+    pool.files.insert(original_file.display().to_string(), data);
+    session.set_audio(pool);
+    let mut app = App::new();
+    app.set_default_data_folder(root.path().join("Application data"));
+    app.set_session(session, &[]);
+    app.multiplayer.open = true;
+    app.multiplayer.address = "127.0.0.1:0".into();
+    let original = app.projects.active().unwrap();
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 900.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run();
+    let before = harness.state().projects.get(original).unwrap().project().clone();
+    harness.get_by_label("Share project + audio").click();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let shared = harness.state().multiplayer.bound.unwrap();
+    let session = harness.state().projects.get(shared).unwrap();
+    assert_eq!(session.audio().files.len(), 1);
+    let folder = session.audio_folder().unwrap().to_path_buf();
+    let file = session.audio().files.keys().next().unwrap();
+    assert!(file.starts_with("Audio/"));
+    assert!(folder.join(file).is_file());
+    assert!(session.source().is_none());
+    assert!(session.has_unsaved_changes());
+    assert_eq!(harness.state().projects.get(original).unwrap().project(), &before);
+    assert_eq!(std::fs::read(&original_file).unwrap(), original_bytes);
+    harness.get_by_label("Leave session").click();
+    harness.run_steps(2);
+    assert!(folder.join("project.suhina").is_file(), "leaving must retain the collected copy");
+    let saved = folder.join("My saved song.suhina");
+    harness.state_mut().projects.execute_in(Some(shared), "project.save", &json!({"path":saved})).unwrap();
+    assert!(saved.is_file());
+    assert_eq!(std::fs::read(&original_file).unwrap(), original_bytes);
+}
+
+#[test]
+fn missing_loaded_audio_is_refused_before_creating_a_shared_tab() {
+    let mut app = App::new();
+    let mut project = suhina_multiplayer::starter_project();
+    project.tracks[0].content = suhina_engine::model::ContentKinds { notes: false, audio: true };
+    project.contents[0].lanes[0].data =
+        suhina_engine::model::LaneData::Audio(suhina_engine::model::AudioRegion::new("/do-not-read-this-file.wav"));
+    app.set_session(Session::new(project), &[]);
+    app.host_current_audio();
+    assert!(app.multiplayer.error.as_ref().unwrap().contains("not loaded"));
+    assert!(!app.multiplayer.service.active());
+    assert!(app.multiplayer.bound.is_none());
+}
+
+#[test]
+#[ignore = "requires a GPU adapter; renders the collected audio sharing state"]
+fn render_shared_audio_panel_for_review() {
+    use suhina_engine::model::{AudioRegion, ContentKinds, LaneData};
+    use suhina_engine::{AudioData, AudioPool};
+    let root = tempfile::tempdir().unwrap();
+    let mut project = suhina_multiplayer::starter_project();
+    project.tracks[0].name = "Shared recording".into();
+    project.tracks[0].content = ContentKinds { notes: false, audio: true };
+    project.contents[0].lanes[0].data = LaneData::Audio(AudioRegion::new("/original/recording.wav"));
+    let mut session = Session::new(project);
+    let mut audio = AudioPool::new();
+    audio.files.insert(
+        "/original/recording.wav".into(),
+        std::sync::Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.25; 8000] }),
+    );
+    session.set_audio(audio);
+    let mut app = App::new();
+    app.set_session(session, &[]);
+    app.set_default_data_folder(root.path().into());
+    app.multiplayer.open = true;
+    app.multiplayer.address = "127.0.0.1:0".into();
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 900.0))
+        .wgpu()
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    theme::install(&harness.ctx);
+    harness.run();
+    let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
+    std::fs::create_dir_all(&folder).unwrap();
+    harness.render().unwrap().save(folder.join("multiplayer-audio-entry.png")).unwrap();
+    harness.get_by_label("Share project + audio").click();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(harness.state().multiplayer.bound.is_some());
+    harness.run_steps(2);
+    harness.render().unwrap().save(folder.join("multiplayer-audio-ready.png")).unwrap();
 }

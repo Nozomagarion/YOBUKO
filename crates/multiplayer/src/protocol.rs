@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 4;
+pub const PROTOCOL: u16 = 5;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -186,7 +186,7 @@ pub fn apply_operations(
         operation.edit.edit()?;
         let (id, params) = operation.edit.command();
         session.execute(id, &params).map_err(|e| e.to_string())?;
-        crate::midi::encode(session.project())?;
+        crate::midi::encode_portable(session.project())?;
         *revision = operation.revision;
     }
     if controls.revision != *revision || !controls.changes(session.project())?.is_empty() {
@@ -200,6 +200,7 @@ pub fn apply_operations(
 pub enum ClientMessage {
     Hello { protocol: u16, format: u16, secret: String },
     Download { protocol: u16, offset: usize },
+    AssetDownload { protocol: u16, asset: usize, offset: usize },
     Poll { protocol: u16, seen_revision: u64 },
     Edit { protocol: u16, sequence: u64, base_revision: u64, seen_revision: u64, edit: WireEdit },
 }
@@ -217,6 +218,16 @@ pub enum ServerMessage {
     },
     Chunk {
         protocol: u16,
+        offset: usize,
+        data: String,
+    },
+    Assets {
+        protocol: u16,
+        manifest: Vec<crate::assets::Asset>,
+    },
+    AssetChunk {
+        protocol: u16,
+        asset: usize,
         offset: usize,
         data: String,
     },

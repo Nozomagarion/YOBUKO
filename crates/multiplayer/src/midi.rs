@@ -20,6 +20,15 @@ fn audio_input() -> AudioInput {
 
 /// Cheap structural admission before cloning a local project or constructing its document.
 pub fn validate(project: &Project) -> Result<(), String> {
+    validate_inner(project, false, false)
+}
+pub fn validate_audio_source(project: &Project) -> Result<(), String> {
+    validate_inner(project, true, false)
+}
+pub fn validate_portable(project: &Project) -> Result<(), String> {
+    validate_inner(project, true, true)
+}
+fn validate_inner(project: &Project, audio: bool, portable: bool) -> Result<(), String> {
     if project.tracks.is_empty()
         || project.tracks.len() > MAX_TRACKS
         || project.channels.len() > 128
@@ -36,7 +45,7 @@ pub fn validate(project: &Project) -> Result<(), String> {
         if track.name.trim().is_empty() || track.name.len() > 256 || track.name.chars().any(char::is_control) {
             return Err("shared track names must have 1–256 bytes".into());
         }
-        if track.content.audio {
+        if track.content.audio && !audio {
             return Err("this project has audio tracks; audio-file sharing comes later".into());
         }
         if track.channel.is_none() {
@@ -50,8 +59,19 @@ pub fn validate(project: &Project) -> Result<(), String> {
         for lane in &content.lanes {
             match &lane.data {
                 LaneData::Notes(items) => notes = notes.checked_add(items.len()).ok_or("too many notes")?,
-                LaneData::Audio(_) => {
-                    return Err("this project contains audio files; MIDI sharing cannot send them yet".into());
+                LaneData::Audio(region) => {
+                    if !audio {
+                        return Err("this project contains audio files; use Share project + audio".into());
+                    }
+                    if region.stream.is_some()
+                        || portable
+                            && (region.absolute_file.is_some()
+                                || !region.file.is_empty() && !crate::assets::valid_path(&region.file))
+                    {
+                        return Err(
+                            "shared audio needs portable manifest references and cannot contain streamed stems".into(),
+                        );
+                    }
                 }
             }
         }
@@ -103,8 +123,19 @@ pub fn validate(project: &Project) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 pub fn encode(project: &Project) -> Result<(Project, Vec<u8>), String> {
-    validate(project)?;
+    encode_inner(project, false)
+}
+pub fn encode_portable(project: &Project) -> Result<(Project, Vec<u8>), String> {
+    encode_inner(project, true)
+}
+fn encode_inner(project: &Project, audio: bool) -> Result<(Project, Vec<u8>), String> {
+    if audio {
+        validate_portable(project)?;
+    } else {
+        validate(project)?;
+    }
     let mut copy = project.clone();
     copy.extensions = Extensions::default();
     copy.launcher.mappings.clear();
@@ -141,11 +172,11 @@ pub fn encode(project: &Project) -> Result<(Project, Vec<u8>), String> {
         return Err("the MIDI copy is larger than 2 MiB".into());
     }
     // The sender obeys the same boundary as the receiver before it starts a listener.
-    let parsed = decode(text.as_bytes())?;
+    let parsed = decode_inner(text.as_bytes(), audio)?;
     Ok((parsed, text.into_bytes()))
 }
 
-fn tree(value: &Value, depth: usize, nodes: &mut usize) -> Result<(), String> {
+fn tree(value: &Value, depth: usize, nodes: &mut usize, audio: bool) -> Result<(), String> {
     *nodes = nodes.checked_add(1).ok_or("MIDI document too complex")?;
     if depth > 32 || *nodes > 250000 {
         return Err("MIDI document too complex".into());
@@ -157,7 +188,7 @@ fn tree(value: &Value, depth: usize, nodes: &mut usize) -> Result<(), String> {
                 return Err("MIDI document collection too large".into());
             }
             for item in items {
-                tree(item, depth + 1, nodes)?;
+                tree(item, depth + 1, nodes, audio)?;
             }
         }
         Value::Object(items) => {
@@ -166,8 +197,11 @@ fn tree(value: &Value, depth: usize, nodes: &mut usize) -> Result<(), String> {
             }
             for (key, item) in items {
                 if key.len() > 64
-                    || (matches!(key.as_str(), "extensions" | "file" | "absolute_file" | "mappings")
-                        || key == "state" && !item.is_null())
+                    || (matches!(key.as_str(), "extensions" | "mappings")
+                        || key == "state" && !item.is_null()
+                        || key == "absolute_file" && !(audio && item.is_null())
+                        || key == "file"
+                            && !(audio && item.as_str().is_some_and(|p| p.is_empty() || crate::assets::valid_path(p))))
                 {
                     return Err("MIDI copy contains unsupported metadata, state or file references".into());
                 }
@@ -184,7 +218,7 @@ fn tree(value: &Value, depth: usize, nodes: &mut usize) -> Result<(), String> {
                 if item.as_array().is_some_and(|a| a.len() > limit) {
                     return Err("MIDI document collection too large".into());
                 }
-                tree(item, depth + 1, nodes)?;
+                tree(item, depth + 1, nodes, audio)?;
             }
         }
         _ => {}
@@ -192,18 +226,25 @@ fn tree(value: &Value, depth: usize, nodes: &mut usize) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(test)]
 pub fn decode(bytes: &[u8]) -> Result<Project, String> {
+    decode_inner(bytes, false)
+}
+pub fn decode_portable(bytes: &[u8]) -> Result<Project, String> {
+    decode_inner(bytes, true)
+}
+fn decode_inner(bytes: &[u8], audio: bool) -> Result<Project, String> {
     if bytes.is_empty() || bytes.len() > MAX_DOCUMENT {
         return Err("invalid MIDI document size".into());
     }
     let text = std::str::from_utf8(bytes).map_err(|_| "MIDI document is not UTF-8")?;
     let value: Value = serde_json::from_str(text).map_err(|_| "invalid MIDI document JSON")?;
-    tree(&value, 0, &mut 0)?;
+    tree(&value, 0, &mut 0, audio)?;
     if suhina_project_file::VERSION != NATIVE_VERSION || value["version"] != NATIVE_VERSION {
         return Err("unsupported native MIDI document version".into());
     }
     let project = suhina_project_file::from_json(text).map_err(|_| "invalid MIDI project")?;
-    validate(&project)?;
+    validate_inner(&project, audio, audio)?;
     if project.tracks.iter().any(|t| t.midi_input != input() || t.audio_input != audio_input())
         || project.channels.iter().any(|c| c.cue)
         || suhina_project_file::to_json(&project).as_bytes() != bytes

@@ -41,8 +41,9 @@
           "evidence": "crates/multiplayer/tests/lan.rs"
         },
         {
-          "name": "Partage d’un projet existant et de ses fichiers",
-          "done": false
+          "name": "Partager un projet MIDI/audio et ses sons chargés",
+          "done": true,
+          "evidence": "crates/multiplayer/tests/audio.rs"
         },
         {
           "name": "Partage des enregistrements",

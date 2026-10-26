@@ -57,12 +57,12 @@ Avancer sur la même musique avec ses amis. Pouvoir travailler sur un projet par
 écoutant une autre partie du morceau que les autres : chacun garde sa lecture et sa position.
 
 Le prototype relie un hôte et un invité sur le réseau local. Il peut maintenant transmettre
-une copie d’un projet MIDI ouvert, avec ses notes, ses clips et ses réglages FM Synth/Utility,
+une copie d’un projet MIDI/audio ouvert, avec ses notes, ses clips et ses réglages FM Synth/Utility,
 ou créer une démonstration. Les notes MIDI, noms, volumes et panoramiques se modifient ensemble.
 Un éditeur permet d’ajouter, modifier et supprimer une note ; les modifications concurrentes
 sont vérifiées par l’hôte. L’onglet **Clips** permet aussi de créer, déplacer, redimensionner,
-dupliquer, activer et supprimer des clips MIDI. La suite visée est le partage des fichiers
-audio et des enregistrements.
+dupliquer, activer et supprimer des clips MIDI. Les sons déjà chargés peuvent être copiés vers l’invité sous forme de WAV portables.
+La suite visée est le partage des nouvelles prises enregistrées pendant la session.
 
 ### Préparer et jouer son set
 
@@ -81,7 +81,7 @@ les platines et l'export vers le matériel DJ restent à construire et à vérif
 <!-- fork-progress:begin -->
 | Partie du projet | Étapes réalisées | Prochain objectif |
 |---|---:|---|
-| Créer ensemble | 7 / 11 | Partage d’un projet existant et de ses fichiers |
+| Créer ensemble | 8 / 11 | Partage des enregistrements |
 | Préparer et jouer | 4 / 8 | Playlists et préparation de set |
 | Évoluer ensemble | 4 / 7 | Version commune validée sur toutes les plateformes |
 <!-- fork-progress:end -->
@@ -94,15 +94,16 @@ leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce
 | Partie | Disponible dans le prototype | Prochaine étape |
 |---|---|---|
 | **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
-| **Multijoueur** | Session LAN hôte + invité, copie d’un projet MIDI ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI, noms/volumes/panoramiques partagés et lectures indépendantes. | Partage des fichiers audio et enregistrements. |
+| **Multijoueur** | Session LAN hôte + invité, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI, noms/volumes/panoramiques partagés et lectures indépendantes. | Publication des nouvelles prises enregistrées. |
 | **DJ** | Bibliothèque audio persistante, import et analyse tempo/tonalité issue de rbxport. | Playlists, points cue, grilles rythmiques, platines et compatibilité matérielle. |
 | **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
 
 Le trafic chiffré est testé entre deux services sur le même ordinateur, avec des vérifications
 sur deux projets de bureau et des moteurs audio indépendants. **Le test sur deux ordinateurs
-physiques reste à faire.** Les copies MIDI sont limitées à 2 Mio et aux instruments FM Synth/Utility
+physiques reste à faire.** Le document partagé est limité à 2 Mio et aux appareils FM Synth/Utility
 sans état opaque. Les notes se modifient dans **MIDI notes**, et l’arrangement dans **Clips**. Les déplacements
-conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les fichiers audio, plugins et prises micro ne sont pas encore échangés.
+conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. Les plugins
+et les nouvelles prises micro pendant la session ne sont pas encore partagés.
 
 ## Essayer la version actuelle
 
@@ -112,7 +113,8 @@ pour voir cette présentation et les ajouts.
 
 Dans l'application, trois accès : **Studio**, **Multiplayer** et **DJ**.
 
-1. Ouvrir son projet MIDI dans **Studio**, puis **Multiplayer → Share current MIDI project**
+1. Ouvrir son projet dans **Studio**, puis **Multiplayer → Share project + audio**
+   pour inclure les sons déjà chargés, ou **Share current MIDI project** pour une copie MIDI seule,
    sur l’ordinateur hôte. **Create LAN session** reste disponible pour la démonstration.
 2. Copier l'invitation privée avec **Copy invitation**.
 3. Sur l'autre instance, coller l'invitation puis choisir **Join LAN session**.
@@ -121,12 +123,17 @@ Dans l'application, trois accès : **Studio**, **Multiplayer** et **DJ**.
    et panoramiques. Chacun utilise **Play locally**
    et **Stop locally** pour son écoute. **Leave session** conserve le projet en local.
 
-La copie s’ouvre dans un nouvel onglet et conserve l’original. Les pistes audio, plugins et autres
-instruments sont refusés avec une explication ; les métadonnées locales et affectations matérielles
+La copie s’ouvre dans un nouvel onglet et conserve l’original. Les plugins et autres
+instruments non pris en charge sont refusés avec une explication ; les métadonnées locales et affectations matérielles
 sont omises. Le mode démonstration reste utilisable sans projet personnel. Les deux participants
-doivent installer la version de protocole 4 ; les anciennes invitations ne sont pas compatibles.
+doivent installer la version de protocole 5 ; les anciennes invitations ne sont pas compatibles.
 Les [instructions détaillées](docs/multiplayer-fork.md#try-the-desktop-lan-prototype) expliquent
 les adresses réseau et les limites de ce prototype.
+
+Le transfert audio accepte jusqu’à **64 sons, 64 Mio par son et 256 Mio au total**. Les copies
+restent dans **Shared projects**, sous le dossier de données de l’application, pour pouvoir
+rouvrir le morceau. Les fichiers d’origine restent intacts. Un transfert incomplet ouvre
+une erreur et aucun onglet partiel.
 
 Les paquets de développement proviennent des [contrôles GitHub du fork](https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml?query=branch%3Afeature%2Fmultiplayer).
 Vérifier le commit et le résultat de sa plateforme. Le canal public commun n'est pas encore

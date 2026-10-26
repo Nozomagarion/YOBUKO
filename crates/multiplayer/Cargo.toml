@@ -11,6 +11,10 @@ publish = false
 suhina-collaboration.workspace = true
 suhina-session.workspace = true
 suhina-model.workspace = true
+suhina-engine.workspace = true
+hound.workspace = true
+blake3 = "1"
+tempfile = "3"
 suhina-project-file.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -22,7 +26,7 @@ rustls = { version = "0.23", default-features = false, features = ["std", "ring"
 rcgen = { version = "0.14", default-features = false, features = ["ring", "crypto"] }
 
 [dev-dependencies]
-suhina-engine.workspace = true
+suhina-media.workspace = true
 
 [lints]
 workspace = true

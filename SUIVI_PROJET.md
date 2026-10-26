@@ -1,7 +1,8 @@
 # Où en est notre application ?
 
-**Bilan vérifié le 26 octobre 2026 à 21 h 21 (heure de Paris).**
-Version du logiciel décrite : `65d031f8` — la dernière étape de code livrée.
+**Bilan local vérifié le 27 octobre 2026 à 00 h 20 (heure de Paris).**
+Ce bilan décrit le nouveau code de partage audio. La compilation du nouveau paquet est la
+dernière opération de livraison ; la référence du paquet sera ajoutée une fois vérifiée.
 
 ## À retenir
 
@@ -9,9 +10,9 @@ On construit **une seule application pour produire, créer à plusieurs, prépar
 Suhina fournit le studio. Notre fork ajoute le multijoueur et le lien avec la préparation DJ,
 qui commence avec l’analyse musicale de rbxport.
 
-**Aujourd’hui : un prototype MIDI à deux fonctionne dans les tests, avec une première bibliothèque DJ.**
-L’application complète que tu veux reste en construction. Le prochain gros morceau est de
-permettre aux participants de recevoir les **fichiers audio** du projet.
+**Nouveau palier : les sons déjà chargés dans le studio peuvent maintenant être transférés à l’invité.**
+Les tests ciblés et la suite complète passent ; le nouveau paquet est en préparation.
+La prochaine étape de musique partagée sera la publication des **nouvelles prises enregistrées** pendant la session.
 
 Les nouvelles fonctions sont dans un **paquet de développement compilé**. Les dernières étapes
 n’ont pas remplacé automatiquement l’application déjà installée ou ouverte sur ton Mac.
@@ -21,9 +22,9 @@ n’ont pas remplacé automatiquement l’application déjà installée ou ouver
 | Partie | Ce qu’on peut faire actuellement | Ce qui manque encore |
 |---|---|---|
 | **Studio** | Utiliser le studio de Suhina et envoyer le rendu d’un morceau vers notre bibliothèque DJ. | Relier toutes les fonctions du studio à la collaboration. |
-| **Créer à deux** | Un hôte crée une session, un invité la rejoint sur le réseau local. Une copie d’un projet MIDI est partagée en conservant l’original. | Partager les projets contenant de l’audio et des plugins ; accueillir plus d’un invité. |
+| **Créer à deux** | Un hôte crée une session, un invité la rejoint sur le réseau local. Une copie MIDI/audio peut être partagée avec les sons déjà chargés, en conservant l’original. | Partager les plugins, ajouter de nouveaux sons pendant la connexion et accueillir plus d’un invité. |
 | **Notes MIDI** | Ajouter, modifier et supprimer les notes ; régler leur hauteur, durée et vélocité. | Étendre les outils partagés et l’édition des instruments. |
-| **Clips MIDI** | Créer, déplacer, changer les bords, dupliquer, activer et supprimer les blocs de musique de l’arrangement. | Partager davantage d’opérations du studio, dont l’ajout de pistes et les déplacements entre cases du lanceur. |
+| **Clips MIDI** | Créer, déplacer, changer les bords, dupliquer, activer et supprimer les clips MIDI/audio de l’arrangement. | Partager davantage d’opérations du studio, dont l’ajout de pistes et les déplacements entre cases du lanceur. |
 | **Écoute personnelle** | Chacun peut écouter une autre partie, démarrer et arrêter sa propre lecture. | Vérifier ce comportement sur les deux ordinateurs de la maison. |
 | **Espace DJ** | Importer des morceaux dans une bibliothèque conservée sur le disque, analyser tempo et tonalité avec du code de rbxport, y ajouter un rendu du studio. | Playlists, points cue, grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Un bouton dans les paramètres compare les versions GitHub. Les outils suivent les deux projets d’origine et vérifient les paquets de notre application. | Activer l’intégration régulière des nouveautés, leur publication et la réception automatique d’une version commune par tous. |
@@ -31,10 +32,16 @@ n’ont pas remplacé automatiquement l’application déjà installée ou ouver
 Le travail à deux passe actuellement par le panneau **Multiplayer**, avec les onglets
 **Mixer**, **MIDI notes** et **Clips**. L’édition partagée couvre ces commandes précises.
 
-**Limite importante :** la copie partagée accepte actuellement les projets MIDI compatibles
-avec FM Synth et Utility, sans état d’appareil opaque. Un projet contenant des pistes audio,
-d’autres instruments ou des plugins externes est refusé pour le moment.
-Les voix, samples et enregistrements ne circulent pas encore entre les participants.
+**Ce que fait le nouveau bouton « Share project + audio » :** il prend les sons déjà chargés
+dans le projet et les copie en WAV portables, sans perte supplémentaire du son décodé.
+L’invité les reçoit dans un nouveau dossier puis ouvre la session avec ces sons. Un fichier
+manquant ou un transfert incomplet produit une erreur, sans ouvrir de projet partiel.
+Les copies complètes restent dans **Shared projects**, sous le dossier de données de l’application.
+
+Limites : **64 sons, 64 Mio par son et 256 Mio au total**, mono/stéréo. FM Synth et Utility
+restent les appareils pris en charge ; les autres instruments, les plugins externes et les
+stems à plusieurs flux restent refusés. Les voix et prises déjà présentes peuvent voyager
+dans la copie initiale ; les nouvelles prises pendant une session ne sont pas encore publiées.
 
 ## Ce qu’on vient de fabriquer, et pourquoi
 
@@ -44,21 +51,26 @@ Les voix, samples et enregistrements ne circulent pas encore entre les participa
 4. **Protéger les modifications.** Si quelqu’un a déjà changé le passage, un vieux brouillon est refusé.
    Déplacer ou agrandir un clip conserve ses voisins. Éditer une duplication protège son original.
 
-Ces étapes posent le fonctionnement commun avant d’y ajouter des fichiers audio et des prises enregistrées.
+5. **Recevoir les sons du projet.** Pour entendre le morceau chez l’invité, même sans les fichiers d’origine sur sa machine.
+
+Les tests comparent le son rendu des deux côtés, conservent l’écoute indépendante et rouvrent
+une copie enregistrée après la déconnexion.
 
 ## Ce qu’on fait maintenant
 
-**Ce point de travail : mettre en place ce suivi unique et clarifier l’état réel.**
-La dernière étape de code, l’arrangement MIDI partagé, est terminée et livrée.
+**Code terminé et validé localement : transfert des sons présents au début de la session.**
+**Livraison en cours : compilation et vérification du nouveau paquet.**
+Le code du bouton, les vérifications de fichiers et le raccordement aux lecteurs sont en place.
+Les tests ciblés incluent le transfert réel, le son identique, le refus des fichiers incorrects,
+la conservation des originaux et la sauvegarde/réouverture.
 
-**Prochain développement prévu : le partage des fichiers audio. Statut : à commencer.**
-Le résultat attendu est concret : l’invité doit recevoir les sons utilisés par le projet,
-même s’ils n’existent pas encore sur son ordinateur, puis pouvoir les écouter.
-On devra aussi gérer l’interruption du transfert et éviter qu’un fichier incomplet soit utilisé.
+**Prochain développement prévu : partager les nouvelles prises pendant la session. Statut : à commencer.**
+Cela devra permettre d’enregistrer une nouvelle prise et de la rendre disponible à l’autre
+participant sans recréer toute la session.
 
 L’ordre de travail reste :
 
-1. Partager les fichiers audio nécessaires au morceau.
+1. Finir la livraison du paquet de ce premier partage audio validé localement.
 2. Partager les nouvelles prises enregistrées pendant le travail commun.
 3. Compléter les capacités multijoueurs encore absentes : pistes, appareils, participants supplémentaires et reconnexion.
 4. Stabiliser l’installation et la mise à jour de la même application pour tout le groupe.
@@ -71,17 +83,18 @@ Son créneau sera décidé avec toi ; ce suivi ne le présente pas comme déjà 
 
 | Vérification | État constaté |
 |---|---|
-| Ensemble des tests automatiques sur ce Mac | **3 079 réussis, aucun échec ; 52 facultatifs ignorés.** Le total comprend le socle Suhina et nos ajouts. |
-| Deux sessions reliées par une vraie connexion chiffrée sur ce Mac | **Réussi** pour les fonctions MIDI décrites, avec lecteurs audio indépendants et vérification du son rendu. |
+| Ensemble des tests automatiques sur ce Mac | **3 093 réussis, aucun échec ; 53 facultatifs ignorés.** Le total comprend le socle Suhina et nos ajouts. |
+| Deux sessions reliées par une vraie connexion chiffrée sur ce Mac | **Réussi pour le MIDI et le nouveau transfert audio**, avec égalité du son rendu, lecteurs indépendants et sauvegarde/réouverture. |
 | Boutons du panneau multijoueur et conservation de l’original | **Réussi dans les tests d’interface.** Affichage également contrôlé visuellement. |
-| Paquet Mac Apple Silicon | **Compilé et vérifié après extraction**, avec les trois programmes et les sources correspondantes. |
-| Dernier contrôle GitHub Linux | **Réussi.** |
-| Dernier contrôle GitHub Windows | **Réussi.** |
-| Dernier contrôle GitHub Mac Universal | **Réussi.** |
+| Paquet Mac Apple Silicon avec audio | **En préparation.** Le précédent paquet MIDI reste disponible ci-dessous. |
+| Contrôle GitHub Linux de la version précédente `65d031f8` | **Réussi ; le nouveau code audio doit encore passer sur GitHub.** |
+| Contrôle GitHub Windows de la version précédente `65d031f8` | **Réussi ; le nouveau code audio doit encore passer sur GitHub.** |
+| Contrôle GitHub Mac Universal de la version précédente `65d031f8` | **Réussi ; le nouveau code audio doit encore passer sur GitHub.** |
 | Deux ordinateurs physiques | **Pas encore testé.** |
 
 [Contrôles GitHub de la version décrite](https://github.com/Nozomagarion/suhina-daw/actions/runs/40387496818).
-Les trois contrôles automatiques de cette version sont réussis. La validation en conditions
+Les trois contrôles de l’ancienne version sont réussis. Ceux du nouveau code audio ne sont
+pas déduits de ces résultats. La validation en conditions
 réelles sur deux ordinateurs et la publication d’une version commune restent à faire.
 Les états ci-dessus sont un relevé daté ; ce fichier ne se rafraîchit pas tout seul.
 
@@ -93,7 +106,8 @@ Les états ci-dessus sont un relevé daté ; ce fichier ne se rafraîchit pas to
   `suhina-multiplayer-clips-macos-arm64-65d031f8.zip`.
 - **Dans le paquet :** `Suhina.app`, les outils nécessaires et les sources du commit livré.
 
-Les deux participants devront utiliser une version compatible ; celle-ci utilise le protocole LAN 4.
+Le paquet MIDI indiqué ci-dessus utilise le protocole 4. Le nouveau transfert audio utilise
+le protocole 5 : les deux participants devront installer la nouvelle version une fois livrée.
 Le canal commun de mises à jour n’est pas encore publié. Les nouveautés Suhina/rbxport doivent
 être intégrées à notre version, testées, puis distribuées ensemble pour conserver le multijoueur.
 

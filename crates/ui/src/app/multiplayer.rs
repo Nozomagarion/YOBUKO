@@ -61,6 +61,17 @@ impl App {
                     .is_some_and(|id| Some(id) == self.projects.active() && self.multiplayer.service.active()))
     }
     pub(super) fn multiplayer_command(&mut self, id: &str, params: serde_json::Value) {
+        if matches!(id, "multiplayer.host" | "multiplayer.hostProject" | "multiplayer.join") {
+            let root = match self.settings.data_folder.trim() {
+                "" => self.data_default_folder.clone(),
+                folder => PathBuf::from(folder),
+            };
+            let root = (!root.as_os_str().is_empty()).then(|| root.join("Shared projects"));
+            if let Err(error) = self.multiplayer.service.set_storage_root(root) {
+                self.multiplayer.error = Some(error.to_string());
+                return;
+            }
+        }
         match self.multiplayer.service.execute(id, &params) {
             Ok(_) => {
                 self.multiplayer.error = None;
@@ -85,6 +96,18 @@ impl App {
             return;
         };
         if let Err(error) = self.multiplayer.service.select_project(project) {
+            self.multiplayer.error = Some(error.to_string());
+            return;
+        }
+        let address = self.multiplayer.address.clone();
+        self.multiplayer_command("multiplayer.hostProject", json!({"address":address}));
+    }
+    fn host_current_audio(&mut self) {
+        let Some(session) = self.projects.active().and_then(|id| self.projects.get(id)) else {
+            self.multiplayer.error = Some("open a project in Studio first".into());
+            return;
+        };
+        if let Err(error) = self.multiplayer.service.select_audio_project(session.project(), session.audio()) {
             self.multiplayer.error = Some(error.to_string());
             return;
         }
@@ -136,18 +159,20 @@ impl App {
             return;
         }
         if self.multiplayer.bound.is_none() {
-            let Some((project, revision)) = self.multiplayer.service.take_snapshot() else {
+            let Some(snapshot) = self.multiplayer.service.take_shared() else {
                 self.multiplayer.error = Some("the verified MIDI project is missing; no project was opened".into());
                 self.leave_multiplayer();
                 return;
             };
-            match self.projects.add(Session::unsaved_copy(project), Some("Shared MIDI session".into())) {
+            let revision = snapshot.revision;
+            match self.projects.add(snapshot.session(), Some("Shared session".into())) {
                 Ok(id) => {
                     if let Err(e) = self.projects.restrict_shared_project(id, true) {
                         self.multiplayer.error = Some(e.to_string());
                         self.leave_multiplayer();
                         return;
                     }
+                    snapshot.keep();
                     self.multiplayer.bound = Some(id);
                     self.multiplayer.applied_revision = revision;
                     self.multiplayer.controls = None;
@@ -217,7 +242,7 @@ impl App {
         ui.add_space(theme::PAD);
         ui.heading("Multiplayer · LAN session");
         ui.label("Create a session, copy its invitation, and join from the same local network.");
-        ui.weak("Share a MIDI copy of your project, or create the four-track demo. MIDI notes, clips and mixer controls are shared; each computer has its own playback.");
+        ui.weak("Share a project with its loaded audio, share a MIDI-only copy, or create the four-track demo. MIDI notes, clips and mixer controls are shared; each computer has its own playback.");
         if !active {
             ui.horizontal(|ui| {
                 ui.label("Host address");
@@ -230,6 +255,10 @@ impl App {
             if ui.add_enabled(self.session().is_some(), egui::Button::new("Share current MIDI project")).clicked() {
                 self.host_current_midi();
             }
+            if ui.add_enabled(self.session().is_some(), egui::Button::new("Share project + audio")).clicked() {
+                self.host_current_audio();
+            }
+            ui.weak("Audio sharing copies loaded sounds into portable WAV files, stored under the application data Shared projects folder. Up to 64 sounds, 64 MiB each and 256 MiB total. Original files stay intact.");
             ui.weak("MIDI copies support up to 64 tracks, FM Synth and Utility parameters. Audio, plugins and other instruments are refused. Local metadata and hardware mappings are omitted; the original stays intact.");
             ui.weak("Use your private network address for another computer. 127.0.0.1 is only for two instances on this computer; :0 selects a free port.");
             ui.add_space(theme::PAD);
@@ -280,7 +309,7 @@ impl App {
             if let Some(progress) = self.multiplayer.state["receiving"].as_array() {
                 let done = progress.first().and_then(serde_json::Value::as_u64).unwrap_or(0);
                 let total = progress.get(1).and_then(serde_json::Value::as_u64).unwrap_or(0);
-                ui.label(format!("Receiving MIDI project: {} / {} KiB", done / 1024, total / 1024));
+                ui.label(format!("Receiving project/audio: {} / {} KiB", done / 1024, total / 1024));
             }
             if let Some(session) = self.multiplayer.bound.and_then(|id| self.projects.get(id)) {
                 let project = session.project();
@@ -294,9 +323,10 @@ impl App {
                     })
                     .sum();
                 ui.label(format!(
-                    "Shared copy: {} tracks · {} MIDI notes. Edit notes and clip placement below.",
+                    "Shared copy: {} tracks · {} MIDI notes · {} audio files. Edit notes and clip placement below.",
                     project.tracks.len(),
-                    notes
+                    notes,
+                    session.audio().files.len()
                 ));
             }
             ui.horizontal(|ui| {
@@ -374,7 +404,7 @@ impl App {
             ui.colored_label(theme::recording(), error);
         }
         ui.add_space(theme::PAD);
-        ui.weak("Original projects are preserved. Leave to edit this MIDI copy freely. Sharing audio files, plugins and recordings comes later.");
+        ui.weak("Original projects are preserved. Leave to edit this copy freely. Sharing new recordings during a session and external plugins comes later.");
     }
 }
 

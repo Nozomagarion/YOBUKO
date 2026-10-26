@@ -200,6 +200,15 @@ impl Session {
         session
     }
 
+    /// Independent shared copy with verified audio already decoded by the LAN worker.
+    /// The local collected folder lets native saving rewrite references without touching the source.
+    pub fn shared_copy(project: Project, audio: suhina_engine::AudioPool, folder: Option<PathBuf>) -> Self {
+        let mut session = Self::unsaved_copy(project);
+        session.set_audio(audio);
+        session.audio.folder = folder;
+        session
+    }
+
     /// Whether the clips copied for `clip.paste` play audio: `Some(true)` for audio, `Some(false)`
     /// for notes, `None` when nothing has been copied. The window uses it to pick the stacking
     /// setting a paste follows.

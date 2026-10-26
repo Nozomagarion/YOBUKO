@@ -31,7 +31,7 @@ and USB export are future work. There is no common public release channel yet.
 
 - **Studio / Multiplayer / DJ** entry points in the native app.
 - **Create LAN session / Join LAN session:** a private invitation connects one host and one guest.
-  Share the current MIDI project (up to 64 tracks, FM Synth/Utility parameters only) or use the
+  Share the current project (up to 64 tracks, FM Synth/Utility parameters only) or use the
   generated starter. Clips arrive in the verified initial copy; single-note add/update/delete, track names, volume
   and pan are live shared edits. The **MIDI notes** editor rejects stale drafts before indices shift. Play, stop and listening position stay local to each computer.
 - **DJ library:** import audio, keep a persistent local catalog, analyse tempo/key and render a
@@ -40,10 +40,11 @@ and USB export are future work. There is no common public release channel yet.
   availability of a combined app update. An official standalone binary cannot overwrite the fork.
 
 The network exchange is tested with real TLS loopback connections and two desktop project
-instances. **A physical two-computer session has not yet been verified.** Audio files, your
-audio assets, plugins and microphone recordings are not shared by this slice. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
+instances. **A physical two-computer session has not yet been verified.** Loaded project audio can now be shared with **Share project + audio** as verified portable
+float32 WAV copies (64 files, 64 MiB each, 256 MiB total). Original encodings/tags are not
+archived. New recording publication and external plugins remain unsupported. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
 move, trim, duplicate, enable and delete with revision checks and stack-only placement.
-Both apps need protocol 4.
+Both apps need protocol 5.
 [LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-lan-prototype)
 
 ## Progress you can audit

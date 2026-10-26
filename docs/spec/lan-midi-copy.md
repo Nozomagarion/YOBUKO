@@ -1,6 +1,6 @@
 ---
 description: Bounded MIDI-only copies of an open project over authenticated LAN, preserving the original and refusing audio and opaque devices
-read_when: share current MIDI project, LAN project transfer, multiplayer protocol 4, MIDI copy limits
+read_when: share current MIDI project, LAN project transfer, multiplayer protocol 5, MIDI copy limits
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -23,8 +23,8 @@ save even before a control edit; saving cannot target the original implicitly. A
 launcher clips, notes, stable IDs, tempo/meter, routing and mixer
 state are retained. Track name, volume, pan, MIDI notes and arrangement clips are live shared edits;
 [the note-editing contract](lan-note-editing.md) defines their revision checks and delivery.
-[The clip contract](lan-clip-editing.md) adds bounded arrangement operations. Audio, plugins
-and publishing recordings remain separate capabilities.
+[The clip contract](lan-clip-editing.md) adds bounded arrangement operations. The explicit Share project + audio option follows the separate
+[audio asset contract](lan-audio-assets.md); plugins and new recording publication remain separate capabilities.
 
 A supported source has 1–64 tracks, at most 128 channels, 512 contents, 4096 clips and 16384 notes.
 Only the file-free FM synth and Utility built-ins, with parameters but no opaque state, are
@@ -38,8 +38,8 @@ in that copy. The source project, its files and its settings are never changed.
 
 ## Document and admission
 
-Protocol 4 retains MIDI-copy format 1, live note operations and snapshot revisions, and adds
-revision-checked arrangement clip operations. Old invitations
+Protocol 5 introduces portable-copy format 2 for initial audio assets and retains live notes,
+revision-checked arrangement clip operations and snapshot revisions. Old invitations
 are refused; both apps need this protocol. The existing certificate-bound TLS admission, expiry,
 one-use secret, owner-ordered controls and local transport rules remain in force.
 
@@ -78,3 +78,12 @@ This is deliberately an interim MIDI-only exchange, not the asset manifest/packa
 [ADR 0026](../decisions/0026-project-folder-and-package.md). Audio sharing must use that portable
 asset direction and its path/hash/quota/atomic-finalization boundary rather than widening this
 reader to arbitrary projects or file paths.
+
+## Audio mode
+
+The MIDI-only selection remains strict and performs no audio collection. Share project + audio
+selects already-loaded audio explicitly, normalizes references to content-addressed WAV copies
+and sends the same bounded native document followed by a manifest and audio chunks. The portable
+decoder admits only empty file references or generated Audio/<hash>.wav names, no absolute paths.
+Both modes use portable-copy format 2; a guest waits for the complete verified audio set and
+initial operation suffix before a tab opens. See [the audio contract](lan-audio-assets.md).

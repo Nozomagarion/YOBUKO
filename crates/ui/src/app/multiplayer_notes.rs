@@ -55,19 +55,27 @@ impl App {
         for lane in &project.arrangement.lanes {
             if let Some(track) = lane.track {
                 for (i, clip) in lane.clips.iter().enumerate() {
-                    clips.push(label(track, clip, format!("arrangement {}", i + 1)));
+                    if project.content(clip.content).is_some_and(|c| {
+                        c.lanes.iter().all(|l| !matches!(l.data, suhina_engine::model::LaneData::Audio(_)))
+                    }) {
+                        clips.push(label(track, clip, format!("arrangement {}", i + 1)));
+                    }
                 }
             }
         }
         for column in &project.launcher.columns {
             for (i, slot) in column.slots.iter().enumerate() {
-                if let Some(clip) = &slot.clip {
+                if let Some(clip) = &slot.clip
+                    && project.content(clip.content).is_some_and(|c| {
+                        c.lanes.iter().all(|l| !matches!(l.data, suhina_engine::model::LaneData::Audio(_)))
+                    })
+                {
                     clips.push(label(column.track, clip, format!("scene {}", i + 1)));
                 }
             }
         }
         if clips.is_empty() {
-            ui.weak("This project has no MIDI clips to edit. Create clips in Studio before sharing it.");
+            ui.weak("This project has no MIDI clips to edit. Use Clips to create one on a MIDI track.");
             return;
         }
         let revision = self.multiplayer.controls.as_ref().map_or(0, |c| c.revision);

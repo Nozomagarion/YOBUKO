@@ -1,6 +1,6 @@
 ---
 description: Revision-checked MIDI clip arrangement edits in the restricted LAN session
-read_when: shared clip placement, multiplayer protocol 4, clip creation duplication deletion, arrangement collaboration
+read_when: shared clip placement, multiplayer protocol 5, clip creation duplication deletion, arrangement collaboration
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -16,9 +16,9 @@ covers:
 
 # Shared MIDI clip placement
 
-Self-authored fork behaviour built on the existing native clip commands. Protocol 4 extends
+Self-authored fork behaviour built on the existing native clip commands. Protocol 5 retains
 the operation journal of lan-note-editing.md; both installations must upgrade. Native file
-version 3, MIDI-copy format 1, admission, musical quotas and independent players stay unchanged.
+version 3, portable-copy format 2, admission, musical quotas and independent players stay unchanged.
 
 The Clips tab lists arrangement clips by stable clip ID, with their track, start, length and
 enabled state. It provides six narrowly admitted native operations:
@@ -57,3 +57,10 @@ convergence, late admission and real independent renderers. UI tests click the v
 and check that the original project and stale drafts remain protected. Physical two-computer
 testing remains the later user acceptance step. Audio assets and recording publication remain
 separate work.
+
+## Amendment: initial collected audio
+
+[The audio contract](lan-audio-assets.md) adds verified initial audio assets under protocol 5.
+The same clip operations act on audio; new audio clips are empty and cannot acquire a new file
+through these commands. The UI lists both MIDI and audio destination tracks. Native note commands
+refuse audio clips. Live file import, audio stretch, plugins and new recording publication stay closed.

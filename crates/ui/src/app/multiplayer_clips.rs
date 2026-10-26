@@ -31,8 +31,12 @@ impl App {
         let Some(session) = self.projects.get(id) else { return };
         let project = session.project();
         let revision = self.multiplayer.controls.as_ref().map_or(0, |c| c.revision);
-        let tracks: Vec<_> =
-            project.tracks.iter().filter(|t| t.content.notes).map(|t| (t.id.0, t.name.clone())).collect();
+        let tracks: Vec<_> = project
+            .tracks
+            .iter()
+            .filter(|t| t.content.notes || t.content.audio)
+            .map(|t| (t.id.0, t.name.clone()))
+            .collect();
         if tracks.is_empty() {
             ui.weak("This project has no MIDI tracks. Add one in Studio before sharing it.");
             return;
@@ -155,7 +159,7 @@ impl App {
             ui.weak("Move changes the clip's position and track. Trim changes its edges and playback offset; the track selector only applies to Move.");
         }
         ui.separator();
-        ui.label("New MIDI clip");
+        ui.label("New clip");
         ui.horizontal_wrapped(|ui| {
             egui::ComboBox::from_id_salt("shared-new-clip-track")
                 .width(180.0)
@@ -172,14 +176,14 @@ impl App {
             ui.add(egui::DragValue::new(&mut editor.create_start).range(0.0..=120_000.0).speed(0.25));
             ui.label("Length");
             ui.add(egui::DragValue::new(&mut editor.create_length).range(0.001..=120_000.0).speed(0.25));
-            if ui.add_enabled(!stale, egui::Button::new("Create MIDI clip")).clicked()
+            if ui.add_enabled(!stale, egui::Button::new("Create clip")).clicked()
                 && let Some(track) = editor.create_track
             {
                 action = Some(WireEdit::ClipCreate { track, start: editor.create_start, length: editor.create_length });
             }
         });
         ui.weak(format!(
-            "Confirmed revision {revision}. New clips start empty; open MIDI notes to compose their content."
+            "Confirmed revision {revision}. New clips start empty. Use MIDI notes on a MIDI track; new audio clips have no sound file yet."
         ));
         if let Some(action) = action
             && let Ok(edit) = serde_json::to_string(&action)

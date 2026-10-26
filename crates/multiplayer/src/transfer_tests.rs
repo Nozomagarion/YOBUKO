@@ -23,7 +23,7 @@ impl Write for Script {
     }
 }
 fn header(bytes: usize, sha256: String) -> ServerMessage {
-    ServerMessage::Project { protocol: PROTOCOL, format: 1, revision: 0, bytes, sha256 }
+    ServerMessage::Project { protocol: PROTOCOL, format: 2, revision: 0, bytes, sha256 }
 }
 
 #[test]

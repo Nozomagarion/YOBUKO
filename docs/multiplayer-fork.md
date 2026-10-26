@@ -86,7 +86,17 @@ The destination track selector applies to Move; Trim follows native edge/offset 
 A newer revision disables a pending clip draft; refresh or select the current clip again.
 A deleted note editor selection cannot silently switch to another clip. Local metadata, hardware
 input settings and launch mappings are omitted. See the [copy contract](spec/lan-midi-copy.md).
-Both participants need the new protocol-4 build; old demo invitations no longer work.
+Both participants need the new protocol-5 build; old demo invitations no longer work.
+
+To include loaded audio, use **Share project + audio**. Configure the application data folder
+when using a custom host: collected copies stay in its **Shared projects** subfolder. Only sounds
+already loaded in Studio are copied; missing audio must first be loaded/relinked. They become
+portable float32 WAV copies, without changing the originals, up to 64 files, 64 MiB each and
+256 MiB total. Wait for the complete transfer before a shared tab appears. FM Synth/Utility
+parameters remain supported; other devices/plugins and streamed stems are refused. Existing
+audio clips can be moved/trimmed/duplicated with the same Clips controls. New audio clips are
+empty; importing a new file or publishing a new recording during connection is not implemented.
+See [the audio contract](spec/lan-audio-assets.md).
 
 Network and UI regression checks:
 

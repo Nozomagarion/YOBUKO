@@ -84,6 +84,15 @@ and arbitrary project mutations remain closed. Admission
 snapshots current music with its revision. Existing projects and private playback are retained. Arbitrary project/media exchange remains
 closed; this is a fork prototype, not an accepted upstream architecture or external security review.
 
+## Amendment: initial collected audio (2026-10-27)
+
+The [audio contract](../spec/lan-audio-assets.md) extends the restricted adapter under protocol 5.
+It adopts ADR 0026’s document/manifest/collected-audio direction without claiming the general
+native folder/package API is implemented. Local loaded audio is copied as canonical WAV with
+BLAKE3 identity, bounded verified transfer and a fresh folder lease. The new session receives
+its verified audio pool before playback. Arbitrary paths, plugins, streamed stems and new
+recording publication remain closed. The native project format stays 3.
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.
