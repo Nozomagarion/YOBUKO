@@ -1,8 +1,8 @@
 # Où en est notre application ?
 
-**Bilan local vérifié le 27 octobre 2026 à 00 h 20 (heure de Paris).**
-Ce bilan décrit le nouveau code de partage audio. La compilation du nouveau paquet est la
-dernière opération de livraison ; la référence du paquet sera ajoutée une fois vérifiée.
+**Bilan vérifié le 27 octobre 2026 à 00 h 24 (heure de Paris).**
+Le partage initial des sons est codé, testé et livré dans le paquet Mac Apple Silicon
+`9a6b7762`. Le code est envoyé sur GitHub ; les contrôles distants de cette version sont en cours.
 
 ## À retenir
 
@@ -11,7 +11,7 @@ Suhina fournit le studio. Notre fork ajoute le multijoueur et le lien avec la pr
 qui commence avec l’analyse musicale de rbxport.
 
 **Nouveau palier : les sons déjà chargés dans le studio peuvent maintenant être transférés à l’invité.**
-Les tests ciblés et la suite complète passent ; le nouveau paquet est en préparation.
+Les tests ciblés et la suite complète passent ; le nouveau paquet Mac est disponible ci-dessous.
 La prochaine étape de musique partagée sera la publication des **nouvelles prises enregistrées** pendant la session.
 
 Les nouvelles fonctions sont dans un **paquet de développement compilé**. Les dernières étapes
@@ -24,7 +24,7 @@ n’ont pas remplacé automatiquement l’application déjà installée ou ouver
 | **Studio** | Utiliser le studio de Suhina et envoyer le rendu d’un morceau vers notre bibliothèque DJ. | Relier toutes les fonctions du studio à la collaboration. |
 | **Créer à deux** | Un hôte crée une session, un invité la rejoint sur le réseau local. Une copie MIDI/audio peut être partagée avec les sons déjà chargés, en conservant l’original. | Partager les plugins, ajouter de nouveaux sons pendant la connexion et accueillir plus d’un invité. |
 | **Notes MIDI** | Ajouter, modifier et supprimer les notes ; régler leur hauteur, durée et vélocité. | Étendre les outils partagés et l’édition des instruments. |
-| **Clips MIDI** | Créer, déplacer, changer les bords, dupliquer, activer et supprimer les clips MIDI/audio de l’arrangement. | Partager davantage d’opérations du studio, dont l’ajout de pistes et les déplacements entre cases du lanceur. |
+| **Clips MIDI/audio** | Créer, déplacer, changer les bords, dupliquer, activer et supprimer les clips de l’arrangement. | Partager davantage d’opérations du studio, dont l’ajout de pistes et les déplacements entre cases du lanceur. |
 | **Écoute personnelle** | Chacun peut écouter une autre partie, démarrer et arrêter sa propre lecture. | Vérifier ce comportement sur les deux ordinateurs de la maison. |
 | **Espace DJ** | Importer des morceaux dans une bibliothèque conservée sur le disque, analyser tempo et tonalité avec du code de rbxport, y ajouter un rendu du studio. | Playlists, points cue, grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Un bouton dans les paramètres compare les versions GitHub. Les outils suivent les deux projets d’origine et vérifient les paquets de notre application. | Activer l’intégration régulière des nouveautés, leur publication et la réception automatique d’une version commune par tous. |
@@ -50,7 +50,6 @@ dans la copie initiale ; les nouvelles prises pendant une session ne sont pas en
 3. **Modifier les clips à deux.** Pour pouvoir arranger le morceau ensemble, pas seulement changer un volume.
 4. **Protéger les modifications.** Si quelqu’un a déjà changé le passage, un vieux brouillon est refusé.
    Déplacer ou agrandir un clip conserve ses voisins. Éditer une duplication protège son original.
-
 5. **Recevoir les sons du projet.** Pour entendre le morceau chez l’invité, même sans les fichiers d’origine sur sa machine.
 
 Les tests comparent le son rendu des deux côtés, conservent l’écoute indépendante et rouvrent
@@ -58,8 +57,9 @@ une copie enregistrée après la déconnexion.
 
 ## Ce qu’on fait maintenant
 
-**Code terminé et validé localement : transfert des sons présents au début de la session.**
-**Livraison en cours : compilation et vérification du nouveau paquet.**
+**Palier livré : transfert des sons présents au début de la session.**
+Le paquet Mac Apple Silicon est compilé, signé localement et vérifié après extraction.
+Les contrôles distants Mac, Windows et Linux sont encore en cours au moment de ce bilan.
 Le code du bouton, les vérifications de fichiers et le raccordement aux lecteurs sont en place.
 Les tests ciblés incluent le transfert réel, le son identique, le refus des fichiers incorrects,
 la conservation des originaux et la sauvegarde/réouverture.
@@ -70,11 +70,10 @@ participant sans recréer toute la session.
 
 L’ordre de travail reste :
 
-1. Finir la livraison du paquet de ce premier partage audio validé localement.
-2. Partager les nouvelles prises enregistrées pendant le travail commun.
-3. Compléter les capacités multijoueurs encore absentes : pistes, appareils, participants supplémentaires et reconnexion.
-4. Stabiliser l’installation et la mise à jour de la même application pour tout le groupe.
-5. Poursuivre la préparation et la performance DJ : playlists, cues, grilles, platines, export.
+1. Partager les nouvelles prises enregistrées pendant le travail commun. Critère : une nouvelle prise devient lisible chez l’invité sans recréer la session ni modifier les originaux.
+2. Compléter les capacités multijoueurs encore absentes : pistes, appareils, participants supplémentaires et reconnexion.
+3. Stabiliser l’installation et la mise à jour de la même application pour tout le groupe.
+4. Poursuivre la préparation et la performance DJ : playlists, cues, grilles, platines, export.
 
 **L’essai sur deux ordinateurs à la maison reste pour plus tard, comme tu l’as demandé.**
 Son créneau sera décidé avec toi ; ce suivi ne le présente pas comme déjà effectué.
@@ -86,16 +85,17 @@ Son créneau sera décidé avec toi ; ce suivi ne le présente pas comme déjà 
 | Ensemble des tests automatiques sur ce Mac | **3 093 réussis, aucun échec ; 53 facultatifs ignorés.** Le total comprend le socle Suhina et nos ajouts. |
 | Deux sessions reliées par une vraie connexion chiffrée sur ce Mac | **Réussi pour le MIDI et le nouveau transfert audio**, avec égalité du son rendu, lecteurs indépendants et sauvegarde/réouverture. |
 | Boutons du panneau multijoueur et conservation de l’original | **Réussi dans les tests d’interface.** Affichage également contrôlé visuellement. |
-| Paquet Mac Apple Silicon avec audio | **En préparation.** Le précédent paquet MIDI reste disponible ci-dessous. |
-| Contrôle GitHub Linux de la version précédente `65d031f8` | **Réussi ; le nouveau code audio doit encore passer sur GitHub.** |
-| Contrôle GitHub Windows de la version précédente `65d031f8` | **Réussi ; le nouveau code audio doit encore passer sur GitHub.** |
-| Contrôle GitHub Mac Universal de la version précédente `65d031f8` | **Réussi ; le nouveau code audio doit encore passer sur GitHub.** |
+| Paquet Mac Apple Silicon avec audio `9a6b7762` | **Réussi.** Les trois exécutables sont compilés ; signature locale, extraction ordinaire, version de l’outil et sommes de contrôle vérifiées. |
+| Contrôle GitHub Linux du nouveau code audio `9a6b7762` | **En cours ; résultat non encore connu.** |
+| Contrôle GitHub Windows du nouveau code audio `9a6b7762` | **En cours ; résultat non encore connu.** |
+| Contrôle GitHub Mac Universal du nouveau code audio `9a6b7762` | **En cours ; résultat non encore connu.** |
 | Deux ordinateurs physiques | **Pas encore testé.** |
 
-[Contrôles GitHub de la version décrite](https://github.com/Nozomagarion/suhina-daw/actions/runs/40387496818).
-Les trois contrôles de l’ancienne version sont réussis. Ceux du nouveau code audio ne sont
-pas déduits de ces résultats. La validation en conditions
-réelles sur deux ordinateurs et la publication d’une version commune restent à faire.
+[Contrôles GitHub du code audio livré](https://github.com/Nozomagarion/suhina-daw/actions/runs/40419500365),
+révision complète `9a6b776288ea58b87d09e6af9d6a4a6519e96600`.
+Les trois contrôles de [l’ancienne version MIDI `65d031f8`](https://github.com/Nozomagarion/suhina-daw/actions/runs/40387496818)
+sont réussis ; ce résultat ne valide pas le nouveau code audio.
+La validation sur deux ordinateurs et la publication d’une version commune restent à faire.
 Les états ci-dessus sont un relevé daté ; ce fichier ne se rafraîchit pas tout seul.
 
 ## Où trouver la version actuelle
@@ -103,11 +103,14 @@ Les états ci-dessus sont un relevé daté ; ce fichier ne se rafraîchit pas to
 - **Code et présentation :** [notre dépôt GitHub](https://github.com/Nozomagarion/suhina-daw).
 - **Branche de notre application :** `feature/multiplayer`, affichée dès l’accueil du dépôt.
 - **Paquet local :** dans le dossier `builds` voisin du dépôt,
-  `suhina-multiplayer-clips-macos-arm64-65d031f8.zip`.
+  `suhina-multiplayer-audio-macos-arm64-9a6b7762.zip` (**52,3 Mio**).
 - **Dans le paquet :** `Suhina.app`, les outils nécessaires et les sources du commit livré.
+- **Somme de contrôle :** fichier `suhina-multiplayer-audio-macos-arm64-9a6b7762.zip.sha256`, à côté du ZIP.
+- **Preuves locales :** dossier `validation/2026-10-27` voisin du dépôt : journaux de tests,
+  compilation, vérification du paquet et captures du panneau.
 
-Le paquet MIDI indiqué ci-dessus utilise le protocole 4. Le nouveau transfert audio utilise
-le protocole 5 : les deux participants devront installer la nouvelle version une fois livrée.
+Ce paquet utilise le protocole 5 : les deux participants devront installer cette même version.
+L’ancien paquet MIDI utilise le protocole 4 et ne peut pas rejoindre une session audio de cette version.
 Le canal commun de mises à jour n’est pas encore publié. Les nouveautés Suhina/rbxport doivent
 être intégrées à notre version, testées, puis distribuées ensemble pour conserver le multijoueur.
 
