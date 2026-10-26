@@ -319,6 +319,7 @@ fn an_audio_take_is_written_to_a_file_and_becomes_a_clip() {
     assert_eq!(state["takes"][0]["kind"], json!("audio"));
     let file = std::path::PathBuf::from(state["takes"][0]["file"].as_str().unwrap());
     assert!(file.starts_with(dir.join("Recorded")) && file.file_name().unwrap() == "Mic bar 1.wav", "{file:?}");
+    let end = rig.renderer.monitor().beat();
     rig.run("transport.record", json!({ "on": false })).unwrap();
     rig.render_to(BEAT * 3 + BLOCK * 4, 0.25);
     let notices = rig.settle();
@@ -332,7 +333,12 @@ fn an_audio_take_is_written_to_a_file_and_becomes_a_clip() {
     // From the start to where it ended: about two beats, all of them the input's level.
     let beats = samples.len() as f64 / BEAT as f64;
     assert!((beats - (3.0 - start)).abs() < 0.05, "{beats} beats from {start}");
-    assert!(close(clip.length, beats));
+    let expected_frames = ((end - start) * BEAT as f64).round() as usize;
+    let clip_frames = (clip.length * BEAT as f64).round() as usize;
+    assert_eq!(clip_frames, expected_frames, "the musical take must end at the requested frame");
+    assert!(samples.len() >= clip_frames, "every frame used by the clip must exist in the file");
+    // The background writer may have drained later chunks before receiving the end order.
+    // Those frames remain in the WAV, but must not lengthen the clip (notably on Windows).
     assert!(samples.iter().all(|s| *s == 0.25));
     rig.run("edit.undo", json!({})).unwrap();
     assert!(rig.session.project().arrangement.lanes.iter().all(|l| l.clips.is_empty()));

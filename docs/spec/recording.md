@@ -141,7 +141,10 @@ with that reason when an armed track would record audio into an unsaved project.
 The render thread never writes a file: it copies the input into a lock-free ring made before
 recording started, and a writer thread empties the ring into the file as it goes, so a take is
 on disk before it ends. The file is finished when the take ends; the clip is made from the
-file's frames.
+file's usable frames. If the writer drained queued audio beyond the requested end before it
+received that end, those extra frames can remain in the WAV. The clip's length is still bounded
+by the take's requested end (rounded to an audio frame), or the amount actually written when
+shorter. A scheduling difference must not extend the musical take to the file's trailing frames.
 
 - **A full disk, or a file that cannot be written**, ends that take: what was written so far is
   kept and becomes the clip when the take ends, and the reason is reported (a notice in the
