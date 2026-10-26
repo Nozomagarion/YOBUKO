@@ -1036,12 +1036,22 @@ fn paint_fader(
     let hover = widgets::hover(ui, response);
     let value_color = motion::mix(theme::text_value(), theme::text_primary(), hover);
     if readout.is_positive() {
-        let centre = if horizontal_volume() || control_layout::placement("mixer-volume-readout") != Default::default() {
-            readout.center()
+        let placed = horizontal_volume() || control_layout::placement("mixer-volume-readout") != Default::default();
+        let area = if placed {
+            readout
         } else {
-            Pos2::new(readout.left() + FADER_COLUMN / 2.0, readout.center().y)
+            Rect::from_center_size(
+                Pos2::new(readout.left() + FADER_COLUMN / 2.0, readout.center().y),
+                Vec2::new(FADER_COLUMN, readout.height()),
+            )
         };
-        painter.text(centre, Align2::CENTER_CENTER, widgets::format_db(db), theme::mono_font(9.0), value_color);
+        // `#mixer-volume-readout`: its own background, corners, `font-size`, `color` and number format.
+        let _readout = crate::kit::style_class::enter_named("value", "mixer-volume-readout");
+        crate::kit::native_css::surface(painter, area, 0.0, egui::Color32::TRANSPARENT);
+        let size = crate::kit::style_class::font_size(9.0);
+        let ink = crate::kit::style_class::foreground(value_color);
+        let text = widgets::formatted_value(&widgets::format_db(db));
+        painter.text(area.center(), Align2::CENTER_CENTER, text, theme::mono_font(size), ink);
     }
     if horizontal_volume() {
         paint_horizontal_fader(painter, fader, db, hover, response);

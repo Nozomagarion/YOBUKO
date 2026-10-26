@@ -890,4 +890,19 @@ of bars, and a slider id per parameter.
 - **MIDI tools:** `--suhina-gap` (0–16) and `.button { height }` inside `.midi-tools`.
 - **Duplicate:** a copy keeping placed controls returns a notice naming how many it keeps in its
   `layout.css`.
+- **Host rules in layers:** `--suhina-*`, placement and artwork rules inside `@layer` blocks are
+  read like the rest (nested layers too, eight deep); rules in `@media` and `@supports` are left
+  to the style engine.
+- **Selected header:** `.track-header:selected { background-color }` paints the header in both
+  views; the name's ink reads on it, and its buttons, sends and meter keep their own fill (track
+  and device containers count as surfaces).
+- **Mixer volume readout:** `#mixer-volume-readout` (a `value`): background, radius, `font-size`,
+  `color` and the value formats.
+- **Empty slots:** `.slot { background-color }` replaces the track-tinted fill of an empty slot.
+- **Knob artwork per part:** `pan.knob.body|pointer` and `send.knob.body|pointer` for a pan's and
+  a send's knob, in the Session and the Arrangement; without them they use `knob.*`. An
+  Arrangement send is a knob with `.send { --suhina-appearance: knob }`, as in the mixer.
+- **Mixer colour strip:** `.control-mixer-color` (`display: none` hides it; `top`, `height` and
+  `width` move and size it).
+- **`accent-color`** reaches every control in its scope, the built-in effects' parameter knobs too.
 

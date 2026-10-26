@@ -555,12 +555,61 @@ fn is_style_line(line: &str) -> bool {
         && !line.starts_with(".window ")
 }
 
+/// `css` with each `@layer NAME { … }` block replaced by its rules, nested layers too (at most
+/// eight deep); a layer statement (`@layer a, b;`) and everything else stay as they are.
+fn unlayer(css: &str, depth: usize) -> String {
+    let mut out = String::with_capacity(css.len());
+    let mut rest = css;
+    while let Some(at) = rest.find("@layer") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at..];
+        let brace = after.find('{');
+        let semicolon = after.find(';');
+        let Some(open) = brace.filter(|b| semicolon.is_none_or(|s| *b < s)) else {
+            // A statement, not a block.
+            let end = semicolon.map_or(after.len(), |s| s + 1);
+            out.push_str(&after[..end]);
+            rest = &after[end..];
+            continue;
+        };
+        let mut level = 0usize;
+        let mut close = None;
+        for (index, c) in after[open..].char_indices() {
+            match c {
+                '{' => level += 1,
+                '}' => {
+                    level = level.saturating_sub(1);
+                    if level == 0 {
+                        close = Some(open + index);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(close) = close else {
+            out.push_str(after);
+            return out;
+        };
+        let body = &after[open + 1..close];
+        if depth < 8 {
+            out.push_str(&unlayer(body, depth + 1));
+        }
+        out.push('\n');
+        rest = &after[close + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Reads the rules of a theme's own sheet that Suhina reads itself (its name, artwork, control
 /// placements, the toolbar and `--suhina-*` styles); everything else is for the style engine
-/// and is left alone. Nested groups (`@media`, `@layer`) are skipped.
+/// and is left alone. Rules inside `@layer` blocks count like the rest (a layer orders rules, it
+/// does not make them conditional); conditional groups (`@media`, `@supports`) are skipped.
 pub fn read_host_rules(theme: &mut Theme, css: &str) -> Vec<String> {
+    let css = &unlayer(css, 0);
     let mut host = String::new();
-    let mut rest = css;
+    let mut rest = css.as_str();
     let mut rules = 0;
     while let Some(start) = rest.find(|c: char| !c.is_whitespace()) {
         rest = &rest[start..];

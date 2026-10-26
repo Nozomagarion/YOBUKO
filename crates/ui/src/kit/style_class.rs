@@ -424,6 +424,10 @@ pub fn knob_preference(fallback: bool) -> bool {
         _ => fallback,
     }
 }
+/// Whether an element of `class` encloses what is drawn now (`pan` around a pan's knob).
+pub fn within(class: &str) -> bool {
+    STACK.with(|stack| stack.borrow().iter().any(|c| c == class))
+}
 /// The view being drawn, for artwork of one view: `mixer` (a strip, in any view), `session` or
 /// `arrangement`.
 pub fn view() -> Option<&'static str> {

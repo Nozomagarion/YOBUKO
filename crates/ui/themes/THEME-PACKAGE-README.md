@@ -757,6 +757,16 @@ control with no room left is not drawn, without a notice: check narrow tracks an
   and moves them.
 - **A copy of a theme** says how many placed controls it keeps in its `layout.css`.
 - **Choosing a theme** keeps the Themes page where it was.
+- **Layers:** `--suhina-*`, `.control-*` and artwork rules work inside `@layer` blocks too; inside
+  `@media` they do not (use plain CSS properties there).
+- **Mixer volume readout:** `#mixer-volume-readout { background-color: #1E1E1E; border-radius: 6px;
+  font-size: 11px; }`.
+- **Empty slots:** `.slot { background-color: #262626; }`.
+- **Pan and send knobs of their own:** `pan.knob.body`, `pan.knob.pointer`, `send.knob.body` and
+  `send.knob.pointer` artwork change only those knobs, in the Session and the Arrangement.
+  `.send { --suhina-appearance: knob; }` makes the Arrangement's sends knobs too.
+- **The mixer's colour strip:** `.control-mixer-color { display: none; }` hides it; `top`, `height`
+  and `width` move it (to the bottom, say).
 
 ## What a theme cannot set
 

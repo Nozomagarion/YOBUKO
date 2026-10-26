@@ -1010,8 +1010,13 @@ fn slot_cell(
     // A clip slot is filled with the clip's colour (its track's unless it has its own).
     let clip_color = slot.color.map_or(track_color, rgb);
     let textured = crate::kit::style_class::property("--suhina-track-artwork").as_deref() == Some("on");
-    let empty =
-        motion::mix(theme::window_background(), track_color, if column.mute { EMPTY_TINT / 2.0 } else { EMPTY_TINT });
+    // An empty slot is tinted with its track's colour, unless the sheet gives it a background
+    // (`.slot { background-color }`).
+    let empty = crate::kit::style_class::background(motion::mix(
+        theme::window_background(),
+        track_color,
+        if column.mute { EMPTY_TINT / 2.0 } else { EMPTY_TINT },
+    ));
     let mark_rect =
         |size: f32| Rect::from_min_size(Pos2::new(rect.left() + PAD, rect.center().y - size / 2.0), Vec2::splat(size));
     let name_rect = Rect::from_min_max(

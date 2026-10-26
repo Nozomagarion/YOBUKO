@@ -88,7 +88,26 @@ pub(super) fn send_knob(
         widgets::track_button_face(ui, painter, rect, &response, fill);
     }
     let letter = send.name.chars().next().map(String::from).unwrap_or_default();
-    crate::kit::mixer_controls::send_field(painter, rect, &letter, shown, send.pre_fader, pointer, position);
+    // `.send { --suhina-appearance: knob }` draws it as a knob, as in the mixer (`send.knob.*`
+    // artwork when the theme has it), its value beside it unless `--suhina-value-position` says
+    // otherwise.
+    if crate::kit::style_class::knob_preference(false) {
+        let text = format!("{letter} {}", widgets::format_db(shown));
+        let right = widgets::ValuePosition::Right;
+        widgets::knob_with_value(
+            painter,
+            rect,
+            position,
+            pointer,
+            Some(&response),
+            &text,
+            pointer,
+            right,
+            theme::TEXT_SMALL,
+        );
+    } else {
+        crate::kit::mixer_controls::send_field(painter, rect, &letter, shown, send.pre_fader, pointer, position);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

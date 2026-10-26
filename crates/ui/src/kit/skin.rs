@@ -58,6 +58,12 @@ pub const OWN_ROLES: &[&str] = &[
     "pan.fill",
     "volume.handle",
     "pan.handle",
+    // A pan drawn as a knob (`.pan { --suhina-appearance: knob }`), apart from every other knob.
+    "pan.knob.body",
+    "pan.knob.pointer",
+    // A send's knob (a return's level), apart from every other knob.
+    "send.knob.body",
+    "send.knob.pointer",
     // A send's tile and its level rail.
     "send",
     "send.fill",
@@ -982,6 +988,10 @@ fn paint_variant(
                     | "track.audio"
                     | "knob.body"
                     | "knob.pointer"
+                    | "pan.knob.body"
+                    | "pan.knob.pointer"
+                    | "send.knob.body"
+                    | "send.knob.pointer"
             ) || role.starts_with("piano."),
         )
         .map(|image| painter.ctx().load_texture(format!("skin-{key}"), image, egui::TextureOptions::LINEAR));

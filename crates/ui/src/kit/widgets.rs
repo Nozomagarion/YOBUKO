@@ -797,6 +797,17 @@ pub fn value_area(ui: &Ui, rect: Rect, id: egui::Id, label: impl ToString, value
 
 /// The knob: a small circle with a pointer from the centre, −135° … +135° of travel for
 /// `position` 0 … 1 (components › Mixer strip).
+/// The artwork roles of a knob's body and pointer: a pan's and a send's (a return's level) knob
+/// take `pan.knob.*` and `send.knob.*` when the theme has them, in the Session and the
+/// Arrangement alike, so they can differ from the devices' knobs; otherwise every knob shares
+/// `knob.*`.
+pub fn knob_roles() -> (&'static str, &'static str) {
+    [("pan", "pan.knob.body", "pan.knob.pointer"), ("send", "send.knob.body", "send.knob.pointer")]
+        .into_iter()
+        .find(|(class, body, _)| super::style_class::within(class) && super::skin::has_own(body))
+        .map_or(("knob.body", "knob.pointer"), |(_, body, tip)| (body, tip))
+}
+
 pub fn knob(painter: &Painter, center: Pos2, size: f32, position: f32, pointer: Color32, response: Option<&Response>) {
     let _style = response
         .map(|response| crate::kit::style_class::enter_response("knob", response))
@@ -806,14 +817,15 @@ pub fn knob(painter: &Painter, center: Pos2, size: f32, position: f32, pointer: 
     let pointer = super::style_class::foreground(pointer);
     let radius = size * 9.0 / 22.0;
     let rect = Rect::from_center_size(center, Vec2::splat(size));
-    if !super::skin::paint(painter, rect, "knob.body", state, pointer, 0.0) {
+    let (body, tip_role) = knob_roles();
+    if !super::skin::paint(painter, rect, body, state, pointer, 0.0) {
         painter.circle_filled(center, radius, theme::control_background());
         painter.circle_stroke(center, radius, theme::hairline(theme::text_hint()));
     }
     super::native_css::background_rounded(painter, rect, size * 0.5);
     let angle = (-135.0 + 270.0 * position.clamp(0.0, 1.0)).to_radians();
     let tip = center + Vec2::new(angle.sin(), -angle.cos()) * (radius - 1.0);
-    if !super::skin::paint(painter, rect, "knob.pointer", state, pointer, angle) {
+    if !super::skin::paint(painter, rect, tip_role, state, pointer, angle) {
         painter.line_segment([center, tip], Stroke::new(1.5, pointer));
     }
 }
@@ -895,6 +907,28 @@ pub(crate) fn button(ui: &Ui, painter: &egui::Painter, rect: Rect, text: &str, l
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pan_and_a_send_take_their_own_knob_artwork_and_other_knobs_do_not() {
+        let svg =
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>"#;
+        let mut skin = super::super::skin::Skin::default();
+        skin.assets.insert("pan.knob.body".into(), svg.into());
+        skin.assets.insert("send.knob.body".into(), svg.into());
+        super::super::skin::configure(&skin);
+        assert_eq!(knob_roles().0, "knob.body", "a device's knob");
+        {
+            let _pan = super::super::style_class::enter("pan");
+            assert_eq!(knob_roles(), ("pan.knob.body", "pan.knob.pointer"));
+        }
+        {
+            let _send = super::super::style_class::enter("send");
+            assert_eq!(knob_roles(), ("send.knob.body", "send.knob.pointer"));
+        }
+        super::super::skin::configure(&super::super::skin::Skin::default());
+        let _pan = super::super::style_class::enter("pan");
+        assert_eq!(knob_roles().0, "knob.body", "without the theme's own artwork");
+    }
 
     #[test]
     fn active_toggle_text_stays_visible_over_transparent_or_gradient_panels() {
