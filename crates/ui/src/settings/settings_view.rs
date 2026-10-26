@@ -1302,7 +1302,9 @@ fn theme_card(
                 break;
             }
             let area = Rect::from_center_size(centre, Vec2::splat(18.0));
-            let swatch = ui.interact(area, Id::new(("theme-variant", *variant)), Sense::click());
+            // The theme in use shows its swatches twice (its large card and its card in the
+            // list), so each card's swatch has an id of its own.
+            let swatch = ui.interact(area, Id::new(("theme-variant", *variant, active)), Sense::click());
             swatch.widget_info(|| {
                 egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Variant: {variant_name}"))
             });

@@ -289,7 +289,10 @@ fn a_variant_swatch_in_settings_uses_that_variant_and_new_variant_makes_one() {
     harness.run();
     assert_eq!(theme::accent(), egui::Color32::from_rgb(0xAB, 0xCD, 0xEF));
     assert_eq!(harness.state_mut().take_changed_settings().map(|s| s.theme), Some("ink@dim".into()));
-    harness.get_by_label("Variant: Theme's own").click();
+    // The theme in use shows its swatches on its large card and on its card in the list; both work.
+    let own: Vec<_> = harness.get_all_by_label("Variant: Theme's own").collect();
+    assert_eq!(own.len(), 2, "the large card's swatch and the list card's");
+    own[0].click();
     harness.run();
     assert_eq!(theme::accent(), egui::Color32::from_rgb(0x12, 0x34, 0x56));
     // A new variant starts from the values in use and is handed out to be written.
