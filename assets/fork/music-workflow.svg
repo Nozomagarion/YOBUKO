@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="510" viewBox="0 0 1280 510" role="img" aria-labelledby="title desc">
+<!-- Copyright (C) 2026 The Suhina contributors; SPDX-License-Identifier: GPL-3.0-or-later -->
+<title id="title">Suhina — Studio + Multijoueur + DJ</title>
+<desc id="desc">Ta musique, de A à Z. Composer, enregistrer, créer ensemble, mixer et jouer dans une seule application. Projet en développement sur les fondations de Suhina et rbxport.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#111822"/><stop offset="1" stop-color="#202137"/></linearGradient><linearGradient id="line"><stop stop-color="#ffcf75"/><stop offset=".5" stop-color="#63e5c1"/><stop offset="1" stop-color="#aba7ff"/></linearGradient></defs>
+<rect width="1280" height="510" rx="24" fill="url(#bg)"/>
+<path d="M56 272H1224" stroke="url(#line)" stroke-width="2" opacity=".65"/>
+<g font-family="system-ui, sans-serif">
+<text x="56" y="58" fill="#c4cddd" font-size="16" font-weight="600" letter-spacing="2.5">SUHINA · STUDIO + MULTIJOUEUR + DJ</text>
+<text x="52" y="140" fill="#f6f4ef" font-size="67" font-weight="800" letter-spacing="-2">TA MUSIQUE, DE A À Z.</text>
+<text x="56" y="191" fill="#d2d8e4" font-size="24">Composer. Enregistrer. Créer ensemble. Mixer. Jouer.</text>
+<text x="56" y="229" fill="#a6b2c8" font-size="18">Une seule application, du premier son à la scène.</text>
+<g transform="translate(56 299)">
+<rect width="365" height="139" rx="14" fill="#2b2a2b" stroke="#61523c"/>
+<text x="22" y="35" fill="#ffcf75" font-size="18" font-weight="700">01 / STUDIO</text>
+<text x="22" y="63" fill="#e0d9ce" font-size="15">Ton idée devient un morceau.</text>
+<g fill="#ffcf75" opacity=".85"><rect x="22" y="85" width="53" height="12" rx="3"/><rect x="80" y="103" width="95" height="12" rx="3"/><rect x="117" y="85" width="61" height="12" rx="3"/><rect x="184" y="85" width="115" height="12" rx="3"/><rect x="232" y="103" width="95" height="12" rx="3"/></g></g>
+<g transform="translate(457 299)">
+<rect width="365" height="139" rx="14" fill="#203134" stroke="#3c6664"/>
+<text x="22" y="35" fill="#63e5c1" font-size="18" font-weight="700">02 / ENSEMBLE</text>
+<text x="22" y="63" fill="#d1e2e0" font-size="15">Un projet commun. Chacun son écoute.</text>
+<path d="M52 105H300" stroke="#63e5c1" stroke-width="2" opacity=".6"/>
+<g fill="#63e5c1"><circle cx="52" cy="105" r="9"/><circle cx="175" cy="105" r="9"/><circle cx="300" cy="105" r="9"/></g>
+<g fill="#203134"><circle cx="52" cy="105" r="3"/><circle cx="175" cy="105" r="3"/><circle cx="300" cy="105" r="3"/></g></g>
+<g transform="translate(858 299)">
+<rect width="365" height="139" rx="14" fill="#2c2b42" stroke="#58557c"/>
+<text x="22" y="35" fill="#aba7ff" font-size="18" font-weight="700">03 / DJ &amp; LIVE</text>
+<text x="22" y="63" fill="#d8d6e8" font-size="15">Ton morceau rejoint ton set.</text>
+<path d="M22 105h19l7-14 9 28 11-44 12 55 13-43 11 30 8-12h31m33 0h19l9-23 11 43 10-55 12 63 10-42 12 14h54" fill="none" stroke="#aba7ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+</g>
+<text x="56" y="479" fill="#a4b0c5" font-size="14">UN PROJET LIBRE EN CONSTRUCTION · FONDATIONS : SUHINA + RBXPORT · VISION : DE L'IDÉE AU LIVE</text>
+</g></svg>

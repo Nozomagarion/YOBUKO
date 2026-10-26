@@ -1,35 +1,131 @@
 {
   "schema": 1,
   "areas": [
-    {"name": "Create together", "color": "#63e5c1", "milestones": [
-      {"name": "Host ordering and bounded allowed edits", "done": true, "evidence": "crates/collaboration/tests/session.rs"},
-      {"name": "Independent local audio players", "done": true, "evidence": "crates/multiplayer/tests/lan.rs"},
-      {"name": "Encrypted LAN and single-use invitations", "done": true, "evidence": "crates/multiplayer/src/transport_tests.rs"},
-      {"name": "Desktop host/join and confirmed track controls", "done": true, "evidence": "crates/ui/src/app/multiplayer_tests.rs"},
-      {"name": "Physical two-computer acceptance test", "done": false},
-      {"name": "Share an existing project and its media", "done": false},
-      {"name": "Coedit notes and clips", "done": false},
-      {"name": "Publish shared recordings", "done": false},
-      {"name": "Internet sessions and reconnect", "done": false}
-    ]},
-    {"name": "Prepare the set", "color": "#b9a1ff", "milestones": [
-      {"name": "Native Studio / DJ workspace", "done": true, "evidence": "crates/ui/src/app/dj_tests.rs"},
-      {"name": "Persistent local audio catalog", "done": true, "evidence": "crates/dj/src/tests.rs"},
-      {"name": "Pinned rbxport tempo and key analysis", "done": true, "evidence": "third_party/rbxport-analysis/VENDORED.md"},
-      {"name": "Render a project into the DJ library", "done": true, "evidence": "crates/ui/src/app/dj_tests.rs"},
-      {"name": "Playlists and set preparation", "done": false},
-      {"name": "Cue and beatgrid editing", "done": false},
-      {"name": "Deck and performance workspace", "done": false},
-      {"name": "USB export and hardware compatibility", "done": false}
-    ]},
-    {"name": "Stay together", "color": "#ffb18d", "milestones": [
-      {"name": "Pinned source origins and isolated integration", "done": true, "evidence": "scripts/test_fork_distribution.py"},
-      {"name": "Visible GitHub source and app update controls", "done": true, "evidence": "crates/ui/src/app/updates_tests.rs"},
-      {"name": "Combined distribution checks before replacement", "done": true, "evidence": "crates/update/src/distribution/tests.rs"},
-      {"name": "Complete packages, notices and source identity", "done": true, "evidence": "scripts/fork_package.py"},
-      {"name": "Latest combined build validated on every platform", "done": false},
-      {"name": "Published common release channel", "done": false},
-      {"name": "Scheduled upstream integration and promotion", "done": false}
-    ]}
+    {
+      "name": "Créer ensemble",
+      "color": "#63e5c1",
+      "milestones": [
+        {
+          "name": "Ordre des modifications validé par un hôte",
+          "done": true,
+          "evidence": "crates/collaboration/tests/session.rs"
+        },
+        {
+          "name": "Lectures audio locales indépendantes",
+          "done": true,
+          "evidence": "crates/multiplayer/tests/lan.rs"
+        },
+        {
+          "name": "LAN chiffré et invitations à usage unique",
+          "done": true,
+          "evidence": "crates/multiplayer/src/transport_tests.rs"
+        },
+        {
+          "name": "Créer/rejoindre et contrôles confirmés dans l’interface",
+          "done": true,
+          "evidence": "crates/ui/src/app/multiplayer_tests.rs"
+        },
+        {
+          "name": "Essai réel sur deux ordinateurs",
+          "done": false
+        },
+        {
+          "name": "Partage d’un projet existant et de ses fichiers",
+          "done": false
+        },
+        {
+          "name": "Édition commune des notes et clips",
+          "done": false
+        },
+        {
+          "name": "Partage des enregistrements",
+          "done": false
+        },
+        {
+          "name": "Sessions Internet et reconnexion",
+          "done": false
+        }
+      ]
+    },
+    {
+      "name": "Préparer et jouer",
+      "color": "#b9a1ff",
+      "milestones": [
+        {
+          "name": "Espaces Studio / DJ dans l’application",
+          "done": true,
+          "evidence": "crates/ui/src/app/dj_tests.rs"
+        },
+        {
+          "name": "Bibliothèque audio locale persistante",
+          "done": true,
+          "evidence": "crates/dj/src/tests.rs"
+        },
+        {
+          "name": "Analyse tempo et tonalité de rbxport intégrée",
+          "done": true,
+          "evidence": "third_party/rbxport-analysis/VENDORED.md"
+        },
+        {
+          "name": "Rendu du projet vers la bibliothèque DJ",
+          "done": true,
+          "evidence": "crates/ui/src/app/dj_tests.rs"
+        },
+        {
+          "name": "Playlists et préparation de set",
+          "done": false
+        },
+        {
+          "name": "Édition des points cue et grilles rythmiques",
+          "done": false
+        },
+        {
+          "name": "Platines et espace de performance",
+          "done": false
+        },
+        {
+          "name": "Export USB et compatibilité matérielle",
+          "done": false
+        }
+      ]
+    },
+    {
+      "name": "Évoluer ensemble",
+      "color": "#ffb18d",
+      "milestones": [
+        {
+          "name": "Versions sources suivies et intégration isolée",
+          "done": true,
+          "evidence": "scripts/test_fork_distribution.py"
+        },
+        {
+          "name": "Contrôles GitHub et mises à jour dans les paramètres",
+          "done": true,
+          "evidence": "crates/ui/src/app/updates_tests.rs"
+        },
+        {
+          "name": "Vérification de la distribution avant remplacement",
+          "done": true,
+          "evidence": "crates/update/src/distribution/tests.rs"
+        },
+        {
+          "name": "Paquets complets avec crédits et identité source",
+          "done": true,
+          "evidence": "scripts/fork_package.py"
+        },
+        {
+          "name": "Version commune validée sur toutes les plateformes",
+          "done": false
+        },
+        {
+          "name": "Publication du canal de mise à jour commun",
+          "done": false
+        },
+        {
+          "name": "Intégration périodique et publication des versions",
+          "done": false
+        }
+      ]
+    }
   ]
 }

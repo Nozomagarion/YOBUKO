@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="310" viewBox="0 0 960 310" role="img" aria-label="Fork acceptance milestones">
+<!-- Copyright (C) 2026 The Suhina contributors; SPDX-License-Identifier: GPL-3.0-or-later -->
+<rect width="960" height="310" rx="20" fill="#111726"/>
+<g font-family="system-ui, sans-serif">
+<text x="32" y="40" fill="#f1f4ff" font-size="19" font-weight="700">Un même parcours musical, trois chantiers qui avancent</text>
+<text x="32" y="81" fill="#dce3f5" font-size="16">Créer ensemble</text>
+<text x="928" y="81" text-anchor="end" fill="#63e5c1" font-size="15">4 / 9 étapes réalisées</text>
+<rect x="32" y="93" width="896" height="9" rx="4.5" fill="#283147"/>
+<rect x="32" y="93" width="398.22" height="9" rx="4.5" fill="#63e5c1"/>
+<text x="32" y="148" fill="#dce3f5" font-size="16">Préparer et jouer</text>
+<text x="928" y="148" text-anchor="end" fill="#b9a1ff" font-size="15">4 / 8 étapes réalisées</text>
+<rect x="32" y="160" width="896" height="9" rx="4.5" fill="#283147"/>
+<rect x="32" y="160" width="448.00" height="9" rx="4.5" fill="#b9a1ff"/>
+<text x="32" y="215" fill="#dce3f5" font-size="16">Évoluer ensemble</text>
+<text x="928" y="215" text-anchor="end" fill="#ffb18d" font-size="15">4 / 7 étapes réalisées</text>
+<rect x="32" y="227" width="896" height="9" rx="4.5" fill="#283147"/>
+<rect x="32" y="227" width="512.00" height="9" rx="4.5" fill="#ffb18d"/>
+<text x="32" y="286" fill="#9caac2" font-size="13">Étapes vérifiables du projet. Ce suivi ne mesure ni le travail restant ni la stabilité du logiciel.</text>
+</g></svg>
