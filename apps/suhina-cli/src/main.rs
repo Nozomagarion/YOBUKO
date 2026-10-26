@@ -18,6 +18,7 @@ usage: suhina-cli render (<project.als> | --demo) -o <out.wav> [--cue <cue.wav>]
                          [--source <track or group>] [<fm>]
        suhina-cli play (<project.als> | --demo) [--scene <n> | --launcher] [<fm>] [<output>]
        suhina-cli fm-synth voices <file.syx>
+       suhina-cli theme (pack <theme-folder> [-o <out.theme.suhina>] | validate (<file.theme.suhina> | <folder>))
        suhina-cli commands [--markdown]
        suhina-cli mcp [--read-root <dir>] [--write-root <dir>] [--audio]
        suhina-cli mcp --attach
@@ -58,6 +59,10 @@ commands:
             set-hosting chooses whether a plug-in's instances share a process per file (the
             default), per vendor, or each run in one of their own
   fm-synth  fm-synth voices: list the voices in a DX7 voice or bank file (.syx)
+  theme     theme pack: pack a theme's folder (its theme.css and files) into a theme package
+            with a manifest of each file's SHA-256 sum, after checking it as an import does;
+            the package is <folder name>.theme.suhina beside the folder unless -o names it;
+            theme validate: check a package or a folder and list what the checks found
   plugin    plugin run: put an audio file through a plug-in (a name or id from plugins list)
             in its own process, offline, and write a 32-bit float stereo WAV; --tail adds
             that many seconds of silence for reverbs and delays to ring out (default 2);
@@ -155,6 +160,13 @@ fn main() -> ExitCode {
             }
         }
         Some("fm-synth") => match fm_synth(args.get(1..).unwrap_or_default()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(message) => {
+                eprintln!("error: {message}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("theme") => match theme(args.get(1..).unwrap_or_default()) {
             Ok(()) => ExitCode::SUCCESS,
             Err(message) => {
                 eprintln!("error: {message}");
@@ -445,6 +457,66 @@ fn put_fm_synth_on_note_tracks(project: &mut Project, patch: &suhina_device_fm_s
 }
 
 /// `fm-synth voices <file.syx>`.
+/// `theme pack` and `theme validate` (`docs/spec/theme-skins.md` › Theme packages).
+fn theme(args: &[String]) -> Result<(), String> {
+    use suhina_theme_package as package;
+    let usage = || {
+        format!(
+            "usage: suhina-cli theme (pack <theme-folder> [-o <out.theme.suhina>] | validate (<file.theme.suhina> | <folder>))\n\n{USAGE}"
+        )
+    };
+    let print_warnings = |warnings: &[String]| {
+        for warning in warnings {
+            println!("warning: {warning}");
+        }
+    };
+    match (args.first().map(String::as_str), args.get(1)) {
+        (Some("pack"), Some(folder)) => {
+            let folder = std::path::Path::new(folder);
+            let out = match (args.get(2).map(String::as_str), args.get(3)) {
+                (Some("-o" | "--output"), Some(out)) => std::path::PathBuf::from(out),
+                (None, _) => {
+                    let name = folder.file_name().and_then(|n| n.to_str()).ok_or("the folder has no name")?;
+                    folder.with_file_name(format!("{name}{}", package::EXTENSION))
+                }
+                _ => return Err(usage()),
+            };
+            let id = folder
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.to_ascii_lowercase().replace(' ', "-"))
+                .ok_or("the folder has no name")?;
+            let files = package::read_folder(folder)?;
+            let name = files
+                .get("theme.css")
+                .and_then(|css| std::str::from_utf8(css).ok())
+                .and_then(package::sheet_name)
+                .unwrap_or_else(|| id.clone());
+            let warnings = package::validate(&files)?;
+            let bytes = package::pack(&id, &name, &files)?;
+            std::fs::write(&out, bytes).map_err(|e| format!("{}: {e}", out.display()))?;
+            print_warnings(&warnings);
+            println!("packed {name} ({} files) into {}", files.len(), out.display());
+            Ok(())
+        }
+        (Some("validate"), Some(path)) => {
+            let path = std::path::Path::new(path);
+            let (what, warnings) = if path.is_dir() {
+                let files = package::read_folder(path)?;
+                (format!("{} files", files.len()), package::validate(&files)?)
+            } else {
+                let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let read = package::read(&bytes)?;
+                (format!("{} ({}), {} files", read.name, read.id, read.files.len()), read.warnings)
+            };
+            print_warnings(&warnings);
+            println!("valid: {what}, {} warnings", warnings.len());
+            Ok(())
+        }
+        _ => Err(usage()),
+    }
+}
+
 fn fm_synth(args: &[String]) -> Result<(), String> {
     let (Some("voices"), Some(path)) = (args.first().map(String::as_str), args.get(1)) else {
         return Err(format!("usage: suhina-cli fm-synth voices <file.syx>\n\n{USAGE}"));

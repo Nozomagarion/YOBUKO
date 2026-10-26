@@ -566,3 +566,265 @@ fn a_project_closed_during_the_gather_stops_the_export_with_its_name() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_panel_the_theme_lays_over_the_view_is_drawn_above_it() {
+    let ctx = egui::Context::default();
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    app.settings.animations = false;
+    app.settings.browser_open = true;
+    app.use_test_skin(crate::kit::skin::Skin {
+        css: Some(std::sync::Arc::from(
+            "#workspace { display: grid; grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr); } \
+             #panel-main { grid-column: 1; grid-row: 1; } \
+             #panel-browser { grid-column: 1; grid-row: 1; width: 260px; justify-self: start; }",
+        )),
+        ..Default::default()
+    });
+    let layer = egui::LayerId::new(egui::Order::Middle, Id::new(("workspace-overlay", "panel-browser")));
+    let mut drawn = false;
+    for _ in 0..4 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| {
+                app.ui(ui);
+                drawn = ui.ctx().graphics(|layers| layers.get(layer).is_some_and(|list| !list.is_empty()));
+            },
+        );
+        output.textures_delta.clear();
+    }
+    app.use_test_skin(crate::kit::skin::Skin::default());
+    assert!(drawn, "the browser is drawn on its own layer over the view");
+}
+
+#[test]
+fn a_bar_draws_its_separator_in_its_own_border_colour() {
+    let ctx = egui::Context::default();
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    app.settings.animations = false;
+    app.use_test_skin(crate::kit::skin::Skin {
+        css: Some(std::sync::Arc::from(".menu-bar { border-color: #FF0000; }")),
+        ..Default::default()
+    });
+    let red = egui::Color32::from_rgb(0xFF, 0, 0);
+    let mut found = false;
+    for _ in 0..4 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| app.ui(ui),
+        );
+        output.textures_delta.clear();
+        // The separator runs the window's whole width; the toolbar's own lines are short.
+        found = output.shapes.iter().any(|shape| match &shape.shape {
+            egui::Shape::LineSegment { points, stroke } => {
+                stroke.color == red && (points[1].x - points[0].x).abs() > 1000.0
+            }
+            egui::Shape::Rect(rect) => rect.fill == red && rect.rect.width() > 1000.0 && rect.rect.height() <= 2.0,
+            _ => false,
+        });
+    }
+    app.use_test_skin(crate::kit::skin::Skin::default());
+    assert!(found, "the line under the menu bar is red");
+}
+
+#[test]
+fn a_bar_without_a_line_fills_the_line_with_its_background() {
+    let ctx = egui::Context::default();
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    app.settings.animations = false;
+    app.use_test_skin(crate::kit::skin::Skin {
+        css: Some(std::sync::Arc::from(".menu-bar { background-color: #00FF00; border-width: 0; }")),
+        ..Default::default()
+    });
+    let green = egui::Color32::from_rgb(0, 0xFF, 0);
+    let mut found = false;
+    for _ in 0..4 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| app.ui(ui),
+        );
+        output.textures_delta.clear();
+        found = output.shapes.iter().any(|shape| match &shape.shape {
+            egui::Shape::LineSegment { points, stroke } => {
+                stroke.color == green && (points[1].x - points[0].x).abs() > 1000.0
+            }
+            egui::Shape::Rect(rect) => rect.fill == green && rect.rect.width() > 1000.0 && rect.rect.height() <= 2.0,
+            _ => false,
+        });
+    }
+    app.use_test_skin(crate::kit::skin::Skin::default());
+    assert!(found, "the menu bar's line is its own green");
+}
+
+#[test]
+fn a_theme_keeps_the_header_column_at_its_least_width() {
+    let ctx = egui::Context::default();
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    app.settings.animations = false;
+    app.shown = View::Arrangement;
+    // As a theme file is read: the sheet's --suhina-* values are the app's.
+    let css = ".arrangement { --suhina-header-min-width: 330px; }";
+    let mut theme = crate::kit::theme::Theme::default();
+    assert!(crate::kit::theme_css::read_host_rules(&mut theme, css).is_empty());
+    theme.skin.css = Some(std::sync::Arc::from(css));
+    app.use_test_skin(theme.skin);
+    app.arrangement.header_width = 200.0;
+    for _ in 0..3 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| app.ui(ui),
+        );
+        output.textures_delta.clear();
+    }
+    app.use_test_skin(crate::kit::skin::Skin::default());
+    assert_eq!(app.arrangement.header_width, 330.0);
+}
+
+#[test]
+fn an_arrangement_header_and_name_draw_the_sheet_s_backgrounds() {
+    let ctx = egui::Context::default();
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    app.settings.animations = false;
+    app.shown = View::Arrangement;
+    app.use_test_skin(crate::kit::skin::Skin {
+        css: Some(std::sync::Arc::from(
+            ".arrangement .track-header { background-color: #102030; } \
+             .arrangement .track-name { background-color: #FF0000; }",
+        )),
+        ..Default::default()
+    });
+    let (mut header, mut name) = (false, false);
+    for _ in 0..4 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| app.ui(ui),
+        );
+        output.textures_delta.clear();
+        for shape in &output.shapes {
+            if let egui::Shape::Rect(rect) = &shape.shape {
+                header |= rect.fill == egui::Color32::from_rgb(0x10, 0x20, 0x30);
+                name |= rect.fill == egui::Color32::from_rgb(0xFF, 0, 0);
+            }
+        }
+    }
+    app.use_test_skin(crate::kit::skin::Skin::default());
+    assert!(header && name, "header {header}, name {name}");
+}
+
+#[test]
+fn a_clip_takes_its_radius_opacity_and_name_colour_from_the_sheet() {
+    let ctx = egui::Context::default();
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    app.settings.animations = false;
+    app.shown = View::Arrangement;
+    app.use_test_skin(crate::kit::skin::Skin {
+        css: Some(std::sync::Arc::from(
+            ".clip { border-radius: 9px; opacity: 0.5; background-color: #2040FF; } \
+             .clip-name { color: #FF0000; }",
+        )),
+        ..Default::default()
+    });
+    let (mut round, mut faded, mut red_name) = (false, false, false);
+    for _ in 0..4 {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1280.0, 800.0))),
+                ..Default::default()
+            },
+            |ui| app.ui(ui),
+        );
+        output.textures_delta.clear();
+        for shape in &output.shapes {
+            match &shape.shape {
+                egui::Shape::Rect(rect) if rect.corner_radius.nw == 9 => {
+                    round = true;
+                    faded |= rect.fill.a() < 200;
+                }
+                egui::Shape::Text(text) => {
+                    red_name |= text.galley.job.sections.iter().any(|s| {
+                        let c = s.format.color;
+                        c.r() > 0 && c.g() == 0 && c.b() == 0
+                    });
+                }
+                _ => {}
+            }
+        }
+    }
+    app.use_test_skin(crate::kit::skin::Skin::default());
+    assert!(round && faded && red_name, "round {round}, faded {faded}, red name {red_name}");
+}
+
+#[test]
+fn a_rename_in_place_covers_the_name_drawn_under_it() {
+    use egui_kittest::kittest::Queryable;
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    app.settings.animations = false;
+    app.shown = View::Arrangement;
+    let track = app.session().unwrap().project().tracks[0].id.0;
+    let mut harness =
+        egui_kittest::Harness::builder().with_size((1280.0, 800.0)).build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run();
+    harness.state_mut().rename = Some((json!({ "rename_track": track }), "Renamed".into(), false));
+    harness.run();
+    let field = harness.get_by_label("Track name").rect();
+    let back = theme::control_background().to_opaque();
+    assert!(
+        harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
+            egui::Shape::Rect(rect) if rect.fill == back && rect.rect.contains_rect(field))),
+        "an opaque back under the field"
+    );
+}
+
+#[test]
+fn css_workspace_moves_native_controls_and_preserves_project_state() {
+    use egui_kittest::kittest::Queryable;
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    app.settings.animations = false;
+    app.settings.browser_open = true;
+    app.detail_open = true;
+    let mut harness =
+        egui_kittest::Harness::builder().with_size((1280.0, 800.0)).build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run();
+    // Let the normal first-frame project/theme initialization finish before
+    // checking that changing presentation does not edit the project.
+    let before = harness.state().session().unwrap().project().clone();
+    harness.state_mut().use_test_skin(crate::kit::skin::Skin {css:Some(std::sync::Arc::from("#workspace {display:grid;grid-template-columns:minmax(0,1fr) 240px;grid-template-rows:minmax(0,1fr) 160px;gap:8px;} #panel-browser {grid-column:2;grid-row:1 / -1;} #panel-main {grid-column:1;grid-row:1;} #panel-detail {grid-column:1;grid-row:2;}")),..Default::default()});
+    harness.run();
+    let slot = harness.get_by_label("Stop Keys (scene 1)").rect();
+    assert!(slot.right() < 1032.0, "native slot uses CSS main rectangle: {slot:?}");
+    assert!(harness.query_by_label("Detail area splitter").is_none());
+    assert_eq!(harness.state().session().unwrap().project(), &before);
+    harness.state_mut().use_test_skin(crate::kit::skin::Skin::default());
+    harness.run();
+    let native_slot = harness.get_by_label("Stop Keys (scene 1)").rect();
+    assert!(
+        native_slot.left() > slot.left() + 100.0,
+        "removing CSS restores the native browser beside the view: {slot:?} -> {native_slot:?}"
+    );
+    assert!(harness.query_by_label("Detail area splitter").is_some());
+    assert_eq!(harness.state().session().unwrap().project(), &before);
+    crate::kit::skin::configure(&crate::kit::skin::Skin::default());
+}

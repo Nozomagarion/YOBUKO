@@ -31,13 +31,15 @@ impl App {
                     }
                     Err(e) => self.status = Status::Error(e.message().to_owned()),
                 }
-            } else if is(&path, "json") || is(&path, "zip") {
+            } else if is_theme_package(&path) || is(&path, "json") || is(&path, "zip") || is(&path, "css") {
+                // Before projects: a package's name ends in `.suhina` too.
+                self.status = Status::Hint(format!("Bringing in the theme {}", path.display()));
                 self.themes.import(path);
             } else if (is(&path, "als") || suhina_session::is_project_file(&path)) && !opened {
                 opened = true;
                 self.request_open(path);
             } else {
-                let what = "is not a sample, a MIDI file, a project (.suhina), a Live Set (.als), a theme (.json), a zip of themes or a folder for the browser";
+                let what = "is not a sample, a MIDI file, a project (.suhina), a Live Set (.als), a theme package (.theme.suhina), a theme (.css or .json), a zip of themes or a folder for the browser";
                 self.status = Status::Error(format!("{} {what}", path.display()));
             }
         }
@@ -222,14 +224,14 @@ impl App {
         let font = theme::ui_font(theme::TEXT_SMALL);
         let galley = widgets::fitted(&painter, &text, font, theme::text_primary(), 280.0);
         let rect = Rect::from_min_size(pointer + Vec2::new(14.0, 10.0), galley.size() + Vec2::new(PAD * 2.0, 6.0));
-        painter.rect_filled(rect, 0.0, theme::control_active());
+        painter.fill_background(rect, 0.0, theme::control_active());
         painter.rect_stroke(
             rect,
             0.0,
             theme::hairline(if label.is_some() { theme::accent() } else { theme::border_strong() }),
             egui::StrokeKind::Inside,
         );
-        painter.galley(rect.min + Vec2::new(PAD, 3.0), galley, theme::text_primary());
+        widgets::paint_text(&painter, rect.min + Vec2::new(PAD, 3.0), galley, theme::text_primary());
         ui.ctx().request_repaint();
     }
 
@@ -686,18 +688,32 @@ pub(super) fn drop_overlay(ui: &Ui, area: Rect) {
     let (project, themes) = ui.input(|i| {
         let files = &i.raw.hovered_files;
         (
-            files.iter().any(|f| is(f, "als") || f.path.as_deref().is_some_and(suhina_session::is_project_file)),
-            files.iter().any(|f| is(f, "json") || is(f, "zip")),
+            files.iter().any(|f| {
+                is(f, "als")
+                    || f.path.as_deref().is_some_and(|p| suhina_session::is_project_file(p) && !is_theme_package(p))
+            }),
+            files.iter().any(|f| {
+                is(f, "json") || is(f, "zip") || is(f, "css") || f.path.as_deref().is_some_and(is_theme_package)
+            }),
         )
     });
     let shown = motion::toward(ui.ctx(), Id::new("drop-overlay"), project || themes, motion::HOVER);
     if shown <= 0.0 {
         return;
     }
-    let painter = ui.painter_at(area);
+    // Above every window, Settings included, which takes the drop like the rest of the window.
+    let painter = ui
+        .ctx()
+        .layer_painter(egui::LayerId::new(egui::Order::Foreground, Id::new("drop-overlay")))
+        .with_clip_rect(area);
     painter.rect_filled(area, 0.0, theme::window_background().gamma_multiply(DROP_DIM * shown));
     let text = theme::text_primary().gamma_multiply(shown);
     // A file whose name is not known yet counts as both; a project is the likelier.
-    let what = if themes && !project { "Drop to add the themes" } else { "Drop to open" };
+    let what = if themes && !project { "Drop to bring in the theme" } else { "Drop to open" };
     painter.text(area.center(), Align2::CENTER_CENTER, what, theme::ui_font(theme::TEXT + 2.0), text);
+}
+
+/// Whether `path` names a theme package (`<name>.theme.suhina`), which is no project.
+pub fn is_theme_package(path: &std::path::Path) -> bool {
+    path.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.to_ascii_lowercase().ends_with(".theme.suhina"))
 }

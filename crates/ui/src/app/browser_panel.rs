@@ -24,7 +24,8 @@ impl App {
 
     /// Lays out the browser at the side of `area`, draws it with its handle, and returns what is
     /// left for the view.
-    pub(super) fn browser_panel(&mut self, ui: &mut Ui, area: Rect) -> Rect {
+    pub(super) fn browser_panel(&mut self, ui: &mut Ui, area: Rect, geometry: Option<(Rect, Rect)>) -> Rect {
+        let _panel_style = crate::kit::style_class::enter_named("workspace-panel", "panel-browser");
         let (low, high) = crate::settings::BROWSER_WIDTHS;
         let widest = (high as f32).min(area.width() * crate::settings::BROWSER_SHARE).max(low as f32);
         let width = (self.settings.browser_width as f32).clamp(low as f32, widest);
@@ -33,7 +34,9 @@ impl App {
         // squeezed, and its handle takes hold only once it is all there.
         let part = self.browser_part.clamp(0.0, 1.0);
         let (shown, handle_width) = (width * part, BROWSER_HANDLE * part);
-        let (panel, handle, rest) = if left {
+        let (panel, handle, rest) = if let Some((panel, rest)) = geometry {
+            (panel, Rect::NOTHING, rest)
+        } else if left {
             let panel = Rect::from_min_max(
                 Pos2::new(area.left() + shown - width, area.top()),
                 Pos2::new(area.left() + shown, area.bottom()),
@@ -55,7 +58,7 @@ impl App {
             (panel, handle, Rect::from_min_max(area.min, Pos2::new(handle.left(), area.bottom())))
         };
         let default_width = crate::settings::Settings::default().browser_width;
-        let (resized, done) = if part >= 1.0 {
+        let (resized, done) = if part >= 1.0 && geometry.is_none() {
             browser_view::resize_handle(ui, handle, width, left, default_width as f32)
         } else {
             (None, false)
@@ -200,7 +203,7 @@ impl App {
                 ui.max_rect()
             };
             ui.allocate_rect(rect, egui::Sense::hover());
-            ui.painter().rect_filled(rect, 0.0, theme::window_background());
+            ui.painter().fill_background(rect, 0.0, theme::window_background());
             let changed = panel.show(ui, rect, browser, projects, &mut settings, revision);
             // The window has its own keyboard: its keys run the same actions as the main window's,
             // unless a field in it is being typed in. Embedded, the main window reads them.

@@ -47,9 +47,11 @@ suhina-output = { path = "crates/output" }
 suhina-realtime = { path = "crates/realtime" }
 suhina-midi = { path = "crates/midi" }
 suhina-ui = { path = "crates/ui" }
+suhina-style = { path = "crates/style" }
 suhina-soundmap = { path = "crates/soundmap" }
 suhina-separation = { path = "crates/separation" }
 suhina-update = { path = "crates/update" }
+suhina-theme-package = { path = "crates/theme-package" }
 
 # external (licences must be GPLv3-compatible)
 hound = "3.5"  # Apache-2.0

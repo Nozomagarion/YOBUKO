@@ -3,6 +3,7 @@
 
 //! SDK drawing programs are evaluated only on the UI thread.
 use crate::detail::detail_view::GraphParameter;
+use crate::kit::surface::Backgrounds as _;
 use crate::kit::widgets::Action;
 use egui::{Color32, Pos2, Rect, Stroke, Vec2};
 use serde_json::json;
@@ -188,7 +189,7 @@ fn sample_waveform(
     });
     let source = ui.ctx().data(|data| data.get_temp::<Arc<suhina_engine::AudioData>>(sample_source_id(track, device)));
     let painter = ui.painter_at(visible);
-    painter.rect_filled(bounds, 0., crate::kit::theme::control_background());
+    painter.fill_background(bounds, 0., crate::kit::theme::control_background());
     let colors = crate::kit::theme::palette();
     let compact = bounds.height() < 100.;
     let field = if compact {
@@ -442,7 +443,7 @@ fn sample_waveform(
             egui::Align2::CENTER_CENTER,
             caption,
             crate::kit::theme::ui_font(10.),
-            crate::kit::theme::window_background(),
+            crate::kit::theme::text_inverse(),
         );
         let response = ui
             .interact(marker, egui::Id::new(("sample-marker", track.0, device, id)), egui::Sense::click_and_drag())
@@ -693,22 +694,71 @@ fn envelope(
 }
 
 fn rgba(color: egui::Color32) -> [u8; 4] {
-    [color.r(), color.g(), color.b(), color.a()]
+    color.to_srgba_unmultiplied()
 }
 fn accent_text(accent: egui::Color32) -> [u8; 4] {
     let luminance = 0.2126 * f32::from(accent.r()) + 0.7152 * f32::from(accent.g()) + 0.0722 * f32::from(accent.b());
     if luminance > 145.0 { [29, 28, 26, 255] } else { [255, 255, 255, 255] }
 }
-fn images(ctx: &egui::Context, source: &Arc<DeviceUi>) -> Arc<Loaded> {
+fn widget_palette() -> WidgetPalette {
     let colors = crate::kit::theme::palette();
-    let palette = WidgetPalette {
+    WidgetPalette {
         text: rgba(colors.text_primary),
         panel: rgba(colors.panel_background),
         control: rgba(colors.control_background),
         border: rgba(colors.border),
         accent: rgba(colors.accent),
         accent_text: accent_text(colors.accent),
-    };
+    }
+}
+/// The widget palette of the control whose style scope is open: colours its CSS writes
+/// (`color`, `background-color`, `border-color`, `accent-color`) replace the theme's.
+fn styled_palette(mut palette: WidgetPalette) -> WidgetPalette {
+    let Some(style) = crate::kit::style_class::computed() else { return palette };
+    if style.authored.color {
+        palette.text = rgba(style.color);
+    }
+    if style.authored.background {
+        palette.control = rgba(style.background);
+    }
+    if style.authored.border {
+        palette.border = rgba(style.border);
+    }
+    if style.authored.accent {
+        palette.accent = rgba(style.accent);
+        palette.accent_text = accent_text(style.accent);
+    }
+    palette
+}
+
+/// A control's drawings in a palette other than the panel's, kept so a styled control is not
+/// rebuilt every frame. Bounded; cleared when full.
+fn styled_drawings(
+    ctx: &egui::Context,
+    loaded: &Loaded,
+    control: &CustomControl,
+    palette: WidgetPalette,
+) -> Arc<[Draw]> {
+    type Cache = std::collections::HashMap<(usize, usize, [[u8; 4]; 6]), Arc<[Draw]>>;
+    let key = egui::Id::new("sd-styled-drawings");
+    let index = loaded.source.controls.iter().position(|c| std::ptr::eq(c, control)).unwrap_or(usize::MAX);
+    let colors = [palette.text, palette.panel, palette.control, palette.border, palette.accent, palette.accent_text];
+    let cache_key = (Arc::as_ptr(&loaded.source) as usize, index, colors);
+    let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<Arc<std::sync::Mutex<Cache>>>(key).clone());
+    let Ok(mut cache) = cache.lock() else { return control.drawings_with_palette(&palette).into_owned().into() };
+    if let Some(found) = cache.get(&cache_key) {
+        return found.clone();
+    }
+    let drawings: Arc<[Draw]> = control.drawings_with_palette(&palette).into_owned().into();
+    if cache.len() >= 512 {
+        cache.clear();
+    }
+    cache.insert(cache_key, drawings.clone());
+    drawings
+}
+
+fn images(ctx: &egui::Context, source: &Arc<DeviceUi>) -> Arc<Loaded> {
+    let palette = widget_palette();
     let key = egui::Id::new("sd-image-cache");
     let mut cache = ctx.data_mut(|d| d.get_temp::<Vec<Arc<Loaded>>>(key)).unwrap_or_default();
     if let Some(found) = cache.iter().find(|v| Arc::ptr_eq(&v.source, source) && v.palette == palette) {
@@ -754,36 +804,59 @@ fn normalized(p: &GraphParameter, log: bool) -> f64 {
     }
 }
 fn paint(painter: &egui::Painter, drawings: &[Draw], origin: Pos2, parameters: &[GraphParameter], loaded: &Loaded) {
+    paint_scaled(painter, drawings, origin, parameters, loaded, Vec2::splat(1.0));
+}
+
+fn paint_scaled(
+    painter: &egui::Painter,
+    drawings: &[Draw],
+    origin: Pos2,
+    parameters: &[GraphParameter],
+    loaded: &Loaded,
+    scale: Vec2,
+) {
+    let weight = scale.x.min(scale.y);
     let lookup = |id: &str, norm: bool, log: bool| {
         parameters.iter().find(|p| p.id == id).map_or(0.0, |p| if norm { normalized(p, log) } else { p.value })
     };
     let value = |v: &UiValue| v.evaluate(&lookup);
-    let point = |p: &[UiValue; 2]| origin + Vec2::new(value(&p[0]), value(&p[1]));
+    let point = |p: &[UiValue; 2]| origin + Vec2::new(value(&p[0]), value(&p[1])) * scale;
     let rectangle = |r: &[UiValue; 4]| {
         Rect::from_min_size(
-            origin + Vec2::new(value(&r[0]), value(&r[1])),
-            Vec2::new(value(&r[2]).clamp(0.0, 8192.0), value(&r[3]).clamp(0.0, 8192.0)),
+            origin + Vec2::new(value(&r[0]), value(&r[1])) * scale,
+            Vec2::new(value(&r[2]).clamp(0.0, 8192.0), value(&r[3]).clamp(0.0, 8192.0)) * scale,
         )
     };
     for draw in drawings {
         match draw {
             Draw::Rect { rect, color: c, radius } => {
-                painter.rect_filled(rectangle(rect), *radius, color(*c));
+                let rect = rectangle(rect);
+                let radius = crate::kit::style_class::radius(*radius * weight);
+                painter.rect_filled(rect, radius, crate::kit::style_class::background(color(*c)));
+                crate::kit::native_css::background_rounded(painter, rect, radius);
             }
             Draw::Circle { center, radius, color: c } => {
-                painter.circle_filled(point(center), value(radius).clamp(0.0, 8192.0), color(*c));
+                painter.circle_filled(
+                    point(center),
+                    (value(radius).clamp(0.0, 8192.0) * weight).min(8192.0),
+                    color(*c),
+                );
             }
             Draw::Line { from, to, color: c, width } => {
-                painter.line_segment([point(from), point(to)], Stroke::new(*width, color(*c)));
+                painter.line_segment([point(from), point(to)], Stroke::new(*width * weight, color(*c)));
             }
             Draw::Path { points, color: c, width, closed, fill } => {
                 let points = points.iter().map(point).collect::<Vec<_>>();
                 if let Some(fill) = fill {
-                    painter.add(egui::Shape::convex_polygon(points, color(*fill), Stroke::new(*width, color(*c))));
+                    painter.add(egui::Shape::convex_polygon(
+                        points,
+                        color(*fill),
+                        Stroke::new(*width * weight, color(*c)),
+                    ));
                 } else if *closed {
-                    painter.add(egui::Shape::closed_line(points, Stroke::new(*width, color(*c))));
+                    painter.add(egui::Shape::closed_line(points, Stroke::new(*width * weight, color(*c))));
                 } else {
-                    painter.add(egui::Shape::line(points, Stroke::new(*width, color(*c))));
+                    painter.add(egui::Shape::line(points, Stroke::new(*width * weight, color(*c))));
                 }
             }
             Draw::Arc { center, radius, start, end, color: c, width } => {
@@ -794,10 +867,10 @@ fn paint(painter: &egui::Painter, drawings: &[Draw], origin: Pos2, parameters: &
                 let points = (0..=64)
                     .map(|i| {
                         let a = start + (end - start) * i as f32 / 64.0;
-                        center + Vec2::new(a.cos(), a.sin()) * radius
+                        center + Vec2::new(a.cos(), a.sin()) * radius * scale
                     })
                     .collect();
-                painter.add(egui::Shape::line(points, Stroke::new(*width, color(*c))));
+                painter.add(egui::Shape::line(points, Stroke::new(*width * weight, color(*c))));
             }
             Draw::Text { position, text, color: c, size, parameter, decimals, align, format } => {
                 let label = parameter.as_ref().and_then(|id| parameters.iter().find(|p| p.id == *id)).map_or_else(
@@ -827,8 +900,9 @@ fn paint(painter: &egui::Painter, drawings: &[Draw], origin: Pos2, parameters: &
                     },
                 );
                 let position = point(position);
-                let mut font = egui::FontId::proportional(*size);
-                let mut galley = painter.layout_no_wrap(label.clone(), font.clone(), color(*c));
+                let ink = crate::kit::style_class::foreground(color(*c));
+                let mut font = crate::kit::theme::ui_font((*size * weight).clamp(1.0, 256.0));
+                let mut galley = painter.layout_no_wrap(label.clone(), font.clone(), ink);
                 if parameter.is_some() {
                     let clip = painter.clip_rect();
                     let available_width = if *align == TextAlign::Center {
@@ -842,11 +916,11 @@ fn paint(painter: &egui::Painter, drawings: &[Draw], origin: Pos2, parameters: &
                         .clamp(0., 1.);
                     if scale < 1. {
                         font.size = (font.size * scale).max(8.);
-                        galley = painter.layout_no_wrap(label, font, color(*c));
+                        galley = painter.layout_no_wrap(label, font, ink);
                     }
                 }
                 let offset = if *align == TextAlign::Center { Vec2::new(galley.size().x / 2., 0.) } else { Vec2::ZERO };
-                painter.galley(position - offset, galley, color(*c));
+                crate::kit::widgets::paint_text(painter, position - offset, galley, ink);
             }
             Draw::Gradient { rect, colors } => {
                 let r = rectangle(rect);
@@ -867,7 +941,7 @@ fn paint(painter: &egui::Painter, drawings: &[Draw], origin: Pos2, parameters: &
                             let mut uv = Rect::from_min_max(Pos2::new(uv[0], uv[1]), Pos2::new(uv[2], uv[3]));
                             let size = texture.size_vec2() * uv.size();
                             if let Some([w, h]) = tile_size {
-                                uv.max = uv.min + Vec2::new(r.width() / w, r.height() / h);
+                                uv.max = uv.min + Vec2::new(r.width() / (w * scale.x), r.height() / (h * scale.y));
                             } else if size.x > 0.0 && size.y > 0.0 && r.width() > 0.0 && r.height() > 0.0 {
                                 match fit {
                                     ImageFit::Contain => {
@@ -899,6 +973,137 @@ fn paint(painter: &egui::Painter, drawings: &[Draw], origin: Pos2, parameters: &
         }
     }
 }
+fn control_class(control: &suhina_device_sdk::ui::CustomControl) -> &'static str {
+    match &control.widget {
+        Some(Widget::Knob { .. } | Widget::Dial { .. }) => "knob",
+        Some(Widget::Button { .. } | Widget::Disclosure { .. }) => "button",
+        Some(Widget::Number { .. } | Widget::Stepper { .. }) => "value",
+        Some(Widget::Menu | Widget::ValueMenu { .. } | Widget::WaveformMenu) => "dropdown",
+        Some(Widget::Label { .. }) => "label",
+        Some(Widget::Panel { .. }) => "device-section",
+        Some(Widget::Separator) => "separator",
+        Some(Widget::Envelope { .. }) => "envelope",
+        Some(Widget::SampleWaveform | Widget::WaveformPreview { .. }) => "waveform",
+        Some(Widget::FilterBand { .. }) => "xy-control",
+        _ => "device-control",
+    }
+}
+
+/// Reuse SDK drawings/geometry and native responses. Artwork replaces only the
+/// standard face/pointer; labels, readouts and the input/command path stay native.
+#[allow(clippy::too_many_arguments)]
+fn paint_control(
+    painter: &egui::Painter,
+    effects: &egui::Painter,
+    control: &suhina_device_sdk::ui::CustomControl,
+    drawings: &[Draw],
+    bounds: Rect,
+    parameters: &[GraphParameter],
+    loaded: &Loaded,
+    response: Option<&egui::Response>,
+) {
+    let class = control_class(control);
+    let _scope = response
+        .map(|r| crate::kit::style_class::enter_response(class, r))
+        .unwrap_or_else(|| crate::kit::style_class::enter(class));
+    let palette = styled_palette(widget_palette());
+    let restyled;
+    let drawings: &[Draw] = if palette != loaded.palette {
+        restyled = styled_drawings(painter.ctx(), loaded, control, palette);
+        &restyled
+    } else {
+        drawings
+    };
+    let value = |v: &UiValue| {
+        v.evaluate(&|id, norm, log| {
+            parameters.iter().find(|p| p.id == id).map_or(0.0, |p| if norm { normalized(p, log) } else { p.value })
+        })
+    };
+    let native = Vec2::new(control.bounds[2], control.bounds[3]).max(Vec2::splat(1.0));
+    let knob = matches!(control.widget, Some(Widget::Knob { .. } | Widget::Dial { .. }));
+    let mut scale = (bounds.size() / native).clamp(Vec2::splat(1.0 / 8192.0), Vec2::splat(4096.0));
+    if knob {
+        scale = Vec2::splat(scale.x.min(scale.y));
+    }
+    let origin = if knob { bounds.center() - native * scale * 0.5 } else { bounds.min };
+    let point = |p: &[UiValue; 2]| origin + Vec2::new(value(&p[0]), value(&p[1])) * scale;
+    let circle = knob
+        .then(|| {
+            drawings.iter().find_map(|draw| match draw {
+                Draw::Circle { center, radius, .. } => {
+                    Some((point(center), (value(radius).clamp(0.0, 8192.0) * scale.x.min(scale.y)).min(8192.0)))
+                }
+                _ => None,
+            })
+        })
+        .flatten();
+    let on =
+        control.x.iter().chain(control.y.iter()).any(|b| {
+            parameters.iter().find(|p| p.id == b.parameter).is_some_and(|p| normalized(p, b.logarithmic) >= 0.5)
+        });
+    let state = response.map_or(crate::kit::skin::State::Normal, |r| crate::kit::skin::State::response(r, !knob && on));
+    let ink = crate::kit::style_class::foreground(crate::kit::theme::text_value());
+    let mut body = None;
+    let mut knob_effects = false;
+    for draw in drawings.iter() {
+        if let Some((center, radius)) = circle {
+            let rect = Rect::from_center_size(center, Vec2::splat(radius * 2.0));
+            if matches!(draw, Draw::Circle { .. }) {
+                let replaced =
+                    *body.get_or_insert_with(|| crate::kit::skin::paint(painter, rect, "knob.body", state, ink, 0.0));
+                if replaced {
+                    if !knob_effects {
+                        crate::kit::native_css::background_rounded(effects, rect, radius);
+                        knob_effects = true;
+                    }
+                    continue;
+                }
+            }
+            if let Draw::Line { from, to, .. } = draw
+                && point(from).distance(center) < 0.1
+            {
+                let direction = point(to) - center;
+                let angle = direction.x.atan2(-direction.y);
+                if crate::kit::skin::paint(painter, rect, "knob.pointer", state, ink, angle) {
+                    continue;
+                }
+            }
+        }
+        if matches!(control.widget, Some(Widget::Button { .. }))
+            && let Draw::Rect { radius, .. } = draw
+        {
+            let replaced = *body.get_or_insert_with(|| {
+                let fill = crate::kit::style_class::background(if on {
+                    crate::kit::theme::control_active()
+                } else {
+                    crate::kit::theme::control_background()
+                });
+                let radius = crate::kit::style_class::radius(*radius * scale.x.min(scale.y));
+                let painted = crate::kit::skin::button(painter, bounds, state, fill, radius);
+                if painted {
+                    crate::kit::native_css::background_rounded(effects, bounds, radius);
+                }
+                painted
+            });
+            if replaced {
+                continue;
+            }
+        }
+        paint_scaled(painter, std::slice::from_ref(draw), origin, parameters, loaded, scale);
+        if !knob_effects
+            && matches!(draw, Draw::Circle { .. })
+            && let Some((center, radius)) = circle
+        {
+            crate::kit::native_css::background_rounded(
+                effects,
+                Rect::from_center_size(center, Vec2::splat(radius * 2.0)),
+                radius,
+            );
+            knob_effects = true;
+        }
+    }
+}
+
 pub(crate) fn show(
     ui: &mut egui::Ui,
     rect: Rect,
@@ -908,6 +1113,13 @@ pub(crate) fn show(
     at: &crate::detail::detail_view::DeviceAt,
     actions: &mut Vec<Action>,
 ) {
+    let address = at.0.iter().map(usize::to_string).collect::<Vec<_>>().join("-");
+    let _style_class =
+        crate::kit::style_class::enter_named("device-panel", &format!("track-{}-device-{address}", track.0));
+    // The panel's own sheet applies inside this scope only, over the application theme.
+    crate::kit::native_css::device_sheet(ui.ctx(), canvas.style.as_deref());
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     // The Sampler's own commands name a device on the track by its index (#600); a device inside
     // a group (#672) is named by its last step.
     let device = at.0.last().copied().unwrap_or(0);
@@ -918,7 +1130,7 @@ pub(crate) fn show(
     } else {
         color(canvas.background)
     };
-    painter.rect_filled(rect, 0.0, background);
+    painter.fill_background(rect, 0.0, background);
     paint(&painter, &canvas.layers, rect.min, parameters, &loaded);
     let sample_panel = canvas.controls.iter().any(|c| matches!(c.widget, Some(Widget::SampleWaveform)));
     for (control, drawings) in canvas.controls.iter().zip(&loaded.controls) {
@@ -944,7 +1156,16 @@ pub(crate) fn show(
         }
         let [x, y, w, h] = control.bounds;
         let bounds = Rect::from_min_size(rect.min + Vec2::new(x, y), Vec2::new(w, h));
+        let name = crate::kit::control_layout::semantic_name("device", &control.id);
+        if crate::kit::control_layout::placement(&name).hidden {
+            continue;
+        }
+        let bounds = crate::kit::control_layout::place(&name, bounds, rect);
+        let _control_scope = crate::kit::style_class::enter_named("device-control", &control.id);
         if matches!(control.widget, Some(Widget::Envelope { .. })) {
+            let _role = crate::kit::style_class::enter("envelope");
+            let mut styled_ui = crate::kit::style_class::ui(ui);
+            let ui = &mut *styled_ui;
             envelope(ui, bounds, control, parameters, (track, device), actions);
             continue;
         }
@@ -953,6 +1174,9 @@ pub(crate) fn show(
             continue;
         }
         if matches!(control.widget, Some(Widget::SampleWaveform)) {
+            let _role = crate::kit::style_class::enter("waveform");
+            let mut styled_ui = crate::kit::style_class::ui(ui);
+            let ui = &mut *styled_ui;
             sample_waveform(
                 ui,
                 bounds,
@@ -964,14 +1188,17 @@ pub(crate) fn show(
             );
             continue;
         }
-        paint(
-            &painter.with_clip_rect(bounds.intersect(painter.clip_rect())),
-            drawings,
-            bounds.min,
-            parameters,
-            &loaded,
-        );
         if matches!(control.widget, Some(Widget::Label { .. } | Widget::Panel { .. } | Widget::Separator)) {
+            paint_control(
+                &painter.with_clip_rect(bounds.intersect(painter.clip_rect())),
+                &painter,
+                control,
+                drawings,
+                bounds,
+                parameters,
+                &loaded,
+                None,
+            );
             continue;
         }
         let tooltip = if sample_panel && control.y.as_ref().is_some_and(|b| b.parameter == "source_bpm") {
@@ -1003,6 +1230,16 @@ pub(crate) fn show(
         } else {
             response
         };
+        paint_control(
+            &painter.with_clip_rect(bounds.intersect(painter.clip_rect())),
+            &painter,
+            control,
+            drawings,
+            bounds,
+            parameters,
+            &loaded,
+            Some(&response),
+        );
         if response.is_pointer_button_down_on() || response.clicked() || response.drag_started() {
             response.request_focus();
         }

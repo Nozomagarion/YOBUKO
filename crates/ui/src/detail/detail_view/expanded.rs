@@ -66,9 +66,9 @@ pub fn show_expanded(ui: &mut Ui, area: Rect, track: TrackId, device: &DeviceBox
             // The whole main area takes the pointer, so the views under it get no clicks.
             let (rect, _) = ui.allocate_exact_size(area.size(), Sense::click());
             let painter = ui.painter_at(rect);
-            painter.rect_filled(rect, 0.0, theme::panel_background());
+            painter.fill_background(rect, 0.0, theme::panel_background());
             let header = Rect::from_min_size(rect.min, Vec2::new(rect.width(), ROW + PAD));
-            painter.rect_filled(header, 0.0, theme::control_background());
+            painter.fill_background(header, 0.0, theme::control_background());
             widgets::text_in(
                 &painter,
                 header.shrink2(Vec2::new(PAD * 2.0, 0.0)),
@@ -82,7 +82,7 @@ pub fn show_expanded(ui: &mut Ui, area: Rect, track: TrackId, device: &DeviceBox
             let response = widgets::button_area(ui, close, Id::new("device-expanded-close"), "Close expanded panel")
                 .on_hover_text("Close the expanded panel (Esc)");
             let fill = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
-            painter.rect_filled(close, 0.0, fill);
+            painter.fill_background(close, 0.0, fill);
             for (from, to) in
                 [(Vec2::new(-4.0, -4.0), Vec2::new(4.0, 4.0)), (Vec2::new(-4.0, 4.0), Vec2::new(4.0, -4.0))]
             {
@@ -134,9 +134,18 @@ pub(super) fn graph_controls(
     actions: &mut Vec<Action>,
 ) {
     ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
+        // The list scrolls under nothing: it is cut at its own top, below the header and buttons.
+        ui.set_clip_rect(ui.clip_rect().intersect(body));
         egui::ScrollArea::both().auto_shrink([false, false]).id_salt(("sd-controls", track.0, at)).show(ui, |ui| {
             let hidden = graph.canvas.as_ref().map_or(&[][..], |c| c.hidden_parameters.as_slice());
-            let width = if graph.canvas.is_some() { body.width() } else { COMPACT_WIDTH };
+            // The generated list keeps its own width in any column, unless the theme sizes the
+            // panel (`.device { width }`): then it follows the panel, its scroll bar aside.
+            let themed = crate::kit::style_class::computed().is_some_and(|c| c.width.is_some());
+            let width = match (&graph.canvas, themed) {
+                (Some(_), _) => body.width(),
+                (None, true) => (body.width() - 8.0).max(120.0),
+                (None, false) => COMPACT_WIDTH,
+            };
             let cells = parameter_layout(&graph.parameters, width, hidden);
             let custom_size = graph.canvas.as_ref().map_or(Vec2::ZERO, |c| Vec2::new(c.size[0], c.size[1]));
             let nodes_height = graph.nodes.len() as f32 * NODE_ROW;
@@ -168,7 +177,7 @@ pub(super) fn node_rows(painter: &egui::Painter, body: Rect, graph: &GraphBox) {
             break;
         }
         let node_rect = Rect::from_min_size(row.min, Vec2::new((row.width() - PAD) * 0.78, NODE_ROW - PAD));
-        painter.rect_filled(node_rect, 1.0, theme::control_background());
+        painter.fill_background(node_rect, 1.0, theme::control_background());
         widgets::text_in(
             painter,
             node_rect.shrink(PAD / 2.0),
