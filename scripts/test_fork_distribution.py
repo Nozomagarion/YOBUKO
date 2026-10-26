@@ -44,6 +44,19 @@ class ForkDistribution(unittest.TestCase):
             self.assertEqual(marker['rbxport_commit'], pins['rbxport']['commit'])
             self.assertTrue((package / 'RBXPORT-COPYING').is_file())
 
+    def test_mac_bundle_metadata_is_a_signed_resource_not_nested_code(self):
+        root = Path(__file__).resolve().parent.parent
+        with tempfile.TemporaryDirectory() as folder:
+            program = Path(folder) / 'Suhina.app' / 'Contents' / 'MacOS'
+            program.mkdir(parents=True)
+            for name in ['suhina', 'suhina-cli', 'suhina-plugin-host']:
+                (program / name).write_bytes(b'fixture')
+            fork_package.write(root, program, '0.0.1', 'a' * 40)
+            self.assertEqual(sorted(p.name for p in program.iterdir()), ['suhina', 'suhina-cli', 'suhina-plugin-host'])
+            resources = program.parent / 'Resources'
+            self.assertEqual(json.loads((resources / 'DISTRIBUTION.json').read_text())['source_commit'], 'a' * 40)
+            self.assertTrue((resources / 'RBXPORT-COPYING').is_file())
+
     def test_a_missing_source_commit_or_invalid_version_cannot_be_packaged(self):
         root = Path(__file__).resolve().parent.parent
         for version, commit in [('bad version', 'a' * 40), ('0.0.1', 'main'), ('0.0.1', '')]:

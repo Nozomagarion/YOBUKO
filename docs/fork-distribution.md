@@ -55,9 +55,9 @@ in the exact binary version; target_commitish must be the full fork commit. Ever
 requires GitHub's SHA-256 digest. Test artifacts are from the same fork and have the same
 package requirements; legacy unmarked artifacts are not eligible.
 
-Before any running file is replaced, the unpacked executable folder must contain
-`DISTRIBUTION.json` naming this distribution, exact version and source commit, supported
-multiplayer API and DJ catalog versions, and full Suhina/rbxport source commits. The marker
+Before any running file is replaced, the unpacked package must contain
+`DISTRIBUTION.json` beside standalone executables, or in Contents/Resources in a Mac bundle.
+It names this distribution, exact version and source commit, supported multiplayer API and DJ catalog versions, and full Suhina/rbxport source commits. The marker
 prevents accidental cross-distribution replacement; it is not a cryptographic signature.
 GitHub HTTPS/repository ownership and the archive checksum remain the trust boundary.
 
@@ -76,7 +76,9 @@ Workspace fmt/clippy/tests, source verification, documentation and dependency ch
 known baseline failures block distribution too. There is no implicit skip/override.
 
 `fork_package.py` requires all three executables and adds the distribution marker, source pins
-and rbxport notices. For a Mac app it runs in Contents/MacOS before the final ad hoc signature.
+and rbxport notices. For a Mac app pass Contents/MacOS; it places metadata in Contents/Resources
+before the final ad hoc signature. Non-code files must not sit in MacOS: their detached signature attributes would
+be lost by the updater's archive extraction. Resource signatures survive ordinary ZIP/tar extraction.
 Candidates contain corresponding source archives at the exact commit. The workflow uploads
 candidate artifacts only; it has no write token and does not publish a release.
 

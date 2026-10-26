@@ -44,7 +44,7 @@ fn commit(s: &str) -> bool {
     s.len() == 40 && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-/// The marker sits beside the executable, including inside Contents/MacOS in a Mac bundle.
+/// The marker sits beside standalone executables or in Contents/Resources for a Mac bundle.
 /// Validate before replacing any running files. This is a distribution guard, not a signature.
 pub fn validate_package(program: &Path, build: &Build) -> Result<(), String> {
     let suffix = if cfg!(windows) { ".exe" } else { "" };
@@ -53,7 +53,12 @@ pub fn validate_package(program: &Path, build: &Build) -> Result<(), String> {
             return Err(format!("the combined package is missing {name}; not installed"));
         }
     }
-    let file = std::fs::File::open(program.join(MARKER))
+    // Non-code files inside MacOS need detached signatures that archive extraction loses.
+    // Resources are covered by the bundle's ordinary content signature instead.
+    let metadata = crate::install::bundle_of(program)
+        .map(|bundle| bundle.join("Contents").join("Resources"))
+        .unwrap_or_else(|| program.to_path_buf());
+    let file = std::fs::File::open(metadata.join(MARKER))
         .map_err(|_| "the download has no multiplayer distribution manifest; not installed")?;
     let mut bytes = Vec::new();
     file.take(16385).read_to_end(&mut bytes).map_err(|e| e.to_string())?;

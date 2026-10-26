@@ -11,6 +11,7 @@ covers:
   - crates/update/src/github.rs
   - crates/update/src/net.rs
   - crates/update/src/install.rs
+  - crates/update/src/distribution.rs
   - crates/ui/src/app/updates.rs
   - crates/ui/src/settings/update_settings.rs
 ---
@@ -22,8 +23,9 @@ covers:
 In this fork all binary update endpoints refer to `Nozomagarion/suhina-daw`. The regular channel is labelled
 **Multiplayer + DJ**, uses release tag `multiplayer`, and accepts only its own package namespace
 with a SHA-256 digest. The legacy saved setting `nightly` still selects this regular channel.
-Every package must carry all three executables and a matching DISTRIBUTION.json beside them,
-including inside Contents/MacOS in a Mac app. Validation runs before any replacement. Official
+Every package must carry all three executables and a matching DISTRIBUTION.json beside standalone
+executables, or in Contents/Resources in a Mac app. This keeps metadata covered by the bundle
+signature after archive extraction, without relying on extended file attributes. Validation runs before any replacement. Official
 Suhina and standalone rbxport packages are refused; no fallback endpoint exists.
 
 Settings > General begins with GitHub updates…, which opens the combined update dialog and

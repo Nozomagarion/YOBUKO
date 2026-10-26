@@ -70,3 +70,32 @@ fn fork_source_pins_are_embedded_in_the_updater() {
     assert!(!crate::github::NIGHTLY_URL.contains("repos/suhina-daw/"));
     assert!(!crate::github::ARTIFACTS_URL.contains("repos/suhina-daw/"));
 }
+
+#[test]
+fn a_mac_bundle_requires_metadata_in_resources_and_keeps_the_same_contract_guard() {
+    let dir = tempfile::tempdir().unwrap();
+    let program = dir.path().join("Suhina.app/Contents/MacOS");
+    let resources = dir.path().join("Suhina.app/Contents/Resources");
+    std::fs::create_dir_all(&program).unwrap();
+    std::fs::create_dir_all(&resources).unwrap();
+    let build = build();
+    for name in ["suhina", "suhina-cli", "suhina-plugin-host"] {
+        let suffix = if cfg!(windows) { ".exe" } else { "" };
+        std::fs::write(program.join(format!("{name}{suffix}")), b"fixture").unwrap();
+    }
+    let good = serde_json::json!({"schema":1,"distribution":ID,"version":build.version,
+        "source_commit":build.commit,"multiplayer_api":1,"dj_catalog":1,
+        "suhina_commit":"b".repeat(40),"rbxport_commit":"c".repeat(40)});
+    std::fs::write(program.join(MARKER), serde_json::to_vec(&good).unwrap()).unwrap();
+    assert!(
+        validate_package(&program, &build).is_err(),
+        "metadata in the executable folder requires nonportable detached signatures"
+    );
+    std::fs::remove_file(program.join(MARKER)).unwrap();
+    std::fs::write(resources.join(MARKER), serde_json::to_vec(&good).unwrap()).unwrap();
+    assert!(validate_package(&program, &build).is_ok());
+    let mut bad = good;
+    bad["multiplayer_api"] = Value::from(0);
+    std::fs::write(resources.join(MARKER), serde_json::to_vec(&bad).unwrap()).unwrap();
+    assert!(validate_package(&program, &build).is_err());
+}

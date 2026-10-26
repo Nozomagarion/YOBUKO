@@ -2,9 +2,10 @@
 # Copyright (C) 2026 The Suhina contributors
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Write the fork's distribution marker beside the three packaged executables.
+"""Write the fork's distribution metadata for a complete three-program package.
 
-Use before signing a Mac bundle. This does not publish or install anything.
+For Contents/MacOS, metadata goes in Contents/Resources before signing.
+This does not publish or install anything.
 """
 import argparse
 import json
@@ -29,10 +30,14 @@ def write(root, directory, version, commit):
     for name in ["suhina", "suhina-cli", "suhina-plugin-host"]:
         if not (directory / (name + suffix)).is_file():
             raise ValueError(f"missing packaged executable: {name}")
+    metadata = directory
+    if directory.name == "MacOS" and directory.parent.name == "Contents" and directory.parent.parent.suffix == ".app":
+        metadata = directory.parent / "Resources"
+        metadata.mkdir(exist_ok=True)
     for source in ["LICENSE", "COPYING", "VENDORED.md"]:
-        (directory / ("RBXPORT-" + source)).write_bytes((root / "third_party/rbxport-analysis" / source).read_bytes())
-    (directory / "DISTRIBUTION.json").write_text(json.dumps(marker(root, version, commit), indent=2) + "\n")
-    (directory / "FORK-SOURCES.json").write_bytes((root / "fork-sources.json").read_bytes())
+        (metadata / ("RBXPORT-" + source)).write_bytes((root / "third_party/rbxport-analysis" / source).read_bytes())
+    (metadata / "DISTRIBUTION.json").write_text(json.dumps(marker(root, version, commit), indent=2) + "\n")
+    (metadata / "FORK-SOURCES.json").write_bytes((root / "fork-sources.json").read_bytes())
 
 
 if __name__ == "__main__":
