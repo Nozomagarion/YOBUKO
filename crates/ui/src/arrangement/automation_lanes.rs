@@ -1475,6 +1475,7 @@ fn lane(
                     state.new_shape = None;
                     ui.close();
                 }
+                picked_menu(ui, state, track, key, actions);
             }
         }
         grid_menu(ui, state, actions);
@@ -1721,6 +1722,7 @@ fn lane(
                     ui.close();
                 }
             }
+            picked_menu(ui, state, track, key, actions);
             grid_menu(ui, state, actions);
         });
         // The field Edit value opened, beside the point: Enter (or a click elsewhere) sets the
@@ -1846,6 +1848,41 @@ fn range_menu(
         actions.push(Action::new("automation.simplify", params));
         state.selection = None;
         ui.close();
+    }
+}
+
+/// The picked points' part of a lane's menus, when points of this lane are picked: how many, and
+/// Stretch for them (letting go runs `automation.scaleRange` with them, then it goes back to
+/// 100 %).
+fn picked_menu(ui: &mut Ui, state: &mut LanesState, track: TrackId, key: &LaneKey, actions: &mut Vec<Action>) {
+    let Some(points) = state
+        .selection
+        .as_ref()
+        .filter(|s| s.track == track && &s.key == key && !s.points.is_empty())
+        .map(|s| s.points.clone())
+    else {
+        return;
+    };
+    ui.separator();
+    let count = points.len();
+    ui.label(
+        egui::RichText::new(format!("{count} point{} selected", if count == 1 { "" } else { "s" }))
+            .color(theme::text_hint())
+            .size(theme::TEXT_SMALL),
+    );
+    let mut stretch = state.stretch.unwrap_or(1.0) * 100.0;
+    let stretched = ui.add(egui::Slider::new(&mut stretch, 0.0..=200.0).text("Stretch").suffix(" %").fixed_decimals(0));
+    if stretched.changed() {
+        state.stretch = Some(stretch / 100.0);
+    }
+    if stretched.drag_stopped() || (stretched.changed() && !stretched.dragged()) {
+        let factor = state.stretch.take().unwrap_or(1.0);
+        if (factor - 1.0).abs() > 1e-6 {
+            let mut params = key.params(track);
+            params["points"] = json!(points);
+            params["factor"] = json!(factor);
+            actions.push(Action::new("automation.scaleRange", params));
+        }
     }
 }
 

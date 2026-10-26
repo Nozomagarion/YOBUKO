@@ -307,12 +307,38 @@ pub(crate) fn simplify(session: &mut Session, params: &Value) -> Result<Value, C
 /// lane, kept inside the travel.
 pub(crate) fn scale_range(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let target = target(session, params)?;
-    let (start, end) = range(params)?;
     let factor = number(params, "factor")?;
     if !(0.0..=4.0).contains(&factor) {
         return Err(format!("factor must be from 0 to 4, got {factor}").into());
     }
     let mut points = points_of(session, &target)?;
+    // Picked points (`points`): only they move, around the middle of the line over their span, so
+    // troughs picked alone deepen while the peaks between them stay.
+    let picked: Option<Vec<usize>> = match params.get("points").filter(|v| !v.is_null()) {
+        None => None,
+        Some(list) => {
+            let mut out = Vec::new();
+            for value in list.as_array().ok_or("points must be a list of point indices")? {
+                let index = value
+                    .as_u64()
+                    .and_then(|n| usize::try_from(n).ok())
+                    .filter(|&n| n < points.len())
+                    .ok_or_else(|| format!("each point is a point index, from 0; the lane has {}", points.len()))?;
+                out.push(index);
+            }
+            Some(out)
+        }
+    };
+    let (start, end) = match &picked {
+        None => range(params)?,
+        Some(list) => {
+            let beats = list.iter().filter_map(|&i| points.get(i)).map(|p| p.beat);
+            let (Some(first), Some(last)) = (beats.clone().reduce(f64::min), beats.reduce(f64::max)) else {
+                return Err("points must name at least one point".into());
+            };
+            (first, last)
+        }
+    };
     let lane = Lane { target: &target, session };
     let places: Vec<f64> =
         points.iter().filter(|p| p.beat >= start && p.beat <= end).map(|p| lane.position(p.value)).collect();
@@ -321,9 +347,15 @@ pub(crate) fn scale_range(session: &mut Session, params: &Value) -> Result<Value
         return Err("the range has no points".into());
     };
     let middle = (low + high) / 2.0;
-    for point in points.iter_mut().filter(|p| p.beat >= start && p.beat <= end) {
-        let place = (middle + (lane.position(point.value) - middle) * factor).clamp(0.0, 1.0);
-        point.value = lane.value(place);
+    for (index, point) in points.iter_mut().enumerate() {
+        let moves = match &picked {
+            Some(list) => list.contains(&index),
+            None => point.beat >= start && point.beat <= end,
+        };
+        if moves {
+            let place = (middle + (lane.position(point.value) - middle) * factor).clamp(0.0, 1.0);
+            point.value = lane.value(place);
+        }
     }
     let count = put(session, &target, points)?;
     Ok(json!({ "param": target.param, "points": count }))

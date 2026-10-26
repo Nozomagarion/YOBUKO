@@ -235,13 +235,18 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "automation.scaleRange",
-        label: "Stretch the points of a parameter's automation inside a time range up and down around their middle, kept inside the parameter's travel",
+        label: "Stretch the points of a parameter's automation inside a time range, or picked points, up and down around their middle, kept inside the parameter's travel",
         params: &[
             DEVICE_TRACK,
             AUTOMATED_DEVICE,
             AUTOMATED,
-            RANGE_START,
-            RANGE_END,
+            optional("start", ParamType::Number, "the range's first arrangement beat, from 0 (with end; or points)"),
+            optional("end", ParamType::Number, "the range's end, an arrangement beat after start"),
+            optional(
+                "points",
+                ParamType::Integers,
+                "instead of a range: point indices, from 0; only they move, around the middle of the line over their span",
+            ),
             param(
                 "factor",
                 ParamType::Number,

@@ -593,3 +593,18 @@ fn shapes_take_a_depth_and_ranges_smooth_and_stretch() {
         .is_err()
     );
 }
+
+/// Stretch on picked points moves only them, around the middle of the line over their span: the
+/// troughs of a wave picked alone deepen and its peaks stay (#916).
+#[test]
+fn stretching_picked_points_moves_only_them() {
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, 0.5), (1.0, -0.5), (2.0, 0.5), (3.0, -0.5), (4.0, 0.5)] {
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    run(&mut session, "automation.scaleRange", json!({ "track": 1, "param": "pan", "points": [1, 3], "factor": 2 }))
+        .unwrap();
+    let values: Vec<f64> = pan_points(&session).iter().map(|p| p.1).collect();
+    assert_eq!(values, [0.5, -1.0, 0.5, -1.0, 0.5]);
+}
