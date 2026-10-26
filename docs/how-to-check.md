@@ -57,7 +57,8 @@ the change could break next to it.
 Platform: all (or: Windows only, because …)
 
 **Set up**
-1. Unzip the test build and open `suhina` (`suhina.exe` on Windows). An empty project opens.
+1. Unpack the test build: unzip it, and on macOS and Linux extract the `.tar.gz` inside it too. Open `suhina`
+   (`suhina.exe` on Windows, `Suhina.app` on macOS). An empty project opens.
 2. <make what the check needs, from the menus: the project, track, clip or file>
 
 **Check**
@@ -146,8 +147,8 @@ Good:
 Platform: all
 
 **Set up**
-1. Unzip the test build and open `suhina` (`suhina.exe` on Windows). Suhina opens with nothing
-   loaded.
+1. Unpack the test build: unzip it, and on macOS and Linux extract the `.tar.gz` inside it too. Open `suhina`
+   (`suhina.exe` on Windows, `Suhina.app` on macOS). Suhina opens with nothing loaded.
 2. Click **File › New or open…** (Ctrl+T) and then **New blank project**. You should see: a grid
    of 4 tracks (columns) with empty slots (boxes that hold clips).
 
