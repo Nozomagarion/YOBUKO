@@ -207,6 +207,11 @@ not request admin/write access, broader token scopes or App secrets to follow th
 convention. Connector restrictions still apply: if no authorized posting route is available,
 explain the limit and give the user the prepared text.
 
+The helper checks a supplied parent is an open epic before opening an issue under the user's
+account, and adds the AI-assisted note to both issues and comments. If a workflow posts but its
+successful completion cannot be confirmed, the helper reports an error with the created item's
+marker and the run id: inspect the run and finish any missing follow-up without posting again.
+
 **Trusted bot actions.** Contributors listed in `TRUSTED_CONTRIBUTORS` may ask `suhina-bot`
 to create issues with `/open-issue`, close/reopen issues with `/close` and `/reopen`, and request
 a PR test build with `/test-build`. Each action records **On behalf of @login**, taken from

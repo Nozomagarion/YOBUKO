@@ -16,12 +16,15 @@ what the authenticated `gh` account may do in the repository (`.permissions`):
 - no push: posts with the person's own account, `gh issue create` or `gh pr comment`. With triage
   access the issue gets its labels, its issue type and its parent epic as the workflow would give
   them; without triage the body says which labels a maintainer should add, and `Part of #N` names
-  the parent. A comment says it was written by an agent.
+  the parent. Before opening an issue, its parent is checked to be an open epic. Issues and
+  comments say they were written by an agent.
 
 Either way it prints `OPENED_ISSUE=#N <url>` or `COMMENTED_PR=#N <url>` and says on stderr whose
 account posted and why. It never retries a refused dispatch or uses another token. Exits 0 when
-posted, 1 when GitHub refused or the run gave no line, 2 for a request that is not valid. Needs the
-GitHub CLI, signed in; standard library only.
+posted and any workflow completed successfully, 1 when GitHub refused or workflow completion
+could not be confirmed, 2 for a request that is not valid. If the workflow posted before failing
+or losing its connection, the error preserves the marker so the caller can follow up without
+posting again. Needs the GitHub CLI, signed in; standard library only.
 """
 
 from __future__ import annotations
@@ -143,12 +146,20 @@ def via_workflow(gh: Runner, workflow: str, request: dict, marker: str) -> str |
     if not found:
         raise PostError(f"{workflow} started but named no run: {started.stdout.strip()}")
     run_id = found.group(1)
-    gh(["run", "watch", run_id, "--repo", REPO, "--exit-status"], None)
+    watched = gh(["run", "watch", run_id, "--repo", REPO, "--exit-status"], None)
     log = gh(["run", "view", run_id, "--repo", REPO, "--log"], None)
     # A run that failed after posting still prints the line.
     line = re.search(rf"{marker}=#[0-9]+ \S+", log.stdout)
     if not line:
         raise PostError(f"Run {run_id} of {workflow} printed no {marker} line; see gh run view {run_id}.")
+    if watched.returncode != 0:
+        # A failed watch may mean a failed run, a timeout or a lost connection. The marker
+        # confirms the post, but not the later steps (such as linking an issue to its parent).
+        raise PostError(
+            f"{line.group(0)} was posted, but successful completion of run {run_id} of {workflow} "
+            f"could not be confirmed (watch exit {watched.returncode}). "
+            f"Do not post again; inspect gh run view {run_id} --repo {REPO}."
+        )
     return line.group(0)
 
 
@@ -167,10 +178,33 @@ def fallback_issue_body(request: dict, triage: bool) -> str:
     if not triage:
         wanted = ", ".join(f"`{label}`" for label in [request["type"], *request["labels"]])
         body += f"\n\nLabels for a maintainer to add: {wanted}."
+    if AGENT_NOTE not in body:
+        body += f"\n\n{AGENT_NOTE}"
     return body + "\n"
 
 
+def validate_parent(gh: Runner, parent: str) -> None:
+    """Check the same open-epic requirement as the workflow before creating anything."""
+    result = gh(["api", f"repos/{REPO}/issues/{parent}"], None)
+    if result.returncode != 0:
+        raise PostError(f"Could not check parent #{parent}; no issue was opened: {result.stderr.strip()}")
+    try:
+        epic = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise PostError(f"Could not read parent #{parent}; no issue was opened.") from error
+    if not isinstance(epic, dict) or not isinstance(epic.get("labels"), list):
+        raise PostError(f"Could not read parent #{parent}; no issue was opened.")
+    if "pull_request" in epic:
+        raise RequestError(f"#{parent} is a pull request, not an epic.")
+    if epic.get("state") != "open":
+        raise RequestError(f"#{parent} is not open.")
+    if not any(label == "epic" or isinstance(label, dict) and label.get("name") == "epic" for label in epic["labels"]):
+        raise RequestError(f"#{parent} is not labelled epic.")
+
+
 def as_user_issue(gh: Runner, request: dict, triage: bool) -> str:
+    if request["parent"]:
+        validate_parent(gh, request["parent"])
     path = body_file(fallback_issue_body(request, triage))
     try:
         args = ["issue", "create", "--repo", REPO, "--title", request["title"], "--body-file", path]

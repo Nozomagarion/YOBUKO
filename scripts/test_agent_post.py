@@ -24,6 +24,10 @@ class FakeGh:
     def __init__(self, permissions, answers=()):
         self.answers = [(["api", f"repos/{ap.REPO}", "--jq", ".permissions"], ap.Result(0, json.dumps(permissions), ""))]
         self.answers += list(answers)
+        self.answers.append((
+            ["api", f"repos/{ap.REPO}/issues/123"],
+            ap.Result(0, json.dumps({"state": "open", "labels": [{"name": "epic"}]}), ""),
+        ))
         self.calls = []
         self.bodies = []
 
@@ -97,6 +101,45 @@ class WithWriteAccess(unittest.TestCase):
 
 
 class WithoutWriteAccess(unittest.TestCase):
+    def test_issue_bodies_identify_the_agent_once_with_or_without_triage(self):
+        for triage in (False, True):
+            for body in ("Goal.", 'The guide mentions "AI-assisted".', f"Goal.\n\n{ap.AGENT_NOTE}"):
+                with self.subTest(triage=triage, body=body):
+                    gh = FakeGh({"push": False, "triage": triage}, [created(902)])
+                    ap.post("issue", {**ISSUE, "body": body}, gh)
+                    self.assertEqual(gh.bodies[0].count(ap.AGENT_NOTE), 1)
+
+    def test_invalid_parents_are_rejected_before_creating_an_issue(self):
+        for triage in (False, True):
+            for parent in (
+                {"state": "closed", "labels": [{"name": "epic"}]},
+                {"state": "open", "labels": [{"name": "bug"}]},
+                {"state": "open", "labels": [{"name": "epic"}], "pull_request": {"url": "pr"}},
+            ):
+                with self.subTest(triage=triage, parent=parent):
+                    gh = FakeGh({"push": False, "triage": triage}, [
+                        (["api", f"repos/{ap.REPO}/issues/123"], ap.Result(0, json.dumps(parent), "")),
+                        created(902),
+                    ])
+                    with self.assertRaises(ap.RequestError):
+                        ap.post("issue", ISSUE, gh)
+                    self.assertEqual(gh.called("issue", "create"), [])
+
+    def test_unreadable_parent_does_not_create_an_issue(self):
+        for result in (ap.Result(1, "", "HTTP 404"), ap.Result(124, "", "Timed out"), ap.Result(0, "not JSON", "")):
+            with self.subTest(result=result):
+                gh = FakeGh({"push": False}, [
+                    (["api", f"repos/{ap.REPO}/issues/123"], result), created(902),
+                ])
+                with self.assertRaises(ap.PostError):
+                    ap.post("issue", ISSUE, gh)
+                self.assertEqual(gh.called("issue", "create"), [])
+
+    def test_no_parent_needs_no_parent_lookup(self):
+        gh = FakeGh({"push": False}, [created(902)])
+        ap.post("issue", {**ISSUE, "parent": ""}, gh)
+        self.assertEqual(len(gh.called("api")), 1, "only the permission lookup is needed")
+
     def test_triage_sets_labels_type_and_parent(self):
         gh = FakeGh(
             {"push": False, "triage": True},
@@ -163,6 +206,27 @@ class WithoutWriteAccess(unittest.TestCase):
 
 
 class GhCalls(unittest.TestCase):
+    def test_unsuccessful_watch_preserves_the_post_without_posting_again(self):
+        for kind, request, marker, url in (
+            ("issue", ISSUE, "OPENED_ISSUE", f"https://github.com/{ap.REPO}/issues/900"),
+            ("comment", {"pr": "900", "body": "Review."}, "COMMENTED_PR", f"https://github.com/{ap.REPO}/pull/900#issuecomment-1"),
+        ):
+            for code in (1, 124):
+                with self.subTest(kind=kind, code=code):
+                    line = f"{marker}=#900 {url}"
+                    gh = FakeGh({"push": True}, [
+                        (["workflow", "run"], ap.Result(0, f"https://github.com/{ap.REPO}/actions/runs/42", "")),
+                        (["run", "watch"], ap.Result(code, "", "Could not confirm completion")),
+                        (["run", "view"], ap.Result(0, line, "")),
+                    ])
+                    with self.assertRaises(ap.PostError) as caught:
+                        ap.post(kind, request, gh)
+                    self.assertIn(line, str(caught.exception))
+                    self.assertIn("42", str(caught.exception))
+                    self.assertEqual(len(gh.called("workflow", "run")), 1)
+                    self.assertEqual(gh.called("issue", "create"), [])
+                    self.assertEqual(gh.called("pr", "comment"), [])
+
     def test_a_hung_gh_comes_back_as_a_failed_result(self):
         def hung(args, input=None, stdin=None, capture_output=None, text=None, check=None, timeout=None):
             raise subprocess.TimeoutExpired(args, timeout)

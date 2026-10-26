@@ -237,6 +237,10 @@ Several agents often run at once, so an agent never starts work that exists alre
   python scripts/agent_post.py issue request.json     # or: comment request.json
   ```
 
+  If the workflow posted but its successful completion could not be confirmed, the helper exits
+  with an error that includes the created issue or comment's marker and the run id. Inspect that
+  run and complete any missing follow-up; do not post again.
+
 - **Open an issue as the bot.** An agent with write access to this repository opens issues
   through the [Open issue](.github/workflows/open-issue.yml) workflow, not as the person it runs
   for, so the issue's author is `suhina-bot[bot]`. Start it with the GitHub MCP's
@@ -262,7 +266,9 @@ Several agents often run at once, so an agent never starts work that exists alre
   board's Priority and Phase afterwards. A pull request itself — its branch, its description and
   its merge — stays under the person's account.
 
-  Without write access, open it with `gh issue create --body-file` under the person's account.
+  Without write access, open it with `gh issue create --body-file` under the person's account,
+  identifying it as AI-assisted. Before opening it, check that a supplied parent is an open issue
+  labelled `epic`, as the workflow does; if the parent cannot be checked, stop before posting.
   With `triage` access (`.permissions.triage`) give it the type label and the area labels, set its
   issue type and add it under the parent epic, as the workflow would. Without triage, leave the
   labels out: the body ends with the labels a maintainer should add, and `Part of #N` names the
