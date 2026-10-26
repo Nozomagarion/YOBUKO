@@ -17,6 +17,7 @@ use std::sync::{
 use std::time::{Duration, Instant};
 use subtle::ConstantTimeEq;
 use suhina_collaboration::{Host, Request, Role};
+use suhina_model::Project;
 use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, ParamType, Policy};
 
 use crate::invitation::{Invitation, new_secret, private, secret_hash};
@@ -48,8 +49,9 @@ impl Canonical {
     }
 }
 enum Event {
-    Ready(String, Controls),
-    Connected(Controls),
+    Ready(String, Controls, Box<Project>),
+    Connected(Controls, Box<Project>),
+    Receiving(usize, usize),
     State(Controls, bool),
     Rejected(String),
     Failed(String),
@@ -83,9 +85,26 @@ pub struct Service {
     invitation: Option<String>,
     error: Option<String>,
     guest: bool,
+    selected: Option<Project>,
+    project: Option<Project>,
+    receiving: Option<(usize, usize)>,
 }
 
 impl Service {
+    /// Trusted local selection only; remote inputs must use the bounded MIDI decoder instead.
+    pub fn select_project(&mut self, project: &Project) -> Result<(), CommandError> {
+        if self.active() {
+            return Err("leave the current session first".into());
+        }
+        self.selected = None;
+        crate::midi::validate(project).map_err(CommandError::from)?;
+        self.selected = Some(project.clone());
+        Ok(())
+    }
+    /// The verified initial music, consumed once by the desktop when it creates a new tab.
+    pub fn take_project(&mut self) -> Option<Project> {
+        self.project.take()
+    }
     pub fn execute(&mut self, id: &str, params: &Value) -> Result<Value, CommandError> {
         let spec = COMMANDS.iter().find(|c| c.id == id).ok_or("unknown multiplayer command")?;
         // The session registry's schema checker is private; enforce the same exact-key shape here.
@@ -100,15 +119,20 @@ impl Service {
         if let Some(running) = &self.running {
             loop {
                 match running.events.try_recv() {
-                    Ok(Event::Ready(invitation, controls)) => {
+                    Ok(Event::Ready(invitation, controls, project)) => {
+                        self.project = Some(*project);
+                        self.receiving = None;
                         self.mode = "hosting".into();
                         self.invitation = Some(invitation);
                         self.controls = Some(controls);
                     }
-                    Ok(Event::Connected(controls)) => {
+                    Ok(Event::Connected(controls, project)) => {
+                        self.project = Some(*project);
+                        self.receiving = None;
                         self.mode = "connected".into();
                         self.controls = Some(controls);
                     }
+                    Ok(Event::Receiving(done, total)) => self.receiving = Some((done, total)),
                     Ok(Event::State(controls, guest)) => {
                         self.controls = Some(controls);
                         self.guest = guest;
@@ -163,6 +187,8 @@ impl Service {
         self.controls = None;
         self.invitation = None;
         self.guest = false;
+        self.project = None;
+        self.receiving = None;
         self.running = Some(Running { stop, sockets, inputs, events });
         Ok(json!({"queued":true}))
     }
@@ -179,6 +205,14 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         params: &[param("address", ParamType::Text, "private IPv4 address:port; port 0 chooses a free port")],
         kind: CommandKind::Projects,
         run: start_host,
+        policy: LOCAL,
+    },
+    CommandSpec {
+        id: "multiplayer.hostProject",
+        label: "Host a MIDI copy of the selected local project",
+        params: &[param("address", ParamType::Text, "private IPv4 address:port")],
+        kind: CommandKind::Projects,
+        run: start_selected_host,
         policy: LOCAL,
     },
     CommandSpec {
@@ -222,16 +256,21 @@ pub fn commands() -> &'static [CommandSpec<Service>] {
 }
 fn state(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.poll();
-    Ok(json!({"mode":s.mode,"controls":s.controls,"invitation":s.invitation,"error":s.error,"guest_connected":s.guest}))
+    Ok(
+        json!({"mode":s.mode,"controls":s.controls,"invitation":s.invitation,"error":s.error,"guest_connected":s.guest,"receiving":s.receiving}),
+    )
 }
 fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.running = None;
     s.invitation = None;
     s.mode = "idle".into();
     s.guest = false;
+    s.selected = None;
+    s.project = None;
+    s.receiving = None;
     Ok(json!({"stopped":true}))
 }
-fn start_host(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
+fn address(p: &Value) -> Result<SocketAddr, CommandError> {
     let address: SocketAddr = p["address"]
         .as_str()
         .ok_or("address must be text")?
@@ -240,8 +279,19 @@ fn start_host(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
     if !private(address.ip()) {
         return Err("use a private or loopback IPv4 address".into());
     }
+    Ok(address)
+}
+fn start_host(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
+    start_source(s, address(p)?, crate::starter_project())
+}
+fn start_selected_host(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
+    let address = address(p)?;
+    let source = s.selected.take().ok_or("select a local MIDI project first")?;
+    start_source(s, address, source)
+}
+fn start_source(s: &mut Service, address: SocketAddr, source: Project) -> Result<Value, CommandError> {
     s.start(move |stop, sockets, inputs, events| {
-        if let Err(e) = host(address, &stop, &sockets, inputs, &events) {
+        if let Err(e) = host(address, source, &stop, &sockets, inputs, &events) {
             let _ = events.try_send(Event::Failed(e));
         }
     })
@@ -346,11 +396,14 @@ fn register(stream: &TcpStream, sockets: &Mutex<Vec<TcpStream>>) -> Result<(), S
 }
 fn host(
     address: SocketAddr,
+    source: Project,
     stop: &Arc<AtomicBool>,
     sockets: &Arc<Mutex<Vec<TcpStream>>>,
     inputs: Receiver<Input>,
     events: &SyncSender<Event>,
 ) -> Result<(), String> {
+    let (source, document) = crate::midi::encode(&source)?;
+    let document = Arc::new(document);
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let key = rcgen::generate_simple_self_signed(vec!["suhina.local".into()])
         .map_err(|_| "could not create the host certificate")?;
@@ -375,7 +428,7 @@ fn host(
         secret: secret.clone(),
     }
     .encode()?;
-    let host = Host::new(crate::starter_project()).map_err(|e| e.to_string())?;
+    let host = Host::new(source.clone()).map_err(|e| e.to_string())?;
     let initial = Controls::from_project(host.project(), 0)?;
     let canonical = Arc::new(Mutex::new(Canonical {
         host,
@@ -384,7 +437,7 @@ fn host(
         redeemed: false,
         guest: false,
     }));
-    events.try_send(Event::Ready(invite, initial)).map_err(|_| "multiplayer view closed")?;
+    events.try_send(Event::Ready(invite, initial, Box::new(source))).map_err(|_| "multiplayer view closed")?;
     let pending = Arc::new(AtomicUsize::new(0));
     let mut handlers: Vec<std::thread::JoinHandle<()>> = Vec::new();
     let mut sequence = 1u64;
@@ -433,10 +486,11 @@ fn host(
                     Arc::clone(&pending),
                     Arc::clone(sockets),
                 );
+                let document = Arc::clone(&document);
                 pending.fetch_add(1, Ordering::Relaxed);
                 match std::thread::Builder::new().name("suhina-lan-peer".into()).spawn(move || {
                     let _guard = ConnectionGuard { sockets: registry, peer: stream.peer_addr().ok() };
-                    let _ = serve(stream, tls, &canonical, &stop);
+                    let _ = serve(stream, tls, &canonical, &stop, &document);
                     pending.fetch_sub(1, Ordering::Relaxed);
                 }) {
                     Ok(handle) => handlers.push(handle),
@@ -460,6 +514,7 @@ fn serve(
     tls: Arc<ServerConfig>,
     canonical: &Mutex<Canonical>,
     stop: &AtomicBool,
+    document: &[u8],
 ) -> Result<(), String> {
     let connection = ServerConnection::new(tls).map_err(|e| e.to_string())?;
     let mut io = StreamOwned::new(connection, DeadlineSocket::new(stream));
@@ -467,7 +522,7 @@ fn serve(
     let peer = {
         let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
         let result = match hello {
-            ClientMessage::Hello { protocol: PROTOCOL, starter: 1, secret } => state.admit(&secret, Instant::now()),
+            ClientMessage::Hello { protocol: PROTOCOL, format: 1, secret } => state.admit(&secret, Instant::now()),
             _ => Err("admission refused".into()),
         };
         match result {
@@ -480,6 +535,9 @@ fn serve(
         }
     };
     let result = (|| {
+        io.sock.deadline = Instant::now() + Duration::from_secs(30);
+        crate::transfer::send(&mut io, document, stop)?;
+        io.sock.renew();
         let initial = {
             let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
             Controls::from_project(state.host.project(), state.host.revision())?
@@ -546,15 +604,22 @@ fn guest(
         ClientConnection::new(Arc::new(tls), name).map_err(|e| e.to_string())?,
         DeadlineSocket::new(stream),
     );
-    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, starter: 1, secret: invitation.secret })?;
+    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 1, secret: invitation.secret })?;
+    io.sock.deadline = Instant::now() + Duration::from_secs(30);
+    let offer: ServerMessage = protocol::read(&mut io)?;
+    let document = crate::transfer::receive(&mut io, offer, stop, |done, total| {
+        let _ = events.try_send(Event::Receiving(done, total));
+    })?;
+    let project = crate::midi::decode(&document)?;
+    io.sock.renew();
     let first: ServerMessage = protocol::read(&mut io)?;
     let ServerMessage::State { protocol: PROTOCOL, controls, .. } = first else {
         return Err("invitation refused, expired or already used".into());
     };
     let controls = *controls;
-    controls.validate()?;
+    controls.changes(&project)?;
     let mut previous = controls.clone();
-    events.try_send(Event::Connected(controls)).map_err(|_| "multiplayer view closed")?;
+    events.try_send(Event::Connected(controls, Box::new(project.clone()))).map_err(|_| "multiplayer view closed")?;
     let mut sequence = 1u64;
     while !stop.load(Ordering::Relaxed) {
         io.sock.renew();
@@ -572,7 +637,7 @@ fn guest(
             return Err("invalid host response".into());
         };
         let controls = *controls;
-        controls.validate()?;
+        controls.changes(&project)?;
         if controls.revision < previous.revision || controls.revision == previous.revision && controls != previous {
             return Err("host control revision mismatch".into());
         }

@@ -717,8 +717,7 @@ impl Projects {
                 )
             {
                 return Err(
-                    "this shared starter tab only accepts confirmed multiplayer controls; leave to edit it freely"
-                        .into(),
+                    "this shared MIDI tab only accepts confirmed multiplayer controls; leave to edit it freely".into(),
                 );
             }
         }

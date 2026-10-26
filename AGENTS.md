@@ -108,7 +108,7 @@ crates/
            (autosave and the offer after a crash, ADR 0010)
   dj       L2 fork-only local DJ catalog and offline rbxport analysis; no GUI or network
   collaboration L3 fork-only trusted host/replica core over session commands; no network in this crate
-  multiplayer L3 fork-only bounded TLS LAN starter adapter, explicit invitation and local worker service
+  multiplayer L3 fork-only bounded TLS LAN starter/MIDI-copy adapter, explicit invitation and local worker service
   automation L3 MCP server (rmcp) over a session, file roots, WAV rendering (docs/mcp.md); the app's
            endpoints: one instance per build, agents attached to the open projects (ADR 0028)
   output   L3 the audio device: lists hosts and devices (cpal; ASIO with the `asio` feature), opens the one

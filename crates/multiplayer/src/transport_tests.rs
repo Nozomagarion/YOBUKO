@@ -25,7 +25,7 @@ fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
 #[test]
 fn frame_bounds_versions_and_typed_fields_are_checked_before_commands() {
     use std::io::Cursor;
-    for size in [0u32, 8193, u32::MAX] {
+    for size in [0u32, protocol::MAX_FRAME as u32 + 1, u32::MAX] {
         let mut input = Cursor::new(size.to_be_bytes());
         assert!(protocol::read::<ClientMessage>(&mut input).is_err());
         assert_eq!(input.position(), 4);
@@ -41,7 +41,7 @@ fn frame_bounds_versions_and_typed_fields_are_checked_before_commands() {
         assert!(protocol::read::<ClientMessage>(&mut Cursor::new(bytes)).is_err());
     }
     assert!(WireEdit::Pan { track: 1, pan: f64::NAN }.edit().is_err());
-    assert!(WireEdit::Rename { track: 5, name: "not shared".into() }.edit().is_err());
+    assert!(WireEdit::Rename { track: 0, name: "not shared".into() }.edit().is_err());
 }
 
 #[test]
@@ -144,16 +144,19 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
     let mut incompatible = connect(&invitation);
     protocol::write(
         &mut incompatible,
-        &ClientMessage::Hello { protocol: 2, starter: 1, secret: invitation.secret.clone() },
+        &ClientMessage::Hello { protocol: PROTOCOL + 1, format: 1, secret: invitation.secret.clone() },
     )
     .unwrap();
     assert!(matches!(protocol::read::<ServerMessage>(&mut incompatible).unwrap(), ServerMessage::Denied));
     let mut io = connect(&invitation);
     protocol::write(
         &mut io,
-        &ClientMessage::Hello { protocol: PROTOCOL, starter: 1, secret: invitation.secret.clone() },
+        &ClientMessage::Hello { protocol: PROTOCOL, format: 1, secret: invitation.secret.clone() },
     )
     .unwrap();
+    let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
+    let document = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
+    assert!(crate::midi::decode(&document).is_ok());
     assert!(matches!(protocol::read::<ServerMessage>(&mut io).unwrap(), ServerMessage::State { .. }));
     let edit = ClientMessage::Edit {
         protocol: PROTOCOL,
@@ -185,7 +188,7 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
     assert_eq!(controls.revision, 1);
     assert_eq!(controls.tracks[0].name, "One revision only");
     assert_eq!(accepted, Some(false));
-    protocol::write(&mut io, &ClientMessage::Poll { protocol: 2 }).unwrap();
+    protocol::write(&mut io, &ClientMessage::Poll { protocol: PROTOCOL + 1 }).unwrap();
     assert!(protocol::read::<ServerMessage>(&mut io).is_err());
 }
 
@@ -207,4 +210,40 @@ fn a_partial_unauthenticated_handshake_times_out_without_consuming_the_invitatio
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(guest.mode, "connected", "{:?}", guest.error);
+}
+
+#[test]
+fn sixty_four_tracks_with_json_escaped_names_fit_a_control_frame() {
+    let controls = Controls {
+        revision: 0,
+        tracks: (1..=64)
+            .map(|track| crate::TrackControl { track, name: "\\".repeat(256), db: 0.0, pan: 0.0 })
+            .collect(),
+    };
+    controls.validate().unwrap();
+    let mut bytes = vec![];
+    protocol::write(
+        &mut bytes,
+        &ServerMessage::State { protocol: PROTOCOL, controls: Box::new(controls.clone()), accepted: None, error: None },
+    )
+    .unwrap();
+    assert!(bytes.len() <= protocol::MAX_FRAME + 4);
+    let ServerMessage::State { controls: back, .. } =
+        protocol::read::<ServerMessage>(&mut std::io::Cursor::new(bytes)).unwrap()
+    else {
+        panic!("state")
+    };
+    assert_eq!(*back, controls);
+    assert!(WireEdit::Rename { track: 1, name: "a\nb".into() }.edit().is_err());
+}
+
+#[test]
+fn an_invalid_new_selection_cannot_leave_an_old_project_staged_for_sharing() {
+    let mut service = Service::default();
+    service.select_project(&crate::starter_project()).unwrap();
+    let mut invalid = crate::starter_project();
+    invalid.tracks[0].content.audio = true;
+    assert!(service.select_project(&invalid).is_err());
+    assert!(service.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).is_err());
+    assert!(!service.active());
 }

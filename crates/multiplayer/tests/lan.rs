@@ -115,3 +115,55 @@ fn the_starter_is_deterministic_has_no_files_or_plugins_and_real_players_are_ind
     assert!(!ra.monitor().running());
     assert!(rb.monitor().running());
 }
+
+#[test]
+fn an_actual_midi_project_crosses_tls_in_chunks_and_keeps_its_ids_notes_and_sound() {
+    use suhina_model::{Device, DeviceKind, DeviceParam, Extensions, LaneData, TrackId};
+    let mut project = suhina_multiplayer::starter_project();
+    project.transport.tempo_bpm = 138.0;
+    project.tracks[0].id = TrackId(17);
+    project.tracks[0].name = "My own lead".into();
+    project.arrangement.lanes[0].track = Some(TrackId(17));
+    project.launcher.columns[0].track = TrackId(17);
+    let LaneData::Notes(notes) = &mut project.contents[0].lanes[0].data else { panic!("notes") };
+    let first = notes[0];
+    *notes =
+        (0..256).map(|i| suhina_model::Note { time: f64::from(i) * 0.25, key: 40 + (i % 48) as u8, ..first }).collect();
+    project.contents[0].length = 64.0;
+    project.channels[0].devices.push(Device {
+        name: "My FM sound".into(),
+        kind: DeviceKind::Builtin("fm-synth".into()),
+        enabled: true,
+        state: None,
+        params: vec![DeviceParam::new("algorithm", 5.0)],
+        automation: vec![],
+        extensions: Extensions::default(),
+    });
+    assert!(project.validate().is_ok());
+    let before = project.clone();
+    let mut host = Service::default();
+    host.select_project(&project).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let ready = wait(&mut host, |v| v["mode"] == "hosting");
+    assert!(host.take_project().is_some());
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
+    wait(&mut guest, |v| v["mode"] == "connected");
+    let received = guest.take_project().unwrap();
+    assert_eq!(received.tracks[0].id, TrackId(17));
+    assert_eq!(received.transport, project.transport);
+    assert_eq!(received.contents, project.contents);
+    assert_eq!(received.arrangement, project.arrangement);
+    assert_eq!(received.channels[0].devices, project.channels[0].devices);
+    assert_eq!(project, before, "the source is never mutated");
+    assert!(suhina_project_file::to_json(&received).len() > 32768, "must exercise multiple frames");
+    // The receiver prepares a real independent renderer from the received musical document.
+    let a = suhina_engine::render_offline(&project, 8000, 512).unwrap();
+    let b = suhina_engine::render_offline(&received, 8000, 512).unwrap();
+    assert!(b.iter().any(|sample| sample.abs() > 0.00001));
+    assert_eq!(a, b);
+    guest.execute("multiplayer.edit",&json!({"base_revision":0,"edit":json!({"command":"track.rename","track":17,"name":"Shared real lead"}).to_string()})).unwrap();
+    let confirmed = wait(&mut host, |v| v["controls"]["revision"] == 1);
+    assert_eq!(confirmed["controls"]["tracks"][0]["name"], "Shared real lead");
+    assert_eq!(before.tracks[0].name, "My own lead");
+}

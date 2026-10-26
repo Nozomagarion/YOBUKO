@@ -4,8 +4,8 @@
 //! Trusted in-process experiment, not an authenticated network session.
 //!
 //! The [`Host`] orders a small subset of existing session commands. Each participant, including
-//! the host's owner, uses a [`Replica`] with its own player. Nothing depends on this crate in
-//! the desktop app, engine or session. Call these allocating APIs on a control thread only.
+//! the host's owner, uses a [`Replica`] with its own player. The separate LAN adapter reuses this trusted core behind
+//! its own admission and bounded MIDI-copy validation; session and engine do not depend on it. Call these allocating APIs on a control thread only.
 
 mod host;
 mod policy;

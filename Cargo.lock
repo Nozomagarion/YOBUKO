@@ -5273,6 +5273,7 @@ dependencies = [
  "suhina-collaboration",
  "suhina-engine",
  "suhina-model",
+ "suhina-project-file",
  "suhina-session",
 ]
 

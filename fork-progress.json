@@ -26,15 +26,16 @@
           "evidence": "crates/ui/src/app/multiplayer_tests.rs"
         },
         {
-          "name": "Essai réel sur deux ordinateurs",
+          "name": "Partager une copie MIDI du projet ouvert",
+          "done": true,
+          "evidence": "crates/multiplayer/tests/lan.rs"
+        },
+        {
+          "name": "Édition commune des notes et clips",
           "done": false
         },
         {
           "name": "Partage d’un projet existant et de ses fichiers",
-          "done": false
-        },
-        {
-          "name": "Édition commune des notes et clips",
           "done": false
         },
         {
@@ -43,6 +44,10 @@
         },
         {
           "name": "Sessions Internet et reconnexion",
+          "done": false
+        },
+        {
+          "name": "Essai réel sur deux ordinateurs",
           "done": false
         }
       ]

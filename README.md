@@ -54,8 +54,10 @@ pour le live, en conservant le lien avec son projet d'origine.
 Avancer sur la même musique avec ses amis. Pouvoir travailler sur un projet partagé tout en
 écoutant une autre partie du morceau que les autres : chacun garde sa lecture et sa position.
 
-Le premier prototype relie un hôte et un invité sur le réseau local. La suite visée est
-l'édition commune des notes et clips, le partage des fichiers du projet et des enregistrements.
+Le prototype relie un hôte et un invité sur le réseau local. Il peut maintenant transmettre
+une copie d’un projet MIDI ouvert, avec ses notes, ses clips et ses réglages FM Synth/Utility,
+ou créer une démonstration. Les noms, volumes et panoramiques se modifient ensemble. La suite
+visée est l’édition commune des notes et clips, puis les fichiers audio et enregistrements.
 
 ### Préparer et jouer son set
 
@@ -74,7 +76,7 @@ les platines et l'export vers le matériel DJ restent à construire et à vérif
 <!-- fork-progress:begin -->
 | Partie du projet | Étapes réalisées | Prochain objectif |
 |---|---:|---|
-| Créer ensemble | 4 / 9 | Essai réel sur deux ordinateurs |
+| Créer ensemble | 5 / 10 | Édition commune des notes et clips |
 | Préparer et jouer | 4 / 8 | Playlists et préparation de set |
 | Évoluer ensemble | 4 / 7 | Version commune validée sur toutes les plateformes |
 <!-- fork-progress:end -->
@@ -87,14 +89,15 @@ leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce
 | Partie | Disponible dans le prototype | Prochaine étape |
 |---|---|---|
 | **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
-| **Multijoueur** | Session LAN hôte + invité, quatre pistes MIDI générées, noms/volumes/panoramiques partagés, lectures indépendantes. | Essai sur deux ordinateurs physiques, puis partage des vrais projets et de leurs fichiers. |
+| **Multijoueur** | Session LAN hôte + invité, copie d’un projet MIDI ouvert ou démo ; jusqu’à 64 pistes, notes/clips initiaux transmis, noms/volumes/panoramiques partagés et lectures indépendantes. | Édition commune des notes/clips, puis partage des fichiers audio et enregistrements. |
 | **DJ** | Bibliothèque audio persistante, import et analyse tempo/tonalité issue de rbxport. | Playlists, points cue, grilles rythmiques, platines et compatibilité matérielle. |
 | **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
 
 Le trafic chiffré est testé entre deux services sur le même ordinateur, avec des vérifications
 sur deux projets de bureau et des moteurs audio indépendants. **Le test sur deux ordinateurs
-physiques reste à faire.** Les projets personnels, fichiers audio, notes, clips, plugins et
-prises micro ne sont pas encore échangés par le multijoueur.
+physiques reste à faire.** Les copies MIDI sont limitées à 2 Mio et aux instruments FM Synth/Utility
+sans état opaque. Les notes/clips arrivent dans la copie initiale et restent en lecture seule
+pendant la connexion. Les fichiers audio, plugins et prises micro ne sont pas encore échangés.
 
 ## Essayer la version actuelle
 
@@ -104,13 +107,17 @@ pour voir cette présentation et les ajouts.
 
 Dans l'application, trois accès : **Studio**, **Multiplayer** et **DJ**.
 
-1. Ouvrir **Multiplayer**, puis **Create LAN session** sur l'ordinateur hôte.
+1. Ouvrir son projet MIDI dans **Studio**, puis **Multiplayer → Share current MIDI project**
+   sur l’ordinateur hôte. **Create LAN session** reste disponible pour la démonstration.
 2. Copier l'invitation privée avec **Copy invitation**.
 3. Sur l'autre instance, coller l'invitation puis choisir **Join LAN session**.
 4. Modifier un nom, un volume ou un panoramique et l'appliquer. Chacun utilise **Play locally**
    et **Stop locally** pour son écoute. **Leave session** conserve le projet en local.
 
-Ce premier essai génère sa propre musique : aucun projet personnel n'est nécessaire.
+La copie s’ouvre dans un nouvel onglet et conserve l’original. Les pistes audio, plugins et autres
+instruments sont refusés avec une explication ; les métadonnées locales et affectations matérielles
+sont omises. Le mode démonstration reste utilisable sans projet personnel. Les deux participants
+doivent installer la version de protocole 2 ; les anciennes invitations ne sont pas compatibles.
 Les [instructions détaillées](docs/multiplayer-fork.md#try-the-desktop-lan-prototype) expliquent
 les adresses réseau et les limites de ce prototype.
 

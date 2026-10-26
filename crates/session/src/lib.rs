@@ -191,6 +191,15 @@ impl Session {
         }
     }
 
+    /// A new independent musical copy with no source path, requiring an explicit first save.
+    /// Its initial music is unsaved even before the person edits a control. No undo snapshot
+    /// points back into another project, and saving cannot overwrite the source of that copy.
+    pub fn unsaved_copy(project: Project) -> Self {
+        let mut session = Self::new(project);
+        session.history.changes = 1;
+        session
+    }
+
     /// Whether the clips copied for `clip.paste` play audio: `Some(true)` for audio, `Some(false)`
     /// for notes, `None` when nothing has been copied. The window uses it to pick the stacking
     /// setting a paste follows.

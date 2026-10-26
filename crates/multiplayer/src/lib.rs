@@ -4,8 +4,10 @@
 //! LAN starter sessions. The wire carries track controls, never arbitrary projects or files.
 
 mod invitation;
+mod midi;
 mod protocol;
 mod starter;
+mod transfer;
 mod transport;
 
 pub use protocol::{Controls, TrackControl};

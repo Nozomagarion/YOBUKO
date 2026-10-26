@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{Read, Write};
 use suhina_collaboration::Edit;
-use suhina_model::{Project, TrackId};
+use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 1;
-pub const MAX_FRAME: usize = 8192;
+pub const PROTOCOL: u16 = 2;
+pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -23,15 +23,21 @@ pub struct TrackControl {
 #[serde(deny_unknown_fields)]
 pub struct Controls {
     pub revision: u64,
-    pub tracks: [TrackControl; 4],
+    pub tracks: Vec<TrackControl>,
 }
 
 impl Controls {
     pub fn validate(&self) -> Result<(), String> {
-        for (i, t) in self.tracks.iter().enumerate() {
-            if t.track != i as u32 + 1
+        if self.tracks.is_empty() || self.tracks.len() > crate::midi::MAX_TRACKS {
+            return Err("invalid shared track count".into());
+        }
+        let mut ids = std::collections::BTreeSet::new();
+        for t in &self.tracks {
+            if t.track == 0
+                || !ids.insert(t.track)
                 || t.name.trim().is_empty()
                 || t.name.len() > 256
+                || t.name.chars().any(char::is_control)
                 || !t.db.is_finite()
                 || !(-150.0..=6.0).contains(&t.db)
                 || !t.pan.is_finite()
@@ -44,8 +50,8 @@ impl Controls {
     }
     pub fn from_project(project: &Project, revision: u64) -> Result<Self, String> {
         let mut tracks = Vec::new();
-        for id in 1..=4 {
-            let track = project.tracks.iter().find(|t| t.id == TrackId(id)).ok_or("starter track missing")?;
+        for track in &project.tracks {
+            let id = track.id.0;
             let channel = track
                 .channel
                 .and_then(|id| project.channels.iter().find(|c| c.id == id))
@@ -58,7 +64,6 @@ impl Controls {
                 pan: channel.pan,
             });
         }
-        let tracks = tracks.try_into().map_err(|_| "starter tracks missing")?;
         let value = Self { revision, tracks };
         value.validate()?;
         Ok(value)
@@ -66,6 +71,11 @@ impl Controls {
     pub fn changes(&self, project: &Project) -> Result<Vec<(&'static str, Value)>, String> {
         self.validate()?;
         let current = Self::from_project(project, self.revision)?;
+        if self.tracks.len() != current.tracks.len()
+            || self.tracks.iter().zip(&current.tracks).any(|(a, b)| a.track != b.track)
+        {
+            return Err("shared track identities do not match the MIDI copy".into());
+        }
         let mut changes = Vec::new();
         for (t, old) in self.tracks.iter().zip(current.tracks.iter()) {
             if t.name != old.name {
@@ -95,13 +105,16 @@ pub enum WireEdit {
 
 impl WireEdit {
     pub fn edit(&self) -> Result<Edit, String> {
+        if matches!(self,Self::Rename{name,..} if name.chars().any(char::is_control)) {
+            return Err("shared track names cannot contain control characters".into());
+        }
         let (id, params, track) = match self {
             Self::Rename { track, name } => ("track.rename", json!({"track":track,"name":name}), *track),
             Self::Volume { track, db } => ("track.setVolume", json!({"tracks":[track],"db":db}), *track),
             Self::Pan { track, pan } => ("track.setPan", json!({"tracks":[track],"pan":pan}), *track),
         };
-        if !(1..=4).contains(&track) {
-            return Err("only starter tracks 1 to 4 are shared".into());
+        if track == 0 {
+            return Err("a shared track needs a nonzero ID".into());
         }
         Edit::new(id, params).map_err(|e| e.to_string())
     }
@@ -110,7 +123,8 @@ impl WireEdit {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ClientMessage {
-    Hello { protocol: u16, starter: u16, secret: String },
+    Hello { protocol: u16, format: u16, secret: String },
+    Download { protocol: u16, offset: usize },
     Poll { protocol: u16 },
     Edit { protocol: u16, sequence: u64, base_revision: u64, edit: WireEdit },
 }
@@ -119,6 +133,8 @@ pub enum ClientMessage {
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ServerMessage {
     Denied,
+    Project { protocol: u16, format: u16, bytes: usize, sha256: String },
+    Chunk { protocol: u16, offset: usize, data: String },
     State { protocol: u16, controls: Box<Controls>, accepted: Option<bool>, error: Option<String> },
 }
 

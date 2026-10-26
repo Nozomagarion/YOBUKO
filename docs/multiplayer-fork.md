@@ -17,7 +17,7 @@ covers:
 
 This fork is an exploratory implementation requested by its owner. It does not claim an official
 upstream issue or represent accepted upstream collaboration architecture. It begins with an
-offline host/replica core and now has a restricted desktop LAN starter session.
+offline host/replica core and now has restricted desktop LAN starter and current-MIDI-project sessions.
 The [core specification](spec/session-sharing.md) and [LAN contract](spec/lan-starter-session.md)
 state the supported subset and missing features. Physical two-computer acceptance remains pending.
 No comments, claims or pull requests have been sent to upstream on the owner's behalf.
@@ -73,6 +73,14 @@ still to perform. No personal project or audio file is needed.
 7. To check disconnect recovery, create/join again, change a name, then quit the host. The guest
    should report disconnection within the exchange deadline and retain the last confirmed local
    starter. Saving it is local; your files and microphone recordings were never shared.
+
+To use your own music, first open a MIDI project in Studio. Choose **Multiplayer → Share current
+MIDI project**, then use the same invitation flow. It creates a new musical copy, retaining the
+source tab. FM Synth and Utility parameters are supported; audio, other instruments, plugins
+and opaque device states are refused with an error. Names/volume/pan remain live shared controls;
+notes/clips arrive in the initial copy and are read-only until leaving. Local metadata, hardware
+input settings and launch mappings are omitted. See the [copy contract](spec/lan-midi-copy.md).
+Both participants need the new protocol-2 build; old demo invitations no longer work.
 
 Network and UI regression checks:
 

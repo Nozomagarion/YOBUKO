@@ -81,6 +81,8 @@ fn two_desktop_projects_apply_confirmed_controls_and_unlock_on_disconnect() {
 #[ignore = "requires a GPU adapter; renders the LAN entry point"]
 fn render_multiplayer_panel_for_review() {
     let mut app = App::new();
+    app.set_session(Session::new(suhina_multiplayer::starter_project()), &[]);
+    app.multiplayer.address = "127.0.0.1:0".into();
     app.multiplayer.open = true;
     let mut harness = egui_kittest::Harness::builder()
         .with_size(Vec2::new(1280.0, 800.0))
@@ -91,4 +93,88 @@ fn render_multiplayer_panel_for_review() {
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
     std::fs::create_dir_all(&folder).unwrap();
     harness.render().unwrap().save(folder.join("multiplayer-lan.png")).unwrap();
+    harness.get_by_label("Share current MIDI project").click();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(harness.state().multiplayer.bound.is_some());
+    harness.run_steps(2);
+    harness.render().unwrap().save(folder.join("multiplayer-midi-copy.png")).unwrap();
+}
+
+#[test]
+fn sharing_the_current_midi_project_opens_a_copy_of_its_real_music() {
+    let mut app = App::new();
+    let mut project = suhina_multiplayer::starter_project();
+    project.tracks[0].name = "My own composition".into();
+    project.transport.tempo_bpm = 137.0;
+    if let suhina_engine::model::LaneData::Notes(notes) = &mut project.contents[0].lanes[0].data {
+        notes[0].key = 77;
+    }
+    let folder = tempfile::tempdir().unwrap();
+    let source_file = folder.path().join("Original.suhina");
+    let mut session = Session::new(project);
+    session.execute("project.save", &json!({"path":source_file})).unwrap();
+    let original_bytes = std::fs::read(&source_file).unwrap();
+    app.set_session(session, &[]);
+    app.multiplayer.open = true;
+    app.multiplayer.address = "127.0.0.1:0".into();
+    let original = app.projects.active().unwrap();
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 800.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run();
+    let before = harness.state().projects.get(original).unwrap().project().clone();
+    harness.get_by_label("Share current MIDI project").click();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    harness.run_steps(2);
+    let rows: Vec<_> = harness.query_all_by_label("Set volume").collect();
+    assert_eq!(rows.len(), before.tracks.len());
+    let mut previous_y = f32::NEG_INFINITY;
+    for button in rows {
+        assert!(button.rect().left() < 800.0, "track controls must fit in the viewport");
+        assert!(button.rect().top() > previous_y, "each track must occupy its own grid row");
+        previous_y = button.rect().top();
+    }
+    let shared = harness.state().multiplayer.bound.unwrap();
+    assert_ne!(shared, original);
+    let session = harness.state().projects.get(shared).unwrap();
+    assert!(session.has_unsaved_changes(), "received music must prompt for a first save");
+    assert!(session.source().is_none(), "a copy must not inherit the original's file path");
+    let copy = session.project();
+    assert_eq!(copy.tracks[0].name, "My own composition");
+    assert_eq!(copy.transport.tempo_bpm, 137.0);
+    assert_eq!(copy.contents, before.contents);
+    assert_eq!(harness.state().projects.get(original).unwrap().project(), &before);
+    let copy_file = folder.path().join("Shared copy.suhina");
+    harness.state_mut().projects.execute_in(Some(shared), "project.save", &json!({"path":copy_file})).unwrap();
+    assert!(!harness.state().projects.get(shared).unwrap().has_unsaved_changes());
+    assert_eq!(std::fs::read(&source_file).unwrap(), original_bytes);
+    assert_eq!(harness.state().projects.get(original).unwrap().source(), Some(source_file.as_path()));
+    harness.get_by_label("Leave session").click();
+    harness.run_steps(3);
+    assert!(harness.state().projects.get(shared).is_some());
+}
+
+#[test]
+fn an_audio_project_is_refused_without_opening_a_listener_or_replacing_its_tab() {
+    let mut project = suhina_multiplayer::starter_project();
+    project.tracks[0].content.audio = true;
+    let mut app = App::new();
+    app.set_session(Session::new(project), &[]);
+    app.multiplayer.open = true;
+    let original = app.projects.active().unwrap();
+    let before = app.projects.get(original).unwrap().project().clone();
+    app.host_current_midi();
+    assert!(app.multiplayer.error.as_ref().is_some_and(|e| e.contains("audio")));
+    assert!(!app.multiplayer.service.active());
+    assert!(app.multiplayer.bound.is_none());
+    assert_eq!(app.projects.active(), Some(original));
+    assert_eq!(app.projects.get(original).unwrap().project(), &before);
 }

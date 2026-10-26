@@ -15,7 +15,7 @@ this independent fork. It combines Suhina's native music production foundation w
 collaboration layer and DJ preparation using selected rbxport code.
 
 The destination is a complete production-to-live workflow. The current build is an experimental
-prototype: LAN sessions share a generated four-track starter, and the DJ workspace provides a
+prototype: LAN sessions share a bounded copy of an open MIDI project or a four-track starter, and the DJ workspace provides a
 local audio catalog and analysis. Full project coediting, shared recordings, performance decks
 and USB export are future work. There is no common public release channel yet.
 
@@ -31,8 +31,9 @@ and USB export are future work. There is no common public release channel yet.
 
 - **Studio / Multiplayer / DJ** entry points in the native app.
 - **Create LAN session / Join LAN session:** a private invitation connects one host and one guest.
-  Both generate the same four MIDI tracks locally. Track names, volume and pan are confirmed by
-  the host; play, stop and listening position remain local to each computer.
+  Share the current MIDI project (up to 64 tracks, FM Synth/Utility parameters only) or use the
+  generated starter. Notes/clips arrive in the verified initial copy; track names, volume and pan
+  are live shared controls. Play, stop and listening position stay local to each computer.
 - **DJ library:** import audio, keep a persistent local catalog, analyse tempo/key and render a
   Studio project into the library.
 - **Settings → General → GitHub updates…:** inspect the three GitHub source identities and check
@@ -40,12 +41,11 @@ and USB export are future work. There is no common public release channel yet.
 
 The network exchange is tested with real TLS loopback connections and two desktop project
 instances. **A physical two-computer session has not yet been verified.** Audio files, your
-existing projects, notes, clips, plugins and microphone recordings are not shared by this slice.
+audio assets, plugins and microphone recordings are not shared by this slice. Notes/clips are
+transferred in the initial MIDI copy and are read-only while connected. Both apps need protocol 2.
 [LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-lan-prototype)
 
 ## Progress you can audit
-
-<img src="assets/fork/progress.svg" alt="Implemented acceptance criteria by workflow" width="960">
 
 See the current [milestone table in the main overview](README.md#où-en-est-le-projet).
 

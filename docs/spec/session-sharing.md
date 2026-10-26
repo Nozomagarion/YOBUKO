@@ -14,7 +14,9 @@ covers:
 
 This document describes the trusted in-process collaboration core. Two existing Suhina sessions
 can exchange permitted edits through a host. The separate [LAN starter adapter](lan-starter-session.md)
-now reuses its allowed edits behind authenticated TLS, without serializing Project snapshots.
+now reuses its allowed edits behind authenticated TLS. Initial music uses the separate bounded
+[MIDI-copy decoder](lan-midi-copy.md); trusted Project snapshots are never deserialized as wire
+acknowledgements or arbitrary native projects.
 The original core experiment is specified by [ADR 0030](../decisions/0030-multiplayer-local-spike.md).
 
 ## Project and peers

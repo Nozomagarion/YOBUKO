@@ -70,8 +70,9 @@ socket as though this prototype provided authentication or safe untrusted docume
 ## Amendment: restricted LAN adapter (2026-10-26)
 
 Fork-owner continuation of feature/multiplayer amends decisions 1 and 5. A separate layer-3
-`multiplayer` crate uses the trusted host without exposing its project clone API. Only a
-locally generated fixed MIDI starter and three bounded track controls participate. The adapter
+`multiplayer` crate uses the trusted host without exposing its project clone API. A generated MIDI starter or an explicitly validated, bounded MIDI-only copy can participate,
+with three live track controls. The [MIDI-copy contract](../spec/lan-midi-copy.md) adds the native
+format/subset, canonical encoding, hash/chunk/deadline bounds and original-project preservation. The adapter
 owns authenticated TLS, bearer invitation lifetime, frame/deadline/queue bounds and guest identity.
 The desktop owns a locked dedicated project and applies host-confirmed controls through commands.
 Existing projects and private playback are retained. Arbitrary project/media exchange remains

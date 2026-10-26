@@ -92,8 +92,9 @@ remaining operational step before friends can receive combined in-app updates.
 ## Compatibility
 
 The marker's multiplayer_api=1 preserves the trusted collaboration contract. The separate LAN
-adapter has protocol 1 and starter version 1, checked during invitation decoding and the TLS
-hello. Future wire changes must change that handshake contract. Combined distribution updates
+adapter has protocol 2 and MIDI-copy format 1, checked during invitation decoding, the TLS
+hello and document offer. Protocol-1 invitations are refused. The bounded MIDI adapter is pinned
+to native project format 3; source integration must review it before changing that format. Future wire changes must change that handshake contract. Combined distribution updates
 do not imply that full project/media transfer or broader remote collaboration exists.
 
 ## Visible GitHub update button

@@ -18,10 +18,11 @@ covers:
 `collaboration` remains a trusted in-process API. Its full Project clones and opaque
 acknowledgements are not wire formats. Numeric PeerIds are local bookkeeping, never credentials.
 The separate `multiplayer` adapter exposes only the [LAN starter contract](../spec/lan-starter-session.md).
-No arbitrary project, asset, device, plugin or microphone state crosses that boundary.
+Its [MIDI-copy decoder](../spec/lan-midi-copy.md) is the only remote initial-project boundary;
+arbitrary native projects, assets, plugin/microphone state and file paths remain refused.
 
-The host retains its canonical project and accepts only track rename, volume and pan on four
-fixed tracks. Membership, role, exact parameter keys, IDs, numeric ranges and sequence/revision
+The host retains its canonical project and accepts only track rename, volume and pan on
+at most 64 verified project tracks. Membership, role, exact parameter keys, IDs, numeric ranges and sequence/revision
 checks precede execution. The adapter allocates the guest's PeerId after admission. A guest
 cannot claim the owner's identity or change roles. Transport, history, files, commands/batches,
 settings and library/plugin operations have no remote representation.
@@ -43,14 +44,19 @@ An attacker controlling that clipboard or either computer is outside this bounda
 
 ## Resource and mutation limits
 
-Length-prefixed typed JSON is capped at 8192 bytes before body allocation, with exact fields,
-fixed track count and bounded names/ranges. Read/write/handshake exchanges have absolute three
-second deadlines. The host has at most four pending connection handlers; the normal authenticated
+Length-prefixed typed JSON is capped at 65536 bytes before body allocation, with exact fields,
+a maximum of 64 tracks and bounded names/ranges. Control characters in track names are refused.
+Initial music has a separate 2 MiB quota and a 30-second transfer deadline: exact-offset chunks,
+SHA-256, JSON-tree/count limits, native-version pinning and exact canonical round-trip bytes all
+precede session construction. Opaque state and extensions, files, SDK graphs and external/foreign
+devices are refused; only parameter-only FM Synth and Utility are allowed. Hardware inputs and
+launch mappings are removed from the local copy and verified off at the receiver. Outside the document transfer, read/write/handshake exchanges have absolute three-second
+deadlines. The host has at most four pending connection handlers; the normal authenticated
 guest polls every 100 ms and the server enforces at least 50 ms per request. UI queues are bounded.
 TLS, canonical execution and I/O run on workers, never the audio thread. A local peer can still
 occupy pending slots until timeout; availability against a sustained LAN flood is not guaranteed.
 
-The desktop creates a dedicated deterministic MIDI project. A Projects mutation gate prevents
+The desktop creates a dedicated starter or verified MIDI copy, preserving the original project. A Projects mutation gate prevents
 normal UI and attached-agent commands from changing its shared model/history outside confirmed
 controls. Its host-owned API admits only the three control command IDs; it is not a registered
 agent command. Other project tabs stay local. Local audition and explicit save/export remain
@@ -61,11 +67,12 @@ leaves the session rather than silently continuing with divergent state.
 
 Automated tests cover real TLS loopback exchange, wrong certificate/secret/version, one-use and
 expiry rules, replayed edits, stale revisions, malformed/duplicate fields, an incomplete handshake
-timeout, stopped connections, desktop application of controls, mutation refusal and independent
-real audio renderers. Physical two-computer/firewall and cross-platform session acceptance remain
+timeout, bounded/chunked MIDI copies, invalid offsets/size/hash, cancellation, opaque/path-bearing
+documents, stopped connections, desktop application of controls, original-project preservation,
+mutation refusal and independent real audio renderers. Physical two-computer/firewall and cross-platform session acceptance remain
 unverified. This prototype has not had an independent security audit.
 
-Sharing arbitrary projects/media remains closed until portable asset manifests, path/symlink
+Sharing arbitrary projects/media beyond the explicit MIDI subset remains closed until portable asset manifests, path/symlink
 confinement, size/hash/disk quotas, atomic finalization and interruption recovery are designed and
 tested, aligned with project folder work (#606). Wider edits require identity allocation and
 side-effect review. Recording publication, linked transport, presence, reconnect/resume, host
