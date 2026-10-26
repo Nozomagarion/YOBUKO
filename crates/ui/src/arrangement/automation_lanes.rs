@@ -539,33 +539,76 @@ struct LastShape {
     after: u64,
 }
 
-/// Stretch kept for one range or set of picked points, so the slider stays where it was let go
-/// of while they stay the same.
+/// How often a slider being dragged puts its value in, in seconds: often enough that the line
+/// follows the slider, seldom enough that a drag is not hundreds of edits.
+const LIVE_EVERY: f64 = 0.1;
+
+/// Whether a menu slider's value goes in now: when it is let go of, clicked or typed into, and
+/// while it is dragged, at most every [`LIVE_EVERY`] seconds.
+fn live(ui: &Ui, state: &mut LanesState, response: &egui::Response) -> bool {
+    let now = ui.input(|i| i.time);
+    let due =
+        response.drag_stopped() || (response.changed() && (!response.dragged() || now - state.live_at >= LIVE_EVERY));
+    if due {
+        state.live_at = now;
+    }
+    due
+}
+
+/// Scale kept for one range or set of picked points, so the slider stays where it was let go of
+/// while they stay the same.
 #[derive(Debug, Clone, PartialEq)]
 struct Stretch {
     of: String,
     shown: f64,
     applied: f64,
+    /// A step of this drag is in the history already, so the next one joins it (`continue`).
+    joined: bool,
 }
 
-/// The Stretch slider for what `of` names: where it stands (100 % for something new), and when it
-/// is let go of, the factor that takes the points from where they are to the value shown, as a
-/// share of where the stretching began (so 150 % then 120 % ends at 120 %).
-fn stretch_slider(ui: &mut Ui, state: &mut LanesState, of: String) -> Option<f64> {
+/// The Scale slider for what `of` names: where it stands (100 % for something new), and while it
+/// is dragged or when it is let go of, the factor that takes the points from where they are to the
+/// value shown, as a share of where the scaling began (so 150 % then 120 % ends at 120 %), and
+/// whether that step joins the one before it in the history (one drag is one undo step).
+fn stretch_slider(ui: &mut Ui, state: &mut LanesState, of: String) -> Option<(f64, bool)> {
     let kept = state.stretch.clone().filter(|s| s.of == of);
-    let (shown, applied) = kept.map_or((1.0, 1.0), |s| (s.shown, s.applied));
+    let (shown, applied, joined) = kept.map_or((1.0, 1.0, false), |s| (s.shown, s.applied, s.joined));
     let mut percent = shown * 100.0;
-    let response = ui.add(egui::Slider::new(&mut percent, 5.0..=200.0).text("Stretch").suffix(" %").fixed_decimals(0));
+    let response = ui
+        .add(egui::Slider::new(&mut percent, 5.0..=200.0).text("Scale").suffix(" %").fixed_decimals(0))
+        .on_hover_text(
+            "Pushes the points away from their middle (over 100 %) or pulls them toward it (under 100 %). \
+             Works on any points, drawn or inserted; their timing stays.",
+        );
     let shown = percent / 100.0;
-    state.stretch = Some(Stretch { of, shown, applied });
-    let finished = response.drag_stopped() || (response.changed() && !response.dragged());
-    if !finished || (shown - applied).abs() < 1e-6 || applied <= 0.0 {
+    let joined = joined && !response.drag_started();
+    state.stretch = Some(Stretch { of, shown, applied, joined });
+    let due = live(ui, state, &response);
+    if !due || (shown - applied).abs() < 1e-6 || applied <= 0.0 {
+        if response.drag_stopped()
+            && let Some(stretch) = state.stretch.as_mut()
+        {
+            stretch.joined = false;
+        }
         return None;
     }
+    // The command takes 0 to 4 at a time; what it did is what the points are at now.
+    let factor = (shown / applied).clamp(0.0, 4.0);
+    let dragging = response.dragged() && !response.drag_stopped();
     if let Some(stretch) = state.stretch.as_mut() {
-        stretch.applied = shown;
+        stretch.applied = applied * factor;
+        stretch.joined = dragging;
     }
-    Some(shown / applied)
+    Some((factor, joined))
+}
+
+/// The Smooth slider's amount kept for one range, and the edit count after the smoothing it put
+/// in last: a change takes that one back first when nothing else changed since.
+#[derive(Debug, Clone, PartialEq)]
+struct Smoothed {
+    of: String,
+    amount: f64,
+    after: Option<u64>,
 }
 
 /// A segment's curve being bent: the segment's first point and its curve so far.
@@ -641,9 +684,13 @@ pub struct LanesState {
     /// `None` for one a beat), the window's choices.
     shape_depth: Option<f64>,
     shape_rate: Option<f64>,
-    /// Stretch as the menu shows it for what it stretches (a range or picked points, by a key):
-    /// the value shown and the value the points are at now, from where the stretching began.
+    /// Scale as the menu shows it for what it scales (a range or picked points, by a key): the
+    /// value shown and the value the points are at now, from where the scaling began.
     stretch: Option<Stretch>,
+    /// Smooth as the range menu shows it, and the smoothing it put in last.
+    smooth: Option<Smoothed>,
+    /// When a dragged menu slider last put its value in (the window's clock, in seconds).
+    live_at: f64,
     /// The shape put in a range last (track, lane, start, end, shape), which the menu's sliders
     /// put in again as they change.
     last_shape: Option<LastShape>,
@@ -1836,8 +1883,9 @@ fn lane(
     }
 }
 
-/// The menu of a painted range: how many bars it holds, the shapes, Intensity and Rate for them
-/// (a change puts the shape put in last in again), Stretch and Smooth points for the points in it.
+/// The menu of a painted range: how many bars it holds; the shapes, with Depth and Cycles per bar
+/// for them (a change puts the shape put in last in again, live while a slider is dragged); and
+/// for whatever points the range holds, Scale, Smooth (rounds corners and jumps) and Fewer points.
 #[allow(clippy::too_many_arguments)]
 fn range_menu(
     ui: &mut Ui,
@@ -1857,11 +1905,16 @@ fn range_menu(
             .color(theme::text_hint())
             .size(theme::TEXT_SMALL),
     );
-    let put = |state: &mut LanesState, shape: &'static str, actions: &mut Vec<Action>| {
-        let rate = state.shape_rate.unwrap_or(bar.round().max(1.0));
+    // The lane and the range, the params every command of this menu starts from.
+    let ranged = || {
         let mut params = key.params(track);
         params["start"] = json!(start);
         params["end"] = json!(end);
+        params
+    };
+    let put = |state: &mut LanesState, shape: &'static str, actions: &mut Vec<Action>| {
+        let rate = state.shape_rate.unwrap_or(bar.round().max(1.0));
+        let mut params = ranged();
         params["shape"] = json!(shape);
         params["cycles"] = json!(((rate * bars).round() as usize).clamp(1, 512));
         params["depth"] = json!(state.shape_depth.unwrap_or(1.0));
@@ -1879,6 +1932,7 @@ fn range_menu(
         }
         actions.push(Action::new("automation.insertShape", params));
         state.selection = None;
+        state.smooth = None;
         state.last_shape =
             Some(LastShape { track, key: key.clone(), start, end, shape, center, after: state.revision + edits });
     };
@@ -1886,19 +1940,26 @@ fn range_menu(
         put(state, shape, actions);
         ui.close();
     }
-    // A slider counts once it is let go of (or clicked or typed into), so each change is one step.
-    let finished = |r: &egui::Response| r.drag_stopped() || (r.changed() && !r.dragged());
     let mut depth = state.shape_depth.unwrap_or(1.0) * 100.0;
-    let intensity = ui.add(egui::Slider::new(&mut depth, 0.0..=100.0).text("Intensity").suffix(" %").fixed_decimals(0));
-    if intensity.changed() {
+    let depth_slider =
+        ui.add(egui::Slider::new(&mut depth, 0.0..=100.0).text("Depth").suffix(" %").fixed_decimals(0)).on_hover_text(
+            "How far the inserted shape swings around its middle: 100 % from the bottom of the lane to its top, \
+             50 % half of that. Changing it puts the shape in again.",
+        );
+    if depth_slider.changed() {
         state.shape_depth = Some(depth / 100.0);
     }
     let mut rate = state.shape_rate.unwrap_or(bar.round().max(1.0));
-    let rated = ui.add(egui::Slider::new(&mut rate, 1.0..=32.0).text("Rate a bar").integer());
-    if rated.changed() {
+    let rate_slider = ui.add(egui::Slider::new(&mut rate, 1.0..=32.0).text("Cycles per bar").integer()).on_hover_text(
+        "How many times the inserted shape repeats in each bar: 4 is once a beat in 4/4. \
+             Changing it puts the shape in again.",
+    );
+    if rate_slider.changed() {
         state.shape_rate = Some(rate);
     }
-    if (finished(&intensity) || finished(&rated))
+    let depth_due = live(ui, state, &depth_slider);
+    let rate_due = live(ui, state, &rate_slider);
+    if (depth_due || rate_due)
         && let Some(shape) = state
             .last_shape
             .as_ref()
@@ -1908,26 +1969,56 @@ fn range_menu(
         put(state, shape, actions);
     }
     ui.separator();
-    if let Some(factor) = stretch_slider(ui, state, format!("{}/{key:?}/range {start} {end}", track.0)) {
-        let mut params = key.params(track);
-        params["start"] = json!(start);
-        params["end"] = json!(end);
-        params["factor"] = json!(factor.clamp(0.0, 4.0));
+    ui.label(egui::RichText::new("Points in the range").color(theme::text_hint()).size(theme::TEXT_SMALL));
+    let of = format!("{}/{key:?}/range {start} {end}", track.0);
+    if let Some((factor, joined)) = stretch_slider(ui, state, of.clone()) {
+        let mut params = ranged();
+        params["factor"] = json!(factor);
+        params["continue"] = json!(joined);
         actions.push(Action::new("automation.scaleRange", params));
     }
-    if ui.button("Smooth points").on_hover_text("Fewer points, bent to keep the line's shape").clicked() {
-        let mut params = key.params(track);
-        params["start"] = json!(start);
-        params["end"] = json!(end);
-        actions.push(Action::new("automation.simplify", params));
+    let kept = state.smooth.clone().filter(|s| s.of == of);
+    let mut amount = kept.as_ref().map_or(0.0, |s| s.amount) * 100.0;
+    let smooth_slider = ui
+        .add(egui::Slider::new(&mut amount, 0.0..=100.0).text("Smooth").suffix(" %").fixed_decimals(0))
+        .on_hover_text(
+            "Rounds the corners and jumps in the range into curves: a square's steps ease from one value \
+             to the next, a triangle's tips turn round. 0 % leaves them sharp.",
+        );
+    let amount = amount / 100.0;
+    let after = kept.and_then(|s| s.after);
+    state.smooth = Some(Smoothed { of: of.clone(), amount, after });
+    if live(ui, state, &smooth_slider) {
+        // The smoothing before is taken back first, so each amount rounds the line as it was.
+        let mut edits = 0;
+        if after == Some(state.revision) {
+            actions.push(Action::new("edit.undo", json!({})));
+            edits += 1;
+        }
+        if amount > 0.0 {
+            let mut params = ranged();
+            params["amount"] = json!(amount.clamp(0.0, 1.0));
+            actions.push(Action::new("automation.smooth", params));
+            edits += 1;
+        }
+        let after = (amount > 0.0).then_some(state.revision + edits);
+        state.smooth = Some(Smoothed { of, amount, after });
         state.selection = None;
+    }
+    if ui
+        .button("Fewer points")
+        .on_hover_text("Removes the points the line does not need, bending the rest to keep its shape")
+        .clicked()
+    {
+        actions.push(Action::new("automation.simplify", ranged()));
+        state.selection = None;
+        state.smooth = None;
         ui.close();
     }
 }
 
 /// The picked points' part of a lane's menus, when points of this lane are picked: how many, and
-/// Stretch for them (letting go runs `automation.scaleRange` with them, then it goes back to
-/// 100 %).
+/// Scale for them (`automation.scaleRange` with them, live while it is dragged).
 fn picked_menu(ui: &mut Ui, state: &mut LanesState, track: TrackId, key: &LaneKey, actions: &mut Vec<Action>) {
     let Some(points) = state
         .selection
@@ -1944,10 +2035,11 @@ fn picked_menu(ui: &mut Ui, state: &mut LanesState, track: TrackId, key: &LaneKe
             .color(theme::text_hint())
             .size(theme::TEXT_SMALL),
     );
-    if let Some(factor) = stretch_slider(ui, state, format!("{}/{key:?}/points {points:?}", track.0)) {
+    if let Some((factor, joined)) = stretch_slider(ui, state, format!("{}/{key:?}/points {points:?}", track.0)) {
         let mut params = key.params(track);
         params["points"] = json!(points);
-        params["factor"] = json!(factor.clamp(0.0, 4.0));
+        params["factor"] = json!(factor);
+        params["continue"] = json!(joined);
         actions.push(Action::new("automation.scaleRange", params));
     }
 }

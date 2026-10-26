@@ -234,6 +234,25 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "automation.smooth",
+        label: "Round the corners and jumps of a parameter's automation inside a time range: a jump becomes an eased step, a corner between straight segments eases in and out; bent segments stay",
+        params: &[
+            DEVICE_TRACK,
+            AUTOMATED_DEVICE,
+            AUTOMATED,
+            RANGE_START,
+            RANGE_END,
+            param(
+                "amount",
+                ParamType::Number,
+                "how much of the room on each side of a corner or jump the rounding takes, 0 to 1",
+            ),
+        ],
+        kind: CommandKind::Edit,
+        run: crate::automation_range::smooth,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "automation.scaleRange",
         label: "Stretch the points of a parameter's automation inside a time range, or picked points, up and down around their middle, kept inside the parameter's travel",
         params: &[
@@ -252,6 +271,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
                 ParamType::Number,
                 "how far from their middle the points go, 0 to 4: 1 leaves them, 2 doubles their swing, 0 flattens them",
             ),
+            CONTINUE,
         ],
         kind: CommandKind::Edit,
         run: crate::automation_range::scale_range,

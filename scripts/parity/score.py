@@ -245,12 +245,12 @@ CHAPTERS = [
      "deleted together, curves bent by dragging, re-enabled from the lane, a click near the line adding "
      "a point on it, a faint line at the value of a lane without points; a time range painted on a lane "
      "copied, pasted onto any lane, duplicated right after itself and deleted, and shapes inserted into it "
-     "(sine, triangle, saws, square, ramps, curves, swell) with an intensity and a rate a bar, into a point's segment from its menu or as the "
+     "(sine, triangle, saws, square, ramps, curves, swell) with a depth and cycles a bar, live while dragged, into a point's segment from its menu or as the "
      "shape new points take; a curve handle half-way along each segment; a click adds a point on the line "
-     "(anywhere, as a setting); a range's points stretched or smoothed to fewer bent segments, the arrows moving "
+     "(anywhere, as a setting); a range's points scaled live, their corners and jumps rounded into curves or thinned to fewer bent segments, the arrows moving "
      "selected points. Missing recording, "
      "drawing with a pencil, plug-in lanes in the view, send, master and tempo automation, "
-     "locking, simplifying envelopes."),
+     "locking."),
     (27, "Clip Envelopes", 13, 0.00, "absent", "No clip envelopes."),
     (28, "Working with Video", 6, 0.00, "absent", "No video import or window."),
     (29, "Live Audio Effect Reference", 139, 0.19, "partial",

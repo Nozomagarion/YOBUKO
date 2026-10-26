@@ -302,6 +302,88 @@ pub(crate) fn simplify(session: &mut Session, params: &Value) -> Result<Value, C
     Ok(json!({ "param": target.param, "points": count, "removed": removed }))
 }
 
+/// The share of the room on each side of a corner or jump that rounding takes at amount 1: under
+/// a half, so the rounding of two neighbours never meets at one beat.
+const ROOM: f64 = 0.45;
+
+/// How far a corner may bend: the steepest curve a rounded corner or jump gets, at amount 1.
+const ROUND_CURVE: f64 = 0.9;
+
+/// Whether the line turns at the point between `a`, `p` and `b` (places on the lane at beats, the
+/// time as a share of `span`): its slope changes by more than a twentieth of the lane a span.
+fn turns(a: (f64, f64), p: (f64, f64), b: (f64, f64), span: f64) -> bool {
+    let slope = |x: (f64, f64), y: (f64, f64)| (y.1 - x.1) / ((y.0 - x.0) / span);
+    (slope(a, p) - slope(p, b)).abs() > 0.05
+}
+
+/// `automation.smooth {track, device?, param, start, end, amount}`: the corners and jumps inside
+/// the range rounded, `amount` (0 to 1) taking up to [`ROOM`] of the room on each side. A jump
+/// (two points at one beat) becomes an eased step: it leaves its first value slowly, passes the
+/// middle at its beat and settles on its second; a corner between two straight segments gets a
+/// point on each side, the line easing into the corner and out of it. Bent segments (a sine's)
+/// are smooth already and are left as they are.
+pub(crate) fn smooth(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let target = target(session, params)?;
+    let (start, end) = range(params)?;
+    let amount = share(params, "amount")?.ok_or("amount must be a number from 0 to 1")?;
+    let points = points_of(session, &target)?;
+    if amount <= 0.0 || target.stepped() || points.len() < 2 {
+        return Ok(json!({ "param": target.param, "points": points.len(), "rounded": 0 }));
+    }
+    let lane = Lane { target: &target, session };
+    let place = |p: &AutomationPoint| (p.beat, lane.position(p.value));
+    let at = |beat: f64| value_at(&points, beat, false, &lane);
+    let bend = ROUND_CURVE * amount;
+    let span = end - start;
+    let inside = |beat: f64| beat > start + SAME && beat < end - SAME;
+    let mut out: Vec<AutomationPoint> = Vec::with_capacity(points.len() * 2);
+    let mut rounded = 0;
+    let mut i = 0;
+    while let Some(&p) = points.get(i) {
+        let before = i.checked_sub(1).and_then(|j| points.get(j)).map_or(start, |a| a.beat.max(start));
+        // A jump: this point and the next at one beat.
+        if let Some(&q) = points.get(i + 1).filter(|q| (q.beat - p.beat).abs() < SAME && inside(p.beat)) {
+            let after = points.get(i + 2).map_or(end, |b| b.beat.min(end));
+            let d = amount * ROOM * (p.beat - before).min(after - p.beat);
+            if d > SAME {
+                let (Some(from), Some(to)) = (at(p.beat - d), at(p.beat + d)) else { break };
+                let middle = lane.value((lane.position(from) + lane.position(to)) / 2.0);
+                out.push(AutomationPoint { beat: p.beat - d, value: from, curve: -bend });
+                out.push(AutomationPoint { beat: p.beat, value: middle, curve: bend });
+                out.push(AutomationPoint { beat: p.beat + d, value: to, curve: q.curve });
+                rounded += 1;
+                i += 2;
+                continue;
+            }
+        }
+        // A corner between two straight segments.
+        if let (Some(&a), Some(&b)) = (i.checked_sub(1).and_then(|j| points.get(j)), points.get(i + 1))
+            && inside(p.beat)
+            && a.curve == 0.0
+            && p.curve == 0.0
+            && p.beat - a.beat > SAME
+            && b.beat - p.beat > SAME
+            && turns(place(&a), place(&p), place(&b), span)
+        {
+            let d = amount * ROOM * (p.beat - a.beat).min(b.beat - p.beat);
+            if let (Some(into), Some(out_of)) = (at(p.beat - d), at(p.beat + d))
+                && d > SAME
+            {
+                out.push(AutomationPoint { beat: p.beat - d, value: into, curve: bend });
+                out.push(AutomationPoint { curve: -bend, ..p });
+                out.push(AutomationPoint { beat: p.beat + d, value: out_of, curve: 0.0 });
+                rounded += 1;
+                i += 1;
+                continue;
+            }
+        }
+        out.push(p);
+        i += 1;
+    }
+    let count = put(session, &target, out)?;
+    Ok(json!({ "param": target.param, "points": count, "rounded": rounded }))
+}
+
 /// `automation.scaleRange {track, device?, param, start, end, factor}`: the points inside the
 /// range stretched up and down by `factor` (0 to 4) around the middle of where they sit on the
 /// lane, kept inside the travel.

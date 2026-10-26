@@ -635,3 +635,77 @@ fn smoothing_a_sine_keeps_its_shape() {
         assert!((old - new).abs() < 0.06, "at beat {beat}: {old} -> {new}");
     }
 }
+
+/// Smooth rounds a square's jumps into eased steps that pass the middle at the jump's beat, and a
+/// triangle's tip into a curve that stays under it; undo brings the sharp line back (#916).
+#[test]
+fn smooth_rounds_jumps_and_corners() {
+    use suhina_model::automation::{Plain, value_at};
+    let mut session = Session::new(project());
+    let lane = |s: &Session| lanes(s).iter().find(|l| l.param == "pan").unwrap().points.clone();
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 0, "value": 0 })).unwrap();
+    run(
+        &mut session,
+        "automation.insertShape",
+        json!({ "track": 1, "param": "pan", "start": 0, "end": 4, "shape": "square", "cycles": 2 }),
+    )
+    .unwrap();
+    let square = lane(&session);
+    let jumps = |points: &[suhina_model::AutomationPoint]| {
+        points
+            .windows(2)
+            .filter(|w| w[0].beat > 0.01 && w[0].beat < 3.99 && (w[1].beat - w[0].beat).abs() < 1e-9)
+            .count()
+    };
+    assert!(jumps(&square) > 0, "{square:?}");
+    let done = run(
+        &mut session,
+        "automation.smooth",
+        json!({ "track": 1, "param": "pan", "start": 0, "end": 4, "amount": 1 }),
+    )
+    .unwrap();
+    assert!(done["rounded"].as_u64().unwrap() > 0, "{done}");
+    let smooth = lane(&session);
+    assert_eq!(jumps(&smooth), 0, "{smooth:?}");
+    // At a jump's beat the eased step is halfway; just after it, it has not reached the top yet.
+    let jump = square.windows(2).find(|w| w[0].beat > 0.01 && (w[1].beat - w[0].beat).abs() < 1e-9).unwrap();
+    let (from, to, at) = (jump[0].value, jump[1].value, jump[0].beat);
+    let middle = value_at(&smooth, at, false, &Plain).unwrap();
+    assert!((middle - (from + to) / 2.0).abs() < 1e-6, "{middle} between {from} and {to}");
+    let soon = value_at(&smooth, at + 0.05, false, &Plain).unwrap();
+    assert!((soon - to).abs() > 1e-3 && (soon - from).abs() > (to - from).abs() / 2.0, "{soon}");
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(lane(&session), square);
+
+    // A triangle's tip: the corner stays, the line on either side bends into it.
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, -1.0), (1.0, 1.0), (2.0, -1.0)] {
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    run(&mut session, "automation.smooth", json!({ "track": 1, "param": "pan", "start": 0, "end": 2, "amount": 0.5 }))
+        .unwrap();
+    let round = lane(&session);
+    assert_eq!(round.len(), 5, "{round:?}");
+    assert!(round.iter().any(|p| p.beat == 1.0 && p.value == 1.0), "{round:?}");
+    let near = value_at(&round, 0.9, false, &Plain).unwrap();
+    assert!(near > 0.6 && near < 1.0, "the straight line is at 0.6 there, the rounded one above it: {near}");
+}
+
+/// Scale steps that continue one another are one undo step, as a slider's drag is (#916).
+#[test]
+fn continued_scaling_is_one_undo_step() {
+    let mut session = Session::new(project());
+    for (beat, value) in [(0.0, 0.5), (1.0, -0.5), (2.0, 0.5)] {
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    let before = pan_points(&session);
+    let scale = |continued: bool| json!({ "track": 1, "param": "pan", "start": 0, "end": 2, "factor": 1.2, "continue": continued });
+    run(&mut session, "automation.scaleRange", scale(false)).unwrap();
+    run(&mut session, "automation.scaleRange", scale(true)).unwrap();
+    run(&mut session, "automation.scaleRange", scale(true)).unwrap();
+    assert_ne!(pan_points(&session), before);
+    run(&mut session, "edit.undo", json!({})).unwrap();
+    assert_eq!(pan_points(&session), before);
+}
