@@ -159,6 +159,21 @@ impl Scale {
         }
     }
 
+    /// How far Up or Down moves a point, in the set command's unit.
+    fn nudge_step(&self) -> f64 {
+        match self {
+            Self::Volume => 1.0,
+            Self::Pan => 0.02,
+            Self::Mute => 1.0,
+            Self::Device(info) => match info.kind {
+                ParamKind::Continuous(_) => (info.max - info.min) / 100.0,
+                _ => 1.0,
+            },
+            Self::Sd(parameter) if parameter.control.is_stepped() => 1.0,
+            Self::Sd(parameter) => (parameter.max - parameter.min) / 100.0,
+        }
+    }
+
     /// A value as Edit value's field starts with: the set command's number, `-inf` for a silent
     /// volume.
     fn typed_text(&self, value: f64) -> String {
@@ -427,7 +442,7 @@ impl Params {
     }
 
     /// `track`'s parameter that `key` names, if the track still has it.
-    fn param(&self, track: TrackId, key: &LaneKey) -> Option<&Param> {
+    pub(crate) fn param(&self, track: TrackId, key: &LaneKey) -> Option<&Param> {
         self.of(track).iter().find(|p| &p.key == key)
     }
 }
@@ -579,6 +594,14 @@ pub struct LanesState {
     /// The lane clicked last, which Ctrl+V pastes copied automation onto at the play position;
     /// a clip or a track header clicked since lets go of it.
     pub last_lane: Option<(TrackId, LaneKey)>,
+    /// The range menu's Intensity (0 to 1; `None` for the whole travel), Rate (cycles a bar;
+    /// `None` for one a beat) and Stretch (`None` for 100 %), the window's choices.
+    shape_depth: Option<f64>,
+    shape_rate: Option<f64>,
+    stretch: Option<f64>,
+    /// The shape put in a range last (track, lane, start, end, shape), which the menu's sliders
+    /// put in again as they change.
+    last_shape: Option<(TrackId, LaneKey, f64, f64, &'static str)>,
     /// The lanes whose parameter was chosen in the parameter menu's "Automated" section: the
     /// menu opens there again for them, and on the parameter's own row for the rest.
     from_automated: HashSet<(TrackId, LaneKey)>,
@@ -698,6 +721,24 @@ impl LanesState {
             self.last_lane = None;
         }
         self.clip = clip;
+    }
+
+    /// The command an arrow key asks for on the selected points: Left and Right move them a grid
+    /// step (`step` beats) earlier or later, Up and Down a small step of value (a decibel for the
+    /// volume, a hundredth of the travel for most parameters, one for a whole-number one).
+    pub fn nudge(&mut self, params: &Params, direction: &str, step: f64) -> Option<Action> {
+        let selection = self.selection.clone().filter(|s| !s.points.is_empty())?;
+        let param = params.param(selection.track, &selection.key)?;
+        let mut command = selection.key.params(selection.track);
+        command["points"] = json!(selection.points);
+        match direction {
+            "left" => command["beats"] = json!(-step),
+            "right" => command["beats"] = json!(step),
+            "up" => command["value"] = json!(param.scale.nudge_step()),
+            "down" => command["value"] = json!(-param.scale.nudge_step()),
+            _ => return None,
+        }
+        Some(Action::new("automation.movePoints", command))
     }
 
     /// Lets go of the selected points, the painted range and the lane clicked last: something
@@ -1421,16 +1462,7 @@ fn lane(
             // Inside a painted range: the shape fills it, once a beat for a repeating one.
             Some(range) => {
                 let (start, end) = (range.start, range.end);
-                if let Some(shape) = shape_menu(ui, "Insert shape", None) {
-                    let mut params = key.params(track);
-                    params["start"] = json!(start);
-                    params["end"] = json!(end);
-                    params["shape"] = json!(shape);
-                    params["cycles"] = json!(((end - start).round() as usize).clamp(1, 512));
-                    actions.push(Action::new("automation.insertShape", params));
-                    state.selection = None;
-                    ui.close();
-                }
+                range_menu(ui, state, track, key, (start, end), geometry.grid.bar_beats, actions);
             }
             // Elsewhere nothing is drawn: the shape is the one the next points' segments take,
             // and a click on the chosen one goes back to straight lines.
@@ -1734,6 +1766,86 @@ fn lane(
         let fill = if selected { theme::text_primary() } else { ink };
         lane_painter.circle_filled(center, radius, fill);
         lane_painter.circle_stroke(center, radius, Stroke::new(1.0, theme::window_background()));
+    }
+}
+
+/// The menu of a painted range: how many bars it holds, the shapes, Intensity and Rate for them
+/// (a change puts the shape put in last in again), Stretch and Smooth points for the points in it.
+#[allow(clippy::too_many_arguments)]
+fn range_menu(
+    ui: &mut Ui,
+    state: &mut LanesState,
+    track: TrackId,
+    key: &LaneKey,
+    (start, end): (f64, f64),
+    bar_beats: f64,
+    actions: &mut Vec<Action>,
+) {
+    let bar = bar_beats.max(1e-3);
+    let bars = (end - start) / bar;
+    let shown = if (bars - bars.round()).abs() < 1e-6 { format!("{}", bars.round()) } else { format!("{bars:.2}") };
+    ui.label(
+        egui::RichText::new(format!("{shown} bar{} selected", if (bars - 1.0).abs() < 1e-6 { "" } else { "s" }))
+            .color(theme::text_hint())
+            .size(theme::TEXT_SMALL),
+    );
+    let put = |state: &mut LanesState, shape: &'static str, actions: &mut Vec<Action>| {
+        let rate = state.shape_rate.unwrap_or(bar.round().max(1.0));
+        let mut params = key.params(track);
+        params["start"] = json!(start);
+        params["end"] = json!(end);
+        params["shape"] = json!(shape);
+        params["cycles"] = json!(((rate * bars).round() as usize).clamp(1, 512));
+        params["depth"] = json!(state.shape_depth.unwrap_or(1.0));
+        actions.push(Action::new("automation.insertShape", params));
+        state.selection = None;
+        state.last_shape = Some((track, key.clone(), start, end, shape));
+    };
+    if let Some(shape) = shape_menu(ui, "Insert shape", None) {
+        put(state, shape, actions);
+        ui.close();
+    }
+    // A slider counts once it is let go of (or clicked or typed into), so each change is one step.
+    let finished = |r: &egui::Response| r.drag_stopped() || (r.changed() && !r.dragged());
+    let mut depth = state.shape_depth.unwrap_or(1.0) * 100.0;
+    let intensity = ui.add(egui::Slider::new(&mut depth, 0.0..=100.0).text("Intensity").suffix(" %").fixed_decimals(0));
+    if intensity.changed() {
+        state.shape_depth = Some(depth / 100.0);
+    }
+    let mut rate = state.shape_rate.unwrap_or(bar.round().max(1.0));
+    let rated = ui.add(egui::Slider::new(&mut rate, 1.0..=32.0).text("Rate a bar").integer());
+    if rated.changed() {
+        state.shape_rate = Some(rate);
+    }
+    if (finished(&intensity) || finished(&rated))
+        && let Some((_, _, _, _, shape)) =
+            state.last_shape.clone().filter(|(t, k, s, e, _)| *t == track && k == key && *s == start && *e == end)
+    {
+        put(state, shape, actions);
+    }
+    ui.separator();
+    let mut stretch = state.stretch.unwrap_or(1.0) * 100.0;
+    let stretched = ui.add(egui::Slider::new(&mut stretch, 0.0..=200.0).text("Stretch").suffix(" %").fixed_decimals(0));
+    if stretched.changed() {
+        state.stretch = Some(stretch / 100.0);
+    }
+    if finished(&stretched) {
+        let factor = state.stretch.take().unwrap_or(1.0);
+        if (factor - 1.0).abs() > 1e-6 {
+            let mut params = key.params(track);
+            params["start"] = json!(start);
+            params["end"] = json!(end);
+            params["factor"] = json!(factor);
+            actions.push(Action::new("automation.scaleRange", params));
+        }
+    }
+    if ui.button("Smooth points").on_hover_text("Fewer points, bent to keep the line's shape").clicked() {
+        let mut params = key.params(track);
+        params["start"] = json!(start);
+        params["end"] = json!(end);
+        actions.push(Action::new("automation.simplify", params));
+        state.selection = None;
+        ui.close();
     }
 }
 

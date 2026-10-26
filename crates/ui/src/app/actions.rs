@@ -760,6 +760,19 @@ impl App {
                     actions.push(Action::new("clip.launch", json!({ "track": track.0, "scene": scene + 1 })));
                 }
             }
+            // Points selected on an automation lane: the arrows move them, a grid step in time or a
+            // small step of value (#916).
+            "selection.up" | "selection.down" | "selection.left" | "selection.right"
+                if self.shown == View::Arrangement && self.arrangement.automation.selected_points().is_some() =>
+            {
+                let Some((_, _, timeline)) = self.timeline.as_ref() else { return };
+                let step = self.arrangement.grid.step(timeline.bar_beats);
+                let step = if step > 0.0 { step } else { 1.0 };
+                let direction = action.trim_start_matches("selection.");
+                if let Some(nudge) = self.arrangement.automation.nudge(&timeline.automation, direction, step) {
+                    actions.push(nudge);
+                }
+            }
             "selection.up" | "selection.down" | "selection.left" | "selection.right" => {
                 let (View::Session, Some(from)) = (self.shown, self.view.selected_slot) else { return };
                 let step = match action {

@@ -537,3 +537,59 @@ fn a_shape_fills_a_points_segment_and_a_new_points_segment() {
         .is_err()
     );
 }
+
+/// Less depth swings a shape around the lane's value where the range starts; a sine is a few bent
+/// segments a cycle; Smooth points thins dense points and keeps the line; Stretch scales the
+/// points around their middle (#916).
+#[test]
+fn shapes_take_a_depth_and_ranges_smooth_and_stretch() {
+    let mut session = Session::new(project());
+    run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": 0, "value": 0 })).unwrap();
+    run(
+        &mut session,
+        "automation.insertShape",
+        json!({ "track": 1, "param": "pan", "start": 0, "end": 4, "shape": "square", "depth": 0.5 }),
+    )
+    .unwrap();
+    let values: Vec<f64> = pan_points(&session).iter().map(|p| p.1).collect();
+    assert!(values.iter().all(|v| (-0.5..=0.5).contains(v)), "half the travel around the middle: {values:?}");
+    assert!(values.contains(&0.5) && values.contains(&-0.5), "{values:?}");
+    // A sine over 4 beats, once a beat: five points a cycle at most, bent.
+    run(
+        &mut session,
+        "automation.insertShape",
+        json!({ "track": 1, "param": "pan", "start": 8, "end": 12, "shape": "sine", "cycles": 4 }),
+    )
+    .unwrap();
+    let sine: Vec<(f64, f64)> = pan_points(&session).into_iter().filter(|(b, _)| (8.0..=12.0).contains(b)).collect();
+    assert!(sine.len() <= 18, "{sine:?}");
+    // Dense points along a straight rise thin to its two ends.
+    for i in 0..=20 {
+        let beat = 16.0 + f64::from(i) * 0.2;
+        let value = -1.0 + f64::from(i) * 0.1;
+        run(&mut session, "automation.addPoint", json!({ "track": 1, "param": "pan", "beat": beat, "value": value }))
+            .unwrap();
+    }
+    let done = run(&mut session, "automation.simplify", json!({ "track": 1, "param": "pan", "start": 16, "end": 20 }))
+        .unwrap();
+    assert_eq!(done["removed"], json!(19));
+    let line: Vec<(f64, f64)> = pan_points(&session).into_iter().filter(|(b, _)| (16.0..=20.0).contains(b)).collect();
+    assert_eq!(line, [(16.0, -1.0), (20.0, 1.0)]);
+    // Stretch at a half: the square's swing halves around its middle.
+    run(
+        &mut session,
+        "automation.scaleRange",
+        json!({ "track": 1, "param": "pan", "start": 0, "end": 4, "factor": 0.5 }),
+    )
+    .unwrap();
+    let values: Vec<f64> = pan_points(&session).iter().filter(|p| p.0 <= 4.0).map(|p| p.1).collect();
+    assert!(values.iter().all(|v| (-0.25 - 1e-9..=0.25 + 1e-9).contains(v)), "{values:?}");
+    assert!(
+        run(
+            &mut session,
+            "automation.scaleRange",
+            json!({ "track": 1, "param": "pan", "start": 0, "end": 4, "factor": 9 })
+        )
+        .is_err()
+    );
+}

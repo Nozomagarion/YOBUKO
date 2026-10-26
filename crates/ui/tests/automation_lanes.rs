@@ -1261,3 +1261,22 @@ fn selected_points_cut_and_paste_from_the_play_position() {
     assert_eq!(pasted.len(), 2, "{pasted:?}");
     assert!((pasted[1] - pasted[0] - 12.0).abs() < 1e-9 && pasted[0] >= play - 1e-9, "{pasted:?} from {play}");
 }
+
+/// The arrows move selected points: Left and Right a grid step, Up and Down a decibel (#916).
+#[test]
+fn the_arrow_keys_move_selected_points() {
+    let mut harness = with_lanes();
+    add_point(&mut harness, 100.0);
+    let point = harness.get_by_label("Volume point 1 on Drums").rect().center();
+    click_at(&mut harness, point);
+    let before = volume(&harness).0[0];
+    harness.key_press(Key::ArrowRight);
+    harness.run();
+    let moved = volume(&harness).0[0];
+    assert!(moved.beat > before.beat, "{before:?} -> {moved:?}");
+    harness.key_press(Key::ArrowUp);
+    harness.run();
+    let up = volume(&harness).0[0];
+    let db = |g: f64| 20.0 * g.log10();
+    assert!((db(up.value) - db(moved.value) - 1.0).abs() < 0.01, "{moved:?} -> {up:?}");
+}

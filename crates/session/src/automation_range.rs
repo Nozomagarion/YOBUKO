@@ -9,7 +9,7 @@
 use serde_json::{Value, json};
 use suhina_engine::MAX_START_BEAT;
 use suhina_model::AutomationPoint;
-use suhina_model::automation::{MAX_POINTS, Taper, value_at};
+use suhina_model::automation::{MAX_POINTS, Taper, curve_through, value_at};
 
 use crate::automation::{Target, target};
 use crate::commands::number;
@@ -227,6 +227,108 @@ pub(crate) fn duplicate(session: &mut Session, params: &Value) -> Result<Value, 
     Ok(json!({ "param": target.param, "start": end, "end": end + length, "points": count }))
 }
 
+/// The points of `points` (time as a share of the span, place on the lane) that keep the line
+/// within `tolerance` of the lane's height, the first and the last always: Ramer-Douglas-Peucker.
+fn keep(points: &[(f64, f64)], tolerance: f64) -> Vec<usize> {
+    fn walk(points: &[(f64, f64)], from: usize, to: usize, tolerance: f64, out: &mut Vec<usize>) {
+        let (Some(&(x0, y0)), Some(&(x1, y1))) = (points.get(from), points.get(to)) else { return };
+        let mut worst = (0.0, from);
+        for (i, &(x, y)) in points.iter().enumerate().take(to).skip(from + 1) {
+            let t = if x1 > x0 { (x - x0) / (x1 - x0) } else { 0.0 };
+            let off = (y - (y0 + (y1 - y0) * t)).abs();
+            if off > worst.0 {
+                worst = (off, i);
+            }
+        }
+        if worst.0 > tolerance {
+            walk(points, from, worst.1, tolerance, out);
+            out.push(worst.1);
+            walk(points, worst.1, to, tolerance, out);
+        }
+    }
+    let Some(last) = points.len().checked_sub(1) else { return Vec::new() };
+    let mut out = vec![0];
+    walk(points, 0, last, tolerance, &mut out);
+    if last > 0 {
+        out.push(last);
+    }
+    out
+}
+
+/// `automation.simplify {track, device?, param, start, end, tolerance?}`: the points inside the
+/// range thinned to those the line needs, within `tolerance` of the lane's height (default 2 %),
+/// each segment left given the curve that passes through the old line half-way along, so the
+/// shape stays.
+pub(crate) fn simplify(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let target = target(session, params)?;
+    let (start, end) = range(params)?;
+    let tolerance = share(params, "tolerance")?.unwrap_or(0.02);
+    let points = points_of(session, &target)?;
+    let inside: Vec<usize> =
+        (0..points.len()).filter(|&i| points.get(i).is_some_and(|p| p.beat >= start && p.beat <= end)).collect();
+    if inside.len() < 3 || target.stepped() {
+        return Ok(json!({ "param": target.param, "points": points.len(), "removed": 0 }));
+    }
+    let lane = Lane { target: &target, session };
+    let span = end - start;
+    let placed: Vec<(f64, f64)> = inside
+        .iter()
+        .filter_map(|&i| points.get(i))
+        .map(|p| ((p.beat - start) / span, lane.position(p.value)))
+        .collect();
+    let kept: Vec<AutomationPoint> = keep(&placed, tolerance)
+        .windows(2)
+        .filter_map(|pair| {
+            let a = points.get(*inside.get(*pair.first()?)?)?;
+            let b = points.get(*inside.get(*pair.get(1)?)?)?;
+            let (pa, pb) = (lane.position(a.value), lane.position(b.value));
+            let mid = value_at(&points, (a.beat + b.beat) / 2.0, false, &lane).map(|v| lane.position(v))?;
+            let curve =
+                if (pb - pa).abs() > SAME { curve_through(0.5, (mid - pa) / (pb - pa)).unwrap_or(0.0) } else { 0.0 };
+            Some(AutomationPoint { curve: (curve * 1000.0).round() / 1000.0, ..*a })
+        })
+        .collect();
+    let (Some(first), Some(last)) =
+        (inside.first().and_then(|&i| points.get(i)).copied(), inside.last().and_then(|&i| points.get(i)).copied())
+    else {
+        return Err("the range has no points".into());
+    };
+    let mut merged: Vec<AutomationPoint> = points.iter().filter(|p| p.beat < first.beat).copied().collect();
+    merged.extend(kept);
+    merged.push(last);
+    merged.extend(points.iter().filter(|p| p.beat > last.beat).copied());
+    let removed = points.len().saturating_sub(merged.len());
+    let count = put(session, &target, merged)?;
+    Ok(json!({ "param": target.param, "points": count, "removed": removed }))
+}
+
+/// `automation.scaleRange {track, device?, param, start, end, factor}`: the points inside the
+/// range stretched up and down by `factor` (0 to 4) around the middle of where they sit on the
+/// lane, kept inside the travel.
+pub(crate) fn scale_range(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let target = target(session, params)?;
+    let (start, end) = range(params)?;
+    let factor = number(params, "factor")?;
+    if !(0.0..=4.0).contains(&factor) {
+        return Err(format!("factor must be from 0 to 4, got {factor}").into());
+    }
+    let mut points = points_of(session, &target)?;
+    let lane = Lane { target: &target, session };
+    let places: Vec<f64> =
+        points.iter().filter(|p| p.beat >= start && p.beat <= end).map(|p| lane.position(p.value)).collect();
+    let (Some(low), Some(high)) = (places.iter().copied().reduce(f64::min), places.iter().copied().reduce(f64::max))
+    else {
+        return Err("the range has no points".into());
+    };
+    let middle = (low + high) / 2.0;
+    for point in points.iter_mut().filter(|p| p.beat >= start && p.beat <= end) {
+        let place = (middle + (lane.position(point.value) - middle) * factor).clamp(0.0, 1.0);
+        point.value = lane.value(place);
+    }
+    let count = put(session, &target, points)?;
+    Ok(json!({ "param": target.param, "points": count }))
+}
+
 /// `automation.deleteRange {track, device?, param, start, end}`: the points inside the range go;
 /// the values at its edges stay, so the envelope outside is as it was.
 pub(crate) fn delete_range(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
@@ -247,16 +349,14 @@ pub type ShapePoint = (f64, f64, f64);
 
 /// A shape `automation.insertShape` draws: its points over one cycle, and whether it repeats.
 pub fn shape_points(shape: &str) -> Option<(Vec<ShapePoint>, bool)> {
-    let sine = |n: usize| -> Vec<ShapePoint> {
-        (0..=n)
-            .map(|i| {
-                let t = i as f64 / n as f64;
-                (t, 0.5 + 0.5 * (std::f64::consts::TAU * t).sin(), 0.0)
-            })
-            .collect()
-    };
+    // A sine from four bent segments a cycle: each quarter leaves the middle fast and reaches a
+    // peak or a trough slowly, the curves that pass through a sine's value half-way along.
+    let away = curve_through(0.5, std::f64::consts::FRAC_1_SQRT_2).unwrap_or(0.0);
+    let back = curve_through(0.5, 1.0 - std::f64::consts::FRAC_1_SQRT_2).unwrap_or(0.0);
     Some(match shape {
-        "sine" => (sine(16), true),
+        "sine" => {
+            (vec![(0.0, 0.5, away), (0.25, 1.0, back), (0.5, 0.5, away), (0.75, 0.0, back), (1.0, 0.5, 0.0)], true)
+        }
         "triangle" => (vec![(0.0, 0.0, 0.0), (0.5, 1.0, 0.0), (1.0, 0.0, 0.0)], true),
         "saw_up" => (vec![(0.0, 0.0, 0.0), (1.0, 1.0, 0.0)], true),
         "saw_down" => (vec![(0.0, 1.0, 0.0), (1.0, 0.0, 0.0)], true),
@@ -284,6 +384,18 @@ fn cycles(params: &Value) -> Result<Option<usize>, CommandError> {
             .filter(|n| (1..=MAX_CYCLES).contains(n))
             .map(Some)
             .ok_or_else(|| format!("cycles must be a whole number from 1 to {MAX_CYCLES}").into()),
+    }
+}
+
+/// A share from 0 to 1 that `params[name]` gives, `None` when left out.
+fn share(params: &Value, name: &str) -> Result<Option<f64>, CommandError> {
+    match params.get(name) {
+        None | Some(Value::Null) => Ok(None),
+        Some(v) => v
+            .as_f64()
+            .filter(|n| (0.0..=1.0).contains(n))
+            .map(Some)
+            .ok_or_else(|| format!("{name} must be a number from 0 to 1").into()),
     }
 }
 
@@ -381,10 +493,22 @@ pub(crate) fn insert_shape(session: &mut Session, params: &Value) -> Result<Valu
         return Err(format!("no shape {name:?}; the shapes are {}", SHAPES.join(", ")).into());
     }
     let asked = cycles(params)?;
+    let depth = share(params, "depth")?.unwrap_or(1.0);
     let (start, end, heights, cycles) = match params.get("point") {
         None | Some(Value::Null) => {
             let (start, end) = range(params)?;
-            (start, end, (0.0, 1.0), asked.unwrap_or(1))
+            // A shape less than the whole travel swings around the lane's value where the range
+            // starts (or `center`), kept inside the travel.
+            let center = match share(params, "center")? {
+                Some(center) => center,
+                None => {
+                    let points = points_of(session, &target)?;
+                    let lane = Lane { target: &target, session };
+                    value_at(&points, start, target.stepped(), &lane).map_or(0.5, |v| target.position(session, v))
+                }
+            };
+            let low = (center - depth / 2.0).clamp(0.0, 1.0 - depth);
+            (start, end, (low, low + depth), asked.unwrap_or(1))
         }
         Some(v) => {
             let index =
@@ -394,8 +518,12 @@ pub(crate) fn insert_shape(session: &mut Session, params: &Value) -> Result<Valu
                 return Err(format!("the lane has no point {index}; it has {}", points.len()).into());
             }
             let (start, end, a, b) = segment(session, &target, &points, index)?;
-            let heights = if (a - b).abs() < SAME { (0.0, 1.0) } else { (a.min(b), a.max(b)) };
-            (start, end, heights, asked.unwrap_or_else(|| cycles_per_beat(start, end)))
+            let (low, high) = if (a - b).abs() < SAME { (0.0, 1.0) } else { (a.min(b), a.max(b)) };
+            // Less than the whole depth: as much of the way between the two heights, around
+            // their middle.
+            let middle = (low + high) / 2.0;
+            let half = (high - low) / 2.0 * depth;
+            (start, end, (middle - half, middle + half), asked.unwrap_or_else(|| cycles_per_beat(start, end)))
         }
     };
     let count = fill(session, &target, start, end, heights, name, cycles)?;
