@@ -209,9 +209,14 @@ fn utility(node: Node, warn: &mut dyn FnMut(String)) -> Vec<DeviceParam> {
 /// Live's EQ Three (`FilterEQ3`) as Suhina's `dj-eq` (`docs/spec/dj-eq.md` › Import).
 fn eq3(node: Node, warn: &mut dyn FnMut(String)) -> Vec<DeviceParam> {
     let mut p = Params::default();
-    // The band gains are stored as linear gains; ours are decibels, with silence at the bottom.
-    let gain =
-        |name: &str| manual(node, name).map(|g| if g > 0.0 { (20.0 * g.log10()).max(SILENCE_DB) } else { SILENCE_DB });
+    // The band gains are stored as linear gains; ours are decibels, held in the device's range
+    // (silence at the bottom, +6 dB at the top), whatever the project file says.
+    let gain = |name: &str| {
+        manual(node, name).map(|g| {
+            (if g > 0.0 { 20.0 * g.log10() } else { SILENCE_DB })
+                .clamp(suhina_device_dj_eq::GAIN_RANGE.0, suhina_device_dj_eq::GAIN_RANGE.1)
+        })
+    };
     p.set("low", gain("GainLo"));
     p.set("mid", gain("GainMid"));
     p.set("high", gain("GainHi"));

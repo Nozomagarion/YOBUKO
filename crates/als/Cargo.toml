@@ -12,6 +12,7 @@ corpus = []
 
 [dependencies]
 suhina-model.workspace = true
+suhina-device-dj-eq.workspace = true
 flate2.workspace = true
 roxmltree.workspace = true
 
@@ -21,5 +22,4 @@ workspace = true
 [dev-dependencies]
 flate2.workspace = true
 suhina-engine.workspace = true
-suhina-device-dj-eq.workspace = true
 suhina-device-pitch.workspace = true

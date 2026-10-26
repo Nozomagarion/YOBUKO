@@ -347,6 +347,17 @@ fn eq_three_zero_gains_and_odd_slopes() {
     assert_eq!(warnings.len(), 1, "{warnings:?}");
 }
 
+/// A gain past the device's range is held there, whatever the project file says.
+#[test]
+fn eq_three_out_of_range_gains_are_clamped() {
+    let xml = manual_xml("GainHi", "16") + &manual_xml("GainLo", "0.01") + &manual_xml("GainMid", "0.000001");
+    let (_, params, warnings) = mapped("FilterEQ3", &xml);
+    assert_eq!(param(&params, "high"), 6.0, "+24 dB is held at the device's top");
+    assert_eq!(param(&params, "low"), -40.0, "−40 dB is inside the range and is kept");
+    assert_eq!(param(&params, "mid"), SILENCE_DB, "−120 dB is held at silence");
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
+
 #[test]
 fn other_devices_are_not_mapped() {
     let doc = roxmltree::Document::parse("<Eq8/>").unwrap_or_else(|e| panic!("{e}"));

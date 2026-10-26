@@ -41,7 +41,7 @@ pub mod param {
 }
 
 /// Band gains run from silence up to +6 dB.
-const GAIN_RANGE: (f64, f64) = (SILENCE_DB as f64, 6.0);
+pub const GAIN_RANGE: (f64, f64) = (SILENCE_DB as f64, 6.0);
 
 const PARAMS: [ParamInfo; param::COUNT] = [
     ParamInfo::continuous("low", "Low", GAIN_RANGE, 0.0, Unit::Decibels, Scale::Linear),

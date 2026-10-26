@@ -6,6 +6,7 @@ status: current
 last_verified: 2026-10-23
 covers:
   - devices/dj-eq/**
+  - crates/als/src/devices.rs
 ---
 
 # DJ EQ
