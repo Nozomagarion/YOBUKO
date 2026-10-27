@@ -172,7 +172,7 @@ refused or suspended, never by losing its edits.
   control-group coordinates simplify panels without changing their saved format or runtime.
 
 - Every built-in effect, instrument and MIDI effect has editable controls in the device panel:
-  its layout (the Sampler's; the Compressor's `panel.json`, a grid of knobs), or a parameter list generated from the device's own parameters,
+  its layout (the Sampler's; the Compressor's `panel.json`, a grid of knobs; the Overdrive's, a band to drag and dials), or a parameter list generated from the device's own parameters,
   260 px wide and at most 168 px high, scrolling past that. Each change is `device.setParam`, so it
   is one undo step and an automation lane takes it over. Built-ins are native code with a layout
   loaded by their id, not `.sd` files ([ADR 0021](docs/decisions/0021-device-graph-files.md) ›
