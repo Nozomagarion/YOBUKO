@@ -146,7 +146,11 @@ pub(super) fn piano_clip_from(
         return None;
     }
     let position = project.tracks.iter().position(|t| t.id == track)?;
-    let color = project.tracks.get(position).and_then(|t| t.color).unwrap_or_else(|| default_track_colour(position));
+    let color = project
+        .tracks
+        .get(position)
+        .map(|track| track_colour(track, position))
+        .unwrap_or_else(|| crate::interaction::grid::to_rgb(theme::midi_clip_default()));
     let ts = project.transport.time_signature;
     let bar_beats =
         if ts.denominator == 0 { 4.0 } else { f64::from(ts.numerator.max(1)) * 4.0 / f64::from(ts.denominator) };

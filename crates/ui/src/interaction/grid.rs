@@ -18,15 +18,16 @@ pub fn track_palette() -> [Rgb; 4] {
     [theme::track_color_1(), theme::track_color_2(), theme::track_color_3(), theme::track_color_4()].map(to_rgb)
 }
 
-/// The default colour of the track at `index` among the tracks.
-pub fn default_track_colour(index: usize) -> Rgb {
-    let palette = track_palette();
-    palette.get(index % palette.len()).copied().unwrap_or(Rgb(0x80, 0x80, 0x80))
+/// Legacy tracks resolve their indexed swatch once when attached to the UI. Creation
+/// defaults are applied by the session only to newly created tracks and clips.
+pub fn track_colour(track: &Track, index: usize) -> Rgb {
+    track.color.unwrap_or_else(|| track_palette()[index % 4])
 }
 
 /// A theme colour as a project's track colour.
 pub fn to_rgb(colour: egui::Color32) -> Rgb {
-    Rgb(colour.r(), colour.g(), colour.b())
+    let [r, g, b, _] = colour.to_srgba_unmultiplied();
+    Rgb(r, g, b)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -306,7 +307,7 @@ impl TrackGrid {
             let column = Column {
                 track: track.id,
                 name: track.name.clone(),
-                color: track.color.unwrap_or_else(|| default_track_colour(index)),
+                color: track_colour(track, index),
                 kind,
                 notes: kind == ColumnKind::Track && track.content.notes,
                 launcher,

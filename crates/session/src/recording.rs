@@ -153,6 +153,23 @@ impl Session {
         self.live.recording.arrangement
     }
 
+    /// Live arrangement take spans, read on the UI thread without editing the project.
+    /// A stopped take remains visible until its writer commits it.
+    pub fn arrangement_recording_spans(&self) -> Vec<(TrackId, f64, f64)> {
+        let beat = self.player().map_or(0.0, |player| player.monitor().beat());
+        self.live
+            .recording
+            .takes
+            .iter()
+            .filter(|take| take.target == Target::Arrangement)
+            .filter_map(|take| {
+                let end = take.end.unwrap_or(beat);
+                (end.is_finite() && take.start.is_finite() && end >= take.start)
+                    .then_some((take.track, take.start, end))
+            })
+            .collect()
+    }
+
     /// The slot `track` records into (its scene index), while a take there has not ended.
     pub fn recording_slot(&self, track: TrackId) -> Option<usize> {
         self.live.recording.takes.iter().find(|t| t.track == track && t.end.is_none()).and_then(|t| match t.target {
@@ -513,6 +530,7 @@ impl Session {
             self.project = before;
             return Err(e);
         }
+        self.colour_new_clips(&before);
         self.history.changes = self.history.changes.wrapping_add(1);
         self.push_undo(before);
         self.update_player(None)?;

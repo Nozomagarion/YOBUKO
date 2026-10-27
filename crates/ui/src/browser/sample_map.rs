@@ -5,6 +5,7 @@
 //! kind, as a cloud or a grid. The view draws and reports what the user did as [`MapEvent`]s;
 //! the browser turns them into its own selection, previews and drags.
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::HashSet;
 
 use egui::{Color32, CornerRadius, Key, PointerButton, Pos2, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2};
@@ -495,6 +496,9 @@ pub fn show(
     tags: &[String],
     events: &mut Vec<MapEvent>,
 ) {
+    let _style_class = crate::kit::style_class::enter("sample-map");
+    let mut styled_ui = crate::kit::style_class::ui(ui);
+    let ui = &mut *styled_ui;
     let full = ui.available_rect_before_wrap();
     ui.allocate_rect(full, Sense::hover());
     let height = top_bar(ui, full, view, status, details, events);
@@ -545,7 +549,7 @@ fn busy_card(ui: &Ui, area: Rect, busy: &Busy) {
     }
     let card = Rect::from_center_size(area.center(), Vec2::new(width, HEIGHT));
     let painter = ui.painter().with_clip_rect(area);
-    painter.rect_filled(card, CornerRadius::ZERO, theme::panel_background());
+    painter.fill_background(card, CornerRadius::ZERO, theme::panel_background());
     painter.rect_stroke(card, CornerRadius::ZERO, Stroke::new(1.0, theme::border_strong()), StrokeKind::Inside);
     let inner = card.shrink(2.0 * theme::PAD);
     painter.text(
@@ -556,7 +560,7 @@ fn busy_card(ui: &Ui, area: Rect, busy: &Busy) {
         theme::text_primary(),
     );
     let bar = Rect::from_min_size(Pos2::new(inner.min.x, inner.center().y - BAR / 2.0), Vec2::new(inner.width(), BAR));
-    painter.rect_filled(bar, CornerRadius::ZERO, theme::control_background());
+    painter.fill_background(bar, CornerRadius::ZERO, theme::control_background());
     let done = Rect::from_min_size(bar.min, Vec2::new(bar.width() * busy.fraction.clamp(0.0, 1.0), BAR));
     painter.rect_filled(done, CornerRadius::ZERO, theme::accent());
     painter.text(
@@ -649,12 +653,12 @@ fn controls(ui: &mut Ui, view: &mut MapView, events: &mut Vec<MapEvent>) {
         ui.label(egui::RichText::new("Size").color(theme::text_secondary()).size(theme::TEXT_SMALL));
         let mut percent = (view.dot_size * 100.0).round() as u32;
         let (low, high) = crate::settings::MAP_DOT_SIZES;
-        let size = ui
-            .add_sized(
-                Vec2::new(48.0, ui.spacing().interact_size.y),
-                egui::DragValue::new(&mut percent).range(low..=high).speed(2.0).suffix(" %"),
-            )
-            .on_hover_text("Point size: drag or type. The points stay where they are, so smaller ones stand apart");
+        let size = crate::kit::widgets::number_input(
+            ui,
+            Some(Vec2::new(48.0, ui.spacing().interact_size.y)),
+            egui::DragValue::new(&mut percent).range(low..=high).speed(2.0).suffix(" %"),
+        )
+        .on_hover_text("Point size: drag or type. The points stay where they are, so smaller ones stand apart");
         if size.changed() {
             view.dot_size = percent as f32 / 100.0;
             events.push(MapEvent::DotSize(percent));
@@ -690,7 +694,7 @@ fn map_area(ui: &mut Ui, rect: Rect, view: &mut MapView, content: &Content<'_>, 
     let id = ui.id().with("sample-map");
     let response = ui.interact(rect, id, Sense::click_and_drag());
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, CornerRadius::ZERO, theme::window_background());
+    painter.fill_background(rect, CornerRadius::ZERO, theme::window_background());
 
     // Zoom and pan.
     if let Some(pointer) = response.hover_pos() {
@@ -1088,7 +1092,7 @@ fn draw_labels(painter: &egui::Painter, view: &MapView, transform: Transform) {
 
 fn similar_strip(ui: &mut Ui, rect: Rect, view: &mut MapView, points: &[MapPoint], events: &mut Vec<MapEvent>) {
     let Some((of, items)) = view.similar.clone() else { return };
-    ui.painter().rect_filled(rect, CornerRadius::ZERO, theme::panel_background());
+    ui.painter().fill_background(rect, CornerRadius::ZERO, theme::panel_background());
     let mut child = ui.new_child(
         egui::UiBuilder::new().max_rect(rect.shrink(theme::PAD)).layout(egui::Layout::top_down(egui::Align::Min)),
     );
