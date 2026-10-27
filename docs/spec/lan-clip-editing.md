@@ -1,6 +1,6 @@
 ---
 description: Revision-checked MIDI clip arrangement edits in the restricted LAN session
-read_when: shared clip placement, multiplayer protocol 5, clip creation duplication deletion, arrangement collaboration
+read_when: shared clip placement, multiplayer protocol 6, clip creation duplication deletion, arrangement collaboration
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -16,7 +16,7 @@ covers:
 
 # Shared MIDI clip placement
 
-Self-authored fork behaviour built on the existing native clip commands. Protocol 5 retains
+Self-authored fork behaviour built on the existing native clip commands. Protocol 6 retains
 the operation journal of lan-note-editing.md; both installations must upgrade. Native file
 version 3, portable-copy format 2, admission, musical quotas and independent players stay unchanged.
 
@@ -55,12 +55,11 @@ Validation uses real TLS, both directions, creation then note editing, cross-tra
 trimming, duplication/COW, deletion, enabling, stale requests, quota refusals, exact ID/model
 convergence, late admission and real independent renderers. UI tests click the visible actions
 and check that the original project and stale drafts remain protected. Physical two-computer
-testing remains the later user acceptance step. Audio assets and recording publication remain
-separate work.
+testing remains the later user acceptance step. The audio contract below extends this journal for verified sounds.
 
 ## Amendment: initial collected audio
 
-[The audio contract](lan-audio-assets.md) adds verified initial audio assets under protocol 5.
+[The audio contract](lan-audio-assets.md) adds verified initial audio assets under protocol 6.
 The same clip operations act on audio; new audio clips are empty and cannot acquire a new file
 through these commands. The UI lists both MIDI and audio destination tracks. Native note commands
-refuse audio clips. Live file import, audio stretch, plugins and new recording publication stay closed.
+refuse audio clips. Audio stretch and plugins stay closed. Protocol 6 additionally orders verified host-only finished-take placement via clip.insertAudio, as specified in the audio contract.

@@ -13,6 +13,7 @@ mod automation;
 mod clip_color;
 mod clip_edges;
 mod clip_shape;
+mod collected_audio;
 mod commands;
 mod cue;
 mod device_groups;

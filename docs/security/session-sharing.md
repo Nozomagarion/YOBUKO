@@ -51,13 +51,13 @@ Initial music has a separate 2 MiB quota and a 30-second transfer deadline: exac
 SHA-256, JSON-tree/count limits, native-version pinning and exact canonical round-trip bytes all
 precede session construction. Opaque state and extensions, arbitrary file references, SDK graphs and external/foreign
 devices are refused; only parameter-only FM Synth and Utility are allowed. Hardware inputs and
-launch mappings are removed from the local copy and verified off at the receiver. Outside the document transfer, read/write/handshake exchanges have absolute three-second
+launch mappings are removed from the local copy and verified off at the receiver. Outside document and asset transfers, read/write/handshake exchanges have absolute three-second
 deadlines. The host has at most four pending connection handlers; the normal authenticated
 guest polls every 100 ms and the server enforces at least 50 ms per request. UI queues are bounded.
 TLS, canonical execution and I/O run on workers, never the audio thread. A local peer can still
 occupy pending slots until timeout; availability against a sustained LAN flood is not guaranteed.
 
-Protocol 5 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
+Protocol 6 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
 A separate draft base revision prevents shifted note indices from being silently reused. Before
 canonical mutation the native command is preflighted on a detached copy and the complete MIDI
 quota/document boundary is checked, including copy-on-write growth. The guest verifies contiguous
@@ -109,3 +109,18 @@ snapshot; failures and unclaimed snapshots remove it. The desktop retains the co
 only after adding its tab. Tests exercise paths, hash/offset/size/metadata errors, malformed WAV,
 cancellation, quota rejection, non-overwrite, cleanup, save/reopen and real TLS/audio equality.
 Sharing new files/recordings during a connected session remains a separate closed boundary.
+
+## Amendment: host publication of finished takes
+
+Protocol 6 admits clip.insertAudio only through trusted host-side AudioData selection and the
+explicit publishTake command. Ordinary LAN edit entry points reject this variant; canonical
+submission independently refuses a guest author. No network message can select a local source
+path. The pure native insertion never reads files and always stacks on an existing audio-only
+track. Publication consumes one revision only after preflight and successful local collection.
+
+After each State, a strict missing-assets manifest and pulled chunks precede UI publication.
+The guest stages operations on a detached model; failed/cancelled transfers never reach its tab.
+Known references must retain their verified metadata, and cumulative verified sounds stay within
+64 files / 256 MiB even if clips are deleted. File transfers use the absolute 180-second deadline.
+Local collection mappings are kept outside canonical state and added only by trusted worker
+results. Saving/backups include these local paths on a copy; shared models remain identical.

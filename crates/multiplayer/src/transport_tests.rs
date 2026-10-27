@@ -9,6 +9,7 @@ fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
     let secret = "a".repeat(64);
     let mut host = Canonical {
         journal: VecDeque::new(),
+        assets: Vec::new(),
         host: Host::new(crate::starter_project()).unwrap(),
         secret: secret_hash(&secret),
         expires: now + Duration::from_secs(1),
@@ -159,7 +160,7 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
     let document = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
     let project = crate::midi::decode_portable(&document.0).unwrap();
     let _snapshot = assets::receive(&mut io, project, document.1, None, &AtomicBool::new(false), |_, _| {}).unwrap();
-    assert!(matches!(protocol::read::<ServerMessage>(&mut io).unwrap(), ServerMessage::State { .. }));
+    assert!(matches!(read_state(&mut io), ServerMessage::State { .. }));
     let edit = ClientMessage::Edit {
         seen_revision: 0,
         protocol: PROTOCOL,
@@ -169,9 +170,7 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
     };
     for _ in 0..2 {
         protocol::write(&mut io, &edit).unwrap();
-        let ServerMessage::State { controls, accepted, .. } = protocol::read::<ServerMessage>(&mut io).unwrap() else {
-            panic!("expected controls")
-        };
+        let ServerMessage::State { controls, accepted, .. } = read_state(&mut io) else { panic!("expected controls") };
         assert_eq!(controls.revision, 1);
         assert_eq!(accepted, Some(true));
     }
@@ -186,9 +185,7 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
         },
     )
     .unwrap();
-    let ServerMessage::State { controls, accepted, .. } = protocol::read::<ServerMessage>(&mut io).unwrap() else {
-        panic!("expected controls")
-    };
+    let ServerMessage::State { controls, accepted, .. } = read_state(&mut io) else { panic!("expected controls") };
     assert_eq!(controls.revision, 1);
     assert_eq!(controls.tracks[0].name, "One revision only");
     assert_eq!(accepted, Some(false));
@@ -264,6 +261,7 @@ fn canonical(project: Project) -> Canonical {
     Canonical {
         host: Host::new(project).unwrap(),
         journal: VecDeque::new(),
+        assets: Vec::new(),
         secret: [0; 32],
         expires: Instant::now() + Duration::from_secs(300),
         redeemed: false,
@@ -373,10 +371,8 @@ fn notes_changed_during_download_are_applied_after_the_snapshot_before_joining()
     assert_eq!(revision, 0);
     let project = crate::midi::decode_portable(&document).unwrap();
     let snapshot = assets::receive(&mut io, project, revision, None, &AtomicBool::new(false), |_, _| {}).unwrap();
-    let mut mirror = snapshot.session();
-    let ServerMessage::State { controls, operations, .. } = protocol::read::<ServerMessage>(&mut io).unwrap() else {
-        panic!("state")
-    };
+    let mut mirror = snapshot.session().unwrap();
+    let ServerMessage::State { controls, operations, .. } = read_state(&mut io) else { panic!("state") };
     assert_eq!(operations.len(), 1);
     protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations).unwrap();
     assert_eq!(revision, 1);
@@ -470,4 +466,100 @@ fn clip_wire_shapes_are_exact_and_old_protocol_invitations_are_refused() {
     let mut invitation = invitation_from(&mut service);
     invitation.protocol = PROTOCOL - 1;
     assert!(Invitation::decode(&invitation.encode().unwrap()).is_err());
+}
+
+fn read_state(io: &mut (impl Read + Write)) -> ServerMessage {
+    let value = protocol::read::<ServerMessage>(io).unwrap();
+    let assets = protocol::read::<ServerMessage>(io).unwrap();
+    assert!(matches!(assets, ServerMessage::Assets { manifest, .. } if manifest.is_empty()));
+    value
+}
+
+#[test]
+fn a_guest_cannot_forge_a_publication_even_with_a_valid_looking_audio_reference() {
+    let mut state = canonical(crate::starter_project());
+    let peer = state.host.add_peer(Role::Editor).unwrap();
+    let wire = WireEdit::AudioInsert {
+        track: 1,
+        start: 0.0,
+        file: format!("Audio/{}.wav", "a".repeat(64)),
+        rate: 8000,
+        channels: 1,
+        frames: 8000,
+    };
+    let before = state.host.project().clone();
+    assert!(state.submit(peer, 1, 0, wire).is_err());
+    assert_eq!(state.host.revision(), 0);
+    assert_eq!(state.host.project(), &before);
+    assert!(state.assets.is_empty());
+}
+
+#[test]
+fn a_take_published_during_initial_download_is_verified_before_the_join_finishes() {
+    let root = tempfile::tempdir().unwrap();
+    let destination = tempfile::tempdir().unwrap();
+    let mut project = crate::starter_project();
+    project.tracks[0].content = suhina_model::ContentKinds { notes: false, audio: true };
+    project.contents[0].lanes[0].data = suhina_model::LaneData::Audio(suhina_model::AudioRegion::new(""));
+    let mut host = Service::default();
+    host.set_storage_root(Some(root.path().into())).unwrap();
+    host.select_audio_project(&project, &AudioPool::new()).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while host.invitation.is_none() && Instant::now() < deadline {
+        host.poll();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let invitation = Invitation::decode(host.invitation.as_ref().unwrap()).unwrap();
+    let mut io = connect(&invitation);
+    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: invitation.secret })
+        .unwrap();
+    let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
+    assert!(matches!(offer, ServerMessage::Project { revision: 0, .. }));
+    host.select_take(Arc::new(suhina_engine::AudioData { sample_rate: 8000, channels: 1, samples: vec![0.4; 8000] }))
+        .unwrap();
+    host.execute("multiplayer.publishTake", &json!({"base_revision":0,"track":1,"start":4})).unwrap();
+    while host.controls.as_ref().unwrap().revision < 1 && Instant::now() < deadline {
+        host.poll();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(host.controls.as_ref().unwrap().revision, 1);
+    let (document, mut revision) =
+        crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
+    let mut snapshot = assets::receive(
+        &mut io,
+        crate::midi::decode_portable(&document).unwrap(),
+        revision,
+        None,
+        &AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
+    assert!(snapshot.audio.files.is_empty());
+    let mut mirror = snapshot.session().unwrap();
+    let ServerMessage::State { controls, operations, .. } = protocol::read(&mut io).unwrap() else { panic!("state") };
+    protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations).unwrap();
+    let audio = assets::receive_known(
+        &mut io,
+        mirror.project().clone(),
+        revision,
+        Some(destination.path()),
+        &AtomicBool::new(false),
+        &assets::Known::new(),
+        |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(audio.audio.files.len(), 1);
+    snapshot.project = mirror.project().clone();
+    snapshot.add_audio(audio.into_audio());
+    let ready = snapshot.session().unwrap();
+    assert_eq!(ready.audio().files.len(), 1, "the first player gets the in-flight sound before attachment");
+    assert!(ready.loaded_audio_paths().iter().all(|p| p.is_file()));
+    let folder = snapshot.folder().unwrap().to_path_buf();
+    ready.project().validate().unwrap();
+    let mut ready = ready;
+    ready.save(&folder.join("Joined.suhina"), false).unwrap();
+    assert_eq!(revision, 1);
+    assert_eq!(mirror.project().contents.last().unwrap().name, "Shared take");
+    assert_eq!(ready.audio().files.values().next().unwrap().samples, vec![0.4; 8000]);
 }

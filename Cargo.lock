@@ -5295,6 +5295,7 @@ dependencies = [
  "getrandom 0.4.3",
  "hound",
  "rcgen",
+ "rtrb",
  "rustls",
  "serde",
  "serde_json",

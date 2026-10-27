@@ -25,4 +25,6 @@ pub(crate) struct ProjectAudio {
     /// saved elsewhere, because the decoded audio is kept under those paths; saving writes them
     /// relative to the new file.
     pub(crate) folder: Option<PathBuf>,
+    /// Trusted collected sounds received later, outside the initial folder; never peer paths.
+    pub(crate) collected: std::collections::BTreeMap<String, PathBuf>,
 }

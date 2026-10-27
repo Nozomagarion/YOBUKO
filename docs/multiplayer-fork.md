@@ -86,7 +86,7 @@ The destination track selector applies to Move; Trim follows native edge/offset 
 A newer revision disables a pending clip draft; refresh or select the current clip again.
 A deleted note editor selection cannot silently switch to another clip. Local metadata, hardware
 input settings and launch mappings are omitted. See the [copy contract](spec/lan-midi-copy.md).
-Both participants need the new protocol-5 build; old demo invitations no longer work.
+Both participants need the new protocol-6 build; old demo invitations no longer work.
 
 To include loaded audio, use **Share project + audio**. Configure the application data folder
 when using a custom host: collected copies stay in its **Shared projects** subfolder. Only sounds
@@ -95,7 +95,13 @@ portable float32 WAV copies, without changing the originals, up to 64 files, 64 
 256 MiB total. Wait for the complete transfer before a shared tab appears. FM Synth/Utility
 parameters remain supported; other devices/plugins and streamed stems are refused. Existing
 audio clips can be moved/trimmed/duplicated with the same Clips controls. New audio clips are
-empty; importing a new file or publishing a new recording during connection is not implemented.
+empty. To publish a finished take while connected, the host records/finishes it in an ordinary
+local Studio tab, keeps Multiplayer open, switches to that tab and selects **Publish take**.
+Choose its loaded sound, an existing shared audio-only track and the arrangement start beat,
+then **Publish loaded take**. The whole sound is inserted unwarped with default gain; source
+trims, loops and effects are not baked in. New verified audio arrives before the guest sees the
+clip, preserving both independent players. Guest uploads and direct shared-tab recording remain
+unsupported. Save the shared copy explicitly to retain the new arrangement on reopening.
 See [the audio contract](spec/lan-audio-assets.md).
 
 Network and UI regression checks:

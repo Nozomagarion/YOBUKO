@@ -677,6 +677,7 @@ impl Projects {
                     | "note.update"
                     | "note.delete"
                     | "clip.create"
+                    | "clip.insertAudio"
                     | "clip.move"
                     | "clip.trim"
                     | "clip.duplicate"

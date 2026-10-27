@@ -11,7 +11,7 @@ mod starter;
 mod transfer;
 mod transport;
 
-pub use assets::SharedSnapshot;
+pub use assets::{AudioAddition, SharedSnapshot};
 pub use protocol::{Controls, Operation, TrackControl, WireEdit};
 pub use starter::starter_project;
 pub use transport::{Service, commands, suggested_address};

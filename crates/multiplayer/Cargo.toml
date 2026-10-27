@@ -26,6 +26,7 @@ rustls = { version = "0.23", default-features = false, features = ["std", "ring"
 rcgen = { version = "0.14", default-features = false, features = ["ring", "crypto"] }
 
 [dev-dependencies]
+rtrb.workspace = true
 suhina-media.workspace = true
 
 [lints]

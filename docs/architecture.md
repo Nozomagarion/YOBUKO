@@ -534,5 +534,9 @@ guest verifies bounded chunks and audio before returning `SharedSnapshot`, which
 folder lease. `SharedSnapshot::session` constructs `Session::shared_copy` with the verified pool
 and local audio folder; `keep` retains the folder only after tab creation succeeds. Canonical
 models stay identical across machines while local folder paths stay outside shared state.
-The initial pool is immutable during this slice; the command allowlist cannot introduce another
-file reference. [Audio boundary and limits](spec/lan-audio-assets.md).
+Protocol 6 also queues explicit host publication of a finished AudioData take. A pure
+clip.insertAudio command orders its placement after native/quota preflight. Each response sends
+only sound references not yet verified by that guest. Verified AudioAddition leases reach the
+existing session before its accepted clip operation. Session local collection mappings allow
+new folders to survive native save/backup/reopen, without adding machine paths to shared models
+or replacing either player. Guest uploads and direct recording in the restricted tab stay closed. [Audio boundary and limits](spec/lan-audio-assets.md).

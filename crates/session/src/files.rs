@@ -498,6 +498,52 @@ pub const EMPTY_CLIP_NAME: &str = "MIDI clip";
 /// silence until a sample is dropped on its slot or lane.
 pub const EMPTY_AUDIO_CLIP_NAME: &str = "Audio clip";
 
+/// Pure placement of a collected sound. The trusted caller supplies verified audio separately;
+/// the command itself never opens a path, so detached canonical hosts can order it too.
+pub(crate) fn insert_audio(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let p = &session.project;
+    let track = track_at(p, params, "track")?;
+    if !p.track(track).is_some_and(|t| t.content.audio && !t.content.notes) {
+        return Err("choose an existing audio-only track".into());
+    }
+    let start = number(params, "start")?;
+    let file = params["file"].as_str().ok_or("file must be text")?;
+    let valid = file
+        .strip_prefix("Audio/")
+        .and_then(|s| s.strip_suffix(".wav"))
+        .is_some_and(|s| s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)));
+    let rate = params["rate"].as_u64().filter(|n| (8000..=192000).contains(n)).ok_or("invalid audio rate")?;
+    let channels = params["channels"].as_u64().filter(|n| (1..=2).contains(n)).ok_or("invalid audio channels")?;
+    let frames = params["frames"]
+        .as_u64()
+        .filter(|n| *n > 0 && *n <= (64 * 1024 * 1024 - 128) / (4 * channels))
+        .ok_or("invalid audio frame budget")?;
+    let duration = frames as f64 / rate as f64;
+    let length = duration * p.transport.tempo_bpm / 60.0;
+    if !(valid && (0.0..=120_000.0).contains(&start) && length > 0.0 && length <= 120_000.0) {
+        return Err("invalid collected audio placement".into());
+    }
+    let mut region = AudioRegion::new(file);
+    region.sample_rate = Some(rate as u32);
+    region.channels = Some(channels as u16);
+    region.duration_seconds = Some(duration);
+    region.warped = false;
+    place_clip(
+        &mut session.project,
+        track,
+        Source {
+            kind: TrackKind::Audio,
+            name: "Shared take".into(),
+            length,
+            lane: LaneData::Audio(region),
+            loops: false,
+        },
+        None,
+        start,
+        true,
+    )
+}
+
 /// `clip.create`: an empty clip on a track that holds clips — MIDI on a notes track, audio with
 /// no file yet on an audio track — in an empty clip slot or at a beat in the arrangement, one bar
 /// long unless `length` says otherwise.

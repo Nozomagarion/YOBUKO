@@ -93,6 +93,15 @@ BLAKE3 identity, bounded verified transfer and a fresh folder lease. The new ses
 its verified audio pool before playback. Arbitrary paths, plugins, streamed stems and new
 recording publication remain closed. The native project format stays 3.
 
+## Amendment: explicit finished-take publication (27 October 2026)
+
+The restricted adapter now publishes host-selected, decoded completed takes during an existing
+connection. The host orders pure clip.insertAudio placement; the guest verifies missing sound
+assets before applying that revision to its existing session/player. Local collected-file
+mappings are included only on native save/backup copies. See the [audio contract](../spec/lan-audio-assets.md#amendment-publish-a-finished-loaded-take-without-reconnecting).
+Direct shared-tab recording, guest uploads and live audio streaming remain separate work.
+
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.

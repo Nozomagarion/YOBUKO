@@ -4,6 +4,7 @@
 //! Explicit LAN starter sessions; the existing project tabs remain local.
 
 use super::*;
+use std::sync::Arc;
 
 #[derive(Default, PartialEq)]
 enum SharedPage {
@@ -11,6 +12,7 @@ enum SharedPage {
     Mixer,
     Notes,
     Clips,
+    Takes,
 }
 
 pub(super) struct MultiplayerPanel {
@@ -29,6 +31,9 @@ pub(super) struct MultiplayerPanel {
     pub(super) notes: super::multiplayer_notes::NoteEditor,
     page: SharedPage,
     pub(super) clips: super::multiplayer_clips::ClipEditor,
+    take_file: String,
+    take_track: u32,
+    take_start: f64,
 }
 impl Default for MultiplayerPanel {
     fn default() -> Self {
@@ -48,6 +53,9 @@ impl Default for MultiplayerPanel {
             notes: Default::default(),
             page: SharedPage::Mixer,
             clips: Default::default(),
+            take_file: String::new(),
+            take_track: 0,
+            take_start: 0.0,
         }
     }
 }
@@ -83,7 +91,7 @@ impl App {
                     self.multiplayer.notes = Default::default();
                     self.multiplayer.clips = Default::default();
                     self.multiplayer.applied_revision = 0;
-                } else if id == "multiplayer.edit" {
+                } else if matches!(id, "multiplayer.edit" | "multiplayer.publishTake") {
                     self.multiplayer.submitted = true;
                 }
             }
@@ -165,7 +173,15 @@ impl App {
                 return;
             };
             let revision = snapshot.revision;
-            match self.projects.add(snapshot.session(), Some("Shared session".into())) {
+            let session = match snapshot.session() {
+                Ok(session) => session,
+                Err(error) => {
+                    self.multiplayer.error = Some(error);
+                    self.leave_multiplayer();
+                    return;
+                }
+            };
+            match self.projects.add(session, Some("Shared session".into())) {
                 Ok(id) => {
                     if let Err(e) = self.projects.restrict_shared_project(id, true) {
                         self.multiplayer.error = Some(e.to_string());
@@ -187,6 +203,24 @@ impl App {
         let Some(id) = self.multiplayer.bound else {
             return;
         };
+        // Verified sounds reach the existing session before any operation can expose their clip.
+        let received = self.multiplayer.service.take_audio();
+        for audio in received {
+            let result = (|| -> Result<(), String> {
+                let folder = audio.folder().ok_or("collected audio folder missing")?;
+                self.projects
+                    .get_mut(id)
+                    .ok_or("shared project closed")?
+                    .add_collected_audio(&audio.audio, folder)
+                    .map_err(|e| e.to_string())
+            })();
+            if let Err(error) = result {
+                self.multiplayer.error = Some(error);
+                self.leave_multiplayer();
+                return;
+            }
+            audio.keep();
+        }
         let operations = serde_json::from_value::<Vec<suhina_multiplayer::Operation>>(state["operations"].clone());
         let result = (|| -> Result<(), String> {
             let operations = operations.map_err(|_| "invalid shared operation list")?;
@@ -235,6 +269,107 @@ impl App {
         self.multiplayer.controls = Some(controls);
         if disconnected {
             self.leave_multiplayer();
+        }
+    }
+    fn show_publish_take(&mut self, ui: &mut Ui) {
+        if self.multiplayer.state["mode"] != "hosting" {
+            ui.label("The host publishes finished takes. You receive their sound before the new clip appears.");
+            return;
+        }
+        ui.label("Record in an ordinary local Studio tab, finish the take, then choose its loaded sound here.");
+        ui.weak("Publishes the whole sound, unwarped, with default gain. Clip trims, loops and effects are not baked in. Original takes stay intact.");
+        let source = self
+            .projects
+            .active()
+            .filter(|id| Some(*id) != self.multiplayer.bound)
+            .and_then(|id| self.projects.get(id))
+            .filter(|s| !s.is_recording());
+        let files: Vec<_> = source
+            .into_iter()
+            .flat_map(|s| {
+                let refs: std::collections::BTreeSet<_> = s
+                    .project()
+                    .contents
+                    .iter()
+                    .flat_map(|c| &c.lanes)
+                    .filter_map(|l| match &l.data {
+                        suhina_engine::model::LaneData::Audio(a) if !a.file.is_empty() => Some(a.file.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                s.audio()
+                    .files
+                    .iter()
+                    .filter(|(key, _)| refs.contains(*key))
+                    .map(|(key, data)| (key.clone(), Arc::clone(data)))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        if files.is_empty() {
+            ui.label("Select an ordinary local project tab with a finished, loaded audio take. Leave this panel open while switching tabs.");
+        }
+        egui::ComboBox::from_id_salt("publish_take_file")
+            .selected_text(if self.multiplayer.take_file.is_empty() {
+                "Choose loaded take"
+            } else {
+                Path::new(&self.multiplayer.take_file).file_name().and_then(|s| s.to_str()).unwrap_or("Loaded sound")
+            })
+            .show_ui(ui, |ui| {
+                for (key, _) in &files {
+                    let label = Path::new(key).file_name().and_then(|s| s.to_str()).unwrap_or(key);
+                    ui.selectable_value(&mut self.multiplayer.take_file, key.clone(), label);
+                }
+            });
+        let tracks: Vec<_> = self
+            .multiplayer
+            .bound
+            .and_then(|id| self.projects.get(id))
+            .into_iter()
+            .flat_map(|s| {
+                s.project()
+                    .tracks
+                    .iter()
+                    .filter(|t| t.content.audio && !t.content.notes)
+                    .map(|t| (t.id.0, t.name.clone()))
+            })
+            .collect();
+        egui::ComboBox::from_id_salt("publish_take_track")
+            .selected_text(
+                tracks
+                    .iter()
+                    .find(|(id, _)| *id == self.multiplayer.take_track)
+                    .map_or("Choose shared audio track", |(_, name)| name.as_str()),
+            )
+            .show_ui(ui, |ui| {
+                for (id, name) in &tracks {
+                    ui.selectable_value(&mut self.multiplayer.take_track, *id, name);
+                }
+            });
+        if tracks.is_empty() {
+            ui.label("The shared project needs an existing audio-only track. Adding shared tracks comes later.");
+        }
+        ui.horizontal(|ui| {
+            ui.label("Start beat");
+            ui.add(egui::DragValue::new(&mut self.multiplayer.take_start).range(0.0..=120_000.0).speed(0.25));
+        });
+        let data = files.iter().find(|(key, _)| key == &self.multiplayer.take_file).map(|(_, data)| Arc::clone(data));
+        let ready = data.is_some()
+            && tracks.iter().any(|(id, _)| *id == self.multiplayer.take_track)
+            && !self.multiplayer.submitted;
+        if ui.add_enabled(ready, egui::Button::new("Publish loaded take")).clicked()
+            && let Some(data) = data
+        {
+            match self.multiplayer.service.select_take(data) {
+                Ok(()) => self.multiplayer_command(
+                    "multiplayer.publishTake",
+                    json!({"base_revision":self.multiplayer.applied_revision,
+                    "track":self.multiplayer.take_track,"start":self.multiplayer.take_start}),
+                ),
+                Err(error) => self.multiplayer.error = Some(error.to_string()),
+            }
+        }
+        if self.multiplayer.submitted {
+            ui.label("Waiting for the host to confirm publication…");
         }
     }
     pub(super) fn show_multiplayer(&mut self, ui: &mut Ui) {
@@ -333,8 +468,11 @@ impl App {
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Mixer, "Mixer");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Notes, "MIDI notes");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Clips, "Clips");
+                ui.selectable_value(&mut self.multiplayer.page, SharedPage::Takes, "Publish take");
             });
-            if self.multiplayer.page == SharedPage::Clips {
+            if self.multiplayer.page == SharedPage::Takes {
+                self.show_publish_take(ui);
+            } else if self.multiplayer.page == SharedPage::Clips {
                 self.show_shared_clips(ui);
             } else if self.multiplayer.page == SharedPage::Notes {
                 self.show_shared_notes(ui);
@@ -404,7 +542,7 @@ impl App {
             ui.colored_label(theme::recording(), error);
         }
         ui.add_space(theme::PAD);
-        ui.weak("Original projects are preserved. Leave to edit this copy freely. Sharing new recordings during a session and external plugins comes later.");
+        ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Guest uploads, recording directly in the shared tab and external plugins come later.");
     }
 }
 

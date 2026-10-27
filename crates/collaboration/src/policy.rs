@@ -25,6 +25,7 @@ impl Edit {
             "note.update" => "note.update",
             "note.delete" => "note.delete",
             "clip.create" => "clip.create",
+            "clip.insertAudio" => "clip.insertAudio",
             "clip.move" => "clip.move",
             "clip.trim" => "clip.trim",
             "clip.duplicate" => "clip.duplicate",
@@ -80,6 +81,19 @@ impl Edit {
                         .get("notes")
                         .and_then(Value::as_array)
                         .is_some_and(|notes| notes.len() == 1 && valid_index(notes.first()))
+            }
+            "clip.insertAudio" => {
+                keys(object, &["track", "start", "file", "rate", "channels", "frames"])
+                    && object.get("track").is_some_and(valid_id)
+                    && number_in(object.get("start"), 0.0, 120_000.0)
+                    && object.get("file").and_then(Value::as_str).is_some_and(|s| {
+                        s.strip_prefix("Audio/").and_then(|s| s.strip_suffix(".wav")).is_some_and(|s| {
+                            s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                        })
+                    })
+                    && object.get("rate").and_then(Value::as_u64).is_some_and(|n| (8000..=192000).contains(&n))
+                    && object.get("channels").and_then(Value::as_u64).is_some_and(|n| (1..=2).contains(&n))
+                    && object.get("frames").and_then(Value::as_u64).is_some_and(|n| n > 0 && n <= 16_777_184)
             }
             "clip.create" => {
                 keys(object, &["track", "start", "length", "stack"])

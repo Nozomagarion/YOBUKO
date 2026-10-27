@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 5;
+pub const PROTOCOL: u16 = 6;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -107,6 +107,8 @@ pub enum WireEdit {
     NoteUpdate { clip: u32, note: usize, time: f64, length: f64, key: u8, velocity: f64, muted: bool },
     #[serde(rename = "note.delete")]
     NoteDelete { clip: u32, note: usize },
+    #[serde(rename = "clip.insertAudio")]
+    AudioInsert { track: u32, start: f64, file: String, rate: u32, channels: u16, frames: usize },
     #[serde(rename = "clip.create")]
     ClipCreate { track: u32, start: f64, length: f64 },
     #[serde(rename = "clip.move")]
@@ -144,6 +146,10 @@ impl WireEdit {
                 json!({"clip":clip,"note":note,"time":time,"length":length,"key":key,"velocity":velocity,"muted":muted}),
             ),
             Self::NoteDelete { clip, note } => ("note.delete", json!({"clip":clip,"notes":[note]})),
+            Self::AudioInsert { track, start, file, rate, channels, frames } => (
+                "clip.insertAudio",
+                json!({"track":track,"start":start,"file":file,"rate":rate,"channels":channels,"frames":frames}),
+            ),
             Self::ClipCreate { track, start, length } => {
                 ("clip.create", json!({"track":track,"start":start,"length":length,"stack":true}))
             }

@@ -1,11 +1,15 @@
 ---
 description: Bounded portable audio snapshots over authenticated LAN, with content hashes and isolated persistent project folders
-read_when: multiplayer audio files, protocol 5, shared assets, portable audio manifest
+read_when: multiplayer audio files, protocol 6, shared assets, portable audio manifest
 type: spec
 status: draft
 last_verified: 2026-10-26
 covers:
   - crates/multiplayer
+  - crates/automation/src/server.rs
+  - crates/collaboration/src/policy.rs
+  - crates/session/src/files.rs
+  - crates/session/src/project_audio.rs
   - crates/session/src/lib.rs
   - crates/ui/src/app/multiplayer.rs
 ---
@@ -61,3 +65,38 @@ Tests use real TLS and isolated filesystem roots: missing files on the guest mac
 stereo, identical render output, independent players, persistence through save/reopen, dedup,
 late admission, edits, malformed manifests/paths/metadata/waves/hashes/chunks, quotas, cancellation,
 failed finalization and preservation of originals. Physical two-computer testing stays deferred.
+
+## Amendment: publish a finished loaded take without reconnecting
+
+Protocol 6 adds explicit host-only publication. Record in an ordinary local Studio tab, finish
+the take, then choose its loaded sound in Multiplayer and publish to an existing shared audio
+track at a chosen beat. The whole decoded sound is inserted, unwarped, with default gain and
+no loop or fades; source clip trimming/effects are not baked in. Recording directly into the
+restricted shared tab, guest uploads, streaming microphone audio and automatic publication
+remain outside this slice. The original tab and recording remain unchanged.
+
+The trusted desktop selects an AudioData handle; no remote path or JSON upload selects a local
+file. A bounded service command queues publication with the observed revision. The worker
+encodes a canonical WAV, checks cumulative session limits (64 unique sounds, 256 MiB, even
+after deleting clips), preflights the pure clip.insertAudio command and portable quotas, then
+orders a single host operation. Guest edit messages cannot submit this operation. Stale or
+invalid publications consume no revision, sequence or asset budget.
+
+Each response freezes its operation suffix and corresponding assets. After the State message,
+the guest pulls a strict manifest containing only references it has not previously verified.
+The receiver stages changes in a detached model, verifies and collects the missing sounds with
+the same WAV/hash/path/size/deadline rules, then releases the operation and decoded assets to
+the UI together. Never expose a clip before its sound is available. Previously verified audio
+is reused. A disconnected or malformed transfer preserves the last usable copy.
+
+Collected audio paths are local session bookkeeping, outside the canonical model. Attach the
+new decoded files before applying the accepted native command; this updates the existing player
+without replacing it, seeking or stopping either participant. Keep the new folder only once the
+UI has accepted the assets. Explicit saving records the local file mappings for reopening.
+Late admission includes all currently referenced sounds. Existing controls, notes and clip edits
+continue to share the same contiguous revision journal. Both installations must use protocol 6.
+
+The native clip.insertAudio `file` parameter is a generated content-addressed resource key,
+not a file-read/write argument. Its exact syntax and numeric metadata are validated by the
+pure command, including outside LAN use. The automation path-parameter audit records this
+exception explicitly; it does not waive confinement for commands that actually touch files.

@@ -463,6 +463,7 @@ fn render_shared_audio_panel_for_review() {
     session.set_audio(audio);
     let mut app = App::new();
     app.set_session(session, &[]);
+    let original = app.projects.active().unwrap();
     app.set_default_data_folder(root.path().into());
     app.multiplayer.open = true;
     app.multiplayer.address = "127.0.0.1:0".into();
@@ -484,4 +485,79 @@ fn render_shared_audio_panel_for_review() {
     assert!(harness.state().multiplayer.bound.is_some());
     harness.run_steps(2);
     harness.render().unwrap().save(folder.join("multiplayer-audio-ready.png")).unwrap();
+    let app = harness.state_mut();
+    app.projects.switch(original).unwrap();
+    app.multiplayer.page = SharedPage::Takes;
+    app.multiplayer.take_file = "/original/recording.wav".into();
+    app.multiplayer.take_track = 1;
+    app.multiplayer.take_start = 16.0;
+    harness.run_steps(3);
+    harness.render().unwrap().save(folder.join("multiplayer-publish-take.png")).unwrap();
+}
+
+#[test]
+fn the_publish_button_uses_a_finished_local_sound_and_keeps_original_and_shared_tabs() {
+    use suhina_engine::{
+        AudioData, AudioPool,
+        model::{AudioRegion, ContentKinds, LaneData},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let mut project = suhina_multiplayer::starter_project();
+    project.tracks[0].content = ContentKinds { notes: false, audio: true };
+    project.contents[0].lanes[0].data = LaneData::Audio(AudioRegion::new(""));
+    let mut app = App::new();
+    app.set_default_data_folder(root.path().into());
+    app.set_session(Session::new(project), &[]);
+    let original = app.projects.active().unwrap();
+    app.multiplayer.open = true;
+    app.multiplayer.address = "127.0.0.1:0".into();
+    app.host_current_audio();
+    let ctx = egui::Context::default();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while app.multiplayer.bound.is_none() && Instant::now() < deadline {
+        app.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let shared = app.multiplayer.bound.unwrap();
+    // A take finished later in the ordinary tab; shared recording remains gated.
+    app.projects.switch(original).unwrap();
+    let source = app.projects.get_mut(original).unwrap();
+    let mut pool = AudioPool::new();
+    pool.files.insert(
+        "Recorded/Voice.wav".into(),
+        std::sync::Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.3; 8000] }),
+    );
+    source.set_audio(pool);
+    // This native local import is already represented by a finished recording's region.
+    let mut source_project = source.project().clone();
+    source_project.contents[0].lanes[0].data = LaneData::Audio(AudioRegion::new("Recorded/Voice.wav"));
+    let mut local = Session::new(source_project);
+    local.set_audio(source.audio().clone());
+    let local_id = app.projects.add(local, Some("Finished local recording".into())).unwrap();
+    app.multiplayer.page = SharedPage::Takes;
+    app.multiplayer.take_file = "Recorded/Voice.wav".into();
+    app.multiplayer.take_track = 1;
+    app.multiplayer.take_start = 12.0;
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 1000.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run_steps(3);
+    let before = harness.state().projects.get(local_id).unwrap().project().clone();
+    harness.get_by_label("Publish loaded take").click();
+    while harness.state().multiplayer.controls.as_ref().unwrap().revision < 1 && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let app = harness.state_mut();
+    assert_eq!(app.multiplayer.controls.as_ref().unwrap().revision, 1, "{:?}", app.multiplayer.error);
+    let shared_session = app.projects.get(shared).unwrap();
+    assert_eq!(shared_session.audio().files.len(), 1);
+    assert!(shared_session.project().arrangement.lanes.iter().flat_map(|l| &l.clips).any(|c| c.start == 12.0));
+    assert_eq!(app.projects.get(local_id).unwrap().project(), &before);
+    let paths = shared_session.loaded_audio_paths();
+    assert!(app.projects.execute_in(Some(shared), "transport.record", &json!({"on":true})).is_err());
+    assert_eq!(paths.len(), 1);
+    assert!(paths[0].is_file());
+    app.leave_multiplayer();
+    assert!(paths[0].is_file());
 }

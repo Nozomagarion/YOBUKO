@@ -46,7 +46,12 @@
           "evidence": "crates/multiplayer/tests/audio.rs"
         },
         {
-          "name": "Partage des enregistrements",
+          "name": "Publier une prise terminée depuis l’hôte",
+          "done": true,
+          "evidence": "crates/multiplayer/tests/audio.rs"
+        },
+        {
+          "name": "Ajouter des pistes pendant une session",
           "done": false
         },
         {

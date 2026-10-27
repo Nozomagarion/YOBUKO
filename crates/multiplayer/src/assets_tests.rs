@@ -174,7 +174,7 @@ fn verified_audio_is_persistent_only_after_the_recipient_retains_the_snapshot() 
         receive(&mut io, prepared.snapshot.project.clone(), 7, Some(root.path()), &AtomicBool::new(false), |_, _| {})
             .unwrap();
     let folder = received.folder().unwrap().to_path_buf();
-    let mut session = received.session();
+    let mut session = received.session().unwrap();
     received.keep();
     assert!(folder.join(asset.meta.path()).is_file());
     assert!(session.has_unsaved_changes());
@@ -322,4 +322,42 @@ fn many_small_files_keep_progress_bounded_so_the_connected_event_has_queue_space
     assert_eq!(received.audio.files.len(), 64);
     assert!(updates.len() <= 18);
     assert_eq!(updates.last(), Some(&(total, total)));
+}
+
+#[test]
+fn live_assets_refuse_cumulative_budgets_and_changed_known_metadata_before_writing() {
+    let root = tempfile::tempdir().unwrap();
+    let (project, pool) = source();
+    let prepared = prepare(&project, &pool, Some(root.path()), &AtomicBool::new(false)).unwrap();
+    let asset = &prepared.assets[0];
+    let mut known = Known::new();
+    for n in 0..64 {
+        let mut meta = asset.meta.clone();
+        meta.hash = format!("{n:064x}");
+        known.insert(meta.path(), meta);
+    }
+    let before = std::fs::read_dir(root.path()).unwrap().count();
+    let mut io = script(vec![asset.meta.clone()], &asset.bytes, false);
+    assert!(
+        receive_known(
+            &mut io,
+            prepared.snapshot.project.clone(),
+            0,
+            Some(root.path()),
+            &AtomicBool::new(false),
+            &known,
+            |_, _| {}
+        )
+        .is_err()
+    );
+    assert!(io.output.is_empty());
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), before);
+    known.clear();
+    known.insert(asset.meta.path(), asset.meta.clone());
+    let mut changed = prepared.snapshot.project.clone();
+    let LaneData::Audio(region) = &mut changed.contents[0].lanes[0].data else { panic!("audio") };
+    region.channels = Some(2);
+    assert!(missing(&changed, &known).is_err());
+    let missing = missing(&prepared.snapshot.project, &known).unwrap();
+    assert!(references(&missing).is_empty());
 }

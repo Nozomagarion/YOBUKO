@@ -92,7 +92,7 @@ fn missing_guest_files_cross_tls_sound_identical_and_survive_disconnect_save_and
     host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
     let ready = wait(&mut host, |s| s["mode"] == "hosting");
     let snapshot = host.take_shared().unwrap();
-    let mut local = snapshot.session();
+    let mut local = snapshot.session().unwrap();
     snapshot.keep();
     let mut guest = Service::default();
     guest.set_storage_root(Some(guest_dir.path().into())).unwrap();
@@ -100,7 +100,7 @@ fn missing_guest_files_cross_tls_sound_identical_and_survive_disconnect_save_and
     wait(&mut guest, |s| s["mode"] == "connected");
     let snapshot = guest.take_shared().unwrap();
     let folder = snapshot.folder().unwrap().to_path_buf();
-    let mut remote = snapshot.session();
+    let mut remote = snapshot.session().unwrap();
     snapshot.keep();
     assert_eq!(local.project(), remote.project());
     assert_eq!(remote.audio().files.len(), 1);
@@ -170,7 +170,7 @@ fn late_guest_receives_audio_for_the_current_edited_arrangement() {
     host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
     let ready = wait(&mut host, |s| s["mode"] == "hosting");
     let snapshot = host.take_shared().unwrap();
-    let mut local = snapshot.session();
+    let mut local = snapshot.session().unwrap();
     snapshot.keep();
     let clip = project.arrangement.lanes[0].clips[0].id.0;
     submit(&mut host, 0, WireEdit::ClipMove { clip, start: 2.0, track: 2 });
@@ -183,5 +183,225 @@ fn late_guest_receives_audio_for_the_current_edited_arrangement() {
     let received = guest.take_shared().unwrap();
     assert_eq!(received.revision, 1);
     assert_eq!(received.project, local.project().clone());
-    assert_eq!(render(&received.session()), render(&local));
+    assert_eq!(render(&received.session().unwrap()), render(&local));
+}
+
+fn accept_audio(service: &mut Service, session: &mut Session) -> usize {
+    let mut count = 0;
+    for batch in service.take_audio() {
+        count += batch.audio.files.len();
+        session.add_collected_audio(&batch.audio, batch.folder().unwrap()).unwrap();
+        batch.keep();
+    }
+    count
+}
+fn publish_take(service: &mut Service, data: Arc<AudioData>, base: u64, track: u32, start: f64) {
+    service.select_take(data).unwrap();
+    service.execute("multiplayer.publishTake", &json!({"base_revision":base,"track":track,"start":start})).unwrap();
+}
+
+#[test]
+fn new_takes_publish_without_reconnecting_reuse_sound_and_preserve_players_and_saved_files() {
+    let host_dir = tempfile::tempdir().unwrap();
+    let guest_dir = tempfile::tempdir().unwrap();
+    let (project, audio) = source();
+    let source_before = project.clone();
+    let mut host = Service::default();
+    host.set_storage_root(Some(host_dir.path().into())).unwrap();
+    host.select_audio_project(&project, &audio).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let ready = wait(&mut host, |s| s["mode"] == "hosting");
+    let snapshot = host.take_shared().unwrap();
+    let mut local = snapshot.session().unwrap();
+    snapshot.keep();
+    let mut guest = Service::default();
+    guest.set_storage_root(Some(guest_dir.path().into())).unwrap();
+    guest.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snapshot = guest.take_shared().unwrap();
+    let folder = snapshot.folder().unwrap().to_path_buf();
+    let mut remote = snapshot.session().unwrap();
+    snapshot.keep();
+    let mut a = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
+    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000).unwrap();
+    local.attach_player(Player::new(a.controller(), None));
+    remote.attach_player(Player::new(b.controller(), None));
+    local.execute("transport.setPosition", &json!({"beats":2})).unwrap();
+    remote.execute("transport.setPosition", &json!({"beats":7})).unwrap();
+    local.execute("transport.play", &json!({})).unwrap();
+    remote.execute("transport.play", &json!({})).unwrap();
+    let take = Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.25; 8000] });
+    assert!(guest.select_take(Arc::clone(&take)).is_err());
+    // The raw operation is not a path/upload backdoor, even through the owner's ordinary edit entry.
+    let raw = WireEdit::AudioInsert {
+        track: 2,
+        start: 8.0,
+        file: format!("Audio/{}.wav", "a".repeat(64)),
+        rate: 8000,
+        channels: 1,
+        frames: 8000,
+    };
+    for service in [&mut host, &mut guest] {
+        assert!(
+            service
+                .execute("multiplayer.edit", &json!({"base_revision":0,"edit":serde_json::to_string(&raw).unwrap()}))
+                .is_err()
+        );
+    }
+    let (mut ar, mut br) = (0, 0);
+    for revision in 1..=2 {
+        publish_take(&mut host, Arc::clone(&take), revision - 1, 2, 8.0 + (revision - 1) as f64 * 4.0);
+        let state = wait(&mut host, |s| s["controls"]["revision"] == revision);
+        assert_eq!(accept_audio(&mut host, &mut local), 1);
+        apply(&mut local, &state, &mut ar);
+        let state = wait(&mut guest, |s| s["controls"]["revision"] == revision);
+        assert_eq!(
+            accept_audio(&mut guest, &mut remote),
+            usize::from(revision == 1),
+            "verified sound is not transferred twice"
+        );
+        apply(&mut remote, &state, &mut br);
+        assert_eq!(local.project(), remote.project());
+        assert_eq!(local.audio().files.len(), 2);
+        assert_eq!(render(&local), render(&remote));
+    }
+    let mut out = [0.0; 512];
+    a.process(&mut out);
+    b.process(&mut out);
+    assert!(a.monitor().running() && b.monitor().running());
+    assert!((a.monitor().beat() - b.monitor().beat()).abs() > 4.0);
+    // Guest can edit the just-published clip through the same contiguous revision journal.
+    let inserted = local.project().arrangement.lanes.iter().flat_map(|l| &l.clips).max_by_key(|c| c.id).unwrap().id.0;
+    submit(&mut guest, 2, WireEdit::ClipMove { clip: inserted, start: 16.0, track: 1 });
+    apply(&mut local, &wait(&mut host, |s| s["controls"]["revision"] == 3), &mut ar);
+    apply(&mut remote, &wait(&mut guest, |s| s["controls"]["revision"] == 3), &mut br);
+    assert_eq!(local.project(), remote.project());
+    let rendered = render(&remote);
+    host.execute("multiplayer.stop", &json!({})).unwrap();
+    guest.execute("multiplayer.stop", &json!({})).unwrap();
+    let saved = folder.join("Saved-with-new-takes.suhina");
+    remote.save(&saved, false).unwrap();
+    let trusted_paths = remote.loaded_audio_paths();
+    assert_eq!(trusted_paths.len(), 2);
+    assert!(trusted_paths.iter().all(|p| p.is_file()));
+    drop(remote);
+    let reopened = suhina_project_file::read_file(&saved).unwrap();
+    // Native trust is explicit, as for local files saved outside a project's own folder.
+    let trusted = suhina_media::Trusted { files: trusted_paths.into_iter().collect(), ..Default::default() };
+    let (pool, warnings) = suhina_media::load_project_audio_trusted(&reopened, &folder, &trusted);
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(
+        suhina_engine::render_offline_from(&reopened, RenderInputs::from_audio(&pool), 8000, 512, None).unwrap(),
+        rendered
+    );
+    assert_eq!(project, source_before);
+    assert_eq!(take.samples, vec![0.25; 8000]);
+}
+
+#[test]
+fn rejected_publication_keeps_revision_and_late_join_gets_the_new_take() {
+    let host_dir = tempfile::tempdir().unwrap();
+    let guest_dir = tempfile::tempdir().unwrap();
+    let (project, audio) = source();
+    let mut host = Service::default();
+    host.set_storage_root(Some(host_dir.path().into())).unwrap();
+    host.select_audio_project(&project, &audio).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let ready = wait(&mut host, |s| s["mode"] == "hosting");
+    let initial = host.take_shared().unwrap();
+    let mut local = initial.session().unwrap();
+    initial.keep();
+    let data = Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.125; 4000] });
+    for (base, track) in [(3, 1), (0, 3)] {
+        publish_take(&mut host, Arc::clone(&data), base, track, 0.0);
+        let rejected = wait(&mut host, |s| s["error"].is_string());
+        assert_eq!(rejected["controls"]["revision"], 0);
+        assert!(host.take_audio().is_empty());
+        assert_eq!(std::fs::read_dir(host_dir.path()).unwrap().count(), 1, "failed take folders are removed");
+    }
+    publish_take(&mut host, Arc::clone(&data), 0, 2, 4.0);
+    let state = wait(&mut host, |s| s["controls"]["revision"] == 1);
+    accept_audio(&mut host, &mut local);
+    let mut rev = 0;
+    apply(&mut local, &state, &mut rev);
+    let mut guest = Service::default();
+    guest.set_storage_root(Some(guest_dir.path().into())).unwrap();
+    guest.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snapshot = guest.take_shared().unwrap();
+    let remote = snapshot.session().unwrap();
+    snapshot.keep();
+    assert_eq!(local.project(), remote.project());
+    assert_eq!(render(&local), render(&remote));
+    assert_eq!(remote.audio().files.len(), 2);
+}
+
+#[test]
+fn a_native_microphone_take_recorded_after_join_can_be_published_without_changing_its_source() {
+    use std::sync::atomic::AtomicU64;
+    use suhina_model::{AudioInput, InputChannels, Monitor};
+    let root = tempfile::tempdir().unwrap();
+    let receive = tempfile::tempdir().unwrap();
+    let (mut project, _) = source();
+    project.contents[0].lanes[0].data = LaneData::Audio(AudioRegion::new(""));
+    project.tracks[0].audio_input = AudioInput { channels: InputChannels::Mono(1), monitor: Monitor::Off };
+    let mut studio = Session::new(project);
+    studio.save(&root.path().join("Original.suhina"), false).unwrap();
+    let mut host = Service::default();
+    host.set_storage_root(Some(root.path().join("Host"))).unwrap();
+    host.select_audio_project(studio.project(), studio.audio()).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let ready = wait(&mut host, |s| s["mode"] == "hosting");
+    let snapshot = host.take_shared().unwrap();
+    let mut local = snapshot.session().unwrap();
+    snapshot.keep();
+    let mut guest = Service::default();
+    guest.set_storage_root(Some(receive.path().into())).unwrap();
+    guest.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snapshot = guest.take_shared().unwrap();
+    let mut remote = snapshot.session().unwrap();
+    snapshot.keep();
+    // Drive the normal recorder with a synthetic microphone, after both services have joined.
+    let mut renderer = Renderer::stopped(studio.project(), studio.audio(), 8000).unwrap();
+    let (mut input, consumer) = rtrb::RingBuffer::new(32768);
+    renderer.set_audio_input(consumer, 1, Arc::new(AtomicU64::new(0)));
+    studio.attach_player(Player::new(renderer.controller(), None));
+    studio.execute("track.setArm", &json!({"track":1,"armed":true})).unwrap();
+    studio.execute("transport.play", &json!({})).unwrap();
+    let mut process = |blocks| {
+        for _ in 0..blocks {
+            for _ in 0..256 {
+                input.push(0.25).unwrap();
+            }
+            renderer.process(&mut [0.0; 512]);
+        }
+    };
+    process(2);
+    studio.execute("transport.record", &json!({"on":true})).unwrap();
+    process(24);
+    studio.execute("transport.record", &json!({"on":false})).unwrap();
+    process(8);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while studio.is_recording() && Instant::now() < deadline {
+        let notices = studio.poll_recording();
+        assert!(notices.is_empty(), "{notices:?}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!studio.is_recording());
+    let (file, data) = studio.audio().files.iter().find(|(key, _)| key.contains("Recorded")).unwrap();
+    let bytes = std::fs::read(file).unwrap();
+    let before = studio.project().clone();
+    publish_take(&mut host, Arc::clone(data), 0, 2, 16.0);
+    let state = wait(&mut host, |s| s["controls"]["revision"] == 1);
+    accept_audio(&mut host, &mut local);
+    apply(&mut local, &state, &mut 0);
+    let state = wait(&mut guest, |s| s["controls"]["revision"] == 1);
+    accept_audio(&mut guest, &mut remote);
+    apply(&mut remote, &state, &mut 0);
+    assert_eq!(render(&local), render(&remote));
+    assert!(render(&remote).iter().any(|s| s.abs() > 0.001));
+    assert_eq!(studio.project(), &before);
+    assert_eq!(std::fs::read(file).unwrap(), bytes);
+    assert_eq!(remote.audio().files.len(), 1);
 }

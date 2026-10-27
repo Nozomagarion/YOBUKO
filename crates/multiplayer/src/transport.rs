@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use crate::assets::{self, SharedSnapshot};
+use crate::assets::{self, AudioAddition, SharedSnapshot};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rustls::{
     ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
@@ -37,6 +37,7 @@ struct Canonical {
     expires: Instant,
     redeemed: bool,
     guest: bool,
+    assets: Vec<Arc<assets::Encoded>>,
 }
 impl Canonical {
     fn since(&self, seen: u64) -> Result<Vec<Operation>, String> {
@@ -53,6 +54,9 @@ impl Canonical {
         base: u64,
         wire: WireEdit,
     ) -> Result<(), String> {
+        if matches!(wire, WireEdit::AudioInsert { .. }) && author != Host::owner() {
+            return Err("only the host can publish a sound".into());
+        }
         let edit = wire.edit()?;
         // Pure commands only: preflight quotas before the canonical host can mutate anything.
         if base == self.host.revision() {
@@ -101,6 +105,7 @@ enum Event {
     Ready(String, Controls, Box<SharedSnapshot>),
     Connected(Controls, Box<SharedSnapshot>),
     Receiving(usize, usize),
+    Audio(Box<AudioAddition>),
     State(Controls, Vec<Operation>, bool),
     Rejected(String),
     Failed(String),
@@ -108,6 +113,7 @@ enum Event {
 }
 enum Input {
     Edit { base: u64, edit: WireEdit },
+    Publish { base: u64, track: u32, start: f64, audio: Arc<suhina_engine::AudioData> },
 }
 
 struct Running {
@@ -139,6 +145,8 @@ pub struct Service {
     operations: Vec<Operation>,
     receiving: Option<(usize, usize)>,
     storage: Option<PathBuf>,
+    selected_take: Option<Arc<suhina_engine::AudioData>>,
+    received_audio: Vec<AudioAddition>,
 }
 
 impl Service {
@@ -191,6 +199,20 @@ impl Service {
         self.storage = root;
         Ok(())
     }
+    /// Trusted desktop selection of a finished loaded take; never a path or network upload.
+    pub fn select_take(&mut self, audio: Arc<suhina_engine::AudioData>) -> Result<(), CommandError> {
+        if !self.active() || self.mode != "hosting" {
+            return Err("only the host can publish a loaded take".into());
+        }
+        if audio.samples.len() > (assets::MAX_ASSET - 128) / 4 {
+            return Err("the take exceeds 64 MiB".into());
+        }
+        self.selected_take = Some(audio);
+        Ok(())
+    }
+    pub fn take_audio(&mut self) -> Vec<AudioAddition> {
+        std::mem::take(&mut self.received_audio)
+    }
     pub fn take_shared(&mut self) -> Option<SharedSnapshot> {
         self.project.take()
     }
@@ -234,8 +256,17 @@ impl Service {
                         self.mode = "connected".into();
                         self.controls = Some(controls);
                     }
+                    Ok(Event::Audio(audio)) => {
+                        if self.received_audio.len() >= 16 {
+                            self.error = Some("shared audio view is not keeping up".into());
+                            closed = true;
+                            break;
+                        }
+                        self.received_audio.push(*audio);
+                    }
                     Ok(Event::Receiving(done, total)) => self.receiving = Some((done, total)),
                     Ok(Event::State(controls, operations, guest)) => {
+                        self.receiving = None;
                         if self.operations.len() + operations.len() > 128 {
                             self.error =
                                 Some("shared editor is not keeping up; the last local copy was preserved".into());
@@ -300,6 +331,8 @@ impl Service {
         self.project = None;
         self.operations.clear();
         self.receiving = None;
+        self.selected_take = None;
+        self.received_audio.clear();
         self.running = Some(Running { stop, sockets, inputs, events });
         Ok(json!({"queued":true}))
     }
@@ -346,6 +379,18 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         policy: LOCAL,
     },
     CommandSpec {
+        id: "multiplayer.publishTake",
+        label: "Publish the host-selected loaded take to an existing shared audio track",
+        params: &[
+            param("base_revision", ParamType::Integer, "observed shared revision"),
+            param("track", ParamType::Integer, "existing audio-only track id"),
+            param("start", ParamType::Number, "arrangement beat, 0..120000"),
+        ],
+        kind: CommandKind::Projects,
+        run: publish_take,
+        policy: LOCAL,
+    },
+    CommandSpec {
         id: "multiplayer.state",
         label: "Poll local LAN state",
         params: &[],
@@ -379,6 +424,8 @@ fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.selected = None;
     s.project = None;
     s.receiving = None;
+    s.selected_take = None;
+    s.received_audio.clear();
     Ok(json!({"stopped":true}))
 }
 fn address(p: &Value) -> Result<SocketAddr, CommandError> {
@@ -431,6 +478,9 @@ fn edit(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
         return Err("edit is too large".into());
     }
     let edit: WireEdit = serde_json::from_str(text).map_err(|_| CommandError::from("invalid shared edit"))?;
+    if matches!(edit, WireEdit::AudioInsert { .. }) {
+        return Err("use the host's explicit loaded-take selection".into());
+    }
     edit.edit().map_err(CommandError::from)?;
     let base = p["base_revision"].as_u64().ok_or("invalid revision")?;
     s.running
@@ -438,6 +488,24 @@ fn edit(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
         .ok_or("no multiplayer session")?
         .inputs
         .try_send(Input::Edit { base, edit })
+        .map_err(|_| CommandError::from("multiplayer is busy or disconnected"))?;
+    s.error = None;
+    Ok(json!({"queued":true}))
+}
+
+fn publish_take(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
+    if s.mode != "hosting" {
+        return Err("only the host can publish a loaded take".into());
+    }
+    let base = p["base_revision"].as_u64().ok_or("invalid revision")?;
+    let track = p["track"].as_u64().and_then(|n| u32::try_from(n).ok()).filter(|n| *n > 0).ok_or("invalid track")?;
+    let start = p["start"].as_f64().filter(|n| (0.0..=120_000.0).contains(n)).ok_or("invalid start beat")?;
+    let audio = s.selected_take.take().ok_or("select a finished loaded take first")?;
+    s.running
+        .as_ref()
+        .ok_or("no multiplayer session")?
+        .inputs
+        .try_send(Input::Publish { base, track, start, audio })
         .map_err(|_| CommandError::from("multiplayer is busy or disconnected"))?;
     s.error = None;
     Ok(json!({"queued":true}))
@@ -523,7 +591,7 @@ fn host(
 ) -> Result<(), String> {
     let prepared = assets::prepare(&source, &resources.0, resources.1.as_deref(), stop)?;
     let source = prepared.snapshot.project.clone();
-    let assets = Arc::new(prepared.assets);
+    let initial_assets = prepared.assets;
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let key = rcgen::generate_simple_self_signed(vec!["suhina.local".into()])
         .map_err(|_| "could not create the host certificate")?;
@@ -557,6 +625,7 @@ fn host(
         expires: Instant::now() + Duration::from_secs(300),
         redeemed: false,
         guest: false,
+        assets: initial_assets,
     }));
     events
         .try_send(Event::Ready(invite, initial, Box::new(prepared.snapshot)))
@@ -566,12 +635,25 @@ fn host(
     let mut sequence = 1u64;
     let mut last = (0u64, false);
     while !stop.load(Ordering::Relaxed) {
-        while let Ok(Input::Edit { base, edit }) = inputs.try_recv() {
-            let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-            match state.submit(Host::owner(), sequence, base, edit) {
+        while let Ok(input) = inputs.try_recv() {
+            let result = match input {
+                Input::Edit { base, edit } => {
+                    canonical.lock().unwrap_or_else(PoisonError::into_inner).submit(Host::owner(), sequence, base, edit)
+                }
+                Input::Publish { base, track, start, audio } => {
+                    match publish(&canonical, sequence, base, track, start, &audio, (resources.1.as_deref(), stop)) {
+                        Ok(snapshot) => {
+                            events.try_send(Event::Audio(Box::new(snapshot))).map_err(|_| "multiplayer view closed")?;
+                            Ok(())
+                        }
+                        Err(error) => Err(error),
+                    }
+                }
+            };
+            match result {
                 Ok(_) => sequence = sequence.checked_add(1).ok_or("operation counter exhausted")?,
                 Err(e) => {
-                    let _ = events.try_send(Event::Rejected(e.to_string()));
+                    let _ = events.try_send(Event::Rejected(e));
                 }
             }
         }
@@ -612,11 +694,10 @@ fn host(
                     Arc::clone(&pending),
                     Arc::clone(sockets),
                 );
-                let assets = Arc::clone(&assets);
                 pending.fetch_add(1, Ordering::Relaxed);
                 match std::thread::Builder::new().name("suhina-lan-peer".into()).spawn(move || {
                     let _guard = ConnectionGuard { sockets: registry, peer: stream.peer_addr().ok() };
-                    let _ = serve(stream, tls, &canonical, &stop, &assets);
+                    let _ = serve(stream, tls, &canonical, &stop);
                     pending.fetch_sub(1, Ordering::Relaxed);
                 }) {
                     Ok(handle) => handlers.push(handle),
@@ -635,12 +716,83 @@ fn host(
     Ok(())
 }
 
+fn publish(
+    canonical: &Mutex<Canonical>,
+    sequence: u64,
+    base: u64,
+    track: u32,
+    start: f64,
+    audio: &suhina_engine::AudioData,
+    storage: (Option<&std::path::Path>, &AtomicBool),
+) -> Result<AudioAddition, String> {
+    {
+        let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+        if state.host.revision() != base {
+            return Err("shared revision changed; refresh before publishing".into());
+        }
+    }
+    let asset = assets::encode_take(audio)?;
+    let collected = assets::collect_take(&asset, storage.0, storage.1)?;
+    let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+    let exists = state.assets.iter().any(|a| a.meta.hash == asset.meta.hash);
+    if !exists
+        && (state.assets.len() >= 64
+            || state.assets.iter().map(|a| a.meta.bytes).sum::<usize>() + asset.meta.bytes > assets::MAX_TOTAL)
+    {
+        return Err("session audio budget reached (64 sounds / 256 MiB)".into());
+    }
+    let m = &asset.meta;
+    let wire =
+        WireEdit::AudioInsert { track, start, file: m.path(), rate: m.rate, channels: m.channels, frames: m.frames };
+    state.submit(Host::owner(), sequence, base, wire)?;
+    if !exists {
+        state.assets.push(asset);
+    }
+    Ok(collected)
+}
+
+fn write_update(
+    io: &mut StreamOwned<ServerConnection, DeadlineSocket>,
+    response: &ServerMessage,
+    project: &Project,
+    assets: &[Arc<assets::Encoded>],
+    known: &mut assets::Known,
+    stop: &AtomicBool,
+) -> Result<(), String> {
+    protocol::write(io, response)?;
+    io.sock.deadline = Instant::now() + Duration::from_secs(180);
+    assets::send(io, &assets::missing(project, known)?, assets, stop)?;
+    for a in assets.iter().filter(|a| assets::references(project).contains(&a.meta.path())) {
+        known.insert(a.meta.path(), a.meta.clone());
+    }
+    Ok(())
+}
+fn receive_update(
+    io: &mut StreamOwned<ClientConnection, DeadlineSocket>,
+    project: &Project,
+    revision: u64,
+    root: Option<&std::path::Path>,
+    known: &mut assets::Known,
+    stop: &AtomicBool,
+    events: &SyncSender<Event>,
+) -> Result<Option<AudioAddition>, String> {
+    io.sock.deadline = Instant::now() + Duration::from_secs(180);
+    let audio =
+        assets::receive_known(io, assets::missing(project, known)?, revision, root, stop, known, |done, total| {
+            // One notification leaves queue space for Audio/State even during initial admission.
+            if done == 0 && total > 0 {
+                let _ = events.try_send(Event::Receiving(0, total));
+            }
+        })?;
+    known.extend(audio.metas.iter().map(|a| (a.path(), a.clone())));
+    Ok((!audio.audio.files.is_empty()).then(|| audio.into_audio()))
+}
+
 fn serve(
     stream: TcpStream,
     tls: Arc<ServerConfig>,
     canonical: &Mutex<Canonical>,
     stop: &AtomicBool,
-    assets: &[Arc<assets::Encoded>],
 ) -> Result<(), String> {
     let connection = ServerConnection::new(tls).map_err(|e| e.to_string())?;
     let mut io = StreamOwned::new(connection, DeadlineSocket::new(stream));
@@ -662,21 +814,29 @@ fn serve(
     };
     let result = (|| {
         io.sock.deadline = Instant::now() + Duration::from_secs(30);
-        let (snapshot, revision) = {
+        let (snapshot, revision, assets) = {
             let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-            (state.host.project().clone(), state.host.revision())
+            (state.host.project().clone(), state.host.revision(), state.assets.clone())
         };
         let (_, document) = crate::midi::encode_portable(&snapshot)?;
         crate::transfer::send(&mut io, &document, revision, stop)?;
         io.sock.deadline = Instant::now() + Duration::from_secs(180);
-        assets::send(&mut io, &snapshot, assets, stop)?;
+        assets::send(&mut io, &snapshot, &assets, stop)?;
+        let mut known: assets::Known = assets
+            .iter()
+            .filter(|a| assets::references(&snapshot).contains(&a.meta.path()))
+            .map(|a| (a.meta.path(), a.meta.clone()))
+            .collect();
         io.sock.renew();
-        let initial = canonical.lock().unwrap_or_else(PoisonError::into_inner).response(revision, None)?;
-        protocol::write(&mut io, &initial)?;
+        let (initial, project, assets) = {
+            let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+            (state.response(revision, None)?, state.host.project().clone(), state.assets.clone())
+        };
+        write_update(&mut io, &initial, &project, &assets, &mut known, stop)?;
         while !stop.load(Ordering::Relaxed) {
             io.sock.renew();
             let message: ClientMessage = protocol::read(&mut io)?;
-            let response = {
+            let (response, project, assets) = {
                 let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
                 let (seen, outcome) = match message {
                     ClientMessage::Poll { protocol: PROTOCOL, seen_revision } => (seen_revision, None),
@@ -689,9 +849,9 @@ fn serve(
                     }
                     _ => return Err("unsupported LAN protocol message".into()),
                 };
-                state.response(seen, outcome)?
+                (state.response(seen, outcome)?, state.host.project().clone(), state.assets.clone())
             };
-            protocol::write(&mut io, &response)?;
+            write_update(&mut io, &response, &project, &assets, &mut known, stop)?;
             // Rate bound also applies to a guest bypassing our client's polling cadence.
             std::thread::sleep(Duration::from_millis(50));
         }
@@ -738,6 +898,7 @@ fn guest(
     let mut snapshot = assets::receive(&mut io, project, revision, storage.as_deref(), stop, |done, total| {
         let _ = events.try_send(Event::Receiving(done, total));
     })?;
+    let mut known: assets::Known = snapshot.metas.iter().map(|a| (a.path(), a.clone())).collect();
     let mut mirror = suhina_session::Session::new(snapshot.project.clone());
     io.sock.renew();
     let first: ServerMessage = protocol::read(&mut io)?;
@@ -746,6 +907,11 @@ fn guest(
     };
     let controls = *controls;
     protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations)?;
+    if let Some(audio) =
+        receive_update(&mut io, mirror.project(), revision, storage.as_deref(), &mut known, stop, events)?
+    {
+        snapshot.add_audio(audio);
+    }
     let mut previous = controls.clone();
     snapshot.project = mirror.project().clone();
     snapshot.revision = revision;
@@ -759,6 +925,7 @@ fn guest(
             Some(Input::Edit { base, edit }) => {
                 ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision: base, seen_revision: revision, edit }
             }
+            Some(Input::Publish { .. }) => return Err("guest publication is not supported".into()),
             None => ClientMessage::Poll { protocol: PROTOCOL, seen_revision: revision },
         };
         protocol::write(&mut io, &request)?;
@@ -768,6 +935,11 @@ fn guest(
         };
         let controls = *controls;
         protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations)?;
+        if let Some(audio) =
+            receive_update(&mut io, mirror.project(), revision, storage.as_deref(), &mut known, stop, events)?
+        {
+            events.try_send(Event::Audio(Box::new(audio))).map_err(|_| "multiplayer view is not keeping up")?;
+        }
         if controls.revision < previous.revision || controls.revision == previous.revision && controls != previous {
             return Err("host control revision mismatch".into());
         }

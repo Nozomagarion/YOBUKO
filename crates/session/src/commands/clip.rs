@@ -562,6 +562,21 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::CRITICAL,
     },
     CommandSpec {
+        id: "clip.insertAudio",
+        label: "Place a verified portable audio reference as a new unwarped arrangement clip; keep neighboring clips; performs no file I/O",
+        params: &[
+            TRACK,
+            param("start", ParamType::Number, "arrangement beat, from 0 to 120000"),
+            param("file", ParamType::Text, "Audio/<64 lowercase hex>.wav"),
+            param("rate", ParamType::Integer, "sample rate, 8000..192000 Hz"),
+            param("channels", ParamType::Integer, "one or two channels"),
+            param("frames", ParamType::Integer, "positive number of decoded frames"),
+        ],
+        kind: CommandKind::Edit,
+        run: files::insert_audio,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "clip.create",
         label: "Make an empty clip on a track that holds clips: MIDI on a notes track, audio with no file yet on an audio track; in an empty clip slot, or at a beat in the arrangement, replacing what it covers unless stacked",
         params: &[

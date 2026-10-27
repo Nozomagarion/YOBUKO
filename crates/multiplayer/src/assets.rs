@@ -147,7 +147,7 @@ fn decode(bytes: &[u8], asset: &Asset) -> Result<AudioData, String> {
     }
     Ok(decoded)
 }
-fn references(project: &Project) -> BTreeSet<String> {
+pub(crate) fn references(project: &Project) -> BTreeSet<String> {
     project
         .contents
         .iter()
@@ -209,23 +209,56 @@ pub struct SharedSnapshot {
     pub revision: u64,
     pub audio: AudioPool,
     folder: Option<tempfile::TempDir>,
+    pub(crate) metas: Vec<Asset>,
+    pub(crate) additions: Vec<AudioAddition>,
 }
-impl SharedSnapshot {
-    pub fn session(&self) -> suhina_session::Session {
-        suhina_session::Session::shared_copy(
-            self.project.clone(),
-            self.audio.clone(),
-            self.folder.as_ref().map(|d| d.path().to_path_buf()),
-        )
+/// Verified additional sound files, leased until the desktop attaches them successfully.
+pub struct AudioAddition {
+    pub audio: AudioPool,
+    folder: Option<tempfile::TempDir>,
+}
+impl AudioAddition {
+    pub fn folder(&self) -> Option<&Path> {
+        self.folder.as_ref().map(|d| d.path())
     }
-    /// Keep collected files only after the desktop has added the new session tab successfully.
     pub fn keep(mut self) {
         if let Some(folder) = self.folder.take() {
             let _ = folder.keep();
         }
     }
+}
+impl SharedSnapshot {
+    pub(crate) fn add_audio(&mut self, audio: AudioAddition) {
+        self.audio.files.extend(audio.audio.files.iter().map(|(key, data)| (key.clone(), Arc::clone(data))));
+        self.additions.push(audio);
+    }
+    pub(crate) fn into_audio(self) -> AudioAddition {
+        AudioAddition { audio: self.audio, folder: self.folder }
+    }
+    pub fn session(&self) -> Result<suhina_session::Session, String> {
+        let mut session = suhina_session::Session::shared_copy(
+            self.project.clone(),
+            self.audio.clone(),
+            self.folder().map(Path::to_path_buf),
+        );
+        for addition in &self.additions {
+            session
+                .add_collected_audio(&addition.audio, addition.folder().ok_or("collected audio folder missing")?)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(session)
+    }
+    /// Keep collected files only after the desktop has added the new session tab successfully.
+    pub fn keep(mut self) {
+        for addition in self.additions.drain(..) {
+            addition.keep();
+        }
+        if let Some(folder) = self.folder.take() {
+            let _ = folder.keep();
+        }
+    }
     pub fn folder(&self) -> Option<&Path> {
-        self.folder.as_ref().map(|d| d.path())
+        self.folder.as_ref().map(|d| d.path()).or_else(|| self.additions.first().and_then(AudioAddition::folder))
     }
 }
 pub(crate) struct Encoded {
@@ -348,7 +381,65 @@ pub(crate) fn prepare(
         }
     }
     finish(folder.as_ref(), &project, &metas, stop)?;
-    Ok(Prepared { snapshot: SharedSnapshot { project, revision: 0, audio, folder }, assets })
+    Ok(Prepared {
+        snapshot: SharedSnapshot { project, revision: 0, audio, folder, metas, additions: Vec::new() },
+        assets,
+    })
+}
+
+/// Keep only not-yet-verified references for the existing strict manifest machinery.
+pub(crate) type Known = BTreeMap<String, Asset>;
+pub(crate) fn missing(project: &Project, known: &Known) -> Result<Project, String> {
+    let mut project = project.clone();
+    for content in &mut project.contents {
+        for lane in &mut content.lanes {
+            if let LaneData::Audio(region) = &mut lane.data
+                && let Some(meta) = known.get(&region.file)
+            {
+                if region.sample_rate != Some(meta.rate)
+                    || region.channels != Some(meta.channels)
+                    || region.duration_seconds != Some(meta.frames as f64 / f64::from(meta.rate))
+                    || region.absolute_file.is_some()
+                    || region.stream.is_some()
+                {
+                    return Err("known audio metadata changed".into());
+                }
+                *region = suhina_model::AudioRegion::new("");
+            }
+        }
+    }
+    Ok(project)
+}
+
+pub(crate) fn encode_take(data: &AudioData) -> Result<Arc<Encoded>, String> {
+    let bytes = wave(data)?;
+    Ok(Arc::new(Encoded {
+        meta: Asset {
+            hash: hash(&bytes),
+            bytes: bytes.len(),
+            rate: data.sample_rate,
+            channels: data.channels,
+            frames: data.frames(),
+        },
+        bytes,
+    }))
+}
+
+pub(crate) fn collect_take(asset: &Encoded, root: Option<&Path>, stop: &AtomicBool) -> Result<AudioAddition, String> {
+    let folder = staging(root, true)?;
+    let dir = folder.as_ref().ok_or("audio storage missing")?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(dir.path().join(asset.meta.path()))
+        .map_err(|e| e.to_string())?;
+    file.write_all(&asset.bytes).and_then(|_| file.sync_all()).map_err(|e| e.to_string())?;
+    let mut audio = AudioPool::new();
+    audio.files.insert(asset.meta.path(), Arc::new(decode(&asset.bytes, &asset.meta)?));
+    if stop.load(Ordering::Relaxed) {
+        return Err("session stopped".into());
+    }
+    Ok(AudioAddition { audio, folder })
 }
 
 pub(crate) fn send(
@@ -388,6 +479,18 @@ pub(crate) fn receive(
     revision: u64,
     root: Option<&Path>,
     stop: &AtomicBool,
+    progress: impl FnMut(usize, usize),
+) -> Result<SharedSnapshot, String> {
+    receive_known(io, project, revision, root, stop, &Known::new(), progress)
+}
+
+pub(crate) fn receive_known(
+    io: &mut (impl Read + Write),
+    project: Project,
+    revision: u64,
+    root: Option<&Path>,
+    stop: &AtomicBool,
+    known: &Known,
     mut progress: impl FnMut(usize, usize),
 ) -> Result<SharedSnapshot, String> {
     use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -396,6 +499,13 @@ pub(crate) fn receive(
     };
     manifest(&project, &metas)?;
     let total: usize = metas.iter().map(|a| a.bytes).sum();
+    let old_total: usize = known.values().map(|a| a.bytes).sum();
+    if known.len() + metas.len() > MAX_ASSETS
+        || old_total.checked_add(total).is_none_or(|n| n > MAX_TOTAL)
+        || metas.iter().any(|a| known.contains_key(&a.path()))
+    {
+        return Err("cumulative session audio budget exceeded or repeated asset".into());
+    }
     let mut done = 0;
     let quantum = total.div_ceil(16).max(CHUNK);
     let mut reported = 0;
@@ -446,7 +556,7 @@ pub(crate) fn receive(
         audio.files.insert(meta.path(), Arc::new(data));
     }
     finish(folder.as_ref(), &project, &metas, stop)?;
-    Ok(SharedSnapshot { project, revision, audio, folder })
+    Ok(SharedSnapshot { project, revision, audio, folder, metas, additions: Vec::new() })
 }
 
 #[cfg(test)]

@@ -277,7 +277,9 @@ impl Session {
         };
         let from = self.audio_from();
         let path = |file: &str, absolute: Option<&str>| {
-            absolute.map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(|| from.join(file))
+            self.audio.collected.get(file).cloned().unwrap_or_else(|| {
+                absolute.map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(|| from.join(file))
+            })
         };
         let mut out: Vec<(String, PathBuf)> = Vec::new();
         let devices = self.project.channels.iter().flat_map(|c| &c.devices);
@@ -305,6 +307,26 @@ impl Session {
     pub fn set_audio(&mut self, audio: suhina_engine::AudioPool) {
         self.audio.pool = audio;
         self.audio.changed = true;
+    }
+
+    /// Attach already verified collected audio from a trusted local worker before its musical
+    /// operation. Preserve the session/player and keep local paths outside the shared model.
+    pub fn add_collected_audio(&mut self, audio: &suhina_engine::AudioPool, folder: &Path) -> Result<(), CommandError> {
+        if !folder.is_absolute()
+            || audio.files.keys().any(|key| {
+                !key.strip_prefix("Audio/").and_then(|s| s.strip_suffix(".wav")).is_some_and(|s| {
+                    s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                })
+            })
+        {
+            return Err("invalid trusted collected audio location".into());
+        }
+        for (key, data) in &audio.files {
+            self.audio.collected.insert(key.clone(), folder.join(key));
+            self.audio.pool.files.insert(key.clone(), std::sync::Arc::clone(data));
+        }
+        self.audio.changed = true;
+        Ok(())
     }
 
     /// The parsed model or decoded IR for a file-backed device's file, from the assets already
@@ -874,6 +896,7 @@ impl Session {
         }
         let to = path.parent().map_or_else(PathBuf::new, Path::to_path_buf);
         let (mut project, states) = self.heard();
+        self.collected_save_paths(&mut project);
         suhina_project_file::rebase_audio(&mut project, &self.audio_from(), &to);
         suhina_project_file::write_file(&path, &project).map_err(|e| CommandError(e.0))?;
         if !copy {
@@ -891,8 +914,21 @@ impl Session {
         // busy plug-in on the window's thread at every backup.
         let states = self.plugins.known_states();
         let mut project = self.with_states(&states);
+        self.collected_save_paths(&mut project);
         suhina_project_file::rebase_audio(&mut project, &self.audio_from(), folder);
         project
+    }
+
+    fn collected_save_paths(&self, project: &mut Project) {
+        for content in &mut project.contents {
+            for lane in &mut content.lanes {
+                if let suhina_model::LaneData::Audio(region) = &mut lane.data
+                    && let Some(path) = self.audio.collected.get(&region.file)
+                {
+                    region.absolute_file = Some(path.to_string_lossy().into_owned());
+                }
+            }
+        }
     }
 
     /// The folder the project's relative audio paths start from: its audio folder, or the
