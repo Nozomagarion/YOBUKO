@@ -228,7 +228,15 @@ fn eq3(node: Node, warn: &mut dyn FnMut(String)) -> Vec<DeviceParam> {
     p.set("lowFrequency", manual(node, "FreqLo"));
     p.set("highFrequency", manual(node, "FreqHi"));
     // Stored 0 is 24 dB/octave and 1 is 48 dB, the same order as ours.
-    p.set("slope", step(node, "Slope", 2, "EQ Three slope", warn));
+    // Unlike the other step values, a slope between the two settings is not rounded into one.
+    let slope = match manual(node, "Slope") {
+        Some(stored) if stored.fract() != 0.0 => {
+            warn(format!("EQ Three slope {stored} is not understood; using the default"));
+            None
+        }
+        _ => step(node, "Slope", 2, "EQ Three slope", warn),
+    };
+    p.set("slope", slope);
     p.0
 }
 

@@ -348,6 +348,14 @@ fn eq_three_zero_gains_and_odd_slopes() {
 }
 
 /// A gain past the device's range is held there, whatever the project file says.
+/// A slope between two settings is not rounded into one of them: it is noted and left out.
+#[test]
+fn eq_three_fractional_slope_is_not_rounded() {
+    let (_, params, warnings) = mapped("FilterEQ3", &manual_xml("Slope", "1.25"));
+    assert!(params.iter().all(|p| p.id != "slope"), "{params:?}");
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+}
+
 #[test]
 fn eq_three_out_of_range_gains_are_clamped() {
     let xml = manual_xml("GainHi", "16") + &manual_xml("GainLo", "0.01") + &manual_xml("GainMid", "0.000001");
