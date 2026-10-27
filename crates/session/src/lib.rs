@@ -47,6 +47,7 @@ mod recording;
 mod relink;
 mod scales;
 mod sends;
+mod shared_devices;
 mod soundmap;
 mod tempo;
 

@@ -249,6 +249,19 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "device.setSharedParam",
+        label: "Set one canonical parameter of an existing parameter-only FM Synth or Utility, addressed by numeric track and top-level index",
+        params: &[
+            param("track", ParamType::Integer, "nonzero track id"),
+            param("device", ParamType::Integer, "top-level device index, 0..15; bound to the shared revision"),
+            param("param", ParamType::Text, "native parameter id, 1..64 ASCII letters/digits/dot/underscore"),
+            param("value", ParamType::Number, "canonical value in the native parameter range and unit"),
+        ],
+        kind: CommandKind::Edit,
+        run: crate::shared_devices::set_param,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "device.setParam",
         label: "Set a parameter of a device on a track, heard from the next block; the value is limited to the parameter's range",
         params: &[

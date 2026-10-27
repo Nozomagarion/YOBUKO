@@ -1,6 +1,6 @@
 ---
 description: Bounded portable audio snapshots over authenticated LAN, with content hashes and isolated persistent project folders
-read_when: multiplayer audio files, protocol 8, shared assets, portable audio manifest
+read_when: multiplayer audio files, protocol 9, shared assets, portable audio manifest
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -94,7 +94,7 @@ new decoded files before applying the accepted native command; this updates the 
 without replacing it, seeking or stopping either participant. Keep the new folder only once the
 UI has accepted the assets. Explicit saving records the local file mappings for reopening.
 Late admission includes all currently referenced sounds. Existing controls, notes and clip edits
-continue to share the same contiguous revision journal. Both installations now require protocol 8, which additionally admits [shared track creation](lan-track-creation.md).
+continue to share the same contiguous revision journal. Both installations now require protocol 9, which additionally admits [shared device parameters](lan-device-parameters.md).
 
 The native clip.insertAudio `file` parameter is a generated content-addressed resource key,
 not a file-read/write argument. Its exact syntax and numeric metadata are validated by the

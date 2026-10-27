@@ -36,6 +36,7 @@ pub use self::expanded::*;
 use self::group_panel::*;
 pub use self::model::*;
 use self::parameters::*;
+pub(crate) use self::parameters::{parameter_widget, value_text};
 #[cfg(test)]
 pub(crate) use self::parameters::{slider_as_knob, themed_slider};
 

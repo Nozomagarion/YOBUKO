@@ -1,6 +1,6 @@
 ---
 description: Bounded MIDI-only copies of an open project over authenticated LAN, preserving the original and refusing audio and opaque devices
-read_when: share current MIDI project, LAN project transfer, multiplayer protocol 8, MIDI copy limits
+read_when: share current MIDI project, LAN project transfer, multiplayer protocol 9, MIDI copy limits
 type: spec
 status: draft
 last_verified: 2026-10-26

@@ -1,6 +1,6 @@
 ---
 description: Revision-checked MIDI clip arrangement edits in the restricted LAN session
-read_when: shared clip placement, multiplayer protocol 8, clip creation duplication deletion, arrangement collaboration
+read_when: shared clip placement, multiplayer protocol 9, clip creation duplication deletion, arrangement collaboration
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -59,7 +59,7 @@ testing remains the later user acceptance step. The audio contract below extends
 
 ## Amendment: initial collected audio
 
-[The audio contract](lan-audio-assets.md) adds verified initial audio assets under protocol 8.
+[The audio contract](lan-audio-assets.md) adds verified initial audio assets. Protocol 9 also admits [device parameters](lan-device-parameters.md).
 The same clip operations act on audio; new audio clips are empty and cannot acquire a new file
 through these commands. The UI lists both MIDI and audio destination tracks. Native note commands
 refuse audio clips. Audio stretch and plugins stay closed. Protocol 8 additionally orders verified verified finished-take placement via clip.insertAudio, as specified in the audio contract.

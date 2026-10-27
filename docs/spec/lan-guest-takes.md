@@ -1,6 +1,6 @@
 ---
 description: Verified guest take uploads into a host-ordered LAN session, preserving source files and independent players
-read_when: multiplayer guest recording upload, protocol 8, bidirectional take publication
+read_when: multiplayer guest recording upload, protocol 9, bidirectional take publication
 type: spec
 status: draft
 last_verified: 2026-10-27

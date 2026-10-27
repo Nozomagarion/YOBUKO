@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 8;
+pub const PROTOCOL: u16 = 9;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -103,6 +103,8 @@ pub enum WireEdit {
     Volume { track: u32, db: f64 },
     #[serde(rename = "track.setPan")]
     Pan { track: u32, pan: f64 },
+    #[serde(rename = "device.setSharedParam")]
+    DeviceParam { track: u32, device: usize, param: String, value: f64 },
     #[serde(rename = "note.add")]
     NoteAdd { clip: u32, time: f64, length: f64, key: u8, velocity: f64 },
     #[serde(rename = "note.update")]
@@ -139,6 +141,9 @@ impl WireEdit {
             Self::Rename { track, name } => ("track.rename", json!({"track":track,"name":name})),
             Self::Volume { track, db } => ("track.setVolume", json!({"tracks":[track],"db":db})),
             Self::Pan { track, pan } => ("track.setPan", json!({"tracks":[track],"pan":pan})),
+            Self::DeviceParam { track, device, param, value } => {
+                ("device.setSharedParam", json!({"track":track,"device":device,"param":param,"value":value}))
+            }
             Self::NoteAdd { clip, time, length, key, velocity } => (
                 "note.add",
                 json!({"clip":clip,

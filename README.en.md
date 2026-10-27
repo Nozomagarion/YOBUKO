@@ -34,6 +34,8 @@ and USB export are future work. There is no common public release channel yet.
   Share the current project (up to 64 tracks, FM Synth/Utility parameters only) or use the
   generated starter. Clips arrive in the verified initial copy; single-note add/update/delete, track names, volume
   and pan are live shared edits. The **MIDI notes** editor rejects stale drafts before indices shift. Play, stop and listening position stay local to each computer.
+- **Devices:** edit existing FM Synth/Utility parameters using generated SDK controls. Draft values
+  are submitted explicitly, validated by the host and rejected after a newer revision until refreshed.
 - **New invitation:** after the guest disconnects, renew admission without replacing the hosted
   music/player. Rejoining downloads the current verified copy into a new tab; the previous local
   copy and solo edits are retained, without merging. No automatic resume or Internet routing.
@@ -47,7 +49,7 @@ instances. **A physical two-computer session has not yet been verified.** Loaded
 float32 WAV copies (64 files, 64 MiB each, 256 MiB total). Original encodings/tags are not
 archived. Either participant can publish a finished loaded take from another local Studio tab into an existing shared audio track using **Publish take**, without reconnecting. The whole sound is inserted unwarped; source trims/effects are not baked in. Guest uploads are pulled and verified by the host before publication. Recording directly into the shared tab and external plugins remain unsupported. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
 move, trim, duplicate, enable and delete with revision checks and stack-only placement.
-**Tracks** lets either participant add an audio track or a MIDI track with default FM Synth while connected. Both apps need protocol 8.
+**Tracks** lets either participant add an audio track or a MIDI track with default FM Synth while connected. Both apps need protocol 9.
 [LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-lan-prototype)
 
 ## Progress you can audit
@@ -60,7 +62,7 @@ Implemented items link to code or validation evidence; pending items stay pendin
 acceptance gate is met. Rebuild the graphic with `python3 scripts/fork_readme.py`.
 
 Portable media, shared notes/clips/tracks and verified take publication are covered by local
-TLS, desktop and audio tests. Next development expands the shared device controls; automatic
+TLS, desktop and audio tests. Next development expands shared device chains; automatic
 resume and Internet sessions remain planned. Physical two-computer acceptance is deferred at
 the owner's request and remains necessary before claiming a verified household session.
 

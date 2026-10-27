@@ -944,3 +944,33 @@ fn a_hello_started_before_renewal_cannot_consume_the_new_invitation() {
     }
     assert_eq!(guest.mode, "connected", "{:?}", guest.error);
 }
+
+#[test]
+fn shared_device_wire_is_exact_and_refuses_paths_gestures_and_nonfinite_values() {
+    let valid = json!({"command":"device.setSharedParam","track":1,"device":0,"param":"op1.on","value":0});
+    let edit: WireEdit = serde_json::from_value(valid.clone()).unwrap();
+    assert!(edit.edit().is_ok());
+    assert_eq!(
+        serde_json::to_value(edit).unwrap(),
+        json!({"command":"device.setSharedParam","track":1,"device":0,"param":"op1.on","value":0.0})
+    );
+    for (key, value) in [
+        ("path", json!("/must-not-read")),
+        ("gesture", json!("drag")),
+        ("device", json!("0/0/0")),
+        ("track", json!(-1)),
+        ("value", json!(null)),
+    ] {
+        let mut data = valid.clone();
+        data[key] = value;
+        assert!(serde_json::from_value::<WireEdit>(data).is_err());
+    }
+    for edit in [
+        WireEdit::DeviceParam { track: 0, device: 0, param: "gain".into(), value: 0. },
+        WireEdit::DeviceParam { track: 1, device: 16, param: "gain".into(), value: 0. },
+        WireEdit::DeviceParam { track: 1, device: 0, param: "x".repeat(65), value: 0. },
+        WireEdit::DeviceParam { track: 1, device: 0, param: "gain".into(), value: f64::NAN },
+    ] {
+        assert!(edit.edit().is_err());
+    }
+}

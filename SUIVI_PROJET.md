@@ -1,11 +1,10 @@
 # Où en est notre application ?
 
-**Bilan du 27 octobre 2026 — réinvitation livrée et validée localement.**
-Le bouton **New invitation** conserve le morceau ouvert chez l’hôte. L’invité revient dans
-une nouvelle copie à jour ; son ancienne copie et ses retouches locales restent conservées.
-**3 126 tests passent, aucun échec.** Le paquet Mac **`b3967616`** est compilé et vérifié
-après extraction. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles distants
-restent bloqués par GitHub ; Windows/Linux ne sont donc pas validés pour cette version.
+**Bilan du 27 octobre 2026 — réglages FM Synth et Utility validés localement.**
+Les deux participants peuvent maintenant modifier les paramètres des appareils déjà présents,
+dans **Multiplayer → Devices**. Les valeurs sont vérifiées par l’hôte avant d’atteindre les deux copies.
+**3 135 tests passent, aucun échec.** Le nouveau paquet Mac est en préparation ; le dernier
+paquet déjà livré reste `b3967616`, avec la réinvitation après coupure.
 
 ## Ce qu’on fabrique
 
@@ -24,35 +23,52 @@ ordinateurs de la maison est prévu plus tard, comme demandé. Le logiciel compl
 | **Créer à deux** | Un hôte et un invité sur le réseau local ; partager une copie MIDI/audio avec les sons chargés, en conservant les originaux. | Plus d’un invité et Internet. |
 | **Reprendre après une coupure** | L’hôte crée une nouvelle invitation sans fermer le morceau ; l’invité ouvre l’état actuel dans un nouvel onglet. | Reconnexion automatique, fusion des retouches hors connexion et reprise après arrêt de l’hôte. |
 | **Notes et clips** | Modifier les notes MIDI ; créer, déplacer, redimensionner, dupliquer, activer et supprimer les clips de l’arrangement. | Édition des cases du lanceur et davantage d’outils partagés. |
-| **Pistes et mixeur** | Les deux participants ajoutent des pistes audio ou MIDI/FM Synth ; noms, volumes et panoramiques partagés. | Suppression, réorganisation/groupes et modification commune des appareils. |
+| **Pistes et mixeur** | Les deux participants ajoutent des pistes audio ou MIDI/FM Synth ; noms, volumes et panoramiques partagés. | Suppression, réorganisation et groupes. |
+| **Réglages des sons** | Modifier les paramètres des FM Synth et Utility déjà présents depuis l’un ou l’autre participant. | Ajouter/retirer les appareils pendant la session, autres effets/instruments et plugins. |
 | **Nouvelles prises** | Les deux participants publient un son terminé depuis un onglet Studio local ; l’hôte vérifie les envois. | Enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
 | **Écoute personnelle** | Chacun garde son lecteur, sa position, son démarrage et son arrêt. | Essai sur les deux ordinateurs physiques. |
 | **Espace DJ** | Bibliothèque persistante, import, analyse tempo/tonalité issue de rbxport, ajout d’un rendu du studio. | Playlists, points cue, grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Bouton dans les paramètres pour comparer les versions GitHub ; suivi des sources et vérification des paquets de notre application. | Intégration régulière des nouveautés, publication et réception automatique d’une version commune. |
 
-## Nouveau : revenir sans recréer le morceau
+## Nouveau : régler le son ensemble
+
+1. Créer ou rejoindre un partage, puis ouvrir **Multiplayer → Devices**.
+2. Choisir un FM Synth ou Utility existant dans **Shared device**.
+3. Retrouver un paramètre avec **Find parameter**, puis le choisir dans **Shared parameter**.
+4. Modifier **Draft value** avec le contrôle du studio : curseur, nombre, choix ou interrupteur selon le paramètre. Cela ne change encore que le brouillon local.
+5. Cliquer **Apply shared parameter**. Après confirmation de l’hôte, **Confirmed value** et les deux projets sont mis à jour.
+6. Si le morceau change entre-temps, **Apply** est désactivé : **Refresh device draft** recharge la valeur confirmée avant de préparer un nouvel envoi.
+
+Pour essayer depuis la démonstration : **Create LAN session → Tracks**, donner un nom à une
+nouvelle **MIDI track · FM Synth**, puis **Add shared track → Devices**. La démonstration de
+départ n’a pas d’appareil FM Synth ; il faut donc en créer une piste. Utility peut être ajouté
+dans le Studio local avant le partage du projet. Son ajout pendant la session reste à construire.
+
+Les contrôles reprennent les paramètres et plages du studio. Les valeurs hors plage, choix
+fractionnaires, appareils non pris en charge et brouillons périmés sont refusés. Un appareil
+éteint reste éteint : son réglage est conservé sans le réactiver. Comme dans le studio, régler
+manuellement un paramètre désactive l’automatisation de ce paramètre, sans supprimer ses points.
+Les lecteurs et positions d’écoute restent personnels. Chacun sauvegarde sa copie explicitement.
+
+## Revenir après une coupure
 
 1. L’invité quitte la session ou perd sa connexion. Sa dernière copie reste ouverte et redevient modifiable en solo.
-2. L’hôte garde sa session ouverte et peut continuer à modifier le morceau, ajouter des pistes ou publier des sons.
+2. L’hôte garde sa session ouverte et peut continuer à modifier le morceau, les réglages, les pistes et les sons.
 3. Quand l’hôte ne voit plus **Guest connected**, il clique **New invitation**, puis **Copy invitation**.
 4. L’invité utilise cette nouvelle invitation dans **Join LAN session**.
-5. Un **nouvel onglet partagé** reçoit le morceau actuel et les sons vérifiés. L’ancienne copie de l’invité reste ouverte, avec ses éventuelles retouches solo.
+5. Un **nouvel onglet partagé** reçoit le morceau actuel, ses réglages et ses sons vérifiés. L’ancienne copie reste ouverte avec les éventuelles retouches solo.
 
-Le bouton est désactivé tant qu’un invité est connecté. Une nouvelle invitation invalide
+Le bouton est désactivé tant qu’un invité est connecté. La nouvelle invitation invalide
 l’ancienne et reste utilisable **une fois, pendant cinq minutes**. Il faut la copier à nouveau.
-L’hôte garde son onglet, son lecteur, les pistes, les sons et l’ordre des modifications.
-Aucune révision musicale n’est consommée par ce changement d’invitation.
-
-**Les retouches solo de l’ancien onglet ne sont pas fusionnées dans le morceau partagé.**
-Enregistrer explicitement les copies qu’on veut garder. Si l’hôte quitte lui-même la session,
-ce partage se termine ; la reprise automatique de l’hôte n’est pas encore construite.
+L’hôte garde son onglet et son lecteur. **Les retouches solo ne sont pas fusionnées** dans
+le morceau partagé. Si l’hôte quitte lui-même la session, ce partage se termine.
 
 ## Comment créer et publier ensemble
 
 1. Ouvrir le projet dans **Studio**, puis **Multiplayer → Share project + audio** pour inclure les sons chargés. **Share current MIDI project** et la démonstration **Create LAN session** restent disponibles.
 2. L’hôte utilise **Copy invitation** ; l’invité colle cette invitation dans **Join LAN session**.
 3. Dans **Tracks**, saisir **New track name**, choisir **Audio track** ou **MIDI track · FM Synth**, puis **Add shared track**.
-4. Utiliser **Clips** pour l’arrangement et **MIDI notes** pour les notes. Un brouillon périmé doit être rafraîchi avant d’envoyer sa modification.
+4. Utiliser **Clips** pour l’arrangement, **MIDI notes** pour les notes et **Devices** pour les réglages. Un brouillon périmé doit être rafraîchi avant son envoi.
 5. Pour apporter une prise : l’enregistrer et la terminer dans un **autre onglet Studio local ordinaire**, puis garder Multiplayer ouvert, sélectionner cet onglet et ouvrir **Publish take**.
 6. Choisir le son chargé, la piste audio partagée et **Start beat**, puis **Publish loaded take**. L’hôte vérifie la prise de l’invité avant son ajout. Chacun sauvegarde explicitement sa copie partagée.
 
@@ -71,55 +87,40 @@ comme chemins de fichiers à l’autre ordinateur. Les originaux restent intacts
 - **64 pistes**, retours et groupes compris ; document partagé de **2 Mio** maximum.
 - **64 sons uniques**, **64 Mio par son**, **256 Mio au total**, mono/stéréo. Supprimer un clip ne remet pas ce budget à zéro. Un son déjà vérifié n’est pas renvoyé inutilement.
 - WAV portables à partir du son décodé ; le format MP3/FLAC d’origine et ses tags ne sont pas archivés.
-- FM Synth et Utility avec paramètres simples au partage initial ; plugins externes, autres instruments et états opaques refusés. Les pistes créées n’activent aucun micro, entrée MIDI ou monitoring local.
-- Pas d’enregistrement direct dans l’onglet partagé ni de diffusion audio en direct entre ordinateurs.
+- FM Synth et Utility avec paramètres simples ; plugins externes, autres instruments et états opaques refusés. Pas encore d’ajout/retrait d’appareil ni de modification des courbes d’automatisation en commun.
+- Les pistes créées n’activent aucun micro, entrée MIDI ou monitoring local. Pas d’enregistrement direct dans l’onglet partagé ni de diffusion audio en direct entre ordinateurs.
 
-Les deux applications utilisent le **protocole 8**. Le renouvellement d’invitation ne change
-pas ce protocole. Les anciens paquets en protocole 4, 5, 6 ou 7 sont incompatibles.
+**Les deux applications doivent utiliser le nouveau protocole 9**, donc le même nouveau paquet.
+Les versions précédentes en protocole 8 ou moins sont incompatibles avec ces sessions.
+Les projets sauvegardés gardent leur format natif version 3 ; ce changement concerne la connexion.
 
 ## Ce qui a été vérifié pour ce palier
 
 | Vérification | Résultat |
 |---|---|
-| Ensemble des tests sur ce Mac | **3 126 réussis, aucun échec**, dans 130 suites ; 55 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
-| Tests du module réseau | **67 réussis** : cœur, vraies connexions TLS, audio et reprises. |
-| Renouvellement | **Réussi** : invitation expirée/utilisée, ancienne invitation refusée, connexion déjà entamée, invité encore présent et file d’événements pleine ou fermée. |
-| Retours successifs | **Quatre cycles réussis** : départ, modifications chez l’hôte, nouvelle invitation et nouvelles modifications par l’invité. |
-| Pistes, sons et lecteur | **Réussi** : récupération des pistes et prises ajoutées pendant l’absence, publication par l’invité revenu, son identique, copie précédente et lecteur de l’hôte conservés. |
-| Interface | **12 tests réussis** : bouton réellement cliqué, même onglet chez l’hôte, nouvel onglet chez l’invité et ancienne copie intacte. Contrôle visuel GPU exécuté séparément avec succès. |
+| Ensemble des tests sur ce Mac | **3 135 réussis, aucun échec**, dans 130 suites ; 56 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
+| Commande native | **Réussi** : plages/types des deux appareils, valeurs incorrectes, états opaques, sauvegarde/réouverture, annulation, automatisation, appareil éteint et refus de contournement de l’onglet partagé. |
+| Tests du module réseau | **69 réussis** : cœur, vraies connexions TLS, audio, reprises et paramètres. Les 19 tests du cœur de collaboration passent également. |
+| Réglages et audio | **Réussi dans les deux sens** : mêmes projets et rendus, lecteurs conservés à des positions différentes, refus sans consommer le numéro de modification puis nouvel envoi valide. |
+| Retour de l’invité | **Réussi** : les réglages modifiés pendant son absence arrivent dans la nouvelle copie ; l’ancienne copie et l’original sont conservés. |
+| Interface | **13 tests réussis** : Apply réellement cliqué, recherche, sélection FM Synth/Utility, interrupteur Mono, brouillon périmé et Refresh. Captures des deux appareils vérifiées séparément avec succès. |
 | Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; pas de nouvelle dépendance. |
-| Paquet Mac Apple Silicon `b3967616` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
-| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat annoncé pour cette révision.** |
+| Nouveau paquet Mac Apple Silicon | En préparation ; l’application installée ou déjà ouverte n’a pas été remplacée. |
 | Deux ordinateurs physiques | **Pas encore testé**, comme convenu. |
-
-Les tests et le paquet correspondent au code **`b39676164c6427c79e4cfa427bfa8fc658e0a1a7`**,
-compilé après son enregistrement puis envoyé sur notre branche GitHub.
-
-## Où trouver la version actuelle
-
-- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-reinvite-macos-arm64-b3967616.zip`.
-- **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
-- **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
-- **Preuves locales :** dossier `validation/2026-10-27` voisin du dépôt : journaux, capture du bouton et script de fabrication du paquet.
-
-C’est un paquet de développement Mac Apple Silicon, signé localement. L’application installée
-ou déjà ouverte sur ton Mac n’a pas été remplacée.
 
 ## GitHub et distribution
 
-Le code est sur notre branche **`feature/multiplayer`**, affichée à l’accueil du
+Notre branche **`feature/multiplayer`** est affichée à l’accueil du
 [dépôt GitHub](https://github.com/Nozomagarion/suhina-daw). `main` reste le miroir de Suhina.
-Le README et ses barres présentent notre application : **12 étapes réalisées sur 15 listées
+Le README et ses barres présentent notre application : **13 étapes réalisées sur 16 listées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
-du logiciel final ; les étapes ont été précisées pour distinguer réinvitation manuelle,
-appareils partagés et reconnexion automatique.
+du logiciel final ; l’ajout/retrait des appareils est distingué du réglage d’un appareil existant.
 
-**Blocage externe à nouveau constaté le 27 octobre à 21 h 57**, sur le code
-`b39676164c6427c79e4cfa427bfa8fc658e0a1a7` :
+**Dernier blocage externe constaté le 27 octobre à 21 h 57**, sur le code `b3967616` :
 GitHub refuse le lancement des contrôles avec `HTTP 422: Actions has been disabled for this repository.`
 La lecture du réglage indique pourtant `enabled: true` ; la cause de ce désaccord n’est pas établie.
-Aucune exécution n’était visible pour cette révision au moment du contrôle. Aucun résultat
-distant réussi n’est annoncé pour les nouveautés. Le réglage général du dépôt n’a pas été modifié.
+Le workflow de notre fork est également indiqué actif. Une nouvelle vérification sera faite
+à l’envoi de ce palier. Le réglage général du dépôt n’a pas été modifié.
 
 La version `9a6b7762` avait terminé ses [contrôles Mac, Windows et Linux](https://github.com/Nozomagarion/suhina-daw/actions/runs/40419500365),
 constaté le 27 octobre à 10 h 01. Cela ne valide pas les ajouts ultérieurs.
@@ -130,14 +131,15 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 
 ## Prochaine étape
 
-**Partager les réglages FM Synth et Utility pendant la session. Statut : à commencer.**
-Critère : modifier un paramètre d’un appareil déjà présent depuis l’un des deux ordinateurs,
-entendre la modification et retrouver le même réglage dans l’autre copie, en conservant les
-lecteurs indépendants et en refusant un brouillon périmé. Les plugins externes restent une étape distincte.
+**Ajouter et retirer des appareils pendant la session. Statut : à commencer.**
+Critère : ajouter ou retirer un appareil autorisé dans le projet commun, retrouver la même
+chaîne et le même son chez l’autre participant, préserver pistes/clips/prises et lecteurs,
+et refuser un ordre préparé sur une ancienne version du morceau. Le chargement de plugins
+externes ou de presets par le réseau reste une étape distincte.
 
-Ensuite : appareils et participants supplémentaires, reconnexion plus complète, version et
-mise à jour communes, puis préparation/performance DJ avancées. L’essai des deux ordinateurs
-à la maison reste différé, comme demandé.
+Ensuite : participants supplémentaires, reconnexion plus complète, version et mise à jour
+communes, puis préparation/performance DJ avancées. L’essai des deux ordinateurs à la maison
+reste différé, comme demandé.
 
 Ce fichier est le point de référence à chaque palier ou blocage. Les anciens fichiers
 `AUDIT_…` restent historiques. Les résultats externes sont des relevés datés ; ce document

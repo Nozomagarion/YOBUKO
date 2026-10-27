@@ -964,6 +964,8 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 - Explicit **New invitation** after a guest disconnect retains the host music/player and admits
   a fresh guest copy, preserving the guest's previous local tab/edits. Automatic resume, Internet,
   wider device editing and physical two-computer acceptance remain pending.
+- Protocol 9 shares scalar parameters of existing FM Synth/Utility through a guarded native
+  command and revision-bound SDK-generated Devices editor; no file/preset/plugin access.
 
 Parity: no change. These fork additions cover restricted starter networking, DJ preparation and
 distribution; full project coediting remains absent and no production feature chapter gains coverage.

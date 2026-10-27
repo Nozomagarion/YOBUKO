@@ -132,6 +132,16 @@ and protocol 8 is unchanged. Returning guests receive a fresh current copy while
 local tabs survive. This does not merge offline work or implement automatic reconnect/resume.
 See the [LAN contract](../spec/lan-starter-session.md#explicit-invitation-renewal).
 
+## Amendment: shared native parameters
+
+Protocol 9 adds a guarded scalar parameter command for existing top-level FM Synth/Utility
+with no opaque state. The native command validates the indexed target and canonical registry
+value before reusing the regular parameter-message/automation-override path. The trusted core
+and authoritative UI API admit this command only; general setters, paths, presets and plugins
+remain closed. The SDK-generated Devices editor stages a revision-bound draft, submits once
+and requires explicit refresh after other edits. Native file version and portable-copy format
+stay unchanged. [Contract and validation](../spec/lan-device-parameters.md).
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.

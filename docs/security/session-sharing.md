@@ -164,3 +164,16 @@ pinned certificate stay the same; no network renewal command exists. Protocol 8 
 A new admission downloads current verified music and assets into a new guest copy. Previous
 unlocked tabs and solo edits remain local, without merging them. This permits explicit recovery
 after a guest disconnect; automatic resume, host recovery and Internet routing remain closed.
+
+
+## Shared device parameter boundary
+
+Protocol 9 admits exactly device.setSharedParam with numeric track, integer top-level index
+0..15, bounded ASCII parameter ID and one finite number. A pure native guard resolves and
+checks the actual device before entering the ordinary setter: parameter-only FM Synth/Utility,
+no opaque state, known parameter and already-canonical value. Thus no admitted edit can load
+an asset, address a plugin, follow a group path or import a preset/gesture. The same guard runs
+on detached canonical preflight, guest mirror and the authoritative desktop path. Missing or
+invalid targets do not mutate the project or consume accepted counters. Base revisions bind
+device indices; chain mutations remain closed. Existing manual automation override is replicated.
+Generic device.setParam remains refused. [Contract](../spec/lan-device-parameters.md).

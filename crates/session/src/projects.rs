@@ -660,7 +660,7 @@ impl Projects {
         Ok(())
     }
 
-    /// Apply only an authoritative track control, MIDI note or clip edit to the tab bound by the host application.
+    /// Apply only an authoritative track, note, clip or guarded device edit to the tab bound by the host application.
     pub fn apply_shared_control(
         &mut self,
         project: ProjectId,
@@ -674,6 +674,7 @@ impl Projects {
                     | "track.createShared"
                     | "track.setVolume"
                     | "track.setPan"
+                    | "device.setSharedParam"
                     | "note.add"
                     | "note.update"
                     | "note.delete"

@@ -525,7 +525,7 @@ copy. MIDI-only transfers write no audio; the explicit audio mode stages verifie
 No transfer loads external devices. The UI marks that new ProjectId restricted in
 Projects. Normal UI/automation commands cannot mutate its model/history; local audition and
 save/export are allowed. Confirmed controls use `apply_shared_control`, a host-owned API with an
-exact fourteen-command allowlist (three track controls, shared track creation, three note commands, six clip commands and verified audio insertion), then the existing Session execution/player notification path.
+exact fifteen-command allowlist (three track controls, shared track creation, three note commands, six clip commands, verified audio insertion and guarded device parameters), then the existing Session execution/player notification path.
 No GUI or networking dependency enters session or engine. Leaving/disconnect unlocks the retained
 project. [LAN contract](spec/lan-starter-session.md) and [threat model](security/session-sharing.md)
 define admission, ordering, deadlines and the arbitrary-project boundary that remains closed.
@@ -554,3 +554,15 @@ follow the existing command path. Detached canonical preflight checks all portab
 acceptance. The window skips personal track/clip creation defaults and stored-colour normalisation for the bound tab, so UI frames cannot mutate it outside the journal. The Tracks UI binds its draft to a revision; new tracks become available to existing
 clip/note editing and take publication. General track.add remains outside the LAN allowlist.
 [Shared-track contract](spec/lan-track-creation.md).
+
+
+### Fork shared device parameters
+
+Protocol 9 adds device.setSharedParam to the same host-ordered journal. Its pure native guard
+checks a numeric track, revision-bound top-level index, supported FM Synth/Utility kind with no
+opaque state, native parameter identity and already-canonical value before delegating to the
+regular setter. Existing parameter messages and automation override reach the same player;
+generic device.setParam, arbitrary devices, paths and gestures remain closed over LAN. The
+Devices page uses the registry's SDK-generated parameters and the existing parameter widget
+for a local draft, then explicitly submits Apply. Any newer revision makes the draft stale.
+[Shared-device contract](spec/lan-device-parameters.md).

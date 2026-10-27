@@ -832,3 +832,144 @@ fn invitation_renewal_button(render: bool) {
     harness.state_mut().leave_multiplayer();
     guest.leave_multiplayer();
 }
+
+#[test]
+fn visible_shared_device_controls_apply_both_types_and_refresh_stale_drafts_without_touching_sources() {
+    shared_device_buttons(false);
+}
+
+#[test]
+#[ignore = "manual GPU capture of generated shared device controls"]
+fn render_shared_device_parameters_for_review() {
+    shared_device_buttons(true);
+}
+
+fn shared_device_buttons(render: bool) {
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    let mut source = Session::new(suhina_multiplayer::starter_project());
+    for kind in ["fm-synth", "utility"] {
+        source.execute("device.add", &json!({"track":1,"id":kind})).unwrap();
+    }
+    let mut host = App::new();
+    host.set_default_data_folder(root.path().join("Host"));
+    host.set_session(source, &[]);
+    let original = host.projects.active().unwrap();
+    host.multiplayer.open = true;
+    host.multiplayer.address = "127.0.0.1:0".into();
+    host.host_current_midi();
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while host.multiplayer.bound.is_none() && Instant::now() < deadline {
+        host.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let local = host.multiplayer.bound.unwrap();
+    let mut guest = App::new();
+    guest.set_default_data_folder(root.path().join("Guest"));
+    guest.multiplayer_command("multiplayer.join", json!({"invitation":host.multiplayer.invitation}));
+    while guest.multiplayer.bound.is_none() && Instant::now() < deadline {
+        host.poll_multiplayer(&ctx);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let remote = guest.multiplayer.bound.unwrap();
+    let builder = egui_kittest::Harness::builder().with_size(Vec2::new(1280., 900.));
+    let builder = if render { builder.wgpu() } else { builder };
+    let mut h = builder.build_ui_state(|ui, app: &mut App| app.ui(ui), host);
+    theme::install(&h.ctx);
+    h.run_steps(3);
+    let original_music = h.state().projects.get(original).unwrap().project().clone();
+    h.get_by_label("Devices").click();
+    h.run_steps(3);
+    assert_eq!(h.state().multiplayer.devices.param.as_deref(), Some("volume"));
+    assert!(h.query_by_label("Parameter value").is_some());
+    h.state_mut().multiplayer.devices.value = -12.;
+    h.run_steps(2);
+    assert!(
+        h.state().projects.get(local).unwrap().project().channels[0].devices[0].params.is_empty(),
+        "changing a draft must not publish it"
+    );
+    if render {
+        let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
+        std::fs::create_dir_all(&folder).unwrap();
+        h.render().unwrap().save(folder.join("multiplayer-fm-parameters.png")).unwrap();
+    }
+    h.get_by_label("Apply shared parameter").click();
+    while (h.state().multiplayer.applied_revision < 1 || guest.multiplayer.applied_revision < 1)
+        && Instant::now() < deadline
+    {
+        h.run_steps(2);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(h.state().multiplayer.applied_revision, 1, "{:?}", h.state().multiplayer.error);
+    assert!(h.get_by_label("Apply shared parameter").accesskit_node().is_disabled());
+    assert_eq!(h.state().projects.get(local).unwrap().project(), guest.projects.get(remote).unwrap().project());
+    h.get_by_label("Refresh device draft").click();
+    h.run_steps(2);
+    h.state_mut().multiplayer.devices.value = -3.;
+    guest.multiplayer_command("multiplayer.edit",json!({"base_revision":1,"edit":json!({"command":"device.setSharedParam","track":1,"device":1,"param":"gain","value":-6}).to_string()}));
+    while (h.state().multiplayer.applied_revision < 2 || guest.multiplayer.applied_revision < 2)
+        && Instant::now() < deadline
+    {
+        h.run_steps(2);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(h.state().multiplayer.applied_revision, 2);
+    assert!(h.get_by_label("Apply shared parameter").accesskit_node().is_disabled());
+    h.get_by_label("Refresh device draft").click();
+    h.run_steps(2);
+    assert_eq!(h.state().multiplayer.devices.value, -12.);
+    h.get_by_label("Shared device").click();
+    h.run_steps(2);
+    h.get_by_label("Pulse · Utility · device 2").click();
+    h.run_steps(2);
+    assert_eq!(h.state().multiplayer.devices.param.as_deref(), Some("gain"));
+    assert_eq!(h.state().multiplayer.devices.value, -6.);
+    h.state_mut().multiplayer.devices.value = -9.;
+    h.get_by_label("Apply shared parameter").click();
+    while (h.state().multiplayer.applied_revision < 3 || guest.multiplayer.applied_revision < 3)
+        && Instant::now() < deadline
+    {
+        h.run_steps(2);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(h.state().multiplayer.applied_revision, 3, "{:?}", h.state().multiplayer.error);
+    h.get_by_label("Refresh device draft").click();
+    h.run_steps(2);
+    h.get_by_label("Find parameter").focus();
+    h.run_steps(2);
+    h.get_by_label("Find parameter").type_text("mono");
+    h.run_steps(2);
+    h.get_by_label("Shared parameter").click();
+    h.run_steps(2);
+    assert!(h.query_by_label("Gain").is_none(), "parameter search must filter out unrelated controls");
+    h.get_by_label("Mono").click();
+    h.run_steps(2);
+    assert_eq!(h.state().multiplayer.devices.param.as_deref(), Some("mono"));
+    h.get_by_label("Parameter value").click();
+    h.run_steps(2);
+    assert_eq!(h.state().multiplayer.devices.value, 1.);
+    assert_eq!(h.state().multiplayer.applied_revision, 3, "a checkbox changes only its draft");
+    if render {
+        let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
+        h.render().unwrap().save(folder.join("multiplayer-utility-parameters.png")).unwrap();
+    }
+    h.get_by_label("Apply shared parameter").click();
+    while (h.state().multiplayer.applied_revision < 4 || guest.multiplayer.applied_revision < 4)
+        && Instant::now() < deadline
+    {
+        h.run_steps(2);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(h.state().multiplayer.applied_revision, 4);
+    assert_eq!(h.state().projects.get(local).unwrap().project(), guest.projects.get(remote).unwrap().project());
+    let utility = &guest.projects.get(remote).unwrap().project().channels[0].devices[1];
+    assert_eq!(utility.params.iter().find(|p| p.id == "mono").unwrap().value, 1.);
+    assert_eq!(h.state().projects.get(original).unwrap().project(), &original_music);
+    h.state_mut().leave_multiplayer();
+    guest.leave_multiplayer();
+}

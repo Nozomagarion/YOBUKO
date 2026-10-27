@@ -580,3 +580,82 @@ fn renewed_invitations_reuse_the_host_and_rejoining_editors_start_fresh_sequence
     }
     assert_eq!(revision, 8);
 }
+
+#[test]
+fn device_parameters_cross_tls_both_ways_keep_players_and_rejoin_with_current_sound() {
+    use suhina_engine::{AudioPool, Renderer};
+    use suhina_multiplayer::WireEdit;
+    use suhina_session::{Player, Session};
+    let mut source = Session::new(suhina_multiplayer::starter_project());
+    for kind in ["fm-synth", "utility"] {
+        source.execute("device.add", &json!({"track":1,"id":kind})).unwrap();
+    }
+    let original = source.project().clone();
+    let mut host = Service::default();
+    host.select_project(source.project()).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let invitation = wait(&mut host, |v| v["mode"] == "hosting")["invitation"].clone();
+    let mut local = Session::new(host.take_project().unwrap());
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut guest, |v| v["mode"] == "connected");
+    let mut remote = Session::new(guest.take_project().unwrap());
+    let initial = suhina_engine::render_offline(local.project(), 8000, 256).unwrap();
+    let mut a = Renderer::stopped(local.project(), &AudioPool::default(), 8000).unwrap();
+    let mut b = Renderer::stopped(remote.project(), &AudioPool::default(), 8000).unwrap();
+    local.attach_player(Player::new(a.controller(), None));
+    remote.attach_player(Player::new(b.controller(), None));
+    for (s, beat) in [(&mut local, 1.), (&mut remote, 9.)] {
+        s.execute("transport.setPosition", &json!({"beats":beat})).unwrap();
+        s.execute("transport.play", &json!({})).unwrap();
+    }
+    let (mut ar, mut br) = (0, 0);
+    for (base, from_guest, device, param, value) in [
+        (0, false, 0, "volume", -12.),
+        (1, true, 1, "gain", -6.),
+        (2, true, 0, "transpose", 12.),
+        (3, false, 1, "mono", 1.),
+    ] {
+        submit(
+            if from_guest { &mut guest } else { &mut host },
+            base,
+            WireEdit::DeviceParam { track: 1, device, param: param.into(), value },
+        );
+        apply(&mut local, &mut ar, &wait(&mut host, |v| v["controls"]["revision"] == base + 1));
+        apply(&mut remote, &mut br, &wait(&mut guest, |v| v["controls"]["revision"] == base + 1));
+        assert_eq!(local.project(), remote.project());
+        let left = suhina_engine::render_offline(local.project(), 8000, 256).unwrap();
+        let right = suhina_engine::render_offline(remote.project(), 8000, 256).unwrap();
+        assert_eq!(left, right);
+        assert_ne!(left, initial);
+        let mut out = [0.; 256];
+        a.process(&mut out);
+        b.process(&mut out);
+        assert!(a.monitor().running() && b.monitor().running());
+        assert!((b.monitor().beat() - a.monitor().beat() - 8.).abs() < 0.00001);
+    }
+    let before = local.project().clone();
+    submit(&mut guest, 4, WireEdit::DeviceParam { track: 1, device: 0, param: "algorithm".into(), value: 8.5 });
+    let rejected = wait(&mut guest, |v| v["error"].is_string());
+    assert_eq!(rejected["controls"]["revision"], 4);
+    assert_eq!(local.project(), &before);
+    submit(&mut guest, 4, WireEdit::DeviceParam { track: 1, device: 0, param: "algorithm".into(), value: 8. });
+    apply(&mut local, &mut ar, &wait(&mut host, |v| v["controls"]["revision"] == 5));
+    apply(&mut remote, &mut br, &wait(&mut guest, |v| v["controls"]["revision"] == 5));
+    guest.execute("multiplayer.stop", &json!({})).unwrap();
+    wait(&mut host, |v| v["guest_connected"] == false);
+    let old_copy = remote.project().clone();
+    submit(&mut host, 5, WireEdit::DeviceParam { track: 1, device: 0, param: "volume".into(), value: -24. });
+    apply(&mut local, &mut ar, &wait(&mut host, |v| v["controls"]["revision"] == 6));
+    host.execute("multiplayer.renewInvitation", &json!({})).unwrap();
+    let next = wait(&mut host, |v| v["invitation"] != invitation)["invitation"].clone();
+    guest.execute("multiplayer.join", &json!({"invitation":next})).unwrap();
+    wait(&mut guest, |v| v["mode"] == "connected");
+    let (fresh, revision) = guest.take_snapshot().unwrap();
+    assert_eq!(revision, 6);
+    assert_eq!(&fresh, local.project());
+    assert_eq!(remote.project(), &old_copy);
+    assert_eq!(source.project(), &original);
+    let parsed = suhina_project_file::from_json(&suhina_project_file::to_json(&fresh)).unwrap();
+    assert_eq!(parsed, fresh);
+}

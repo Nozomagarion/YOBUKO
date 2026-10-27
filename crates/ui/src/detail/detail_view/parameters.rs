@@ -145,7 +145,7 @@ pub(super) fn parameter_cell(
 
 /// The text beside a parameter's control at `value`: a choice's label, the device's own text
 /// for the value it listed, or the number with its unit.
-pub(super) fn value_text(parameter: &GraphParameter, value: f64) -> String {
+pub(crate) fn value_text(parameter: &GraphParameter, value: f64) -> String {
     if matches!(parameter.control, ParameterControl::Choice | ParameterControl::Radio) {
         parameter.ui.options.get(value as usize).cloned().unwrap_or_default()
     } else if !parameter.text.is_empty() && value == parameter.value {
@@ -156,7 +156,7 @@ pub(super) fn value_text(parameter: &GraphParameter, value: f64) -> String {
 }
 
 /// The control `parameter.control` names, in `rect`, editing `value`.
-pub(super) fn parameter_widget(
+pub(crate) fn parameter_widget(
     ui: &mut Ui,
     parameter: &GraphParameter,
     rect: Rect,

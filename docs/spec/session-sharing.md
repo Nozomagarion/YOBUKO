@@ -36,13 +36,15 @@ a live instance is never silently replaced to conceal an ordering error.
 ## Allowed shared edits
 
 `track.rename`, `track.setVolume`, `track.setPan`, `note.add`, `note.update`, `note.delete` and
-the six [clip commands](lan-clip-editing.md) are accepted. The command registry
+the six [clip commands](lan-clip-editing.md), guarded track.createShared/clip.insertAudio, and
+[device.setSharedParam](lan-device-parameters.md) are accepted. The command registry
 must also identify each as an Edit. Parameters have the exact keys needed by that command:
 
 - `track.rename`: `track` is a nonzero `u32` id and `name` is nonempty text of at most 256 bytes.
 - `track.setVolume`: `tracks` is one to 64 nonzero `u32` ids; `db` is a finite number from -150
   to +6. The prototype does not accept the textual silence shortcut.
 - `track.setPan`: the same `tracks`, and finite `pan` from -1 to +1.
+- `device.setSharedParam`: numeric track, top-level device index 0..15, bounded ASCII parameter ID and finite scalar; the pure native guard independently restricts FM Synth/Utility, canonical ranges and opaque state.
 - `note.add`: nonzero stable `clip` ID and exactly one note with explicit time, length, key and velocity.
 - `note.update`: `clip`, one zero-based `note` index, absolute time/length/key/velocity and boolean muted.
 - `note.delete`: `clip` and exactly one index in `notes`.

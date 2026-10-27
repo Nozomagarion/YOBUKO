@@ -67,6 +67,11 @@
         },
         {
           "name": "Modifier les réglages FM Synth et Utility en commun",
+          "done": true,
+          "evidence": "crates/multiplayer/tests/lan.rs"
+        },
+        {
+          "name": "Ajouter et retirer des appareils pendant la session",
           "done": false
         },
         {

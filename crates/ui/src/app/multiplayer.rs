@@ -11,6 +11,7 @@ enum SharedPage {
     #[default]
     Mixer,
     Tracks,
+    Devices,
     Notes,
     Clips,
     Takes,
@@ -31,6 +32,7 @@ pub(super) struct MultiplayerPanel {
     applied_revision: u64,
     pub(super) notes: super::multiplayer_notes::NoteEditor,
     page: SharedPage,
+    pub(super) devices: super::multiplayer_devices::DeviceEditor,
     pub(super) clips: super::multiplayer_clips::ClipEditor,
     pub(super) tracks: super::multiplayer_tracks::TrackEditor,
     take_file: String,
@@ -54,6 +56,7 @@ impl Default for MultiplayerPanel {
             applied_revision: 0,
             notes: Default::default(),
             page: SharedPage::Mixer,
+            devices: Default::default(),
             clips: Default::default(),
             tracks: Default::default(),
             take_file: String::new(),
@@ -94,6 +97,7 @@ impl App {
                     self.multiplayer.notes = Default::default();
                     self.multiplayer.clips = Default::default();
                     self.multiplayer.tracks = Default::default();
+                    self.multiplayer.devices = Default::default();
                     self.multiplayer.applied_revision = 0;
                 } else if matches!(id, "multiplayer.edit" | "multiplayer.publishTake") {
                     self.multiplayer.submitted = true;
@@ -489,11 +493,14 @@ impl App {
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Mixer, "Mixer");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Tracks, "Tracks");
+                ui.selectable_value(&mut self.multiplayer.page, SharedPage::Devices, "Devices");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Notes, "MIDI notes");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Clips, "Clips");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Takes, "Publish take");
             });
-            if self.multiplayer.page == SharedPage::Tracks {
+            if self.multiplayer.page == SharedPage::Devices {
+                self.show_shared_devices(ui);
+            } else if self.multiplayer.page == SharedPage::Tracks {
                 self.show_shared_tracks(ui);
             } else if self.multiplayer.page == SharedPage::Takes {
                 self.show_publish_take(ui);

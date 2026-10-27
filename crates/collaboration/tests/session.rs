@@ -374,3 +374,59 @@ fn clip_admission_refuses_overwrite_batches_paths_and_legacy_index_addressing() 
         assert!(Edit::new(command, json!({})).is_err());
     }
 }
+
+#[test]
+fn shared_device_parameters_keep_roles_replays_and_stale_or_invalid_requests_atomic() {
+    let mut native = suhina_session::Session::new(project());
+    native.execute("device.add", &json!({"track":1,"id":"fm-synth"})).unwrap();
+    let mut host = Host::new(native.project().clone()).unwrap();
+    let peer = host.add_peer(Role::Reader).unwrap();
+    let p = json!({"track":1,"device":0,"param":"algorithm","value":8});
+    let req = request(1, 0, "device.setSharedParam", p);
+    assert_eq!(host.submit(peer, req.clone()), Err(Error::ReadOnly));
+    host.set_role(peer, Role::Editor).unwrap();
+    let mut replica = Replica::new(host.snapshot());
+    let ack = host.submit(peer, req.clone()).unwrap();
+    replica.apply(&ack).unwrap();
+    assert_eq!(host.submit(peer, req).unwrap(), ack);
+    assert_eq!(host.revision(), 1);
+    let before = host.project().clone();
+    assert!(
+        host.submit(
+            peer,
+            request(2, 0, "device.setSharedParam", json!({"track":1,"device":0,"param":"algorithm","value":2}))
+        )
+        .is_err()
+    );
+    assert!(
+        host.submit(
+            peer,
+            request(2, 1, "device.setSharedParam", json!({"track":1,"device":0,"param":"algorithm","value":40}))
+        )
+        .is_err()
+    );
+    assert_eq!(host.project(), &before);
+    assert_eq!(host.revision(), 1);
+    let ack = host
+        .submit(
+            peer,
+            request(2, 1, "device.setSharedParam", json!({"track":1,"device":0,"param":"algorithm","value":2})),
+        )
+        .unwrap();
+    replica.apply(&ack).unwrap();
+    assert_eq!(replica.project(), host.project());
+    assert_eq!(Edit::new("device.setParam", json!({})), Err(Error::UnsupportedCommand));
+    for (key, value) in [
+        ("device", json!("0/0/0")),
+        ("device", json!(16)),
+        ("param", json!("../file")),
+        ("param", json!("a".repeat(65))),
+        ("track", json!("Bass")),
+        ("continuous", json!(true)),
+        ("value", json!(1e300)),
+    ] {
+        let mut p = json!({"track":1,"device":0,"param":"algorithm","value":2});
+        p[key] = value;
+        assert_eq!(Edit::new("device.setSharedParam", p), Err(Error::InvalidParameters));
+    }
+}
