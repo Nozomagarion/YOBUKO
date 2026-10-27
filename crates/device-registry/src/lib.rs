@@ -45,7 +45,7 @@ pub fn layout(id: &str) -> Option<Result<Layout, DeviceSdkError>> {
 }
 
 /// The layouts kept as JSON next to a device crate, by device id.
-pub const LAYOUT_FILES: &[(&str, &str)] = &[];
+pub const LAYOUT_FILES: &[(&str, &str)] = &[("compressor", include_str!("../../../devices/compressor/panel.json"))];
 
 /// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
 /// layout, or the generated parameter list when it has none or its layout does not load.
@@ -209,6 +209,17 @@ mod tests {
             assert!(super::info(id).is_some(), "panel.json for unknown device {id}");
         }
         assert!(layout("sampler").is_some(), "the sampler has its own layout");
+    }
+
+    #[test]
+    fn the_compressors_knobs_fill_the_compact_panel_without_scrolling() {
+        use suhina_device_sdk::ParameterControl::{Knob, LogKnob};
+        let panel = panel("compressor").unwrap();
+        for p in &panel.parameters {
+            assert!(matches!(p.control, Knob | LogKnob), "{} is not a knob", p.id);
+            let ([x, y], [w, h]) = (p.ui.position.unwrap(), p.ui.size.unwrap());
+            assert!(x + w <= builtin::COMPACT_WIDTH && y + h <= builtin::COMPACT_HEIGHT, "{} is outside", p.id);
+        }
     }
 
     #[test]
