@@ -61,7 +61,7 @@ fn settings_change_right_away_and_are_handed_out_to_be_saved() {
     harness.run();
     let saved = harness.state_mut().take_changed_settings();
     assert_eq!(saved.as_ref().map(|s| s.animations), Some(false));
-    assert_eq!(saved.map(|s| s.track_headers), Some(suhina_ui::settings::Side::Left));
+    assert_eq!(saved.map(|s| s.track_headers), Some(Some(suhina_ui::settings::Side::Left)));
     assert!(!suhina_ui::kit::motion::enabled(&harness.ctx));
     assert_eq!(harness.state_mut().take_changed_settings(), None);
     harness.get_by_label("Close settings").click();
@@ -76,13 +76,21 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
     colors.accent = egui::Color32::from_rgb(0x12, 0xAB, 0x9F);
     let night = suhina_ui::settings::themes::ThemeEntry {
         id: "night".into(),
-        theme: theme::Theme { name: "Night".into(), colors },
+        theme: theme::Theme {
+            name: "Night".into(),
+            colors,
+            liquid: None,
+            gradients: Default::default(),
+            transparent_rgb: Default::default(),
+            skin: Default::default(),
+            vars: Default::default(),
+        },
     };
     let ctx = harness.ctx.clone();
     harness.state_mut().set_themes(&ctx, vec![night], Some("themes".into()));
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
     harness.run();
-    harness.get_by_label("Settings page: Theme").click();
+    harness.get_by_label("Settings page: Themes").click();
     harness.run();
     assert!(harness.query_by_label("Theme: Suhina Dark").is_some());
     harness.get_by_label("Theme: Night").click();
@@ -91,6 +99,8 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
     assert_eq!(harness.state_mut().take_changed_settings().map(|s| s.theme), Some("night".into()));
 
     // A copy to change becomes the theme in use, and is handed out to be written.
+    harness.get_by_label("More").click();
+    harness.run();
     harness.get_by_label("Duplicate theme").click();
     harness.run();
     let saved: Vec<_> = harness
@@ -105,6 +115,8 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
     assert_eq!(saved, [("night-copy".to_string(), "Night copy".to_string())]);
     assert_eq!(harness.state().settings().theme, "night-copy");
     for button in ["Reload themes", "Open the themes folder", "Back up themes", "Export the theme template"] {
+        harness.get_by_label("More").click();
+        harness.run();
         harness.get_by_label(button).click();
         harness.run();
     }
@@ -122,7 +134,15 @@ fn a_theme_picked_in_settings_colours_the_window_and_is_saved() {
     colors.accent = egui::Color32::from_rgb(1, 2, 3);
     let edited = suhina_ui::settings::themes::ThemeEntry {
         id: "night-copy".into(),
-        theme: theme::Theme { name: "Night copy".into(), colors },
+        theme: theme::Theme {
+            name: "Night copy".into(),
+            colors,
+            liquid: None,
+            gradients: Default::default(),
+            transparent_rgb: Default::default(),
+            skin: Default::default(),
+            vars: Default::default(),
+        },
     };
     harness.state_mut().put_theme(&ctx, edited);
     assert_eq!(theme::accent(), colors.accent);

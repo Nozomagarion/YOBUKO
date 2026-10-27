@@ -2,6 +2,150 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use super::*;
+
+#[test]
+fn theme_device_geometry_moves_paint_and_input_and_hidden_controls_do_not_dispatch() {
+    use crate::kit::{control_layout::Placement, skin};
+    let canvas = Arc::new(DeviceUi {
+        size: [240.0, 120.0],
+        controls: vec![CustomControl {
+            id: "enabled".into(),
+            name: "Enabled".into(),
+            tooltip: String::new(),
+            bounds: [20.0, 20.0, 40.0, 20.0],
+            widget: Some(Widget::Button { label: "On".into(), off_label: None, indicator: false }),
+            visible_when: None,
+            gesture: UiGesture::Toggle,
+            x: None,
+            y: Some(UiBinding::new("enabled")),
+            drawing: Vec::new(),
+        }],
+        ..Default::default()
+    });
+    let parameters = [GraphParameter { value: 0.0, ..parameter("enabled", false) }];
+    let mut skin = skin::Skin::default();
+    skin.controls.insert(
+        "device-enabled".into(),
+        Placement { x: 80, y: 30, width: Some(80), height: Some(40), ..Default::default() },
+    );
+    skin::configure(&skin);
+    let ctx = egui::Context::default();
+    let mut output = ctx.run_ui(Default::default(), |ui| {
+        show(
+            ui,
+            Rect::from_min_size(Pos2::ZERO, Vec2::new(240.0, 120.0)),
+            &canvas,
+            &parameters,
+            TrackId(1),
+            &crate::detail::detail_view::DeviceAt(vec![0]),
+            &mut Vec::new(),
+        )
+    });
+    output.textures_delta.clear();
+    let expected = Rect::from_min_size(egui::pos2(100.0, 50.0), Vec2::new(80.0, 40.0));
+    assert!(
+        output.shapes.iter().any(
+            |shape| matches!(&shape.shape, egui::Shape::Rect(rect) if rect.rect == expected && rect.brush.is_some())
+        )
+    );
+    assert!(output.shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Text(text) if text.galley.job.text == "On" && expected.contains(text.pos))));
+    assert!(click(&canvas, &parameters, egui::pos2(40.0, 30.0)).is_empty());
+    let actions = click(&canvas, &parameters, expected.center());
+    assert!(actions.iter().any(|action| action.id == "device.setParam" && action.params["param"] == "enabled"));
+    skin.controls.get_mut("device-enabled").unwrap().hidden = true;
+    skin::configure(&skin);
+    assert!(click(&canvas, &parameters, expected.center()).is_empty());
+    skin::configure(&skin::Skin::default());
+    assert!(click(&canvas, &parameters, egui::pos2(40.0, 30.0)).iter().any(|action| action.id == "device.setParam"));
+}
+
+#[test]
+fn sdk_knob_and_button_use_theme_svg_without_changing_parameter_commands() {
+    let control = |id: &str, widget: Widget, x: f32, gesture| CustomControl {
+        id: id.into(),
+        name: id.into(),
+        tooltip: String::new(),
+        bounds: [x, 0.0, 40.0, 40.0],
+        widget: Some(widget),
+        visible_when: None,
+        gesture,
+        x: None,
+        y: Some(UiBinding::new(id)),
+        drawing: Vec::new(),
+    };
+    let canvas = Arc::new(DeviceUi {
+        size: [100.0, 60.0],
+        controls: vec![
+            control("amount", Widget::Knob { label: "Amount".into() }, 0.0, UiGesture::Drag),
+            control(
+                "enabled",
+                Widget::Button { label: "On".into(), off_label: None, indicator: false },
+                50.0,
+                UiGesture::Toggle,
+            ),
+        ],
+        ..Default::default()
+    });
+    let parameters = [parameter("amount", false), parameter("enabled", false)];
+    let svg = |fill: &str| {
+        format!(
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"20\"><rect width=\"20\" height=\"20\" fill=\"{fill}\"/></svg>"
+        )
+    };
+    let skin = crate::kit::skin::Skin {
+        assets: [("knob.body".into(), svg("#12AB34")), ("button".into(), svg("#AB1234"))].into(),
+        css: Some(Arc::from(
+            ".device-panel .knob { color:rgb(120 40 180); font-size:17px; } .device-panel .button {background:linear-gradient(90deg,red,blue);border-radius:6px;}",
+        )),
+        ..Default::default()
+    };
+    crate::kit::skin::configure(&skin);
+    let ctx = egui::Context::default();
+    let mut actions = Vec::new();
+    let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+        let _frame = crate::kit::native_css::frame(ui);
+        show(
+            ui,
+            Rect::from_min_size(Pos2::ZERO, Vec2::new(100.0, 60.0)),
+            &canvas,
+            &parameters,
+            TrackId(1),
+            &crate::detail::detail_view::DeviceAt(vec![0]),
+            &mut actions,
+        )
+    });
+    let colors: Vec<_> = output
+        .textures_delta
+        .set
+        .values()
+        .flat_map(|d| d.iter())
+        .flat_map(|delta| match &delta.image {
+            egui::ImageData::Color(image) => image.pixels.iter().copied(),
+        })
+        .collect();
+    assert!(colors.contains(&Color32::from_rgb(0x12, 0xAB, 0x34)));
+    assert!(colors.contains(&Color32::from_rgb(0xAB, 0x12, 0x34)));
+    let button = Rect::from_min_size(Pos2::new(50.0, 0.0), Vec2::splat(40.0));
+    assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+        egui::Shape::Rect(rect) if rect.rect == button && rect.brush.is_some() && rect.corner_radius.nw == 6)));
+    assert!(output.shapes.iter().any(|shape| matches!(&shape.shape,
+        egui::Shape::Mesh(mesh) if mesh.calc_bounds() == button && mesh.vertices.len() > 4)));
+    assert!(actions.is_empty(), "painting artwork must not edit parameters");
+    let label = output
+        .shapes
+        .iter()
+        .find_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "Amount" => text.galley.job.sections.first(),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(label.format.font_id.size, 17.0);
+    assert_eq!(label.format.color, Color32::from_rgb(120, 40, 180));
+    output.textures_delta.clear();
+    let actions = click(&canvas, &parameters, Pos2::new(70.0, 20.0));
+    assert!(actions.iter().any(|action| action.id == "device.setParam" && action.params["param"] == "enabled"));
+    crate::kit::skin::configure(&crate::kit::skin::Skin::default());
+}
 #[test]
 fn sample_markers_have_one_solid_color_without_an_outline() {
     let context = egui::Context::default();
@@ -289,8 +433,8 @@ fn sampler_tabs_render_with_sdk_controls_and_dispatch() {
     parameters.iter_mut().find(|p| p.id == "panel_view").unwrap().value = 2.;
     let actions = pointer_gesture(&canvas, &parameters, Pos2::new(200., 140.), Some(Pos2::new(244., 136.)));
     assert!(actions.iter().any(
-            |a| a.params["param"] == "lfo_rate" && (a.params["value"].as_f64().unwrap() - 0.4472136).abs() < 0.001
-        ));
+        |a| a.params["param"] == "lfo_rate" && (a.params["value"].as_f64().unwrap() - 0.4472136).abs() < 0.001
+    ));
     assert!(!actions.iter().any(|a| a.params["param"] == "lfo_pitch"));
     parameters.iter_mut().find(|p| p.id == "panel_view").unwrap().value = 0.;
     let actions = click(&canvas, &parameters, Pos2::new(639., 95.));
@@ -514,7 +658,8 @@ fn delay_panel_renders_and_selector_dispatches_a_literal() {
         }
     }
     snapshot(&mut harness, "delay-panel.png");
-    let nord = crate::kit::theme::Theme::from_json(include_str!("../../themes/nord.json")).0;
+    let nord =
+        crate::kit::theme::built_in_themes().into_iter().find(|(id, _)| *id == "nord").map(|(_, theme)| theme).unwrap();
     crate::kit::theme::set_palette(&harness.ctx, nord.colors);
     harness.run();
     snapshot(&mut harness, "delay-panel-nord.png");
@@ -910,7 +1055,6 @@ fn waveform_manual_edit_navigation_and_inactive_colors() {
         peaks.peaks.iter().filter(|p| **p > 0.1).count() > 500,
         "zoomed samples fill the viewport instead of leaving empty bins"
     );
-    drop(frame);
     assert_eq!(edits.len(), 3, "navigation must not emit project edits; line drag commits once on release");
     assert_eq!(edits[0].params["continue"], false);
     assert!(edits.iter().all(|a| a.params["continue"] == false));

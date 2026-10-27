@@ -50,7 +50,7 @@ pub(super) fn marker_flags(
         } else {
             theme::control_background()
         };
-        painter.rect_filled(tag, 0.0, fill);
+        painter.fill_background(tag, 0.0, fill);
         painter.vline(x, row.y_range(), theme::hairline(theme::text_secondary()));
         widgets::text_in(
             &painter,
@@ -99,7 +99,10 @@ pub(super) fn marker_flags(
                 return;
             };
             let index = *index;
-            let field = ui.add(egui::TextEdit::singleline(name).hint_text("Marker name").desired_width(140.0));
+            let field = crate::kit::widgets::text_input(
+                ui,
+                egui::TextEdit::singleline(name).hint_text("Marker name").desired_width(140.0),
+            );
             let entered = field.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if ui.button("Rename").clicked() || entered {
                 let name = name.trim().to_string();
@@ -252,17 +255,28 @@ pub(super) fn loop_brace(
     let Some((start, end)) = shown else { return };
     let enabled = timeline.loop_brace.is_none_or(|b| b.enabled) || state.loop_drag.is_some();
     let (left, right) = (x_of(start).round(), x_of(end).round());
+    // `.loop-region` styles the bar, `:checked` while looping is on; `height` is its thickness
+    // and `loop-region` (`.on` while on) its artwork, nine-sliced when the SVG says so.
+    let _style = crate::kit::style_class::enter("loop-region");
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, enabled);
+    let thickness = crate::kit::native_css::thickness(LOOP_BAR).clamp(1.0, row.height());
     let bar = Rect::from_min_max(
-        Pos2::new(left, row.center().y - LOOP_BAR / 2.0),
-        Pos2::new(right.max(left + 1.0), row.center().y + LOOP_BAR / 2.0),
+        Pos2::new(left, row.center().y - thickness / 2.0),
+        Pos2::new(right.max(left + 1.0), row.center().y + thickness / 2.0),
     );
     let (fill, edge) = if enabled {
         (theme::control_active(), theme::text_secondary())
     } else {
         (theme::control_background(), theme::text_hint())
     };
-    painter.rect_filled(bar, 0.0, fill);
-    painter.rect_stroke(bar, 0.0, theme::hairline(edge), StrokeKind::Inside);
+    let state = if enabled { crate::kit::skin::State::On } else { crate::kit::skin::State::Normal };
+    if !crate::kit::skin::paint(&painter, bar, "loop-region", state, edge, 0.0) {
+        let authored = crate::kit::style_class::computed().is_some_and(|c| c.authored.border || c.border_width > 0.0);
+        crate::kit::native_css::surface(&painter, bar, 0.0, fill);
+        if !authored {
+            painter.rect_stroke(bar, 0.0, theme::hairline(edge), StrokeKind::Inside);
+        }
+    }
 }
 
 /// The Back to arrangement glyph: an arrow curving over the top from the right to the left, its

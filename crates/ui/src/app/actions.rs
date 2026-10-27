@@ -532,12 +532,19 @@ impl App {
                     Some((track, id)) => timeline
                         .and_then(|t| t.lanes.iter().find(|l| l.track == track))
                         .and_then(|l| l.clips.iter().find(|c| c.id == id))
-                        .map(|c| (track, c.start + c.length)),
-                    None => self.arrangement.selected_tracks.first().map(|t| (*t, timeline.map_or(0.0, |t| t.beat))),
+                        .map(|c| (track, if self.settings.view.replace_clip { c.start } else { c.start + c.length })),
+                    None => self.arrangement.insert.or_else(|| {
+                        self.arrangement.selected_tracks.first().map(|t| (*t, timeline.map_or(0.0, |t| t.beat)))
+                    }),
                 };
                 match target {
                     Some((track, start)) => {
                         let mut params = json!({ "track": track.0, "start": start });
+                        if self.settings.view.replace_clip
+                            && let Some((_, clip)) = self.arrangement.selected_clip()
+                        {
+                            params["replace"] = json!(clip.0);
+                        }
                         // The pasted clip follows the stacking setting for its kind, as a moved clip does.
                         let audio = self.session().and_then(Session::copied_clip_is_audio);
                         if audio.is_some_and(|audio| self.stacks(audio)) {
