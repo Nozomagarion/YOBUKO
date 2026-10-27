@@ -257,11 +257,14 @@ but a maintainer takes the label off, so new commits are never merged unread; ta
 by hand stops the merge. Only a maintainer adds it: an agent never adds `ready to merge`, also not
 when asked to finish a pull request.
 
-**Workflows and scripts need the owner's review.** A pull request that changes `.github/` or
-`scripts/` runs with the repository's secrets once it is on `main`, so
-[`.github/CODEOWNERS`](.github/CODEOWNERS) names the repository owner for them and the main
-ruleset requires a code owner's approval: `ready to merge` alone does not merge such a change, also
-not one from another maintainer.
+**Workflows and scripts need the owner's review.** To protect code that runs with the
+repository's secrets, [`.github/CODEOWNERS`](.github/CODEOWNERS) names the repository owner for
+`.github/` and `scripts/`, except `scripts/parity/`. The main ruleset requires a code owner's
+approval for the protected paths: `ready to merge` alone does not merge such a change, also
+not one from another maintainer. Parity scripts run without environment secrets; the generated
+documentation is published in a separate job that does not execute them. Changes confined to
+`scripts/parity/` therefore follow the usual review and `ready to merge` process. Keep parity
+code out of jobs that use environment secrets.
 
 ## Clean-room
 
