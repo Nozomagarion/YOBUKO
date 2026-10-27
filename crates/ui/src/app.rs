@@ -27,6 +27,7 @@ pub mod missing_files;
 mod multiplayer;
 mod multiplayer_clips;
 mod multiplayer_notes;
+mod multiplayer_tracks;
 mod plugin_host;
 pub mod project_dialog;
 pub mod splash;

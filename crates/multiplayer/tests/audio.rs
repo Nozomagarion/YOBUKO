@@ -405,3 +405,51 @@ fn a_native_microphone_take_recorded_after_join_can_be_published_without_changin
     assert_eq!(std::fs::read(file).unwrap(), bytes);
     assert_eq!(remote.audio().files.len(), 1);
 }
+
+#[test]
+fn a_guest_adds_an_audio_track_and_the_host_publishes_a_new_sound_to_it_without_rejoining() {
+    let host_dir = tempfile::tempdir().unwrap();
+    let guest_dir = tempfile::tempdir().unwrap();
+    let mut host = Service::default();
+    host.set_storage_root(Some(host_dir.path().into())).unwrap();
+    host.execute("multiplayer.host", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let ready = wait(&mut host, |s| s["mode"] == "hosting");
+    let snapshot = host.take_shared().unwrap();
+    let mut local = snapshot.session().unwrap();
+    snapshot.keep();
+    let original = local.project().clone();
+    let mut guest = Service::default();
+    guest.set_storage_root(Some(guest_dir.path().into())).unwrap();
+    guest.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snapshot = guest.take_shared().unwrap();
+    let mut remote = snapshot.session().unwrap();
+    snapshot.keep();
+    submit(&mut guest, 0, WireEdit::TrackCreate { kind: "audio".into(), name: "New vocal take".into() });
+    let mut ar = 0;
+    let mut br = 0;
+    apply(&mut local, &wait(&mut host, |s| s["controls"]["revision"] == 1), &mut ar);
+    apply(&mut remote, &wait(&mut guest, |s| s["controls"]["revision"] == 1), &mut br);
+    let track = local.project().tracks.iter().find(|t| t.name == "New vocal take").unwrap().id.0;
+    publish_take(
+        &mut host,
+        Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.25; 8000] }),
+        1,
+        track,
+        4.0,
+    );
+    let state = wait(&mut host, |s| s["controls"]["revision"] == 2);
+    accept_audio(&mut host, &mut local);
+    apply(&mut local, &state, &mut ar);
+    let state = wait(&mut guest, |s| s["controls"]["revision"] == 2);
+    accept_audio(&mut guest, &mut remote);
+    apply(&mut remote, &state, &mut br);
+    assert_eq!(local.project(), remote.project());
+    assert_eq!(local.project().tracks.len(), original.tracks.len() + 1);
+    assert_eq!(local.audio().files.len(), 1);
+    assert_eq!(render(&local), render(&remote));
+    let lane =
+        remote.project().arrangement.lanes.iter().find(|l| l.track == Some(suhina_model::TrackId(track))).unwrap();
+    assert_eq!(lane.clips.len(), 1);
+    assert_eq!(lane.clips[0].start, 4.0);
+}

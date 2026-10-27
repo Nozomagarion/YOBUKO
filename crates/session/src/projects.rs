@@ -671,6 +671,7 @@ impl Projects {
             || !matches!(
                 id,
                 "track.rename"
+                    | "track.createShared"
                     | "track.setVolume"
                     | "track.setPan"
                     | "note.add"

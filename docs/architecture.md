@@ -521,7 +521,7 @@ copy. MIDI-only transfers write no audio; the explicit audio mode stages verifie
 No transfer loads external devices. The UI marks that new ProjectId restricted in
 Projects. Normal UI/automation commands cannot mutate its model/history; local audition and
 save/export are allowed. Confirmed controls use `apply_shared_control`, a host-owned API with an
-exact twelve-command allowlist (three track controls, three note commands and six clip commands), then the existing Session execution/player notification path.
+exact fourteen-command allowlist (three track controls, shared track creation, three note commands, six clip commands and verified audio insertion), then the existing Session execution/player notification path.
 No GUI or networking dependency enters session or engine. Leaving/disconnect unlocks the retained
 project. [LAN contract](spec/lan-starter-session.md) and [threat model](security/session-sharing.md)
 define admission, ordering, deadlines and the arbitrary-project boundary that remains closed.
@@ -540,3 +540,13 @@ only sound references not yet verified by that guest. Verified AudioAddition lea
 existing session before its accepted clip operation. Session local collection mappings allow
 new folders to survive native save/backup/reopen, without adding machine paths to shared models
 or replacing either player. Guest uploads and direct recording in the restricted tab stay closed. [Audio boundary and limits](spec/lan-audio-assets.md).
+
+### Fork shared track creation
+
+Protocol 7 extends the same journal with track.createShared from either editor. Its native
+command reuses regular insertion, disables hardware inputs, sets an explicit type colour and
+includes only default parameter-only FM Synth on MIDI tracks. IDs and native player updates
+follow the existing command path. Detached canonical preflight checks all portable quotas before
+acceptance. The window skips personal track/clip creation defaults and stored-colour normalisation for the bound tab, so UI frames cannot mutate it outside the journal. The Tracks UI binds its draft to a revision; new tracks become available to existing
+clip/note editing and host take publication. General track.add remains outside the LAN allowlist.
+[Shared-track contract](spec/lan-track-creation.md).

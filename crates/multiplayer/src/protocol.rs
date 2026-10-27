@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 6;
+pub const PROTOCOL: u16 = 7;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -95,6 +95,8 @@ impl Controls {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "command", deny_unknown_fields)]
 pub enum WireEdit {
+    #[serde(rename = "track.createShared")]
+    TrackCreate { kind: String, name: String },
     #[serde(rename = "track.rename")]
     Rename { track: u32, name: String },
     #[serde(rename = "track.setVolume")]
@@ -133,6 +135,7 @@ impl WireEdit {
     }
     pub fn command(&self) -> (&'static str, Value) {
         match self {
+            Self::TrackCreate { kind, name } => ("track.createShared", json!({"kind":kind,"name":name})),
             Self::Rename { track, name } => ("track.rename", json!({"track":track,"name":name})),
             Self::Volume { track, db } => ("track.setVolume", json!({"tracks":[track],"db":db})),
             Self::Pan { track, pan } => ("track.setPan", json!({"tracks":[track],"pan":pan})),

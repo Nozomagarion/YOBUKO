@@ -1,9 +1,9 @@
 # Où en est notre application ?
 
-**Bilan du 27 octobre 2026 à 10 h 20 (heure de Paris).**
-Le nouveau palier est codé, testé et compilé pour Mac Apple Silicon : **l’hôte peut publier
-une prise terminée pendant la session, sans reconnecter l’invité**. Paquet : `f93e8af2`.
-Les contrôles distants de cette version sont bloqués par un refus de GitHub, détaillé ci-dessous.
+**Ajout de pistes en cours de vérification — 27 octobre 2026.**
+Le code permet maintenant à l’hôte et à l’invité d’ajouter une piste audio ou MIDI pendant la
+connexion. Les tests du studio, du réseau, de l’interface et la suite complète passent : **3 110 réussis,
+aucun échec, 53 ignorés**. La compilation et le nouveau paquet sont en préparation. Le paquet précédent `f93e8af2` ne possède pas cette fonction.
 
 ## À retenir
 
@@ -105,9 +105,10 @@ Le canal commun de mises à jour n’est pas encore publié. Les nouveautés Suh
 
 ## Ce qui vient ensuite
 
-**Prochain développement : ajouter des pistes pendant la session. Statut : à commencer.**
-Critère : créer une piste audio sans reconnecter les participants, y publier un son et conserver
-les deux projets identiques. Cela évitera de préparer toutes les pistes avant le premier partage.
+**Développement actuel : ajouter des pistes pendant la session. Statut : code en vérification.**
+Critère vérifié dans les tests ciblés : créer une piste audio sans reconnecter les participants,
+y publier un son et conserver les deux projets identiques. Les deux participants peuvent aussi
+créer une piste MIDI avec FM Synth et y composer. Onglet **Multiplayer → Tracks**, bouton **Add shared track**.
 
 La suite reste : envoi de prises par l’invité, appareils et participants supplémentaires,
 reconnexion, installation/mise à jour commune, puis préparation et performance DJ avancées.

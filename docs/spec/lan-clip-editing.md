@@ -1,6 +1,6 @@
 ---
 description: Revision-checked MIDI clip arrangement edits in the restricted LAN session
-read_when: shared clip placement, multiplayer protocol 6, clip creation duplication deletion, arrangement collaboration
+read_when: shared clip placement, multiplayer protocol 7, clip creation duplication deletion, arrangement collaboration
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -16,7 +16,7 @@ covers:
 
 # Shared MIDI clip placement
 
-Self-authored fork behaviour built on the existing native clip commands. Protocol 6 retains
+Self-authored fork behaviour built on the existing native clip commands. Protocol 7 retains
 the operation journal of lan-note-editing.md; both installations must upgrade. Native file
 version 3, portable-copy format 2, admission, musical quotas and independent players stay unchanged.
 
@@ -34,7 +34,7 @@ enabled state. It provides six narrowly admitted native operations:
 - `clip.setEnabled`: exactly one stable arrangement clip reference and a boolean enabled flag.
 
 Creation, movement and trimming always stack, so no neighbouring clip is silently removed,
-shortened or split. No new tracks, file import, clipboard, arbitrary batch, audio stretch,
+shortened or split. General track.add, file import, clipboard, arbitrary batch, audio stretch,
 consolidation, recording, transport or launch command is admitted. Native validation checks
 track compatibility and placement; the LAN adapter preflights each result against the complete
 MIDI-copy quota before changing the host or consuming a sequence. Explicit starts/trim ends are finite,
@@ -59,7 +59,9 @@ testing remains the later user acceptance step. The audio contract below extends
 
 ## Amendment: initial collected audio
 
-[The audio contract](lan-audio-assets.md) adds verified initial audio assets under protocol 6.
+[The audio contract](lan-audio-assets.md) adds verified initial audio assets under protocol 7.
 The same clip operations act on audio; new audio clips are empty and cannot acquire a new file
 through these commands. The UI lists both MIDI and audio destination tracks. Native note commands
-refuse audio clips. Audio stretch and plugins stay closed. Protocol 6 additionally orders verified host-only finished-take placement via clip.insertAudio, as specified in the audio contract.
+refuse audio clips. Audio stretch and plugins stay closed. Protocol 7 additionally orders verified host-only finished-take placement via clip.insertAudio, as specified in the audio contract.
+
+Protocol 7 additionally admits bounded [shared track creation](lan-track-creation.md) through the same operation journal.

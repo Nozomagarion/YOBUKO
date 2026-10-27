@@ -52,6 +52,11 @@
         },
         {
           "name": "Ajouter des pistes pendant une session",
+          "done": true,
+          "evidence": "crates/multiplayer/tests/lan.rs"
+        },
+        {
+          "name": "Envoyer une prise depuis l’invité",
           "done": false
         },
         {

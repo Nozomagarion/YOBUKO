@@ -38,7 +38,7 @@ impl App {
             .map(|t| (t.id.0, t.name.clone()))
             .collect();
         if tracks.is_empty() {
-            ui.weak("This project has no MIDI tracks. Add one in Studio before sharing it.");
+            ui.weak("Add a shared track in Tracks, then create its clip here.");
             return;
         }
         let editor = &mut self.multiplayer.clips;

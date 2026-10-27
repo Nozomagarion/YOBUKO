@@ -19,6 +19,7 @@ impl Edit {
     pub fn new(command: &str, params: Value) -> Result<Self, Error> {
         let command = match command {
             "track.rename" => "track.rename",
+            "track.createShared" => "track.createShared",
             "track.setVolume" => "track.setVolume",
             "track.setPan" => "track.setPan",
             "note.add" => "note.add",
@@ -39,6 +40,14 @@ impl Edit {
         }
         let object = params.as_object().ok_or(Error::InvalidParameters)?;
         let valid = match command {
+            "track.createShared" => {
+                keys(object, &["kind", "name"])
+                    && matches!(object.get("kind").and_then(Value::as_str), Some("audio" | "midi"))
+                    && object
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .is_some_and(|s| !s.trim().is_empty() && s.len() <= 256 && !s.chars().any(char::is_control))
+            }
             "track.rename" => {
                 keys(object, &["track", "name"])
                     && object.get("track").is_some_and(valid_id)

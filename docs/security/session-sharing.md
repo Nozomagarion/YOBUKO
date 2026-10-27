@@ -57,7 +57,7 @@ guest polls every 100 ms and the server enforces at least 50 ms per request. UI 
 TLS, canonical execution and I/O run on workers, never the audio thread. A local peer can still
 occupy pending slots until timeout; availability against a sustained LAN flood is not guaranteed.
 
-Protocol 6 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
+Protocol 7 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
 A separate draft base revision prevents shifted note indices from being silently reused. Before
 canonical mutation the native command is preflighted on a detached copy and the complete MIDI
 quota/document boundary is checked, including copy-on-write growth. The guest verifies contiguous
@@ -124,3 +124,13 @@ Known references must retain their verified metadata, and cumulative verified so
 64 files / 256 MiB even if clips are deleted. File transfers use the absolute 180-second deadline.
 Local collection mappings are kept outside canonical state and added only by trusted worker
 results. Saving/backups include these local paths on a copy; shared models remain identical.
+
+## Shared track boundary
+
+Protocol 7 admits track.createShared with exactly kind and name, from either admitted editor.
+Its pure native handler can add only an audio skeleton or a MIDI skeleton with default FM Synth;
+no file path, arbitrary device/preset, ID, group or hardware binding is accepted. Names are bounded
+and have no control characters, inputs/monitoring are off, colours are explicit, and the full
+portable track/channel/lane/device/document quotas are preflighted before revision or identity
+allocation on the canonical host. The guest mirror and UI execute the same operation. Local theme/default normalisation is skipped for the bound tab to prevent mutations outside that journal. Ordinary
+track.add and broader track mutations remain refused. See [the track contract](../spec/lan-track-creation.md).

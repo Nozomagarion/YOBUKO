@@ -346,7 +346,7 @@ fn malformed_operation_gaps_and_unconfirmed_controls_are_never_accepted() {
 }
 
 #[test]
-fn notes_changed_during_download_are_applied_after_the_snapshot_before_joining() {
+fn notes_and_tracks_changed_during_download_are_applied_before_joining() {
     let mut host = Service::default();
     let invitation = invitation_from(&mut host);
     let clip = host.project.as_ref().unwrap().project.arrangement.lanes[0].clips[0].id.0;
@@ -366,6 +366,16 @@ fn notes_changed_during_download_are_applied_after_the_snapshot_before_joining()
         host.poll();
         std::thread::sleep(Duration::from_millis(10));
     }
+    host.execute(
+        "multiplayer.edit",
+        &json!({"base_revision":1,"edit":serde_json::to_string(
+        &WireEdit::TrackCreate { kind:"audio".into(),name:"Created during download".into() }).unwrap()}),
+    )
+    .unwrap();
+    while host.controls.as_ref().unwrap().revision < 2 && Instant::now() < deadline {
+        host.poll();
+        std::thread::sleep(Duration::from_millis(10));
+    }
     let (document, mut revision) =
         crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
     assert_eq!(revision, 0);
@@ -373,9 +383,10 @@ fn notes_changed_during_download_are_applied_after_the_snapshot_before_joining()
     let snapshot = assets::receive(&mut io, project, revision, None, &AtomicBool::new(false), |_, _| {}).unwrap();
     let mut mirror = snapshot.session().unwrap();
     let ServerMessage::State { controls, operations, .. } = read_state(&mut io) else { panic!("state") };
-    assert_eq!(operations.len(), 1);
+    assert_eq!(operations.len(), 2);
     protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations).unwrap();
-    assert_eq!(revision, 1);
+    assert_eq!(revision, 2);
+    assert!(mirror.project().tracks.iter().any(|t| t.name == "Created during download"));
     let notes = mirror.execute("note.list", &json!({"clip":clip})).unwrap();
     assert_eq!(notes[4]["key"], 95);
 }
@@ -562,4 +573,70 @@ fn a_take_published_during_initial_download_is_verified_before_the_join_finishes
     assert_eq!(revision, 1);
     assert_eq!(mirror.project().contents.last().unwrap().name, "Shared take");
     assert_eq!(ready.audio().files.values().next().unwrap().samples, vec![0.4; 8000]);
+}
+
+#[test]
+fn shared_track_wire_is_exact_and_cannot_select_files_devices_inputs_or_ids() {
+    for text in [
+        r#"{"command":"track.createShared","kind":"audio","name":"Voice","device":"sampler"}"#,
+        r#"{"command":"track.createShared","kind":"midi","name":"Keys","preset":"/do-not-open"}"#,
+        r#"{"command":"track.createShared","kind":"audio","name":"Voice","track":99}"#,
+        r#"{"command":"track.createShared","kind":"audio","name":"Voice","input":1}"#,
+    ] {
+        assert!(serde_json::from_str::<WireEdit>(text).is_err());
+    }
+    for (kind, name) in
+        [("group", "Group".into()), ("audio", " ".into()), ("midi", "\n".into()), ("audio", "é".repeat(129))]
+    {
+        assert!(WireEdit::TrackCreate { kind: kind.into(), name }.edit().is_err());
+    }
+}
+
+#[test]
+fn shared_track_quotas_refuse_without_mutation_ids_or_consuming_an_author_sequence() {
+    use suhina_model::{ArrangementLane, Channel, ChannelId, Device, DeviceKind};
+    let mut tracks = suhina_session::Session::new(crate::starter_project());
+    while tracks.project().tracks.len() < 64 {
+        tracks.execute("track.createShared", &json!({"kind":"audio","name":"Bounded audio"})).unwrap();
+    }
+    let mut channels = crate::starter_project();
+    while channels.channels.len() < 128 {
+        let id = 200 + channels.channels.len() as u32;
+        channels.channels.push(Channel::new(ChannelId(id), "Unused"));
+    }
+    let mut lanes = crate::starter_project();
+    while lanes.arrangement.lanes.len() < 512 {
+        lanes.arrangement.lanes.push(ArrangementLane {
+            id: Default::default(),
+            name: "Empty".into(),
+            track: None,
+            clips: vec![],
+        });
+    }
+    lanes.assign_ids().unwrap();
+    let mut devices = crate::starter_project();
+    devices.channels.push(Channel::new(ChannelId(200), "Unused"));
+    for c in &mut devices.channels {
+        c.devices.clear();
+    }
+    for c in &mut devices.channels {
+        c.devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into())); 16];
+    }
+    assert_eq!(devices.channels.iter().map(|c| c.devices.len()).sum::<usize>(), 128);
+    for project in [tracks.project().clone(), channels, lanes, devices] {
+        let mut state = canonical(project);
+        let before = state.host.project().clone();
+        assert!(
+            state
+                .submit(Host::owner(), 1, 0, WireEdit::TrackCreate { kind: "midi".into(), name: "Over budget".into() })
+                .is_err()
+        );
+        assert_eq!(state.host.project(), &before);
+        assert_eq!(state.host.revision(), 0);
+        assert!(state.journal.is_empty());
+        state
+            .submit(Host::owner(), 1, 0, WireEdit::Rename { track: 1, name: "Counter still available".into() })
+            .unwrap();
+        assert_eq!(state.host.revision(), 1);
+    }
 }

@@ -235,6 +235,17 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "track.createShared",
+        label: "Create a bounded shared audio or MIDI track with local inputs off; MIDI uses default FM Synth; no file I/O",
+        params: &[
+            param("kind", ParamType::Text, "audio or midi"),
+            param("name", ParamType::Text, "nonblank track name, at most 256 UTF-8 bytes, no control characters"),
+        ],
+        kind: CommandKind::Edit,
+        run: files::create_shared_track,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "track.add",
         label: "Add an audio or MIDI track with its mixer channel, clip slots and arrangement lane, optionally with a device (an instrument or MIDI effect makes a MIDI track, an effect an audio track)",
         params: &[

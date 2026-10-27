@@ -102,6 +102,15 @@ mappings are included only on native save/backup copies. See the [audio contract
 Direct shared-tab recording, guest uploads and live audio streaming remain separate work.
 
 
+## Amendment: shared track creation (27 October 2026)
+
+Protocol 7 admits the pure track.createShared operation from either editor, with only audio/MIDI
+kind and a bounded name. Default FM Synth, explicit colour and disabled hardware inputs keep
+creation deterministic without admitting general track.add or file/device loading. Native
+identity allocation and portable quota preflight precede canonical acceptance. Existing readers
+and clips remain; new audio tracks can receive published takes. See the [track contract](../spec/lan-track-creation.md).
+
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.

@@ -44,6 +44,7 @@ mod save;
 mod scales;
 mod scenes;
 mod sends;
+mod shared_tracks;
 mod soundmap;
 mod stems;
 mod support;

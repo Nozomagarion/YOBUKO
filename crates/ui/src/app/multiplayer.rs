@@ -10,6 +10,7 @@ use std::sync::Arc;
 enum SharedPage {
     #[default]
     Mixer,
+    Tracks,
     Notes,
     Clips,
     Takes,
@@ -25,12 +26,13 @@ pub(super) struct MultiplayerPanel {
     state: serde_json::Value,
     pub(super) controls: Option<suhina_multiplayer::Controls>,
     draft: Option<suhina_multiplayer::Controls>,
-    error: Option<String>,
-    submitted: bool,
+    pub(super) error: Option<String>,
+    pub(super) submitted: bool,
     applied_revision: u64,
     pub(super) notes: super::multiplayer_notes::NoteEditor,
     page: SharedPage,
     pub(super) clips: super::multiplayer_clips::ClipEditor,
+    pub(super) tracks: super::multiplayer_tracks::TrackEditor,
     take_file: String,
     take_track: u32,
     take_start: f64,
@@ -53,6 +55,7 @@ impl Default for MultiplayerPanel {
             notes: Default::default(),
             page: SharedPage::Mixer,
             clips: Default::default(),
+            tracks: Default::default(),
             take_file: String::new(),
             take_track: 0,
             take_start: 0.0,
@@ -90,6 +93,7 @@ impl App {
                     self.multiplayer.submitted = false;
                     self.multiplayer.notes = Default::default();
                     self.multiplayer.clips = Default::default();
+                    self.multiplayer.tracks = Default::default();
                     self.multiplayer.applied_revision = 0;
                 } else if matches!(id, "multiplayer.edit" | "multiplayer.publishTake") {
                     self.multiplayer.submitted = true;
@@ -346,7 +350,7 @@ impl App {
                 }
             });
         if tracks.is_empty() {
-            ui.label("The shared project needs an existing audio-only track. Adding shared tracks comes later.");
+            ui.label("Add an audio track in the Tracks tab, then choose it here.");
         }
         ui.horizontal(|ui| {
             ui.label("Start beat");
@@ -466,11 +470,14 @@ impl App {
             }
             ui.horizontal(|ui| {
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Mixer, "Mixer");
+                ui.selectable_value(&mut self.multiplayer.page, SharedPage::Tracks, "Tracks");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Notes, "MIDI notes");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Clips, "Clips");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Takes, "Publish take");
             });
-            if self.multiplayer.page == SharedPage::Takes {
+            if self.multiplayer.page == SharedPage::Tracks {
+                self.show_shared_tracks(ui);
+            } else if self.multiplayer.page == SharedPage::Takes {
                 self.show_publish_take(ui);
             } else if self.multiplayer.page == SharedPage::Clips {
                 self.show_shared_clips(ui);

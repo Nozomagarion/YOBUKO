@@ -86,7 +86,7 @@ The destination track selector applies to Move; Trim follows native edge/offset 
 A newer revision disables a pending clip draft; refresh or select the current clip again.
 A deleted note editor selection cannot silently switch to another clip. Local metadata, hardware
 input settings and launch mappings are omitted. See the [copy contract](spec/lan-midi-copy.md).
-Both participants need the new protocol-6 build; old demo invitations no longer work.
+Both participants need the new protocol-7 build; old demo invitations no longer work.
 
 To include loaded audio, use **Share project + audio**. Configure the application data folder
 when using a custom host: collected copies stay in its **Shared projects** subfolder. Only sounds
@@ -103,6 +103,14 @@ trims, loops and effects are not baked in. New verified audio arrives before the
 clip, preserving both independent players. Guest uploads and direct shared-tab recording remain
 unsupported. Save the shared copy explicitly to retain the new arrangement on reopening.
 See [the audio contract](spec/lan-audio-assets.md).
+
+In **Tracks**, enter a name, choose **Audio track** or **MIDI track · FM Synth**, and click
+**Add shared track**. Both participants can do this while connected. A new audio track appears
+immediately in **Publish take** destinations; use **Clips** then **MIDI notes** to compose on a
+new MIDI track. Refresh a stale track draft explicitly; the name is cleared. Inputs stay off,
+existing clips and readers are preserved, and the 64-track cap includes returns/groups.
+General track.add, arbitrary devices and track deletion/grouping remain closed over LAN.
+See the [shared-track contract](spec/lan-track-creation.md).
 
 Network and UI regression checks:
 

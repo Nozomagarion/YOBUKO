@@ -1,6 +1,6 @@
 ---
 description: Revision-checked shared MIDI note commands and bounded operation delivery over LAN
-read_when: shared notes, multiplayer protocol 6, operation journal, note.update
+read_when: shared notes, multiplayer protocol 7, operation journal, note.update
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -42,7 +42,7 @@ them. The UI applies the same native commands to the existing session and its at
 Admission transfers a current canonical MIDI snapshot with its revision, then operations since
 that snapshot. Changes during download are either delivered contiguously or fail before a tab
 opens. The original project, independent transports, native file version 3 and portable-copy format
-2 stay as specified in lan-midi-copy.md. Both installations now need protocol 6, which also admits the
+2 stay as specified in lan-midi-copy.md. Both installations now need protocol 7, which also admits the
 [clip operations](lan-clip-editing.md). The journal was introduced by protocol 3.
 
 Before accepting a native command, preflight it on a detached canonical copy and verify all MIDI
@@ -53,3 +53,5 @@ malformed operations disconnect visibly while preserving the last local project.
 Validation covers atomic native edits and undo, copy-on-write, stale index refusal, journal
 replay and gaps, joining after edits, real encrypted bidirectional note edits, independent
 players and actual audio renders. Physical two-computer testing is deferred to user acceptance.
+
+Protocol 7 additionally admits bounded [shared track creation](lan-track-creation.md) through the same operation journal.

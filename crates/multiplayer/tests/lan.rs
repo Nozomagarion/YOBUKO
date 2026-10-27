@@ -456,3 +456,80 @@ fn an_empty_midi_project_can_be_composed_together_without_a_demo_clip() {
     assert!(audio.iter().any(|s| s.abs() > 0.00001));
     assert!(source.contents.is_empty());
 }
+
+#[test]
+fn both_authors_add_tracks_then_compose_on_the_new_midi_track_without_replacing_players() {
+    use suhina_engine::{AudioPool, Renderer};
+    use suhina_multiplayer::WireEdit;
+    use suhina_session::Player;
+    let mut source = suhina_multiplayer::starter_project();
+    source.contents.clear();
+    for lane in &mut source.arrangement.lanes {
+        lane.clips.clear();
+    }
+    let before = source.clone();
+    let mut pair = ClipPair::new(&source);
+    let mut a = Renderer::stopped(pair.local.project(), &AudioPool::new(), 8000).unwrap();
+    let mut b = Renderer::stopped(pair.remote.project(), &AudioPool::new(), 8000).unwrap();
+    pair.local.attach_player(Player::new(a.controller(), None));
+    pair.remote.attach_player(Player::new(b.controller(), None));
+    pair.local.execute("transport.setPosition", &json!({"beats":1})).unwrap();
+    pair.remote.execute("transport.setPosition", &json!({"beats":6})).unwrap();
+    pair.local.execute("transport.play", &json!({})).unwrap();
+    pair.remote.execute("transport.play", &json!({})).unwrap();
+    pair.step(true, WireEdit::TrackCreate { kind: "audio".into(), name: "New voice".into() });
+    pair.step(false, WireEdit::TrackCreate { kind: "midi".into(), name: "New keys".into() });
+    let p = pair.local.project();
+    let keys = p.tracks.iter().find(|t| t.name == "New keys").unwrap().id.0;
+    assert_eq!(p.tracks.len(), before.tracks.len() + 2);
+    assert_eq!(&p.arrangement.lanes[..before.arrangement.lanes.len()], &before.arrangement.lanes);
+    for name in ["New voice", "New keys"] {
+        let track = p.tracks.iter().find(|t| t.name == name).unwrap();
+        assert_eq!(track.midi_input.port, suhina_model::MidiPort::Nothing);
+        assert_eq!(track.audio_input.monitor, suhina_model::Monitor::Off);
+    }
+    submit(&mut pair.guest, 0, WireEdit::TrackCreate { kind: "midi".into(), name: "Stale request".into() });
+    let rejected = wait(&mut pair.guest, |s| s["error"].is_string());
+    assert_eq!(rejected["controls"]["revision"], 2);
+    pair.step(true, WireEdit::ClipCreate { track: keys, start: 0.0, length: 4.0 });
+    let clip = pair
+        .local
+        .project()
+        .arrangement
+        .lanes
+        .iter()
+        .find(|l| l.track == Some(suhina_model::TrackId(keys)))
+        .unwrap()
+        .clips[0]
+        .id
+        .0;
+    pair.step(false, WireEdit::NoteAdd { clip, time: 0.0, length: 1.0, key: 60, velocity: 100.0 });
+    let local = suhina_engine::render_offline(pair.local.project(), 8000, 512).unwrap();
+    assert_eq!(local, suhina_engine::render_offline(pair.remote.project(), 8000, 512).unwrap());
+    assert!(local.iter().any(|s| s.abs() > 0.00001), "new MIDI track has an audible default instrument");
+    let mut out = [0.0; 512];
+    a.process(&mut out);
+    b.process(&mut out);
+    assert!(a.monitor().running() && b.monitor().running());
+    assert!((a.monitor().beat() - b.monitor().beat()).abs() > 4.0);
+    assert_eq!(source, before);
+}
+
+#[test]
+fn a_late_guest_receives_created_tracks_with_the_same_ids_and_default_devices() {
+    use suhina_multiplayer::WireEdit;
+    let (mut host, invitation) = host();
+    let mut expected = suhina_session::Session::new(host.take_project().unwrap());
+    let mut revision = 0;
+    for kind in ["audio", "midi"] {
+        submit(&mut host, revision, WireEdit::TrackCreate { kind: kind.into(), name: format!("Late {kind}") });
+        let state = wait(&mut host, |s| s["controls"]["revision"] == revision + 1);
+        apply(&mut expected, &mut revision, &state);
+    }
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let (project, at) = guest.take_snapshot().unwrap();
+    assert_eq!(at, revision);
+    assert_eq!(&project, expected.project());
+}

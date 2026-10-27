@@ -191,6 +191,44 @@ fn flag(params: &Value, name: &str) -> Result<bool, CommandError> {
     }
 }
 
+/// Restricted deterministic skeleton for host-ordered creation. Never loads a device/preset file.
+pub(crate) fn create_shared_track(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    let kind = match params["kind"].as_str() {
+        Some("audio") => TrackKind::Audio,
+        Some("midi") => TrackKind::Midi,
+        _ => return Err("shared track kind must be audio or midi".into()),
+    };
+    let name = params["name"]
+        .as_str()
+        .filter(|s| !s.trim().is_empty() && s.len() <= 256 && !s.chars().any(char::is_control))
+        .ok_or("shared track names need 1–256 UTF-8 bytes and no control characters")?;
+    if session.project.tracks.len() >= 64 {
+        return Err("shared sessions hold at most 64 tracks".into());
+    }
+    let id = insert_track(&mut session.project, kind, name, None)?;
+    let track = session.project.tracks.iter_mut().find(|t| t.id == id).ok_or("new shared track missing")?;
+    track.midi_input = suhina_model::MidiInput {
+        port: suhina_model::MidiPort::Nothing,
+        channel: None,
+        monitor: suhina_model::Monitor::Off,
+    };
+    track.audio_input = suhina_model::AudioInput { monitor: suhina_model::Monitor::Off, ..Default::default() };
+    track.color = Some(match kind {
+        TrackKind::Audio => suhina_model::Rgb(99, 229, 193),
+        TrackKind::Midi => suhina_model::Rgb(185, 161, 255),
+    });
+    let channel = track.channel.ok_or("new shared channel missing")?;
+    if kind == TrackKind::Midi {
+        let channel =
+            session.project.channels.iter_mut().find(|c| c.id == channel).ok_or("new shared channel missing")?;
+        channel.volume = 0.2;
+        channel
+            .devices
+            .push(suhina_model::Device::new("FM Synth", suhina_model::DeviceKind::Builtin("fm-synth".into())));
+    }
+    Ok(json!({"track":id.0,"channel":channel.0,"kind":params["kind"],"name":name}))
+}
+
 /// `track.add`: a new audio or MIDI track, with a device when one is named.
 pub(crate) fn add_track(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let device = text(params, "device")?;

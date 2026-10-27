@@ -485,6 +485,11 @@ fn render_shared_audio_panel_for_review() {
     assert!(harness.state().multiplayer.bound.is_some());
     harness.run_steps(2);
     harness.render().unwrap().save(folder.join("multiplayer-audio-ready.png")).unwrap();
+    harness.state_mut().multiplayer.page = SharedPage::Tracks;
+    harness.state_mut().multiplayer.tracks.name = "New shared keys".into();
+    harness.state_mut().multiplayer.tracks.midi = true;
+    harness.run_steps(3);
+    harness.render().unwrap().save(folder.join("multiplayer-tracks.png")).unwrap();
     let app = harness.state_mut();
     app.projects.switch(original).unwrap();
     app.multiplayer.page = SharedPage::Takes;
@@ -560,4 +565,82 @@ fn the_publish_button_uses_a_finished_local_sound_and_keeps_original_and_shared_
     assert!(paths[0].is_file());
     app.leave_multiplayer();
     assert!(paths[0].is_file());
+}
+
+#[test]
+fn visible_track_creation_adds_midi_and_audio_to_both_tabs_and_refuses_a_stale_draft() {
+    let ctx = egui::Context::default();
+    let mut host = App::new();
+    host.set_session(Session::new(suhina_multiplayer::starter_project()), &[]);
+    host.multiplayer.open = true;
+    host.multiplayer.address = "127.0.0.1:0".into();
+    let original = host.projects.active().unwrap();
+    host.host_current_midi();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while host.multiplayer.bound.is_none() && Instant::now() < deadline {
+        host.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let local = host.multiplayer.bound.unwrap();
+    let mut guest = App::new();
+    guest.multiplayer_command("multiplayer.join", json!({"invitation":host.multiplayer.invitation}));
+    while guest.multiplayer.bound.is_none() && Instant::now() < deadline {
+        host.poll_multiplayer(&ctx);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let remote = guest.multiplayer.bound.unwrap();
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 900.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), host);
+    harness.run_steps(3);
+    let before = harness.state().projects.get(original).unwrap().project().clone();
+    harness.get_by_label("Tracks").click();
+    harness.run_steps(2);
+    assert!(harness.get_by_label("Add shared track").accesskit_node().is_disabled());
+    harness.state_mut().multiplayer.tracks.name = "Shared keys".into();
+    harness.get_by_label("MIDI track · FM Synth").click();
+    harness.run_steps(2);
+    harness.get_by_label("Add shared track").click();
+    while (harness.state().multiplayer.applied_revision < 1 || guest.multiplayer.applied_revision < 1)
+        && Instant::now() < deadline
+    {
+        harness.run_steps(2);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(harness.state().multiplayer.applied_revision, 1, "{:?}", harness.state().multiplayer.error);
+    harness.run_steps(2);
+    assert!(harness.get_by_label("Add shared track").accesskit_node().is_disabled());
+    harness.get_by_label("Refresh track draft").click();
+    harness.run_steps(2);
+    assert!(harness.state().multiplayer.tracks.name.is_empty());
+    harness.state_mut().multiplayer.tracks.name = "Shared voice".into();
+    harness.get_by_label("Audio track").click();
+    harness.run_steps(2);
+    harness.get_by_label("Add shared track").click();
+    while (harness.state().multiplayer.applied_revision < 2 || guest.multiplayer.applied_revision < 2)
+        && Instant::now() < deadline
+    {
+        harness.run_steps(2);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    guest.settings.view.fixed_track_colour = true;
+    guest.poll_plugins(&ctx);
+    let host = harness.state_mut();
+    assert_eq!(host.multiplayer.applied_revision, 2);
+    assert_eq!(host.projects.get(local).unwrap().project(), guest.projects.get(remote).unwrap().project());
+    let p = host.projects.get(local).unwrap().project();
+    let keys = p.tracks.iter().find(|t| t.name == "Shared keys").unwrap();
+    assert!(keys.content.notes);
+    assert_eq!(
+        p.channel(keys.channel.unwrap()).unwrap().devices[0].kind,
+        suhina_engine::model::DeviceKind::Builtin("fm-synth".into())
+    );
+    assert!(p.tracks.iter().any(|t| t.name == "Shared voice" && t.content.audio));
+    assert_eq!(host.projects.get(original).unwrap().project(), &before);
+    assert!(
+        host.projects.execute_in(Some(local), "track.createShared", &json!({"kind":"audio","name":"Bypass"})).is_err()
+    );
 }

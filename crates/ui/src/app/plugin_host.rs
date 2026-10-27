@@ -71,6 +71,11 @@ impl App {
         self.projects.set_editor_embedding(self.settings.plugin_editors == EditorPlacement::DeviceView);
         // Tracks keep the colour they show when others come and go (#690, #709).
         for id in self.projects.ids() {
+            // A shared model follows the host journal. Local theme/default normalisation
+            // must not change its stored colours or the defaults of accepted clip edits.
+            if self.multiplayer.bound == Some(id) {
+                continue;
+            }
             let Ok(session) = self.projects.session_mut(Some(id)) else { continue };
             let palette = crate::interaction::grid::track_palette();
             let fixed = self

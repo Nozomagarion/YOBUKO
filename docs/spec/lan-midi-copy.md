@@ -1,6 +1,6 @@
 ---
 description: Bounded MIDI-only copies of an open project over authenticated LAN, preserving the original and refusing audio and opaque devices
-read_when: share current MIDI project, LAN project transfer, multiplayer protocol 6, MIDI copy limits
+read_when: share current MIDI project, LAN project transfer, multiplayer protocol 7, MIDI copy limits
 type: spec
 status: draft
 last_verified: 2026-10-26
@@ -38,7 +38,7 @@ in that copy. The source project, its files and its settings are never changed.
 
 ## Document and admission
 
-Protocol 6 uses portable-copy format 2 for initial audio assets and retains live notes,
+Protocol 7 uses portable-copy format 2 for initial audio assets and retains live notes,
 revision-checked arrangement clip operations and snapshot revisions. Old invitations
 are refused; both apps need this protocol. The existing certificate-bound TLS admission, expiry,
 one-use secret, owner-ordered controls and local transport rules remain in force.
@@ -87,3 +87,5 @@ and sends the same bounded native document followed by a manifest and audio chun
 decoder admits only empty file references or generated Audio/<hash>.wav names, no absolute paths.
 Both modes use portable-copy format 2; a guest waits for the complete verified audio set and
 initial operation suffix before a tab opens. See [the audio contract](lan-audio-assets.md).
+
+Protocol 7 additionally admits bounded [shared track creation](lan-track-creation.md) through the same operation journal.
