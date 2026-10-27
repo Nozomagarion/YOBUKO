@@ -25,7 +25,8 @@ account posted and why. It never retries a refused dispatch or uses another toke
 posted and any workflow completed successfully, 1 when GitHub refused or workflow completion
 could not be confirmed, 2 for a request that is not valid. If the workflow posted before failing
 or losing its connection, the error preserves the marker so the caller can follow up without
-posting again. Needs the GitHub CLI, signed in; standard library only.
+posting again. GitHub CLI pipes use UTF-8, including on Windows with a legacy locale.
+Needs the GitHub CLI, signed in; standard library only.
 """
 
 from __future__ import annotations
@@ -76,7 +77,10 @@ Runner = Callable[[list[str], str | None], Result]
 def run_gh(args: list[str], stdin: str | None = None) -> Result:
     timeout = RUN_WATCH_TIMEOUT if args[:2] == ["run", "watch"] else GH_TIMEOUT
     try:
-        done = subprocess.run(["gh", *args], input=stdin, capture_output=True, text=True, check=False, timeout=timeout)
+        done = subprocess.run(
+            ["gh", *args], input=stdin, capture_output=True, text=True,
+            encoding="utf-8", check=False, timeout=timeout,
+        )
     except subprocess.TimeoutExpired:
         return Result(124, "", f"gh {' '.join(args)} gave no answer within {timeout} s")
     return Result(done.returncode, done.stdout, done.stderr)

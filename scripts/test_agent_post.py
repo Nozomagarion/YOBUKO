@@ -5,6 +5,7 @@
 
 import json
 import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -251,6 +252,29 @@ class WithoutWriteAccess(unittest.TestCase):
 
 
 class GhCalls(unittest.TestCase):
+    def test_utf8_pipes_ignore_the_windows_legacy_encoding(self):
+        real_run = subprocess.run
+        output = "Opened \u201dissue\u201d\nOPENED_ISSUE=#900 https://github.com/suhina-daw/suhina-daw/issues/900\n"
+        diagnostic = "\u0101\u2014diagnostic\n"
+
+        def utf8_child(args, **kwargs):
+            # Model Python's legacy Windows default, but keep the real pipe I/O.
+            kwargs.setdefault("encoding", "cp1252")
+            script = (
+                "import sys; "
+                "data = sys.stdin.buffer.read(); "
+                "sys.stdout.buffer.write(data + " + repr(output.encode("utf-8")) + "); "
+                "sys.stderr.buffer.write(" + repr(diagnostic.encode("utf-8")) + ")"
+            )
+            return real_run([sys.executable, "-c", script], **kwargs)
+
+        for request in ("", "\u0101\u201drequest\n"):
+            with self.subTest(request=request), mock.patch.object(ap.subprocess, "run", utf8_child):
+                result = ap.run_gh(["run", "view", "42", "--log"], request)
+                self.assertEqual(result.returncode, 0)
+                self.assertEqual(result.stdout, request + output)
+                self.assertEqual(result.stderr, diagnostic)
+
     def test_unsuccessful_watch_preserves_the_post_without_posting_again(self):
         for kind, request, marker, url in (
             ("issue", ISSUE, "OPENED_ISSUE", f"https://github.com/{ap.REPO}/issues/900"),
@@ -273,7 +297,7 @@ class GhCalls(unittest.TestCase):
                     self.assertEqual(gh.called("pr", "comment"), [])
 
     def test_a_hung_gh_comes_back_as_a_failed_result(self):
-        def hung(args, input=None, stdin=None, capture_output=None, text=None, check=None, timeout=None):
+        def hung(args, input=None, stdin=None, capture_output=None, text=None, encoding=None, check=None, timeout=None):
             raise subprocess.TimeoutExpired(args, timeout)
 
         with mock.patch.object(ap.subprocess, "run", hung):
@@ -284,7 +308,7 @@ class GhCalls(unittest.TestCase):
     def test_the_watch_timeout_is_the_long_one(self):
         captured = {}
 
-        def watching(args, input=None, stdin=None, capture_output=None, text=None, check=None, timeout=None):
+        def watching(args, input=None, stdin=None, capture_output=None, text=None, encoding=None, check=None, timeout=None):
             captured["timeout"] = timeout
             return ap.Result(0, "", "")
 
