@@ -165,11 +165,37 @@ fn crossover_frequencies_move() {
 }
 
 #[test]
-fn the_high_frequency_never_goes_below_the_low_one() {
-    let mut eq = dj_eq(&[(param::LOW_FREQUENCY, 3_000.0), (param::HIGH_FREQUENCY, 300.0)]);
-    let [low, high] = eq.frequency_targets();
-    assert_eq!(low, high);
-    assert!((gain_at(&mut eq, 1_000.0) - 1.0).abs() < 0.01);
+fn crossed_crossovers_match_the_measurements() {
+    // Low frequency above the high one, 24 dB, as measured (dB at 905, 1280, 1810 and 2560 Hz):
+    // the mid band alone is almost empty, with every gain at 0 dB the sum is flat to 0.3 dB, and
+    // the high band alone with its crossover at 200 Hz below the low one at 500 Hz is the two
+    // high-passes in series.
+    let hz = [905.1, 1_280.0, 1_810.2, 2_560.0];
+    let crossed = [(param::LOW_FREQUENCY, 3_000.0), (param::HIGH_FREQUENCY, 500.0)];
+    let only = |kept: usize| -> Vec<(usize, f64)> {
+        let gain = |band| (band, if band == kept { 0.0 } else { SILENCE_DB as f64 });
+        [gain(param::LOW), gain(param::MID), gain(param::HIGH)].into_iter().chain(crossed).collect()
+    };
+    for (f, expected) in hz.iter().zip([-63.62, -63.24, -63.87, -66.43]) {
+        let got = db_at(&mut dj_eq(&only(param::MID)), *f);
+        assert!((got - expected).abs() < 0.6, "mid band alone at {f} Hz: {got} against {expected}");
+    }
+    for (f, expected) in hz.iter().zip([-0.08, -0.16, -0.27, -0.30]) {
+        let got = db_at(&mut dj_eq(&crossed), *f);
+        assert!((got - expected).abs() < 0.1, "sum at {f} Hz: {got} against {expected}");
+    }
+    let mut high_only = vec![
+        (param::LOW, SILENCE_DB as f64),
+        (param::MID, SILENCE_DB as f64),
+        (param::LOW_FREQUENCY, 500.0),
+        (param::HIGH_FREQUENCY, 200.0),
+    ];
+    high_only.push((param::HIGH, 0.0));
+    for (f, expected) in [(160.0, -50.0), (226.3, -31.79), (320.0, -17.96), (452.5, -8.21), (640.0, -2.83)] {
+        let got = db_at(&mut dj_eq(&high_only), f);
+        // Within the harness's 0.5 dB, on a slope of 24 dB per octave.
+        assert!((got - expected).abs() < 0.5, "high band at {f} Hz: {got} against {expected}");
+    }
 }
 
 #[test]

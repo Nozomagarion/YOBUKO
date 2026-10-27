@@ -72,8 +72,9 @@ bands of both sides are always built; a silenced or killed band is multiplied, n
 - **Changes while playing.** Gains and kills glide over 20 ms; crossover frequencies glide over
   50 ms, smoothed as log2 hertz so a sweep sounds even, and the filters are retuned every 16
   frames while they move. The filters' state carries through a retune, so a sweep does not click.
-- **Ordering.** The high crossover never goes below the low one: a lower value is clamped up to
-  the low crossover (Decisions 4).
+- **Ordering.** The crossovers are independent: with the low frequency above the high one the
+  mid band (a high-pass at the low frequency, then a low-pass at the high one) is almost empty,
+  about −63 dB, and the sum with every gain at 0 dB stays flat to 0.3 dB (Decisions 4).
 - **Latency:** none beyond the filters' own group delay (the largest tap of the sum's impulse is
   the first sample, as in the measurements).
 
@@ -109,9 +110,11 @@ Each entry: what was chosen, what it costs, why.
    guess of an all-pass was wrong.
 3. **Gains run from silence to +6 dB.** The dump's range; the earlier +12 dB top was ours alone.
    Cost: none; a set that asked for more is clamped (import does the same).
-4. **The high crossover clamps to the low one.** What the counterpart does with FreqLo above
-   FreqHi was not measured (a [measure] gap); clamping keeps the split defined. Candidate run: the
-   note's Measurement plan 8.
+4. **The crossovers are not tied to each other.** The counterpart does not clamp FreqHi up to
+   FreqLo: with FreqLo above FreqHi its mid band is closed (about −63 dB) and the sum is flat
+   to 0.3 dB, and with FreqHi below FreqLo the high band carries both high-passes. The same
+   structure reproduces these runs to 0.4 dB without a clamp, so there is none (the note's
+   Measurement plan 8).
 5. **Changes ramp.** Gains and kills glide over 20 ms, frequencies over 50 ms. Whether the
    counterpart ramps its kills or switches them was not measured (a [measure] gap); ramping keeps
    a kill click-free while playing. Candidate run: the note's Measurement plan 5 (kill clicks).
@@ -139,7 +142,7 @@ cost -- --ignored --nocapture` to measure it.
 against the measured magnitudes in both slope settings (loose where the measurement's own render
 floor limited it); the measured 0 dB sums and flatness far from the crossovers; gains boosting,
 cutting and silencing, the +6 dB top; kills removing their band and leaving the others; crossover
-moves while playing; the high frequency clamped to the low one; a frequency sweep staying clean;
+moves while playing; crossed crossovers against the measured responses; a frequency sweep staying clean;
 the cost benchmark. `crates/als/src/devices_tests.rs` tests the import: every stored value in our
 units, a gain of 0 becoming silence, an odd slope noted and left out.
 `crates/dsp/src/crossover.rs` tests the Linkwitz-Riley block itself.

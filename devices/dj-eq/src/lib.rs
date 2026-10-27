@@ -10,7 +10,8 @@
 //! crossovers at 500 Hz and 2 kHz) instead of summing flat. A kill takes its band to silence; a
 //! gain at its minimum does the same. Gains run from silence up to +6 dB. Gains, kills and
 //! crossover frequencies are all smoothed, so they can be turned and automated while playing.
-//! The high frequency never goes below the low one.
+//! The crossovers are independent: a low frequency above the high one leaves the mid band
+//! almost empty and the sum flat, as measured.
 
 use suhina_device_api::{
     DEFAULT_SAMPLE_RATE, Device, DeviceError, DeviceInfo, ParamBank, ParamInfo, ProcessContext, Role, Scale, Unit,
@@ -137,10 +138,10 @@ impl DjEq {
         if self.value(param::SLOPE) >= 0.5 { Slope::Db48 } else { Slope::Db24 }
     }
 
-    /// Crossover targets in log2 hertz; the high one is never below the low one.
+    /// Crossover targets in log2 hertz.
     fn frequency_targets(&self) -> [f32; 2] {
         let low = self.value(param::LOW_FREQUENCY);
-        let high = self.value(param::HIGH_FREQUENCY).max(low);
+        let high = self.value(param::HIGH_FREQUENCY);
         [low.log2() as f32, high.log2() as f32]
     }
 
