@@ -17,7 +17,8 @@ admitted editor guest. Record/finish in an ordinary local Studio tab, choose a l
 an existing shared audio track and start beat, then Publish loaded take. It publishes the
 whole decoded sound as an unwarped canonical WAV, without source trims/effects. Native file
 version 3 and portable-copy format 2 remain. Direct shared-tab recording, microphone streaming,
-reconnection and additional guests remain separate work.
+automatic reconnection and additional guests remain separate work. Explicit host invitation renewal
+is defined by the [LAN contract](lan-starter-session.md#explicit-invitation-renewal).
 
 Guest preparation runs on one bounded background job while its network worker continues
 polling. A selected AudioData handle is trusted local input, never a remotely chosen source

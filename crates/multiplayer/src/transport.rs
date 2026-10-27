@@ -172,6 +172,22 @@ impl Canonical {
             error,
         })
     }
+    fn renew(&mut self, invitation: &Invitation, now: Instant, events: &SyncSender<Event>) -> Result<(), String> {
+        if self.guest {
+            return Err("wait for the guest to leave before creating a new invitation".into());
+        }
+        let secret = secret_hash(&invitation.secret);
+        if bool::from(self.secret.ct_eq(&secret)) {
+            return Err("could not create a fresh invitation".into());
+        }
+        let expires = now.checked_add(Duration::from_secs(300)).ok_or("invitation clock exhausted")?;
+        // Publish under the admission lock before revoking: backpressure must leave the old token usable.
+        events.try_send(Event::Invitation(invitation.encode()?)).map_err(|_| "invitation view is busy; try again")?;
+        self.secret = secret;
+        self.expires = expires;
+        self.redeemed = false;
+        Ok(())
+    }
     fn admit(&mut self, secret: &str, now: Instant) -> Result<suhina_collaboration::PeerId, String> {
         if secret.len() != 64
             || !bool::from(self.secret.ct_eq(&secret_hash(secret)))
@@ -189,6 +205,7 @@ impl Canonical {
 enum Event {
     Ready(String, Controls, Box<SharedSnapshot>),
     Connected(Controls, Box<SharedSnapshot>),
+    Invitation(String),
     Receiving(usize, usize),
     Upload(Option<(usize, usize)>),
     State(Controls, Vec<Operation>, bool, Vec<AudioAddition>),
@@ -197,6 +214,7 @@ enum Event {
     Closed,
 }
 enum Input {
+    RenewInvitation,
     Edit { base: u64, edit: WireEdit },
     Publish { base: u64, track: u32, start: f64, audio: Arc<suhina_engine::AudioData> },
 }
@@ -345,6 +363,7 @@ impl Service {
                         self.mode = "connected".into();
                         self.controls = Some(controls);
                     }
+                    Ok(Event::Invitation(invitation)) => self.invitation = Some(invitation),
                     Ok(Event::Upload(progress)) => self.sending = progress,
                     Ok(Event::Receiving(done, total)) => self.receiving = Some((done, total)),
                     Ok(Event::State(controls, operations, guest, audio)) => {
@@ -455,6 +474,14 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         policy: LOCAL,
     },
     CommandSpec {
+        id: "multiplayer.renewInvitation",
+        label: "Create a new invitation without replacing the hosted project",
+        params: &[],
+        kind: CommandKind::Projects,
+        run: renew_invitation,
+        policy: LOCAL,
+    },
+    CommandSpec {
         id: "multiplayer.edit",
         label: "Submit a supported shared edit",
         params: &[
@@ -502,6 +529,20 @@ fn state(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     Ok(
         json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"error":s.error,"guest_connected":s.guest,"receiving":s.receiving,"sending":s.sending}),
     )
+}
+fn renew_invitation(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
+    s.poll();
+    if s.mode != "hosting" || s.guest {
+        return Err("only a host without a connected guest can create a new invitation".into());
+    }
+    s.running
+        .as_ref()
+        .ok_or("host a session first")?
+        .inputs
+        .try_send(Input::RenewInvitation)
+        .map_err(|_| CommandError::from("multiplayer queue is busy; try again"))?;
+    s.error = None;
+    Ok(json!({"queued":true}))
 }
 fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.running = None;
@@ -698,13 +739,13 @@ fn host(
     let listener = TcpListener::bind(address).map_err(|e| format!("could not host on {address}: {e}"))?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let secret = new_secret()?;
-    let invite = Invitation {
+    let mut invitation = Invitation {
         protocol: PROTOCOL,
         endpoint: listener.local_addr().map_err(|e| e.to_string())?,
         certificate: URL_SAFE_NO_PAD.encode(der.as_ref()),
         secret: secret.clone(),
-    }
-    .encode()?;
+    };
+    let invite = invitation.encode()?;
     let host = Host::new(source.clone()).map_err(|e| e.to_string())?;
     let initial = Controls::from_project(host.project(), 0)?;
     let canonical = Arc::new(Mutex::new(Canonical {
@@ -727,6 +768,20 @@ fn host(
     while !stop.load(Ordering::Relaxed) {
         while let Ok(input) = inputs.try_recv() {
             let result = match input {
+                Input::RenewInvitation => {
+                    let result = new_secret().and_then(|secret| {
+                        invitation.secret = secret;
+                        canonical.lock().unwrap_or_else(PoisonError::into_inner).renew(
+                            &invitation,
+                            Instant::now(),
+                            events,
+                        )
+                    });
+                    if let Err(error) = result {
+                        let _ = events.try_send(Event::Rejected(error));
+                    }
+                    continue;
+                }
                 Input::Edit { base, edit } => {
                     canonical.lock().unwrap_or_else(PoisonError::into_inner).submit(Host::owner(), sequence, base, edit)
                 }
@@ -1106,6 +1161,7 @@ fn guest(
                 None
             }
             Some(Input::Edit { base, edit }) => Some((base, edit)),
+            Some(Input::RenewInvitation) => return Err("only the host can renew invitations".into()),
             None => None,
         };
         let prepared = match pending.as_ref().map(|p| p.ready.try_recv()) {

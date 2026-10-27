@@ -513,6 +513,10 @@ admission actions. Create/join queue worker startup; no TLS or network I/O runs 
 audio callback. The host worker owns the canonical collaboration Host; at most four connection
 handlers perform bounded TLS requests through its mutex. A guest worker polls contiguous operations and validates a detached native session mirror.
 A 32-operation journal and bounded channels carry UI edits and confirmed operations; stopping shuts down tracked sockets.
+The local renewInvitation command rotates the admission secret under the same mutex as hello,
+refusing a live guest and publishing its bounded UI event before revocation. Listener, TLS
+certificate, canonical music/assets and owner sequence remain intact. No wire message or native
+musical command is added. Rejoining creates a fresh guest snapshot/tab; old local copies stay open.
 
 The UI stages either the generated starter or a checked local MIDI project; a worker removes
 local metadata/input mappings and builds a bounded canonical document. The authenticated guest

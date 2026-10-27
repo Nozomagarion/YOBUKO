@@ -957,11 +957,13 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   rendering a project into the DJ library ([spec](docs/spec/dj-workspace.md)).
 - A guarded fork update channel and source integration candidate tooling; common publication
   is pending ([distribution](docs/fork-distribution.md)).
-- Restricted desktop LAN sessions: generated starter or an explicit copy of the current MIDI
-  project (up to 64 tracks, FM Synth/Utility parameters, no audio/plugins). Initial notes/clips
-  and IDs are transferred with bounds and a checksum; names/volume/pan are live shared controls
-  with independent local playback. Originals stay intact. Shared note/clip editing, audio assets
-  and physical two-computer acceptance remain pending ([contract](docs/spec/lan-midi-copy.md)).
+- Restricted desktop LAN sessions share a verified portable MIDI/audio copy (up to 64 tracks,
+  parameter-only FM Synth/Utility) and support shared notes, arrangement clips, track creation,
+  finished take publication from either participant and mixer controls. Original tabs/files and
+  independent local playback are preserved ([contract](docs/spec/lan-starter-session.md)).
+- Explicit **New invitation** after a guest disconnect retains the host music/player and admits
+  a fresh guest copy, preserving the guest's previous local tab/edits. Automatic resume, Internet,
+  wider device editing and physical two-computer acceptance remain pending.
 
 Parity: no change. These fork additions cover restricted starter networking, DJ preparation and
 distribution; full project coediting remains absent and no production feature chapter gains coverage.

@@ -733,3 +733,102 @@ fn guest_take_button(render: bool) {
     harness.state_mut().leave_multiplayer();
     assert!(paths.iter().all(|p| p.is_file()));
 }
+
+#[test]
+fn visible_invitation_renewal_preserves_the_host_and_opens_a_new_guest_copy() {
+    invitation_renewal_button(false);
+}
+
+#[test]
+#[ignore = "manual GPU capture of the invitation renewal control"]
+fn render_invitation_renewal_for_review() {
+    invitation_renewal_button(true);
+}
+
+fn invitation_renewal_button(render: bool) {
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    let mut host = App::new();
+    host.set_default_data_folder(root.path().join("Host"));
+    host.multiplayer.open = true;
+    host.multiplayer_command("multiplayer.host", json!({"address":"127.0.0.1:0"}));
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while host.multiplayer.bound.is_none() && Instant::now() < deadline {
+        host.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let host_tab = host.multiplayer.bound.unwrap();
+    let old_invitation = host.multiplayer.invitation.clone();
+    let mut guest = App::new();
+    guest.set_default_data_folder(root.path().join("Guest"));
+    guest.multiplayer_command("multiplayer.join", json!({"invitation":old_invitation}));
+    while guest.multiplayer.bound.is_none() && Instant::now() < deadline {
+        host.poll_multiplayer(&ctx);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let old_guest_tab = guest.multiplayer.bound.unwrap();
+    let builder = egui_kittest::Harness::builder().with_size(Vec2::new(1280.0, 900.0));
+    let builder = if render { builder.wgpu() } else { builder };
+    let mut harness = builder.build_ui_state(|ui, app: &mut App| app.ui(ui), host);
+    theme::install(&harness.ctx);
+    harness.run_steps(3);
+    assert!(harness.get_by_label("New invitation").accesskit_node().is_disabled());
+    guest.leave_multiplayer();
+    guest
+        .projects
+        .execute_in(Some(old_guest_tab), "track.rename", &json!({"track":1,"name":"My solo version"}))
+        .unwrap();
+    let old_music = guest.projects.get(old_guest_tab).unwrap().project().clone();
+    while harness.state().multiplayer.state["guest_connected"] == true && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    harness.state_mut().multiplayer_command("multiplayer.edit", json!({"base_revision":0,"edit":json!({"command":"track.createShared","kind":"midi","name":"Added while absent"}).to_string()}));
+    while harness.state().multiplayer.applied_revision < 1 && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(harness.state().multiplayer.applied_revision, 1);
+    assert!(!harness.get_by_label("New invitation").accesskit_node().is_disabled());
+    if render {
+        let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
+        std::fs::create_dir_all(&folder).unwrap();
+        harness.render().unwrap().save(folder.join("multiplayer-renew-invitation.png")).unwrap();
+    }
+    harness.get_by_label("New invitation").click();
+    while harness.state().multiplayer.invitation == old_invitation && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(harness.state().multiplayer.invitation != old_invitation, "invitation was not renewed");
+    assert_eq!(harness.state().multiplayer.bound, Some(host_tab));
+    assert_eq!(harness.state().multiplayer.applied_revision, 1);
+    guest.multiplayer_command("multiplayer.join", json!({"invitation":harness.state().multiplayer.invitation}));
+    while guest.multiplayer.bound.is_none() && Instant::now() < deadline {
+        harness.run_steps(2);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let new_guest_tab = guest.multiplayer.bound.unwrap();
+    assert_ne!(old_guest_tab, new_guest_tab);
+    assert_eq!(guest.projects.get(old_guest_tab).unwrap().project(), &old_music);
+    assert_eq!(
+        guest.projects.get(new_guest_tab).unwrap().project(),
+        harness.state().projects.get(host_tab).unwrap().project()
+    );
+    assert_eq!(guest.multiplayer.applied_revision, 1);
+    guest.multiplayer_command("multiplayer.edit", json!({"base_revision":1,"edit":json!({"command":"track.rename","track":1,"name":"Back together"}).to_string()}));
+    while (guest.multiplayer.applied_revision < 2 || harness.state().multiplayer.applied_revision < 2)
+        && Instant::now() < deadline
+    {
+        harness.run_steps(2);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(harness.state().multiplayer.applied_revision, 2);
+    assert_eq!(guest.multiplayer.applied_revision, 2);
+    assert_eq!(guest.projects.get(old_guest_tab).unwrap().project(), &old_music);
+    harness.state_mut().leave_multiplayer();
+    guest.leave_multiplayer();
+}

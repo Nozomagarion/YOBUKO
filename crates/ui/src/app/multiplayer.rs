@@ -422,12 +422,24 @@ impl App {
                     if ui.button("Copy invitation").clicked() {
                         ui.ctx().copy_text(self.multiplayer.invitation.clone());
                     }
+                    let can_renew = self.multiplayer.state["guest_connected"] != true
+                        && self.multiplayer.state["sending"].is_null();
+                    if ui.add_enabled(can_renew, egui::Button::new("New invitation"))
+                        .on_hover_text("Create a fresh invitation after a disconnect or expiry. Previous invitations stop working.")
+                        .clicked()
+                    {
+                        self.multiplayer_command("multiplayer.renewInvitation", json!({}));
+                    }
                     ui.label(if self.multiplayer.state["guest_connected"] == true {
                         "Guest connected"
                     } else {
-                        "Waiting for guest · invitation expires after 5 minutes and is used once"
+                        "Waiting for guest"
                     });
                 });
+            }
+            if mode == "hosting" {
+                // Keep this row when a guest connects: controls must not move during a click.
+                ui.weak("Invitations expire after 5 minutes and work once. After a disconnect, renew and copy again. The guest opens a new copy; previous tabs are kept.");
             }
             if self.multiplayer.bound == self.projects.active() {
                 ui.horizontal(|ui| {

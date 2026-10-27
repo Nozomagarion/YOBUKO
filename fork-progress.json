@@ -61,7 +61,16 @@
           "evidence": "crates/multiplayer/tests/audio.rs"
         },
         {
-          "name": "Sessions Internet et reconnexion",
+          "name": "Réinviter après une coupure sans fermer le morceau",
+          "done": true,
+          "evidence": "crates/multiplayer/tests/audio.rs"
+        },
+        {
+          "name": "Modifier les réglages FM Synth et Utility en commun",
+          "done": false
+        },
+        {
+          "name": "Sessions Internet et reconnexion automatique",
           "done": false
         },
         {

@@ -121,6 +121,17 @@ Audio leases and operations reach the UI atomically, retaining bounded pending d
 backpressure. Raw audio edits remain closed. Existing players/source projects are retained.
 See the [guest-take contract](../spec/lan-guest-takes.md).
 
+## Amendment: explicit renewal after guest disconnect
+
+The host-only local renewInvitation command rotates the bearer secret without replacing the
+host, journal, assets, listener, certificate, UI tab or player. Admission and rotation share the
+canonical mutex and rotation refuses an admitted guest. A bounded UI notification is reserved
+before revoking the previous secret; queue failure keeps the previous capability unchanged.
+New invitations retain the five-minute, one-use policy. No musical revision/sequence is consumed
+and protocol 8 is unchanged. Returning guests receive a fresh current copy while their previous
+local tabs survive. This does not merge offline work or implement automatic reconnect/resume.
+See the [LAN contract](../spec/lan-starter-session.md#explicit-invitation-renewal).
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.

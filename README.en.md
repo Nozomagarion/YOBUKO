@@ -16,7 +16,7 @@ collaboration layer and DJ preparation using selected rbxport code.
 
 The destination is a complete production-to-live workflow. The current build is an experimental
 prototype: LAN sessions share a bounded copy of an open MIDI project or a four-track starter, and the DJ workspace provides a
-local audio catalog and analysis. Full project coediting, shared recordings, performance decks
+local audio catalog and analysis. Full project coediting, direct shared-tab recording, performance decks
 and USB export are future work. There is no common public release channel yet.
 
 ## The workflow we are building
@@ -34,6 +34,9 @@ and USB export are future work. There is no common public release channel yet.
   Share the current project (up to 64 tracks, FM Synth/Utility parameters only) or use the
   generated starter. Clips arrive in the verified initial copy; single-note add/update/delete, track names, volume
   and pan are live shared edits. The **MIDI notes** editor rejects stale drafts before indices shift. Play, stop and listening position stay local to each computer.
+- **New invitation:** after the guest disconnects, renew admission without replacing the hosted
+  music/player. Rejoining downloads the current verified copy into a new tab; the previous local
+  copy and solo edits are retained, without merging. No automatic resume or Internet routing.
 - **DJ library:** import audio, keep a persistent local catalog, analyse tempo/key and render a
   Studio project into the library.
 - **Settings → General → GitHub updates…:** inspect the three GitHub source identities and check
@@ -56,9 +59,10 @@ They are **not percentages of engineering effort, stability or completion of the
 Implemented items link to code or validation evidence; pending items stay pending until their
 acceptance gate is met. Rebuild the graphic with `python3 scripts/fork_readme.py`.
 
-The next practical gate is running the same packaged build on two physical computers, followed
-by portable project/media exchange. This distinction matters: sharing three track controls is
-one foundation for collaborative production, not the finished experience.
+Portable media, shared notes/clips/tracks and verified take publication are covered by local
+TLS, desktop and audio tests. Next development expands the shared device controls; automatic
+resume and Internet sessions remain planned. Physical two-computer acceptance is deferred at
+the owner's request and remains necessary before claiming a verified household session.
 
 ## One app, one update path
 

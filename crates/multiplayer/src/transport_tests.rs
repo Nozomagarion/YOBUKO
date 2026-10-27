@@ -835,3 +835,112 @@ fn a_full_ui_queue_keeps_the_sound_lease_until_its_operation_can_be_delivered_wi
     drop(audio);
     assert!(!path.exists());
 }
+
+#[test]
+fn renewal_revokes_expired_and_spent_secrets_without_resetting_music_or_owner_sequences() {
+    let now = Instant::now();
+    let mut state = canonical(crate::starter_project());
+    let original = "a".repeat(64);
+    state.secret = secret_hash(&original);
+    state.expires = now;
+    state.redeemed = true;
+    state.submit(Host::owner(), 1, 0, WireEdit::Rename { track: 1, name: "Keep this".into() }).unwrap();
+    let music = state.host.project().clone();
+    let (send, receive) = mpsc::sync_channel(1);
+    let invite = Invitation {
+        protocol: PROTOCOL,
+        endpoint: "127.0.0.1:1".parse().unwrap(),
+        certificate: "YQ".into(),
+        secret: "b".repeat(64),
+    };
+    state.renew(&invite, now, &send).unwrap();
+    assert!(matches!(receive.try_recv().unwrap(), Event::Invitation(_)));
+    assert_eq!(state.host.project(), &music);
+    assert_eq!(state.host.revision(), 1);
+    assert_eq!(state.journal.len(), 1);
+    assert!(state.admit(&original, now).is_err());
+    assert!(!state.redeemed);
+    let peer = state.admit(&invite.secret, now + Duration::from_secs(299)).unwrap();
+    // Admission winning the lock prevents renewal, and the live editor keeps its identity.
+    let next = Invitation { secret: "c".repeat(64), ..invite };
+    assert!(state.renew(&next, now, &send).is_err());
+    state.apply(peer, 1, 1, WireEdit::Pan { track: 1, pan: 0.25 }).unwrap();
+    state.host.remove_peer(peer).unwrap();
+    state.guest = false;
+    state.renew(&next, now, &send).unwrap();
+    assert!(state.admit(&next.secret, now + Duration::from_secs(300)).is_err());
+    assert!(!state.redeemed);
+    state.submit(Host::owner(), 2, 2, WireEdit::Pan { track: 1, pan: -0.25 }).unwrap();
+    assert_eq!(state.host.revision(), 3);
+}
+
+#[test]
+fn renewal_backpressure_and_closed_views_preserve_the_previous_invitation() {
+    let now = Instant::now();
+    let original = "a".repeat(64);
+    for closed in [false, true] {
+        let mut state = canonical(crate::starter_project());
+        state.secret = secret_hash(&original);
+        let expires = state.expires;
+        let (send, receive) = mpsc::sync_channel(1);
+        assert!(send.try_send(Event::Closed).is_ok());
+        if closed {
+            drop(receive);
+        }
+        let invite = Invitation {
+            protocol: PROTOCOL,
+            endpoint: "127.0.0.1:1".parse().unwrap(),
+            certificate: "YQ".into(),
+            secret: "b".repeat(64),
+        };
+        assert!(state.renew(&invite, now, &send).is_err());
+        assert!(state.secret == secret_hash(&original));
+        assert_eq!(state.expires, expires);
+        assert!(!state.redeemed && !state.guest);
+        assert!(state.admit(&original, now).is_ok());
+    }
+}
+
+#[test]
+fn renewal_refuses_a_repeated_secret_without_consuming_the_old_invitation() {
+    let now = Instant::now();
+    let secret = "a".repeat(64);
+    let mut state = canonical(crate::starter_project());
+    state.secret = secret_hash(&secret);
+    let (send, receive) = mpsc::sync_channel(1);
+    let invite =
+        Invitation { protocol: PROTOCOL, endpoint: "127.0.0.1:1".parse().unwrap(), certificate: "YQ".into(), secret };
+    assert!(state.renew(&invite, now, &send).is_err());
+    assert!(receive.try_recv().is_err());
+    assert!(state.admit(&invite.secret, now).is_ok());
+}
+
+#[test]
+fn a_hello_started_before_renewal_cannot_consume_the_new_invitation() {
+    let mut host = Service::default();
+    let original = invitation_from(&mut host);
+    let mut old_io = connect(&original);
+    host.execute("multiplayer.renewInvitation", &json!({})).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        host.poll();
+        let current = Invitation::decode(host.invitation.as_ref().unwrap()).unwrap();
+        if current.secret != original.secret {
+            assert_eq!(current.endpoint, original.endpoint);
+            assert!(current.certificate == original.certificate);
+            break;
+        }
+        assert!(Instant::now() < deadline, "invitation renewal timed out");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    protocol::write(&mut old_io, &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: original.secret })
+        .unwrap();
+    assert!(matches!(protocol::read::<ServerMessage>(&mut old_io).unwrap(), ServerMessage::Denied));
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":host.invitation})).unwrap();
+    while guest.mode != "connected" && Instant::now() < deadline {
+        guest.poll();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(guest.mode, "connected", "{:?}", guest.error);
+}

@@ -533,3 +533,50 @@ fn a_late_guest_receives_created_tracks_with_the_same_ids_and_default_devices() 
     assert_eq!(at, revision);
     assert_eq!(&project, expected.project());
 }
+
+#[test]
+fn renewed_invitations_reuse_the_host_and_rejoining_editors_start_fresh_sequences() {
+    let (mut host, first) = host();
+    assert!(Service::default().execute("multiplayer.renewInvitation", &json!({})).is_err());
+    assert!(host.execute("multiplayer.renewInvitation", &json!({"extra":true})).is_err());
+    let mut previous = first;
+    let mut revision = 0;
+    for cycle in 0..4 {
+        host.execute("multiplayer.renewInvitation", &json!({})).unwrap();
+        let ready = wait(&mut host, |v| v["invitation"].as_str().is_some_and(|s| s != previous));
+        assert_eq!(ready["controls"]["revision"], revision);
+        let next = ready["invitation"].as_str().unwrap().to_owned();
+        // An old hello must not redeem the replacement capability.
+        let mut obsolete = Service::default();
+        obsolete.execute("multiplayer.join", &json!({"invitation":previous})).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while obsolete.active() && Instant::now() < deadline {
+            obsolete.poll();
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!obsolete.active());
+        assert!(state(&mut obsolete)["error"].is_string());
+        let mut guest = Service::default();
+        guest.execute("multiplayer.join", &json!({"invitation":next})).unwrap();
+        let joined = wait(&mut guest, |v| v["mode"] == "connected");
+        assert_eq!(joined["controls"]["revision"], revision);
+        wait(&mut host, |v| v["guest_connected"] == true);
+        assert!(guest.execute("multiplayer.renewInvitation", &json!({})).is_err());
+        assert!(host.execute("multiplayer.renewInvitation", &json!({})).is_err());
+        submit(&mut guest, revision, suhina_multiplayer::WireEdit::Rename { track: 1, name: format!("Guest {cycle}") });
+        revision += 1;
+        wait(&mut host, |v| v["controls"]["revision"] == revision);
+        wait(&mut guest, |v| v["controls"]["revision"] == revision);
+        guest.execute("multiplayer.stop", &json!({})).unwrap();
+        wait(&mut host, |v| v["guest_connected"] == false);
+        submit(
+            &mut host,
+            revision,
+            suhina_multiplayer::WireEdit::Rename { track: 2, name: format!("Host continued {cycle}") },
+        );
+        revision += 1;
+        wait(&mut host, |v| v["controls"]["revision"] == revision);
+        previous = next;
+    }
+    assert_eq!(revision, 8);
+}

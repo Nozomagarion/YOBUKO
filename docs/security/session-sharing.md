@@ -92,7 +92,7 @@ unverified. This prototype has not had an independent security audit.
 Sharing arbitrary projects/media beyond the explicit portable MIDI/audio subset remains closed until portable asset manifests, path/symlink
 confinement, size/hash/disk quotas, atomic finalization and interruption recovery are designed and
 tested, aligned with project folder work (#606). Wider edits require identity allocation and
-side-effect review. Recording publication, linked transport, presence, reconnect/resume, host
+side-effect review. Recording publication, linked transport, presence, automatic reconnect/resume, host
 migration and internet routing need separate contracts. The restricted starter is not evidence
 that these wider boundaries are safe or implemented.
 
@@ -148,4 +148,19 @@ backpressure cannot expose a clip before its sound. Pending leases/catalogs are 
 failed/unclaimed data is cleaned. The guest validates its exact acknowledged operation before
 retaining its local collected copy. The known upload is not echoed to its sender. No remote
 source filename, path, device, role or arbitrary command is accepted. Direct shared recording
-and reconnect remain closed. See [the upload contract](../spec/lan-guest-takes.md).
+and automatic reconnect remain closed. See [the upload contract](../spec/lan-guest-takes.md).
+
+
+## Explicit invitation renewal
+
+Only the local hosting service can queue multiplayer.renewInvitation with no parameters. It
+cannot eject or replace a connected guest. Canonical admission and rotation share one lock;
+old pending hellos fail after rotation without consuming the new secret. Fresh OS-random
+256-bit secrets get a new five-minute single-use lifetime. The bounded UI event must be accepted
+before changing the stored hash/expiry/redemption bit, so backpressure does not strand the host
+with an undisclosed replacement secret. Token errors never include the secret. The listener and
+pinned certificate stay the same; no network renewal command exists. Protocol 8 is unchanged.
+
+A new admission downloads current verified music and assets into a new guest copy. Previous
+unlocked tabs and solo edits remain local, without merging them. This permits explicit recovery
+after a guest disconnect; automatic resume, host recovery and Internet routing remain closed.

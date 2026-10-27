@@ -612,3 +612,76 @@ fn a_failed_guest_preparation_keeps_the_connection_and_next_publication_sequence
     assert_eq!(local.project(), remote.project());
     assert_eq!(render(&local), render(&remote));
 }
+
+#[test]
+fn returning_guest_gets_current_tracks_and_takes_while_both_previous_copies_survive() {
+    let host_dir = tempfile::tempdir().unwrap();
+    let guest_dir = tempfile::tempdir().unwrap();
+    let (project, pool) = source();
+    let mut host = Service::default();
+    host.set_storage_root(Some(host_dir.path().into())).unwrap();
+    host.select_audio_project(&project, &pool).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let invitation = wait(&mut host, |s| s["mode"] == "hosting")["invitation"].clone();
+    let initial = host.take_shared().unwrap();
+    let mut local = initial.session().unwrap();
+    initial.keep();
+    let mut player = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
+    local.attach_player(Player::new(player.controller(), None));
+    local.execute("transport.setPosition", &json!({"beats":3})).unwrap();
+    local.execute("transport.play", &json!({})).unwrap();
+    let mut guest = Service::default();
+    guest.set_storage_root(Some(guest_dir.path().into())).unwrap();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snapshot = guest.take_shared().unwrap();
+    let mut previous = snapshot.session().unwrap();
+    let previous_folder = snapshot.folder().unwrap().to_path_buf();
+    snapshot.keep();
+    wait(&mut host, |s| s["guest_connected"] == true);
+    guest.execute("multiplayer.stop", &json!({})).unwrap();
+    wait(&mut host, |s| s["guest_connected"] == false);
+    previous.execute("track.rename", &json!({"track":1,"name":"Solo version kept"})).unwrap();
+    let old_music = previous.project().clone();
+    let old_render = render(&previous);
+    let mut revision = 0;
+    submit(&mut host, 0, WireEdit::TrackCreate { kind: "audio".into(), name: "New while absent".into() });
+    apply(&mut local, &wait(&mut host, |s| s["controls"]["revision"] == 1), &mut revision);
+    let track = local.project().tracks.iter().find(|t| t.name == "New while absent").unwrap().id.0;
+    let take = Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.125; 8000] });
+    publish_take(&mut host, Arc::clone(&take), 1, track, 4.0);
+    let state = wait(&mut host, |s| s["controls"]["revision"] == 2);
+    assert_eq!(accept_audio(&mut host, &mut local), 1);
+    apply(&mut local, &state, &mut revision);
+    host.execute("multiplayer.renewInvitation", &json!({})).unwrap();
+    let ready = wait(&mut host, |s| s["invitation"] != invitation);
+    assert!(host.take_shared().is_none(), "renewal must not replace the host snapshot/player");
+    guest.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snapshot = guest.take_shared().unwrap();
+    let mut remote = snapshot.session().unwrap();
+    let mut remote_revision = snapshot.revision;
+    assert_ne!(snapshot.folder().unwrap(), previous_folder);
+    snapshot.keep();
+    assert_eq!(remote_revision, 2);
+    assert_eq!(local.project(), remote.project());
+    assert_eq!(render(&local), render(&remote));
+    // A new admission resets the guest author sequence, not the canonical musical revision.
+    publish_take(&mut guest, Arc::new(AudioData { samples: vec![-0.25; 4000], ..(*take).clone() }), 2, track, 8.0);
+    let state = wait(&mut host, |s| s["controls"]["revision"] == 3);
+    assert_eq!(accept_audio(&mut host, &mut local), 1);
+    apply(&mut local, &state, &mut revision);
+    let state = wait(&mut guest, |s| s["controls"]["revision"] == 3);
+    accept_audio(&mut guest, &mut remote);
+    apply(&mut remote, &state, &mut remote_revision);
+    assert_eq!(local.project(), remote.project());
+    assert_eq!(render(&local), render(&remote));
+    assert_eq!(previous.project(), &old_music);
+    assert_eq!(render(&previous), old_render);
+    assert!(previous.loaded_audio_paths().iter().all(|p| p.is_file()));
+    let mut output = [0.0; 512];
+    player.process(&mut output);
+    assert!(player.monitor().running());
+    assert!(player.monitor().beat() >= 3.0);
+    assert_eq!(project, source().0);
+}

@@ -64,6 +64,8 @@ sont vérifiées par l’hôte. L’onglet **Clips** permet aussi de créer, dé
 dupliquer, activer et supprimer des clips MIDI/audio. Les sons déjà chargés peuvent être copiés vers l’invité sous forme de WAV portables.
 Chaque participant peut aussi publier une nouvelle prise terminée depuis un onglet local : le son arrive chez l’invité puis son clip apparaît, sans recréer la session.
 L’onglet **Tracks** permet à chacun d’ajouter une piste audio vide ou une piste MIDI avec FM Synth pendant la connexion.
+Après le départ de l’invité, **New invitation** permet de le réinviter sans fermer le morceau de l’hôte.
+Il retrouve l’état actuel dans un nouvel onglet ; son ancienne copie et ses modifications locales sont conservées.
 
 ### Préparer et jouer son set
 
@@ -82,7 +84,7 @@ les platines et l'export vers le matériel DJ restent à construire et à vérif
 <!-- fork-progress:begin -->
 | Partie du projet | Étapes réalisées | Prochain objectif |
 |---|---:|---|
-| Créer ensemble | 11 / 13 | Sessions Internet et reconnexion |
+| Créer ensemble | 12 / 15 | Modifier les réglages FM Synth et Utility en commun |
 | Préparer et jouer | 4 / 8 | Playlists et préparation de set |
 | Évoluer ensemble | 4 / 7 | Version commune validée sur toutes les plateformes |
 <!-- fork-progress:end -->
@@ -95,7 +97,7 @@ leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce
 | Partie | Disponible dans le prototype | Prochaine étape |
 |---|---|---|
 | **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
-| **Multijoueur** | Session LAN hôte + invité, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, publication de prises terminées par les deux participants, noms/volumes/panoramiques partagés et lectures indépendantes. | Appareils partagés et reconnexion. |
+| **Multijoueur** | Session LAN hôte + invité, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, publication de prises terminées par les deux participants, noms/volumes/panoramiques partagés et lectures indépendantes. | Appareils partagés et reconnexion automatique. |
 | **DJ** | Bibliothèque audio persistante, import et analyse tempo/tonalité issue de rbxport. | Playlists, points cue, grilles rythmiques, platines et compatibilité matérielle. |
 | **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
 

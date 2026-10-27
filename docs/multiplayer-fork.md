@@ -68,8 +68,11 @@ still to perform. No personal project or audio file is needed.
    audio output. On one, click **Listen from beat 16**, then **Stop locally**. The other should
    continue from its own position. Transport is deliberately private.
 6. Click **Leave session**. The starter project remains open and can be edited normally. Other
-   projects remain intact. A reused invitation must be refused. Create a fresh host session for
-   another invitation; it expires after five minutes and admits one guest only.
+   projects remain intact. A reused invitation must be refused. If only the guest leaves, the
+   host keeps its project and can use **New invitation → Copy invitation** to invite again;
+   the new secret expires after five minutes and admits one guest only. The returning guest
+   opens the current host version in a new tab, retaining the previous solo copy and its edits.
+   The button refuses a connected guest. If the host leaves, its session ends.
 7. To check disconnect recovery, create/join again, change a name, then quit the host. The guest
    should report disconnection within the exchange deadline and retain the last confirmed local
    starter. Saving it is local; your files and microphone recordings were never shared.
