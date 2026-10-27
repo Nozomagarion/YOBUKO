@@ -1,6 +1,7 @@
 name: Multiplayer fork checks and development builds
 
 on:
+  workflow_dispatch:
   push:
     branches: [feature/multiplayer, 'integration/multiplayer-*']
   pull_request:
