@@ -7,12 +7,13 @@
 //! timeline and its points edited with the pointer. Every edit is an `automation.*` command;
 //! which lanes are shown is the view's own state, like a lane's height.
 
+use crate::kit::surface::Backgrounds as _;
 use std::collections::{HashMap, HashSet};
 
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Shape, Stroke, StrokeKind, Ui, Vec2};
 use serde_json::{Value, json};
 use suhina_device_api::{ParamInfo, ParamKind, Unit};
-use suhina_engine::model::automation::{self, MUTE, PAN, Taper, VOLUME};
+use suhina_engine::model::automation::{self, Curve, MUTE, PAN, Taper, VOLUME};
 use suhina_engine::model::{AutomationLane, AutomationPoint, ClipId, DeviceKind, Project, Rgb, TrackId};
 
 use crate::interaction::timeline_grid::TimelineGrid;
@@ -32,8 +33,9 @@ const POINT_HIT: f32 = 11.0;
 /// How near the envelope a drag has to start to bend a segment, and a click has to be to add a
 /// point on it.
 const SEGMENT_HIT: f32 = 6.0;
-/// How much a point of vertical drag bends a segment's curve.
-const CURVE_PER_POINT: f64 = 0.01;
+/// Points of vertical drag per step of a curve drag (`automation::CurveDrag`): the mirrored
+/// family's whole range, 128 steps, is 192 points.
+const POINTS_PER_STEP: f32 = 1.5;
 /// How strongly a lane without points draws its parameter's value.
 const LEVEL_ALPHA: f32 = 0.4;
 /// Most points one segment of an envelope is drawn with.
@@ -135,16 +137,6 @@ impl Scale {
         }
     }
 
-    /// Whether `automation.addPoint` keeps `value` as it is: a whole-number parameter (an integer,
-    /// a toggle, a choice) rounds it, which would move a point spliced onto a slope.
-    fn keeps(&self, value: f64) -> bool {
-        match self {
-            Self::Device(info) => info.clamp(value) == value,
-            Self::Sd(parameter) => parameter.clamp(value) == value,
-            Self::Volume | Self::Pan | Self::Mute => true,
-        }
-    }
-
     /// A value in the unit of the set command, as a number: the volume's silence is its floor.
     fn number(&self, value: f64) -> f64 {
         match self {
@@ -190,8 +182,9 @@ impl Scale {
                 ParamKind::Choice(options) => {
                     options.get(info.clamp(value) as usize).map_or_else(String::new, |o| (*o).to_string())
                 }
+                // What the parameter plays: a lane between two numbers cuts the fraction off.
                 ParamKind::Integer => {
-                    let value = info.clamp(value);
+                    let value = info.played(value);
                     match info.unit {
                         Unit::Semitones => format!("{value:+} st"),
                         Unit::ScaleDegrees => format!("{value:+} sd"),
@@ -446,13 +439,16 @@ struct PointDrag {
     now: (f64, f64),
 }
 
-/// A segment's curve being bent: the segment's first point and its curve so far.
+/// A segment's curve being bent: the segment's first point, the drag along the control points'
+/// paths, how far the pointer has moved and the curve that gives.
 #[derive(Debug, Clone, PartialEq)]
 struct CurveDrag {
     track: TrackId,
     key: LaneKey,
     point: usize,
-    curve: f64,
+    paths: automation::CurveDrag,
+    moved: f32,
+    curve: Curve,
 }
 
 /// A box drawn over a lane to select the points in it, from where it started to the pointer.
@@ -652,9 +648,23 @@ pub fn header_button(
     if response.clicked() {
         state.toggle(track, params);
     }
+    // `#control-automation`, `:checked` while the lanes show, and `automation` artwork.
+    let _style = crate::kit::style_class::enter_named_response("button", "automation", &response);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, open);
     let hover = widgets::hover(ui, &response);
     let off = crate::kit::motion::mix(theme::control_background(), theme::control_hover(), hover);
-    painter.rect_filled(rect, 0.0, if open { theme::control_active() } else { off });
+    widgets::track_button_face(ui, painter, rect, &response, if open { theme::control_active() } else { off });
+    let ink = crate::kit::style_class::foreground(if open { theme::text_primary() } else { theme::text_secondary() });
+    if crate::kit::skin::paint(
+        painter,
+        rect,
+        "automation",
+        crate::kit::skin::State::response(&response, open),
+        ink,
+        0.0,
+    ) {
+        return;
+    }
     // A small envelope: up, along, down.
     let glyph = rect.shrink2(Vec2::new(4.0, 4.0));
     let line = vec![
@@ -663,7 +673,6 @@ pub fn header_button(
         Pos2::new(glyph.left() + glyph.width() * 0.65, glyph.top()),
         glyph.right_bottom(),
     ];
-    let ink = if open { theme::text_primary() } else { theme::text_secondary() };
     painter.add(Shape::line(line, Stroke::new(1.0, ink)));
 }
 
@@ -774,10 +783,11 @@ fn envelope(points: &[AutomationPoint], scale: &Scale, plot: Rect, geometry: &Ge
             // Evenly in the lane's position, as the engine plays it: a straight segment is a
             // straight line; a bent one is sampled along its curve.
             let (ya, yb) = (scale.position(a.value), scale.position(b.value));
-            let steps = if a.curve == 0.0 { 1 } else { (((xb - xa) / 2.0).ceil() as usize).clamp(2, SEGMENT_POINTS) };
+            let steps =
+                if a.curve.is_straight() { 1 } else { (((xb - xa) / 2.0).ceil() as usize).clamp(2, SEGMENT_POINTS) };
             for step in 1..steps {
                 let t = step as f64 / steps as f64;
-                let shaped = suhina_engine::model::automation::shape(t, a.curve);
+                let shaped = a.curve.shape(t);
                 let x = geometry.x_of(a.beat + (b.beat - a.beat) * t);
                 line.push(Pos2::new(x, y_of(plot, ya + (yb - ya) * shaped)));
             }
@@ -796,8 +806,8 @@ impl automation::Taper for Scale {
         Scale::position(self, value)
     }
     fn value(&self, position: f64) -> f64 {
-        // A whole-number parameter moves along the line between its points and the device
-        // rounds, as the engine plays it.
+        // A whole-number parameter moves along the line between its points, through values
+        // between its numbers, as the engine moves it (it plays them with the fraction cut off).
         match self {
             Self::Device(info) if matches!(info.kind, ParamKind::Integer) => {
                 info.min + position.clamp(0.0, 1.0) * (info.max - info.min)
@@ -824,27 +834,6 @@ fn distance_to(line: &[Pos2], pos: Pos2) -> f32 {
             _ => None,
         })
         .fold(f32::INFINITY, f32::min)
-}
-
-/// A point at `beat` that leaves the envelope of `points` (on `scale`) as it is: the envelope's
-/// value there, and the curve of the segment it starts. The segment before it keeps its curve and
-/// the one after it gets the curve through the old segment's middle: exact for a straight or
-/// level segment, close for a bent one (a bend cut in two is not two bends of the same kind).
-/// `None` for no points.
-fn splice(points: &[AutomationPoint], beat: f64, scale: &Scale) -> Option<(f64, f64)> {
-    use suhina_engine::model::automation::{curve_through, shape, value_at};
-    let stepped = scale.stepped();
-    let value = value_at(points, beat, stepped, scale)?;
-    let index = points.partition_point(|p| p.beat <= beat).checked_sub(1);
-    let segment = index.and_then(|i| Some((points.get(i)?, points.get(i + 1)?)));
-    let Some((a, b)) = segment.filter(|(a, b)| !stepped && a.curve != 0.0 && b.beat > a.beat) else {
-        return Some((value, 0.0));
-    };
-    let t = (beat - a.beat) / (b.beat - a.beat);
-    let start = shape(t, a.curve);
-    let middle = (shape(t + (1.0 - t) / 2.0, a.curve) - start) / (1.0 - start);
-    let curve = curve_through(0.5, middle).map_or(0.0, |c| round(c.clamp(-1.0, 1.0), 1000.0));
-    Some((value, curve))
 }
 
 /// The segment of `points` under `pos`, near enough to its line to bend it: the index of its
@@ -899,15 +888,13 @@ fn lane(
         params["beat"] = json!(beat);
         let level = level_points(param);
         let near = distance_to(&envelope(&level, &param.scale, plot, geometry), pos) <= SEGMENT_HIT;
-        // On a whole-number lane a value between two numbers cannot be kept: the point goes where
-        // the pointer is, as off the line.
-        match splice(&level, beat, &param.scale).filter(|(value, _)| near && param.scale.keeps(*value)) {
-            Some((value, curve)) => {
-                params["value"] = param.scale.exact(value);
-                if curve != 0.0 {
-                    params["curve"] = json!(curve);
-                }
-            }
+        let on_line = automation::value_at(&level, beat, param.scale.stepped(), &param.scale);
+        // Near the line the point goes on the envelope, and the command splits a bent segment so
+        // it plays as before; on a whole-number lane it keeps a value between two numbers.
+        match on_line.filter(|_| near) {
+            // Without points, on the faint line at the parameter's value.
+            Some(value) if param.points.is_empty() => params["value"] = param.scale.exact(value),
+            Some(_) => {}
             None => params["value"] = param.scale.command(param.scale.value_at(position_of(plot, pos.y))),
         }
         actions.push(Action::new("automation.addPoint", params));
@@ -920,8 +907,12 @@ fn lane(
     {
         match segment_at(&param.points, &param.scale, plot, geometry, pos) {
             Some(point) => {
-                let curve = param.points.get(point).map_or(0.0, |p| p.curve);
-                state.curve_drag = Some(CurveDrag { track, key: key.clone(), point, curve });
+                let curve = param.points.get(point).map_or(Curve::STRAIGHT, |p| p.curve);
+                // A drag first holds a split half's control points in the unit square, so even one
+                // shorter than a step changes a curve that lay outside it.
+                let paths = automation::CurveDrag::new(&curve);
+                let curve = paths.dragged(0);
+                state.curve_drag = Some(CurveDrag { track, key: key.clone(), point, paths, moved: 0.0, curve });
             }
             None => state.box_drag = Some(BoxDrag { track, key: key.clone(), from: pos, to: pos }),
         }
@@ -929,13 +920,14 @@ fn lane(
     if body.dragged_by(egui::PointerButton::Primary) {
         let dy = body.drag_delta().y;
         if let Some(drag) = state.curve_drag.as_mut().filter(|d| d.track == track && &d.key == key) {
-            // Up bends the line up: a rising segment moves fast first, a falling one late.
+            // Up bends the line up: on a rising segment that moves the curve earlier, on a falling
+            // one later.
             let rising = match (param.points.get(drag.point), param.points.get(drag.point + 1)) {
                 (Some(a), Some(b)) => param.scale.position(b.value) >= param.scale.position(a.value),
                 _ => true,
             };
-            let sign = if rising { 1.0 } else { -1.0 };
-            drag.curve = (drag.curve - f64::from(dy) * CURVE_PER_POINT * sign).clamp(-1.0, 1.0);
+            drag.moved += if rising { dy } else { -dy };
+            drag.curve = drag.paths.dragged((drag.moved / POINTS_PER_STEP).round() as i32);
         }
         if let Some(drag) = state.box_drag.as_mut().filter(|d| d.track == track && &d.key == key)
             && let Some(pos) = body.interact_pointer_pos()
@@ -969,11 +961,11 @@ fn lane(
     if body.drag_stopped_by(egui::PointerButton::Primary)
         && let Some(drag) = state.curve_drag.take_if(|d| d.track == track && &d.key == key)
     {
-        let before = param.points.get(drag.point).map_or(0.0, |p| p.curve);
-        if (drag.curve - before).abs() > 1e-6 {
+        let before = param.points.get(drag.point).map_or(Curve::STRAIGHT, |p| p.curve);
+        if drag.curve != before {
             let mut params = key.params(track);
             params["point"] = json!(drag.point);
-            params["curve"] = json!(round(drag.curve, 1000.0));
+            params["curve"] = json!(drag.curve.to_array());
             actions.push(Action::new("automation.movePoint", params));
         }
     }
@@ -1196,7 +1188,7 @@ fn heading_row(ui: &mut Ui, name: &str, count: usize, marked: bool, open: bool, 
     if ui.is_rect_visible(rect) {
         let painter = ui.painter();
         if toggles && response.hovered() {
-            painter.rect_filled(rect, 2.0, ui.visuals().widgets.hovered.weak_bg_fill);
+            painter.fill_background(rect, 2.0, ui.visuals().widgets.hovered.weak_bg_fill);
         }
         widgets::chevron(painter, Pos2::new(rect.left() + 6.0, rect.center().y), open, theme::text_hint());
         let font = egui::TextStyle::Button.resolve(ui.style());
@@ -1216,7 +1208,9 @@ fn heading_row(ui: &mut Ui, name: &str, count: usize, marked: bool, open: bool, 
 fn parameter_row(ui: &mut Ui, choice: &Param, current: &LaneKey, free: bool, scroll: bool) -> bool {
     let mark = if choice.points.is_empty() { "" } else { " •" };
     let selected = choice.key == *current;
-    let button = egui::Button::selectable(selected, format!("{}{mark}", choice.short_name()));
+    let text = egui::RichText::new(format!("{}{mark}", choice.short_name()));
+    let text = if selected { text.color(theme::text_on(ui.visuals().selection.bg_fill)) } else { text };
+    let button = egui::Button::selectable(selected, text);
     let response = ui.add_enabled(free, button);
     let label = choice.label();
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, free, selected, &label));
@@ -1233,7 +1227,9 @@ fn parameter_row(ui: &mut Ui, choice: &Param, current: &LaneKey, free: bool, scr
 fn automated_row(ui: &mut Ui, choice: &Param, current: &LaneKey, free: bool, scroll: bool) -> bool {
     let selected = choice.key == *current;
     let label = choice.label();
-    let response = ui.add_enabled(free, egui::Button::selectable(selected, &label));
+    let text = egui::RichText::new(&label);
+    let text = if selected { text.color(theme::text_on(ui.visuals().selection.bg_fill)) } else { text };
+    let response = ui.add_enabled(free, egui::Button::selectable(selected, text));
     let label = format!("{label} (automated)");
     response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, free, selected, &label));
     if scroll && selected {
@@ -1408,7 +1404,7 @@ fn lane_header(
         return;
     }
     let painter = painter.with_clip_rect(clip);
-    painter.rect_filled(rect, 0.0, theme::panel_background());
+    painter.fill_background(rect, 0.0, theme::panel_background());
     let track = lanes.track;
     let id = Id::new(("automation-header", track.0, param.key.device, param.key.param.as_str()));
     let inner = rect.shrink2(Vec2::new(PAD, 5.0));
@@ -1453,6 +1449,8 @@ fn lane_header(
                 .is_some_and(|p| last.is_some_and(|r| !r.contains(p)) && !response.rect.contains(p))
     });
     let menu = egui::Popup::menu(&response)
+        // The theme's popup fill: see-through where the theme is, with the window blurred under it.
+        .frame(egui::Frame::popup(ui.style()))
         .align(align)
         .align_alternatives(&[])
         .close_behavior(egui::PopupCloseBehavior::IgnoreClicks);
@@ -1513,7 +1511,7 @@ fn lane_header(
             response.on_hover_text("A manual change turned this automation off; click to follow it again")
         };
         let (fill, ink) = widgets::toggle_colors(ui, &response, param.enabled);
-        painter.rect_filled(toggle, 0.0, fill);
+        painter.fill_background(toggle, 0.0, fill);
         if !param.enabled {
             painter.rect_stroke(toggle, 0.0, theme::hairline(theme::accent()), StrokeKind::Inside);
         }
@@ -1576,7 +1574,7 @@ fn forget_menu(ui: &Ui, filter: Id, placed: Id) {
 fn small_button(ui: &Ui, painter: &egui::Painter, rect: Rect, response: &egui::Response, text: &str) {
     let fill =
         crate::kit::motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, response));
-    painter.rect_filled(rect, 0.0, fill);
+    painter.fill_background(rect, 0.0, fill);
     widgets::text_in(painter, rect, Align2::CENTER_CENTER, text, theme::ui_font(theme::TEXT), theme::text_secondary());
 }
 

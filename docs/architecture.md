@@ -3,8 +3,10 @@ description: How the crates, threads and commands fit together, from a file to t
 read_when: adding a crate or feature, where does code go, threads, audio thread, data flow, layers, player, controller
 type: system
 status: current
-last_verified: 2026-10-24
+last_verified: 2026-10-25
 covers:
+  - crates/style/
+  - apps/suhina/src/theme_io.rs
   - crates/session/src/record_writer.rs
   - Cargo.toml
   - crates/*/Cargo.toml
@@ -89,6 +91,7 @@ allocation or locking.
 
 | Crate | Owns | Depends on |
 |---|---|---|
+| `style` | Toolkit-independent native style sheets ([ADR 0031](decisions/0031-style-sheets.md)): bounded selectors and device scopes, typed properties and shadow data, cascade and inherited variables, viewport conditions, Taffy rectangles and source-preserving edits. It takes text and element data, never a window, file or audio callback. The desktop uses the source editor and resolves supported paint-only sheets directly; sheets requiring remaining layout, gradient or animation features use the compatibility adapter during migration. | cssparser, taffy |
 | `model` | The DAW-neutral project: tracks, mixer channels, a pool of clip contents, clips that place them, the launcher grid ([ADR 0001](decisions/0001-daw-neutral-model.md)). Validation, with groups nested at most 16 deep and never inside themselves, and the one conversion from beats to time and bars through the tempo and time-signature changes (`TempoMap`, `Meter`; [spec](spec/tempo-map.md)), and which audio clips overlap on a track (`audio_overlaps`, [ADR 0028](decisions/0028-ara-hosting.md)). No behaviour beyond that. | nothing |
 | `stretch` | Time-stretching and pitch-shifting DSP for interleaved audio: a pure-Rust port of Signalsmith Stretch (MIT), behind every stretch mode except `Repitch` ([ADR 0003](decisions/0003-time-stretching.md)). | nothing (rustfft) |
 | `als` | Reading Live Sets into `model`, with warnings for what it skips ([spec](spec/als-format.md)). One crate per format later. | model |
@@ -101,6 +104,7 @@ allocation or locking.
 | `soundmap` | The sample map ([spec](spec/sample-map.md), [ADR 0013](decisions/0013-sample-map-analysis.md)): features of samples (MFCC, spectral shape, envelope, pitch), analysed on background threads and cached per library folder; layouts of a scope by PCA and t-SNE, kept; grids; kinds from names or guessed from neighbours; similar items. The session holds one (`Projects::sound_map_mut`) and runs the `soundmap.*` commands on it; the window shows its maps. | media |
 | `test-support` | What tests across the workspace build again and again, written once ([#764](https://github.com/suhina-daw/suhina-daw/issues/764) › 8): `ProjectBuilder`, `write_wav`, `sine`, `peak` and `rms`, and the comparison with golden files (`SUHINA_BLESS=1` rewrites them). A dev-dependency only. | model |
 | `separation` | Stem separation ([spec](spec/stem-separation.md), planned in steps): a source brought to a model's sample rate and channels (`resample`, a windowed-sinc resampler), cut into the model's windows with the last one padded, each handed to a `Backend`, and the windows' outputs added back with their weighting divided out (`chunk`); limits on every shape and source (`shape`); progress per window and cancel between windows. `BandSplitter` is a backend with no weights that runs the pipeline in tests. No model, runtime, command or session wiring yet. | nothing |
+| `theme-package` | Theme packages, `.theme.suhina` ([spec](spec/theme-skins.md#theme-packages)): a theme's folder as a zip with `manifest.json` naming the theme and each file's SHA-256 sum; packs a folder, reads a package and checks it (paths, sizes, sums, a `theme.css` that parses, SVG, PNG and JSON that are what they say) before anything is written. The app's export and import and `suhina-cli theme` use it. | style |
 | `update` | Updates ([spec](spec/updates.md)): asks GitHub for the nightly release or the test builds (`github`) through the system's `curl` (`net`, which also finds the GitHub CLI and asks it for its token only when the user connects it), compares versions (`version`), downloads a build on a thread of its own, checks its SHA-256 against GitHub's digest, unpacks it and moves each file in place of the running one, the old ones renamed aside on Windows and deleted on the next start (`install`). | nothing |
 | `session` | An open project with its undo history (`Session`) and its decoded audio (ADR 0011), the open projects with one active, like tabs (`Projects`, [ADR 0007](decisions/0007-several-open-projects.md)), the command registry ([ADR 0002](decisions/0002-commands.md)), the `Player` that connects a session to a running engine, the audio output chosen and the `audio.*` commands (`audio`: the `AudioSystem` the output layer implements, reopening the active project's output with the transport where it was), the MIDI inputs and the `midi.*` commands (`midi`: the `MidiSystem` the MIDI layer implements, the ports turned off, and the `LiveInput` that hands their notes to the engine that plays; ADR 0017), the armed tracks (`track.setArm`, kept beside the project), the project's running plug-ins (`rack`: each plug-in device found in the catalog, started with its saved state off the audio thread, handed to the engine, watched and restarted; `start_offline` for renders; the states it reads compared with the ones last saved, `plugin_edits`, so a change in a plug-in's editor is an unsaved change), adding tracks and placing files (`files`: `track.add`, `clip.addFiles`), splitting and consolidating clips (`editing`: `clip.split`, `clip.consolidate`, which renders audio with the engine's `render_track` and writes it as a WAV file with hound), previews (`preview.*`) and the browser's commands (`library.*`, on the `Library` `Projects` holds) and the sample map's (`soundmap.*`, on its `SoundMap`), missing files (`relink`: `project.missingFiles`, `project.relinkFiles`), the device commands (`devices`), sends and return tracks (`sends`: `track.setSend`, `track.setSendMode`, `return.*`) the blank project (`blank`) and backups (`backup`: when each project is copied, the backup thread that writes the copies and cleans up, the journal the offer after a crash reads, `project.autosave`; [spec](spec/backups.md)). | model, engine, media, library, soundmap, als, project-file, plugins, device-api, device-registry, device-sdk, devices/fm-synth |
 | `automation` | The MCP server over the open projects, file roots for agents (every path a command reads is checked against the read root), the user's browser library, offline WAV rendering ([`mcp.md`](mcp.md)); the desktop app's endpoints, a named pipe or Unix socket per build: one instance per build, and agents working on the window's open projects through a job queue the window runs between frames ([ADR 0028](decisions/0028-mcp-in-the-running-app.md)). | session, engine, media, library |
@@ -109,11 +113,11 @@ allocation or locking.
 | `ui` | The user interface ([ADR 0009](decisions/0009-ui-toolkit-and-look.md)): the main window with the browser ([spec](spec/browser.md): `browser`, `browser_view`, and `drop` for dragging into the views), the Session and Arrangement views (the Session view's channel strips in `mixer_strip`; the track colour palette and colour areas in `colour_picker`; the Arrangement's automation lanes in `automation_lanes`; `nesting` for groups inside groups: folding them and moving tracks between them), the detail area (device chain, clip properties, embedded plug-in editors, the piano roll in `piano_roll`), the sample map, the missing-files dialog, the Settings dialog and the updates (`app/updates`: the start panel's *New version available* line and Help › Check for updates…, [spec](spec/updates.md)), drawn with egui from the project and the `LauncherMonitor`; every change is a command. `memory-stats`
 reads the program's RAM for the control bar and the plug-in hosts' reports theirs, which `plugins::host_memory` adds together. Design tokens in `theme.rs`; the colours are the theme in use (`themes.rs` keeps the list). No windowing or GPU code, so tests drive it headless (egui_kittest). | engine, session, plugins, library, media, output, soundmap, device-api, device-registry, device-sdk, update |
 | `suhina-cli` | The command line: render, play, mcp (with `--audio`, the MIDI inputs too). | all of the above |
-| `suhina` | The desktop app: opens a project (argument, a dropped `.suhina` or `.als`, or the project dialog), makes new ones (blank or from a template), keeps the recent projects, decodes its audio into the session, plays it stopped through `output` and runs `ui` in an eframe window; starts the browser's library (`browser.json` and its indexes in the app-data folder) and records opened projects among its recent ones; folders dropped on the window join the browser, and samples and MIDI files dropped on it land like a drag from the browser; shows the system's file and folder dialogs (`rfd`) that the window's **Browse…** buttons ask for and hands back the path chosen, and forgets a recent project the start panel takes off the list; loads and saves the settings, keymap and theme files (a theme file saved elsewhere is read again; theme backups and the theme template are zips in `exports/`, and theme files or zips dropped on the window are added); opens the MIDI inputs the settings leave on. Starting, it reads the settings, keymap and themes, opens the window and shows the splash ([components](design/components.md#splash)); only once the splash is on screen does it start the library and the sample map and open the project asked for, so nothing slow runs before the window. Once the window is up it checks for updates (Settings › General › Updates), and after *Restart now* starts the updated build as it closes. | engine, session, media, library, plugins, output, midi, ui, update |
+| `suhina` | The desktop app: opens a project (argument, a dropped `.suhina` or `.als`, or the project dialog), makes new ones (blank or from a template), keeps the recent projects, decodes its audio into the session, plays it stopped through `output` and runs `ui` in an eframe window; starts the browser's library (`browser.json` and its indexes in the app-data folder) and records opened projects among its recent ones; folders dropped on the window join the browser, and samples and MIDI files dropped on it land like a drag from the browser; shows the system's file and folder dialogs (`rfd`) that the window's **Browse…** buttons ask for and hands back the path chosen, and forgets a recent project the start panel takes off the list; loads and saves the settings, keymap and theme files (a theme file saved elsewhere is read again; theme backups and the theme template are zips in `exports/`, and theme files or zips dropped on the window are added); opens the MIDI inputs the settings leave on. On macOS `mac_menu.rs` builds the system's menu bar from the window's menus (`ui::app::menus`) and keeps it in step every frame; a pick runs the same item as the window's bar. With the GPU renderer the window is asked to be transparent; on the first frame `surface.rs` asks the GPU whether the swapchain hands alpha to the compositor (macOS always, DX12 through a DirectComposition visual on Windows, a probe surface for Vulkan and OpenGL). Where it does, `surface.rs` draws `kit::surface`'s backgrounds with a wgpu pipeline that writes their colour and alpha unblended, and the system blurs what is behind while the theme has a see-through background (winit's blur on macOS and Wayland, DWM acrylic through `window-vibrancy` on Windows); on macOS the content runs under the title bar. Starting, it reads the settings, keymap and themes, opens the window and shows the splash ([components](design/components.md#splash)); only once the splash is on screen does it start the library and the sample map and open the project asked for, so nothing slow runs before the window. Once the window is up it checks for updates (Settings › General › Updates), and after *Restart now* starts the updated build as it closes. | engine, session, media, library, plugins, output, midi, ui, update |
 | `dsp` | Signal-processing blocks for devices: dB conversions, parameter smoothing, biquad filters, a DC blocker, Linkwitz-Riley crossovers (24 and 48 dB/octave), LFO waveforms (with a smoothly wandering random one), waveshapers, a 2× oversampler, first-order filters and shelves, delay lines with linear and cubic interpolation and a Schroeder allpass, a trim delay that moves smoothly while running, a windowed-sinc polyphase resampler and IR convolution (uniform-partitioned, `fft-convolver`) with its `Ir`. Real-time safe, panic-free on any input. | nothing |
 | `device-registry` | Every built-in effect, instrument or MIDI effect by its stable id: makes the device a project's `DeviceKind::Builtin` names, lists them, and gives its panel (`panel`: its parameters from `DeviceInfo` and its layout, or the generated list; ADR 0021 › Amendment: device panels). | device-api, device-sdk, devices/* |
 | `device-api` | The `Device` trait, `DeviceInfo` (an effect, an instrument or a MIDI effect) and `ParamInfo` (plain values in their unit, conversion to knob travel), `NoteEvent` for instruments and MIDI effects (with the clip's `MusicalScale`), and the contract tests every device runs (`conformance::check`, with note checks for instruments and event checks for MIDI effects). | nothing |
-| `device-sdk` | Builds, validates, serializes and prepares data-only `.sd` audio-effect, MIDI-effect and instrument graphs; stereo DSP graphs support branching, modulation and delayed feedback, MIDI effects preserve event frame offsets, and monophonic instruments turn MIDI controls into audio, with a shared node catalog, generated parameter UI and embedded custom canvases. It contains no executable Rust in `.sd` files. | dsp, device-api, serde, serde_json, base64, image (PNG/JPEG) |
+| `device-sdk` | Builds, validates, serializes and prepares data-only `.sd` audio-effect, MIDI-effect and instrument graphs; stereo DSP graphs support branching, modulation and delayed feedback, MIDI effects preserve event frame offsets, and private polyphonic voice/grain graphs turn routed MIDI controls into audio, with a shared node catalog, generated parameter UI and embedded custom canvases. Audio graphs execute acyclic regions node by node over bounded 64-frame buffers allocated at preparation. Feedback components preserve frame-by-frame evaluation and delayed commits; graphs whose only acyclic nodes are input and output retain the original frame schedule to avoid unnecessary buffer copies. Parameter timelines and MIDI span boundaries preserve sample timing. It contains no executable Rust in `.sd` files. | dsp, stretch, device-api, serde, serde_json, base64, image (PNG/JPEG) |
 | `ipc` | Audio blocks between the engine and a plug-in host process ([ADR 0006](decisions/0006-plug-in-hosting.md)): a shared-memory region with each block's notes and controllers (`Event`, up to 1024 a block) and the instances of the host process that run the block after the link's own (up to 63, `Link::send_joint`), one block in flight, a doorbell per direction (a futex on Linux, events with a high-resolution timer on Windows, yielding elsewhere for now) and a deadline; a crashed or hung host costs missed blocks, never a stall. `AudioSource`: a file's decoded samples in a region of their own, written once and mapped read only by the host, for an ARA plug-in to read ([ADR 0028](decisions/0028-ara-hosting.md)). Both are memory the operating system frees when the last process holding it ends, however it ends (`shm`): a page-file mapping named `Local\suhina-…` on Windows, a `memfd` opened through `/proc/<pid>/fd/<n>` on Linux, and on macOS a file in the temporary folder whose name goes once the host has opened a link or the engine drops a source; the first one a process makes removes the macOS files of processes that crashed before that, and earlier versions' leftover files on every system (`sweep`, ADR 0006 › The boundary). One of the two crates allowed `unsafe`. Linked into the engine's process through `plugins`. | nothing |
 | `realtime` | Real-time priority for the threads that make sound, the render thread and the plug-in hosts' audio threads (`RealTime::join`): MMCSS "Pro Audio" on Windows; on Linux `SCHED_FIFO` where the user has real-time rights, otherwise rtkit over the system D-Bus (`zbus`, pure Rust, so no libdbus), otherwise the highest normal priority; the highest priority elsewhere. Says what it got, and why real-time scheduling was refused; never fails. Under rtkit, whose grant ends the process when a thread runs `RLIMIT_RTTIME` without waiting, it paces a rendering thread (`waited`, `worked`): a short rest before the limit, and normal priority after a block that takes a quarter of it. No `unsafe`. | nothing |
 | `plugins` | The engine's side of plug-in hosting: `Plugin::start` loads an instance into a `suhina-plugin-host` process (the one its group shares, `Launch::group`, or one of its own) and returns a control half (health, ping, state, parameters, restart) and an audio half (`PluginAudio::process`, real-time safe). Control messages are JSON lines over a local socket (`protocol`; the host also reports its process's resident memory once a second, unasked, and `host_memory` reads the running hosts' reports for the control bar). A host that exits is *crashed*; one that leaves 32 blocks in a row unanswered is *hung*; `restart` brings it back with its last saved state. `scan` and `scan_pool` find installed CLAP and VST3 plug-ins (standard folders, `CLAP_PATH`, folders the user adds), read VST3 bundles' `moduleinfo.json` without loading them and load the rest in a few long-lived `--scan-worker` processes with per-file timeouts, into a catalog that can be saved. `PluginAudio::process_with_events` sends an instrument its notes. `offline::render` runs audio (and `render_with_events` notes) through a plug-in without a deadline (`suhina-cli plugin run`, `plugin run-device`). The session starts a project's plug-ins with it and hands their audio halves to the engine. | ipc |
@@ -159,7 +163,8 @@ crates/ui/src/
   interaction/   what views share: drop (dragging between views), pick, menus, nesting, grid
                  (the tracks and slots as the views see them), colour_picker, empty_space, status,
                  timeline_grid (the lines and snapping of the arrangement, piano roll and automation)
-  kit/           what every view draws with: theme, widgets, meter, motion, logo, waveform, scroll
+  kit/           what every view draws with: theme, widgets, meter, motion, logo, waveform, scroll,
+                 surface (backgrounds that set the window's pixels)
   demo.rs        the demo project the app opens with `--demo` and the tests draw
 ```
 
@@ -172,6 +177,12 @@ file (`arrangement.rs` for `arrangement/`), and code names it by its full path
 (`crate::arrangement::timeline::Timeline`).
 
 ## From a file to the speakers
+
+Native stereo sources and effects use the device-neutral `NativeNode` contract. The graph
+interpreter stores prepared trait objects; a separate factory and implementation adapters
+own concrete kernel selection and off-thread resource binding. Rendering, span preparation,
+note events and reset remain allocation-free. Shared modulation math lives outside concrete
+instruments.
 
 The SDK also preserves optional editor geometry (node rectangles, wire bends and port
 anchors). This remains authoring data in the embedded JSON; it is validated off the audio thread
@@ -233,6 +244,7 @@ gesture id grouping both XY axes into one undo step. See [ADR 0021](decisions/00
 | Thread | Runs | May allocate, lock, do I/O |
 |---|---|---|
 | Main / session | The CLI, the desktop app's window (egui, one frame at a time), or the MCP server's tokio runtime. Owns the `Session` (the MCP server: all open `Projects`), runs commands, imports and loads audio, builds the `Renderer` and, after each edit, a new graph for it (ADR 0005). In the desktop app an attached agent's commands run here too, as jobs between frames (ADR 0028). | yes |
+| Background image | At most one short-lived `background-image` worker per UI app decodes, bounds and blurs the user-selected PNG. It returns pixels through a bounded channel; the UI uploads them once and shares the cached image with the liquid offscreen renderer. It never captures desktop pixels or touches the audio graph. | yes |
 | Agent endpoints | The desktop app's `suhina-agents` tokio runtime (two threads): holds the build's endpoints, reads "open these files" from later starts and serves attached agents' MCP; it never touches a project, only hands jobs to the window. | yes |
 | Render | `suhina-render` in `output`, at real-time priority (`realtime`; it says what it got before the device starts, and the first stream in a process adds a notice when real-time scheduling was refused, since playback may then drop out under load): `Renderer::process_with_cue` in blocks of the buffer size the user chose (`engine_block`: 64 … 4096 frames, 1024 when none is chosen, fitted to the sizes the device allows, `SUHINA_ENGINE_BLOCK` to try another in tests), ahead of the device into a lock-free ring (`rtrb`). It keeps two blocks queued, or a device buffer and a block when the device takes more at once; while a track is armed, one block or one device buffer, so a key on a MIDI controller sounds sooner ([ADR 0017](decisions/0017-inputs-and-latency.md)). Every plug-in device's deadline counts from this block, so it follows the buffer size chosen. | **no** (AGENTS.md rule 3) |
 | Audio | The device callback (cpal's thread; in WASAPI exclusive mode `suhina-wasapi`, an event loop on the device's buffer): copies from the ring (silence, counted as an underrun, for what is not there yet), the main and cue pairs to their channels, sample conversion, setting atomics, measuring the latency from the frames queued and the device's own delay. | **no** (AGENTS.md rule 3) |
@@ -245,6 +257,7 @@ gesture id grouping both XY axes into one undo step. See [ADR 0021](decisions/00
 | Decode workers | Scoped threads in `media` while a project loads; in the window, a thread per drop (`suhina-drop`) that decodes its samples before `clip.addFiles` runs (ADR 0011). | yes |
 | Missing files and plug-in scans | In the window, `suhina-find-files` searches the index and folders for a project's missing files, and `suhina-plugin-scan` runs a plug-in scan, so the frame never waits. | yes |
 | Library | One thread in `library` (`suhina-library`): checks the browser's folders against their saved indexes, reads the ones that changed, and takes the file-system watcher's events (`notify`, its own threads) or polls (ADR 0012). Started by the desktop app and the MCP server only. | yes |
+| Theme files | One desktop thread (`suhina-theme-files`, `apps/suhina/src/theme_io.rs`) owns theme persistence, conflict checks, exports/imports and live-reload polling. At most one batch is in flight; the window coalesces later saves without crossing file-operation barriers, previews changes immediately and polls replies without waiting. Normal exit drains pending saves. | yes |
 | Backups | One thread in `session` (`suhina-backup`), started with the first backup: turns each project copy the window's thread made (`Projects::back_up`, which waits at most a second for the plug-ins' state, as a save does) into JSON, writes it through a temporary file, cleans up old ones and keeps the journal ([spec](spec/backups.md)). | yes |
 | Browser files | One thread in the window (`suhina-browser-files`): reads the length, tempo and key of the files the browser shows, and decodes the selected sample for its waveform and preview. | yes |
 | Sample analysis | `soundmap-analysis` threads, half the cores, while a `SoundMap` has files queued; they decode and analyse samples and send the results back. Started by the desktop app and the MCP server only. In the window, a `soundmap-layout` thread per new layout computes it (t-SNE) so the frame never waits. | yes |
@@ -405,3 +418,69 @@ do not add DSP graph nodes or run on the audio thread.
 Sampler read-head positions travel through the engine meter monitor as atomic values. The UI reads them without accessing audio-thread device state.
 
 Host-owned AudioData implements AsRef<[f32]> so sample instruments share decoded PCM through Device::load_shared_sample without a copy. SDK transient analyses are shared by source identity and format in an off-thread weak cache, which retains no unused source or analysis. Device::set_context receives each block context before its MIDI events, including events at frame zero.
+
+Registered zero-latency audio effects used as `native_effect` graph kernels resolve in
+`device-registry::compile_graph`. Track chains and nested device groups use this same factory;
+the session validates it before insertion. The SDK interpreter knows only `NativeNode`.
+Prepared sample PCM and checked read regions are independent SDK resource data; file loading,
+decoding, binding and retirement remain host responsibilities outside the render thread.
+
+
+### Prepared sample and component nodes
+
+SDK implementations are grouped by type under `device-sdk/src/nodes/`; the scheduler owns only
+generic NativeNode input/output, event, parameter and completion interfaces. Sample resources are
+immutable Arc-backed PCM supplied by the host off-thread. Resource keys persist in .sd and resolve
+through PreparedSamples; the SDK does no file decoding. Missing keys fail preparation. Replacing a
+binding prepares a new graph; existing voices retain their old Arc until graph retirement off-thread.
+VoiceGroup, GrainPool and versioned Component definitions contain private precompiled graphs, bounded
+by nesting and aggregate state budgets. Their states are never constructed or freed during rendering.
+Shared envelope stages, RNG, grain windows/scheduling, source analysis and stretch processing serve
+both the existing sampler and graph nodes. Existing Delay and Reverb implementations are unchanged.
+
+SDK sampler graphs receive decoded immutable `SampleAsset` resources from the host while
+track chains are prepared. The engine maps an SDK device's model sample reference to binding
+`sample`; it does not decode files. Graph state and source references persist independently,
+so relocation and relinking do not rewrite graph definitions. `device.addSd` checks the same
+resources before insertion, and MCP confines both graph and source paths.
+
+### Private background images
+
+The UI background coordinator owns the active texture and one bounded worker. Separate
+source, filter and placement modules decode the local image, apply alpha-correct blur,
+and map it into display coordinates. Cached source pixels survive effect changes.
+Obsolete workers cannot publish into a newer request. Main-window surface opacity is
+separate from the Settings panel material; neither changes text opacity. This is an
+internal boundary, not an extension host or a new dependency of the audio engine.
+
+An active private image keeps background fills in ordinary blend mode, including on hosts
+capable of desktop transparency. Liquid captures release shared texture handles and renderer
+registrations when the next capture no longer uses them, bounding retained image history.
+
+## Native theme styles
+
+The UI kit owns static SVG rasterization, scoped theme values and the native style
+adapter over `suhina-style` (ADR 0031): Suhina's own parser, selectors, cascade layers,
+variables, media queries, Taffy layout and motion, with no browser engine. The host
+supplies bounded role trees; themes supply CSS, never markup or scripts. The adapter has
+no network or file access and caches computed class contexts on the UI thread.
+A retained scope tree carries project identities and native interaction states; changed
+snapshots publish computed values on the following repaint. Connected surfaces paint
+bounded cached gradient ramps/spatial textures and inset/outset shadow textures; scoped
+guards apply authored values to ordinary egui controls without changing widget identity.
+The toolbar and optional workspace panel layout consume Taffy's rectangles for both
+native controls and input clipping. CSS-owned browser/detail sizes bypass native
+splitters while preserving saved native sizes. Token-level CSS validation bounds source
+size and nesting and reports known unsupported effects without deleting source.
+Computed targets persist for an unchanged scope structure. State changes start native
+transitions from the painted value, and egui's clock samples transitions and keyframe
+animations for connected paint properties. Active motion
+requests repainting at 16 ms and respects the global animation/high-contrast settings;
+geometry animation is not yet consumed by native panel layout.
+No theme work runs on the audio thread. The desktop theme-file service owns portable
+resources: one folder per theme with its author's `theme.css` (read, never written),
+`variants/*.json` (values for its settings, written by the settings editors) and Suhina's
+`layout.css`, with the one-time, validated migration of earlier themes. Settings are registered
+custom properties (`kit/theme_vars.rs`); a variant's values apply in their own cascade tier,
+between the theme and device panel sheets. Details and current adapter limits are in
+[ADR 0031](decisions/0031-style-sheets.md) and the [skin spec](spec/theme-skins.md).

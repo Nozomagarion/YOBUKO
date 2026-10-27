@@ -41,6 +41,9 @@ pub struct DeviceBox {
     pub name: String,
     /// What it is: a built-in effect or instrument, a plug-in format, or one Suhina cannot run.
     pub kind: String,
+    /// What a theme selects its panel by, after `#device-`: a built-in device's id
+    /// (`#device-compressor`), `sd` for a device file, `plugin` for a plug-in.
+    pub theme_id: String,
     pub enabled: bool,
     /// Parameter ids and values as text.
     pub params: Vec<(String, String)>,
@@ -433,6 +436,8 @@ impl Detail {
                 };
                 for lane in device.automation.iter().filter(|l| l.enabled && !l.points.is_empty()) {
                     let spec = info.and_then(|info| info.params.iter().find(|p| p.id == lane.param));
+                    // On/off and choice parameters hold each point's value until the next, as the
+                    // engine plays them and the lane draws them.
                     // Evenly along the parameter's control, as the engine plays it and the lane
                     // draws it.
                     use crate::arrangement::automation_lanes::Scale;
@@ -451,7 +456,8 @@ impl Detail {
                     };
                     let Some(scale) = scale else { continue };
                     let Some(value) = lane.value_at(beat, scale.stepped(), &scale) else { continue };
-                    let value = spec.map_or(value, |spec| spec.clamp(value));
+                    // A whole-number parameter shows what it plays, the fraction cut off toward zero.
+                    let value = spec.map_or(value, |spec| spec.played(value));
                     for (id, v) in &mut device_box.values {
                         if *id == lane.param {
                             *v = value;
@@ -586,6 +592,12 @@ pub(super) fn device_box(
         at: DeviceAt(path.to_vec()),
         group: d.as_group().map(|g| group_box(g, d, path, id, plugins)),
         name: device_display_name(d),
+        theme_id: match &d.kind {
+            DeviceKind::Builtin(id) => id.to_ascii_lowercase(),
+            DeviceKind::Sd => "sd".into(),
+            DeviceKind::Clap { .. } | DeviceKind::Vst3 { .. } | DeviceKind::Vst2 { .. } => "plugin".into(),
+            _ => "unsupported".into(),
+        },
         kind: match &d.kind {
             DeviceKind::Builtin(_) => "Suhina".into(),
             DeviceKind::Sd => d

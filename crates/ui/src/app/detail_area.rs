@@ -125,7 +125,17 @@ impl App {
 
     /// Lays out the detail area beside or under the view in `area`, draws it with its splitter,
     /// and returns what is left for the view.
-    pub(super) fn detail_area(&mut self, ui: &mut Ui, area: Rect, actions: &mut Vec<Action>) -> Rect {
+    pub(super) fn detail_area(
+        &mut self,
+        ui: &mut Ui,
+        area: Rect,
+        actions: &mut Vec<Action>,
+        geometry: Option<(Rect, Rect)>,
+    ) -> Rect {
+        let _panel_style = crate::kit::style_class::enter_named("workspace-panel", "panel-detail");
+        let styled_ui = crate::kit::style_class::ui(ui);
+        let mut styled_ui = if let Some((_, detail)) = geometry { styled_ui.clipped_to(detail) } else { styled_ui };
+        let ui = &mut *styled_ui;
         let stacked = self.settings.device_layout == DeviceLayout::Stack;
         // What it shows: the selected clip, or the selected track's devices.
         let (track, clip) = match self.shown {
@@ -249,7 +259,8 @@ impl App {
         let least = self.least_detail_height();
         // The piano roll, or an ARA plug-in's editor in the clip's place, can be pulled to the
         // top, the edited track's lane above it (Melodyne as a MIDI clip's notes are).
-        let pullable = !stacked && (piano.is_some() || ara.is_some()) && self.shown == View::Arrangement;
+        let pullable =
+            geometry.is_none() && !stacked && (piano.is_some() || ara.is_some()) && self.shown == View::Arrangement;
         let pulled = pullable && self.detail_max;
         // With the switch on Devices the track's devices take the editor's place, and nothing is
         // pulled to the top (› Where it opens in `docs/spec/ui-clip-editor.md`).
@@ -277,7 +288,9 @@ impl App {
                 self.detail_showing,
             ),
         );
-        let (view, splitter, detail) = if stacked {
+        let (view, splitter, detail) = if let Some((view, detail)) = geometry {
+            (view, Rect::NOTHING, detail)
+        } else if stacked {
             self.detail_width = self.detail_width.clamp(180.0, (area.width() - 240.0).max(180.0));
             let x = area.right() - self.detail_width;
             (
@@ -314,40 +327,42 @@ impl App {
         // The splitter: dragged to make the detail area bigger or smaller; under the
         // Arrangement view, past the view's least height the piano roll goes to the top, and a
         // double-click takes it there and back.
-        let cursor = if stacked { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical };
-        let response =
-            ui.interact(splitter, Id::new("detail-splitter"), Sense::click_and_drag()).on_hover_cursor(cursor);
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Detail area splitter"));
-        // A double-click closes the detail area, as a double-click on a split view's divider does
-        // on macOS; a double-click on the closed splitter opens it at its default size.
-        if response.double_clicked() {
-            self.detail_max = false;
-            self.hide_editor();
-        }
-        if response.dragged_by(egui::PointerButton::Primary) {
-            let delta = response.drag_delta();
-            if stacked {
-                self.detail_width -= delta.x;
-            } else {
-                let height = self.detail_drag.unwrap_or(detail.height()) - delta.y;
-                self.detail_drag = Some(height);
-                self.detail_max = pullable && height > area.height() - MIN_VIEW;
-                if height < least / 2.0 {
-                    // Dragged down past half its least height, the detail area closes; the same
-                    // drag going back up opens it again (`collapsed_splitter`).
-                    self.detail_max = false;
-                    self.hide_editor();
-                } else if !self.detail_max {
-                    self.detail_height = height.max(least);
-                }
+        if geometry.is_none() {
+            let cursor = if stacked { egui::CursorIcon::ResizeHorizontal } else { egui::CursorIcon::ResizeVertical };
+            let response =
+                ui.interact(splitter, Id::new("detail-splitter"), Sense::click_and_drag()).on_hover_cursor(cursor);
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Detail area splitter"));
+            // A double-click closes the detail area, as a double-click on a split view's divider does
+            // on macOS; a double-click on the closed splitter opens it at its default size.
+            if response.double_clicked() {
+                self.detail_max = false;
+                self.hide_editor();
             }
-        } else {
-            self.detail_drag = None;
+            if response.dragged_by(egui::PointerButton::Primary) {
+                let delta = response.drag_delta();
+                if stacked {
+                    self.detail_width -= delta.x;
+                } else {
+                    let height = self.detail_drag.unwrap_or(detail.height()) - delta.y;
+                    self.detail_drag = Some(height);
+                    self.detail_max = pullable && height > area.height() - MIN_VIEW;
+                    if height < least / 2.0 {
+                        // Dragged down past half its least height, the detail area closes; the same
+                        // drag going back up opens it again (`collapsed_splitter`).
+                        self.detail_max = false;
+                        self.hide_editor();
+                    } else if !self.detail_max {
+                        self.detail_height = height.max(least);
+                    }
+                }
+            } else {
+                self.detail_drag = None;
+            }
+            let painter = ui.painter_at(splitter);
+            painter.fill_background(splitter, 0.0, theme::control_background());
+            let grip = if stacked { Vec2::new(2.0, 32.0) } else { Vec2::new(32.0, 2.0) };
+            painter.rect_filled(Rect::from_center_size(splitter.center(), grip), 0.0, theme::text_hint());
         }
-        let painter = ui.painter_at(splitter);
-        painter.rect_filled(splitter, 0.0, theme::control_background());
-        let grip = if stacked { Vec2::new(2.0, 32.0) } else { Vec2::new(32.0, 2.0) };
-        painter.rect_filled(Rect::from_center_size(splitter.center(), grip), 0.0, theme::text_hint());
 
         if let Some(shown_track) = clip.map(ClipRef::track).or(track) {
             self.detail_drop = Some((detail, shown_track));
@@ -577,7 +592,7 @@ impl App {
             self.detail_drag = None;
         }
         let painter = ui.painter_at(splitter);
-        painter.rect_filled(splitter, 0.0, theme::control_background());
+        painter.fill_background(splitter, 0.0, theme::control_background());
         painter.rect_filled(Rect::from_center_size(splitter.center(), Vec2::new(32.0, 2.0)), 0.0, theme::text_hint());
         Rect::from_min_max(area.min, Pos2::new(area.right(), splitter.top()))
     }

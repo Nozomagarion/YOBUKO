@@ -54,6 +54,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         params: &[
             TRACK,
             param("path", ParamType::Path(PathKind::File), "path to a validated .sd AudioEffect graph"),
+            optional("sample", ParamType::Path(PathKind::File), "audio file for the graph resource named sample"),
             optional(
                 "position",
                 ParamType::DevicePath,
@@ -220,7 +221,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "device.loadSample",
-        label: "Load an audio file into a Sampler instrument",
+        label: "Load an audio file into a Sampler instrument, or into the sample binding of an SDK graph",
         params: &[TRACK, DEVICE, param("path", ParamType::Path(PathKind::File), "sample audio file")],
         kind: CommandKind::Edit,
         run: devices::load_sample,

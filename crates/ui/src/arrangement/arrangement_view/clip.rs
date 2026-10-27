@@ -807,27 +807,36 @@ pub(super) fn clip_box<'a>(
     // Picked by a click in its body: not lit (the play start is what the click chose), but
     // outlined, so the clip the editor and the keys work on is plain to see.
     if selected && !lit && state.clip_drag.is_none() {
+        let edge = Rect::from_min_size(rect.min, Vec2::new(4.0, rect.height()));
+        let body = motion::mix(theme::panel_background(), rgb(clip.color), 0.82);
+        painter.with_clip_rect(row.clip).rect_filled(edge, 0.0, motion::mix(body, ink_on(body), 0.5));
         painter.with_clip_rect(row.clip).rect_stroke(
             rect,
             0.0,
-            egui::Stroke::new(1.5, theme::text_primary()),
+            egui::Stroke::new(1.0, theme::text_primary()),
             StrokeKind::Inside,
         );
     }
     // The gain sits on top of the clip.
     if let Some((field, db, hover)) = gain_paint {
         let gain_painter = painter.with_clip_rect(row.clip);
+        // `.clip-gain`: its background, border, radius and text.
+        let _style = crate::kit::style_class::enter("clip-gain");
         let fill = motion::mix(theme::control_background(), theme::control_hover(), hover);
-        gain_painter.rect_filled(field, 0.0, fill);
+        crate::kit::native_css::surface(&gain_painter, field, 0.0, fill);
         let text = format!("{} dB", widgets::format_db(db));
-        let font = theme::mono_font(theme::TEXT_TINY);
+        let font = theme::mono_font(
+            crate::kit::style_class::computed()
+                .filter(|c| c.authored.font_size)
+                .map_or(theme::TEXT_TINY, |c| c.font_size),
+        );
         widgets::text_in(
             &gain_painter,
             field.shrink2(Vec2::new(3.0, 0.0)),
             Align2::RIGHT_CENTER,
             &text,
             font,
-            theme::text_value(),
+            crate::kit::style_class::foreground(theme::text_value()),
         );
     }
     // The handles sit on top of everything on the clip, where the fades now end.
@@ -845,9 +854,25 @@ pub(super) fn clip_box<'a>(
     for (edge, hover) in handles {
         let length = if edge == FadeEdge::In { shown.fade_in } else { shown.fade_out };
         let handle = fade_handle(rect, edge, length as f32 * state.beat_width);
+        // `.clip-fade-handle`: its fill (`background-color`), border and radius, or the
+        // `clip.fade-handle` artwork.
+        let _style = crate::kit::style_class::enter("clip-fade-handle");
         let fill = motion::mix(theme::text_secondary(), theme::text_primary(), hover);
-        handle_painter.rect_filled(handle, 0.0, fill);
-        handle_painter.rect_stroke(handle, 0.0, theme::hairline(theme::window_background()), StrokeKind::Outside);
+        let state = if hover > 0.5 { crate::kit::skin::State::Hover } else { crate::kit::skin::State::Normal };
+        if !crate::kit::skin::paint(&handle_painter, handle, "clip.fade-handle", state, fill, 0.0) {
+            let authored = crate::kit::style_class::computed();
+            if authored.as_ref().is_some_and(|c| c.authored.background || c.authored.border) {
+                crate::kit::native_css::surface(&handle_painter, handle, 0.0, fill);
+            } else {
+                handle_painter.rect_filled(handle, 0.0, fill);
+                handle_painter.rect_stroke(
+                    handle,
+                    0.0,
+                    theme::hairline(theme::window_background()),
+                    StrokeKind::Outside,
+                );
+            }
+        }
     }
     for (edge, hover) in curves {
         let length = if edge == FadeEdge::In { shown.fade_in } else { shown.fade_out };
@@ -943,23 +968,86 @@ pub(super) fn paint_clip(
     timeline: &Timeline,
     selected: bool,
 ) {
+    let _work_trace = crate::kit::frame_trace::WorkSpan::new("arrangement clip");
+    let _style_class = crate::kit::style_class::enter_named("clip", &format!("clip-{}", clip.id.0));
     let view = painter.clip_rect();
     if !rect.intersects(view) {
         return;
     }
-    // The clip in its colour (its own, or its track's): the name bar in full colour, the body a
-    // shade of it, and its notes or waveform in ink that reads on both. Off or muted, it greys.
     let off = lane.mute || !clip.enabled;
-    let base = if off { motion::mix(rgb(clip.color), theme::text_hint(), 0.7) } else { rgb(clip.color) };
-    let body = motion::mix(theme::window_background(), base, if selected { 0.85 } else { 0.62 });
-    painter.rect_filled(rect, 0.0, body);
+    crate::kit::native_css::set_variable("--clip-colour", crate::kit::native_css::hex(rgb(clip.color)));
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, selected);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Muted, off);
+    // `:playing` while the play position is inside it, `:recording` while a take records over it.
+    let end = clip.start + clip.length;
+    let playing = timeline.running && !off && (clip.start..end).contains(&timeline.beat);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Playing, playing);
+    let recording = timeline
+        .recording_spans
+        .iter()
+        .any(|(track, from, to)| *track == lane.track && *from < end && *to > clip.start);
+    crate::kit::native_css::mark(crate::kit::native_css::HostState::Recording, recording);
+    // The sheet's opacity fades the whole clip, its waveform, notes and name too.
+    let faded;
+    let painter = match crate::kit::style_class::computed().map(|style| style.opacity).filter(|o| *o < 1.0) {
+        Some(opacity) => {
+            let mut fade = painter.clone();
+            fade.multiply_opacity(opacity.clamp(0.0, 1.0));
+            faded = fade;
+            &faded
+        }
+        None => painter,
+    };
+    // Keep the clip colour legible against the quiet grid. Selection changes brightness,
+    // never hue; the reserved title area leaves notes and waveforms unobstructed.
+    let strength = if clip.audio {
+        painter.ctx().data(|d| d.get_temp::<u8>(Id::new(AUDIO_COLOUR_STRENGTH))).unwrap_or(82)
+    } else {
+        82
+    };
+    let strength = if selected { strength.saturating_add(12).min(100) } else { strength };
+    let body =
+        crate::kit::style_class::background(colour_surface(theme::panel_background(), rgb(clip.color), strength, off));
+    let radius = crate::kit::style_class::radius(2.0);
+    // A clip is content, not a background: it blends with the lane under it, so its alpha never
+    // reaches the window and the desktop never shows through it.
+    painter.rect_filled(rect, radius, body);
+    crate::kit::native_css::background_rounded(painter, rect, radius);
     let bar = clip_name_bar(rect);
     if let Some(bar) = bar {
-        painter.rect_filled(bar, 0.0, base);
+        let _name_bar = crate::kit::style_class::enter("clip-name");
+        let fill = crate::kit::style_class::background(motion::mix(body, ink_on(body), 0.045));
+        // The bar keeps the clip's rounded top corners.
+        let top = radius.min(bar.height()).clamp(0.0, 255.0) as u8;
+        painter.rect_filled(
+            bar.shrink2(Vec2::new(2.0, 0.0)),
+            egui::CornerRadius { nw: top, ne: top, sw: 0, se: 0 },
+            fill,
+        );
     } else {
-        painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, base);
+        painter.rect_filled(Rect::from_min_size(rect.min, Vec2::new(rect.width(), 2.0)), 0.0, body);
     }
+    crate::kit::liquid::paint(painter, rect.shrink(1.0), body, crate::kit::liquid::Surface::Clip);
     let ink = ink_on(body);
+    let edge_width = if selected { 4.0 } else { 3.0 };
+    let edge_ink = motion::mix(body, ink, 0.5);
+    if let Some(bar) = bar {
+        // A quiet divider ties the title to the stronger leading edge without framing the preview.
+        painter.hline(
+            (rect.left() + edge_width)..=rect.right(),
+            bar.bottom() - 0.5,
+            theme::hairline(motion::mix(body, edge_ink, 0.4)),
+        );
+    }
+    // The leading edge follows the clip's rounded left corners.
+    let left = radius.clamp(0.0, 255.0) as u8;
+    painter.rect_filled(
+        // Inset from rounder corners, so it never stands outside them.
+        Rect::from_min_size(rect.min, Vec2::new(edge_width, rect.height()))
+            .shrink2(Vec2::new(0.0, (radius - edge_width).max(0.0).min(rect.height() / 2.0 - 1.0).max(0.0))),
+        egui::CornerRadius { nw: left, sw: left, ne: 0, se: 0 },
+        edge_ink,
+    );
     // A looping clip's passes are marked by the notches and lines at their starts (below), not by
     // shades: the body is one colour all along.
     // The grid shows through the body, faintly, the bars a little stronger.
@@ -975,10 +1063,24 @@ pub(super) fn paint_clip(
     // Notes an ARA plug-in found in an audio clip go over its waveform, which dims a little under
     // them so both read (ADR 0028, #720): dimmed to 40 % it read as an empty clip on a light body.
     let ara_notes = timeline.ara_notes.get(&clip.id).filter(|_| clip.audio).zip(timeline.tempo.as_ref());
-    let wave_ink = if ara_notes.is_some() { motion::mix(body, ink, 0.75) } else { ink };
+    let appearance = painter
+        .ctx()
+        .data(|d| d.get_temp::<crate::settings::view_settings::WaveformAppearance>(Id::new(WAVEFORM_APPEARANCE)))
+        .unwrap_or_default();
+    // Theme: the sheet's `.clip-waveform` and `.clip-notes` colours, else Dark.
+    let themed = |class: &str| {
+        let _part = crate::kit::style_class::enter(class);
+        crate::kit::style_class::foreground(appearance.ink(ink))
+    };
+    let content_ink = if appearance.mode == crate::settings::view_settings::WaveformColour::Theme {
+        themed(if clip.audio { "clip-waveform" } else { "clip-notes" })
+    } else {
+        appearance.ink(ink)
+    };
+    let wave_ink = if ara_notes.is_some() { motion::mix(body, content_ink, 0.75) } else { content_ink };
     let dim = |_: Color32| wave_ink;
     let color = ink;
-    let text_color = ink_on(if bar.is_some() { base } else { body });
+    let text_color = ink_on(body);
     // The name's place, for a rename in place (Ctrl+R).
     let strip = Rect::from_min_max(
         Pos2::new(rect.left().max(view.left()), rect.top()),
@@ -988,23 +1090,21 @@ pub(super) fn paint_clip(
     painter.ctx().data_mut(|d| {
         d.insert_temp(Id::new((crate::app::NAME_RECT_CLIP, u64::from(clip.id.0))), (strip, pass));
     });
-    let has_name = rect.height() >= 20.0;
+    let has_name = bar.is_some();
     if has_name {
         // The name stays in view while the clip's start is scrolled off to the left.
-        let left = rect.left().max(view.left()) + 4.0;
-        let name_rect =
-            Rect::from_min_max(Pos2::new(left, rect.top() + 3.0), Pos2::new(rect.right() - 2.0, rect.top() + 15.0));
-        widgets::text_in(
-            painter,
-            name_rect,
-            Align2::LEFT_CENTER,
-            &clip.name,
-            theme::ui_font(theme::TEXT_SMALL),
-            text_color,
+        let left = rect.left().max(view.left()) + 7.0;
+        let name_rect = Rect::from_min_max(
+            Pos2::new(left, rect.top() + 3.0),
+            Pos2::new(rect.right() - 5.0, bar.map_or(rect.top(), |bar| bar.bottom()) - 3.0),
         );
+        let _name = crate::kit::style_class::enter("clip-name");
+        let font = theme::ui_font(crate::kit::style_class::font_size(theme::TEXT));
+        let text_color = crate::kit::style_class::foreground(text_color);
+        widgets::text_in(painter, name_rect, Align2::LEFT_CENTER, &clip.name, font, text_color);
     }
     let marks = Rect::from_min_max(
-        Pos2::new(rect.left(), rect.top() + if has_name && rect.height() >= 30.0 { 17.0 } else { 4.0 }),
+        Pos2::new(rect.left() + 3.0, bar.map_or(rect.top() + 4.0, |bar| bar.bottom() + 3.0)),
         Pos2::new(rect.right(), rect.bottom() - 3.0),
     );
     if let Some(view) = clip.audio_view.as_ref().filter(|_| marks.height() >= 4.0)
@@ -1055,7 +1155,7 @@ pub(super) fn paint_clip(
         let span_end = f64::from((rect.right() - x_of(start)) / beat_width);
         // Dark on the clip's colour, as notes read on a vivid body; light ink read as a
         // highlight and vanished on the light colours.
-        let note_ink = motion::mix(body, Color32::BLACK, 0.7);
+        let note_ink = content_ink;
         for note in clip.notes.iter().filter(|n| n.start + n.length >= first && n.start <= last && n.start < span_end) {
             let x = x_of(start + note.start);
             let right = x_of(start + span_end);
@@ -1068,7 +1168,7 @@ pub(super) fn paint_clip(
     if let Some((notes, tempo)) = ara_notes
         && marks.height() >= 4.0
     {
-        paint_ara_notes(painter, rect, marks, notes, tempo, start, clip.length, x_of, beat_width, ink);
+        paint_ara_notes(painter, rect, marks, notes, tempo, start, clip.length, x_of, beat_width, content_ink);
     }
     // An ARA plug-in loading or analysing the track's audio: said on the clip, which shows no
     // notes yet and cannot be edited in it until it is done.
@@ -1078,51 +1178,30 @@ pub(super) fn paint_clip(
     {
         paint_ara_activity(painter, marks, body, ink, name, *progress);
     }
-    // Where a looping clip starts another pass: a notch in its top and bottom edges and a
-    // dashed line between them, the repeats drawn as the clip itself (#700).
-    if !clip.seams.is_empty() {
-        // Dark, as the notches cut into the clip are: a light line read as a note or the playhead.
-        let mark = motion::mix(body, theme::window_background(), 0.6);
-        let top = bar.map_or(rect.top(), |bar| bar.bottom());
-        let (first, last) = (view.left() - 4.0, view.right() + 4.0);
-        // As wide as the passes allow: zoomed out, a pass a few points wide keeps its body and
-        // still shows a small notch.
-        let pass =
-            clip.seams.windows(2).map(|w| w[1] - w[0]).chain(clip.seams.first().copied()).fold(f64::MAX, f64::min);
-        let pass_width = (pass.max(0.0) as f32) * beat_width;
-        let notch = (pass_width * 0.1).clamp(1.5, 4.0);
-        for seam in &clip.seams {
-            let x = x_of(start + seam).round() + 0.5;
-            if x < first || x > last || x <= rect.left() || x >= rect.right() {
-                continue;
-            }
-            painter.add(egui::Shape::dashed_line(
-                &[Pos2::new(x, top), Pos2::new(x, rect.bottom())],
-                theme::hairline(mark),
-                3.0,
-                3.0,
-            ));
-            // Cut out of the clip, in the lane's colour, so they show on a light name bar too.
-            let cut = theme::window_background();
-            painter.add(egui::Shape::convex_polygon(
-                vec![
-                    Pos2::new(x - notch, rect.top()),
-                    Pos2::new(x + notch, rect.top()),
-                    Pos2::new(x, rect.top() + notch),
-                ],
-                cut,
-                egui::Stroke::NONE,
-            ));
-            painter.add(egui::Shape::convex_polygon(
-                vec![
-                    Pos2::new(x - notch, rect.bottom()),
-                    Pos2::new(x, rect.bottom() - notch),
-                    Pos2::new(x + notch, rect.bottom()),
-                ],
-                cut,
-                egui::Stroke::NONE,
-            ));
+    // Loop boundaries share the leading edge's contrast, with a small top notch so they
+    // remain distinct from the grid and playhead at every lane height.
+    let span = f64::from((rect.right() - x_of(start)) / beat_width);
+    let preview_seams = (span > clip.length + 1e-6)
+        .then(|| crate::arrangement::timeline::loop_seams_for_span(clip.loop_range, clip.offset, span));
+    let seams = preview_seams.as_deref().unwrap_or(&clip.seams);
+    let pass_width = clip.loop_range.map_or(0.0, |range| (range.end - range.start) as f32 * beat_width);
+    for seam in seams {
+        let x = x_of(start + seam).round() + 0.5;
+        if x < view.left() - 4.0 || x > view.right() + 4.0 || x <= rect.left() || x >= rect.right() {
+            continue;
         }
+        painter.vline(x, rect.y_range(), egui::Stroke::new(1.0, motion::mix(body, edge_ink, 0.5)));
+        // Dense passes should not turn the top edge into a sawtooth.
+        if pass_width < 64.0 {
+            continue;
+        }
+        let notch = 2.5_f32.min(pass_width * 0.012).min(rect.height() * 0.1);
+        // Only a shallow circular segment cuts into the clip; leave the grid above intact.
+        painter.with_clip_rect(painter.clip_rect().intersect(rect)).circle_filled(
+            Pos2::new(x, rect.top() - notch * 0.5),
+            notch,
+            theme::window_background(),
+        );
     }
     // A fade is a line over the waveform, from the clip's bottom corner to where it ends at
     // the top, following its shape and curve.
@@ -1138,7 +1217,7 @@ pub(super) fn paint_clip(
         }
     }
     if selected {
-        painter.rect_stroke(rect, 0.0, egui::Stroke::new(2.0, theme::text_primary()), StrokeKind::Inside);
+        painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.0, motion::mix(body, ink, 0.45)), StrokeKind::Inside);
     }
 }
 
@@ -1151,7 +1230,11 @@ pub(super) fn clip_grab_area(rect: Rect) -> Option<Rect> {
 /// The bar along a clip's top that carries its name, on a lane tall enough to have a body under
 /// it (a title bar); the drag that moves the clip takes the whole upper half.
 pub(super) fn clip_name_bar(rect: Rect) -> Option<Rect> {
-    (rect.height() >= CLIP_BODY_LEAST).then(|| Rect::from_min_size(rect.min, Vec2::new(rect.width(), CLIP_NAME_BAR)))
+    (rect.height() >= CLIP_BODY_LEAST).then(|| {
+        // Leave the lower-half body gesture clear even on compact two-row lanes.
+        let height = CLIP_NAME_BAR.min(rect.height() * 0.5 - 1.0);
+        Rect::from_min_size(rect.min, Vec2::new(rect.width(), height))
+    })
 }
 
 /// An ARA plug-in loading or analysing a clip's audio, over the clip's waveform: the body dimmed,
@@ -1183,6 +1266,12 @@ pub(super) fn paint_ara_activity(
         let done = Rect::from_min_max(track.min, Pos2::new(track.left() + track.width() * p, track.bottom()));
         painter.rect_filled(done, 0.0, theme::accent());
     }
+}
+
+/// Keep hue and dim a muted source by reducing its strength over the same theme surface.
+pub(super) fn colour_surface(background: Color32, source: Color32, strength: u8, dim: bool) -> Color32 {
+    let amount = f32::from(strength.min(100)) / 100.0;
+    motion::mix(background, source, if dim { amount * 0.55 } else { amount })
 }
 
 /// Text and marks that read on `background`: dark on a light colour, light on a dark one.
