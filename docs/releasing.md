@@ -11,6 +11,9 @@ covers:
   - .github/workflows/test-build.yml
   - .github/workflows/test-build-links.yml
   - .github/workflows/ready-to-merge.yml
+  - scripts/build_reuse.py
+  - scripts/test_build_reuse.py
+  - scripts/test_merge_approval.py
   - scripts/branch_update.py
   - scripts/macos_app.sh
   - assets/brand/suhina-icon.png
@@ -151,12 +154,23 @@ The version says which pull request and commit it is: `0.0.1-pr.302+abc1234` in 
 bug reports. Test builds use the release profile without LTO and with 16 codegen units, so they
 build faster and run slightly slower than the nightly.
 
+**Repeated build requests reuse available work.** `/test-build` first checks the current head
+and up to ten preceding main-only updates using `scripts/build_reuse.py` from the default branch.
+It reuses a current-head run already building the requested platforms, or a successful run with
+all requested, nonempty, unexpired artifacts. Failed, cancelled, skipped or incomplete builds
+are not reused. Windows-only packages satisfy a Windows-only request, but not an all-platform
+request. Reuse replies link the existing run without changing the `test-build` label. Build lookup
+errors stop the request instead of assuming that no build exists. Main-only reuse is conservative:
+a changed patch or a resolved conflict requires a new build. PR files are never checked out or
+executed during this lookup; only git objects are fetched for comparison.
+
 **A branch update is not built.** A push that only merges `main` into the pull request, as
 *Update branch* does, leaves the pull request's own changes as they were, so the build already
 linked from it is still the one to try. A small first job, *what to build*, asks
 [`scripts/branch_update.py`](../scripts/branch_update.py) whether the new head is a merge commit
 whose first parent is the previous head, whose second parent is on `main`, and whose own diff is
-the same patch as the previous head's (a resolved conflict, or `main` changing lines next to the
+the same patch as the previous head's, ignoring only line numbers and blob hashes, never whitespace
+or file modes (a resolved conflict, or `main` changing lines next to the
 pull request's own, makes it a new patch). It also checks that the previous head's run succeeded,
 so a failed or cancelled build is never kept as the last one. When all hold, the platforms are
 skipped, and `test-build-links.yml`, finding nothing built, leaves the comment linking the last
@@ -232,15 +246,16 @@ pull request without updating it; CI on `main`, which runs on every push, catche
 conflict in meaning between two of them.
 
 **The `ready to merge` label.** A maintainer who has read a pull request adds the label instead of
-coming back to press *Merge when ready* once CI is green.
+coming back to press *Merge when ready* once CI is green. That label is their approval of the
+current head; requesting downloadable test packages is a separate decision. A stale review must
+not force a new packaging run just to satisfy this workflow.
 [`ready-to-merge.yml`](../.github/workflows/ready-to-merge.yml) (`pull_request_target`, never
 checking out or running the pull request's code) then:
 
 | Event | What happens |
 |---|---|
 | a maintainer adds the label | the app approves the head commit as the event saw it (the rule for `main` needs one approval, and a maintainer cannot approve their own pull request) and turns on auto-merge with that commit as the expected head; the queue takes the pull request once `ci` is green and every review thread is resolved |
-| the label on a contributor's pull request without `test-build` | queued as usual when a maintainer has approved that same head commit in a review; otherwise the label comes off, with a comment: a maintainer approves the commit they read, or tries its build first |
-| the label on a Dependabot Cargo update (branch `dependabot/cargo/…`) | as for a maintainer's own pull request: no `test-build` needed, the queue's build and tests check the new crate; an update of the Actions still needs `test-build`, since `ci` runs no Rust jobs for a change under `.github/` |
+| a maintainer adds the label on a contributor's or dependency update PR | the same commit-bound approval applies; no test-build label or additional review is needed by this workflow, and GitHub still enforces code-owner approval and required checks |
 | anyone else adds the label | it comes off |
 | a push by a maintainer | the label stays; the app approves the new head and turns auto-merge on for it |
 | a push by anyone else | the label comes off, so the new commits wait to be read (the rule for `main` dismisses the older approval) |

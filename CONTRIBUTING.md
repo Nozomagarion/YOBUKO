@@ -235,7 +235,10 @@ Windows, macOS and Linux ([`docs/releasing.md` › Test builds](docs/releasing.m
 links the downloads from the pull request in a comment, updated with every new build. A maintainer's own pull requests are
 built on every push. A contributor's pull request is built once a maintainer has read the diff and
 added the `test-build` label, or a trusted contributor requests it with `/test-build`; a later
-push takes the label off, and the new commits need a new request.
+push takes the label off, and the new commits need a new request. `/test-build` first reuses a
+running build of that commit or a successful build whose requested packages are still available.
+A verified main-only update can reuse the previous build. It starts another build only when no
+suitable build is available.
 
 ## Merging many pull requests
 
@@ -250,9 +253,11 @@ says how the queue is set up and what runs in it.
 **The `ready to merge` label** does the waiting for you. A maintainer who has read a pull request
 adds it, and [`ready-to-merge.yml`](.github/workflows/ready-to-merge.yml) approves the commit it was
 added on and turns on *Merge when ready* for that commit: the queue takes the pull request once
-`ci` is green and every review thread is resolved (CodeRabbit's too), and a red check stops it. A
-contributor's pull request also needs a maintainer's approving review of the same head commit, or
-`test-build` so its build was tried first; Dependabot's Cargo updates need neither, since the queue's build and tests check them (its updates of the Actions do). A push by anyone
+`ci` is green and every review thread is resolved (CodeRabbit's too), and a red check stops it.
+Adding the label is the maintainer's approval of that exact commit, regardless of the author.
+Downloadable test builds are optional and independent of merge approval; a missing build or a
+stale review does not require another packaging run. Code-owner approval is still required for
+protected paths. A push by anyone
 but a maintainer takes the label off, so new commits are never merged unread; taking the label off
 by hand stops the merge. Only a maintainer adds it: an agent never adds `ready to merge`, also not
 when asked to finish a pull request.
