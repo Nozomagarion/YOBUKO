@@ -1310,3 +1310,27 @@ fn depth_puts_the_last_shape_in_again_with_less_swing() {
     let less = swing(&harness);
     assert!(less < full * 0.9, "{full} -> {less}");
 }
+
+/// A selection box begun on a track, over no clip, picks the automation points it covers on the
+/// lanes under the track (#916).
+#[test]
+fn a_box_from_the_track_picks_its_lanes_points() {
+    // Drums with no clips, so the box goes over none.
+    let mut project = demo_project();
+    let drums = project.tracks.iter().find(|t| t.name == "Drums").map(|t| t.id);
+    for lane in project.arrangement.lanes.iter_mut().filter(|l| l.track == drums) {
+        lane.clips.clear();
+    }
+    let mut harness = arrangement(project);
+    harness.get_by_label("Show automation of Drums").click();
+    harness.run();
+    for x in [600.0, 700.0] {
+        add_point(&mut harness, x);
+    }
+    let rect = lane(&harness);
+    // From the lower part of the track's row above the lane, down over both points.
+    drag(&mut harness, Pos2::new(rect.left() + 560.0, rect.top() - 6.0), vec2(200.0, rect.height()));
+    harness.key_press(Key::Delete);
+    harness.run();
+    assert!(volume(&harness).0.is_empty(), "both points were picked and deleted: {:?}", volume(&harness).0);
+}

@@ -192,6 +192,11 @@ relative to the clip:
 - **Duplicated** (`clip.duplicate`, `range.duplicate`): each copy gets the envelope under the clip
   it copies.
 
+In the Arrangement view a time selection painted over tracks lights their take and automation
+lanes under them too, and a selection box begun on a track over no clip picks the automation points
+it covers on the lanes under the track (on the lane where it covers the most; a selection of points
+is on one lane).
+
 A lane with no point under the clip is a straight line there and stays as it is. On another
 track the mixer's lanes (volume, pan, mute) go along; a device's lanes only on the track the
 clip came from, whose devices they name. All of it is part of the clip's command, one undo step.

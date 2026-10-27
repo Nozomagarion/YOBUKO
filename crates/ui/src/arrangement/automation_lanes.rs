@@ -700,6 +700,10 @@ pub struct LanesState {
     from_automated: HashSet<(TrackId, LaneKey)>,
     /// The clip selected in the view last frame: selecting a clip ends a selection of points.
     clip: Option<(TrackId, ClipId)>,
+    /// Where every point of the lanes was drawn in the pass `placed_pass`, for a selection box
+    /// begun on a track that reaches over its lanes.
+    placed: Vec<(TrackId, LaneKey, usize, Pos2)>,
+    placed_pass: u64,
 }
 
 impl LanesState {
@@ -915,6 +919,25 @@ impl LanesState {
                 vec![action("automation.paste", &params)]
             }
             _ => Vec::new(),
+        }
+    }
+
+    /// Picks the points a selection box begun on a track covers: on the lane where it covers the
+    /// most (a selection of points is on one lane), in place of the points picked before. With no
+    /// point under it, the selection of points is left as it is.
+    pub fn select_inside(&mut self, rect: Rect) {
+        let mut by_lane: Vec<((TrackId, LaneKey), Vec<usize>)> = Vec::new();
+        for (track, key, index, _) in self.placed.iter().filter(|(_, _, _, at)| rect.contains(*at)) {
+            match by_lane.iter_mut().find(|(lane, _)| lane.0 == *track && &lane.1 == key) {
+                Some((_, points)) => points.push(*index),
+                None => by_lane.push(((*track, key.clone()), vec![*index])),
+            }
+        }
+        if let Some(((track, key), mut points)) = by_lane.into_iter().max_by_key(|(_, points)| points.len()) {
+            points.sort_unstable();
+            points.dedup();
+            self.selection = Some(Selection { track, key, points });
+            self.range = None;
         }
     }
 
@@ -1726,6 +1749,12 @@ fn lane(
             None => (point.beat, point.value),
         };
         let center = Pos2::new(geometry.x_of(shown.0), y_of(plot, param.scale.position(shown.1)));
+        let pass = ui.ctx().cumulative_pass_nr();
+        if state.placed_pass != pass {
+            state.placed.clear();
+            state.placed_pass = pass;
+        }
+        state.placed.push((track, key.clone(), index, center));
         if !visible.expand(POINT_HIT).contains(center) {
             continue;
         }

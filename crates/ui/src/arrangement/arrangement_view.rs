@@ -1238,15 +1238,17 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
     if let Some(selection) = &state.time_selection {
         // Within the timeline: the track headers beside it are not lit.
         let span = egui::Rangef::new(x_of(selection.start), x_of(selection.end)).intersection(time.x_range());
-        for (_, row) in rows_seen.iter().filter(|(t, _)| selection.tracks.contains(t)) {
+        for (track, row) in rows_seen.iter().filter(|(t, _)| selection.tracks.contains(t)) {
             if span.span() <= 0.0 {
                 break;
             }
             // Plainly over the clips too: the accent, and a line at each edge; in one row of a
-            // stack, over that row.
+            // stack, over that row. The track's take and automation lanes under it are lit too:
+            // their automation goes with the clips (#916).
+            let under = state.takes_height(*track, timeline) + state.automation.height(*track, &timeline.automation);
             let band = match selection.row {
                 Some((at, of)) => sub_row(*row, at, of).y_range(),
-                None => row.y_range(),
+                None => egui::Rangef::new(row.top(), row.bottom() + under),
             };
             let lit = Rect::from_x_y_ranges(span, band);
             lanes_painter.rect_filled(lit, 0.0, theme::accent().gamma_multiply(0.38));
@@ -1311,6 +1313,9 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
                 if picked.is_empty() {
                     state.selected.clear();
                     state.anchor = None;
+                    // Over no clip, the automation points it covers on the lanes under the
+                    // tracks are picked (#916); clips picked take their automation along anyway.
+                    state.automation.select_inside(whole);
                 } else {
                     state.select_clips(picked);
                 }
