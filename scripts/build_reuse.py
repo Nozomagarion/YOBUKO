@@ -118,11 +118,13 @@ def find_reuse(api, repo, pr, head, candidates, maintainers, trusted, now=None):
                 sha == source and at <= timestamp(run.get("created_at")) for sha, at in proofs))
             if not allowed:
                 continue
-            if source == head:
-                latest_current_run = max(latest_current_run, timestamp(run.get("created_at")))
             run_id = int(run["id"])
             jobs = list(api.pages(f"actions/runs/{run_id}/jobs", "jobs"))
             build_jobs = {job["name"]: job for job in jobs if job["name"] in expected_jobs}
+            # A queued workflow may be visible before its matrix jobs exist. It must not
+            # cancel the dispatch window; a completed skipped run, however, permits retry.
+            if source == head and (run["status"] == "completed" or build_jobs):
+                latest_current_run = max(latest_current_run, timestamp(run.get("created_at")))
             if set(build_jobs) != expected_jobs:
                 continue
             state = None

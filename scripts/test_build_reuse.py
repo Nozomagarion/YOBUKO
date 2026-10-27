@@ -139,6 +139,16 @@ class BuildReuse(unittest.TestCase):
         api.runs[0]["created_at"] = "2026-10-28T11:59:30Z"
         self.assertEqual(api.find(), {})
 
+    def test_queued_run_without_matrix_jobs_keeps_dispatch_window(self):
+        api = FakeApi()
+        api.pr["labels"] = [{"name": "test-build"}]
+        api.proof("2026-10-28T11:59:00Z")
+        api.runs[0].update(status="queued", conclusion=None, created_at="2026-10-28T11:59:30Z")
+        api.jobs = []
+        self.assertEqual(api.find()["state"], "requested")
+        api.runs[0].update(status="completed", conclusion="success")
+        self.assertEqual(api.find(), {})
+
     def test_successful_ancestor_only_reused_after_verified_main_update(self):
         api = FakeApi()
         api.runs[0]["head_sha"] = OLD
