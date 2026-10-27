@@ -25,6 +25,10 @@ class FakeGh:
         self.answers = [(["api", f"repos/{ap.REPO}", "--jq", ".permissions"], ap.Result(0, json.dumps(permissions), ""))]
         self.answers += list(answers)
         self.answers.append((
+            ["api", f"repos/{ap.REPO}/labels"],
+            ap.Result(0, "enhancement\nui\nengine\nepic\n", ""),
+        ))
+        self.answers.append((
             ["api", f"repos/{ap.REPO}/issues/123"],
             ap.Result(0, json.dumps({"state": "open", "labels": [{"name": "epic"}]}), ""),
         ))
@@ -101,6 +105,47 @@ class WithWriteAccess(unittest.TestCase):
 
 
 class WithoutWriteAccess(unittest.TestCase):
+    def test_triage_omits_missing_labels_and_names_them_in_the_body(self):
+        for available, applied, omitted in (
+            ("enhancement\nUI\n", ["enhancement", "ui"], "`engine`"),
+            ("ui\nengine\n", ["ui", "engine"], "`enhancement`"),
+            ("", [], "`enhancement`, `ui`, `engine`"),
+        ):
+            with self.subTest(available=available):
+                gh = FakeGh({"triage": True}, [
+                    (["api", f"repos/{ap.REPO}/labels"], ap.Result(0, available, "")),
+                    created(902),
+                ])
+                self.assertTrue(ap.post("issue", ISSUE, gh).startswith("OPENED_ISSUE=#902 "))
+                creates = gh.called("issue", "create")
+                self.assertEqual(len(creates), 1)
+                args = creates[0]
+                self.assertEqual([args[i + 1] for i, arg in enumerate(args) if arg == "--label"], applied)
+                self.assertIn(f"Labels for a maintainer to add: {omitted}.", gh.bodies[0])
+                lookup = gh.called("api", f"repos/{ap.REPO}/labels")[0]
+                self.assertIn("--paginate", lookup)
+                self.assertLess([a for a, _ in gh.calls].index(lookup), [a for a, _ in gh.calls].index(args))
+
+    def test_failed_label_lookup_stops_before_creating(self):
+        for code in (1, 124):
+            with self.subTest(code=code):
+                gh = FakeGh({"triage": True}, [
+                    (["api", f"repos/{ap.REPO}/labels"], ap.Result(code, "enhancement\n", "Lookup failed")),
+                    created(902),
+                ])
+                with self.assertRaisesRegex(ap.PostError, "labels.*no issue was opened"):
+                    ap.post("issue", ISSUE, gh)
+                self.assertEqual(gh.called("issue", "create"), [])
+                self.assertEqual(gh.called("api", "-X"), [])
+
+    def test_create_failure_after_label_lookup_is_not_retried(self):
+        gh = FakeGh({"triage": True}, [
+            (["issue", "create"], ap.Result(1, "", "'engine' not found")),
+        ])
+        with self.assertRaises(ap.PostError):
+            ap.post("issue", ISSUE, gh)
+        self.assertEqual(len(gh.called("issue", "create")), 1)
+
     def test_issue_bodies_identify_the_agent_once_with_or_without_triage(self):
         for triage in (False, True):
             for body in ("Goal.", 'The guide mentions "AI-assisted".', f"Goal.\n\n{ap.AGENT_NOTE}"):

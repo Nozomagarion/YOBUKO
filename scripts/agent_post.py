@@ -17,7 +17,8 @@ what the authenticated `gh` account may do in the repository (`.permissions`):
   access the issue gets its labels, its issue type and its parent epic as the workflow would give
   them; without triage the body says which labels a maintainer should add, and `Part of #N` names
   the parent. Before opening an issue, its parent is checked to be an open epic. Issues and
-  comments say they were written by an agent.
+  comments say they were written by an agent. With triage, repository labels are checked before
+  creating the issue; missing labels are left out and named in its body for a maintainer.
 
 Either way it prints `OPENED_ISSUE=#N <url>` or `COMMENTED_PR=#N <url>` and says on stderr whose
 account posted and why. It never retries a refused dispatch or uses another token. Exits 0 when
@@ -170,13 +171,14 @@ def body_file(text: str) -> str:
     return path
 
 
-def fallback_issue_body(request: dict, triage: bool) -> str:
+def fallback_issue_body(request: dict, triage: bool, omitted_labels: list[str] | None = None) -> str:
     body = request["body"].rstrip("\n")
     parent = request["parent"]
     if parent and f"Part of #{parent}" not in body:
         body += f"\n\nPart of #{parent}"
-    if not triage:
-        wanted = ", ".join(f"`{label}`" for label in [request["type"], *request["labels"]])
+    labels = omitted_labels if triage else [request["type"], *request["labels"]]
+    if labels:
+        wanted = ", ".join(f"`{label}`" for label in labels)
         body += f"\n\nLabels for a maintainer to add: {wanted}."
     if AGENT_NOTE not in body:
         body += f"\n\n{AGENT_NOTE}"
@@ -202,14 +204,30 @@ def validate_parent(gh: Runner, parent: str) -> None:
         raise RequestError(f"#{parent} is not labelled epic.")
 
 
+def available_labels(gh: Runner, labels: list[str]) -> tuple[list[str], list[str]]:
+    """Omit missing labels before the single create attempt, including labels beyond page one."""
+    result = gh(["api", f"repos/{REPO}/labels", "--paginate", "--jq", ".[].name"], None)
+    if result.returncode != 0:
+        raise PostError(f"Could not check labels; no issue was opened: {result.stderr.strip()}")
+    found = {label.casefold() for label in result.stdout.splitlines()}
+    return (
+        [label for label in labels if label.casefold() in found],
+        [label for label in labels if label.casefold() not in found],
+    )
+
+
 def as_user_issue(gh: Runner, request: dict, triage: bool) -> str:
     if request["parent"]:
         validate_parent(gh, request["parent"])
-    path = body_file(fallback_issue_body(request, triage))
+    labels = [request["type"], *request["labels"]]
+    omitted_labels = []
+    if triage:
+        labels, omitted_labels = available_labels(gh, labels)
+    path = body_file(fallback_issue_body(request, triage, omitted_labels))
     try:
         args = ["issue", "create", "--repo", REPO, "--title", request["title"], "--body-file", path]
         if triage:
-            for label in [request["type"], *request["labels"]]:
+            for label in labels:
                 args += ["--label", label]
         created = gh(args, None)
     finally:
