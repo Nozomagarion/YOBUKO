@@ -14,6 +14,7 @@ covers:
   - crates/engine/src/buses.rs
   - crates/session/src/automation.rs
   - crates/session/tests/automation.rs
+  - crates/session/tests/clip_automation.rs
   - crates/ui/src/arrangement/automation_lanes.rs
   - crates/ui/tests/automation_lanes.rs
   - crates/ui/src/kit/widgets.rs
@@ -174,6 +175,26 @@ shape; a beat below 0 or past the
 arrangement's limit; a value out of range for the mixer (a volume above +6 dB, a pan outside -1 to
 1, a mute other than 0 or 1); a curve outside -1 to 1; a point index the lane does not have; a lane
 of more than 65,536 points; a `movePoint` with nothing to change.
+
+## Automation under clips
+
+The automation of a track under an arrangement clip goes with the clip (#916), as it sits
+relative to the clip:
+
+- **Moved** (`clip.move`, `clip.moveMany`): every lane of the track's mixer and devices with a
+  point from the clip's start up to its end takes its envelope there along: from the clip's start
+  to its end, with its values at the two edges. Where the clip was, the lane is a straight line
+  between the values it had at those edges; where it lands, the envelope replaces what was there,
+  the values outside kept (points at the edges hold them, so a different value outside is a jump
+  at the clip's edge). A copy made by the move (`copy`) leaves the envelope where it was too.
+- **Copied** (`clip.copy`, `clip.cut`, `range.copy`): each clip's envelope goes on the clipboard
+  with it, and `clip.paste` lays it under the clip's copy, on the track pasted to.
+- **Duplicated** (`clip.duplicate`, `range.duplicate`): each copy gets the envelope under the clip
+  it copies.
+
+A lane with no point under the clip is a straight line there and stays as it is. On another
+track the mixer's lanes (volume, pan, mute) go along; a device's lanes only on the track the
+clip came from, whose devices they name. All of it is part of the clip's command, one undo step.
 
 ## In the Arrangement view
 

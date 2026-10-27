@@ -11,6 +11,8 @@ use suhina_engine::MAX_START_BEAT;
 use suhina_model::AutomationPoint;
 use suhina_model::automation::{MAX_POINTS, Taper, curve_through, value_at};
 
+use suhina_model::TrackId;
+
 use crate::automation::{Target, target};
 use crate::commands::number;
 use crate::{CommandError, Session};
@@ -225,6 +227,86 @@ pub(crate) fn duplicate(session: &mut Session, params: &Value) -> Result<Value, 
     let merged = replace(&points, end, end + length, inner, stepped, &Lane { target: &target, session });
     let count = put(session, &target, merged)?;
     Ok(json!({ "param": target.param, "start": end, "end": end + length, "points": count }))
+}
+
+/// One lane's envelope under a clip (`docs/spec/automation.md` › Automation under clips): the
+/// lane, by its device on the track (`None` for the mixer's) and its parameter, and its points
+/// from the clip's start, the values at the clip's two edges included.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Under {
+    device: Option<usize>,
+    param: String,
+    points: Vec<AutomationPoint>,
+}
+
+/// The params that name a lane of `track`: its device (none for the mixer) and parameter.
+fn lane_params(track: TrackId, device: Option<usize>, param: &str) -> Value {
+    match device {
+        Some(device) => json!({ "track": track.0, "device": device, "param": param }),
+        None => json!({ "track": track.0, "param": param }),
+    }
+}
+
+/// The envelope under a clip from `start` to `end` on `track`: every lane of the track's mixer
+/// and devices with a point from `start` up to `end`, its points from `start`. A lane with no
+/// point there is a straight line under the clip and is left out: it stays as it is.
+pub(crate) fn under(session: &Session, track: TrackId, start: f64, end: f64) -> Vec<Under> {
+    let Some(channel) = session.project.channel_of_track(track) else { return Vec::new() };
+    let mixer = channel.automation.iter().map(|lane| (None, lane));
+    let devices = channel.devices.iter().enumerate().flat_map(|(i, d)| d.automation.iter().map(move |l| (Some(i), l)));
+    mixer
+        .chain(devices)
+        .filter(|(_, lane)| lane.points.iter().any(|p| p.beat >= start - SAME && p.beat < end - SAME))
+        .filter_map(|(device, lane)| {
+            let target = target(session, &lane_params(track, device, &lane.param)).ok()?;
+            let cut = slice(&lane.points, start, end, target.stepped(), &Lane { target: &target, session });
+            let points = cut.into_iter().map(|p| AutomationPoint { beat: p.beat - start, ..p }).collect();
+            Some(Under { device, param: lane.param.clone(), points })
+        })
+        .collect()
+}
+
+/// Clears the lanes `lanes` names on `track` from `start` to `end`, the values at the edges
+/// kept: what is left where a clip and its envelope moved away.
+pub(crate) fn clear_under(
+    session: &mut Session,
+    track: TrackId,
+    start: f64,
+    end: f64,
+    lanes: &[Under],
+) -> Result<(), CommandError> {
+    for lane in lanes {
+        let Ok(target) = target(session, &lane_params(track, lane.device, &lane.param)) else { continue };
+        let points = points_of(session, &target)?;
+        let cleared = replace(&points, start, end, Vec::new(), target.stepped(), &Lane { target: &target, session });
+        put(session, &target, cleared)?;
+    }
+    Ok(())
+}
+
+/// Lays `lanes` on `track` from `at`, over what is there, the values at the edges outside kept:
+/// the envelope under a clip moved or pasted there. A device's lane goes only on the track the
+/// envelope came from (`same`); the mixer's go on any track.
+pub(crate) fn lay_under(
+    session: &mut Session,
+    track: TrackId,
+    at: f64,
+    lanes: &[Under],
+    same: bool,
+) -> Result<(), CommandError> {
+    for lane in lanes.iter().filter(|l| same || l.device.is_none()) {
+        let length = lane.points.last().map_or(0.0, |p| p.beat);
+        if length <= SAME || at + length > MAX_START_BEAT {
+            continue;
+        }
+        let Ok(target) = target(session, &lane_params(track, lane.device, &lane.param)) else { continue };
+        let inner: Vec<AutomationPoint> =
+            lane.points.iter().map(|p| AutomationPoint { beat: at + p.beat, ..*p }).collect();
+        let points = points_of(session, &target)?;
+        let laid = replace(&points, at, at + length, inner, target.stepped(), &Lane { target: &target, session });
+        put(session, &target, laid)?;
+    }
+    Ok(())
 }
 
 /// How many places along a segment a fit is checked at.

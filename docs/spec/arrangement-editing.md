@@ -83,7 +83,9 @@ outline in the accent colour while it has the keyboard.
 `clip.move {track, index, start, toTrack?, stack?}` moves one arrangement clip to `start` (beats,
 at least 0), on its own track or on `toTrack`, which must take the clip's kind: a MIDI clip goes
 to a track that plays notes, an audio clip to an audio track. A clip that moves to another track
-plays through that track's instrument and effects. The move is one undo step.
+plays through that track's instrument and effects. The track's automation under the clip moves
+with it ([automation spec › Automation under clips](automation.md#automation-under-clips)). The
+move is one undo step.
 
 In the Arrangement view a clip is moved by dragging it, along its lane or onto another; it lands
 on the nearest line of [the grid](#the-grid), or where it is let go with Alt held (at the end of

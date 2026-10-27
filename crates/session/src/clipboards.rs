@@ -15,6 +15,9 @@ pub(crate) struct Clipboards {
     /// The track each copied clip came from, when the copy knows it (arrangement clips and time
     /// selections); a paste with no track puts each clip back on its own.
     pub(crate) tracks: Vec<TrackId>,
+    /// The automation under each copied arrangement clip, in the order of `clips` (empty for a
+    /// slot's clip): a paste lays it under the clip's copy (#916).
+    pub(crate) under: Vec<Vec<crate::automation_range::Under>>,
     /// Devices copied for `device.paste`, with their state as it was then.
     pub(crate) devices: Vec<Device>,
     /// Notes copied from a MIDI clip, for `note.paste`.
