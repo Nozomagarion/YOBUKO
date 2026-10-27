@@ -1,10 +1,11 @@
 # Où en est notre application ?
 
-**Bilan du 27 octobre 2026 — réglages FM Synth et Utility validés localement.**
+**Bilan du 27 octobre 2026 — réglages FM Synth et Utility livrés et validés localement.**
 Les deux participants peuvent maintenant modifier les paramètres des appareils déjà présents,
 dans **Multiplayer → Devices**. Les valeurs sont vérifiées par l’hôte avant d’atteindre les deux copies.
-**3 135 tests passent, aucun échec.** Le nouveau paquet Mac est en préparation ; le dernier
-paquet déjà livré reste `b3967616`, avec la réinvitation après coupure.
+**3 135 tests passent, aucun échec.** Le paquet Mac **`09edc15b`**, en protocole 9, est compilé
+et vérifié après extraction. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles
+distants restent bloqués par GitHub ; Windows/Linux ne sont donc pas validés pour cette version.
 
 ## Ce qu’on fabrique
 
@@ -105,8 +106,22 @@ Les projets sauvegardés gardent leur format natif version 3 ; ce changement con
 | Retour de l’invité | **Réussi** : les réglages modifiés pendant son absence arrivent dans la nouvelle copie ; l’ancienne copie et l’original sont conservés. |
 | Interface | **13 tests réussis** : Apply réellement cliqué, recherche, sélection FM Synth/Utility, interrupteur Mono, brouillon périmé et Refresh. Captures des deux appareils vérifiées séparément avec succès. |
 | Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; pas de nouvelle dépendance. |
-| Nouveau paquet Mac Apple Silicon | En préparation ; l’application installée ou déjà ouverte n’a pas été remplacée. |
+| Paquet Mac Apple Silicon `09edc15b` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
+| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat annoncé pour cette révision.** |
 | Deux ordinateurs physiques | **Pas encore testé**, comme convenu. |
+
+Les tests et le paquet correspondent au code **`09edc15b3d1dd547a757a1f3631fd6bdda325303`**,
+compilé après son enregistrement puis envoyé sur notre branche GitHub.
+
+## Où trouver la version actuelle
+
+- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-devices-macos-arm64-09edc15b.zip`.
+- **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
+- **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
+- **Preuves locales :** dossier `validation/2026-10-27` voisin du dépôt : journaux, captures FM Synth/Utility et script de fabrication du paquet.
+
+C’est un paquet de développement Mac Apple Silicon, signé localement. L’application installée
+ou déjà ouverte sur ton Mac n’a pas été remplacée. Le nouveau paquet doit être le même des deux côtés.
 
 ## GitHub et distribution
 
@@ -116,11 +131,13 @@ Le README et ses barres présentent notre application : **13 étapes réalisées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
 du logiciel final ; l’ajout/retrait des appareils est distingué du réglage d’un appareil existant.
 
-**Dernier blocage externe constaté le 27 octobre à 21 h 57**, sur le code `b3967616` :
+**Blocage externe à nouveau constaté le 27 octobre à 23 h 44**, sur le code
+`09edc15b3d1dd547a757a1f3631fd6bdda325303` :
 GitHub refuse le lancement des contrôles avec `HTTP 422: Actions has been disabled for this repository.`
 La lecture du réglage indique pourtant `enabled: true` ; la cause de ce désaccord n’est pas établie.
-Le workflow de notre fork est également indiqué actif. Une nouvelle vérification sera faite
-à l’envoi de ce palier. Le réglage général du dépôt n’a pas été modifié.
+Le workflow de notre fork est également indiqué actif. Aucune exécution n’était visible pour
+cette révision au moment du contrôle. Le lancement manuel a échoué ; aucun résultat distant
+réussi n’est annoncé pour les nouveautés. Le réglage général du dépôt n’a pas été modifié.
 
 La version `9a6b7762` avait terminé ses [contrôles Mac, Windows et Linux](https://github.com/Nozomagarion/suhina-daw/actions/runs/40419500365),
 constaté le 27 octobre à 10 h 01. Cela ne valide pas les ajouts ultérieurs.
