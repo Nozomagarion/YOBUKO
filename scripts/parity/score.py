@@ -248,7 +248,7 @@ CHAPTERS = [
      "(sine, triangle, saws, square, ramps, curves, swell) with a depth and cycles a bar, live while dragged, into a point's segment from its menu or as the "
      "shape new points take; a curve handle half-way along each segment; a click adds a point on the line "
      "(anywhere, as a setting); a range's points scaled live, their corners and jumps rounded into curves or thinned to fewer bent segments, the arrows moving "
-     "selected points. Missing recording, "
+     "selected points; the automation under a clip moving, copying and duplicating with it, a box from a track picking its lanes' points. Missing recording, "
      "drawing with a pencil, plug-in lanes in the view, send, master and tempo automation, "
      "locking."),
     (27, "Clip Envelopes", 13, 0.00, "absent", "No clip envelopes."),
