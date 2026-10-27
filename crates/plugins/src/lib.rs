@@ -1355,9 +1355,16 @@ fn take_in_transport(message: &Message) {
         }
         Message::AraPlayback(request) => {
             let mut requests = lock(&ARA_PLAYBACK);
-            // A newer position replaces one not taken yet; a few starts and stops are kept.
-            if let protocol::AraPlayback::Position(_) = request {
-                requests.retain(|r| !matches!(r, protocol::AraPlayback::Position(_)));
+            // A newer position or loop replaces one not taken yet (a loop dragged in the editor
+            // asks on every move); a few starts and stops are kept.
+            match request {
+                protocol::AraPlayback::Position(_) => {
+                    requests.retain(|r| !matches!(r, protocol::AraPlayback::Position(_)));
+                }
+                protocol::AraPlayback::Cycle(..) => {
+                    requests.retain(|r| !matches!(r, protocol::AraPlayback::Cycle(..)));
+                }
+                _ => {}
             }
             if requests.len() < MAX_ARA_PLAYBACK {
                 requests.push(*request);

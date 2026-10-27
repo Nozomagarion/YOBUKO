@@ -2670,6 +2670,20 @@ impl App {
                         actions.push(Action::new("transport.setPosition", json!({ "beats": beats })));
                     }
                 }
+                // A loop made in the plug-in's editor is the arrangement's loop.
+                AraPlayback::Cycle(start, length) => {
+                    if let Some(session) = self.session() {
+                        let map = session.project().transport.tempo_map(1.0);
+                        let (from, to) = (map.beat_at(start), map.beat_at(start + length));
+                        suhina_plugins::trace!("app: ara loop {start:.3}s +{length:.3}s -> beats {from:.3}..{to:.3}");
+                        if to > from {
+                            actions.push(Action::new("transport.setLoop", json!({ "start": from, "end": to })));
+                        }
+                    }
+                }
+                AraPlayback::CycleOn(on) => {
+                    actions.push(Action::new("transport.setLoopEnabled", json!({ "enabled": on })));
+                }
             }
         }
         self.frame_trace.mark("plug-in requests");

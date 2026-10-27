@@ -220,8 +220,12 @@ the list below, in a first form). Where it differs from the decisions above it i
   moves the transport. Until the engine reports the position asked for (or a second has passed),
   the host shows the plug-in that position in its process context while the transport is stopped:
   the request goes to the engine and back, and the plug-in otherwise drew the old position from the
-  next block, its playhead flickering back for a moment. The loop (cycle) requests
-  are not followed; the loop region is set in the ruler. A click on a clip in the arrangement
+  next block, its playhead flickering back for a moment. A loop made or switched in the
+  editor is the arrangement's loop (`ara_playback` `cycle` and `cycle_on`, protocol version 14):
+  its start and length in seconds become beats through the tempo map and `transport.setLoop`, its
+  switch `transport.setLoopEnabled`, and a newer loop replaces one not taken yet, as a dragged
+  loop asks on every move. The plug-in sees the arrangement's loop, however it was set, in each
+  block's process context (`cycleStartMusic`, `cycleEndMusic`, `kCycleActive`). A click on a clip in the arrangement
   moves the play position there, so the editor follows the clip it shows (#717). The rules that play
   from a selected clip's start (Settings › Play from, and a clip picked while stopped) give way
   on a track with an ARA plug-in, always: there the editor's timeline and a click set where

@@ -78,13 +78,15 @@ fn gain() -> ParamInfo {
 
 #[test]
 fn every_message_round_trips() {
-    assert_eq!(VERSION, 13);
+    assert_eq!(VERSION, 14);
     let messages = [
         Message::Hello { version: VERSION },
         Message::TransportKey,
         Message::AraPlayback(AraPlayback::Start),
         Message::AraPlayback(AraPlayback::Stop),
         Message::AraPlayback(AraPlayback::Position(12.5)),
+        Message::AraPlayback(AraPlayback::Cycle(4.0, 2.5)),
+        Message::AraPlayback(AraPlayback::CycleOn(true)),
         Message::AraNotes {
             instance: 4,
             region: "clip-12".into(),

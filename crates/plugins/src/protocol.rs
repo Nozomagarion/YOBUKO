@@ -25,7 +25,7 @@
 use serde_json::{Value, json};
 
 /// Bumped whenever a message changes; both sides refuse a different version.
-pub const VERSION: u64 = 13;
+pub const VERSION: u64 = 14;
 /// Longest line either side accepts; state blobs are hex, so this bounds them at 32 MiB.
 pub const MAX_LINE: usize = 64 * 1024 * 1024;
 
@@ -338,6 +338,10 @@ pub enum AraPlayback {
     Stop,
     /// Move the play position to this many seconds of song time.
     Position(f64),
+    /// Make the loop (cycle) this span: its start and its length, in seconds of song time.
+    Cycle(f64, f64),
+    /// Turn the loop on or off.
+    CycleOn(bool),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -668,6 +672,12 @@ impl Message {
             Self::AraPlayback(AraPlayback::Position(seconds)) => {
                 json!({ "op": "ara_playback", "request": "position", "seconds": seconds })
             }
+            Self::AraPlayback(AraPlayback::Cycle(start, length)) => {
+                json!({ "op": "ara_playback", "request": "cycle", "seconds": start, "length": length })
+            }
+            Self::AraPlayback(AraPlayback::CycleOn(on)) => {
+                json!({ "op": "ara_playback", "request": "cycle_on", "on": on })
+            }
             Self::CloseEditor { instance } => json!({ "op": "close_editor", "instance": instance }),
             Self::EditorClosed { instance } => json!({ "op": "editor_closed", "instance": instance }),
             Self::Quit => json!({ "op": "quit" }),
@@ -825,6 +835,11 @@ impl Message {
                 "position" => AraPlayback::Position(
                     value.get("seconds").and_then(Value::as_f64).filter(|s| s.is_finite() && *s >= 0.0)?,
                 ),
+                "cycle" => AraPlayback::Cycle(
+                    value.get("seconds").and_then(Value::as_f64).filter(|s| s.is_finite() && *s >= 0.0)?,
+                    value.get("length").and_then(Value::as_f64).filter(|s| s.is_finite() && *s > 0.0)?,
+                ),
+                "cycle_on" => AraPlayback::CycleOn(value.get("on").and_then(Value::as_bool)?),
                 _ => return None,
             }),
             "close_editor" => Self::CloseEditor { instance: instance()? },
