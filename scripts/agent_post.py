@@ -156,7 +156,11 @@ def via_workflow(gh: Runner, workflow: str, request: dict, marker: str) -> str |
     # A run that failed after posting still prints the line.
     line = re.search(rf"{marker}=#[0-9]+ \S+", log.stdout)
     if not line:
-        raise PostError(f"Run {run_id} of {workflow} printed no {marker} line; see gh run view {run_id}.")
+        raise PostError(
+            f"Could not obtain the {marker} line from run {run_id} of {workflow}; "
+            "the posting outcome is unknown. The workflow may still post. "
+            f"Do not post again; inspect gh run view {run_id} --repo {REPO}."
+        )
     if watched.returncode != 0:
         # A failed watch may mean a failed run, a timeout or a lost connection. The marker
         # confirms the post, but not the later steps (such as linking an issue to its parent).

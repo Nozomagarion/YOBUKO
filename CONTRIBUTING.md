@@ -215,6 +215,8 @@ The helper checks a supplied parent is an open epic before opening an issue unde
 account, and adds the AI-assisted note to both issues and comments. If a workflow posts but its
 successful completion cannot be confirmed, the helper reports an error with the created item's
 marker and the run id: inspect the run and finish any missing follow-up without posting again.
+If no marker can be read, the posting outcome is unknown and the workflow may still post;
+inspect the named run instead of starting another request.
 
 **Trusted bot actions.** Contributors listed in `TRUSTED_CONTRIBUTORS` may ask `suhina-bot`
 to create issues with `/open-issue`, close/reopen issues with `/close` and `/reopen`, and request

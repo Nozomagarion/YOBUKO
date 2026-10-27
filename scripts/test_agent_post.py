@@ -252,6 +252,26 @@ class WithoutWriteAccess(unittest.TestCase):
 
 
 class GhCalls(unittest.TestCase):
+    def test_missing_marker_reports_uncertainty_without_posting_again(self):
+        for kind, request in (("issue", ISSUE), ("comment", {"pr": "900", "body": "Review."})):
+            for watch_code in (0, 1, 124):
+                for log_code in (0, 1, 124):
+                    with self.subTest(kind=kind, watch_code=watch_code, log_code=log_code):
+                        gh = FakeGh({"push": True}, [
+                            (["workflow", "run"], ap.Result(0, f"https://github.com/{ap.REPO}/actions/runs/42", "")),
+                            (["run", "watch"], ap.Result(watch_code, "", "")),
+                            (["run", "view"], ap.Result(log_code, "", "")),
+                        ])
+                        with self.assertRaises(ap.PostError) as caught:
+                            ap.post(kind, request, gh)
+                        message = str(caught.exception)
+                        self.assertIn("posting outcome is unknown", message)
+                        self.assertIn("Do not post again", message)
+                        self.assertIn(f"gh run view 42 --repo {ap.REPO}", message)
+                        self.assertEqual(len(gh.called("workflow", "run")), 1)
+                        self.assertEqual(gh.called("issue", "create"), [])
+                        self.assertEqual(gh.called("pr", "comment"), [])
+
     def test_utf8_pipes_ignore_the_windows_legacy_encoding(self):
         real_run = subprocess.run
         output = "Opened \u201dissue\u201d\nOPENED_ISSUE=#900 https://github.com/suhina-daw/suhina-daw/issues/900\n"
