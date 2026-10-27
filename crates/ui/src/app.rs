@@ -3265,7 +3265,10 @@ impl App {
                 .then(|| action.params["track"].as_u64().and_then(|t| u32::try_from(t).ok()).map(TrackId))
                 .flatten()
                 .and_then(|track| self.device_count(track).map(|count| (track, count)));
+            let status_before = self.status.clone();
             self.run(action);
+            // An error this action left, not one shown from before it.
+            let failed = matches!(self.status, Status::Error(_)) && self.status != status_before;
             // A removed device takes its selection with it, whichever way it was removed — and
             // the devices after it move up an index, so a selection below the removal follows.
             if action.id == "device.remove"
@@ -3305,11 +3308,8 @@ impl App {
             // The window gets Ctrl+V only as a paste of the system clipboard's text, which it
             // does not send while the clipboard holds no text: copying puts a line there, so
             // Ctrl+V reaches the keymap after a copy in Suhina (`Keymap::pressed`).
-            if matches!(action.id, "note.copy" | "note.cut" | "clip.copy" | "clip.cut")
-                && !matches!(self.status, Status::Error(_))
-            {
-                let what = if action.id.starts_with("note.") { "notes" } else { "a clip" };
-                ui.ctx().copy_text(format!("Suhina: {what} copied"));
+            if !failed && let Some(line) = clipboard_line(action.id) {
+                ui.ctx().copy_text(line);
             }
         }
         // A selection this frame's commands or clicks made arms its track.
@@ -3394,6 +3394,21 @@ pub struct NameSpot {
     pub fill: egui::Color32,
     pub text: egui::Color32,
     pub size: f32,
+}
+
+/// The line a copy in Suhina puts on the system clipboard: the window gets Ctrl+V only as a paste
+/// of the clipboard's text, so after a copy of notes, clips, automation, devices or tracks there
+/// is text for it to send. `None` for any other command.
+pub(crate) fn clipboard_line(command: &str) -> Option<String> {
+    let what = match command {
+        "note.copy" | "note.cut" => "notes",
+        "clip.copy" | "clip.cut" => "a clip",
+        "automation.copy" => "automation",
+        "device.copy" => "devices",
+        "track.copy" | "track.cut" => "tracks",
+        _ => return None,
+    };
+    Some(format!("Suhina: {what} copied"))
 }
 
 /// Shows a bar with `show`, its separator line in the bar's own `border-color` (`.toolbar {
