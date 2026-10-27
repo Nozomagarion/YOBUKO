@@ -1,10 +1,11 @@
 # Où en est notre application ?
 
-**Bilan du 27 octobre 2026 — réinviter après une coupure validé localement.**
+**Bilan du 27 octobre 2026 — réinvitation livrée et validée localement.**
 Le bouton **New invitation** conserve le morceau ouvert chez l’hôte. L’invité revient dans
 une nouvelle copie à jour ; son ancienne copie et ses retouches locales restent conservées.
-**3 126 tests passent, aucun échec.** Le nouveau paquet Mac est en préparation.
-Le dernier paquet déjà livré reste `de4dae38`, avec l’envoi de prises par l’invité.
+**3 126 tests passent, aucun échec.** Le paquet Mac **`b3967616`** est compilé et vérifié
+après extraction. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles distants
+restent bloqués par GitHub ; Windows/Linux ne sont donc pas validés pour cette version.
 
 ## Ce qu’on fabrique
 
@@ -87,8 +88,22 @@ pas ce protocole. Les anciens paquets en protocole 4, 5, 6 ou 7 sont incompatibl
 | Pistes, sons et lecteur | **Réussi** : récupération des pistes et prises ajoutées pendant l’absence, publication par l’invité revenu, son identique, copie précédente et lecteur de l’hôte conservés. |
 | Interface | **12 tests réussis** : bouton réellement cliqué, même onglet chez l’hôte, nouvel onglet chez l’invité et ancienne copie intacte. Contrôle visuel GPU exécuté séparément avec succès. |
 | Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; pas de nouvelle dépendance. |
-| Nouveau paquet Mac Apple Silicon | En préparation ; l’application installée ou déjà ouverte n’a pas été remplacée. |
+| Paquet Mac Apple Silicon `b3967616` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
+| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat annoncé pour cette révision.** |
 | Deux ordinateurs physiques | **Pas encore testé**, comme convenu. |
+
+Les tests et le paquet correspondent au code **`b39676164c6427c79e4cfa427bfa8fc658e0a1a7`**,
+compilé après son enregistrement puis envoyé sur notre branche GitHub.
+
+## Où trouver la version actuelle
+
+- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-reinvite-macos-arm64-b3967616.zip`.
+- **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
+- **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
+- **Preuves locales :** dossier `validation/2026-10-27` voisin du dépôt : journaux, capture du bouton et script de fabrication du paquet.
+
+C’est un paquet de développement Mac Apple Silicon, signé localement. L’application installée
+ou déjà ouverte sur ton Mac n’a pas été remplacée.
 
 ## GitHub et distribution
 
@@ -99,11 +114,12 @@ pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est p
 du logiciel final ; les étapes ont été précisées pour distinguer réinvitation manuelle,
 appareils partagés et reconnexion automatique.
 
-**Dernier blocage externe constaté le 27 octobre à 21 h 11**, sur la version `de4dae38` :
+**Blocage externe à nouveau constaté le 27 octobre à 21 h 57**, sur le code
+`b39676164c6427c79e4cfa427bfa8fc658e0a1a7` :
 GitHub refuse le lancement des contrôles avec `HTTP 422: Actions has been disabled for this repository.`
 La lecture du réglage indique pourtant `enabled: true` ; la cause de ce désaccord n’est pas établie.
-Une nouvelle vérification sera faite à l’envoi de ce palier. Aucun contrôle distant réussi
-n’est annoncé pour les nouveautés. Le réglage général du dépôt n’a pas été modifié.
+Aucune exécution n’était visible pour cette révision au moment du contrôle. Aucun résultat
+distant réussi n’est annoncé pour les nouveautés. Le réglage général du dépôt n’a pas été modifié.
 
 La version `9a6b7762` avait terminé ses [contrôles Mac, Windows et Linux](https://github.com/Nozomagarion/suhina-daw/actions/runs/40419500365),
 constaté le 27 octobre à 10 h 01. Cela ne valide pas les ajouts ultérieurs.
