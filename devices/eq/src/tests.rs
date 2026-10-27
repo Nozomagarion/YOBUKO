@@ -107,6 +107,26 @@ fn every_type_has_the_measured_response() {
 }
 
 #[test]
+fn shelf_q_has_the_measured_shape() {
+    // 1 kHz, +12 dB: the measured response (dB) at 508 Hz, 640 Hz, 806 Hz, 1.016 kHz, 1.28 kHz and
+    // 1.613 kHz, for a low shelf at Q 6 and high shelves at Q 0.1, 2 and 18. A cookbook shelf
+    // with the Q itself is up to 11 dB off these.
+    let hz = [508.0, 640.0, 806.3, 1_015.9, 1_280.0, 1_612.7];
+    let measured: [(usize, f64, [f64; 6]); 4] = [
+        (2, 6.0, [14.46, 14.6, 11.61, 5.66, -0.17, -2.71]),
+        (5, 0.1, [4.32, 4.94, 5.51, 6.04, 6.57, 7.14]),
+        (5, 2.0, [-1.03, -0.32, 2.23, 6.34, 10.3, 12.52]),
+        (5, 18.0, [-3.31, -4.43, -0.92, 6.7, 13.96, 16.4]),
+    ];
+    for (kind, q, row) in measured {
+        for (f, expected) in hz.iter().zip(row) {
+            let got = gain_db(&mut eq(&single(kind, q, 12.0)), *f);
+            assert!((got - expected).abs() < 0.35, "{} at Q {q}, {f} Hz: {got} against {expected}", TYPE_NAMES[kind]);
+        }
+    }
+}
+
+#[test]
 fn cut_q_raises_a_peak_at_the_corner() {
     // Measured: the 12 dB low-pass peaks at about 20 log10 Q at the corner; the 48 dB one at
     // +6.9 dB near 901 Hz for Q 2 and +13.5 dB near 941 Hz for Q 6.

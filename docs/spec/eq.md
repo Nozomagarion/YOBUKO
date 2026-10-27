@@ -77,10 +77,18 @@ Bands that are off cost nothing; a shelf or bell with no gain is skipped too.
 - **Responses.** Every band is a state-variable filter integrated with the trapezoidal rule
   (`dsp::Svf`), mixed to give exactly the cookbook response of its type at its frequency, gain
   and Q: the 12 dB cuts are the cookbook low-pass and high-pass (Q at the corner, 1/√2 a
-  Butterworth), the shelves are half way in decibels at the frequency, the bell's Q sets the
+  Butterworth), the shelves are half way in decibels at the frequency (their Q is mapped before it
+  reaches the cookbook formula, see *Shelf Q* below), the bell's Q sets the
   width between its half-gain points and its centre is the set gain at every Q, the notch is
   `(p² + 1) / (p² + p/Q + 1)`. The bilinear transform bends the responses near Nyquist as the
   cookbook ones bend; a frequency above 0.49 of the sample rate is held there.
+- **Shelf Q.** A shelf is the cookbook shelf, but the Q control does not enter it directly: the
+  measured shelves (12 dB at 1 kHz, Q 0.1 to 18, and the same at 100 Hz, 10 kHz, ±12 dB, +3 dB and
+  +15 dB) match a cookbook shelf whose Q is `0.1687 + 0.4281 · ln(1 + Q / 0.281)`, the same for
+  low and high shelves and at every gain and frequency tried (1/√2 maps to 1/√2, Q 2 to 1.06,
+  Q 6 to 1.50, Q 18 to 1.96). The cookbook shelf with the Q itself overshoots by up to 11 dB at
+  Q 6. The constants are a fit to the 14 measured Qs (largest error 0.004 in Q); between them it
+  is an interpolation.
 - **48 dB cuts.** Four sections at the frequency with the Qs of an 8th-order Butterworth filter
   (0.510, 0.601, 0.900, 2.563), each multiplied by `1 + 0.263 · ln(Q / 0.7071)` (at least 0.1):
   a Butterworth at the default Q, and a resonant corner as Q rises.
@@ -150,6 +158,11 @@ of the four runs, rendered through the device at 44.1 kHz from the probe signal 
 stored values: **30 of 32** within tolerance. The two others are the notches at 1 kHz (Q 0.71 and
 6): the steady 1 kHz tone's AM and FM depth, read from what is left of a tone the notch removes
 (about −70 dB in both renders); not audible, left as is.
+
+Two further runs measure the shelves' Q (Q 0.1 to 18; gains +3, +12, +15 and −12 dB; 100 Hz, 1 kHz
+and 10 kHz; low and high). With the shelf Q mapping above the 37 cases agree with the
+measured responses to within 0.25 dB (the cookbook Q itself was up to 11 dB off). The mapping is
+a fit, so a Q between the measured ones is interpolated.
 
 ## Cost
 

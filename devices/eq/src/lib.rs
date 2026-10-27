@@ -35,6 +35,12 @@ const BUTTERWORTH_8: [f64; 4] = [0.509_795_6, 0.601_344_9, 0.899_976_2, 2.562_91
 const CUT_48_Q_SLOPE: f64 = 0.263;
 /// The default Q, at which a cut is a Butterworth filter: 1/√2.
 pub const DEFAULT_Q: f64 = std::f64::consts::FRAC_1_SQRT_2;
+/// A shelf's Q is not the cookbook's: the measured shelves match a cookbook shelf whose Q is
+/// `SHELF_Q_OFFSET + SHELF_Q_SLOPE · ln(1 + Q / SHELF_Q_KNEE)`, the same at every gain and
+/// frequency (1/√2 stays 1/√2, Q 6 gives 1.50, Q 18 gives 1.96).
+const SHELF_Q_OFFSET: f64 = 0.1687;
+const SHELF_Q_SLOPE: f64 = 0.4281;
+const SHELF_Q_KNEE: f64 = 0.281;
 
 const FREQUENCY: (f64, f64) = (10.0, 22_000.0);
 const GAIN: (f64, f64) = (-15.0, 15.0);
@@ -229,11 +235,11 @@ impl Kind {
                 1
             }
             Self::LowShelf => {
-                out[0] = SvfCoefficients::low_shelf(sr, frequency, q, gain);
+                out[0] = SvfCoefficients::low_shelf(sr, frequency, shelf_q(q), gain);
                 1
             }
             Self::HighShelf => {
-                out[0] = SvfCoefficients::high_shelf(sr, frequency, q, gain);
+                out[0] = SvfCoefficients::high_shelf(sr, frequency, shelf_q(q), gain);
                 1
             }
             Self::Notch => {
@@ -248,6 +254,11 @@ impl Kind {
         };
         (out, count)
     }
+}
+
+/// The cookbook Q that gives a shelf the shape its Q control has.
+fn shelf_q(q: f64) -> f64 {
+    SHELF_Q_OFFSET + SHELF_Q_SLOPE * (q / SHELF_Q_KNEE).ln_1p()
 }
 
 /// One band of one curve: what it is now and its smoothed controls.
