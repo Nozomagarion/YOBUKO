@@ -3,7 +3,7 @@ description: How a device stored in a Live Set is brought into Suhina: the three
 read_when: device import, importing devices, importing MIDI effects, device mapping, placeholder device, Operator, Live device to Suhina device, which device imports into what, golden renders of imported sets
 type: spec
 status: current
-last_verified: 2026-10-19
+last_verified: 2026-10-23
 covers:
   - crates/als/src/devices.rs
 ---
@@ -87,7 +87,8 @@ comes in as it (otherwise as a placeholder):
 | Reverb | reverb ([spec](reverb.md)) | own | DSP done; import done |
 | Hybrid Reverb | convolution and algorithmic reverb | own convolution, the reverb | planned |
 | Saturator, Roar | multi-stage saturation | own, oversampled | planned |
-| EQ Eight, Auto Filter | EQ, filter | own (`dsp` filters) | planned |
+| EQ Eight | EQ ([spec](eq.md)) | own (`dsp` state-variable filters) | DSP done; import done (no analyser, Audition or oversampling yet) |
+| Auto Filter | filter | own (`dsp` filters) | planned |
 | Operator | FM synth | MSFA (Apache-2.0) via Dexed | DX7-style engine done; Operator's algorithms, waveforms and filter, and import, planned |
 | Wavetable | wavetable synth | Vital (GPL-3.0), under its own name | planned |
 | Drift, Analog | subtractive synth | own, Surge XT (GPL-3.0) for reference | planned |

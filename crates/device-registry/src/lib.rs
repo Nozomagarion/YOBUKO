@@ -12,12 +12,13 @@ use suhina_device_sdk::DeviceSdkError;
 use suhina_device_sdk::builtin::{self, Layout, Panel};
 
 /// The built-in effects, instruments and MIDI effects, in the order a device browser lists them.
-pub const DEVICES: [&DeviceInfo; 14] = [
+pub const DEVICES: [&DeviceInfo; 15] = [
     &suhina_device_fm_synth::INFO,
     &suhina_device_sampler::INFO,
     &suhina_device_utility::INFO,
     &suhina_device_auto_pan::INFO,
     &suhina_device_dj_eq::INFO,
+    &suhina_device_eq::INFO,
     &suhina_device_vinyl_distortion::INFO,
     &suhina_device_overdrive::INFO,
     &suhina_device_compressor::INFO,
@@ -45,7 +46,7 @@ pub fn layout(id: &str) -> Option<Result<Layout, DeviceSdkError>> {
 }
 
 /// The layouts kept as JSON next to a device crate, by device id.
-pub const LAYOUT_FILES: &[(&str, &str)] = &[];
+pub const LAYOUT_FILES: &[(&str, &str)] = &[("compressor", include_str!("../../../devices/compressor/panel.json"))];
 
 /// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
 /// layout, or the generated parameter list when it has none or its layout does not load.
@@ -78,6 +79,7 @@ pub fn create(id: &str) -> Option<Box<dyn Device>> {
         "utility" => Box::new(suhina_device_utility::Utility::new()),
         "auto-pan" => Box::new(suhina_device_auto_pan::AutoPan::new()),
         "dj-eq" => Box::new(suhina_device_dj_eq::DjEq::new()),
+        "eq" => Box::new(suhina_device_eq::Eq::new()),
         "vinyl-distortion" => Box::new(suhina_device_vinyl_distortion::VinylDistortion::new()),
         "overdrive" => Box::new(suhina_device_overdrive::Overdrive::new()),
         "compressor" => Box::new(suhina_device_compressor::Compressor::new()),
@@ -209,6 +211,17 @@ mod tests {
             assert!(super::info(id).is_some(), "panel.json for unknown device {id}");
         }
         assert!(layout("sampler").is_some(), "the sampler has its own layout");
+    }
+
+    #[test]
+    fn the_compressors_knobs_fill_the_compact_panel_without_scrolling() {
+        use suhina_device_sdk::ParameterControl::{Knob, LogKnob};
+        let panel = panel("compressor").unwrap();
+        for p in &panel.parameters {
+            assert!(matches!(p.control, Knob | LogKnob), "{} is not a knob", p.id);
+            let ([x, y], [w, h]) = (p.ui.position.unwrap(), p.ui.size.unwrap());
+            assert!(x + w <= builtin::COMPACT_WIDTH && y + h <= builtin::COMPACT_HEIGHT, "{} is outside", p.id);
+        }
     }
 
     #[test]
