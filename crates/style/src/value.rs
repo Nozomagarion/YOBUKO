@@ -43,6 +43,9 @@ impl Color {
             Token::Function(name) if name.eq_ignore_ascii_case("color-mix") => {
                 Self::Rgba(crate::sheet::nested(&mut parser, mix)?)
             }
+            Token::Function(name) if name.eq_ignore_ascii_case("contrast-color") => {
+                Self::Rgba(crate::sheet::nested(&mut parser, contrast)?)
+            }
             _ => return Err("Unsupported colour value".into()),
         };
         parser.expect_exhausted().map_err(|_| "Unexpected colour suffix")?;
@@ -207,6 +210,21 @@ impl Space {
             }
         }
     }
+}
+
+/// `contrast-color(<colour>)`: white or black, whichever has the higher WCAG 2 contrast with the
+/// colour; white on a tie. Alpha is ignored, as a colour behind the text is not known here.
+fn contrast(parser: &mut Parser<'_, '_>) -> Result<[u8; 4], String> {
+    let start = parser.position();
+    crate::sheet::consume(parser)?;
+    let Color::Rgba([r, g, b, _]) = Color::parse(parser.slice_from(start).trim())? else {
+        return Err("currentColor in contrast-color is not supported natively".into());
+    };
+    let channel = |c: u8| linear(f32::from(c) / 255.0);
+    let luminance = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+    let white = 1.05 / (luminance + 0.05);
+    let black = (luminance + 0.05) / 0.05;
+    Ok(if white >= black { [255, 255, 255, 255] } else { [0, 0, 0, 255] })
 }
 
 /// `color-mix(in <space>, <colour> [<p>%], <colour> [<p>%])` for literal colours.
@@ -614,6 +632,30 @@ mod tests {
         }
         let deep = format!("{}1px{}", "calc(".repeat(40), ")".repeat(40));
         assert!(Length::parse(&deep).is_err());
+    }
+
+    #[test]
+    fn contrast_color_picks_white_or_black() {
+        let white = Ok(Color::Rgba([255, 255, 255, 255]));
+        let black = Ok(Color::Rgba([0, 0, 0, 255]));
+        assert_eq!(Color::parse("contrast-color(#000)"), white);
+        assert_eq!(Color::parse("contrast-color(navy)"), white);
+        assert_eq!(Color::parse("contrast-color(#ffff00)"), black);
+        assert_eq!(Color::parse("contrast-color(rgb(0 0 255 / 10%))"), white);
+        // Black and white contrast equally at a luminance of 0.179, between greys 117 and 118.
+        assert_eq!(Color::parse("contrast-color(#757575)"), white);
+        assert_eq!(Color::parse("contrast-color(#767676)"), black);
+        assert_eq!(Color::parse("contrast-color(#808080)"), black);
+        assert_eq!(Color::parse("contrast-color(color-mix(in oklab, white, black 10%))"), black);
+        assert_eq!(
+            Color::parse("color-mix(in srgb, contrast-color(white), white)"),
+            Ok(Color::Rgba([128, 128, 128, 255]))
+        );
+        for bad in
+            ["contrast-color()", "contrast-color(currentColor)", "contrast-color(red, blue)", "contrast-color(1px)"]
+        {
+            assert!(Color::parse(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
