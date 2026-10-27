@@ -1640,6 +1640,36 @@ fn lane(
             actions.push(Action::new("automation.movePoint", params));
         }
     }
+    // A lane with points drawn without its line: the line is missing or has a place that is not
+    // a number (a flash of the faint line or the empty lane, #916).
+    let broken = line.iter().filter(|p| !p.x.is_finite() || !p.y.is_finite()).count();
+    if !param.points.is_empty() && (line.len() < 2 || broken > 0) {
+        suhina_plugins::trace!(
+            "automation lane {} {}/{:?} drew no whole line: {} points, {} shown, line of {}, {broken} not numbers, drag {:?}",
+            track.0,
+            key.param,
+            key.device,
+            param.points.len(),
+            points.len(),
+            line.len(),
+            state.point_drag.as_ref().map(|d| (d.point, d.together.len(), d.grab, d.now)),
+        );
+    }
+    // What each lane drew, traced when it changes: a lane that flashes to the faint line (or to
+    // nothing) and back shows in the log, with how many points it had.
+    if suhina_plugins::trace::on() {
+        let drew = if line.len() > 1 {
+            "line"
+        } else if points.is_empty() {
+            "faint line"
+        } else {
+            "nothing"
+        };
+        suhina_plugins::trace::state(
+            &format!("automation lane {} {}/{:?}", track.0, key.param, key.device),
+            format!("{drew}, {} points", param.points.len()),
+        );
+    }
     if line.len() > 1 {
         lane_painter.add(Shape::line(line, Stroke::new(1.5, ink)));
     } else if points.is_empty() {
