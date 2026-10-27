@@ -1,9 +1,9 @@
 # Où en est notre application ?
 
-**Bilan du 27 octobre 2026 — palier validé localement et paquet Mac livré.**
-L’hôte et l’invité peuvent maintenant **ajouter une piste audio ou MIDI pendant la connexion**,
-puis y composer ou y publier une prise. Version du paquet : **`acc0b105`**, protocole 7.
-Les contrôles distants restent bloqués par un refus de GitHub, détaillé ci-dessous.
+**Envoi de prises par l’invité en vérification — 27 octobre 2026.**
+Le code et les tests ciblés permettent maintenant à l’invité de publier une prise terminée.
+L’hôte reçoit et vérifie le son avant d’ajouter son clip. La suite complète passe : **3 119 tests réussis, aucun échec, 54 ignorés**. Le nouveau
+paquet reste à livrer ; le paquet précédent `acc0b105` ne possède pas cette fonction.
 
 ## À retenir
 

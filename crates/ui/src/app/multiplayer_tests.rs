@@ -644,3 +644,92 @@ fn visible_track_creation_adds_midi_and_audio_to_both_tabs_and_refuses_a_stale_d
         host.projects.execute_in(Some(local), "track.createShared", &json!({"kind":"audio","name":"Bypass"})).is_err()
     );
 }
+
+#[test]
+fn a_guest_can_publish_a_loaded_local_take_through_the_visible_button() {
+    guest_take_button(false);
+}
+
+#[test]
+#[ignore = "requires a GPU adapter; renders guest take publication"]
+fn render_guest_take_publication_for_review() {
+    guest_take_button(true);
+}
+
+fn guest_take_button(render: bool) {
+    use suhina_engine::{
+        AudioData, AudioPool,
+        model::{AudioRegion, ContentKinds, LaneData},
+    };
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    let mut shared = suhina_multiplayer::starter_project();
+    shared.tracks[0].content = ContentKinds { notes: false, audio: true };
+    shared.contents[0].lanes[0].data = LaneData::Audio(AudioRegion::new(""));
+    let mut host = App::new();
+    host.set_default_data_folder(root.path().join("Host"));
+    host.set_session(Session::new(shared.clone()), &[]);
+    host.multiplayer.address = "127.0.0.1:0".into();
+    host.host_current_audio();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while host.multiplayer.bound.is_none() && Instant::now() < deadline {
+        host.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    shared.contents[0].lanes[0].data = LaneData::Audio(AudioRegion::new("Recorded/My guest take.wav"));
+    let mut source = Session::new(shared);
+    let mut pool = AudioPool::new();
+    pool.files.insert(
+        "Recorded/My guest take.wav".into(),
+        std::sync::Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.25; 12000] }),
+    );
+    source.set_audio(pool);
+    let mut guest = App::new();
+    guest.set_default_data_folder(root.path().join("Guest"));
+    guest.set_session(source, &[]);
+    let original = guest.projects.active().unwrap();
+    guest.multiplayer.open = true;
+    guest.multiplayer_command("multiplayer.join", json!({"invitation":host.multiplayer.invitation}));
+    while guest.multiplayer.bound.is_none() && Instant::now() < deadline {
+        host.poll_multiplayer(&ctx);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let remote = guest.multiplayer.bound.unwrap();
+    let local = host.multiplayer.bound.unwrap();
+    guest.projects.switch(original).unwrap();
+    guest.multiplayer.page = SharedPage::Takes;
+    guest.multiplayer.take_file = "Recorded/My guest take.wav".into();
+    guest.multiplayer.take_track = 1;
+    guest.multiplayer.take_start = 12.0;
+    let builder = egui_kittest::Harness::builder().with_size(Vec2::new(1280.0, 900.0));
+    let builder = if render { builder.wgpu() } else { builder };
+    let mut harness = builder.build_ui_state(|ui, app: &mut App| app.ui(ui), guest);
+    theme::install(&harness.ctx);
+    harness.run_steps(3);
+    assert_eq!(harness.state().multiplayer.state["mode"], "connected");
+    let before = harness.state().projects.get(original).unwrap().project().clone();
+    if render {
+        let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
+        std::fs::create_dir_all(&folder).unwrap();
+        harness.render().unwrap().save(folder.join("multiplayer-guest-take.png")).unwrap();
+    }
+    harness.get_by_label("Publish loaded take").click();
+    while (host.multiplayer.applied_revision < 1 || harness.state().multiplayer.applied_revision < 1)
+        && Instant::now() < deadline
+    {
+        host.poll_multiplayer(&ctx);
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(harness.state().multiplayer.applied_revision, 1, "{:?}", harness.state().multiplayer.error);
+    assert_eq!(host.projects.get(local).unwrap().project(), harness.state().projects.get(remote).unwrap().project());
+    assert_eq!(host.projects.get(local).unwrap().audio().files.len(), 1);
+    assert_eq!(harness.state().projects.get(remote).unwrap().audio().files.len(), 1);
+    assert_eq!(harness.state().projects.get(original).unwrap().project(), &before);
+    let paths = harness.state().projects.get(remote).unwrap().loaded_audio_paths();
+    assert!(paths.iter().all(|p| p.is_file()));
+    host.leave_multiplayer();
+    harness.state_mut().leave_multiplayer();
+    assert!(paths.iter().all(|p| p.is_file()));
+}

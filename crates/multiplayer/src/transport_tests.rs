@@ -10,6 +10,7 @@ fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
     let mut host = Canonical {
         journal: VecDeque::new(),
         assets: Vec::new(),
+        pending_audio: Vec::new(),
         host: Host::new(crate::starter_project()).unwrap(),
         secret: secret_hash(&secret),
         expires: now + Duration::from_secs(1),
@@ -262,6 +263,7 @@ fn canonical(project: Project) -> Canonical {
         host: Host::new(project).unwrap(),
         journal: VecDeque::new(),
         assets: Vec::new(),
+        pending_audio: Vec::new(),
         secret: [0; 32],
         expires: Instant::now() + Duration::from_secs(300),
         redeemed: false,
@@ -404,7 +406,7 @@ fn a_closed_worker_retains_its_last_verified_operations_until_the_ui_takes_them(
     controls.tracks[0].name = "Last confirmed change".into();
     let operation =
         Operation { revision: 1, edit: WireEdit::Rename { track: 1, name: controls.tracks[0].name.clone() } };
-    assert!(send.try_send(Event::State(controls, vec![operation.clone()], true)).is_ok());
+    assert!(send.try_send(Event::State(controls, vec![operation.clone()], true, vec![])).is_ok());
     assert!(send.try_send(Event::Failed("connection closed".into())).is_ok());
     service.poll();
     assert!(!service.active());
@@ -639,4 +641,197 @@ fn shared_track_quotas_refuse_without_mutation_ids_or_consuming_an_author_sequen
             .unwrap();
         assert_eq!(state.host.revision(), 1);
     }
+}
+
+fn guest_upload_host() -> (Service, Invitation, tempfile::TempDir) {
+    let root = tempfile::tempdir().unwrap();
+    let mut project = crate::starter_project();
+    project.tracks[0].content = suhina_model::ContentKinds { notes: false, audio: true };
+    project.contents[0].lanes[0].data = suhina_model::LaneData::Audio(suhina_model::AudioRegion::new(""));
+    let mut host = Service::default();
+    host.set_storage_root(Some(root.path().into())).unwrap();
+    host.select_audio_project(&project, &AudioPool::new()).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while host.invitation.is_none() && Instant::now() < deadline {
+        host.poll();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let invite = Invitation::decode(host.invitation.as_ref().unwrap()).unwrap();
+    host.take_shared().unwrap().keep();
+    (host, invite, root)
+}
+fn admitted_upload(invite: &Invitation) -> StreamOwned<ClientConnection, DeadlineSocket> {
+    let mut io = connect(invite);
+    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: invite.secret.clone() })
+        .unwrap();
+    let offer = protocol::read(&mut io).unwrap();
+    let (doc, revision) = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
+    assets::receive(
+        &mut io,
+        crate::midi::decode_portable(&doc).unwrap(),
+        revision,
+        None,
+        &AtomicBool::new(false),
+        |_, _| {},
+    )
+    .unwrap();
+    read_state(&mut io);
+    io
+}
+fn offer_take(io: &mut impl Write, meta: &assets::Asset, sequence: u64, base: u64, seen: u64, track: u32) {
+    protocol::write(
+        io,
+        &ClientMessage::Publish {
+            protocol: PROTOCOL,
+            sequence,
+            base_revision: base,
+            seen_revision: seen,
+            track,
+            start: 8.0,
+            asset: meta.clone(),
+        },
+    )
+    .unwrap();
+}
+fn upload_asset() -> Arc<assets::Encoded> {
+    assets::encode_take(&suhina_engine::AudioData { sample_rate: 8000, channels: 1, samples: vec![0.3; 8000] }).unwrap()
+}
+fn empty_assets(io: &mut impl Read) {
+    assert!(
+        matches!(protocol::read::<ServerMessage>(io).unwrap(),ServerMessage::Assets { manifest,.. } if manifest.is_empty())
+    );
+}
+#[test]
+fn upload_preflight_refuses_bad_offers_before_bytes_and_accepted_retries_add_exactly_one_clip() {
+    let (mut host, invite, root) = guest_upload_host();
+    let mut io = admitted_upload(&invite);
+    let asset = upload_asset();
+    for (seq, base, track) in [(0, 0, 1), (2, 0, 1), (1, 9, 1), (1, 0, 2)] {
+        offer_take(&mut io, &asset.meta, seq, base, 0, track);
+        assert!(matches!(read_state(&mut io), ServerMessage::State { accepted: Some(false), .. }));
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+    let mut bad = asset.meta.clone();
+    bad.hash = "../outside".into();
+    offer_take(&mut io, &bad, 1, 0, 0, 1);
+    assert!(matches!(read_state(&mut io), ServerMessage::State { accepted: Some(false), .. }));
+    offer_take(&mut io, &asset.meta, 1, 0, 0, 1);
+    let ack = assets::send_take(&mut io, &asset, &AtomicBool::new(false), |_, _| {}).unwrap();
+    empty_assets(&mut io);
+    assert!(matches!(ack,ServerMessage::State { accepted:Some(true),controls,.. } if controls.revision==1));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while host.controls.as_ref().unwrap().revision < 1 && Instant::now() < deadline {
+        host.poll();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let audio = host.take_audio();
+    assert_eq!(audio.len(), 1);
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    offer_take(&mut io, &asset.meta, 1, 0, 1, 1);
+    assert!(
+        matches!(read_state(&mut io),ServerMessage::State { accepted:Some(true),controls,operations,.. } if controls.revision==1 && operations.is_empty())
+    );
+    host.poll();
+    assert!(host.take_audio().is_empty());
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    drop(audio);
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0, "an unclaimed UI lease cleans up");
+}
+
+#[test]
+fn editing_during_upload_never_holds_the_host_mutex_and_refuses_the_finished_stale_take() {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let (mut host, invite, root) = guest_upload_host();
+    let mut io = admitted_upload(&invite);
+    let asset = upload_asset();
+    offer_take(&mut io, &asset.meta, 1, 0, 0, 1);
+    let first = protocol::read::<ServerMessage>(&mut io).unwrap();
+    assert!(matches!(first, ServerMessage::UploadRequest { offset: 0, .. }));
+    host.execute("multiplayer.edit",&json!({"base_revision":0,"edit":serde_json::to_string(&WireEdit::Rename { track:1,name:"While receiving".into() }).unwrap()})).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while host.controls.as_ref().unwrap().revision < 1 && Instant::now() < deadline {
+        host.poll();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(host.controls.as_ref().unwrap().revision, 1, "host edits proceed while peer waits for chunk zero");
+    for (i, chunk) in asset.bytes.chunks(16384).enumerate() {
+        if i > 0 {
+            assert!(
+                matches!(protocol::read::<ServerMessage>(&mut io).unwrap(),ServerMessage::UploadRequest { offset,.. } if offset==i*16384)
+            );
+        }
+        protocol::write(
+            &mut io,
+            &ClientMessage::UploadChunk { protocol: PROTOCOL, offset: i * 16384, data: STANDARD.encode(chunk) },
+        )
+        .unwrap();
+    }
+    assert!(
+        matches!(read_state(&mut io),ServerMessage::State { accepted:Some(false),controls,.. } if controls.revision==1)
+    );
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    assert!(host.take_audio().is_empty());
+    offer_take(&mut io, &asset.meta, 1, 1, 1, 1);
+    assert!(
+        matches!(assets::send_take(&mut io,&asset,&AtomicBool::new(false),|_,_|{}).unwrap(),ServerMessage::State { accepted:Some(true),controls,.. } if controls.revision==2)
+    );
+    empty_assets(&mut io);
+}
+
+#[test]
+fn a_bad_hash_upload_disconnects_without_publishing_or_leaving_files() {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let (mut host, invite, root) = guest_upload_host();
+    let mut io = admitted_upload(&invite);
+    let asset = upload_asset();
+    offer_take(&mut io, &asset.meta, 1, 0, 0, 1);
+    let mut bytes = asset.bytes.clone();
+    bytes[100] ^= 1;
+    for (i, chunk) in bytes.chunks(16384).enumerate() {
+        assert!(
+            matches!(protocol::read::<ServerMessage>(&mut io).unwrap(),ServerMessage::UploadRequest { offset,.. } if offset==i*16384)
+        );
+        protocol::write(
+            &mut io,
+            &ClientMessage::UploadChunk { protocol: PROTOCOL, offset: i * 16384, data: STANDARD.encode(chunk) },
+        )
+        .unwrap();
+    }
+    assert!(protocol::read::<ServerMessage>(&mut io).is_err());
+    host.poll();
+    assert_eq!(host.controls.as_ref().unwrap().revision, 0);
+    assert!(host.take_audio().is_empty());
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn a_full_ui_queue_keeps_the_sound_lease_until_its_operation_can_be_delivered_with_it() {
+    let root = tempfile::tempdir().unwrap();
+    let mut project = crate::starter_project();
+    project.tracks[0].content = suhina_model::ContentKinds { notes: false, audio: true };
+    project.contents[0].lanes[0].data = suhina_model::LaneData::Audio(suhina_model::AudioRegion::new(""));
+    let mut state = canonical(project);
+    let asset = upload_asset();
+    let collected = assets::collect_take(&asset, Some(root.path()), &AtomicBool::new(false)).unwrap();
+    let path = collected.folder().unwrap().to_path_buf();
+    state.commit_take(Host::owner(), 1, 0, (1, 0.0), asset, Some(collected)).unwrap();
+    let (send, receive) = mpsc::sync_channel(1);
+    assert!(send.try_send(Event::Upload(None)).is_ok());
+    let mut last = (0, false);
+    state.emit(&send, &mut last).unwrap();
+    assert_eq!(last, (0, false));
+    assert_eq!(state.pending_audio.len(), 1);
+    assert!(path.exists());
+    receive.recv().unwrap();
+    state.emit(&send, &mut last).unwrap();
+    assert_eq!(last, (1, false));
+    assert!(state.pending_audio.is_empty());
+    let Event::State(controls, operations, _, audio) = receive.recv().unwrap() else { panic!("state") };
+    assert_eq!(controls.revision, 1);
+    assert_eq!(operations.len(), 1);
+    assert_eq!(audio.len(), 1);
+    assert!(path.exists());
+    drop(audio);
+    assert!(!path.exists());
 }

@@ -534,19 +534,19 @@ guest verifies bounded chunks and audio before returning `SharedSnapshot`, which
 folder lease. `SharedSnapshot::session` constructs `Session::shared_copy` with the verified pool
 and local audio folder; `keep` retains the folder only after tab creation succeeds. Canonical
 models stay identical across machines while local folder paths stay outside shared state.
-Protocol 6 also queues explicit host publication of a finished AudioData take. A pure
+Protocol 8 also queues explicit publication from either participant of a finished AudioData take. A pure
 clip.insertAudio command orders its placement after native/quota preflight. Each response sends
 only sound references not yet verified by that guest. Verified AudioAddition leases reach the
-existing session before its accepted clip operation. Session local collection mappings allow
+existing session in the same bounded state event as their accepted clip operations. Session local collection mappings allow
 new folders to survive native save/backup/reopen, without adding machine paths to shared models
-or replacing either player. Guest uploads and direct recording in the restricted tab stay closed. [Audio boundary and limits](spec/lan-audio-assets.md).
+or replacing either player. Guest offers use the connection-assigned author, exact chunk pulls and the same portable bounds. Preparation runs in a bounded background job while the guest keeps polling; transfers never hold the canonical mutex. Direct recording in the restricted tab stays closed. [Audio boundary and limits](spec/lan-audio-assets.md).
 
 ### Fork shared track creation
 
-Protocol 7 extends the same journal with track.createShared from either editor. Its native
+Protocol 8 extends the same journal with track.createShared from either editor. Its native
 command reuses regular insertion, disables hardware inputs, sets an explicit type colour and
 includes only default parameter-only FM Synth on MIDI tracks. IDs and native player updates
 follow the existing command path. Detached canonical preflight checks all portable quotas before
 acceptance. The window skips personal track/clip creation defaults and stored-colour normalisation for the bound tab, so UI frames cannot mutate it outside the journal. The Tracks UI binds its draft to a revision; new tracks become available to existing
-clip/note editing and host take publication. General track.add remains outside the LAN allowlist.
+clip/note editing and take publication. General track.add remains outside the LAN allowlist.
 [Shared-track contract](spec/lan-track-creation.md).

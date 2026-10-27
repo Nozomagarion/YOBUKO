@@ -276,10 +276,6 @@ impl App {
         }
     }
     fn show_publish_take(&mut self, ui: &mut Ui) {
-        if self.multiplayer.state["mode"] != "hosting" {
-            ui.label("The host publishes finished takes. You receive their sound before the new clip appears.");
-            return;
-        }
         ui.label("Record in an ordinary local Studio tab, finish the take, then choose its loaded sound here.");
         ui.weak("Publishes the whole sound, unwarped, with default gain. Clip trims, loops and effects are not baked in. Original takes stay intact.");
         let source = self
@@ -359,7 +355,8 @@ impl App {
         let data = files.iter().find(|(key, _)| key == &self.multiplayer.take_file).map(|(_, data)| Arc::clone(data));
         let ready = data.is_some()
             && tracks.iter().any(|(id, _)| *id == self.multiplayer.take_track)
-            && !self.multiplayer.submitted;
+            && !self.multiplayer.submitted
+            && self.multiplayer.state["sending"].is_null();
         if ui.add_enabled(ready, egui::Button::new("Publish loaded take")).clicked()
             && let Some(data) = data
         {
@@ -444,6 +441,15 @@ impl App {
                         self.run(&Action::new("transport.setPosition", json!({"beats":16})));
                     }
                 });
+            }
+            if let Some(progress) = self.multiplayer.state["sending"].as_array() {
+                let done = progress.first().and_then(serde_json::Value::as_u64).unwrap_or(0);
+                let total = progress.get(1).and_then(serde_json::Value::as_u64).unwrap_or(0);
+                if total == 0 {
+                    ui.label("Preparing take…");
+                } else {
+                    ui.label(format!("Sending take: {} / {} KiB", done / 1024, total / 1024));
+                }
             }
             if let Some(progress) = self.multiplayer.state["receiving"].as_array() {
                 let done = progress.first().and_then(serde_json::Value::as_u64).unwrap_or(0);
@@ -549,7 +555,7 @@ impl App {
             ui.colored_label(theme::recording(), error);
         }
         ui.add_space(theme::PAD);
-        ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Guest uploads, recording directly in the shared tab and external plugins come later.");
+        ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Recording directly in the shared tab and external plugins come later.");
     }
 }
 

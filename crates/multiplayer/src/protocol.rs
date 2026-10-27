@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 7;
+pub const PROTOCOL: u16 = 8;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -207,17 +207,55 @@ pub fn apply_operations(
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ClientMessage {
-    Hello { protocol: u16, format: u16, secret: String },
-    Download { protocol: u16, offset: usize },
-    AssetDownload { protocol: u16, asset: usize, offset: usize },
-    Poll { protocol: u16, seen_revision: u64 },
-    Edit { protocol: u16, sequence: u64, base_revision: u64, seen_revision: u64, edit: WireEdit },
+    Hello {
+        protocol: u16,
+        format: u16,
+        secret: String,
+    },
+    Download {
+        protocol: u16,
+        offset: usize,
+    },
+    AssetDownload {
+        protocol: u16,
+        asset: usize,
+        offset: usize,
+    },
+    Publish {
+        protocol: u16,
+        sequence: u64,
+        base_revision: u64,
+        seen_revision: u64,
+        track: u32,
+        start: f64,
+        asset: crate::assets::Asset,
+    },
+    UploadChunk {
+        protocol: u16,
+        offset: usize,
+        data: String,
+    },
+    Poll {
+        protocol: u16,
+        seen_revision: u64,
+    },
+    Edit {
+        protocol: u16,
+        sequence: u64,
+        base_revision: u64,
+        seen_revision: u64,
+        edit: WireEdit,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ServerMessage {
     Denied,
+    UploadRequest {
+        protocol: u16,
+        offset: usize,
+    },
     Project {
         protocol: u16,
         format: u16,

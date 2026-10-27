@@ -86,15 +86,17 @@ impl Host {
         self.peers.remove(&peer).map(|_| ()).ok_or(Error::UnknownPeer)
     }
 
-    pub fn submit(&mut self, author: PeerId, request: Request) -> Result<Accepted, Error> {
-        let peer = self.peers.get_mut(&author).ok_or(Error::UnknownPeer)?;
+    /// Check role, sequence/retry, revision and counter bounds before costly trusted preparation.
+    /// Returns the cached confirmation for an exact retry; never mutates the project or counters.
+    pub fn preflight(&self, author: PeerId, request: &Request) -> Result<Option<Accepted>, Error> {
+        let peer = self.peers.get(&author).ok_or(Error::UnknownPeer)?;
         if peer.role != Role::Editor {
             return Err(Error::ReadOnly);
         }
         // Check the retry before base revision: a lost ACK necessarily has an old base.
         if request.sequence < peer.next_sequence {
             return match peer.last.as_ref() {
-                Some(last) if last.request == request => Ok(last.clone()),
+                Some(last) if last.request == *request => Ok(Some(last.clone())),
                 Some(last) if last.request.sequence == request.sequence => Err(Error::SequenceReused),
                 _ => Err(Error::ReplayTooOld),
             };
@@ -105,8 +107,17 @@ impl Host {
         if request.base_revision != self.revision {
             return Err(Error::StaleRevision { expected: self.revision, received: request.base_revision });
         }
-        // Reserve both counters before execution so overflow cannot accept an unacknowledged edit.
+        self.revision.checked_add(1).ok_or(Error::CounterExhausted)?;
+        peer.next_sequence.checked_add(1).ok_or(Error::CounterExhausted)?;
+        Ok(None)
+    }
+
+    pub fn submit(&mut self, author: PeerId, request: Request) -> Result<Accepted, Error> {
+        if let Some(accepted) = self.preflight(author, &request)? {
+            return Ok(accepted);
+        }
         let revision = self.revision.checked_add(1).ok_or(Error::CounterExhausted)?;
+        let peer = self.peers.get_mut(&author).ok_or(Error::UnknownPeer)?;
         let next_sequence = peer.next_sequence.checked_add(1).ok_or(Error::CounterExhausted)?;
         // This canonical session has no player, plugins, backup path or remote file commands.
         let result = self.session.execute(request.edit.command, &request.edit.params)?;

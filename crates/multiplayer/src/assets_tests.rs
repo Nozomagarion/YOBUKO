@@ -215,7 +215,7 @@ fn total_manifest_quota_is_checked_before_disk_or_audio_allocation() {
             bytes: MAX_ASSET,
             rate: 8000,
             channels: 1,
-            frames: (MAX_ASSET - 68) / 4,
+            frames: (MAX_ASSET - 128) / 4,
         };
         let mut region = suhina_model::AudioRegion::new(meta.path());
         region.sample_rate = Some(meta.rate);
@@ -360,4 +360,79 @@ fn live_assets_refuse_cumulative_budgets_and_changed_known_metadata_before_writi
     assert!(missing(&changed, &known).is_err());
     let missing = missing(&prepared.snapshot.project, &known).unwrap();
     assert!(references(&missing).is_empty());
+}
+
+fn upload_script(bytes: &[u8], wrong_offset: bool) -> Script {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let mut input = vec![];
+    for (i, chunk) in bytes.chunks(CHUNK).enumerate() {
+        protocol::write(
+            &mut input,
+            &ClientMessage::UploadChunk {
+                protocol: PROTOCOL,
+                offset: if wrong_offset { 1 } else { i * CHUNK },
+                data: STANDARD.encode(chunk),
+            },
+        )
+        .unwrap();
+    }
+    Script { input: Cursor::new(input), output: vec![] }
+}
+#[test]
+fn reverse_take_upload_verifies_wave_hash_and_metadata_and_cleans_failed_or_unclaimed_folders() {
+    let root = tempfile::tempdir().unwrap();
+    let (_, pool) = source();
+    let data = pool.files.values().next().unwrap();
+    let encoded = encode_take(data).unwrap();
+    for (bytes, offset) in [(&encoded.bytes[..encoded.bytes.len() - 1], false), (&encoded.bytes[..], true)] {
+        assert!(
+            receive_take(&mut upload_script(bytes, offset), &encoded.meta, Some(root.path()), &AtomicBool::new(false))
+                .is_err()
+        );
+        assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    }
+    let mut bad_wave = encoded.bytes.clone();
+    bad_wave[16..20].copy_from_slice(&u32::MAX.to_le_bytes());
+    let mut bad_meta = encoded.meta.clone();
+    bad_meta.hash = hash(&bad_wave);
+    assert!(
+        receive_take(&mut upload_script(&bad_wave, false), &bad_meta, Some(root.path()), &AtomicBool::new(false))
+            .is_err()
+    );
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    let mut corrupt = encoded.bytes.clone();
+    corrupt[100] ^= 1;
+    assert!(
+        receive_take(&mut upload_script(&corrupt, false), &encoded.meta, Some(root.path()), &AtomicBool::new(false))
+            .is_err()
+    );
+    let mut meta = encoded.meta.clone();
+    meta.channels = 2;
+    assert!(
+        receive_take(&mut upload_script(&encoded.bytes, false), &meta, Some(root.path()), &AtomicBool::new(false))
+            .is_err()
+    );
+    let mut script = upload_script(&encoded.bytes, false);
+    let (asset, audio) = receive_take(&mut script, &encoded.meta, Some(root.path()), &AtomicBool::new(false)).unwrap();
+    assert_eq!(asset.bytes, encoded.bytes);
+    assert_eq!(&**audio.audio.files.values().next().unwrap(), &**data);
+    let path = audio.folder().unwrap().to_path_buf();
+    assert!(path.join(encoded.meta.path()).is_file());
+    drop(audio);
+    assert!(!path.exists());
+    let mut invalid = encoded.meta.clone();
+    invalid.hash = "../outside".into();
+    let mut script = upload_script(&[], false);
+    assert!(receive_take(&mut script, &invalid, Some(root.path()), &AtomicBool::new(false)).is_err());
+    assert!(script.output.is_empty());
+    assert!(
+        receive_take(
+            &mut upload_script(&encoded.bytes, false),
+            &encoded.meta,
+            Some(root.path()),
+            &AtomicBool::new(true)
+        )
+        .is_err()
+    );
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
 }

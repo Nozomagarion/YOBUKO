@@ -92,8 +92,8 @@ remaining operational step before friends can receive combined in-app updates.
 ## Compatibility
 
 The marker's multiplayer_api=1 preserves the trusted collaboration contract. The separate LAN
-adapter has protocol 7 and MIDI-copy format 2, checked during invitation decoding, the TLS
-hello and document offer. Protocol-1/2/3/4/5/6 invitations are refused. The bounded MIDI adapter is pinned
+adapter has protocol 8 and MIDI-copy format 2, checked during invitation decoding, the TLS
+hello and document offer. Protocol-1/2/3/4/5/6/7 invitations are refused. The bounded MIDI adapter is pinned
 to native project format 3; source integration must review it before changing that format. Future wire changes must change that handshake contract. Combined distribution updates
 do not imply that full project/media transfer or broader remote collaboration exists.
 

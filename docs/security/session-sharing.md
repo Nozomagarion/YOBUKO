@@ -57,7 +57,7 @@ guest polls every 100 ms and the server enforces at least 50 ms per request. UI 
 TLS, canonical execution and I/O run on workers, never the audio thread. A local peer can still
 occupy pending slots until timeout; availability against a sustained LAN flood is not guaranteed.
 
-Protocol 7 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
+Protocol 8 delivers at most 32 revision-stamped operations per response from a 32-entry journal.
 A separate draft base revision prevents shifted note indices from being silently reused. Before
 canonical mutation the native command is preflighted on a detached copy and the complete MIDI
 quota/document boundary is checked, including copy-on-write growth. The guest verifies contiguous
@@ -134,3 +134,18 @@ and have no control characters, inputs/monitoring are off, colours are explicit,
 portable track/channel/lane/device/document quotas are preflighted before revision or identity
 allocation on the canonical host. The guest mirror and UI execute the same operation. Local theme/default normalisation is skipped for the bound tab to prevent mutations outside that journal. Ordinary
 track.add and broader track mutations remain refused. See [the track contract](../spec/lan-track-creation.md).
+
+## Verified guest publication
+
+Protocol 8 offers strict sound metadata, author sequence, draft base, delivery cursor and target
+on the authenticated connection; the host derives the author rather than receiving an ID. A
+read-only trusted-core preflight enforces membership, roles, replay, revisions and counters;
+the adapter also preflights native placement, quotas and existing-hash metadata before bytes.
+Pull chunks into a fresh private folder and verify size, BLAKE3, bounded WAV, metadata and exact
+re-encoding outside the canonical lock. Recheck before committing the guest-authored operation;
+raw Edit/audio insertion is still refused. Queue the decoded sound with its operation so UI
+backpressure cannot expose a clip before its sound. Pending leases/catalogs are bounded, and
+failed/unclaimed data is cleaned. The guest validates its exact acknowledged operation before
+retaining its local collected copy. The known upload is not echoed to its sender. No remote
+source filename, path, device, role or arbitrary command is accepted. Direct shared recording
+and reconnect remain closed. See [the upload contract](../spec/lan-guest-takes.md).

@@ -1,6 +1,6 @@
 ---
 description: Revision-checked audio and MIDI track creation in a connected LAN project, with deterministic identities and local inputs off
-read_when: multiplayer shared tracks, protocol 7, add shared audio track, MIDI FM Synth track
+read_when: multiplayer shared tracks, protocol 8, add shared audio track, MIDI FM Synth track
 type: spec
 status: draft
 last_verified: 2026-10-27
@@ -17,7 +17,7 @@ covers:
 
 # Add tracks during a shared session
 
-Self-authored fork behaviour. Protocol 7 adds one typed operation, track.createShared, to the
+Self-authored fork behaviour. Protocol 8 adds one typed operation, track.createShared, to the
 existing host-ordered journal. Both the host and admitted editor guest may request it. The
 ordinary track.add command remains closed over LAN: its optional device, preset, SDK graph,
 sample and grouping arguments are not exposed. Native project format 3 and copy format 2 stay.
@@ -47,7 +47,7 @@ controls verify the resulting ordered track identities after operations, never r
 model implicitly. While a tab is bound to collaboration, the window must skip its local
 track/clip creation preferences and inherited-colour normalisation; otherwise a UI frame can
 mutate stored colours outside the journal. These preferences still apply to ordinary local tabs
-and resume on the retained copy after leaving. New audio tracks immediately appear in the host take-publication destination
+and resume on the retained copy after leaving. New audio tracks immediately appear in the take-publication destination
 list; new MIDI tracks accept existing shared clip/note edits.
 
 Multiplayer gains a Tracks tab with a name field, Audio/MIDI choice, and Add shared track. A

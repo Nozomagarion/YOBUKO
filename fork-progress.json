@@ -57,7 +57,8 @@
         },
         {
           "name": "Envoyer une prise depuis l’invité",
-          "done": false
+          "done": true,
+          "evidence": "crates/multiplayer/tests/audio.rs"
         },
         {
           "name": "Sessions Internet et reconnexion",

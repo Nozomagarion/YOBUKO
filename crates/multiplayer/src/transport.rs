@@ -38,6 +38,7 @@ struct Canonical {
     redeemed: bool,
     guest: bool,
     assets: Vec<Arc<assets::Encoded>>,
+    pending_audio: Vec<AudioAddition>,
 }
 impl Canonical {
     fn since(&self, seen: u64) -> Result<Vec<Operation>, String> {
@@ -57,14 +58,39 @@ impl Canonical {
         if matches!(wire, WireEdit::AudioInsert { .. }) && author != Host::owner() {
             return Err("only the host can publish a sound".into());
         }
+        self.apply(author, sequence, base, wire)
+    }
+    fn check(
+        &self,
+        author: suhina_collaboration::PeerId,
+        sequence: u64,
+        base: u64,
+        wire: &WireEdit,
+    ) -> Result<bool, String> {
         let edit = wire.edit()?;
-        // Pure commands only: preflight quotas before the canonical host can mutate anything.
-        if base == self.host.revision() {
-            let mut candidate = suhina_session::Session::new(self.host.project().clone());
-            let (id, params) = wire.command();
-            candidate.execute(id, &params).map_err(|e| e.to_string())?;
-            crate::midi::encode_portable(candidate.project())?;
+        if self
+            .host
+            .preflight(author, &Request { sequence, base_revision: base, edit })
+            .map_err(|e| e.to_string())?
+            .is_some()
+        {
+            return Ok(true);
         }
+        let mut candidate = suhina_session::Session::new(self.host.project().clone());
+        let (id, params) = wire.command();
+        candidate.execute(id, &params).map_err(|e| e.to_string())?;
+        crate::midi::encode_portable(candidate.project())?;
+        Ok(false)
+    }
+    fn apply(
+        &mut self,
+        author: suhina_collaboration::PeerId,
+        sequence: u64,
+        base: u64,
+        wire: WireEdit,
+    ) -> Result<(), String> {
+        self.check(author, sequence, base, &wire)?;
+        let edit = wire.edit()?;
         let before = self.host.revision();
         self.host.submit(author, Request { sequence, base_revision: base, edit }).map_err(|e| e.to_string())?;
         if self.host.revision() != before {
@@ -72,6 +98,65 @@ impl Canonical {
                 self.journal.pop_front();
             }
             self.journal.push_back(Operation { revision: self.host.revision(), edit: wire });
+        }
+        Ok(())
+    }
+    fn check_take(
+        &self,
+        author: suhina_collaboration::PeerId,
+        sequence: u64,
+        base: u64,
+        target: (u32, f64),
+        meta: &assets::Asset,
+    ) -> Result<bool, String> {
+        assets::validate_asset(meta)?;
+        let cached = self.check(author, sequence, base, &take_edit(target, meta))?;
+        if let Some(old) = self.assets.iter().find(|a| a.meta.hash == meta.hash) {
+            if old.meta != *meta {
+                return Err("known sound metadata changed".into());
+            }
+        } else if self.pending_audio.len() >= 16
+            || self.assets.len() >= 64
+            || self.assets.iter().map(|a| a.meta.bytes).sum::<usize>() + meta.bytes > assets::MAX_TOTAL
+        {
+            return Err("session audio budget reached or view is busy".into());
+        }
+        Ok(cached)
+    }
+    fn commit_take(
+        &mut self,
+        author: suhina_collaboration::PeerId,
+        sequence: u64,
+        base: u64,
+        target: (u32, f64),
+        asset: Arc<assets::Encoded>,
+        audio: Option<AudioAddition>,
+    ) -> Result<(), String> {
+        self.check_take(author, sequence, base, target, &asset.meta)?;
+        let exists = self.assets.iter().any(|a| a.meta.hash == asset.meta.hash);
+        if !exists && audio.is_none() {
+            return Err("verified take collection missing".into());
+        }
+        self.apply(author, sequence, base, take_edit(target, &asset.meta))?;
+        if !exists {
+            self.assets.push(asset);
+            if let Some(audio) = audio {
+                self.pending_audio.push(audio);
+            }
+        }
+        Ok(())
+    }
+    fn emit(&mut self, events: &SyncSender<Event>, last: &mut (u64, bool)) -> Result<(), String> {
+        let current = (self.host.revision(), self.guest);
+        if current != *last {
+            let controls = Controls::from_project(self.host.project(), current.0)?;
+            let operations = self.since(last.0)?;
+            let audio = std::mem::take(&mut self.pending_audio);
+            match events.try_send(Event::State(controls, operations, current.1, audio)) {
+                Ok(()) => *last = current,
+                Err(mpsc::TrySendError::Full(Event::State(_, _, _, audio))) => self.pending_audio = audio,
+                Err(_) => return Err("multiplayer view closed".into()),
+            }
         }
         Ok(())
     }
@@ -105,8 +190,8 @@ enum Event {
     Ready(String, Controls, Box<SharedSnapshot>),
     Connected(Controls, Box<SharedSnapshot>),
     Receiving(usize, usize),
-    Audio(Box<AudioAddition>),
-    State(Controls, Vec<Operation>, bool),
+    Upload(Option<(usize, usize)>),
+    State(Controls, Vec<Operation>, bool, Vec<AudioAddition>),
     Rejected(String),
     Failed(String),
     Closed,
@@ -147,6 +232,7 @@ pub struct Service {
     storage: Option<PathBuf>,
     selected_take: Option<Arc<suhina_engine::AudioData>>,
     received_audio: Vec<AudioAddition>,
+    sending: Option<(usize, usize)>,
 }
 
 impl Service {
@@ -201,8 +287,11 @@ impl Service {
     }
     /// Trusted desktop selection of a finished loaded take; never a path or network upload.
     pub fn select_take(&mut self, audio: Arc<suhina_engine::AudioData>) -> Result<(), CommandError> {
-        if !self.active() || self.mode != "hosting" {
-            return Err("only the host can publish a loaded take".into());
+        if !self.active() || !matches!(self.mode.as_str(), "hosting" | "connected") {
+            return Err("connect before selecting a loaded take".into());
+        }
+        if self.sending.is_some() {
+            return Err("a take is already being published".into());
         }
         if audio.samples.len() > (assets::MAX_ASSET - 128) / 4 {
             return Err("the take exceeds 64 MiB".into());
@@ -256,24 +345,20 @@ impl Service {
                         self.mode = "connected".into();
                         self.controls = Some(controls);
                     }
-                    Ok(Event::Audio(audio)) => {
-                        if self.received_audio.len() >= 16 {
-                            self.error = Some("shared audio view is not keeping up".into());
-                            closed = true;
-                            break;
-                        }
-                        self.received_audio.push(*audio);
-                    }
+                    Ok(Event::Upload(progress)) => self.sending = progress,
                     Ok(Event::Receiving(done, total)) => self.receiving = Some((done, total)),
-                    Ok(Event::State(controls, operations, guest)) => {
+                    Ok(Event::State(controls, operations, guest, audio)) => {
                         self.receiving = None;
-                        if self.operations.len() + operations.len() > 128 {
+                        if self.operations.len() + operations.len() > 128
+                            || self.received_audio.len() + audio.len() > 64
+                        {
                             self.error =
                                 Some("shared editor is not keeping up; the last local copy was preserved".into());
                             self.mode = "error".into();
                             closed = true;
                             break;
                         }
+                        self.received_audio.extend(audio);
                         self.operations.extend(operations);
                         self.controls = Some(controls);
                         self.guest = guest;
@@ -299,6 +384,7 @@ impl Service {
             }
         }
         if closed {
+            self.sending = None;
             self.running = None;
             self.invitation = None;
             self.guest = false;
@@ -333,6 +419,7 @@ impl Service {
         self.receiving = None;
         self.selected_take = None;
         self.received_audio.clear();
+        self.sending = None;
         self.running = Some(Running { stop, sockets, inputs, events });
         Ok(json!({"queued":true}))
     }
@@ -380,7 +467,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
     },
     CommandSpec {
         id: "multiplayer.publishTake",
-        label: "Publish the host-selected loaded take to an existing shared audio track",
+        label: "Publish the locally selected loaded take to an existing shared audio track",
         params: &[
             param("base_revision", ParamType::Integer, "observed shared revision"),
             param("track", ParamType::Integer, "existing audio-only track id"),
@@ -413,7 +500,7 @@ pub fn commands() -> &'static [CommandSpec<Service>] {
 fn state(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.poll();
     Ok(
-        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"error":s.error,"guest_connected":s.guest,"receiving":s.receiving}),
+        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"error":s.error,"guest_connected":s.guest,"receiving":s.receiving,"sending":s.sending}),
     )
 }
 fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
@@ -426,6 +513,7 @@ fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.receiving = None;
     s.selected_take = None;
     s.received_audio.clear();
+    s.sending = None;
     Ok(json!({"stopped":true}))
 }
 fn address(p: &Value) -> Result<SocketAddr, CommandError> {
@@ -479,7 +567,7 @@ fn edit(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
     }
     let edit: WireEdit = serde_json::from_str(text).map_err(|_| CommandError::from("invalid shared edit"))?;
     if matches!(edit, WireEdit::AudioInsert { .. }) {
-        return Err("use the host's explicit loaded-take selection".into());
+        return Err("use explicit loaded-take selection".into());
     }
     edit.edit().map_err(CommandError::from)?;
     let base = p["base_revision"].as_u64().ok_or("invalid revision")?;
@@ -494,8 +582,8 @@ fn edit(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
 }
 
 fn publish_take(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
-    if s.mode != "hosting" {
-        return Err("only the host can publish a loaded take".into());
+    if !matches!(s.mode.as_str(), "hosting" | "connected") || s.sending.is_some() {
+        return Err("connect and wait for the pending take before publishing".into());
     }
     let base = p["base_revision"].as_u64().ok_or("invalid revision")?;
     let track = p["track"].as_u64().and_then(|n| u32::try_from(n).ok()).filter(|n| *n > 0).ok_or("invalid track")?;
@@ -508,6 +596,7 @@ fn publish_take(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
         .try_send(Input::Publish { base, track, start, audio })
         .map_err(|_| CommandError::from("multiplayer is busy or disconnected"))?;
     s.error = None;
+    s.sending = Some((0, 0));
     Ok(json!({"queued":true}))
 }
 
@@ -626,6 +715,7 @@ fn host(
         redeemed: false,
         guest: false,
         assets: initial_assets,
+        pending_audio: Vec::new(),
     }));
     events
         .try_send(Event::Ready(invite, initial, Box::new(prepared.snapshot)))
@@ -641,13 +731,10 @@ fn host(
                     canonical.lock().unwrap_or_else(PoisonError::into_inner).submit(Host::owner(), sequence, base, edit)
                 }
                 Input::Publish { base, track, start, audio } => {
-                    match publish(&canonical, sequence, base, track, start, &audio, (resources.1.as_deref(), stop)) {
-                        Ok(snapshot) => {
-                            events.try_send(Event::Audio(Box::new(snapshot))).map_err(|_| "multiplayer view closed")?;
-                            Ok(())
-                        }
-                        Err(error) => Err(error),
-                    }
+                    let result =
+                        publish(&canonical, sequence, base, track, start, &audio, (resources.1.as_deref(), stop));
+                    events.try_send(Event::Upload(None)).map_err(|_| "multiplayer view closed")?;
+                    result
                 }
             };
             match result {
@@ -658,19 +745,7 @@ fn host(
             }
         }
         {
-            let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-            let current = (state.host.revision(), state.guest);
-            if current != last
-                && events
-                    .try_send(Event::State(
-                        Controls::from_project(state.host.project(), current.0)?,
-                        state.since(last.0)?,
-                        current.1,
-                    ))
-                    .is_ok()
-            {
-                last = current;
-            }
+            canonical.lock().unwrap_or_else(PoisonError::into_inner).emit(events, &mut last)?;
         }
         match listener.accept() {
             Ok((stream, _)) if pending.load(Ordering::Relaxed) < 4 => {
@@ -694,10 +769,11 @@ fn host(
                     Arc::clone(&pending),
                     Arc::clone(sockets),
                 );
+                let storage = resources.1.clone();
                 pending.fetch_add(1, Ordering::Relaxed);
                 match std::thread::Builder::new().name("suhina-lan-peer".into()).spawn(move || {
                     let _guard = ConnectionGuard { sockets: registry, peer: stream.peer_addr().ok() };
-                    let _ = serve(stream, tls, &canonical, &stop);
+                    let _ = serve(stream, tls, &canonical, &stop, storage.as_deref());
                     pending.fetch_sub(1, Ordering::Relaxed);
                 }) {
                     Ok(handle) => handlers.push(handle),
@@ -716,6 +792,16 @@ fn host(
     Ok(())
 }
 
+fn take_edit(target: (u32, f64), meta: &assets::Asset) -> WireEdit {
+    WireEdit::AudioInsert {
+        track: target.0,
+        start: target.1,
+        file: meta.path(),
+        rate: meta.rate,
+        channels: meta.channels,
+        frames: meta.frames,
+    }
+}
 fn publish(
     canonical: &Mutex<Canonical>,
     sequence: u64,
@@ -724,31 +810,22 @@ fn publish(
     start: f64,
     audio: &suhina_engine::AudioData,
     storage: (Option<&std::path::Path>, &AtomicBool),
-) -> Result<AudioAddition, String> {
-    {
-        let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-        if state.host.revision() != base {
-            return Err("shared revision changed; refresh before publishing".into());
-        }
-    }
+) -> Result<(), String> {
     let asset = assets::encode_take(audio)?;
-    let collected = assets::collect_take(&asset, storage.0, storage.1)?;
-    let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-    let exists = state.assets.iter().any(|a| a.meta.hash == asset.meta.hash);
-    if !exists
-        && (state.assets.len() >= 64
-            || state.assets.iter().map(|a| a.meta.bytes).sum::<usize>() + asset.meta.bytes > assets::MAX_TOTAL)
-    {
-        return Err("session audio budget reached (64 sounds / 256 MiB)".into());
-    }
-    let m = &asset.meta;
-    let wire =
-        WireEdit::AudioInsert { track, start, file: m.path(), rate: m.rate, channels: m.channels, frames: m.frames };
-    state.submit(Host::owner(), sequence, base, wire)?;
-    if !exists {
-        state.assets.push(asset);
-    }
-    Ok(collected)
+    let exists = {
+        let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+        state.check_take(Host::owner(), sequence, base, (track, start), &asset.meta)?;
+        state.assets.iter().any(|a| a.meta.hash == asset.meta.hash)
+    };
+    let collected = if exists { None } else { Some(assets::collect_take(&asset, storage.0, storage.1)?) };
+    canonical.lock().unwrap_or_else(PoisonError::into_inner).commit_take(
+        Host::owner(),
+        sequence,
+        base,
+        (track, start),
+        asset,
+        collected,
+    )
 }
 
 fn write_update(
@@ -788,11 +865,46 @@ fn receive_update(
     Ok((!audio.audio.files.is_empty()).then(|| audio.into_audio()))
 }
 
+fn receive_publication(
+    io: &mut StreamOwned<ServerConnection, DeadlineSocket>,
+    canonical: &Mutex<Canonical>,
+    identity: (suhina_collaboration::PeerId, u64, u64, u64),
+    target: (u32, f64),
+    meta: &assets::Asset,
+    storage: (Option<&std::path::Path>, &AtomicBool),
+) -> Result<Result<(), String>, String> {
+    let (peer, sequence, base, seen) = identity;
+    let existing = {
+        let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+        state.since(seen)?;
+        if let Err(error) = state.check_take(peer, sequence, base, target, meta) {
+            return Ok(Err(error));
+        }
+        state.assets.iter().find(|a| a.meta.hash == meta.hash).cloned()
+    };
+    let (asset, audio) = if let Some(asset) = existing {
+        (asset, None)
+    } else {
+        if storage.0.is_none() {
+            return Ok(Err("host has no shared audio storage".into()));
+        }
+        io.sock.deadline = Instant::now() + Duration::from_secs(180);
+        let (asset, audio) = assets::receive_take(io, meta, storage.0, storage.1)?;
+        (asset, Some(audio))
+    };
+    let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+    if storage.1.load(Ordering::Relaxed) {
+        return Err("session stopped".into());
+    }
+    Ok(state.commit_take(peer, sequence, base, target, asset, audio))
+}
+
 fn serve(
     stream: TcpStream,
     tls: Arc<ServerConfig>,
     canonical: &Mutex<Canonical>,
     stop: &AtomicBool,
+    storage: Option<&std::path::Path>,
 ) -> Result<(), String> {
     let connection = ServerConnection::new(tls).map_err(|e| e.to_string())?;
     let mut io = StreamOwned::new(connection, DeadlineSocket::new(stream));
@@ -836,21 +948,52 @@ fn serve(
         while !stop.load(Ordering::Relaxed) {
             io.sock.renew();
             let message: ClientMessage = protocol::read(&mut io)?;
+            let upload = if let ClientMessage::Publish {
+                protocol: PROTOCOL,
+                sequence,
+                base_revision,
+                seen_revision,
+                track,
+                start,
+                asset,
+            } = &message
+            {
+                Some((
+                    *seen_revision,
+                    receive_publication(
+                        &mut io,
+                        canonical,
+                        (peer, *sequence, *base_revision, *seen_revision),
+                        (*track, *start),
+                        asset,
+                        (storage, stop),
+                    )?,
+                ))
+            } else {
+                None
+            };
             let (response, project, assets) = {
                 let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-                let (seen, outcome) = match message {
-                    ClientMessage::Poll { protocol: PROTOCOL, seen_revision } => (seen_revision, None),
-                    ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision, seen_revision, edit }
-                        if sequence > 0 =>
-                    {
+                let (seen, outcome) = match (upload, &message) {
+                    (Some((seen, result)), _) => (seen, Some(result)),
+                    (None, ClientMessage::Poll { protocol: PROTOCOL, seen_revision }) => (*seen_revision, None),
+                    (
+                        None,
+                        ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision, seen_revision, edit },
+                    ) if *sequence > 0 => {
                         // Validate delivery cursor before allowing a mutation.
-                        state.since(seen_revision)?;
-                        (seen_revision, Some(state.submit(peer, sequence, base_revision, edit)))
+                        state.since(*seen_revision)?;
+                        (*seen_revision, Some(state.submit(peer, *sequence, *base_revision, edit.clone())))
                     }
                     _ => return Err("unsupported LAN protocol message".into()),
                 };
                 (state.response(seen, outcome)?, state.host.project().clone(), state.assets.clone())
             };
+            if let (ClientMessage::Publish { asset, .. }, ServerMessage::State { accepted: Some(true), .. }) =
+                (&message, &response)
+            {
+                known.insert(asset.path(), asset.clone());
+            }
             write_update(&mut io, &response, &project, &assets, &mut known, stop)?;
             // Rate bound also applies to a guest bypassing our client's polling cadence.
             std::thread::sleep(Duration::from_millis(50));
@@ -863,10 +1006,46 @@ fn serve(
     result
 }
 
+struct PreparedTake {
+    base: u64,
+    track: u32,
+    start: f64,
+    asset: Arc<assets::Encoded>,
+    audio: AudioAddition,
+}
+struct PendingTake {
+    ready: Receiver<Result<PreparedTake, String>>,
+}
+fn prepare_take(
+    base: u64,
+    track: u32,
+    start: f64,
+    audio: Arc<suhina_engine::AudioData>,
+    root: Option<PathBuf>,
+    stop: Arc<AtomicBool>,
+) -> Result<PendingTake, String> {
+    let (send, ready) = mpsc::sync_channel(1);
+    std::thread::Builder::new()
+        .name("suhina-take-copy".into())
+        .spawn(move || {
+            let prepared = (|| {
+                if stop.load(Ordering::Relaxed) {
+                    return Err("session stopped".into());
+                }
+                let asset = assets::encode_take(&audio)?;
+                let collected = assets::collect_take(&asset, root.as_deref(), &stop)?;
+                Ok(PreparedTake { base, track, start, asset, audio: collected })
+            })();
+            let _ = send.try_send(prepared);
+        })
+        .map_err(|e| format!("cannot prepare take: {e}"))?;
+    Ok(PendingTake { ready })
+}
+
 fn guest(
     invitation: Invitation,
     storage: Option<PathBuf>,
-    stop: &AtomicBool,
+    stop: &Arc<AtomicBool>,
     sockets: &Mutex<Vec<TcpStream>>,
     inputs: Receiver<Input>,
     events: &SyncSender<Event>,
@@ -917,45 +1096,100 @@ fn guest(
     snapshot.revision = revision;
     events.try_send(Event::Connected(controls, Box::new(snapshot))).map_err(|_| "multiplayer view closed")?;
     let mut sequence = 1u64;
+    let mut pending: Option<PendingTake> = None;
     while !stop.load(Ordering::Relaxed) {
         io.sock.renew();
-        let input = inputs.try_recv().ok();
-        let edited = input.is_some();
-        let request = match input {
-            Some(Input::Edit { base, edit }) => {
-                ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision: base, seen_revision: revision, edit }
+        let input = if pending.is_none() { inputs.try_recv().ok() } else { None };
+        let edit = match input {
+            Some(Input::Publish { base, track, start, audio }) => {
+                pending = Some(prepare_take(base, track, start, audio, storage.clone(), Arc::clone(stop))?);
+                None
             }
-            Some(Input::Publish { .. }) => return Err("guest publication is not supported".into()),
-            None => ClientMessage::Poll { protocol: PROTOCOL, seen_revision: revision },
+            Some(Input::Edit { base, edit }) => Some((base, edit)),
+            None => None,
+        };
+        let prepared = match pending.as_ref().map(|p| p.ready.try_recv()) {
+            Some(Ok(Ok(take))) => {
+                pending = None;
+                Some(take)
+            }
+            Some(Ok(Err(error))) => {
+                pending = None;
+                events.try_send(Event::Upload(None)).map_err(|_| "multiplayer view closed")?;
+                events.try_send(Event::Rejected(error)).map_err(|_| "multiplayer view closed")?;
+                None
+            }
+            Some(Err(mpsc::TryRecvError::Disconnected)) => return Err("take preparation stopped".into()),
+            _ => None,
+        };
+        let edited = prepared.is_some() || edit.is_some();
+        let request = if let Some(take) = &prepared {
+            ClientMessage::Publish {
+                protocol: PROTOCOL,
+                sequence,
+                base_revision: take.base,
+                seen_revision: revision,
+                track: take.track,
+                start: take.start,
+                asset: take.asset.meta.clone(),
+            }
+        } else if let Some((base, edit)) = edit {
+            ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision: base, seen_revision: revision, edit }
+        } else {
+            ClientMessage::Poll { protocol: PROTOCOL, seen_revision: revision }
         };
         protocol::write(&mut io, &request)?;
-        let response: ServerMessage = protocol::read(&mut io)?;
+        let response = if let Some(take) = &prepared {
+            io.sock.deadline = Instant::now() + Duration::from_secs(180);
+            assets::send_take(&mut io, &take.asset, stop, |done, total| {
+                let _ = events.try_send(Event::Upload(Some((done, total))));
+            })?
+        } else {
+            protocol::read(&mut io)?
+        };
         let ServerMessage::State { protocol: PROTOCOL, controls, operations, accepted, error } = response else {
             return Err("invalid host response".into());
         };
         let controls = *controls;
+        let was_publication = prepared.is_some();
+        let mut audio = Vec::new();
+        if let Some(take) = prepared
+            && accepted == Some(true)
+        {
+            let expected = take_edit((take.track, take.start), &take.asset.meta);
+            if !operations.iter().any(|op| Some(op.revision) == take.base.checked_add(1) && op.edit == expected) {
+                return Err("host did not confirm the offered take operation".into());
+            }
+            if assets::remember_take(&mut known, &take.asset.meta)? {
+                audio.push(take.audio);
+            }
+        }
         protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations)?;
-        if let Some(audio) =
+        if let Some(addition) =
             receive_update(&mut io, mirror.project(), revision, storage.as_deref(), &mut known, stop, events)?
         {
-            events.try_send(Event::Audio(Box::new(audio))).map_err(|_| "multiplayer view is not keeping up")?;
+            audio.push(addition);
         }
         if controls.revision < previous.revision || controls.revision == previous.revision && controls != previous {
             return Err("host control revision mismatch".into());
+        }
+        if was_publication {
+            events.try_send(Event::Upload(None)).map_err(|_| "multiplayer view closed")?;
         }
         if edited {
             match accepted {
                 Some(true) => sequence = sequence.checked_add(1).ok_or("operation counter exhausted")?,
                 Some(false) => {
-                    let _ =
-                        events.try_send(Event::Rejected(error.unwrap_or_else(|| "the host refused this edit".into())));
+                    events
+                        .try_send(Event::Rejected(error.unwrap_or_else(|| "the host refused this edit".into())))
+                        .map_err(|_| "multiplayer view closed")?;
                 }
                 None => return Err("host did not acknowledge the edit".into()),
             }
         }
         if controls != previous {
             events
-                .try_send(Event::State(controls.clone(), operations, true))
+                .try_send(Event::State(controls.clone(), operations, true, audio))
                 .map_err(|_| "multiplayer view is not keeping up")?;
             previous = controls;
         }

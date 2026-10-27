@@ -62,7 +62,7 @@ ou créer une démonstration. Les notes MIDI, noms, volumes et panoramiques se m
 Un éditeur permet d’ajouter, modifier et supprimer une note ; les modifications concurrentes
 sont vérifiées par l’hôte. L’onglet **Clips** permet aussi de créer, déplacer, redimensionner,
 dupliquer, activer et supprimer des clips MIDI/audio. Les sons déjà chargés peuvent être copiés vers l’invité sous forme de WAV portables.
-L’hôte peut aussi publier une nouvelle prise terminée depuis un onglet local : le son arrive chez l’invité puis son clip apparaît, sans recréer la session.
+Chaque participant peut aussi publier une nouvelle prise terminée depuis un onglet local : le son arrive chez l’invité puis son clip apparaît, sans recréer la session.
 L’onglet **Tracks** permet à chacun d’ajouter une piste audio vide ou une piste MIDI avec FM Synth pendant la connexion.
 
 ### Préparer et jouer son set
@@ -82,7 +82,7 @@ les platines et l'export vers le matériel DJ restent à construire et à vérif
 <!-- fork-progress:begin -->
 | Partie du projet | Étapes réalisées | Prochain objectif |
 |---|---:|---|
-| Créer ensemble | 10 / 13 | Envoyer une prise depuis l’invité |
+| Créer ensemble | 11 / 13 | Sessions Internet et reconnexion |
 | Préparer et jouer | 4 / 8 | Playlists et préparation de set |
 | Évoluer ensemble | 4 / 7 | Version commune validée sur toutes les plateformes |
 <!-- fork-progress:end -->
@@ -95,7 +95,7 @@ leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce
 | Partie | Disponible dans le prototype | Prochaine étape |
 |---|---|---|
 | **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
-| **Multijoueur** | Session LAN hôte + invité, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, publication de prises terminées par l’hôte, noms/volumes/panoramiques partagés et lectures indépendantes. | Envoi de prises par l’invité et appareils partagés. |
+| **Multijoueur** | Session LAN hôte + invité, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, publication de prises terminées par les deux participants, noms/volumes/panoramiques partagés et lectures indépendantes. | Appareils partagés et reconnexion. |
 | **DJ** | Bibliothèque audio persistante, import et analyse tempo/tonalité issue de rbxport. | Playlists, points cue, grilles rythmiques, platines et compatibilité matérielle. |
 | **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
 
@@ -103,7 +103,7 @@ Le trafic chiffré est testé entre deux services sur le même ordinateur, avec 
 sur deux projets de bureau et des moteurs audio indépendants. **Le test sur deux ordinateurs
 physiques reste à faire.** Le document partagé est limité à 2 Mio et aux appareils FM Synth/Utility
 sans état opaque. Les notes se modifient dans **MIDI notes**, et l’arrangement dans **Clips**. Les déplacements
-conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. L’onglet **Publish take** permet à l’hôte de publier le son entier d’une prise terminée depuis un autre onglet Studio vers une piste audio existante, au temps choisi. L’onglet **Tracks** permet d’ajouter les pistes nécessaires sans repartir d’un nouveau partage. Les deux applications doivent utiliser le protocole 7. L’enregistrement direct dans l’onglet partagé, l’envoi par l’invité et les plugins restent à construire.
+conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. L’onglet **Publish take** permet à chacun de publier le son entier d’une prise terminée depuis un autre onglet Studio vers une piste audio existante, au temps choisi. L’onglet **Tracks** permet d’ajouter les pistes nécessaires sans repartir d’un nouveau partage. Les deux applications doivent utiliser le protocole 8. L’invité envoie sa prise à l’hôte pour vérification avant son ajout au morceau. L’enregistrement direct dans l’onglet partagé et les plugins restent à construire.
 
 ## Essayer la version actuelle
 

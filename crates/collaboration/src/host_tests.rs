@@ -43,3 +43,19 @@ fn peer_counter_overflow_does_not_add_a_member() {
     assert_eq!(host.add_peer(Role::Editor), Err(Error::CounterExhausted));
     assert_eq!(host.peers.len(), 1);
 }
+
+#[test]
+fn preflight_has_the_same_replay_and_membership_rules_without_consuming_anything() {
+    let mut host = Host::new(blank_project()).unwrap();
+    let peer = host.add_peer(Role::Editor).unwrap();
+    let request = request(1, 0);
+    let before = host.project().clone();
+    assert!(host.preflight(peer, &request).unwrap().is_none());
+    assert!(host.preflight(peer, &request).unwrap().is_none());
+    assert_eq!(host.project(), &before);
+    assert_eq!(host.revision(), 0);
+    let accepted = host.submit(peer, request.clone()).unwrap();
+    assert_eq!(host.preflight(peer, &request).unwrap(), Some(accepted));
+    host.set_role(peer, Role::Reader).unwrap();
+    assert_eq!(host.preflight(peer, &request), Err(Error::ReadOnly));
+}

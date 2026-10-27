@@ -42,9 +42,9 @@ and USB export are future work. There is no common public release channel yet.
 The network exchange is tested with real TLS loopback connections and two desktop project
 instances. **A physical two-computer session has not yet been verified.** Loaded project audio can now be shared with **Share project + audio** as verified portable
 float32 WAV copies (64 files, 64 MiB each, 256 MiB total). Original encodings/tags are not
-archived. The host can publish a finished loaded take from another local Studio tab into an existing shared audio track using **Publish take**, without reconnecting. The whole sound is inserted unwarped; source trims/effects are not baked in. Guest uploads, recording directly into the shared tab and external plugins remain unsupported. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
+archived. Either participant can publish a finished loaded take from another local Studio tab into an existing shared audio track using **Publish take**, without reconnecting. The whole sound is inserted unwarped; source trims/effects are not baked in. Guest uploads are pulled and verified by the host before publication. Recording directly into the shared tab and external plugins remain unsupported. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
 move, trim, duplicate, enable and delete with revision checks and stack-only placement.
-**Tracks** lets either participant add an audio track or a MIDI track with default FM Synth while connected. Both apps need protocol 7.
+**Tracks** lets either participant add an audio track or a MIDI track with default FM Synth while connected. Both apps need protocol 8.
 [LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-lan-prototype)
 
 ## Progress you can audit

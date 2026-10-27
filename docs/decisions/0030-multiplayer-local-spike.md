@@ -111,6 +111,16 @@ identity allocation and portable quota preflight precede canonical acceptance. E
 and clips remain; new audio tracks can receive published takes. See the [track contract](../spec/lan-track-creation.md).
 
 
+## Amendment: verified guest take publication (27 October 2026)
+
+Protocol 8 extends explicit finished-take publication to the admitted editor. The trusted core
+adds a read-only preflight using the same role/replay/revision rules as commit. The guest
+prepares a private sound copy off its network worker, then the host requests bounded chunks,
+verifies/collects outside its mutex and rechecks before ordering the guest-authored insertion.
+Audio leases and operations reach the UI atomically, retaining bounded pending data on queue
+backpressure. Raw audio edits remain closed. Existing players/source projects are retained.
+See the [guest-take contract](../spec/lan-guest-takes.md).
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.

@@ -231,7 +231,7 @@ fn new_takes_publish_without_reconnecting_reuse_sound_and_preserve_players_and_s
     local.execute("transport.play", &json!({})).unwrap();
     remote.execute("transport.play", &json!({})).unwrap();
     let take = Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.25; 8000] });
-    assert!(guest.select_take(Arc::clone(&take)).is_err());
+    assert!(guest.select_take(Arc::clone(&take)).is_ok());
     // The raw operation is not a path/upload backdoor, even through the owner's ordinary edit entry.
     let raw = WireEdit::AudioInsert {
         track: 2,
@@ -252,7 +252,7 @@ fn new_takes_publish_without_reconnecting_reuse_sound_and_preserve_players_and_s
     for revision in 1..=2 {
         publish_take(&mut host, Arc::clone(&take), revision - 1, 2, 8.0 + (revision - 1) as f64 * 4.0);
         let state = wait(&mut host, |s| s["controls"]["revision"] == revision);
-        assert_eq!(accept_audio(&mut host, &mut local), 1);
+        assert_eq!(accept_audio(&mut host, &mut local), usize::from(revision == 1));
         apply(&mut local, &state, &mut ar);
         let state = wait(&mut guest, |s| s["controls"]["revision"] == revision);
         assert_eq!(
@@ -392,7 +392,7 @@ fn a_native_microphone_take_recorded_after_join_can_be_published_without_changin
     let (file, data) = studio.audio().files.iter().find(|(key, _)| key.contains("Recorded")).unwrap();
     let bytes = std::fs::read(file).unwrap();
     let before = studio.project().clone();
-    publish_take(&mut host, Arc::clone(data), 0, 2, 16.0);
+    publish_take(&mut guest, Arc::clone(data), 0, 2, 16.0);
     let state = wait(&mut host, |s| s["controls"]["revision"] == 1);
     accept_audio(&mut host, &mut local);
     apply(&mut local, &state, &mut 0);
@@ -452,4 +452,163 @@ fn a_guest_adds_an_audio_track_and_the_host_publishes_a_new_sound_to_it_without_
         remote.project().arrangement.lanes.iter().find(|l| l.track == Some(suhina_model::TrackId(track))).unwrap();
     assert_eq!(lane.clips.len(), 1);
     assert_eq!(lane.clips[0].start, 4.0);
+}
+
+#[test]
+fn guest_uploads_reuse_verified_sounds_preserve_players_and_save_both_copies() {
+    let host_dir = tempfile::tempdir().unwrap();
+    let guest_dir = tempfile::tempdir().unwrap();
+    let (project, pool) = source();
+    let before = project.clone();
+    let mut host = Service::default();
+    host.set_storage_root(Some(host_dir.path().into())).unwrap();
+    host.select_audio_project(&project, &pool).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let invitation = wait(&mut host, |s| s["mode"] == "hosting")["invitation"].clone();
+    let snapshot = host.take_shared().unwrap();
+    let mut local = snapshot.session().unwrap();
+    let host_folder = snapshot.folder().unwrap().to_path_buf();
+    snapshot.keep();
+    let mut guest = Service::default();
+    guest.set_storage_root(Some(guest_dir.path().into())).unwrap();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snapshot = guest.take_shared().unwrap();
+    let mut remote = snapshot.session().unwrap();
+    let guest_folder = snapshot.folder().unwrap().to_path_buf();
+    snapshot.keep();
+    let mut a = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
+    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000).unwrap();
+    local.attach_player(Player::new(a.controller(), None));
+    remote.attach_player(Player::new(b.controller(), None));
+    local.execute("transport.setPosition", &json!({"beats":1})).unwrap();
+    remote.execute("transport.setPosition", &json!({"beats":7})).unwrap();
+    local.execute("transport.play", &json!({})).unwrap();
+    remote.execute("transport.play", &json!({})).unwrap();
+    let take = Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.25; 12000] });
+    let (mut ar, mut br) = (0, 0);
+    for revision in 1..=2 {
+        publish_take(&mut guest, Arc::clone(&take), revision - 1, 2, 8.0 + revision as f64 * 4.0);
+        assert!(
+            guest.execute("multiplayer.publishTake", &json!({"base_revision":revision-1,"track":2,"start":0})).is_err(),
+            "one local upload at a time"
+        );
+        let s = wait(&mut host, |s| s["controls"]["revision"] == revision);
+        assert_eq!(accept_audio(&mut host, &mut local), usize::from(revision == 1));
+        apply(&mut local, &s, &mut ar);
+        let s = wait(&mut guest, |s| s["controls"]["revision"] == revision);
+        assert_eq!(accept_audio(&mut guest, &mut remote), usize::from(revision == 1));
+        apply(&mut remote, &s, &mut br);
+        assert!(s["sending"].is_null());
+        assert_eq!(local.project(), remote.project());
+        assert_eq!(render(&local), render(&remote));
+        assert_eq!(local.audio().files.len(), 2);
+    }
+    assert_eq!(std::fs::read_dir(host_dir.path()).unwrap().count(), 2, "duplicate creates no new host folder");
+    assert_eq!(std::fs::read_dir(guest_dir.path()).unwrap().count(), 2, "duplicate local preparation is discarded");
+    publish_take(
+        &mut host,
+        Arc::new(AudioData { sample_rate: 8000, channels: 2, samples: vec![0.1; 8000] }),
+        2,
+        1,
+        24.0,
+    );
+    let s = wait(&mut host, |s| s["controls"]["revision"] == 3);
+    accept_audio(&mut host, &mut local);
+    apply(&mut local, &s, &mut ar);
+    let s = wait(&mut guest, |s| s["controls"]["revision"] == 3);
+    accept_audio(&mut guest, &mut remote);
+    apply(&mut remote, &s, &mut br);
+    let folders = std::fs::read_dir(guest_dir.path()).unwrap().count();
+    let candidate = Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.4; 8000] });
+    publish_take(&mut guest, Arc::clone(&candidate), 0, 2, 32.0);
+    let s = wait(&mut guest, |s| s["error"].is_string());
+    assert_eq!(s["controls"]["revision"], 3);
+    assert!(guest.take_audio().is_empty());
+    assert_eq!(std::fs::read_dir(guest_dir.path()).unwrap().count(), folders, "stale local preparation is cleaned up");
+    publish_take(&mut guest, Arc::clone(&candidate), 3, 2, 32.0);
+    let s = wait(&mut host, |s| s["controls"]["revision"] == 4);
+    accept_audio(&mut host, &mut local);
+    apply(&mut local, &s, &mut ar);
+    let s = wait(&mut guest, |s| s["controls"]["revision"] == 4);
+    accept_audio(&mut guest, &mut remote);
+    apply(&mut remote, &s, &mut br);
+    assert_eq!(local.project(), remote.project());
+    assert_eq!(render(&local), render(&remote));
+    let mut out = [0.0; 512];
+    a.process(&mut out);
+    b.process(&mut out);
+    assert!(a.monitor().running() && b.monitor().running());
+    assert!((a.monitor().beat() - b.monitor().beat()).abs() > 5.0);
+    host.execute("multiplayer.stop", &json!({})).unwrap();
+    guest.execute("multiplayer.stop", &json!({})).unwrap();
+    for (session, folder) in [(&mut local, host_folder), (&mut remote, guest_folder)] {
+        let path = folder.join("With-guest-takes.suhina");
+        session.save(&path, false).unwrap();
+        let trusted =
+            suhina_media::Trusted { files: session.loaded_audio_paths().into_iter().collect(), ..Default::default() };
+        let opened = suhina_project_file::read_file(&path).unwrap();
+        let (audio, warnings) = suhina_media::load_project_audio_trusted(&opened, &folder, &trusted);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!(
+            suhina_engine::render_offline_from(&opened, RenderInputs::from_audio(&audio), 8000, 512, None).unwrap(),
+            render(session)
+        );
+    }
+    assert_eq!(project, before);
+    assert_eq!(take.samples, vec![0.25; 12000]);
+}
+
+#[test]
+fn a_failed_guest_preparation_keeps_the_connection_and_next_publication_sequence_usable() {
+    let a = tempfile::tempdir().unwrap();
+    let b = tempfile::tempdir().unwrap();
+    let (project, audio) = source();
+    let mut host = Service::default();
+    host.set_storage_root(Some(a.path().into())).unwrap();
+    host.select_audio_project(&project, &audio).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let invite = wait(&mut host, |s| s["mode"] == "hosting")["invitation"].clone();
+    let snapshot = host.take_shared().unwrap();
+    let mut local = snapshot.session().unwrap();
+    snapshot.keep();
+    let mut guest = Service::default();
+    guest.set_storage_root(Some(b.path().into())).unwrap();
+    guest.execute("multiplayer.join", &json!({"invitation":invite})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snapshot = guest.take_shared().unwrap();
+    let mut remote = snapshot.session().unwrap();
+    snapshot.keep();
+    publish_take(
+        &mut guest,
+        Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![f32::NAN; 100] }),
+        0,
+        2,
+        8.0,
+    );
+    let state = wait(&mut guest, |s| s["error"].is_string());
+    assert_eq!(state["mode"], "connected");
+    assert_eq!(state["controls"]["revision"], 0);
+    assert!(state["sending"].is_null());
+    assert!(guest.take_audio().is_empty());
+    assert_eq!(
+        std::fs::read_dir(b.path()).unwrap().count(),
+        1,
+        "bad local data leaves only the original collected folder"
+    );
+    publish_take(
+        &mut guest,
+        Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.2; 8000] }),
+        0,
+        2,
+        8.0,
+    );
+    let state = wait(&mut host, |s| s["controls"]["revision"] == 1);
+    accept_audio(&mut host, &mut local);
+    apply(&mut local, &state, &mut 0);
+    let state = wait(&mut guest, |s| s["controls"]["revision"] == 1);
+    accept_audio(&mut guest, &mut remote);
+    apply(&mut remote, &state, &mut 0);
+    assert_eq!(local.project(), remote.project());
+    assert_eq!(render(&local), render(&remote));
 }

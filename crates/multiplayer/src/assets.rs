@@ -158,6 +158,20 @@ pub(crate) fn references(project: &Project) -> BTreeSet<String> {
         })
         .collect()
 }
+pub(crate) fn validate_asset(a: &Asset) -> Result<(), String> {
+    let expected = a.frames.checked_mul(usize::from(a.channels)).and_then(|n| n.checked_mul(4));
+    if !valid_path(&a.path())
+        || a.bytes == 0
+        || a.bytes > MAX_ASSET
+        || !(8000..=192000).contains(&a.rate)
+        || !(1..=2).contains(&a.channels)
+        || a.frames == 0
+        || expected.is_none_or(|n| n > MAX_ASSET - 128 || n > a.bytes || a.bytes - n > 128)
+    {
+        return Err("invalid audio manifest entry".into());
+    }
+    Ok(())
+}
 fn manifest(project: &Project, assets: &[Asset]) -> Result<(), String> {
     if assets.len() > MAX_ASSETS {
         return Err("too many shared audio files".into());
@@ -165,17 +179,9 @@ fn manifest(project: &Project, assets: &[Asset]) -> Result<(), String> {
     let mut paths = BTreeSet::new();
     let mut total = 0usize;
     for a in assets {
-        let expected = a.frames.checked_mul(usize::from(a.channels)).and_then(|n| n.checked_mul(4));
-        if !valid_path(&a.path())
-            || !paths.insert(a.path())
-            || a.bytes == 0
-            || a.bytes > MAX_ASSET
-            || !(8000..=192000).contains(&a.rate)
-            || !(1..=2).contains(&a.channels)
-            || a.frames == 0
-            || expected.is_none_or(|n| n > a.bytes || a.bytes - n > 128)
-        {
-            return Err("invalid audio manifest entry".into());
+        validate_asset(a)?;
+        if !paths.insert(a.path()) {
+            return Err("repeated asset".into());
         }
         total = total.checked_add(a.bytes).filter(|n| *n <= MAX_TOTAL).ok_or("shared audio exceeds 256 MiB")?;
     }
@@ -389,6 +395,17 @@ pub(crate) fn prepare(
 
 /// Keep only not-yet-verified references for the existing strict manifest machinery.
 pub(crate) type Known = BTreeMap<String, Asset>;
+pub(crate) fn remember_take(known: &mut Known, meta: &Asset) -> Result<bool, String> {
+    validate_asset(meta)?;
+    if let Some(old) = known.get(&meta.path()) {
+        return if old == meta { Ok(false) } else { Err("known sound metadata changed".into()) };
+    }
+    if known.len() >= MAX_ASSETS || known.values().map(|a| a.bytes).sum::<usize>() + meta.bytes > MAX_TOTAL {
+        return Err("cumulative session audio budget exceeded".into());
+    }
+    known.insert(meta.path(), meta.clone());
+    Ok(true)
+}
 pub(crate) fn missing(project: &Project, known: &Known) -> Result<Project, String> {
     let mut project = project.clone();
     for content in &mut project.contents {
@@ -440,6 +457,94 @@ pub(crate) fn collect_take(asset: &Encoded, root: Option<&Path>, stop: &AtomicBo
         return Err("session stopped".into());
     }
     Ok(AudioAddition { audio, folder })
+}
+
+/// Pull a single offered sound from an authenticated guest into a fresh private folder.
+pub(crate) fn receive_take(
+    io: &mut (impl Read + Write),
+    meta: &Asset,
+    root: Option<&Path>,
+    stop: &AtomicBool,
+) -> Result<(Arc<Encoded>, AudioAddition), String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    validate_asset(meta)?;
+    let folder = staging(root, true)?;
+    let dir = folder.as_ref().ok_or("audio storage missing")?;
+    let part = dir.path().join("take.part");
+    let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&part).map_err(|e| e.to_string())?;
+    let mut offset = 0;
+    let mut digest = blake3::Hasher::new();
+    while offset < meta.bytes {
+        if stop.load(Ordering::Relaxed) {
+            return Err("session stopped".into());
+        }
+        protocol::write(io, &ServerMessage::UploadRequest { protocol: PROTOCOL, offset })?;
+        let ClientMessage::UploadChunk { protocol: PROTOCOL, offset: at, data } = protocol::read(io)? else {
+            return Err("invalid upload chunk".into());
+        };
+        if at != offset || data.len() > CHUNK.div_ceil(3) * 4 {
+            return Err("invalid upload offset or size".into());
+        }
+        let bytes = STANDARD.decode(data).map_err(|_| "invalid upload encoding")?;
+        if bytes.len() != CHUNK.min(meta.bytes - offset) {
+            return Err("incomplete or oversized upload".into());
+        }
+        file.write_all(&bytes).map_err(|e| e.to_string())?;
+        digest.update(&bytes);
+        offset += bytes.len();
+    }
+    file.sync_all().map_err(|e| e.to_string())?;
+    drop(file);
+    if digest.finalize().to_hex().as_str() != meta.hash {
+        return Err("uploaded sound hash mismatch".into());
+    }
+    let bytes = std::fs::read(&part).map_err(|e| e.to_string())?;
+    let data = decode(&bytes, meta)?;
+    std::fs::rename(&part, dir.path().join(meta.path())).map_err(|e| e.to_string())?;
+    let mut audio = AudioPool::new();
+    audio.files.insert(meta.path(), Arc::new(data));
+    Ok((Arc::new(Encoded { meta: meta.clone(), bytes }), AudioAddition { audio, folder }))
+}
+
+/// Answer exact host pulls until its terminal State. No source path is transmitted or opened.
+pub(crate) fn send_take(
+    io: &mut (impl Read + Write),
+    asset: &Encoded,
+    stop: &AtomicBool,
+    mut progress: impl FnMut(usize, usize),
+) -> Result<ServerMessage, String> {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    let mut offset = 0;
+    let mut reported = 0;
+    let quantum = asset.bytes.len().div_ceil(16).max(CHUNK);
+    progress(0, asset.bytes.len());
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            return Err("session stopped".into());
+        }
+        match protocol::read(io)? {
+            ServerMessage::UploadRequest { protocol: PROTOCOL, offset: at }
+                if at == offset && offset < asset.bytes.len() =>
+            {
+                let end = (offset + CHUNK).min(asset.bytes.len());
+                protocol::write(
+                    io,
+                    &ClientMessage::UploadChunk {
+                        protocol: PROTOCOL,
+                        offset,
+                        data: STANDARD.encode(&asset.bytes[offset..end]),
+                    },
+                )?;
+                offset = end;
+                if offset == asset.bytes.len() || offset - reported >= quantum {
+                    progress(offset, asset.bytes.len());
+                    reported = offset;
+                }
+            }
+            value @ ServerMessage::State { .. } if offset == 0 || offset == asset.bytes.len() => return Ok(value),
+            _ => return Err("invalid host upload response".into()),
+        }
+    }
 }
 
 pub(crate) fn send(
