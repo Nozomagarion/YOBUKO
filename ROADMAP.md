@@ -164,6 +164,8 @@ refused or suspended, never by losing its edits.
 
 - **Composable SDK sample source:** Rust-authored instrument graphs can bind PCM to
   independent polyphonic `sampler` nodes and process their audio with ordinary SDK nodes.
+- Windows release, nightly and test packages include ASIO support: choose ASIO in Settings ›
+  Audio › Driver, then an installed audio driver in Device. WASAPI remains available.
 
 - **Device SDK authoring:** checked Rust graph handles, parameter-source helpers and standard
   panel-control constructors produce the same data-only `.sd` devices and use the existing runtime.
