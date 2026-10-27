@@ -445,7 +445,7 @@ fn sample_waveform(
             crate::kit::theme::window_background(),
         );
         let response = ui
-            .interact(marker, egui::Id::new(("sample-marker", track.0, device, id)), egui::Sense::click_and_drag())
+            .interact(marker, ui.id().with(("sample-marker", track.0, device, id)), egui::Sense::click_and_drag())
             .on_hover_text(format!("Drag {}", id.replace('_', " ")))
             .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
         if response.double_clicked() {
@@ -587,7 +587,7 @@ fn envelope(
             .min_by(|i, j| plot.points[*i].distance_sq(pos).total_cmp(&plot.points[*j].distance_sq(pos)))
     });
     for index in 1..count {
-        let id = egui::Id::new(("sd-envelope", target.0.0, target.1, &control.id, index));
+        let id = ui.id().with(("sd-envelope", target.0.0, target.1, &control.id, index));
         let state_id = id.with("press");
         let state = ui.ctx().data(|data| data.get_temp::<([f64; 4], [f64; 4])>(state_id));
         let sense = if nearest == Some(index) || state.is_some() {
@@ -995,7 +995,8 @@ pub(crate) fn show(
         let response = ui
             .interact(
                 bounds,
-                egui::Id::new(("sd-custom", track.0, device, &control.id)),
+                // Scoped to the canvas: the compact panel under an expanded one has controls of the same ids.
+                ui.id().with(("sd-custom", track.0, device, &control.id)),
                 if control.gesture == UiGesture::Menu { egui::Sense::click() } else { egui::Sense::click_and_drag() },
             )
             .on_hover_text(tooltip);
