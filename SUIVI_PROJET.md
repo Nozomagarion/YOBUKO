@@ -1,9 +1,9 @@
 # Où en est notre application ?
 
-**Envoi de prises par l’invité en vérification — 27 octobre 2026.**
-Le code et les tests ciblés permettent maintenant à l’invité de publier une prise terminée.
-L’hôte reçoit et vérifie le son avant d’ajouter son clip. La suite complète passe : **3 119 tests réussis, aucun échec, 54 ignorés**. Le nouveau
-paquet reste à livrer ; le paquet précédent `acc0b105` ne possède pas cette fonction.
+**Bilan du 27 octobre 2026 — envoi de prises par l’invité livré et validé localement.**
+Les deux participants peuvent maintenant **publier une prise terminée pendant la connexion**.
+L’hôte reçoit et vérifie le son de l’invité avant d’ajouter son clip au morceau partagé.
+Paquet Mac : **`de4dae38`**, protocole 8. Les contrôles distants restent bloqués par GitHub.
 
 ## À retenir
 
@@ -11,12 +11,11 @@ On construit **une seule application pour produire, créer à plusieurs, prépar
 Suhina fournit le studio. Notre fork ajoute le multijoueur et le lien avec la préparation DJ,
 qui commence avec l’analyse musicale de rbxport.
 
-Le partage comprenait déjà les notes, le mixeur, les clips et la publication de prises terminées
-par l’hôte. **Il n’est plus nécessaire de préparer toutes les pistes avant de partager.** Dans
-**Multiplayer → Tracks**, chacun peut ajouter une piste audio vide ou une piste MIDI avec
-FM Synth. Les nouvelles pistes apparaissent dans les deux copies sans reconnexion.
-La publication de prises reste limitée à l’hôte et utilise le son entier, sans les découpes,
-boucles ou effets du clip source.
+Le partage comprenait déjà les notes, le mixeur, les clips et l’ajout de pistes. **L’invité peut
+désormais apporter ses propres prises au morceau commun**, comme l’hôte, sans reconnecter la
+session. La préparation du son se fait en arrière-plan ; l’envoi est affiché, puis le clip
+apparaît une fois accepté. Les originaux restent dans leurs onglets et fichiers locaux.
+La publication utilise le son entier, sans les découpes, boucles ou effets du clip source.
 
 Le paquet de développement est disponible. Il n’a pas remplacé automatiquement l’application
 installée ou déjà ouverte sur ton Mac. Le multijoueur complet et l’espace DJ complet restent en développement.
@@ -30,7 +29,7 @@ installée ou déjà ouverte sur ton Mac. Le multijoueur complet et l’espace D
 | **Notes MIDI** | Ajouter, modifier et supprimer les notes ; régler hauteur, durée et vélocité. | Davantage d’outils partagés et l’édition des instruments. |
 | **Pistes** | Les deux participants peuvent ajouter une piste audio ou MIDI/FM Synth pendant la session. | Suppression, réorganisation/groupes et choix partagé des appareils. |
 | **Clips MIDI/audio** | Créer, déplacer, changer les bords, dupliquer, activer et supprimer les clips de l’arrangement. | Édition dans les cases du lanceur et davantage d’opérations. |
-| **Nouvelles prises** | L’hôte publie un son terminé depuis un onglet Studio local vers une piste audio partagée existante. | Envoi par l’invité, enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
+| **Nouvelles prises** | L’hôte et l’invité publient un son terminé depuis un onglet Studio local vers une piste audio partagée. L’hôte vérifie les envois. | Enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
 | **Écoute personnelle** | Chacun garde son lecteur, sa position, son démarrage et son arrêt. Une publication ne remplace pas les lecteurs. | Essai sur les deux ordinateurs de la maison. |
 | **Espace DJ** | Bibliothèque persistante, import, analyse tempo/tonalité issue de rbxport, ajout d’un rendu du studio. | Playlists, points cue, grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Bouton dans les paramètres pour comparer les versions GitHub ; suivi des sources et vérification des paquets de notre application. | Intégration régulière des nouveautés, publication et réception automatique d’une version commune. |
@@ -51,11 +50,17 @@ visuelles locales ne modifient plus les couleurs stockées dans l’onglet parta
 ## Comment publier une nouvelle prise
 
 1. L’hôte crée ou partage un projet ; l’invité rejoint avec son invitation. Une **piste audio** peut être ajoutée ensuite dans **Tracks**.
-2. L’hôte enregistre sa nouvelle prise dans un **onglet Studio local ordinaire**, puis termine l’enregistrement.
+2. Le participant qui veut publier enregistre sa prise dans un **onglet Studio local ordinaire**, puis termine l’enregistrement.
 3. Il garde le panneau **Multiplayer** ouvert et sélectionne cet onglet local.
 4. Dans **Publish take**, il choisit le son chargé, la piste audio du projet partagé et **Start beat**.
-5. Il clique sur **Publish loaded take**. Le clip apparaît dans les copies partagées une fois accepté ; l’invité reçoit d’abord le son manquant.
-6. Il enregistre explicitement la copie partagée pour conserver son arrangement modifié.
+5. Il clique sur **Publish loaded take**. S’il est invité, l’hôte demande et vérifie les morceaux du fichier. Le clip apparaît dans les deux copies après confirmation.
+6. Chacun enregistre explicitement sa copie partagée pour conserver l’arrangement modifié.
+
+**Preparing take…** puis **Sending take** indiquent la préparation et l’envoi. Les lecteurs
+restent indépendants. Si le morceau change pendant le transfert, l’hôte peut refuser la prise
+périmée : attendre la synchronisation puis relancer la publication. Aucun ancien arrangement
+n’est écrasé. Le transfert utilise la connexion existante ; les modifications réseau peuvent
+attendre sa fin, tandis que l’écoute locale continue.
 
 Le bouton **Share project + audio** reste celui du partage initial. Les copies des sons sont
 conservées sous **Shared projects**, dans le dossier de données de l’application. Les nouvelles
@@ -70,31 +75,31 @@ pris en charge ; plugins externes, autres instruments et stems à plusieurs flux
 
 ## Ce qu’on vient de fabriquer, et pourquoi
 
-- **Création de pistes par les deux participants :** pour agrandir le morceau au fil de la session.
-- **Piste MIDI déjà équipée :** pour écrire des notes et entendre FM Synth immédiatement.
-- **Nouvelle piste audio utilisable :** pour y publier une nouvelle voix, prise ou boucle sans repartir d’un partage.
-- **Identités et ordre communs :** les deux copies reçoivent les mêmes pistes, canaux et clips.
-- **Refus sans modification :** une demande périmée ou hors limite ne consomme pas d’identifiant ni de révision.
-- **Préférences locales isolées :** les réglages de couleurs du studio ne modifient pas la copie partagée hors de son historique.
+- **Envoi depuis l’invité :** pour que chacun puisse apporter une nouvelle voix, prise ou boucle.
+- **Préparation en arrière-plan :** pour continuer à traiter la connexion pendant la copie locale du son.
+- **Vérification par l’hôte :** taille, identité du fichier, format audio et révision du morceau avant son ajout.
+- **Son et clip livrés ensemble à l’interface :** pour ne pas afficher un clip dont le son n’est pas encore disponible.
+- **Réutilisation des sons :** un fichier déjà vérifié n’est pas renvoyé inutilement à son auteur ni recopié une seconde fois chez l’hôte.
+- **Refus et nettoyage :** un transfert incomplet ou une prise périmée n’ajoute pas de clip ; les copies abandonnées sont retirées, les originaux conservés.
 
 ## Ce qui a été vérifié
 
 | Vérification | État constaté |
 |---|---|
-| Ensemble des tests sur ce Mac | **3 110 réussis, aucun échec ; 53 facultatifs ignorés.** Le total comprend Suhina et nos ajouts. |
+| Ensemble des tests sur ce Mac | **3 119 réussis, aucun échec ; 54 non lancés dans ce passage standard.** Le contrôle visuel de l’invité a été exécuté séparément. Le total comprend Suhina et nos ajouts. |
 | Ajout de pistes pendant la connexion | **Réussi dans les deux sens** : piste MIDI puis notes audibles ; piste audio puis publication d’un son, projets identiques. |
-| Prise enregistrée après la connexion | **Réussi avec le moteur natif et un micro simulé**, puis transfert chiffré, son identique et original conservé. |
-| Lecteurs, publication et sauvegarde | **Réussi** : lectures indépendantes, réutilisation du même son, sauvegarde/réouverture et arrivée tardive. |
-| Erreurs et limites | **Réussi** : requêtes périmées, champs interdits, limites pistes/canaux/appareils/lanes, fichiers incorrects, quotas et transferts interrompus. |
+| Prise de l’invité enregistrée après la connexion | **Réussi avec le moteur natif et un micro simulé**, puis envoi chiffré à l’hôte, son identique et original conservé. |
+| Lecteurs, publication et sauvegarde | **Réussi dans les deux sens** : lectures indépendantes, réutilisation du même son, sauvegarde/réouverture des deux copies et autres modifications partagées après un envoi. |
+| Erreurs et limites | **Réussi** : refus avant réception des données, doublons acceptés une seule fois, modifications pendant l’envoi, mauvaise identité de fichier, WAV malformé, erreur de préparation, quotas et nettoyage. |
 | Interface | **Réussi** : bouton cliqué dans les tests, conservation des onglets et affichage contrôlé visuellement. |
-| Paquet Mac Apple Silicon `acc0b105` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
+| Paquet Mac Apple Silicon `de4dae38` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
 | Nouveaux contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat annoncé pour cette version.** |
 | Deux ordinateurs physiques | **Pas encore testé**, comme convenu. |
 
-Les tests et le paquet correspondent au code **`acc0b1057d3220945d453c44645bd31d7e22571a`**,
+Les tests et le paquet correspondent au code **`de4dae38047ddde709d704f0a90ecb2c86848939`**,
 compilé après son enregistrement et envoyé sur notre branche GitHub.
 
-**Blocage GitHub à nouveau constaté le 27 octobre à 14 h 10 :** le lancement manuel renvoie
+**Blocage GitHub à nouveau constaté le 27 octobre à 21 h 11 :** le lancement manuel renvoie
 `HTTP 422: Actions has been disabled for this repository.` La lecture du réglage renvoie
 pourtant `enabled: true`. La cause de ce désaccord n’est pas établie. Aucun nouveau contrôle
 n’était visible pour cette révision ; la validation distante n’a pas pu commencer.
@@ -108,24 +113,25 @@ Les états de ce fichier sont un relevé daté ; ils ne se rafraîchissent pas t
 ## Où trouver la version actuelle
 
 - **Code et présentation :** [notre dépôt GitHub](https://github.com/Nozomagarion/suhina-daw), branche `feature/multiplayer` affichée dès l’accueil.
-- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-tracks-macos-arm64-acc0b105.zip`.
+- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-guest-takes-macos-arm64-de4dae38.zip`.
 - **Dans le paquet :** `Suhina.app`, les outils nécessaires, ce suivi et les sources exactes du commit livré.
 - **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP.
 - **Preuves locales :** dossier `validation/2026-10-27` voisin du dépôt : journaux, captures et script de fabrication du paquet.
 
-**Les deux participants devront utiliser le protocole 7**, donc cette même nouvelle version.
-Les anciens paquets utilisant les protocoles 4, 5 ou 6 ne peuvent pas rejoindre ces sessions.
+**Les deux participants devront utiliser le protocole 8**, donc cette même nouvelle version.
+Les anciens paquets utilisant les protocoles 4, 5, 6 ou 7 ne peuvent pas rejoindre ces sessions.
 Le canal commun de mises à jour n’est pas encore publié. Les nouveautés Suhina/rbxport doivent
 être intégrées à notre version, testées puis distribuées ensemble pour conserver le multijoueur.
 
 ## Ce qui vient ensuite
 
-**Prochain développement : envoyer des prises depuis l’invité. Statut : à commencer.**
-Critère : l’invité termine une prise dans son onglet local, puis la publie dans le morceau
-commun ; les deux participants entendent le même son sans reconnexion et les originaux restent conservés.
+**Prochain développement : réinviter après une coupure sans redémarrer l’hôte. Statut : à commencer.**
+Critère : conserver le morceau courant chez l’hôte, produire une nouvelle invitation privée,
+puis rejoindre son état à jour sans écraser la dernière copie ni les modifications locales de l’invité.
+Aujourd’hui, l’invitation reste à usage unique et il faut recréer un partage après la coupure.
 
-La suite reste : appareils et participants supplémentaires, reconnexion, installation/mise à
-jour commune, puis préparation et performance DJ avancées.
+La suite reste : reconnexion plus complète, appareils et participants supplémentaires,
+installation/mise à jour commune, puis préparation et performance DJ avancées.
 **L’essai sur deux ordinateurs à la maison reste prévu plus tard, comme tu l’as demandé.**
 
 ## Comment ce suivi sera tenu
