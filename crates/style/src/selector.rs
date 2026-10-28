@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Native element selectors, independent of HTML and bounded at device-panel roots.
-use cssparser::{Parser, ParserInput, Token};
+use cssparser::{Parser, Token};
 
 const MAX_ELEMENTS: usize = 4096;
 const MAX_DEPTH: usize = 32;
@@ -188,8 +188,7 @@ impl Selector {
             return Err("Selector exceeds 2048 bytes".into());
         }
         crate::syntax::validate(source)?;
-        let mut input = ParserInput::new(source);
-        parse_list(&mut Parser::new(&mut input), 0)
+        parse_list(&mut Parser::new(source), 0)
     }
 
     /// A device sheet supplies its panel as `root`, so ancestor and sibling matching
@@ -289,7 +288,7 @@ impl Selector {
     }
 }
 
-fn parse_list(parser: &mut Parser<'_, '_>, depth: usize) -> Result<Vec<Selector>, String> {
+fn parse_list(parser: &mut Parser<'_>, depth: usize) -> Result<Vec<Selector>, String> {
     if depth > 8 {
         return Err("Selector logic exceeds eight nested functions".into());
     }
@@ -350,7 +349,7 @@ fn parse_list(parser: &mut Parser<'_, '_>, depth: usize) -> Result<Vec<Selector>
                 parser
                     .parse_nested_block(|parser| {
                         attribute = Some(object_attribute(parser));
-                        Ok::<(), cssparser::ParseError<'_, ()>>(())
+                        Ok::<(), cssparser::ParseError<()>>(())
                     })
                     .map_err(|e| format!("Attribute: {e:?}"))?;
                 (Test::Object(attribute.ok_or("Missing attribute")??), Specificity(0, 1, 0))
@@ -377,7 +376,7 @@ fn parse_list(parser: &mut Parser<'_, '_>, depth: usize) -> Result<Vec<Selector>
                     parser
                         .parse_nested_block(|parser| {
                             inner = Some(parse_list(parser, depth + 1));
-                            Ok::<(), cssparser::ParseError<'_, ()>>(())
+                            Ok::<(), cssparser::ParseError<()>>(())
                         })
                         .map_err(|e| format!("Selector logic: {e:?}"))?;
                     let selectors = inner.ok_or("Missing selector arguments")??;
@@ -412,7 +411,7 @@ fn parse_list(parser: &mut Parser<'_, '_>, depth: usize) -> Result<Vec<Selector>
 }
 
 /// The inside of `[...]`: only `data-object`, the host's stable object name, exists.
-fn object_attribute(parser: &mut Parser<'_, '_>) -> Result<Option<String>, String> {
+fn object_attribute(parser: &mut Parser<'_>) -> Result<Option<String>, String> {
     let name = parser.expect_ident_cloned().map_err(|_| "Expected an attribute name")?;
     if !name.eq_ignore_ascii_case("data-object") {
         return Err("Only [data-object] is a native attribute".into());
