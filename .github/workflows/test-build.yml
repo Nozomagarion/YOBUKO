@@ -292,7 +292,7 @@ jobs:
       # 10 GB and evicted main's caches, ci.yml's among them.
       - uses: Swatinem/rust-cache@v2
         with:
-          key: test-build-${{ matrix.name }}
+          shared-key: test-build-${{ matrix.name }}
           save-if: false
 
       # As release.yml does for the nightly: the version in [workspace.package], and so in every
@@ -418,7 +418,7 @@ jobs:
           targets: ${{ matrix.targets }}
       - uses: Swatinem/rust-cache@v2
         with:
-          key: test-build-${{ matrix.name }}
+          shared-key: test-build-${{ matrix.name }}
       - name: Build
         shell: bash
         env:
