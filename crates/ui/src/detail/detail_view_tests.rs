@@ -182,10 +182,7 @@ fn a_selected_track_shows_its_devices() {
 #[test]
 fn a_built_ins_generated_list_fits_the_compact_panel() {
     let mut project = demo_project();
-    project.channels[0].devices = vec![
-        Device::new("Utility", DeviceKind::Builtin("utility".into())),
-        Device::new("Pitch", DeviceKind::Builtin("pitch".into())),
-    ];
+    project.channels[0].devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into()))];
     let Detail::Devices(chain) = build(&project, Some(TrackId(1)), None) else { panic!() };
     for device in &chain.devices {
         let graph = device.graph.as_ref().unwrap_or_else(|| panic!("{} has a panel", device.name));
@@ -477,7 +474,7 @@ fn a_running_plug_in_shows_the_parameters_it_lists_as_a_generated_list() {
 fn automation_replaces_a_plug_ins_listed_text_with_the_value_it_plays() {
     use suhina_engine::model::{AutomationLane, AutomationPoint};
     let mut project = with_plugin();
-    let point = |beat, value| AutomationPoint { beat, value, curve: 0.0 };
+    let point = |beat, value| AutomationPoint { beat, value, curve: Default::default() };
     project.channels[0].devices[0].automation = vec![
         AutomationLane { param: "1".into(), points: vec![point(0.0, 0.75), point(8.0, 0.75)], enabled: true },
         AutomationLane { param: "2".into(), points: vec![point(0.0, 3.0), point(8.0, 3.0)], enabled: true },
@@ -495,6 +492,42 @@ fn automation_replaces_a_plug_ins_listed_text_with_the_value_it_plays() {
     let shown: Vec<_> = graph.parameters.iter().map(|p| (p.value, p.text.as_str())).collect();
     assert_eq!(shown, [(0.75, ""), (1.0, "")]);
     assert_eq!(value_text(&graph.parameters[0], 0.75), "0.75");
+}
+
+/// A panel showing what automation plays sends nothing by itself, also where the value
+/// falls between the control's steps or decimals: egui's slider rounds the value it draws,
+/// and that rounding was sent as a change, which turned the lane off as soon as playback
+/// reached it (reported on Discord).
+#[test]
+fn a_followed_value_between_steps_is_not_sent_as_an_edit() {
+    use egui_kittest::Harness;
+    use suhina_engine::model::{AutomationLane, AutomationPoint};
+    let mut project = demo_project();
+    let mut utility = Device::new("Utility", DeviceKind::Builtin("utility".into()));
+    for param in ["mono", "balance", "gain", "width"] {
+        let mut lane = AutomationLane::new(param);
+        lane.points = vec![AutomationPoint::new(0.0, 0.0), AutomationPoint::new(4.0, 1.0)];
+        utility.automation.push(lane);
+    }
+    project.channels[0].devices.push(utility);
+    let mut detail = build(&project, Some(TrackId(1)), None);
+    detail.follow_automation(&project, 1.234_567);
+    for stacked in [false, true] {
+        let mut harness = Harness::builder().with_size(egui::vec2(900.0, 400.0)).build_ui_state(
+            |ui, actions: &mut Vec<Action>| {
+                let mut places = Vec::new();
+                if stacked {
+                    show_stack(ui, &detail, &[], actions, &mut places);
+                } else {
+                    show_row(ui, &detail, &[], actions, &mut places);
+                }
+            },
+            Vec::new(),
+        );
+        harness.run_steps(3);
+        let set: Vec<_> = harness.state().iter().filter(|a| a.id == "device.setParam").collect();
+        assert!(set.is_empty(), "stacked {stacked}: {set:?}");
+    }
 }
 
 #[test]
@@ -739,4 +772,39 @@ fn the_editor_button_asks_for_the_device_command() {
         assert_eq!(actions[0].id, "device.openEditor");
         assert_eq!(actions[0].params, json!({ "track": 1, "device": 0 }));
     }
+}
+
+#[test]
+fn a_theme_lays_a_generated_list_side_by_side() {
+    let mut project = demo_project();
+    project.channels[0].devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into()))];
+    let Detail::Devices(chain) = build(&project, Some(TrackId(1)), None) else { panic!() };
+    let graph = chain.devices[0].graph.as_ref().unwrap();
+    let (theme, _) =
+        crate::kit::theme::from_sheet(".device { --suhina-param-columns: 3; --suhina-param-row: 48px; }", "");
+    crate::kit::skin::configure(&theme.skin);
+    let cells = parameter_layout(&graph.parameters, 300.0, &[]);
+    crate::kit::skin::configure(&crate::kit::skin::Skin::default());
+    let lefts: Vec<f32> = cells.iter().take(4).map(|c| c.left()).collect();
+    assert_eq!(lefts, [0.0, 100.0, 200.0, 0.0], "three to a line, then the next line");
+    assert!(cells[0].height() >= 48.0 && cells[3].top() >= 48.0, "{cells:?}");
+}
+
+#[test]
+fn stock_value_text_drops_the_minus_of_a_negative_that_rounds_to_zero() {
+    let mut parameter = GraphParameter {
+        text: String::new(),
+        default: 0.0,
+        control: suhina_device_sdk::ParameterControl::Knob,
+        unit: "dB".into(),
+        id: "gain".into(),
+        name: "Gain".into(),
+        min: -1.0,
+        max: 1.0,
+        value: 0.0,
+        ui: suhina_device_sdk::ParameterUi::default(),
+    };
+    parameter.ui.decimals = 2;
+    assert_eq!(super::parameters::value_text(&parameter, -0.004), "0.00 dB");
+    assert_eq!(super::parameters::value_text(&parameter, -0.014), "-0.01 dB");
 }

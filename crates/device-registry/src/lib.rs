@@ -12,12 +12,13 @@ use suhina_device_sdk::DeviceSdkError;
 use suhina_device_sdk::builtin::{self, Layout, Panel};
 
 /// The built-in effects, instruments and MIDI effects, in the order a device browser lists them.
-pub const DEVICES: [&DeviceInfo; 14] = [
+pub const DEVICES: [&DeviceInfo; 15] = [
     &suhina_device_fm_synth::INFO,
     &suhina_device_sampler::INFO,
     &suhina_device_utility::INFO,
     &suhina_device_auto_pan::INFO,
     &suhina_device_dj_eq::INFO,
+    &suhina_device_eq::INFO,
     &suhina_device_vinyl_distortion::INFO,
     &suhina_device_overdrive::INFO,
     &suhina_device_compressor::INFO,
@@ -45,7 +46,18 @@ pub fn layout(id: &str) -> Option<Result<Layout, DeviceSdkError>> {
 }
 
 /// The layouts kept as JSON next to a device crate, by device id.
-pub const LAYOUT_FILES: &[(&str, &str)] = &[];
+pub const LAYOUT_FILES: &[(&str, &str)] = &[
+    ("compressor", include_str!("../../../devices/compressor/panel.json")),
+    ("overdrive", include_str!("../../../devices/overdrive/panel.json")),
+    ("reverb", include_str!("../../../devices/reverb/panel.json")),
+    ("limiter", include_str!("../../../devices/limiter/panel.json")),
+    ("dj-eq", include_str!("../../../devices/dj-eq/panel.json")),
+    ("auto-pan", include_str!("../../../devices/auto-pan/panel.json")),
+    ("vinyl-distortion", include_str!("../../../devices/vinyl-distortion/panel.json")),
+    ("delay", include_str!("../../../devices/delay/panel.json")),
+    ("pitch", include_str!("../../../devices/pitch/panel.json")),
+    ("fm-synth", include_str!("../../../devices/fm-synth/panel.json")),
+];
 
 /// The panel of the device with this id: its parameters from its `DeviceInfo`, laid out by its
 /// layout, or the generated parameter list when it has none or its layout does not load.
@@ -78,6 +90,7 @@ pub fn create(id: &str) -> Option<Box<dyn Device>> {
         "utility" => Box::new(suhina_device_utility::Utility::new()),
         "auto-pan" => Box::new(suhina_device_auto_pan::AutoPan::new()),
         "dj-eq" => Box::new(suhina_device_dj_eq::DjEq::new()),
+        "eq" => Box::new(suhina_device_eq::Eq::new()),
         "vinyl-distortion" => Box::new(suhina_device_vinyl_distortion::VinylDistortion::new()),
         "overdrive" => Box::new(suhina_device_overdrive::Overdrive::new()),
         "compressor" => Box::new(suhina_device_compressor::Compressor::new()),
@@ -166,79 +179,122 @@ fn read_voices(data: &[u8]) -> Result<suhina_device_fm_synth::patch::Voices, Str
 }
 
 #[cfg(test)]
-mod tests {
+#[path = "lib_tests.rs"]
+mod tests;
+
+/// Prepare a data-only graph using only registered, zero-latency built-in effects.
+/// Unknown ids fail before the graph reaches the audio thread.
+pub fn compile_graph(
+    graph: &suhina_device_sdk::DeviceGraph,
+    rate: f64,
+) -> Result<suhina_device_sdk::PreparedEffect, suhina_device_sdk::DeviceSdkError> {
+    compile_graph_with_samples(graph, rate, &Default::default())
+}
+
+/// Prepare graph resources supplied by the host; decoding and retirement stay off-thread.
+pub fn compile_graph_with_samples(
+    graph: &suhina_device_sdk::DeviceGraph,
+    rate: f64,
+    samples: &suhina_device_sdk::sample_resource::PreparedSamples,
+) -> Result<suhina_device_sdk::PreparedEffect, suhina_device_sdk::DeviceSdkError> {
+    graph.compile_with_samples_and_native_at(rate, samples, |id, rate| {
+        let mut device =
+            create(id).ok_or_else(|| suhina_device_sdk::DeviceSdkError(format!("unknown graph effect {id:?}")))?;
+        if device.info().role != suhina_device_api::Role::Effect {
+            return Err(suhina_device_sdk::DeviceSdkError(format!("graph kernel {id:?} is not an audio effect")));
+        }
+        device.prepare(rate).map_err(|e| suhina_device_sdk::DeviceSdkError(e.to_string()))?;
+        if device.latency() != 0 {
+            return Err(suhina_device_sdk::DeviceSdkError(
+                "graph kernels with latency require path compensation".into(),
+            ));
+        }
+        Ok(Box::new(GraphEffect { device, context: Default::default(), rate }))
+    })
+}
+
+struct GraphEffect {
+    device: Box<dyn Device>,
+    context: suhina_device_api::ProcessContext,
+    rate: f64,
+}
+impl suhina_device_sdk::native_node::NativeNode for GraphEffect {
+    fn prepare_block(&mut self, context: &suhina_device_api::ProcessContext) {
+        self.context = *context;
+        self.device.set_context(context);
+    }
+    fn process(&mut self, inputs: [&[f32]; 5], output: &mut [f32]) {
+        output.copy_from_slice(inputs[0]);
+        self.device.process(&self.context, output);
+        if self.context.playing {
+            self.context.beat += (output.len() / 2) as f64 * self.context.tempo / (60.0 * self.rate);
+        }
+    }
+    fn connected_inputs(&mut self, mask: [bool; 5]) -> Result<(), suhina_device_sdk::DeviceSdkError> {
+        if mask[1..].iter().any(|&v| v) {
+            return Err(suhina_device_sdk::DeviceSdkError(
+                "registered effect control bindings are not implemented".into(),
+            ));
+        }
+        Ok(())
+    }
+    fn parameter_range(&self, id: &str) -> Option<(f64, f64)> {
+        self.device.info().params.iter().find(|p| p.id == id).map(|p| (p.min, p.max))
+    }
+    fn set_parameter(&mut self, id: &str, value: f64) {
+        if let Some(index) = self.device.info().param_index(id) {
+            self.device.set_param(index, value);
+        }
+    }
+    fn event(&mut self, event: suhina_device_api::NoteEvent) {
+        self.device.event(event);
+    }
+    fn reset(&mut self) {
+        self.device.reset();
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(test)]
+mod graph_kernel_tests {
     use super::*;
-
+    use suhina_device_sdk::{Connection, DeviceGraph, DeviceRole, Node, NodeKind};
     #[test]
-    fn a_dx7_voice_is_a_preset_for_the_fm_synth() {
-        use suhina_device_fm_synth::patch::{Patch, write_bank, write_voice};
-        let mut patch = Patch::default();
-        patch.set_name("GLASS BELL");
-        patch.set(134, 21); // algorithm 22
-        let single = write_voice(&patch);
-        let preset = preset(&single, 1).unwrap();
-        assert_eq!((preset.device, preset.name.as_str()), ("fm-synth", "GLASS BELL"));
-        assert_eq!(preset.params.len(), suhina_device_fm_synth::INFO.params.len());
-        let mut synth = suhina_device_fm_synth::FmSynth::new();
-        synth.load_patch(&patch);
-        for (i, (id, value)) in preset.params.iter().enumerate() {
-            assert_eq!(Some(*value), synth.param(i), "{id}");
-        }
-        assert_eq!(preset_voices(&single).unwrap(), vec![(1, "GLASS BELL".to_string())]);
+    fn stored_graph_resolves_registered_effect_and_rejects_unknown() {
+        let mut graph = DeviceGraph::new("org.test.registry", "Registry", DeviceRole::Effect);
+        graph.nodes = vec![
+            Node::audio_input("in"),
+            Node::new("fx", NodeKind::NativeEffect { effect: "utility".into() }),
+            Node::audio_output("out"),
+        ];
+        graph.connections = vec![Connection::new("in", "fx"), Connection::new("fx", "out")];
+        let graph = DeviceGraph::from_sd(&graph.to_sd().unwrap()).unwrap();
+        let mut prepared = compile_graph(&graph, 48000.).unwrap();
+        let mut audio = [0.25, -0.5, 0.125, 0.75];
+        prepared.process(&mut audio);
+        assert!(audio.iter().all(|v| v.is_finite()));
+        assert!(audio.iter().any(|v| v.abs() > 0.01));
+        let mut controlled = graph.clone();
+        controlled.connections.push(Connection::ports("in", "out", "fx", "control1"));
+        assert!(compile_graph(&controlled, 48000.).is_err());
+        let mut nested = DeviceGraph::new("org.test.nested", "Nested", DeviceRole::Effect);
+        nested.nodes = vec![
+            Node::audio_input("in"),
+            Node::new(
+                "child",
+                NodeKind::Component { name: "Hidden effect".into(), version: 1, graph: controlled.to_sd().unwrap() },
+            ),
+            Node::audio_output("out"),
+        ];
+        nested.connections = vec![Connection::new("in", "child"), Connection::new("child", "out")];
+        assert!(compile_graph(&nested, 48000.).is_err());
 
-        let bank = write_bank(&vec![patch; 32]);
-        assert_eq!(preset_voices(&bank).unwrap().len(), 32);
-        assert_eq!(super::preset(&bank, 32).unwrap().name, "GLASS BELL");
-        assert!(super::preset(&bank, 33).is_err());
-        assert!(super::preset(&bank, 0).is_err());
-        assert!(super::preset(b"not a preset", 1).is_err());
-        assert!(super::preset(&vec![0u8; MAX_PRESET_BYTES + 1], 1).is_err());
-    }
-
-    #[test]
-    fn every_layout_loads_and_names_only_its_devices_parameters() {
-        // A layout that names a parameter id its device lacks fails here, rather than falling
-        // back to the generated list unnoticed.
-        for info in DEVICES {
-            if let Some(layout) = layout(info.id) {
-                let panel = layout.and_then(|l| l.panel(info)).unwrap_or_else(|e| panic!("{}: {e}", info.id));
-                assert_eq!(panel_ids(&panel), info.params.iter().map(|p| p.id).collect::<Vec<_>>());
-            }
+        for id in ["missing", "sampler", "limiter"] {
+            let mut invalid = graph.clone();
+            invalid.nodes[1].kind = NodeKind::NativeEffect { effect: id.into() };
+            assert!(compile_graph(&invalid, 48000.).is_err(), "{id}");
         }
-        for (id, _) in LAYOUT_FILES {
-            assert!(super::info(id).is_some(), "panel.json for unknown device {id}");
-        }
-        assert!(layout("sampler").is_some(), "the sampler has its own layout");
-    }
-
-    #[test]
-    fn every_device_has_a_panel_with_its_parameters() {
-        for info in DEVICES {
-            let panel = panel(info.id).unwrap_or_else(|| panic!("{} has no panel", info.id));
-            assert_eq!(panel_ids(panel), info.params.iter().map(|p| p.id).collect::<Vec<_>>(), "{}", info.id);
-            for (parameter, native) in panel.parameters.iter().zip(info.params) {
-                assert_eq!((parameter.min, parameter.max, parameter.default), (native.min, native.max, native.default));
-            }
-        }
-        // MIDI effects get one too: the generated list.
-        assert!(panel("pitch").is_some_and(|p| p.ui.is_none()));
-        assert!(panel("sampler").is_some_and(|p| p.ui.is_some()));
-        assert!(panel("no-such-device").is_none());
-    }
-
-    fn panel_ids(panel: &Panel) -> Vec<&str> {
-        panel.parameters.iter().map(|p| p.id.as_str()).collect()
-    }
-
-    #[test]
-    fn every_listed_device_can_be_made_and_ids_are_unique() {
-        for (i, info) in DEVICES.iter().enumerate() {
-            let device = create(info.id).unwrap_or_else(|| panic!("{} cannot be made", info.id));
-            assert_eq!(device.info(), *info);
-            assert_eq!(super::info(info.id), Some(*info));
-            assert!(DEVICES.iter().skip(i + 1).all(|other| other.id != info.id), "{} twice", info.id);
-        }
-        assert!(create("no-such-device").is_none());
-        assert!(info("").is_none());
     }
 }

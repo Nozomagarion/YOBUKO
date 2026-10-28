@@ -70,7 +70,7 @@ documentation and UI). The scope decision it leads to is
 | Measure | Value |
 |---|---|
 | The manual it was measured from | 43 chapters, 1039 PDF pages, 999 pages of feature text |
-| Page-weighted coverage of everything the manual documents | **about 25 %** |
+| Page-weighted coverage of everything the manual documents | **about 26 %** |
 | Same, without Push 1 and 2, Max for Live (+ its devices) and video | **about 30 %** |
 | Same, over the scope the roadmap aims at (also without accessibility) | **about 30 %** |
 | Weighting each chapter by its numbered sections instead of its pages | **17 %** (the two weightings agree) |
@@ -143,7 +143,7 @@ documented behaviour that exists today.
 | 14 | Using Grooves | 6 | 0 % | absent | No groove pool, extraction or commit. |
 | 15 | Using Tuning Systems | 9 | 0 % | absent | No .scl/.ascl tuning systems. |
 | 16 | Launching Clips | 12 | 77 % | partial | Launch quantisation (none, 8 bars..1/32, triplets), scenes (with their tempo and time signature), stop, loop, back to arrangement (the arrangement's dimmed lanes and the ruler's button), warped launched clips, follow actions (A/B by chance, linked or timed, jump to a slot; by command and in the detail area), samples looping in slots with or without a known tempo, a slot clip's loop switched on or off (clip.setLoop), launch modes (trigger, gate, toggle, repeat) with press and release, legato, per-clip launch quantisation, slots and scenes launched from computer keys. Missing velocity amount, clip offset/nudge, launching from live MIDI notes, follow-action multiplier and scene follow actions. |
-| 17 | Routing and I/O | 22 | 39 % | partial | Track output to main or a group (track.setOutput); MIDI controllers play the armed tracks, or the selected one with auto-arm on (Settings › MIDI, #834), each track choosing its MIDI port and channel (track.setMidiInput), with the mod wheel, pitch bend and aftertouch reaching the instrument alongside notes (#812); an audio input device with a channel or pair per track and monitoring Auto / In / Off (track.setAudioInput). No MIDI out, external instrument, resampling, sidechain, multi-timbral. |
+| 17 | Routing and I/O | 22 | 39 % | partial | Track output to main or a group (track.setOutput); MIDI controllers play the armed tracks and, with auto-arm on, the selected one as well (while a take records, arming does not follow the selection, Settings > MIDI, #834), with MIDI monitoring Auto / In / Off per track, each track choosing its MIDI port and channel (track.setMidiInput), with the mod wheel, pitch bend and aftertouch reaching the instrument alongside notes (#812); an audio input device with a channel or pair per track and monitoring Auto / In / Off (track.setAudioInput). No MIDI out, external instrument, resampling, sidechain, multi-timbral. |
 | 18 | Mixing | 18 | 59 % | partial | Faders (vertical in the Session view's channel strips), pan, mute, solo (exclusive/Ctrl), groups as buses nested up to 16 deep (solo and mute through the levels), master, latency compensation, sends pre or post fader into return tracks that run their device chains (track.setSend, track.setSendMode, return.add/remove/rename, send knobs in the Session mixer), level meters (peak, RMS, clip) per track, group, return and main, also over MCP, and a cue output on a second pair of the device (previews, per-track cue, cue volume); return tracks imported and drawn. Missing crossfader, track delay, send fields in the Arrangement headers. |
 | 19 | Recording New Clips | 13 | 45 % | partial | Independent record arm and Auto / In / Off input monitoring (MIDI controllers, audio inputs); MIDI and audio recording into an empty slot from the next launch boundary (ended on the next one, then played looped) or into the arrangement, several armed tracks at once, a count-in of 1, 2 or 4 bars, takes lined up with what was heard, audio written to WAV files off the audio thread, one undo step per take. Missing overdub, punch in/out, recording automation, capture MIDI, session record button. |
 | 20 | Bounce to Audio | 6 | 15 % | partial | Whole-project offline render to 32-bit float WAV (CLI/MCP), from an open project with its running plug-ins' state as heard; no per-track or group bounce, no paste. |
@@ -155,10 +155,10 @@ documented behaviour that exists today.
 | 26 | Automation and Editing Envelopes | 22 | 48 % | partial | Envelopes for track volume, pan and mute, built-in, .sd and plug-in device parameters: breakpoints with curved segments and jumps, saved, played in playback and renders (64-frame steps, ramped mixer gains), a manual change turning a lane off until re-enabled. Lanes under each track in the Arrangement: a parameter chooser with a search, the automated parameters first, devices and parameter groups folded under headings, points added, moved on the grid, selected and moved or deleted together, curves bent by dragging, re-enabled from the lane, a click near the line adding a point on it, a faint line at the value of a lane without points. Missing recording, drawing with a pencil, plug-in lanes in the view, send, master and tempo automation, locking, simplifying envelopes. |
 | 27 | Clip Envelopes | 13 | 0 % | absent | No clip envelopes. |
 | 28 | Working with Video | 6 | 0 % | absent | No video import or window. |
-| 29 | Live Audio Effect Reference | 139 | 19 % | partial | Suhina has 9 effects (utility, auto-pan, three-band DJ EQ, vinyl distortion, overdrive, compressor, limiter, delay, reverb) against 42 documented audio effects; the delay and reverb take every parameter of their counterparts, several others are close in kind but far narrower in parameters and modes. |
+| 29 | Live Audio Effect Reference | 139 | 21 % | partial | Suhina has 10 effects (utility, auto-pan, eight-band EQ, three-band DJ EQ, vinyl distortion, overdrive, compressor, limiter, delay, reverb) against 42 documented audio effects; the EQ, delay and reverb take every parameter of their counterparts, several others are close in kind but far narrower in parameters and modes. |
 | 30 | Live MIDI Effect Reference | 13 | 10 % | started | One built-in MIDI effect, pitch: semitones or scale degrees with the clip's scale, and a key window that blocks, folds or limits notes; its step buttons are planned. SDK MIDI-effect graphs run before the instrument too. The other 7 documented MIDI effects are missing. |
 | 31 | Live Instrument Reference | 120 | 12 % | started | FM synth and single-source sample/granular instrument against 13 instruments; graphical envelope stages with cumulative timing and directly draggable points, persistent waveform with grouped granular controls and a shared six-shape pitch/filter/volume/pan LFO with Random, Hz/time/beat-synced rates, independent source and loop-edge fades and tempo-synchronised sample Warp using editable original BPM; five pitch-preserving modes currently share one stretcher; no multisample zones, drum sampler, wavetable, subtractive or physical modelling yet. |
-| 32 | Max for Live | 6 | 5 % | planned | ADR 0021 defines data-only .sd graphs with a Rust SDK, DSP runtime and custom UI nodes; visual graph editing is planned. Imported Max devices remain placeholders; no Max runtime. |
+| 32 | Max for Live | 6 | 5 % | planned | ADR 0021 defines data-only .sd graphs with a Rust SDK, DSP runtime and custom UI nodes; typed sample resources, polyphonic voice/grain subgraphs, slicing, stretch and versioned components are executable through the Rust host API; visual graph editing is planned. Imported Max devices remain placeholders; no Max runtime. |
 | 33 | Max for Live Devices | 35 | 0 % | absent | Not applicable until Max for Live exists. |
 | 34 | MIDI and Key Remote Control | 9 | 25 % | partial | Every command can be bound to a key (keymap.json, Settings > Shortcuts); a key mapping mode (Ctrl+M) maps keys to clip slots, scenes and stop buttons, saved in the project, and launcher.addMapping takes MIDI notes too. No live MIDI remote input, CC mapping, takeover modes or mapping browser. |
 | 35 | Using Push 1 | 40 | 0 % | absent | No control-surface support. |
@@ -197,10 +197,10 @@ last table in this section.
 <!-- parity:begin device-counts -->
 | | Live 12 | Suhina equivalent exists | Suhina plans one (ROADMAP) | No counterpart named |
 |---|---|---|---|---|
-| Audio effects | 42 | 11 | 8 | 23 |
+| Audio effects | 42 | 12 | 7 | 23 |
 | MIDI effects | 8 | 1 | 0 | 7 |
 | Instruments | 13 | 2 | 8 | 3 |
-| **All** | **63** | **14** | **16** | **33** |
+| **All** | **63** | **15** | **15** | **33** |
 <!-- parity:end -->
 
 <!-- parity:begin device-none -->
@@ -230,8 +230,8 @@ does not name (Meld, Electric, Impulse, External Instrument).
 | Drum Buss | 29.12 | drum bus processor | none | the compressor is a plain compressor; ROADMAP's bus compressor is a different device |
 | Dynamic Tube | 29.13 | tube saturation | none |  |
 | Echo | 29.14 | modulation delay | planned | ROADMAP: delays |
-| EQ Eight | 29.15 | parametric EQ | planned | ROADMAP: EQ, filter |
-| EQ Three | 29.16 | DJ EQ | equivalent | Suhina three-band DJ EQ |
+| EQ Eight | 29.15 | parametric EQ | equivalent | Suhina EQ takes every band parameter of both curves (eight types, Stereo/Left-Right/Mid-Side, Scale, Adaptive Q); no analyser, Audition or oversampling option yet |
+| EQ Three | 29.16 | DJ EQ | equivalent | Suhina three-band DJ EQ: gains from silence to +6 dB with kills, Linkwitz-Riley crossovers at 24 or 48 dB/octave; its 0 dB sum keeps the measured dip at the low crossover |
 | Erosion | 29.17 | modulation destruction | none |  |
 | External Audio Effect | 29.18 | external send and return | none | needs external audio I/O, which Suhina does not have |
 | Filter Delay | 29.19 | filtered delay | none | the planned delay device is not documented as filtered or three-line |
@@ -309,7 +309,7 @@ placeholders. None of them run today.
 |---|---|---|
 | utility | effect | gain, balance, width, mono, bass mono, phase, channels, DC filter (13 parameters) |
 | auto-pan | effect | LFO panning and tremolo, free Hz or synced (9 parameters) |
-| dj-eq | effect | three bands with kills, Linkwitz-Riley crossovers at 24 or 48 dB/octave (9 parameters) |
+| eq | effect | eight bands, two curves for Stereo, Left/Right or Mid/Side, Scale, Adaptive Q (84 parameters) |
 | vinyl-distortion | effect | tracing, pinch, crackle, oversampled (12 parameters) |
 | overdrive | effect | pedal-style: band, drive, tone, dynamics, dry/wet (7 parameters) |
 | compressor | effect | stereo-linked, soft knee, side-chain high-pass, dry/wet (9 parameters) |

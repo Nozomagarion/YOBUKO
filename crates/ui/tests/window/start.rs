@@ -30,8 +30,7 @@ fn crashed_run(dir: &std::path::Path) -> (std::path::PathBuf, std::path::PathBuf
 
 #[test]
 fn a_backup_a_crash_left_is_offered_on_start_and_opens_tied_to_its_file() {
-    let dir = std::env::temp_dir().join(format!("suhina-ui-recovery-{}", std::process::id()));
-    let _fresh = std::fs::remove_dir_all(&dir);
+    let dir = crate::temp_dir::TempDir::new("ui-recovery");
     let (file, backup) = crashed_run(&dir);
 
     let mut app = App::new();
@@ -65,13 +64,11 @@ fn a_backup_a_crash_left_is_offered_on_start_and_opens_tied_to_its_file() {
     next.offer_recovery();
     let harness = window(next);
     assert!(harness.query_by_label("Open the backup").is_none());
-    let _clean = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn ignoring_an_offered_backup_leaves_it_and_asks_no_more() {
-    let dir = std::env::temp_dir().join(format!("suhina-ui-recovery-ignore-{}", std::process::id()));
-    let _fresh = std::fs::remove_dir_all(&dir);
+    let dir = crate::temp_dir::TempDir::new("ui-recovery-ignore");
     let (_file, backup) = crashed_run(&dir);
     let mut app = App::new();
     app.projects_mut().set_backup_folder(Some(dir.join("settings")));
@@ -88,7 +85,6 @@ fn ignoring_an_offered_backup_leaves_it_and_asks_no_more() {
     next.projects_mut().set_backup_folder(Some(dir.join("settings")));
     next.offer_recovery();
     assert!(window(next).query_by_label("Open the backup").is_none());
-    let _clean = std::fs::remove_dir_all(&dir);
 }
 
 /// A window with nothing open that starts as `settings` say, given the last project `last`.
@@ -121,8 +117,7 @@ fn at_start_the_start_panel_shows_unless_the_settings_say_otherwise() {
 #[test]
 fn at_start_a_new_project_comes_from_the_start_template_or_the_panel_says_why_not() {
     use suhina_ui::settings::AtStart;
-    let folder = std::env::temp_dir().join(format!("suhina-at-start-{}", std::process::id()));
-    std::fs::create_dir_all(&folder).unwrap_or_else(|e| panic!("{e}"));
+    let folder = crate::temp_dir::TempDir::new("at-start");
     let template = folder.join("Four on the floor.suhina");
     std::fs::write(&template, b"{}").unwrap_or_else(|e| panic!("{e}"));
     let mut settings = at_start(AtStart::Template);
@@ -148,7 +143,6 @@ fn at_start_a_new_project_comes_from_the_start_template_or_the_panel_says_why_no
     let harness = started(settings, None);
     assert!(harness.query_by_label("New project").is_some());
     assert!(matches!(harness.state().status(), Status::Hint(h) if h.contains("No template")));
-    let _ = std::fs::remove_dir_all(&folder);
 }
 
 #[test]
@@ -313,12 +307,24 @@ fn help_about_shows_the_version_and_copies_it() {
     let version = suhina_ui::app::project_dialog::VERSION;
     let build = suhina_ui::app::project_dialog::BUILD;
     assert!(!build.is_empty(), "the build script sets the build string");
+    // The night and the commit, as a nightly's version ends: 20261016+a15ad35. A build whose
+    // value came from the environment skips this: its value is what that build was told, not
+    // the form git gives — build.rs says which happened, read here at compile time.
+    if build != "unknown" && option_env!("SUHINA_BUILD_FROM_ENVIRONMENT").is_none() {
+        let (date, hash) = build.split_once('+').unwrap_or_default();
+        assert!(date.len() == 8 && date.bytes().all(|b| b.is_ascii_digit()), "{build}");
+        assert!(hash.len() == 7 && hash.bytes().all(|b| b.is_ascii_hexdigit()), "{build}");
+    }
     assert!(harness.query_by_label_contains(version).is_none());
     harness.get_by_label("Help").click();
     harness.run();
     harness.get_by_label_contains("About Suhina").click();
     harness.run();
+    // The logo heads the dialog, above the version it names.
+    let logo = harness.get_by_label("Suhina").rect();
+    assert!(logo.height() > 0.0 && logo.width() > logo.height(), "{logo:?}");
     let line = suhina_ui::app::project_dialog::version_line();
+    assert!(harness.get_by_label(&format!("Copy version: {line}")).rect().top() > logo.bottom());
     assert!(line.starts_with(&format!("Suhina {version} build ")), "{line}");
     assert!(line.contains(build), "the copied line carries the build string: {line}");
     harness.get_by_label(&format!("Copy version: {line}")).click();

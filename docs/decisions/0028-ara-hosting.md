@@ -3,7 +3,7 @@ description: How ARA plug-ins (audio editors such as pitch editors) are hosted o
 read_when: ARA, ARA2, Melodyne, pitch editor, audio random access, playback region, audio source, audio modification, region sequence, document controller, overlapping audio clips, audio overlap, arrangement.audioOverlaps, stacked clips and ARA
 type: decision
 status: draft
-last_verified: 2026-10-24
+last_verified: 2026-10-25
 covers:
   - crates/model/src/overlap.rs
   - crates/session/src/commands.rs
@@ -13,7 +13,7 @@ covers:
   - crates/ipc/src/source.rs
   - crates/ipc/src/events.rs
   - crates/plugin-host/src/ara.rs
-  - crates/plugin-host/src/ara_sys.rs
+  - crates/plugin-host/src/ara_sys
   - crates/session/src/ara.rs
   - crates/session/src/rack.rs
   - crates/session/src/devices.rs
@@ -193,11 +193,11 @@ the list below, in a first form). Where it differs from the decisions above it i
 
 - **Bindings.** The ARA headers (2.3, Apache-2.0) are vendored in `third_party/ara-api`
   (`VENDORED.md` names the commit). `scripts/ara_bindings.sh` generates
-  `crates/plugin-host/src/ara_sys.rs` from them with bindgen, with its layout checks, so a
+  `crates/plugin-host/src/ara_sys/` from them with bindgen, with its layout checks, so a
   struct that does not match the C headers fails to compile. The three VST3 interfaces of
   `ARAVST3.h` are declared by hand in `crates/plugin-host/src/ara.rs`. The headers pack structs
-  to 1 byte on x86 and to 8 on ARM; the bindings are generated for x86-64, and an ARM build
-  needs them generated there.
+  to 1 byte on x86 and to 8 on ARM, so the bindings are generated once for each (`x86.rs`,
+  `arm.rs`) and the host builds with the one for its CPU.
 - **Model updates.** The host calls the document controller's `notifyModelUpdates` every 250 ms
   while it is not editing, right after every edit and restore, and before storing the edits, as
   the API asks ("periodically by the host whenever not editing"). Without it a plug-in sends what
@@ -246,6 +246,18 @@ the list below, in a first form). Where it differs from the decisions above it i
   so (dimmed, "<plug-in> loading"); while it analyses them, how far (the least done of the
   track's sources, from the plug-in's analysis progress, sent as `ara_analysis` when it moves by
   a percent), with a bar filling along the bottom. The clips cannot be edited in it until then.
+  An analysis ends when the plug-in reports it completed, or when, asked whether the source's
+  notes are still incomplete (each time the notes are read, and every second while a clip shows
+  the analysis), it says they are not: a plug-in that restores its analysis from an archive
+  reports only that it started (#816). One progress covers all of a source's analyses, so
+  while the plug-in says another content type it lists as analysable is incomplete, the
+  analysis shows until that one is done too, or until it has not reported for 3 s (a type it
+  never analyses unasked). A track that leaves the document forgets its sources'
+  analysis, so the next track that plays one asks for it again. After an archive is restored
+  every source's analysis is asked for again, as one asked for before may have been dropped for
+  the archive's without a *completed* report; and a plug-in that keeps saying the notes are
+  incomplete while every region of the track has them is taken as done once it has not
+  reported for 3 s (Melodyne after a project is opened again, #816).
 - **Notes on the clips** (#720). After a model update in which the plug-in said a region's,
   modification's or source's notes may have changed (not with "note scope remains unchanged"),
   and after the host's own edits, the host reads every region's notes with a playback-region
@@ -254,7 +266,7 @@ the list below, in a first form). Where it differs from the decisions above it i
   session keeps them by clip while the plug-in runs; the arrangement draws them as bars over
   the clip's waveform, which dims under them, placed through the tempo map. A bypassed
   plug-in's notes are kept and not shown. When the factory lists notes among what it analyses, the host asks it once
-  for each source whose notes are not found yet, so they show without the editor being opened. A
+  for each source whose notes are not found yet (again after the tracks that played it left), so they show without the editor being opened. A
   finished analysis (its progress Completed) has the notes read too, and while a region has none
   yet they are looked for again every second, as a plug-in may finish without saying the content
   changed.

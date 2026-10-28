@@ -49,6 +49,26 @@ impl IconButton {
         }
     }
 
+    /// The id a theme selects it by (`#piano-draw`) and the name of its artwork (`piano.draw`).
+    pub(crate) fn id(self) -> &'static str {
+        match self {
+            Self::Select => "piano-select",
+            Self::Draw => "piano-draw",
+            Self::Paint => "piano-paint",
+            Self::Erase => "piano-erase",
+            Self::Slice => "piano-slice",
+            Self::Mute => "piano-mute",
+            Self::Cut => "piano-cut",
+            Self::Copy => "piano-copy",
+            Self::Paste => "piano-paste",
+            Self::Duplicate => "piano-duplicate",
+            Self::Quantise => "piano-quantise",
+            Self::MidiTools => "piano-midi-tools",
+            Self::Audition => "piano-audition",
+            Self::Hide => "piano-hide",
+        }
+    }
+
     /// The action id whose key the tooltip shows ("Draw (2)"), when the button has one.
     pub(super) fn action(self) -> Option<&'static str> {
         Some(match self {
@@ -155,7 +175,7 @@ impl IconButton {
                     StrokeKind::Inside,
                 );
                 let front = Rect::from_center_size(at(1.5, 1.5), size(8.0, 8.0));
-                painter.rect_filled(front, 0.0, theme::panel_background());
+                painter.fill_background(front, 0.0, theme::panel_background());
                 painter.rect_stroke(front, 0.0, stroke, StrokeKind::Inside);
             }
             // Scissors: two rings and the blades crossing over them.
@@ -235,7 +255,7 @@ pub(super) fn toolbar(
     }
     let painter = ui.painter_at(rect);
     let paint = ButtonPaint { ui, painter: &painter, keymap, scale };
-    painter.rect_filled(rect, 0.0, theme::panel_background());
+    painter.fill_background(rect, 0.0, theme::panel_background());
     painter.hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline(theme::border()));
     let row = rect.shrink2(Vec2::new(4.0, 3.0));
     // The icon box, the gap and the strokes scale with Toolbar size; the box never outgrows the
@@ -243,9 +263,18 @@ pub(super) fn toolbar(
     let icon = (TOOL_ICON * scale).min(row.height());
     let gap = TOOL_GAP * scale;
     let side = row.height().min(icon);
+    // `.piano-tool { width; height }` sizes the buttons, so stretched artwork has room.
+    let size = {
+        let _style = crate::kit::style_class::enter("piano-tool");
+        let own = crate::kit::style_class::computed();
+        Vec2::new(
+            own.as_ref().and_then(|c| c.width).map_or(side, |w| w.clamp(8.0, 96.0)),
+            own.as_ref().and_then(|c| c.height).map_or(side, |h| h.clamp(8.0, row.height().max(8.0))),
+        )
+    };
     let x = std::cell::Cell::new(row.left() + KEYS - 4.0);
     let place = || {
-        let area = Rect::from_min_size(Pos2::new(x.get(), row.top() + (row.height() - side) / 2.0), Vec2::splat(side));
+        let area = Rect::from_min_size(Pos2::new(x.get(), row.top() + (row.height() - size.y) / 2.0), size);
         x.set(area.right() + gap);
         area
     };
@@ -538,22 +567,35 @@ impl ButtonPaint<'_> {
         let hint = icon_hint(button, self.keymap);
         let response = response.on_hover_text(hint.clone());
         response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Button, active, chosen, hint.clone()));
-        if active {
-            let fill = if chosen { theme::control_active() } else { theme::control_background() };
-            painter.rect_filled(
-                area,
-                0.0,
-                crate::kit::motion::mix(fill, theme::control_hover(), widgets::hover(ui, &response)),
-            );
-        }
-        let color = if !active {
+        // `.piano-tool` styles them all, `#piano-draw` and the others one; `:checked` is the
+        // chosen tool or an open column. `piano.draw` (`.on`, `.hover`) replaces its shape.
+        let _style = crate::kit::style_class::enter_named_response("piano-tool", button.id(), &response);
+        crate::kit::native_css::mark(crate::kit::native_css::HostState::Checked, chosen);
+        let color = crate::kit::style_class::foreground(if !active {
             theme::text_hint()
         } else if chosen {
             theme::text_primary()
         } else {
             theme::text_secondary()
+        });
+        let state = if !active {
+            crate::kit::skin::State::Disabled
+        } else {
+            crate::kit::skin::State::response(&response, chosen)
         };
-        button.draw(painter, area, color, self.scale);
+        let role = format!("piano.{}", button.id().trim_start_matches("piano-"));
+        if active {
+            let fill = if chosen { theme::control_active() } else { theme::control_background() };
+            crate::kit::native_css::surface(
+                painter,
+                area,
+                0.0,
+                crate::kit::motion::mix(fill, theme::control_hover(), widgets::hover(ui, &response)),
+            );
+        }
+        if !(crate::kit::skin::has_own(&role) && crate::kit::skin::paint(painter, area, &role, state, color, 0.0)) {
+            button.draw(painter, area, color, self.scale);
+        }
         active && response.clicked()
     }
 }

@@ -46,75 +46,21 @@ fn volume_positions_and_values_are_inverses() {
     // The lane places a volume where the mixer's field does.
     for db in [-70.0, -30.0, -6.0, 0.0, 4.0] {
         let field = f64::from(crate::kit::widgets::volume_position(db));
-        assert!((volume_position(db) - field).abs() < 1e-6, "{db}");
+        assert!((scale.position(10f64.powf(db / 20.0)) - field).abs() < 1e-6, "{db}");
     }
 }
 
-/// A point spliced in at `beat` with [`splice`], as `automation.addPoint` puts it.
-fn spliced(points: &[AutomationPoint], beat: f64) -> Vec<AutomationPoint> {
-    let mut lane = AutomationLane::new(VOLUME);
-    lane.points = points.to_vec();
-    if let Some((value, curve)) = splice(points, beat, false) {
-        lane.insert(AutomationPoint { beat, value, curve });
-    }
-    lane.points
-}
-
-/// A point spliced onto a level or straight segment leaves the envelope exactly as it was.
+/// A whole-number lane places a value between two numbers where it falls, unrounded, and shows
+/// what it plays: the value with its fraction cut off toward zero.
 #[test]
-fn a_spliced_point_keeps_a_straight_or_level_envelope_exactly() {
-    use suhina_engine::model::automation::value_at;
-    let level = [AutomationPoint::new(0.0, 0.5), AutomationPoint::new(8.0, 0.5)];
-    assert_eq!(splice(&level, 3.0, false), Some((0.5, 0.0)));
-    let ramp = [AutomationPoint::new(0.0, 0.0), AutomationPoint::new(8.0, 1.0)];
-    let after = spliced(&ramp, 2.0);
-    assert_eq!(after.len(), 3);
-    for beat in [0.0, 1.0, 2.0, 5.0, 8.0, 10.0] {
-        assert_eq!(value_at(&after, beat, false), value_at(&ramp, beat, false), "{beat}");
-    }
-    // Before the first point and after the last, the envelope holds: the point takes that.
-    assert_eq!(splice(&ramp, 12.0, false), Some((1.0, 0.0)));
-    assert_eq!(splice(&[], 1.0, false), None);
-    // A step holds its first value.
-    assert_eq!(splice(&ramp, 4.0, true), Some((0.0, 0.0)));
-}
-
-/// A whole-number lane cannot keep a value between two numbers, so a point is not spliced
-/// with one; a value that is a whole number is kept.
-#[test]
-fn a_whole_number_lane_keeps_only_whole_numbers() {
+fn a_whole_number_lane_places_values_between_numbers_and_shows_what_plays() {
     let integer = Scale::Device(ParamInfo::integer("steps", "Steps", (0, 3), 0, Unit::None));
-    let ramp = [AutomationPoint::new(0.0, 0.0), AutomationPoint::new(8.0, 3.0)];
-    let (value, _) = splice(&ramp, 4.0, integer.stepped()).unwrap();
-    assert_eq!(value, 1.5);
-    assert!(!integer.keeps(value));
-    let halves = [AutomationPoint::new(0.0, 0.0), AutomationPoint::new(8.0, 2.0)];
-    let (value, _) = splice(&halves, 4.0, integer.stepped()).unwrap();
-    assert!(integer.keeps(value), "{value}");
-    assert!(Scale::Pan.keeps(0.123_456));
-}
-
-/// A point spliced onto a curved segment keeps the part before it exactly and the part after it
-/// within 5 % of the lane.
-#[test]
-fn a_spliced_point_follows_a_curved_segment_closely() {
-    use suhina_engine::model::automation::value_at;
-    for curve in [-1.0, -0.4, 0.3, 1.0] {
-        let bent = [AutomationPoint { beat: 0.0, value: 0.0, curve }, AutomationPoint::new(8.0, 1.0)];
-        for at in [0.0, 1.0, 3.0, 6.0] {
-            let after = spliced(&bent, at);
-            // The segment before the new point is the same curve, exactly.
-            for beat in (0..=at as usize * 4).map(|q| q as f64 / 4.0) {
-                let (old, new) = (value_at(&bent, beat, false), value_at(&after, beat, false));
-                assert!((old.unwrap_or(0.0) - new.unwrap_or(1.0)).abs() < 1e-12, "{curve} {at} {beat}");
-            }
-            // The one after follows it within a small part of the lane.
-            for beat in (at as usize * 4..=32).map(|q| q as f64 / 4.0) {
-                let (old, new) = (value_at(&bent, beat, false), value_at(&after, beat, false));
-                assert!((old.unwrap_or(0.0) - new.unwrap_or(1.0)).abs() < 0.05, "{curve} {at} {beat}");
-            }
-        }
-    }
+    assert_eq!(integer.position(1.5), 0.5);
+    assert_eq!(integer.text(1.5), "1");
+    assert_eq!(integer.text(2.999), "2");
+    let semitones = Scale::Device(ParamInfo::integer("t", "T", (-48, 48), 0, Unit::Semitones));
+    assert_eq!(semitones.text(-0.94), "+0 st");
+    assert_eq!(semitones.text(-2.97), "-2 st");
 }
 
 /// The distance to a line is to its nearest segment, end or corner.

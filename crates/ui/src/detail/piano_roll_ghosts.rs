@@ -16,7 +16,7 @@ use suhina_engine::model::{Clip, LaneData, Note, Project, TrackId};
 
 use crate::detail::detail_view::ClipRef;
 use crate::detail::piano_roll::{Placement, key_name};
-use crate::interaction::grid::default_track_colour;
+use crate::interaction::grid::track_colour;
 use crate::kit::theme;
 
 /// The most ghost notes one clip shows, so a big project never draws without end.
@@ -170,7 +170,11 @@ pub fn ghosts(project: &Project, edited: ClipRef, source: GhostSource) -> Ghosts
         let Some(notes) = notes_of(project, track, clip) else { continue };
         let Some(position) = project.tracks.iter().position(|t| t.id == track) else { continue };
         let name = project.tracks.get(position).map_or_else(String::new, |t| t.name.clone());
-        let rgb = project.tracks.get(position).and_then(|t| t.color).unwrap_or_else(|| default_track_colour(position));
+        let rgb = project
+            .tracks
+            .get(position)
+            .map(|track| track_colour(track, position))
+            .unwrap_or_else(|| crate::interaction::grid::to_rgb(theme::midi_clip_default()));
         let color = Color32::from_rgb(rgb.0, rgb.1, rgb.2);
         let source = ghosts.sources.iter().position(|s| *s == name).unwrap_or(ghosts.sources.len());
         let before = ghosts.notes.len();

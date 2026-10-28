@@ -332,10 +332,14 @@ impl Device {
     }
     /// A sampler's source path, versioned independently of parameter values.
     pub fn sample_file(&self) -> Option<&str> {
-        if !matches!(&self.kind, DeviceKind::Builtin(id) if id == "sampler") {
+        let bytes = if self.kind == DeviceKind::Sd {
+            &self.extensions.0.iter().find(|e| e.format == "suhina" && e.key == "sample_reference")?.data
+        } else if matches!(&self.kind, DeviceKind::Builtin(id) if id == "sampler") {
+            self.state.as_deref()?
+        } else {
             return None;
-        }
-        std::str::from_utf8(self.state.as_deref()?).ok()?.strip_prefix("suhina-sample-v1\n")?.split('\0').next()
+        };
+        std::str::from_utf8(bytes).ok()?.strip_prefix("suhina-sample-v1\n")?.split('\0').next()
     }
 
     pub fn set_sample_file(&mut self, path: &str) {
@@ -344,11 +348,22 @@ impl Device {
 
     pub fn sample_absolute_file(&self) -> Option<&str> {
         self.sample_file()?;
-        std::str::from_utf8(self.state.as_deref()?).ok()?.split_once('\0').map(|(_, absolute)| absolute)
+        let bytes = if self.kind == DeviceKind::Sd {
+            &self.extensions.0.iter().find(|e| e.format == "suhina" && e.key == "sample_reference")?.data
+        } else {
+            self.state.as_deref()?
+        };
+        std::str::from_utf8(bytes).ok()?.split_once('\0').map(|(_, absolute)| absolute)
     }
 
     pub fn set_sample_reference(&mut self, file: &str, absolute: &str) {
-        self.state = Some(format!("suhina-sample-v1\n{file}\0{absolute}").into_bytes());
+        let data = format!("suhina-sample-v1\n{file}\0{absolute}").into_bytes();
+        if self.kind == DeviceKind::Sd {
+            self.extensions.0.retain(|e| !(e.format == "suhina" && e.key == "sample_reference"));
+            self.extensions.0.push(Extension { format: "suhina".into(), key: "sample_reference".into(), data });
+        } else {
+            self.state = Some(data);
+        }
     }
 }
 
@@ -371,10 +386,9 @@ pub struct AutomationLane {
 pub struct AutomationPoint {
     pub beat: f64,
     pub value: f64,
-    /// The shape of the segment from this point to the next, -1 to 1: 0 is a straight line,
-    /// above 0 it moves fast first and slow later, below 0 slow first (see
-    /// [`automation::shape`]).
-    pub curve: f64,
+    /// The shape of the segment from this point to the next: two control points of a cubic
+    /// Bezier ([`automation::Curve`]), straight by default.
+    pub curve: automation::Curve,
 }
 
 /// One parameter value of a built-in effect or instrument, by the parameter's stable id (ADR 0004). The value

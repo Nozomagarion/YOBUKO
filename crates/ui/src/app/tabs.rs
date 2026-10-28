@@ -36,6 +36,9 @@ impl App {
         self.arrangement.headers_left = headers_left;
         self.arrangement.returns_hidden = returns_hidden;
         self.arrangement.waveform_zoom = waveform_zoom;
+        self.arrangement.waveform_appearance = self.settings.view.waveform;
+        self.arrangement.audio_colour_strength = self.settings.view.audio_colour_strength;
+        self.arrangement.header_colour_strength = self.settings.view.header_colour_strength;
         self.arrangement.header_width = header_width;
         self.selected_device = stash.selected_device;
         self.revision = stash.revision.wrapping_add(1);
@@ -152,7 +155,11 @@ impl App {
 
     /// The tab row: one tab per open project, the active one lit; a tab's × closes it.
     pub(super) fn tab_row(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
+        let _style_class = crate::kit::style_class::enter("project-tabs");
+        let mut styled_ui = crate::kit::style_class::ui(ui);
+        let ui = &mut *styled_ui;
         let bar = ui.max_rect();
+        crate::kit::native_css::background(ui.painter(), bar);
         ui.allocate_rect(bar, Sense::hover());
         let painter = ui.painter_at(bar);
         let active = self.projects.active();
@@ -176,9 +183,14 @@ impl App {
             }
             let lit = motion::toward(ui.ctx(), response.id.with("active"), Some(id) == active, motion::VALUE);
             let idle = motion::mix(theme::window_background(), theme::panel_hover(), widgets::hover(ui, &response));
-            painter.rect_filled(tab, 0.0, motion::mix(idle, theme::panel_background(), lit));
+            painter.fill_background(tab, 0.0, motion::mix(idle, theme::panel_background(), lit));
             let text = motion::mix(theme::text_secondary(), theme::text_primary(), lit);
-            painter.galley(Pos2::new(tab.left() + PAD, tab.center().y - galley.size().y / 2.0), galley, text);
+            widgets::paint_text(
+                &painter,
+                Pos2::new(tab.left() + PAD, tab.center().y - galley.size().y / 2.0),
+                galley,
+                text,
+            );
             let cross = motion::mix(theme::text_hint(), theme::text_primary(), widgets::hover(ui, &close_response));
             let c = close.center();
             for (a, b) in [(Vec2::new(-3.0, -3.0), Vec2::new(3.0, 3.0)), (Vec2::new(-3.0, 3.0), Vec2::new(3.0, -3.0))] {
@@ -192,7 +204,7 @@ impl App {
     pub(super) fn open_prompt_bar(&mut self, ui: &mut Ui) {
         let Some(path) = self.open_prompt.clone() else { return };
         let bar = ui.max_rect();
-        ui.painter().rect_filled(bar, 0.0, theme::panel_background());
+        ui.painter().fill_background(bar, 0.0, theme::panel_background());
         let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().to_string());
         let current = self.projects.active().and_then(|id| self.projects.name(id)).unwrap_or("the project").to_string();
         let mut choice = None;

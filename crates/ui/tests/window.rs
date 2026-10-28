@@ -31,8 +31,11 @@ mod settings;
 mod snapshots;
 mod start;
 mod tabs;
+mod themes;
 
-pub(super) const SIZE: (f32, f32) = (1280.0, 800.0);
+// The full-workspace fixture leaves five spacious lanes visible for audio gain/fade tests.
+// Short and constrained layouts are exercised separately in short_panes.rs.
+pub(super) const SIZE: (f32, f32) = (1280.0, 900.0);
 
 /// A file dropped on the window in a test.
 #[derive(Debug)]

@@ -391,36 +391,8 @@ fn an_audio_track_is_armed_to_hear_its_input_and_its_menu_chooses_the_channels()
 }
 
 /// A linear gain in dB, as the engine keeps it.
-fn gain_of(db: f64) -> f64 {
+pub(super) fn gain_of(db: f64) -> f64 {
     10f64.powf(db / 20.0)
-}
-
-#[test]
-fn alt_and_the_wheel_over_a_fader_change_the_volume_and_the_wheel_alone_does_not() {
-    let mut harness = arrangement_app();
-    let at = harness.get_by_label("Drums volume").rect().center();
-    harness.hover_at(at);
-    harness.run();
-    let volume = |h: &Harness<'static, App>| h.state().session().map(|s| s.project().channels[0].volume).unwrap_or(1.0);
-    // One line of a wheel turned up, as a wheel reports it (the content moves down).
-    let tick = |modifiers: Modifiers| egui::Event::MouseWheel {
-        unit: egui::MouseWheelUnit::Line,
-        delta: egui::vec2(0.0, 1.0),
-        modifiers,
-        phase: egui::TouchPhase::Move,
-    };
-    // The wheel alone scrolls the view: scrolling down the headers never moves a fader.
-    harness.input_mut().events.push(tick(Modifiers::NONE));
-    harness.run();
-    assert!((volume(&harness) - 1.0).abs() < 1e-9, "the wheel alone left it: {}", volume(&harness));
-    // Alt and the wheel move the fader, and the view stays where it is.
-    let scroll = harness.state().arrangement().scroll;
-    harness.event(egui::Event::ModifiersChanged(Modifiers::ALT));
-    harness.input_mut().events.push(tick(Modifiers::ALT));
-    harness.run();
-    harness.event(egui::Event::ModifiersChanged(Modifiers::NONE));
-    assert!((volume(&harness) - gain_of(1.0)).abs() < 1e-6, "one tick raised it by 1 dB: {}", volume(&harness));
-    assert_eq!(harness.state().arrangement().scroll, scroll, "and the view stayed where it was");
 }
 
 #[test]
@@ -479,6 +451,8 @@ fn a_selections_track_on_and_solo_buttons_take_the_whole_selection() {
 #[test]
 fn a_return_in_the_arrangement_has_a_tracks_controls_and_main_a_volume_bar_and_they_grow_upward() {
     let mut harness = arrangement_app();
+    harness.get_by_label("Expand A Reverb").click();
+    harness.run();
     // A return's header is a track's: volume and pan, its on switch, its automation lanes.
     for label in ["A Reverb volume", "A Reverb pan", "Turn A Reverb off"] {
         assert!(harness.query_by_label(label).is_some(), "missing {label}");

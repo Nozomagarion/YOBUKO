@@ -8,9 +8,11 @@
 use std::sync::Arc;
 use suhina_engine::LauncherMonitor;
 
-use suhina_engine::model::{ChannelRole, Clip, ClipContent, ClipId, FadeCurve, LaneData, Meter, Project, Rgb, TrackId};
+use suhina_engine::model::{
+    ChannelRole, Clip, ClipContent, ClipId, FadeCurve, LaneData, LoopRange, Meter, Project, Rgb, TrackId,
+};
 
-use crate::interaction::grid::{ColumnKind, default_track_colour, gain_to_db};
+use crate::interaction::grid::{ColumnKind, gain_to_db, track_colour};
 use crate::interaction::nesting::depth;
 use crate::kit::waveform::Waveforms;
 
@@ -86,8 +88,11 @@ pub struct ClipBox {
     pub audio_view: Option<AudioView>,
     pub notes: Vec<NoteMark>,
     /// Where a looping clip starts another pass through its loop, in beats from its start: the
-    /// clip marks each with notches and a dashed line (#700).
+    /// clip marks each with a continuous vertical line and a small top notch (#700).
     pub seams: Vec<f64>,
+    /// Loop source timing, retained for right-edge previews beyond the committed length.
+    pub loop_range: Option<LoopRange>,
+    pub offset: f64,
     /// The sub-row the clip is drawn in, and how many the lane has: more than one where clips
     /// overlap (stacked), so each stays visible.
     pub row: usize,
@@ -171,6 +176,8 @@ pub type StackRows = std::collections::HashMap<(TrackId, (u32, u64)), (usize, f6
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Timeline {
+    /// Current recording spans supplied by the session, not committed editable clips.
+    pub recording_spans: Vec<(TrackId, f64, f64)>,
     /// Tracks in project order, then return tracks.
     pub lanes: Vec<Lane>,
     /// The sub-row each stacked clip was put in, by track and [`ClipBox::stack_key`]: the next
@@ -295,7 +302,7 @@ impl Timeline {
                 Some(ChannelRole::Submix) => ColumnKind::Group,
                 _ => ColumnKind::Track,
             };
-            let track_color = track.color.unwrap_or_else(|| default_track_colour(position));
+            let track_color = track_colour(track, position);
             let clips = project
                 .arrangement
                 .lanes
@@ -332,6 +339,8 @@ impl Timeline {
                                 audio_view: content.and_then(|c| audio_view(c, clip, project.transport.tempo_bpm)),
                                 notes: content.map(|c| note_marks(c, clip)).unwrap_or_default(),
                                 seams: loop_seams(clip),
+                                loop_range: clip.loop_range,
+                                offset: clip.offset,
                                 row: 0,
                                 rows: 1,
                             }
@@ -343,7 +352,7 @@ impl Timeline {
             let lane = Lane {
                 track: track.id,
                 name: track.name.clone(),
-                color: track.color.unwrap_or_else(|| default_track_colour(position)),
+                color: track_colour(track, position),
                 kind,
                 notes: kind == ColumnKind::Track && track.content.notes,
                 depth: depth(project, track.parent),
@@ -411,6 +420,7 @@ impl Timeline {
         let main_volume_db =
             project.channels.iter().find(|c| c.role == ChannelRole::Master).map(|c| gain_to_db(c.volume));
         let mut timeline = Self {
+            recording_spans: Vec::new(),
             stack_rows,
             ara_notes: std::collections::HashMap::new(),
             ara_activity: std::collections::HashMap::new(),
@@ -706,13 +716,21 @@ fn sub_rows(mut clips: Vec<ClipBox>, track: TrackId, before: &StackRows, after: 
 /// plays it: the first pass runs from its offset (or the loop's start, for an offset past the
 /// loop) to the loop's end, each after it through the whole loop. None when it does not loop.
 pub fn loop_seams(clip: &Clip) -> Vec<f64> {
-    let Some(range) = clip.loop_range.filter(|r| r.start.is_finite() && r.end.is_finite() && r.end > r.start) else {
+    loop_seams_for_span(clip.loop_range, clip.offset, clip.length)
+}
+
+/// Loop marks for a visible span, including a resize that has not been committed yet.
+pub fn loop_seams_for_span(range: Option<LoopRange>, offset: f64, length: f64) -> Vec<f64> {
+    if !offset.is_finite() || !length.is_finite() || length <= 0.0 {
+        return Vec::new();
+    }
+    let Some(range) = range.filter(|r| r.start.is_finite() && r.end.is_finite() && r.end > r.start) else {
         return Vec::new();
     };
     let pass = range.end - range.start;
-    let mut at = if clip.offset >= range.end { pass } else { range.end - clip.offset };
+    let mut at = if offset >= range.end { pass } else { range.end - offset };
     let mut seams = Vec::new();
-    while at < clip.length - 1e-9 && seams.len() < MAX_MARKS {
+    while at < length - 1e-9 && seams.len() < MAX_MARKS {
         seams.push(at);
         at += pass;
     }

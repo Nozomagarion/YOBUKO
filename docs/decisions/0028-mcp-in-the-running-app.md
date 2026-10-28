@@ -44,8 +44,8 @@ anything listens, so the rules are decided here, before the code.
 ### 1. The app serves MCP for its open tabs, off by default
 
 The desktop app can serve the same MCP tools as `suhina-cli mcp` (one `SuhinaMcp`, not a second
-server) for the projects it has open. It is off until the person turns on **Settings › Projects and backups ›
-Agents › Let agents work on open projects**; with it off, nothing listens.
+server) for the projects it has open. It is off until the person turns on **Settings › Agents and updates ›
+Agents › AI agents edit projects**; with it off, nothing listens.
 
 The tools run on the app's own `Projects`, on the thread that runs the window's commands: the
 server hands each tool call to the window as a job, the window runs the jobs between frames, in order

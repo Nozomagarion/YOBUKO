@@ -25,6 +25,18 @@
   the `last_verified` line of a document you change (it is stamped with the day of the merge).
   [`docs/README.md`](docs/README.md) says what an ADR, a spec and a system document each hold and
   how an ADR is amended; `python scripts/docs.py check` checks it.
+- **Settings help:** adding, removing, moving, renaming or changing a setting includes its website
+  help in the same pull request, automatically for agents. Read
+  [`docs/spec/settings-guide-export.md`](docs/spec/settings-guide-export.md), review the control
+  and implementation, and update `docs/guide-data/settings-help.json` with descriptions, choice
+  explanations, defaults, dependencies, when-to-change guidance, references and status. Review
+  behavior changes even when the source fingerprint stays unchanged; update fingerprints only
+  after checking the text. Migrate moved IDs and remove deleted entries. Run
+  `python scripts/settings_guide.py` and commit its `docs/guide-data/settings.json` output too;
+  this export is intentionally tracked. Verify with `python scripts/settings_guide.py --check`
+  and `python -m unittest discover -s scripts -p 'test_settings_guide.py'`. Check all changed
+  settings, not only the first reported error; do not defer the help to another repository,
+  a follow-up or a separate request.
 - **Parity measurement:** a pull request that adds, changes or removes something a user can do
   updates its coverage in `scripts/parity/score.py` (and `scripts/parity/devices.json` for a
   built-in effect or instrument) in the same pull request, and leaves the numbers in
@@ -223,7 +235,10 @@ Windows, macOS and Linux ([`docs/releasing.md` › Test builds](docs/releasing.m
 links the downloads from the pull request in a comment, updated with every new build. A maintainer's own pull requests are
 built on every push. A contributor's pull request is built once a maintainer has read the diff and
 added the `test-build` label, or a trusted contributor requests it with `/test-build`; a later
-push takes the label off, and the new commits need a new request.
+push takes the label off, and the new commits need a new request. `/test-build` first reuses a
+running build of that commit or a successful build whose requested packages are still available.
+A verified main-only update can reuse the previous build. It starts another build only when no
+suitable build is available.
 
 ## Merging many pull requests
 
@@ -238,12 +253,25 @@ says how the queue is set up and what runs in it.
 **The `ready to merge` label** does the waiting for you. A maintainer who has read a pull request
 adds it, and [`ready-to-merge.yml`](.github/workflows/ready-to-merge.yml) approves the commit it was
 added on and turns on *Merge when ready* for that commit: the queue takes the pull request once
-`ci` is green and every review thread is resolved (CodeRabbit's too), and a red check stops it. A
-contributor's pull request also needs a maintainer's approving review of the same head commit, or
-`test-build` so its build was tried first; Dependabot's Cargo updates need neither, since the queue's build and tests check them (its updates of the Actions do). A push by anyone
+`ci` is green and every review thread is resolved (CodeRabbit's too), and a red check stops it.
+Adding the label is the maintainer's approval of that exact commit, regardless of the author, and
+it needs a finished test build of that commit: a successful `/test-build` run whose packages are
+still available, or one of an earlier head the branch has only merged `main` into since. Without
+one the label comes off with a comment asking for `/test-build`; an existing build is reused, so
+asking again starts no second packaging run. A pull request that changes nothing in the binaries (only documentation, scripts or workflows) needs no build. Code-owner approval is still required for
+protected paths. A push by anyone
 but a maintainer takes the label off, so new commits are never merged unread; taking the label off
 by hand stops the merge. Only a maintainer adds it: an agent never adds `ready to merge`, also not
 when asked to finish a pull request.
+
+**Workflows and scripts need the owner's review.** To protect code that runs with the
+repository's secrets, [`.github/CODEOWNERS`](.github/CODEOWNERS) names the repository owner for
+`.github/` and `scripts/`, except `scripts/parity/`. The main ruleset requires a code owner's
+approval for the protected paths: `ready to merge` alone does not merge such a change, also
+not one from another maintainer. Parity scripts run without environment secrets; the generated
+documentation is published in a separate job that does not execute them. Changes confined to
+`scripts/parity/` therefore follow the usual review and `ready to merge` process. Keep parity
+code out of jobs that use environment secrets.
 
 ## Clean-room
 

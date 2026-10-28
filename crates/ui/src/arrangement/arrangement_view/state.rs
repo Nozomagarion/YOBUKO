@@ -133,6 +133,10 @@ pub struct ArrangementViewState {
     pub ara_default: Option<String>,
     pub header_width: f32,
     pub(super) heights: HashMap<TrackId, f32>,
+    pub(super) sizes: TrackSizes,
+    pub(super) apply_track_default: bool,
+    pub(super) apply_return_default: bool,
+    pub(super) expanded_heights: HashMap<TrackId, f32>,
     /// The selected clips, in the order they were picked, and the one clicked last: a Shift-click
     /// takes the run of clips from it, and the other views work on it.
     pub(super) selected: Vec<(TrackId, ClipId)>,
@@ -189,6 +193,7 @@ pub struct ArrangementViewState {
     /// Where the volume, pan and gain fields were drawn last frame: the wheel over one changes its
     /// value instead of scrolling the view, which has to know before they draw themselves again.
     pub(super) value_areas: Vec<Rect>,
+    pub(super) send_scroll_areas: Vec<Rect>,
     /// Where the waveform zoom slider was drawn last frame: the wheel over it steps the zoom
     /// and leaves the view where it is.
     pub(super) zoom_area: Option<Rect>,
@@ -227,6 +232,9 @@ pub struct ArrangementViewState {
     /// How much larger audio clips' waveforms are drawn, 1 … 16: the display only, never the
     /// sound or the clip's gain (the slider by the ruler; Ctrl+Alt+Up and Down).
     pub waveform_zoom: f32,
+    pub waveform_appearance: crate::settings::view_settings::WaveformAppearance,
+    pub audio_colour_strength: u8,
+    pub header_colour_strength: u8,
     /// Where the last click in a lane or a clip's body put the play start, on which track: a
     /// thin line there in that lane while the play start is still there.
     pub insert: Option<(TrackId, f64)>,
@@ -263,6 +271,10 @@ impl Default for ArrangementViewState {
             ara_default: None,
             header_width: HEADER_COLUMN,
             heights: HashMap::new(),
+            sizes: TrackSizes::default(),
+            apply_track_default: false,
+            apply_return_default: false,
+            expanded_heights: HashMap::new(),
             selected: Vec::new(),
             anchor: None,
             marquee: None,
@@ -289,6 +301,7 @@ impl Default for ArrangementViewState {
             track_anchor: None,
             folds: Folds::default(),
             value_areas: Vec::new(),
+            send_scroll_areas: Vec::new(),
             zoom_area: None,
             knobs: false,
             targeted: None,
@@ -303,6 +316,9 @@ impl Default for ArrangementViewState {
             name_bar_moves: true,
             grid_in_clips: true,
             waveform_zoom: 1.0,
+            waveform_appearance: crate::settings::view_settings::WaveformAppearance::default(),
+            audio_colour_strength: 82,
+            header_colour_strength: 82,
             insert: None,
             open_devices: None,
             automation: LanesState::default(),
@@ -553,17 +569,75 @@ impl ArrangementViewState {
 
     /// How tall a return track's row is: a row's height until its edge is dragged.
     pub(super) fn return_height(&self, track: TrackId) -> f32 {
-        self.heights.get(&track).copied().unwrap_or(SHOWS_MIXER)
+        self.heights.get(&track).copied().unwrap_or(f32::from(self.sizes.height(self.sizes.returns)))
     }
 
-    /// How tall `track`'s lane is.
+    /// Set every track and return to one named size, including folded/hidden rows.
+    pub(super) fn resize_all(&mut self, timeline: &Timeline, size: TrackSize) {
+        let height = f32::from(self.sizes.height(size));
+        for lane in &timeline.lanes {
+            self.heights.insert(lane.track, height);
+            if !matches!(size, TrackSize::Tiny | TrackSize::Compact) {
+                self.expanded_heights.insert(lane.track, height);
+            }
+        }
+    }
+
+    /// Apply named sizes live, retaining manual heights that do not match a preset.
+    pub fn set_size_settings(&mut self, sizes: TrackSizes) {
+        if sizes == self.sizes {
+            return;
+        }
+        self.apply_track_default |= sizes.tracks != self.sizes.tracks;
+        self.apply_return_default |= sizes.returns != self.sizes.returns;
+        for height in self.heights.values_mut().chain(self.expanded_heights.values_mut()) {
+            if let Some(size) = TrackSize::ALL.into_iter().find(|s| f32::from(self.sizes.height(*s)) == *height) {
+                *height = f32::from(sizes.height(size));
+            }
+        }
+        self.sizes = sizes;
+    }
+
+    /// A changed default applies to its rows immediately, including a previous Resize all.
+    pub(crate) fn apply_size_defaults(&mut self, timeline: &Timeline) {
+        if !self.apply_track_default && !self.apply_return_default {
+            return;
+        }
+        for lane in &timeline.lanes {
+            if if lane.kind == ColumnKind::Return { self.apply_return_default } else { self.apply_track_default } {
+                self.heights.remove(&lane.track);
+                self.expanded_heights.remove(&lane.track);
+            }
+        }
+        self.apply_track_default = false;
+        self.apply_return_default = false;
+    }
+
+    /// Toggle a lane between the smallest row and its last expanded height.
+    pub(super) fn toggle_height(&mut self, track: TrackId, height: f32) {
+        let compact = f32::from(self.sizes.height(TrackSize::Compact));
+        if height > compact {
+            self.expanded_heights.insert(track, height);
+            self.heights.insert(track, compact);
+        } else {
+            self.heights.insert(
+                track,
+                self.expanded_heights.get(&track).copied().unwrap_or(f32::from(self.sizes.height(TrackSize::Small))),
+            );
+        }
+    }
+
+    /// How tall a track's row is: its own height once its edge is dragged or it is resized, else
+    /// the theme's (`--suhina-track-height`), else the default size.
     pub fn lane_height(&self, track: TrackId) -> f32 {
-        self.heights.get(&track).copied().unwrap_or(DEFAULT_LANE)
+        self.heights.get(&track).copied().unwrap_or_else(|| {
+            crate::kit::style_class::theme_track_height().unwrap_or(f32::from(self.sizes.height(self.sizes.tracks)))
+        })
     }
 
     /// How tall the view is when it shows only `track` ([`Self::focus`]): the ruler, the loop
     /// brace and marker rows under it, and the whole lane.
     pub fn focus_height(&self, track: TrackId) -> f32 {
-        RULER + 1.0 + LOOP_ROW + 1.0 + MARKER_ROW + 1.0 + self.lane_height(track) + 1.0
+        RULER + 1.0 + loop_row_height() + 1.0 + MARKER_ROW + 1.0 + self.lane_height(track) + 1.0
     }
 }
