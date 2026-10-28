@@ -1112,3 +1112,30 @@ fn an_edit_that_jumps_the_sound_is_eased_and_smooth_sound_is_left_exact() {
     // And silence after it.
     assert!(out[(at + crate::DECLICK_FRAMES + 1) * 2..].iter().all(|s| s.abs() < 1e-6));
 }
+
+#[test]
+fn a_clip_deleted_or_moved_while_playing_stops_where_it_was() {
+    // Deleted, the clip falls silent from the edit; moved later, it plays only at its new place.
+    for mode in [StretchMode::Repitch, StretchMode::Smooth] {
+        for moved in [false, true] {
+            let (project, pool) = stretched_project(440.0, 4.0, 8.0, 110.0, mode);
+            let mut edited = project.clone();
+            if moved {
+                edited.arrangement.lanes[0].clips[0].start = 100.0;
+            } else {
+                edited.arrangement.lanes[0].clips.clear();
+            }
+            let mut renderer =
+                Renderer::build(&project, RenderInputs::from_audio(&pool), SR, RenderOptions::PLAYING).unwrap();
+            let mut controller = renderer.controller();
+            controller.run_stretch_worker(&mut renderer).unwrap();
+            let pace = |_| std::thread::sleep(std::time::Duration::from_millis(5));
+            let mut out = blocks(&mut renderer, 50, 480, pace);
+            controller.update(&edited).unwrap();
+            out.extend(blocks(&mut renderer, 100, 480, pace));
+            let at = swap_frame(50) + crate::DECLICK_FRAMES;
+            let after = rms(&out, at, at + 9_600);
+            assert!(after < 1e-4, "{mode:?}, moved {moved}: still playing at {after}");
+        }
+    }
+}

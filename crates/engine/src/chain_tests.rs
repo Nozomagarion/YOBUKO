@@ -316,6 +316,40 @@ fn stopping_the_transport_releases_an_instruments_notes() {
 }
 
 #[test]
+fn a_held_note_ends_when_an_edit_takes_it_away_while_playing() {
+    // An 8-beat note sounds; at 0.5 s an edit deletes its clip, deletes the note, or shortens it
+    // to 1.5 beats (0.75 s): the instrument lets it go then, not at its old end (#916).
+    let p = project(vec![note(0.0, 8.0, 69)], 8.0, vec![device("fm-synth", &[])]);
+    let mut no_clip = p.clone();
+    no_clip.arrangement.lanes[0].clips.clear();
+    let mut no_note = p.clone();
+    let mut shorter = p.clone();
+    for (project, notes) in [(&mut no_note, vec![]), (&mut shorter, vec![note(0.0, 1.5, 69)])] {
+        project.contents[0].lanes =
+            vec![suhina_model::ContentLane { target: None, data: suhina_model::LaneData::Notes(notes) }];
+    }
+    for (name, edited, silent_from) in
+        [("clip deleted", &no_clip, 24_000), ("note deleted", &no_note, 24_000), ("note shortened", &shorter, 36_000)]
+    {
+        let mut renderer =
+            Renderer::build(&p, RenderInputs::from_audio(&crate::AudioPool::new()), SR, RenderOptions::PLAYING)
+                .unwrap();
+        let mut controller = renderer.controller();
+        let mut out = blocks(&mut renderer, 50, 480);
+        assert!(peak(&left(&out)[9_600..]) > 0.05, "{name}: sounding");
+        controller.update(edited).unwrap();
+        out.extend(blocks(&mut renderer, 150, 480));
+        let out = left(&out);
+        // The synth's release, then silence.
+        let after = silent_from + 9_600;
+        assert!(peak(&out[after..]) < 1e-4, "{name}: {}", peak(&out[after..]));
+        if silent_from > 24_000 {
+            assert!(peak(&out[24_000..silent_from]) > 0.05, "{name}: plays on until its new end");
+        }
+    }
+}
+
+#[test]
 fn an_edit_keeps_a_chain_playing_and_takes_its_new_values() {
     let p = project(vec![note(0.0, 8.0, 69)], 8.0, vec![device("fm-synth", &[]), device("utility", &[])]);
     let mut edited = p.clone();

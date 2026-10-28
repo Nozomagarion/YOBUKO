@@ -1956,6 +1956,7 @@ impl Renderer {
                 bus: note.bus,
                 meter: note.meter,
                 scale: note.scale,
+                arranged: false,
             };
             start_note(voices, chains, frame, *position, *sample_rate, end, start);
         };

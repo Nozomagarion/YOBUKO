@@ -133,6 +133,18 @@ klingt and JUCE's graph do), now:
    velocity; at a swap it takes the new graph's volume, pan and mute (and bus, if the track's
    chain changed) at once instead of keeping them until the note ends.
 
+## Amendment: notes an edit takes away (2026-10-28)
+
+A chain that carries over keeps its held notes, and a sine voice keeps sounding, until the end
+they were started with. An arrangement note deleted, shortened or moved while it sounded (or
+its clip deleted or moved away) therefore played on to its old end, until the transport stopped
+(#916). The engine now marks the notes the arrangement started, per chain key and per voice, and
+when a graph takes over while playing it looks each one up in the new graph's notes on the same
+bus and key that have started and not ended: found, the note ends where it now ends; not found,
+it is released at once. Notes from the launcher, the piano roll's keys and live input are not
+marked, so an edit leaves them alone. Audio clips needed nothing: the new graph's list of
+sounding clips is rebuilt from the edited project at the swap.
+
 ## Consequences
 
 - An edit is rendered from the next engine block after the command returns, plus the time to

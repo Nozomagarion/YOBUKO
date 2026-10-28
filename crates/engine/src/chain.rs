@@ -158,6 +158,8 @@ pub(crate) struct Chain {
     /// Per key, the renderer frame its note ends at, or `NOT_HELD`.
     held: [u64; 128],
     next_off: u64,
+    /// Per key (a bit each), whether its held note is an arrangement note (#916).
+    arranged: u128,
     /// The scale last sent to the devices ([`Chain::set_scale`]); `None` before the first.
     scale: Option<Option<MusicalScale>>,
     /// When its first slot is the channel's clip host, the ARA plug-in its clips play through
@@ -473,6 +475,7 @@ impl Chain {
             joined: Joined::default(),
             held: [NOT_HELD; 128],
             next_off: NOT_HELD,
+            arranged: 0,
             scale: None,
             built_volume: None,
             built_pan: None,
@@ -522,6 +525,7 @@ impl Chain {
             joined: Joined::default(),
             held: [NOT_HELD; 128],
             next_off: NOT_HELD,
+            arranged: 0,
             scale: None,
             built_volume: None,
             built_pan: None,
@@ -881,6 +885,7 @@ impl Chain {
             *held = NOT_HELD;
             self.push(frame, NoteEvent::Off { key, velocity: 0.5 });
         }
+        self.arranged &= !(1u128 << key.min(127));
         // A note of velocity 0 would be a release.
         let velocity = velocity.clamp(1.0 / 127.0, 1.0);
         self.push(frame, NoteEvent::On { key, velocity });
@@ -937,6 +942,41 @@ impl Chain {
     pub(crate) fn hold_key(&mut self, key: u8, end: u64) {
         if let Some(held) = self.held.get_mut(usize::from(key)) {
             *held = end;
+        }
+    }
+
+    /// Marks the note just started on `key` as an arrangement note.
+    pub(crate) fn mark_arranged(&mut self, key: u8) {
+        self.arranged |= 1u128 << key.min(127);
+    }
+
+    /// After an edit, the arrangement notes this chain holds follow the new graph: `wanted`
+    /// gives a held key's new end, in renderer frames, or `None` when its note is gone, and
+    /// that note is released at `frame` of the block (#916). Never allocates.
+    pub(crate) fn follow_arranged(&mut self, frame: usize, mut wanted: impl FnMut(u8) -> Option<u64>) {
+        if self.arranged == 0 {
+            return;
+        }
+        for key in 0..=127u8 {
+            if self.arranged & (1u128 << key) == 0 {
+                continue;
+            }
+            let Some(held) = self.held.get_mut(usize::from(key)) else { continue };
+            if *held == NOT_HELD {
+                self.arranged &= !(1u128 << key);
+                continue;
+            }
+            match wanted(key) {
+                Some(end) => {
+                    *held = end;
+                    self.next_off = self.next_off.min(end);
+                }
+                None => {
+                    *held = NOT_HELD;
+                    self.arranged &= !(1u128 << key);
+                    self.push(frame, NoteEvent::Off { key, velocity: 0.5 });
+                }
+            }
         }
     }
 
@@ -1226,6 +1266,7 @@ impl Chain {
         }
         self.held = old.held;
         self.next_off = old.next_off;
+        self.arranged = old.arranged;
         self.scale = old.scale;
         self.delay.adopt(&mut old.delay);
         self.adopt_sends(old);

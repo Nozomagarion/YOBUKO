@@ -223,6 +223,34 @@ impl Renderer {
         }
     }
 
+    /// After an edit while playing, the arrangement notes that sound follow the new graph
+    /// (#916): one whose note is gone (deleted, or its clip deleted or moved away) is released,
+    /// one still there ends where its note now ends. Arranged time `time`. Never allocates.
+    fn follow_arranged_notes(&mut self, time: u64) {
+        let position = self.position;
+        let Self { graph, voices, next_event, .. } = self;
+        let started = graph.events.get(..*next_event).unwrap_or_default();
+        let launcher = &graph.launcher;
+        // The renderer frame a sounding note on `bus` and `key` now ends at, if one still sounds.
+        let wanted = |bus: u32, key: u8| {
+            started
+                .iter()
+                .filter(|e| e.bus == bus && e.key == key && e.end > time && !launcher.overrides(e.column))
+                .map(|e| position + (e.end - time))
+                .max()
+        };
+        for (index, chain) in graph.chains.iter_mut().enumerate() {
+            let bus = u32::try_from(index + 1).unwrap_or(u32::MAX);
+            chain.follow_arranged(0, |key| wanted(bus, key));
+        }
+        for voice in voices.iter_mut().filter(|v| v.active && v.arranged) {
+            match wanted(voice.bus, voice.key) {
+                Some(end) => voice.end = end,
+                None => voice.end = voice.end.min(position),
+            }
+        }
+    }
+
     /// The frame the pending graph takes over at, if one is waiting.
     pub(crate) fn swap_at(&self) -> Option<u64> {
         self.swap.pending.as_ref().map(|s| s.at)
@@ -320,6 +348,9 @@ impl Renderer {
         let time = self.time();
         // Cursors into the new lists: what has started by now has been handled.
         self.next_event = self.graph.events.partition_point(|e| e.start < time);
+        if self.running {
+            self.follow_arranged_notes(time);
+        }
         self.next_audio = self.graph.audio_events.partition_point(|a| a.event.start < time);
         self.active_audio_count = 0;
         if self.running {

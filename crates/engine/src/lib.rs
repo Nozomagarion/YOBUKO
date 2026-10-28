@@ -317,6 +317,10 @@ pub(crate) struct Voice {
     bus: u32,
     /// The track's meter slot.
     meter: u32,
+    /// Its key, and whether an arrangement note started it: an edit that takes that note away
+    /// ends the voice (#916).
+    key: u8,
+    arranged: bool,
 }
 
 /// An arrangement audio clip and the launcher column of its track.
@@ -789,6 +793,7 @@ impl Renderer {
                 bus: event.bus,
                 meter: event.meter,
                 scale: event.scale,
+                arranged: true,
             };
             let Self { voices, graph, position, sample_rate, .. } = self;
             start_note(voices, &mut graph.chains, frame, *position, *sample_rate, end, start);
@@ -1031,6 +1036,7 @@ impl Renderer {
                         bus: event.bus,
                         meter: event.meter,
                         scale: event.scale,
+                        arranged: true,
                     };
                     let Self { voices, graph, position, sample_rate, .. } = self;
                     start_note(voices, &mut graph.chains, frame, *position, *sample_rate, end, start);
@@ -1272,6 +1278,8 @@ pub(crate) struct NoteStart {
     pub(crate) meter: u32,
     /// The scale of the note's clip.
     pub(crate) scale: Option<MusicalScale>,
+    /// Whether it is an arrangement note, which an edit can take away while it sounds.
+    pub(crate) arranged: bool,
 }
 
 /// The chain behind `bus`, or `None` for the output.
@@ -1295,6 +1303,9 @@ pub(crate) fn start_note(
     if let Some(chain) = bus_chain(chains, note.bus).filter(|c| c.instrument) {
         chain.set_scale(frame, note.scale);
         chain.note_on(frame, position, note.key, note.velocity, end);
+        if note.arranged {
+            chain.mark_arranged(note.key);
+        }
         return;
     }
     let slot = match voices.iter().position(|v| !v.active) {
@@ -1315,6 +1326,8 @@ pub(crate) fn start_note(
             column: note.column,
             bus: note.bus,
             meter: note.meter,
+            key: note.key,
+            arranged: note.arranged,
         };
     }
 }
