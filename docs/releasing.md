@@ -247,17 +247,17 @@ conflict in meaning between two of them.
 
 **The `ready to merge` label.** A maintainer who has read a pull request adds the label instead of
 coming back to press *Merge when ready* once CI is green. That label is their approval of the
-current head; requesting downloadable test packages is a separate decision. A stale review must
-not force a new packaging run just to satisfy this workflow.
-[`ready-to-merge.yml`](../.github/workflows/ready-to-merge.yml) (`pull_request_target`, never
-checking out or running the pull request's code) then:
+current head, given with a finished test build of it: nothing merges without one, but a build that
+already exists is reused, so a stale review never forces a new packaging run.
+[`ready-to-merge.yml`](../.github/workflows/ready-to-merge.yml) (`pull_request_target`, checking out
+only `main`'s automation for the build lookup, never running the pull request's code) then:
 
 | Event | What happens |
 |---|---|
-| a maintainer adds the label | the app approves the head commit as the event saw it (the rule for `main` needs one approval, and a maintainer cannot approve their own pull request) and turns on auto-merge with that commit as the expected head; the queue takes the pull request once `ci` is green and every review thread is resolved |
-| a maintainer adds the label on a contributor's or dependency update PR | the same commit-bound approval applies; no test-build label or additional review is needed by this workflow, and GitHub still enforces code-owner approval and required checks |
+| a maintainer adds the label and a finished test build of the head exists | the app approves the head commit as the event saw it (the rule for `main` needs one approval, and a maintainer cannot approve their own pull request) and turns on auto-merge with that commit as the expected head; the queue takes the pull request once `ci` is green and every review thread is resolved |
+| a maintainer adds the label and no finished test build of the head exists | the label comes off with a comment asking for `/test-build`; nothing is approved or queued. A build counts when it is a successful, authorized `test build` run of the head, or of an earlier head the branch only merged `main` into, with every requested package still available (`scripts/build_reuse.py`); a build still running does not count yet. This applies to every author, maintainers and dependency updates included. A pull request that changes nothing `test-build.yml` builds (only documentation, scripts or other workflows) needs no build |
 | anyone else adds the label | it comes off |
-| a push by a maintainer | the label stays; the app approves the new head and turns auto-merge on for it |
+| a push by a maintainer | the label stays and the new head goes through the same check: with a finished test build of it (a push that only merged `main` reuses the earlier one) the app approves it and turns auto-merge on for it; without one the label comes off with the same comment |
 | a push by anyone else | the label comes off, so the new commits wait to be read (the rule for `main` dismisses the older approval) |
 | the label comes off | auto-merge off, out of the queue, and the app's approvals dismissed; a call that fails fails the run. When the label was added again meanwhile, the run fails and asks for the label to be taken off and added again, so the pull request waits rather than merging |
 

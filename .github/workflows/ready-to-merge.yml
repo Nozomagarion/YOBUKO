@@ -9,8 +9,12 @@ name: Ready to merge
 # - Labelled by a maintainer: the app approves the head commit as the event saw it (main's rule
 #   needs one approval, and a maintainer cannot approve their own pull request), then enables
 #   auto-merge with that commit as the expected head, so a commit pushed in between is never what
-#   gets merged. Adding the label is the maintainer's approval of that head, for any author.
-#   Downloadable test builds are optional and never substitute for merge approval.
+#   gets merged. Adding the label is the maintainer's approval of that head, for any author, but
+#   only with a test build of it: a successful, authorized `test build` run whose artifacts are
+#   still available, for that head or for a head it reaches by merging only main
+#   (scripts/build_reuse.py, the lookup /test-build uses). Without one the label comes off with a
+#   comment asking for /test-build; a build that is still running counts as none yet. A pull
+#   request that changes nothing test-build.yml's paths filter builds needs none.
 # - A push by anyone but a maintainer takes the label off, turns auto-merge off and leaves the
 #   pull request out of the queue: the new commits wait for a maintainer to read them, as the
 #   `test-build` label does (test-build-links.yml, job `unlabel`). main's rule dismisses the
@@ -98,7 +102,29 @@ jobs:
         needs.roles.outputs.sender == 'true')
     runs-on: ubuntu-latest
     environment: docs-bot
+    # Read-only token for the build lookup; writes go through the app's token.
+    permissions:
+      actions: read
+      contents: read
+      issues: read
+      pull-requests: read
     steps:
+      # main's automation only: the pull request's files are never checked out or run here.
+      - name: Check out default-branch automation
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Find a test build of the head
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUEST: '{"command": "test-build", "sha": "${{ github.event.pull_request.head.sha }}", "number": ${{ github.event.pull_request.number }}}'
+          TRUSTED_CONTRIBUTORS: ${{ vars.TRUSTED_CONTRIBUTORS }}
+        run: |
+          build=$(python3 scripts/build_reuse.py)
+          echo "result=$build" >> "$GITHUB_OUTPUT"
       - name: Token of the app
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -111,6 +137,7 @@ jobs:
           NUMBER: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
           SENDER: ${{ github.event.sender.login }}
+          BUILD: ${{ steps.build.outputs.result }}
         run: |
           eval "$HELPERS"
           is_maintainer() {
@@ -121,8 +148,20 @@ jobs:
             echo "::notice::$SENDER is not a maintainer; the label was taken off."
             exit 0
           fi
-          # The maintainer's label approves this exact head; packaging a test build is
-          # independent. CODEOWNERS and all required checks still gate the merge queue.
+          # Nothing merges without a finished test build of this head (or of the head it updated
+          # with main only). A lookup that failed has already failed the job, label kept.
+          state=$(printf '%s' "$BUILD" | jq -r --arg sha "$SHA" 'if .head == $sha then .state // "" else "" end')
+          # no-binary: test-build.yml never runs for this change (documentation, scripts or other
+          # workflows only), so there is no build to wait for.
+          if [ "$state" != "ready" ] && [ "$state" != "no-binary" ]; then
+            gh pr edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
+            gh pr comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+              "\`$LABEL\` needs a finished test build of ${SHA:0:7}: comment \`/test-build\`, wait for the build to succeed, then add \`$LABEL\` again (CONTRIBUTING.md › Merging many pull requests)."
+            echo "::notice::No finished test build of ${SHA:0:7}; the label was taken off."
+            exit 0
+          fi
+          # The maintainer's label approves this exact head. CODEOWNERS and all required checks
+          # still gate the merge queue.
           gh api --method POST "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/reviews" \
             -f commit_id="$SHA" -f event=APPROVE \
             -f body="\`$LABEL\`: a maintainer read ${SHA:0:7}; merge when every check is green." >/dev/null

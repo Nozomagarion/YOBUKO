@@ -104,6 +104,7 @@ def find_reuse(api, repo, pr, head, candidates, maintainers, trusted, now=None):
     comments = list(api.pages(f"issues/{number}/comments"))
     proofs = authorized_proofs(api, repo, number, comments, trusted | maintainers)
     latest_current_run = datetime.min.replace(tzinfo=timezone.utc)
+    running = None
     for source in candidates:
         # A bounded recent page: overlooking an older run requests a new build, never reuses
         # incomplete or unrelated evidence. The workflow endpoint binds the workflow identity.
@@ -141,9 +142,16 @@ def find_reuse(api, repo, pr, head, candidates, maintainers, trusted, now=None):
                              and a.get("size_in_bytes", 0) > 0 and timestamp(a.get("expires_at")) > now}
                 if expected_artifacts <= available:
                     state = "ready"
-            if state:
+            if state == "ready":
                 return {"head": head, "source": source, "state": state,
                         "url": f"https://github.com/{repo}/actions/runs/{run_id}"}
+            if state and running is None:
+                # Kept until every eligible head is checked: a finished build of an earlier
+                # head is better than waiting for this one.
+                running = {"head": head, "source": source, "state": state,
+                           "url": f"https://github.com/{repo}/actions/runs/{run_id}"}
+    if running:
+        return running
     # Actions may not expose a newly dispatched run yet. Serialize requests per PR and allow
     # a five-minute dispatch window when an authenticated proof and its label already exist.
     if "test-build" in labels and any(
@@ -152,6 +160,21 @@ def find_reuse(api, repo, pr, head, candidates, maintainers, trusted, now=None):
         return {"head": head, "source": head, "state": "requested",
                 "url": f"https://github.com/{repo}/pull/{number}/checks"}
     return {}
+
+
+def build_paths(workflow):
+    """The `paths` filter of test-build.yml's pull_request trigger, as written there."""
+    block = workflow.split("  pull_request:", 1)[1].split("  workflow_dispatch:", 1)[0]
+    return [m for m in re.findall(r'^\s+- "([^"]+)"\s*$', block, flags=re.M)]
+
+
+def builds_binary(files, paths):
+    """Whether test-build.yml runs for a pull request changing these files."""
+    def match(name, pattern):
+        if pattern.endswith("/**"):
+            return name.startswith(pattern[:-2])
+        return name == pattern
+    return any(match(f, p) for f in files for p in paths)
 
 
 def main():
@@ -165,6 +188,17 @@ def main():
     pr = api.get(f"pulls/{number}")
     if pr["state"] != "open" or pr["head"]["sha"] != head:
         raise ValueError("The pull request changed; post a new request.")
+    # test-build.yml does not run for a pull request that changes nothing in the binaries, so
+    # there is no build to wait for: the decision says so instead of asking for one.
+    with open(os.path.join(os.path.dirname(__file__), "..", ".github", "workflows", "test-build.yml"),
+              encoding="utf-8") as workflow:
+        paths = build_paths(workflow.read())
+    if not paths:
+        raise ValueError("test-build.yml has no paths filter to read.")
+    files = [f["filename"] for f in api.pages(f"pulls/{number}/files")]
+    files += [f["previous_filename"] for f in api.pages(f"pulls/{number}/files") if f.get("previous_filename")]
+    if not builds_binary(files, paths):
+        return {"head": head, "source": head, "state": "no-binary", "url": ""}
     candidates = [head]
     if pr["base"]["ref"] == "main":
         # Fetch objects only: do not check out files, submodules, build scripts or hooks from PRs.

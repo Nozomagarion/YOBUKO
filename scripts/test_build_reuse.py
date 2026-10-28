@@ -41,7 +41,8 @@ class FakeApi:
 
     def pages(self, path, key=None):
         return {"issues/960/comments": self.comments, "actions/runs/42/jobs": self.jobs,
-                "actions/runs/42/artifacts": self.artifacts}[path]
+                "actions/runs/42/artifacts": self.artifacts,
+                "actions/runs/43/jobs": [dict(j, status="in_progress", conclusion=None) for j in self.jobs]}[path]
 
     def proof(self, at="2026-10-28T10:01:00Z"):
         self.comments = [{"user": {"login": "suhina-bot[bot]", "type": "Bot"}, "created_at": at,
@@ -162,6 +163,38 @@ class BuildReuse(unittest.TestCase):
         api.get = lambda _: (_ for _ in ()).throw(RuntimeError("API unavailable"))
         with self.assertRaises(RuntimeError):
             api.find()
+
+
+class PreferReady(unittest.TestCase):
+    def test_finished_ancestor_build_wins_over_running_current_build(self):
+        api = FakeApi()
+        api.runs[0]["head_sha"] = OLD
+        api.runs.append(dict(api.runs[0], id=43, head_sha=HEAD, status="in_progress", conclusion=None))
+        self.assertEqual(api.find([HEAD, OLD])["state"], "ready")
+        self.assertEqual(api.find([HEAD, OLD])["source"], OLD)
+
+    def test_running_current_build_is_kept_when_nothing_finished(self):
+        api = FakeApi()
+        api.runs = [dict(api.runs[0], id=43, status="in_progress", conclusion=None)]
+        self.assertEqual(api.find([HEAD, OLD])["state"], "running")
+
+
+class BinaryPaths(unittest.TestCase):
+    def test_paths_come_from_test_build_workflow(self):
+        from pathlib import Path
+        text = (Path(__file__).resolve().parents[1] / ".github/workflows/test-build.yml").read_text(encoding="utf-8")
+        paths = br.build_paths(text)
+        self.assertIn("crates/**", paths)
+        self.assertIn("Cargo.lock", paths)
+        self.assertNotIn("docs/**", paths)
+
+    def test_only_binary_paths_need_a_build(self):
+        paths = ["crates/**", "Cargo.lock", ".github/workflows/test-build.yml"]
+        self.assertFalse(br.builds_binary(["docs/a.md", ".github/workflows/ci.yml", "scripts/x.py"], paths))
+        self.assertTrue(br.builds_binary(["docs/a.md", "crates/ui/src/a.rs"], paths))
+        self.assertTrue(br.builds_binary(["Cargo.lock"], paths))
+        self.assertTrue(br.builds_binary([".github/workflows/test-build.yml"], paths))
+        self.assertFalse(br.builds_binary(["crates-old/a.rs", "Cargo.lock.bak"], paths))
 
 
 class EligibleHeads(unittest.TestCase):
