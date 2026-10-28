@@ -208,12 +208,27 @@ blocks nothing (`AGENTS.md` › Tasks has the commands). The rules in
 [AI-assisted contributions](#ai-assisted-contributions) apply to what the agent wrote.
 
 **No elevated access just to post.** These bot workflows require existing repository write
-access, not admin access. Without it, an agent uses the user's authenticated account to post
-ordinary issues and PR comments, within the user's authorization, and identifies agent-written
-feedback as AI-assisted. Trusted contributors may use the comment commands below. Agents must
+access, not admin access. An agent checks that access first
+(`gh api repos/suhina-daw/suhina-daw --jq .permissions.push`, or
+[`scripts/agent_post.py`](scripts/agent_post.py), which checks and posts either way); without it,
+or when a dispatch is answered with a 403 (whose message wrongly asks for admin rights), it uses
+the user's authenticated account to post ordinary issues and PR comments, within the user's
+authorization, names in an issue's body the labels and parent it could not set, and identifies
+agent-written feedback as AI-assisted. Trusted contributors may use the comment commands below. Agents must
 not request admin/write access, broader token scopes or App secrets to follow the bot posting
 convention. Connector restrictions still apply: if no authorized posting route is available,
 explain the limit and give the user the prepared text.
+
+With triage access, the helper checks repository labels before creating an issue, applies only
+available labels and names missing ones in the body for a maintainer. A failed label lookup stops
+before creation; a failed create is never retried.
+
+The helper checks a supplied parent is an open epic before opening an issue under the user's
+account, and adds the AI-assisted note to both issues and comments. If a workflow posts but its
+successful completion cannot be confirmed, the helper reports an error with the created item's
+marker and the run id: inspect the run and finish any missing follow-up without posting again.
+If no marker can be read, the posting outcome is unknown and the workflow may still post;
+inspect the named run instead of starting another request.
 
 **Trusted bot actions.** Contributors listed in `TRUSTED_CONTRIBUTORS` may ask `suhina-bot`
 to create issues with `/open-issue`, close/reopen issues with `/close` and `/reopen`, and request
