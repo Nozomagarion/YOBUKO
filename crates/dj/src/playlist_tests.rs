@@ -126,7 +126,7 @@ fn legacy_open_is_read_only_and_first_commit_keeps_exact_backup() {
     let bytes = serde_json::to_vec_pretty(&serde_json::json!({"format":1,"tracks":catalog().tracks})).unwrap();
     std::fs::write(&path, &bytes).unwrap();
     let old = Catalog::open(&path).unwrap();
-    assert_eq!(old.format, 2);
+    assert_eq!(old.format, FORMAT);
     assert_eq!(old.revision, 0);
     assert_eq!(std::fs::read(&path).unwrap(), bytes);
     let mut next = old.clone();

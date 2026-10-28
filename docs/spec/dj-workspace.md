@@ -1,6 +1,6 @@
 ---
-description: The fork's Studio and DJ workspaces, separate local catalog, asynchronous rbxport analysis and rendered-project bridge
-read_when: DJ library, rbxport integration, render a project for DJ preparation
+description: The fork's Studio and DJ workspaces, local playlists and cues, asynchronous rbxport analysis and engine audition
+read_when: DJ library, playlists, cue points, audition, rbxport integration, render a project for DJ preparation
 type: spec
 status: current
 last_verified: 2026-10-26
@@ -12,6 +12,10 @@ covers:
   - crates/ui/src/app/dj_playlists.rs
   - crates/ui/src/app/dj_playlist_tests.rs
   - crates/session/tests/dj.rs
+  - crates/session/src/dj_preview.rs
+  - crates/session/tests/dj_audition.rs
+  - crates/ui/src/app/dj_prepare.rs
+  - crates/ui/src/app/dj_prepare_tests.rs
   - crates/ui/src/interaction/pick.rs
   - third_party/rbxport-analysis
 ---
@@ -27,7 +31,8 @@ The output engine, project model and collaboration prototype remain unchanged.
 
 ## Commands and storage
 
-`dj.library` polls the worker and returns tracks, busy, error, analysis and format.
+`dj.library` polls the worker and returns tracks, playlists, cues, revision, preview status, busy,
+error, analysis and format.
 `dj.import` queues one audio file, with an optional `sourceProject` path. All DJ operations are Library
 commands on Projects and are denied to MCP agents: managing the local DJ collection is the
 person's action. Typed file parameters retain their path classification. No Rekordbox database
@@ -95,12 +100,12 @@ The collection selector offers All tracks and the saved playlists; each list is 
 Deletion needs an explicit confirmation in the UI. Draft names are tied to the catalog revision:
 a changed revision requires refreshing the draft before saving it. Shared DJ playlists are deferred.
 
-Catalog format 2 adds playlists, a monotonically checked revision and a non-reused playlist-id
+Catalog format 2 introduced playlists, a monotonically checked revision and a non-reused playlist-id
 counter. Limits are 128 playlists, 128 bytes per trimmed nonempty name without control characters,
 2000 unique entries per playlist and 16000 entries in total, still within the 4 MiB catalog limit.
 Unknown ids, duplicate entries, unknown fields, invalid counters and unsupported versions fail.
 Format 1 opens without writing; the first successful mutation keeps a byte-exact sibling
-`dj-library-v1-backup-*.json` before publishing format 2. A malformed catalog is never replaced.
+`dj-library-v1-backup-*.json` before publishing the current catalog format. A malformed catalog is never replaced.
 
 All writes run on the catalog worker through a bounded channel. The `dj.playlist.create`,
 `.rename`, `.delete`, `.addTrack`, `.removeTrack` and `.moveTrack` commands require the displayed
@@ -117,3 +122,42 @@ name, remove an entry and delete one playlist; reopen with the same settings and
 remaining ordered list, original audio and source-project links. Also test legacy migration,
 stale edits, malformed data, failed saves and concurrent app instances. Physical machine tests
 remain separate from automated model, worker and interface tests.
+
+## Audition and named cue points (fork extension)
+
+Selecting Prepare beside a catalog track opens a local preparation panel without playing it.
+Play from position and Stop audition use the existing engine preview voice at −6 dB, routed to
+the configured cue/headphone output or otherwise the main output. A time slider sets the next
+start position; it does not rewrite audio. The actual engine monitor reports playback position.
+The Studio project/undo history and LAN transport formats are unchanged. Leaving DJ, changing
+settings folders, reloading the catalog or pressing Stop cancels a pending audition; a late
+worker result cannot start playback. Changing the active project while loading also cancels it.
+No microphone or additional output is opened by Stop. Missing output/files are visible errors.
+
+`dj.preview.play` takes track and from (seconds); `dj.preview.stop` is independent of catalog
+busy status. Audio validation/decode and a one-file cache live on the existing bounded DJ worker.
+Metadata changes invalidate the cache; decoded duration must match the catalog within 0.05 s,
+otherwise reimport is required. Only validated mono/stereo files up to 20 min/96 kHz are accepted.
+Decoded Arc data is sent to the existing controller on the caller thread, never from the audio
+callback. The library snapshot includes audition track, playing, loading, position and error.
+No output is opened until the person explicitly requests Play.
+
+Catalog format 3 adds per-track cue sets with stable, non-reused ids and named positions in
+seconds, sorted by (time,id). Limits are 16 cues per track, 8000 total, names of 1–64 trimmed
+bytes without control characters, finite positions >=0 and strictly before the stored duration.
+`dj.cue.add`, `.rename`, `.move`, `.delete` require the displayed catalog revision and track id;
+editing existing cues also requires cue id. Writes use the existing checked atomic publication.
+The editor freezes its draft revision; stale drafts need an explicit refresh. Cue deletion is
+confirmed. A failed write preserves the draft and saved catalog. Reanalysis preserves cues and
+playlist references; shortening audio past a cue refuses reimport rather than silently deleting it.
+
+Formats 1 and 2 open without writes. The first mutation saves an exact sibling backup with
+the original format in its filename before publishing format 3, preserving playlists/counters.
+Future/unknown fields and invalid cue references are refused. Play/Stop never persist a catalog.
+Cue sets are local, not shared over LAN and not exported to a proprietary database or hardware.
+Waveforms, beat grids, quantised cues, decks and USB/LINK export remain deferred.
+
+Acceptance: audition generated audio through an offline renderer, seek from a cue, stop while
+loading, leave DJ and switch projects without late playback; output failures must keep projects
+intact. Create/rename/move/delete cues with actual UI buttons, preserve their names/positions
+across playlists and restart, refuse stale/invalid edits and verify legacy backups byte-for-byte.

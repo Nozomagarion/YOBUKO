@@ -19,6 +19,7 @@ mod cue;
 mod device_groups;
 mod devices;
 mod dj;
+mod dj_audition;
 mod editing;
 mod export;
 mod files;

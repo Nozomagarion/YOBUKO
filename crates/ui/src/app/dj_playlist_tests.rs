@@ -6,7 +6,7 @@ use super::*;
 use egui_kittest::kittest::{NodeT, Queryable};
 use serde_json::Value;
 
-fn fixture(dir: &std::path::Path) -> App {
+pub(super) fn fixture(dir: &std::path::Path) -> App {
     let tracks: Vec<_> = (1..=3)
         .map(|id| {
             let path = dir.join(format!("{id}.wav"));
@@ -23,12 +23,12 @@ fn fixture(dir: &std::path::Path) -> App {
     app.dj.active = true;
     app
 }
-fn harness(app: App) -> egui_kittest::Harness<'static, App> {
+pub(super) fn harness(app: App) -> egui_kittest::Harness<'static, App> {
     egui_kittest::Harness::builder()
         .with_size(Vec2::new(1280.0, 900.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app)
 }
-fn settle(h: &mut egui_kittest::Harness<'_, App>) {
+pub(super) fn settle(h: &mut egui_kittest::Harness<'_, App>) {
     let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
         h.state_mut().dj.next_poll = None;
@@ -41,7 +41,7 @@ fn settle(h: &mut egui_kittest::Harness<'_, App>) {
         std::thread::sleep(std::time::Duration::from_millis(2));
     }
 }
-fn type_name(h: &mut egui_kittest::Harness<'_, App>, label: &str, text: &str) {
+pub(super) fn type_name(h: &mut egui_kittest::Harness<'_, App>, label: &str, text: &str) {
     h.get_by_label(label).focus();
     h.run_steps(2);
     h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
@@ -49,7 +49,7 @@ fn type_name(h: &mut egui_kittest::Harness<'_, App>, label: &str, text: &str) {
     h.get_by_label(label).type_text(text);
     h.run_steps(2);
 }
-fn click(h: &mut egui_kittest::Harness<'_, App>, label: &str) {
+pub(super) fn click(h: &mut egui_kittest::Harness<'_, App>, label: &str) {
     h.get_by_label(label).click();
     settle(h);
 }

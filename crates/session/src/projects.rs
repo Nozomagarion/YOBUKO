@@ -504,7 +504,10 @@ impl Projects {
     /// Uses `library` for the browser and the `library.*` commands: the desktop app and the
     /// MCP server give it Suhina's settings folder.
     pub fn set_file_library(&mut self, library: suhina_library::Library) {
+        let _ = crate::dj_preview::stop(self, &json!({}));
+        let audition = std::mem::take(&mut self.dj.audition);
         self.dj = crate::dj::Dj::default();
+        self.dj.audition = audition;
         self.browser.files = library;
         // The sound map keeps its caches beside the library's indexes.
         self.browser.sound_map = None;

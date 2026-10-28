@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use super::{Catalog, FORMAT, MAX_BYTES, Track};
+use super::{Catalog, FORMAT, MAX_BYTES, Playlist, Track};
 use serde::Deserialize;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -13,7 +13,22 @@ struct LegacyCatalog {
     tracks: Vec<Track>,
 }
 
-fn read(path: &Path) -> Result<(Catalog, Option<Vec<u8>>), String> {
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PlaylistCatalog {
+    format: u32,
+    tracks: Vec<Track>,
+    playlists: Vec<Playlist>,
+    revision: u64,
+    next_playlist_id: u64,
+}
+
+struct LegacyBackup {
+    format: u32,
+    bytes: Vec<u8>,
+}
+
+fn read(path: &Path) -> Result<(Catalog, Option<LegacyBackup>), String> {
     let file = match std::fs::File::open(path) {
         Ok(f) => f,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok((Catalog::default(), None)),
@@ -30,7 +45,22 @@ fn read(path: &Path) -> Result<(Catalog, Option<Vec<u8>>), String> {
         if old.format != 1 {
             return Err("unsupported DJ catalog format".into());
         }
-        (Catalog { tracks: old.tracks, ..Catalog::default() }, Some(bytes))
+        (Catalog { tracks: old.tracks, ..Catalog::default() }, Some(LegacyBackup { format: 1, bytes }))
+    } else if value["format"].as_u64() == Some(2) {
+        let old: PlaylistCatalog = serde_json::from_slice(&bytes).map_err(|e| format!("invalid DJ catalog: {e}"))?;
+        if old.format != 2 {
+            return Err("unsupported DJ catalog format".into());
+        }
+        (
+            Catalog {
+                tracks: old.tracks,
+                playlists: old.playlists,
+                revision: old.revision,
+                next_playlist_id: old.next_playlist_id,
+                ..Catalog::default()
+            },
+            Some(LegacyBackup { format: 2, bytes }),
+        )
     } else {
         let catalog: Catalog = serde_json::from_slice(&bytes).map_err(|e| format!("invalid DJ catalog: {e}"))?;
         (catalog, None)
@@ -84,9 +114,9 @@ impl Catalog {
         if &disk != expected {
             return Err("the DJ library changed in another app; use Refresh DJ library".into());
         }
-        if let Some(bytes) = legacy {
+        if let Some(LegacyBackup { format, bytes }) = legacy {
             let mut backup = tempfile::Builder::new()
-                .prefix("dj-library-v1-backup-")
+                .prefix(&format!("dj-library-v{format}-backup-"))
                 .suffix(".json")
                 .tempfile_in(parent)
                 .map_err(|e| e.to_string())?;

@@ -19,6 +19,7 @@ mod device_files;
 mod device_groups;
 mod devices;
 mod dj;
+mod dj_preview;
 mod editing;
 mod execute;
 mod export;

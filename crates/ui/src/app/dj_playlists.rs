@@ -77,6 +77,7 @@ impl App {
             self.dj.playlist_page = 0;
             self.dj.library_page = 0;
         }
+        self.show_dj_prepare(ui, busy);
         let tracks = self.dj.snapshot["tracks"].as_array().cloned().unwrap_or_default();
         let selected = playlists.iter().find(|p| p["id"].as_u64() == self.dj.selected_playlist);
         if let Some(p) = selected {
@@ -171,7 +172,7 @@ impl App {
             ui,
             |ui| {
                 egui::Grid::new(salt).striped(true).spacing(Vec2::new(14.0, 8.0)).show(ui, |ui| {
-                    for text in ["Track", "BPM", "Key", "Length", "Source"] {
+                    for text in ["Track", "BPM", "Key", "Length", "Source", "Preparation"] {
                         ui.strong(text);
                     }
                     if playlist.is_some() {
@@ -195,6 +196,12 @@ impl App {
                             }
                         } else {
                             ui.label("Imported audio");
+                        }
+                        if !adding && action(ui, "Prepare", format!("Prepare track {id}"), !busy) {
+                            self.prepare_dj_track(id);
+                        }
+                        if adding {
+                            ui.label("—");
                         }
                         if let Some((playlist, revision)) = playlist {
                             ui.horizontal(|ui| {

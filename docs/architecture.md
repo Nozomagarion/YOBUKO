@@ -497,12 +497,18 @@ keeps Studio and DJ as workspaces around the existing Session/Arrangement views.
 exports explicitly requested from DJ are queued into the catalog, retaining their original
 source project. The [DJ specification](spec/dj-workspace.md) gives the storage and worker contract.
 
-The fork catalog format 2 stores ordered local playlists by stable track id, independently of
+The fork catalog format 3 stores named cue points and ordered local playlists by stable track id, independently of
 project/native/network formats. A bounded command channel feeds analysis and playlist edits to
 one worker. Every mutation checks the displayed revision and compares the saved catalog under
-a short advisory lock before atomic publication. Legacy format 1 stays readable and is backed
+a short advisory lock before atomic publication. Legacy formats 1 and 2 stay readable and are backed
 up byte-for-byte on the first successful write. Refresh reloads another instance's changes;
 failed/stale writes preserve the current catalog. These playlists are local, without LAN sharing.
+
+DJ audition prepares audio and a one-file metadata-checked cache on that same worker, then
+hands Arc data to the existing engine preview controller. A request token and target project
+identity prevent stopped or obsolete loads from playing later. Its monitor supplies actual
+position; settings changes and leaving DJ cancel the audition. No callback or project document
+is changed. Cue edits share the revision and checked-save contract; audio files remain untouched.
 
 The updater is confined to the fork distribution, validates the complete package marker before
 replacement, and embeds the two source pins. [Fork distribution](fork-distribution.md) describes

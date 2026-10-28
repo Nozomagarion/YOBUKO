@@ -11,7 +11,7 @@ fn projects(dir: &std::path::Path) -> Projects {
     p.set_file_library(suhina_library::Library::new(Some(dir.to_owned())));
     p
 }
-fn idle(p: &mut Projects) -> Value {
+pub(super) fn idle(p: &mut Projects) -> Value {
     let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
     loop {
         let result = p.execute("dj.library", &json!({})).unwrap();

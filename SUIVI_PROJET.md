@@ -1,16 +1,17 @@
 # Où en est notre application ?
 
-**Bilan du 28 octobre 2026 : les playlists DJ sont réalisées et validées sur ce Mac.**
-On peut créer et renommer ses sets, y ajouter les morceaux, choisir leur ordre, retirer une
-entrée et retrouver les listes au redémarrage. Les fichiers audio et les projets source restent en place.
-**3 232 tests du logiciel passent, aucun échec ; 272 tests des scripts passent également.**
-Le contrôle Rust strict, le format, la documentation, les licences et les sources épinglées passent.
-**Le paquet Mac `53f33aa6` est compilé et vérifié après extraction**, avec les trois exécutables,
-les sources exactes et ce suivi. L’application installée ou ouverte n’a pas été remplacée.
+**Bilan du 28 octobre 2026 : préécoute DJ et points cue nommés réalisés et testés.**
+Dans **DJ → Prepare**, on peut écouter un morceau depuis une position choisie, arrêter l’écoute,
+ajouter des repères nommés, les déplacer et les retrouver au redémarrage dans toutes les playlists.
+**3 246 tests du logiciel passent, aucun échec ; les 272 tests des scripts passent également.**
+Le contrôle Rust strict de tout le projet, le format et les contrôles de documentation passent.
+Les trois captures DJ sont vérifiées. Le nouveau paquet Mac est en préparation ; le dernier
+paquet livré reste `53f33aa6`.
 
-Le palier précédent a intégré les 77 commits officiels jusqu’à Suhina `9717cc71`, en conservant
-le multijoueur à quatre. rbxport reste sur `b739d369`. Le protocole de partage reste 13, la copie
-portable v3 et les projets natifs v4. Le catalogue DJ passe seul au format 2, avec sauvegarde de l’ancien.
+Le studio reste basé sur Suhina `9717cc71` et l’analyse rbxport sur `b739d369`. Le multijoueur à
+quatre est conservé : protocole 13, copie portable v3 et projets natifs v4. Seul le catalogue DJ
+passe au format 3, avec sauvegarde exacte de l’ancien catalogue avant le premier changement.
+Les formes d’onde, les grilles rythmiques, les platines et l’export matériel restent à développer.
 
 ## Ce qu’on fabrique
 
@@ -171,7 +172,40 @@ Les versions précédentes en protocole 12 ou moins sont incompatibles avec ces 
 Les nouvelles sauvegardes utilisent le format natif v4 ; les anciens projets restent lisibles.
 Le partage utilise une copie portable v3 et conserve exactement les courbes prises en charge.
 
-## Nouveau palier DJ : préparer ses playlists
+## Nouveau palier DJ : écouter et poser ses repères
+
+**Code, tests et captures validés ; paquet Mac en préparation.**
+
+Les **133 suites** comptent **3 246 réussites, 0 échec, 64 contrôles non lancés dans le passage
+standard**. Le périmètre DJ comprend **16 tests du catalogue, 10 tests des commandes et 10 tests
+normaux de l’interface**. Les nouveaux scénarios vérifient le signal réellement rendu, sa position,
+l’arrêt pendant un chargement, le changement d’onglet/dossier et les erreurs audio. Ils couvrent
+aussi les repères, leur sauvegarde, les anciens catalogues et les brouillons périmés.
+Les **3 tests GPU DJ passent séparément** ; les captures de la bibliothèque, des playlists et
+de l’éditeur de repères ont été vérifiées. L’écoute physique au casque n’est pas annoncée comme testée.
+
+Dans la bibliothèque ou une playlist, **Prepare** ouvre l’éditeur du morceau. Choisir une position
+puis **Play from position** lance la préécoute. **Stop audition**, la fermeture de l’éditeur et le
+retour au Studio arrêtent cette écoute et empêchent un chargement tardif de démarrer ensuite.
+La lecture utilise la sortie casque configurée dans Suhina, ou la sortie principale à défaut.
+Aucun projet Studio n’est modifié et aucun micro n’est activé par cette préécoute.
+
+**Cue name** et **Cue position seconds** permettent d’ajouter un point nommé. Un point existant
+se sélectionne pour changer son nom ou sa position ; sa suppression est confirmée. **Play cue**
+l’écoute directement depuis ce repère. **Use playback position** reprend la position mesurée par
+le moteur. Les points sont liés au morceau, dans toutes ses playlists, et conservés au redémarrage.
+
+Le catalogue DJ passe au **format 3**. Les formats 1 et 2 sont repris sans écriture à la lecture ;
+le premier changement garde une sauvegarde exacte. Les listes, leur ordre et leurs identifiants
+restent conservés. Les écritures périmées ou invalides sont refusées. Une réanalyse garde les
+repères et refuse de raccourcir le morceau au-delà d’un repère existant.
+
+Limites : 16 points par morceau, 8 000 au total, positions en secondes. Préécoute à −6 dB,
+lecture locale et un morceau à la fois. Les formes d’onde, grilles, calage automatique, platines,
+partage des collections DJ et export USB/LINK restent à développer. Les écoutes réelles au casque
+et les essais sur deux ordinateurs physiques restent distincts des tests de rendu automatique.
+
+## Palier précédent : préparer ses playlists
 
 **Code, tests, captures et paquet Mac validés localement.**
 
@@ -255,16 +289,14 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 
 ## Prochaine étape
 
-**Écouter un morceau et préparer ses points cue. Statut : à commencer.**
-Le palier des playlists est réalisé et ses critères sont vérifiés automatiquement. La suite est
-la préparation à l’intérieur du morceau : préécoute, déplacement dans l’audio et points de repère
-nommés, enregistrés sans modifier le fichier audio. Les grilles rythmiques viennent dans ce chantier DJ,
-puis les platines et l’export vers le matériel. Les playlists restent locales pour le moment.
+**Afficher la forme d’onde et préparer la grille rythmique. Statut : à commencer.**
+La préécoute et les repères nommés sont réalisés et testés. Le prochain critère est de visualiser
+le morceau sur une échelle de temps, s’y déplacer et préparer des repères de pulsation éditables,
+sans modifier le fichier audio. Les platines et l’export matériel viennent ensuite.
+Les playlists et les points cue restent locaux pour le moment.
 
 Le multijoueur reste un prototype LAN : Internet, reconnexion automatique, noms/rôles et reprise
-de l’hôte restent prévus. La version et les mises à jour communes restent à publier. Les points
-cue, grilles rythmiques, platines et export vers le matériel DJ viennent après la préparation
-du set. L’essai des ordinateurs de la maison reste différé, comme demandé.
+de l’hôte restent prévus. La version et les mises à jour communes restent à publier. Les grilles rythmiques, platines et export vers le matériel DJ restent à développer. L’essai des ordinateurs de la maison reste différé, comme demandé.
 
 Ce fichier est le point de référence à chaque palier ou blocage. Les anciens fichiers
 `AUDIT_…` restent historiques. Les résultats externes sont des relevés datés ; ce document

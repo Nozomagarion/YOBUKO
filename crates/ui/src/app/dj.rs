@@ -8,6 +8,8 @@ use serde_json::Value;
 
 #[path = "dj_playlists.rs"]
 mod playlists;
+#[path = "dj_prepare.rs"]
+mod prepare;
 
 #[derive(Default)]
 pub(super) struct PlaylistDraft {
@@ -20,6 +22,16 @@ pub(super) struct PlaylistDraft {
 #[derive(Default)]
 pub(super) struct DjPanel {
     pub active: bool,
+    pub preparing: Option<u64>,
+    pub seek: f64,
+    pub preview_owned: bool,
+    pub preview_started: bool,
+    pub cue_selected: Option<u64>,
+    pub cue_revision: Option<u64>,
+    pub cue_name: String,
+    pub cue_seconds: f64,
+    pub cue_delete: Option<(u64, u64, u64)>,
+    pub cue_queued: bool,
     pub selected_playlist: Option<u64>,
     pub playlist_name: String,
     pub draft: Option<PlaylistDraft>,
@@ -37,9 +49,13 @@ pub(super) struct DjPanel {
 impl App {
     pub(super) fn poll_dj(&mut self, ctx: &egui::Context) {
         if !self.dj.active && self.dj.pending.is_none() {
+            self.stop_dj_preview();
             return;
         }
-        if !self.dj.snapshot.is_null() && self.dj.snapshot["busy"].as_bool() != Some(true) && self.dj.pending.is_none()
+        if !self.dj.snapshot.is_null()
+            && self.dj.snapshot["busy"].as_bool() != Some(true)
+            && self.dj.pending.is_none()
+            && !self.dj.preview_owned
         {
             return;
         }
@@ -68,6 +84,19 @@ impl App {
                     self.dj.draft = None;
                     self.dj.playlist_page = 0;
                 }
+                if snapshot["preview"]["playing"] == true {
+                    self.dj.preview_started = true;
+                }
+                if self.dj.preview_started && snapshot["preview"]["playing"] == false {
+                    self.dj.preview_owned = false;
+                    self.dj.preview_started = false;
+                }
+                if self.dj.cue_queued && snapshot["busy"] != true {
+                    self.dj.cue_queued = false;
+                    if snapshot["error"].is_null() {
+                        self.dj.cue_revision = None;
+                    }
+                }
                 self.dj.snapshot = snapshot;
             }
             Err(e) => {
@@ -75,7 +104,7 @@ impl App {
                 self.dj.snapshot = json!({"error": e.to_string()});
             }
         }
-        if self.dj.snapshot["busy"].as_bool() == Some(true) || self.dj.pending.is_some() {
+        if self.dj.snapshot["busy"].as_bool() == Some(true) || self.dj.pending.is_some() || self.dj.preview_owned {
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
         }
     }
@@ -93,6 +122,9 @@ impl App {
     }
 
     pub(super) fn show_dj(&mut self, ui: &mut Ui) {
+        egui::ScrollArea::vertical().id_salt("dj-workspace").show(ui, |ui| self.show_dj_contents(ui));
+    }
+    fn show_dj_contents(&mut self, ui: &mut Ui) {
         ui.add_space(theme::PAD);
         ui.heading("DJ library");
         ui.label("Your rendered tracks and imported audio, analysed with rbxport.");
@@ -123,6 +155,6 @@ impl App {
         ui.separator();
         self.show_dj_playlists(ui, busy);
         ui.add_space(theme::PAD);
-        ui.weak("Local library, analysis and playlists. Cues, decks, USB export and LINK are still to come.");
+        ui.weak("Local library, playlists, audition and cue points. Beat grids, decks, USB export and LINK are still to come.");
     }
 }

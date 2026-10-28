@@ -736,8 +736,10 @@ impl App {
     /// Uses `library` for the browser and the `library.*` commands (ADR 0012); the app gives
     /// it Suhina's settings folder and starts it.
     pub fn set_file_library(&mut self, library: suhina_library::Library) {
+        self.stop_dj_preview();
         self.projects.set_file_library(library);
-        self.dj = dj::DjPanel { active: self.dj.active, ..dj::DjPanel::default() };
+        self.dj =
+            dj::DjPanel { active: self.dj.active, preview_owned: self.dj.preview_owned, ..dj::DjPanel::default() };
         self.browser.relist();
     }
 
@@ -3230,3 +3232,7 @@ mod dj_tests;
 #[cfg(test)]
 #[path = "app/dj_playlist_tests.rs"]
 mod dj_playlist_tests;
+
+#[cfg(test)]
+#[path = "app/dj_prepare_tests.rs"]
+mod dj_prepare_tests;

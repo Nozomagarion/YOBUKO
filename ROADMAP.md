@@ -990,5 +990,9 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   refresh after another local instance changes the catalog and a backed-up format 1 migration.
   Cue/grid editing, decks and USB export remain later work ([contract](docs/spec/dj-workspace.md)).
 
+- DJ audition reuses the engine preview voice with worker decoding and cancellation of late loads.
+  Named cue points are saved per track in catalog format 3 with exact format 1/2 backups;
+  waveform/beat-grid editing, decks and USB export remain later work ([contract](docs/spec/dj-workspace.md)).
+
 Parity: no change. These fork additions cover restricted starter networking, DJ preparation and
 distribution; full project coediting remains absent and no production feature chapter gains coverage.
