@@ -230,6 +230,16 @@ Amendment: a chain on the main channel). Commands on devices and lanes name Main
 
 ## Clip edges
 
+With several clips selected, an edge dragged on one of them moves the same edge of every selected
+clip by as much, each within its own limits (`clip.trimMany`), and every one is drawn at its new
+length while the drag goes on, not only once it is let go. A fade's length dragged on one of them
+moves every selected audio clip's fade by as much, and its curve handle gives every selected
+audio clip's fade on that side the same curve (`clip.shiftFades` with `curve`), all as one undo
+step. A moved or trimmed selection is drawn where it went until the project has it, so it does
+not show its old place for a frame or two after the button comes up; while the selection is
+moved, the clips' fade handles and edges go with them (with the copy key held they stay on the
+clips, which stay).
+
 A clip's left and right edges are handles (below the fade handles of an audio clip). Dragging one
 moves that edge on the grid (Alt: free, as for every other drag) and the clip is drawn at its new
 length as it goes; it never gets shorter than a grid step (a 16th of a beat with Alt or no grid).

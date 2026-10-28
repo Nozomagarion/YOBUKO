@@ -50,6 +50,14 @@ pub(super) fn edge_extent(
     }
 }
 
+/// Where `clip`'s edges go when another selected clip's `grab` edge is dragged `by` beats: its
+/// same edge moves as far, within its own limits, as `clip.trimMany` does (#956).
+pub(super) fn edge_by(clip: &ClipBox, grab: EdgeGrab, by: f64, grid: &TimelineGrid) -> (f64, f64) {
+    let edge = if grab == EdgeGrab::Left { clip.start } else { clip.start + clip.length };
+    let drag = EdgeDrag { key: (TrackId(0), clip.id), grab, raw: edge + by, from: edge, origin: 0.0 };
+    edge_extent(clip, drag, grid, true, false)
+}
+
 /// A fade's length after a drag of `raw` beats: its end on the grid (unless `grid` is `None`,
 /// Alt held, or a grid that does not snap), and no longer than the clip leaves beside the other
 /// fade. No fade and all the room
@@ -179,6 +187,17 @@ pub(super) fn clip_box<'a>(
             (clip.start + snapped(drag.start) - drag.origin).max(0.0)
         }
         _ => clip.start,
+    };
+    // Just moved or trimmed with its selection: drawn where it went until the project has it.
+    let pass = ui.ctx().cumulative_pass_nr();
+    state.settling.retain(|s| {
+        s.key != key
+            || !((clip.start - s.from).abs() < 1e-9 && (clip.start + clip.length - s.to).abs() < 1e-9 || pass > s.until)
+    });
+    let settled = state.settling.iter().find(|s| s.key == key).copied();
+    let at = match settled {
+        Some(s) if s.moved => s.from,
+        _ => at,
     };
     // Where it was last frame takes the pointer; it is drawn where this frame's drag puts it.
     let space = if clip.rows > 1 { sub_row(row.time, clip.row, clip.rows) } else { row.time };
@@ -415,7 +434,29 @@ pub(super) fn clip_box<'a>(
             }
         } else if state.selected.len() > 1 && state.is_selected(key) {
             // The whole selection moves by as much, at once: to another track when all of it is on
-            // this one, by as many tracks when it is on several, or to a new track.
+            // this one, by as many tracks when it is on several, or to a new track. On its own
+            // tracks, each clip is drawn where it went until the project has it.
+            if moved && !drag.new_track && drag.target == lane.track && tracks_by == 0 {
+                let by = start - clip.start;
+                let until = ui.ctx().cumulative_pass_nr() + 30;
+                for &(track, id) in &state.selected {
+                    if let Some(c) = timeline
+                        .lanes
+                        .iter()
+                        .find(|l| l.track == track)
+                        .and_then(|l| l.clips.iter().find(|c| c.id == id))
+                    {
+                        let from = (c.start + by).max(0.0);
+                        state.settling.push(Settling {
+                            key: (track, id),
+                            from,
+                            to: from + c.length,
+                            moved: true,
+                            until,
+                        });
+                    }
+                }
+            }
             let clips: Vec<Value> = state.selected.iter().map(|(_, id)| json!({ "clip": id.0 })).collect();
             let mut params = json!({ "clips": clips, "beats": start - clip.start });
             if drag.new_track {
@@ -455,6 +496,10 @@ pub(super) fn clip_box<'a>(
             }
             if moved {
                 actions.push(Action::new("clip.move", params));
+                if drag.target == lane.track {
+                    let until = ui.ctx().cumulative_pass_nr() + 30;
+                    state.settling.push(Settling { key, from: start, to: start + clip.length, moved: true, until });
+                }
             }
         }
         // Dropped on another track: the view draws it there, as while it was dragged, until the
@@ -490,13 +535,24 @@ pub(super) fn clip_box<'a>(
         state.edge_released = None;
     }
     let released = state.edge_released.filter(|(k, ..)| *k == key).map(|(_, from, to, _)| (from, to));
+    // Another selected clip's edge dragged: this one's same edge moves as far (#956); or it was
+    // just trimmed with them and the project does not have it yet.
+    let others_edge = state
+        .edge_drag
+        .filter(|d| d.key != key && state.selected.len() > 1 && state.is_selected(d.key) && state.is_selected(key))
+        .map(|d| edge_by(clip, d.grab, grid.place(d.raw, edge_keys(ui).0, false) - d.from, &grid))
+        .or(settled.filter(|s| !s.moved).map(|s| (s.from, s.to)));
+    let released = released.or(others_edge);
+    // Copying leaves the clip where it is: its handles stay on it; moving takes them along.
+    let copy_drag = state.clip_drag.is_some_and(|d| d.copy || copy_key);
+    let base = if copy_drag { clip.start } else { at };
     let (live_start, live_length) = match state.edge_drag.filter(|d| d.key == key) {
         Some(edge) => {
             let stretching = edge_keys(ui).1 && state.stretch_alt && clip.audio;
             let (from, to) = edge_extent(clip, edge, &grid, edge_keys(ui).0, stretching);
             (from, to - from)
         }
-        None => released.map_or((clip.start, clip.length), |(from, to)| (from, to - from)),
+        None => released.map_or((base, clip.length), |(from, to)| (from, to - from)),
     };
     // What the clip shows: the project's values, or those of a drag in progress, so the
     // waveform follows the gain and the fades while they are dragged.
@@ -635,6 +691,18 @@ pub(super) fn clip_box<'a>(
                             many["stack"] = json!(true);
                         }
                         actions.push(Action::new("clip.trimMany", many));
+                        let until = ui.ctx().cumulative_pass_nr() + 30;
+                        for &(track, id) in &state.selected {
+                            if let Some(c) = timeline
+                                .lanes
+                                .iter()
+                                .find(|l| l.track == track)
+                                .and_then(|l| l.clips.iter().find(|c| c.id == id))
+                            {
+                                let (from, to) = edge_by(c, grab, beat - old, &grid);
+                                state.settling.push(Settling { key: (track, id), from, to, moved: false, until });
+                            }
+                        }
                     } else {
                         actions.push(Action::new(if stretch { "clip.stretch" } else { "clip.trim" }, params));
                     }
@@ -816,7 +884,21 @@ pub(super) fn clip_box<'a>(
             };
             if let Some(v) = done {
                 let v = (v * 1000.0).round() / 1000.0;
-                if (v - stored).abs() > 1e-9 {
+                if state.is_selected(key) && state.selected.len() > 1 && !response.double_clicked() {
+                    // One of several selected clips: every selected audio clip's fade on this
+                    // edge takes the curve, in one step, as their lengths do (#715).
+                    let audio = |(track, id): &(TrackId, ClipId)| {
+                        timeline
+                            .lanes
+                            .iter()
+                            .find(|l| l.track == *track)
+                            .is_some_and(|l| l.clips.iter().any(|c| c.id == *id && c.audio))
+                    };
+                    let clips: Vec<Value> =
+                        state.selected.iter().filter(|k| audio(k)).map(|(_, id)| json!({ "clip": id.0 })).collect();
+                    let param = if edge == FadeEdge::In { "in" } else { "out" };
+                    actions.push(Action::new("clip.shiftFades", json!({ "clips": clips, "edge": param, "curve": v })));
+                } else if (v - stored).abs() > 1e-9 {
                     let param = if edge == FadeEdge::In { "inCurve" } else { "outCurve" };
                     let mut params = json!({ "clip": clip.id.0 });
                     params[param] = json!(v);
@@ -870,7 +952,9 @@ pub(super) fn clip_box<'a>(
                     let stretching = edge_keys(ui).1 && state.stretch_alt && clip.audio;
                     Some(edge_extent(clip, edge, &grid, free, stretching))
                 }
-                None => state.edge_released.filter(|(k, ..)| *k == key).map(|(_, from, to, _)| (from, to)),
+                None => {
+                    state.edge_released.filter(|(k, ..)| *k == key).map(|(_, from, to, _)| (from, to)).or(others_edge)
+                }
             };
             let (rect, clip_area) = match extent {
                 Some((from, to)) => {

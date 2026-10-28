@@ -47,6 +47,17 @@ pub(super) enum EdgeGrab {
     Right,
 }
 
+/// A clip of a selection just moved or trimmed: where it is drawn until the project has it
+/// ([`ArrangementViewState::settling`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct Settling {
+    pub(super) key: (TrackId, ClipId),
+    pub(super) from: f64,
+    pub(super) to: f64,
+    pub(super) moved: bool,
+    pub(super) until: u64,
+}
+
 /// A clip's edge being dragged: the clip, which grip, and the beat the edge is at so far;
 /// the beat it was at and where the button went down, which the edge follows the pointer from.
 #[derive(Debug, Clone, Copy)]
@@ -228,6 +239,11 @@ pub struct ArrangementViewState {
     /// It is drawn there until the project has it, or the frame the button came up showed the
     /// clip as it was before the drag for an instant.
     pub(super) edge_released: Option<((TrackId, ClipId), f64, f64, u8)>,
+    /// Clips of a selection just moved or trimmed together: each clip, the start and end it
+    /// was given, whether it moved (its content with it) and the pass it is drawn there until
+    /// at most. It is drawn there until the project has it, so the selection does not show
+    /// where it was for a few frames, or flicker between there and here.
+    pub(super) settling: Vec<Settling>,
     /// The beat an empty spot of a lane was right-clicked on, for its menu.
     pub(super) menu_beat: Option<f64>,
     pub(super) clip_drag: Option<ClipDrag>,
@@ -379,6 +395,7 @@ impl Default for ArrangementViewState {
             ruler_select: None,
             edge_drag: None,
             edge_released: None,
+            settling: Vec::new(),
             menu_beat: None,
             clip_drag: None,
             landing: None,
@@ -692,7 +709,11 @@ impl ArrangementViewState {
                 }
             }
         }
-        if let Some(drag) = self.curve_drag.filter(|d| d.key == key) {
+        // Another selected clip's curve dragged: this one's takes it too.
+        let curve = self.curve_drag.filter(|d| {
+            d.key == key || (clip.audio && self.selected.len() > 1 && self.is_selected(d.key) && self.is_selected(key))
+        });
+        if let Some(drag) = curve {
             match drag.edge {
                 FadeEdge::In => shown.fade_in_curve.curve = drag.curve,
                 FadeEdge::Out => shown.fade_out_curve.curve = drag.curve,

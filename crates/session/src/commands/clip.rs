@@ -124,11 +124,16 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         id: "clip.shiftFades",
-        label: "Lengthen or shorten the fade-in or fade-out of several arrangement clips by the same beats, each from its own, kept from 0 to what the clip's other fade leaves; clips with no audio are left as they are; as one undo step",
+        label: "Lengthen or shorten the fade-in or fade-out of several arrangement clips by the same beats, each from its own, kept from 0 to what the clip's other fade leaves, and optionally give that fade one curve; clips with no audio are left as they are; as one undo step",
         params: &[
             CLIPS,
             param("edge", ParamType::Text, "in or out"),
-            param("beats", ParamType::Number, "how much longer (or, below 0, shorter) each fade gets"),
+            optional("beats", ParamType::Number, "how much longer (or, below 0, shorter) each fade gets (default 0)"),
+            optional(
+                "curve",
+                ParamType::Number,
+                "the curve every one of these fades takes, -1 to +1 (default: as each is)",
+            ),
         ],
         kind: CommandKind::Edit,
         run: shift_fades,
@@ -1062,7 +1067,20 @@ fn shift_fades(session: &mut Session, params: &Value) -> Result<Value, CommandEr
         Some("out") => false,
         _ => return Err("edge must be in or out".into()),
     };
-    let beats = number(params, "beats")?;
+    let beats = if params.get("beats").is_some() { number(params, "beats")? } else { 0.0 };
+    let curve = match params.get("curve") {
+        None => None,
+        Some(_) => {
+            let curve = number(params, "curve")?;
+            if !(-1.0..=1.0).contains(&curve) {
+                return Err(format!("curve must be from -1 to +1, got {curve}").into());
+            }
+            Some(curve)
+        }
+    };
+    if params.get("beats").is_none() && curve.is_none() {
+        return Err("give beats, curve or both".into());
+    }
     let p = &mut session.project;
     let chosen = clip_list(p, params)?;
     let mut changed = 0;
@@ -1088,6 +1106,13 @@ fn shift_fades(session: &mut Session, params: &Value) -> Result<Value, CommandEr
             clip.fade_in = now;
         } else {
             clip.fade_out = now;
+        }
+        if let Some(curve) = curve {
+            if fade_in {
+                clip.fade_in_curve.curve = curve;
+            } else {
+                clip.fade_out_curve.curve = curve;
+            }
         }
         changed += 1;
     }
