@@ -1170,7 +1170,7 @@ fn add_value_edit_value_and_snap_to_grid_from_the_menus() {
     // Snap to grid off: a point lands where the pointer is.
     harness.get_by_label("Volume point 1 on Drums").click_secondary();
     harness.run();
-    harness.get_by_label("Snap to grid (Ctrl+4)").click();
+    harness.get_by_label_contains("Snap to grid").click();
     harness.run();
     click_anywhere(&mut harness, true);
     click_at(&mut harness, Pos2::new(rect.left() + 303.0, rect.center().y));
