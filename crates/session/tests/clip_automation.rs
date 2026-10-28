@@ -3,6 +3,7 @@
 
 //! The automation under an arrangement clip goes with it: moved, copied and pasted, duplicated
 //! (#916, `docs/spec/automation.md` › Automation under clips).
+#![allow(clippy::unwrap_used)] // test helpers outside #[test] functions
 
 use serde_json::json;
 use suhina_model::automation::{Plain, value_at};
