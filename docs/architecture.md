@@ -465,6 +465,9 @@ adapter over `suhina-style` (ADR 0031): Suhina's own parser, selectors, cascade 
 variables, media queries, Taffy layout and motion, with no browser engine. The host
 supplies bounded role trees; themes supply CSS, never markup or scripts. The adapter has
 no network or file access and caches computed class contexts on the UI thread.
+For what is drawn in bulk (notes, clips), the resolver offers a leaf cache that styles by
+parent and identity, once per distinct identity rather than once per note. The UI does not
+draw through it yet.
 A retained scope tree carries project identities and native interaction states; changed
 snapshots publish computed values on the following repaint. Connected surfaces paint
 bounded cached gradient ramps/spatial textures and inset/outset shadow textures; scoped

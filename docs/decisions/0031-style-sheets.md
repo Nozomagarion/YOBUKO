@@ -260,7 +260,9 @@ Selectors are CSS's own, without the HTML-only parts:
 - logic: `:not()`, `:is()`, `:where()`;
 - combinators: descendant, `>`, `+`, `~`; comma lists.
 
-Not supported: attribute selectors, pseudo-elements, and pseudo-classes about documents and links
+Attribute selectors test the attributes the host gives an element (`[selected]`,
+`[kind="kick"]`, with `=`, `~=`, `|=`, `^=`, `$=`, `*=` and the `i` flag); `attr()` reads them
+(issue 1017). Not supported: pseudo-elements, and pseudo-classes about documents and links
 (`:link`, `:visited`, `:target` and the like). Specificity, `!important`, source order and the
 layers decide between rules as in CSS.
 
@@ -538,8 +540,12 @@ The style crate takes text and returns values, so parser, cascade, media queries
 editing and the glass arithmetic are tested without a window. The UI module is the only place that
 knows egui; the render module the only one that knows wgpu. A view never reads a property by name:
 it declares an element, gets a `ComputedStyle`, and either hands it to `paint` and `text` or reads
-typed metrics from it. Resolved styles are cached per frame by element path, state, matching media
-and style-sheet generation, so an immediate-mode repaint costs a hash lookup per element.
+typed metrics from it. Resolved styles are kept until the element tree, the viewport or the sheets
+change. What is drawn in bulk (notes, clips, grid lines) is not in the tree: a drawn element is
+styled by its parent and its identity (kind, classes, states, attributes such as a clip's `color`),
+once per distinct identity, so a repaint costs a hash lookup per note. Such an element is styled as
+its parent's only child. A new tree of the same structure drops only the cached styles under the
+elements that changed.
 
 `theme::panel_background()` and the other token functions stay during the move and read the
 variables, so views move over one at a time and the snapshots must not change on the way.
