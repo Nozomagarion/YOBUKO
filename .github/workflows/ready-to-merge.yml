@@ -13,7 +13,8 @@ name: Ready to merge
 #   only with a test build of it: a successful, authorized `test build` run whose artifacts are
 #   still available, for that head or for a head it reaches by merging only main
 #   (scripts/build_reuse.py, the lookup /test-build uses). Without one the label comes off with a
-#   comment asking for /test-build; a build that is still running counts as none yet.
+#   comment asking for /test-build; a build that is still running counts as none yet. A pull
+#   request that changes nothing test-build.yml's paths filter builds needs none.
 # - A push by anyone but a maintainer takes the label off, turns auto-merge off and leaves the
 #   pull request out of the queue: the new commits wait for a maintainer to read them, as the
 #   `test-build` label does (test-build-links.yml, job `unlabel`). main's rule dismisses the
@@ -150,7 +151,9 @@ jobs:
           # Nothing merges without a finished test build of this head (or of the head it updated
           # with main only). A lookup that failed has already failed the job, label kept.
           state=$(printf '%s' "$BUILD" | jq -r --arg sha "$SHA" 'if .head == $sha then .state // "" else "" end')
-          if [ "$state" != "ready" ]; then
+          # no-binary: test-build.yml never runs for this change (documentation, scripts or other
+          # workflows only), so there is no build to wait for.
+          if [ "$state" != "ready" ] && [ "$state" != "no-binary" ]; then
             gh pr edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label "$LABEL"
             gh pr comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body \
               "\`$LABEL\` needs a finished test build of ${SHA:0:7}: comment \`/test-build\`, wait for the build to succeed, then add \`$LABEL\` again (CONTRIBUTING.md › Merging many pull requests)."

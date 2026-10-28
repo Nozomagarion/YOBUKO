@@ -47,6 +47,12 @@ class MergeApproval(unittest.TestCase):
         self.assertIn("--match-head-commit " + "a" * 40, calls)
         self.assertNotIn("--remove-label", calls)
 
+    def test_change_with_nothing_to_build_queues_without_a_build(self):
+        result, calls = self.run_queue(build="no-binary")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("event=APPROVE", calls)
+        self.assertNotIn("--remove-label", calls)
+
     def test_no_build_running_build_or_build_of_another_head_never_queues(self):
         for build, head in ((None, "a" * 40), ("running", "a" * 40), ("requested", "a" * 40), ("ready", "b" * 40)):
             with self.subTest(build=build, head=head):
