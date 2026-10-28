@@ -274,9 +274,25 @@ fn solo_leaves_only_soloed_tracks_their_groups_and_returns() {
     project.channels[0].output = Some(ChannelId(5));
     assert_onsets(&render_offline(&project, SR, 256).unwrap(), &[0]);
 
-    // Muting still wins over solo.
+    // A track muted is silent though the group it plays into is soloed.
     project.channels[0].mute = true;
     assert_eq!(render_offline(&project, SR, 256), Ok(Vec::new()));
+    // Soloed itself, a muted track is heard: a solo outranks the track's own mute.
+    project.channels[0].solo = true;
+    assert_onsets(&render_offline(&project, SR, 256).unwrap(), &[0]);
+}
+
+#[test]
+fn a_muted_track_soloed_is_heard_but_its_muted_clips_are_not() {
+    let mut project = project_with(untargeted(vec![note(0.0, 0.25, 36)]), vec![clip(0.0, 1.0), clip(1.0, 1.0)], 2);
+    let beat = SR as usize / 2;
+    project.channels[0].mute = true;
+    assert_eq!(render_offline(&project, SR, 256), Ok(Vec::new()));
+    project.channels[0].solo = true;
+    assert_onsets(&render_offline(&project, SR, 256).unwrap(), &[0, beat]);
+    // A clip turned off stays silent.
+    project.arrangement.lanes[0].clips[1].enabled = false;
+    assert_onsets(&render_offline(&project, SR, 256).unwrap(), &[0]);
 }
 
 #[test]

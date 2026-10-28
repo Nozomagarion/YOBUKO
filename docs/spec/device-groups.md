@@ -86,7 +86,7 @@ running at their state, as a switched-off device does today.
   state and sounds again at once when unmuted, and a reverb tail is cut rather than restarted.
 - While any branch of a group is soloed, only the soloed branches add to the sum. Solo is local
   to its group: it does not touch other groups, other branches outside the group or the track
-  solo. Mute wins over solo, as on tracks.
+  solo. Mute wins over solo on a branch (on a track, the track's own solo outranks its mute).
 - Muting every branch leaves only the dry part of the mix.
 
 ### Instruments in a group

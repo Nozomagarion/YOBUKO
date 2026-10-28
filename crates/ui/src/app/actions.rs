@@ -577,6 +577,32 @@ impl App {
                     actions.push(Action::new("track.setMute", json!({ "tracks": ids, "mute": !muted })));
                     return;
                 }
+                // A range painted in the Arrangement: the clips under it on its tracks (in its
+                // row of a stack, when it is in one), turned off or on as one.
+                if self.shown == View::Arrangement
+                    && let Some(span) = self.arrangement.time_selection().cloned()
+                    && let Some((_, _, timeline)) = self.timeline.as_ref()
+                {
+                    let under: Vec<(serde_json::Value, bool)> = timeline
+                        .lanes
+                        .iter()
+                        .filter(|l| span.tracks.contains(&l.track))
+                        .flat_map(|l| {
+                            l.clips.iter().filter(move |c| {
+                                c.start < span.end
+                                    && c.start + c.length > span.start
+                                    && span.row.is_none_or(|(row, rows)| c.row == row && c.rows == rows)
+                            })
+                        })
+                        .map(|c| (json!({ "clip": c.id.0 }), c.enabled))
+                        .collect();
+                    if !under.is_empty() {
+                        let enabled = under.iter().any(|(_, on)| *on);
+                        let clips: Vec<serde_json::Value> = under.into_iter().map(|(c, _)| c).collect();
+                        actions.push(Action::new("clip.setEnabled", json!({ "clips": clips, "enabled": !enabled })));
+                    }
+                    return;
+                }
                 let clips = self.selected_clip_list();
                 if clips.is_empty() {
                     return;

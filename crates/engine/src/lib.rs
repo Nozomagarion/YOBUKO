@@ -1794,7 +1794,8 @@ pub(crate) fn track_gains(project: &Project, track: TrackId) -> Option<(f32, f32
         if main_chain && c.role == ChannelRole::Master {
             break;
         }
-        if c.mute || visited.len() > 64 || visited.contains(&c.id) {
+        // A solo outranks a mute: a muted track soloed is heard (its muted clips are not).
+        if (c.mute && !c.solo) || visited.len() > 64 || visited.contains(&c.id) {
             return None;
         }
         visited.push(c.id);

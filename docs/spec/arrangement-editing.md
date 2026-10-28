@@ -821,6 +821,12 @@ elsewhere), with no return tracks and no main track, and is not scrolled; its sc
 
 ## Volume, pan, mute and solo
 
+**A solo outranks the track's own mute.** A muted track that is soloed is heard while it is
+soloed: its mute stays set (its track-on toggle still shows it off) and takes over again when the
+solo ends. Its mute automation is set aside the same way. Clips turned off stay silent, and a track
+muted while only the group it plays into is soloed stays silent: the solo outranks a track's own
+mute, not another channel's.
+
 Every track's mixer strip is reached by a `track.*` command that takes `tracks`, a list of one or
 more tracks by id or name:
 

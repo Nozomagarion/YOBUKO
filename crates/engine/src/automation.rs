@@ -422,7 +422,9 @@ impl MixLanes {
             channel.lane(param).and_then(|lane| Envelope::new(lane, frames_per_beat, stepped, taper))
         };
         let volume = lane(VOLUME, false, Position::Volume);
-        let (pan, mute) = (lane(PAN, false, Position::Value), lane(MUTE, true, Position::Value));
+        // A soloed track is heard whatever its mute says, its mute lane too.
+        let mute = if channel.solo { None } else { lane(MUTE, true, Position::Value) };
+        let pan = lane(PAN, false, Position::Value);
         if volume.is_none() && pan.is_none() && mute.is_none() {
             return None;
         }
