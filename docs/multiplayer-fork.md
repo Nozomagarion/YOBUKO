@@ -13,7 +13,19 @@ covers:
 
 # Multiplayer fork
 
-## Shared Launcher (protocol 11)
+## One host and three guests (protocol 12)
+
+Create a session, privately copy its invitation and wait for the first guest to join. Click
+**New invitation → Copy invitation** for the second guest, then repeat for the third. Each
+invitation expires after five minutes and works once. There is one outstanding invitation at
+a time: creating the next one replaces the previous unused link, while connected guests stay.
+**Guests: N / 3** shows admitted connections, including transfers. At three guests New invitation
+is disabled; one guest leaving frees a place without ending the others' session. Renew again
+for a returning guest: their new shared tab keeps the previous solo copy intact. Every author
+can send edits/takes; stale concurrent drafts must be refreshed and resent. Launches and clocks
+stay local. [Contract](spec/lan-multiple-guests.md). Physical-machine acceptance remains deferred.
+
+## Shared Launcher (protocol 12)
 
 Open **Multiplayer → Launcher** in a hosted/joined session. Click an empty slot, choose
 **Source clip**, then **Copy clip into shared slot**; the original arrangement stays intact.
@@ -26,7 +38,7 @@ Explicitly routed multi-track patterns cannot be copied into slots in this miles
 **Launch slot locally** / **Launch scene locally** act only on this computer, as does Stop locally.
 New shared edits make drafts stale; **Refresh launcher draft** clears them. Structural scene
 changes clear selections even on hidden pages, requiring a fresh selection. Both applications
-must use protocol 11; old invitations are refused. [Contract](spec/lan-launcher-editing.md).
+must use protocol 12; old invitations are refused. [Contract](spec/lan-launcher-editing.md).
 Physical two-computer tests and cross-platform acceptance remain separate from local tests.
 
 ## Scope and status
@@ -88,7 +100,8 @@ still to perform. No personal project or audio file is needed.
    host keeps its project and can use **New invitation → Copy invitation** to invite again;
    the new secret expires after five minutes and admits one guest only. The returning guest
    opens the current host version in a new tab, retaining the previous solo copy and its edits.
-   The button refuses a connected guest. If the host leaves, its session ends.
+   The button refuses a full three-guest session. Other connected guests stay; if the host leaves,
+   its session ends.
 7. To check disconnect recovery, create/join again, change a name, then quit the host. The guest
    should report disconnection within the exchange deadline and retain the last confirmed local
    starter. Saving it is local; your files and microphone recordings were never shared.

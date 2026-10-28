@@ -30,17 +30,18 @@ and USB export are future work. There is no common public release channel yet.
 ## What you can try
 
 - **Studio / Multiplayer / DJ** entry points in the native app.
-- **Create LAN session / Join LAN session:** a private invitation connects one host and one guest.
+- **Create LAN session / Join LAN session:** separate single-use invitations connect one host and up to three guests.
   Share the current project (up to 64 tracks, FM Synth/Utility parameters only) or use the
   generated starter. Clips arrive in the verified initial copy; single-note add/update/delete, track names, volume
   and pan are live shared edits. The **MIDI notes** editor rejects stale drafts before indices shift. Play, stop and listening position stay local to each computer.
-- **Launcher (protocol 11):** organize scenes and slots together, copy arrangement clips into empty
+- **Launcher (protocol 12):** organize scenes and slots together, copy arrangement clips into empty
   compatible slots with independent contents, move/swap slots, and launch privately on each computer.
   Scene structural changes invalidate hidden selections; stale drafts require explicit refresh.
 - **Devices:** add/remove top-level FM Synth and Utility without loading presets or replacing an
   existing instrument; chain edits discard old device selections. Edit parameters using generated SDK controls. Draft values
   are submitted explicitly, validated by the host and rejected after a newer revision until refreshed.
-- **New invitation:** after the guest disconnects, renew admission without replacing the hosted
+- **New invitation:** invite another guest while existing connections stay, up to three guests;
+  rotating replaces the previous outstanding invitation. Guests: N / 3 shows occupancy. Renew admission without replacing the hosted
   music/player. Rejoining downloads the current verified copy into a new tab; the previous local
   copy and solo edits are retained, without merging. No automatic resume or Internet routing.
 - **DJ library:** import audio, keep a persistent local catalog, analyse tempo/key and render a

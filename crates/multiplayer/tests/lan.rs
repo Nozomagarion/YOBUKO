@@ -562,7 +562,7 @@ fn renewed_invitations_reuse_the_host_and_rejoining_editors_start_fresh_sequence
         assert_eq!(joined["controls"]["revision"], revision);
         wait(&mut host, |v| v["guest_connected"] == true);
         assert!(guest.execute("multiplayer.renewInvitation", &json!({})).is_err());
-        assert!(host.execute("multiplayer.renewInvitation", &json!({})).is_err());
+        assert_eq!(state(&mut host)["guests_connected"], 1);
         submit(&mut guest, revision, suhina_multiplayer::WireEdit::Rename { track: 1, name: format!("Guest {cycle}") });
         revision += 1;
         wait(&mut host, |v| v["controls"]["revision"] == revision);

@@ -35,7 +35,8 @@ IPv4 address. There is no discovery, relay, DNS target, public binding or intern
 Joining trusts the certificate embedded in the private invitation with normal rustls TLS 1.3
 verification for suhina.local. A 256-bit OS-random secret is proven inside TLS, compared by
 constant-time hash equality, expires after five minutes and is redeemed once. Stopping revokes
-all admission. Disconnect cannot resume a used invitation. One host and one guest are supported.
+all admission. Disconnect cannot resume a used invitation. One host and at most three guests are supported. Each admitted connection has a separate
+authenticated PeerId and native sequence/cache; a handler exit removes only its own peer.
 
 The invitation is a bearer capability: a person with its complete contents can join during its
 lifetime. Send it privately. Certificate mismatch, malformed data and failed admission do not
@@ -159,7 +160,9 @@ old pending hellos fail after rotation without consuming the new secret. Fresh O
 256-bit secrets get a new five-minute single-use lifetime. The bounded UI event must be accepted
 before changing the stored hash/expiry/redemption bit, so backpressure does not strand the host
 with an undisclosed replacement secret. Token errors never include the secret. The listener and
-pinned certificate stay the same; no network renewal command exists. Protocol 8 is unchanged.
+pinned certificate stay the same; no network renewal command exists. Protocol 12 permits rotation
+while other guests are connected, refusing a full session. There is one outstanding token, so
+rotation replaces an unused invitation; it never invalidates an authenticated connection.
 
 A new admission downloads current verified music and assets into a new guest copy. Previous
 unlocked tabs and solo edits remain local, without merging them. This permits explicit recovery
@@ -203,3 +206,20 @@ reuse previously verified assets; no new asset path enters this operation. UI dr
 revision, and every scene insertion/duplication/deletion clears selections on hidden pages too.
 Private launches remain local transport, rejected as wire edits. See
 [the launcher contract](../spec/lan-launcher-editing.md).
+
+
+## Multiple-guest boundary
+
+Protocol 12 bounds admitted peers to three guests under the canonical admission mutex, before
+allocating a PeerId or consuming the single-use token. The host still caps all socket handlers
+at four. Renewing refuses capacity, backpressure and repeated secrets without replacing the
+previous capability. A count-only membership update does not change musical revision or reset
+any author's sequence. Every server State carries the count; guests refuse missing/out-of-range
+values (valid 1..3) before emitting an update. No count, identity, role or renewal action from a
+guest can override canonical membership. Guests receive no invitation for another guest.
+
+Concurrent edit/upload drafts retain the existing revision preflight/recheck, cumulative audio
+quotas and per-connection known-asset maps. A stale author can retry with refreshed revision;
+other guests and source takes survive. Stopping a guest releases only its connection; stopping
+the host terminates them all, retaining last local copies. See
+[the multiple-guest contract](../spec/lan-multiple-guests.md). Internet and automatic resume remain closed.

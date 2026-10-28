@@ -161,6 +161,16 @@ scene and clip launches are private local transport. Revision-bound row drafts a
 on structural scene edits even while hidden. No clipboard or external paths are admitted.
 [Launcher contract](../spec/lan-launcher-editing.md) and tests define the accepted subset.
 
+## Amendment: bounded multiple LAN guests
+
+Protocol 12 replaces the single connected flag with an admitted PeerId set capped at three
+guests. A new single-use invitation may be issued while other guests are present; only the
+outstanding capability is rotated, with the same queue-publication/admission lock discipline.
+Peer cleanup affects its own connection only. State messages and desktop events carry the
+admitted count even without musical changes. Existing author sequences, replicas, media checks,
+quotas and private players remain. No musical command or GUI dependency enters the trusted core.
+[Contract and evidence](../spec/lan-multiple-guests.md).
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.

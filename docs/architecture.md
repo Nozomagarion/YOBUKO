@@ -514,9 +514,9 @@ audio callback. The host worker owns the canonical collaboration Host; at most f
 handlers perform bounded TLS requests through its mutex. A guest worker polls contiguous operations and validates a detached native session mirror.
 A 32-operation journal and bounded channels carry UI edits and confirmed operations; stopping shuts down tracked sockets.
 The local renewInvitation command rotates the admission secret under the same mutex as hello,
-refusing a live guest and publishing its bounded UI event before revocation. Listener, TLS
-certificate, canonical music/assets and owner sequence remain intact. No wire message or native
-musical command is added. Rejoining creates a fresh guest snapshot/tab; old local copies stay open.
+refusing a full three-guest session and publishing its bounded UI event before revocation. Listener, TLS
+certificate, authenticated peer identities, canonical music/assets and owner sequence remain
+intact. Protocol 12 State messages carry the admitted guest count; no native musical command is added. Rejoining creates a fresh guest snapshot/tab; old local copies stay open.
 
 The UI stages either the generated starter or a checked local MIDI project; a worker removes
 local metadata/input mappings and builds a bounded canonical document. The authenticated guest
@@ -589,3 +589,13 @@ copying gives independent content while reusing verified audio. A paged Launcher
 revision-bound selections and clears them on scene structural edits even while hidden. Native
 scene/clip launch actions run only against the local active bound tab, never across TLS.
 [Launcher contract](spec/lan-launcher-editing.md) specifies quotas and refusal semantics.
+
+
+### Fork multiple guests
+
+Protocol 12 admits one host and three guests. A bounded PeerId set controls capacity independently
+of the four-handler socket limit; each handler keeps its own sequence, delivery cursor and asset
+inventory. Renewal replaces only the outstanding token while authenticated sockets stay. Every
+handler exit removes only its peer. State events/replies carry the admitted count, including
+membership-only changes at the same music revision. Guests validate 1..3 before publication to
+the UI. [Admission and validation contract](spec/lan-multiple-guests.md).

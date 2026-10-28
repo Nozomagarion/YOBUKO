@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 11;
+pub const PROTOCOL: u16 = 12;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -318,11 +318,19 @@ pub enum ServerMessage {
     },
     State {
         protocol: u16,
+        guests: usize,
         controls: Box<Controls>,
         operations: Vec<Operation>,
         accepted: Option<bool>,
         error: Option<String>,
     },
+}
+
+pub(crate) fn validate_guest_count(guests: usize) -> Result<(), String> {
+    if !(1..=crate::transport::MAX_GUESTS).contains(&guests) {
+        return Err("invalid admitted guest count".into());
+    }
+    Ok(())
 }
 
 pub fn read<T: for<'de> Deserialize<'de>>(io: &mut impl Read) -> Result<T, String> {

@@ -974,5 +974,9 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   from the arrangement, explicit slot swaps and private local launches; structural scene edits
   invalidate hidden row selections ([contract](docs/spec/lan-launcher-editing.md)).
 
+- Protocol 12 supports one host and three LAN guests, separate single-use invitations,
+  membership counters and per-peer departures; existing guests keep their players and copies
+  while another joins or leaves ([contract](docs/spec/lan-multiple-guests.md)).
+
 Parity: no change. These fork additions cover restricted starter networking, DJ preparation and
 distribution; full project coediting remains absent and no production feature chapter gains coverage.

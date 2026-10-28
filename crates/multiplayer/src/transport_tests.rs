@@ -15,7 +15,7 @@ fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
         secret: secret_hash(&secret),
         expires: now + Duration::from_secs(1),
         redeemed: false,
-        guest: false,
+        guests: BTreeSet::new(),
     };
     assert!(host.admit(&"b".repeat(64), now).is_err());
     assert!(!host.redeemed);
@@ -228,6 +228,7 @@ fn sixty_four_tracks_with_json_escaped_names_fit_a_control_frame() {
         &mut bytes,
         &ServerMessage::State {
             protocol: PROTOCOL,
+            guests: 1,
             controls: Box::new(controls.clone()),
             operations: (1..=32)
                 .map(|revision| Operation { revision, edit: WireEdit::Rename { track: 1, name: "\\".repeat(256) } })
@@ -267,7 +268,7 @@ fn canonical(project: Project) -> Canonical {
         secret: [0; 32],
         expires: Instant::now() + Duration::from_secs(300),
         redeemed: false,
-        guest: false,
+        guests: BTreeSet::new(),
     }
 }
 
@@ -406,7 +407,7 @@ fn a_closed_worker_retains_its_last_verified_operations_until_the_ui_takes_them(
     controls.tracks[0].name = "Last confirmed change".into();
     let operation =
         Operation { revision: 1, edit: WireEdit::Rename { track: 1, name: controls.tracks[0].name.clone() } };
-    assert!(send.try_send(Event::State(controls, vec![operation.clone()], true, vec![])).is_ok());
+    assert!(send.try_send(Event::State(controls, vec![operation.clone()], 1, vec![])).is_ok());
     assert!(send.try_send(Event::Failed("connection closed".into())).is_ok());
     service.poll();
     assert!(!service.active());
@@ -818,14 +819,14 @@ fn a_full_ui_queue_keeps_the_sound_lease_until_its_operation_can_be_delivered_wi
     state.commit_take(Host::owner(), 1, 0, (1, 0.0), asset, Some(collected)).unwrap();
     let (send, receive) = mpsc::sync_channel(1);
     assert!(send.try_send(Event::Upload(None)).is_ok());
-    let mut last = (0, false);
+    let mut last = (0, 0);
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (0, false));
+    assert_eq!(last, (0, 0));
     assert_eq!(state.pending_audio.len(), 1);
     assert!(path.exists());
     receive.recv().unwrap();
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (1, false));
+    assert_eq!(last, (1, 0));
     assert!(state.pending_audio.is_empty());
     let Event::State(controls, operations, _, audio) = receive.recv().unwrap() else { panic!("state") };
     assert_eq!(controls.revision, 1);
@@ -861,13 +862,13 @@ fn renewal_revokes_expired_and_spent_secrets_without_resetting_music_or_owner_se
     assert!(state.admit(&original, now).is_err());
     assert!(!state.redeemed);
     let peer = state.admit(&invite.secret, now + Duration::from_secs(299)).unwrap();
-    // Admission winning the lock prevents renewal, and the live editor keeps its identity.
+    // Rotation replaces the outstanding capability, while authenticated peers keep their identity.
     let next = Invitation { secret: "c".repeat(64), ..invite };
-    assert!(state.renew(&next, now, &send).is_err());
+    state.renew(&next, now, &send).unwrap();
+    receive.try_recv().unwrap();
     state.apply(peer, 1, 1, WireEdit::Pan { track: 1, pan: 0.25 }).unwrap();
     state.host.remove_peer(peer).unwrap();
-    state.guest = false;
-    state.renew(&next, now, &send).unwrap();
+    state.guests.remove(&peer);
     assert!(state.admit(&next.secret, now + Duration::from_secs(300)).is_err());
     assert!(!state.redeemed);
     state.submit(Host::owner(), 2, 2, WireEdit::Pan { track: 1, pan: -0.25 }).unwrap();
@@ -896,7 +897,7 @@ fn renewal_backpressure_and_closed_views_preserve_the_previous_invitation() {
         assert!(state.renew(&invite, now, &send).is_err());
         assert!(state.secret == secret_hash(&original));
         assert_eq!(state.expires, expires);
-        assert!(!state.redeemed && !state.guest);
+        assert!(!state.redeemed && state.guests.is_empty());
         assert!(state.admit(&original, now).is_ok());
     }
 }
@@ -1096,4 +1097,89 @@ fn slot_content_quota_and_occupied_target_refuse_without_consuming_sequence() {
     assert_eq!(state.host.project(), &before);
     assert_eq!(state.host.revision(), 1);
     state.submit(Host::owner(), 2, 1, WireEdit::SceneRename { scene: 1, name: "Retry after occupied".into() }).unwrap();
+}
+
+#[test]
+fn several_admissions_rotate_capabilities_keep_peer_sequences_and_refuse_full_sessions_atomically() {
+    let now = Instant::now();
+    let mut state = canonical(crate::starter_project());
+    let (send, receive) = mpsc::sync_channel(1);
+    let mut peers = Vec::new();
+    for n in 0..MAX_GUESTS {
+        let invite = Invitation {
+            protocol: PROTOCOL,
+            endpoint: "127.0.0.1:1".parse().unwrap(),
+            certificate: "YQ".into(),
+            secret: format!("{n:064x}"),
+        };
+        state.renew(&invite, now, &send).unwrap();
+        receive.try_recv().unwrap();
+        let peer = state.admit(&invite.secret, now).unwrap();
+        peers.push(peer);
+        assert_eq!(state.guests.len(), n + 1);
+        assert!(state.admit(&invite.secret, now).is_err());
+        state.submit(peer, 1, n as u64, WireEdit::Pan { track: 1, pan: n as f64 / 4. }).unwrap();
+    }
+    let invite = Invitation {
+        protocol: PROTOCOL,
+        endpoint: "127.0.0.1:1".parse().unwrap(),
+        certificate: "YQ".into(),
+        secret: "f".repeat(64),
+    };
+    let old = state.secret;
+    assert!(state.renew(&invite, now, &send).is_err());
+    assert!(state.secret == old);
+    // Even a valid unused capability cannot allocate another peer or be consumed at capacity.
+    state.secret = secret_hash(&invite.secret);
+    state.redeemed = false;
+    assert!(state.admit(&invite.secret, now).is_err());
+    assert!(!state.redeemed);
+    assert_eq!(state.host.revision(), 3);
+    state.host.remove_peer(peers[1]).unwrap();
+    state.guests.remove(&peers[1]);
+    assert!(state.admit(&invite.secret, now).is_ok());
+    assert_eq!(state.guests.len(), 3);
+    assert!(state.submit(peers[1], 2, 3, WireEdit::Pan { track: 1, pan: 0. }).is_err());
+    state.submit(peers[0], 2, 3, WireEdit::Pan { track: 1, pan: -0.5 }).unwrap();
+    state.submit(peers[2], 2, 4, WireEdit::Pan { track: 1, pan: 0.5 }).unwrap();
+    assert_eq!(state.host.revision(), 5);
+}
+
+#[test]
+fn membership_only_events_survive_backpressure_without_consuming_music_revisions() {
+    let mut state = canonical(crate::starter_project());
+    let peer = state.host.add_peer(Role::Editor).unwrap();
+    state.guests.insert(peer);
+    let (send, receive) = mpsc::sync_channel(1);
+    assert!(send.try_send(Event::Upload(None)).is_ok());
+    let mut last = (0, 0);
+    state.emit(&send, &mut last).unwrap();
+    assert_eq!(last, (0, 0));
+    receive.try_recv().unwrap();
+    state.emit(&send, &mut last).unwrap();
+    assert_eq!(last, (0, 1));
+    assert!(
+        matches!(receive.try_recv().unwrap(), Event::State(c, o, 1, a) if c.revision == 0 && o.is_empty() && a.is_empty())
+    );
+    state.host.remove_peer(peer).unwrap();
+    state.guests.remove(&peer);
+    state.emit(&send, &mut last).unwrap();
+    assert_eq!(last, (0, 0));
+    assert_eq!(state.host.revision(), 0);
+    assert!(state.journal.is_empty());
+}
+
+#[test]
+fn wire_guest_counts_are_bounded_and_required() {
+    for count in [0, 4, usize::MAX] {
+        assert!(protocol::validate_guest_count(count).is_err());
+    }
+    for count in 1..=3 {
+        assert!(protocol::validate_guest_count(count).is_ok());
+    }
+    let value = json!({"kind":"State","protocol":PROTOCOL,"controls":Controls::from_project(&crate::starter_project(),0).unwrap(),"operations":[],"accepted":null,"error":null});
+    assert!(serde_json::from_value::<ServerMessage>(value.clone()).is_err());
+    let mut valid = value;
+    valid["guests"] = json!(1);
+    assert!(serde_json::from_value::<ServerMessage>(valid).is_ok());
 }

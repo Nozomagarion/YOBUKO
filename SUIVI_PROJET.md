@@ -1,12 +1,12 @@
 # Où en est notre application ?
 
-**Bilan du 28 octobre 2026 — lanceur de clips et scènes partagés livrés et validés localement.**
-Dans **Multiplayer → Launcher**, les deux participants organisent la grille, copient leurs clips
-et préparent les scènes, tout en gardant leurs lancements et leur écoute personnels.
-**3 155 tests passent, aucun échec.** Le nouveau code utilise le protocole 11.
-**Le paquet Mac `fdf6eab9` est compilé et vérifié après extraction**, avec les trois exécutables
-et les sources exactes. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles
-distants restent bloqués par GitHub ; Windows/Linux ne sont pas validés pour cette version.
+**Bilan du 28 octobre 2026 — un hôte et trois invités codés et validés localement.**
+Quatre musiciens peuvent partager le même morceau sur le réseau local. Chacun reçoit son
+invitation, conserve son lecteur et peut envoyer des modifications et des prises terminées.
+Le départ d’un invité laisse la session des autres ouverte ; un compteur affiche les places.
+**3 162 tests passent, aucun échec.** Le nouveau code utilise le protocole 12.
+**Nouveau paquet Mac : en cours de fabrication.** Le précédent paquet `fdf6eab9`, en protocole 11,
+reste celui du lanceur et des scènes avec un seul invité ; il ne contient pas encore ce palier.
 
 ## Ce qu’on fabrique
 
@@ -14,23 +14,42 @@ distants restent bloqués par GitHub ; Windows/Linux ne sont pas validés pour c
 Suhina fournit le studio. Notre fork ajoute le multijoueur et le lien avec la préparation DJ,
 qui commence avec l’analyse musicale de rbxport. Les auteurs et les licences restent crédités.
 
-La priorité reste de rendre le travail musical à plusieurs plus complet. Le test sur les deux
-ordinateurs de la maison est prévu plus tard, comme demandé. Le logiciel complet reste en développement.
+La prochaine priorité est la préparation des sets DJ, après ce palier de collaboration LAN.
+Les essais sur les ordinateurs de la maison restent prévus plus tard, comme demandé. Le logiciel
+complet reste en développement.
 
 ## Ce qui existe vraiment
 
 | Partie | Ce qu’on peut faire actuellement | Ce qui manque encore |
 |---|---|---|
 | **Studio** | Utiliser le studio de Suhina et envoyer le rendu d’un morceau vers notre bibliothèque DJ. | Relier toutes les fonctions du studio à la collaboration. |
-| **Créer à deux** | Un hôte et un invité sur le réseau local ; partager une copie MIDI/audio avec les sons chargés, en conservant les originaux. | Plus d’un invité et Internet. |
+| **Créer à plusieurs** | Un hôte et trois invités maximum sur le réseau local ; copie MIDI/audio et sons vérifiés ; chacun modifie et publie ses prises, en conservant les originaux. | Internet, noms/rôles des participants et transfert du rôle d’hôte. |
 | **Reprendre après une coupure** | L’hôte crée une nouvelle invitation sans fermer le morceau ; l’invité ouvre l’état actuel dans un nouvel onglet. | Reconnexion automatique, fusion des retouches hors connexion et reprise après arrêt de l’hôte. |
 | **Notes, clips et scènes** | Modifier les notes et l’arrangement ; créer/copier/déplacer/échanger/effacer les cases du lanceur et organiser les scènes ensemble. | Davantage d’outils partagés, dont le retour du lanceur vers l’arrangement. |
-| **Pistes et mixeur** | Les deux participants ajoutent des pistes audio ou MIDI/FM Synth ; noms, volumes et panoramiques partagés. | Suppression, réorganisation et groupes. |
+| **Pistes et mixeur** | Les participants ajoutent des pistes audio ou MIDI/FM Synth ; noms, volumes et panoramiques partagés. | Suppression, réorganisation et groupes. |
 | **Appareils et sons** | Ajouter, retirer et régler FM Synth et Utility depuis l’un ou l’autre participant. | Réorganisation, activation/désactivation, autres effets/instruments et plugins. |
-| **Nouvelles prises** | Les deux participants publient un son terminé depuis un onglet Studio local ; l’hôte vérifie les envois. | Enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
+| **Nouvelles prises** | Les participants publient un son terminé depuis un onglet Studio local ; l’hôte vérifie les envois. | Enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
 | **Écoute personnelle** | Chacun garde son lecteur, sa position, son démarrage et son arrêt. | Essai sur les deux ordinateurs physiques. |
 | **Espace DJ** | Bibliothèque persistante, import, analyse tempo/tonalité issue de rbxport, ajout d’un rendu du studio. | Playlists, points cue, grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Bouton dans les paramètres pour comparer les versions GitHub ; suivi des sources et vérification des paquets de notre application. | Intégration régulière des nouveautés, publication et réception automatique d’une version commune. |
+
+## Nouveau : jouer et composer à quatre sur le réseau local
+
+Ce chantier ajoute **un hôte et jusqu’à trois invités**, donc quatre musiciens au total.
+Le compteur **Guests: N / 3** indique les connexions admises, y compris les copies en cours de réception.
+
+1. L’hôte crée le partage et utilise **Copy invitation** pour le premier invité.
+2. Attendre son arrivée, puis **New invitation → Copy invitation** pour le suivant. Refaire pour le troisième. Les personnes déjà connectées restent dans le morceau.
+3. À trois invités, le bouton est désactivé. Un départ libère une place sans fermer les sessions restantes ; une nouvelle invitation permet de la réutiliser.
+4. Chacun peut modifier les notes, clips, scènes, pistes, sons et réglages pris en charge. Si deux modifications partent du même état du morceau, l’une peut être refusée : rafraîchir son brouillon puis la renvoyer.
+5. Chaque invité peut publier une prise terminée depuis un onglet local. Si un envoi devient périmé pendant le transfert, sa source est conservée et peut être renvoyée. Les autres reçoivent le son vérifié avant son clip.
+6. Chacun garde son lecteur. Le départ d’un invité conserve sa dernière copie locale ; son retour ouvre un nouvel onglet partagé sans fusionner les retouches solo. Si l’hôte quitte, le partage se termine pour tout le monde.
+
+**Une seule invitation peut attendre à la fois.** Chaque invitation expire après cinq minutes
+et fonctionne une fois. Créer la suivante remplace l’ancienne non utilisée : attendre que son
+destinataire ait rejoint avant d’en créer une autre. La transmettre en privé.
+Le réseau Internet, la reconnexion automatique, les noms/rôles des participants et la reprise
+du rôle d’hôte après son départ restent à construire. Les essais physiques restent différés.
 
 ## Nouveau : préparer des scènes ensemble
 
@@ -87,16 +106,16 @@ Les lecteurs et positions d’écoute restent personnels. Chacun sauvegarde sa c
 
 ## Revenir après une coupure
 
-1. L’invité quitte la session ou perd sa connexion. Sa dernière copie reste ouverte et redevient modifiable en solo.
-2. L’hôte garde sa session ouverte et peut continuer à modifier le morceau, les réglages, les pistes et les sons.
-3. Quand l’hôte ne voit plus **Guest connected**, il clique **New invitation**, puis **Copy invitation**.
+1. L’invité quitte ou perd sa connexion. Sa dernière copie reste ouverte et redevient modifiable en solo.
+2. L’hôte et les autres invités restent dans le morceau et peuvent continuer à le modifier.
+3. Quand le compteur indique une place libre, l’hôte utilise **New invitation**, puis **Copy invitation**.
 4. L’invité utilise cette nouvelle invitation dans **Join LAN session**.
-5. Un **nouvel onglet partagé** reçoit le morceau actuel, ses réglages et ses sons vérifiés. L’ancienne copie reste ouverte avec les éventuelles retouches solo.
+5. Un **nouvel onglet partagé** reçoit l’état actuel et ses sons vérifiés. L’ancienne copie reste ouverte avec les retouches solo éventuelles.
 
-Le bouton est désactivé tant qu’un invité est connecté. La nouvelle invitation invalide
-l’ancienne et reste utilisable **une fois, pendant cinq minutes**. Il faut la copier à nouveau.
-L’hôte garde son onglet et son lecteur. **Les retouches solo ne sont pas fusionnées** dans
-le morceau partagé. Si l’hôte quitte lui-même la session, ce partage se termine.
+Le bouton est désactivé à trois invités. Une nouvelle invitation invalide seulement l’ancienne
+invitation encore en attente, sans fermer les connexions déjà admises. Chaque invitation est
+utilisable **une fois, pendant cinq minutes**. Les retouches solo ne sont pas fusionnées.
+Si l’hôte quitte la session, le partage se termine pour tous ; les copies locales restent ouvertes.
 
 ## Comment créer et publier ensemble
 
@@ -118,32 +137,33 @@ comme chemins de fichiers à l’autre ordinateur. Les originaux restent intacts
 
 ## Limites actuelles
 
-- **Un hôte et un invité, sur le réseau local**, sans serveur Internet ni reconnexion automatique.
+- **Un hôte et trois invités maximum, sur le réseau local**, sans serveur Internet ni reconnexion automatique. Une seule invitation peut attendre à la fois.
 - **64 pistes**, retours et groupes compris ; document partagé de **2 Mio** maximum.
 - **64 sons uniques**, **64 Mio par son**, **256 Mio au total**, mono/stéréo. Supprimer un clip ne remet pas ce budget à zéro. Un son déjà vérifié n’est pas renvoyé inutilement.
 - WAV portables à partir du son décodé ; le format MP3/FLAC d’origine et ses tags ne sont pas archivés.
 - FM Synth et Utility avec paramètres simples ; plugins externes, autres instruments et états opaques refusés. Pas encore de réorganisation, d’activation/désactivation ni de modification des courbes d’automatisation en commun.
 - Les pistes créées n’activent aucun micro, entrée MIDI ou monitoring local. Pas d’enregistrement direct dans l’onglet partagé ni de diffusion audio en direct entre ordinateurs.
 
-**Les deux applications doivent utiliser le nouveau protocole 11**, donc le même nouveau paquet.
-Les versions précédentes en protocole 10 ou moins sont incompatibles avec ces sessions.
+**Toutes les applications doivent utiliser le nouveau protocole 12**, donc le même nouveau paquet.
+Les versions précédentes en protocole 11 ou moins sont incompatibles avec ces sessions.
 Les projets sauvegardés gardent leur format natif version 3 ; ce changement concerne la connexion.
 
 ## Ce qui a été vérifié pour ce palier
 
 | Vérification | Résultat |
 |---|---|
-| Ensemble des tests sur ce Mac | **3 155 réussis, aucun échec**, dans 130 suites ; 58 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
-| Nouvelles commandes natives | **4 tests réussis** : copie indépendante, annulation, sauvegarde/réouverture, refus des cases remplies ou incompatibles, des indices invalides et des contenus à routage explicite. |
-| Réseau et collaboration | **77 tests réseau et 21 tests du cœur réussis**, dont les échanges TLS réels dans les deux sens, brouillons périmés et budgets dépassés. Un refus ne consomme pas la modification suivante. |
-| Notes et audio | **Réussi** : les notes copiées sont indépendantes, l’arrangement original est conservé et les clips audio réutilisent leur son vérifié. Les fichiers collectés restent présents après les suppressions de scènes. |
-| Retour de l’invité | **Réussi** : la nouvelle copie retrouve la grille, les scènes, les notes et la révision actuelles après renouvellement de l’invitation. |
-| Interface | **15 tests multijoueur réussis**, dont les vrais boutons de la grille, sélections annulées sur page fermée et lancements/arrêt locaux sans modifier le lecteur distant. |
-| Rendu visuel | **Réussi séparément** : capture GPU de la nouvelle page vérifiée. |
+| Ensemble des tests sur ce Mac | **3 162 réussis, aucun échec**, dans 131 suites ; 59 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
+| Réseau et permissions | **83 tests réseau et 21 tests du cœur réussis** : invitations distinctes, remplacées ou déjà utilisées refusées, capacité limitée, séquences indépendantes et compteur sans fausse modification musicale. |
+| Quatre participants | **Réussi avec de vrais échanges TLS entre quatre instances locales** : les changements convergent ; le départ d’un invité conserve les autres connexions ; son retour reçoit l’état actuel. |
+| Conflits | **Réussi** : deux invités partant du même état ne s’écrasent pas ; le brouillon refusé peut être renvoyé avec la révision actualisée sans perdre sa séquence. |
+| Audio et prises | **Réussi** : prises envoyées par trois auteurs, envois concurrents refusés puis repris, sons vérifiés reçus par tous, réutilisation d’un son sans doubler le budget et mêmes rendus. Les sources et sauvegardes sont conservées. |
+| Lecteurs et copies | **Réussi** : quatre lecteurs à des positions différentes ; arrêt indépendant ; copies conservées après un départ, un retour et l’arrêt de l’hôte. |
+| Interface | **16 tests multijoueur réussis**, dont le bouton d’invitation à capacité pleine, le compteur, la place libérée et la conservation des anciens onglets. |
+| Rendu visuel | **Réussi séparément** : capture GPU avec trois invités admis vérifiée. |
 | Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; aucune nouvelle dépendance. |
-| Paquet Mac Apple Silicon `fdf6eab9` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
-| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat distant annoncé pour cette révision.** |
-| Deux ordinateurs physiques | **Pas encore testé**, comme convenu. |
+| Nouveau paquet Mac Apple Silicon | **En cours de fabrication** ; le paquet précédent reste disponible ci-dessous. |
+| Contrôles GitHub Mac/Windows/Linux | **À retenter sur le nouveau commit** ; les contrôles précédents étaient bloqués par GitHub. |
+| Ordinateurs physiques | **Pas encore testé**, comme convenu. |
 
 ## Où trouver la version actuelle
 
@@ -152,7 +172,7 @@ Les projets sauvegardés gardent leur format natif version 3 ; ce changement con
 - **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
 - **Preuves locales :** dossier `validation/2026-10-28` voisin du dépôt : journaux, captures et script de fabrication du paquet.
 
-Les tests et le paquet correspondent au code **`fdf6eab9db63a37115ef840db87b27d57b5c5e7c`**,
+Le dernier paquet livré correspond au code **`fdf6eab9db63a37115ef840db87b27d57b5c5e7c`**,
 compilé après son enregistrement puis envoyé sur notre branche GitHub. C’est un paquet de
 développement Mac Apple Silicon, signé localement. L’application installée ou ouverte n’a pas
 été remplacée. Les deux participants doivent utiliser ce même nouveau paquet.
@@ -161,9 +181,9 @@ développement Mac Apple Silicon, signé localement. L’application installée 
 
 Notre branche **`feature/multiplayer`** est affichée à l’accueil du
 [dépôt GitHub](https://github.com/Nozomagarion/suhina-daw). `main` reste le miroir de Suhina.
-Le README et ses barres présentent notre application : **15 étapes réalisées sur 18 listées
+Le README et ses barres présentent notre application : **16 étapes réalisées sur 18 listées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
-du logiciel final ; le nouveau palier correspond à la grille et aux scènes partagées.
+du logiciel final ; le nouveau palier correspond aux invitations de plusieurs musiciens.
 
 **Blocage externe à nouveau constaté le 28 octobre à 9 h 48 (heure de Paris)**, sur le code
 `fdf6eab9db63a37115ef840db87b27d57b5c5e7c` :
@@ -182,14 +202,15 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 
 ## Prochaine étape
 
-**Inviter plusieurs participants sur le réseau local. Statut : à commencer.**
-Critère : un hôte et au moins deux invités créent ensemble dans le même morceau, chacun avec
-son invitation privée, ses modifications validées et son écoute indépendante ; le départ d’un
-invité conserve la session des autres. Les quotas et permissions restent contrôlés.
+**Préparer un set DJ avec des playlists dans l’application. Statut : à commencer.**
+Après les outils communs et les sessions LAN à quatre, on avance sur la suite de la chaîne musicale.
+Critère : créer, nommer et retrouver ses playlists, y ranger et réordonner les morceaux de la
+bibliothèque DJ, puis les retrouver au redémarrage sans déplacer ni supprimer les fichiers audio.
 
-Ensuite : reconnexion plus complète et Internet, version et mise à jour communes, puis
-préparation/performance DJ avancées. L’essai des deux ordinateurs à la maison reste différé,
-comme demandé.
+Le multijoueur reste un prototype LAN : Internet, reconnexion automatique, noms/rôles et reprise
+de l’hôte restent prévus. La version et les mises à jour communes restent à publier. Les points
+cue, grilles rythmiques, platines et export vers le matériel DJ viennent après la préparation
+des playlists. L’essai des ordinateurs de la maison reste différé, comme demandé.
 
 Ce fichier est le point de référence à chaque palier ou blocage. Les anciens fichiers
 `AUDIT_…` restent historiques. Les résultats externes sont des relevés datés ; ce document

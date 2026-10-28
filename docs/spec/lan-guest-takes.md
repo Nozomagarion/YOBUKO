@@ -59,3 +59,12 @@ Tests cover actual TLS, both authors, native recording after join, exact renders
 save/reopen, dedup, stale races, replay, malformed offers/chunks/WAV/hash, cumulative quotas,
 interruption, unclaimed-lease cleanup and native visible controls. Household two-PC testing
 stays deferred; automated loopback is not that acceptance test.
+
+
+## Amendment: several guest authors
+
+Protocol 12 supports [up to three guests](lan-multiple-guests.md). Each connection keeps its own
+verified-asset inventory and author sequence. Any guest can publish a finished take; all other
+connections receive missing verified audio before its operation. Concurrent edits/uploads may
+make a draft stale at the final recheck: the refused author retains its source and can resend
+with refreshed revision. Global cumulative quotas remain; a departure does not reset them.

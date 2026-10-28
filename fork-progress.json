@@ -82,7 +82,8 @@
         },
         {
           "name": "Inviter plusieurs participants sur le réseau local",
-          "done": false
+          "done": true,
+          "evidence": "crates/multiplayer/tests/guests.rs"
         },
         {
           "name": "Sessions Internet et reconnexion automatique",

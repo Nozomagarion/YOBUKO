@@ -444,24 +444,21 @@ impl App {
                     if ui.button("Copy invitation").clicked() {
                         ui.ctx().copy_text(self.multiplayer.invitation.clone());
                     }
-                    let can_renew = self.multiplayer.state["guest_connected"] != true
+                    let can_renew = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(3) < 3
                         && self.multiplayer.state["sending"].is_null();
                     if ui.add_enabled(can_renew, egui::Button::new("New invitation"))
-                        .on_hover_text("Create a fresh invitation after a disconnect or expiry. Previous invitations stop working.")
+                        .on_hover_text("Create a separate invitation for the next guest. Replaces the previous unused invitation; connected guests stay.")
                         .clicked()
                     {
                         self.multiplayer_command("multiplayer.renewInvitation", json!({}));
                     }
-                    ui.label(if self.multiplayer.state["guest_connected"] == true {
-                        "Guest connected"
-                    } else {
-                        "Waiting for guest"
-                    });
+
                 });
             }
+            ui.label(format!("Guests: {} / 3", self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0)));
             if mode == "hosting" {
                 // Keep this row when a guest connects: controls must not move during a click.
-                ui.weak("Invitations expire after 5 minutes and work once. After a disconnect, renew and copy again. The guest opens a new copy; previous tabs are kept.");
+                ui.weak("One host and up to three guests. Create and privately copy a new invitation for each guest after the previous one joins. Each expires after 5 minutes and works once; replacing an unused invitation revokes it. Connected guests stay.");
             }
             if self.multiplayer.bound == self.projects.active() {
                 ui.horizontal(|ui| {

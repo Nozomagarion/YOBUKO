@@ -8,7 +8,7 @@ use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
 };
 use serde_json::{Value, json};
-use std::collections::VecDeque;
+use std::collections::{BTreeSet, VecDeque};
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -19,13 +19,15 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use subtle::ConstantTimeEq;
-use suhina_collaboration::{Host, Request, Role};
+use suhina_collaboration::{Host, PeerId, Request, Role};
 use suhina_engine::AudioPool;
 use suhina_model::Project;
 use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, ParamType, Policy};
 
 use crate::invitation::{Invitation, new_secret, private, secret_hash};
 use crate::protocol::{self, ClientMessage, Controls, Operation, PROTOCOL, ServerMessage, WireEdit};
+
+pub const MAX_GUESTS: usize = 3;
 
 const TIMEOUT: Duration = Duration::from_secs(3);
 const POLL: Duration = Duration::from_millis(100);
@@ -36,7 +38,7 @@ struct Canonical {
     secret: [u8; 32],
     expires: Instant,
     redeemed: bool,
-    guest: bool,
+    guests: BTreeSet<PeerId>,
     assets: Vec<Arc<assets::Encoded>>,
     pending_audio: Vec<AudioAddition>,
 }
@@ -146,8 +148,8 @@ impl Canonical {
         }
         Ok(())
     }
-    fn emit(&mut self, events: &SyncSender<Event>, last: &mut (u64, bool)) -> Result<(), String> {
-        let current = (self.host.revision(), self.guest);
+    fn emit(&mut self, events: &SyncSender<Event>, last: &mut (u64, usize)) -> Result<(), String> {
+        let current = (self.host.revision(), self.guests.len());
         if current != *last {
             let controls = Controls::from_project(self.host.project(), current.0)?;
             let operations = self.since(last.0)?;
@@ -166,6 +168,7 @@ impl Canonical {
         let error = outcome.and_then(Result::err);
         Ok(ServerMessage::State {
             protocol: PROTOCOL,
+            guests: self.guests.len(),
             controls: Box::new(Controls::from_project(self.host.project(), self.host.revision())?),
             operations,
             accepted,
@@ -173,8 +176,8 @@ impl Canonical {
         })
     }
     fn renew(&mut self, invitation: &Invitation, now: Instant, events: &SyncSender<Event>) -> Result<(), String> {
-        if self.guest {
-            return Err("wait for the guest to leave before creating a new invitation".into());
+        if self.guests.len() >= MAX_GUESTS {
+            return Err("the session already has three guests; wait for a guest to leave".into());
         }
         let secret = secret_hash(&invitation.secret);
         if bool::from(self.secret.ct_eq(&secret)) {
@@ -192,23 +195,24 @@ impl Canonical {
         if secret.len() != 64
             || !bool::from(self.secret.ct_eq(&secret_hash(secret)))
             || self.redeemed
+            || self.guests.len() >= MAX_GUESTS
             || now >= self.expires
         {
             return Err("admission refused".into());
         }
         let peer = self.host.add_peer(Role::Editor).map_err(|e| e.to_string())?;
         self.redeemed = true;
-        self.guest = true;
+        self.guests.insert(peer);
         Ok(peer)
     }
 }
 enum Event {
     Ready(String, Controls, Box<SharedSnapshot>),
-    Connected(Controls, Box<SharedSnapshot>),
+    Connected(Controls, Box<SharedSnapshot>, usize),
     Invitation(String),
     Receiving(usize, usize),
     Upload(Option<(usize, usize)>),
-    State(Controls, Vec<Operation>, bool, Vec<AudioAddition>),
+    State(Controls, Vec<Operation>, usize, Vec<AudioAddition>),
     Rejected(String),
     Failed(String),
     Closed,
@@ -242,7 +246,7 @@ pub struct Service {
     controls: Option<Controls>,
     invitation: Option<String>,
     error: Option<String>,
-    guest: bool,
+    guest_count: usize,
     selected: Option<(Project, AudioPool)>,
     project: Option<SharedSnapshot>,
     operations: Vec<Operation>,
@@ -356,17 +360,18 @@ impl Service {
                         self.invitation = Some(invitation);
                         self.controls = Some(controls);
                     }
-                    Ok(Event::Connected(controls, project)) => {
+                    Ok(Event::Connected(controls, project, guests)) => {
                         self.project = Some(*project);
                         self.operations.clear();
                         self.receiving = None;
                         self.mode = "connected".into();
+                        self.guest_count = guests;
                         self.controls = Some(controls);
                     }
                     Ok(Event::Invitation(invitation)) => self.invitation = Some(invitation),
                     Ok(Event::Upload(progress)) => self.sending = progress,
                     Ok(Event::Receiving(done, total)) => self.receiving = Some((done, total)),
-                    Ok(Event::State(controls, operations, guest, audio)) => {
+                    Ok(Event::State(controls, operations, guests, audio)) => {
                         self.receiving = None;
                         if self.operations.len() + operations.len() > 128
                             || self.received_audio.len() + audio.len() > 64
@@ -380,7 +385,7 @@ impl Service {
                         self.received_audio.extend(audio);
                         self.operations.extend(operations);
                         self.controls = Some(controls);
-                        self.guest = guest;
+                        self.guest_count = guests;
                     }
                     Ok(Event::Rejected(error)) => self.error = Some(error),
                     Ok(Event::Failed(error)) => {
@@ -406,7 +411,7 @@ impl Service {
             self.sending = None;
             self.running = None;
             self.invitation = None;
-            self.guest = false;
+            self.guest_count = 0;
         }
     }
     pub fn active(&self) -> bool {
@@ -432,7 +437,7 @@ impl Service {
         self.error = None;
         self.controls = None;
         self.invitation = None;
-        self.guest = false;
+        self.guest_count = 0;
         self.project = None;
         self.operations.clear();
         self.receiving = None;
@@ -527,13 +532,13 @@ pub fn commands() -> &'static [CommandSpec<Service>] {
 fn state(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.poll();
     Ok(
-        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"error":s.error,"guest_connected":s.guest,"receiving":s.receiving,"sending":s.sending}),
+        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"error":s.error,"guest_connected":s.guest_count > 0,"guests_connected":s.guest_count,"max_guests":MAX_GUESTS,"receiving":s.receiving,"sending":s.sending}),
     )
 }
 fn renew_invitation(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.poll();
-    if s.mode != "hosting" || s.guest {
-        return Err("only a host without a connected guest can create a new invitation".into());
+    if s.mode != "hosting" || s.guest_count >= MAX_GUESTS {
+        return Err("only a host with space for another guest can create a new invitation".into());
     }
     s.running
         .as_ref()
@@ -548,7 +553,7 @@ fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.running = None;
     s.invitation = None;
     s.mode = "idle".into();
-    s.guest = false;
+    s.guest_count = 0;
     s.selected = None;
     s.project = None;
     s.receiving = None;
@@ -754,7 +759,7 @@ fn host(
         secret: secret_hash(&secret),
         expires: Instant::now() + Duration::from_secs(300),
         redeemed: false,
-        guest: false,
+        guests: BTreeSet::new(),
         assets: initial_assets,
         pending_audio: Vec::new(),
     }));
@@ -764,7 +769,7 @@ fn host(
     let pending = Arc::new(AtomicUsize::new(0));
     let mut handlers: Vec<std::thread::JoinHandle<()>> = Vec::new();
     let mut sequence = 1u64;
-    let mut last = (0u64, false);
+    let mut last = (0u64, 0usize);
     while !stop.load(Ordering::Relaxed) {
         while let Ok(input) = inputs.try_recv() {
             let result = match input {
@@ -1057,7 +1062,7 @@ fn serve(
     })();
     let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
     let _ = state.host.remove_peer(peer);
-    state.guest = false;
+    state.guests.remove(&peer);
     result
 }
 
@@ -1136,9 +1141,12 @@ fn guest(
     let mut mirror = suhina_session::Session::new(snapshot.project.clone());
     io.sock.renew();
     let first: ServerMessage = protocol::read(&mut io)?;
-    let ServerMessage::State { protocol: PROTOCOL, controls, operations, accepted: None, error: None } = first else {
+    let ServerMessage::State { protocol: PROTOCOL, controls, operations, guests, accepted: None, error: None } = first
+    else {
         return Err("invitation refused, expired or already used".into());
     };
+    protocol::validate_guest_count(guests)?;
+    let mut previous_guests = guests;
     let controls = *controls;
     protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations)?;
     if let Some(audio) =
@@ -1149,7 +1157,7 @@ fn guest(
     let mut previous = controls.clone();
     snapshot.project = mirror.project().clone();
     snapshot.revision = revision;
-    events.try_send(Event::Connected(controls, Box::new(snapshot))).map_err(|_| "multiplayer view closed")?;
+    events.try_send(Event::Connected(controls, Box::new(snapshot), guests)).map_err(|_| "multiplayer view closed")?;
     let mut sequence = 1u64;
     let mut pending: Option<PendingTake> = None;
     while !stop.load(Ordering::Relaxed) {
@@ -1203,9 +1211,11 @@ fn guest(
         } else {
             protocol::read(&mut io)?
         };
-        let ServerMessage::State { protocol: PROTOCOL, controls, operations, accepted, error } = response else {
+        let ServerMessage::State { protocol: PROTOCOL, controls, operations, guests, accepted, error } = response
+        else {
             return Err("invalid host response".into());
         };
+        protocol::validate_guest_count(guests)?;
         let controls = *controls;
         let was_publication = prepared.is_some();
         let mut audio = Vec::new();
@@ -1243,11 +1253,12 @@ fn guest(
                 None => return Err("host did not acknowledge the edit".into()),
             }
         }
-        if controls != previous {
+        if controls != previous || guests != previous_guests {
             events
-                .try_send(Event::State(controls.clone(), operations, true, audio))
+                .try_send(Event::State(controls.clone(), operations, guests, audio))
                 .map_err(|_| "multiplayer view is not keeping up")?;
             previous = controls;
+            previous_guests = guests;
         }
         std::thread::sleep(POLL);
     }

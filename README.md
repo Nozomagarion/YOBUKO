@@ -56,7 +56,7 @@ pour le live, en conservant le lien avec son projet d'origine.
 Avancer sur la même musique avec ses amis. Pouvoir travailler sur un projet partagé tout en
 écoutant une autre partie du morceau que les autres : chacun garde sa lecture et sa position.
 
-Le prototype relie un hôte et un invité sur le réseau local. Il peut maintenant transmettre
+Le prototype relie un hôte et jusqu’à trois invités sur le réseau local. Il peut maintenant transmettre
 une copie d’un projet MIDI/audio ouvert, avec ses notes, ses clips et ses réglages FM Synth/Utility,
 ou créer une démonstration. Les notes MIDI, noms, volumes et panoramiques se modifient ensemble.
 Un éditeur permet d’ajouter, modifier et supprimer une note ; les modifications concurrentes
@@ -89,7 +89,7 @@ les platines et l'export vers le matériel DJ restent à construire et à vérif
 <!-- fork-progress:begin -->
 | Partie du projet | Étapes réalisées | Prochain objectif |
 |---|---:|---|
-| Créer ensemble | 15 / 18 | Inviter plusieurs participants sur le réseau local |
+| Créer ensemble | 16 / 18 | Sessions Internet et reconnexion automatique |
 | Préparer et jouer | 4 / 8 | Playlists et préparation de set |
 | Évoluer ensemble | 4 / 7 | Version commune validée sur toutes les plateformes |
 <!-- fork-progress:end -->
@@ -102,7 +102,7 @@ leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce
 | Partie | Disponible dans le prototype | Prochaine étape |
 |---|---|---|
 | **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
-| **Multijoueur** | Session LAN hôte + invité, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, grille du lanceur et scènes partagées, publication de prises terminées par les deux participants, réglages FM Synth/Utility et noms/volumes/panoramiques partagés et lectures indépendantes. | Plusieurs invités et reconnexion automatique. |
+| **Multijoueur** | Session LAN hôte + trois invités maximum, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, grille du lanceur et scènes partagées, publication de prises terminées par les deux participants, réglages FM Synth/Utility et noms/volumes/panoramiques partagés et lectures indépendantes. | Internet et reconnexion automatique. |
 | **DJ** | Bibliothèque audio persistante, import et analyse tempo/tonalité issue de rbxport. | Playlists, points cue, grilles rythmiques, platines et compatibilité matérielle. |
 | **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
 
@@ -110,7 +110,12 @@ Le trafic chiffré est testé entre deux services sur le même ordinateur, avec 
 sur deux projets de bureau et des moteurs audio indépendants. **Le test sur deux ordinateurs
 physiques reste à faire.** Le document partagé est limité à 2 Mio et aux appareils FM Synth/Utility
 sans état opaque. Les notes se modifient dans **MIDI notes**, et l’arrangement dans **Clips**. Les déplacements
-conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. L’onglet **Publish take** permet à chacun de publier le son entier d’une prise terminée depuis un autre onglet Studio vers une piste audio existante, au temps choisi. L’onglet **Tracks** permet d’ajouter les pistes nécessaires sans repartir d’un nouveau partage. Les deux applications doivent utiliser le protocole 11. L’invité envoie sa prise à l’hôte pour vérification avant son ajout au morceau. L’enregistrement direct dans l’onglet partagé et les plugins restent à construire.
+conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. L’onglet **Publish take** permet à chacun de publier le son entier d’une prise terminée depuis un autre onglet Studio vers une piste audio existante, au temps choisi. L’onglet **Tracks** permet d’ajouter les pistes nécessaires sans repartir d’un nouveau partage. Toutes les applications doivent utiliser le protocole 12. L’invité envoie sa prise à l’hôte pour vérification avant son ajout au morceau. L’enregistrement direct dans l’onglet partagé et les plugins restent à construire.
+
+Pour inviter plusieurs musiciens, créer une nouvelle invitation pour chacun avec **New invitation**,
+après l’arrivée du précédent. Les invités déjà connectés restent présents. Le compteur **Guests: N / 3**
+affiche les places occupées ; un départ libère une place sans fermer la session des autres.
+[Invitations et limites](docs/spec/lan-multiple-guests.md).
 
 Dans **Multiplayer → Launcher**, vous pouvez copier vos clips vers la grille, créer des cases,
 organiser et dupliquer les scènes, puis les lancer chacun de votre côté. Les copies conservent

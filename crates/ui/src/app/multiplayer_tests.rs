@@ -773,7 +773,7 @@ fn invitation_renewal_button(render: bool) {
     let mut harness = builder.build_ui_state(|ui, app: &mut App| app.ui(ui), host);
     theme::install(&harness.ctx);
     harness.run_steps(3);
-    assert!(harness.get_by_label("New invitation").accesskit_node().is_disabled());
+    assert!(!harness.get_by_label("New invitation").accesskit_node().is_disabled());
     guest.leave_multiplayer();
     guest
         .projects
@@ -979,3 +979,6 @@ mod chain_tests;
 
 #[path = "multiplayer_launcher_tests.rs"]
 mod launcher_tests;
+
+#[path = "multiplayer_guest_tests.rs"]
+mod guest_tests;

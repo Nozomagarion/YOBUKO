@@ -102,3 +102,12 @@ pure command, including outside LAN use. The automation path-parameter audit rec
 exception explicitly; it does not waive confinement for commands that actually touch files.
 
 Protocol 8 extends the above host-only publication slice with [verified guest take uploads](lan-guest-takes.md); direct shared-tab recording remains closed.
+
+
+## Amendment: several guest authors
+
+Protocol 12 supports [up to three guests](lan-multiple-guests.md). Each connection keeps its own
+verified-asset inventory and author sequence. Any guest can publish a finished take; all other
+connections receive missing verified audio before its operation. Concurrent edits/uploads may
+make a draft stale at the final recheck: the refused author retains its source and can resend
+with refreshed revision. Global cumulative quotas remain; a departure does not reset them.
