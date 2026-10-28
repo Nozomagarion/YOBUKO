@@ -5,7 +5,8 @@ On peut créer et renommer ses sets, y ajouter les morceaux, choisir leur ordre,
 entrée et retrouver les listes au redémarrage. Les fichiers audio et les projets source restent en place.
 **3 232 tests du logiciel passent, aucun échec ; 272 tests des scripts passent également.**
 Le contrôle Rust strict, le format, la documentation, les licences et les sources épinglées passent.
-**Le nouveau paquet Mac est en préparation** ; la version précédente vérifiée reste `17a67aca`.
+**Le paquet Mac `53f33aa6` est compilé et vérifié après extraction**, avec les trois exécutables,
+les sources exactes et ce suivi. L’application installée ou ouverte n’a pas été remplacée.
 
 Le palier précédent a intégré les 77 commits officiels jusqu’à Suhina `9717cc71`, en conservant
 le multijoueur à quatre. rbxport reste sur `b739d369`. Le protocole de partage reste 13, la copie
@@ -172,7 +173,7 @@ Le partage utilise une copie portable v3 et conserve exactement les courbes pris
 
 ## Nouveau palier DJ : préparer ses playlists
 
-**Code, tests et captures validés ; paquet Mac en préparation.**
+**Code, tests, captures et paquet Mac validés localement.**
 
 Les 133 suites comptent **3 232 tests réussis, 0 échec, 63 contrôles non lancés dans le passage
 standard**. Le périmètre DJ comprend **10 tests du catalogue, 5 tests des commandes et 7 tests
@@ -214,15 +215,20 @@ le protocole réseau ne changent pas. Les points cue, grilles, platines et expor
 
 ## Où trouver la version actuelle
 
-- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-upstream-macos-arm64-17a67aca.zip`.
+- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-playlists-macos-arm64-53f33aa6.zip`.
 - **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
 - **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
 - **Preuves locales :** dossier `validation/2026-10-28` voisin du dépôt : journaux, captures et script de fabrication du paquet.
 
-Les tests et le paquet correspondent au code **`17a67aca2e0ba0af1710777bf7d6edd557b15e80`**,
+Les tests et le paquet correspondent au code **`53f33aa6d3fa43745ef94008712d41fdee6d1f5f`**,
 compilé après son enregistrement puis envoyé sur notre branche GitHub. C’est un paquet de
 développement Mac Apple Silicon, signé localement. L’application installée ou ouverte n’a pas
 été remplacée. Tous les participants doivent utiliser cette même nouvelle version.
+
+La fabrication a utilisé un cache Rust temporaire extérieur au dépôt, supprimé après les vérifications
+du paquet. Les preuves et les captures
+sont conservées dans `validation/2026-10-28`, avec le script `package-playlists.py` et le relevé
+`playlists-validation.json`. La version de secours précédente est conservée.
 
 ## GitHub et distribution
 
@@ -232,8 +238,8 @@ Le README et ses barres présentent notre application : **16 étapes réalisées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
 du logiciel final ; le nouveau palier correspond aux invitations de plusieurs musiciens.
 
-**Blocage externe à nouveau constaté le 28 octobre à 13 h 30 (heure de Paris)**, sur le code
-`17a67aca2e0ba0af1710777bf7d6edd557b15e80` :
+**Blocage externe à nouveau constaté le 28 octobre à 20 h 21 (heure de Paris)**, sur le code
+`53f33aa6d3fa43745ef94008712d41fdee6d1f5f` :
 GitHub refuse le lancement des contrôles avec `HTTP 422: Actions has been disabled for this repository.`
 La lecture du réglage indique pourtant `enabled: true` ; la cause de ce désaccord n’est pas établie.
 Le workflow de notre fork est également indiqué actif. Aucune exécution n’était visible pour
