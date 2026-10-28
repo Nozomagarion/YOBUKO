@@ -1,25 +1,14 @@
 # Où en est notre application ?
 
-**Mise à jour Suhina préparée, validation globale en cours — 28 octobre 2026.**
-Le relevé « Veille Suhina DAW » a été retrouvé. La branche officielle vérifiée est
-`9717cc717537010de76554062c64efab895f81cc`, soit 77 commits depuis notre référence `3b242ba6`.
-La fusion est préparée dans une copie isolée, sans conflit Git, en conservant le multijoueur et le module DJ.
-Les tests ciblés du réseau, de l’interface et des anciens projets passent ; les captures des
-nouveaux panneaux ont été vérifiées. Le partage utilise maintenant le protocole 13, une copie
-portable v3 et des projets natifs v4, avec vérification de la révision du moteur à la connexion.
-Les nouveautés incluent des égaliseurs, panneaux et courbes d’automatisation, avec un format
-natif v4 à adapter au partage. Les PR Saturator #1040 et contrôles XY #1028 restent non fusionnées
-et ne sont pas incluses. Aucun nouveau paquet n’est encore validé ; le bilan ci-dessous reste
-celui de la dernière version livrée. Les playlists DJ passent après cette maintenance.
-
-**Bilan du 28 octobre 2026 — un hôte et trois invités livrés et validés localement.**
-Quatre musiciens peuvent partager le même morceau sur le réseau local. Chacun reçoit son
-invitation, conserve son lecteur et peut envoyer des modifications et des prises terminées.
-Le départ d’un invité laisse la session des autres ouverte ; un compteur affiche les places.
-**3 162 tests passent, aucun échec.** Le nouveau code utilise le protocole 12.
-**Le paquet Mac `4be2d443` est compilé et vérifié après extraction**, avec les trois exécutables
-et les sources exactes. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles distants
-restent bloqués par GitHub ; Windows/Linux ne sont pas validés pour cette version.
+**Bilan du 28 octobre 2026 — mise à jour Suhina livrée et validée localement.**
+Le rapport **« Veille Suhina DAW »** a été retrouvé, puis vérifié contre GitHub. Nous avons
+intégré les **77 commits déjà fusionnés** jusqu’à Suhina `9717cc71`, en conservant le
+multijoueur à quatre et le module DJ. La partie rbxport reste sur sa référence déjà vérifiée.
+**3 216 tests du logiciel passent, aucun échec ; 272 tests des scripts passent aussi.**
+Le nouveau partage utilise le protocole 13, une copie portable v3 et des projets natifs v4.
+**Le paquet Mac `17a67aca` est compilé et vérifié après extraction**, avec les trois exécutables
+et les sources exactes. Le code est envoyé sur notre GitHub. Les contrôles distants restent
+bloqués ; Windows/Linux ne sont pas validés pour cette révision.
 
 ## Ce qu’on fabrique
 
@@ -45,6 +34,24 @@ complet reste en développement.
 | **Écoute personnelle** | Chacun garde son lecteur, sa position, son démarrage et son arrêt. | Essai sur les deux ordinateurs physiques. |
 | **Espace DJ** | Bibliothèque persistante, import, analyse tempo/tonalité issue de rbxport, ajout d’un rendu du studio. | Playlists, points cue, grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Bouton dans les paramètres pour comparer les versions GitHub ; suivi des sources et vérification des paquets de notre application. | Intégration régulière des nouveautés, publication et réception automatique d’une version commune. |
+
+## Nouveau : les changements officiels de Suhina
+
+- Égaliseur à huit bandes et améliorations de DJ EQ/import dans le studio.
+- Nouveaux panneaux d’instruments et d’effets, dont FM Synth et DJ EQ.
+- Courbes d’automatisation Bézier, avec le format natif de projet v4.
+- Correctifs de chargement des plugins, liaisons ARM du processus de plugins et dépendances d’interface actualisées.
+- Notre partage conserve ses limites et ses fonctions : trois invités, notes/clips/scènes, prises audio vérifiées, appareils FM Synth/Utility et lecteurs indépendants.
+- La connexion compare aussi la révision du moteur Suhina. Une version différente est refusée avant l’envoi du morceau et sans consommer l’invitation.
+
+**Les PR non fusionnées Saturator #1040 et contrôles XY #1028 ne sont pas intégrées.**
+Les nouveaux effets du studio ne deviennent pas automatiquement éditables dans l’onglet partagé.
+
+**Compatibilité des projets :** les anciens fichiers restent lisibles dans le studio. Les
+nouvelles sauvegardes utilisent v4, que les anciennes applications ne lisent pas. Garder les
+anciens fichiers, ou utiliser un autre nom de sauvegarde, pour les rouvrir avec l’ancien paquet.
+Le partage ne réécrit pas les fichiers d’origine. Tous les participants doivent utiliser la
+nouvelle version ; les anciennes invitations ne fonctionnent pas avec elle.
 
 ## Nouveau : jouer et composer à quatre sur le réseau local
 
@@ -157,35 +164,36 @@ comme chemins de fichiers à l’autre ordinateur. Les originaux restent intacts
 - FM Synth et Utility avec paramètres simples ; plugins externes, autres instruments et états opaques refusés. Pas encore de réorganisation, d’activation/désactivation ni de modification des courbes d’automatisation en commun.
 - Les pistes créées n’activent aucun micro, entrée MIDI ou monitoring local. Pas d’enregistrement direct dans l’onglet partagé ni de diffusion audio en direct entre ordinateurs.
 
-**Toutes les applications doivent utiliser le nouveau protocole 12**, donc le même nouveau paquet.
-Les versions précédentes en protocole 11 ou moins sont incompatibles avec ces sessions.
-Les projets sauvegardés gardent leur format natif version 3 ; ce changement concerne la connexion.
+**Toutes les applications doivent utiliser le nouveau protocole 13**, donc le même nouveau paquet.
+Les versions précédentes en protocole 12 ou moins sont incompatibles avec ces sessions.
+Les nouvelles sauvegardes utilisent le format natif v4 ; les anciens projets restent lisibles.
+Le partage utilise une copie portable v3 et conserve exactement les courbes prises en charge.
 
 ## Ce qui a été vérifié pour ce palier
 
 | Vérification | Résultat |
 |---|---|
-| Ensemble des tests sur ce Mac | **3 162 réussis, aucun échec**, dans 131 suites ; 59 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
-| Réseau et permissions | **83 tests réseau et 21 tests du cœur réussis** : invitations distinctes, remplacées ou déjà utilisées refusées, capacité limitée, séquences indépendantes et compteur sans fausse modification musicale. |
-| Quatre participants | **Réussi avec de vrais échanges TLS entre quatre instances locales** : les changements convergent ; le départ d’un invité conserve les autres connexions ; son retour reçoit l’état actuel. |
-| Conflits | **Réussi** : deux invités partant du même état ne s’écrasent pas ; le brouillon refusé peut être renvoyé avec la révision actualisée sans perdre sa séquence. |
-| Audio et prises | **Réussi** : prises envoyées par trois auteurs, envois concurrents refusés puis repris, sons vérifiés reçus par tous, réutilisation d’un son sans doubler le budget et mêmes rendus. Les sources et sauvegardes sont conservées. |
-| Lecteurs et copies | **Réussi** : quatre lecteurs à des positions différentes ; arrêt indépendant ; copies conservées après un départ, un retour et l’arrêt de l’hôte. |
-| Interface | **16 tests multijoueur réussis**, dont le bouton d’invitation à capacité pleine, le compteur, la place libérée et la conservation des anciens onglets. |
-| Rendu visuel | **Réussi séparément** : capture GPU avec trois invités admis vérifiée. |
-| Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; aucune nouvelle dépendance. |
-| Paquet Mac Apple Silicon `4be2d443` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
-| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat distant annoncé pour cette révision.** |
+| Ensemble des tests du logiciel sur ce Mac | **3 216 réussis, aucun échec**, dans 133 suites ; 62 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
+| Réseau et collaboration | **86 tests réseau et 21 tests du cœur réussis** : quatre instances locales, prises vérifiées, lecteurs indépendants, retour d’un invité, refus des anciens formats et des révisions de moteur différentes. |
+| Anciens projets et courbes | **Réussi** : lecture d’un projet v3 puis partage v4, courbes Bézier conservées, formes invalides ou non canoniques refusées, réglage manuel d’un appareil sans supprimer ses points. |
+| Studio et appareils officiels | **Réussi** : tests natifs EQ, DJ EQ, registre des appareils, automatisation et format v4 dans la suite complète. |
+| DJ | **3 tests du module réussis**, avec les tests de son interface et du rendu vers la bibliothèque conservés. Le code d’analyse rbxport n’a pas changé. |
+| Interface multijoueur | **16 tests réussis**, dont les boutons d’invitation, les quatre participants, les copies conservées et les commandes musicales. |
+| Rendu visuel | **3 tests GPU séparés réussis** : panneaux FM Synth/EQ/DJ EQ, session avec trois invités et bibliothèque DJ ; cinq captures vérifiées. |
+| Qualité, sources et dépendances | **Réussi** : contrôle Rust strict, format, en-têtes, documentation, aide des réglages, sources épinglées et audit des dépendances ; aucune exception de sécurité/licence ajoutée. |
+| Scripts de maintenance et distribution | **272 tests réussis avec Bash 5.2.37**. Le Bash 3.2 livré par macOS ne prend pas en charge la syntaxe de certains scripts GitHub hérités ; l’outil récent a été construit dans un dossier temporaire, sans changer le shell du Mac ni affaiblir leurs contrôles. |
+| Paquet Mac Apple Silicon `17a67aca` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
+| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement** pour le nouveau code. Aucun résultat distant annoncé pour cette révision. |
 | Ordinateurs physiques | **Pas encore testé**, comme convenu. |
 
 ## Où trouver la version actuelle
 
-- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-guests-macos-arm64-4be2d443.zip`.
+- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-upstream-macos-arm64-17a67aca.zip`.
 - **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
 - **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
 - **Preuves locales :** dossier `validation/2026-10-28` voisin du dépôt : journaux, captures et script de fabrication du paquet.
 
-Les tests et le paquet correspondent au code **`4be2d4439930db5f96aaea56c80aebe964b7ab1d`**,
+Les tests et le paquet correspondent au code **`17a67aca2e0ba0af1710777bf7d6edd557b15e80`**,
 compilé après son enregistrement puis envoyé sur notre branche GitHub. C’est un paquet de
 développement Mac Apple Silicon, signé localement. L’application installée ou ouverte n’a pas
 été remplacée. Tous les participants doivent utiliser cette même nouvelle version.
@@ -198,8 +206,8 @@ Le README et ses barres présentent notre application : **16 étapes réalisées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
 du logiciel final ; le nouveau palier correspond aux invitations de plusieurs musiciens.
 
-**Blocage externe à nouveau constaté le 28 octobre à 10 h 36 (heure de Paris)**, sur le code
-`4be2d4439930db5f96aaea56c80aebe964b7ab1d` :
+**Blocage externe à nouveau constaté le 28 octobre à 13 h 30 (heure de Paris)**, sur le code
+`17a67aca2e0ba0af1710777bf7d6edd557b15e80` :
 GitHub refuse le lancement des contrôles avec `HTTP 422: Actions has been disabled for this repository.`
 La lecture du réglage indique pourtant `enabled: true` ; la cause de ce désaccord n’est pas établie.
 Le workflow de notre fork est également indiqué actif. Aucune exécution n’était visible pour
