@@ -2007,7 +2007,7 @@
       "keys": [
         "liquid_panel_strength"
       ],
-      "sourceFingerprint": "444e66795a3b941bf4c5dd763bc26408b2f449359214f37aebb5de58ab151a5e",
+      "sourceFingerprint": "af50718c6cd8d34ee6aaabf13bbf3b38afcc6acf06cd5f60bc14830b83de3196",
       "helpStatus": "reviewed",
       "description": "Controls the transparency and edge refraction of the Settings backdrop through the theme tint. A detached Settings window keeps a solid background. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio. Strength controls remain editable without the GPU renderer; values are saved for later. The material itself requires GPU rendering and Animations; switch renderer and restart to see it. These global sliders are disabled while the current theme supplies liquid overrides. Enable Use global liquid settings in the theme editor to edit and apply them again.",
       "options": [],
@@ -2023,7 +2023,7 @@
       "keys": [
         "liquid_track_strength"
       ],
-      "sourceFingerprint": "80f78fe7b7d36783ce1a0d270f7135b68fbec38c5eccec6c7b893a4582a3b33c",
+      "sourceFingerprint": "2cc2d7d027adedba5a30335f666cbb9a30e516cffe2721e099297e37fd52223b",
       "helpStatus": "reviewed",
       "description": "Controls reflections and edge refraction on MIDI and audio track headers. Track labels and controls are painted sharply afterward. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio. Strength controls remain editable without the GPU renderer; values are saved for later. The material itself requires GPU rendering and Animations; switch renderer and restart to see it. These global sliders are disabled while the current theme supplies liquid overrides. Enable Use global liquid settings in the theme editor to edit and apply them again.",
       "options": [],
@@ -2039,7 +2039,7 @@
       "keys": [
         "liquid_clip_strength"
       ],
-      "sourceFingerprint": "0863792ca0f0d2d18c7e747301e290dbc3dcbf800f91ad0cd3bcb755d020da1a",
+      "sourceFingerprint": "007a57c8e2f53d3914b71a480d69bf84766e86cc08f93efd1ad51a0635aad455",
       "helpStatus": "reviewed",
       "description": "Controls reflections and edge refraction on clip bodies. Notes, waveforms and labels are painted sharply afterward. This experimental 0–100% slider defaults to 0%, which disables the material. It requires the GPU renderer and Animations on; a high-contrast theme suppresses it. Switching from OpenGL to GPU requires an app restart. A theme with its own liquid overrides uses those values instead; enable Use global liquid settings in its editor to use these sliders. Changes apply live and do not affect audio. Strength controls remain editable without the GPU renderer; values are saved for later. The material itself requires GPU rendering and Animations; switch renderer and restart to see it. These global sliders are disabled while the current theme supplies liquid overrides. Enable Use global liquid settings in the theme editor to edit and apply them again. Clip reflections and rims use a gentler optical range than panels to keep dense arrangements readable, including at 100 percent.",
       "options": [],
