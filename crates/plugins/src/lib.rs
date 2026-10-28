@@ -44,7 +44,8 @@ use interprocess::local_socket::{
     ToNsName,
 };
 pub use suhina_ipc::{
-    AudioSource, Event, EventKind, MAX_EVENTS, Outcome, keys_to_engine, set_keys_to_engine, take_keyboard_back,
+    AudioSource, Event, EventKind, MAX_EVENTS, Outcome, keys_to_engine, pointer_on_screen, set_keys_to_engine,
+    take_keyboard_back,
 };
 use suhina_ipc::{IpcError, Link};
 

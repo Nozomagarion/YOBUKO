@@ -138,13 +138,16 @@ pub struct DropProbe {
     pub target: Option<DropTarget>,
     /// The target's area, outlined while dragging.
     pub area: Option<egui::Rect>,
+    /// The files go onto one track each (Ctrl held, or the setting): the new tracks after the
+    /// first are shown too, below the tracks.
+    pub separate: bool,
 }
 
 impl DropProbe {
     /// A device carried from a chain or a strip's list onto another track (#688): it lands on a
     /// track as a dropped device does.
     pub fn for_device(pointer: egui::Pos2) -> Self {
-        Self { pointer, files: false, devices: true, clip: false, target: None, area: None }
+        Self { pointer, files: false, devices: true, clip: false, target: None, area: None, separate: false }
     }
 
     pub fn new(pointer: egui::Pos2, items: &[BrowserItem]) -> Self {
@@ -155,12 +158,13 @@ impl DropProbe {
             clip: false,
             target: None,
             area: None,
+            separate: false,
         }
     }
 
     /// A probe for a clip carried between the views.
     pub fn for_clip(pointer: egui::Pos2) -> Self {
-        Self { pointer, files: true, devices: false, clip: true, target: None, area: None }
+        Self { pointer, files: true, devices: false, clip: true, target: None, area: None, separate: false }
     }
 
     /// Takes `target` when the pointer is in `area` and nothing took it yet.
@@ -183,6 +187,18 @@ pub struct DropPlan {
     pub samples: Vec<PathBuf>,
     /// What the label beside the pointer says.
     pub label: String,
+}
+
+/// What a drop of `files` files on a track says: onto that track, or with `separate` (one track
+/// each) the first there and the others on as many new tracks after it.
+fn spread(count: &str, files: usize, separate: bool, track: &str) -> String {
+    match files {
+        2.. if separate => {
+            let more = files - 1;
+            format!("Add {count}, one track each: {track} and {more} new track{}", if more == 1 { "" } else { "s" })
+        }
+        _ => format!("Add {count} to {track}"),
+    }
 }
 
 /// The commands a drop of `items` on `target` runs. `separate` is Ctrl held, already flipped
@@ -228,12 +244,12 @@ pub fn plan(
                 params["track"] = json!(track.0);
                 params["start"] = json!(beat);
                 params["stack"] = json!(stack);
-                label.push(format!("Add {count} to {}", track_name(track)));
+                label.push(spread(&count, files.len(), separate, &track_name(track)));
             }
             DropTarget::Slot { track, scene } => {
                 params["track"] = json!(track.0);
                 params["scene"] = json!(scene + 1);
-                label.push(format!("Add {count} to {}", track_name(track)));
+                label.push(spread(&count, files.len(), separate, &track_name(track)));
             }
             DropTarget::Track(_) | DropTarget::Sampler { .. } => return None,
             DropTarget::NewTracks { beat, scene } => {
@@ -315,6 +331,14 @@ pub fn plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_drop_of_files_one_track_each_says_how_many_new_tracks() {
+        assert_eq!(spread("3 clips", 3, true, "Bass"), "Add 3 clips, one track each: Bass and 2 new tracks");
+        assert_eq!(spread("2 clips", 2, true, "Bass"), "Add 2 clips, one track each: Bass and 1 new track");
+        assert_eq!(spread("3 clips", 3, false, "Bass"), "Add 3 clips to Bass");
+        assert_eq!(spread("a clip", 1, true, "Bass"), "Add a clip to Bass");
+    }
 
     #[test]
     fn a_device_let_go_along_its_chain_lands_before_the_panel_whose_middle_is_right_of_it() {

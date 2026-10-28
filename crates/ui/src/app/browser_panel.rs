@@ -175,6 +175,20 @@ impl App {
                 let main = ctx.input(|i| i.viewport().inner_rect).map_or(Pos2::ZERO, |r| r.min);
                 remote.screen.map(|p| p - main.to_vec2())
             }
+            // Files dragged in from the system: Windows sends the window no pointer moves
+            // while they hover, so the pointer is read from the screen, or the drop went where
+            // the pointer last was before the drag came in.
+            None if ctx.input(|i| !i.raw.hovered_files.is_empty()) => {
+                let screen = suhina_plugins::pointer_on_screen();
+                let main = ctx.input(|i| i.viewport().inner_rect);
+                match (screen, main) {
+                    (Some((x, y)), Some(main)) => {
+                        let scale = ctx.pixels_per_point();
+                        Some(Pos2::new(x as f32 / scale, y as f32 / scale) - main.min.to_vec2())
+                    }
+                    _ => ctx.pointer_latest_pos(),
+                }
+            }
             None => ctx.pointer_latest_pos(),
         }
     }

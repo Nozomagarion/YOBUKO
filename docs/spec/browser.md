@@ -251,13 +251,17 @@ the MIDI track's name, when it has one: "groove – Hats").
 in the Arrangement each starts where the one before ends; in the Launcher they go down the
 track's slots from the slot they were dropped on. With **Ctrl** held when releasing, they go
 onto **one track each**, side by side: in the Arrangement all at the dropped beat, in the
-Session all in the dropped scene, the first on the track it was dropped on and the others on
+Launcher all in the dropped scene, the first on the track it was dropped on and the others on
 new tracks after it. Settings › General › Dropping files › Several files flips this (one track each
-without Ctrl).
+without Ctrl). While they hover, the label says which (`Add 3 clips, one track each: Bass and 2 new
+tracks`) and, in the Arrangement, the empty space below the tracks is outlined from the dropped
+beat, where the new tracks come. Files dragged in from the system (Explorer, Finder) show the same
+label and outline and land where the pointer is, as files from the browser do: on Windows, which
+sends the window no pointer moves during such a drag, the pointer is read from the screen.
 
 | Dropped on | Result |
 |---|---|
-| An Arrangement lane | Clips from the beat under the pointer, on the grid the control bar's value sets at that zoom ([arrangement editing](arrangement-editing.md) › The grid; Alt or `none`: no snap). The clips replace what they cover, unless the stacking settings allow it ([arrangement editing](arrangement-editing.md)). |
+| An Arrangement lane | Clips from the beat under the pointer, on the Arrangement's grid at that zoom ([arrangement editing](arrangement-editing.md) › The grid; Alt or snap off: no snap). The clips replace what they cover, unless the stacking settings allow it ([arrangement editing](arrangement-editing.md)). |
 | A Launcher slot (empty or not) | Clips into that slot and the ones below it; a clip already there is replaced. Scenes are added at the bottom when there are more clips than slots. |
 | The empty area | New tracks, see below. |
 

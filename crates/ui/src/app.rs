@@ -2928,8 +2928,13 @@ impl App {
             // A drag from the browser, or files from the system: the views say what is under the
             // pointer.
             let dragged = self.browser.drag.as_ref().or(system.as_ref().map(|(items, _)| items));
-            let probe =
-                dragged.and_then(|items| self.drag_pointer(ui.ctx()).map(|pointer| DropProbe::new(pointer, items)));
+            let probe = dragged.and_then(|items| {
+                self.drag_pointer(ui.ctx()).map(|pointer| DropProbe {
+                    separate: items.iter().filter(|i| i.kind.is_file_clip()).count() > 1
+                        && ui.input(|i| i.modifiers.command) != self.settings.drop_separate,
+                    ..DropProbe::new(pointer, items)
+                })
+            });
             // A carried clip probes the same way, for a slot or a lane only; a carried device for a
             // track, as a dropped one does.
             if let Some(start) = ui.ctx().data_mut(|d| {

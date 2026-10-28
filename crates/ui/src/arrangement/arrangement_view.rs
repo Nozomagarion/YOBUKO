@@ -1658,6 +1658,19 @@ fn show_lanes(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState
                 egui::Stroke::new(1.5, theme::accent()),
                 egui::StrokeKind::Inside,
             );
+            // One track each: the new tracks the other files go onto, below the tracks, from
+            // the same beat.
+            if probe.separate && matches!(probe.target, Some(DropTarget::Lane { .. })) && empty.height() > 4.0 {
+                let x = probe.pointer.x.clamp(time.left(), time.right());
+                let below = Rect::from_x_y_ranges(egui::Rangef::new(x, time.right()), empty.y_range());
+                painter.rect_filled(below, 0.0, theme::accent().gamma_multiply(0.12));
+                painter.rect_stroke(
+                    below.shrink(0.5),
+                    0.0,
+                    egui::Stroke::new(1.0, theme::accent()),
+                    egui::StrokeKind::Inside,
+                );
+            }
         }
     }
 

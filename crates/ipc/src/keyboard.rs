@@ -44,3 +44,18 @@ pub fn keys_to_engine() -> bool {
 pub(crate) fn heard_keys_to_engine(on: bool) {
     KEYS_TO_ENGINE.store(on, std::sync::atomic::Ordering::Relaxed);
 }
+
+/// Where the mouse pointer is on the screen, in physical pixels: for a drag of files from the
+/// system, during which Windows sends the window no pointer moves. `None` elsewhere than on
+/// Windows, or when it cannot be read.
+pub fn pointer_on_screen() -> Option<(i32, i32)> {
+    #[cfg(windows)]
+    {
+        let mut point = windows_sys::Win32::Foundation::POINT { x: 0, y: 0 };
+        // SAFETY: the call fills the point it is given, a local of the right type.
+        let read = unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut point) };
+        (read != 0).then_some((point.x, point.y))
+    }
+    #[cfg(not(windows))]
+    None
+}
