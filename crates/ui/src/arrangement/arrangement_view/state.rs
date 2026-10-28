@@ -190,6 +190,9 @@ pub struct ArrangementViewState {
     pub toolbar: bool,
     pub tool: ArrangementTool,
     pub tool_keys: Vec<Option<String>>,
+    /// The keys of the grid's snap, narrower, wider and triplet (`GRID_KEYS`), as its menus
+    /// show them; the window sets them.
+    pub grid_keys: [String; 4],
     pub has_focus: bool,
     /// A drag of the Draw tool on a lane: the track and the beat it started at.
     pub(super) draw_drag: Option<(TrackId, f64)>,
@@ -373,6 +376,7 @@ impl Default for ArrangementViewState {
             toolbar: false,
             tool: ArrangementTool::Select,
             tool_keys: Vec::new(),
+            grid_keys: Default::default(),
             has_focus: false,
             draw_drag: None,
             stretch_alt: true,

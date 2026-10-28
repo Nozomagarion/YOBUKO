@@ -190,7 +190,28 @@ pub struct ViewSettings {
     /// The Arrangement's toolbar of tools shows, and the tool keys choose them while it has the
     /// focus (off by default, #991).
     pub arrangement_toolbar: bool,
+    /// The Arrangement's grid when Suhina starts, and again when this is changed: a fixed value
+    /// such as `1/4` or an adaptive width such as `adaptive narrow` (1/4 by default).
+    pub default_grid: &'static str,
 }
+
+/// The values Settings › Arrangement › Default grid offers, as the settings file keeps them.
+pub const DEFAULT_GRIDS: [&str; 14] = [
+    "adaptive widest",
+    "adaptive wide",
+    "adaptive medium",
+    "adaptive narrow",
+    "adaptive narrowest",
+    "8 bars",
+    "4 bars",
+    "2 bars",
+    "1 bar",
+    "1/2",
+    "1/4",
+    "1/8",
+    "1/16",
+    "1/32",
+];
 
 impl Default for ViewSettings {
     fn default() -> Self {
@@ -231,6 +252,7 @@ impl Default for ViewSettings {
             alt_wheel_one: false,
             folder_drop: FolderDrop::Ask,
             arrangement_toolbar: false,
+            default_grid: "1/4",
         }
     }
 }
@@ -285,6 +307,7 @@ impl ViewSettings {
                 self.app_name_centered, self.bar_project_name, self.bar_project_timing, self.bar_project_centered
             )
             + &format!("background_tint = {}\nbackground_blur = {}\n", self.background_tint, self.background_blur)
+            + &format!("arrangement_grid = {}\n", self.default_grid)
             + &self.track_sizes.to_text()
     }
 
@@ -380,6 +403,9 @@ impl ViewSettings {
                 self.folder_drop = FolderDrop::parse(drop).unwrap_or_default();
             }
             ("arrangement_toolbar", "on" | "off") => self.arrangement_toolbar = value == "on",
+            ("arrangement_grid", grid) if DEFAULT_GRIDS.contains(&grid) => {
+                self.default_grid = DEFAULT_GRIDS.iter().find(|g| **g == grid).copied().unwrap_or("1/4");
+            }
             ("clip_drag", "halves" | "name_bar") => self.clip_halves = value == "halves",
             ("clip_grid", "on" | "off") => self.grid_in_clips = value == "on",
             ("waveform_zoom", zoom) => match zoom.parse::<f32>() {

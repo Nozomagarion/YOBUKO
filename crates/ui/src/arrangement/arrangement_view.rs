@@ -327,6 +327,7 @@ pub fn show(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState, 
         state.grid = picked;
     }
     state.automation.grid = state.grid;
+    state.automation.grid_keys = state.grid_keys.clone();
     // A released edge whose trim never came (refused, undone at once) is let go of in a while.
     if let Some(released) = state.edge_released.as_mut() {
         released.3 = released.3.saturating_sub(1);

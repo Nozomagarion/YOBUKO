@@ -575,6 +575,28 @@ pub(crate) static ROWS: &[Entry] = &[
     ),
     row(
         Page::Arrangement,
+        "Tools",
+        "Default grid",
+        "The Arrangement's grid when Suhina starts: a fixed value or an adaptive grid that follows the zoom; its menu and Ctrl+1 to Ctrl+4 change it from there",
+        &["arrangement_grid"],
+        |cx, r| {
+            let names: Vec<String> = super::view_settings::DEFAULT_GRIDS
+                .iter()
+                .map(|g| {
+                    let mut name = g.to_string();
+                    if let Some(first) = name.get_mut(..1) {
+                        first.make_ascii_uppercase();
+                    }
+                    name
+                })
+                .collect();
+            let options: Vec<(&str, &'static str)> =
+                names.iter().zip(super::view_settings::DEFAULT_GRIDS).map(|(n, g)| (n.as_str(), g)).collect();
+            cx.choose(r, &options, |s| &mut s.view.default_grid)
+        },
+    ),
+    row(
+        Page::Arrangement,
         "Automation",
         "A click anywhere adds a point",
         "On an automation lane; off, a click adds one only on or near the line, and a double-click anywhere",

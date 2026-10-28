@@ -568,6 +568,8 @@ pub struct App {
     /// A device carried from a chain or a strip's list onto another track (#688): its track and
     /// index.
     device_carry: Option<(TrackId, usize)>,
+    /// The default Arrangement grid last taken from the settings.
+    applied_grid: Option<&'static str>,
     /// How much of the browser shows, 0 to 1, while it slides in or out (#708).
     browser_part: f32,
     /// The hosts' reader threads wake this window ([`suhina_plugins::set_waker`]).
@@ -715,6 +717,7 @@ impl App {
             audio_traced: (0, 0, 0),
             carry: None,
             device_carry: None,
+            applied_grid: None,
             browser_part: 1.0,
             waker_set: false,
             switch_hover: None,
@@ -2565,6 +2568,16 @@ impl App {
         }
         self.arrangement.has_focus = !self.piano_roll.focused;
         self.arrangement.take_solo = self.session().and_then(Session::take_solo);
+        // The default grid from the settings: at start, and again when the setting changes.
+        if self.applied_grid != Some(self.settings.view.default_grid) {
+            self.applied_grid = Some(self.settings.view.default_grid);
+            self.arrangement.grid =
+                crate::detail::piano_roll_grid::PianoGrid::from_setting(self.settings.view.default_grid);
+        }
+        if self.arrangement.grid_keys[0].is_empty() {
+            self.arrangement.grid_keys =
+                crate::detail::piano_roll::grid_key_labels(&self.keymap, &arrangement_view::GRID_KEYS);
+        }
         if self.arrangement.toolbar && self.arrangement.tool_keys.is_empty() {
             self.arrangement.tool_keys =
                 arrangement_view::TOOL_ACTIONS.iter().map(|id| self.keymap.label(id)).collect();

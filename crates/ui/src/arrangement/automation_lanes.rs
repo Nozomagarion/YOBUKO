@@ -675,6 +675,8 @@ pub struct LanesState {
     pub grid: crate::detail::piano_roll_grid::PianoGrid,
     /// A grid picked in the lanes' menu this frame, for the Arrangement to take.
     pub grid_picked: Option<crate::detail::piano_roll_grid::PianoGrid>,
+    /// The grid keys' labels, as the menu shows them.
+    pub grid_keys: [String; 4],
     /// A point whose value is being typed (its menu's Edit value): track, lane, point and text.
     editing: Option<(TrackId, LaneKey, usize, String)>,
     /// A point being made by a drag from the line.
@@ -2096,10 +2098,9 @@ fn picked_menu(ui: &mut Ui, state: &mut LanesState, track: TrackId, key: &LaneKe
 /// its lanes' menus offer it.
 fn grid_menu(ui: &mut Ui, state: &mut LanesState, _actions: &mut Vec<Action>) {
     ui.separator();
-    let keys = crate::arrangement::arrangement_view::GRID_KEYS;
-    if let Some(picked) = crate::detail::piano_roll::grid_entries(ui, state.grid, &keys, None, &|_| true) {
+    let keys = state.grid_keys.clone();
+    if let Some(picked) = crate::detail::piano_roll::grid_entries(ui, state.grid, &keys, &|_| true) {
         state.grid_picked = Some(picked);
-        ui.close();
     }
 }
 

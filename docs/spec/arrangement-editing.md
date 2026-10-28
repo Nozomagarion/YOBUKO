@@ -99,14 +99,15 @@ box, which only sets when launched clips start ([clip launching](clip-launching.
 quantisation). It works as the piano roll's grid does ([clip editor](ui-clip-editor.md) › Grid
 and snapping) and is chosen from the same menu, at the right end of the Arrangement's toolbar,
 under **Grid** in the right-click menu of an empty spot of a lane and at the end of an automation
-lane's menus: **Snap to grid**, an **adaptive** grid (Widest, Wide, Medium, Narrow, Narrowest:
+lane's menus, all in the menu itself (no submenu): **Snap to grid**, an **adaptive** grid (Widest, Wide, Medium, Narrow, Narrowest:
 its lines follow the zoom) or a **fixed** value (`8 bars` … `1 bar`, `1/2` … `1/32`), **Narrow
 grid**, **Widen grid** and **Triplet grid**. While the Arrangement has the keyboard (it was
 clicked last), Ctrl+1 makes the grid finer, Ctrl+2 coarser, Ctrl+3 turns triplets on or off and
 Ctrl+4 snapping; with the piano roll clicked last the same keys change its grid. Note values are
 quarter-note beats (`1/16` is a quarter of a beat, a triplet two thirds of that note), and bars are
 the time signature's bar. The grid is the window's, not saved in the project file and not an undo
-step; it starts on `1 bar`. With snapping off its lines are still drawn and nothing snaps, as if
+step; it starts on Settings › Arrangement › **Default grid** (`arrangement_grid`, `1/4` unless
+changed), and changing that setting sets it again. With snapping off its lines are still drawn and nothing snaps, as if
 Alt were held.
 
 **Lines follow the zoom.** A line is drawn at every step of the value, starting again at every bar

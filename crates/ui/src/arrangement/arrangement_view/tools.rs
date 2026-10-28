@@ -75,14 +75,13 @@ pub(super) fn toolbar(ui: &mut Ui, rect: Rect, state: &mut ArrangementViewState)
     );
     if menu.left() > x + GAP {
         let grid = state.grid;
+        let keys = state.grid_keys.clone();
         let shown = grid.label();
         let mono = theme::mono_font(theme::TEXT_SMALL);
         ui.scope_builder(egui::UiBuilder::new().max_rect(menu), |ui| {
             let text = egui::RichText::new(format!("{shown}   ")).font(mono).color(theme::text_value());
             let response = ui.menu_button(text, |ui| {
-                if let Some(picked) =
-                    crate::detail::piano_roll::grid_entries(ui, grid, &super::GRID_KEYS, None, &|_| true)
-                {
+                if let Some(picked) = crate::detail::piano_roll::grid_entries(ui, grid, &keys, &|_| true) {
                     state.grid = picked;
                     ui.close();
                 }
