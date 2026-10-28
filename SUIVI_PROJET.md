@@ -1,12 +1,13 @@
 # Où en est notre application ?
 
-**Bilan du 28 octobre 2026 — un hôte et trois invités codés et validés localement.**
+**Bilan du 28 octobre 2026 — un hôte et trois invités livrés et validés localement.**
 Quatre musiciens peuvent partager le même morceau sur le réseau local. Chacun reçoit son
 invitation, conserve son lecteur et peut envoyer des modifications et des prises terminées.
 Le départ d’un invité laisse la session des autres ouverte ; un compteur affiche les places.
 **3 162 tests passent, aucun échec.** Le nouveau code utilise le protocole 12.
-**Nouveau paquet Mac : en cours de fabrication.** Le précédent paquet `fdf6eab9`, en protocole 11,
-reste celui du lanceur et des scènes avec un seul invité ; il ne contient pas encore ce palier.
+**Le paquet Mac `4be2d443` est compilé et vérifié après extraction**, avec les trois exécutables
+et les sources exactes. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles distants
+restent bloqués par GitHub ; Windows/Linux ne sont pas validés pour cette version.
 
 ## Ce qu’on fabrique
 
@@ -161,21 +162,21 @@ Les projets sauvegardés gardent leur format natif version 3 ; ce changement con
 | Interface | **16 tests multijoueur réussis**, dont le bouton d’invitation à capacité pleine, le compteur, la place libérée et la conservation des anciens onglets. |
 | Rendu visuel | **Réussi séparément** : capture GPU avec trois invités admis vérifiée. |
 | Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; aucune nouvelle dépendance. |
-| Nouveau paquet Mac Apple Silicon | **En cours de fabrication** ; le paquet précédent reste disponible ci-dessous. |
-| Contrôles GitHub Mac/Windows/Linux | **À retenter sur le nouveau commit** ; les contrôles précédents étaient bloqués par GitHub. |
+| Paquet Mac Apple Silicon `4be2d443` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
+| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat distant annoncé pour cette révision.** |
 | Ordinateurs physiques | **Pas encore testé**, comme convenu. |
 
 ## Où trouver la version actuelle
 
-- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-launcher-macos-arm64-fdf6eab9.zip`.
+- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-guests-macos-arm64-4be2d443.zip`.
 - **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
 - **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
 - **Preuves locales :** dossier `validation/2026-10-28` voisin du dépôt : journaux, captures et script de fabrication du paquet.
 
-Le dernier paquet livré correspond au code **`fdf6eab9db63a37115ef840db87b27d57b5c5e7c`**,
+Les tests et le paquet correspondent au code **`4be2d4439930db5f96aaea56c80aebe964b7ab1d`**,
 compilé après son enregistrement puis envoyé sur notre branche GitHub. C’est un paquet de
 développement Mac Apple Silicon, signé localement. L’application installée ou ouverte n’a pas
-été remplacée. Les deux participants doivent utiliser ce même nouveau paquet.
+été remplacée. Tous les participants doivent utiliser cette même nouvelle version.
 
 ## GitHub et distribution
 
@@ -185,8 +186,8 @@ Le README et ses barres présentent notre application : **16 étapes réalisées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
 du logiciel final ; le nouveau palier correspond aux invitations de plusieurs musiciens.
 
-**Blocage externe à nouveau constaté le 28 octobre à 9 h 48 (heure de Paris)**, sur le code
-`fdf6eab9db63a37115ef840db87b27d57b5c5e7c` :
+**Blocage externe à nouveau constaté le 28 octobre à 10 h 36 (heure de Paris)**, sur le code
+`4be2d4439930db5f96aaea56c80aebe964b7ab1d` :
 GitHub refuse le lancement des contrôles avec `HTTP 422: Actions has been disabled for this repository.`
 La lecture du réglage indique pourtant `enabled: true` ; la cause de ce désaccord n’est pas établie.
 Le workflow de notre fork est également indiqué actif. Aucune exécution n’était visible pour
