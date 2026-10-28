@@ -775,7 +775,7 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Appearance,
         "Advanced",
         "Graphics renderer",
-        "Which part of the computer draws the window, used from the next start",
+        "Whether the window is drawn with GPU or OpenGL, used from the next start",
         &["renderer"],
         |cx, r| {
             if cx.about.graphics_now.is_some_and(|now| now != cx.settings.graphics) {

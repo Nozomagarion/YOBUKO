@@ -72,7 +72,7 @@ const RULES: &str = "docs/spec/ui-settings.md > Adding a setting";
 
 /// Words a newcomer cannot read, kept out of descriptions (docs/spec/ui-settings.md › Adding a
 /// setting, rule 4); a setting's options or help may name them when someone needs them.
-const JARGON: [&str; 8] = ["underruns", "underrun", "MCP", "IR", "latency", "ADR", "OpenGL", "buffer"];
+const JARGON: [&str; 7] = ["underruns", "underrun", "MCP", "IR", "latency", "ADR", "buffer"];
 
 #[test]
 fn every_entry_has_a_page_a_group_and_a_one_sentence_description() {

@@ -1982,7 +1982,7 @@
       "keys": [
         "renderer"
       ],
-      "sourceFingerprint": "8816de1f87fa0cd060c3ada787a979db91f3ba8aee78f15734cbfea547736752",
+      "sourceFingerprint": "fd60f59e91bbc9fcfdbdb97a3817152fa960b265bfb79383866d2f6135786e37",
       "helpStatus": "reviewed",
       "description": "The renderer draws the application window and controls. GPU uses Suhina’s wgpu graphics path; OpenGL uses its OpenGL path. This preference takes effect on the next application start rather than changing the running window. It does not change the audio engine. A command-line renderer choice can override the saved preference for a launch.",
       "options": [
