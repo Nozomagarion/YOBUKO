@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 10;
+pub const PROTOCOL: u16 = 11;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -117,6 +117,20 @@ pub enum WireEdit {
     NoteDelete { clip: u32, note: usize },
     #[serde(rename = "clip.insertAudio")]
     AudioInsert { track: u32, start: f64, file: String, rate: u32, channels: u16, frames: usize },
+    #[serde(rename = "scene.insert")]
+    SceneInsert { scene: usize, name: String },
+    #[serde(rename = "scene.rename")]
+    SceneRename { scene: usize, name: String },
+    #[serde(rename = "scene.duplicate")]
+    SceneDuplicate { scene: usize },
+    #[serde(rename = "scene.delete")]
+    SceneDelete { scene: usize },
+    #[serde(rename = "clip.createSharedSlot")]
+    SlotCreate { track: u32, scene: usize, length: f64 },
+    #[serde(rename = "clip.copyToSharedSlot")]
+    SlotCopy { source: u32, track: u32, scene: usize },
+    #[serde(rename = "clip.moveSlot")]
+    SlotMove { track: u32, scene: usize, to_track: u32, to_scene: usize },
     #[serde(rename = "clip.create")]
     ClipCreate { track: u32, start: f64, length: f64 },
     #[serde(rename = "clip.move")]
@@ -164,6 +178,19 @@ impl WireEdit {
                 "clip.insertAudio",
                 json!({"track":track,"start":start,"file":file,"rate":rate,"channels":channels,"frames":frames}),
             ),
+            Self::SceneInsert { scene, name } => ("scene.insert", json!({"scene":scene,"name":name})),
+            Self::SceneRename { scene, name } => ("scene.rename", json!({"scene":scene,"name":name})),
+            Self::SceneDuplicate { scene } => ("scene.duplicate", json!({"scene":scene})),
+            Self::SceneDelete { scene } => ("scene.delete", json!({"scene":scene})),
+            Self::SlotCreate { track, scene, length } => {
+                ("clip.createSharedSlot", json!({"track":track,"scene":scene,"length":length}))
+            }
+            Self::SlotCopy { source, track, scene } => {
+                ("clip.copyToSharedSlot", json!({"source":source,"track":track,"scene":scene}))
+            }
+            Self::SlotMove { track, scene, to_track, to_scene } => {
+                ("clip.moveSlot", json!({"track":track,"scene":scene,"toTrack":to_track,"toScene":to_scene}))
+            }
             Self::ClipCreate { track, start, length } => {
                 ("clip.create", json!({"track":track,"start":start,"length":length,"stack":true}))
             }

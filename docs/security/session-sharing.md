@@ -75,7 +75,7 @@ audio stretch or consolidation is exposed. The editor lists bounded pages of arr
 
 The desktop creates a dedicated starter or verified MIDI copy, preserving the original project. A Projects mutation gate prevents
 normal UI and attached-agent commands from changing its shared model/history outside confirmed
-operations. Its host-owned API admits only twelve exact control/note/clip command IDs; it is not a registered
+operations. Its host-owned API admits only twenty-four exact musical command IDs; it is not a registered
 agent command. Other project tabs stay local. Local audition and explicit save/export remain
 available. Disconnect retains and unlocks the last local project; a failed authoritative apply
 leaves the session rather than silently continuing with divergent state.
@@ -189,3 +189,17 @@ asset or plugin selector to the native handlers. Preflight/replay/revisions rema
 All confirmed chain changes clear desktop device/parameter selection, including hidden pages
 and same-index replacement, so Refresh cannot redeem a draft against another device.
 See the [chain contract](../spec/lan-device-chains.md).
+
+
+## Shared launcher boundary
+
+Protocol 11 admits scene.insert/rename/duplicate/delete, clip.createSharedSlot,
+clip.copyToSharedSlot and clip.moveSlot. Exact numeric fields, one-based indices and bounded
+names are checked before native execution. No clipboard, filesystem path, implicit row growth
+or arbitrary batch is admitted. Copy refuses occupied or incompatible targets; moving uses
+explicit native swap semantics. Detached portable validation checks complete scene/content/
+clip/note/document quotas before canonical mutation or sequence consumption. Audio copies
+reuse previously verified assets; no new asset path enters this operation. UI drafts freeze the
+revision, and every scene insertion/duplication/deletion clears selections on hidden pages too.
+Private launches remain local transport, rejected as wire edits. See
+[the launcher contract](../spec/lan-launcher-editing.md).

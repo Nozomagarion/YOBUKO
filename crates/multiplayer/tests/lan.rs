@@ -659,3 +659,93 @@ fn device_parameters_cross_tls_both_ways_keep_players_and_rejoin_with_current_so
     let parsed = suhina_project_file::from_json(&suhina_project_file::to_json(&fresh)).unwrap();
     assert_eq!(parsed, fresh);
 }
+
+#[test]
+fn launcher_scenes_cross_tls_keep_originals_private_launches_and_rejoin_state() {
+    use suhina_engine::{AudioPool, Renderer};
+    use suhina_multiplayer::WireEdit;
+    use suhina_session::{Player, Session};
+    let (mut host, invitation) = host();
+    let (project, mut ar) = host.take_snapshot().unwrap();
+    let original = project.clone();
+    let source = project.arrangement.lanes[0].clips[0].id.0;
+    let mut local = Session::new(project);
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut guest, |v| v["mode"] == "connected");
+    let (project, mut br) = guest.take_snapshot().unwrap();
+    let mut remote = Session::new(project);
+    let mut a = Renderer::stopped(local.project(), &AudioPool::default(), 8000).unwrap();
+    let mut b = Renderer::stopped(remote.project(), &AudioPool::default(), 8000).unwrap();
+    local.attach_player(Player::new(a.controller(), None));
+    remote.attach_player(Player::new(b.controller(), None));
+    local.execute("transport.setPosition", &json!({"beats":4})).unwrap();
+    remote.execute("transport.setPosition", &json!({"beats":20})).unwrap();
+    local.execute("transport.play", &json!({})).unwrap();
+    remote.execute("transport.play", &json!({})).unwrap();
+    macro_rules! exchange {
+        ($guest:expr, $edit:expr) => {{
+            submit(if $guest { &mut guest } else { &mut host }, ar, $edit);
+            let next = ar + 1;
+            apply(&mut local, &mut ar, &wait(&mut host, |v| v["controls"]["revision"] == next));
+            apply(&mut remote, &mut br, &wait(&mut guest, |v| v["controls"]["revision"] == next));
+            assert_eq!(local.project(), remote.project());
+        }};
+    }
+    exchange!(true, WireEdit::SceneRename { scene: 1, name: "Intro".into() });
+    exchange!(false, WireEdit::SlotCopy { source, track: 1, scene: 1 });
+    let copied = local.project().launcher.columns[0].slots[0].clip.as_ref().unwrap().id.0;
+    exchange!(true, WireEdit::NoteAdd { clip: copied, time: 2., length: 0.5, key: 90, velocity: 100. });
+    assert_eq!(local.project().arrangement, original.arrangement);
+    assert_eq!(
+        local.project().content(original.arrangement.lanes[0].clips[0].content),
+        original.content(original.arrangement.lanes[0].clips[0].content)
+    );
+    exchange!(false, WireEdit::SceneDuplicate { scene: 1 });
+    let duplicated = local.project().launcher.columns[0].slots[1].clip.as_ref().unwrap().clone();
+    exchange!(true, WireEdit::NoteDelete { clip: copied, note: 0 });
+    assert_ne!(
+        local.project().content(duplicated.content).unwrap().lanes,
+        local
+            .project()
+            .content(local.project().launcher.columns[0].slots[0].clip.as_ref().unwrap().content)
+            .unwrap()
+            .lanes
+    );
+    exchange!(true, WireEdit::SlotCreate { track: 2, scene: 1, length: 8. });
+    let other = local.project().launcher.columns[1].slots[0].clip.as_ref().unwrap().id;
+    exchange!(false, WireEdit::SlotMove { track: 1, scene: 1, to_track: 2, to_scene: 1 });
+    assert_eq!(local.project().launcher.columns[0].slots[0].clip.as_ref().unwrap().id, other);
+    let before = local.project().clone();
+    submit(&mut guest, ar - 1, WireEdit::SceneDelete { scene: 1 });
+    let denied = wait(&mut guest, |v| v["error"].is_string());
+    assert_eq!(denied["controls"]["revision"], ar);
+    assert_eq!(local.project(), &before);
+    exchange!(true, WireEdit::SceneInsert { scene: 1, name: "Opening".into() });
+    exchange!(false, WireEdit::ClipDelete { clip: other.0 });
+    exchange!(true, WireEdit::SceneDelete { scene: 3 });
+    let mut out = [0.; 512];
+    a.process(&mut out);
+    b.process(&mut out);
+    assert!((a.monitor().beat() - b.monitor().beat()).abs() > 10.);
+    assert!(a.monitor().running() && b.monitor().running());
+    local.execute("launcher.setQuantization", &json!({"value":"none"})).unwrap();
+    local.execute("scene.launch", &json!({"scene":2})).unwrap();
+    a.process(&mut out);
+    b.process(&mut out);
+    assert_eq!(a.monitor().column(1).unwrap().playing, Some(1));
+    assert_eq!(b.monitor().column(1).unwrap().playing, None);
+    assert_eq!(ar, br);
+    assert_eq!(local.project(), remote.project());
+    guest.execute("multiplayer.stop", &json!({})).unwrap();
+    wait(&mut host, |v| v["guest_connected"] == false);
+    let previous_invitation = state(&mut host)["invitation"].clone();
+    host.execute("multiplayer.renewInvitation", &json!({})).unwrap();
+    let ready = wait(&mut host, |v| v["invitation"].is_string() && v["invitation"] != previous_invitation);
+    let mut late = Service::default();
+    late.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
+    wait(&mut late, |v| v["mode"] == "connected");
+    let (joined, rev) = late.take_snapshot().unwrap();
+    assert_eq!(rev, ar);
+    assert_eq!(&joined, local.project());
+}

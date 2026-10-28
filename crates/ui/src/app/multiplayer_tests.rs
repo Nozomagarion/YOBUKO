@@ -976,3 +976,6 @@ fn shared_device_buttons(render: bool) {
 
 #[path = "multiplayer_chain_tests.rs"]
 mod chain_tests;
+
+#[path = "multiplayer_launcher_tests.rs"]
+mod launcher_tests;

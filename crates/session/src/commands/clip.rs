@@ -7,6 +7,22 @@ use super::*;
 
 pub(super) static COMMANDS: &[CommandSpec] = &[
     CommandSpec {
+        id: "clip.createSharedSlot",
+        label: "Create an empty clip in an existing empty shared launcher slot",
+        params: &[TRACK, SCENE, param("length", ParamType::Number, "positive length, at most 120000 beats")],
+        kind: CommandKind::Edit,
+        run: crate::shared_launcher::create,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "clip.copyToSharedSlot",
+        label: "Copy a clip and independent content into an existing empty launcher slot",
+        params: &[param("source", ParamType::Integer, "source clip id"), TRACK, SCENE],
+        kind: CommandKind::Edit,
+        run: crate::shared_launcher::copy,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "arrangement.audioOverlaps",
         label: "List the pairs of audio clips that sound together on one track because their arrangement spans overlap; clips that only touch do not",
         params: &[optional("track", ParamType::Track, "only overlaps on this track (id or name)")],

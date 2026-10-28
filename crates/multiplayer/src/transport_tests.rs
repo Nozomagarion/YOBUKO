@@ -1017,3 +1017,83 @@ fn full_shared_chains_refuse_addition_without_consuming_revision_or_owner_sequen
     assert_eq!(state.host.revision(), 2);
     assert_eq!(state.host.project().channels[0].devices.len(), 16);
 }
+
+#[test]
+fn launcher_wire_is_exact_and_scene_names_and_indices_are_bounded() {
+    let good = [
+        WireEdit::SceneInsert { scene: 1, name: "Intro".into() },
+        WireEdit::SceneRename { scene: 1, name: String::new() },
+        WireEdit::SceneDuplicate { scene: 1 },
+        WireEdit::SceneDelete { scene: 1 },
+        WireEdit::SlotCreate { track: 1, scene: 1, length: 4. },
+        WireEdit::SlotCopy { source: 1, track: 1, scene: 1 },
+        WireEdit::SlotMove { track: 1, scene: 1, to_track: 2, to_scene: 2 },
+    ];
+    for edit in good {
+        assert!(edit.edit().is_ok());
+        let mut value = serde_json::to_value(&edit).unwrap();
+        let decoded: WireEdit = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(decoded, edit);
+        value["file"] = json!("/must-not-read");
+        assert!(serde_json::from_value::<WireEdit>(value).is_err());
+    }
+    for edit in [
+        WireEdit::SceneRename { scene: 0, name: "Intro".into() },
+        WireEdit::SceneInsert { scene: 130, name: "Intro".into() },
+        WireEdit::SceneRename { scene: 1, name: "x".repeat(257) },
+        WireEdit::SceneRename { scene: 1, name: "bad\nname".into() },
+        WireEdit::SlotCreate { track: 1, scene: 129, length: 4. },
+        WireEdit::SlotCreate { track: 1, scene: 1, length: f64::NAN },
+        WireEdit::SlotCopy { source: 0, track: 1, scene: 1 },
+        WireEdit::SlotMove { track: 1, scene: 1, to_track: 2, to_scene: 0 },
+    ] {
+        assert!(edit.edit().is_err());
+    }
+}
+
+#[test]
+fn launcher_quota_refusal_preserves_revision_sequence_and_model() {
+    let mut p = crate::starter_project();
+    let template = p.launcher.scenes[0].clone();
+    while p.launcher.scenes.len() < 128 {
+        let mut scene = template.clone();
+        scene.id = p.new_scene_id().unwrap();
+        p.launcher.scenes.push(scene);
+    }
+    for c in &mut p.launcher.columns {
+        c.slots.resize_with(128, || suhina_model::Slot { clip: None, has_stop: true });
+    }
+    let mut state = canonical(p.clone());
+    for edit in [WireEdit::SceneInsert { scene: 129, name: "overflow".into() }, WireEdit::SceneDuplicate { scene: 1 }] {
+        assert!(state.submit(Host::owner(), 1, 0, edit).is_err());
+        assert_eq!(state.host.project(), &p);
+        assert_eq!(state.host.revision(), 0);
+        assert!(state.journal.is_empty());
+    }
+    state.submit(Host::owner(), 1, 0, WireEdit::SceneRename { scene: 128, name: "Still works".into() }).unwrap();
+    assert_eq!(state.host.revision(), 1);
+}
+
+#[test]
+fn slot_content_quota_and_occupied_target_refuse_without_consuming_sequence() {
+    let mut p = crate::starter_project();
+    let source = p.arrangement.lanes[0].clips[0].id.0;
+    let template = p.contents[0].clone();
+    while p.contents.len() < 512 {
+        let mut c = template.clone();
+        c.id = suhina_model::ContentId(2000 + p.contents.len() as u32);
+        p.contents.push(c);
+    }
+    let mut state = canonical(p.clone());
+    assert!(state.submit(Host::owner(), 1, 0, WireEdit::SlotCopy { source, track: 1, scene: 1 }).is_err());
+    assert_eq!(state.host.project(), &p);
+    assert_eq!(state.host.revision(), 0);
+    state.submit(Host::owner(), 1, 0, WireEdit::SceneRename { scene: 1, name: "Retry".into() }).unwrap();
+    let mut state = canonical(crate::starter_project());
+    state.submit(Host::owner(), 1, 0, WireEdit::SlotCreate { track: 1, scene: 1, length: 4. }).unwrap();
+    let before = state.host.project().clone();
+    assert!(state.submit(Host::owner(), 2, 1, WireEdit::SlotCopy { source, track: 1, scene: 1 }).is_err());
+    assert_eq!(state.host.project(), &before);
+    assert_eq!(state.host.revision(), 1);
+    state.submit(Host::owner(), 2, 1, WireEdit::SceneRename { scene: 1, name: "Retry after occupied".into() }).unwrap();
+}

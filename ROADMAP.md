@@ -970,5 +970,9 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 - Protocol 10 admits guarded top-level FM Synth/Utility add/remove through the existing native
   handlers and clears device selections after structural changes; source tabs and music survive.
 
+- Protocol 11 adds shared launcher slots and scene organization, independent clip/content copies
+  from the arrangement, explicit slot swaps and private local launches; structural scene edits
+  invalidate hidden row selections ([contract](docs/spec/lan-launcher-editing.md)).
+
 Parity: no change. These fork additions cover restricted starter networking, DJ preparation and
 distribution; full project coediting remains absent and no production feature chapter gains coverage.

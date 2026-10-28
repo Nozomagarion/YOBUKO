@@ -45,6 +45,7 @@ mod scales;
 mod scenes;
 mod sends;
 mod shared_devices;
+mod shared_launcher;
 mod shared_tracks;
 mod soundmap;
 mod stems;

@@ -1,11 +1,11 @@
 # Où en est notre application ?
 
-**Bilan du 28 octobre 2026 — ajout et retrait de FM Synth/Utility livrés et validés localement.**
-Les deux participants peuvent maintenant construire leur chaîne sonore pendant le partage,
-dans **Multiplayer → Devices**, sans recréer le morceau ni perdre les prises.
-**3 144 tests passent, aucun échec.** Le paquet Mac **`b17d8df6`**, en protocole 10, est compilé
-et vérifié après extraction. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles
-distants restent bloqués par GitHub ; Windows/Linux ne sont donc pas validés pour cette version.
+**Bilan du 28 octobre 2026 — lanceur de clips et scènes partagés codés et validés localement.**
+Dans **Multiplayer → Launcher**, les deux participants organisent la grille, copient leurs clips
+et préparent les scènes, tout en gardant leurs lancements et leur écoute personnels.
+**3 155 tests passent, aucun échec.** Le nouveau code utilise le protocole 11.
+**Nouveau paquet Mac : en cours de fabrication.** Le dernier paquet livré `b17d8df6` reste
+celui des chaînes sonores, en protocole 10, et ne contient pas cette nouvelle grille.
 
 ## Ce qu’on fabrique
 
@@ -23,13 +23,31 @@ ordinateurs de la maison est prévu plus tard, comme demandé. Le logiciel compl
 | **Studio** | Utiliser le studio de Suhina et envoyer le rendu d’un morceau vers notre bibliothèque DJ. | Relier toutes les fonctions du studio à la collaboration. |
 | **Créer à deux** | Un hôte et un invité sur le réseau local ; partager une copie MIDI/audio avec les sons chargés, en conservant les originaux. | Plus d’un invité et Internet. |
 | **Reprendre après une coupure** | L’hôte crée une nouvelle invitation sans fermer le morceau ; l’invité ouvre l’état actuel dans un nouvel onglet. | Reconnexion automatique, fusion des retouches hors connexion et reprise après arrêt de l’hôte. |
-| **Notes et clips** | Modifier les notes MIDI ; créer, déplacer, redimensionner, dupliquer, activer et supprimer les clips de l’arrangement. | Édition des cases du lanceur et davantage d’outils partagés. |
+| **Notes, clips et scènes** | Modifier les notes et l’arrangement ; créer/copier/déplacer/échanger/effacer les cases du lanceur et organiser les scènes ensemble. | Davantage d’outils partagés, dont le retour du lanceur vers l’arrangement. |
 | **Pistes et mixeur** | Les deux participants ajoutent des pistes audio ou MIDI/FM Synth ; noms, volumes et panoramiques partagés. | Suppression, réorganisation et groupes. |
 | **Appareils et sons** | Ajouter, retirer et régler FM Synth et Utility depuis l’un ou l’autre participant. | Réorganisation, activation/désactivation, autres effets/instruments et plugins. |
 | **Nouvelles prises** | Les deux participants publient un son terminé depuis un onglet Studio local ; l’hôte vérifie les envois. | Enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
 | **Écoute personnelle** | Chacun garde son lecteur, sa position, son démarrage et son arrêt. | Essai sur les deux ordinateurs physiques. |
 | **Espace DJ** | Bibliothèque persistante, import, analyse tempo/tonalité issue de rbxport, ajout d’un rendu du studio. | Playlists, points cue, grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Bouton dans les paramètres pour comparer les versions GitHub ; suivi des sources et vérification des paquets de notre application. | Intégration régulière des nouveautés, publication et réception automatique d’une version commune. |
+
+## Nouveau : préparer des scènes ensemble
+
+Dans **Multiplayer → Launcher**, une scène est une ligne de la grille ; une case contient un
+clip sur une piste. L’organisation est commune, mais chacun choisit ce qu’il lance et écoute.
+
+1. Cliquer une case vide, choisir **Source clip**, puis **Copy clip into shared slot**. Le clip de l’arrangement reste intact ; ses notes copiées sont modifiables séparément. Un son audio déjà partagé est réutilisé.
+2. Pour partir de zéro, choisir **Create empty shared slot**. Ajouter ensuite ses notes dans **MIDI notes**. Une case audio créée vide reste silencieuse tant qu’elle n’a pas de son.
+3. Cliquer une ligne de scène, saisir **Scene name**, puis **Rename shared scene**, **Insert scene before**, **Duplicate shared scene** ou **Delete shared scene**. **Append shared scene** ajoute une ligne à la fin.
+4. Cliquer une case remplie, choisir la destination, puis **Move or swap shared slot**. Une destination occupée compatible échange les deux clips. **Clear shared slot** retire seulement le clip de cette case.
+5. **Launch slot locally** et **Launch scene locally** lancent seulement sur cet ordinateur. **Stop locally** reste personnel. Ces actions n’envoient pas un démarrage à l’autre participant.
+6. Après une modification commune, **Refresh launcher draft** efface le brouillon périmé. Après insertion, duplication ou suppression d’une scène, il faut sélectionner à nouveau la ligne/case, même si la page était fermée.
+
+Copier dans une case remplie est refusé ; aucune case voisine n’est écrasée. La dernière scène
+ne peut pas être supprimée. Maximum **128 scènes**, avec les budgets communs de **512 contenus**,
+**4 096 clips** et **16 384 notes**. Les patterns routés explicitement vers une ou plusieurs
+pistes ne sont pas copiables dans une case à ce palier. Les clips ordinaires MIDI/audio le sont.
+Les copies, scènes et cases passent par la validation de l’hôte ; chacun sauvegarde sa copie.
 
 ## Nouveau : construire la chaîne sonore ensemble
 
@@ -106,23 +124,24 @@ comme chemins de fichiers à l’autre ordinateur. Les originaux restent intacts
 - FM Synth et Utility avec paramètres simples ; plugins externes, autres instruments et états opaques refusés. Pas encore de réorganisation, d’activation/désactivation ni de modification des courbes d’automatisation en commun.
 - Les pistes créées n’activent aucun micro, entrée MIDI ou monitoring local. Pas d’enregistrement direct dans l’onglet partagé ni de diffusion audio en direct entre ordinateurs.
 
-**Les deux applications doivent utiliser le nouveau protocole 10**, donc le même nouveau paquet.
-Les versions précédentes en protocole 9 ou moins sont incompatibles avec ces sessions.
+**Les deux applications doivent utiliser le nouveau protocole 11**, donc le même nouveau paquet.
+Les versions précédentes en protocole 10 ou moins sont incompatibles avec ces sessions.
 Les projets sauvegardés gardent leur format natif version 3 ; ce changement concerne la connexion.
 
 ## Ce qui a été vérifié pour ce palier
 
 | Vérification | Résultat |
 |---|---|
-| Ensemble des tests sur ce Mac | **3 144 réussis, aucun échec**, dans 130 suites ; 57 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
-| Commandes natives | **9 tests ciblés réussis** : placement, retrait, paramètres, annulation, sauvegarde, refus d’instrument sur piste audio, états opaques, quotas et conservation des notes/entrées/identités. |
-| Réseau et collaboration | **72 tests réseau et 20 tests du cœur réussis**, dont vrais échanges TLS dans les deux sens, doublons et brouillons périmés refusés. |
-| Audio et prises | **Réussi** : mêmes projets et rendus, prises publiées et conservées malgré les changements de chaîne, lecteurs à des positions différentes et comportement sonore identique au studio natif. |
-| Retour de l’invité | **Réussi** : chaîne et sons ajoutés pendant son absence reçus dans la nouvelle copie ; ancienne copie et original conservés. |
-| Interface | **14 tests réussis** : boutons réellement cliqués, sélection annulée sur page fermée, décalage d’index, plusieurs Utility, réutilisation d’une ancienne place et chaîne vide. Captures vérifiées séparément. |
-| Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; pas de nouvelle dépendance. |
-| Paquet Mac Apple Silicon `b17d8df6` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
-| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat annoncé pour cette révision.** |
+| Ensemble des tests sur ce Mac | **3 155 réussis, aucun échec**, dans 130 suites ; 58 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
+| Nouvelles commandes natives | **4 tests réussis** : copie indépendante, annulation, sauvegarde/réouverture, refus des cases remplies ou incompatibles, des indices invalides et des contenus à routage explicite. |
+| Réseau et collaboration | **77 tests réseau et 21 tests du cœur réussis**, dont les échanges TLS réels dans les deux sens, brouillons périmés et budgets dépassés. Un refus ne consomme pas la modification suivante. |
+| Notes et audio | **Réussi** : les notes copiées sont indépendantes, l’arrangement original est conservé et les clips audio réutilisent leur son vérifié. Les fichiers collectés restent présents après les suppressions de scènes. |
+| Retour de l’invité | **Réussi** : la nouvelle copie retrouve la grille, les scènes, les notes et la révision actuelles après renouvellement de l’invitation. |
+| Interface | **15 tests multijoueur réussis**, dont les vrais boutons de la grille, sélections annulées sur page fermée et lancements/arrêt locaux sans modifier le lecteur distant. |
+| Rendu visuel | **Réussi séparément** : capture GPU de la nouvelle page vérifiée. |
+| Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; aucune nouvelle dépendance. |
+| Nouveau paquet Mac Apple Silicon | **En cours de fabrication** ; le paquet précédent reste disponible ci-dessous. |
+| Contrôles GitHub Mac/Windows/Linux | **À retenter sur le nouveau commit** ; les contrôles de la version précédente étaient bloqués par GitHub. |
 | Deux ordinateurs physiques | **Pas encore testé**, comme convenu. |
 
 ## Où trouver la version actuelle
@@ -141,9 +160,9 @@ développement Mac Apple Silicon, signé localement. L’application installée 
 
 Notre branche **`feature/multiplayer`** est affichée à l’accueil du
 [dépôt GitHub](https://github.com/Nozomagarion/suhina-daw). `main` reste le miroir de Suhina.
-Le README et ses barres présentent notre application : **14 étapes réalisées sur 17 listées
+Le README et ses barres présentent notre application : **15 étapes réalisées sur 18 listées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
-du logiciel final ; l’ajout/retrait des appareils est distingué du réglage d’un appareil existant.
+du logiciel final ; le nouveau palier correspond à la grille et aux scènes partagées.
 
 **Blocage externe à nouveau constaté le 28 octobre à 2 h 21**, sur le code
 `b17d8df65173f56217e0497ab5936e9c37d40927` :
@@ -165,7 +184,7 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 **Inviter plusieurs participants sur le réseau local. Statut : à commencer.**
 Critère : un hôte et au moins deux invités créent ensemble dans le même morceau, chacun avec
 son invitation privée, ses modifications validées et son écoute indépendante ; le départ d’un
-invité conserve la session des autres. Les quotas et les permissions restent contrôlés.
+invité conserve la session des autres. Les quotas et permissions restent contrôlés.
 
 Ensuite : reconnexion plus complète et Internet, version et mise à jour communes, puis
 préparation/performance DJ avancées. L’essai des deux ordinateurs à la maison reste différé,

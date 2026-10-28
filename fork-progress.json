@@ -76,6 +76,11 @@
           "evidence": "crates/ui/src/app/multiplayer_chain_tests.rs"
         },
         {
+          "name": "Organiser les scènes et la grille du lanceur en commun",
+          "done": true,
+          "evidence": "crates/ui/src/app/multiplayer_launcher_tests.rs"
+        },
+        {
           "name": "Inviter plusieurs participants sur le réseau local",
           "done": false
         },

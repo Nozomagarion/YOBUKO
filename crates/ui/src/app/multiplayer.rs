@@ -14,6 +14,7 @@ enum SharedPage {
     Devices,
     Notes,
     Clips,
+    Launcher,
     Takes,
 }
 
@@ -34,6 +35,7 @@ pub(super) struct MultiplayerPanel {
     page: SharedPage,
     pub(super) devices: super::multiplayer_devices::DeviceEditor,
     pub(super) clips: super::multiplayer_clips::ClipEditor,
+    pub(super) launcher: super::multiplayer_launcher::LauncherEditor,
     pub(super) tracks: super::multiplayer_tracks::TrackEditor,
     take_file: String,
     take_track: u32,
@@ -59,6 +61,7 @@ impl Default for MultiplayerPanel {
             devices: Default::default(),
             clips: Default::default(),
             tracks: Default::default(),
+            launcher: Default::default(),
             take_file: String::new(),
             take_track: 0,
             take_start: 0.0,
@@ -97,6 +100,7 @@ impl App {
                     self.multiplayer.notes = Default::default();
                     self.multiplayer.clips = Default::default();
                     self.multiplayer.tracks = Default::default();
+                    self.multiplayer.launcher = Default::default();
                     self.multiplayer.devices = Default::default();
                     self.multiplayer.applied_revision = 0;
                 } else if matches!(id, "multiplayer.edit" | "multiplayer.publishTake") {
@@ -250,6 +254,14 @@ impl App {
                     suhina_multiplayer::WireEdit::DeviceAdd { .. } | suhina_multiplayer::WireEdit::DeviceRemove { .. }
                 ) {
                     self.multiplayer.devices.chain_changed();
+                }
+                if matches!(
+                    operation.edit,
+                    suhina_multiplayer::WireEdit::SceneInsert { .. }
+                        | suhina_multiplayer::WireEdit::SceneDuplicate { .. }
+                        | suhina_multiplayer::WireEdit::SceneDelete { .. }
+                ) {
+                    self.multiplayer.launcher.structure_changed();
                 }
                 self.multiplayer.applied_revision = operation.revision;
             }
@@ -502,9 +514,12 @@ impl App {
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Devices, "Devices");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Notes, "MIDI notes");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Clips, "Clips");
+                ui.selectable_value(&mut self.multiplayer.page, SharedPage::Launcher, "Launcher");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Takes, "Publish take");
             });
-            if self.multiplayer.page == SharedPage::Devices {
+            if self.multiplayer.page == SharedPage::Launcher {
+                self.show_shared_launcher(ui);
+            } else if self.multiplayer.page == SharedPage::Devices {
                 self.show_shared_devices(ui);
             } else if self.multiplayer.page == SharedPage::Tracks {
                 self.show_shared_tracks(ui);

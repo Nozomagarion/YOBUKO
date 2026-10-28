@@ -28,6 +28,13 @@ impl Edit {
             "note.add" => "note.add",
             "note.update" => "note.update",
             "note.delete" => "note.delete",
+            "scene.insert" => "scene.insert",
+            "scene.rename" => "scene.rename",
+            "scene.duplicate" => "scene.duplicate",
+            "scene.delete" => "scene.delete",
+            "clip.createSharedSlot" => "clip.createSharedSlot",
+            "clip.copyToSharedSlot" => "clip.copyToSharedSlot",
+            "clip.moveSlot" => "clip.moveSlot",
             "clip.create" => "clip.create",
             "clip.insertAudio" => "clip.insertAudio",
             "clip.move" => "clip.move",
@@ -128,6 +135,37 @@ impl Edit {
                     && object.get("channels").and_then(Value::as_u64).is_some_and(|n| (1..=2).contains(&n))
                     && object.get("frames").and_then(Value::as_u64).is_some_and(|n| n > 0 && n <= 16_777_184)
             }
+            "scene.insert" | "scene.rename" => {
+                keys(object, &["scene", "name"])
+                    && object
+                        .get("scene")
+                        .and_then(Value::as_u64)
+                        .is_some_and(|n| (1..=if command == "scene.insert" { 129 } else { 128 }).contains(&n))
+                    && object
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .is_some_and(|s| s.len() <= 256 && !s.chars().any(char::is_control))
+            }
+            "scene.duplicate" | "scene.delete" => keys(object, &["scene"]) && scene(object, "scene"),
+            "clip.createSharedSlot" => {
+                keys(object, &["track", "scene", "length"])
+                    && object.get("track").is_some_and(valid_id)
+                    && scene(object, "scene")
+                    && number_in(object.get("length"), f64::MIN_POSITIVE, 120_000.0)
+            }
+            "clip.copyToSharedSlot" => {
+                keys(object, &["source", "track", "scene"])
+                    && object.get("source").is_some_and(valid_id)
+                    && object.get("track").is_some_and(valid_id)
+                    && scene(object, "scene")
+            }
+            "clip.moveSlot" => {
+                keys(object, &["track", "scene", "toTrack", "toScene"])
+                    && object.get("track").is_some_and(valid_id)
+                    && object.get("toTrack").is_some_and(valid_id)
+                    && scene(object, "scene")
+                    && scene(object, "toScene")
+            }
             "clip.create" => {
                 keys(object, &["track", "start", "length", "stack"])
                     && object.get("track").is_some_and(valid_id)
@@ -164,6 +202,10 @@ impl Edit {
         }
         Ok(Self { command, params })
     }
+}
+
+fn scene(object: &Map<String, Value>, key: &str) -> bool {
+    object.get(key).and_then(Value::as_u64).is_some_and(|n| (1..=128).contains(&n))
 }
 
 fn stacked(object: &Map<String, Value>) -> bool {

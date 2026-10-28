@@ -34,6 +34,9 @@ and USB export are future work. There is no common public release channel yet.
   Share the current project (up to 64 tracks, FM Synth/Utility parameters only) or use the
   generated starter. Clips arrive in the verified initial copy; single-note add/update/delete, track names, volume
   and pan are live shared edits. The **MIDI notes** editor rejects stale drafts before indices shift. Play, stop and listening position stay local to each computer.
+- **Launcher (protocol 11):** organize scenes and slots together, copy arrangement clips into empty
+  compatible slots with independent contents, move/swap slots, and launch privately on each computer.
+  Scene structural changes invalidate hidden selections; stale drafts require explicit refresh.
 - **Devices:** add/remove top-level FM Synth and Utility without loading presets or replacing an
   existing instrument; chain edits discard old device selections. Edit parameters using generated SDK controls. Draft values
   are submitted explicitly, validated by the host and rejected after a newer revision until refreshed.

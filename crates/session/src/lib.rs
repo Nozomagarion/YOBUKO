@@ -48,6 +48,7 @@ mod relink;
 mod scales;
 mod sends;
 mod shared_devices;
+mod shared_launcher;
 mod soundmap;
 mod tempo;
 

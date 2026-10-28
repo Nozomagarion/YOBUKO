@@ -789,3 +789,61 @@ fn shared_chain_edits_cross_tls_preserve_collected_takes_notes_and_independent_p
     assert_eq!(remote.project(), &old);
     assert_eq!(project, before);
 }
+
+#[test]
+fn audio_copies_to_launcher_keep_verified_assets_after_scene_duplicate_and_delete() {
+    let host_dir = tempfile::tempdir().unwrap();
+    let guest_dir = tempfile::tempdir().unwrap();
+    let (project, audio) = source();
+    let before = project.clone();
+    let source = project.arrangement.lanes[0].clips[0].id.0;
+    let mut host = Service::default();
+    host.set_storage_root(Some(host_dir.path().into())).unwrap();
+    host.select_audio_project(&project, &audio).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let ready = wait(&mut host, |s| s["mode"] == "hosting");
+    let snap = host.take_shared().unwrap();
+    let mut local = snap.session().unwrap();
+    snap.keep();
+    let mut guest = Service::default();
+    guest.set_storage_root(Some(guest_dir.path().into())).unwrap();
+    guest.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snap = guest.take_shared().unwrap();
+    let folder = snap.folder().unwrap().to_path_buf();
+    let mut remote = snap.session().unwrap();
+    snap.keep();
+    let (mut ar, mut br) = (0, 0);
+    for (from_guest, edit) in [
+        (true, WireEdit::SlotCopy { source, track: 2, scene: 1 }),
+        (false, WireEdit::SceneDuplicate { scene: 1 }),
+        (true, WireEdit::SlotMove { track: 2, scene: 2, to_track: 1, to_scene: 3 }),
+        (false, WireEdit::SceneDelete { scene: 1 }),
+    ] {
+        submit(if from_guest { &mut guest } else { &mut host }, ar, edit);
+        let next = ar + 1;
+        apply(&mut local, &wait(&mut host, |s| s["controls"]["revision"] == next), &mut ar);
+        apply(&mut remote, &wait(&mut guest, |s| s["controls"]["revision"] == next), &mut br);
+        assert_eq!(local.project(), remote.project());
+        assert_eq!(local.audio().files.len(), 1);
+        assert_eq!(remote.audio().files.len(), 1);
+    }
+    assert_eq!(project, before);
+    assert_eq!(render(&local), render(&remote));
+    let asset = remote.audio().files.keys().next().unwrap();
+    assert!(folder.join(asset).is_file());
+    let reopened = suhina_project_file::from_json(&suhina_project_file::to_json(remote.project())).unwrap();
+    assert_eq!(&reopened, remote.project());
+    let mut a = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
+    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000).unwrap();
+    local.attach_player(Player::new(a.controller(), None));
+    remote.attach_player(Player::new(b.controller(), None));
+    local.execute("launcher.setQuantization", &json!({"value":"none"})).unwrap();
+    local.execute("clip.launch", &json!({"track":1,"scene":2})).unwrap();
+    let mut left = [0.; 512];
+    let mut right = [0.; 512];
+    a.process(&mut left);
+    b.process(&mut right);
+    assert!(left.iter().any(|s| s.abs() > 0.0001));
+    assert!(right.iter().all(|s| *s == 0.));
+}

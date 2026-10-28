@@ -34,7 +34,7 @@ enabled state. It provides six narrowly admitted native operations:
 - `clip.setEnabled`: exactly one stable arrangement clip reference and a boolean enabled flag.
 
 Creation, movement and trimming always stack, so no neighbouring clip is silently removed,
-shortened or split. General track.add, file import, clipboard, arbitrary batch, audio stretch,
+shortened or split. No general track.add, file import, clipboard, arbitrary batch, audio stretch,
 consolidation, recording, transport or launch command is admitted. Native validation checks
 track compatibility and placement; the LAN adapter preflights each result against the complete
 MIDI-copy quota before changing the host or consuming a sequence. Explicit starts/trim ends are finite,
@@ -65,3 +65,11 @@ through these commands. The UI lists both MIDI and audio destination tracks. Nat
 refuse audio clips. Audio stretch and plugins stay closed. Protocol 8 additionally orders verified verified finished-take placement via clip.insertAudio, as specified in the audio contract.
 
 Protocol 8 additionally admits bounded [shared track creation](lan-track-creation.md) through the same operation journal.
+
+
+## Amendment: shared launcher organization
+
+Protocol 11 adds [scene and slot editing](lan-launcher-editing.md). The arrangement commands
+above retain their original semantics. Launcher copies use explicit independent content and
+existing verified audio, not clipboard or file import. Native clip.delete and note commands
+also resolve stable launcher clip IDs. Local launches never enter the shared journal.

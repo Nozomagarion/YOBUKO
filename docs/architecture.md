@@ -525,7 +525,7 @@ copy. MIDI-only transfers write no audio; the explicit audio mode stages verifie
 No transfer loads external devices. The UI marks that new ProjectId restricted in
 Projects. Normal UI/automation commands cannot mutate its model/history; local audition and
 save/export are allowed. Confirmed controls use `apply_shared_control`, a host-owned API with an
-exact seventeen-command allowlist (three track controls, shared track creation, three note commands, six clip commands, verified audio insertion guarded device parameters and two guarded chain commands), then the existing Session execution/player notification path.
+exact twenty-four-command allowlist (track controls/creation, notes, arrangement clips, verified audio insertion, guarded devices, four scene edits and three launcher placement commands), then the existing Session execution/player notification path.
 No GUI or networking dependency enters session or engine. Leaving/disconnect unlocks the retained
 project. [LAN contract](spec/lan-starter-session.md) and [threat model](security/session-sharing.md)
 define admission, ordering, deadlines and the arbitrary-project boundary that remains closed.
@@ -578,3 +578,14 @@ The native graph-update path retains each existing player and independent transp
 The UI invalidates device/parameter selections on every confirmed chain operation, including
 hidden pages and index reuse; selecting the replacement is explicit. Separate track-addressed
 addition drafts require refresh after a new revision. [Contract](spec/lan-device-chains.md).
+
+
+### Fork shared launcher organization
+
+Protocol 11 carries four native scene edits and three narrowly admitted launcher placement
+commands through the existing journal/preflight path. Two native slot commands create or copy
+into existing empty slots, with numeric identities and compatibility checked before mutation;
+copying gives independent content while reusing verified audio. A paged Launcher UI stages
+revision-bound selections and clears them on scene structural edits even while hidden. Native
+scene/clip launch actions run only against the local active bound tab, never across TLS.
+[Launcher contract](spec/lan-launcher-editing.md) specifies quotas and refusal semantics.

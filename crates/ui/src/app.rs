@@ -28,6 +28,7 @@ mod multiplayer;
 mod multiplayer_clips;
 mod multiplayer_device_chain;
 mod multiplayer_devices;
+mod multiplayer_launcher;
 mod multiplayer_notes;
 mod multiplayer_tracks;
 mod plugin_host;

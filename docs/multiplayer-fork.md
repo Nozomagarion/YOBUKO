@@ -13,6 +13,22 @@ covers:
 
 # Multiplayer fork
 
+## Shared Launcher (protocol 11)
+
+Open **Multiplayer → Launcher** in a hosted/joined session. Click an empty slot, choose
+**Source clip**, then **Copy clip into shared slot**; the original arrangement stays intact.
+Alternatively choose **Create empty shared slot**, then use **MIDI notes** to add its notes.
+Click a scene row to rename, insert before, duplicate or delete it; the last row cannot be
+deleted. **Append shared scene** adds an empty row. All confirmed edits appear in both copies.
+Click a filled slot to clear it or choose a destination for **Move or swap shared slot**;
+occupied compatible targets swap. Copying into an occupied slot fails without replacement.
+Explicitly routed multi-track patterns cannot be copied into slots in this milestone.
+**Launch slot locally** / **Launch scene locally** act only on this computer, as does Stop locally.
+New shared edits make drafts stale; **Refresh launcher draft** clears them. Structural scene
+changes clear selections even on hidden pages, requiring a fresh selection. Both applications
+must use protocol 11; old invitations are refused. [Contract](spec/lan-launcher-editing.md).
+Physical two-computer tests and cross-platform acceptance remain separate from local tests.
+
 ## Scope and status
 
 This fork is an exploratory implementation requested by its owner. It does not claim an official

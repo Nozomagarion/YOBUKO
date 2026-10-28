@@ -152,6 +152,15 @@ operation clears all desktop device/parameter drafts, even when hidden or the in
 New selection is explicit. General add/remove, presets, plugins and nested paths remain closed.
 [Chain contract](../spec/lan-device-chains.md).
 
+## Amendment: shared launcher organization
+
+Protocol 11 extends the ordered journal to native scene edits and bounded slot placement.
+Copying an arrangement or launcher clip into an empty compatible slot retains the original,
+allocates independent content and reuses verified audio. Native players remain attached;
+scene and clip launches are private local transport. Revision-bound row drafts are cleared
+on structural scene edits even while hidden. No clipboard or external paths are admitted.
+[Launcher contract](../spec/lan-launcher-editing.md) and tests define the accepted subset.
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.
