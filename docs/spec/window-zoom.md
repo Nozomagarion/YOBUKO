@@ -3,7 +3,7 @@ description: Zooming the whole window (every panel, text and control larger or s
 read_when: zoom, UI zoom, window zoom, interface size, scale, Ctrl+Plus, Ctrl+Minus, Cmd+Plus, bigger text, high-DPI, zoom display
 type: spec
 status: current
-last_verified: 2026-10-13
+last_verified: 2026-10-25
 covers:
   - crates/ui/src/settings.rs
   - crates/ui/src/settings/keymap.rs
