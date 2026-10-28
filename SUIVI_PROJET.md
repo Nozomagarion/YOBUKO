@@ -5,8 +5,8 @@ Dans **DJ → Prepare**, on peut écouter un morceau depuis une position choisie
 ajouter des repères nommés, les déplacer et les retrouver au redémarrage dans toutes les playlists.
 **3 246 tests du logiciel passent, aucun échec ; les 272 tests des scripts passent également.**
 Le contrôle Rust strict de tout le projet, le format et les contrôles de documentation passent.
-Les trois captures DJ sont vérifiées. Le nouveau paquet Mac est en préparation ; le dernier
-paquet livré reste `53f33aa6`.
+**Le paquet Mac `52ec1270` est compilé et vérifié après extraction**, avec les trois exécutables,
+les sources exactes et ce suivi. L’application installée ou ouverte n’a pas été remplacée.
 
 Le studio reste basé sur Suhina `9717cc71` et l’analyse rbxport sur `b739d369`. Le multijoueur à
 quatre est conservé : protocole 13, copie portable v3 et projets natifs v4. Seul le catalogue DJ
@@ -174,7 +174,7 @@ Le partage utilise une copie portable v3 et conserve exactement les courbes pris
 
 ## Nouveau palier DJ : écouter et poser ses repères
 
-**Code, tests et captures validés ; paquet Mac en préparation.**
+**Code, tests, captures et paquet Mac validés localement.**
 
 Les **133 suites** comptent **3 246 réussites, 0 échec, 64 contrôles non lancés dans le passage
 standard**. Le périmètre DJ comprend **16 tests du catalogue, 10 tests des commandes et 10 tests
@@ -188,7 +188,7 @@ Dans la bibliothèque ou une playlist, **Prepare** ouvre l’éditeur du morceau
 puis **Play from position** lance la préécoute. **Stop audition**, la fermeture de l’éditeur et le
 retour au Studio arrêtent cette écoute et empêchent un chargement tardif de démarrer ensuite.
 La lecture utilise la sortie casque configurée dans Suhina, ou la sortie principale à défaut.
-Aucun projet Studio n’est modifié et aucun micro n’est activé par cette préécoute.
+La préécoute conserve les réglages audio existants de Suhina et ne modifie pas le projet Studio.
 
 **Cue name** et **Cue position seconds** permettent d’ajouter un point nommé. Un point existant
 se sélectionne pour changer son nom ou sa position ; sa suppression est confirmée. **Play cue**
@@ -199,6 +199,9 @@ Le catalogue DJ passe au **format 3**. Les formats 1 et 2 sont repris sans écri
 le premier changement garde une sauvegarde exacte. Les listes, leur ordre et leurs identifiants
 restent conservés. Les écritures périmées ou invalides sont refusées. Une réanalyse garde les
 repères et refuse de raccourcir le morceau au-delà d’un repère existant.
+
+Le README compte **6 étapes DJ réalisées sur 9 critères listés** ; ces comptes ne mesurent pas
+un pourcentage du logiciel final.
 
 Limites : 16 points par morceau, 8 000 au total, positions en secondes. Préécoute à −6 dB,
 lecture locale et un morceau à la fois. Les formes d’onde, grilles, calage automatique, platines,
@@ -249,20 +252,20 @@ le protocole réseau ne changent pas. Les points cue, grilles, platines et expor
 
 ## Où trouver la version actuelle
 
-- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-playlists-macos-arm64-53f33aa6.zip`.
+- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-cues-macos-arm64-52ec1270.zip`.
 - **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
 - **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
 - **Preuves locales :** dossier `validation/2026-10-28` voisin du dépôt : journaux, captures et script de fabrication du paquet.
 
-Les tests et le paquet correspondent au code **`53f33aa6d3fa43745ef94008712d41fdee6d1f5f`**,
+Les tests et le paquet correspondent au code **`52ec12704052412deb6a939a62d7b51312422bd9`**,
 compilé après son enregistrement puis envoyé sur notre branche GitHub. C’est un paquet de
 développement Mac Apple Silicon, signé localement. L’application installée ou ouverte n’a pas
 été remplacée. Tous les participants doivent utiliser cette même nouvelle version.
 
 La fabrication a utilisé un cache Rust temporaire extérieur au dépôt, supprimé après les vérifications
 du paquet. Les preuves et les captures
-sont conservées dans `validation/2026-10-28`, avec le script `package-playlists.py` et le relevé
-`playlists-validation.json`. La version de secours précédente est conservée.
+sont conservées dans `validation/2026-10-28`, avec le script `package-cues.py` et le relevé
+`cues-validation.json`. La version de secours précédente est conservée.
 
 ## GitHub et distribution
 
@@ -272,8 +275,8 @@ Le README et ses barres présentent notre application : **16 étapes réalisées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
 du logiciel final ; le nouveau palier correspond aux invitations de plusieurs musiciens.
 
-**Blocage externe à nouveau constaté le 28 octobre à 20 h 21 (heure de Paris)**, sur le code
-`53f33aa6d3fa43745ef94008712d41fdee6d1f5f` :
+**Blocage externe à nouveau constaté le 28 octobre à 22 h 47 (heure de Paris)**, sur le code
+`52ec12704052412deb6a939a62d7b51312422bd9` :
 GitHub refuse le lancement des contrôles avec `HTTP 422: Actions has been disabled for this repository.`
 La lecture du réglage indique pourtant `enabled: true` ; la cause de ce désaccord n’est pas établie.
 Le workflow de notre fork est également indiqué actif. Aucune exécution n’était visible pour
