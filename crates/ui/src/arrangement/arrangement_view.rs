@@ -3,7 +3,7 @@
 
 //! The Arrangement view: a timeline of lanes, one per track, with the track headers on the right
 //! (`docs/design/components.md` › Arrangement view). Track headers show more controls as a lane
-//! grows. Like the Session view it draws data and turns gestures into [`Action`]s.
+//! grows. Like the Launcher view it draws data and turns gestures into [`Action`]s.
 
 use crate::kit::surface::Backgrounds as _;
 use std::collections::{HashMap, HashSet};

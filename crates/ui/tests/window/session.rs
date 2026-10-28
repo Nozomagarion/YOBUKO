@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The Session view: slots, scenes, launching, stop buttons, slot menus and drags between the views.
+//! The Launcher view: slots, scenes, launching, stop buttons, slot menus and drags between the views.
 
 use super::*;
 
@@ -361,7 +361,7 @@ fn wait_over(harness: &mut Harness<'static, App>, at: egui::Pos2) {
 fn an_arrangement_clip_dragged_over_the_session_switch_drops_into_a_slot() {
     let mut harness = arrangement_app();
     let from = harness.get_by_label("Clip Fill on Drums at bar 29").rect().center_top() + egui::vec2(0.0, 6.0);
-    let switch = harness.get_by_label("Session view").rect().center();
+    let switch = harness.get_by_label("Launcher view").rect().center();
     harness.hover_at(from);
     harness.step();
     harness.drag_at(from);

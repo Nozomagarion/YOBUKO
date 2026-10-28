@@ -7,7 +7,7 @@ use super::*;
 
 impl App {
     /// Keys mapped to slots, scenes and stop buttons, and the keys of the mapping mode, before
-    /// the shortcuts see them: only while the Session view is shown and nothing else has the
+    /// the shortcuts see them: only while the Launcher view is shown and nothing else has the
     /// keyboard (`docs/spec/ui-session-view.md` › Launch keys). A key held when that ends, or
     /// when the window loses focus, is released.
     pub(super) fn launch_keys(&mut self, ui: &Ui, actions: &mut Vec<Action>) {
@@ -55,7 +55,7 @@ impl App {
         }
     }
 
-    /// Turns the mapping mode on (showing the Session view) or off.
+    /// Turns the mapping mode on (showing the Launcher view) or off.
     pub(super) fn toggle_mapping_mode(&mut self) {
         let keys = &mut self.view.launch_keys;
         keys.toggle_mode();

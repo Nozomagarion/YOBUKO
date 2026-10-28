@@ -20,7 +20,7 @@ covers:
 Suhina records what armed tracks play ([ADR 0017](../decisions/0017-inputs-and-latency.md)):
 the notes a MIDI controller plays on a track that plays notes, and the sound of the audio input
 on a track that has one. A recording makes one clip per armed track, a **take**, either in a
-clip slot of the Session view or in the Arrangement. Each take is one edit: one undo removes it.
+clip slot of the Launcher view or in the Arrangement. Each take is one edit: one undo removes it.
 
 This spec is written from how recording is commonly understood and from Suhina's own engine; it
 names no other program's behaviour.

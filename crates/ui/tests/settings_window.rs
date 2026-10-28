@@ -55,7 +55,7 @@ fn compact_session_css_applies_to_a_png_skin_without_changing_artwork_or_project
     settle(&mut harness);
     harness.get_by_label("Edit current theme…").click();
     settle(&mut harness);
-    for label in ["Controls, meters and toolbar", "Native CSS", "Load compact Session geometry"] {
+    for label in ["Controls, meters and toolbar", "Native CSS", "Load compact Launcher geometry"] {
         wheel_to(&mut harness, label, 80);
         harness.get_by_label(label).click();
         settle(&mut harness);
@@ -673,7 +673,7 @@ fn every_page_scrolls_to_its_last_setting_in_a_short_window() {
         ("MIDI", None),
         ("Plug-ins", Some("Open the plug-in manager")),
         ("Arrangement", Some("Large height")),
-        ("Session and mixer", Some("Mixer controls: Knob")),
+        ("Launcher and mixer", Some("Mixer controls: Knob")),
         ("Clip editor", Some("Double-click on a note: Nothing")),
         ("Transport", Some("Stop: Stay")),
         ("Detail area", Some("Detail area layout: Full width")),

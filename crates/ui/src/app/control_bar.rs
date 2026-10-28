@@ -308,7 +308,7 @@ impl App {
         let carrying = self.carry.is_some() || self.arrangement.dragged_clip().is_some();
         let pointer = ui.ctx().pointer_latest_pos();
         let mut hovered_switch = None;
-        for (view, name) in [(View::Arrangement, "Arrangement"), (View::Session, "Session")] {
+        for (view, name) in [(View::Arrangement, "Arrangement"), (View::Session, "Launcher")] {
             native_styles.enter("views");
             let color = if self.shown == view { theme::text_primary() } else { theme::text_secondary() };
             let galley = widgets::fitted(&painter, name, theme::ui_font(theme::TEXT), color, 120.0);

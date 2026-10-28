@@ -284,10 +284,10 @@ pub struct Settings {
     /// Where Play starts.
     pub play_from: PlayFrom,
     pub device_layout: DeviceLayout,
-    /// Launching a clip in the Session view selects it, so the detail area shows it
+    /// Launching a clip in the Launcher view selects it, so the detail area shows it
     /// (`docs/spec/ui-session-view.md` › Launching and selecting).
     pub select_on_launch: bool,
-    /// The Session mixer's height, the detail area's layout and double-clicks that make clips.
+    /// The Launcher mixer's height, the detail area's layout and double-clicks that make clips.
     pub view: crate::settings::view_settings::ViewSettings,
     /// Whether and where to check for updates (`docs/spec/updates.md`).
     pub updates: crate::settings::update_settings::UpdateSettings,
@@ -298,7 +298,7 @@ pub struct Settings {
     /// The control bar's grid value sets the piano roll's too; otherwise the piano roll keeps
     /// its own.
     pub piano_grid_follows: bool,
-    /// A track's volume and pan as a field or as a knob (Settings › Session and mixer).
+    /// A track's volume and pan as a field or as a knob (Settings › Launcher and mixer).
     pub mixer_controls: MixerControls,
     /// Where plug-in editors open.
     pub plugin_editors: EditorPlacement,

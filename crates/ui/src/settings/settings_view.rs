@@ -282,7 +282,7 @@ impl Page {
         (Page::Midi, "MIDI"),
         (Page::Plugins, "Plug-ins"),
         (Page::Arrangement, "Arrangement"),
-        (Page::Session, "Session and mixer"),
+        (Page::Session, "Launcher and mixer"),
         (Page::ClipEditor, "Clip editor"),
         (Page::Transport, "Transport"),
         (Page::DetailArea, "Detail area"),

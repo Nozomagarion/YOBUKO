@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The main window: tabs for the open projects (ADR 0007), the control bar, the Session or
+//! The main window: tabs for the open projects (ADR 0007), the control bar, the Launcher or
 //! Arrangement view and the status bar around the active project.
 //! Every change goes through `Session::execute` (AGENTS.md rule 6); the window only reads the
 //! project and the engine's monitor to draw them.
@@ -2413,7 +2413,7 @@ impl App {
                     self.select_tracks(vec![next]);
                 }
                 // A clip made by a double-click is selected, ready to edit: in the Arrangement
-                // the clip, in the Session its slot, so the detail area shows it.
+                // the clip, in the Launcher its slot, so the detail area shows it.
                 if action.id == "clip.create"
                     && let Some(track) = result["track"].as_u64().and_then(|t| u32::try_from(t).ok()).map(TrackId)
                 {
@@ -3020,8 +3020,8 @@ impl App {
                         self.frame_trace.mark("view setup");
                         session_view::show(ui, grid, &progress, &mut self.view, &mut actions);
                         self.arrangement.selected_tracks.clone_from(&self.view.selected_tracks);
-                        self.frame_trace.mark("session view");
-                        self.frame_trace.note(|| format!("session view, {} tracks", grid.columns.len()));
+                        self.frame_trace.mark("launcher view");
+                        self.frame_trace.note(|| format!("launcher view, {} tracks", grid.columns.len()));
                         match self.view.device_event.take() {
                             Some(session_view::DeviceEvent::Pick { track, index, add, run }) => {
                                 self.pick_device(track, detail_view::DeviceAt::at(index), add, run);
@@ -3368,7 +3368,7 @@ impl App {
         self.frame_trace.finish();
     }
 
-    /// What the Session view asked for this frame that the window keeps: the mixer's height,
+    /// What the Launcher view asked for this frame that the window keeps: the mixer's height,
     /// saved in Settings, and the detail area opened from a strip's device list.
     fn session_view_done(&mut self) {
         let height = self.view.mixer_height.round() as u32;

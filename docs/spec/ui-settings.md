@@ -65,8 +65,8 @@ is on exactly one page, under one heading.
 | Arrangement | Track sizes | Default track size, Default return size, Advanced track sizes, Tiny height, Compact height, Small height, Medium height, Large height |
 | Arrangement | Tools | Toolbar (On or Off, Off by default, #991) |
 | Arrangement | Automation | A click anywhere adds a point (On or Off, Off by default: a click adds a point only on or near the line, a double-click anywhere) |
-| Session and mixer | Launching | Select on launch |
-| Session and mixer | Mixer | Mixer controls |
+| Launcher and mixer | Launching | Select on launch |
+| Launcher and mixer | Mixer | Mixer controls |
 | Clip editor | Piano roll | Pulled to the top, Piano roll grid, Toolbar size |
 | Clip editor | Mouse | Left click draws, Right click deletes a note, Shift+right click splits, Alt+right plays from the point |
 | Transport | Play and stop | Play from, Stop |

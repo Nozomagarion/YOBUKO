@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The Session view's channel strip: the part of a column under its slots, which shows more the
+//! The Launcher view's channel strip: the part of a column under its slots, which shows more the
 //! taller the mixer is (`docs/spec/ui-session-view.md` › Mixer, sizes and steps in
 //! `docs/design/components.md` › Mixer strip). [`layout`] says where each part goes for a height;
 //! [`show`] draws a column's strip and turns what is done there into [`Action`]s.
@@ -62,7 +62,7 @@ const FADER_COLUMN: f32 = 20.0;
 const SCALE_WIDTH: f32 = 14.0;
 const METER_GAP: f32 = 4.0;
 const SEND_HEIGHT: f32 = 22.0;
-/// Session meters use wider stereo bars than compact Arrangement headers.
+/// Launcher meters use wider stereo bars than compact Arrangement headers.
 pub const METER_WIDTH: f32 = 14.0;
 const CAP: Vec2 = Vec2::new(20.0, 26.0);
 

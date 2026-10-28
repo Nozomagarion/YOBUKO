@@ -637,7 +637,7 @@ pub(crate) fn create_clip(session: &mut Session, params: &Value) -> Result<Value
     Ok(done)
 }
 
-/// Puts one source as a clip on `track`: in slot `row` of the Session, or at beat `at` in the
+/// Puts one source as a clip on `track`: in slot `row` of the Launcher, or at beat `at` in the
 /// Arrangement (replacing what it covers unless `stack`).
 pub(crate) fn place_clip(
     p: &mut Project,

@@ -95,13 +95,13 @@ status bar.
 |---|---|
 | Play or stop (`transport.toggle`; Play starts from the play start marker or the selected clip, as Settings › Transport › Play from says; Stop goes back to the marker or stays, as Settings › Transport › Stop says) | Space |
 | Play from the start of the clip selected in the Arrangement view, whatever the setting (`transport.playFromSelection`; from the marker when no clip is selected) | Shift+Space |
-| Switch between Session and Arrangement (`view.toggle`) | Tab |
+| Switch between Launcher and Arrangement (`view.toggle`) | Tab |
 | Show or hide the detail area (`view.detail`) | Shift+Tab |
 | Hide the clip editor, or show it again (`view.editor`; [spec](spec/ui-clip-editor.md) › Least height and closing). Escape in the piano roll keeps clearing the note selection | Ctrl+Shift+E |
-| Show the selected clip's track devices in the detail area, or the clip again: the detail area's Clip / Devices switch, for a MIDI clip; opens the detail area when it is hidden (`view.devices`; [spec](spec/ui-clip-editor.md) › Where it opens). A double-click on a track's header, a Session column's name or its channel strip shows that track's devices too | Ctrl+Shift+D |
+| Show the selected clip's track devices in the detail area, or the clip again: the detail area's Clip / Devices switch, for a MIDI clip; opens the detail area when it is hidden (`view.devices`; [spec](spec/ui-clip-editor.md) › Where it opens). A double-click on a track's header, a Launcher column's name or its channel strip shows that track's devices too | Ctrl+Shift+D |
 | Open the selected audio clip in its track's plug-in that edits clips, such as a pitch editor (`view.araEditor`; [spec](spec/ui-clip-editor.md) › Where it opens): the detail area shows the clip with the plug-in's editor, and the plug-in shows that clip. On a track without one, the installed one (Melodyne first) is added to the track first. The clip's right-click menu has the same as **Open in** and the plug-in's name | Alt+M |
 | Play notes from the computer keyboard, or stop (`view.computerKeyboard`; the control bar's Keys button): A W S E D F T G Y H U J K and O L P ; play the armed tracks, Z and X move the octave, C and V the velocity, and while it is on those keys run no shortcut ([recording](spec/recording.md)) | Ctrl+K |
-| Map keys to clip slots, scenes and stop buttons, or stop mapping (`view.mappingMode`; [Session view](spec/ui-session-view.md#launch-keys)). A key mapped to a slot wins over its shortcut while the Session view is shown | Ctrl+M |
+| Map keys to clip slots, scenes and stop buttons, or stop mapping (`view.mappingMode`; [Launcher view](spec/ui-session-view.md#launch-keys)). A key mapped to a slot wins over its shortcut while the Launcher view is shown | Ctrl+M |
 | Show or hide the browser (`view.browser`) | Ctrl+B |
 | Show or hide the sample map in the main area (`view.sampleMap`; Escape on the map closes it too) | Ctrl+Alt+Shift+M |
 | Insert an empty MIDI clip over the time selection (`clip.insertMidi`) | Ctrl+Shift+M |
@@ -139,7 +139,7 @@ status bar.
 | Consolidate the selected clip into one new clip (`selection.consolidate`; [spec](spec/arrangement-editing.md#consolidating)) | Ctrl+J |
 | Group the selected tracks (`selection.group`); with devices picked in a strip's list or the chain, put them into a device group ([spec](spec/device-groups.md)) | Ctrl+G |
 | Take the picked device group of one branch apart (`selection.ungroup`) | Ctrl+Shift+G |
-| In the Session view, with a clip slot selected: launch it (`selection.launch`); select the slot above, below, in the track to the left or right (`selection.up`, `.down`, `.left`, `.right`; [spec](spec/ui-session-view.md) › Launching and selecting) | Enter; Up, Down, Left, Right |
+| In the Launcher view, with a clip slot selected: launch it (`selection.launch`); select the slot above, below, in the track to the left or right (`selection.up`, `.down`, `.left`, `.right`; [spec](spec/ui-session-view.md) › Launching and selecting) | Enter; Up, Down, Left, Right |
 | Quantise the piano roll's selected notes, or all its notes, with the settings the quantise block in the MIDI tools column keeps (`pianoRoll.quantize`, [spec](spec/ui-clip-editor.md) › Quantise) | Ctrl+U |
 | Open or close the shown track's plug-in editor — the device the chain panel selects, else the track's first running plug-in (`view.plugin`; [spec](spec/ui-clip-editor.md) › The device chain) | P |
 | Add an arrangement marker at the playhead, or at the play start marker while stopped (`marker.addAtPlayhead`; [spec](spec/arrangement-editing.md#markers)) | M |
@@ -169,10 +169,10 @@ puts the copied notes right after the selected notes, or at the playhead when it
 clip, else right after where they were copied from; pasted and duplicated notes are selected
 ([clip editor spec](spec/ui-clip-editor.md) › Shortcuts).
 
-In the Session view, copy and paste act on the selected clip slot (the one clicked last): Ctrl+C
+In the Launcher view, copy and paste act on the selected clip slot (the one clicked last): Ctrl+C
 copies its clip, Ctrl+V puts the copied clip in it, replacing what it holds. That is how an
 arrangement clip goes into a slot: Ctrl+C on the clip, Tab, click a slot, Ctrl+V
-([Session view](spec/ui-session-view.md) › Between the views). Cut, duplicate and delete act on
+([Launcher view](spec/ui-session-view.md) › Between the views). Cut, duplicate and delete act on
 arrangement clips only.
 
 Zoom in has two keys, `Ctrl+Plus` and `Ctrl+Equals`. On macOS `+` is typed as Shift and `=`, and

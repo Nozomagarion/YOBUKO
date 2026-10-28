@@ -315,7 +315,7 @@ impl App {
     }
 
     /// Adds browser items to the selected track, as Enter and a double-click do: devices to its
-    /// chain, files in the Arrangement at the play start marker, in the Session from its first
+    /// chain, files in the Arrangement at the play start marker, in the Launcher from its first
     /// empty slot; without a selected track, on new tracks.
     pub(super) fn add_to_selected(&mut self, items: Vec<BrowserItem>) {
         let Some(session) = self.session() else {

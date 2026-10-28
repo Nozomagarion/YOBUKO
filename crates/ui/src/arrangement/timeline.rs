@@ -145,7 +145,7 @@ pub struct Lane {
     pub volume_db: f64,
     pub pan: f64,
     /// The track's sends, one per return track in track order (none on a return), as the
-    /// Session view's strip has them.
+    /// Launcher view's strip has them.
     pub sends: Vec<crate::interaction::grid::SendKnob>,
     /// The group track this track plays into; `None` is the main output.
     pub output: Option<TrackId>,
@@ -565,7 +565,7 @@ impl Folds {
         }
     }
 
-    /// The folded groups as a set, for the views that share them (the Session view's columns,
+    /// The folded groups as a set, for the views that share them (the Launcher view's columns,
     /// the track list's drop targets).
     pub fn groups(&self) -> std::collections::BTreeSet<TrackId> {
         self.folded.iter().copied().collect()

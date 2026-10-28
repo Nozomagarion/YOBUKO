@@ -472,7 +472,7 @@ impl App {
             }
             "views" => {
                 let carrying = self.carry.is_some() || self.arrangement.dragged_clip().is_some();
-                for (index, view, name) in [(0, View::Session, "Session"), (1, View::Arrangement, "Arrangement")] {
+                for (index, view, name) in [(0, View::Session, "Launcher"), (1, View::Arrangement, "Arrangement")] {
                     let at = middle(index as f32 * 86.0, 86.0);
                     if widgets::button(ui, &painter, at, name, &format!("{name} view")) {
                         self.shown = view;

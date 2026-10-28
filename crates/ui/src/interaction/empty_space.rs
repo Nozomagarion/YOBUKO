@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The empty space after the last track, in the Session view and the Arrangement view alike.
+//! The empty space after the last track, in the Launcher view and the Arrangement view alike.
 
 use egui::{Align2, Id, Pos2, Rect, Ui, Vec2};
 use serde_json::json;

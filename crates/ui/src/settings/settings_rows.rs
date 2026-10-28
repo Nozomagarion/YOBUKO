@@ -603,7 +603,7 @@ pub(crate) static ROWS: &[Entry] = &[
         &["automation_click"],
         |cx, r| cx.on_off(r, |s| &mut s.view.automation_click_anywhere),
     ),
-    // Session view and mixer.
+    // Launcher view and mixer.
     row(
         Page::Arrangement,
         "Pasting",
@@ -616,7 +616,7 @@ pub(crate) static ROWS: &[Entry] = &[
         Page::Session,
         "Launching",
         "Select on launch",
-        "Launching a clip in the Session view shows it in the detail area",
+        "Launching a clip in the Launcher view shows it in the detail area",
         &["select_on_launch"],
         |cx, r| cx.on_off(r, |s| &mut s.select_on_launch),
     ),

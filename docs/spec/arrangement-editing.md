@@ -164,7 +164,7 @@ In the track headers the same keys work on tracks: a click selects one, Ctrl add
 Shift takes the run of headers between the last one clicked and this one. Ctrl+G groups those.
 After a header click Delete removes the selected tracks, not a clip (a clip on the track stays
 selected for the detail area until another is picked); a click on a clip or a lane gives Delete
-back to the clips. In the Session view a header click does the same for its track (#690). After a
+back to the clips. In the Launcher view a header click does the same for its track (#690). After a
 header click **Ctrl+C**, **Ctrl+X**, **Ctrl+V** and **Ctrl+D** copy, cut, paste and duplicate the
 selected tracks, in their order, one undo step each (Tracks, #919). The
 header shows its track's colour strongly (60 % over the panel); a selected track's is brighter
@@ -338,8 +338,8 @@ the clip's index as `project.clips` counts it.
 In the Arrangement view a double-click on an empty spot of a lane that holds clips makes one a bar
 long, starting at the grid line before the pointer (with Alt, exactly at the pointer), and selects
 it; it stacks when the stacking setting for the track's kind is on (MIDI stacking, or audio
-stacking). A double-click on a clip is the clip's own. In the Session view a double-click on an
-empty slot makes one there ([Session view](ui-session-view.md) › Clip slots).
+stacking). A double-click on a clip is the clip's own. In the Launcher view a double-click on an
+empty slot makes one there ([Launcher view](ui-session-view.md) › Clip slots).
 
 Both double-clicks follow one setting, Settings › Arrangement › **Double-click makes a clip** (On by
 default, saved as `double_click_clip`). Off, a double-click on an empty spot of a lane, or on an
@@ -365,11 +365,11 @@ error. Copying with `clips` and `scene` together, or neither, is an error, and s
 `start` and `scene` together, or neither; `start` is at most 120000 beats.
 
 **Dragging into a slot, and back.** A clip dragged in the Arrangement view and held over
-**Session** in the control bar for half a second switches the view; let go over a slot and the
+**Launcher** in the control bar for half a second switches the view; let go over a slot and the
 clip is copied into it, the arrangement left as it was. A slot's clip dragged and held over
 **Arrangement** lands on the lane under the pointer, at the beat on the grid, as a copy that
 replaces what it covers unless stacked. Both are `clip.copy` then `clip.paste`
-([Session view](ui-session-view.md) › Between the views).
+([Launcher view](ui-session-view.md) › Between the views).
 
 ## Clips off
 
@@ -637,7 +637,7 @@ Play button pass the setting **Play from** (Settings › General): **Selected cl
 **Marker**, saved as `play_start = clip | marker` (the older `play_from` key, which every file got as `marker` while that was the default, is read and ignored). Whatever way clips are picked whole while stopped (a click on a name bar, a rectangle, Ctrl+A, a paste), the play start marker also moves to the first of them. A click in a clip's body picks it but sets the play start where it was clicked, and play starts there, not from the clip's start, until the clip is picked whole again.
 A loop the clip starts before still catches playback when it reaches the loop's end. With **Selected clip** and a clip
 selected in the Arrangement view, they run `transport.play {from: "clip"}` on that clip; with no
-clip selected, or while the Session view is shown (where the selection is not seen), they play
+clip selected, or while the Launcher view is shown (where the selection is not seen), they play
 from the marker. **Shift+Space** (`transport.playFromSelection` in the keymap) plays from the
 selected clip whatever the setting; while playing, it jumps there.
 
@@ -766,21 +766,21 @@ Clips placed from the browser or dropped from the system's file manager (`clip.a
 moved clip; they stack when either stacking setting is on (one `stack` flag for the whole drop,
 not per kind) ([browser](browser.md) › Files).
 
-In the Arrangement view a header click selects a track (Ctrl adds or takes one out, Shift takes a run), and the Session view's column headers select the same tracks the same way (#208), Ctrl+G
+In the Arrangement view a header click selects a track (Ctrl adds or takes one out, Shift takes a run), and the Launcher view's column headers select the same tracks the same way (#208), Ctrl+G
 groups the selection, dragging a header moves the track above the lane under the pointer (below it
 from its lower half), and a right-click opens the track's menu: name, colour, group, ungroup,
 **Move into group** (a submenu of every other group it can go into), **Move out of group** (one
 level up, right after the group it leaves), **Audio input** or **MIDI input** on a track that
 plays them (the source's channels and the monitoring; the commands the strip's block and the
-Session view's menu share), **Cut**, **Copy**, **Duplicate** (the selected tracks when this one
+Launcher view's menu share), **Cut**, **Copy**, **Duplicate** (the selected tracks when this one
 is among them) and **Paste** (after this track, enabled once tracks are copied), delete. A group's header starts with a triangle that
-folds its tracks away (Folded groups). The Session view's column headers have the same menu.
+folds its tracks away (Folded groups). The Launcher view's column headers have the same menu.
 
 A header's left edge is a 6 px band of the track's colour, the header's full height (dimmed while
 the track is off); return rows have one too. A click on the band opens the colour palette under
 it, the same swatches as the menu's; a swatch sets the colour (`track.setColor`, one undo step).
 A press on the band that drags still resizes the header column where the band meets its inner
-edge ([Session view](ui-session-view.md) › Track colour).
+edge ([Launcher view](ui-session-view.md) › Track colour).
 
 A **double-click on a header** (on its name or its background, not on one of its controls) also
 shows the track's devices in the detail area, opening the detail area if it was hidden; a clip
@@ -807,7 +807,7 @@ the colour the group shows, and turns the clips of the group and of those tracks
 track's colour (`track.colorGroup` with `clips`, one undo step). A looping clip's top notches are at most 2.5 px wide on each side of the boundary and
 shrink with the lane height. Its 1 px boundary line uses half the leading edge's contrast; the top notch cuts through to the canvas colour for a clearer silhouette. A group that holds tracks has
 the fold triangle at the start of its header (Folded groups): the lanes of every track inside it, at any
-depth, are hidden while it is folded, and the Session view hides their columns; both views fold
+depth, are hidden while it is folded, and the Launcher view hides their columns; both views fold
 the same groups, and folding is part of the view, not an edit, so it does not undo. A dragged
 header joins the group of the lane it is let go over: above that lane, or below it from its lower
 half, and below the header of an open group is into that group, first. Within the same group the
@@ -861,11 +861,11 @@ the value with `continue`, so the drag is one undo step.
 wheel is one step (1 dB, or 0.02 of pan), Shift as well makes it ten times finer, and the view
 stays where it is. The wheel alone scrolls the view over a field too, so scrolling down the track
 headers never moves a fader. The same holds for a clip's gain field, a send's knob, the main
-volume and the Session mixer's values; a strip's device list scrolls with the wheel itself.
+volume and the Launcher mixer's values; a strip's device list scrolls with the wheel itself.
 
-**Mixer controls** (Settings › Session and mixer) chooses how a track's volume and pan are
+**Mixer controls** (Settings › Launcher and mixer) chooses how a track's volume and pan are
 drawn: **Field** (default), the bar and the centre bar this view has always had, or **Knob**, a
-small knob with its value beside it, as the Session mixer's pan knob. Either way the control is
+small knob with its value beside it, as the Launcher mixer's pan knob. Either way the control is
 dragged and rolled over the same.
 
 ## Over other clips

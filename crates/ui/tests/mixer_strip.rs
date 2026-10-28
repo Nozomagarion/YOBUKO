@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The Session view's channel strip in the window: what each mixer height shows, resizing it from
+//! The Launcher view's channel strip in the window: what each mixer height shows, resizing it from
 //! its top edge, the fader (one undo step, a double-click for 0 dB), the output dropdown and the
 //! device list
 //! (`docs/spec/ui-session-view.md` › Mixer); the detail area's two layouts; and the setting that
@@ -379,7 +379,7 @@ fn a_double_click_makes_a_clip_only_while_the_setting_is_on() {
 
         let at = harness.get_by_label("Stop Keys (scene 1)").rect().center();
         double_click_at(&mut harness, at);
-        assert_eq!(keys_clips(&harness), (slots + made, lane), "Session view, setting on: {on}");
+        assert_eq!(keys_clips(&harness), (slots + made, lane), "Launcher view, setting on: {on}");
 
         harness.get_by_label("Arrangement view").click();
         harness.run();
@@ -389,7 +389,7 @@ fn a_double_click_makes_a_clip_only_while_the_setting_is_on() {
     }
 }
 
-/// Renders the Session view with a tall mixer to `target/ui-snapshots/mixer-strip.png`, for
+/// Renders the Launcher view with a tall mixer to `target/ui-snapshots/mixer-strip.png`, for
 /// looking at: `cargo test -p suhina-ui --test mixer_strip -- --ignored`.
 #[test]
 #[ignore = "needs a GPU adapter; run with --ignored"]

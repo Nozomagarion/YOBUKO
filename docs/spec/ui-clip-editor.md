@@ -44,7 +44,7 @@ lane, the grid and zoom, and the `note.*` commands.
   left of the detail area and the piano roll in the rest of it, in place of the track's devices.
   Selecting a track, or an audio clip, shows what it showed before (devices; an audio clip's
   properties). With the detail area stacked on the right, the piano roll sits under the properties.
-- **Later ([#343](https://github.com/suhina-daw/suhina-daw/issues/343)):** a clip selected in a Session slot opens it too, once slot selection lands (open pull
+- **Later ([#343](https://github.com/suhina-daw/suhina-daw/issues/343)):** a clip selected in a Launcher slot opens it too, once slot selection lands (open pull
   request #302); the piano roll then edits that slot's clip with the same commands (`scene`
   instead of `index`). A double-click on a clip opens the detail area if it is closed.
 - **Built ([#505](https://github.com/suhina-daw/suhina-daw/issues/505)):** a **Clip / Devices**
@@ -95,8 +95,8 @@ lane, the grid and zoom, and the `note.*` commands.
   is pulled to the top.
 - **Built ([#505](https://github.com/suhina-daw/suhina-daw/issues/505)):** a **double-click on a
   track** shows its devices: on an Arrangement track header ([arrangement
-  editing](arrangement-editing.md) › Tracks), on a Session column's name, or on the
-  Session channel strip's own background ([Session view](ui-session-view.md) › Mixer). The track
+  editing](arrangement-editing.md) › Tracks), on a Launcher column's name, or on the
+  Launcher channel strip's own background ([Launcher view](ui-session-view.md) › Mixer). The track
   is selected (the first click of the two already does that), the detail area opens if it was
   hidden (Shift+Tab, View › Hide detail area, or the splitter), and it shows that track's device
   chain. A device's panel answers a click with its selection (a 1 px `selection` outline in the
@@ -108,7 +108,7 @@ lane, the grid and zoom, and the `note.*` commands.
   track without an instrument); either way its settings are kept and its name dims. On an Arrangement
   header or a channel strip, a clip selected on that track stays
   selected and the switch goes to **Devices**, and a clip selected on another track is no longer
-  selected; a click on a Session column's name clears the slot selection already, so there the
+  selected; a click on a Launcher column's name clears the slot selection already, so there the
   devices show on their own. A double-click on a
   control in the header or the strip (a button, a fader, a knob, a value) is that control's own,
   as before.
@@ -276,7 +276,7 @@ comes back. It is window state, not a command, and not an undo step.
   own instead, one no other default uses.
 
 After the editor is closed one of these ways, **selecting a clip** (a click on a clip in the
-Arrangement view, another clip, or a slot's clip in the Session view) opens it again at the
+Arrangement view, another clip, or a slot's clip in the Launcher view) opens it again at the
 height it had. A detail area hidden with Shift+Tab stays hidden when a clip is selected, as
 before; Shift+Tab, View › Show detail area and the splitter open it either way. A click on an
 empty spot of the Arrangement view clears the clip selection (› [Arrangement
@@ -302,7 +302,7 @@ What stays above it is a setting, Settings › Clip editor › Piano roll › **
 - **Whole window**: the piano roll fills the whole area under the control bar.
 
 It stays pulled up while MIDI clips (or, with an ARA plug-in, audio clips) are edited; selecting
-something else (another kind of clip, a track, nothing), hiding the detail area (Shift+Tab) or the Session view shows the view as before. With the
+something else (another kind of clip, a track, nothing), hiding the detail area (Shift+Tab) or the Launcher view shows the view as before. With the
 device chain as a column beside the view (Settings › Detail area) there is nothing to
 pull up.
 
@@ -797,7 +797,7 @@ written against another (a bass line against the chords).
   - **None**: no ghost notes.
   - **Playing together** (the default): the clips that play at the same time as the edited clip.
     For an arrangement clip, every other arrangement clip, on any track, that plays during the
-    edited clip's first pass (below); a clip that is turned off is left out. For a Session slot's
+    edited clip's first pass (below); a clip that is turned off is left out. For a Launcher slot's
     clip, the clips in the other slots of the same scene: launching the scene starts them
     together, so each is laid out from the same launch (a looping slot clip goes on for ever, one
     that does not loop stops after its length).

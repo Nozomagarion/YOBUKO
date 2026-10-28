@@ -412,11 +412,11 @@ fn play_starts_from_the_selected_clip_with_shift_space_or_the_setting() {
     assert_eq!((monitor.running(), monitor.start_beat()), (true, 72.0));
     stop(&mut harness, &mut renderer);
 
-    // In the Session view the selection is not shown, so Play starts from the marker; stopping
+    // In the Launcher view the selection is not shown, so Play starts from the marker; stopping
     // again first puts the marker at the beginning.
     stop(&mut harness, &mut renderer);
     assert_eq!(monitor.start_beat(), 0.0);
-    harness.get_by_label("Session view").click();
+    harness.get_by_label("Launcher view").click();
     harness.run();
     harness.key_press(Key::Space);
     harness.run_steps(2);

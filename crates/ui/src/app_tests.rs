@@ -841,7 +841,7 @@ fn css_workspace_moves_native_controls_and_preserves_project_state() {
     crate::kit::skin::configure(&crate::kit::skin::Skin::default());
 }
 
-/// A rename in the session view's header reads as the name itself: the name's size, centred in
+/// A rename in the launcher view's header reads as the name itself: the name's size, centred in
 /// the header as the name is, and no selection colour of the theme's, which reads as a box of
 /// its own on a coloured header (#916).
 #[test]

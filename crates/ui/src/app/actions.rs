@@ -209,7 +209,7 @@ impl App {
                 let at = self.timeline.as_ref().map_or(0.0, |(_, _, t)| t.beat);
                 actions.extend(self.arrangement.automation.point_actions(action.trim_start_matches("selection."), at));
             }
-            // In the Session view copy and paste act on the selected clip slot.
+            // In the Launcher view copy and paste act on the selected clip slot.
             // Picked devices (a click on a strip's device or a panel of the chain): copy, cut
             // and paste act on them, before any clip.
             "selection.copy" | "selection.cut" if self.device_focus && self.selected_device.is_some() => {
@@ -273,7 +273,7 @@ impl App {
             // Cut and duplicate of a slot's clip wait for launcher clip commands; Delete works,
             // in the arm below.
             "selection.cut" | "selection.duplicate" if self.shown == View::Session => {
-                self.status = Status::Hint("In the Session view, a slot's clip can be copied and pasted".into());
+                self.status = Status::Hint("In the Launcher view, a slot's clip can be copied and pasted".into());
             }
             // Take pieces picked with Ctrl and a click: Delete deletes them, the last take first so
             // the numbers of the others hold when an emptied take goes (#989).
@@ -411,7 +411,7 @@ impl App {
                         return;
                     }
                 }
-                // The Session view: Delete takes the selected slot's clip off its slot, and the
+                // The Launcher view: Delete takes the selected slot's clip off its slot, and the
                 // detail area falls back to the track's devices.
                 if self.shown == View::Session {
                     if action == "selection.delete"
@@ -482,7 +482,7 @@ impl App {
                     self.rename = Some((json!({ "clip": id.0, "clips": clips }), name, false));
                     return;
                 }
-                // The selected clip: the Arrangement's, or the Session view's slot.
+                // The selected clip: the Arrangement's, or the Launcher view's slot.
                 let target = match self.shown {
                     View::Arrangement => self.arrangement.selected_clip().map(|(track, id)| {
                         let name = self
@@ -936,7 +936,7 @@ impl App {
     }
 
     /// Whether the edit keys act on tracks: a track header was the last thing clicked (in the
-    /// Session view, with no slot selected).
+    /// Launcher view, with no slot selected).
     pub(super) fn track_keys_on(&self) -> bool {
         match self.shown {
             View::Arrangement => self.arrangement.track_focus,

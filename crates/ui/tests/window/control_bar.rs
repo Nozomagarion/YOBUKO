@@ -24,7 +24,7 @@ fn tab_and_the_view_switch_change_the_view() {
     harness.run();
     assert_eq!(harness.state().view(), View::Arrangement);
     assert!(harness.query_by_label("Clip Beat B on Drums at bar 17").is_some());
-    harness.get_by_label("Session view").click();
+    harness.get_by_label("Launcher view").click();
     harness.run();
     assert_eq!(harness.state().view(), View::Session);
 }
@@ -97,7 +97,7 @@ fn the_view_switch_is_the_last_control_at_the_right_with_the_cpu_and_ram_left_of
     let ram = harness.get_by_label_contains("RAM usage").rect();
     let cpu = harness.get_by_label_contains("CPU load").rect();
     let arrangement = harness.get_by_label("Arrangement view").rect();
-    let session = harness.get_by_label("Session view").rect();
+    let session = harness.get_by_label("Launcher view").rect();
     let switch_left = arrangement.left().min(session.left());
     let switch_right = arrangement.right().max(session.right());
     assert!(ram.right() <= cpu.left(), "RAM {ram:?} left of CPU {cpu:?}");
@@ -126,7 +126,7 @@ fn a_narrow_window_leaves_out_what_would_reach_the_position_readout() {
     harness.run();
     let transport_end = size.0 / 2.0 + (28.0 * 2.0 + 1.0 + theme::PAD + 64.0) / 2.0;
     let arrangement = harness.get_by_label("Arrangement view").rect();
-    let session = harness.get_by_label("Session view").rect();
+    let session = harness.get_by_label("Launcher view").rect();
     let switch_left = arrangement.left().min(session.left());
     assert!(switch_left > transport_end, "the switch at {switch_left} clears the position");
     let cpu = harness.query_by_label_contains("CPU load").map(|n| n.rect());

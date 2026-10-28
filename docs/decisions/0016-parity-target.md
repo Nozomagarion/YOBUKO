@@ -48,7 +48,7 @@ agrees on. It does not schedule the work.
 ## Decision
 
 1. **The target is the clip-launching DAW workflow, not Live's whole surface.** In scope: reading
-   and writing projects, the Session and Arrangement views, clips and warping, launching, devices
+   and writing projects, the Launcher and Arrangement views, clips and warping, launching, devices
    and chains, mixing and routing, the browser and the library, plug-in hosting, and every action
    as a command (UI, CLI, MCP alike). A person who works in Live should be able to do their normal
    work here without keeping a second DAW installed.

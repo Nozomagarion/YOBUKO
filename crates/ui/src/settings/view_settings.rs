@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Settings of the window's layout and editing that live in their own lines of the settings
-//! file: the Session mixer's height, where the detail area goes, and whether a double-click on an
+//! file: the Launcher mixer's height, where the detail area goes, and whether a double-click on an
 //! empty slot or lane makes a clip (`docs/design/components.md` › Settings).
 
-/// The Session mixer's height in points: the least, the default and the most a file may say
+/// The Launcher mixer's height in points: the least, the default and the most a file may say
 /// (the view clamps it further to the space it has).
 pub const MIXER_HEIGHTS: (u32, u32, u32) = (46, 166, 2000);
 
@@ -115,7 +115,7 @@ pub struct ViewSettings {
     pub audio_colour_strength: u8,
     /// Track header colour strength, as a percentage of its source RGB colour.
     pub header_colour_strength: u8,
-    /// The Session mixer's height, in points.
+    /// The Launcher mixer's height, in points.
     pub mixer_height: u32,
     /// The strips' fader height the divider under their device lists sets, in points; 0 is
     /// automatic.

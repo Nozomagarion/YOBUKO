@@ -6,7 +6,7 @@
 use super::*;
 
 impl App {
-    /// A double-click on a track (an Arrangement header, a Session column's name or channel
+    /// A double-click on a track (an Arrangement header, a Launcher column's name or channel
     /// strip) selects it and shows its devices, opening the detail area; a clip selected on
     /// another track is no longer selected (`docs/spec/ui-clip-editor.md` › Where it opens).
     pub(super) fn devices_asked(&mut self) {
@@ -634,7 +634,7 @@ impl App {
         if piano { piano_roll::LEAST_HEIGHT } else { 80.0 }
     }
 
-    /// The clip the detail area shows: the Arrangement view's selected clip, or the Session view's
+    /// The clip the detail area shows: the Arrangement view's selected clip, or the Launcher view's
     /// selected slot's.
     pub(super) fn shown_clip(&self) -> Option<ClipRef> {
         match self.shown {
@@ -656,7 +656,7 @@ impl App {
 
     /// The piano roll for the selected arrangement clip, when it is a MIDI clip; its grid is its
     /// own grid value, or the control bar's when Settings says so.
-    /// The piano roll for the shown clip: an arrangement clip's, or the Session view's selected
+    /// The piano roll for the shown clip: an arrangement clip's, or the Launcher view's selected
     /// slot's clip.
     pub(super) fn piano_clip(&self, clip: Option<detail_view::ClipRef>) -> Option<piano_roll::PianoClip> {
         let follows = self.settings.piano_grid_follows;

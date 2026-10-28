@@ -286,7 +286,7 @@ pub struct ArrangementViewState {
     /// Where the waveform zoom slider was drawn last frame: the wheel over it steps the zoom
     /// and leaves the view where it is.
     pub(super) zoom_area: Option<Rect>,
-    /// Volume and pan as knobs instead of fields (Settings › Session and mixer).
+    /// Volume and pan as knobs instead of fields (Settings › Launcher and mixer).
     pub knobs: bool,
     /// The track the user last worked on: the header they clicked, or the track of the clip they
     /// selected. A folded group shows that track while it is one of its own.

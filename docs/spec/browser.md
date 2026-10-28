@@ -248,7 +248,7 @@ notes (in the file's order; a type 0 file gives one clip). The clip is named aft
 the MIDI track's name, when it has one: "groove – Hats").
 
 **Several files** (and a MIDI file's several clips) go onto **one track**, one after another:
-in the Arrangement each starts where the one before ends; in the Session they go down the
+in the Arrangement each starts where the one before ends; in the Launcher they go down the
 track's slots from the slot they were dropped on. With **Ctrl** held when releasing, they go
 onto **one track each**, side by side: in the Arrangement all at the dropped beat, in the
 Session all in the dropped scene, the first on the track it was dropped on and the others on
@@ -258,14 +258,14 @@ without Ctrl).
 | Dropped on | Result |
 |---|---|
 | An Arrangement lane | Clips from the beat under the pointer, on the grid the control bar's value sets at that zoom ([arrangement editing](arrangement-editing.md) › The grid; Alt or `none`: no snap). The clips replace what they cover, unless the stacking settings allow it ([arrangement editing](arrangement-editing.md)). |
-| A Session slot (empty or not) | Clips into that slot and the ones below it; a clip already there is replaced. Scenes are added at the bottom when there are more clips than slots. |
+| A Launcher slot (empty or not) | Clips into that slot and the ones below it; a clip already there is replaced. Scenes are added at the bottom when there are more clips than slots. |
 | The empty area | New tracks, see below. |
 
 **A track takes the files it can play:** samples go to an audio track, MIDI files to a note
 track. Files the dropped-on track cannot take go onto a new track of their kind inserted after
 it (one track for all of them, or one each with Ctrl).
 
-**The empty area** is the space right of the last track in the Session (above the scenes, or
+**The empty area** is the space right of the last track in the Launcher (above the scenes, or
 in the scene row dropped on) and the space under the last lane in the Arrangement (at the
 dropped beat). Dropping there makes new tracks at the end of the regular tracks (before the
 returns): one audio track for the samples and one note track for the MIDI files, or with Ctrl
@@ -273,7 +273,7 @@ one track per clip. A new track made for one file is named after it; otherwise "
 "MIDI <n>".
 
 **The empty area shows two buttons**, **+ MIDI track** and **+ Audio track** (at its top in the
-Session, at its left in the Arrangement), which add an empty track of that kind. A drop on
+Launcher, at its left in the Arrangement), which add an empty track of that kind. A drop on
 either works like a drop on the empty area.
 
 **Warping.** A sample whose tempo is known (see *Tempo and key*) is warped: it plays at the
@@ -333,7 +333,7 @@ is added. Other files are an error in the status bar.
 
 | Dropped on | Result |
 |---|---|
-| A track (its header, an Arrangement lane, a Session slot, the detail area showing its chain) | The device is added to that track's chain: an instrument first, an effect last. An instrument on an audio track is refused with a message. A track plays one instrument: an instrument added to a track that has one takes its place (effects after it stay), as one undo step. |
+| A track (its header, an Arrangement lane, a Launcher slot, the detail area showing its chain) | The device is added to that track's chain: an instrument first, an effect last. An instrument on an audio track is refused with a message. A track plays one instrument: an instrument added to a track that has one takes its place (effects after it stay), as one undo step. |
 | The empty area | A new track with the device: a note track for an instrument, an audio track for an effect, named after the device. |
 
 A **preset** is its device with the preset's values: a DX7 voice is the FM synth playing that
@@ -380,7 +380,7 @@ it is a place to drop, and the status line says what a drop there does.
 
 Enter in the search field or a double-click on an item adds it to the selected track:
 a device to its chain; samples and MIDI files in the Arrangement at the play start marker, in
-the Session from the first empty slot down. With no track selected, a new track is made as for
+the Launcher from the first empty slot down. With no track selected, a new track is made as for
 the empty area.
 
 ## Colour tags
@@ -454,7 +454,7 @@ the CLI can do the same.
 | Command | Params | Does |
 |---|---|---|
 | `track.add` | `kind?` (`audio`, `midi`), `name?`, `after?`, `device?`, `sd?`, `preset?`, `voice?` | adds a track with its mixer channel, clip slots for every scene and an Arrangement lane, after track `after` or at the end of the regular tracks; with `device` (a built-in id or a plug-in from `plugin.list`), `sd` or `preset`, the device too, and `kind` follows from it; `.sd` and built-in instruments and MIDI effects create MIDI tracks |
-| `clip.addFiles` | `paths`, `track?`, `start?`, `scene?`, `separate?`, `stack?`, `warp?` | places samples, MIDI files and Stems files as in *Files*: on `track` (or new tracks when it is missing; a Stems file's group goes into `track` when it is a group), from beat `start` in the Arrangement or from `scene` (1-based) in the Session (exactly one of the two); `separate` gives each clip a track; `warp` is the stretch mode for samples with a known tempo (`rhythmic` by default); returns the clips, the new tracks, the Stems groups (`groups`) and what was `skipped` |
+| `clip.addFiles` | `paths`, `track?`, `start?`, `scene?`, `separate?`, `stack?`, `warp?` | places samples, MIDI files and Stems files as in *Files*: on `track` (or new tracks when it is missing; a Stems file's group goes into `track` when it is a group), from beat `start` in the Arrangement or from `scene` (1-based) in the Launcher (exactly one of the two); `separate` gives each clip a track; `warp` is the stretch mode for samples with a known tempo (`rhythmic` by default); returns the clips, the new tracks, the Stems groups (`groups`) and what was `skipped` |
 | `device.add` | adds `preset?` and `voice?` (1–32) | the built-in effect or instrument with a preset's values |
 
 **Preview** (Transport kind, on the active project's player): `preview.play {path, from?, track?, gain?}`

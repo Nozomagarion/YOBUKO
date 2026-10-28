@@ -798,7 +798,7 @@ pub fn value_area(ui: &Ui, rect: Rect, id: egui::Id, label: impl ToString, value
 /// The knob: a small circle with a pointer from the centre, −135° … +135° of travel for
 /// `position` 0 … 1 (components › Mixer strip).
 /// The artwork roles of a knob's body and pointer: a pan's and a send's (a return's level) knob
-/// take `pan.knob.*` and `send.knob.*` when the theme has them, in the Session and the
+/// take `pan.knob.*` and `send.knob.*` when the theme has them, in the Launcher and the
 /// Arrangement alike, so they can differ from the devices' knobs; otherwise every knob shares
 /// `knob.*`.
 pub fn knob_roles() -> (&'static str, &'static str) {

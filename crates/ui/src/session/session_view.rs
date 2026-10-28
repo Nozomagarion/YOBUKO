@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The Session view: tracks as columns, scenes as rows, scene launch on the right, the mixer
+//! The Launcher view: tracks as columns, scenes as rows, scene launch on the right, the mixer
 //! along the bottom (`docs/spec/ui-session-view.md`, sizes in `docs/design/components.md`).
 //! It draws a [`TrackGrid`] and turns clicks into [`Action`]s; it never changes the project itself.
 
@@ -104,7 +104,7 @@ pub struct SessionViewState {
     /// over them alone, with or without Alt.
     pub(crate) scroll_areas: Vec<Rect>,
     /// The volume as a knob beside the pan knob instead of a plain value
-    /// (Settings › Session and mixer › Mixer controls).
+    /// (Settings › Launcher and mixer › Mixer controls).
     pub knobs: bool,
     /// A drag from the browser over the window: the view says which target is under the
     /// pointer (`docs/spec/browser.md` › Dragging into the project).
@@ -230,7 +230,7 @@ fn rgb(color: suhina_engine::model::Rgb) -> Color32 {
 /// the whole column in its track's colour.
 const EMPTY_TINT: f32 = 0.12;
 
-/// Draws the Session view in the space left in `ui` and adds what the user asked for to
+/// Draws the Launcher view in the space left in `ui` and adds what the user asked for to
 /// `actions`. `progress` is how far each column's playing clip is (0 … 1), by column index.
 pub fn show(
     ui: &mut Ui,

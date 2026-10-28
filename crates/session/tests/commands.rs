@@ -642,7 +642,7 @@ fn several_clips_mute_and_delete_as_one_undo_step() {
     }
     assert_eq!(bass_spans(&session).len(), 2, "a refused list changes nothing");
 
-    // One clip by track and index still works, as the Session view's form by scene does.
+    // One clip by track and index still works, as the Launcher view's form by scene does.
     run(&mut session, "clip.delete", json!({ "track": "Bass", "index": 0 })).unwrap();
     assert_eq!(bass_spans(&session), [(8.0, true)]);
 }

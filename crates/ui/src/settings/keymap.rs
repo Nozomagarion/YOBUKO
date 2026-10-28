@@ -119,8 +119,8 @@ const WINDOW_ACTIONS: [(&str, &str, &str); 83] = [
     ("transport.toggle", "Play or stop", "Transport"),
     ("view.computerKeyboard", "Play notes from the computer keyboard, or stop", "Transport"),
     ("transport.playFromSelection", "Play from the start of the selected clip", "Transport"),
-    ("view.toggle", "Switch between Session and Arrangement", "View"),
-    ("view.session", "Show the Session view", "View"),
+    ("view.toggle", "Switch between Launcher and Arrangement", "View"),
+    ("view.session", "Show the Launcher view", "View"),
     ("view.arrangement", "Show the Arrangement view", "View"),
     ("settings.open", "Open or close Settings", "View"),
     ("view.detail", "Show or hide the detail area", "View"),
@@ -155,11 +155,11 @@ const WINDOW_ACTIONS: [(&str, &str, &str); 83] = [
     ("track.addMidi", "Add a MIDI track", "Tracks"),
     ("clip.insertMidi", "Insert an empty MIDI clip over the time selection", "Edit"),
     ("view.automation", "Show or hide every track's automation lanes", "View"),
-    ("selection.launch", "Launch the selected clip slot", "Session"),
-    ("selection.up", "Select the clip slot above", "Session"),
-    ("selection.down", "Select the clip slot below", "Session"),
-    ("selection.left", "Select the clip slot in the track to the left", "Session"),
-    ("selection.right", "Select the clip slot in the track to the right", "Session"),
+    ("selection.launch", "Launch the selected clip slot", "Launcher"),
+    ("selection.up", "Select the clip slot above", "Launcher"),
+    ("selection.down", "Select the clip slot below", "Launcher"),
+    ("selection.left", "Select the clip slot in the track to the left", "Launcher"),
+    ("selection.right", "Select the clip slot in the track to the right", "Launcher"),
     ("pianoRoll.quantize", "Quantise the piano roll's selected notes, or all its notes", PIANO_ROLL),
     ("pianoRoll.selectAll", "Select every note in the piano roll", PIANO_ROLL),
     ("pianoRoll.deselect", "Clear the piano roll's note selection", PIANO_ROLL),
@@ -219,7 +219,7 @@ pub fn piano_roll_only(action: &str) -> bool {
     action.starts_with("pianoRoll.") && action != "pianoRoll.quantize"
 }
 
-/// Whether `action` works only on a selected clip slot in the Session view: the piano roll keys
+/// Whether `action` works only on a selected clip slot in the Launcher view: the piano roll keys
 /// never do (it edits arrangement clips), so the two may share keys.
 pub fn slot_only(action: &str) -> bool {
     matches!(action, "selection.launch" | "selection.up" | "selection.down" | "selection.left" | "selection.right")
