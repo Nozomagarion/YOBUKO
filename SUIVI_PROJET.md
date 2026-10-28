@@ -1,10 +1,11 @@
 # Où en est notre application ?
 
-**Bilan du 28 octobre 2026 — ajout et retrait de FM Synth/Utility validés localement.**
+**Bilan du 28 octobre 2026 — ajout et retrait de FM Synth/Utility livrés et validés localement.**
 Les deux participants peuvent maintenant construire leur chaîne sonore pendant le partage,
 dans **Multiplayer → Devices**, sans recréer le morceau ni perdre les prises.
-**3 144 tests passent, aucun échec.** Le nouveau paquet Mac est en préparation ; le dernier
-paquet livré reste `09edc15b`, avec les réglages des appareils existants.
+**3 144 tests passent, aucun échec.** Le paquet Mac **`b17d8df6`**, en protocole 10, est compilé
+et vérifié après extraction. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles
+distants restent bloqués par GitHub ; Windows/Linux ne sont donc pas validés pour cette version.
 
 ## Ce qu’on fabrique
 
@@ -120,14 +121,21 @@ Les projets sauvegardés gardent leur format natif version 3 ; ce changement con
 | Retour de l’invité | **Réussi** : chaîne et sons ajoutés pendant son absence reçus dans la nouvelle copie ; ancienne copie et original conservés. |
 | Interface | **14 tests réussis** : boutons réellement cliqués, sélection annulée sur page fermée, décalage d’index, plusieurs Utility, réutilisation d’une ancienne place et chaîne vide. Captures vérifiées séparément. |
 | Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; pas de nouvelle dépendance. |
-| Nouveau paquet Mac Apple Silicon | En préparation ; l’application installée ou déjà ouverte n’a pas été remplacée. |
+| Paquet Mac Apple Silicon `b17d8df6` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
+| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat annoncé pour cette révision.** |
 | Deux ordinateurs physiques | **Pas encore testé**, comme convenu. |
 
 ## Où trouver la version actuelle
 
-Le nouveau paquet est en préparation. Le dernier paquet déjà livré reste
-`suhina-multiplayer-devices-macos-arm64-09edc15b.zip`, dans `builds` voisin du dépôt.
-Il utilise le protocole 9 et ne contient pas encore l’ajout/retrait d’appareils.
+- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-chains-macos-arm64-b17d8df6.zip`.
+- **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
+- **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
+- **Preuves locales :** dossier `validation/2026-10-28` voisin du dépôt : journaux, captures et script de fabrication du paquet.
+
+Les tests et le paquet correspondent au code **`b17d8df65173f56217e0497ab5936e9c37d40927`**,
+compilé après son enregistrement puis envoyé sur notre branche GitHub. C’est un paquet de
+développement Mac Apple Silicon, signé localement. L’application installée ou ouverte n’a pas
+été remplacée. Les deux participants doivent utiliser ce même nouveau paquet.
 
 ## GitHub et distribution
 
@@ -137,8 +145,8 @@ Le README et ses barres présentent notre application : **14 étapes réalisées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
 du logiciel final ; l’ajout/retrait des appareils est distingué du réglage d’un appareil existant.
 
-**Blocage externe à nouveau constaté le 27 octobre à 23 h 44**, sur le code
-`09edc15b3d1dd547a757a1f3631fd6bdda325303` :
+**Blocage externe à nouveau constaté le 28 octobre à 2 h 21**, sur le code
+`b17d8df65173f56217e0497ab5936e9c37d40927` :
 GitHub refuse le lancement des contrôles avec `HTTP 422: Actions has been disabled for this repository.`
 La lecture du réglage indique pourtant `enabled: true` ; la cause de ce désaccord n’est pas établie.
 Le workflow de notre fork est également indiqué actif. Aucune exécution n’était visible pour
