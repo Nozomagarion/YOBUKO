@@ -114,7 +114,7 @@ crates/
   midi     L3 MIDI controllers: lists the input ports and opens them (midir); their notes play the armed
            tracks' instruments (ADR 0017)
   ui       L3 the main window, the browser and the views (egui, ADR 0009); every change is a command
-  dsp      L0 signal-processing blocks for built-in effects and instruments: smoothing, filters, crossovers, LFOs, shapers, oversampling, delay lines (ADR 0004)
+  dsp      L0 signal-processing blocks for built-in effects and instruments: smoothing, attack/release followers, filters, crossovers, LFOs and tempo sync, shapers, oversampling, delay lines (ADR 0004)
   device-api L0 the Device trait, parameter descriptions, contract tests every device runs
   device-sdk L0 builds and validates data-only `.sd` effect graphs, compiles DSP primitives and delayed feedback for real-time execution; shared node contracts and embedded custom UI canvases/images for authors and agents; the layouts of
            built-in devices (`builtin`: the UI part only, no graph); native sampler tempo synchronisation uses stretch
@@ -130,6 +130,7 @@ devices/
   utility  gain, balance, width, mono, bass mono, phase, channels, DC filter; depends on dsp, device-api
   auto-pan LFO panning and tremolo, free in Hz or synced to the song position
   dj-eq    three bands with kills, Linkwitz-Riley crossovers at 24 or 48 dB/octave
+  eq       eight bands (cuts, shelves, bells, notch) on state-variable filters, two curves: Stereo, L/R, M/S
   vinyl-distortion  tracing (even), pinch (odd, out of phase) and crackle, oversampled
   overdrive  pedal-style: band, drive, tone, dynamics, dry/wet; oversampled
   compressor stereo-linked, soft knee, side-chain high-pass, attack/release, dry/wet

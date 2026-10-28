@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Bounded custom-property substitution with inheritance handled at element boundaries.
-use cssparser::{Parser, ParserInput, Token};
+use cssparser::{Parser, Token};
 use std::collections::{BTreeMap, BTreeSet};
 
 const MAX_EXPANSION: usize = 16 * 1024;
@@ -15,9 +15,8 @@ pub(crate) fn resolve(raw: &BTreeMap<String, String>) -> Result<BTreeMap<String,
     }
     let mut graph = BTreeMap::new();
     for (name, value) in raw {
-        let mut input = ParserInput::new(value);
         let mut dependencies = BTreeSet::new();
-        references(&mut Parser::new(&mut input), &mut dependencies, 0)?;
+        references(&mut Parser::new(value), &mut dependencies, 0)?;
         graph.insert(name.clone(), dependencies);
     }
     let mut invalid = BTreeSet::new();
@@ -68,7 +67,7 @@ fn cycles(
     Ok(())
 }
 
-fn references(parser: &mut Parser<'_, '_>, output: &mut BTreeSet<String>, depth: usize) -> Result<(), String> {
+fn references(parser: &mut Parser<'_>, output: &mut BTreeSet<String>, depth: usize) -> Result<(), String> {
     if depth > crate::MAX_NESTING {
         return Err("Custom-property nesting limit".into());
     }
@@ -108,12 +107,11 @@ fn expand(
     if depth > 32 {
         return Err("Variable substitution exceeds 32 levels".into());
     }
-    let mut input = ParserInput::new(source);
-    expand_tokens(&mut Parser::new(&mut input), source, variables, invalid, depth, work)
+    expand_tokens(&mut Parser::new(source), source, variables, invalid, depth, work)
 }
 
 fn expand_tokens(
-    parser: &mut Parser<'_, '_>,
+    parser: &mut Parser<'_>,
     source: &str,
     variables: &BTreeMap<String, String>,
     invalid: &BTreeSet<String>,
@@ -194,12 +192,11 @@ pub(crate) fn substitute_attributes(source: &str, element: &crate::selector::Ele
         return Ok(source.to_owned());
     }
     let mut work = MAX_WORK;
-    let mut input = ParserInput::new(source);
-    attributes(&mut Parser::new(&mut input), source, element, 0, &mut work)
+    attributes(&mut Parser::new(source), source, element, 0, &mut work)
 }
 
 fn attributes(
-    parser: &mut Parser<'_, '_>,
+    parser: &mut Parser<'_>,
     source: &str,
     element: &crate::selector::Element,
     depth: usize,
@@ -256,8 +253,7 @@ fn attributes(
                     match (value, fallback) {
                         (Some(value), _) => Ok(value),
                         (None, Some(fallback)) => {
-                            let mut input = ParserInput::new(&fallback);
-                            attributes(&mut Parser::new(&mut input), &fallback, element, depth + 1, work)
+                            attributes(&mut Parser::new(&fallback), &fallback, element, depth + 1, work)
                         }
                         (None, None) => Err(format!("No usable attribute {name}")),
                     }

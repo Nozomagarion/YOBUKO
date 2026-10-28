@@ -545,8 +545,7 @@ change. What is drawn in bulk (notes, clips, grid lines) is not in the tree: a d
 styled by its parent and its identity (kind, classes, states, attributes such as a clip's `color`),
 once per distinct identity, so a repaint costs a hash lookup per note. Such an element is styled as
 its parent's only child. A new tree of the same structure drops only the cached styles under the
-elements that changed (`crates/style/src/resolver.rs` has the rules and
-`crates/style/benches/style_cache.rs` the measurements).
+elements that changed.
 
 `theme::panel_background()` and the other token functions stay during the move and read the
 variables, so views move over one at a time and the snapshots must not change on the way.
