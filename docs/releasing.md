@@ -232,7 +232,16 @@ skipped jobs show as skipped and `ci` passes.
 **The build cache.** Only `main` saves `ci.yml`'s Rust cache; pull requests and the merge queue
 restore `main`'s. The repository's caches share GitHub's 10 GB, and when every pull request push
 saved its own (about 0.8 GB per system), `main`'s were evicted and about half the runs compiled
-every dependency again: 11 to 12 minutes of compiling on Linux instead of 3½ to 4½.
+every dependency again: 11 to 12 minutes of compiling on Linux instead of 3½ to 4½. Each push to
+`main` runs CI to the end in a concurrency group of its own: the generated-docs commit that
+follows every merge used to cancel it, and as a cancelled run saves no cache, Windows (the slowest)
+never saved one and every pull request compiled every dependency there, 23 to 29 minutes instead of
+about 10.
+
+The test build follows the same rule: its `cache` job builds the test build's binaries on every
+push to `main` that changes them, only to save the cache, and pull requests' test builds restore it
+and save none. Their own caches, 0.6 to 0.8 GB per system on every build, had filled the 10 GB and
+evicted the others.
 
 The queue is a setting, not code: Settings › Rules (or Branches) › the rule for `main` › **Require
 merge queue**, with the merge method used today, a group size of about 5 and *Only merge
