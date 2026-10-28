@@ -75,7 +75,7 @@ documentation and UI). The scope decision it leads to is
 | Same, over the scope the roadmap aims at (also without accessibility) | **about 30 %** |
 | Weighting each chapter by its numbered sections instead of its pages | **17 %** (the two weightings agree) |
 | Numbered manual sections | **344**, of which **111 (32 %)** sit in chapters Suhina has not started at all |
-| Built-in devices | **12** (10 effects, 1 MIDI effect, 1 instrument) against Live's 63 (42 audio effects, 8 MIDI effects, 13 instruments) |
+| Built-in devices | **11** (9 effects, 1 MIDI effect, 1 instrument) against Live's 63 (42 audio effects, 8 MIDI effects, 13 instruments) |
 | Commands | **243**, every one reachable from the UI, the CLI and MCP |
 | Still absent as whole features | MPE, Grooves, Tuning, Comping, Racks, Clip Envelopes, Push, Link, video, accessibility |
 <!-- parity:end -->
@@ -231,7 +231,7 @@ does not name (Meld, Electric, Impulse, External Instrument).
 | Dynamic Tube | 29.13 | tube saturation | none |  |
 | Echo | 29.14 | modulation delay | planned | ROADMAP: delays |
 | EQ Eight | 29.15 | parametric EQ | equivalent | Suhina EQ takes every band parameter of both curves (eight types, Stereo/Left-Right/Mid-Side, Scale, Adaptive Q); no analyser, Audition or oversampling option yet |
-| EQ Three | 29.16 | DJ EQ | equivalent | Suhina three-band DJ EQ |
+| EQ Three | 29.16 | DJ EQ | equivalent | Suhina three-band DJ EQ: gains from silence to +6 dB with kills, Linkwitz-Riley crossovers at 24 or 48 dB/octave; its 0 dB sum keeps the measured dip at the low crossover |
 | Erosion | 29.17 | modulation destruction | none |  |
 | External Audio Effect | 29.18 | external send and return | none | needs external audio I/O, which Suhina does not have |
 | Filter Delay | 29.19 | filtered delay | none | the planned delay device is not documented as filtered or three-line |
@@ -310,7 +310,6 @@ placeholders. None of them run today.
 | utility | effect | gain, balance, width, mono, bass mono, phase, channels, DC filter (13 parameters) |
 | auto-pan | effect | LFO panning and tremolo, free Hz or synced (9 parameters) |
 | eq | effect | eight bands, two curves for Stereo, Left/Right or Mid/Side, Scale, Adaptive Q (84 parameters) |
-| dj-eq | effect | three bands with kills, Linkwitz-Riley crossovers at 24 or 48 dB/octave (9 parameters) |
 | vinyl-distortion | effect | tracing, pinch, crackle, oversampled (12 parameters) |
 | overdrive | effect | pedal-style: band, drive, tone, dynamics, dry/wet (7 parameters) |
 | compressor | effect | stereo-linked, soft knee, side-chain high-pass, dry/wet (9 parameters) |
