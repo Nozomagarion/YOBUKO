@@ -736,8 +736,8 @@ impl Cx<'_> {
     /// it changes only through Browse or Reset, each asking first.
     pub fn moved_folder(&mut self, row: Rect, hint: &str, pick: PickField, value: &str) {
         let name = self.name;
-        self.label =
-            Some(Rect::from_min_size(row.min, Vec2::new(row.width() - FOLDER_FIELD - 8.0 + LABEL_WIDTH, row.height())));
+        // The name is cut where the field starts.
+        self.label = Some(Rect::from_min_size(row.min, Vec2::new(CONTROL_COLUMN - 8.0, row.height())));
         let browse = Rect::from_min_size(
             Pos2::new(row.right() - BROWSE_WIDTH, row.top() + 1.0),
             Vec2::new(BROWSE_WIDTH, SEGMENT),
@@ -762,8 +762,8 @@ impl Cx<'_> {
             self.outcome.folder_reset = Some(pick);
         }
         let rect = Rect::from_min_max(
-            Pos2::new(row.right() - FOLDER_FIELD, row.top()),
-            Pos2::new(reset.left() - 4.0, row.top() + SEGMENT + 2.0),
+            Pos2::new(control_x(row), row.top()),
+            Pos2::new((reset.left() - 4.0).max(control_x(row) + 40.0), row.top() + SEGMENT + 2.0),
         );
         let (text, color) = if value.is_empty() { (hint, theme::text_hint()) } else { (value, theme::text_value()) };
         self.painter.rect_stroke(rect, 2.0, theme::hairline(theme::border()), egui::StrokeKind::Inside);
