@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 9;
+pub const PROTOCOL: u16 = 10;
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -103,6 +103,10 @@ pub enum WireEdit {
     Volume { track: u32, db: f64 },
     #[serde(rename = "track.setPan")]
     Pan { track: u32, pan: f64 },
+    #[serde(rename = "device.addShared")]
+    DeviceAdd { track: u32, kind: String },
+    #[serde(rename = "device.removeShared")]
+    DeviceRemove { track: u32, device: usize },
     #[serde(rename = "device.setSharedParam")]
     DeviceParam { track: u32, device: usize, param: String, value: f64 },
     #[serde(rename = "note.add")]
@@ -141,6 +145,8 @@ impl WireEdit {
             Self::Rename { track, name } => ("track.rename", json!({"track":track,"name":name})),
             Self::Volume { track, db } => ("track.setVolume", json!({"tracks":[track],"db":db})),
             Self::Pan { track, pan } => ("track.setPan", json!({"tracks":[track],"pan":pan})),
+            Self::DeviceAdd { track, kind } => ("device.addShared", json!({"track":track,"kind":kind})),
+            Self::DeviceRemove { track, device } => ("device.removeShared", json!({"track":track,"device":device})),
             Self::DeviceParam { track, device, param, value } => {
                 ("device.setSharedParam", json!({"track":track,"device":device,"param":param,"value":value}))
             }

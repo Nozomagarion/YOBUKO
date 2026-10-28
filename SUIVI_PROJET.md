@@ -1,11 +1,10 @@
 # Où en est notre application ?
 
-**Bilan du 27 octobre 2026 — réglages FM Synth et Utility livrés et validés localement.**
-Les deux participants peuvent maintenant modifier les paramètres des appareils déjà présents,
-dans **Multiplayer → Devices**. Les valeurs sont vérifiées par l’hôte avant d’atteindre les deux copies.
-**3 135 tests passent, aucun échec.** Le paquet Mac **`09edc15b`**, en protocole 9, est compilé
-et vérifié après extraction. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles
-distants restent bloqués par GitHub ; Windows/Linux ne sont donc pas validés pour cette version.
+**Bilan du 28 octobre 2026 — ajout et retrait de FM Synth/Utility validés localement.**
+Les deux participants peuvent maintenant construire leur chaîne sonore pendant le partage,
+dans **Multiplayer → Devices**, sans recréer le morceau ni perdre les prises.
+**3 144 tests passent, aucun échec.** Le nouveau paquet Mac est en préparation ; le dernier
+paquet livré reste `09edc15b`, avec les réglages des appareils existants.
 
 ## Ce qu’on fabrique
 
@@ -25,13 +24,29 @@ ordinateurs de la maison est prévu plus tard, comme demandé. Le logiciel compl
 | **Reprendre après une coupure** | L’hôte crée une nouvelle invitation sans fermer le morceau ; l’invité ouvre l’état actuel dans un nouvel onglet. | Reconnexion automatique, fusion des retouches hors connexion et reprise après arrêt de l’hôte. |
 | **Notes et clips** | Modifier les notes MIDI ; créer, déplacer, redimensionner, dupliquer, activer et supprimer les clips de l’arrangement. | Édition des cases du lanceur et davantage d’outils partagés. |
 | **Pistes et mixeur** | Les deux participants ajoutent des pistes audio ou MIDI/FM Synth ; noms, volumes et panoramiques partagés. | Suppression, réorganisation et groupes. |
-| **Réglages des sons** | Modifier les paramètres des FM Synth et Utility déjà présents depuis l’un ou l’autre participant. | Ajouter/retirer les appareils pendant la session, autres effets/instruments et plugins. |
+| **Appareils et sons** | Ajouter, retirer et régler FM Synth et Utility depuis l’un ou l’autre participant. | Réorganisation, activation/désactivation, autres effets/instruments et plugins. |
 | **Nouvelles prises** | Les deux participants publient un son terminé depuis un onglet Studio local ; l’hôte vérifie les envois. | Enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
 | **Écoute personnelle** | Chacun garde son lecteur, sa position, son démarrage et son arrêt. | Essai sur les deux ordinateurs physiques. |
 | **Espace DJ** | Bibliothèque persistante, import, analyse tempo/tonalité issue de rbxport, ajout d’un rendu du studio. | Playlists, points cue, grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Bouton dans les paramètres pour comparer les versions GitHub ; suivi des sources et vérification des paquets de notre application. | Intégration régulière des nouveautés, publication et réception automatique d’une version commune. |
 
-## Nouveau : régler le son ensemble
+## Nouveau : construire la chaîne sonore ensemble
+
+1. Créer ou rejoindre le partage, puis **Multiplayer → Devices**.
+2. Choisir la piste dans **Device track**.
+3. Cliquer **Add FM Synth** ou **Add Utility**. FM Synth est disponible sur une piste MIDI sans instrument ; il ne remplace jamais un instrument existant. Utility s’ajoute en fin de chaîne.
+4. Choisir explicitement l’appareil dans **Shared device** pour accéder à ses réglages.
+5. Pour le retirer, cliquer **Remove selected device**. Ses réglages et son automatisation sont retirés avec lui ; pistes, clips, notes et sons collectés sont conservés.
+6. Après un ajout ou retrait, choisir à nouveau **Shared device**. Les anciennes sélections sont annulées, même si un nouvel appareil réutilise leur ancienne place.
+
+**Refresh chain draft** actualise le brouillon d’ajout après une modification du morceau.
+**Refresh device draft** actualise un réglage ou un retrait périmé ; après un changement de
+chaîne, il faut choisir l’appareil à nouveau plutôt que réutiliser l’ancien brouillon.
+Les originaux restent dans leurs onglets. Les lecteurs et leurs positions ne sont pas remplacés.
+Comme dans le studio, le nouvel instrument prend le relais aux prochaines notes. Retirer FM Synth
+conserve les notes et laisse la piste utiliser son son de base.
+
+## Régler le son ensemble
 
 1. Créer ou rejoindre un partage, puis ouvrir **Multiplayer → Devices**.
 2. Choisir un FM Synth ou Utility existant dans **Shared device**.
@@ -40,10 +55,9 @@ ordinateurs de la maison est prévu plus tard, comme demandé. Le logiciel compl
 5. Cliquer **Apply shared parameter**. Après confirmation de l’hôte, **Confirmed value** et les deux projets sont mis à jour.
 6. Si le morceau change entre-temps, **Apply** est désactivé : **Refresh device draft** recharge la valeur confirmée avant de préparer un nouvel envoi.
 
-Pour essayer depuis la démonstration : **Create LAN session → Tracks**, donner un nom à une
-nouvelle **MIDI track · FM Synth**, puis **Add shared track → Devices**. La démonstration de
-départ n’a pas d’appareil FM Synth ; il faut donc en créer une piste. Utility peut être ajouté
-dans le Studio local avant le partage du projet. Son ajout pendant la session reste à construire.
+Pour essayer depuis la démonstration : **Create LAN session → Devices**, choisir **Pulse**
+dans **Device track**, puis **Add FM Synth**. Ajouter Utility de la même manière, avec un
+rafraîchissement du brouillon de chaîne si nécessaire.
 
 Les contrôles reprennent les paramètres et plages du studio. Les valeurs hors plage, choix
 fractionnaires, appareils non pris en charge et brouillons périmés sont refusés. Un appareil
@@ -88,46 +102,38 @@ comme chemins de fichiers à l’autre ordinateur. Les originaux restent intacts
 - **64 pistes**, retours et groupes compris ; document partagé de **2 Mio** maximum.
 - **64 sons uniques**, **64 Mio par son**, **256 Mio au total**, mono/stéréo. Supprimer un clip ne remet pas ce budget à zéro. Un son déjà vérifié n’est pas renvoyé inutilement.
 - WAV portables à partir du son décodé ; le format MP3/FLAC d’origine et ses tags ne sont pas archivés.
-- FM Synth et Utility avec paramètres simples ; plugins externes, autres instruments et états opaques refusés. Pas encore d’ajout/retrait d’appareil ni de modification des courbes d’automatisation en commun.
+- FM Synth et Utility avec paramètres simples ; plugins externes, autres instruments et états opaques refusés. Pas encore de réorganisation, d’activation/désactivation ni de modification des courbes d’automatisation en commun.
 - Les pistes créées n’activent aucun micro, entrée MIDI ou monitoring local. Pas d’enregistrement direct dans l’onglet partagé ni de diffusion audio en direct entre ordinateurs.
 
-**Les deux applications doivent utiliser le nouveau protocole 9**, donc le même nouveau paquet.
-Les versions précédentes en protocole 8 ou moins sont incompatibles avec ces sessions.
+**Les deux applications doivent utiliser le nouveau protocole 10**, donc le même nouveau paquet.
+Les versions précédentes en protocole 9 ou moins sont incompatibles avec ces sessions.
 Les projets sauvegardés gardent leur format natif version 3 ; ce changement concerne la connexion.
 
 ## Ce qui a été vérifié pour ce palier
 
 | Vérification | Résultat |
 |---|---|
-| Ensemble des tests sur ce Mac | **3 135 réussis, aucun échec**, dans 130 suites ; 56 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
-| Commande native | **Réussi** : plages/types des deux appareils, valeurs incorrectes, états opaques, sauvegarde/réouverture, annulation, automatisation, appareil éteint et refus de contournement de l’onglet partagé. |
-| Tests du module réseau | **69 réussis** : cœur, vraies connexions TLS, audio, reprises et paramètres. Les 19 tests du cœur de collaboration passent également. |
-| Réglages et audio | **Réussi dans les deux sens** : mêmes projets et rendus, lecteurs conservés à des positions différentes, refus sans consommer le numéro de modification puis nouvel envoi valide. |
-| Retour de l’invité | **Réussi** : les réglages modifiés pendant son absence arrivent dans la nouvelle copie ; l’ancienne copie et l’original sont conservés. |
-| Interface | **13 tests réussis** : Apply réellement cliqué, recherche, sélection FM Synth/Utility, interrupteur Mono, brouillon périmé et Refresh. Captures des deux appareils vérifiées séparément avec succès. |
+| Ensemble des tests sur ce Mac | **3 144 réussis, aucun échec**, dans 130 suites ; 57 contrôles non lancés dans le passage standard. Ce total comprend Suhina et nos ajouts. |
+| Commandes natives | **9 tests ciblés réussis** : placement, retrait, paramètres, annulation, sauvegarde, refus d’instrument sur piste audio, états opaques, quotas et conservation des notes/entrées/identités. |
+| Réseau et collaboration | **72 tests réseau et 20 tests du cœur réussis**, dont vrais échanges TLS dans les deux sens, doublons et brouillons périmés refusés. |
+| Audio et prises | **Réussi** : mêmes projets et rendus, prises publiées et conservées malgré les changements de chaîne, lecteurs à des positions différentes et comportement sonore identique au studio natif. |
+| Retour de l’invité | **Réussi** : chaîne et sons ajoutés pendant son absence reçus dans la nouvelle copie ; ancienne copie et original conservés. |
+| Interface | **14 tests réussis** : boutons réellement cliqués, sélection annulée sur page fermée, décalage d’index, plusieurs Utility, réutilisation d’une ancienne place et chaîne vide. Captures vérifiées séparément. |
 | Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; pas de nouvelle dépendance. |
-| Paquet Mac Apple Silicon `09edc15b` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
-| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat annoncé pour cette révision.** |
+| Nouveau paquet Mac Apple Silicon | En préparation ; l’application installée ou déjà ouverte n’a pas été remplacée. |
 | Deux ordinateurs physiques | **Pas encore testé**, comme convenu. |
-
-Les tests et le paquet correspondent au code **`09edc15b3d1dd547a757a1f3631fd6bdda325303`**,
-compilé après son enregistrement puis envoyé sur notre branche GitHub.
 
 ## Où trouver la version actuelle
 
-- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-devices-macos-arm64-09edc15b.zip`.
-- **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
-- **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
-- **Preuves locales :** dossier `validation/2026-10-27` voisin du dépôt : journaux, captures FM Synth/Utility et script de fabrication du paquet.
-
-C’est un paquet de développement Mac Apple Silicon, signé localement. L’application installée
-ou déjà ouverte sur ton Mac n’a pas été remplacée. Le nouveau paquet doit être le même des deux côtés.
+Le nouveau paquet est en préparation. Le dernier paquet déjà livré reste
+`suhina-multiplayer-devices-macos-arm64-09edc15b.zip`, dans `builds` voisin du dépôt.
+Il utilise le protocole 9 et ne contient pas encore l’ajout/retrait d’appareils.
 
 ## GitHub et distribution
 
 Notre branche **`feature/multiplayer`** est affichée à l’accueil du
 [dépôt GitHub](https://github.com/Nozomagarion/suhina-daw). `main` reste le miroir de Suhina.
-Le README et ses barres présentent notre application : **13 étapes réalisées sur 16 listées
+Le README et ses barres présentent notre application : **14 étapes réalisées sur 17 listées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
 du logiciel final ; l’ajout/retrait des appareils est distingué du réglage d’un appareil existant.
 
@@ -148,15 +154,14 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 
 ## Prochaine étape
 
-**Ajouter et retirer des appareils pendant la session. Statut : à commencer.**
-Critère : ajouter ou retirer un appareil autorisé dans le projet commun, retrouver la même
-chaîne et le même son chez l’autre participant, préserver pistes/clips/prises et lecteurs,
-et refuser un ordre préparé sur une ancienne version du morceau. Le chargement de plugins
-externes ou de presets par le réseau reste une étape distincte.
+**Inviter plusieurs participants sur le réseau local. Statut : à commencer.**
+Critère : un hôte et au moins deux invités créent ensemble dans le même morceau, chacun avec
+son invitation privée, ses modifications validées et son écoute indépendante ; le départ d’un
+invité conserve la session des autres. Les quotas et les permissions restent contrôlés.
 
-Ensuite : participants supplémentaires, reconnexion plus complète, version et mise à jour
-communes, puis préparation/performance DJ avancées. L’essai des deux ordinateurs à la maison
-reste différé, comme demandé.
+Ensuite : reconnexion plus complète et Internet, version et mise à jour communes, puis
+préparation/performance DJ avancées. L’essai des deux ordinateurs à la maison reste différé,
+comme demandé.
 
 Ce fichier est le point de référence à chaque palier ou blocage. Les anciens fichiers
 `AUDIT_…` restent historiques. Les résultats externes sont des relevés datés ; ce document

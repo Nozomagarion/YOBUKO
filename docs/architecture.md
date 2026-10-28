@@ -525,7 +525,7 @@ copy. MIDI-only transfers write no audio; the explicit audio mode stages verifie
 No transfer loads external devices. The UI marks that new ProjectId restricted in
 Projects. Normal UI/automation commands cannot mutate its model/history; local audition and
 save/export are allowed. Confirmed controls use `apply_shared_control`, a host-owned API with an
-exact fifteen-command allowlist (three track controls, shared track creation, three note commands, six clip commands, verified audio insertion and guarded device parameters), then the existing Session execution/player notification path.
+exact seventeen-command allowlist (three track controls, shared track creation, three note commands, six clip commands, verified audio insertion guarded device parameters and two guarded chain commands), then the existing Session execution/player notification path.
 No GUI or networking dependency enters session or engine. Leaving/disconnect unlocks the retained
 project. [LAN contract](spec/lan-starter-session.md) and [threat model](security/session-sharing.md)
 define admission, ordering, deadlines and the arbitrary-project boundary that remains closed.
@@ -566,3 +566,15 @@ generic device.setParam, arbitrary devices, paths and gestures remain closed ove
 Devices page uses the registry's SDK-generated parameters and the existing parameter widget
 for a local draft, then explicitly submits Apply. Any newer revision makes the draft stale.
 [Shared-device contract](spec/lan-device-parameters.md).
+
+
+### Fork shared device chains
+
+Protocol 10 admits device.addShared/removeShared through pure native guards and the same
+journal/preflight. They allow only top-level parameter-only FM Synth/Utility, native defaults,
+16 devices per channel and 128 total. FM Synth requires a MIDI track without an instrument;
+it never replaces one. Utility is appended and removal retains all musical content/assets.
+The native graph-update path retains each existing player and independent transport.
+The UI invalidates device/parameter selections on every confirmed chain operation, including
+hidden pages and index reuse; selecting the replacement is explicit. Separate track-addressed
+addition drafts require refresh after a new revision. [Contract](spec/lan-device-chains.md).

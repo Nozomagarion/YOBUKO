@@ -72,6 +72,11 @@
         },
         {
           "name": "Ajouter et retirer des appareils pendant la session",
+          "done": true,
+          "evidence": "crates/ui/src/app/multiplayer_chain_tests.rs"
+        },
+        {
+          "name": "Inviter plusieurs participants sur le réseau local",
           "done": false
         },
         {

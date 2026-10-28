@@ -169,3 +169,147 @@ fn shared_project_gate_admits_only_the_guarded_parameter_command_and_keeps_its_c
     projects.apply_shared_control(id, "device.setSharedParam", &good).unwrap();
     assert_eq!(projects.get(id).unwrap().project().channels[0].devices[0].params[0], DeviceParam::new("volume", -9.));
 }
+
+#[test]
+fn shared_chain_placement_removal_undo_and_save_preserve_notes_inputs_and_other_device_settings() {
+    let mut s = session().unwrap();
+    let original = s.project().clone();
+    s.execute("device.removeShared", &json!({"track":1,"device":0})).unwrap();
+    assert_eq!(s.project().channels[0].devices[0].kind, DeviceKind::Builtin("utility".into()));
+    s.execute("device.setSharedParam", &json!({"track":1,"device":0,"param":"gain","value":-9})).unwrap();
+    s.execute("device.addShared", &json!({"track":1,"kind":"fm-synth"})).unwrap();
+    s.execute("device.addShared", &json!({"track":1,"kind":"utility"})).unwrap();
+    let chain = &s.project().channels[0].devices;
+    assert_eq!(chain.len(), 3);
+    assert_eq!(chain[0].kind, DeviceKind::Builtin("fm-synth".into()));
+    assert_eq!(chain[1].params, vec![DeviceParam::new("gain", -9.)]);
+    assert!(chain[2].params.is_empty() && chain[2].enabled && chain[2].state.is_none());
+    assert_eq!(s.project().tracks, original.tracks);
+    assert_eq!(s.project().contents, original.contents);
+    assert_eq!(s.project().arrangement, original.arrangement);
+    assert_eq!(s.project().next_id, original.next_id);
+    let before = s.project().clone();
+    assert!(s.execute("device.addShared", &json!({"track":1,"kind":"fm-synth"})).is_err());
+    assert_eq!(s.project(), &before);
+    let parsed = suhina_project_file::from_json(&suhina_project_file::to_json(s.project())).unwrap();
+    assert_eq!(&parsed, s.project());
+    for _ in 0..4 {
+        s.execute("edit.undo", &json!({})).unwrap();
+    }
+    assert_eq!(s.project(), &original);
+    s.execute("device.setEnabled", &json!({"track":1,"device":0,"enabled":false})).unwrap();
+    let before = s.project().clone();
+    assert!(s.execute("device.addShared", &json!({"track":1,"kind":"fm-synth"})).is_err());
+    assert_eq!(s.project(), &before, "disabled instruments must not be replaced");
+}
+
+#[test]
+fn shared_chain_guards_reject_paths_unknown_kinds_opaque_chains_wrong_indices_and_audio_instruments() {
+    let mut s = session().unwrap();
+    let before = s.project().clone();
+    for (command, params) in [
+        ("device.addShared", json!({"track":"Keys","kind":"utility"})),
+        ("device.addShared", json!({"track":1,"kind":"sampler"})),
+        ("device.addShared", json!({"track":1,"kind":"utility","preset":"/must-not-read.syx"})),
+        ("device.addShared", json!({"track":1,"kind":"utility","position":0})),
+        ("device.addShared", json!({"track":1,"kind":"utility","state":[1]})),
+        ("device.addShared", json!({"track":0,"kind":"utility"})),
+        ("device.removeShared", json!({"track":1,"device":"0/0/0"})),
+        ("device.removeShared", json!({"track":1,"device":16})),
+        ("device.removeShared", json!({"track":1,"device":-1})),
+        ("device.removeShared", json!({"track":1,"device":2})),
+        ("device.removeShared", json!({"track":1,"device":0,"continue":true})),
+    ] {
+        assert!(s.execute(command, &params).is_err());
+        assert_eq!(s.project(), &before);
+    }
+    for opaque in [false, true] {
+        let mut p = before.clone();
+        if opaque {
+            p.channels[0].devices[0].state = Some(vec![1]);
+        } else {
+            p.channels[0].devices[0] =
+                Device::new("Unsupported", DeviceKind::Clap { id: "/must-not-load.clap".into() });
+        }
+        let mut s = Session::new(p.clone());
+        for (id, params) in [
+            ("device.addShared", json!({"track":1,"kind":"utility"})),
+            ("device.removeShared", json!({"track":1,"device":1})),
+        ] {
+            assert!(s.execute(id, &params).is_err());
+            assert_eq!(s.project(), &p);
+        }
+    }
+    let mut audio = Session::new(ProjectBuilder::new().audio_track(1, "Audio").build());
+    let before = audio.project().clone();
+    assert!(audio.execute("device.addShared", &json!({"track":1,"kind":"fm-synth"})).is_err());
+    assert_eq!(audio.project(), &before);
+    audio.execute("device.addShared", &json!({"track":1,"kind":"utility"})).unwrap();
+}
+
+#[test]
+fn shared_chain_channel_and_project_quotas_fail_without_mutation() {
+    let mut project = ProjectBuilder::new().midi_track(1, "Full").build();
+    project.channels[0].devices =
+        (0..16).map(|_| Device::new("Utility", DeviceKind::Builtin("utility".into()))).collect();
+    let mut s = Session::new(project.clone());
+    assert!(s.execute("device.addShared", &json!({"track":1,"kind":"utility"})).is_err());
+    assert_eq!(s.project(), &project);
+    let mut builder = ProjectBuilder::new();
+    for id in 1..=9 {
+        builder = builder.midi_track(id, &format!("Track {id}"));
+    }
+    let mut p = builder.build();
+    for c in p.channels.iter_mut().take(8) {
+        c.devices = project.channels[0].devices.clone();
+    }
+    let mut s = Session::new(p.clone());
+    assert!(s.execute("device.addShared", &json!({"track":9,"kind":"utility"})).is_err());
+    assert_eq!(s.project(), &p);
+}
+
+#[test]
+fn shared_chain_graph_updates_match_native_audio_without_replacing_players() {
+    use suhina_engine::{AudioPool, Renderer};
+    let project = ProjectBuilder::new()
+        .midi_track(1, "Keys")
+        .midi_track(2, "Unchanged")
+        .notes(1, "Held", 32., vec![Note::new(0., 32., 60, 0.8)])
+        .clip(1, Clip::new(ContentId(1), 0., 32.))
+        .notes(2, "Held", 32., vec![Note::new(0., 32., 48, 0.6)])
+        .clip(2, Clip::new(ContentId(2), 0., 32.))
+        .build();
+    let mut shared = Session::new(project);
+    shared.execute("device.add", &json!({"track":1,"id":"fm-synth"})).unwrap();
+    shared.execute("device.add", &json!({"track":1,"id":"utility"})).unwrap();
+    let mut ordinary = Session::new(shared.project().clone());
+    let mut a = Renderer::stopped(shared.project(), &AudioPool::default(), 8000).unwrap();
+    let mut b = Renderer::stopped(ordinary.project(), &AudioPool::default(), 8000).unwrap();
+    shared.attach_player(Player::new(a.controller(), None));
+    ordinary.attach_player(Player::new(b.controller(), None));
+    for s in [&mut shared, &mut ordinary] {
+        s.execute("transport.play", &json!({})).unwrap();
+    }
+    let mut aa = [0.; 256];
+    let mut bb = [0.; 256];
+    a.process(&mut aa);
+    b.process(&mut bb);
+    for (guarded, normal, p, q) in [
+        ("device.removeShared", "device.remove", json!({"track":1,"device":0}), json!({"track":1,"device":0})),
+        ("device.addShared", "device.add", json!({"track":1,"kind":"fm-synth"}), json!({"track":1,"id":"fm-synth"})),
+        ("device.addShared", "device.add", json!({"track":1,"kind":"utility"}), json!({"track":1,"id":"utility"})),
+        ("device.removeShared", "device.remove", json!({"track":1,"device":1}), json!({"track":1,"device":1})),
+    ] {
+        shared.execute(guarded, &p).unwrap();
+        ordinary.execute(normal, &q).unwrap();
+        for _ in 0..8 {
+            a.process(&mut aa);
+            b.process(&mut bb);
+            assert_eq!(aa, bb);
+        }
+        assert!(a.monitor().running() && b.monitor().running());
+        assert_eq!(a.monitor().beat(), b.monitor().beat());
+        assert_eq!(shared.project(), ordinary.project());
+    }
+    assert!(aa.iter().any(|x| x.abs() > 0.0001));
+}

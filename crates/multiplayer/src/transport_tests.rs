@@ -974,3 +974,46 @@ fn shared_device_wire_is_exact_and_refuses_paths_gestures_and_nonfinite_values()
         assert!(edit.edit().is_err());
     }
 }
+
+#[test]
+fn shared_chain_wire_shapes_refuse_presets_paths_positions_and_invalid_indices() {
+    for data in [
+        json!({"command":"device.addShared","track":1,"kind":"utility"}),
+        json!({"command":"device.removeShared","track":1,"device":0}),
+    ] {
+        let edit: WireEdit = serde_json::from_value(data.clone()).unwrap();
+        assert!(edit.edit().is_ok());
+        assert_eq!(serde_json::to_value(edit).unwrap(), data);
+        for (key, value) in
+            [("preset", json!("/file.syx")), ("position", json!(0)), ("state", json!([1])), ("path", json!("/file"))]
+        {
+            let mut bad = data.clone();
+            bad[key] = value;
+            assert!(serde_json::from_value::<WireEdit>(bad).is_err());
+        }
+    }
+    for edit in [
+        WireEdit::DeviceAdd { track: 0, kind: "utility".into() },
+        WireEdit::DeviceAdd { track: 1, kind: "sampler".into() },
+        WireEdit::DeviceRemove { track: 1, device: 16 },
+    ] {
+        assert!(edit.edit().is_err());
+    }
+}
+
+#[test]
+fn full_shared_chains_refuse_addition_without_consuming_revision_or_owner_sequence() {
+    let mut project = crate::starter_project();
+    project.channels[0].devices = (0..16)
+        .map(|_| suhina_model::Device::new("Utility", suhina_model::DeviceKind::Builtin("utility".into())))
+        .collect();
+    let mut state = canonical(project.clone());
+    assert!(state.submit(Host::owner(), 1, 0, WireEdit::DeviceAdd { track: 1, kind: "utility".into() }).is_err());
+    assert_eq!(state.host.project(), &project);
+    assert_eq!(state.host.revision(), 0);
+    assert!(state.journal.is_empty());
+    state.submit(Host::owner(), 1, 0, WireEdit::DeviceRemove { track: 1, device: 15 }).unwrap();
+    state.submit(Host::owner(), 2, 1, WireEdit::DeviceAdd { track: 1, kind: "utility".into() }).unwrap();
+    assert_eq!(state.host.revision(), 2);
+    assert_eq!(state.host.project().channels[0].devices.len(), 16);
+}

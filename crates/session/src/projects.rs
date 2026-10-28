@@ -674,6 +674,8 @@ impl Projects {
                     | "track.createShared"
                     | "track.setVolume"
                     | "track.setPan"
+                    | "device.addShared"
+                    | "device.removeShared"
                     | "device.setSharedParam"
                     | "note.add"
                     | "note.update"

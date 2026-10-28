@@ -175,5 +175,17 @@ no opaque state, known parameter and already-canonical value. Thus no admitted e
 an asset, address a plugin, follow a group path or import a preset/gesture. The same guard runs
 on detached canonical preflight, guest mirror and the authoritative desktop path. Missing or
 invalid targets do not mutate the project or consume accepted counters. Base revisions bind
-device indices; chain mutations remain closed. Existing manual automation override is replicated.
+device indices; structural edits use the separate guarded chain commands. Existing manual automation override is replicated.
 Generic device.setParam remains refused. [Contract](../spec/lan-device-parameters.md).
+
+
+## Shared device chain boundary
+
+Protocol 10 admits two exact scalar commands: addShared(track,kind) and
+removeShared(track,device). Pure native guards restrict the entire target chain to top-level
+FM Synth/Utility with no state, enforce 16/128 device limits on addition and refuse instrument
+replacement or an instrument on a non-MIDI track. They pass no preset, position, nested path,
+asset or plugin selector to the native handlers. Preflight/replay/revisions remain unchanged.
+All confirmed chain changes clear desktop device/parameter selection, including hidden pages
+and same-index replacement, so Refresh cannot redeem a draft against another device.
+See the [chain contract](../spec/lan-device-chains.md).

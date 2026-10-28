@@ -22,6 +22,8 @@ impl Edit {
             "track.createShared" => "track.createShared",
             "track.setVolume" => "track.setVolume",
             "track.setPan" => "track.setPan",
+            "device.addShared" => "device.addShared",
+            "device.removeShared" => "device.removeShared",
             "device.setSharedParam" => "device.setSharedParam",
             "note.add" => "note.add",
             "note.update" => "note.update",
@@ -66,6 +68,16 @@ impl Edit {
                 keys(object, &["tracks", "pan"])
                     && object.get("tracks").is_some_and(valid_tracks)
                     && number_in(object.get("pan"), -1.0, 1.0)
+            }
+            "device.addShared" => {
+                keys(object, &["track", "kind"])
+                    && object.get("track").is_some_and(valid_id)
+                    && matches!(object.get("kind").and_then(Value::as_str), Some("fm-synth" | "utility"))
+            }
+            "device.removeShared" => {
+                keys(object, &["track", "device"])
+                    && object.get("track").is_some_and(valid_id)
+                    && object.get("device").and_then(Value::as_u64).is_some_and(|n| n < 16)
             }
             "device.setSharedParam" => {
                 keys(object, &["track", "device", "param", "value"])

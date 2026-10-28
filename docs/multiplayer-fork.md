@@ -89,7 +89,7 @@ The destination track selector applies to Move; Trim follows native edge/offset 
 A newer revision disables a pending clip draft; refresh or select the current clip again.
 A deleted note editor selection cannot silently switch to another clip. Local metadata, hardware
 input settings and launch mappings are omitted. See the [copy contract](spec/lan-midi-copy.md).
-Both participants need the new protocol-9 build; old demo invitations no longer work.
+Both participants need the new protocol-10 build; old demo invitations no longer work.
 
 To include loaded audio, use **Share project + audio**. Configure the application data folder
 when using a custom host: collected copies stay in its **Shared projects** subfolder. Only sounds
@@ -129,8 +129,13 @@ A newer shared revision disables Apply: **Refresh device draft** reloads the cur
 before making a new edit. Switching to another target explicitly starts its new draft. A
 switched-off device stores values without enabling it; manual changes override that parameter's
 existing automation as ordinary native edits do. No new device/preset/plugin is loaded.
-To start from an empty app, **Create LAN session → Tracks**, name and add a **MIDI track · FM Synth**,
-then choose **Devices**. The second instance joins its private invitation to check both copies.
+To start from an empty app, choose **Create LAN session → Devices**, select **Pulse** in
+**Device track**, then **Add FM Synth** or **Add Utility**. Refresh a stale chain draft first.
+Utility is appended; FM Synth is only available for a MIDI track without an instrument.
+**Shared device → Remove selected device** removes its settings/automation and keeps the music.
+After every confirmed addition/removal, explicitly select Shared device again: old indices and
+parameter drafts are discarded, including on hidden pages and repeated same-kind devices.
+Then choose a parameter and apply it as above. The second instance joins its private invitation to check both copies.
 See the [shared-device contract](spec/lan-device-parameters.md).
 
 Network and UI regression checks:

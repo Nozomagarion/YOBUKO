@@ -64,7 +64,9 @@ sont vérifiées par l’hôte. L’onglet **Clips** permet aussi de créer, dé
 dupliquer, activer et supprimer des clips MIDI/audio. Les sons déjà chargés peuvent être copiés vers l’invité sous forme de WAV portables.
 Chaque participant peut aussi publier une nouvelle prise terminée depuis un onglet local : le son arrive chez l’invité puis son clip apparaît, sans recréer la session.
 L’onglet **Tracks** permet à chacun d’ajouter une piste audio vide ou une piste MIDI avec FM Synth pendant la connexion.
-L’onglet **Devices** permet de modifier les réglages des FM Synth et Utility déjà présents.
+L’onglet **Devices** permet d’ajouter et retirer FM Synth/Utility pendant le partage, puis de modifier leurs réglages.
+Choisir **Device track**, puis **Add FM Synth** ou **Add Utility** ; **Remove selected device** retire l’appareil sélectionné.
+Après un ajout ou retrait, il faut choisir à nouveau l’appareil pour éviter de réutiliser une ancienne sélection.
 Les contrôles reprennent les plages et types du studio ; on prépare une valeur, puis on l’applique
 aux deux copies. Un brouillon périmé doit être rafraîchi avant l’envoi.
 Après le départ de l’invité, **New invitation** permet de le réinviter sans fermer le morceau de l’hôte.
@@ -87,7 +89,7 @@ les platines et l'export vers le matériel DJ restent à construire et à vérif
 <!-- fork-progress:begin -->
 | Partie du projet | Étapes réalisées | Prochain objectif |
 |---|---:|---|
-| Créer ensemble | 13 / 16 | Ajouter et retirer des appareils pendant la session |
+| Créer ensemble | 14 / 17 | Inviter plusieurs participants sur le réseau local |
 | Préparer et jouer | 4 / 8 | Playlists et préparation de set |
 | Évoluer ensemble | 4 / 7 | Version commune validée sur toutes les plateformes |
 <!-- fork-progress:end -->
@@ -100,7 +102,7 @@ leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce
 | Partie | Disponible dans le prototype | Prochaine étape |
 |---|---|---|
 | **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
-| **Multijoueur** | Session LAN hôte + invité, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, publication de prises terminées par les deux participants, réglages FM Synth/Utility et noms/volumes/panoramiques partagés et lectures indépendantes. | Ajout/retrait d’appareils partagés, plusieurs invités et reconnexion automatique. |
+| **Multijoueur** | Session LAN hôte + invité, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, publication de prises terminées par les deux participants, réglages FM Synth/Utility et noms/volumes/panoramiques partagés et lectures indépendantes. | Plusieurs invités et reconnexion automatique. |
 | **DJ** | Bibliothèque audio persistante, import et analyse tempo/tonalité issue de rbxport. | Playlists, points cue, grilles rythmiques, platines et compatibilité matérielle. |
 | **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
 
@@ -108,7 +110,7 @@ Le trafic chiffré est testé entre deux services sur le même ordinateur, avec 
 sur deux projets de bureau et des moteurs audio indépendants. **Le test sur deux ordinateurs
 physiques reste à faire.** Le document partagé est limité à 2 Mio et aux appareils FM Synth/Utility
 sans état opaque. Les notes se modifient dans **MIDI notes**, et l’arrangement dans **Clips**. Les déplacements
-conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. L’onglet **Publish take** permet à chacun de publier le son entier d’une prise terminée depuis un autre onglet Studio vers une piste audio existante, au temps choisi. L’onglet **Tracks** permet d’ajouter les pistes nécessaires sans repartir d’un nouveau partage. Les deux applications doivent utiliser le protocole 9. L’invité envoie sa prise à l’hôte pour vérification avant son ajout au morceau. L’enregistrement direct dans l’onglet partagé et les plugins restent à construire.
+conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. L’onglet **Publish take** permet à chacun de publier le son entier d’une prise terminée depuis un autre onglet Studio vers une piste audio existante, au temps choisi. L’onglet **Tracks** permet d’ajouter les pistes nécessaires sans repartir d’un nouveau partage. Les deux applications doivent utiliser le protocole 10. L’invité envoie sa prise à l’hôte pour vérification avant son ajout au morceau. L’enregistrement direct dans l’onglet partagé et les plugins restent à construire.
 
 ## Essayer la version actuelle
 

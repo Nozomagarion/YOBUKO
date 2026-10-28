@@ -249,6 +249,28 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         policy: Policy::DEFAULT,
     },
     CommandSpec {
+        id: "device.addShared",
+        label: "Add a default FM Synth without replacing an instrument, or append Utility, in a restricted shared chain",
+        params: &[
+            param("track", ParamType::Integer, "nonzero track id"),
+            param("kind", ParamType::Text, "fm-synth or utility; no preset or asset"),
+        ],
+        kind: CommandKind::Edit,
+        run: crate::shared_devices::add,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
+        id: "device.removeShared",
+        label: "Remove one top-level FM Synth or Utility and its settings from a restricted shared chain, retaining clips and notes",
+        params: &[
+            param("track", ParamType::Integer, "nonzero track id"),
+            param("device", ParamType::Integer, "device index 0..15, bound to the shared revision"),
+        ],
+        kind: CommandKind::Edit,
+        run: crate::shared_devices::remove,
+        policy: Policy::DEFAULT,
+    },
+    CommandSpec {
         id: "device.setSharedParam",
         label: "Set one canonical parameter of an existing parameter-only FM Synth or Utility, addressed by numeric track and top-level index",
         params: &[

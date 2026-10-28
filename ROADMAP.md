@@ -967,5 +967,8 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 - Protocol 9 shares scalar parameters of existing FM Synth/Utility through a guarded native
   command and revision-bound SDK-generated Devices editor; no file/preset/plugin access.
 
+- Protocol 10 admits guarded top-level FM Synth/Utility add/remove through the existing native
+  handlers and clears device selections after structural changes; source tabs and music survive.
+
 Parity: no change. These fork additions cover restricted starter networking, DJ preparation and
 distribution; full project coediting remains absent and no production feature chapter gains coverage.

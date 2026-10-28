@@ -685,3 +685,107 @@ fn returning_guest_gets_current_tracks_and_takes_while_both_previous_copies_surv
     assert!(player.monitor().beat() >= 3.0);
     assert_eq!(project, source().0);
 }
+
+#[test]
+fn shared_chain_edits_cross_tls_preserve_collected_takes_notes_and_independent_players() {
+    let host_dir = tempfile::tempdir().unwrap();
+    let guest_dir = tempfile::tempdir().unwrap();
+    let (mut project, pool) = source();
+    project.contents[2].lanes[0].data = LaneData::Notes(vec![suhina_model::Note::new(0., 2., 60, 0.8)]);
+    let before = project.clone();
+    let mut host = Service::default();
+    host.set_storage_root(Some(host_dir.path().into())).unwrap();
+    host.select_audio_project(&project, &pool).unwrap();
+    host.execute("multiplayer.hostProject", &json!({"address":"127.0.0.1:0"})).unwrap();
+    let invitation = wait(&mut host, |s| s["mode"] == "hosting")["invitation"].clone();
+    let snap = host.take_shared().unwrap();
+    let mut local = snap.session().unwrap();
+    snap.keep();
+    let mut guest = Service::default();
+    guest.set_storage_root(Some(guest_dir.path().into())).unwrap();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snap = guest.take_shared().unwrap();
+    let mut remote = snap.session().unwrap();
+    snap.keep();
+    let mut a = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
+    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000).unwrap();
+    local.attach_player(Player::new(a.controller(), None));
+    remote.attach_player(Player::new(b.controller(), None));
+    for (s, beat) in [(&mut local, 1.), (&mut remote, 5.)] {
+        s.execute("transport.setPosition", &json!({"beats":beat})).unwrap();
+        s.execute("transport.play", &json!({})).unwrap();
+    }
+    let (mut ar, mut br) = (0, 0);
+    let steps = [
+        (true, WireEdit::DeviceAdd { track: 1, kind: "utility".into() }),
+        (false, WireEdit::DeviceParam { track: 1, device: 0, param: "gain".into(), value: -12. }),
+        (true, WireEdit::DeviceParam { track: 1, device: 0, param: "width".into(), value: 0.5 }),
+        (false, WireEdit::DeviceRemove { track: 1, device: 0 }),
+        (false, WireEdit::DeviceAdd { track: 3, kind: "fm-synth".into() }),
+        (true, WireEdit::DeviceParam { track: 3, device: 0, param: "volume".into(), value: -9. }),
+        (true, WireEdit::DeviceRemove { track: 3, device: 0 }),
+    ];
+    for (index, (from_guest, edit)) in steps.into_iter().enumerate() {
+        let previous = local.project().clone();
+        let structural = matches!(edit, WireEdit::DeviceAdd { .. } | WireEdit::DeviceRemove { .. });
+        submit(if from_guest { &mut guest } else { &mut host }, ar, edit);
+        let next = ar + 1;
+        apply(&mut local, &wait(&mut host, |s| s["controls"]["revision"] == next), &mut ar);
+        apply(&mut remote, &wait(&mut guest, |s| s["controls"]["revision"] == next), &mut br);
+        assert_eq!(local.project(), remote.project());
+        assert_eq!(render(&local), render(&remote));
+        if structural {
+            assert_eq!(local.project().contents, previous.contents);
+            assert_eq!(local.project().arrangement, previous.arrangement);
+            assert_eq!(local.project().tracks, previous.tracks);
+        }
+        let mut output = [0.; 256];
+        a.process(&mut output);
+        b.process(&mut output);
+        assert!(a.monitor().running() && b.monitor().running());
+        assert!((b.monitor().beat() - a.monitor().beat() - 4.).abs() < 0.00001);
+        if index == 2 {
+            let take = Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.125; 8000] });
+            publish_take(&mut guest, take, ar, 2, 4.);
+            let next = ar + 1;
+            let state = wait(&mut host, |s| s["controls"]["revision"] == next);
+            accept_audio(&mut host, &mut local);
+            apply(&mut local, &state, &mut ar);
+            let state = wait(&mut guest, |s| s["controls"]["revision"] == next);
+            accept_audio(&mut guest, &mut remote);
+            apply(&mut remote, &state, &mut br);
+            a.process(&mut output);
+            b.process(&mut output);
+        }
+    }
+    assert_eq!(ar, 8);
+    assert_eq!(local.audio().files.len(), 2);
+    assert_eq!(remote.audio().files.len(), 2);
+    assert!(local.loaded_audio_paths().iter().all(|p| p.is_file()));
+    assert!(remote.loaded_audio_paths().iter().all(|p| p.is_file()));
+    let stable = local.project().clone();
+    submit(&mut guest, 0, WireEdit::DeviceRemove { track: 1, device: 0 });
+    let rejected = wait(&mut guest, |s| s["error"].is_string());
+    assert_eq!(rejected["controls"]["revision"], 8);
+    assert_eq!(local.project(), &stable);
+    submit(&mut guest, 8, WireEdit::DeviceAdd { track: 1, kind: "utility".into() });
+    apply(&mut local, &wait(&mut host, |s| s["controls"]["revision"] == 9), &mut ar);
+    apply(&mut remote, &wait(&mut guest, |s| s["controls"]["revision"] == 9), &mut br);
+    guest.execute("multiplayer.stop", &json!({})).unwrap();
+    wait(&mut host, |s| s["guest_connected"] == false);
+    let old = remote.project().clone();
+    submit(&mut host, 9, WireEdit::DeviceAdd { track: 3, kind: "fm-synth".into() });
+    apply(&mut local, &wait(&mut host, |s| s["controls"]["revision"] == 10), &mut ar);
+    host.execute("multiplayer.renewInvitation", &json!({})).unwrap();
+    let next = wait(&mut host, |s| s["invitation"] != invitation)["invitation"].clone();
+    guest.execute("multiplayer.join", &json!({"invitation":next})).unwrap();
+    wait(&mut guest, |s| s["mode"] == "connected");
+    let snap = guest.take_shared().unwrap();
+    let fresh = snap.session().unwrap();
+    snap.keep();
+    assert_eq!(fresh.project(), local.project());
+    assert_eq!(render(&fresh), render(&local));
+    assert_eq!(remote.project(), &old);
+    assert_eq!(project, before);
+}

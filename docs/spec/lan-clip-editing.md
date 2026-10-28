@@ -1,6 +1,6 @@
 ---
 description: Revision-checked MIDI clip arrangement edits in the restricted LAN session
-read_when: shared clip placement, multiplayer protocol 9, clip creation duplication deletion, arrangement collaboration
+read_when: shared clip placement, multiplayer protocol 10, clip creation duplication deletion, arrangement collaboration
 type: spec
 status: draft
 last_verified: 2026-10-26

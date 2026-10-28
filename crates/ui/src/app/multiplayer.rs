@@ -245,6 +245,12 @@ impl App {
                 operation.edit.edit()?;
                 let (command, params) = operation.edit.command();
                 self.projects.apply_shared_control(id, command, &params).map_err(|e| e.to_string())?;
+                if matches!(
+                    operation.edit,
+                    suhina_multiplayer::WireEdit::DeviceAdd { .. } | suhina_multiplayer::WireEdit::DeviceRemove { .. }
+                ) {
+                    self.multiplayer.devices.chain_changed();
+                }
                 self.multiplayer.applied_revision = operation.revision;
             }
             let session = self.projects.get(id).ok_or("shared project is closed")?;

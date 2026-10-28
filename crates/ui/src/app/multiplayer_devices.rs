@@ -13,10 +13,23 @@ pub(super) struct DeviceEditor {
     pub(super) value: f64,
     base: Option<u64>,
     filter: String,
+    selection_required: bool,
+    pub(super) chain: super::multiplayer_device_chain::ChainDraft,
 }
 
+impl DeviceEditor {
+    pub(super) fn chain_changed(&mut self) {
+        self.target = None;
+        self.param = None;
+        self.base = None;
+        self.value = 0.0;
+        self.filter.clear();
+        self.selection_required = true;
+    }
+}
 impl App {
     pub(super) fn show_shared_devices(&mut self, ui: &mut Ui) {
+        self.show_shared_device_chain(ui);
         let Some(session) = self.multiplayer.bound.and_then(|id| self.projects.get(id)) else { return };
         let project = session.project();
         let mut targets = Vec::new();
@@ -38,12 +51,12 @@ impl App {
             }
         }
         if targets.is_empty() {
-            ui.weak("No shared FM Synth or Utility yet. In Tracks, add a MIDI track with FM Synth, or share a Studio project containing these devices.");
+            ui.weak("No shared devices yet. Choose Device track above and add FM Synth or Utility.");
             return;
         }
         let revision = self.multiplayer.controls.as_ref().map_or(0, |c| c.revision);
         let editor = &mut self.multiplayer.devices;
-        if editor.target.is_none() {
+        if editor.target.is_none() && !editor.selection_required {
             editor.target = targets.first().map(|r| r.0);
         }
         let old_target = editor.target;
@@ -59,12 +72,13 @@ impl App {
                 }
             });
         if old_target != editor.target {
+            editor.selection_required = false;
             editor.param = None;
             editor.base = None;
             editor.filter.clear();
         }
         let Some(row) = targets.iter().find(|r| Some(r.0) == editor.target) else {
-            ui.weak("The selected device is no longer available. Choose a device explicitly; this draft will not be redirected.");
+            ui.weak("The device chain changed. Choose Shared device explicitly before editing; the previous draft was discarded.");
             return;
         };
         let parameters = &row.3.parameters;
@@ -142,12 +156,23 @@ impl App {
             }
         });
         let ready = editor.base == Some(revision) && !self.multiplayer.submitted;
-        if ui.add_enabled(ready, egui::Button::new("Apply shared parameter")).clicked() {
-            let edit = suhina_multiplayer::WireEdit::DeviceParam {
-                track: row.0.0,
-                device: row.0.1,
-                param: parameter.id.clone(),
-                value: editor.value,
+        let (apply, remove) = ui.horizontal(|ui| {
+            let apply = ui.add_enabled(ready, egui::Button::new("Apply shared parameter")).clicked();
+            let remove = ui.add_enabled(ready, egui::Button::new("Remove selected device"))
+                .on_hover_text("Removes this device, its settings and automation from both shared copies. Notes and clips are kept.")
+                .clicked();
+            (apply, remove)
+        }).inner;
+        if apply || remove {
+            let edit = if remove {
+                suhina_multiplayer::WireEdit::DeviceRemove { track: row.0.0, device: row.0.1 }
+            } else {
+                suhina_multiplayer::WireEdit::DeviceParam {
+                    track: row.0.0,
+                    device: row.0.1,
+                    param: parameter.id.clone(),
+                    value: editor.value,
+                }
             };
             let base = editor.base.unwrap_or(revision);
             match serde_json::to_string(&edit) {

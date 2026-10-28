@@ -973,3 +973,6 @@ fn shared_device_buttons(render: bool) {
     h.state_mut().leave_multiplayer();
     guest.leave_multiplayer();
 }
+
+#[path = "multiplayer_chain_tests.rs"]
+mod chain_tests;

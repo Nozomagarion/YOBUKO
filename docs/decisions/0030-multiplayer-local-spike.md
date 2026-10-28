@@ -142,6 +142,16 @@ remain closed. The SDK-generated Devices editor stages a revision-bound draft, s
 and requires explicit refresh after other edits. Native file version and portable-copy format
 stay unchanged. [Contract and validation](../spec/lan-device-parameters.md).
 
+## Amendment: guarded shared device chains
+
+Protocol 10 adds top-level FM Synth/Utility creation and removal through two guarded native
+commands. Native placement, defaults and graph updates are reused after checking kinds/state,
+track capability, lack of an existing instrument and portable quotas. Source projects and
+music/assets remain intact. Because device indices are revision-bound, every confirmed chain
+operation clears all desktop device/parameter drafts, even when hidden or the index is reused.
+New selection is explicit. General add/remove, presets, plugins and nested paths remain closed.
+[Chain contract](../spec/lan-device-chains.md).
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.

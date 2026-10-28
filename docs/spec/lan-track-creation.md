@@ -1,6 +1,6 @@
 ---
 description: Revision-checked audio and MIDI track creation in a connected LAN project, with deterministic identities and local inputs off
-read_when: multiplayer shared tracks, protocol 9, add shared audio track, MIDI FM Synth track
+read_when: multiplayer shared tracks, protocol 10, add shared audio track, MIDI FM Synth track
 type: spec
 status: draft
 last_verified: 2026-10-27

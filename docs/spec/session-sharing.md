@@ -37,7 +37,7 @@ a live instance is never silently replaced to conceal an ordering error.
 
 `track.rename`, `track.setVolume`, `track.setPan`, `note.add`, `note.update`, `note.delete` and
 the six [clip commands](lan-clip-editing.md), guarded track.createShared/clip.insertAudio, and
-[device.setSharedParam](lan-device-parameters.md) are accepted. The command registry
+[device.setSharedParam](lan-device-parameters.md) and the two [guarded device-chain commands](lan-device-chains.md) are accepted. The command registry
 must also identify each as an Edit. Parameters have the exact keys needed by that command:
 
 - `track.rename`: `track` is a nonzero `u32` id and `name` is nonempty text of at most 256 bytes.

@@ -430,3 +430,39 @@ fn shared_device_parameters_keep_roles_replays_and_stale_or_invalid_requests_ato
         assert_eq!(Edit::new("device.setSharedParam", p), Err(Error::InvalidParameters));
     }
 }
+
+#[test]
+fn shared_device_chain_replays_and_stale_indices_do_not_remove_a_different_device() {
+    let mut host = Host::new(project()).unwrap();
+    let peer = host.add_peer(Role::Reader).unwrap();
+    let add = request(1, 0, "device.addShared", json!({"track":1,"kind":"utility"}));
+    assert_eq!(host.submit(peer, add.clone()), Err(Error::ReadOnly));
+    host.set_role(peer, Role::Editor).unwrap();
+    let mut replica = Replica::new(host.snapshot());
+    let accepted = host.submit(peer, add.clone()).unwrap();
+    replica.apply(&accepted).unwrap();
+    assert_eq!(host.submit(peer, add).unwrap(), accepted);
+    let add = request(2, 1, "device.addShared", json!({"track":1,"kind":"utility"}));
+    let accepted = host.submit(peer, add).unwrap();
+    replica.apply(&accepted).unwrap();
+    let before = host.project().clone();
+    assert!(host.submit(peer, request(3, 0, "device.removeShared", json!({"track":1,"device":0}))).is_err());
+    assert_eq!(host.project(), &before);
+    let remove = request(3, 2, "device.removeShared", json!({"track":1,"device":0}));
+    let accepted = host.submit(peer, remove.clone()).unwrap();
+    replica.apply(&accepted).unwrap();
+    assert_eq!(host.submit(peer, remove).unwrap(), accepted);
+    assert_eq!(host.project().channels[0].devices.len(), 1);
+    assert_eq!(replica.project(), host.project());
+    assert_eq!(host.revision(), 3);
+    for (id, p) in [
+        ("device.addShared", json!({"track":1,"kind":"sampler"})),
+        ("device.addShared", json!({"track":1,"kind":"utility","preset":"/file"})),
+        ("device.removeShared", json!({"track":1,"device":"0/0/0"})),
+    ] {
+        assert!(Edit::new(id, p).is_err());
+    }
+    for id in ["device.add", "device.remove", "device.addPlugin"] {
+        assert_eq!(Edit::new(id, json!({})), Err(Error::UnsupportedCommand));
+    }
+}

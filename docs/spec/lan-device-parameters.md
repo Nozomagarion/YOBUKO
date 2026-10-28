@@ -1,6 +1,6 @@
 ---
 description: Revision-checked scalar parameter edits for existing FM Synth and Utility devices in restricted LAN sessions
-read_when: shared device controls, multiplayer protocol 9, FM Synth, Utility, device.setSharedParam
+read_when: shared device controls, multiplayer protocol 10, FM Synth, Utility, device.setSharedParam
 type: spec
 status: draft
 last_verified: 2026-10-27
@@ -23,7 +23,7 @@ Self-authored fork behaviour, extending the existing native parameter path and S
 `device.setSharedParam` takes exactly numeric nonzero u32 `track`, integer `device` 0..15,
 text `param` (1..64 ASCII letters/digits, dot or underscore), and finite numeric `value`.
 The device is a zero-based index in that track's top-level channel chain, not a stable ID.
-The host checks the draft revision before execution; chain mutations remain unavailable over LAN.
+The host checks the draft revision before execution; structural edits follow the guarded [chain contract](lan-device-chains.md).
 Name/path addressing, nested groups, gestures, batches, files and preset/state loading are refused.
 
 Only existing parameter-only built-in FM Synth or Utility devices with no opaque state are
@@ -51,6 +51,8 @@ integers, choices and toggles. **Find parameter** filters by name/id/group. Sele
 or parameter creates a draft at the observed revision. Editing the widget changes only the
 local draft; **Apply shared parameter** submits one command. Confirmed values are separate.
 A stale revision disables Apply until **Refresh device draft** reloads the confirmed value;
+a confirmed add/remove discards the entire selection and requires explicit device selection,
+so an old index can never redirect a draft to its replacement;
 selecting another target intentionally creates a new draft. An in-flight edit disables Apply.
 
 Ordinary device panels/automation cannot bypass the shared mutation gate. The authoritative
@@ -67,7 +69,7 @@ tests cover bidirectional edits, matching renders, independent players, late joi
 invalid fields and portable preflight. Desktop tests click Apply and Refresh, retain source tabs,
 show current confirmed values and refuse stale drafts. A separate GPU capture checks the panel.
 
-Adding/removing/reordering/enabling devices, other instruments/effects, external plugins,
+Reordering/enabling devices, other instruments/effects, external plugins,
 presets, automation editing, continuous shared gestures and simultaneous multi-parameter edits
 remain separate work. Physical two-computer acceptance is still deferred by the owner.
 
