@@ -181,8 +181,6 @@ fn read_voices(data: &[u8]) -> Result<suhina_device_fm_synth::patch::Voices, Str
 #[cfg(test)]
 #[path = "lib_tests.rs"]
 mod tests;
-<<<<<<< HEAD
-=======
 
 /// Prepare a data-only graph using only registered, zero-latency built-in effects.
 /// Unknown ids fail before the graph reaches the audio thread.
@@ -300,4 +298,3 @@ mod graph_kernel_tests {
         }
     }
 }
->>>>>>> origin/main

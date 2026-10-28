@@ -1395,7 +1395,7 @@ pub(crate) fn show(
                     ui.ctx().set_cursor_icon(egui::CursorIcon::None);
                     // A discrete value is rounded when it is written, so a drag that moves less than half
                     // a step in a frame would be lost: the unrounded position is kept while the drag lasts.
-                    let position_id = response.id.with("drag-position");
+                    let position_id = response.id.with(("drag-position", axis));
                     if discrete && !response.drag_started() {
                         next = ui.data(|data| data.get_temp::<f64>(position_id)).unwrap_or(old);
                     }

@@ -1254,6 +1254,86 @@ fn slow_drag_on_an_integer_control_adds_up_across_frames() {
     assert!(parameters[0].value >= 1.0, "a slow drag must move an integer control, got {}", parameters[0].value);
 }
 #[test]
+fn two_axis_integer_drag_keeps_a_position_per_axis() {
+    let canvas = Arc::new(DeviceUi {
+        size: [60.0, 60.0],
+        controls: vec![CustomControl {
+            widget: None,
+            visible_when: None,
+            id: "xy".into(),
+            name: "XY".into(),
+            tooltip: String::new(),
+            bounds: [0.0, 0.0, 40.0, 40.0],
+            gesture: UiGesture::Drag,
+            x: Some(UiBinding::new("a")),
+            y: Some(UiBinding::new("b")),
+            drawing: vec![],
+        }],
+
+        ..Default::default()
+    });
+    let mut parameters = vec![
+        GraphParameter {
+            control: suhina_device_sdk::ParameterControl::Integer,
+            max: 7.0,
+            value: 5.0,
+            ..parameter("a", false)
+        },
+        GraphParameter {
+            control: suhina_device_sdk::ParameterControl::Integer,
+            max: 7.0,
+            value: 0.0,
+            ..parameter("b", false)
+        },
+    ];
+    let ctx = egui::Context::default();
+    let start = Pos2::new(20., 20.);
+    let mut frames = vec![(start, None), (start, Some(true))];
+    frames.extend((1..=12).map(|i| (start + Vec2::new(i as f32, 0.), None)));
+    frames.push((start + Vec2::new(12., 0.), Some(false)));
+    for (position, pressed) in frames {
+        let mut events = vec![egui::Event::PointerMoved(position)];
+        if let Some(pressed) = pressed {
+            events.push(egui::Event::PointerButton {
+                pos: position,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: Default::default(),
+            });
+        }
+        let mut actions = Vec::new();
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(72., 72.))),
+                events,
+                ..Default::default()
+            },
+            |ui| {
+                show(
+                    ui,
+                    Rect::from_min_size(Pos2::ZERO, Vec2::new(60., 60.)),
+                    &canvas,
+                    &parameters,
+                    TrackId(1),
+                    &crate::detail::detail_view::DeviceAt(vec![0]),
+                    &mut actions,
+                )
+            },
+        );
+        output.textures_delta.clear();
+        for action in &actions {
+            let id = action.params["param"].as_str().unwrap_or_default();
+            if let (Some(value), Some(p)) =
+                (action.params["value"].as_f64(), parameters.iter_mut().find(|p| p.id == id))
+            {
+                p.value = value.round();
+            }
+        }
+    }
+    assert!(parameters[0].value >= 5.0, "x must not read y's position, got {}", parameters[0].value);
+    assert_eq!(parameters[1].value, 0.0);
+}
+#[test]
 fn idle_log_control_does_not_emit_edits_and_xy_click_is_one_gesture() {
     let ctx = egui::Context::default();
     let canvas = Arc::new(DeviceUi {
