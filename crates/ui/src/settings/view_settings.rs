@@ -464,6 +464,7 @@ mod tests {
             alt_wheel_one: true,
             folder_drop: FolderDrop::Copy,
             arrangement_toolbar: true,
+            default_grid: "adaptive narrow",
             replace_clip: true,
             menu_bar: false,
             app_name_centered: true,

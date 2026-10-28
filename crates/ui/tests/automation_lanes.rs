@@ -40,6 +40,8 @@ fn click_anywhere(harness: &mut Harness<'static, App>, on: bool) {
 fn arrangement_sized(project: Project, size: (f32, f32)) -> Harness<'static, App> {
     let mut app = App::new();
     app.set_browser_open(false);
+    // These tests place points on a bar grid.
+    app.set_arrangement_grid(suhina_ui::arrangement::arrangement_view::PianoGrid::from_value("1 bar"));
     app.set_session(Session::new(project), &[]);
     let mut harness = Harness::builder()
         .with_size(size)
@@ -881,6 +883,8 @@ fn render_the_lanes() {
     }
     let mut app = App::new();
     app.set_browser_open(false);
+    // These tests place points on a bar grid.
+    app.set_arrangement_grid(suhina_ui::arrangement::arrangement_view::PianoGrid::from_value("1 bar"));
     app.set_session(Session::new(project), &[]);
     let mut harness = Harness::builder()
         .with_size(SIZE)
@@ -1166,7 +1170,7 @@ fn add_value_edit_value_and_snap_to_grid_from_the_menus() {
     // Snap to grid off: a point lands where the pointer is.
     harness.get_by_label("Volume point 1 on Drums").click_secondary();
     harness.run();
-    harness.get_by_label("Snap to grid").click();
+    harness.get_by_label("Snap to grid (Ctrl+4)").click();
     harness.run();
     click_anywhere(&mut harness, true);
     click_at(&mut harness, Pos2::new(rect.left() + 303.0, rect.center().y));

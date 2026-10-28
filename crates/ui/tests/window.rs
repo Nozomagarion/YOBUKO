@@ -85,7 +85,9 @@ pub(super) fn window(app: App) -> Harness<'static, App> {
 
 /// Like [`window`], with `step` seconds a frame (a double-click needs frames closer together),
 /// and a second of frames for animations to settle.
-pub(super) fn window_with_step(app: App, step: f32) -> Harness<'static, App> {
+pub(super) fn window_with_step(mut app: App, step: f32) -> Harness<'static, App> {
+    // The window's tests place clips, fades and markers on a bar grid.
+    app.set_arrangement_grid(suhina_ui::arrangement::arrangement_view::PianoGrid::from_value("1 bar"));
     let mut harness = Harness::builder()
         .with_size(SIZE)
         .with_step_dt(step)

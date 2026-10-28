@@ -1068,6 +1068,8 @@ impl App {
     /// The Arrangement's grid, to choose as its menu does (the window's tests).
     pub fn set_arrangement_grid(&mut self, grid: crate::arrangement::arrangement_view::PianoGrid) {
         self.arrangement.grid = grid;
+        // The setting's default does not take it back on the next frame.
+        self.applied_grid = Some(self.settings.view.default_grid);
     }
 
     /// `transport.stop`, with where the playhead goes from the settings.
