@@ -167,6 +167,9 @@ refused or suspended, never by losing its edits.
 - Windows release, nightly and test packages include ASIO support: choose ASIO in Settings ›
   Audio › Driver, then an installed audio driver in Device. WASAPI remains available.
 
+- ASIO device choices remain available during playback. Late plug-in replies do not
+  mark a responsive host as hung, and obsolete starts unload away from the window.
+
 - **Device SDK authoring:** checked Rust graph handles, parameter-source helpers and standard
   panel-control constructors produce the same data-only `.sd` devices and use the existing runtime.
 

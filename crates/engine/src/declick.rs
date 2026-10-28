@@ -1,0 +1,61 @@
+// Copyright (C) 2026 The Suhina contributors
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! A transport start joins the last output value to the new sound, including plug-in output.
+
+pub(crate) struct StartGuard {
+    last: [f32; 4],
+    from: [f32; 4],
+    left: u32,
+    frames: u32,
+}
+
+impl StartGuard {
+    pub(crate) fn new(sample_rate: u32) -> Self {
+        let frames = (f64::from(sample_rate) * crate::audio::CLICK_GUARD_SECONDS).ceil().max(1.0) as u32;
+        Self { last: [0.0; 4], from: [0.0; 4], left: 0, frames }
+    }
+
+    pub(crate) fn begin(&mut self) {
+        self.from = self.last;
+        self.left = self.frames;
+    }
+
+    /// Runs after mixing; no allocation, and no per-frame work outside a transition.
+    pub(crate) fn process(&mut self, main: &mut [f32], cue: &mut [f32]) {
+        if self.left > 0 {
+            for (main, cue) in main.as_chunks_mut::<2>().0.iter_mut().zip(cue.as_chunks_mut::<2>().0) {
+                if self.left == 0 {
+                    break;
+                }
+                let t = 1.0 - self.left as f32 / self.frames as f32;
+                for (sample, from) in main.iter_mut().chain(cue.iter_mut()).zip(self.from) {
+                    *sample = from + (*sample - from) * t;
+                }
+                self.left -= 1;
+            }
+        }
+        if let (Some([l, r]), Some([cl, cr])) = (main.as_chunks::<2>().0.last(), cue.as_chunks::<2>().0.last()) {
+            self.last = [*l, *r, *cl, *cr];
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_start_continues_from_an_audible_tail_on_both_outputs() {
+        let mut guard = StartGuard::new(48_000);
+        guard.process(&mut [0.25, -0.25], &mut [0.5, -0.5]);
+        guard.begin();
+        let mut main = [1.0; 256];
+        let mut cue = [-1.0; 256];
+        guard.process(&mut main, &mut cue);
+        assert_eq!(&main[..2], &[0.25, -0.25]);
+        assert_eq!(&cue[..2], &[0.5, -0.5]);
+        assert_eq!(&main[254..], &[1.0, 1.0]);
+        assert_eq!(&cue[254..], &[-1.0, -1.0]);
+    }
+}

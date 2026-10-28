@@ -230,7 +230,7 @@ workspace forbids.
    audio thread runs at the engine's real-time priority (MMCSS "Pro Audio" on Windows; the
    engine's audio workgroup on macOS). The engine waits at most the rest of the block's time.
    On a miss it outputs the plug-in's input (an effect) or silence (an instrument) for that block
-   and counts the miss. Repeated misses, a dead process or an unanswered ping mark the plug-in
+   and counts the miss. Repeated unanswered requests, a dead process or an unanswered ping mark the plug-in
    *crashed* or *hung*; the engine kills the process and offers a restart. Offline renders wait
    without a deadline (with a long timeout), so they run as fast as the plug-in allows; a block
    left unanswered there says whether the process died (the plug-in crashed) or is still stuck.
@@ -256,7 +256,17 @@ workspace forbids.
    Nothing fails over it: when real-time scheduling is refused the first stream in a process
    adds a notice (the app shows it, `suhina-cli play` prints it), and the hosts' threads, which
    ask the same system, play on silently. `SUHINA_NO_REALTIME=1` turns it off, to compare.
-   The deadline is 60 % of a block's
+   A late reply resets the hang counter when the next request is accepted: missing
+   an audio deadline does not mean the host stopped answering. Superseded starts
+   after a rate change are unloaded off the session thread, like accepted instances.
+   With measured render lead, the deadline uses the complete device periods covered by queued
+   frames minus 3 ms, with half a render batch as the startup floor. All internal chunks
+   of the batch share that absolute deadline: the 1024-frame internal limit must neither
+   cap a short processing burst while queued audio covers it nor renew the time allowed
+   for a hanging processor. Sustained overload still exhausts the queue and misses its
+   deadline; extra processing time does not add buffered audio or latency. Playback keeps four engine blocks
+   queued (or a device period and a block, whichever is larger); armed tracks keep
+   their shallower queue. Without measured lead the deadline is 60 % of a block's
    playing time for all of a block's plug-ins together, one after another, so it depends on
    the block: the audio output renders the engine in blocks of its own ahead of the device into a
    ring, rather than in the device's buffers, after a driver that gave 3 ms buffers left 25
@@ -664,6 +674,17 @@ workspace forbids.
   the tracks are lined up again. Blocks that come during the restart (milliseconds) go
   unanswered, as a late block does. An offline render started with its plug-ins keeps the
   latencies they had when they started.
+
+### Retained processors across an output change
+
+A renderer returning its processors marks them as carried. Before the replacement renderer
+chases the current notes, its instrument chains queue explicit note-offs for all 128 keys,
+then AllNotesOff for those retained processors. Explicit releases are necessary for instruments
+that ignore controller 123, including VST3 instruments without its MIDI mapping.
+The old renderer's note-off schedule no longer exists; keeping its voices while chasing notes
+again would stack voices on every device or engine-block change. This does not reload presets,
+restart host processes or reset effect tails. An ordinary graph edit keeps its existing note
+schedule and does not use this output-replacement flag.
 
 ## Sources
 

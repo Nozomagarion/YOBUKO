@@ -164,6 +164,9 @@ impl PluginAudio {
         output: &mut [f32],
         timeout: Duration,
     ) -> Outcome {
+        if self.link.ready() {
+            self.unanswered.store(0, Ordering::Relaxed);
+        }
         let outcome = self.link.process_with_events(input, events, output, timeout);
         self.note(outcome);
         outcome
@@ -180,7 +183,11 @@ impl PluginAudio {
         if !sent && !patience.is_zero() && self.link.wait_ready(Instant::now() + patience) {
             sent = self.link.send_with_events(input, events, room);
         }
-        if !sent {
+        if sent {
+            // Accepting a new request proves the previous one was answered, even
+            // if its reply arrived too late to be used for audio.
+            self.unanswered.store(0, Ordering::Relaxed);
+        } else {
             self.note(Outcome::Busy);
         }
         sent
@@ -210,7 +217,9 @@ impl PluginAudio {
         if !sent && !patience.is_zero() && self.link.wait_ready(Instant::now() + patience) {
             sent = self.link.send_joint(input, events, followers, room);
         }
-        if !sent {
+        if sent {
+            self.unanswered.store(0, Ordering::Relaxed);
+        } else {
             self.note(Outcome::Busy);
         }
         sent
@@ -220,6 +229,11 @@ impl PluginAudio {
     /// a block its host did not answer counts against this instance too, as it may be the one
     /// that is stuck. Real-time safe.
     pub fn followed(&self, outcome: Outcome) {
+        // A missed joint request was accepted, so the previous joint request
+        // finished. Busy means no new request could go and keeps the hang count.
+        if outcome == Outcome::Missed {
+            self.unanswered.store(0, Ordering::Relaxed);
+        }
         self.note(outcome);
     }
 

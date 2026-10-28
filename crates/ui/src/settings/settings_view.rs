@@ -300,7 +300,7 @@ impl Page {
 
 /// What the Settings page keeps between frames: the page shown, and the action whose keys are
 /// being set (the next key pressed becomes its key).
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct PageState {
     pub page: Page,
     /// Settings lives in a separate native viewport until Dock is chosen.
@@ -325,6 +325,8 @@ pub struct PageState {
     pub theme_colour_held: bool,
     /// The audio devices were listed since the Audio page was opened.
     pub audio_listed: Option<bool>,
+    /// A driver picked in the form, applied only once its device is chosen.
+    pub audio_pending: Option<suhina_session::OutputChoice>,
     /// What is typed in the search field: while it has text, the settings that match it are shown
     /// in place of a page.
     pub search: String,
@@ -836,6 +838,7 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
     // Escape closes the page, unless it is cancelling a key being set or a search.
     if response.clicked() || (!escaped && state.capture.is_none() && ui.input(|i| i.key_pressed(egui::Key::Escape))) {
         outcome.close = true;
+        state.audio_pending = None;
     }
 
     // The pages down the left, the one shown beside them; none is lit while searching.
@@ -1948,7 +1951,10 @@ struct Chosen<'a> {
 }
 
 fn chosen<'a>(settings: &Settings, about: &'a About) -> Chosen<'a> {
-    let choice = settings.output_choice();
+    chosen_output(settings.output_choice(), about)
+}
+
+fn chosen_output(choice: suhina_session::OutputChoice, about: &About) -> Chosen<'_> {
     let default_host = about.audio_hosts.iter().find(|h| h.default).or(about.audio_hosts.first());
     let host = match &choice.host {
         Some(name) => about.audio_hosts.iter().find(|h| h.name.eq_ignore_ascii_case(name)),
@@ -1977,8 +1983,13 @@ pub(crate) fn audio_output(cx: &mut Cx<'_>, y: &mut f32) {
         cx.outcome.audio_refresh = true;
         cx.state.audio_listed = Some(true);
     }
-    let picked = output_rows(cx.ui, cx.painter, cx.page, y, cx.settings, cx.about);
-    use_output(cx, picked);
+    let active = cx.settings.output_choice();
+    let shown = cx.state.audio_pending.as_ref().unwrap_or(&active);
+    let picked = output_rows(cx.ui, cx.painter, cx.page, y, shown, cx.about, cx.state.audio_pending.is_some());
+    if let Some(picked) = picked {
+        let apply = select_output(&mut cx.state.audio_pending, &active, picked);
+        use_output(cx, apply);
+    }
 }
 
 /// Audio › Cue: the cue's output pair and volume.
@@ -1992,16 +2003,47 @@ pub(crate) fn audio_now(cx: &mut Cx<'_>, y: &mut f32) {
     cx.outcome.audio_refresh |= now_rows(cx.ui, cx.painter, cx.page, y, cx.settings, cx.about);
 }
 
+/// Selecting a driver only changes the form. The device commits the pair through
+/// the same audio.setOutput command as every other output change.
+enum OutputPick {
+    Driver(suhina_session::OutputChoice),
+    Device(suhina_session::OutputChoice),
+    Setting(suhina_session::OutputChoice),
+}
+
+fn select_output(
+    pending: &mut Option<suhina_session::OutputChoice>,
+    active: &suhina_session::OutputChoice,
+    picked: OutputPick,
+) -> Option<suhina_session::OutputChoice> {
+    match picked {
+        OutputPick::Driver(choice) => {
+            *pending = (choice.host != active.host).then_some(choice);
+            None
+        }
+        OutputPick::Device(choice) => {
+            *pending = None;
+            Some(choice)
+        }
+        OutputPick::Setting(choice) if pending.is_some() => {
+            *pending = Some(choice);
+            None
+        }
+        OutputPick::Setting(choice) => Some(choice),
+    }
+}
+
 /// The rows of Audio › Output; returns a new choice.
 fn output_rows(
     ui: &Ui,
     painter: &egui::Painter,
     page: Rect,
     y: &mut f32,
-    settings: &Settings,
+    choice: &suhina_session::OutputChoice,
     about: &About,
-) -> Option<suhina_session::OutputChoice> {
-    let Chosen { choice, default_host, host, device } = chosen(settings, about);
+    pending: bool,
+) -> Option<OutputPick> {
+    let Chosen { choice, default_host, host, device } = chosen_output(choice.clone(), about);
     let row = |y: &mut f32| setting_row(page, y);
     let mut picked: Option<suhina_session::OutputChoice> = None;
     // Host.
@@ -2011,13 +2053,20 @@ fn output_rows(
         vec![(format!("Default ({})", default_host.map_or("none", |h| h.name.as_str())), None)];
     options.extend(about.audio_hosts.iter().map(|h| (h.name.clone(), Some(h.name.clone()))));
     if let Some(host) = choice_dropdown(ui, painter, r, "Driver", &options, &choice.host) {
-        picked = choice.with_params(&serde_json::json!({ "host": host.unwrap_or_default() })).ok();
+        return choice
+            .with_params(&serde_json::json!({ "host": host.unwrap_or_default() }))
+            .ok()
+            .map(OutputPick::Driver);
     }
     // Device.
     let r = row(y);
-    let note = match (&choice.device, device) {
-        (Some(name), None) => format!("{name} is not there; the default output plays"),
-        _ => "The output device on that driver".to_string(),
+    let note = if pending {
+        "Choose a device to apply the driver change".to_string()
+    } else {
+        match (&choice.device, device) {
+            (Some(name), None) => format!("{name} is not there; the default output plays"),
+            _ => "The output device on that driver".to_string(),
+        }
     };
     label(painter, r, "Device", &note);
     let default_device = host.and_then(|h| h.devices.iter().find(|d| d.default)).map_or("none", |d| d.name.as_str());
@@ -2025,8 +2074,18 @@ fn output_rows(
     if let Some(host) = host {
         options.extend(host.devices.iter().map(|d| (d.name.clone(), Some(d.name.clone()))));
     }
-    if let Some(name) = choice_dropdown(ui, painter, r, "Device", &options, &choice.device) {
-        picked = choice.with_params(&serde_json::json!({ "device": name.unwrap_or_default() })).ok();
+    let mut device_options: Vec<_> = options.into_iter().map(|(label, value)| (label, Some(value))).collect();
+    let selected = if pending {
+        device_options.insert(0, ("Choose a device…".into(), None));
+        None
+    } else {
+        Some(choice.device.clone())
+    };
+    if let Some(Some(name)) = choice_dropdown(ui, painter, r, "Device", &device_options, &selected) {
+        return choice
+            .with_params(&serde_json::json!({ "device": name.unwrap_or_default() }))
+            .ok()
+            .map(OutputPick::Device);
     }
     // Sample rate.
     let r = row(y);
@@ -2126,7 +2185,7 @@ fn output_rows(
         picked = choice.with_params(&serde_json::json!({ "input": input.as_text() })).ok();
     }
 
-    picked
+    picked.map(OutputPick::Setting)
 }
 
 /// The rows of Audio › Cue; returns a new choice.
@@ -2458,6 +2517,35 @@ pub(super) fn edit_rgba(ui: &mut Ui, rgba: &mut [u8; 4], alpha: egui::color_pick
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_driver_is_applied_only_together_with_the_selected_device() {
+        let active = suhina_session::OutputChoice::default();
+        let mut pending = None;
+        for host in ["ASIO", "WASAPI", "CoreAudio"] {
+            let driver = active.with_params(&serde_json::json!({"host": host})).unwrap();
+            assert!(select_output(&mut pending, &active, OutputPick::Driver(driver.clone())).is_none());
+            assert_eq!(pending.as_ref(), Some(&driver));
+            let device = driver.with_params(&serde_json::json!({"device": "Selected interface"})).unwrap();
+            assert_eq!(select_output(&mut pending, &active, OutputPick::Device(device.clone())), Some(device));
+            assert!(pending.is_none());
+        }
+    }
+
+    #[test]
+    fn a_pending_driver_can_be_cancelled_or_explicitly_use_its_default_device() {
+        let active = suhina_session::OutputChoice::default();
+        let driver = active.with_params(&serde_json::json!({"host": "ASIO"})).unwrap();
+        let mut pending = Some(driver.clone());
+        let rate = driver.with_params(&serde_json::json!({"sampleRate": 44100})).unwrap();
+        assert!(select_output(&mut pending, &active, OutputPick::Setting(rate.clone())).is_none());
+        assert_eq!(pending.as_ref(), Some(&rate));
+        assert!(select_output(&mut pending, &active, OutputPick::Driver(active.clone())).is_none());
+        assert!(pending.is_none());
+        pending = Some(driver.clone());
+        assert_eq!(select_output(&mut pending, &active, OutputPick::Device(driver.clone())), Some(driver));
+        assert!(pending.is_none());
+    }
 
     #[test]
     fn the_theme_search_matches_names_ids_and_variant_names() {

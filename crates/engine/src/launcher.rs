@@ -121,7 +121,8 @@ pub enum LaunchCommand {
     SetMetronomeSound(crate::ClickSound),
     /// While the transport runs, playback jumps to `beat` at once, as [`LaunchCommand::SetPosition`]
     /// does, but the play start marker stays where it is. Ignored while stopped (the playhead is
-    /// at the marker then) and for non-finite beats. For an output that is opened again.
+    /// at the marker then) and for non-finite beats. A pending start waiting for read-ahead
+    /// resumes at this beat once ready. For an output that is opened again.
     Locate {
         beat: f64,
     },
@@ -1203,16 +1204,33 @@ impl Renderer {
             // the play start marker stays where it is.
             LaunchCommand::Stop | LaunchCommand::StopHere if self.count_in.is_some() => self.cancel_count_in(),
             // A stop before the waiting start rolled: it never did.
-            LaunchCommand::Stop | LaunchCommand::StopHere if self.start_waiting.is_some() => self.start_waiting = None,
+            LaunchCommand::Stop | LaunchCommand::StopHere if self.start_waiting.is_some() => {
+                self.start_waiting = None;
+                self.start_target = None;
+                let marker = self.start_beat;
+                self.stop_transport(false);
+                self.set_position(marker);
+            }
             LaunchCommand::Stop => self.stop_transport(false),
             LaunchCommand::StopHere => self.stop_transport(true),
             LaunchCommand::SetRecording { on } => self.recorder.set(on),
             LaunchCommand::CountIn { beats, bar_beats } => self.start_count_in(beats, bar_beats),
             LaunchCommand::SetPosition { beat } => self.set_position(beat),
             LaunchCommand::Locate { beat } => {
-                if self.running && beat.is_finite() {
-                    self.jump_to(beat.clamp(0.0, MAX_START_BEAT));
-                    self.chase = true;
+                if beat.is_finite() {
+                    let beat = beat.clamp(0.0, MAX_START_BEAT);
+                    if self.running {
+                        self.jump_to(beat);
+                        self.chase = true;
+                    } else if self.start_waiting.is_some() {
+                        // Play may still be waiting for read-ahead. Restore the playhead
+                        // there too, or a device/block change restarts at the old marker.
+                        self.start_target = Some(beat);
+                        self.start_waiting = Some(0);
+                        self.graph.ahead.move_to(self.frame_of_beat(beat));
+                        self.graph.launcher.beat = beat;
+                        self.graph.launcher.tempo_from_map();
+                    }
                 }
             }
             LaunchCommand::ResumeColumn { column, slot, elapsed_beats } => {
@@ -1364,7 +1382,8 @@ impl Renderer {
         let Some(waited) = self.start_waiting else { return };
         self.graph.ahead.service();
         let limit = (crate::START_WAIT_SECONDS * f64::from(self.sample_rate)) as u64;
-        if waited >= limit || self.graph.ahead.ready_at(self.start_frame()) {
+        let target = self.frame_of_beat(self.start_target.unwrap_or(self.start_beat));
+        if waited >= limit || self.graph.ahead.ready_at(target) {
             self.start_waiting = None;
             self.start_transport();
         } else {
@@ -1373,12 +1392,21 @@ impl Renderer {
     }
 
     pub(crate) fn start_transport(&mut self) {
+        // Native clip readers already guard their starts. Hosted processors may
+        // produce an immediate step (including ARA or a chased instrument note).
+        if !self.plugin_info.is_empty() {
+            self.start_guard.begin();
+        }
+        let resumed = self.start_target.take();
+        let target = resumed.unwrap_or(self.start_beat);
         self.start_waiting = None;
         self.running = true;
         self.count_in = None;
         // A start plays the arrangement's tempo and bars again; a scene launched with it takes
         // the clock off the map again at its launch beat.
-        self.graph.launcher.follow_map();
+        if resumed.is_none() {
+            self.graph.launcher.follow_map();
+        }
         // The stretch voices are moved to the marker when the transport stops or the marker
         // moves, so the worker has them ready by the next start; only a start without either
         // before it moves them here.
@@ -1386,7 +1414,7 @@ impl Renderer {
             self.graph.ahead.move_to(self.start_frame());
             self.stretch_fresh = true;
         }
-        self.locate(self.start_beat);
+        self.locate(target);
         self.chase = true;
         self.graph.launcher.monitor.running.store(true, Ordering::Relaxed);
     }
@@ -1476,6 +1504,7 @@ impl Renderer {
         if !beat.is_finite() {
             return;
         }
+        self.start_target = None;
         self.start_beat = beat.clamp(0.0, MAX_START_BEAT);
         if !self.running {
             self.graph.ahead.move_to(self.start_frame());
@@ -1577,7 +1606,7 @@ impl Renderer {
     /// [`LaunchCommand::ResumeColumn`]: the column plays `slot`'s clip as if launched
     /// `elapsed_beats` ago, or nothing, and its track no longer plays its arrangement.
     fn resume_column(&mut self, column: usize, slot: Option<usize>, elapsed_beats: f64) {
-        if !self.running || column >= self.graph.launcher.columns.len() {
+        if (!self.running && self.start_waiting.is_none()) || column >= self.graph.launcher.columns.len() {
             return;
         }
         let elapsed = if elapsed_beats.is_finite() { elapsed_beats.clamp(0.0, ENDLESS_BEATS) } else { 0.0 };

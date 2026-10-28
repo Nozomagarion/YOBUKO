@@ -283,6 +283,8 @@ impl Projects {
         let choice = self.devices.output_choice.clone();
         let Ok(session) = self.session_mut(None) else { return Ok(None) };
         let Some(transport) = session.player().map(crate::audio::Transport::of) else { return Ok(None) };
+        let began = std::time::Instant::now();
+        suhina_plugins::trace!("audio reopen begin: choice {choice:?}, transport {transport:?}");
         let (mut notice, mut kept) = (None, false);
         session
             .replace_player(|project, audio, assets, previous| {
@@ -299,6 +301,11 @@ impl Projects {
         if let Ok(player) = session.player_mut() {
             transport.restore(player)?;
         }
+        suhina_plugins::trace!(
+            "audio reopen complete: {:.1} ms, plugins_kept={kept}, output {:?}, restored {transport:?}",
+            began.elapsed().as_secs_f64() * 1000.0,
+            session.player().and_then(crate::Player::output_info)
+        );
         // Plug-ins that could not carry over (a new sample rate) start again.
         session.sync_plugins();
         Ok(notice)

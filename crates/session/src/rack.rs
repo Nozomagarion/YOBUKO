@@ -205,6 +205,12 @@ struct Started {
     first_state: Option<SavedState>,
 }
 
+/// A superseded start can own a control connection whose destructor waits for an
+/// unload (or a sibling still loading). Never run that destructor on the UI thread.
+fn retire_started<T: Send + 'static>(started: T) {
+    let _detached = std::thread::Builder::new().name("suhina-plugin-retire".into()).spawn(move || drop(started));
+}
+
 /// What a plug-in's control half did on a thread of its own, coming back.
 enum Done {
     Opened(Result<(u32, u32), String>),
@@ -1382,8 +1388,12 @@ impl Rack {
         let mut changed = false;
         let mut reopen = Vec::new();
         while let Ok(started) = self.receiver.try_recv() {
-            let Some(instance) = self.instances.get_mut(&started.key) else { continue };
+            let Some(instance) = self.instances.get_mut(&started.key) else {
+                retire_started(started);
+                continue;
+            };
             if instance.generation != started.generation {
+                retire_started(started);
                 continue;
             }
             if let Some(state) = started.first_state {

@@ -1119,6 +1119,21 @@ impl App {
         }
         let Some(player) = self.session().and_then(Session::player) else { return };
         let info = player.output_info();
+        if let Some(info) = &info {
+            suhina_plugins::trace::state(
+                "audio output",
+                format!(
+                    "host={:?}, device={:?}, sample_rate={}, device_buffer={}, engine_block={}, fallback={}, exclusive={}",
+                    info.host,
+                    info.device,
+                    info.sample_rate,
+                    info.buffer_frames,
+                    info.engine_block,
+                    info.fallback,
+                    info.exclusive
+                ),
+            );
+        }
         let device = info.as_ref().map_or(0, |i| i.underruns);
         let stretched = player.stretch_underruns();
         let moves = player.stretch_moves();
@@ -1130,9 +1145,9 @@ impl App {
         let cpu = player.cpu_monitor().load_milli();
         let running = player.monitor().running();
         let (was_device, was_stretched, was_misses) = self.audio_traced;
-        if device > was_device || stretched > was_stretched || misses > was_misses || cpu >= 700 {
+        if running || device > was_device || stretched > was_stretched || misses > was_misses || cpu >= 700 {
             suhina_plugins::trace!(
-                "audio: device underruns {device} (+{}), stretched frames late {stretched} (+{}), edits that restarted stretched clips {moves}, plug-in blocks late {misses} (+{}, most {worst_name}: {worst_misses}), engine load {:.1} %, {}, buffer {} frames, block {}, latency {:.1} ms{}",
+                "audio: device underruns {device} (+{}), stretched frames late {stretched} (+{}), edits that restarted stretched clips {moves}, plug-in blocks late {misses} (+{}, most {worst_name}: {worst_misses}), engine load {:.1} %, {}, buffer {} frames, block {}, latency {:.1} ms{}, output {:?}, beat {:.6}, last late render (us, queued, period, frames) {:?}",
                 device.saturating_sub(was_device),
                 stretched.saturating_sub(was_stretched),
                 misses.saturating_sub(was_misses),
@@ -1142,6 +1157,9 @@ impl App {
                 info.as_ref().map_or(0, |i| i.engine_block),
                 info.as_ref().map_or(0.0, |i| i.latency_ms),
                 if info.as_ref().is_some_and(|i| i.failed) { ", the device failed" } else { "" },
+                info.as_ref().map(|i| (&i.host, &i.device, i.sample_rate)),
+                player.monitor().beat(),
+                player.cpu_monitor().late_render(),
             );
         }
         self.audio_traced = (device, stretched, misses);
@@ -2968,6 +2986,8 @@ impl App {
                 crate::kit::liquid::prepare(ui.ctx());
             }
             self.settings_dialog(ui, window);
+        } else {
+            self.page.audio_pending = None;
         }
         self.update_title(ui.ctx());
         self.frame_trace.mark("dialogs");

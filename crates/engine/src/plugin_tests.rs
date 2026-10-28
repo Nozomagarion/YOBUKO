@@ -1137,3 +1137,58 @@ fn a_plug_in_keeps_running_when_it_moves_into_a_group() {
     controller.send_plugin(key, Box::new(Stand::new(Behaviour::Gain(1.0)))).unwrap();
     assert!(peak(&blocks(&mut renderer, 5, 480)) > 0.1);
 }
+
+#[test]
+fn a_carried_instrument_releases_old_notes_before_the_new_engine_chases_them() {
+    let p = project(vec![note(0.0, 8.0, 69)], 8.0, vec![plug(vst3())]);
+    let stand = Stand::new(Behaviour::Instrument);
+    let seen = Arc::clone(&stand.seen);
+    let mut current = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins(&p, vec![(stand, INSTRUMENT)])),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
+    blocks(&mut current, 1, 1024);
+    for size in [1024, 2048, 1024, 2048] {
+        seen.lock().unwrap().clear();
+        let carried = current.into_plugins();
+        current = Renderer::build(
+            &p,
+            RenderInputs::from_audio(&AudioPool::new()).with_plugins(carried),
+            SR,
+            RenderOptions::STOPPED,
+        )
+        .unwrap();
+        current.handle(crate::LaunchCommand::SetPosition { beat: 1.0 });
+        current.handle(crate::LaunchCommand::Play);
+        blocks(&mut current, 1, size);
+        let events = seen.lock().unwrap();
+        let off = events.iter().position(|(_, e)| matches!(e, NoteEvent::Off { key: 69, .. }));
+        let on = events.iter().position(|(_, e)| matches!(e, NoteEvent::On { .. }));
+        assert!(off.zip(on).is_some_and(|(off, on)| off < on), "old voices must be released before chase: {events:?}");
+    }
+}
+
+#[test]
+fn play_chases_a_plugin_note_without_a_step_from_silence() {
+    let p = project(vec![note(0.0, 8.0, 69)], 8.0, vec![plug(vst3())]);
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new())
+            .with_plugins(plugins(&p, vec![(Stand::new(Behaviour::Instrument), INSTRUMENT)])),
+        SR,
+        RenderOptions::STOPPED,
+    )
+    .unwrap();
+    let before = blocks(&mut renderer, 1, 128);
+    assert_eq!(peak(&before), 0.0);
+    renderer.handle(crate::LaunchCommand::SetPosition { beat: 2.0 });
+    renderer.handle(crate::LaunchCommand::Play);
+    let after = blocks(&mut renderer, 4, 32);
+    assert_eq!(after[0], 0.0, "Play must begin continuously from the previous output sample");
+    assert!(after[after.len() - 2] > 0.4, "the guard must not mute the note");
+    let largest_step = left(&after).windows(2).map(|s| (s[1] - s[0]).abs()).fold(0.0, f32::max);
+    assert!(largest_step < 0.01, "the attack must be short and smooth: {largest_step}");
+}

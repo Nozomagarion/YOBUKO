@@ -153,6 +153,54 @@ fn find(log: &[Hand], name: &str) -> Hand {
     *log.iter().find(|hand| hand.name == name).unwrap()
 }
 
+#[test]
+fn a_large_device_period_does_not_cut_plugin_time_to_a_quarter_block() {
+    let p = tracks(vec![vec![plug()]]);
+    let log = Arc::default();
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new())
+            .with_plugins(plugins(&p, vec![Timed::new("effect", 0.5, Duration::from_millis(40), &log)])),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
+    renderer.set_render_lead(FRAMES, FRAMES * 2);
+    let (actual, _) = play(&mut renderer, 3);
+    let mut reference =
+        Renderer::build(&p, RenderInputs::from_audio(&AudioPool::new()), SR, RenderOptions::PLAYING).unwrap();
+    reference.set_offline(true);
+    let (dry, _) = play(&mut reference, 3);
+    assert!(peak(&dry) > 0.0);
+    let expected: Vec<_> = dry.iter().map(|s| s * 0.5).collect();
+    assert!(max_diff(&actual, &expected) < 1e-6, "the effect was bypassed before its block had time to finish");
+}
+
+#[test]
+fn a_queued_device_period_leaves_time_for_the_next_plugin_block() {
+    let p = tracks(vec![vec![plug()]]);
+    let log = Arc::default();
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new())
+            .with_plugins(plugins(&p, vec![Timed::new("effect", 0.5, Duration::from_millis(80), &log)])),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
+    // Even if the device takes this entire queued period immediately, its next
+    // callback is a period away. Do not subtract that period a second time.
+    renderer.set_render_lead(FRAMES * 2, FRAMES * 2);
+    let (actual, _) = play(&mut renderer, 3);
+    let mut reference =
+        Renderer::build(&p, RenderInputs::from_audio(&AudioPool::new()), SR, RenderOptions::PLAYING).unwrap();
+    reference.set_offline(true);
+    let (dry, _) = play(&mut reference, 3);
+    assert!(peak(&dry) > 0.0);
+    let expected: Vec<_> = dry.iter().map(|s| s * 0.5).collect();
+    assert!(max_diff(&actual, &expected) < 1e-6, "a queued device period was discounted twice");
+}
+
 /// Two chains of three plug-ins whose slow plug-ins are at different places: one chain's first,
 /// the other's last. In stages the block would take both slow plug-ins one after another (the
 /// second stage of every chain waiting for the first chain's slow one); a chain that goes on
@@ -302,4 +350,65 @@ fn offline_the_order_plug_ins_answer_in_changes_nothing() {
     // And it is the plug-ins' sound: not the dry track.
     let dry = crate::render_offline(&tracks(vec![vec![], vec![]]), SR, 512).unwrap();
     assert!(max_diff(&at_once[..dry.len().min(at_once.len())], &dry) > 1e-3);
+}
+
+#[test]
+fn late_plugin_diagnostics_capture_render_time_and_queue_lead() {
+    let p = tracks(vec![vec![plug()]]);
+    let log = Arc::default();
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new())
+            .with_plugins(plugins(&p, vec![Timed::new("hung", 0.5, HUNG, &log)])),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
+    renderer.set_render_lead(FRAMES * 2, FRAMES * 2);
+    play(&mut renderer, 1);
+    assert!(renderer.plugin_misses() > 0);
+    let (elapsed, queued, period, frames) = renderer.cpu.monitor.late_render();
+    assert!(elapsed > 0);
+    assert_eq!((queued, period, frames), ((FRAMES * 2) as u64, (FRAMES * 2) as u64, FRAMES as u64));
+}
+
+#[test]
+fn queued_audio_covers_a_start_burst_longer_than_an_internal_chunk() {
+    let p = tracks(vec![vec![plug()]]);
+    let log = Arc::default();
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new())
+            .with_plugins(plugins(&p, vec![Timed::new("start", 0.5, Duration::from_millis(160), &log)])),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
+    // Three 128 ms periods are already queued. Both 160 ms chunks fit before
+    // the device needs this batch, although neither fits the old 121 ms cap.
+    renderer.set_render_lead(FRAMES * 3, FRAMES);
+    let mut output = vec![0.0; FRAMES * 4];
+    renderer.process(&mut output);
+    assert_eq!(renderer.plugin_misses(), 0);
+    assert!(peak(&output) > 0.01);
+}
+
+#[test]
+fn internal_chunks_share_the_device_deadline_instead_of_restarting_it() {
+    let p = tracks(vec![vec![plug()]]);
+    let log = Arc::default();
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new())
+            .with_plugins(plugins(&p, vec![Timed::new("hung", 0.5, HUNG, &log)])),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
+    renderer.set_render_lead(FRAMES * 2, FRAMES);
+    let mut output = vec![0.0; FRAMES * 4];
+    let start = Instant::now();
+    renderer.process(&mut output);
+    assert!(start.elapsed() < Duration::from_millis(350), "the second chunk must not renew the 253 ms budget");
+    assert_eq!(renderer.plugin_misses(), 2);
 }

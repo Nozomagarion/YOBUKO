@@ -938,3 +938,12 @@ says recording need not be enabled, and Off says live input is silent but can st
 recorded. Tooltips explain the selected mode and the separate record-ready
 button, without requiring knowledge of "armed" or "play-through". The file/API value `in`
 remains unchanged.
+
+### Starting playback without an output step
+
+For a graph with hosted plug-ins, Play joins the previous main and cue output samples to the
+newly rendered sound over a 2 ms linear transition. Native audio clip readers already have
+start guards; hosted processors can otherwise bypass that protection. This covers
+starting inside a sustained note. The transition begins at the previous output value, rather
+than forcing an already audible effect tail to zero. It does not move note times or add a buffer
+of latency, and spans render-block boundaries. Offline command rendering uses the same path.

@@ -293,6 +293,8 @@ pub fn plugin_devices(project: &Project) -> Vec<PluginDevice> {
 pub struct Plugins {
     pub(crate) info: HashMap<u64, PluginSlotInfo>,
     pub(crate) processors: HashMap<u64, Box<dyn PluginProcessor>>,
+    /// Processors retained from a closed renderer can still hold its sounding notes.
+    pub(crate) carried: bool,
 }
 
 impl Plugins {

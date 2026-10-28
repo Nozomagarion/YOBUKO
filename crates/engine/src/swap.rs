@@ -484,7 +484,7 @@ impl Controller {
         let collect_began = std::time::Instant::now();
         updater.collect();
         let collect_took = collect_began.elapsed();
-        let mut plugins = Plugins { info: updater.plugin_info.clone(), processors: HashMap::new() };
+        let mut plugins = Plugins { info: updater.plugin_info.clone(), processors: HashMap::new(), carried: false };
         let mut graph = Graph::build(project, &updater.audio, &updater.assets, updater.sample_rate, &mut plugins, None)
             .map_err(|e| e.to_string())?;
         crate::build_report::add(&format!("old graphs dropped {:.1} ms", collect_took.as_secs_f64() * 1000.0));

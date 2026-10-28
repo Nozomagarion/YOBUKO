@@ -3,6 +3,21 @@
 
 use super::*;
 
+#[test]
+fn retiring_a_superseded_start_does_not_wait_for_its_unload() {
+    struct BlockedUnload(std::sync::mpsc::Receiver<()>);
+    impl Drop for BlockedUnload {
+        fn drop(&mut self) {
+            let _ = self.0.recv_timeout(Duration::from_secs(2));
+        }
+    }
+    let (release, wait) = std::sync::mpsc::channel();
+    let before = Instant::now();
+    retire_started(BlockedUnload(wait));
+    assert!(before.elapsed() < Duration::from_millis(250));
+    release.send(()).unwrap();
+}
+
 /// A pending read whose instance was detached while the host held its control.
 fn detached_gather() -> Rack {
     Rack {

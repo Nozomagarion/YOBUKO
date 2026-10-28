@@ -33,6 +33,17 @@ Text inputs and dropdowns use transparent fills and only a
 theme-coloured underline, stronger on hover and accented on focus. Navigation rows
 have no opaque background: only selected/hovered rows add a translucent tint.
 
+### Choosing an audio driver and device
+
+Choosing Driver changes the devices shown in the form without opening a stream.
+Device then shows “Choose a device…”; selecting a named device or explicitly
+selecting Default applies the driver and device together with `audio.setOutput`.
+Until then Now continues to describe the output still playing. Closing Settings
+or selecting the active driver abandons the pending driver choice. Sample-rate
+and buffer edits made while a driver is pending belong to that pending choice.
+There are no preferred driver brands. A change that keeps the sample rate carries
+existing plug-ins over; a different rate still requires their reinitialization.
+
 ## Sources
 
 Suhina's own layout: no other program was observed for it. The grouping follows what the user is
@@ -89,6 +100,14 @@ system folder picker or removes its grant; the project-folder grant can also be 
 The settings persist across restarts. Missing folders grant no access, and each subsequent
 operation uses the current grants. File › Export still writes to the destination the person
 chooses. Agents cannot change these settings. Standalone MCP keeps its `--write-root` option.
+
+### Keeping playback through an output change
+
+Changing the output or engine block restores the current playhead and keeps the play start
+marker separate. If stretched audio is still being prepared on the new output, the pending
+start accepts the restored playhead and launched clips before playback begins. Cancelling
+that pending start clears the resume target; the next ordinary Play uses the marker.
+
 
 ## Theme gallery and colour editor
 

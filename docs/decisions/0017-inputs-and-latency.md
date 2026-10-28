@@ -31,8 +31,8 @@ to its own clock.
 Played input is where latency is felt. A clip launch waits for its quantisation anyway; a key
 pressed on a keyboard must sound within a few milliseconds, or the instrument feels late. The
 output was built for playback: the render thread runs `Renderer::process` ahead of the device
-into a lock-free ring and keeps two blocks queued (`docs/architecture.md` › Threads), so a frame
-rendered now is heard about *two blocks plus the device buffer* later. Plug-ins add a round trip
+into a lock-free ring and keeps four blocks queued (`docs/architecture.md` › Threads), so a frame
+rendered now is heard about *four blocks plus the device buffer* later. Plug-ins add a round trip
 per block, within a deadline ([ADR 0006](0006-plug-in-hosting.md)).
 
 AGENTS.md rule 3 rules out allocating, locking or waiting on the audio thread, rule 6 asks that
@@ -106,7 +106,7 @@ engine code.
 6. **While a track is armed, the output keeps one block queued instead of two** (amendment,
    [#265](https://github.com/suhina-daw/suhina-daw/issues/265)). The render thread reads
    `Renderer::live_armed` (a track is armed or monitors MIDI with In) before each block and aims for one block or one device buffer,
-   whichever is more, instead of two blocks or a device buffer and a block. It is automatic, not
+   whichever is more, instead of four blocks or a device buffer and a block. It is automatic, not
    a setting: an armed track is the one sign that someone may be playing, and playback alone
    keeps the safer depth. Arming lets the device drain the queue to the new depth and disarming
    lets the thread fill it again, so neither is heard. The cost is time to render: the thread

@@ -76,9 +76,9 @@ fn the_engine_block_follows_the_chosen_buffer() {
 }
 
 #[test]
-fn the_ring_keeps_two_blocks_or_a_device_buffer_and_a_block() {
-    assert_eq!(ring_target(512, 0, false), 1024);
-    assert_eq!(ring_target(512, 128, false), 1024);
+fn the_ring_keeps_four_blocks_or_a_device_buffer_and_a_block() {
+    assert_eq!(ring_target(512, 0, false), 2048);
+    assert_eq!(ring_target(512, 128, false), 2048);
     assert_eq!(ring_target(256, 1024, false), 1280);
     // A device asking for absurd amounts is capped.
     assert_eq!(ring_target(64, usize::MAX, false), MAX_DEVICE_FRAMES + 64);
@@ -304,4 +304,23 @@ fn the_render_thread_keeps_less_ahead_while_a_track_is_armed() {
     stop.store(true, Ordering::Release);
     progress.wake_render();
     assert!(render.join().is_ok());
+}
+
+#[test]
+fn the_first_device_callback_has_audio_before_the_render_thread_runs() {
+    for (block, device, live) in
+        [(1024, 2048, false), (2048, 444, false), (256, 2048, true), (64, MAX_DEVICE_FRAMES, true)]
+    {
+        let (mut producer, mut consumer) = ring(block);
+        prime_ring(&mut producer, block, device, live);
+        let progress = Progress::default();
+        let mut output = vec![1.0; device * RING_CHANNELS];
+        read_ring(&mut consumer, &mut output, &progress);
+        assert_eq!(progress.underruns(), 0, "first callback: block {block}, device {device}");
+        assert!(output.iter().all(|sample| *sample == 0.0));
+        // ASIO may request both halves immediately before hardware streaming starts.
+        read_ring(&mut consumer, &mut output, &progress);
+        assert_eq!(progress.underruns(), 0, "second initial callback: block {block}, device {device}");
+        assert_eq!(consumer.slots() / RING_CHANNELS, ring_target(block, device, live).max(2 * device) - 2 * device);
+    }
 }

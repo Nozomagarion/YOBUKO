@@ -162,13 +162,34 @@ happens. Two counters tell the causes apart:
   crackle on that track). The line names the plug-in late most often and its track. A return's
   plug-ins run after every track that sends to them, so they have the least time left.
 
-Lines come only when a counter grew or the load is high, so a session that plays cleanly writes
-none.
+While playing, a health line is written each second, including zero deltas, so a clean
+interval can be distinguished from a stopped logger. While stopped, lines require a changed
+counter or high load. Each health line identifies the actual host, device, sample rate and
+playhead beat. `audio output:` records format changes even without a dropout, including
+whether the device is a fallback. `audio reopen begin/complete` records the requested choice,
+transport snapshot, elapsed opening time and whether plug-ins carried over.
+
+The last late render diagnostic gives its wall time in microseconds, frames queued before
+rendering, device period and number of render frames. These are atomic diagnostic samples
+published by the engine and read by the UI; no log writes run on the audio thread. A low
+smoothed CPU reading alone does not exclude one long render call or a scheduling delay.
+Counters belong to the current player/graph and may reset on replacement; use the reopen
+records and cumulative values as well as the deltas.
 
 What is normal: a few late plug-in blocks in the first second of playback (every plug-in wakes at
 once), and a few thousand stretched frames late right after a jump of the play position (the
 stretched clips there are made from the new place first). Late blocks that keep coming while it
 plays, or underruns at all, are the bug.
+
+### Further reading on audio timing
+
+- [Microsoft: DPC latency](https://microsoft.github.io/MIDI/kb/dpc-latency/) explains how driver
+  interrupts and scheduling delays can hold up an audio thread. A larger buffer can tolerate
+  more delay; identifying a driver as the cause requires a trace of the actual interruption.
+- [Kiefer et al., 2015: Parallelizing a Real-time Audio Application](https://ps.ipd.kit.edu/english/180_1222.php)
+  compares parallel scheduling strategies in an audio application. Its results motivate measuring
+  render completion times and synchronization overhead, rather than treating average CPU load
+  as proof that every audio deadline was met.
 
 ### Adding a trace point
 

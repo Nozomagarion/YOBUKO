@@ -9,8 +9,8 @@
 //! [`engine_block`]) into a lock-free ring ([`rtrb`]); the device's callback only copies from
 //! the ring, converts samples and sets atomics: no allocation, locks or I/O on either thread
 //! (AGENTS.md rule 3). The plug-ins of a block get the time the frames queued before it play,
-//! less the device's buffer and a margin (ADR 0006), so a return's plug-ins, which run after the
-//! tracks that send to them, are not left a fraction of a block. The ring keeps two blocks
+//! counting complete device periods less a margin (ADR 0006), so a return's plug-ins, which run after the
+//! tracks that send to them, are not left a fraction of a block. The ring keeps four blocks
 //! ahead, or a device buffer and a block when the device asks for more at once; while a track
 //! is armed to play a MIDI controller, one block or a device buffer, so a key sounds sooner
 //! (ADR 0017). Launcher
@@ -59,9 +59,9 @@ pub(crate) const RING_CHANNELS: usize = 4;
 pub const ENGINE_BLOCK: usize = 1024;
 /// Blocks the ring keeps ahead of the device: the latency from the engine to the device is up
 /// to this many blocks (more when the device takes more than a block at once).
-const RING_BLOCKS: usize = 2;
-/// Blocks the ring keeps ahead while a track is armed (ADR 0017): a key pressed waits for one
-/// block less, and the render thread has one device buffer's time to fill the next.
+const RING_BLOCKS: usize = 4;
+/// Blocks the ring keeps ahead while a track is armed (ADR 0017): a key pressed waits for a
+/// shallow queue, and the render thread has one device buffer's time to fill the next.
 const LIVE_RING_BLOCKS: usize = 1;
 /// The largest device buffer the ring makes room for, in frames.
 const MAX_DEVICE_FRAMES: usize = 8192;
@@ -224,7 +224,7 @@ fn block_for(chosen: Option<u32>, overridden: Option<&str>) -> usize {
         .unwrap_or(ENGINE_BLOCK)
 }
 
-/// Frames the render thread keeps ahead in the ring: two blocks, or a device buffer and a
+/// Frames the render thread keeps ahead in the ring: four blocks, or a device buffer and a
 /// block when the device takes more at once. While someone may be playing live (`live`, a
 /// track armed), one block or one device buffer: the device's next callback is then all the
 /// render thread has to fill the ring again, so underruns tell when it is too little.
@@ -405,8 +405,9 @@ impl Output {
         let host = cpal::host_from_id(host_id).map_err(|e| format!("audio host {}: {e}", host_id.name()))?;
         let host_name = host_id.name().to_string();
         let chosen = choice.device.as_ref().and_then(|name| {
-            let found =
-                host.output_devices().ok().and_then(|mut list| list.find(|d| devices::same_name(&d.to_string(), name)));
+            let found = devices::output_devices(&host)
+                .ok()
+                .and_then(|list| list.into_iter().find(|d| devices::same_name(&d.to_string(), name)));
             if found.is_none() {
                 notices.push(format!("the audio device {name} is not there; the default output plays"));
             }
@@ -414,7 +415,7 @@ impl Output {
         });
         let device = match chosen {
             Some(device) => device,
-            None => host.default_output_device().ok_or("no audio output device found")?,
+            None => devices::default_output(&host).ok_or("no audio output device found")?,
         };
         let device_name = device.to_string();
         let default = device.default_output_config().map_err(|e| format!("audio output {device_name}: {e}"))?;
@@ -610,7 +611,7 @@ impl Output {
         &self,
         device: DeviceStream,
         mut renderer: Renderer,
-        producer: rtrb::Producer<f32>,
+        mut producer: rtrb::Producer<f32>,
         progress: &Arc<Progress>,
     ) -> Result<Stream, String> {
         // The cue's volume, and whether it has outputs of its own, apply from the first block.
@@ -618,6 +619,9 @@ impl Output {
         if let Some(frames) = device.buffer_frames() {
             progress.set_callback_frames(frames as usize);
         }
+        // A driver may call back immediately in play(), before the render thread's
+        // first block. Begin with the normal queue lead, not an empty underrunning ring.
+        prime_ring(&mut producer, self.block, progress.callback_frames(), renderer.live_armed());
         let stop = Arc::new(AtomicBool::new(false));
         let (stopping, watching, block) = (Arc::clone(&stop), Arc::clone(progress), self.block);
         let (joined, priority) = mpsc::sync_channel(1);
@@ -644,9 +648,21 @@ impl Output {
     }
 }
 
+/// Primes the queue before the first device callback can run.
+fn prime_ring(ring: &mut rtrb::Producer<f32>, block: usize, device: usize, live: bool) {
+    // ASIO can request both halves before hardware starts. Other backends may
+    // also burst initially; the extra reserve drains to the normal target.
+    let initial = ring_target(block, device, live).max(2 * device.min(MAX_DEVICE_FRAMES));
+    let samples = initial.saturating_mul(RING_CHANNELS).min(ring.slots());
+    if let Ok(chunk) = ring.write_chunk_uninit(samples) {
+        chunk.fill_from_iter(std::iter::repeat_n(0.0, samples));
+    }
+}
+
 /// A ring for blocks of `block` frames: room for the target and a device buffer more.
 fn ring(block: usize) -> (rtrb::Producer<f32>, Ring) {
-    rtrb::RingBuffer::<f32>::new((ring_target(block, MAX_DEVICE_FRAMES, false) + block) * RING_CHANNELS)
+    let target = ring_target(block, MAX_DEVICE_FRAMES, false).max(2 * MAX_DEVICE_FRAMES);
+    rtrb::RingBuffer::<f32>::new((target + block) * RING_CHANNELS)
 }
 
 /// The render thread: runs the engine a block at a time whenever the ring holds less than its
@@ -990,8 +1006,6 @@ struct Watch {
 /// and opening a project on the device chosen.
 #[derive(Default)]
 pub struct DeviceOutput {
-    /// The last listing, for the ASIO host while its driver is in use.
-    listed: std::sync::Mutex<Vec<HostInfo>>,
     watch: Arc<std::sync::Mutex<Watch>>,
 }
 
@@ -1003,17 +1017,7 @@ impl DeviceOutput {
 
 impl AudioSystem for DeviceOutput {
     fn hosts(&self) -> Vec<HostInfo> {
-        let mut hosts = devices::list_hosts();
-        let Ok(mut listed) = self.listed.lock() else { return hosts };
-        if ASIO_OPEN.load(Ordering::Acquire)
-            && let Some(before) = listed.iter().find(|h| h.name == "ASIO")
-            && let Some(now) = hosts.iter_mut().find(|h| h.name == "ASIO")
-            && now.devices.len() < before.devices.len()
-        {
-            *now = before.clone();
-        }
-        listed.clone_from(&hosts);
-        hosts
+        devices::list_hosts()
     }
 
     fn open(
