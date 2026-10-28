@@ -50,7 +50,11 @@ subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.m
   music/player. Rejoining downloads the current verified copy into a new tab; the previous local
   copy and solo edits are retained, without merging. No automatic resume or Internet routing.
 - **DJ library:** import audio, keep a persistent local catalog, analyse tempo/key and render a
-  Studio project into the library.
+  Studio project into the library. Create/rename local playlists, add/remove tracks, change their
+  order and recover the sets after restarting. Audio/source files stay in place; deletion is
+  confirmed. Revision checks refuse stale writes, and **Refresh DJ library** reloads another
+  instance’s changes. Legacy catalogs are backed up before their first format 2 write.
+  Cue/grid editing, decks and hardware export are still pending.
 - **Settings → General → GitHub updates…:** inspect the three GitHub source identities and check
   availability of a combined app update. An official standalone binary cannot overwrite the fork.
 

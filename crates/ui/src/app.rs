@@ -737,6 +737,7 @@ impl App {
     /// it Suhina's settings folder and starts it.
     pub fn set_file_library(&mut self, library: suhina_library::Library) {
         self.projects.set_file_library(library);
+        self.dj = dj::DjPanel { active: self.dj.active, ..dj::DjPanel::default() };
         self.browser.relist();
     }
 
@@ -3225,3 +3226,7 @@ mod tests;
 #[cfg(test)]
 #[path = "app/dj_tests.rs"]
 mod dj_tests;
+
+#[cfg(test)]
+#[path = "app/dj_playlist_tests.rs"]
+mod dj_playlist_tests;

@@ -4,10 +4,28 @@
 //! Studio/DJ workspace switch and the separate, asynchronous library.
 
 use super::*;
+use serde_json::Value;
+
+#[path = "dj_playlists.rs"]
+mod playlists;
+
+#[derive(Default)]
+pub(super) struct PlaylistDraft {
+    pub(super) id: u64,
+    pub(super) revision: u64,
+    pub(super) original: String,
+    pub(super) name: String,
+}
 
 #[derive(Default)]
 pub(super) struct DjPanel {
     pub active: bool,
+    pub selected_playlist: Option<u64>,
+    pub playlist_name: String,
+    pub draft: Option<PlaylistDraft>,
+    pub delete_confirmation: Option<(u64, u64)>,
+    pub library_page: usize,
+    pub playlist_page: usize,
     pub(super) snapshot: serde_json::Value,
     pub(super) next_poll: Option<std::time::Instant>,
     pub pending: Option<(PathBuf, Option<PathBuf>)>,
@@ -44,6 +62,12 @@ impl App {
                         Err(e) => self.status = Status::Error(e.to_string()),
                     }
                 }
+                if let Some(id) = snapshot["created_playlist"].as_u64() {
+                    self.dj.selected_playlist = Some(id);
+                    self.dj.playlist_name.clear();
+                    self.dj.draft = None;
+                    self.dj.playlist_page = 0;
+                }
                 self.dj.snapshot = snapshot;
             }
             Err(e) => {
@@ -53,6 +77,18 @@ impl App {
         }
         if self.dj.snapshot["busy"].as_bool() == Some(true) || self.dj.pending.is_some() {
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        }
+    }
+
+    fn dj_command(&mut self, command: &str, params: Value) {
+        match self.projects.execute(command, &params) {
+            Ok(_) => {
+                self.dj.snapshot["busy"] = json!(true);
+                self.dj.snapshot["error"] = Value::Null;
+                self.dj.next_poll = None;
+                self.dj.delete_confirmation = None;
+            }
+            Err(e) => self.dj.snapshot["error"] = json!(e.to_string()),
         }
     }
 
@@ -72,6 +108,9 @@ impl App {
                 self.open_export();
                 self.dj.next_export_to_dj = true;
             }
+            if ui.add_enabled(!busy, egui::Button::new("Refresh DJ library")).clicked() {
+                self.dj_command("dj.reload", json!({}));
+            }
             if busy {
                 ui.spinner();
                 ui.label("Loading / analysing…");
@@ -82,36 +121,8 @@ impl App {
         }
         ui.add_space(theme::PAD);
         ui.separator();
-        let tracks = self.dj.snapshot["tracks"].as_array().cloned().unwrap_or_default();
-        if tracks.is_empty() && !busy {
-            ui.label("Import an audio file, or open a project and render it into this library.");
-        }
-        egui::ScrollArea::vertical().id_salt("dj-library").show(ui, |ui| {
-            egui::Grid::new("dj-tracks").striped(true).spacing(Vec2::new(20.0, 10.0)).show(ui, |ui| {
-                for text in ["Track", "BPM", "Key", "Length", "Source"] {
-                    ui.strong(text);
-                }
-                ui.end_row();
-                for track in tracks {
-                    ui.label(track["title"].as_str().unwrap_or("Untitled"))
-                        .on_hover_text(track["path"].as_str().unwrap_or_default());
-                    ui.label(track["bpm"].as_f64().map_or_else(|| "—".into(), |b| format!("{b:.1}")));
-                    ui.label(track["key"].as_str().unwrap_or("—"));
-                    let seconds = track["seconds"].as_f64().unwrap_or(0.0) as u64;
-                    ui.label(format!("{}:{:02}", seconds / 60, seconds % 60));
-                    if let Some(source) = track["source_project"].as_str() {
-                        if ui.button("Open source project").clicked() {
-                            self.dj.active = false;
-                            self.request_open(PathBuf::from(source));
-                        }
-                    } else {
-                        ui.label("Imported audio");
-                    }
-                    ui.end_row();
-                }
-            });
-        });
+        self.show_dj_playlists(ui, busy);
         ui.add_space(theme::PAD);
-        ui.weak("First integration: local library and analysis. Playlists, cues, decks, USB export and LINK are still to come.");
+        ui.weak("Local library, analysis and playlists. Cues, decks, USB export and LINK are still to come.");
     }
 }

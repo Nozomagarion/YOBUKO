@@ -4,12 +4,17 @@
 //! The fork's separate DJ catalog. Files stay in place; analysis never runs on the audio thread.
 
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-pub const FORMAT: u32 = 1;
+pub const FORMAT: u32 = 2;
 pub const MAX_TRACKS: usize = 2000;
 const MAX_BYTES: u64 = 4 * 1024 * 1024;
+pub const MAX_PLAYLISTS: usize = 128;
+pub const MAX_PLAYLIST_ENTRIES: usize = 16000;
+
+mod playlist;
+mod storage;
+pub use playlist::{Playlist, PlaylistEdit};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -28,31 +33,18 @@ pub struct Track {
 pub struct Catalog {
     pub format: u32,
     pub tracks: Vec<Track>,
+    pub playlists: Vec<Playlist>,
+    pub revision: u64,
+    pub next_playlist_id: u64,
 }
 
 impl Default for Catalog {
     fn default() -> Self {
-        Self { format: FORMAT, tracks: Vec::new() }
+        Self { format: FORMAT, tracks: Vec::new(), playlists: Vec::new(), revision: 0, next_playlist_id: 1 }
     }
 }
 
 impl Catalog {
-    pub fn open(path: &Path) -> Result<Self, String> {
-        let file = match std::fs::File::open(path) {
-            Ok(f) => f,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Self::default()),
-            Err(e) => return Err(format!("could not read the DJ catalog: {e}")),
-        };
-        let mut bytes = Vec::new();
-        file.take(MAX_BYTES + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
-        if bytes.len() as u64 > MAX_BYTES {
-            return Err("the DJ catalog is too large".into());
-        }
-        let catalog: Self = serde_json::from_slice(&bytes).map_err(|e| format!("invalid DJ catalog: {e}"))?;
-        catalog.validate()?;
-        Ok(catalog)
-    }
-
     pub fn validate(&self) -> Result<(), String> {
         if self.format != FORMAT || self.tracks.len() > MAX_TRACKS {
             return Err("unsupported DJ catalog format or track limit".into());
@@ -77,21 +69,7 @@ impl Catalog {
                 return Err("invalid DJ catalog track".into());
             }
         }
-        Ok(())
-    }
-
-    /// Publish the entire validated catalog atomically; failed writes keep the previous file.
-    pub fn save(&self, path: &Path) -> Result<(), String> {
-        self.validate()?;
-        let bytes = serde_json::to_vec_pretty(self).map_err(|e| e.to_string())?;
-        if bytes.len() as u64 > MAX_BYTES {
-            return Err("the DJ catalog is too large".into());
-        }
-        let parent = path.parent().ok_or("the DJ catalog needs a folder")?;
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        let mut temp = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
-        temp.write_all(&bytes).and_then(|_| temp.as_file().sync_all()).map_err(|e| e.to_string())?;
-        temp.persist(path).map_err(|e| e.to_string())?;
+        self.validate_playlists(&ids)?;
         Ok(())
     }
 
@@ -158,6 +136,7 @@ impl Catalog {
         } else {
             next.tracks.push(track);
         }
+        next.revision = next.revision.checked_add(1).ok_or("DJ catalog revision exhausted")?;
         next.validate()?;
         *self = next;
         Ok(id)
@@ -166,3 +145,6 @@ impl Catalog {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod playlist_tests;

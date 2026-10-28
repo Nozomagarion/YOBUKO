@@ -18,6 +18,7 @@ mod commands;
 mod cue;
 mod device_groups;
 mod devices;
+mod dj;
 mod editing;
 mod export;
 mod files;

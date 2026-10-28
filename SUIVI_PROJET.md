@@ -1,14 +1,15 @@
 # Où en est notre application ?
 
-**Bilan du 28 octobre 2026 — mise à jour Suhina livrée et validée localement.**
-Le rapport **« Veille Suhina DAW »** a été retrouvé, puis vérifié contre GitHub. Nous avons
-intégré les **77 commits déjà fusionnés** jusqu’à Suhina `9717cc71`, en conservant le
-multijoueur à quatre et le module DJ. La partie rbxport reste sur sa référence déjà vérifiée.
-**3 216 tests du logiciel passent, aucun échec ; 272 tests des scripts passent aussi.**
-Le nouveau partage utilise le protocole 13, une copie portable v3 et des projets natifs v4.
-**Le paquet Mac `17a67aca` est compilé et vérifié après extraction**, avec les trois exécutables
-et les sources exactes. Le code est envoyé sur notre GitHub. Les contrôles distants restent
-bloqués ; Windows/Linux ne sont pas validés pour cette révision.
+**Bilan du 28 octobre 2026 : les playlists DJ sont réalisées et validées sur ce Mac.**
+On peut créer et renommer ses sets, y ajouter les morceaux, choisir leur ordre, retirer une
+entrée et retrouver les listes au redémarrage. Les fichiers audio et les projets source restent en place.
+**3 232 tests du logiciel passent, aucun échec ; 272 tests des scripts passent également.**
+Le contrôle Rust strict, le format, la documentation, les licences et les sources épinglées passent.
+**Le nouveau paquet Mac est en préparation** ; la version précédente vérifiée reste `17a67aca`.
+
+Le palier précédent a intégré les 77 commits officiels jusqu’à Suhina `9717cc71`, en conservant
+le multijoueur à quatre. rbxport reste sur `b739d369`. Le protocole de partage reste 13, la copie
+portable v3 et les projets natifs v4. Le catalogue DJ passe seul au format 2, avec sauvegarde de l’ancien.
 
 ## Ce qu’on fabrique
 
@@ -32,7 +33,7 @@ complet reste en développement.
 | **Appareils et sons** | Ajouter, retirer et régler FM Synth et Utility depuis l’un ou l’autre participant. | Réorganisation, activation/désactivation, autres effets/instruments et plugins. |
 | **Nouvelles prises** | Les participants publient un son terminé depuis un onglet Studio local ; l’hôte vérifie les envois. | Enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
 | **Écoute personnelle** | Chacun garde son lecteur, sa position, son démarrage et son arrêt. | Essai sur les deux ordinateurs physiques. |
-| **Espace DJ** | Bibliothèque persistante, import, analyse tempo/tonalité issue de rbxport, ajout d’un rendu du studio. | Playlists, points cue, grilles rythmiques, platines et export vers le matériel DJ. |
+| **Espace DJ** | Bibliothèque persistante, analyse rbxport, rendu du studio, playlists nommées et ordre du set conservé. | Points cue, grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Bouton dans les paramètres pour comparer les versions GitHub ; suivi des sources et vérification des paquets de notre application. | Intégration régulière des nouveautés, publication et réception automatique d’une version commune. |
 
 ## Nouveau : les changements officiels de Suhina
@@ -169,7 +170,32 @@ Les versions précédentes en protocole 12 ou moins sont incompatibles avec ces 
 Les nouvelles sauvegardes utilisent le format natif v4 ; les anciens projets restent lisibles.
 Le partage utilise une copie portable v3 et conserve exactement les courbes prises en charge.
 
-## Ce qui a été vérifié pour ce palier
+## Nouveau palier DJ : préparer ses playlists
+
+**Code, tests et captures validés ; paquet Mac en préparation.**
+
+Les 133 suites comptent **3 232 tests réussis, 0 échec, 63 contrôles non lancés dans le passage
+standard**. Le périmètre DJ comprend **10 tests du catalogue, 5 tests des commandes et 7 tests
+normaux de l’interface**. Les scénarios couvrent la reprise de l’ancien catalogue, le redémarrage,
+la réanalyse, la pagination, les brouillons périmés, les sauvegardes refusées et deux écritures
+concurrentes. Les tests de collaboration et de réseau sont conservés dans la suite complète.
+Les **deux tests GPU DJ passent séparément** et leurs captures ont été vérifiées : bibliothèque vide
+et playlist ordonnée avec les boutons d’ajout, de déplacement et de retrait visibles.
+
+- Créer et renommer un set depuis l’espace **DJ**, puis le choisir dans **DJ collection**.
+- Ajouter les morceaux avec **Add from library** ; les flèches choisissent l’ordre de passage.
+- Retirer une entrée ou supprimer une playlist après confirmation. Les fichiers audio restent en place.
+- Retrouver les listes au redémarrage, y compris après la réanalyse d’un morceau déjà rangé.
+- Recharger avec **Refresh DJ library** les changements d’une autre instance. Une écriture périmée
+  est refusée ; un renommage qui échoue conserve le texte saisi.
+- Reprendre l’ancien catalogue : sa lecture ne l’écrit pas et le premier changement garde une
+  sauvegarde exacte avant le passage au format 2. Un catalogue invalide n’est pas écrasé.
+
+Limites : playlists **locales**, jusqu’à 128 listes, 2 000 morceaux par liste et 16 000 entrées
+au total. Elles ne sont pas encore partagées dans le multijoueur. Le format du projet Studio et
+le protocole réseau ne changent pas. Les points cue, grilles, platines et export matériel restent à développer.
+
+## Vérifications du palier précédent : mise à jour Suhina
 
 | Vérification | Résultat |
 |---|---|
@@ -223,15 +249,16 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 
 ## Prochaine étape
 
-**Préparer un set DJ avec des playlists dans l’application. Statut : à commencer.**
-Après les outils communs et les sessions LAN à quatre, on avance sur la suite de la chaîne musicale.
-Critère : créer, nommer et retrouver ses playlists, y ranger et réordonner les morceaux de la
-bibliothèque DJ, puis les retrouver au redémarrage sans déplacer ni supprimer les fichiers audio.
+**Écouter un morceau et préparer ses points cue. Statut : à commencer.**
+Le palier des playlists est réalisé et ses critères sont vérifiés automatiquement. La suite est
+la préparation à l’intérieur du morceau : préécoute, déplacement dans l’audio et points de repère
+nommés, enregistrés sans modifier le fichier audio. Les grilles rythmiques viennent dans ce chantier DJ,
+puis les platines et l’export vers le matériel. Les playlists restent locales pour le moment.
 
 Le multijoueur reste un prototype LAN : Internet, reconnexion automatique, noms/rôles et reprise
 de l’hôte restent prévus. La version et les mises à jour communes restent à publier. Les points
 cue, grilles rythmiques, platines et export vers le matériel DJ viennent après la préparation
-des playlists. L’essai des ordinateurs de la maison reste différé, comme demandé.
+du set. L’essai des ordinateurs de la maison reste différé, comme demandé.
 
 Ce fichier est le point de référence à chaque palier ou blocage. Les anciens fichiers
 `AUDIT_…` restent historiques. Les résultats externes sont des relevés datés ; ce document

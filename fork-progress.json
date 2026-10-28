@@ -121,7 +121,8 @@
         },
         {
           "name": "Playlists et préparation de set",
-          "done": false
+          "done": true,
+          "evidence": "crates/ui/src/app/dj_playlist_tests.rs"
         },
         {
           "name": "Édition des points cue et grilles rythmiques",
