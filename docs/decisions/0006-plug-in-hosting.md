@@ -479,9 +479,12 @@ workspace forbids.
     of that, Options › Settings › Plug-ins › Editors: *Window* (the default) or *Device view*,
     where the editor shows inside the device panel as part of the chain, as the wrapper
     devices some users buy do by hand for one plug-in at a time. With *Device view* the engine
-    asks for the editor `embedded` (protocol version 7), the host opens it as a child inside
-    Suhina's window (Win32 `WS_CHILD` under the `HWND`, X11 a child of the window id; both
-    allowed across processes) and hidden, answers its size, and the window lays the panel out
+    asks for the editor `embedded` (protocol version 7), the host opens it over Suhina's
+    window (X11 a child of the window id; on Windows a frameless window that Suhina's `HWND`
+    owns, placed in screen pixels and moved with that window, because Suhina's window draws
+    through DirectComposition for its see-through backgrounds and that covers its child
+    windows: an editor made a `WS_CHILD` stayed invisible behind it; made per-monitor DPI
+    aware, as Suhina's window is) and hidden, answers its size, and the window lays the panel out
     around it (the device as wide as the editor, the panel as tall) and says each frame where
     it goes (`place_editor`: the editor's origin and the panel's visible area in the window's
     pixels; the host keeps the editor inside a *clip* window of that area, so a scrolled or
