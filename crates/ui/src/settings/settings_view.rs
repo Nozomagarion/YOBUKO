@@ -870,7 +870,8 @@ pub fn show(ui: &mut Ui, settings: &mut Settings, sources: Sources<'_>, state: &
         theme::ui_font(theme::TEXT),
         theme::text_primary(),
     );
-    let toggle = Rect::from_min_max(pos2(title.right() - 170.0, title.top()), pos2(close.left() - 6.0, title.bottom()));
+    // Undock or dock, left of Help.
+    let toggle = Rect::from_min_max(pos2(help.left() - 116.0, title.top()), pos2(help.left() - 6.0, title.bottom()));
     let label = if state.window { "Dock" } else { "Open in window" };
     if ui.put(toggle, egui::Button::new(label)).clicked() {
         state.window = !state.window;

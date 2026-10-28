@@ -524,11 +524,11 @@ fn settings_can_undock_and_dock_without_losing_the_page() {
     harness.get_by_label("Open in window").click();
     settle(&mut harness);
     assert!(harness.state().settings_open());
-    harness.get_by_label("Track liquid");
+    harness.get_by_label("Animations");
     harness.get_by_label("Dock").click();
     settle(&mut harness);
     harness.get_by_label("Open in window");
-    harness.get_by_label("Track liquid");
+    harness.get_by_label("Animations");
     harness.get_by_label("Close settings").click();
     settle(&mut harness);
     assert!(!harness.state().settings_open());
@@ -546,7 +546,10 @@ fn liquid_sliders_change_independent_saved_strengths_without_restarting() {
     harness.run();
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
     harness.run();
-    harness.get_by_label("Settings page: Appearance").click();
+    // The liquid sliders are under Appearance › Advanced; a search lists them unfolded.
+    harness.get_by_label("Search settings").focus();
+    harness.run();
+    harness.get_by_label("Search settings").type_text("liquid");
     harness.run();
     harness.get_by_label("Panel liquid").click();
     harness.run();
@@ -676,7 +679,7 @@ fn every_page_scrolls_to_its_last_setting_in_a_short_window() {
         ("Projects and backups", Some("Delete old backups")),
         ("Audio", Some("Cue volume: +6 dB")),
         ("MIDI", None),
-        ("Plug-ins", Some("Editors: Device view")),
+        ("Plug-ins", Some("Plug-in editors open in: Device view")),
         ("Devices", Some("Detail area width: Full width")),
         ("Importing", Some("Warp mode for samples: Rhythmic")),
         ("Arrangement", Some("Show advanced settings")),
@@ -685,7 +688,7 @@ fn every_page_scrolls_to_its_last_setting_in_a_short_window() {
         ("Browser", Some("Colour tag limit: 1024")),
         ("Keys", Some("Change keys of file.new")),
         ("Appearance", Some("Show advanced settings")),
-        ("Themes", Some("Edit current theme…")),
+        ("Themes", Some("Browse for Themes folder")),
         ("Agents and updates", Some("Show advanced settings")),
     ];
     let names: Vec<&str> = Page::ALL.iter().map(|(_, name)| *name).collect();
@@ -736,6 +739,7 @@ fn the_advanced_group_is_folded_until_it_is_opened_and_a_search_finds_inside_it(
     harness.get_by_label("Settings page: Appearance").click();
     settle(&mut harness);
     assert!(harness.query_by_label("Graphics renderer: OpenGL").is_none(), "folded");
+    wheel_to(&mut harness, "Show advanced settings", 40);
     harness.get_by_label("Show advanced settings").click();
     settle(&mut harness);
     assert!(harness.query_by_label("Graphics renderer: OpenGL").is_some(), "unfolded");
@@ -782,10 +786,13 @@ fn a_search_shows_the_settings_that_match_from_every_page() {
     harness.get_by_label("Search settings").focus();
     settle(&mut harness);
     harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
-    harness.get_by_label("Search settings").type_text("arrangement stay");
+    harness.get_by_label("Search settings").type_text("arrangement playhead");
     settle(&mut harness);
     assert!(harness.query_by_label("Playhead after Stop: Stay").is_some());
-    assert!(harness.query_by_label("Play from: Marker").is_none(), "only Stop has both words (Stay is its note)");
+    assert!(
+        harness.query_by_label("Play from: Marker").is_none(),
+        "only Stop has both words (playhead is in its note)"
+    );
 
     // Nothing matches.
     harness.key_press_modifiers(Modifiers::COMMAND, Key::A);
