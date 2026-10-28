@@ -167,7 +167,7 @@ bottom:
    for Erase (the shape of the eraser button, not the no-entry sign it used before), a text cursor
    for Slice, an arrow for Select and Mute.
 
-   **Toolbar size** is a setting, Settings › Clip editor › Piano roll › **Toolbar size**: **Normal**
+   **Piano roll toolbar size** is a setting, Settings › Clip editor › Piano roll › **Piano roll toolbar size**: **Normal**
    (100 %), **Large** (125 %, the default) and **Larger** (150 %). It scales the toolbar's height,
    every button's box and the icon strokes inside it together, so the icons stay 1.1 px at Normal
    and grow with the box; the rest of the editor (grid, notes, ruler) does not change with it. The
@@ -299,7 +299,7 @@ What stays above it is a setting, Settings › Clip editor › Piano roll › **
 
 It stays pulled up while MIDI clips (or, with an ARA plug-in, audio clips) are edited; selecting
 something else (another kind of clip, a track, nothing), hiding the detail area (Shift+Tab) or the Session view shows the view as before. With the
-device chain as a column beside the view (Settings › Detail area) there is nothing to
+device chain as a column beside the view (Settings › Devices › Device panels) there is nothing to
 pull up.
 
 ## Grid and snapping
@@ -342,7 +342,7 @@ pull up.
   The keys work after a click in the piano roll, like its other keys (› Shortcuts). The grid value
   and its steps are the `piano_roll_grid` module of the `ui` crate (`crates/ui/src/detail/piano_roll_grid.rs`);
   the lines and snapping are the shared `TimelineGrid` (`crates/ui/src/interaction/timeline_grid.rs`).
-- **Built:** Settings › Clip editor › Piano roll › **Piano roll grid** set to **Control bar** makes the
+- **Built:** Settings › Clip editor › Piano roll › **Piano roll grid source** set to **Control bar** makes the
   piano roll use the control bar's value instead, and its menu and keys then set the control
   bar's (`launcher.setQuantization`). The control bar has no adaptive grid and no 1/32 triplet,
   so an entry whose result it cannot hold is greyed out and its key does nothing: the adaptive
@@ -945,7 +945,7 @@ Later: Ctrl+G (glue), added to the keymap when built.
 works is a **mode**: one of the three presets below, or **Custom**. The **workflow menu** in the
 piano roll's toolbar, after the MIDI tools icon, shows the mode's name (its accessible label is
 "Workflow" and the name, such as "Workflow Select-first") and can be changed at any time, while
-editing; Settings › Shortcuts › **Preset** offers the same four modes. The menu lists the four
+editing; Settings › Keys › **Preset** offers the same four modes. The menu lists the four
 modes, ticked as chosen, and under a divider every **workflow setting** with its choices:
 
 | Setting | Choices | Select-first | Draw-first | Mouse-first |
@@ -959,7 +959,7 @@ modes, ticked as chosen, and under a divider every **workflow setting** with its
 | **Double-click on a note** (Select tool) | Deletes it, Does nothing | Deletes | Deletes | Deletes |
 
 - Choosing a preset fills in every setting with its column. Changing one setting, in the menu or
-  in Settings › Clip editor › Workflow (one row per setting), makes the mode **Custom**, with the
+  in Settings › Keys › Mouse and key behaviour (one row per setting), makes the mode **Custom**, with the
   other settings kept as they were. Choosing **Custom** itself changes no setting, so a preset's
   column can be the start of a mix. A Custom mix that happens to equal a preset's column stays
   Custom until the preset is chosen.
@@ -982,7 +982,7 @@ modes, ticked as chosen, and under a divider every **workflow setting** with its
 ## Keymap presets
 
 - **Built ([#443](https://github.com/suhina-daw/suhina-daw/issues/443), Mouse-first
-  [#460](https://github.com/suhina-daw/suhina-daw/issues/460)):** Settings › Shortcuts has
+  [#460](https://github.com/suhina-daw/suhina-daw/issues/460)):** Settings › Keys has
   a **Preset** menu with three choices, which set the keys of a few actions and the mouse's
   behaviour at once:
 
@@ -993,7 +993,7 @@ modes, ticked as chosen, and under a divider every **workflow setting** with its
   | **Mouse-first** | the clicks of someone who works with the mouse: every switch below on, and the left button draws in the **Select** tool | duplicate is **Ctrl+D**; the four switches are on |
 
 - **Mouse-first gives the mouse the four jobs a pen and modifier keys would do**, each a switch of
-  its own under Settings › Clip editor › Workflow, so any of them can be turned off and the rest
+  its own under Settings › Keys › Mouse and key behaviour, so any of them can be turned off and the rest
   kept:
   - **Left click draws** (on by default with Mouse-first): in the **Select** tool, a press on an
     empty spot of the grid draws a note there and dragging sets its length, as the Draw tool does,

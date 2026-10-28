@@ -847,7 +847,7 @@ of bars, and a slider id per parameter.
   `--window-background` has alpha below 255; the window otherwise clears to an opaque colour and
   every fill blends. A clip's body, the focused track's lane highlight and a control's surface
   (`native_css::surface`) blend in every theme.
-- **Themes folder:** Settings › Theme › Themes folder (`themes_folder`), `SUHINA_THEMES` over
+- **Themes folder:** Settings › Themes › Themes folder (`themes_folder`), `SUHINA_THEMES` over
   it, or `--data-dir` / `SUHINA_DATA` for the whole data folder. Changing the setting reads the
   new folder at once; a folder that does not exist is not read. A theme's own folder may be a
   link to a folder (a junction on Windows); links below it are refused.

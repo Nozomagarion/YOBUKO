@@ -33,9 +33,9 @@ Settings › Display & Input), read on 2026-10-13. No binaries or files were loo
 - Everything in the window scales together: panels, text, controls, the timeline and the
   hit areas. The arrangement's own zoom (Ctrl or Cmd and the wheel, a pinch) is unchanged.
 - The keys are actions in the keymap (`view.zoomIn`, `view.zoomOut`, `view.zoomReset`), so they
-  can be changed in Settings › Shortcuts ([shortcuts](../shortcuts.md)). View › Zoom in, Zoom out
+  can be changed in Settings › Keys ([shortcuts](../shortcuts.md)). View › Window zoom in, Zoom out
   and Actual size do the same.
-- Settings › Appearance › Zoom shows the value between - and + buttons; clicking the value goes
+- Settings › Appearance › Window zoom shows the value between - and + buttons; clicking the value goes
   back to 100 %.
 - The zoom is saved in `settings.txt` as `zoom = <percent>`. A value out of range is limited to
   it; one that is not a number is skipped with a warning and leaves 100 %.
