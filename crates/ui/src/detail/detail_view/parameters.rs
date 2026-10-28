@@ -151,7 +151,7 @@ pub(super) fn value_text(parameter: &GraphParameter, value: f64) -> String {
     } else if !parameter.text.is_empty() && value == parameter.value {
         parameter.text.clone()
     } else {
-        format!("{:.*} {}", parameter.ui.decimals, value, parameter.unit).trim().to_owned()
+        format!("{} {}", widgets::fixed(value, parameter.ui.decimals), parameter.unit).trim().to_owned()
     }
 }
 
