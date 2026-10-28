@@ -1062,6 +1062,11 @@ impl App {
         &self.arrangement
     }
 
+    /// The Arrangement's grid, to choose as its menu does (the window's tests).
+    pub fn set_arrangement_grid(&mut self, grid: crate::arrangement::arrangement_view::PianoGrid) {
+        self.arrangement.grid = grid;
+    }
+
     /// `transport.stop`, with where the playhead goes from the settings.
     fn stop_action(&self) -> Action {
         Action::new("transport.stop", json!({ "return": self.settings.stop.param() }))
@@ -2844,6 +2849,11 @@ impl App {
             // (#916). With the detail area showing, another clip clicked shows its editor.
             let shown_clip = self.shown_clip();
             let clicked = std::mem::take(&mut self.arrangement.clip_clicked);
+            // A clip clicked takes the keys from the piano roll: Ctrl+D, Ctrl+C and Delete go to
+            // the clips picked, not to notes picked in the editor before.
+            if clicked {
+                self.piano_roll.selected.clear();
+            }
             let opened = std::mem::take(&mut self.arrangement.clip_opened) | std::mem::take(&mut self.view.clip_opened);
             if opened && shown_clip.is_some() {
                 if !self.detail_open {
@@ -3095,10 +3105,6 @@ impl App {
                                     timeline
                                 }
                             };
-                            // The grid follows the value in the control bar, which each
-                            // project keeps (`launcher.setQuantization`).
-                            self.arrangement.grid = session.quantization();
-                            self.arrangement.automation.grid = Some(session.quantization());
                             let mut timeline = timeline;
                             timeline.follow_automation(session.project());
                             timeline.recording_spans = session.arrangement_recording_spans();

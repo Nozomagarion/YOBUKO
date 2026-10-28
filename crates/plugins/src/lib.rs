@@ -43,7 +43,9 @@ use interprocess::local_socket::{
     GenericFilePath, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, Name, NameType, Stream, ToFsName,
     ToNsName,
 };
-pub use suhina_ipc::{AudioSource, Event, EventKind, MAX_EVENTS, Outcome, take_keyboard_back};
+pub use suhina_ipc::{
+    AudioSource, Event, EventKind, MAX_EVENTS, Outcome, keys_to_engine, set_keys_to_engine, take_keyboard_back,
+};
 use suhina_ipc::{IpcError, Link};
 
 use protocol::{AraDocument, MAX_LINE, Message, VERSION};
@@ -512,7 +514,7 @@ impl Group {
                     self.ara_analysis.push((*instance, *progress));
                 }
             }
-            Message::TransportKey | Message::AraPlayback(_) => take_in_transport(message),
+            Message::TransportKey | Message::TypedKey { .. } | Message::AraPlayback(_) => take_in_transport(message),
             Message::Memory { bytes } => {
                 // Only a process that is still there reports; the host sends it once a second,
                 // so the latest is what the control bar adds.
@@ -1291,6 +1293,18 @@ static TRANSPORT_KEYS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU
 /// How many times Space was pressed in a plug-in's editor window since the last call: the window
 /// plays or stops that many times, as Space in its own window does. Takes in what the hosts sent
 /// without waiting for any of them.
+/// Keys the app's computer keyboard plays, pressed or let go in plug-in editor windows (their
+/// Windows virtual-key codes), oldest first.
+static TYPED_KEYS: Mutex<Vec<(u8, bool)>> = Mutex::new(Vec::new());
+/// At most this many wait; more are dropped (a stuck window would otherwise grow the list).
+const MAX_TYPED_KEYS: usize = 64;
+
+/// The keys pressed and let go in editor windows while the computer keyboard plays (#944).
+pub fn take_typed_keys() -> Vec<(u8, bool)> {
+    drain_groups();
+    std::mem::take(&mut *lock(&TYPED_KEYS))
+}
+
 pub fn take_transport_keys() -> u32 {
     drain_groups();
     TRANSPORT_KEYS.swap(0, std::sync::atomic::Ordering::Relaxed)
@@ -1353,6 +1367,12 @@ fn take_in_transport(message: &Message) {
         Message::TransportKey => {
             TRANSPORT_KEYS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
+        Message::TypedKey { key, pressed } => {
+            let mut keys = lock(&TYPED_KEYS);
+            if keys.len() < MAX_TYPED_KEYS {
+                keys.push((*key, *pressed));
+            }
+        }
         Message::AraPlayback(request) => {
             let mut requests = lock(&ARA_PLAYBACK);
             // A newer position or loop replaces one not taken yet (a loop dragged in the editor
@@ -1396,12 +1416,14 @@ pub fn read_lines(stream: Stream) -> Receiver<Message> {
                         let shown = matches!(
                             message,
                             Message::TransportKey
+                                | Message::TypedKey { .. }
                                 | Message::AraPlayback(_)
                                 | Message::AraNotes { .. }
                                 | Message::AraAnalysis { .. }
                                 | Message::EditorClosed { .. }
                         );
-                        if matches!(message, Message::TransportKey | Message::AraPlayback(_)) {
+                        if matches!(message, Message::TransportKey | Message::TypedKey { .. } | Message::AraPlayback(_))
+                        {
                             take_in_transport(&message);
                             wake();
                             continue;

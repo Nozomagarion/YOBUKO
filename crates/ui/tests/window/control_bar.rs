@@ -143,13 +143,12 @@ fn a_narrow_window_leaves_out_what_would_reach_the_position_readout() {
 }
 
 #[test]
-fn the_grid_value_in_the_control_bar_sets_where_a_dragged_clip_lands() {
+fn the_arrangement_grid_sets_where_a_dragged_clip_lands() {
     let mut harness = arrangement_app();
-    assert_eq!(grid_of(&harness), Some(suhina_engine::Quantization::Bars(1)));
-    // No audio engine is needed to choose the grid.
-    choose_grid(&mut harness, "1/16");
-    assert_eq!(grid_of(&harness), Some(suhina_engine::Quantization::Beats(0.25)));
-    assert!(matches!(harness.state().status(), Status::Done(s) if s == "Grid 1/16"));
+    // The control bar's value is the launch quantisation only; the Arrangement has its own grid.
+    choose_grid(&mut harness, "1/4");
+    assert_eq!(grid_of(&harness), Some(suhina_engine::Quantization::Beats(1.0)));
+    choose_arrangement_grid(&mut harness, "1/16");
     zoom_in_at_beat_b(&mut harness);
 
     // 1.3 beats right (83.2 points at 64 a beat): on the nearest sixteenth, beat 65.25.
@@ -171,7 +170,7 @@ fn the_grid_value_in_the_control_bar_sets_where_a_dragged_clip_lands() {
     harness.run();
 
     // 1 bar: 3.5 beats right lands on the next bar, beat 68, at the same zoom.
-    choose_grid(&mut harness, "1 bar");
+    choose_arrangement_grid(&mut harness, "1 bar");
     drag_beat_b(&mut harness, egui::vec2(224.0, 0.0));
     assert_eq!(beat_b_start(&harness), Some(68.0));
 }
@@ -179,7 +178,7 @@ fn the_grid_value_in_the_control_bar_sets_where_a_dragged_clip_lands() {
 #[test]
 fn a_triplet_or_none_grid_places_a_dragged_clip_by_its_own_rule() {
     let mut harness = arrangement_app();
-    choose_grid(&mut harness, "1/16T");
+    choose_arrangement_grid(&mut harness, "1/16T");
     zoom_in_at_beat_b(&mut harness);
     // 1.3 beats right: the nearest sixth of a beat is 64 + 8/6.
     drag_beat_b(&mut harness, egui::vec2(83.2, 0.0));
@@ -188,9 +187,8 @@ fn a_triplet_or_none_grid_places_a_dragged_clip_by_its_own_rule() {
     harness.key_press_modifiers(Modifiers::COMMAND, Key::Z);
     harness.run();
 
-    // none: nothing snaps, as if Alt were held.
-    choose_grid(&mut harness, "none");
-    assert_eq!(grid_of(&harness), Some(suhina_engine::Quantization::None));
+    // Snap off: nothing snaps, as if Alt were held.
+    choose_arrangement_grid(&mut harness, "none");
     drag_beat_b(&mut harness, egui::vec2(83.2, 0.0));
     let free = beat_b_start(&harness).unwrap_or_default();
     assert!((free - 65.3).abs() < 0.02 && (free * 4.0).fract().abs() > 0.01, "{free}");

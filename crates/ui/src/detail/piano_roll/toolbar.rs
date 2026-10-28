@@ -410,17 +410,50 @@ pub(super) fn grid_menu(
     keymap: &crate::settings::keymap::Keymap,
 ) -> Option<PianoGrid> {
     let grid = clip.grid_menu;
-    let font = theme::ui_font(theme::TEXT_SMALL);
     let mono = theme::mono_font(theme::TEXT_SMALL);
     let shown = grid.label();
     let mut picked = None;
     ui.scope_builder(egui::UiBuilder::new().max_rect(rect), |ui| {
         let text = egui::RichText::new(format!("{shown}   ")).font(mono.clone()).color(theme::text_value());
         let menu = ui.menu_button(text, |ui| {
+            let follows = clip.grid_follows;
+            picked = grid_entries(ui, grid, &PIANO_GRID_KEYS, Some(keymap), &|g| {
+                !follows || g.control_bar_value().is_some()
+            });
+        });
+        let label = format!("Grid value {shown}");
+        menu_arrow(ui, menu.response.rect, theme::text_value());
+        menu.response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
+        menu.response.on_hover_text("The grid: snapping, adaptive or fixed lines, triplets");
+    });
+    picked.filter(|p| *p != grid)
+}
+
+/// The piano roll's grid keys: snap, narrower, wider, triplets.
+pub(crate) const PIANO_GRID_KEYS: [&str; 4] =
+    ["pianoRoll.gridSnap", "pianoRoll.gridNarrow", "pianoRoll.gridWiden", "pianoRoll.gridTriplet"];
+
+/// A grid menu's entries, inside a menu: Snap to grid, the adaptive widths, the fixed values,
+/// Narrow grid, Widen grid and Triplet grid, each with the key of its action in `keys` (snap,
+/// narrow, widen, triplet) when `keymap` is given, the chosen ones ticked; an entry `enabled`
+/// refuses is greyed out. The piano roll's toolbar, the Arrangement's toolbar and its menus
+/// show the same entries. Returns the grid picked.
+pub(crate) fn grid_entries(
+    ui: &mut Ui,
+    grid: PianoGrid,
+    keys: &[&str; 4],
+    keymap: Option<&crate::settings::keymap::Keymap>,
+    enabled: &dyn Fn(&PianoGrid) -> bool,
+) -> Option<PianoGrid> {
+    let font = theme::ui_font(theme::TEXT_SMALL);
+    let mono = theme::mono_font(theme::TEXT_SMALL);
+    let mut picked = None;
+    {
+        {
             // One entry: its text, the key its action has, ticked when `ticked` says so.
             let mut entry = |ui: &mut Ui, name: &str, action: Option<&str>, ticked: Option<bool>, result: PianoGrid| {
-                let enabled = !clip.grid_follows || result.control_bar_value().is_some();
-                let key = action.and_then(|a| keymap.label(a)).unwrap_or_default();
+                let enabled = enabled(&result);
+                let key = action.and_then(|a| keymap.and_then(|k| k.label(a))).unwrap_or_default();
                 let text = egui::RichText::new(name).font(font.clone());
                 let button = egui::Button::selectable(ticked.unwrap_or(false), text)
                     .shortcut_text(egui::RichText::new(key.as_str()).font(mono.clone()).color(theme::text_hint()));
@@ -439,7 +472,7 @@ pub(super) fn grid_menu(
             let heading = |ui: &mut Ui, text: &str| {
                 ui.label(egui::RichText::new(text).font(font.clone()).color(theme::text_hint()));
             };
-            entry(ui, "Snap to grid", Some("pianoRoll.gridSnap"), Some(grid.snap), grid.toggle_snap());
+            entry(ui, "Snap to grid", Some(keys[0]), Some(grid.snap), grid.toggle_snap());
             ui.separator();
             heading(ui, "Adaptive grid");
             for width in Width::ALL {
@@ -450,23 +483,17 @@ pub(super) fn grid_menu(
             ui.separator();
             heading(ui, "Fixed grid");
             for (index, value) in FIXED_VALUES.iter().enumerate() {
-                // Picking a value while following the control bar turns snapping back on: its
-                // none is snap off.
-                let snap = grid.snap || clip.grid_follows;
-                let result = PianoGrid { mode: GridMode::Fixed(index), snap, ..grid };
+                // Picking a value turns snapping back on (the control bar's none is snap off).
+                let result = PianoGrid { mode: GridMode::Fixed(index), snap: true, ..grid };
                 entry(ui, value, None, Some(grid.mode == GridMode::Fixed(index)), result);
             }
             ui.separator();
-            entry(ui, "Narrow grid", Some("pianoRoll.gridNarrow"), None, grid.narrower());
-            entry(ui, "Widen grid", Some("pianoRoll.gridWiden"), None, grid.wider());
+            entry(ui, "Narrow grid", Some(keys[1]), None, grid.narrower());
+            entry(ui, "Widen grid", Some(keys[2]), None, grid.wider());
             ui.separator();
-            entry(ui, "Triplet grid", Some("pianoRoll.gridTriplet"), Some(grid.triplet), grid.toggle_triplet());
-        });
-        let label = format!("Grid value {shown}");
-        menu_arrow(ui, menu.response.rect, theme::text_value());
-        menu.response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
-        menu.response.on_hover_text("The grid: snapping, adaptive or fixed lines, triplets");
-    });
+            entry(ui, "Triplet grid", Some(keys[3]), Some(grid.triplet), grid.toggle_triplet());
+        }
+    }
     picked.filter(|p| *p != grid)
 }
 

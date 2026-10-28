@@ -38,6 +38,32 @@ pub(crate) fn take_transport_keys() -> u32 {
 }
 
 #[cfg(any(windows, target_os = "macos"))]
+/// The keys the app's computer keyboard plays (#944), as Windows virtual-key codes: A W S E D F
+/// T G Y H U J K O L P and ; (VK_OEM_1) play, Z X move the octave, C V the velocity.
+#[allow(dead_code)]
+fn is_note_key(key: u8) -> bool {
+    b"AWSEDFTGYHUJKOLPZXCV".contains(&key) || key == 0xBA
+}
+
+thread_local! {
+    static TYPED_KEYS: std::cell::RefCell<Vec<(u8, bool)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[allow(dead_code)]
+fn caught_key(key: u8, pressed: bool) {
+    TYPED_KEYS.with(|k| {
+        let mut keys = k.borrow_mut();
+        if keys.len() < 64 {
+            keys.push((key, pressed));
+        }
+    });
+}
+
+/// The note keys caught in editor windows since the last call, oldest first.
+pub(crate) fn take_typed_keys() -> Vec<(u8, bool)> {
+    TYPED_KEYS.with(|k| std::mem::take(&mut *k.borrow_mut()))
+}
+
 fn caught_space(repeat: bool) {
     if !repeat {
         TRANSPORT_KEYS.with(|k| k.set(k.get().saturating_add(1)));

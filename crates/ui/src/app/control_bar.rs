@@ -135,7 +135,7 @@ impl App {
                 &painter,
                 grid_caption,
                 Align2::LEFT_CENTER,
-                "Grid",
+                "Quantize",
                 theme::ui_font(theme::TEXT_SMALL),
                 theme::text_hint(),
             );
@@ -144,7 +144,7 @@ impl App {
         let quant_base = quant_rect;
         let quant_rect = native_styles.place(ui, "grid", quant_rect);
         let mono = theme::mono_font(theme::TEXT);
-        // One value for both: when launched clips start, and the Arrangement view's grid.
+        // When launched clips start; the Arrangement has a grid of its own (its toolbar, Ctrl+1 to 4).
         let current = self.session().map_or(DEFAULT_QUANTIZATION, |s| quantization_label(s.quantization()));
         let mut chosen = current;
         ui.scope_builder(egui::UiBuilder::new().max_rect(quant_rect), |ui| {
@@ -530,7 +530,7 @@ impl App {
 }
 
 /// The control bar's value box, as screen readers and tests name it.
-pub(super) const QUANTIZATION_LABEL: &str = "Grid and launch quantisation";
+pub(super) const QUANTIZATION_LABEL: &str = "Launch quantisation";
 
 /// The control bar's text for `quantization`: the choice that parses to it.
 pub(super) fn quantization_label(quantization: suhina_engine::Quantization) -> &'static str {

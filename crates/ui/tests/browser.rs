@@ -755,9 +755,7 @@ fn drop_groove_on_the_drums_lane(name: &str, modifiers: Modifiers) -> Vec<f64> {
     harness.run();
     harness.get_by_label("Arrangement view").click();
     harness.run();
-    harness.get_by_label("Grid and launch quantisation").click();
-    harness.run();
-    harness.get_by_label("1/8").click();
+    harness.state_mut().set_arrangement_grid(suhina_ui::arrangement::arrangement_view::PianoGrid::from_value("1/8"));
     harness.run();
     // Zoom in eight times around a point half a beat into Beat B: its start stays in view.
     let clip = harness.get_by_label("Clip Beat B on Drums at bar 17").rect();

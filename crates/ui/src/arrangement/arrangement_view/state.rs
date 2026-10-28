@@ -151,9 +151,10 @@ pub struct ArrangementViewState {
     /// scrolls at least that far, so zooming past the end of the content keeps the time under
     /// the pointer in place instead of pulling the view back (#910).
     pub(super) zoom_reach: f64,
-    /// The value chosen in the control bar, which the grid is drawn from and clips snap to
-    /// (`launcher.setQuantization`); the window sets it before each frame.
-    pub grid: Quantization,
+    /// The Arrangement's own grid, which its lines are drawn from and clips, fades, points and
+    /// ruler clicks snap to: adaptive or fixed, triplets, snap on or off, as the piano roll's.
+    /// It is apart from the control bar's launch quantisation.
+    pub grid: PianoGrid,
     /// Track headers on the left of the timeline instead of the right.
     pub headers_left: bool,
     /// The return tracks' rows are left out (the "Hide returns" button by the ruler).
@@ -356,7 +357,7 @@ impl Default for ArrangementViewState {
             scroll: Vec2::ZERO,
             zoom_reach: 0.0,
             beat_width: DEFAULT_BEAT_WIDTH,
-            grid: Quantization::Bars(1),
+            grid: PianoGrid::from_value("1 bar"),
             headers_left: false,
             returns_hidden: false,
             tracks_copied: false,
@@ -469,6 +470,11 @@ impl ArrangementViewState {
     }
 
     /// The clip the views work on: the one clicked last.
+    /// The Arrangement grid's step at the view's zoom, in beats, for `bar_beats` beats a bar.
+    pub fn grid_step(&self, bar_beats: f64) -> f64 {
+        arrangement_grid(self.grid, self.beat_width, bar_beats).step
+    }
+
     pub fn selected_clip(&self) -> Option<(TrackId, ClipId)> {
         self.anchor
     }

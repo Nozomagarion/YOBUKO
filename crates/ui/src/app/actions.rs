@@ -726,6 +726,10 @@ impl App {
             }
             "view.computerKeyboard" => self.toggle_typing_keys(),
             // The Arrangement's tool keys, while its toolbar shows (#991).
+            id if let Some(grid) = crate::arrangement::arrangement_view::grid_key(id, self.arrangement.grid) => {
+                self.arrangement.grid = grid;
+                self.status = Status::Hint(format!("Arrangement grid: {}", grid.label()));
+            }
             id if id.starts_with("arrangement.tool") => {
                 let index =
                     id.trim_start_matches("arrangement.tool").parse::<usize>().ok().and_then(|n| n.checked_sub(1));
@@ -773,7 +777,7 @@ impl App {
                 if self.shown == View::Arrangement && self.arrangement.automation.selected_points().is_some() =>
             {
                 let Some((_, _, timeline)) = self.timeline.as_ref() else { return };
-                let step = self.arrangement.grid.step(timeline.bar_beats);
+                let step = self.arrangement.grid_step(timeline.bar_beats);
                 let step = if step > 0.0 { step } else { 1.0 };
                 let direction = action.trim_start_matches("selection.");
                 if let Some(nudge) = self.arrangement.automation.nudge(&timeline.automation, direction, step) {

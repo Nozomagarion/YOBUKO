@@ -53,6 +53,24 @@ pub fn start_device_carry(ctx: &egui::Context, track: suhina_engine::model::Trac
     ctx.data_mut(|d| d.insert_temp(egui::Id::new(DEVICE_CARRY), (track, index)));
 }
 
+/// Where the shown chain's top-level devices are this frame: the track, the chain's area and
+/// each device's index and panel, left to right. A device carried and let go over it moves to
+/// the place under the pointer (`device.move`).
+pub const DEVICE_SLOTS: &str = "device-slots";
+
+/// The device being carried, set by the window every frame while it is, so the chain can show
+/// where it would go.
+pub const DEVICE_CARRYING: &str = "device-carrying";
+
+pub type DeviceSlots = (suhina_engine::model::TrackId, egui::Rect, Vec<(usize, egui::Rect)>);
+
+/// Where in `slots` a device let go at `x` goes: the index of the device it lands before, as
+/// `device.move` takes it (the first whose middle is right of `x`, or after the last).
+pub fn device_slot_at(slots: &[(usize, egui::Rect)], x: f32) -> Option<usize> {
+    let last = slots.last()?;
+    Some(slots.iter().find(|(_, r)| x < r.center().x).map_or(last.0 + 1, |(i, _)| *i))
+}
+
 /// An item in the browser's results, as it is dragged.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BrowserItem {
@@ -297,6 +315,17 @@ pub fn plan(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_device_let_go_along_its_chain_lands_before_the_panel_whose_middle_is_right_of_it() {
+        let panel = |left: f32| egui::Rect::from_min_size(egui::pos2(left, 0.0), egui::vec2(100.0, 80.0));
+        let slots = [(0, panel(0.0)), (1, panel(101.0)), (2, panel(202.0))];
+        assert_eq!(device_slot_at(&slots, 10.0), Some(0));
+        assert_eq!(device_slot_at(&slots, 60.0), Some(1));
+        assert_eq!(device_slot_at(&slots, 240.0), Some(2));
+        assert_eq!(device_slot_at(&slots, 260.0), Some(3), "after the last");
+        assert_eq!(device_slot_at(&[], 10.0), None);
+    }
 
     fn item(key: &str, kind: ItemKind) -> BrowserItem {
         BrowserItem { key: key.into(), name: key.rsplit(['/', ':']).next().unwrap_or(key).into(), kind, plugin: false }

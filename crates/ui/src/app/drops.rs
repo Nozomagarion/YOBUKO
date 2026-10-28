@@ -206,6 +206,7 @@ impl App {
         });
         if escape {
             self.device_carry = None;
+            ui.ctx().data_mut(|d| d.remove::<(TrackId, usize)>(Id::new(drop::DEVICE_CARRYING)));
             return;
         }
         let target = match self.shown {
@@ -232,7 +233,14 @@ impl App {
                 p.channel(channel)?.devices.get(index).map(|d| d.name.clone())
             })
             .unwrap_or_default();
+        // Over its own chain: the place under the pointer along it.
+        let slots = ui.ctx().data(|d| d.get_temp::<drop::DeviceSlots>(Id::new(drop::DEVICE_SLOTS)));
+        let along = slots
+            .filter(|(track, area, _)| *track == from && pointer.is_some_and(|p| area.contains(p)))
+            .and_then(|(_, _, slots)| pointer.and_then(|p| drop::device_slot_at(&slots, p.x)))
+            .filter(|to| *to != index && *to != index + 1);
         if !released {
+            ui.ctx().data_mut(|d| d.insert_temp(Id::new(drop::DEVICE_CARRYING), (from, index)));
             if let Some(pointer) = pointer {
                 let text = match to {
                     Some(to) if copy => format!("Copy {device} to {}", name(to)),
@@ -244,8 +252,13 @@ impl App {
             return;
         }
         self.device_carry = None;
+        ui.ctx().data_mut(|d| d.remove::<(TrackId, usize)>(Id::new(drop::DEVICE_CARRYING)));
         self.view.drop = None;
         self.arrangement.drop = None;
+        if let Some(to) = along.filter(|_| to.is_none()) {
+            self.run(&Action::new("device.move", json!({ "track": from.0, "device": index, "to": to })));
+            return;
+        }
         if let Some(to) = to {
             if !copy {
                 self.selected_device = None;

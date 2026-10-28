@@ -82,6 +82,7 @@ fn every_message_round_trips() {
     let messages = [
         Message::Hello { version: VERSION },
         Message::TransportKey,
+        Message::TypedKey { key: b'A', pressed: true },
         Message::AraPlayback(AraPlayback::Start),
         Message::AraPlayback(AraPlayback::Stop),
         Message::AraPlayback(AraPlayback::Position(12.5)),

@@ -479,6 +479,27 @@ pub(crate) fn pump() {
         } else if message.wParam == VK_SPACE && message.message == WM_KEYUP && SPACE_OURS.with(std::cell::Cell::get) {
             continue;
         }
+        // While the app's computer keyboard plays notes, its keys go to the app as well, not to
+        // the plug-in (#944), unless a text field of the plug-in's has the keyboard or Ctrl, Alt
+        // or the Windows key is held. A held key's repeats are dropped.
+        if (message.message == WM_KEYDOWN || message.message == WM_KEYUP)
+            && suhina_plugins::keys_to_engine()
+            && let Ok(key) = u8::try_from(message.wParam)
+            && super::is_note_key(key)
+        {
+            let held = |key: u16| {
+                // SAFETY: reads this thread's keyboard state; no pointers.
+                unsafe { windows_sys::Win32::UI::Input::KeyboardAndMouse::GetKeyState(i32::from(key)) < 0 }
+            };
+            use windows_sys::Win32::UI::Input::KeyboardAndMouse::{VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN};
+            if !(held(VK_CONTROL) || held(VK_MENU) || held(VK_LWIN) || held(VK_RWIN) || typing(message.hwnd)) {
+                let pressed = message.message == WM_KEYDOWN;
+                if !(pressed && message.lParam & (1 << 30) != 0) {
+                    super::caught_key(key, pressed);
+                }
+                continue;
+            }
+        }
         // SAFETY: a message just taken from the queue.
         unsafe { TranslateMessage(&message) };
         // SAFETY: as above.

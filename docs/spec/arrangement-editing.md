@@ -94,13 +94,20 @@ the drag; the clip is drawn where it will land while it is dragged).
 ## The grid
 
 The Arrangement view has one grid, drawn as vertical lines across the lanes and used by
-everything that snaps. Its value is the box in the control bar next to the tempo and the time
-signature (`none`, `8 bars` … `1 bar`, `1/2`, `1/2T` … `1/16T`, `1/32`), the same value that sets
-when launched clips start ([clip launching](clip-launching.md) › Launch quantisation): changing it
-runs `launcher.setQuantization`. Note values are quarter-note beats (`1/16` is a quarter of a beat,
-a `T` triplet two thirds of that note), and bars are the time signature's bar. The value is kept by
-each open project's session, so every project tab has its own; it is not saved in the project
-file and is not an undo step (a new or opened project starts on `1 bar`).
+everything that snaps. It is the Arrangement's own, apart from the control bar's **Quantize**
+box, which only sets when launched clips start ([clip launching](clip-launching.md) › Launch
+quantisation). It works as the piano roll's grid does ([clip editor](ui-clip-editor.md) › Grid
+and snapping) and is chosen from the same menu, at the right end of the Arrangement's toolbar,
+under **Grid** in the right-click menu of an empty spot of a lane and at the end of an automation
+lane's menus: **Snap to grid**, an **adaptive** grid (Widest, Wide, Medium, Narrow, Narrowest:
+its lines follow the zoom) or a **fixed** value (`8 bars` … `1 bar`, `1/2` … `1/32`), **Narrow
+grid**, **Widen grid** and **Triplet grid**. While the Arrangement has the keyboard (it was
+clicked last), Ctrl+1 makes the grid finer, Ctrl+2 coarser, Ctrl+3 turns triplets on or off and
+Ctrl+4 snapping; with the piano roll clicked last the same keys change its grid. Note values are
+quarter-note beats (`1/16` is a quarter of a beat, a triplet two thirds of that note), and bars are
+the time signature's bar. The grid is the window's, not saved in the project file and not an undo
+step; it starts on `1 bar`. With snapping off its lines are still drawn and nothing snaps, as if
+Alt were held.
 
 **Lines follow the zoom.** A line is drawn at every step of the value, starting again at every bar
 line, and bar lines are stronger than the lines between them. Lines are never drawn closer than
@@ -124,9 +131,6 @@ goes to beat 3, not 4.
 `TimelineGrid` in `crates/ui/src/interaction/timeline_grid.rs` (#734). Each view keeps its own grid
 value (the control bar's here, the piano roll's grid menu there) and its own least spacing between
 lines; only the arithmetic is shared.
-
-**`none`** launches clips at once, and in the Arrangement view nothing snaps (as if Alt were held);
-lines show beats and bars by the zoom alone.
 
 ## Selecting clips
 

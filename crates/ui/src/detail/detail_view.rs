@@ -198,6 +198,7 @@ fn chain_row(
     ui.set_clip_rect(area.intersect(outer_clip));
     let mut x = area.left() - offset;
     let mut tallest: f32 = 0.0;
+    let mut slots = Vec::new();
     for (device, (width, height)) in entries.iter().zip(boxes) {
         let editor = device.plugin.as_ref().and_then(|p| p.editor_size(scale)).filter(|_| device.at.top());
         // A panel with its editor embedded takes the area's whole height, and the editor is
@@ -206,6 +207,9 @@ fn chain_row(
         let rect = Rect::from_min_size(Pos2::new(x, area.top()), Vec2::new(width, shown_height));
         x = rect.right() + 1.0;
         tallest = tallest.max(height);
+        if device.at.top() {
+            slots.push((device.index, rect));
+        }
         if rect.right() < area.left() {
             continue;
         }
@@ -234,6 +238,27 @@ fn chain_row(
         }
     }
     ui.set_clip_rect(outer_clip);
+    // A device of this chain carried over it: a line where it would go (#688).
+    let carrying = ui.data(|d| d.get_temp::<(TrackId, usize)>(Id::new(crate::interaction::drop::DEVICE_CARRYING)));
+    if let Some((track, from)) = carrying.filter(|(t, _)| *t == chain.track)
+        && let Some(pointer) = ui.ctx().pointer_latest_pos().filter(|p| area.contains(*p))
+        && let Some(to) = crate::interaction::drop::device_slot_at(&slots, pointer.x)
+        && to != from
+        && to != from + 1
+        && track == chain.track
+    {
+        let x = slots
+            .iter()
+            .find(|(i, _)| *i == to)
+            .map_or_else(|| slots.last().map_or(area.left(), |(_, r)| r.right() + 0.5), |(_, r)| r.left() - 0.5);
+        painter.with_clip_rect(area).line_segment(
+            [Pos2::new(x, area.top()), Pos2::new(x, (area.top() + tallest).min(area.bottom()))],
+            egui::Stroke::new(2.0, theme::accent()),
+        );
+    }
+    ui.data_mut(|d| {
+        d.insert_temp(Id::new(crate::interaction::drop::DEVICE_SLOTS), (chain.track, area, slots));
+    });
     if let Some(bar) = bar {
         painter.fill_background(bar, 0.0, theme::control_background());
         let thumb_width = (area.width() / total * bar.width()).max(24.0);

@@ -25,3 +25,22 @@ pub fn take_keyboard_back(window: u64) {
     #[cfg(not(windows))]
     let _ = window;
 }
+
+/// Whether the app's computer keyboard plays notes (#944): set by the app; a host learns it
+/// from the blocks it gets, and while it is on hands the note keys pressed in its editors back
+/// to the app instead of to the plug-in (unless a text field there has the keyboard).
+static KEYS_TO_ENGINE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The app: says whether its computer keyboard plays notes.
+pub fn set_keys_to_engine(on: bool) {
+    KEYS_TO_ENGINE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether the app's computer keyboard plays notes, as this process last heard. Real-time safe.
+pub fn keys_to_engine() -> bool {
+    KEYS_TO_ENGINE.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+pub(crate) fn heard_keys_to_engine(on: bool) {
+    KEYS_TO_ENGINE.store(on, std::sync::atomic::Ordering::Relaxed);
+}

@@ -110,7 +110,7 @@ pub struct Action {
 }
 
 /// Actions the window does itself or on the selection, with their labels.
-const WINDOW_ACTIONS: [(&str, &str, &str); 79] = [
+const WINDOW_ACTIONS: [(&str, &str, &str); 83] = [
     ("file.new", "New project or open one", "File"),
     ("file.open", "Open a project", "File"),
     ("file.save", "Save the project", "File"),
@@ -186,6 +186,10 @@ const WINDOW_ACTIONS: [(&str, &str, &str); 79] = [
     ("arrangement.tool4", "Choose the Arrangement's Erase tool", ARRANGEMENT),
     ("arrangement.tool5", "Choose the Arrangement's Draw tool", ARRANGEMENT),
     ("arrangement.tool6", "Choose the Arrangement's Mute tool", ARRANGEMENT),
+    ("arrangement.gridNarrow", "Make the Arrangement's grid finer", ARRANGEMENT),
+    ("arrangement.gridWiden", "Make the Arrangement's grid coarser", ARRANGEMENT),
+    ("arrangement.gridTriplet", "Turn the Arrangement's triplet grid on or off", ARRANGEMENT),
+    ("arrangement.gridSnap", "Turn snapping to the Arrangement's grid on or off", ARRANGEMENT),
     ("pianoRoll.tool6", "Choose the Mute tool", PIANO_ROLL),
     ("pianoRoll.gridNarrow", "Make the piano roll's grid finer", PIANO_ROLL),
     ("pianoRoll.gridWiden", "Make the piano roll's grid coarser", PIANO_ROLL),
@@ -202,9 +206,9 @@ const PIANO_ROLL: &str = "Piano roll";
 const ARRANGEMENT: &str = "Arrangement";
 
 /// Whether an action works only while the Arrangement has the keyboard, not the piano roll: its
-/// tool keys, which share the piano roll's keys (#991).
+/// tool keys and grid keys, which share the piano roll's keys (#991).
 pub fn arrangement_only(action: &str) -> bool {
-    action.starts_with("arrangement.tool")
+    action.starts_with("arrangement.tool") || action.starts_with("arrangement.grid")
 }
 
 /// Whether an action works only while the piano roll has the keyboard (after a click in it). Its
@@ -442,7 +446,7 @@ const PRESET_KEY: &str = "preset";
 /// The duplicate key of Draw-first, and the browser's key otherwise.
 const CTRL_B: Shortcut = Shortcut::new(Modifiers::COMMAND, Key::B);
 
-const DEFAULTS: [(&str, &[&str]); 80] = [
+const DEFAULTS: [(&str, &[&str]); 84] = [
     ("file.new", &["Ctrl+N"]),
     ("track.addAudio", &["Ctrl+T"]),
     ("track.addMidi", &["Ctrl+Shift+T"]),
@@ -497,6 +501,10 @@ const DEFAULTS: [(&str, &[&str]); 80] = [
     ("arrangement.tool4", &["4"]),
     ("arrangement.tool5", &["5"]),
     ("arrangement.tool6", &["6"]),
+    ("arrangement.gridNarrow", &["Ctrl+1"]),
+    ("arrangement.gridWiden", &["Ctrl+2"]),
+    ("arrangement.gridTriplet", &["Ctrl+3"]),
+    ("arrangement.gridSnap", &["Ctrl+4"]),
     ("transport.setLoopEnabled", &["Ctrl+L"]),
     ("project.next", &["Ctrl+Tab"]),
     ("project.previous", &["Ctrl+Shift+Tab"]),

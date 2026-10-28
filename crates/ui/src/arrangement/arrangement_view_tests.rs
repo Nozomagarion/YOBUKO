@@ -266,13 +266,12 @@ fn fade_lines_and_curve_handles_follow_the_shape() {
 
 /// A grid of `step` beats at a zoom where its lines are far enough apart, in 4/4.
 fn beats(step: f64) -> TimelineGrid {
-    arrangement_grid(Quantization::Beats(step), 1000.0, 4.0)
+    grid_of_step(step, 1000.0, 4.0)
 }
 
 /// The grid step for the control bar's `value`, at `beat_width` points a beat.
 fn step(value: &str, beat_width: f32, bar_beats: f64) -> f64 {
-    let chosen = suhina_session::parse_quantization(value).unwrap_or(Quantization::None);
-    arrangement_grid(chosen, beat_width, bar_beats).step
+    arrangement_grid(PianoGrid::from_value(value), beat_width, bar_beats).step
 }
 
 #[test]
@@ -298,7 +297,7 @@ fn each_choice_is_its_own_step_when_zoomed_in() {
     // Bars follow the time signature: a bar of 3/4 is three beats.
     assert_eq!(step("1 bar", 400.0, 3.0), 3.0);
     assert_eq!(step("2 bars", 400.0, 3.0), 6.0);
-    assert!(arrangement_grid(Quantization::Beats(0.25), 400.0, 4.0).snaps);
+    assert!(arrangement_grid(PianoGrid::from_value("1/16"), 400.0, 4.0).snaps);
 }
 
 #[test]
@@ -341,10 +340,27 @@ fn a_triplet_grid_coarsens_to_the_beat_so_lines_stay_on_the_bar() {
 }
 
 #[test]
-fn none_draws_beats_and_bars_by_the_zoom_and_does_not_snap() {
-    let grid = arrangement_grid(Quantization::None, 400.0, 4.0);
-    assert_eq!((grid.step, grid.snaps), (1.0, false));
-    assert_eq!(step("none", 7.0, 4.0), 4.0);
+fn an_adaptive_grid_follows_the_zoom_and_the_keys_change_it() {
+    let narrow = PianoGrid { snap: true, mode: GridMode::Adaptive(Width::Narrow), triplet: false };
+    // Zoomed in the lines are finer than zoomed out, and they snap.
+    let near = arrangement_grid(narrow, 400.0, 4.0);
+    let far = arrangement_grid(narrow, 10.0, 4.0);
+    assert!(near.step < far.step && near.snaps, "{} {}", near.step, far.step);
+    // Ctrl+1 narrows, Ctrl+2 widens, Ctrl+3 triplets, Ctrl+4 snap.
+    assert_eq!(grid_key("arrangement.gridNarrow", narrow), Some(narrow.narrower()));
+    assert_eq!(grid_key("arrangement.gridWiden", narrow), Some(narrow.wider()));
+    assert!(grid_key("arrangement.gridTriplet", narrow).is_some_and(|g| g.triplet));
+    let off = grid_key("arrangement.gridSnap", narrow).unwrap();
+    assert!(!arrangement_grid(off, 400.0, 4.0).snaps);
+    assert_eq!(grid_key("arrangement.tool1", narrow), None);
+}
+
+#[test]
+fn snap_off_draws_the_lines_and_does_not_snap() {
+    // Snap off keeps its value's lines (1/16 here), as the piano roll's grid does.
+    let grid = arrangement_grid(PianoGrid::from_value("none"), 400.0, 4.0);
+    assert_eq!((grid.step, grid.snaps), (0.25, false));
+    assert_eq!(grid_of_step(0.0, 7.0, 4.0).step, 4.0);
     assert_eq!(grid.place(2.1337, false, false), 2.1337);
     assert_eq!(ruler_beat(2.1337, grid, false), 2.134);
     let clip = audio_clip();
@@ -354,11 +370,11 @@ fn none_draws_beats_and_bars_by_the_zoom_and_does_not_snap() {
 #[test]
 fn a_ruler_click_lands_on_the_grid_unless_alt_is_held() {
     // 1 bar at 8 points a beat: the grid is a bar.
-    let bars = arrangement_grid(Quantization::Bars(1), 8.0, 4.0);
+    let bars = arrangement_grid(PianoGrid::from_value("1 bar"), 8.0, 4.0);
     assert_eq!(ruler_beat(17.9, bars, false), 16.0);
     assert_eq!(ruler_beat(18.1, bars, false), 20.0);
     // 1/16 at 60 points a beat: sixteenths.
-    let sixteenths = arrangement_grid(Quantization::Beats(0.25), 60.0, 4.0);
+    let sixteenths = arrangement_grid(PianoGrid::from_value("1/16"), 60.0, 4.0);
     assert_eq!(ruler_beat(2.13, sixteenths, false), 2.25);
     assert_eq!(ruler_beat(2.1337, sixteenths, true), 2.134);
     assert_eq!(ruler_beat(-3.0, bars, true), 0.0);
@@ -446,7 +462,7 @@ fn a_stretch_goes_past_the_audio_and_a_midi_clip_before_its_notes() {
     project.assign_ids().unwrap();
     let timeline = Timeline::build(&project, None);
     let clip = timeline.lanes.iter().find(|l| l.track == drums).and_then(|l| l.clips.first()).unwrap();
-    let grid = arrangement_grid(Quantization::Beats(1.0), 24.0, 4.0);
+    let grid = arrangement_grid(PianoGrid::from_value("1/4"), 24.0, 4.0);
     let right = EdgeDrag { key: (drums, clip.id), grab: EdgeGrab::Right, raw: 112.0, from: 104.0, origin: 0.0 };
     // A plain drag stops where the audio ends; a stretch goes on (#833).
     assert_eq!(edge_extent(clip, right, &grid, false, false), (100.0, 104.0));

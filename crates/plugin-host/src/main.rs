@@ -677,6 +677,10 @@ fn run(address: &str) -> Result<(), Box<dyn std::error::Error>> {
         for _ in 0..window::take_transport_keys() {
             send(&mut writer, &Message::TransportKey)?;
         }
+        // The computer keyboard's note keys pressed in an editor window, while it plays (#944).
+        for (key, pressed) in window::take_typed_keys() {
+            send(&mut writer, &Message::TypedKey { key, pressed })?;
+        }
         // What ARA plug-ins asked of the transport (their play buttons, their timeline).
         for request in ara::take_playback_requests() {
             send(&mut writer, &Message::AraPlayback(request))?;

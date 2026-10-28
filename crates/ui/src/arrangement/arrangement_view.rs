@@ -10,18 +10,18 @@ use std::collections::{HashMap, HashSet};
 
 use egui::{Align2, Color32, Id, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
 use serde_json::{Value, json};
-use suhina_engine::Quantization;
 use suhina_engine::model::{ClipId, FadeCurve, FadeShape, Project, Rgb, TrackId};
 
 use crate::arrangement::automation_lanes::{self as automation, LanesState};
 use crate::arrangement::timeline::{ClipBox, Folds, Lane, Timeline, inside_lanes};
+pub use crate::detail::piano_roll_grid::{GridMode, PianoGrid, Width};
 use crate::interaction::colour_picker;
 use crate::interaction::commands;
 use crate::interaction::drop::{DropProbe, DropTarget};
 use crate::interaction::grid::ColumnKind;
 use crate::interaction::menus::{self, TrackMenu};
 use crate::interaction::nesting::{self, Place};
-use crate::interaction::timeline_grid::{self, TimelineGrid};
+use crate::interaction::timeline_grid::TimelineGrid;
 use crate::kit::meter::{self, Meters};
 use crate::kit::motion;
 use crate::kit::theme::{self, PAD, ROW};
@@ -273,12 +273,32 @@ pub(crate) fn most_scroll_x(content_beats: f64, reach: f64, beat_width: f32, vie
     ((content_beats.max(reach) as f32) * beat_width - view_width).max(0.0)
 }
 
-/// The Arrangement view's grid for the value `chosen` in the control bar, at `beat_width` points
-/// a beat with bars of `bar_beats` beats (`docs/spec/arrangement-editing.md` › The grid): lines
-/// at least [`MIN_GRID_SPACING`] apart; `none` draws beats and bars by the zoom alone and does not
-/// snap.
-pub fn arrangement_grid(chosen: Quantization, beat_width: f32, bar_beats: f64) -> TimelineGrid {
-    TimelineGrid::new(chosen.step(timeline_grid::bar_length(bar_beats)), beat_width, bar_beats, MIN_GRID_SPACING)
+/// The Arrangement's grid keys: snap, narrower, wider, triplets (Ctrl+4, 1, 2, 3 by default).
+pub const GRID_KEYS: [&str; 4] =
+    ["arrangement.gridSnap", "arrangement.gridNarrow", "arrangement.gridWiden", "arrangement.gridTriplet"];
+
+/// What the Arrangement's grid key `action` makes of `grid`, if it is one.
+pub fn grid_key(action: &str, grid: PianoGrid) -> Option<PianoGrid> {
+    Some(match action {
+        "arrangement.gridNarrow" => grid.narrower(),
+        "arrangement.gridWiden" => grid.wider(),
+        "arrangement.gridTriplet" => grid.toggle_triplet(),
+        "arrangement.gridSnap" => grid.toggle_snap(),
+        _ => return None,
+    })
+}
+
+/// The Arrangement's grid as it is drawn and snapped to at `beat_width` points a beat: an
+/// adaptive grid's step for the zoom, or a fixed value's, coarsened until its lines are at least
+/// [`MIN_GRID_SPACING`] apart. With snapping off the lines are still drawn and nothing snaps.
+pub fn arrangement_grid(chosen: PianoGrid, beat_width: f32, bar_beats: f64) -> TimelineGrid {
+    let grid = grid_of_step(chosen.step(beat_width, bar_beats), beat_width, bar_beats);
+    TimelineGrid { snaps: grid.snaps && chosen.snap, ..grid }
+}
+
+/// A grid of `step` beats at `beat_width` (0 or less: beats and bars by the zoom, no snapping).
+pub fn grid_of_step(step: f64, beat_width: f32, bar_beats: f64) -> TimelineGrid {
+    TimelineGrid::new(step, beat_width, bar_beats, MIN_GRID_SPACING)
 }
 
 /// Where a click `raw` beats into the ruler puts the play start marker: on `grid`, or where it
@@ -302,6 +322,11 @@ pub fn show(ui: &mut Ui, timeline: &Timeline, state: &mut ArrangementViewState, 
     let mut styled_ui = crate::kit::style_class::ui(ui);
     let ui = &mut *styled_ui;
 
+    // The lanes' menus show the Arrangement's grid and change it.
+    if let Some(picked) = state.automation.grid_picked.take() {
+        state.grid = picked;
+    }
+    state.automation.grid = state.grid;
     // A released edge whose trim never came (refused, undone at once) is let go of in a while.
     if let Some(released) = state.edge_released.as_mut() {
         released.3 = released.3.saturating_sub(1);

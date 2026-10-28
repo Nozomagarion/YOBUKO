@@ -671,9 +671,10 @@ pub struct LanesState {
     /// Snap to grid is off in the lanes' menu: points and ranges go where the pointer is, as with
     /// Alt. The window's choice, not saved.
     pub snap_off: bool,
-    /// The grid value the project has (`launcher.setQuantization`), which the menu marks; the
-    /// window sets it before each frame.
-    pub grid: Option<suhina_engine::Quantization>,
+    /// The Arrangement's grid, which the menu shows; the view sets it before each frame.
+    pub grid: crate::detail::piano_roll_grid::PianoGrid,
+    /// A grid picked in the lanes' menu this frame, for the Arrangement to take.
+    pub grid_picked: Option<crate::detail::piano_roll_grid::PianoGrid>,
     /// A point whose value is being typed (its menu's Edit value): track, lane, point and text.
     editing: Option<(TrackId, LaneKey, usize, String)>,
     /// A point being made by a drag from the line.
@@ -2091,26 +2092,14 @@ fn picked_menu(ui: &mut Ui, state: &mut LanesState, track: TrackId, key: &LaneKe
     }
 }
 
-/// The grid entries at the end of the lanes' menus: Snap to grid, and the grid value (the
-/// control bar's, `launcher.setQuantization`).
-fn grid_menu(ui: &mut Ui, state: &mut LanesState, actions: &mut Vec<Action>) {
+/// The grid entries at the end of the lanes' menus: the Arrangement's grid, as its toolbar and
+/// its lanes' menus offer it.
+fn grid_menu(ui: &mut Ui, state: &mut LanesState, _actions: &mut Vec<Action>) {
     ui.separator();
-    let mut snap = !state.snap_off;
-    if ui.checkbox(&mut snap, "Snap to grid").clicked() {
-        state.snap_off = !snap;
+    let keys = crate::arrangement::arrangement_view::GRID_KEYS;
+    if let Some(picked) = crate::detail::piano_roll::grid_entries(ui, state.grid, &keys, None, &|_| true) {
+        state.grid_picked = Some(picked);
         ui.close();
-    }
-    ui.label(egui::RichText::new("Grid").color(theme::text_hint()).size(theme::TEXT_SMALL));
-    for row in crate::app::QUANTIZATION.iter().filter(|q| **q != "none").collect::<Vec<_>>().chunks(5) {
-        ui.horizontal(|ui| {
-            for &&value in row {
-                let on = state.grid.is_some_and(|g| suhina_session::parse_quantization(value).ok() == Some(g));
-                if ui.selectable_label(on, value).clicked() {
-                    actions.push(Action::new("launcher.setQuantization", json!({ "value": value })));
-                    ui.close();
-                }
-            }
-        });
     }
 }
 

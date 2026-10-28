@@ -73,6 +73,8 @@ impl App {
     /// Turns the computer keyboard's notes on or off; off, its held notes end.
     pub(super) fn toggle_typing_keys(&mut self) {
         self.typing.on = !self.typing.on;
+        // The plug-in hosts hand these keys back from their editor windows while it is on.
+        suhina_plugins::set_keys_to_engine(self.typing.on);
         if !self.typing.on {
             self.release_typing_keys();
         }
@@ -95,6 +97,8 @@ impl App {
     /// shortcuts, while the mode is on and no text field has the keyboard. A held key's repeats
     /// play nothing more.
     pub(super) fn typing_keys(&mut self, ui: &Ui) {
+        // Keys pressed in a plug-in's editor window, which had the keyboard (#944).
+        let from_editors = suhina_plugins::take_typed_keys();
         if !self.typing.on {
             return;
         }
@@ -102,7 +106,8 @@ impl App {
             self.release_typing_keys();
             return;
         }
-        let mut events = Vec::new();
+        let mut events: Vec<(Key, bool)> =
+            from_editors.into_iter().filter_map(|(code, pressed)| Some((key_of(code)?, pressed))).collect();
         ui.input_mut(|i| {
             i.events.retain(|event| match event {
                 egui::Event::Key { key, pressed, repeat, modifiers, .. }
@@ -165,5 +170,31 @@ mod tests {
         let top = TypingKeys { octave: 8, ..TypingKeys::default() };
         assert_eq!(top.key(7), Some(127));
         assert_eq!(top.key(8), None, "past the last MIDI key");
+    }
+}
+
+/// The key a Windows virtual-key code from a plug-in host names: a letter's code is its capital,
+/// and ; is VK_OEM_1.
+fn key_of(code: u8) -> Option<Key> {
+    if code == 0xBA {
+        return Some(Key::Semicolon);
+    }
+    let letter = char::from(code);
+    letter.is_ascii_uppercase().then(|| Key::from_name(&letter.to_string())).flatten()
+}
+
+#[cfg(test)]
+mod key_tests {
+    use super::*;
+
+    #[test]
+    fn a_hosts_key_codes_name_the_typing_keys() {
+        assert_eq!(key_of(b'A'), Some(Key::A));
+        assert_eq!(key_of(b'Z'), Some(Key::Z));
+        assert_eq!(key_of(0xBA), Some(Key::Semicolon));
+        assert_eq!(key_of(b'1'), None);
+        for code in b"AWSEDFTGYHUJKOLPZXCV" {
+            assert!(key_of(*code).is_some_and(is_typing_key), "{}", char::from(*code));
+        }
     }
 }

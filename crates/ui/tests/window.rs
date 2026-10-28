@@ -346,9 +346,15 @@ pub(super) fn double_click_at(harness: &mut Harness<'static, App>, at: egui::Pos
 
 /// Picks `value` in the control bar's grid box, as a user does: open it, click the value.
 pub(super) fn choose_grid(harness: &mut Harness<'static, App>, value: &str) {
-    harness.get_by_label("Grid and launch quantisation").click();
+    harness.get_by_label("Launch quantisation").click();
     harness.run();
     harness.get_by_label(value).click();
+    harness.run();
+}
+
+/// Chooses the Arrangement's own grid value, a control bar value such as `1/16` or `1/8T`.
+pub(super) fn choose_arrangement_grid(harness: &mut Harness<'static, App>, value: &str) {
+    harness.state_mut().set_arrangement_grid(suhina_ui::arrangement::arrangement_view::PianoGrid::from_value(value));
     harness.run();
 }
 

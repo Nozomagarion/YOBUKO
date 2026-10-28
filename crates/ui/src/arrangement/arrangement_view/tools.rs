@@ -28,8 +28,12 @@ pub const TOOL_ACTIONS: [&str; 6] = [
     "arrangement.tool6",
 ];
 
-/// Draws the toolbar in `rect`: a button per tool, the chosen one lit; a click chooses it.
-pub(super) fn toolbar(ui: &Ui, rect: Rect, state: &mut ArrangementViewState) {
+/// How wide the toolbar's grid menu is.
+const GRID_MENU: f32 = 96.0;
+
+/// Draws the toolbar in `rect`: a button per tool, the chosen one lit, a click choosing it; at
+/// its right end the grid menu.
+pub(super) fn toolbar(ui: &mut Ui, rect: Rect, state: &mut ArrangementViewState) {
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, theme::panel_background());
     painter.hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline(theme::border()));
@@ -63,6 +67,33 @@ pub(super) fn toolbar(ui: &Ui, rect: Rect, state: &mut ArrangementViewState) {
         if response.clicked() {
             state.tool = tool;
         }
+    }
+    // The grid menu, as the piano roll's: adaptive or fixed, triplets, snap (Ctrl+1 to Ctrl+4).
+    let menu = Rect::from_min_max(
+        egui::pos2(rect.right() - GRID_MENU - 6.0, rect.top() + 2.0),
+        egui::pos2(rect.right() - 6.0, rect.bottom() - 2.0),
+    );
+    if menu.left() > x + GAP {
+        let grid = state.grid;
+        let shown = grid.label();
+        let mono = theme::mono_font(theme::TEXT_SMALL);
+        ui.scope_builder(egui::UiBuilder::new().max_rect(menu), |ui| {
+            let text = egui::RichText::new(format!("{shown}   ")).font(mono).color(theme::text_value());
+            let response = ui.menu_button(text, |ui| {
+                if let Some(picked) =
+                    crate::detail::piano_roll::grid_entries(ui, grid, &super::GRID_KEYS, None, &|_| true)
+                {
+                    state.grid = picked;
+                    ui.close();
+                }
+            });
+            crate::detail::piano_roll::menu_arrow(ui, response.response.rect, theme::text_value());
+            let label = format!("Arrangement grid {shown}");
+            response.response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
+            response.response.on_hover_text(
+                "The Arrangement's grid: snapping, adaptive or fixed lines, triplets (Ctrl+1 to Ctrl+4)",
+            );
+        });
     }
 }
 

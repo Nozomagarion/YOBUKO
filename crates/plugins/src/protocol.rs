@@ -510,6 +510,12 @@ pub enum Message {
     /// Space was pressed in one of the host's editor windows (unasked): the engine plays or
     /// stops as Space does in its own window, since the key never reaches it there.
     TransportKey,
+    /// A key the app's computer keyboard plays, pressed or let go in an editor window while
+    /// that keyboard plays notes: its Windows virtual-key code.
+    TypedKey {
+        key: u8,
+        pressed: bool,
+    },
     /// An ARA plug-in asked the host's transport to play, stop or move (unasked): its own
     /// transport buttons and a click in its editor's timeline (#717).
     AraPlayback(AraPlayback),
@@ -581,6 +587,7 @@ impl Message {
             | Self::Pong { .. }
             | Self::Memory { .. }
             | Self::TransportKey
+            | Self::TypedKey { .. }
             | Self::AraPlayback(_)
             | Self::Quit => None,
         }
@@ -667,6 +674,7 @@ impl Message {
             }
             Self::Memory { bytes } => json!({ "op": "memory", "bytes": bytes }),
             Self::TransportKey => json!({ "op": "transport_key" }),
+            Self::TypedKey { key, pressed } => json!({ "op": "typed_key", "key": key, "pressed": pressed }),
             Self::AraPlayback(AraPlayback::Start) => json!({ "op": "ara_playback", "request": "start" }),
             Self::AraPlayback(AraPlayback::Stop) => json!({ "op": "ara_playback", "request": "stop" }),
             Self::AraPlayback(AraPlayback::Position(seconds)) => {
@@ -829,6 +837,10 @@ impl Message {
             "latency_changed" => Self::LatencyChanged { instance: instance()?, latency: small("latency")? },
             "memory" => Self::Memory { bytes: number("bytes")? },
             "transport_key" => Self::TransportKey,
+            "typed_key" => Self::TypedKey {
+                key: value.get("key").and_then(Value::as_u64).and_then(|k| u8::try_from(k).ok())?,
+                pressed: value.get("pressed").and_then(Value::as_bool)?,
+            },
             "ara_playback" => Self::AraPlayback(match text("request")?.as_str() {
                 "start" => AraPlayback::Start,
                 "stop" => AraPlayback::Stop,

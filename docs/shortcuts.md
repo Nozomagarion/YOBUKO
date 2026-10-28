@@ -112,6 +112,7 @@ status bar.
 | Open or close Settings (`settings.open`) | Ctrl+, |
 | Make the whole window larger, smaller, its normal size (`view.zoomIn`, `view.zoomOut`, `view.zoomReset`; 50–200 % in 10 % steps, kept in `settings.txt`, [spec](spec/window-zoom.md)) | Ctrl+Plus, Ctrl+Equals; Ctrl+Minus; Ctrl+0 |
 | Choose the Arrangement's tools while it has the keyboard and its toolbar shows: Select, Range, Split, Erase, Draw, Mute (`arrangement.tool1` … `arrangement.tool6`; [spec](spec/arrangement-editing.md#tools)) | 1; 2; 3; 4; 5; 6 |
+| The Arrangement's grid while it has the keyboard: finer, coarser, triplets, snap (`arrangement.gridNarrow`, `.gridWiden`, `.gridTriplet`, `.gridSnap`; [spec](spec/arrangement-editing.md#the-grid)) | Ctrl+1; Ctrl+2; Ctrl+3; Ctrl+4 |
 | Swap the selected comped parts for the take above or below (`selection.takeUp`, `selection.takeDown`; [recording](spec/recording.md#take-lanes)) | Alt+Up; Alt+Down |
 | Draw audio clips' waveforms larger or smaller in the Arrangement, the sound unchanged (`view.waveformZoomIn`, `view.waveformZoomOut`; ×1–×16 in ×1.25 steps, [spec](spec/arrangement-editing.md)) | Ctrl+Alt+Up; Ctrl+Alt+Down |
 | Undo, redo (`edit.undo`, `edit.redo`) | Ctrl+Z; Ctrl+Shift+Z, Ctrl+Y |

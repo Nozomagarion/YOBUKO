@@ -31,6 +31,14 @@ pub(super) fn empty_lane_menu(
         }
         ui.separator();
     }
+    // The Arrangement's grid, as its toolbar offers it.
+    ui.menu_button("Grid", |ui| {
+        if let Some(picked) = crate::detail::piano_roll::grid_entries(ui, state.grid, &GRID_KEYS, None, &|_| true) {
+            state.grid = picked;
+            ui.close();
+        }
+    });
+    ui.separator();
     let beat = state.menu_beat.unwrap_or(0.0);
     if ui.add_enabled(notes, egui::Button::new("Insert empty MIDI clip")).clicked() {
         let stack = state.stack_midi;

@@ -713,6 +713,8 @@ impl App {
                 .selected_slot
                 .map(|(t, s)| detail_view::ClipRef::Slot(t, s))
                 .and_then(|clip| self.piano_clip(Some(clip)))?,
+            // Several clips picked: the keys are theirs, not one clip's notes.
+            View::Arrangement if self.arrangement.selected_clips().len() > 1 => return None,
             View::Arrangement => self
                 .arrangement
                 .selected_clip()
