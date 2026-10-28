@@ -235,7 +235,10 @@ Windows, macOS and Linux ([`docs/releasing.md` › Test builds](docs/releasing.m
 links the downloads from the pull request in a comment, updated with every new build. A maintainer's own pull requests are
 built on every push. A contributor's pull request is built once a maintainer has read the diff and
 added the `test-build` label, or a trusted contributor requests it with `/test-build`; a later
-push takes the label off, and the new commits need a new request.
+push takes the label off, and the new commits need a new request. `/test-build` first reuses a
+running build of that commit or a successful build whose requested packages are still available.
+A verified main-only update can reuse the previous build. It starts another build only when no
+suitable build is available.
 
 ## Merging many pull requests
 
@@ -250,18 +253,25 @@ says how the queue is set up and what runs in it.
 **The `ready to merge` label** does the waiting for you. A maintainer who has read a pull request
 adds it, and [`ready-to-merge.yml`](.github/workflows/ready-to-merge.yml) approves the commit it was
 added on and turns on *Merge when ready* for that commit: the queue takes the pull request once
-`ci` is green and every review thread is resolved (CodeRabbit's too), and a red check stops it. A
-contributor's pull request also needs a maintainer's approving review of the same head commit, or
-`test-build` so its build was tried first; Dependabot's Cargo updates need neither, since the queue's build and tests check them (its updates of the Actions do). A push by anyone
+`ci` is green and every review thread is resolved (CodeRabbit's too), and a red check stops it.
+Adding the label is the maintainer's approval of that exact commit, regardless of the author, and
+it needs a finished test build of that commit: a successful `/test-build` run whose packages are
+still available, or one of an earlier head the branch has only merged `main` into since. Without
+one the label comes off with a comment asking for `/test-build`; an existing build is reused, so
+asking again starts no second packaging run. A pull request that changes nothing in the binaries (only documentation, scripts or workflows) needs no build. Code-owner approval is still required for
+protected paths. A push by anyone
 but a maintainer takes the label off, so new commits are never merged unread; taking the label off
 by hand stops the merge. Only a maintainer adds it: an agent never adds `ready to merge`, also not
 when asked to finish a pull request.
 
-**Workflows and scripts need the owner's review.** A pull request that changes `.github/` or
-`scripts/` runs with the repository's secrets once it is on `main`, so
-[`.github/CODEOWNERS`](.github/CODEOWNERS) names the repository owner for them and the main
-ruleset requires a code owner's approval: `ready to merge` alone does not merge such a change, also
-not one from another maintainer.
+**Workflows and scripts need the owner's review.** To protect code that runs with the
+repository's secrets, [`.github/CODEOWNERS`](.github/CODEOWNERS) names the repository owner for
+`.github/` and `scripts/`, except `scripts/parity/`. The main ruleset requires a code owner's
+approval for the protected paths: `ready to merge` alone does not merge such a change, also
+not one from another maintainer. Parity scripts run without environment secrets; the generated
+documentation is published in a separate job that does not execute them. Changes confined to
+`scripts/parity/` therefore follow the usual review and `ready to merge` process. Keep parity
+code out of jobs that use environment secrets.
 
 ## Clean-room
 
