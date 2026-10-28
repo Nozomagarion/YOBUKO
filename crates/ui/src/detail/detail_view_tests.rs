@@ -789,3 +789,22 @@ fn a_theme_lays_a_generated_list_side_by_side() {
     assert_eq!(lefts, [0.0, 100.0, 200.0, 0.0], "three to a line, then the next line");
     assert!(cells[0].height() >= 48.0 && cells[3].top() >= 48.0, "{cells:?}");
 }
+
+#[test]
+fn stock_value_text_drops_the_minus_of_a_negative_that_rounds_to_zero() {
+    let mut parameter = GraphParameter {
+        text: String::new(),
+        default: 0.0,
+        control: suhina_device_sdk::ParameterControl::Knob,
+        unit: "dB".into(),
+        id: "gain".into(),
+        name: "Gain".into(),
+        min: -1.0,
+        max: 1.0,
+        value: 0.0,
+        ui: suhina_device_sdk::ParameterUi::default(),
+    };
+    parameter.ui.decimals = 2;
+    assert_eq!(super::parameters::value_text(&parameter, -0.004), "0.00 dB");
+    assert_eq!(super::parameters::value_text(&parameter, -0.014), "-0.01 dB");
+}
