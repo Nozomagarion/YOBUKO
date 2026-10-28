@@ -13,7 +13,18 @@ covers:
 
 # Multiplayer fork
 
-## One host and three guests (protocol 12)
+## Suhina source update, 28 October 2026
+
+The fork integrates official main `9717cc717537010de76554062c64efab895f81cc` (77 commits after
+its former pin), including EQs, panels, Bezier automation and dependency updates. Open PRs
+#1040/#1028 are excluded; rbxport remains at its previous checked analysis pin. The shared
+subset stays FM Synth/Utility; new studio devices do not widen remote permissions. Protocol 13,
+portable-copy format 3 and native v4 are required, with exact Suhina revision checked at hello.
+Studio reads earlier files, while new saves use v4; keep the old app/files for backward use.
+No source file is rewritten by sharing and no installed app is replaced. Existing four-person
+LAN workflows are retained. [Integration contract](spec/lan-upstream-20261028.md).
+
+## One host and three guests (protocol 13)
 
 Create a session, privately copy its invitation and wait for the first guest to join. Click
 **New invitation → Copy invitation** for the second guest, then repeat for the third. Each
@@ -25,7 +36,7 @@ for a returning guest: their new shared tab keeps the previous solo copy intact.
 can send edits/takes; stale concurrent drafts must be refreshed and resent. Launches and clocks
 stay local. [Contract](spec/lan-multiple-guests.md). Physical-machine acceptance remains deferred.
 
-## Shared Launcher (protocol 12)
+## Shared Launcher (protocol 13)
 
 Open **Multiplayer → Launcher** in a hosted/joined session. Click an empty slot, choose
 **Source clip**, then **Copy clip into shared slot**; the original arrangement stays intact.
@@ -38,7 +49,7 @@ Explicitly routed multi-track patterns cannot be copied into slots in this miles
 **Launch slot locally** / **Launch scene locally** act only on this computer, as does Stop locally.
 New shared edits make drafts stale; **Refresh launcher draft** clears them. Structural scene
 changes clear selections even on hidden pages, requiring a fresh selection. Both applications
-must use protocol 12; old invitations are refused. [Contract](spec/lan-launcher-editing.md).
+must use protocol 13; old invitations are refused. [Contract](spec/lan-launcher-editing.md).
 Physical two-computer tests and cross-platform acceptance remain separate from local tests.
 
 ## Scope and status

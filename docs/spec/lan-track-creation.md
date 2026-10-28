@@ -60,3 +60,12 @@ wire fields, track/channel/device/lane quotas without mutation, hardware off, em
 new MIDI clip/note rendering, new audio track then take publication without reconnecting,
 late join, independent attached players, visible controls and original-tab preservation.
 Physical two-computer acceptance remains deferred at the owner's request.
+
+
+## Compatibility amendment: Suhina update of 28 October
+
+[Protocol 13](lan-upstream-20261028.md) supersedes earlier version pins in this contract: native
+project v4, portable-copy format 3 and matching pinned Suhina engine identities are required.
+Ordinary old project files remain readable through the studio reader, then share as v4. The
+musical edit permissions and quotas above remain unchanged; newly added studio effects are not
+implicitly permitted in shared tabs. All participants need the updated combined application.

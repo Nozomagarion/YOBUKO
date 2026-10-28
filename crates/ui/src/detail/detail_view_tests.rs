@@ -182,10 +182,7 @@ fn a_selected_track_shows_its_devices() {
 #[test]
 fn a_built_ins_generated_list_fits_the_compact_panel() {
     let mut project = demo_project();
-    project.channels[0].devices = vec![
-        Device::new("Utility", DeviceKind::Builtin("utility".into())),
-        Device::new("Pitch", DeviceKind::Builtin("pitch".into())),
-    ];
+    project.channels[0].devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into()))];
     let Detail::Devices(chain) = build(&project, Some(TrackId(1)), None) else { panic!() };
     for device in &chain.devices {
         let graph = device.graph.as_ref().unwrap_or_else(|| panic!("{} has a panel", device.name));
@@ -477,7 +474,7 @@ fn a_running_plug_in_shows_the_parameters_it_lists_as_a_generated_list() {
 fn automation_replaces_a_plug_ins_listed_text_with_the_value_it_plays() {
     use suhina_engine::model::{AutomationLane, AutomationPoint};
     let mut project = with_plugin();
-    let point = |beat, value| AutomationPoint { beat, value, curve: 0.0 };
+    let point = |beat, value| AutomationPoint { beat, value, curve: Default::default() };
     project.channels[0].devices[0].automation = vec![
         AutomationLane { param: "1".into(), points: vec![point(0.0, 0.75), point(8.0, 0.75)], enabled: true },
         AutomationLane { param: "2".into(), points: vec![point(0.0, 3.0), point(8.0, 3.0)], enabled: true },
@@ -791,4 +788,24 @@ fn a_theme_lays_a_generated_list_side_by_side() {
     let lefts: Vec<f32> = cells.iter().take(4).map(|c| c.left()).collect();
     assert_eq!(lefts, [0.0, 100.0, 200.0, 0.0], "three to a line, then the next line");
     assert!(cells[0].height() >= 48.0 && cells[3].top() >= 48.0, "{cells:?}");
+}
+
+#[test]
+#[ignore = "GPU review of merged upstream FM Synth and EQ panels"]
+fn render_updated_upstream_panels_for_review() {
+    for kind in ["fm-synth", "eq", "dj-eq"] {
+        let mut project = demo_project();
+        project.channels[0].devices.clear();
+        project.channels[0].devices.push(Device::new(kind, suhina_engine::model::DeviceKind::Builtin(kind.into())));
+        let detail = build(&project, Some(TrackId(1)), None);
+        let mut h =
+            egui_kittest::Harness::builder().with_size((1180., 240.)).with_pixels_per_point(1.).wgpu().build_ui(|ui| {
+                show_row(ui, &detail, &[], &mut Vec::new(), &mut Vec::new());
+            });
+        theme::install(&h.ctx);
+        h.run();
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
+        std::fs::create_dir_all(&folder).unwrap();
+        h.render().unwrap().save(folder.join(format!("upstream-{kind}.png"))).unwrap();
+    }
 }

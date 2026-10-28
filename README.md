@@ -110,7 +110,7 @@ Le trafic chiffré est testé entre deux services sur le même ordinateur, avec 
 sur deux projets de bureau et des moteurs audio indépendants. **Le test sur deux ordinateurs
 physiques reste à faire.** Le document partagé est limité à 2 Mio et aux appareils FM Synth/Utility
 sans état opaque. Les notes se modifient dans **MIDI notes**, et l’arrangement dans **Clips**. Les déplacements
-conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. L’onglet **Publish take** permet à chacun de publier le son entier d’une prise terminée depuis un autre onglet Studio vers une piste audio existante, au temps choisi. L’onglet **Tracks** permet d’ajouter les pistes nécessaires sans repartir d’un nouveau partage. Toutes les applications doivent utiliser le protocole 12. L’invité envoie sa prise à l’hôte pour vérification avant son ajout au morceau. L’enregistrement direct dans l’onglet partagé et les plugins restent à construire.
+conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. L’onglet **Publish take** permet à chacun de publier le son entier d’une prise terminée depuis un autre onglet Studio vers une piste audio existante, au temps choisi. L’onglet **Tracks** permet d’ajouter les pistes nécessaires sans repartir d’un nouveau partage. Toutes les applications doivent utiliser le protocole 13. L’invité envoie sa prise à l’hôte pour vérification avant son ajout au morceau. L’enregistrement direct dans l’onglet partagé et les plugins restent à construire.
 
 Pour inviter plusieurs musiciens, créer une nouvelle invitation pour chacun avec **New invitation**,
 après l’arrivée du précédent. Les invités déjà connectés restent présents. Le compteur **Guests: N / 3**
@@ -121,6 +121,11 @@ Dans **Multiplayer → Launcher**, vous pouvez copier vos clips vers la grille, 
 organiser et dupliquer les scènes, puis les lancer chacun de votre côté. Les copies conservent
 les originaux ; les scènes et cases modifiées sont confirmées par l’hôte. Les sélections périmées
 sont annulées avant une nouvelle modification. [Fonctionnement](docs/spec/lan-launcher-editing.md).
+
+La mise à jour du socle Suhina du 28 octobre intègre les nouveautés déjà fusionnées : égaliseur
+à huit bandes, améliorations DJ EQ, panneaux et courbes d’automatisation. Les anciens projets
+restent lisibles ; les nouveaux enregistrements de projet utilisent le format v4. Le partage
+vérifie aussi la révision du moteur. [Compatibilité et limites](docs/spec/lan-upstream-20261028.md).
 
 ## Essayer la version actuelle
 

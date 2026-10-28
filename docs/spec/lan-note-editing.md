@@ -55,3 +55,12 @@ replay and gaps, joining after edits, real encrypted bidirectional note edits, i
 players and actual audio renders. Physical two-computer testing is deferred to user acceptance.
 
 Protocol 8 additionally admits bounded [shared track creation](lan-track-creation.md) through the same operation journal.
+
+
+## Compatibility amendment: Suhina update of 28 October
+
+[Protocol 13](lan-upstream-20261028.md) supersedes earlier version pins in this contract: native
+project v4, portable-copy format 3 and matching pinned Suhina engine identities are required.
+Ordinary old project files remain readable through the studio reader, then share as v4. The
+musical edit permissions and quotas above remain unchanged; newly added studio effects are not
+implicitly permitted in shared tabs. All participants need the updated combined application.

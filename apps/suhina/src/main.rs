@@ -865,14 +865,28 @@ fn saved(path: &Path, what: &str) -> String {
     format!("{what} {}", path.display())
 }
 
-/// Suhina's icon for the window: without one eframe shows its own. On macOS the empty icon tells
-/// eframe to leave the Dock alone, so it keeps the icon of `Suhina.app`, which macOS draws with
-/// rounded corners; an image set at run time is drawn square as it is (#799).
+/// Suhina's icon for the window, the Dock and Suhina › About Suhina: without one eframe shows its
+/// own. Inside `Suhina.app` on macOS the empty icon tells eframe to leave the Dock alone, so it
+/// keeps the bundle's icon, which macOS draws with rounded corners; an image set at run time is
+/// drawn square as it is (#799). Run from outside a bundle there is no icon to keep.
 fn app_icon() -> Option<eframe::egui::IconData> {
-    if cfg!(target_os = "macos") {
+    if cfg!(target_os = "macos") && in_app_bundle() {
         return Some(eframe::egui::IconData::default());
     }
     eframe::icon_data::from_png_bytes(include_bytes!("../../../assets/brand/suhina-icon.png")).ok()
+}
+
+/// Whether this program runs from an app bundle.
+fn in_app_bundle() -> bool {
+    std::env::current_exe().ok().and_then(|exe| exe.canonicalize().ok()).is_some_and(|exe| is_bundle_program(&exe))
+}
+
+/// Whether `exe` is a program in an app bundle's `Contents/MacOS`.
+fn is_bundle_program(exe: &Path) -> bool {
+    let mut up = exe.ancestors().skip(1).map(|dir| dir.file_name().and_then(|name| name.to_str()));
+    up.next() == Some(Some("MacOS"))
+        && up.next() == Some(Some("Contents"))
+        && up.next().flatten().is_some_and(|app| app.ends_with(".app"))
 }
 
 /// The app id whose folder holds the settings: the old one while only its folder exists
@@ -1114,5 +1128,15 @@ mod tests {
         let args = parse(&["--new-instance", "set.als"]).ok().flatten();
         assert_eq!(args.as_ref().map(|a| a.new_instance), Some(true));
         assert_eq!(args.map(|a| a.source), Some(Source::Als("set.als".into())));
+    }
+
+    #[test]
+    fn a_program_in_contents_macos_of_an_app_is_in_a_bundle() {
+        assert!(is_bundle_program(Path::new("/Applications/Suhina.app/Contents/MacOS/suhina")));
+        assert!(is_bundle_program(Path::new("/Users/me/Desktop/suhina-pr879/Suhina.app/Contents/MacOS/suhina")));
+        assert!(!is_bundle_program(Path::new("/Users/me/suhina-daw/target/release/suhina")));
+        assert!(!is_bundle_program(Path::new("/Users/me/Suhina/Contents/MacOS/suhina")));
+        assert!(!is_bundle_program(Path::new("/Contents/MacOS/suhina")));
+        assert!(!is_bundle_program(Path::new("suhina")));
     }
 }

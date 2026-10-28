@@ -3,7 +3,7 @@
   "distribution": "suhina-multiplayer-dj",
   "suhina": {
     "repository": "https://github.com/suhina-daw/suhina-daw.git",
-    "commit": "3b242ba649c5200d6a41ba6b64943a2752013b35"
+    "commit": "9717cc717537010de76554062c64efab895f81cc"
   },
   "rbxport": {
     "repository": "https://github.com/chrisle/rbxport.git",

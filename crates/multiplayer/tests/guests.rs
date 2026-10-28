@@ -74,6 +74,13 @@ impl Band {
         let mut service = Service::default();
         service.set_storage_root(Some(root.path().join("Host"))).unwrap();
         let mut project = suhina_multiplayer::starter_project();
+        let mut point = suhina_model::AutomationPoint::new(0., 0.1);
+        point.curve = suhina_model::automation::Curve::new(0.1, 0.8, 0.7, 0.4).unwrap();
+        project.channels[0].automation.push(suhina_model::AutomationLane {
+            param: "volume".into(),
+            enabled: true,
+            points: vec![point, suhina_model::AutomationPoint::new(4., 0.2)],
+        });
         if audio {
             project.tracks[3].content = suhina_model::ContentKinds { notes: false, audio: true };
             project.contents[3].lanes[0].data = suhina_model::LaneData::Audio(suhina_model::AudioRegion::new(""));

@@ -171,6 +171,14 @@ admitted count even without musical changes. Existing author sequences, replicas
 quotas and private players remain. No musical command or GUI dependency enters the trusted core.
 [Contract and evidence](../spec/lan-multiple-guests.md).
 
+## Amendment: upstream source and automation v4
+
+Protocol 13, portable format 3 and exact native v4 serialization accommodate upstream Bezier
+controls. Studio can read older files; the wire refuses older schemas rather than flattening
+curves. A hello must also match the compiled Suhina pin before secret redemption. Source merges
+preserve custom crates and exact permissions, leaving new EQs and other studio effects outside
+the shared subset. [Integration contract](../spec/lan-upstream-20261028.md).
+
 ## Sources
 
 - [ADR 0002](0002-commands.md), commands shared by all front ends.

@@ -223,3 +223,15 @@ quotas and per-connection known-asset maps. A stale author can retry with refres
 other guests and source takes survive. Stopping a guest releases only its connection; stopping
 the host terminates them all, retaining last local copies. See
 [the multiple-guest contract](../spec/lan-multiple-guests.md). Internet and automatic resume remain closed.
+
+
+## Upstream engine identity and native v4
+
+Protocol 13 adds exact pinned Suhina revision comparison to authenticated hello. The public
+source hash is compiled from reviewed pins; missing/mismatched fields deny admission before
+capability consumption or document transfer. It detects accidental mixed upstream builds; it
+is not code attestation against a malicious authorized peer. Portable format 3 admits only
+canonical native v4 JSON, with bounded model-validated Bezier controls. Legacy/native v3 files
+must be opened in the studio and restaged; they are not normalized silently on the wire.
+New upstream devices remain outside the exact shared policy. See
+[the source-update contract](../spec/lan-upstream-20261028.md).

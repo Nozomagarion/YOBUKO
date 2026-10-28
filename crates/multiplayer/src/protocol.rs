@@ -7,7 +7,19 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 12;
+pub const PROTOCOL: u16 = 13;
+pub const COPY_FORMAT: u16 = 3;
+
+pub(crate) fn engine_revision() -> Result<String, String> {
+    let pins: Value = serde_json::from_str(include_str!("../../../fork-sources.json"))
+        .map_err(|_| "invalid pinned source identity")?;
+    let revision = pins["suhina"]["commit"]
+        .as_str()
+        .filter(|s| s.len() == 40 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+        .ok_or("invalid pinned Suhina identity")?;
+    Ok(revision.to_owned())
+}
+
 pub const MAX_FRAME: usize = 65536;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -248,6 +260,7 @@ pub enum ClientMessage {
     Hello {
         protocol: u16,
         format: u16,
+        engine: String,
         secret: String,
     },
     Download {

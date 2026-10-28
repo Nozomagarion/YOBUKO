@@ -73,3 +73,12 @@ Protocol 11 adds [scene and slot editing](lan-launcher-editing.md). The arrangem
 above retain their original semantics. Launcher copies use explicit independent content and
 existing verified audio, not clipboard or file import. Native clip.delete and note commands
 also resolve stable launcher clip IDs. Local launches never enter the shared journal.
+
+
+## Compatibility amendment: Suhina update of 28 October
+
+[Protocol 13](lan-upstream-20261028.md) supersedes earlier version pins in this contract: native
+project v4, portable-copy format 3 and matching pinned Suhina engine identities are required.
+Ordinary old project files remain readable through the studio reader, then share as v4. The
+musical edit permissions and quotas above remain unchanged; newly added studio effects are not
+implicitly permitted in shared tabs. All participants need the updated combined application.

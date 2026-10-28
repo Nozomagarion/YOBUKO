@@ -9,7 +9,7 @@ use suhina_model::{AudioInput, DeviceKind, Extensions, LaneData, MidiInput, Midi
 pub const MAX_DOCUMENT: usize = 2 * 1024 * 1024;
 pub const MAX_TRACKS: usize = 64;
 // Upstream source integration must explicitly review this adapter when the native format changes.
-const NATIVE_VERSION: u64 = 3;
+const NATIVE_VERSION: u64 = 4;
 
 fn input() -> MidiInput {
     MidiInput { port: MidiPort::Nothing, channel: None, monitor: Monitor::Off }

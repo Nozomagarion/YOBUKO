@@ -590,6 +590,15 @@ fn device_parameters_cross_tls_both_ways_keep_players_and_rejoin_with_current_so
     for kind in ["fm-synth", "utility"] {
         source.execute("device.add", &json!({"track":1,"id":kind})).unwrap();
     }
+    let mut project = source.project().clone();
+    let mut point = suhina_model::AutomationPoint::new(0., -24.);
+    point.curve = suhina_model::automation::Curve::new(0.2, 0.9, 0.8, 0.1).unwrap();
+    project.channels[0].devices[0].automation.push(suhina_model::AutomationLane {
+        param: "volume".into(),
+        enabled: true,
+        points: vec![point, suhina_model::AutomationPoint::new(4., -6.)],
+    });
+    let source = Session::new(project);
     let original = source.project().clone();
     let mut host = Service::default();
     host.select_project(source.project()).unwrap();
@@ -624,6 +633,12 @@ fn device_parameters_cross_tls_both_ways_keep_players_and_rejoin_with_current_so
         apply(&mut local, &mut ar, &wait(&mut host, |v| v["controls"]["revision"] == base + 1));
         apply(&mut remote, &mut br, &wait(&mut guest, |v| v["controls"]["revision"] == base + 1));
         assert_eq!(local.project(), remote.project());
+        assert!(!local.project().channels[0].devices[0].automation[0].enabled);
+        assert_eq!(
+            local.project().channels[0].devices[0].automation[0].points,
+            original.channels[0].devices[0].automation[0].points
+        );
+
         let left = suhina_engine::render_offline(local.project(), 8000, 256).unwrap();
         let right = suhina_engine::render_offline(remote.project(), 8000, 256).unwrap();
         assert_eq!(left, right);

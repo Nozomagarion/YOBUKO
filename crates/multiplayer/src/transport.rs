@@ -972,7 +972,11 @@ fn serve(
     let peer = {
         let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
         let result = match hello {
-            ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret } => state.admit(&secret, Instant::now()),
+            ClientMessage::Hello { protocol: PROTOCOL, format: crate::protocol::COPY_FORMAT, engine, secret }
+                if engine == protocol::engine_revision()? =>
+            {
+                state.admit(&secret, Instant::now())
+            }
             _ => Err("admission refused".into()),
         };
         match result {
@@ -1126,7 +1130,15 @@ fn guest(
         ClientConnection::new(Arc::new(tls), name).map_err(|e| e.to_string())?,
         DeadlineSocket::new(stream),
     );
-    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: invitation.secret })?;
+    protocol::write(
+        &mut io,
+        &ClientMessage::Hello {
+            protocol: PROTOCOL,
+            format: crate::protocol::COPY_FORMAT,
+            engine: protocol::engine_revision()?,
+            secret: invitation.secret,
+        },
+    )?;
     io.sock.deadline = Instant::now() + Duration::from_secs(30);
     let offer: ServerMessage = protocol::read(&mut io)?;
     let (document, mut revision) = crate::transfer::receive(&mut io, offer, stop, |done, total| {

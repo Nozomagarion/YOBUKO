@@ -27,6 +27,11 @@ and USB export are future work. There is no common public release channel yet.
 | Collaborate on a common project while listening independently. | Keep the connection between your production and its rendered audio. | Keep everyone on the same tested combined version. |
 | **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** product direction; decks and hardware export remain planned. |
 
+The 28 October Suhina source update integrates merged main 9717cc7, including EQs, panels and
+Bezier automation. Old studio projects remain readable; new saves use native v4. LAN uses
+protocol 13, portable format 3 and matching compiled Suhina identities. The shared device
+subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.md).
+
 ## What you can try
 
 - **Studio / Multiplayer / DJ** entry points in the native app.
@@ -34,7 +39,7 @@ and USB export are future work. There is no common public release channel yet.
   Share the current project (up to 64 tracks, FM Synth/Utility parameters only) or use the
   generated starter. Clips arrive in the verified initial copy; single-note add/update/delete, track names, volume
   and pan are live shared edits. The **MIDI notes** editor rejects stale drafts before indices shift. Play, stop and listening position stay local to each computer.
-- **Launcher (protocol 12):** organize scenes and slots together, copy arrangement clips into empty
+- **Launcher (protocol 13):** organize scenes and slots together, copy arrangement clips into empty
   compatible slots with independent contents, move/swap slots, and launch privately on each computer.
   Scene structural changes invalidate hidden selections; stale drafts require explicit refresh.
 - **Devices:** add/remove top-level FM Synth and Utility without loading presets or replacing an

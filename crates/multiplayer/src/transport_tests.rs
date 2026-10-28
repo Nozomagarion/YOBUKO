@@ -147,14 +147,24 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
     let mut incompatible = connect(&invitation);
     protocol::write(
         &mut incompatible,
-        &ClientMessage::Hello { protocol: PROTOCOL + 1, format: 2, secret: invitation.secret.clone() },
+        &ClientMessage::Hello {
+            protocol: PROTOCOL + 1,
+            format: crate::protocol::COPY_FORMAT,
+            engine: protocol::engine_revision().unwrap(),
+            secret: invitation.secret.clone(),
+        },
     )
     .unwrap();
     assert!(matches!(protocol::read::<ServerMessage>(&mut incompatible).unwrap(), ServerMessage::Denied));
     let mut io = connect(&invitation);
     protocol::write(
         &mut io,
-        &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: invitation.secret.clone() },
+        &ClientMessage::Hello {
+            protocol: PROTOCOL,
+            format: crate::protocol::COPY_FORMAT,
+            engine: protocol::engine_revision().unwrap(),
+            secret: invitation.secret.clone(),
+        },
     )
     .unwrap();
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
@@ -354,8 +364,16 @@ fn notes_and_tracks_changed_during_download_are_applied_before_joining() {
     let invitation = invitation_from(&mut host);
     let clip = host.project.as_ref().unwrap().project.arrangement.lanes[0].clips[0].id.0;
     let mut io = connect(&invitation);
-    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: invitation.secret })
-        .unwrap();
+    protocol::write(
+        &mut io,
+        &ClientMessage::Hello {
+            protocol: PROTOCOL,
+            format: crate::protocol::COPY_FORMAT,
+            engine: protocol::engine_revision().unwrap(),
+            secret: invitation.secret,
+        },
+    )
+    .unwrap();
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     assert!(matches!(offer, ServerMessage::Project { revision: 0, .. }));
     host.execute(
@@ -526,8 +544,16 @@ fn a_take_published_during_initial_download_is_verified_before_the_join_finishes
     }
     let invitation = Invitation::decode(host.invitation.as_ref().unwrap()).unwrap();
     let mut io = connect(&invitation);
-    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: invitation.secret })
-        .unwrap();
+    protocol::write(
+        &mut io,
+        &ClientMessage::Hello {
+            protocol: PROTOCOL,
+            format: crate::protocol::COPY_FORMAT,
+            engine: protocol::engine_revision().unwrap(),
+            secret: invitation.secret,
+        },
+    )
+    .unwrap();
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     assert!(matches!(offer, ServerMessage::Project { revision: 0, .. }));
     host.select_take(Arc::new(suhina_engine::AudioData { sample_rate: 8000, channels: 1, samples: vec![0.4; 8000] }))
@@ -664,8 +690,16 @@ fn guest_upload_host() -> (Service, Invitation, tempfile::TempDir) {
 }
 fn admitted_upload(invite: &Invitation) -> StreamOwned<ClientConnection, DeadlineSocket> {
     let mut io = connect(invite);
-    protocol::write(&mut io, &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: invite.secret.clone() })
-        .unwrap();
+    protocol::write(
+        &mut io,
+        &ClientMessage::Hello {
+            protocol: PROTOCOL,
+            format: crate::protocol::COPY_FORMAT,
+            engine: protocol::engine_revision().unwrap(),
+            secret: invite.secret.clone(),
+        },
+    )
+    .unwrap();
     let offer = protocol::read(&mut io).unwrap();
     let (doc, revision) = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
     assets::receive(
@@ -934,8 +968,16 @@ fn a_hello_started_before_renewal_cannot_consume_the_new_invitation() {
         assert!(Instant::now() < deadline, "invitation renewal timed out");
         std::thread::sleep(Duration::from_millis(10));
     }
-    protocol::write(&mut old_io, &ClientMessage::Hello { protocol: PROTOCOL, format: 2, secret: original.secret })
-        .unwrap();
+    protocol::write(
+        &mut old_io,
+        &ClientMessage::Hello {
+            protocol: PROTOCOL,
+            format: crate::protocol::COPY_FORMAT,
+            engine: protocol::engine_revision().unwrap(),
+            secret: original.secret,
+        },
+    )
+    .unwrap();
     assert!(matches!(protocol::read::<ServerMessage>(&mut old_io).unwrap(), ServerMessage::Denied));
     let mut guest = Service::default();
     guest.execute("multiplayer.join", &json!({"invitation":host.invitation})).unwrap();
@@ -1182,4 +1224,33 @@ fn wire_guest_counts_are_bounded_and_required() {
     let mut valid = value;
     valid["guests"] = json!(1);
     assert!(serde_json::from_value::<ServerMessage>(valid).is_ok());
+}
+
+#[test]
+fn mismatched_engine_and_old_copy_format_refuse_before_spending_the_private_invitation() {
+    let mut host = Service::default();
+    let invitation = invitation_from(&mut host);
+    for (engine, format) in [
+        ("0".repeat(40), protocol::COPY_FORMAT),
+        ("invalid".into(), protocol::COPY_FORMAT),
+        (protocol::engine_revision().unwrap(), 2),
+    ] {
+        let mut io = connect(&invitation);
+        protocol::write(
+            &mut io,
+            &ClientMessage::Hello { protocol: PROTOCOL, format, engine, secret: invitation.secret.clone() },
+        )
+        .unwrap();
+        assert!(matches!(protocol::read::<ServerMessage>(&mut io).unwrap(), ServerMessage::Denied));
+    }
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation.encode().unwrap()})).unwrap();
+    let until = Instant::now() + Duration::from_secs(10);
+    while guest.mode != "connected" && guest.active() && Instant::now() < until {
+        guest.poll();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(guest.mode, "connected", "{:?}", guest.error);
+    let pins: Value = serde_json::from_str(include_str!("../../../fork-sources.json")).unwrap();
+    assert_eq!(protocol::engine_revision().unwrap(), pins["suhina"]["commit"]);
 }

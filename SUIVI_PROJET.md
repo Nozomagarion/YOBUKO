@@ -1,9 +1,12 @@
 # Où en est notre application ?
 
-**Mise à jour Suhina en préparation — 28 octobre 2026.**
+**Mise à jour Suhina préparée, validation globale en cours — 28 octobre 2026.**
 Le relevé « Veille Suhina DAW » a été retrouvé. La branche officielle vérifiée est
 `9717cc717537010de76554062c64efab895f81cc`, soit 77 commits depuis notre référence `3b242ba6`.
-On prépare leur intégration dans une copie isolée, en conservant le multijoueur et le module DJ.
+La fusion est préparée dans une copie isolée, sans conflit Git, en conservant le multijoueur et le module DJ.
+Les tests ciblés du réseau, de l’interface et des anciens projets passent ; les captures des
+nouveaux panneaux ont été vérifiées. Le partage utilise maintenant le protocole 13, une copie
+portable v3 et des projets natifs v4, avec vérification de la révision du moteur à la connexion.
 Les nouveautés incluent des égaliseurs, panneaux et courbes d’automatisation, avec un format
 natif v4 à adapter au partage. Les PR Saturator #1040 et contrôles XY #1028 restent non fusionnées
 et ne sont pas incluses. Aucun nouveau paquet n’est encore validé ; le bilan ci-dessous reste

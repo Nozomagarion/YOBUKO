@@ -18,7 +18,13 @@ pub fn send(io: &mut (impl Read + Write), bytes: &[u8], revision: u64, stop: &At
     }
     protocol::write(
         io,
-        &ServerMessage::Project { protocol: PROTOCOL, format: 2, revision, bytes: bytes.len(), sha256: hash(bytes) },
+        &ServerMessage::Project {
+            protocol: PROTOCOL,
+            format: crate::protocol::COPY_FORMAT,
+            revision,
+            bytes: bytes.len(),
+            sha256: hash(bytes),
+        },
     )?;
     for (index, chunk) in bytes.chunks(CHUNK).enumerate() {
         if stop.load(Ordering::Relaxed) {
@@ -40,7 +46,9 @@ pub fn receive(
     stop: &AtomicBool,
     mut progress: impl FnMut(usize, usize),
 ) -> Result<(Vec<u8>, u64), String> {
-    let ServerMessage::Project { protocol: PROTOCOL, format: 2, revision, bytes, sha256 } = header else {
+    let ServerMessage::Project { protocol: PROTOCOL, format: crate::protocol::COPY_FORMAT, revision, bytes, sha256 } =
+        header
+    else {
         return Err("invitation refused or incompatible MIDI format".into());
     };
     if bytes == 0

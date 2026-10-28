@@ -38,12 +38,12 @@ in that copy. The source project, its files and its settings are never changed.
 
 ## Document and admission
 
-Protocol 8 uses portable-copy format 2 for initial audio assets and retains live notes,
+Protocol 13 uses portable-copy format 3 for initial audio assets and retains live notes,
 revision-checked arrangement clip operations and snapshot revisions. Old invitations
 are refused; both apps need this protocol. The existing certificate-bound TLS admission, expiry,
 one-use secret, owner-ordered controls and local transport rules remain in force.
 
-The musical document uses the existing `.suhina` serializer (native format version 3), in its
+The musical document uses the existing `.suhina` serializer (native format version 4), in its
 canonical encoding, with a maximum of 2 MiB. It is data in memory, not a remote filename or disk
 import. Before calling the native reader, bound the JSON tree, strings and collection sizes.
 After parsing, check the MIDI/device/input subset and require the exact canonical bytes to match
@@ -85,7 +85,16 @@ The MIDI-only selection remains strict and performs no audio collection. Share p
 selects already-loaded audio explicitly, normalizes references to content-addressed WAV copies
 and sends the same bounded native document followed by a manifest and audio chunks. The portable
 decoder admits only empty file references or generated Audio/<hash>.wav names, no absolute paths.
-Both modes use portable-copy format 2; a guest waits for the complete verified audio set and
+Both modes use portable-copy format 3; a guest waits for the complete verified audio set and
 initial operation suffix before a tab opens. See [the audio contract](lan-audio-assets.md).
 
 Protocol 8 additionally admits bounded [shared track creation](lan-track-creation.md) through the same operation journal.
+
+
+## Compatibility amendment: Suhina update of 28 October
+
+[Protocol 13](lan-upstream-20261028.md) supersedes earlier version pins in this contract: native
+project v4, portable-copy format 3 and matching pinned Suhina engine identities are required.
+Ordinary old project files remain readable through the studio reader, then share as v4. The
+musical edit permissions and quotas above remain unchanged; newly added studio effects are not
+implicitly permitted in shared tabs. All participants need the updated combined application.
