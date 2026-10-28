@@ -1112,17 +1112,17 @@
       "page": "Arrangement",
       "section": "Tracks",
       "name": "Track headers",
-      "note": "Place Arrangement track names and controls on the left or right of the timeline, or where the theme puts them.",
+      "note": "Place Arrangement track names and controls on the left or right of the timeline, or where the theme puts them (the left when it says nothing).",
       "keys": [
         "track_headers"
       ],
       "sourceFingerprint": "836455800937f61a56189fe8d17ea11795f5f4726737b996885673a487dec04b",
       "helpStatus": "reviewed",
-      "description": "Track headers contain each track’s name and controls. This moves their column to the chosen edge of the Arrangement timeline. Theme, the default, uses the side the theme in use gives (a theme says it with --suhina-track-headers in its sheet) and the right when it gives none; the headers then move when you change theme. Left and Right are your own choice and stay whatever theme is in use. Moving the headers with the button in the view's corner sets Left or Right. It does not reorder tracks, move the browser, or change the Session view’s columns. Browser side is a separate preference.",
+      "description": "Track headers contain each track’s name and controls. This moves their column to the chosen edge of the Arrangement timeline. Theme, the default, uses the side the theme in use gives (a theme says it with --suhina-track-headers in its sheet) and the left when it gives none; the headers then move when you change theme. Left and Right are your own choice and stay whatever theme is in use. Moving the headers with the button in the view's corner sets Left or Right. It does not reorder tracks, move the browser, or change the Session view’s columns. Browser side is a separate preference.",
       "options": [
         {
           "name": "Theme",
-          "description": "Follow the theme in use: its side, or the right when it gives none. This is the default."
+          "description": "Follow the theme in use: its side, or the left when it gives none. This is the default."
         },
         {
           "name": "Left",

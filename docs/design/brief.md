@@ -61,7 +61,8 @@ From [research](#sources) and the first design rounds:
   detail area (devices or clip editor) at the bottom, info text and status at the very bottom.
 - Session view as a grid: tracks are columns, scenes are rows, scene launch on the right, return
   tracks and the main track after the regular tracks.
-- Arrangement view: timeline left, track headers on the right with their controls.
+- Arrangement view: track headers with their controls on the left of the timeline by default
+  (#1046); the right is a setting, and a theme may choose it.
 - Interactions: click to launch, pending state while quantised, drag from the browser, double-click
   to open a clip (on an empty slot or lane of a MIDI track, to make one), Tab between Session and
   Arrangement; keyboard shortcuts and menu structure.

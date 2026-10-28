@@ -13,6 +13,15 @@ use suhina_session::Session;
 use suhina_ui::demo::demo_project;
 use suhina_ui::{App, kit::theme};
 
+/// `harness`'s track headers on the right of the timeline, where these tests drag their edge.
+fn headers_right(harness: &mut Harness<'static, App>) {
+    let mut settings = harness.state().settings().clone();
+    settings.track_headers = Some(suhina_ui::settings::Side::Right);
+    let ctx = harness.ctx.clone();
+    harness.state_mut().set_settings(&ctx, settings);
+    harness.run();
+}
+
 fn arrangement(session: Session) -> Harness<'static, App> {
     let mut app = App::new();
     app.set_browser_open(false);
@@ -130,6 +139,7 @@ fn track_type_is_on_the_name_row_and_does_not_change_the_project() {
 #[test]
 fn narrow_header_volume_starts_below_automation() {
     let mut harness = arrangement(Session::new(demo_project()));
+    headers_right(&mut harness);
     let ruler = harness.get_by_label("Ruler").rect();
     let edge = egui::pos2(ruler.right(), ruler.bottom() + 30.0);
     harness.hover_at(edge);
@@ -158,6 +168,7 @@ fn minimum_width_headers_keep_names_controls_and_meters_separate() {
                 .unwrap();
         }
         let mut harness = arrangement(session);
+        headers_right(&mut harness);
         // Keep all eight group rows and the child visible above the detail area.
         harness.set_size(egui::vec2(1600.0, 1200.0));
         harness.run();

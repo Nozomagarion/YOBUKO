@@ -3482,11 +3482,11 @@ fn over_view<R>(ui: &mut Ui, name: &str, panel: Rect, main: Rect, draw: impl FnO
 }
 
 /// Whether the track headers are on the left: on the user's side, or else on the theme's, or else
-/// on the right.
+/// on the left (#1046).
 fn headers_left(side: Option<Side>) -> bool {
     match side {
         Some(side) => side == Side::Left,
-        None => crate::kit::style_class::theme_track_headers_left().unwrap_or(false),
+        None => crate::kit::style_class::theme_track_headers_left().unwrap_or(true),
     }
 }
 
