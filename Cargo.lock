@@ -4758,6 +4758,7 @@ version = "0.0.1"
 dependencies = [
  "flate2",
  "roxmltree 0.21.1",
+ "suhina-device-dj-eq",
  "suhina-device-pitch",
  "suhina-engine",
  "suhina-model",
