@@ -62,13 +62,52 @@ pub const DEVICE_SLOTS: &str = "device-slots";
 /// where it would go.
 pub const DEVICE_CARRYING: &str = "device-carrying";
 
-pub type DeviceSlots = (suhina_engine::model::TrackId, egui::Rect, Vec<(usize, egui::Rect)>);
+/// One shown list of a track's top-level devices: the detail area's chain (left to right) or a
+/// mixer strip's list (top to bottom), drawn in frame `pass`.
+#[derive(Debug, Clone)]
+pub struct DeviceSlots {
+    pub track: suhina_engine::model::TrackId,
+    pub area: egui::Rect,
+    pub slots: Vec<(usize, egui::Rect)>,
+    pub vertical: bool,
+    pub pass: u64,
+}
 
-/// Where in `slots` a device let go at `x` goes: the index of the device it lands before, as
-/// `device.move` takes it (the first whose middle is right of `x`, or after the last).
-pub fn device_slot_at(slots: &[(usize, egui::Rect)], x: f32) -> Option<usize> {
+impl DeviceSlots {
+    /// Where a device let go at `pointer` goes along this list ([`device_slot_at`]).
+    pub fn at(&self, pointer: egui::Pos2) -> Option<usize> {
+        device_slot_at(&self.slots, if self.vertical { pointer.y } else { pointer.x }, self.vertical)
+    }
+}
+
+/// Adds `list` to this frame's device lists (the lists of earlier frames go).
+pub fn note_device_slots(ctx: &egui::Context, list: DeviceSlots) {
+    ctx.data_mut(|d| {
+        let lists = d.get_temp_mut_or_default::<Vec<DeviceSlots>>(egui::Id::new(DEVICE_SLOTS));
+        lists.retain(|l| l.pass == list.pass && !(l.track == list.track && l.vertical == list.vertical));
+        lists.push(list);
+    });
+}
+
+/// This frame's or the last frame's device list of `track` under `pointer`, if one is.
+pub fn device_slots_under(
+    ctx: &egui::Context,
+    track: suhina_engine::model::TrackId,
+    pointer: egui::Pos2,
+) -> Option<DeviceSlots> {
+    let pass = ctx.cumulative_pass_nr();
+    ctx.data(|d| d.get_temp::<Vec<DeviceSlots>>(egui::Id::new(DEVICE_SLOTS)))?
+        .into_iter()
+        .find(|l| l.track == track && l.pass + 1 >= pass && l.area.contains(pointer))
+}
+
+/// Where in `slots` a device let go at `at` (x along a chain, y down a list) goes: the index of
+/// the device it lands before, as `device.move` takes it (the first whose middle is past `at`,
+/// or after the last).
+pub fn device_slot_at(slots: &[(usize, egui::Rect)], at: f32, vertical: bool) -> Option<usize> {
     let last = slots.last()?;
-    Some(slots.iter().find(|(_, r)| x < r.center().x).map_or(last.0 + 1, |(i, _)| *i))
+    let middle = |r: &egui::Rect| if vertical { r.center().y } else { r.center().x };
+    Some(slots.iter().find(|(_, r)| at < middle(r)).map_or(last.0 + 1, |(i, _)| *i))
 }
 
 /// An item in the browser's results, as it is dragged.
@@ -344,11 +383,16 @@ mod tests {
     fn a_device_let_go_along_its_chain_lands_before_the_panel_whose_middle_is_right_of_it() {
         let panel = |left: f32| egui::Rect::from_min_size(egui::pos2(left, 0.0), egui::vec2(100.0, 80.0));
         let slots = [(0, panel(0.0)), (1, panel(101.0)), (2, panel(202.0))];
-        assert_eq!(device_slot_at(&slots, 10.0), Some(0));
-        assert_eq!(device_slot_at(&slots, 60.0), Some(1));
-        assert_eq!(device_slot_at(&slots, 240.0), Some(2));
-        assert_eq!(device_slot_at(&slots, 260.0), Some(3), "after the last");
-        assert_eq!(device_slot_at(&[], 10.0), None);
+        assert_eq!(device_slot_at(&slots, 10.0, false), Some(0));
+        assert_eq!(device_slot_at(&slots, 60.0, false), Some(1));
+        assert_eq!(device_slot_at(&slots, 240.0, false), Some(2));
+        assert_eq!(device_slot_at(&slots, 260.0, false), Some(3), "after the last");
+        assert_eq!(device_slot_at(&[], 10.0, false), None);
+        // Down a strip's list, by height.
+        let row = |top: f32| egui::Rect::from_min_size(egui::pos2(0.0, top), egui::vec2(100.0, 20.0));
+        let rows = [(0, row(0.0)), (1, row(20.0)), (2, row(40.0))];
+        assert_eq!(device_slot_at(&rows, 25.0, true), Some(1));
+        assert_eq!(device_slot_at(&rows, 55.0, true), Some(3));
     }
 
     fn item(key: &str, kind: ItemKind) -> BrowserItem {

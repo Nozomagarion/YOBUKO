@@ -694,10 +694,12 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
     } else {
         state.device_scroll.remove(&track);
     }
+    let mut slots = Vec::new();
     for (row_index, device) in column.devices.iter().enumerate() {
         let index = device.at;
         let top = rect.top() - scroll + row_index as f32 * DEVICE_ROW;
         let row = Rect::from_min_size(Pos2::new(rect.left(), top), Vec2::new(rect.width(), DEVICE_ROW));
+        slots.push((index, row));
         if !row.intersects(clip) {
             continue;
         }
@@ -760,6 +762,28 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
             );
         }
     }
+    // A device of this track carried over its list: a line where it would go, and its place
+    // for the drop (#688).
+    let carrying = ui.data(|d| {
+        d.get_temp::<(suhina_engine::model::TrackId, usize)>(Id::new(crate::interaction::drop::DEVICE_CARRYING))
+    });
+    if let Some((_, from)) = carrying.filter(|(t, _)| *t == track)
+        && let Some(pointer) = ui.ctx().pointer_latest_pos().filter(|p| clip.contains(*p))
+        && let Some(to) = crate::interaction::drop::device_slot_at(&slots, pointer.y, true)
+        && to != from
+        && to != from + 1
+    {
+        let y = slots
+            .iter()
+            .find(|(i, _)| *i == to)
+            .map_or_else(|| slots.last().map_or(rect.top(), |(_, r)| r.bottom()), |(_, r)| r.top());
+        list_painter.hline(rect.x_range(), y, egui::Stroke::new(2.0, theme::accent()));
+    }
+    let pass = ui.ctx().cumulative_pass_nr();
+    crate::interaction::drop::note_device_slots(
+        ui.ctx(),
+        crate::interaction::drop::DeviceSlots { track, area: clip, slots, vertical: true, pass },
+    );
 }
 
 /// The audio tracking's block above the toggles: "Audio From" with a dropdown of where the

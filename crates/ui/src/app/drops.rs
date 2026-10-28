@@ -234,10 +234,8 @@ impl App {
             })
             .unwrap_or_default();
         // Over its own chain: the place under the pointer along it.
-        let slots = ui.ctx().data(|d| d.get_temp::<drop::DeviceSlots>(Id::new(drop::DEVICE_SLOTS)));
-        let along = slots
-            .filter(|(track, area, _)| *track == from && pointer.is_some_and(|p| area.contains(p)))
-            .and_then(|(_, _, slots)| pointer.and_then(|p| drop::device_slot_at(&slots, p.x)))
+        let along = pointer
+            .and_then(|p| drop::device_slots_under(ui.ctx(), from, p).and_then(|list| list.at(p)))
             .filter(|to| *to != index && *to != index + 1);
         if !released {
             ui.ctx().data_mut(|d| d.insert_temp(Id::new(drop::DEVICE_CARRYING), (from, index)));

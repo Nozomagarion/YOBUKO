@@ -242,7 +242,7 @@ fn chain_row(
     let carrying = ui.data(|d| d.get_temp::<(TrackId, usize)>(Id::new(crate::interaction::drop::DEVICE_CARRYING)));
     if let Some((track, from)) = carrying.filter(|(t, _)| *t == chain.track)
         && let Some(pointer) = ui.ctx().pointer_latest_pos().filter(|p| area.contains(*p))
-        && let Some(to) = crate::interaction::drop::device_slot_at(&slots, pointer.x)
+        && let Some(to) = crate::interaction::drop::device_slot_at(&slots, pointer.x, false)
         && to != from
         && to != from + 1
         && track == chain.track
@@ -256,9 +256,9 @@ fn chain_row(
             egui::Stroke::new(2.0, theme::accent()),
         );
     }
-    ui.data_mut(|d| {
-        d.insert_temp(Id::new(crate::interaction::drop::DEVICE_SLOTS), (chain.track, area, slots));
-    });
+    let pass = ui.ctx().cumulative_pass_nr();
+    let list = crate::interaction::drop::DeviceSlots { track: chain.track, area, slots, vertical: false, pass };
+    crate::interaction::drop::note_device_slots(ui.ctx(), list);
     if let Some(bar) = bar {
         painter.fill_background(bar, 0.0, theme::control_background());
         let thumb_width = (area.width() / total * bar.width()).max(24.0);
