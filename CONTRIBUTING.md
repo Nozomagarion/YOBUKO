@@ -254,9 +254,11 @@ says how the queue is set up and what runs in it.
 adds it, and [`ready-to-merge.yml`](.github/workflows/ready-to-merge.yml) approves the commit it was
 added on and turns on *Merge when ready* for that commit: the queue takes the pull request once
 `ci` is green and every review thread is resolved (CodeRabbit's too), and a red check stops it.
-Adding the label is the maintainer's approval of that exact commit, regardless of the author.
-Downloadable test builds are optional and independent of merge approval; a missing build or a
-stale review does not require another packaging run. Code-owner approval is still required for
+Adding the label is the maintainer's approval of that exact commit, regardless of the author, and
+it needs a finished test build of that commit: a successful `/test-build` run whose packages are
+still available, or one of an earlier head the branch has only merged `main` into since. Without
+one the label comes off with a comment asking for `/test-build`; an existing build is reused, so
+asking again starts no second packaging run. Code-owner approval is still required for
 protected paths. A push by anyone
 but a maintainer takes the label off, so new commits are never merged unread; taking the label off
 by hand stops the merge. Only a maintainer adds it: an agent never adds `ready to merge`, also not
