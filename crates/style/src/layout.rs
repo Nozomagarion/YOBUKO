@@ -445,9 +445,9 @@ pub fn compute(tree: &Tree, styles: &[ComputedStyle], viewport: [f32; 2]) -> Res
                 top: margin(computed, Property::MarginTop),
                 bottom: margin(computed, Property::MarginBottom),
             },
-            justify_content: content(keyword(computed, Property::JustifyContent)),
-            align_content: content(keyword(computed, Property::AlignContent)),
-            align_items: items(keyword(computed, Property::AlignItems)),
+            justify_content: content(keyword(computed, Property::JustifyContent)).unwrap_or(AlignContent::NORMAL),
+            align_content: content(keyword(computed, Property::AlignContent)).unwrap_or(AlignContent::NORMAL),
+            align_items: items(keyword(computed, Property::AlignItems)).unwrap_or(AlignItems::NORMAL),
             align_self: items(keyword(computed, Property::AlignSelf)),
             grid_template_columns: template(computed, Property::GridTemplateColumns)
                 .unwrap_or_else(|| grid_tracks(computed, Property::Columns)),
