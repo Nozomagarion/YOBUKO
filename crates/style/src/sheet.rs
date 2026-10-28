@@ -3,7 +3,7 @@
 
 //! Bounded style rules with source locations and explicit native support diagnostics.
 use crate::{media::Media, property::Property, selector::Selector};
-use cssparser::{Parser, ParserInput, Token};
+use cssparser::{Parser, Token};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Notice {
@@ -105,8 +105,7 @@ impl Shorthand {
 /// Positions, sizes, repeats and URLs are not drawn natively and are an error.
 pub(crate) fn background_part(property: Property, value: &str) -> Result<String, String> {
     crate::syntax::validate(value)?;
-    let mut input = ParserInput::new(value);
-    let mut parser = Parser::new(&mut input);
+    let mut parser = Parser::new(value);
     let mut images: Vec<String> = Vec::new();
     let mut color: Option<String> = None;
     let mut layer_has_image = false;
@@ -227,9 +226,8 @@ impl Sheet {
     }
     pub fn parse(source: &str) -> Result<Self, String> {
         crate::syntax::validate(source)?;
-        let mut input = ParserInput::new(source);
         let mut sheet = Self::default();
-        rules(&mut Parser::new(&mut input), source, &Scope::default(), &mut sheet, 0)?;
+        rules(&mut Parser::new(source), source, &Scope::default(), &mut sheet, 0)?;
         sheet.rank_layers();
         Ok(sheet)
     }
@@ -298,20 +296,20 @@ impl Sheet {
 }
 
 pub(crate) fn nested<T>(
-    parser: &mut Parser<'_, '_>,
-    read: impl FnOnce(&mut Parser<'_, '_>) -> Result<T, String>,
+    parser: &mut Parser<'_>,
+    read: impl FnOnce(&mut Parser<'_>) -> Result<T, String>,
 ) -> Result<T, String> {
     let mut outcome = None;
     parser
         .parse_nested_block(|inner| {
             outcome = Some(read(inner));
-            Ok::<(), cssparser::ParseError<'_, ()>>(())
+            Ok::<(), cssparser::ParseError<()>>(())
         })
         .map_err(|e| format!("CSS block: {e:?}"))?;
     outcome.ok_or("Missing CSS block")?
 }
 
-pub(crate) fn consume(parser: &mut Parser<'_, '_>) -> Result<(), String> {
+pub(crate) fn consume(parser: &mut Parser<'_>) -> Result<(), String> {
     while !parser.is_exhausted() {
         let token = parser.next_including_whitespace_and_comments().map_err(|e| format!("CSS: {e:?}"))?.clone();
         if matches!(
@@ -344,13 +342,7 @@ fn layer_name(text: &str) -> Option<&str> {
     .then_some(text)
 }
 
-fn rules(
-    parser: &mut Parser<'_, '_>,
-    source: &str,
-    scope: &Scope,
-    sheet: &mut Sheet,
-    depth: usize,
-) -> Result<(), String> {
+fn rules(parser: &mut Parser<'_>, source: &str, scope: &Scope, sheet: &mut Sheet, depth: usize) -> Result<(), String> {
     let media = scope.media.as_slice();
     if depth > 16 {
         return Err("Style rules exceed sixteen nested groups".into());
@@ -511,11 +503,7 @@ fn rules(
 }
 
 /// The inside of `@keyframes`: offset lists (`from`, `to`, percentages) and declarations.
-fn frames(
-    parser: &mut Parser<'_, '_>,
-    source: &str,
-    sheet: &mut Sheet,
-) -> Result<Vec<(f32, Vec<Declaration>)>, String> {
+fn frames(parser: &mut Parser<'_>, source: &str, sheet: &mut Sheet) -> Result<Vec<(f32, Vec<Declaration>)>, String> {
     let mut result: Vec<(f32, Vec<Declaration>)> = Vec::new();
     let mut start = None;
     while !parser.is_exhausted() {
@@ -562,7 +550,7 @@ fn frames(
     Ok(result)
 }
 
-fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) -> Result<Vec<Declaration>, String> {
+fn declarations(parser: &mut Parser<'_>, source: &str, sheet: &mut Sheet) -> Result<Vec<Declaration>, String> {
     let mut declarations = Vec::new();
     while !parser.is_exhausted() {
         parser.skip_whitespace();
@@ -573,7 +561,7 @@ fn declarations(parser: &mut Parser<'_, '_>, source: &str, sheet: &mut Sheet) ->
         let property = parser.try_parse(|parser| {
             let name = parser.expect_ident_cloned()?.to_string();
             parser.expect_colon()?;
-            Ok::<_, cssparser::BasicParseError<'_>>(name)
+            Ok::<_, cssparser::BasicParseError>(name)
         });
         let value_start = parser.position().byte_index();
         let mut value_end = value_start;

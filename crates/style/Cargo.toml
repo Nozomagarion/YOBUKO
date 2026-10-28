@@ -7,7 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-cssparser = "0.37" # MPL-2.0; CSS syntax tokens, no browser engine
+cssparser = "0.38" # MPL-2.0; CSS syntax tokens, no browser engine
 taffy = { version = "0.15", default-features = false, features = ["std", "taffy_tree", "flexbox", "grid", "block_layout"] } # MIT; native layout only
 
 [lints]
