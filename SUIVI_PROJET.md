@@ -1,11 +1,12 @@
 # Où en est notre application ?
 
-**Bilan du 28 octobre 2026 — lanceur de clips et scènes partagés codés et validés localement.**
+**Bilan du 28 octobre 2026 — lanceur de clips et scènes partagés livrés et validés localement.**
 Dans **Multiplayer → Launcher**, les deux participants organisent la grille, copient leurs clips
 et préparent les scènes, tout en gardant leurs lancements et leur écoute personnels.
 **3 155 tests passent, aucun échec.** Le nouveau code utilise le protocole 11.
-**Nouveau paquet Mac : en cours de fabrication.** Le dernier paquet livré `b17d8df6` reste
-celui des chaînes sonores, en protocole 10, et ne contient pas cette nouvelle grille.
+**Le paquet Mac `fdf6eab9` est compilé et vérifié après extraction**, avec les trois exécutables
+et les sources exactes. Le code et ce suivi sont envoyés sur notre GitHub. Les contrôles
+distants restent bloqués par GitHub ; Windows/Linux ne sont pas validés pour cette version.
 
 ## Ce qu’on fabrique
 
@@ -140,18 +141,18 @@ Les projets sauvegardés gardent leur format natif version 3 ; ce changement con
 | Interface | **15 tests multijoueur réussis**, dont les vrais boutons de la grille, sélections annulées sur page fermée et lancements/arrêt locaux sans modifier le lecteur distant. |
 | Rendu visuel | **Réussi séparément** : capture GPU de la nouvelle page vérifiée. |
 | Qualité du code et documentation | **Réussi** : contrôle Rust strict, format, sources, documentation et six tests Python de distribution ; aucune nouvelle dépendance. |
-| Nouveau paquet Mac Apple Silicon | **En cours de fabrication** ; le paquet précédent reste disponible ci-dessous. |
-| Contrôles GitHub Mac/Windows/Linux | **À retenter sur le nouveau commit** ; les contrôles de la version précédente étaient bloqués par GitHub. |
+| Paquet Mac Apple Silicon `fdf6eab9` | **Compilé et vérifié après extraction** : signature locale, trois exécutables, version de l’outil, sources exactes et sommes de contrôle. |
+| Contrôles GitHub Mac/Windows/Linux | **Non lancés : GitHub refuse le déclenchement. Aucun résultat distant annoncé pour cette révision.** |
 | Deux ordinateurs physiques | **Pas encore testé**, comme convenu. |
 
 ## Où trouver la version actuelle
 
-- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-chains-macos-arm64-b17d8df6.zip`.
+- **Paquet local :** dossier `builds` voisin du dépôt, `suhina-multiplayer-launcher-macos-arm64-fdf6eab9.zip`.
 - **Dans le paquet :** `Suhina.app`, les trois exécutables nécessaires, ce suivi, les crédits et les sources exactes du commit livré.
 - **Somme de contrôle :** fichier `.zip.sha256` à côté du ZIP ; les fichiers extraits sont vérifiés dans `SHA256SUMS.txt`.
 - **Preuves locales :** dossier `validation/2026-10-28` voisin du dépôt : journaux, captures et script de fabrication du paquet.
 
-Les tests et le paquet correspondent au code **`b17d8df65173f56217e0497ab5936e9c37d40927`**,
+Les tests et le paquet correspondent au code **`fdf6eab9db63a37115ef840db87b27d57b5c5e7c`**,
 compilé après son enregistrement puis envoyé sur notre branche GitHub. C’est un paquet de
 développement Mac Apple Silicon, signé localement. L’application installée ou ouverte n’a pas
 été remplacée. Les deux participants doivent utiliser ce même nouveau paquet.
@@ -164,8 +165,8 @@ Le README et ses barres présentent notre application : **15 étapes réalisées
 pour créer ensemble**, avec les preuves dans `fork-progress.json`. Ce n’est pas un pourcentage
 du logiciel final ; le nouveau palier correspond à la grille et aux scènes partagées.
 
-**Blocage externe à nouveau constaté le 28 octobre à 2 h 21**, sur le code
-`b17d8df65173f56217e0497ab5936e9c37d40927` :
+**Blocage externe à nouveau constaté le 28 octobre à 9 h 48 (heure de Paris)**, sur le code
+`fdf6eab9db63a37115ef840db87b27d57b5c5e7c` :
 GitHub refuse le lancement des contrôles avec `HTTP 422: Actions has been disabled for this repository.`
 La lecture du réglage indique pourtant `enabled: true` ; la cause de ce désaccord n’est pas établie.
 Le workflow de notre fork est également indiqué actif. Aucune exécution n’était visible pour
