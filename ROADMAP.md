@@ -172,7 +172,7 @@ refused or suspended, never by losing its edits.
   control-group coordinates simplify panels without changing their saved format or runtime.
 
 - Every built-in effect, instrument and MIDI effect has editable controls in the device panel:
-  its layout (the Sampler's; the Compressor's `panel.json`, a grid of knobs; the Overdrive's, a band to drag and dials), or a parameter list generated from the device's own parameters,
+  its layout (in Rust, or as `devices/<name>/panel.json`: dials, buttons and band graphs in the compact panel, an expanded panel where a device has many parameters, and a generated list below the compact panel for parameters the compact layout does not place), or a parameter list generated from the device's own parameters,
   260 px wide and at most 168 px high, scrolling past that. Each change is `device.setParam`, so it
   is one undo step and an automation lane takes it over. Built-ins are native code with a layout
   loaded by their id, not `.sd` files ([ADR 0021](docs/decisions/0021-device-graph-files.md) ›
