@@ -44,7 +44,7 @@ CHAPTERS = [
      "Release and nightly packages for Windows, macOS and Linux; Windows packages include installed ASIO driver support; Help > About names the build "
      "(version, nightly date and commit, platform). Settings pages, grouped by task in headed sections, scrolling and searchable: General, Export (MCP write folders), Arrangement, Session and mixer, Clip editor, Transport, Detail area, Browser, Appearance (zoom, theme, graphics), MIDI, Audio (driver/device/rate/buffer/exclusive/cue; "
      "a change or a device back after unplugging keeps playback and launched clips going; "
-     "input device, MIDI inputs on/off), "
+     "active ASIO driver's native control panel and separate engine/callback buffer readouts; input device, MIDI inputs on/off), "
      "Shortcuts, Plug-ins; the detail area beside the browser or across the full width. Missing Link, Tempo & MIDI, File & Folder, Library, Record/Warp/Launch, "
      "Learn view, Info view."),
     (3, "Live Concepts", 27, 0.50, "partial",

@@ -373,6 +373,8 @@ pub struct Outcome {
     pub audio_output: Option<suhina_session::OutputChoice>,
     /// The audio devices should be listed again.
     pub audio_refresh: bool,
+    /// Ask the active output's owner to open its native ASIO panel.
+    pub audio_control_panel: bool,
     /// A MIDI input port was turned on or off: the app runs `midi.setInput`.
     pub midi_input: Option<(String, bool)>,
     /// A field's Browse… was clicked: the app shows the system's dialog for it.
@@ -2005,6 +2007,33 @@ pub(crate) fn audio_cue(cx: &mut Cx<'_>, y: &mut f32) {
 /// Audio › Now: what plays now with its latency and underruns, and List devices again.
 pub(crate) fn audio_now(cx: &mut Cx<'_>, y: &mut f32) {
     cx.outcome.audio_refresh |= now_rows(cx.ui, cx.painter, cx.page, y, cx.settings, cx.about);
+    if cx.about.audio_live.as_ref().is_some_and(|info| info.host == "ASIO") {
+        let r = setting_row(cx.page, y);
+        label(
+            cx.painter,
+            r,
+            "Driver settings",
+            "The active driver's own panel; its buffers are separate from Engine block",
+        );
+        let rect = Rect::from_min_size(Pos2::new(r.right() - 150.0, r.top() + 1.0), Vec2::new(150.0, SEGMENT));
+        let response = widgets::button_area(
+            cx.ui,
+            rect,
+            Id::new("asio-control-panel"),
+            "Open the active ASIO driver's control panel",
+        );
+        let hover = widgets::hover(cx.ui, &response);
+        cx.painter.fill_background(rect, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+        widgets::text_in(
+            cx.painter,
+            rect,
+            Align2::CENTER_CENTER,
+            "ASIO Control Panel…",
+            theme::ui_font(theme::TEXT_SMALL),
+            theme::text_primary(),
+        );
+        cx.outcome.audio_control_panel |= response.clicked();
+    }
 }
 
 /// Selecting a driver only changes the form. The device commits the pair through
@@ -2301,6 +2330,17 @@ fn now_rows(ui: &Ui, painter: &egui::Painter, page: Rect, y: &mut f32, settings:
     );
     let r = row(y);
     label(painter, r, "Latency", &format!("Engine to speaker, measured: {latency}"));
+    let r = row(y);
+    let buffers = about.audio_live.as_ref().map_or_else(
+        || "No active output".to_string(),
+        |info| {
+            format!(
+                "Engine: {} frames; driver callback: {} frames. Internal driver buffers may differ",
+                info.engine_block, info.buffer_frames
+            )
+        },
+    );
+    label(painter, r, "Active buffers", &buffers);
     // A key on a MIDI controller (ADR 0017): the engine keeps less ahead while a track is armed.
     let r = row(y);
     let key = match &about.audio_live {

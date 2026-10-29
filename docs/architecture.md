@@ -144,8 +144,12 @@ driver reload ([host contract](spec/asio-host.md)). The application's safe audio
 boundary and render path remain in `output`.
 
 ASIO device descriptors are cached before the first stream opens and reused while
-it plays; settings never enumerate other ASIO drivers over a loaded driver. A
-superseded plug-in start is released on a worker thread, since unloading its host
+it plays; settings never enumerate other ASIO drivers over a loaded driver.
+The active output's native control-panel request travels from the
+session through the owner's command queue to the retained ASIO stream; it does
+not load a separate driver or launch an external settings application. The native
+dialog runs on the owner thread, independently of render and device callbacks.
+A superseded plug-in start is released on a worker thread, since unloading its host
 may wait for a sibling loading after a sample-rate change.
 
 ### Inside the `ui` crate

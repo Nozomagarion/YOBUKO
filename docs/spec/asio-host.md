@@ -39,6 +39,21 @@ output: audio.info must report host ASIO, the selected device, and fallback fals
 Successful playback on a WASAPI fallback does not establish ASIO support. Tests
 of project-specific failures use that project, its plug-ins and the same driver.
 
+## Native control panel and buffer readouts
+
+`audio.openControlPanel` requests the active ASIO stream's native panel through
+the stream-owner queue. `ASIOControlPanel` runs on that owner thread, never in an
+audio callback or by loading a second driver. Repeated requests are refused while
+the panel is pending/open. Non-ASIO outputs and absent outputs return an error.
+The dialog can remain modal on the owner until the user closes it; close the panel
+before changing outputs or closing the project. Opening it does not reload plugins.
+
+Audio > Now offers **ASIO Control Panel…** for the active ASIO output and reports
+**Active buffers** as separate engine-block and observed callback frame counts.
+The latter is not a claim about every internal hardware/WDM buffer. The driver
+owns its internal settings. External offline panels may edit defaults rather than
+the running application's settings; the native call addresses the current instance.
+
 ## Device catalog during playback
 
 CPAL 0.18.2's ASIO device descriptors cache metadata without retaining a driver.

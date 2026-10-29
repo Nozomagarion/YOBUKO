@@ -66,7 +66,7 @@ fn main() {
     // If they don't create them
     let mut binding_path = out_dir.clone();
     binding_path.push("asio_bindings.rs");
-    if !binding_path.exists() {
+    if !std::fs::read_to_string(&binding_path).is_ok_and(|s| s.contains("fn ASIOControlPanel")) {
         if is_msvc {
             invoke_vcvars_if_not_set();
         }
@@ -211,6 +211,7 @@ fn create_bindings(cpal_asio_dir: &PathBuf) {
         .allowlist_type("AsioTimeInfoFlags")
         .allowlist_type("ASIOTimeCodeFlags")
         .allowlist_function("ASIOGetChannels")
+        .allowlist_function("ASIOControlPanel")
         .allowlist_function("ASIOGetChannelInfo")
         .allowlist_function("ASIOGetBufferSize")
         .allowlist_function("ASIOGetLatencies")

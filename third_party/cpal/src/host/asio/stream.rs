@@ -90,6 +90,12 @@ crate::assert_stream_send!(Stream);
 crate::assert_stream_sync!(Stream);
 
 impl Stream {
+    /// Opens the active driver's settings without loading another driver instance.
+    /// Call from the stream owner, never from an audio callback.
+    pub fn control_panel(&self) -> Result<(), Error> {
+        self.driver.control_panel().map_err(|e| Error::with_message(ErrorKind::BackendError, e.to_string()))
+    }
+
     pub fn now(&self) -> StreamInstant {
         // `ASIOTimeInfo::systemTime` is specified by the ASIO SDK as nanoseconds
         // derived from `timeGetTime()`, so calling it here gives a value on the

@@ -15,3 +15,7 @@ Silent hardware probe with the installed driver: one callback in three seconds
 before the fix, 63 after it. See docs/spec/asio-host.md in the parent repository.
 
 No driver-name checks or changes to the buffer addresses. Other backends are unchanged.
+
+The ASIO Stream also exposes `control_panel()` on its retained driver so the
+application's stream owner can open the active instance's settings without loading
+another driver or launching an external executable.

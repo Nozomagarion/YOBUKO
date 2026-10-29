@@ -268,6 +268,11 @@ impl App {
         if outcome.audio_refresh {
             self.list_audio_devices();
         }
+        if outcome.audio_control_panel
+            && let Err(error) = self.projects.execute("audio.openControlPanel", &json!({}))
+        {
+            self.status = Status::Error(error.message().to_string());
+        }
         if let Some(field) = outcome.pick {
             self.ask_pick(field);
         }

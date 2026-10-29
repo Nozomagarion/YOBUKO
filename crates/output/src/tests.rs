@@ -7,6 +7,37 @@ use super::*;
 const RINGED: [f32; 8] = [0.5, -0.5, 0.25, -0.25, 1.0, 0.0, 0.1, 0.2];
 
 #[test]
+fn control_panel_targets_the_current_owner_once_and_rejects_other_hosts() {
+    let (owner, requests) = mpsc::channel();
+    let mut live = Live {
+        owner,
+        panel_pending: Arc::new(AtomicBool::new(false)),
+        progress: Arc::new(Progress::default()),
+        host: "ASIO".into(),
+        device: "Any installed driver".into(),
+        sample_rate: 48_000,
+        block: 2048,
+        exclusive: true,
+        fallback: false,
+        channels: 2,
+        cue_pair: None,
+        input: None,
+    };
+    assert!(live.open_control_panel().is_ok());
+    assert!(matches!(requests.try_recv(), Ok(OwnerRequest::ControlPanel)));
+    assert!(live.open_control_panel().is_err());
+    assert!(requests.try_recv().is_err());
+    live.panel_pending.store(false, Ordering::Release);
+    live.host = "WASAPI".into();
+    assert!(live.open_control_panel().is_err());
+    assert!(requests.try_recv().is_err());
+    live.host = "ASIO".into();
+    drop(requests);
+    assert!(live.open_control_panel().is_err());
+    assert!(!live.panel_pending.load(Ordering::Acquire));
+}
+
+#[test]
 fn a_missing_callback_or_failed_device_does_not_wait_forever_for_the_close_fade() {
     let control = transition::Control::default();
     let start = std::time::Instant::now();

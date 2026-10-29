@@ -203,3 +203,8 @@ pub unsafe extern "C" fn set_sample_rate(_rate: c_double) -> ASIOError {
 pub unsafe extern "C" fn can_sample_rate(_rate: c_double) -> ASIOError {
     0
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn ASIOControlPanel() -> ASIOError {
+    0
+}

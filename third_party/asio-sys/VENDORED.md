@@ -7,6 +7,10 @@ upstream commit. Registry bookkeeping and the crate's separate lockfile are omit
 
 Local changes:
 
+- Expose ASIOControlPanel through the retained Driver. Bindgen refreshes an older
+  cached binding file if this entry point is absent. The call holds no callback
+  lock and belongs to the driver's non-audio owner thread.
+
 - Both ASIOInit call sites use a fully initialized ASIODriverInfo: host ASIO
   version 2, zeroed driver outputs, and the desktop HWND on Windows.
 - A windows-sys dependency supplies GetDesktopWindow. The returned HWND is

@@ -289,6 +289,16 @@ enum DeviceStream {
 }
 
 impl DeviceStream {
+    fn control_panel(&self) -> Result<(), String> {
+        #[cfg(all(windows, feature = "asio"))]
+        if let Self::Cpal(stream) = self
+            && let cpal::platform::StreamInner::Asio(stream) = stream.as_inner()
+        {
+            return stream.control_panel().map_err(|e| e.to_string());
+        }
+        Err("this output has no native ASIO control panel".into())
+    }
+
     fn play(&self) -> Result<(), String> {
         match self {
             Self::Cpal(stream) => stream.play().map_err(|e| e.to_string()),
@@ -826,9 +836,14 @@ fn open_fitting(choice: &OutputChoice) -> Result<(Output, DeviceStream, rtrb::Pr
 /// What keeps a player's output open: closing it ends the stream on the owner's thread, which
 /// hands back the renderer's plug-ins.
 struct Owner {
-    close: mpsc::Sender<()>,
+    close: mpsc::Sender<OwnerRequest>,
     back: mpsc::Receiver<(u32, Option<Plugins>)>,
     thread: Option<std::thread::JoinHandle<()>>,
+}
+
+enum OwnerRequest {
+    Close,
+    ControlPanel,
 }
 
 impl suhina_session::OutputHandle for Owner {
@@ -841,7 +856,7 @@ impl Owner {
     /// Closes the stream and returns its sample rate and plug-ins, when they come back in
     /// time.
     fn close(mut self) -> Option<(u32, Plugins)> {
-        let _closed = self.close.send(());
+        let _closed = self.close.send(OwnerRequest::Close);
         let back = self.back.recv_timeout(CLOSE_TIMEOUT).ok();
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -852,6 +867,8 @@ impl Owner {
 
 /// What a playing output runs with, for `audio.info`.
 struct Live {
+    owner: mpsc::Sender<OwnerRequest>,
+    panel_pending: Arc<AtomicBool>,
     progress: Arc<Progress>,
     host: String,
     device: String,
@@ -867,6 +884,20 @@ struct Live {
 }
 
 impl LiveOutput for Live {
+    fn open_control_panel(&self) -> Result<(), String> {
+        if self.host != "ASIO" {
+            return Err("only the active ASIO output has a native control panel".into());
+        }
+        if self.panel_pending.swap(true, Ordering::AcqRel) {
+            return Err("the ASIO control panel is already open or requested".into());
+        }
+        if self.owner.send(OwnerRequest::ControlPanel).is_err() {
+            self.panel_pending.store(false, Ordering::Release);
+            return Err("the audio owner has stopped".into());
+        }
+        Ok(())
+    }
+
     fn info(&self) -> OutputInfo {
         OutputInfo {
             host: self.host.clone(),
@@ -921,7 +952,8 @@ pub fn open_chosen(
     let (project, audio, assets, choice) =
         (project.clone(), audio.clone(), std::sync::Arc::new(assets.clone()), choice.clone());
     let (ready, opened) = mpsc::channel();
-    let (close, closed) = mpsc::channel::<()>();
+    let (close, closed) = mpsc::channel::<OwnerRequest>();
+    let owner_requests = close.clone();
     let (back_tx, back) = mpsc::channel();
     let thread = std::thread::Builder::new()
         .name("suhina-audio".into())
@@ -966,7 +998,10 @@ pub fn open_chosen(
             })();
             match started {
                 Ok((output, controller, progress, stream, kept, input)) => {
+                    let panel_pending = Arc::new(AtomicBool::new(false));
                     let live = Live {
+                        owner: owner_requests,
+                        panel_pending: Arc::clone(&panel_pending),
                         progress,
                         host: output.host.clone(),
                         device: output.device_name.clone(),
@@ -981,7 +1016,19 @@ pub fn open_chosen(
                     let notice = (!output.notices.is_empty()).then(|| output.notices.join("; "));
                     if ready.send(Ok((controller, live, notice, kept))).is_ok() {
                         // Returns once the player, which holds `close`, closes or is dropped.
-                        let _closed = closed.recv();
+                        while let Ok(request) = closed.recv() {
+                            match request {
+                                OwnerRequest::Close => break,
+                                OwnerRequest::ControlPanel => {
+                                    if let Some(device) = &stream.device
+                                        && let Err(error) = device.control_panel()
+                                    {
+                                        eprintln!("ASIO control panel: {error}");
+                                    }
+                                    panel_pending.store(false, Ordering::Release);
+                                }
+                            }
+                        }
                     }
                     let plugins = stream.close().map(Renderer::into_plugins);
                     drop(input);

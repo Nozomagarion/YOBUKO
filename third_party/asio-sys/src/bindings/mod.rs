@@ -507,6 +507,14 @@ impl BufferCallback {
 }
 
 impl Driver {
+    /// Opens this loaded driver's native settings on its owning (non-audio) thread.
+    /// The driver may run a modal dialog until the user dismisses it.
+    pub fn control_panel(&self) -> Result<(), AsioError> {
+        // SAFETY: this Driver retains the initialized instance throughout the call.
+        // No buffer or callback lock is held: the dialog may invoke ASIO callbacks.
+        unsafe { asio_result!(ai::ASIOControlPanel()) }
+    }
+
     /// The name used to uniquely identify this driver.
     pub fn name(&self) -> &str {
         &self.inner.name
