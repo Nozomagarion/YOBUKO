@@ -6,6 +6,7 @@ status: current
 last_verified: 2026-10-28
 covers:
   - third_party/asio-sys/
+  - third_party/cpal/
   - Cargo.toml
   - crates/output/
 ---
@@ -63,6 +64,20 @@ before hardware streaming starts; its example gives the first two callbacks the 
 Suhina therefore primes enough silence for two known device periods before starting the
 stream. This is a startup reserve only; the ordinary render queue target stays unchanged.
 
+## Repeated buffer indices
+
+A buffer index identifies the memory to process, not a unique processing cycle.
+Some installed drivers use buffer 0 for every cycle. CPAL 0.18.2's index-only
+repeat guard drops all but the first callback from these drivers. A silent
+three-second reproduction with FL Studio ASIO delivered one callback before
+including the driver timestamp in the comparison, and 63 afterwards.
+
+Compare both index and timestamp to suppress duplicate notifications from the
+same cycle while allowing a new timestamp for the same buffer. Apply the same
+rule to input and output, without driver-name checks. This does not change which
+ASIO buffer is read or written. Drivers with missing or repeated timestamps need
+separate validation; the test does not establish their compatibility.
+
 ## Sources
 
 - The vendored SDK, `third_party/asiosdk/common/asio.cpp`, ASIOInit.
@@ -73,3 +88,4 @@ stream. This is a startup reserve only; the ordinary render queue target stays u
 - [CPAL 0.18.2 ASIO device enumeration](https://github.com/RustAudio/cpal/blob/v0.18.2/src/host/asio/device.rs).
 
 - [Steinberg ASIO SDK 2.3 specification, section 5](https://dspace.tul.cz/bitstream/handle/15240/49466/ASIO_SDK_2.3.pdf?sequence=1).
+- [CPAL single-buffer compatibility report](https://github.com/RustAudio/cpal/pull/1077).

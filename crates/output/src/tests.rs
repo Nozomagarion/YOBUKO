@@ -324,3 +324,34 @@ fn the_first_device_callback_has_audio_before_the_render_thread_runs() {
         assert_eq!(consumer.slots() / RING_CHANNELS, ring_target(block, device, live).max(2 * device) - 2 * device);
     }
 }
+#[cfg(all(windows, feature = "asio"))]
+#[test]
+#[ignore = "requires SUHINA_ASIO_TEST_DRIVER naming an installed connected driver; emits silence"]
+fn installed_asio_driver_delivers_more_than_one_callback() {
+    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+    let name = std::env::var("SUHINA_ASIO_TEST_DRIVER").expect("test driver required");
+    let host = cpal::host_from_id(cpal::HostId::Asio).expect("ASIO host");
+    let device = host.output_devices().expect("devices").find(|d| d.to_string() == name).expect("test device");
+    let supported = device.default_output_config().expect("output config");
+    let mut config = supported.config();
+    config.channels = config.channels.min(2);
+    let count = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let seen = std::sync::Arc::clone(&count);
+    // CPAL zero-fills the output before invoking this callback. No generated audio.
+    let stream = device
+        .build_output_stream_raw(
+            config,
+            supported.sample_format(),
+            move |_, _| {
+                seen.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            },
+            |_| {},
+            None,
+        )
+        .expect("open stream");
+    stream.play().expect("start stream");
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    let callbacks = count.load(std::sync::atomic::Ordering::Relaxed);
+    drop(stream);
+    assert!(callbacks > 5, "stream stalled after {callbacks} callbacks");
+}
