@@ -1,20 +1,39 @@
 # Où en est notre application ?
 
-## Palier du 29 octobre : grille rythmique DJ réalisée et testée
+## Dernier palier livré : grille rythmique DJ — 29 octobre 2026
 
-Le palier suivant ajoute une grille à tempo constant, quatre battements par mesure, réglable dans
-**Prepare**. Le BPM analysé reste séparé de ta correction. On peut prévisualiser le brouillon,
-placer le premier battement au départ choisi, puis enregistrer ou supprimer la grille.
+Dans **DJ → Prepare**, on peut régler une grille à tempo constant et quatre battements par mesure,
+choisir le premier battement depuis la position sélectionnée et diviser/doubler le tempo.
+Le BPM analysé reste séparé de la correction. Le brouillon orange se prévisualise avant enregistrement ;
+la grille enregistrée est bleue et se retrouve au redémarrage. Sa suppression est confirmée.
 
-Le catalogue passe au format 4 ; les formats 1/2/3 restent lisibles, avec sauvegarde exacte avant
-la première modification. Les fichiers audio, cues et playlists doivent rester intacts.
+Le catalogue passe au **format 4**, avec lecture des formats 1/2/3 et sauvegarde exacte avant
+la première modification. Cues, playlists, identifiants, projets et fichiers audio sont conservés.
+Une réanalyse garde la grille ; raccourcir un fichier au-delà de son ancrage est refusé.
+Les anciennes applications ne lisent pas le catalogue v4 ; garder ses sauvegardes pour revenir en arrière.
+
 **3 262 tests Rust réussis, aucun échec, 66 ignorés ; 272 tests Python réussis.**
 Le contrôle Rust strict et les contrôles documentaires passent. Cinq tests de captures GPU passent ;
 la grille enregistrée, son brouillon et les vues de préparation ont été examinés.
-Le paquet livré reste `612aab62` tant que le nouveau paquet n’est pas vérifié. Les platines, le tempo variable et l’export matériel restent à construire.
+Le README compte **8 jalons DJ réalisés sur 10**, sans prétendre mesurer le logiciel final.
 
+Le paquet Mac Apple Silicon **`7842c68e` est compilé et vérifié après extraction** : signature locale,
+CRC, manifeste, identité source et **19 commandes DJ**. Ses marqueurs annoncent lecture des catalogues
+1–4 et écriture v4 ; le contrôle des mises à jour refuse les paquets qui ne les préservent pas.
+Les sources exactes sont incluses. L’application installée ou ouverte n’a pas été remplacée.
 
-## Palier du 29 octobre livré : forme d’onde DJ
+Application : `../builds/suhina-multiplayer-grid-macos-arm64-7842c68e/Suhina.app`.
+ZIP : `../builds/suhina-multiplayer-grid-macos-arm64-7842c68e.zip`.
+Preuves : `../validation/2026-10-29/grid-validation.json`.
+
+La requête GitHub du 29 octobre à 16 h 10 pour ce code ne trouve aucun run. Le dernier lancement
+explicite, à 11 h 57 pour `612aab62`, a été refusé avec HTTP 422 « Actions has been disabled for
+this repository » ; il n’est pas relancé à répétition. Cela ne valide pas Windows/Linux.
+Les essais sur deux ordinateurs et au casque physique restent différés. Le canal de mises à jour
+commun n’est pas publié. Le prochain chantier est la préparation des **platines A/B** ; tempo
+variable, quantification de lecture et export matériel restent à construire.
+
+## Historique : palier forme d’onde du 29 octobre
 
 Le panneau **Prepare** charge maintenant une forme d’onde du morceau en arrière-plan,
 avec les repères cue et les positions de départ et de lecture. Un clic choisit le départ ;
@@ -34,11 +53,11 @@ Application locale : `../builds/suhina-multiplayer-waveform-macos-arm64-612aab62
 ZIP : `../builds/suhina-multiplayer-waveform-macos-arm64-612aab62.zip`.
 Preuves locales : `../validation/2026-10-29/waveform-validation.json`.
 
-Le catalogue DJ reste en format 3, les projets en v4, le protocole LAN en 13 et la copie partagée
+À ce palier, le catalogue DJ restait en format 3, les projets en v4, le protocole LAN en 13 et la copie partagée
 v3. Aucun format ni paquet de mise à jour commun n’est publié par ce palier. Le contrôle distant du 29 octobre pour `612aab62` ne trouve aucun run ; le lancement explicite
 sur le fork est refusé avec **HTTP 422 : Actions has been disabled for this repository**.
 La cause n’est pas établie : ce palier ne valide donc pas Windows/Linux. Les essais sur deux ordinateurs et au casque physique restent différés.
-La grille rythmique, les platines et les exports matériels restent les étapes suivantes.
+La grille rythmique venait ensuite ; elle est maintenant livrée dans le bilan en tête de ce fichier.
 
 **Bilan du 28 octobre 2026 : préécoute DJ et points cue nommés réalisés et testés.**
 Dans **DJ → Prepare**, on peut écouter un morceau depuis une position choisie, arrêter l’écoute,
@@ -241,7 +260,7 @@ le premier changement garde une sauvegarde exacte. Les listes, leur ordre et leu
 restent conservés. Les écritures périmées ou invalides sont refusées. Une réanalyse garde les
 repères et refuse de raccourcir le morceau au-delà d’un repère existant.
 
-Le README compte **6 étapes DJ réalisées sur 9 critères listés** ; ces comptes ne mesurent pas
+À ce palier, le README comptait **6 étapes DJ réalisées sur 9 critères listés** ; ces comptes ne mesurent pas
 un pourcentage du logiciel final.
 
 Limites : 16 points par morceau, 8 000 au total, positions en secondes. Préécoute à −6 dB,
@@ -333,14 +352,16 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 
 ## Prochaine étape
 
-**Afficher la forme d’onde et préparer la grille rythmique. Statut : à commencer.**
-La préécoute et les repères nommés sont réalisés et testés. Le prochain critère est de visualiser
-le morceau sur une échelle de temps, s’y déplacer et préparer des repères de pulsation éditables,
-sans modifier le fichier audio. Les platines et l’export matériel viennent ensuite.
-Les playlists et les points cue restent locaux pour le moment.
+**Préparer l’espace de performance avec deux platines A/B. Statut : à commencer.**
+La bibliothèque, les playlists, la préécoute, les cues, la forme d’onde et la grille à tempo constant
+sont réalisés. Le prochain critère est de définir puis construire deux lectures DJ contrôlables
+avec le moteur existant, sans modifier les projets Studio. La préécoute actuelle n’est pas encore
+un système de deux platines. Les grilles variables, la quantification et l’export matériel viennent ensuite.
+Les métadonnées DJ restent locales ; elles ne sont pas partagées par LAN.
 
 Le multijoueur reste un prototype LAN : Internet, reconnexion automatique, noms/rôles et reprise
-de l’hôte restent prévus. La version et les mises à jour communes restent à publier. Les grilles rythmiques, platines et export vers le matériel DJ restent à développer. L’essai des ordinateurs de la maison reste différé, comme demandé.
+de l’hôte restent prévus. La version et les mises à jour communes restent à publier. L’essai des
+ordinateurs de la maison reste différé, comme demandé.
 
 Ce fichier est le point de référence à chaque palier ou blocage. Les anciens fichiers
 `AUDIT_…` restent historiques. Les résultats externes sont des relevés datés ; ce document
