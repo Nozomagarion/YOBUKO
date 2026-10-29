@@ -25,6 +25,10 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
+          if [ "$GITHUB_REF_TYPE" != tag ]; then
+            echo 'Dispatch an immutable multiplayer version tag, not a branch' >&2
+            exit 1
+          fi
           version="${TAG#multiplayer-v}"
           if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{14}\+[0-9a-f]{7}$ ]]; then
             echo 'Use multiplayer-vMAJOR.MINOR.PATCH-nightly.YYYYMMDDHHMMSS+COMMIT7' >&2
