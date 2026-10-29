@@ -324,6 +324,9 @@ pub struct ClipInfo {
     /// The Clip / Devices switch at the end of the title row, and which part is on: only for a
     /// clip with an editor (› Where it opens in `docs/spec/ui-clip-editor.md`).
     pub switch: Option<Showing>,
+    /// The other arrangement clips selected with it, by id: the title says how many are
+    /// selected, and a switch (Loop) turns all of them as it turns this one.
+    pub others: Vec<u32>,
 }
 
 /// What the detail area shows for a clip that has an editor: the editor, or its track's devices.
@@ -591,6 +594,7 @@ pub fn build_with(
                 notes,
                 selection: SelectionInfo::default(),
                 switch: None,
+                others: Vec::new(),
             }),
             chain(project, id, plugins, nam.clone()),
         );

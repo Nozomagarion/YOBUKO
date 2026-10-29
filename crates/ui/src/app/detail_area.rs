@@ -472,6 +472,21 @@ impl App {
         }
         if let detail_view::Detail::Clip(info, _) = &mut shown {
             info.switch = switch;
+            // Several arrangement clips picked: the column says how many, and its switches turn
+            // them all.
+            if self.shown == View::Arrangement && self.arrangement.selected_clips().len() > 1 {
+                let this = match info.at {
+                    Some(detail_view::ClipRef::Arrangement(_, clip)) => Some(clip),
+                    _ => None,
+                };
+                info.others = self
+                    .arrangement
+                    .selected_clips()
+                    .iter()
+                    .filter(|(_, id)| Some(*id) != this)
+                    .map(|(_, id)| id.0)
+                    .collect();
+            }
         }
         // A selected slot clip's follow action comes first, the rest of the detail beside or
         // under it.

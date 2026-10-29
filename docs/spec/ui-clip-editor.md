@@ -696,6 +696,10 @@ one undo step, so Ctrl+Z (Cmd+Z on macOS) takes back exactly what it did.
   column is the same column in every layout: Track, Start, Length, Loop and (for a MIDI clip)
   Notes, or the audio clip's Gain and fades. With the detail area stacked (a column at the right of
   the window) it is a block at the top and the piano roll sits under it, as before.
+- **Several clips picked** in the Arrangement: the column's title says how many ("2 selected")
+  and its rows are the last picked clip's; its Loop switch turns every picked clip's loop on or
+  off with it. The piano roll still shows the last picked clip only (editing several clips' notes
+  together is not built yet).
 - **Built ([#699](https://github.com/suhina-daw/suhina-daw/issues/699)):** the column edits the
   clip, each change one undo step:
   - **Loop** is a switch (`clip.setLoop`). An audio clip that loops has **Loop start** and **Loop

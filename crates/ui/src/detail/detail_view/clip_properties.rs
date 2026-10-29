@@ -166,7 +166,7 @@ pub(super) fn clip_properties(
         painter,
         name.shrink2(Vec2::new(PAD, 0.0)),
         Align2::LEFT_CENTER,
-        &info.name,
+        &if info.others.is_empty() { info.name.clone() } else { format!("{} selected", info.others.len() + 1) },
         theme::ui_font(theme::TEXT),
         theme::text_primary(),
     );
@@ -254,6 +254,12 @@ pub(super) fn clip_edit_row(
         let response = widgets::button_area(ui, value_rect, id, format!("{label}: {value}"));
         draw_value(&response, value);
         if response.clicked() {
+            // The other selected clips' loops follow this one's.
+            if edit == ClipEdit::Loop {
+                for other in &info.others {
+                    actions.push(Action::new("clip.setLoop", json!({ "clip": other, "loop": !info.looping })));
+                }
+            }
             actions.push(match edit {
                 ClipEdit::Loop => Action::new("clip.setLoop", on_clip(at, json!({ "loop": !info.looping }))),
                 ClipEdit::Warp => Action::new("clip.setAudio", on_clip(at, json!({ "warp": !info.warped }))),
