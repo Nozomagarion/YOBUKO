@@ -3,7 +3,7 @@ description: Automation envelopes - lanes of points over the arrangement for a t
 read_when: automation, envelope, curve family, Bezier, volume fader, fader law, volume taper, volume smoothing, Taper, VolumeTaper, Curve, CurveDrag, curve split, curve drag, automation lane, automation lanes view, show automation, automation.movePoints, automation.deletePoints, select points, breakpoint, automation point, curve, automation.addPoint, automation.movePoint, automation.deletePoint, automation.clear, automation.setEnabled, automation.list, device.setAutomation, automation off, re-enable automation, volume automation, pan automation, mute automation, device parameter automation, AutomationLane, AutomationPoint, MixLanes, DeviceLanes, Envelope
 type: spec
 status: current
-last_verified: 2026-10-25
+last_verified: 2026-10-29
 covers:
   - crates/model/src/automation.rs
   - crates/engine/src/automation.rs
@@ -161,6 +161,13 @@ Setting a parameter that follows an enabled lane by hand (`track.setVolume`, `tr
 transport runs, and the answer says `"automation": "off"`. The value set by hand holds until
 `automation.setEnabled {enabled: true}` turns the lane on again; the lane's points are kept. Undo
 brings the lane back on with the old value.
+
+## What the controls show
+
+A control whose parameter follows an enabled lane (a track header's volume and pan, a mixer
+strip's, the returns' and Main's, a device's knob) shows the lane's value at the playhead,
+whether the transport runs, is paused or is stopped, and follows the playhead when it is moved
+while stopped (#706, #811). A lane turned off shows the value set by hand.
 
 ## How the engine plays them
 

@@ -48,7 +48,8 @@ the panel is pending/open. Non-ASIO outputs and absent outputs return an error.
 The dialog can remain modal on the owner until the user closes it; close the panel
 before changing outputs or closing the project. Opening it does not reload plugins.
 
-Audio > Now offers **ASIO Control Panel…** for the active ASIO output and reports
+Audio > Output offers **Control panel…** immediately below the active ASIO device.
+Audio status reports
 **Active buffers** as separate engine-block and observed callback frame counts.
 The latter is not a claim about every internal hardware/WDM buffer. The driver
 owns its internal settings. External offline panels may edit defaults rather than

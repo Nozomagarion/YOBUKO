@@ -45,8 +45,8 @@ usage: suhina [<project.suhina> | <project.als> | --demo] [--renderer wgpu|glow]
                      development, docs/debugging.md); SUHINA_TRACE=<file> does the same
 While this build of Suhina is running, starting it again opens the project in the running
 window as a tab instead. Agents reach the running window with suhina-cli mcp --attach once
-Options > Settings > General > Let agents work on open projects is on.
-Without a project the window opens what Options > Settings > General > At start says (the
+Options > Settings > Agents and updates > AI agents edit projects is on.
+Without a project the window opens what Options > Settings > Projects and backups > Startup project says (the
 New or open dialog unless changed); Ctrl+T makes a new one or opens one, and a .suhina
 or .als file dropped on it opens.
 Settings are kept in settings.txt, the keys in keymap.json and themes in themes/<name>/,
@@ -367,7 +367,7 @@ struct Window {
     themes: theme_io::ThemeIo,
     /// The folder `themes` reads, to start reading another when the setting changes.
     themes_folder: Option<PathBuf>,
-    /// Settings › General › Settings folder as last applied: empty for the default.
+    /// Settings › Projects and backups › Settings folder as last applied: empty for the default.
     data_folder: String,
     /// The theme files' last error in the status bar, cleared once they read without one.
     theme_error: Option<String>,
@@ -608,7 +608,7 @@ impl Window {
     }
 
     /// Starts the browser's library and the sample map, and opens the project asked for, or what
-    /// Settings › General › At start says without one.
+    /// Settings › Projects and backups › Startup project says without one.
     fn start(&mut self, start_up: StartUp) {
         let StartUp { source, output_choice, mut warnings } = start_up;
         // The browser's library: browser.json and the folder indexes beside the settings (ADR 0012).
@@ -627,7 +627,7 @@ impl Window {
             self.app.set_status(Status::Hint(warning.clone()));
         }
         match source {
-            // What Settings › General › At start says; the last project is the newest recent one.
+            // What Settings › Projects and backups › Startup project says; the last project is the newest recent one.
             Source::Nothing => self.app.open_at_start(self.recent.existing().into_iter().next()),
             Source::Demo => {
                 self.app.projects_mut().close_preview_output();
@@ -704,7 +704,7 @@ impl Window {
         }
     }
 
-    /// Settings › General › Settings folder changed (the person confirmed the move): a backup of
+    /// Settings › Projects and backups › Settings folder changed (the person confirmed the move): a backup of
     /// Suhina's data is made beside it, the data moves into the folder chosen (what is there
     /// already is kept) and is used from now on; empty moves it back to the default.
     fn move_data_folder(&mut self, chosen: &str) {
@@ -778,7 +778,7 @@ impl Window {
                 Err(error) => self.app.set_status(Status::Error(error)),
             }
         }
-        // Settings › Theme › Themes folder changed: the themes are read from the new one.
+        // Settings › Themes › Themes folder changed: the themes are read from the new one.
         let wanted = themes_env().or_else(|| Some(self.app.themes_folder()));
         // A folder that is not there (a path half typed) is not read; the default is made.
         let default = self.app.settings().themes_folder.trim().is_empty();
@@ -894,9 +894,9 @@ fn is_bundle_program(exe: &Path) -> bool {
 /// The data folder `--data-dir` chose for this run.
 static DATA_DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
 
-/// Suhina's data folder: `--data-dir`, `SUHINA_DATA`, the folder chosen in Settings › General ›
-/// Settings folder (named in the default folder, `data_folder`), or Suhina's folder of the user's
-/// app data. Worked out once, at the first call after the command line is read.
+/// Suhina's data folder: `--data-dir`, `SUHINA_DATA`, the folder chosen in Settings › Projects and
+/// backups › Settings folder (named in the default folder, `data_folder`), or Suhina's folder of the
+/// user's app data. Worked out once, at the first call after the command line is read.
 fn data_dir() -> Option<PathBuf> {
     if let Some(moved) = MOVED_DATA_DIR.lock().ok().and_then(|moved| moved.clone()) {
         return Some(moved);
@@ -907,7 +907,7 @@ fn data_dir() -> Option<PathBuf> {
         .clone()
 }
 
-/// The folder Suhina's data was moved to while it runs (Settings › General › Settings folder).
+/// The folder Suhina's data was moved to while it runs (Settings › Projects and backups › Settings folder).
 static MOVED_DATA_DIR: std::sync::Mutex<Option<PathBuf>> = std::sync::Mutex::new(None);
 
 /// The data folder `--data-dir` or `SUHINA_DATA` gives for this run, over the setting.

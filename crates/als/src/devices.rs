@@ -25,6 +25,7 @@ pub(crate) fn builtin(
         "Reverb" => Some(("reverb", "Reverb", reverb(node, warn))),
         "Delay" => Some(("delay", "Delay", delay(node, warn))),
         "Eq8" => Some(("eq", "EQ", eq(node, warn))),
+        "FilterEQ3" => Some(("dj-eq", "DJ EQ", eq3(node, warn))),
         "MidiPitcher" => Some(("pitch", "Pitch", pitch(node, warn))),
         _ => None,
     }
@@ -245,6 +246,40 @@ fn utility(node: Node, warn: &mut dyn FnMut(String)) -> Vec<DeviceParam> {
     set("dcFilter", manual_flag(node, "DcFilter").map(toggle));
     set("mute", manual_flag(node, "Mute").map(toggle));
     params
+}
+
+/// Live's EQ Three (`FilterEQ3`) as Suhina's `dj-eq` (`docs/spec/dj-eq.md` › Import).
+fn eq3(node: Node, warn: &mut dyn FnMut(String)) -> Vec<DeviceParam> {
+    let mut p = Params::default();
+    // The band gains are stored as linear gains; ours are decibels, held in the device's range
+    // (silence at the bottom, +6 dB at the top), whatever the project file says.
+    let gain = |name: &str| {
+        manual(node, name).map(|g| {
+            (if g > 0.0 { 20.0 * g.log10() } else { SILENCE_DB })
+                .clamp(suhina_device_dj_eq::GAIN_RANGE.0, suhina_device_dj_eq::GAIN_RANGE.1)
+        })
+    };
+    p.set("low", gain("GainLo"));
+    p.set("mid", gain("GainMid"));
+    p.set("high", gain("GainHi"));
+    // A stored band switch says the band is on; ours is its kill.
+    let kill = |name: &str| manual_flag(node, name).map(|on| toggle(!on));
+    p.set("lowKill", kill("LowOn"));
+    p.set("midKill", kill("MidOn"));
+    p.set("highKill", kill("HighOn"));
+    p.set("lowFrequency", manual(node, "FreqLo"));
+    p.set("highFrequency", manual(node, "FreqHi"));
+    // Stored 0 is 24 dB/octave and 1 is 48 dB, the same order as ours.
+    // Unlike the other step values, a slope between the two settings is not rounded into one.
+    let slope = match manual(node, "Slope") {
+        Some(stored) if stored.fract() != 0.0 => {
+            warn(format!("EQ Three slope {stored} is not understood; using the default"));
+            None
+        }
+        _ => step(node, "Slope", 2, "EQ Three slope", warn),
+    };
+    p.set("slope", slope);
+    p.0
 }
 
 /// Live's Pitch (`MidiPitcher`) as Suhina's `pitch`. Every value is stored in the unit ours

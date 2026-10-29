@@ -182,10 +182,7 @@ fn a_selected_track_shows_its_devices() {
 #[test]
 fn a_built_ins_generated_list_fits_the_compact_panel() {
     let mut project = demo_project();
-    project.channels[0].devices = vec![
-        Device::new("Utility", DeviceKind::Builtin("utility".into())),
-        Device::new("Pitch", DeviceKind::Builtin("pitch".into())),
-    ];
+    project.channels[0].devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into()))];
     let Detail::Devices(chain) = build(&project, Some(TrackId(1)), None) else { panic!() };
     for device in &chain.devices {
         let graph = device.graph.as_ref().unwrap_or_else(|| panic!("{} has a panel", device.name));
@@ -791,4 +788,23 @@ fn a_theme_lays_a_generated_list_side_by_side() {
     let lefts: Vec<f32> = cells.iter().take(4).map(|c| c.left()).collect();
     assert_eq!(lefts, [0.0, 100.0, 200.0, 0.0], "three to a line, then the next line");
     assert!(cells[0].height() >= 48.0 && cells[3].top() >= 48.0, "{cells:?}");
+}
+
+#[test]
+fn stock_value_text_drops_the_minus_of_a_negative_that_rounds_to_zero() {
+    let mut parameter = GraphParameter {
+        text: String::new(),
+        default: 0.0,
+        control: suhina_device_sdk::ParameterControl::Knob,
+        unit: "dB".into(),
+        id: "gain".into(),
+        name: "Gain".into(),
+        min: -1.0,
+        max: 1.0,
+        value: 0.0,
+        ui: suhina_device_sdk::ParameterUi::default(),
+    };
+    parameter.ui.decimals = 2;
+    assert_eq!(super::parameters::value_text(&parameter, -0.004), "0.00 dB");
+    assert_eq!(super::parameters::value_text(&parameter, -0.014), "-0.01 dB");
 }

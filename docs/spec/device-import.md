@@ -3,7 +3,7 @@ description: How a device stored in a Live Set is brought into Suhina: the three
 read_when: device import, importing devices, importing MIDI effects, device mapping, placeholder device, Operator, Live device to Suhina device, which device imports into what, golden renders of imported sets
 type: spec
 status: current
-last_verified: 2026-10-23
+last_verified: 2026-10-28
 covers:
   - crates/als/src/devices.rs
 ---
@@ -75,7 +75,7 @@ comes in as it (otherwise as a placeholder):
 | Utility, Auto Pan | utility, auto-pan | own | DSP done; import done for Utility, planned for Auto Pan |
 | Pitch (MIDI effect) | pitch ([spec](pitch.md)) | own | done; import done (the step widths wait for the step buttons) |
 | Arpeggiator, CC Control, Chord, Note Length, Random, Scale, Velocity (MIDI effects) | not yet | | placeholder: notes pass on to the instrument unchanged. How each is stored is written down ([`als-format.md`](als-format.md) › MIDI effects), so each import can be written as its device lands |
-| EQ Three | three-band DJ EQ with kills | own crossovers (Linkwitz-Riley) | DSP done; import planned |
+| EQ Three | dj-eq ([spec](dj-eq.md)) | own crossovers (Linkwitz-Riley) | DSP done; import done |
 | Vinyl Distortion | vinyl distortion | own, oversampled | DSP done; import planned |
 | Overdrive | overdrive | own, oversampled | DSP done; import planned |
 | Compressor | compressor: stereo-linked, soft knee, side-chain high-pass, dry/wet | own | DSP done; import planned |
