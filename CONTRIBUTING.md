@@ -101,9 +101,13 @@ cargo deny check
 **Dependabot** opens the updates: a security update as soon as a RustSec or GitHub advisory
 names a crate Suhina uses, and on Mondays the week's version updates
 ([`.github/dependabot.yml`](.github/dependabot.yml)): minor and patch updates of the Cargo
-workspace grouped in one pull request, a major update in a pull request of its own, and the GitHub
-Actions the workflows use. They go through CI and review like any other pull request; a major
-update that changes an API needs the code changed in the same pull request.
+workspace grouped in one pull request, the major updates (for a 0.x crate, 0.14 to 0.15) in a
+second one, and the GitHub Actions the workflows use. Every update rewrites `Cargo.lock`, so two
+of them in the merge queue at once conflict; queue one, and after it merges ask the other to rebase
+(`@dependabot rebase`). They go through CI and review like any other pull request; a major
+update that changes an API needs the code changed in the same pull request. One that cannot be
+fixed there goes in the `cargo-major` group's `exclude-patterns` in `.github/dependabot.yml`, so it
+comes in a pull request of its own and the rest of the group can merge.
 
 When it rejects a licence, prefer another crate. Add an exception only for a licence that is
 GPLv3-compatible, for the crate that needs it, with a comment saying what the crate is for and
