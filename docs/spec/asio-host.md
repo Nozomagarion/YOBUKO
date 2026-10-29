@@ -126,7 +126,10 @@ This recovery does not silently select a different backend.
 
 While a native panel request is pending or open, output replacement, project opening,
 tab switching and project closing report "close the ASIO control panel first".
-They leave the current player attached. This prevents waiting on an audio-owner thread
+They leave the current player attached. Rejected project opens do not enter the recent-project
+list. Rejected output choices restore the settings selection without changing device history;
+an actual device-open failure retains the requested choice for retry. Only successful output
+selections update the remembered device. This prevents waiting on an audio-owner thread
 that is occupied by a modal driver dialog. Application exit still uses bounded
 background session cleanup; driver calls themselves cannot be forcibly timed out.
 

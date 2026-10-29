@@ -2148,9 +2148,6 @@ fn chosen_output(choice: suhina_session::OutputChoice, about: &About) -> Chosen<
 /// An output chosen anew is kept in the settings, and the app plays on it.
 fn use_output(cx: &mut Cx<'_>, picked: Option<suhina_session::OutputChoice>) {
     if let Some(choice) = picked {
-        let default = cx.about.audio_hosts.iter().find(|h| h.default).map(|h| h.name.as_str());
-        cx.settings.remember_output(&cx.settings.output_choice(), default);
-        cx.settings.remember_output(&choice, default);
         cx.settings.set_output_choice(&choice);
         cx.outcome.audio_output = Some(choice);
         cx.outcome.changed = true;
