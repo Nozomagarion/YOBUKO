@@ -35,14 +35,19 @@ have no opaque background: only selected/hovered rows add a translucent tint.
 
 ### Choosing an audio driver and device
 
-Choosing Driver changes the devices shown in the form without opening a stream.
-Device then shows “Choose a device…”; selecting a named device or explicitly
+Each resolved host remembers its last applied device across application restarts,
+including an explicit Default selection. The system-default host and the same host
+chosen by name share this history. Choosing Driver restores an available remembered
+device and applies the pair together, without opening an intermediate default.
+For a new host or an unavailable remembered device, Driver only changes the devices
+shown in the form. Device then shows “Choose a device…”; selecting a named device or explicitly
 selecting Default applies the driver and device together with `audio.setOutput`.
 Until then Now continues to describe the output still playing. Closing Settings
 or selecting the active driver abandons the pending driver choice. Sample-rate
 and buffer edits made while a driver is pending belong to that pending choice.
 There are no preferred driver brands. A change that keeps the sample rate carries
-existing plug-ins over; a different rate still requires their reinitialization.
+existing plug-ins over; a different rate reconfigures the retained instances while
+processing is stopped, without reloading their state or recreating their editors.
 
 ## Sources
 

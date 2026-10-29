@@ -227,7 +227,15 @@ pub(crate) static ROWS: &[Entry] = &[
         "Output",
         "Output",
         "Driver, device, sample rate, buffer size, exclusive mode and the input device",
-        &["audio_host", "audio_device", "audio_sample_rate", "audio_buffer", "audio_exclusive", "audio_input"],
+        &[
+            "audio_host",
+            "audio_device",
+            "audio_devices",
+            "audio_sample_rate",
+            "audio_buffer",
+            "audio_exclusive",
+            "audio_input",
+        ],
         crate::settings::settings_view::audio_output,
     ),
     block(

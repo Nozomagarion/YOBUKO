@@ -1970,6 +1970,9 @@ fn chosen_output(choice: suhina_session::OutputChoice, about: &About) -> Chosen<
 /// An output chosen anew is kept in the settings, and the app plays on it.
 fn use_output(cx: &mut Cx<'_>, picked: Option<suhina_session::OutputChoice>) {
     if let Some(choice) = picked {
+        let default = cx.about.audio_hosts.iter().find(|h| h.default).map(|h| h.name.as_str());
+        cx.settings.remember_output(&cx.settings.output_choice(), default);
+        cx.settings.remember_output(&choice, default);
         cx.settings.set_output_choice(&choice);
         cx.outcome.audio_output = Some(choice);
         cx.outcome.changed = true;
@@ -1987,6 +1990,7 @@ pub(crate) fn audio_output(cx: &mut Cx<'_>, y: &mut f32) {
     let shown = cx.state.audio_pending.as_ref().unwrap_or(&active);
     let picked = output_rows(cx.ui, cx.painter, cx.page, y, shown, cx.about, cx.state.audio_pending.is_some());
     if let Some(picked) = picked {
+        let picked = restore_driver(picked, cx.settings, cx.about);
         let apply = select_output(&mut cx.state.audio_pending, &active, picked);
         use_output(cx, apply);
     }
@@ -2009,6 +2013,33 @@ enum OutputPick {
     Driver(suhina_session::OutputChoice),
     Device(suhina_session::OutputChoice),
     Setting(suhina_session::OutputChoice),
+}
+
+/// A remembered, available pair can be committed atomically; an unknown or missing
+/// device still requires an explicit choice, never an intermediate default open.
+fn restore_driver(picked: OutputPick, settings: &Settings, about: &About) -> OutputPick {
+    let OutputPick::Driver(mut choice) = picked else { return picked };
+    if choice.host == settings.output_choice().host {
+        return OutputPick::Driver(choice);
+    }
+    let default = about.audio_hosts.iter().find(|h| h.default);
+    let host = choice
+        .host
+        .as_ref()
+        .and_then(|name| about.audio_hosts.iter().find(|h| h.name.eq_ignore_ascii_case(name)))
+        .or_else(|| choice.host.is_none().then_some(default).flatten());
+    let remembered = settings.remembered_device(choice.host.as_deref(), default.map(|h| h.name.as_str()));
+    if let (Some(host), Some(device)) = (host, remembered) {
+        let available = match &device {
+            Some(name) => host.devices.iter().any(|d| &d.name == name),
+            None => host.devices.iter().any(|d| d.default),
+        };
+        if available {
+            choice.device = device;
+            return OutputPick::Device(choice);
+        }
+    }
+    OutputPick::Driver(choice)
 }
 
 fn select_output(
@@ -2517,6 +2548,66 @@ pub(super) fn edit_rgba(ui: &mut Ui, rgba: &mut [u8; 4], alpha: egui::color_pick
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn driver_memory_survives_restart_and_applies_only_an_available_pair() {
+        use suhina_session::audio::{DeviceInfo, HostInfo};
+        let about = About {
+            audio_hosts: vec![
+                HostInfo {
+                    name: "WASAPI".into(),
+                    default: true,
+                    devices: vec![DeviceInfo { name: "Speakers".into(), default: true, ..Default::default() }],
+                    ..Default::default()
+                },
+                HostInfo {
+                    name: "ASIO".into(),
+                    devices: vec![DeviceInfo { name: "Interface".into(), default: true, ..Default::default() }],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+        let wasapi = suhina_session::OutputChoice { device: Some("Speakers".into()), ..Default::default() };
+        let asio = suhina_session::OutputChoice {
+            host: Some("ASIO".into()),
+            device: Some("Interface".into()),
+            ..Default::default()
+        };
+        let mut settings = Settings::default();
+        for choice in [&wasapi, &asio] {
+            settings.remember_output(choice, Some("WASAPI"));
+            settings.set_output_choice(choice);
+        }
+        let (mut settings, warnings) = Settings::from_text(&settings.to_text());
+        assert!(warnings.is_empty());
+        for choice in [&wasapi, &asio, &wasapi] {
+            let driver = suhina_session::OutputChoice { host: choice.host.clone(), ..Default::default() };
+            let OutputPick::Device(restored) = restore_driver(OutputPick::Driver(driver), &settings, &about) else {
+                panic!("remembered pair must apply")
+            };
+            assert_eq!(restored.device, choice.device);
+            settings.set_output_choice(&restored);
+        }
+        // A named default host and Default refer to the same remembered backend.
+        settings.set_output_choice(&asio);
+        let named = suhina_session::OutputChoice { host: Some("WASAPI".into()), ..Default::default() };
+        assert!(
+            matches!(restore_driver(OutputPick::Driver(named), &settings, &about), OutputPick::Device(c) if c.device == wasapi.device)
+        );
+        settings.set_output_choice(&wasapi);
+        let mut missing = about.clone();
+        missing.audio_hosts[1].devices.clear();
+        assert!(matches!(restore_driver(OutputPick::Driver(asio.clone()), &settings, &missing), OutputPick::Driver(_)));
+        // An explicitly selected Default is distinct from having no history.
+        settings.remember_output(
+            &suhina_session::OutputChoice { host: asio.host.clone(), ..Default::default() },
+            Some("WASAPI"),
+        );
+        assert!(
+            matches!(restore_driver(OutputPick::Driver(asio), &settings, &about), OutputPick::Device(c) if c.device.is_none())
+        );
+    }
 
     #[test]
     fn a_driver_is_applied_only_together_with_the_selected_device() {

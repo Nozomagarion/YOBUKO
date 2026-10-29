@@ -234,7 +234,7 @@ pub(crate) use error_emit::try_emit_error;
     target_os = "dragonfly",
     target_os = "freebsd",
     target_os = "netbsd",
-    target_os = "windows",
+    all(target_os = "windows", any(feature = "asio", feature = "jack")),
     target_vendor = "apple",
     feature = "audioworklet",
 ))]
