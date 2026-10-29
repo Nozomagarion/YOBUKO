@@ -1997,7 +1997,8 @@ fn a_header_volume_and_pan_take_a_typed_number() {
     harness.run_steps(60);
     harness.get_by_label(&format!("{name} pan")).click();
     harness.run();
-    harness.event(egui::Event::Text("-50".into()));
+    // The pan's own scale: 50L to 50R, so -25 is half left.
+    harness.event(egui::Event::Text("-25".into()));
     harness.run();
     harness.key_press(Key::Enter);
     harness.run();

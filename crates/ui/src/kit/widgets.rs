@@ -683,8 +683,10 @@ fn value_keys(ui: &Ui, response: &Response) -> (i32, bool, Option<String>) {
         return (0, fine, Some(typed));
     }
     ctx.data_mut(|d| d.insert_temp(typed_id, typed.clone()));
-    // Lit while it takes the keys; what is typed shows over it.
-    let painter = ui.painter_at(response.rect);
+    // Lit while it takes the keys; what is typed shows over it, on a layer above the window's
+    // own, as a theme's field drawn after this would hide it (#916: the typed number did not
+    // show until Enter set it).
+    let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Foreground, response.id.with("typed-layer")));
     // Keep the target ring outside the surface: custom value painters run after key handling
     // and would cover an inset rectangle, leaving only sharp yellow corners behind.
     let radius = if response.rect.width() > response.rect.height() * 4.0 { response.rect.height() * 0.5 } else { 4.0 };
@@ -721,10 +723,11 @@ pub fn drag_value(
 }
 
 /// A number typed into a value control, in the control's range. A pan (-1 to 1) shows and is
-/// typed as a percentage ("50" is half right, "-50" half left), so a number past 1 is read so.
+/// typed on its own scale, 50L to 50R ("-50" is all the way left, "25" half right), as
+/// [`format_pan`] shows it, so a number past 1 is read so.
 fn typed_value(number: f64, range: (f64, f64)) -> f64 {
     let pan = range == (-1.0, 1.0);
-    let number = if pan && number.abs() > 1.0 { number / 100.0 } else { number };
+    let number = if pan && number.abs() > 1.0 { number / 50.0 } else { number };
     number.clamp(range.0, range.1)
 }
 
