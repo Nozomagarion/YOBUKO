@@ -721,4 +721,11 @@ impl Controller {
             m.worst_misses.load(Ordering::Relaxed),
         )
     }
+
+    /// Plug-in blocks that were not sent at all (their host was still busy with an earlier
+    /// one), and the longest round trip a plug-in answered in, in microseconds.
+    pub fn plugin_time(&self) -> (u64, u32) {
+        let m = &self.monitor;
+        (m.plugin_blocked.load(Ordering::Relaxed), m.worst_trip.load(Ordering::Relaxed))
+    }
 }

@@ -326,6 +326,11 @@ pub struct LauncherMonitor {
     pub(crate) plugin_misses: AtomicU64,
     pub(crate) worst_plugin: AtomicU64,
     pub(crate) worst_misses: AtomicU64,
+    /// Plug-in blocks that were not sent at all (the host was still busy with an earlier one),
+    /// summed over the playing graph's slots.
+    pub(crate) plugin_blocked: AtomicU64,
+    /// The longest round trip a playing graph's plug-in answered in, in microseconds.
+    pub(crate) worst_trip: AtomicU32,
     /// Arrangement frames per beat of the playing graph (f64 bits), so an update can find the
     /// playhead's beat.
     pub(crate) frames_per_beat: AtomicU64,
@@ -365,6 +370,8 @@ impl LauncherMonitor {
             plugin_misses: AtomicU64::new(0),
             worst_plugin: AtomicU64::new(0),
             worst_misses: AtomicU64::new(0),
+            plugin_blocked: AtomicU64::new(0),
+            worst_trip: AtomicU32::new(0),
             frames_per_beat: AtomicU64::new(0),
             metronome: AtomicBool::new(false),
             start_beat: AtomicU64::new(0f64.to_bits()),

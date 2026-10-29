@@ -85,7 +85,7 @@ host process have their own id, so `grep "\[12345\]"` shows one process. To foll
 | `ara musical context changed` | host | the tempo map or time signatures sent to the plug-in again |
 | `slow frame N ms: part ms, …; what was shown` | app (`kit/frame_trace.rs`) | a frame whose drawing took 25 ms or more, part by part (› UI time) |
 | `frames: N in 1.0 s …` | app | once a second while the window draws: frames, drawing time on average and the longest, the longest wait between frames |
-| `audio: device underruns N (+n), stretched frames late N (+n), … plug-in blocks late N (+n, most <plug-in on track>: n), engine load …` | app | once a second, when sound went missing since the last look or the engine's load is 70 % or more (› Audio dropouts) |
+| `audio: device underruns N (+n), stretched frames late N (+n), … plug-in blocks late N (+n, most <plug-in on track>: n), not sent N (+n), longest trip N µs, engine load …` | app | once a second, while playing, when sound went missing since the last look or the engine's load is 70 % or more (› Audio dropouts) |
 | `slow engine update: N ms (graph …)` | app (`session/src/lib.rs`) | a project change whose new engine graph took 25 ms or more to make, part by part |
 | `slow <work>: N ms` | app | library listings, browser rows, the sample map and its cache, a drop, adding to a track: anything that took 5 ms or more |
 
@@ -161,6 +161,12 @@ happens. Two counters tell the causes apart:
   engine had to hand the device its buffer, so that block passed the sound through unprocessed (a
   crackle on that track). The line names the plug-in late most often and its track. A return's
   plug-ins run after every track that sends to them, so they have the least time left.
+- **not sent** (of the late blocks): the host was still busy with an earlier block when the next
+  came, so the engine did not send this one at all — a serve that took longer than a block's
+  playing time, not a slow engine.
+- **longest trip:** the longest round trip a plug-in answered in, in microseconds: what any
+  answered block took at worst. With this and *not sent*, a miss's cause says itself — long
+  trips (the host's serve or the machine's scheduling), or a budget the deadline never left.
 
 While playing, a health line is written each second, including zero deltas, so a clean
 interval can be distinguished from a stopped logger. While stopped, lines require a changed

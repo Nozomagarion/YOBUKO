@@ -684,10 +684,13 @@ impl Renderer {
     /// Publishes the plug-in blocks missed so far and the plug-in that missed most. Never
     /// allocates.
     fn publish_plugin_misses(&mut self) {
-        let (mut total, mut worst) = (0u64, (0u64, 0u64));
+        let (mut total, mut blocked, mut worst) = (0u64, 0u64, (0u64, 0u64));
+        let mut worst_trip = 0u32;
         for chain in &mut self.graph.chains {
             for slot in chain.plugin_slots() {
                 total += slot.missed;
+                blocked += slot.busy;
+                worst_trip = worst_trip.max(slot.longest_us);
                 if slot.missed > worst.1 {
                     worst = (slot.key, slot.missed);
                 }
@@ -695,6 +698,8 @@ impl Renderer {
         }
         let monitor = &self.graph.launcher.monitor;
         monitor.plugin_misses.store(total, std::sync::atomic::Ordering::Relaxed);
+        monitor.plugin_blocked.store(blocked, std::sync::atomic::Ordering::Relaxed);
+        monitor.worst_trip.store(worst_trip, std::sync::atomic::Ordering::Relaxed);
         monitor.worst_plugin.store(worst.0, std::sync::atomic::Ordering::Relaxed);
         monitor.worst_misses.store(worst.1, std::sync::atomic::Ordering::Relaxed);
     }

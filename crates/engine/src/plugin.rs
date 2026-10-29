@@ -355,6 +355,13 @@ pub(crate) struct PluginSlot {
     pub(crate) enabled: bool,
     /// Round trips it did not answer in time or refused; tests read it.
     pub(crate) missed: u64,
+    /// Blocks the host refused outright (still busy with an earlier one), of `missed`.
+    pub(crate) busy: u64,
+    /// The longest trip it answered within a real-time deadline, in microseconds; for the
+    /// trace's health line.
+    pub(crate) longest_us: u32,
+    /// When the block out was sent, for [`PluginSlot::longest_us`].
+    pub(crate) sent_at: Option<Instant>,
     /// The parameter values it sends: set ones and automation.
     pub(crate) params: SlotParams,
 }
@@ -394,10 +401,15 @@ impl PluginSlot {
             return;
         }
         let timeout = deadline.map_or(OFFLINE_TIMEOUT, |d| d.saturating_duration_since(Instant::now()));
+        let started = Instant::now();
         let answered = match self.processor.as_mut() {
             Some(processor) => processor.process(span, events, timeout),
             None => false,
         };
+        if deadline.is_some() && answered {
+            self.longest_us = self.longest_us.max(u32::try_from(started.elapsed().as_micros()).unwrap_or(u32::MAX));
+        }
+        self.sent_at = None;
         if !answered {
             if self.processor.is_some() {
                 self.missed += 1;
@@ -421,6 +433,16 @@ impl PluginSlot {
         let Some(processor) = self.processor.as_mut() else { return Sent::Unsupported };
         let patience = if deadline.is_some() { Duration::ZERO } else { OFFLINE_TIMEOUT };
         let sent = processor.send(span, events, patience);
+        if deadline.is_some() {
+            self.sent_at = match sent {
+                Sent::Out => Some(Instant::now()),
+                Sent::Refused => {
+                    self.busy += 1;
+                    None
+                }
+                Sent::Unsupported => None,
+            };
+        }
         if sent == Sent::Refused {
             self.missed += 1;
             if self.instrument {
@@ -434,8 +456,14 @@ impl PluginSlot {
     /// result in `span`; a miss passes the sound through, or is silent for an instrument.
     /// Returns whether it was answered.
     pub(crate) fn finish(&mut self, span: &mut [f32], deadline: Option<Instant>) -> bool {
+        let sent_at = deadline.is_some().then(|| self.sent_at.take()).flatten();
         let timeout = deadline.map_or(OFFLINE_TIMEOUT, |d| d.saturating_duration_since(Instant::now()));
         let answered = self.processor.as_mut().is_some_and(|processor| processor.wait(span, timeout));
+        if let Some(sent_at) = sent_at
+            && answered
+        {
+            self.longest_us = self.longest_us.max(u32::try_from(sent_at.elapsed().as_micros()).unwrap_or(u32::MAX));
+        }
         if !answered {
             if self.processor.is_some() {
                 self.missed += 1;
@@ -491,6 +519,18 @@ impl PluginSlot {
         let Some(processor) = self.processor.as_mut() else { return Sent::Unsupported };
         let patience = if deadline.is_some() { Duration::ZERO } else { OFFLINE_TIMEOUT };
         let sent = processor.send_joint(span, events, followers, patience);
+        // The lead slot's round trip is recorded as a plain one's is: the wait that follows is
+        // timed (`finish`), and a refused one counts as busy.
+        if deadline.is_some() {
+            self.sent_at = match sent {
+                Sent::Out => Some(Instant::now()),
+                Sent::Refused => {
+                    self.busy += 1;
+                    None
+                }
+                Sent::Unsupported => None,
+            };
+        }
         if sent == Sent::Refused {
             self.missed += 1;
             if self.instrument {

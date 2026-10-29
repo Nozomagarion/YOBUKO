@@ -225,8 +225,16 @@ workspace forbids.
    back. Primitives: a futex in the shared memory on Linux; duplicated auto-reset events on
    Windows, waited on together with a high-resolution waitable timer that wakes the wait 1 ms
    before the deadline, the rest spent yielding, so a miss ends on time and not on the system
-   timer's next 15.6 ms tick (#211); semaphores on macOS, prototyped first because they are the
-   least certain. The host's
+   timer's next 15.6 ms tick (#211); on macOS, checks with short naps between them — measured on
+   an M3, a mac wait that only yields never sleeps, and the timeshare scheduler then demotes the
+   thread for burning a core and steers it to the efficiency cores, where its round trip misses
+   the deadline: 138 µs at rest, p50 651 µs and growing to 17 % of blocks late with three busy
+   processes on the machine. A nap counts as waiting and the demotion does not accumulate;
+   250 µs caps each requested sleep, although OS scheduling can delay the actual wake-up. A semaphore wait
+   remains the surest wake, and the reason it has not landed: Mach semaphores live in one task
+   and cannot be shared with another process by name (their send rights would have to go over
+   Mach IPC), and named POSIX semaphores answer `sem_open` across processes but Darwin has no
+   `sem_timedwait` to end a wait by its deadline. The host's
    audio thread runs at the engine's real-time priority (MMCSS "Pro Audio" on Windows; the
    engine's audio workgroup on macOS). The engine waits at most the rest of the block's time.
    On a miss it outputs the plug-in's input (an effect) or silence (an instrument) for that block
@@ -253,6 +261,13 @@ workspace forbids.
    Suhina. The hosts' audio threads wait for every block, so only a plug-in stuck in one block
    that long hits the limit, and the host process ending is then a crash the engine already
    reports and restarts. **macOS:** the highest priority (the audio workgroup is to come).
+   Measured on an M3, what a priority alone does not get: macOS refuses QoS on a thread whose
+   priority another call has already raised (set the class first); the user-interactive class
+   alone did not keep a waiting thread off the efficiency cores; and the time-constraint policy
+   (`THREAD_TIME_CONSTRAINT_POLICY`) on a thread that waits by yielding defers its work to the
+   policy's period — 81 % of blocks late in the same bench — so a scheduling class is worth it
+   only once the waits sleep. Until then the napped wait (above) keeps a mac thread's timeshare
+   band clean without either.
    Nothing fails over it: when real-time scheduling is refused the first stream in a process
    adds a notice (the app shows it, `suhina-cli play` prints it), and the hosts' threads, which
    ask the same system, play on silently. `SUHINA_NO_REALTIME=1` turns it off, to compare.
@@ -273,7 +288,10 @@ workspace forbids.
    plug-ins 30 to 50 % of their blocks late (notes dropped, "stopped answering"). The block is
    the buffer size the user chooses (Settings › Audio, `audio.setOutput`: 64 … 4096 frames,
    rounded to a size the driver allows; 1024 when none is chosen), so the deadline follows that
-   choice: a smaller buffer is quicker to answer a key and leaves the plug-ins less time. The
+   choice: a smaller buffer is quicker to answer a key and leaves the plug-ins less time.
+   Ordinary playback keeps four blocks queued; armed input keeps its shorter queue.
+   The half-batch minimum and queued-period budget above retain the room needed by
+   plug-ins at small device buffers without capping a queue-covered batch at one block. The
    driver is never asked for a size outside the buffer range it declared: a range holding no size
    the engine renders in leaves the driver its own, with a notice that says which size plays.
    With ASIO and WASAPI exclusive mode the device's buffer is that size too; WASAPI shared mode

@@ -534,7 +534,7 @@ pub struct App {
     ram: Option<u64>,
     next_ram: Option<f64>,
     /// The audio's health counters last traced: device underruns, late stretched frames and late plug-in blocks.
-    audio_traced: (u64, u64, u64),
+    audio_traced: (u64, u64, u64, u64),
     /// A clip carried between the views, and the view whose name it hovers over since when.
     carry: Option<Carry>,
     /// A device carried from a chain or a strip's list onto another track (#688): its track and
@@ -675,7 +675,7 @@ impl App {
             reveal: None,
             ram: None,
             next_ram: None,
-            audio_traced: (0, 0, 0),
+            audio_traced: (0, 0, 0, 0),
             carry: None,
             device_carry: None,
             browser_part: 1.0,
@@ -1138,19 +1138,27 @@ impl App {
         let stretched = player.stretch_underruns();
         let moves = player.stretch_moves();
         let (misses, worst, worst_misses) = player.plugin_misses();
+        let (blocked, worst_trip) = player.plugin_time();
         let worst_name = self
             .session()
             .and_then(|s| suhina_session::plugin_device_name(s.project(), worst))
             .unwrap_or_else(|| "none".into());
         let cpu = player.cpu_monitor().load_milli();
         let running = player.monitor().running();
-        let (was_device, was_stretched, was_misses) = self.audio_traced;
-        if running || device > was_device || stretched > was_stretched || misses > was_misses || cpu >= 700 {
+        let (was_device, was_stretched, was_misses, was_blocked) = self.audio_traced;
+        if running
+            || device > was_device
+            || stretched > was_stretched
+            || misses > was_misses
+            || blocked > was_blocked
+            || cpu >= 700
+        {
             suhina_plugins::trace!(
-                "audio: device underruns {device} (+{}), stretched frames late {stretched} (+{}), edits that restarted stretched clips {moves}, plug-in blocks late {misses} (+{}, most {worst_name}: {worst_misses}), engine load {:.1} %, {}, buffer {} frames, block {}, latency {:.1} ms{}, output {:?}, beat {:.6}, last late render (us, queued, period, frames) {:?}",
+                "audio: device underruns {device} (+{}), stretched frames late {stretched} (+{}), edits that restarted stretched clips {moves}, plug-in blocks late {misses} (+{}, most {worst_name}: {worst_misses}), not sent {blocked} (+{}), longest trip {worst_trip} µs, engine load {:.1} %, {}, buffer {} frames, block {}, latency {:.1} ms{}, output {:?}, beat {:.6}, last late render (us, queued, period, frames) {:?}",
                 device.saturating_sub(was_device),
                 stretched.saturating_sub(was_stretched),
                 misses.saturating_sub(was_misses),
+                blocked.saturating_sub(was_blocked),
                 f64::from(cpu) / 10.0,
                 if running { "playing" } else { "stopped" },
                 info.as_ref().map_or(0, |i| i.buffer_frames),
@@ -1162,7 +1170,7 @@ impl App {
                 player.cpu_monitor().late_render(),
             );
         }
-        self.audio_traced = (device, stretched, misses);
+        self.audio_traced = (device, stretched, misses, blocked);
     }
 
     /// Uses `settings` from now on, as loaded from the settings file.

@@ -321,6 +321,9 @@ impl Chain {
                         latency: info.latency,
                         enabled: stored.enabled,
                         missed: 0,
+                        busy: 0,
+                        longest_us: 0,
+                        sent_at: None,
                         params: SlotParams::new(stored, frames_per_beat),
                     }));
                     positions.push(position);

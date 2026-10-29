@@ -396,6 +396,7 @@ fn a_block_a_plug_in_refuses_is_one_miss_and_is_not_run_again() {
     assert_eq!(processes.load(Ordering::SeqCst), 0, "a refused block is not run again");
     // Each block here is one round trip, so one miss a block.
     assert_eq!(renderer.graph.chains[0].missed(), 20, "one miss a round trip");
+    assert_eq!(renderer.controller().plugin_time(), (20, 0), "refused blocks publish busy, not completed trips");
     // The effect is skipped: the dry sound.
     assert!(max_diff(&out, &dry) < 1e-6);
 }
@@ -1283,4 +1284,67 @@ fn stopping_a_plugin_note_joins_the_delayed_release_without_a_step() {
             assert_eq!(*after.last().unwrap(), 0.0);
         }
     }
+}
+
+fn diagnostic_slot(processor: Box<dyn PluginProcessor>) -> crate::plugin::PluginSlot {
+    crate::plugin::PluginSlot {
+        key: 1,
+        processor: Some(processor),
+        instrument: false,
+        latency: 0,
+        enabled: true,
+        missed: 0,
+        busy: 0,
+        longest_us: 0,
+        sent_at: None,
+        params: crate::plugin_params::SlotParams::new(&plug(vst3()), BEAT as f64),
+    }
+}
+
+#[test]
+fn unanswered_trips_do_not_replace_the_longest_answered_trip() {
+    use std::time::Instant;
+    let mut slot = diagnostic_slot(Box::new(Stand::new(Behaviour::Gone)));
+    slot.longest_us = 7;
+    let deadline = Some(Instant::now() + Duration::from_secs(1));
+    let mut samples = [0.0; 16];
+    slot.run(&mut samples, &[], deadline);
+    assert_eq!(slot.longest_us, 7);
+    slot.sent_at = Instant::now().checked_sub(Duration::from_millis(10));
+    assert!(!slot.finish(&mut samples, deadline));
+    assert_eq!(slot.longest_us, 7);
+    assert!(slot.sent_at.is_none());
+}
+
+#[test]
+fn joint_sends_record_busy_and_successful_trip_timing() {
+    use std::time::Instant;
+    struct JointProbe(bool);
+    impl PluginProcessor for JointProbe {
+        fn process(&mut self, _: &mut [f32], _: &[(usize, NoteEvent)], _: Duration) -> bool {
+            false
+        }
+        fn send_joint(&mut self, _: &[f32], _: &[(usize, NoteEvent)], _: &[u32], _: Duration) -> Sent {
+            if self.0 { Sent::Out } else { Sent::Refused }
+        }
+        fn wait(&mut self, _: &mut [f32], _: Duration) -> bool {
+            self.0
+        }
+    }
+    let deadline = Some(Instant::now() + Duration::from_secs(1));
+    let mut samples = [0.0; 16];
+    let mut slot = diagnostic_slot(Box::new(JointProbe(false)));
+    assert_eq!(slot.send_joint(&mut samples, &[], &[2], deadline), Sent::Refused);
+    assert_eq!((slot.busy, slot.missed), (1, 1));
+    assert!(slot.sent_at.is_none());
+    slot.processor = Some(Box::new(JointProbe(true)));
+    assert_eq!(slot.send_joint(&mut samples, &[], &[2], deadline), Sent::Out);
+    assert!(slot.sent_at.is_some());
+    slot.sent_at = Instant::now().checked_sub(Duration::from_millis(10));
+    assert!(slot.finish(&mut samples, deadline));
+    assert!(slot.longest_us >= 10_000);
+    let longest = slot.longest_us;
+    assert_eq!(slot.send_joint(&mut samples, &[], &[2], None), Sent::Out);
+    assert!(slot.finish(&mut samples, None));
+    assert_eq!(slot.longest_us, longest, "offline work does not pollute real-time diagnostics");
 }

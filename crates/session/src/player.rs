@@ -159,6 +159,12 @@ impl Player {
         self.controller.plugin_misses()
     }
 
+    /// Plug-in blocks refused while the host was busy, and the longest answered
+    /// real-time round trip in microseconds.
+    pub fn plugin_time(&self) -> (u64, u32) {
+        self.controller.plugin_time()
+    }
+
     /// The level meters of the main output and every track.
     pub fn meter_monitor(&self) -> &suhina_engine::MeterMonitor {
         self.controller.meter_monitor()
