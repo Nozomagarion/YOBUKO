@@ -1,5 +1,17 @@
 # Où en est notre application ?
 
+## En cours : platines A/B
+
+Deux lectures indépendantes sont ajoutées au même moteur audio : chargement sans lecture,
+Play/Pause/Stop, repositionnement, niveaux et crossfader. Le casque est séparé du crossfader et
+requiert une paire de sorties dédiée ; il n’envoie pas un morceau masqué dans la sortie principale.
+Les pistes du Studio, le catalogue v4 et les formats LAN ne sont pas modifiés par ces lectures.
+
+Les vérifications sont en cours, notamment pause/reprise, fin du morceau, annulation des chargements,
+files de commandes pleines et changements de projet. Le paquet validé reste `7842c68e` jusqu’à
+vérification d’une nouvelle livraison. Synchronisation, pitch, boucles et export matériel restent à faire.
+
+
 ## Dernier palier livré : grille rythmique DJ — 29 octobre 2026
 
 Dans **DJ → Prepare**, on peut régler une grille à tempo constant et quatre battements par mesure,

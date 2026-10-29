@@ -127,3 +127,9 @@ To check: open Options > Settings (Cmd+, on Mac), choose General, and click GitH
 at the top. The dialog shows all three projects and a combined-release status. Check now
 refreshes them. GitHub links open the matching repositories. If no combined release is
 published the dialog says so; turning off startup checks leaves this button available.
+
+
+Performance-capable packages also declare `dj_decks=1`. Current updater validation requires this
+field as well as catalog readers 1–4/writer >=4 and multiplayer API 1, so an earlier grid-only
+package cannot erase the deck feature. Older clients accept the additional field and can install
+the new combined package. No release/channel publication is implied.

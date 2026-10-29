@@ -122,3 +122,14 @@ explicit relinking. Direct sample loads and relink commands still decode user-se
 paths. Shared decoders reject formats outside 1000..384000 Hz and 1..32 channels before
 creating a decoder, and cap decoded PCM at 1 GiB per file, checked before copying
 each packet (all streams combined for Stems).
+
+
+## Fork amendment: local performance decks
+
+The fork keeps the single browser/MIDI preview unchanged and adds two sample-only instances of
+that same voice for transient DJ decks (see [DJ contract](../spec/dj-workspace.md)). The shared
+reader, interpolation and click guards are not copied. Sample messages can resume an identical
+Arc source; pause/seek are used by the deck controller. Replaced or unused incoming Arcs retire
+through the same bounded channel and are freed by the controller. Deck voices are outside Graph
+and do not change saved projects, undo or the active transport. A single smoothed mixer feeds main
+and, only when separate, the cue bus; there is still one audio output and one render path.

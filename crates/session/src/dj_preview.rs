@@ -32,13 +32,20 @@ pub(crate) struct Cached {
 }
 
 pub(crate) fn prepare(track: &suhina_dj::Track, cache: &mut Option<Cached>) -> Result<Arc<AudioData>, String> {
+    prepare_limited(track, cache, usize::MAX)
+}
+pub(crate) fn prepare_limited(
+    track: &suhina_dj::Track,
+    cache: &mut Option<Cached>,
+    max_samples: usize,
+) -> Result<Arc<AudioData>, String> {
     let before = std::fs::metadata(&track.path).map_err(|e| format!("audio file: {e}"))?;
     if let Some(c) = cache
         .as_ref()
         .filter(|c| c.path == track.path && c.length == before.len() && c.modified == before.modified().ok())
     {
         let seconds = c.data.frames() as f64 / f64::from(c.data.sample_rate);
-        if (seconds - track.seconds).abs() <= 0.05 {
+        if c.data.samples.len() <= max_samples && (seconds - track.seconds).abs() <= 0.05 {
             return Ok(Arc::clone(&c.data));
         }
     }
@@ -50,7 +57,7 @@ pub(crate) fn prepare(track: &suhina_dj::Track, cache: &mut Option<Cached>) -> R
     {
         return Err("DJ audition accepts up to 20 minutes of mono/stereo audio at up to 96 kHz".into());
     }
-    let data = suhina_media::decode_file(&track.path)?;
+    let data = suhina_media::decode_file_bounded(&track.path, max_samples)?;
     if !(1..=2).contains(&data.channels)
         || !(1000..=96000).contains(&data.sample_rate)
         || data.samples.is_empty()

@@ -737,9 +737,14 @@ impl App {
     /// it Suhina's settings folder and starts it.
     pub fn set_file_library(&mut self, library: suhina_library::Library) {
         self.stop_dj_preview();
+        self.stop_dj_decks();
         self.projects.set_file_library(library);
-        self.dj =
-            dj::DjPanel { active: self.dj.active, preview_owned: self.dj.preview_owned, ..dj::DjPanel::default() };
+        self.dj = dj::DjPanel {
+            active: self.dj.active,
+            preview_owned: self.dj.preview_owned,
+            decks_owned: self.dj.decks_owned,
+            ..dj::DjPanel::default()
+        };
         self.browser.relist();
     }
 
@@ -3240,3 +3245,7 @@ mod dj_prepare_tests;
 #[cfg(test)]
 #[path = "app/dj_grid_tests.rs"]
 mod dj_grid_tests;
+
+#[cfg(test)]
+#[path = "app/dj_decks_tests.rs"]
+mod dj_decks_tests;

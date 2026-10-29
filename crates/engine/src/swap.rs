@@ -629,7 +629,7 @@ impl Controller {
     pub fn preview_sample(&mut self, data: Arc<crate::AudioData>, from: f64, gain: f32) -> Result<(), String> {
         let from = if from.is_finite() { from.max(0.0) } else { 0.0 };
         let gain = if gain.is_finite() { gain.clamp(0.0, 4.0) } else { 0.0 };
-        self.preview.send(crate::preview::PreviewCommand::Sample { data, from, gain })
+        self.preview.send(crate::preview::PreviewCommand::Sample { data, from, gain, resume: false })
     }
 
     /// Previews notes ([`crate::preview_notes`] makes them) through their track's instrument,

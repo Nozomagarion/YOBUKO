@@ -141,7 +141,8 @@
         },
         {
           "name": "Platines et espace de performance",
-          "done": false
+          "done": true,
+          "evidence": "crates/ui/src/app/dj_decks_tests.rs"
         },
         {
           "name": "Export USB et compatibilité matérielle",

@@ -120,3 +120,13 @@ file is the same with or without `--cue`, and the same whether tracks are cued o
   clocks to keep in step.
 - A crossfader between cue and main, or splitting cue and main into the two ears of one pair.
 - Level meters for the cue (they come with the mixer's meters).
+
+
+## Fork performance deck cues
+
+DJ decks A/B reuse the engine preview sample reader but have independent voices and mix controls.
+Their headphone selection is after channel level/fixed trim and before the crossfader. They add
+to the separate cue bus, scaled by the existing cue volume. Unlike browser audition fallback,
+a hidden deck never folds into main when no separate cue pair exists; UI/API require configuring
+a separate pair for deck cues. Physical routing still needs verification on the audio interface.
+The [DJ workspace contract](dj-workspace.md) defines loading, stops and transient state.

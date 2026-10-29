@@ -18,18 +18,21 @@ pub(crate) enum Job {
     Grid(u64, u32, Option<(f64, f64)>),
     Preview(u64, u32),
     Waveform(u64, u32),
+    Deck(usize, u64, u32),
 }
 struct Reply {
     catalog: Catalog,
     created: Option<u32>,
     audio: Option<crate::dj_preview::Loaded>,
     waveform: Option<crate::dj_waveform::Loaded>,
+    deck: Option<crate::dj_decks::Loaded>,
 }
 
 #[derive(Default)]
 pub(crate) struct Dj {
     pub(crate) catalog: Catalog,
     pub(crate) audition: crate::dj_preview::Audition,
+    pub(crate) decks: crate::dj_decks::Decks,
     pub(crate) waveform: crate::dj_waveform::Waveform,
     worker: Option<SyncSender<Job>>,
     results: Option<Receiver<Result<Reply, String>>>,
@@ -57,13 +60,43 @@ impl Dj {
                     }
                 };
                 if done
-                    .send(Ok(Reply { catalog: catalog.clone(), created: None, waveform: None, audio: None }))
+                    .send(Ok(Reply {
+                        deck: None,
+                        catalog: catalog.clone(),
+                        created: None,
+                        waveform: None,
+                        audio: None,
+                    }))
                     .is_err()
                 {
                     return;
                 }
                 let mut cache = None;
                 while let Ok(job) = jobs.recv() {
+                    if let Job::Deck(i, token, track) = job {
+                        let data = catalog
+                            .tracks
+                            .iter()
+                            .find(|t| t.id == track)
+                            .ok_or_else(|| "unknown DJ track".to_string())
+                            .and_then(|t| {
+                                crate::dj_preview::prepare_limited(t, &mut cache, crate::dj_decks::MAX_SAMPLES)
+                            })
+                            .map_err(|e| format!("Deck loading (128 MiB decoded maximum): {e}"));
+                        if done
+                            .send(Ok(Reply {
+                                catalog: catalog.clone(),
+                                created: None,
+                                audio: None,
+                                waveform: None,
+                                deck: Some((i, token, data)),
+                            }))
+                            .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
                     if let Job::Waveform(token, track) = job {
                         let data = catalog
                             .tracks
@@ -74,6 +107,7 @@ impl Dj {
                             .map(|data| std::sync::Arc::new(suhina_media::waveform::peaks(&data).without_samples()));
                         if done
                             .send(Ok(Reply {
+                                deck: None,
                                 catalog: catalog.clone(),
                                 created: None,
                                 audio: None,
@@ -94,6 +128,7 @@ impl Dj {
                             .and_then(|t| crate::dj_preview::prepare(t, &mut cache));
                         if done
                             .send(Ok(Reply {
+                                deck: None,
                                 catalog: catalog.clone(),
                                 created: None,
                                 waveform: None,
@@ -111,7 +146,7 @@ impl Dj {
                         Job::Playlist(revision, edit) => next.edit_playlist(revision, edit),
                         Job::Cue(revision, track, edit) => next.edit_cue(revision, track, edit).map(|_| None),
                         Job::Grid(revision, track, value) => next.set_grid(revision, track, value).map(|_| None),
-                        Job::Preview(..) | Job::Waveform(..) => Err("invalid DJ worker job".into()),
+                        Job::Preview(..) | Job::Waveform(..) | Job::Deck(..) => Err("invalid DJ worker job".into()),
                     }
                     .and_then(|created| {
                         next.save_checked(&catalog, &path)?;
@@ -119,7 +154,7 @@ impl Dj {
                     })
                     .map(|created| {
                         catalog = next;
-                        Reply { catalog: catalog.clone(), created, waveform: None, audio: None }
+                        Reply { deck: None, catalog: catalog.clone(), created, waveform: None, audio: None }
                     });
                     if done.send(result).is_err() {
                         break;
@@ -142,6 +177,9 @@ impl Dj {
                     match result {
                         Ok(reply) => {
                             self.audition.loaded = reply.audio;
+                            if let Some(deck) = reply.deck {
+                                self.decks.apply(deck);
+                            }
                             if let Some(waveform) = reply.waveform {
                                 self.waveform.apply(waveform);
                             }
@@ -192,7 +230,32 @@ const REVISION: crate::commands::Param = param("revision", ParamType::Integer, "
 const PLAYLIST: crate::commands::Param = param("playlist", ParamType::Integer, "local DJ playlist id");
 const TRACK: crate::commands::Param = param("track", ParamType::Integer, "local DJ catalog track id");
 const NAME: crate::commands::Param = param("name", ParamType::Text, "playlist name");
+const DECK: crate::commands::Param = param("deck", ParamType::Text, "deck A or B");
 static COMMANDS: &[CommandSpec<Projects>] = &[
+    command!("dj.deck.load", "Load a local track into a stopped DJ deck", &[DECK, TRACK], deck_load),
+    command!("dj.deck.play", "Play or resume a DJ deck", &[DECK], deck_play),
+    command!("dj.deck.pause", "Pause a DJ deck", &[DECK], deck_pause),
+    command!("dj.deck.stop", "Stop and rewind a DJ deck", &[DECK], deck_stop),
+    command!("dj.deck.clear", "Stop and unload a DJ deck", &[DECK], deck_clear),
+    command!(
+        "dj.deck.seek",
+        "Seek a DJ deck in source seconds",
+        &[DECK, param("from", ParamType::Number, "source seconds")],
+        deck_seek
+    ),
+    command!("dj.deck.stopAll", "Stop decks and cancel pending loads", &[], deck_stop_all),
+    command!(
+        "dj.mixer.set",
+        "Set the DJ crossfader, channel levels and headphone cues",
+        &[
+            param("crossfade", ParamType::Number, "0=A, 1=B"),
+            param("levelA", ParamType::Number, "A level 0–1"),
+            param("levelB", ParamType::Number, "B level 0–1"),
+            param("cueA", ParamType::Bool, "A headphone cue"),
+            param("cueB", ParamType::Bool, "B headphone cue")
+        ],
+        deck_mixer
+    ),
     command!(
         "dj.grid.set",
         "Save the manual constant DJ beat grid",
@@ -285,12 +348,13 @@ pub(crate) fn ready(projects: &mut Projects) -> Result<(), CommandError> {
     projects.dj.start(path).map_err(CommandError::from)?;
     projects.dj.poll();
     crate::dj_preview::sync(projects);
+    crate::dj_decks::sync(projects);
     Ok(())
 }
 fn library(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
     ready(projects)?;
     Ok(json!({"tracks": projects.dj.catalog.tracks, "playlists": projects.dj.catalog.playlists,
-        "grids":projects.dj.catalog.grids, "waveform":projects.dj.waveform.snapshot(),
+        "performance":crate::dj_decks::snapshot(projects), "grids":projects.dj.catalog.grids, "waveform":projects.dj.waveform.snapshot(),
         "cues": projects.dj.catalog.cues, "preview": crate::dj_preview::snapshot(projects),
         "revision": projects.dj.catalog.revision, "created_playlist": projects.dj.created.take(),
         "busy": projects.dj.busy, "error": projects.dj.error, "analysis": "rbxport", "format": suhina_dj::FORMAT}))
@@ -301,6 +365,7 @@ fn reload(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
         return Err("the DJ library is busy; wait before refreshing".into());
     }
     crate::dj_preview::stop(projects, &json!({}))?;
+    crate::dj_decks::stop_all(projects, &json!({}))?;
     projects.dj = Dj::default();
     ready(projects)?;
     Ok(json!({"queued": true}))
@@ -397,4 +462,29 @@ fn grid_set(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 fn grid_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     ready(p)?;
     p.dj.queue(Job::Grid(number(v, "revision")?, id(v, "track")?, None))
+}
+
+fn deck_load(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::load(p, v)
+}
+fn deck_play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::play(p, v)
+}
+fn deck_pause(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::pause(p, v)
+}
+fn deck_stop(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::stop(p, v)
+}
+fn deck_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::clear(p, v)
+}
+fn deck_seek(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::seek(p, v)
+}
+fn deck_stop_all(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::stop_all(p, v)
+}
+fn deck_mixer(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::mixer(p, v)
 }

@@ -5,6 +5,12 @@ type: spec
 status: current
 last_verified: 2026-10-26
 covers:
+  - crates/engine/src/decks.rs
+  - crates/engine/src/decks_tests.rs
+  - crates/session/src/dj_decks.rs
+  - crates/session/tests/dj_decks.rs
+  - crates/ui/src/app/dj_decks.rs
+  - crates/ui/src/app/dj_decks_tests.rs
   - crates/dj
   - crates/session/src/dj.rs
   - crates/ui/src/app/dj.rs
@@ -314,3 +320,73 @@ agent denial, no output or project mutations and explicit package compatibility 
 Check legacy migration on a test copy of a format-3 catalog: opening/previewing writes nothing,
 and the first successful edit leaves an exact `dj-library-v3-backup-*.json`. The automatic
 migration and concurrent-write tests cover refusal paths; do not experiment on a sole real catalog.
+
+
+## Two local performance decks (fork extension)
+
+A/B are two independent sample voices on the existing Renderer and audio output, outside the
+Studio graph/undo/project file. They reuse the Preview sample reader, interpolation, rate
+conversion and click guards. Each has its own bounded command/retirement queues and monitor;
+no decoding, allocation, locks, file access or destruction of audio occurs on the callback.
+Pause retains the exact source position; Play resumes the same source or starts again after
+end/stop. Seek is in source seconds, before the decoded end. Stop rewinds; Clear also unloads.
+
+Load A/B queues decode on the existing DJ worker, without opening output or starting audio.
+Files share audition validation/cache, with an additional 128 MiB decoded sample budget per
+deck (256 MiB retained decks, one pending load may retain another 128 MiB). The bounded decoder
+checks headers and accumulated decoded samples. The catalog's wider import/audition limits
+remain unchanged. A failed replacement keeps the previous loaded source stopped and reports
+its error; a token prevents cancelled/old worker results from retargeting another load.
+
+Only Play may open the chosen output, which remains the active Session output or the existing
+empty preview Session when no project is open. A block-smoothed linear crossfader (0=A, 1=B),
+channel levels 0–1 and fixed −6 dB trim feed main. A single bounded mixer message changes both
+sides together. No automatic sync, pitch change, loops, scratching or recording is included.
+CUE A/B is post-channel level, pre-crossfader, on the separate configured cue pair only; absence
+of a separate pair never leaks an otherwise muted deck into main. The existing cue volume scales
+it. Source samples and mix controls are sanitised/bounded; summing decks is not a general limiter.
+
+Commands: `dj.deck.load {deck,track}`, `.play`, `.pause`, `.stop`, `.clear` (deck A/B), `.seek
+{deck,from}`, `.stopAll {}` and `dj.mixer.set {crossfade,levelA,levelB,cueA,cueB}`. These are
+person-only Library commands. Playback controls and mixer work while another worker job is
+busy. Pausing/stopping/clearing never opens output; full queues are visible errors and leaving
+DJ retries stopping rather than claiming silence. Library snapshots include loaded metadata,
+source position, playing/loading and per-deck errors plus mixer values.
+
+Leaving DJ stops both decks and cancels pending loads. Switching project/output invalidates
+old engine bindings and requires another explicit Play; it cannot start a late decoded result.
+Reloading the library or changing its folder stops and clears decks; stop state is retained
+across a folder reset if a queue is full. Deck choices and mixer are transient, not catalog
+metadata: project v4, catalog v4 and LAN protocol 13/portable v3 remain unchanged.
+
+Acceptance: two different authored signals at their own rates/positions, pause/resume/seek,
+EOF/replay, independent stop, crossfade endpoints/midpoint and smoothing, cue before fader and
+no main leakage without cue outputs. Check stop/loading/context cancellation, missing/oversized
+files, output errors, queue pressure/retirement, no project/catalog writes and actual UI controls.
+Offline Renderer tests are the audio oracle; physical headphones and two computers remain separate.
+
+
+### Check A/B performance
+
+1. Open Suhina with no project. Generate the eight-second WAV using **Check waveform preparation**
+   above, click **DJ**, **Import audio…**, select the printed file and wait for analysis.
+   In its library row click **Load A** (accessible name **Load track 1 to deck A** when it is track 1).
+   The **Performance · decks A / B** pane below the lists shows its title; loading makes no sound.
+2. Click **Play deck A** in that pane. Position advances and the file plays. Click **Pause deck A**:
+   position stops. Click **Play deck A** again: position resumes. At the end, Play starts again.
+3. In the same library row click **Load B**. It loads silently while A continues. Click **Play deck B**:
+   its position advances independently. Move **Crossfader A / B** from 0 to 1: 0 hears A only,
+   1 hears B only, the middle mixes both. **Deck A level** and **Deck B level** adjust each side.
+4. Pause A, move the crossfader to 1, then resume A: its position advances but no A sound briefly
+   returns. Set **Deck A seek seconds** to 2, click **Seek deck A**: only A moves to that position.
+   **Stop deck A** stops and rewinds it while B continues. **Unload deck A** clears its title.
+5. Without a separate cue output pair, **Cue deck A/B** are disabled. Configuring that pair in
+   Audio settings enables cues before the crossfader; actual headphone routing needs a separate
+   physical test. The automated Renderer test checks no cue leakage into main without that pair.
+6. Click **Studio** in the top bar: both decks stop. Return to **DJ**: no automatic restart.
+   Starting a load then returning to Studio must likewise not play its late result. No project
+   file or catalog edit is produced by deck controls. Missing files and the decoded 128 MiB cap
+   give an error while keeping a previously loaded source stopped.
+
+These are original-speed decks: the saved beat grid does not yet sync their tempos. Automated
+UI checks use a real offline Renderer; the GPU image uses fixture metadata for visual review.

@@ -988,7 +988,7 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 
 - Local DJ playlists add named ordered sets, revision-checked command edits, explicit deletion,
   refresh after another local instance changes the catalog and a backed-up format 1 migration.
-  Variable-tempo grids, decks and USB export remain later work ([contract](docs/spec/dj-workspace.md)).
+  Variable-tempo grids, automatic deck sync and USB export remain later work ([contract](docs/spec/dj-workspace.md)).
 
 - DJ audition reuses the engine preview voice with worker decoding and cancellation of late loads.
   Named cue points are saved per track; catalog format 4 adds manual beat grids with exact
@@ -1004,3 +1004,9 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 
 Parity: no change. These fork additions cover restricted starter networking, DJ preparation and
 distribution; full project coediting remains absent and no production feature chapter gains coverage.
+
+
+- Fork DJ A/B performance decks reuse the preview sample kernel on one output, with bounded
+  worker loading, independent pause/seek/stop, smoothed crossfader/channel levels and separate
+  headphone cues. Transient sources do not change Studio/catalog formats; sync, pitch/loop
+  controls, hardware export and physical routing validation remain pending.

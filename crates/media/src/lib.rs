@@ -341,6 +341,14 @@ pub fn missing_audio_trusted(project: &Project, project_dir: &Path, trusted: &Tr
 
 /// Decodes a whole audio file (WAV, AIFF, FLAC, MP3, Ogg Vorbis) to interleaved f32.
 pub fn decode_file(path: &Path) -> Result<AudioData, String> {
+    decode_file_bounded(path, MAX_DECODED_SAMPLES)
+}
+
+/// Decode with an additional caller sample budget; headers and actual decoded packets are checked.
+pub fn decode_file_bounded(path: &Path, sample_budget: usize) -> Result<AudioData, String> {
+    if sample_budget == 0 {
+        return Err("the decoded sample budget is empty".into());
+    }
     let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
     let stream = MediaSourceStream::new(Box::new(file), Default::default());
     let mut hint = Hint::new();
@@ -357,7 +365,7 @@ pub fn decode_file(path: &Path) -> Result<AudioData, String> {
     let channels =
         params.channels.as_ref().map(|c| c.count()).filter(|c| (1..=32).contains(c)).ok_or("unknown channel count")?;
     let channels = u16::try_from(channels).map_err(|_| "too many channels")?;
-    let max_samples = decode_limit(sample_rate, usize::from(channels))?;
+    let max_samples = decode_limit(sample_rate, usize::from(channels))?.min(sample_budget);
     if track
         .num_frames
         .is_some_and(|frames| frames.checked_mul(u64::from(channels)).is_none_or(|n| n > max_samples as u64))

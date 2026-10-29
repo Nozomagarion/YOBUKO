@@ -41,6 +41,7 @@ class ForkDistribution(unittest.TestCase):
             self.assertEqual(marker['source_commit'], 'a' * 40)
             self.assertEqual(marker['multiplayer_api'], 1)
             self.assertEqual(marker['dj_catalog'], 1)
+            self.assertEqual(marker['dj_decks'], 1)
             self.assertEqual(marker['dj_catalog_read_min'], 1)
             self.assertEqual(marker['dj_catalog_read_max'], 4)
             self.assertEqual(marker['dj_catalog_write'], 4)

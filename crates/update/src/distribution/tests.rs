@@ -41,7 +41,7 @@ fn only_a_matching_complete_manifest_is_accepted() {
         std::fs::write(dir.path().join(format!("{name}{suffix}")), b"fixture").unwrap();
     }
     let good = serde_json::json!({"schema":1,"distribution":ID,"version":build.version,
-        "source_commit":build.commit,"multiplayer_api":1,"dj_catalog":1,"dj_catalog_read_min":1,"dj_catalog_read_max":4,"dj_catalog_write":4,
+        "source_commit":build.commit,"multiplayer_api":1,"dj_catalog":1,"dj_decks":1,"dj_catalog_read_min":1,"dj_catalog_read_max":4,"dj_catalog_write":4,
         "suhina_commit":"b".repeat(40),"rbxport_commit":"c".repeat(40)});
     let path = dir.path().join(MARKER);
     std::fs::write(&path, serde_json::to_vec(&good).unwrap()).unwrap();
@@ -56,6 +56,8 @@ fn only_a_matching_complete_manifest_is_accepted() {
         ("distribution", Value::from("suhina-official")),
         ("multiplayer_api", Value::from(0)),
         ("dj_catalog", Value::from(2)),
+        ("dj_decks", Value::Null),
+        ("dj_decks", Value::from(0)),
         ("dj_catalog_read_min", Value::from(2)),
         ("dj_catalog_read_max", Value::from(3)),
         ("dj_catalog_write", Value::from(3)),
@@ -95,7 +97,7 @@ fn a_mac_bundle_requires_metadata_in_resources_and_keeps_the_same_contract_guard
         std::fs::write(program.join(format!("{name}{suffix}")), b"fixture").unwrap();
     }
     let good = serde_json::json!({"schema":1,"distribution":ID,"version":build.version,
-        "source_commit":build.commit,"multiplayer_api":1,"dj_catalog":1,"dj_catalog_read_min":1,"dj_catalog_read_max":4,"dj_catalog_write":4,
+        "source_commit":build.commit,"multiplayer_api":1,"dj_catalog":1,"dj_decks":1,"dj_catalog_read_min":1,"dj_catalog_read_max":4,"dj_catalog_write":4,
         "suhina_commit":"b".repeat(40),"rbxport_commit":"c".repeat(40)});
     std::fs::write(program.join(MARKER), serde_json::to_vec(&good).unwrap()).unwrap();
     assert!(

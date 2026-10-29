@@ -172,7 +172,7 @@ impl App {
             ui,
             |ui| {
                 egui::Grid::new(salt).striped(true).spacing(Vec2::new(14.0, 8.0)).show(ui, |ui| {
-                    for text in ["Track", "BPM", "Key", "Length", "Source", "Preparation"] {
+                    for text in ["Track", "BPM", "Key", "Length", "Source", "Preparation", "Decks"] {
                         ui.strong(text);
                     }
                     if playlist.is_some() {
@@ -200,7 +200,22 @@ impl App {
                         if !adding && action(ui, "Prepare", format!("Prepare track {id}"), !busy) {
                             self.prepare_dj_track(id);
                         }
+                        if !adding {
+                            ui.horizontal(|ui| {
+                                for deck in ["A", "B"] {
+                                    if action(
+                                        ui,
+                                        &format!("Load {deck}"),
+                                        format!("Load track {id} to deck {deck}"),
+                                        !busy,
+                                    ) {
+                                        self.performance_command("dj.deck.load", json!({"track":id,"deck":deck}));
+                                    }
+                                }
+                            });
+                        }
                         if adding {
+                            ui.label("—");
                             ui.label("—");
                         }
                         if let Some((playlist, revision)) = playlist {

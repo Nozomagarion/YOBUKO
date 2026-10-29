@@ -23,6 +23,7 @@ mod cpu;
 mod cue;
 #[cfg(test)]
 mod cue_tests;
+mod decks;
 #[cfg(test)]
 mod fade_cost_tests;
 #[cfg(test)]
@@ -408,6 +409,7 @@ pub struct Renderer {
     plugin_info: HashMap<u64, PluginSlotInfo>,
     /// The browser's preview voice (ADR 0011).
     preview: preview::Preview,
+    decks: decks::Decks,
     /// The cue bus: cued tracks and the preview, for headphones (`cue.rs`).
     cue: cue::Cue,
     /// Notes played on a MIDI controller, and the armed tracks that hear them (ADR 0017).
@@ -529,6 +531,7 @@ impl Renderer {
             render_lead: None,
             plugin_info: plugins.info,
             preview: preview::Preview::new(sample_rate),
+            decks: decks::Decks::new(sample_rate),
             cue: cue::Cue::new(),
             live: live::Live::new(sample_rate),
             input: input::Input::new(),
@@ -1024,6 +1027,7 @@ impl Renderer {
         if let Some(preview) = self.cue.preview.get_mut(..frames * 2) {
             self.preview.finish(preview, frames, &mut self.graph.chains);
         }
+        self.decks.finish(out, &mut self.cue.bus, frames, self.cue.separate);
         self.cue.finish(out, frames);
         if let Some(cue) = cue
             && let Some(bus) = self.cue.bus.get(..frames * 2)
@@ -1739,3 +1743,6 @@ fn collect_notes(
 #[cfg(test)]
 #[path = "lib_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod decks_tests;

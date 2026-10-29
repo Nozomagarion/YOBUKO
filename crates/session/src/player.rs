@@ -133,6 +133,11 @@ impl Player {
         self.controller.preview_monitor()
     }
 
+    /// Independent DJ source monitor, without opening another output.
+    pub fn deck_monitor(&self, deck: usize) -> Option<std::sync::Arc<suhina_engine::PreviewMonitor>> {
+        self.controller.deck_monitor(deck)
+    }
+
     /// The audio thread's CPU load: the smoothed share of wall time it spends rendering,
     /// in per mille (1000 is busy all of the time).
     pub fn cpu_monitor(&self) -> &suhina_engine::CpuMonitor {

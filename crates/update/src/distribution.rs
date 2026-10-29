@@ -72,6 +72,7 @@ pub fn validate_package(program: &Path, build: &Build) -> Result<(), String> {
         || marker["source_commit"] != build.commit
         || marker["multiplayer_api"] != 1
         || marker["dj_catalog"] != 1
+        || marker["dj_decks"] != 1
         || marker["dj_catalog_read_min"] != 1
         || !marker["dj_catalog_read_max"].as_u64().is_some_and(|n| (4..=u64::from(u32::MAX)).contains(&n))
         || !marker["dj_catalog_write"]

@@ -22,7 +22,7 @@ def marker(root, version, commit):
     pins = json.loads((root / "fork-sources.json").read_text())
     return {"schema": 1, "distribution": pins["distribution"], "version": version,
             "source_commit": commit, "multiplayer_api": 1, "dj_catalog": 1,
-            "dj_catalog_read_min": 1, "dj_catalog_read_max": 4, "dj_catalog_write": 4,
+            "dj_catalog_read_min": 1, "dj_catalog_read_max": 4, "dj_catalog_write": 4, "dj_decks": 1,
             "suhina_commit": pins["suhina"]["commit"], "rbxport_commit": pins["rbxport"]["commit"]}
 
 

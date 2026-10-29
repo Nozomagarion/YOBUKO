@@ -6,6 +6,8 @@
 use super::*;
 use serde_json::Value;
 
+#[path = "dj_decks.rs"]
+mod decks;
 #[path = "dj_grid.rs"]
 mod grid;
 #[path = "dj_playlists.rs"]
@@ -27,6 +29,8 @@ pub(super) struct PlaylistDraft {
 #[derive(Default)]
 pub(super) struct DjPanel {
     pub active: bool,
+    pub decks_owned: bool,
+    pub deck_seek: [f64; 2],
     pub preparing: Option<u64>,
     pub seek: f64,
     pub preview_owned: bool,
@@ -58,6 +62,7 @@ impl App {
     pub(super) fn poll_dj(&mut self, ctx: &egui::Context) {
         if !self.dj.active && self.dj.pending.is_none() {
             self.stop_dj_preview();
+            self.stop_dj_decks();
             if self.dj.preparing.take().is_some() {
                 let _ = self.projects.execute("dj.waveform.clear", &json!({}));
             }
@@ -67,6 +72,7 @@ impl App {
             && self.dj.snapshot["busy"].as_bool() != Some(true)
             && self.dj.pending.is_none()
             && !self.dj.preview_owned
+            && !self.dj.decks_owned
         {
             return;
         }
@@ -121,7 +127,11 @@ impl App {
                 self.dj.snapshot = json!({"error": e.to_string()});
             }
         }
-        if self.dj.snapshot["busy"].as_bool() == Some(true) || self.dj.pending.is_some() || self.dj.preview_owned {
+        if self.dj.snapshot["busy"].as_bool() == Some(true)
+            || self.dj.pending.is_some()
+            || self.dj.preview_owned
+            || self.dj.decks_owned
+        {
             ctx.request_repaint_after(std::time::Duration::from_millis(250));
         }
     }
@@ -171,6 +181,8 @@ impl App {
         ui.add_space(theme::PAD);
         ui.separator();
         self.show_dj_playlists(ui, busy);
+        ui.add_space(theme::PAD);
+        self.show_dj_decks(ui);
         ui.add_space(theme::PAD);
         ui.weak("Local library, playlists, cue points and constant beat grids. Decks, USB export and LINK are still to come.");
     }

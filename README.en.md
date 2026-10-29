@@ -16,7 +16,7 @@ collaboration layer and DJ preparation using selected rbxport code.
 
 The destination is a complete production-to-live workflow. The current build is an experimental
 prototype: LAN sessions share a bounded copy of an open MIDI project or a four-track starter, and the DJ workspace provides a
-local audio catalog and analysis. Full project coediting, direct shared-tab recording, performance decks
+local audio catalog, analysis and two original-speed A/B decks. Full project coediting, direct shared-tab recording, automatic tempo sync
 and USB export are future work. There is no common public release channel yet.
 
 ## The workflow we are building
@@ -25,7 +25,7 @@ and USB export are future work. There is no common public release channel yet.
 |---|---|---|
 | Produce with Suhina's engine, instruments and clip workflow. | Render a project into the DJ library; analyse tempo and key with rbxport code. | Build toward set preparation and live performance in the same app. |
 | Collaborate on a common project while listening independently. | Keep the connection between your production and its rendered audio. | Keep everyone on the same tested combined version. |
-| **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** product direction; decks and hardware export remain planned. |
+| **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** two independent A/B decks, levels and crossfader; hardware export remains planned. |
 
 The 28 October Suhina source update integrates merged main 9717cc7, including EQs, panels and
 Bezier automation. Old studio projects remain readable; new saves use native v4. LAN uses
@@ -61,8 +61,8 @@ subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.m
   or missing file. Stop and leaving DJ cancel pending playback.
 - **Beat grid:** edit a constant 20–400 BPM grid with a first-beat anchor and four beats per bar.
   Preview drafts before saving; revision checks protect stale edits and deletion is confirmed.
-  Manual BPM stays separate from analysis and survives reimport. Variable tempo, decks and
-  hardware export remain pending.
+  Manual BPM stays separate from analysis and survives reimport. A/B performance decks now play original-speed tracks with pause/seek and a crossfader;
+  deck headphone cues require a separate output pair. Sync, variable tempo and hardware export remain pending.
 - **Settings → General → GitHub updates…:** inspect the three GitHub source identities and check
   availability of a combined app update. An official standalone binary cannot overwrite the fork.
 

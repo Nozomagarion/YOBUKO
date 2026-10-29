@@ -407,11 +407,11 @@
   "Audio/Cue/audio_cue_pair,audio_cue_volume": {
     "sourceFingerprint": "1b76ff381dd68ee36409231a762453cd44cc601d750ce81df96f5b308fcd0a9d",
     "summary": "Route previews to the main outputs or a separate headphone pair.",
-    "description": "The cue is a separate listening path for browser and sample-map previews and tracks whose headphone cue button is on. Cue output chooses a stereo pair on the same device as the main mix. A separate pair lets previews play through headphones without reaching the main speakers. Cue volume sets this listening path’s level without changing the main mix. If a saved pair is unavailable, previews play with the main output until that pair is available again. MIDI previews played through a selected track’s instrument follow that track’s routing rather than the separate fallback preview path.",
+    "description": "The cue is a separate listening path for browser and sample-map previews and tracks whose headphone cue button is on. Cue output chooses a stereo pair on the same device as the main mix. A separate pair lets previews play through headphones without reaching the main speakers. Cue volume sets this listening path’s level without changing the main mix. If a saved pair is unavailable, previews play with the main output until that pair is available again. MIDI previews played through a selected track’s instrument follow that track’s routing rather than the separate fallback preview path. DJ deck cues also use this pair and cue volume, after each deck level and before its crossfader. Unlike browser previews, deck cues never fall back into the main mix: without an available separate pair, hidden decks stay inaudible there.",
     "options": [
       {
         "name": "Same as main (1/2)",
-        "description": "Play previews with the main mix. A track’s cue button adds no separate audible path. This is the default."
+        "description": "Play previews with the main mix. A track’s cue button adds no separate audible path. This is the default. DJ deck cue buttons require a separate pair and do not add hidden decks to main."
       },
       {
         "name": "Outputs 3/4, 5/6, …",
@@ -422,7 +422,7 @@
         "description": "Set the cue quieter, unchanged in level, or louder. dB expresses relative level; 0 dB is the default, with no level adjustment. Browser Preview volume also affects sample previews."
       }
     ],
-    "whenToChange": "Choose outputs connected to headphones when auditioning samples during playback. Use Same as main on a two-output device.",
+    "whenToChange": "Choose outputs connected to headphones when auditioning samples during playback. Use Same as main on a two-output device. For DJ deck cues, choose an additional stereo pair; a two-output device cannot provide that separate listening path.",
     "references": [
       "crates/ui/src/settings/settings_rows.rs",
       "crates/ui/src/settings.rs",
@@ -431,7 +431,9 @@
       "crates/output/src/lib.rs",
       "docs/decisions/0020-latency-and-its-readout.md",
       "docs/spec/cue-output.md",
-      "crates/engine/src/cue.rs"
+      "crates/engine/src/cue.rs",
+      "crates/engine/src/decks.rs",
+      "crates/session/src/dj_decks.rs"
     ]
   },
   "Audio/Now/Now": {

@@ -629,3 +629,12 @@ studio reader migrates prior native files before staging. TLS hello carries the 
 Suhina pin from fork-sources.json and rejects a mismatch before admission. All prior command,
 asset, peer and local-player boundaries remain. No new studio device is implicitly shared.
 [Source and compatibility contract](spec/lan-upstream-20261028.md).
+
+
+The fork's two transient DJ decks reuse sample-only Preview voices on Renderer, outside the
+project Graph. Each voice has independent bounded queues and retirement/monitor state; mixer
+settings change both channel gains together through another bounded queue. Existing DSP smoothers
+ramp main/cue gains. These deck samples reach main after the graph and the separate cue bus before
+its gain; no separate audio stream is created. `session::dj_decks` retains validated decoded sources
+and tracks output identity; loading uses the existing DJ worker with a 128 MiB per-deck decoder
+budget. Switching context stops decks/cancels loads; no deck state is written into projects/catalogs.

@@ -279,6 +279,7 @@ impl Projects {
     /// it is (the playhead, playing or stopped, and the metronome) and the plug-ins running.
     /// Nothing happens while no project plays. Returns a notice as [`Projects::open_output`].
     pub fn reopen_output(&mut self) -> Result<Option<String>, CommandError> {
+        let _ = crate::dj_decks::stop_all(self, &json!({}));
         // The preview output opens on the new choice when next needed.
         self.close_preview_output();
         let Some(system) = self.devices.audio.clone() else { return Ok(None) };
@@ -371,6 +372,9 @@ impl Projects {
     /// own (a device may only be open once). The desktop app calls it before opening a project's
     /// output; adding a project and choosing another output do too.
     pub fn close_preview_output(&mut self) {
+        if self.preview.is_some() {
+            let _ = crate::dj_decks::stop_all(self, &json!({}));
+        }
         self.preview = None;
     }
 
@@ -434,6 +438,9 @@ impl Projects {
     pub fn close(&mut self, id: ProjectId) -> Result<Session, CommandError> {
         if self.get(id).is_none() {
             return Err(unknown_project(id));
+        }
+        if self.tabs.active == Some(id) {
+            let _ = crate::dj_decks::stop_all(self, &json!({}));
         }
         self.back_up_critical(id);
         self.backups_after_close(id);
@@ -506,8 +513,11 @@ impl Projects {
     pub fn set_file_library(&mut self, library: suhina_library::Library) {
         let _ = crate::dj_preview::stop(self, &json!({}));
         let audition = std::mem::take(&mut self.dj.audition);
+        crate::dj_decks::invalidate(self);
+        let decks = std::mem::take(&mut self.dj.decks);
         self.dj = crate::dj::Dj::default();
         self.dj.audition = audition;
+        self.dj.decks = decks;
         self.browser.files = library;
         // The sound map keeps its caches beside the library's indexes.
         self.browser.sound_map = None;
@@ -812,6 +822,7 @@ impl Projects {
         if self.tabs.active == Some(id) {
             return;
         }
+        let _ = crate::dj_decks::stop_all(self, &json!({}));
         if let Some(previous) = self.tabs.active.and_then(|a| self.get_mut(a)) {
             previous.detach_player();
         }
