@@ -698,8 +698,11 @@ one undo step, so Ctrl+Z (Cmd+Z on macOS) takes back exactly what it did.
   the window) it is a block at the top and the piano roll sits under it, as before.
 - **Several clips picked** in the Arrangement: the column's title says how many ("2 selected")
   and its rows are the last picked clip's; its Loop switch turns every picked clip's loop on or
-  off with it. The piano roll still shows the last picked clip only (editing several clips' notes
-  together is not built yet).
+  off with it. With several MIDI clips picked (#1054) the piano roll edits one of them, the one
+  with the focus (the last picked); the others' notes are drawn faint where they play, as ghost
+  notes are, and the view runs on over them. The column lists the picked clips, the one being
+  edited marked **Editing**; a click on another gives it the focus. Not yet: a strip of the
+  clips over the piano roll and a click on a faint note to switch.
 - **Built ([#699](https://github.com/suhina-daw/suhina-daw/issues/699)):** the column edits the
   clip, each change one undo step:
   - **Loop** is a switch (`clip.setLoop`). An audio clip that loops has **Loop start** and **Loop

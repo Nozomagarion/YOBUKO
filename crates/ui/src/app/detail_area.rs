@@ -212,6 +212,13 @@ impl App {
         if let (Some(piano), Some(clip), Some(session)) = (piano.as_mut(), clip, self.session()) {
             piano.ghosts =
                 crate::detail::piano_roll_ghosts::ghosts(session.project(), clip, self.piano_roll.ghost_source);
+            // Several MIDI clips picked: the others' notes faint where they play, the edited one
+            // (the focus) the one picked last or chosen in the clip column (#1054).
+            if self.shown == View::Arrangement && self.arrangement.selected_clips().len() > 1 {
+                let picked: Vec<ClipRef> =
+                    self.arrangement.selected_clips().iter().map(|(t, c)| ClipRef::Arrangement(*t, *c)).collect();
+                crate::detail::piano_roll_ghosts::add_picked(session.project(), clip, &picked, &mut piano.ghosts);
+            }
         }
         // An audio clip on a track whose plug-in edits clips (ARA) has that plug-in's editor in
         // the piano roll's place: the plug-in is told the clip is selected, and its editor opens
@@ -486,6 +493,30 @@ impl App {
                     .filter(|(_, id)| Some(*id) != this)
                     .map(|(_, id)| id.0)
                     .collect();
+                // The picked MIDI clips, each a row that gives it the piano roll's focus (#1054).
+                if !info.audio
+                    && let Some(session) = self.session()
+                {
+                    let p = session.project();
+                    info.picked = self
+                        .arrangement
+                        .selected_clips()
+                        .iter()
+                        .filter_map(|&(track, id)| {
+                            let lane = p.arrangement.lanes.iter().find(|l| l.track == Some(track))?;
+                            let clip = lane.clips.iter().find(|c| c.id == id)?;
+                            let content = p.content(clip.content)?;
+                            let notes = content
+                                .lanes
+                                .iter()
+                                .any(|l| matches!(l.data, suhina_engine::model::LaneData::Notes(_)));
+                            notes.then(|| {
+                                let name = format!("{} - {}", p.shown_track_name(track), content.name);
+                                (track, id, name, Some(id) == this)
+                            })
+                        })
+                        .collect();
+                }
             }
         }
         // A selected slot clip's follow action comes first, the rest of the detail beside or

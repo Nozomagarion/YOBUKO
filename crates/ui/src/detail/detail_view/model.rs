@@ -327,6 +327,9 @@ pub struct ClipInfo {
     /// The other arrangement clips selected with it, by id: the title says how many are
     /// selected, and a switch (Loop) turns all of them as it turns this one.
     pub others: Vec<u32>,
+    /// Every picked MIDI clip, for its row in the column that gives it the piano roll's focus
+    /// (#1054): its track and clip, what the row says ("Bass · Riff") and whether it has the focus.
+    pub picked: Vec<(TrackId, ClipId, String, bool)>,
 }
 
 /// What the detail area shows for a clip that has an editor: the editor, or its track's devices.
@@ -595,6 +598,7 @@ pub fn build_with(
                 selection: SelectionInfo::default(),
                 switch: None,
                 others: Vec::new(),
+                picked: Vec::new(),
             }),
             chain(project, id, plugins, nam.clone()),
         );

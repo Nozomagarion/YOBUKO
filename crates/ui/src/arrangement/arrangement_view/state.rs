@@ -500,6 +500,14 @@ impl ArrangementViewState {
     }
 
     /// Selects every clip in `keys`, as Ctrl+A does.
+    /// Gives `key`, one of the picked clips, the piano roll's focus: it is the clip shown and
+    /// edited, the others staying picked (#1054).
+    pub fn focus_clip(&mut self, key: (TrackId, ClipId)) {
+        if self.selected.contains(&key) {
+            self.anchor = Some(key);
+        }
+    }
+
     pub fn select_clips(&mut self, keys: Vec<(TrackId, ClipId)>) {
         self.track_focus = false;
         self.picked_whole = true;

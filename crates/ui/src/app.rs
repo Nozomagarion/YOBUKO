@@ -3266,6 +3266,15 @@ impl App {
             if let Some(project) = closing {
                 self.check_plugin_edits(project);
             }
+            // A picked clip's row in the clip column: it gets the piano roll's focus (#1054).
+            if action.id == "view.focusClip" {
+                let number = |key: &str| action.params[key].as_u64().and_then(|n| u32::try_from(n).ok());
+                if let (Some(track), Some(clip)) = (number("track"), number("clip")) {
+                    self.arrangement.focus_clip((TrackId(track), ClipId(clip)));
+                    self.piano_roll.selected.clear();
+                }
+                continue;
+            }
             // The ARA editor's Float and Dock: the window's own, not an undo step.
             if action.id == "view.araFloat" {
                 let number = |key: &str| action.params[key].as_u64();

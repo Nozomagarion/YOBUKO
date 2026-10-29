@@ -10,6 +10,12 @@ impl App {
     pub(super) fn files_into_folder(&mut self, files: Vec<PathBuf>, folder: &Path, copy: bool) {
         let items: Vec<String> = files.iter().map(|p| p.display().to_string()).collect();
         let params = json!({ "items": items, "folder": folder.display().to_string() });
+        suhina_plugins::trace!(
+            "browser: {} {} files into {}",
+            if copy { "copy" } else { "move" },
+            items.len(),
+            folder.display()
+        );
         self.status = if copy {
             copied_status(self.projects.execute("library.copyTo", &params))
         } else {
@@ -102,6 +108,13 @@ impl App {
             self.browser.drag = None;
             self.map_window.drag = None;
             let files = drag_out_files(&items);
+            suhina_plugins::trace!(
+                "browser: {} items dropped on folder {} ({} files), setting {:?}",
+                items.len(),
+                folder.display(),
+                files.len(),
+                self.settings.view.folder_drop
+            );
             if files.is_empty() {
                 return;
             }

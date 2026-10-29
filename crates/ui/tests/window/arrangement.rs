@@ -1979,3 +1979,27 @@ fn a_take_lanes_header_buttons_solo_promote_and_delete_it() {
     harness.run();
     assert!(harness.state().session().is_some_and(|s| s.project().arrangement.takes.is_empty()));
 }
+
+/// A track header's volume and pan, clicked, take a typed number with Enter.
+#[test]
+fn a_header_volume_and_pan_take_a_typed_number() {
+    let mut harness = arrangement_app();
+    let channel = |h: &Harness<'static, App>| h.state().session().unwrap().project().channels[0].clone();
+    let name = harness.state().session().unwrap().project().tracks[0].name.clone();
+    harness.get_by_label(&format!("{name} volume")).click();
+    harness.run();
+    harness.event(egui::Event::Text("-12".into()));
+    harness.run();
+    harness.key_press(Key::Enter);
+    harness.run();
+    let db = 20.0 * channel(&harness).volume.log10();
+    assert!((db + 12.0).abs() < 0.05, "volume typed: {db}");
+    harness.run_steps(60);
+    harness.get_by_label(&format!("{name} pan")).click();
+    harness.run();
+    harness.event(egui::Event::Text("-50".into()));
+    harness.run();
+    harness.key_press(Key::Enter);
+    harness.run();
+    assert!((channel(&harness).pan + 0.5).abs() < 0.01, "pan typed: {}", channel(&harness).pan);
+}
