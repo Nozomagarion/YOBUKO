@@ -939,7 +939,7 @@ recorded. Tooltips explain the selected mode and the separate record-ready
 button, without requiring knowledge of "armed" or "play-through". The file/API value `in`
 remains unchanged.
 
-### Starting playback without an output step
+### Starting and stopping playback without an output step
 
 For a graph with hosted plug-ins, Play joins the previous main and cue output samples to the
 newly rendered sound over a 2 ms linear transition. The transition waits for the graph's reported
@@ -950,3 +950,8 @@ start guards; hosted processors can otherwise bypass that protection. This cover
 starting inside a sustained note. The transition begins at the previous output value, rather
 than forcing an already audible effect tail to zero. It does not move note times or add a buffer
 of latency, and spans render-block boundaries. Offline command rendering uses the same path.
+
+Stopping a running transport, whether returning to the marker or keeping the current position,
+uses the same latency-aligned transition. Note-off messages still arrive immediately; the guard
+smooths an abrupt hosted instrument release at the output without cutting off effect tails.
+Stopping an already stopped transport does not begin a new transition.

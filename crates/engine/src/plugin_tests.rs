@@ -1251,3 +1251,36 @@ fn pitch_releases_the_transposed_plugin_note_on_repeated_transport_starts() {
         assert_eq!(notes, vec![(true, 81), (false, 81)], "beat {beat}");
     }
 }
+
+#[test]
+fn stopping_a_plugin_note_joins_the_delayed_release_without_a_step() {
+    for latency in [0, 512] {
+        for stop in [crate::LaunchCommand::Stop, crate::LaunchCommand::StopHere] {
+            let p = project(vec![note(0.0, 8.0, 69)], 8.0, vec![plug(vst3()), plug(vst3())]);
+            let mut renderer = Renderer::build(
+                &p,
+                RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins(
+                    &p,
+                    vec![
+                        (Stand::new(Behaviour::Instrument), INSTRUMENT),
+                        (Stand::new(Behaviour::Delay(latency)), PluginSlotInfo { latency: latency as u32, ..EFFECT }),
+                    ],
+                )),
+                SR,
+                RenderOptions::STOPPED,
+            )
+            .unwrap();
+            renderer.handle(crate::LaunchCommand::SetPosition { beat: 2.0 });
+            renderer.handle(crate::LaunchCommand::Play);
+            let before = blocks(&mut renderer, 32, 32);
+            assert!(before.last().copied().unwrap() > 0.4);
+            renderer.handle(stop);
+            let after = blocks(&mut renderer, 32, 32);
+            let mut joined = vec![*before.last().unwrap()];
+            joined.extend(left(&after));
+            let largest_step = joined.windows(2).map(|s| (s[1] - s[0]).abs()).fold(0.0, f32::max);
+            assert!(largest_step < 0.01, "stop with latency {latency} has step {largest_step}");
+            assert_eq!(*after.last().unwrap(), 0.0);
+        }
+    }
+}

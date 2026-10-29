@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! A transport start joins the last output value to the new sound, including plug-in output.
+//! Transport starts and stops join the last output value to the new sound, including plug-ins.
 
 pub(crate) struct StartGuard {
     last: [f32; 4],

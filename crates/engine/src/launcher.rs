@@ -1466,6 +1466,11 @@ impl Renderer {
     /// Stops the transport; the playhead goes back to the marker, or, with `here`, the marker
     /// moves to the playhead. Stopping while stopped moves the marker to beat 0.
     fn stop_transport(&mut self, here: bool) {
+        // A hosted instrument can end its voice immediately on note-off. Join that
+        // release when it reaches the output, preserving the preceding delayed tail.
+        if self.running && !self.plugin_info.is_empty() {
+            self.start_guard.begin(self.graph.latency);
+        }
         self.start_beat = if !self.running {
             0.0
         } else if here {
