@@ -686,6 +686,50 @@ again would stack voices on every device or engine-block change. This does not r
 restart host processes or reset effect tails. An ordinary graph edit keeps its existing note
 schedule and does not use this output-replacement flag.
 
+## Amendment: reconfiguring a retained instance
+
+Protocol 14 adds `reconfigure {instance, sample_rate}` and
+`reconfigured {instance, latency}`. The engine must quiesce the instance's audio
+link before requesting a change. Its shared-memory maximum block capacity is
+unchanged; engine block-size changes within that capacity require no new link.
+Rates must be finite, positive and at most 768000 Hz.
+
+The host stops and joins the instance's audio worker with the existing bounded
+stop wait, deactivates the same component, changes its processing configuration,
+and activates it again. CLAP uses its activate configuration; VST3 calls
+setupProcessing while inactive on the host main thread. The editor and component
+are retained, and the reply carries the newly reported latency. The caller must
+not resume audio until the acknowledgement and its latency update are applied.
+Failure is explicit and requires recovery; it must not be treated as a successful
+rate change. Same-rate requests leave an already configured instance alone.
+
+The output owner applies this transaction to retained processors before building
+its new renderer, updating each slot's latency. The session acknowledges the
+retained rate before its next rack sync; otherwise that sync would unload all
+instances again. Starts still in flight are retired and restarted at the new
+rate because they were not part of the returned renderer. A failed transaction
+aborts opening the new renderer and reports the error instead of playing a graph
+containing mixed processing rates. A later crash restart reads the acknowledged
+rate shared with the control half.
+
+## Amendment: stopping a hosted instrument
+
+Some instruments reset their output immediately when the transport's playing flag
+becomes false, even when ordinary note-off messages alone allow a smooth release.
+The hosted instrument therefore fades its continuing output to zero over 5 ms
+using a smooth polynomial gain envelope before delivering the stopped transport.
+Its position continues during that short fade; Stop's return to the start marker
+is deferred along with the flag. This is per instrument, before downstream effects
+and delay compensation, so those effects can keep their tails. Instrument releases
+are limited to this stop fade. A Play during the fade reverses it from its current
+gain; a live note while paused reopens the gate at that note's frame offset.
+
+While its gate changes or is closed, an instrument processes separately from
+joint followers, so its envelope cannot mute downstream effects. Ordinary playback
+keeps joint processing. The renderer does not add the older held-sample output
+ramp when its instruments provide this soft-stop contract. Both offline and live
+hosting use the same gate. This introduces no delay during ordinary playback.
+
 ## Sources
 
 - Bitwig plug-in hosting modes: https://www.bitwig.com/userguide/latest/vst_plug-in_handling_and_options

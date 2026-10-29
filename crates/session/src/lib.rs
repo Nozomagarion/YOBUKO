@@ -558,6 +558,12 @@ impl Session {
         self.plugins.stop_all();
     }
 
+    pub(crate) fn retain_plugins_at_player_rate(&mut self) {
+        if let Some(player) = &self.sync.player {
+            self.plugins.retain_at_rate(player.sample_rate());
+        }
+    }
+
     /// Disconnects the audio engine; the project's plug-ins stop (each keeps its last state for
     /// when the project plays again).
     pub fn detach_player(&mut self) -> Option<Player> {

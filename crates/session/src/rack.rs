@@ -35,6 +35,7 @@ use crate::{CommandError, Player};
 mod catalog;
 mod hosted;
 mod offline;
+mod transport_gate;
 
 pub use self::catalog::*;
 pub use self::hosted::*;
@@ -843,6 +844,18 @@ impl Rack {
         }
     }
 
+    /// The output has acknowledged reconfiguration of the retained audio processors.
+    /// Prevent the next sync from replacing their still-live control halves.
+    pub(crate) fn retain_at_rate(&mut self, sample_rate: u32) {
+        if self.sample_rate == sample_rate {
+            return;
+        }
+        self.sample_rate = sample_rate;
+        // A start still in flight has no processor in the returned renderer and therefore
+        // was not reconfigured. Retire its old-generation result and start it at the new rate.
+        self.instances.retain(|_, instance| !matches!(instance.status, PluginStatus::Loading));
+    }
+
     /// Reads `control`'s last state and lets it go, on a thread of its own; the state comes
     /// back to be kept for when the device's plug-in starts again.
     fn stop(&self, key: u64, mut control: Plugin) {
@@ -1413,7 +1426,8 @@ impl Rack {
                     }
                     instance.state_refused = refused;
                     // A plug-in with an ARA document plays its regions at the song's position.
-                    let hosted = Hosted::new(audio);
+                    let hosted =
+                        Hosted::new(audio).with_instrument_transport(instance.info.instrument, self.sample_rate);
                     instance.counts = Some(hosted.counts());
                     match player.send_plugin(started.key, Box::new(hosted)) {
                         Ok(()) => instance.status = PluginStatus::Running,

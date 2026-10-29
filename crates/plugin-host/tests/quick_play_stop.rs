@@ -128,6 +128,10 @@ fn project(tracks: u32) -> Project {
 /// A stopped renderer with one track per instrument of `specs`, each in its own host process;
 /// the controls (kept so the hosts run) and each plug-in's counts, in order.
 fn renderer(specs: &[&str], sample_rate: u32) -> (Renderer, Vec<Plugin>, Vec<Arc<BlockCounts>>) {
+    renderer_with_gate(specs, sample_rate, false)
+}
+
+fn renderer_with_gate(specs: &[&str], sample_rate: u32, gate: bool) -> (Renderer, Vec<Plugin>, Vec<Arc<BlockCounts>>) {
     let p = project(specs.len() as u32);
     let mut plugins = Plugins::new();
     let mut controls = Vec::new();
@@ -135,7 +139,11 @@ fn renderer(specs: &[&str], sample_rate: u32) -> (Renderer, Vec<Plugin>, Vec<Arc
     for (found, spec) in plugin_devices(&p).into_iter().zip(specs) {
         let (control, hosted) = start(spec, sample_rate);
         counts.push(hosted.counts());
-        plugins.insert(found.key, PluginSlotInfo { instrument: true, latency: 0 }, Box::new(hosted));
+        plugins.insert(
+            found.key,
+            PluginSlotInfo { instrument: true, latency: 0 },
+            Box::new(hosted.with_instrument_transport(gate, sample_rate)),
+        );
         controls.push(control);
     }
     let renderer = Renderer::build(
@@ -146,6 +154,34 @@ fn renderer(specs: &[&str], sample_rate: u32) -> (Renderer, Vec<Plugin>, Vec<Arc
     )
     .unwrap();
     (renderer, controls, counts)
+}
+
+#[test]
+fn stopping_a_transport_sensitive_instrument_fades_its_waveform() {
+    for frames in [32, 512, 2048] {
+        let (mut render, _controls, _) = renderer_with_gate(&["test:transport-cut"], 48_000, true);
+        render.handle(LaunchCommand::Play);
+        let mut block = vec![0.0; frames * 2];
+        for _ in 0..17 {
+            render.process(&mut block);
+        }
+        let mut left = vec![block[block.len() - 2]];
+        render.handle(LaunchCommand::StopHere);
+        for _ in 0..20 {
+            render.process(&mut block);
+            left.extend(block.iter().step_by(2).copied());
+        }
+        let max_step = left.windows(2).map(|s| (s[1] - s[0]).abs()).fold(0.0, f32::max);
+        assert!(max_step < 0.007, "{frames} frames: step {max_step}");
+        let max_bend = left.windows(3).map(|s| (s[2] - 2.0 * s[1] + s[0]).abs()).fold(0.0, f32::max);
+        assert!(max_bend < 0.0002, "{frames} frames: slope step {max_bend}");
+        assert_eq!(left.last(), Some(&0.0));
+        render.handle(LaunchCommand::Play);
+        for _ in 0..20 {
+            render.process(&mut block);
+        }
+        assert!(block.iter().any(|s| s.abs() > 0.01), "restart stayed muted");
+    }
 }
 
 /// What playing with play and stop pressed every few blocks did.

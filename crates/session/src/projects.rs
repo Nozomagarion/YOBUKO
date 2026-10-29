@@ -267,7 +267,9 @@ impl Projects {
                 })
             })
             .map_err(|e| CommandError(format!("no audio output: {e}")))?;
-        if !kept {
+        if kept {
+            session.retain_plugins_at_player_rate();
+        } else {
             session.restart_plugins();
         }
         Ok(notice)
@@ -295,7 +297,9 @@ impl Projects {
                 })
             })
             .map_err(|e| CommandError(format!("no audio output: {e}")))?;
-        if !kept {
+        if kept {
+            session.retain_plugins_at_player_rate();
+        } else {
             session.restart_plugins();
         }
         if let Ok(player) = session.player_mut() {
@@ -306,7 +310,7 @@ impl Projects {
             began.elapsed().as_secs_f64() * 1000.0,
             session.player().and_then(crate::Player::output_info)
         );
-        // Plug-ins that could not carry over (a new sample rate) start again.
+        // Plug-ins that could not carry over start again; retained instances stay alive.
         session.sync_plugins();
         Ok(notice)
     }

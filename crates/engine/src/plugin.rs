@@ -111,6 +111,15 @@ impl Default for SongPosition {
 /// The audio half of a running plug-in, as the engine sees it. Implemented outside the engine
 /// (the session, over `suhina-plugins`); test doubles implement it too.
 pub trait PluginProcessor: Send {
+    /// The instrument softens its own transport stop before handing audio to effects.
+    fn smooth_transport_stop(&self) -> bool {
+        false
+    }
+    /// Reconfigures a retained processor between renderers, with audio fully stopped.
+    /// This control operation is NOT real-time safe. Returns its new latency in frames.
+    fn reconfigure(&mut self, _sample_rate: u32, _timeout: Duration) -> Result<u32, String> {
+        Err("this processor does not support audio reconfiguration".into())
+    }
     /// Runs `buffer`, interleaved stereo (the chain's sound so far), through the plug-in in
     /// place, with `events` at frames counted from the start of `buffer`, waiting at most
     /// `timeout`. Returns false when the plug-in did not answer in time or is gone; `buffer` is
@@ -298,6 +307,24 @@ pub struct Plugins {
 }
 
 impl Plugins {
+    /// Reconfigures all retained processors before building a renderer at a new rate.
+    /// Never called from rendering. Failure aborts opening the new renderer: mixing
+    /// processors configured at different rates would produce incorrect sound.
+    pub fn reconfigure(&mut self, sample_rate: u32, timeout: Duration) -> Result<(), String> {
+        let deadline = Instant::now() + timeout;
+        for (key, processor) in &mut self.processors {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err("plug-in audio reconfiguration timed out".into());
+            }
+            let latency = processor.reconfigure(sample_rate, left).map_err(|why| format!("plug-in {key}: {why}"))?;
+            if let Some(info) = self.info.get_mut(key) {
+                info.latency = latency;
+            }
+        }
+        Ok(())
+    }
+
     pub fn new() -> Self {
         Self::default()
     }

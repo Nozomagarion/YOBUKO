@@ -1466,9 +1466,17 @@ impl Renderer {
     /// Stops the transport; the playhead goes back to the marker, or, with `here`, the marker
     /// moves to the playhead. Stopping while stopped moves the marker to beat 0.
     fn stop_transport(&mut self, here: bool) {
-        // A hosted instrument can end its voice immediately on note-off. Join that
-        // release when it reaches the output, preserving the preceding delayed tail.
-        if self.running && !self.plugin_info.is_empty() {
+        // Hosted instruments fade their continuing waveform before reporting stopped,
+        // ahead of downstream effects and delay compensation. A second output ramp would
+        // replace the start of that waveform with a held sample. Keep the legacy fallback
+        // for processors that do not provide that contract.
+        let mut has_instrument = false;
+        let mut needs_guard = false;
+        for slot in self.graph.chains.iter_mut().flat_map(|chain| chain.plugin_slots()).filter(|s| s.instrument) {
+            has_instrument = true;
+            needs_guard |= !slot.processor.as_ref().is_some_and(|p| p.smooth_transport_stop());
+        }
+        if self.running && !self.plugin_info.is_empty() && (!has_instrument || needs_guard) {
             self.start_guard.begin(self.graph.latency);
         }
         self.start_beat = if !self.running {

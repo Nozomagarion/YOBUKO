@@ -402,7 +402,7 @@ pub struct Opened {
     /// plays instead, or a part of the choice could not be had.
     pub notice: Option<String>,
     /// The previous player's plug-ins run on in the new one; when false the session starts
-    /// them again (a new sample rate, or the old output did not give them back).
+    /// them again (the old output did not give them back).
     pub plugins_kept: bool,
 }
 
@@ -415,7 +415,7 @@ pub trait AudioSystem: Send + Sync {
     /// Plays `project` with its transport stopped on the output `choice` names, or on the
     /// default one, with a notice, when that is not there. `previous` is the player it
     /// replaces: it is closed first (a device may only be open once), and its running plug-ins
-    /// carry over when the sample rate stays the same.
+    /// carry over after any required sample-rate reconfiguration has succeeded.
     fn open(
         &self,
         project: &Project,

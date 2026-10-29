@@ -878,7 +878,7 @@ pub fn open_player(project: &Project, audio: &AudioPool) -> Result<(Player, Stri
 
 /// Plays `project` with its transport stopped on the output `choice` names (see
 /// [`AudioSystem::open`]), from a thread that owns the stream. `previous` is closed first; its
-/// plug-ins carry over when the sample rate stays the same.
+/// plug-ins carry over, reconfigured while quiescent when the sample rate changes.
 pub fn open_chosen(
     project: &Project,
     audio: &AudioPool,
@@ -903,7 +903,12 @@ pub fn open_chosen(
             let started = (|| {
                 let (mut output, device, producer, progress) = open_fitting(&choice)?;
                 let (plugins, kept) = match carried {
-                    Some((rate, plugins)) if rate == output.sample_rate => (plugins, true),
+                    Some((rate, mut plugins)) => {
+                        if rate != output.sample_rate {
+                            plugins.reconfigure(output.sample_rate, std::time::Duration::from_secs(10))?;
+                        }
+                        (plugins, true)
+                    }
                     _ => (Plugins::new(), false),
                 };
                 let mut renderer = Renderer::build(
