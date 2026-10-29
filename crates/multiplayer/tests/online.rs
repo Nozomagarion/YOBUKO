@@ -94,6 +94,53 @@ fn an_online_code_works_once_and_three_guests_can_join_with_fresh_codes() {
     }
 }
 
+/// When a scheduled start falls on this process's clock, read from one state call.
+fn start_instant(value: &Value, read_at: Instant) -> Instant {
+    let starts_in = value["transport_starts_in_ms"].as_i64().unwrap();
+    let magnitude = Duration::from_millis(starts_in.unsigned_abs());
+    if starts_in >= 0 { read_at + magnitude } else { read_at - magnitude }
+}
+
+#[test]
+fn linked_playback_starts_host_and_guest_together_and_stops_both() {
+    let (mut host, invitation) = host();
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut guest, |v| v["mode"] == "connected");
+    assert!(guest.execute("multiplayer.transport", &json!({"action":"play","beats":4})).is_err(), "unlinked");
+    host.execute("multiplayer.linkPlayback", &json!({"linked":true})).unwrap();
+    wait(&mut host, |v| v["linked"] == true);
+    let linked = wait(&mut guest, |v| v["linked"] == true);
+    assert_eq!(linked["transport"]["playing"], false);
+    assert!(linked["transport_starts_in_ms"].is_null());
+    // Let the guest collect a few round trips for its clock estimate.
+    std::thread::sleep(Duration::from_millis(400));
+    guest.execute("multiplayer.transport", &json!({"action":"play","beats":4})).unwrap();
+    let remote = wait(&mut guest, |v| v["transport"]["playing"] == true);
+    let remote_at = Instant::now();
+    let local = wait(&mut host, |v| v["transport"]["playing"] == true);
+    let local_at = Instant::now();
+    assert_eq!(remote["transport"], local["transport"], "the same seq, beat and host start time");
+    assert_eq!(local["transport"]["beat"], 4.0);
+    let (guest_start, host_start) = (start_instant(&remote, remote_at), start_instant(&local, local_at));
+    let gap = if guest_start > host_start { guest_start - host_start } else { host_start - guest_start };
+    assert!(gap < Duration::from_millis(30), "starts differ by {gap:?}");
+    let lead = host_start.saturating_duration_since(local_at);
+    assert!(lead <= Duration::from_millis(suhina_multiplayer::LEAD_MS), "{lead:?}");
+    // A late reader sees a negative delay and can catch up from the elapsed time.
+    std::thread::sleep(Duration::from_millis(400));
+    assert!(state(&mut guest)["transport_starts_in_ms"].as_i64().unwrap() < 0);
+    let seq = local["transport"]["seq"].as_u64().unwrap();
+    host.execute("multiplayer.transport", &json!({"action":"stop","beats":0})).unwrap();
+    let stopped = wait(&mut guest, |v| v["transport"]["playing"] == false);
+    assert_eq!(stopped["transport"]["seq"], seq + 1);
+    assert_eq!(stopped["transport"]["beat"], 4.0, "stop keeps the start position");
+    guest.execute("multiplayer.linkPlayback", &json!({"linked":false})).unwrap();
+    wait(&mut host, |v| v["linked"] == false && v["transport"].is_null());
+    wait(&mut guest, |v| v["linked"] == false);
+    assert!(host.execute("multiplayer.transport", &json!({"action":"play","beats":0})).is_err());
+}
+
 #[test]
 fn malformed_online_codes_are_refused_before_connecting() {
     let mut guest = Service::default();

@@ -994,6 +994,9 @@ mod launcher_tests;
 #[path = "multiplayer_guest_tests.rs"]
 mod guest_tests;
 
+#[path = "multiplayer_linked_tests.rs"]
+mod linked_tests;
+
 #[test]
 fn synchronous_refusals_survive_state_refreshes_and_can_be_acknowledged_without_editing() {
     let ctx = egui::Context::default();

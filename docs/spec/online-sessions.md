@@ -15,7 +15,8 @@ covers:
 
 Self-authored extension of the host-ordered session adapter
 ([several guests](lan-multiple-guests.md)). The collaboration protocol, its limits and its
-admission rules are unchanged; only the transport between computers changes. Protocol 13.
+admission rules are unchanged; only the transport between computers changes. Protocol 14
+(13 before [linked playback](linked-playback.md) added the shared transport).
 
 ## What a person does
 
@@ -30,7 +31,7 @@ admission rules are unchanged; only the transport between computers changes. Pro
 
 Each session side opens an [iroh](https://github.com/n0-computer/iroh) endpoint (MIT OR
 Apache-2.0) with a fresh secret key, created for the session and never stored. Connections are
-QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/13`.
+QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/14`.
 
 - The host waits up to ten seconds for a home relay, then puts its endpoint id (public key),
   relay URL and direct addresses in the invitation. Without a relay it still invites with its
@@ -60,7 +61,8 @@ whole session, so a renewed code differs only in its secret.
   connections are refused before any data is read.
 - Sound budgets, frame sizes and journal length are those of the LAN transport.
 - No reconnection after a cut, no host transfer, no live audio between computers: each
-  computer plays the project on its own, as on the LAN.
+  computer plays the project on its own, as on the LAN; [linked playback](linked-playback.md)
+  only starts them together.
 - `online-loopback`, accepted wherever an address is, binds 127.0.0.1 without relays or
   address lookup. It serves tests and two instances on one computer.
 

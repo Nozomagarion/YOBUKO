@@ -25,6 +25,7 @@ use suhina_model::Project;
 use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, ParamType, Policy};
 
 use crate::invitation::{Invitation, Invite, new_secret, private, secret_hash};
+use crate::linked::{ClockEstimate, Linked, SharedTransport, TransportRequest};
 use crate::online::{Net, OnlineInvitation, Reach};
 use crate::protocol::{self, ClientMessage, Controls, Operation, PROTOCOL, ServerMessage, WireEdit};
 
@@ -42,6 +43,7 @@ struct Canonical {
     guests: BTreeSet<PeerId>,
     assets: Vec<Arc<assets::Encoded>>,
     pending_audio: Vec<AudioAddition>,
+    linked: Linked,
 }
 impl Canonical {
     fn since(&self, seen: u64) -> Result<Vec<Operation>, String> {
@@ -149,15 +151,25 @@ impl Canonical {
         }
         Ok(())
     }
-    fn emit(&mut self, events: &SyncSender<Event>, last: &mut (u64, usize)) -> Result<(), String> {
+    fn emit(&mut self, events: &SyncSender<Event>, last: &mut (u64, usize, u64)) -> Result<(), String> {
         let current = (self.host.revision(), self.guests.len());
-        if current != *last {
+        if current != (last.0, last.1) {
             let controls = Controls::from_project(self.host.project(), current.0)?;
             let operations = self.since(last.0)?;
             let audio = std::mem::take(&mut self.pending_audio);
             match events.try_send(Event::State(controls, operations, current.1, audio)) {
-                Ok(()) => *last = current,
+                Ok(()) => (last.0, last.1) = current,
                 Err(mpsc::TrySendError::Full(Event::State(_, _, _, audio))) => self.pending_audio = audio,
+                Err(_) => return Err("multiplayer view closed".into()),
+            }
+        }
+        let seq = self.linked.seq();
+        if seq != last.2 {
+            // The host's own clock: there is no offset to estimate.
+            let clock = LocalClock { epoch: self.linked.clock.epoch(), offset: 0 };
+            match events.try_send(Event::Transport(self.linked.view(), clock)) {
+                Ok(()) => last.2 = seq,
+                Err(mpsc::TrySendError::Full(_)) => {}
                 Err(_) => return Err("multiplayer view closed".into()),
             }
         }
@@ -174,6 +186,8 @@ impl Canonical {
             operations,
             accepted,
             error,
+            host_ms: self.linked.clock.now_ms(),
+            transport: self.linked.view(),
         })
     }
     fn renew(&mut self, invitation: &dyn Invite, now: Instant, events: &SyncSender<Event>) -> Result<(), String> {
@@ -214,6 +228,7 @@ enum Event {
     Receiving(usize, usize),
     Upload(Option<(usize, usize)>),
     State(Controls, Vec<Operation>, usize, Vec<AudioAddition>),
+    Transport(Option<SharedTransport>, LocalClock),
     Rejected(String),
     Failed(String),
     Closed,
@@ -222,6 +237,20 @@ enum Input {
     RenewInvitation,
     Edit { base: u64, edit: WireEdit },
     Publish { base: u64, track: u32, start: f64, audio: Arc<suhina_engine::AudioData> },
+    Transport(TransportRequest),
+}
+
+/// A local clock and its estimated distance to the host clock, so the view can schedule a start.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct LocalClock {
+    epoch: Instant,
+    /// Host clock minus the clock that starts at `epoch`, in milliseconds.
+    offset: i64,
+}
+impl LocalClock {
+    fn host_now_ms(&self) -> i64 {
+        i64::try_from(self.epoch.elapsed().as_millis()).unwrap_or(i64::MAX).saturating_add(self.offset)
+    }
 }
 
 struct Running {
@@ -256,6 +285,8 @@ pub struct Service {
     selected_take: Option<Arc<suhina_engine::AudioData>>,
     received_audio: Vec<AudioAddition>,
     sending: Option<(usize, usize)>,
+    transport: Option<SharedTransport>,
+    clock: Option<LocalClock>,
 }
 
 impl Service {
@@ -388,6 +419,10 @@ impl Service {
                         self.controls = Some(controls);
                         self.guest_count = guests;
                     }
+                    Ok(Event::Transport(transport, clock)) => {
+                        self.transport = transport;
+                        self.clock = Some(clock);
+                    }
                     Ok(Event::Rejected(error)) => self.error = Some(error),
                     Ok(Event::Failed(error)) => {
                         self.error = Some(error);
@@ -413,6 +448,8 @@ impl Service {
             self.running = None;
             self.invitation = None;
             self.guest_count = 0;
+            self.transport = None;
+            self.clock = None;
         }
     }
     pub fn active(&self) -> bool {
@@ -445,6 +482,8 @@ impl Service {
         self.selected_take = None;
         self.received_audio.clear();
         self.sending = None;
+        self.transport = None;
+        self.clock = None;
         self.running = Some(Running { stop, sockets, inputs, events });
         Ok(json!({"queued":true}))
     }
@@ -511,6 +550,25 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         policy: LOCAL,
     },
     CommandSpec {
+        id: "multiplayer.linkPlayback",
+        label: "Link or unlink playback: every participant then plays, stops and moves together",
+        params: &[param("linked", ParamType::Bool, "true links playback for everyone, false unlinks it")],
+        kind: CommandKind::Projects,
+        run: link_playback,
+        policy: LOCAL,
+    },
+    CommandSpec {
+        id: "multiplayer.transport",
+        label: "Play, stop or move the linked transport of every participant",
+        params: &[
+            param("action", ParamType::Text, "play, stop or seek"),
+            param("beats", ParamType::Number, "where play or seek starts, 0..120000; stop ignores it"),
+        ],
+        kind: CommandKind::Projects,
+        run: shared_transport,
+        policy: LOCAL,
+    },
+    CommandSpec {
         id: "multiplayer.state",
         label: "Poll local LAN state",
         params: &[],
@@ -532,9 +590,50 @@ pub fn commands() -> &'static [CommandSpec<Service>] {
 }
 fn state(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.poll();
+    // The local delay to the shared start, so the view needs no clock arithmetic of its own.
+    let starts_in = match (s.transport, s.clock) {
+        (Some(t), Some(clock)) if t.playing => Some(crate::linked::starts_in_ms(t.start_ms, clock.host_now_ms())),
+        _ => None,
+    };
     Ok(
-        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"error":s.error,"guest_connected":s.guest_count > 0,"guests_connected":s.guest_count,"max_guests":MAX_GUESTS,"receiving":s.receiving,"sending":s.sending}),
+        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"error":s.error,"guest_connected":s.guest_count > 0,"guests_connected":s.guest_count,"max_guests":MAX_GUESTS,"receiving":s.receiving,"sending":s.sending,"linked":s.transport.is_some(),"transport":s.transport,"transport_starts_in_ms":starts_in}),
     )
+}
+fn queue_transport(s: &mut Service, request: TransportRequest) -> Result<Value, CommandError> {
+    s.poll();
+    if !matches!(s.mode.as_str(), "hosting" | "connected") {
+        return Err("connect before linking playback".into());
+    }
+    request.validate().map_err(CommandError::from)?;
+    s.running
+        .as_ref()
+        .ok_or("no multiplayer session")?
+        .inputs
+        .try_send(Input::Transport(request))
+        .map_err(|_| CommandError::from("multiplayer is busy or disconnected"))?;
+    s.error = None;
+    Ok(json!({"queued":true}))
+}
+fn link_playback(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
+    let linked = p["linked"].as_bool().ok_or("linked must be true or false")?;
+    queue_transport(s, TransportRequest::Link { linked })
+}
+fn shared_transport(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
+    let beat = p["beats"]
+        .as_f64()
+        .filter(|b| b.is_finite() && (0.0..=crate::linked::MAX_BEAT).contains(b))
+        .ok_or("beats must be a number between 0 and 120000")?;
+    let request = match p["action"].as_str() {
+        Some("play") => TransportRequest::Play { beat },
+        Some("stop") => TransportRequest::Stop {},
+        Some("seek") => TransportRequest::Seek { beat },
+        _ => return Err("action must be play, stop or seek".into()),
+    };
+    s.poll();
+    if s.transport.is_none() {
+        return Err("turn on Link playback first".into());
+    }
+    queue_transport(s, request)
 }
 fn renew_invitation(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.poll();
@@ -561,6 +660,8 @@ fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.selected_take = None;
     s.received_audio.clear();
     s.sending = None;
+    s.transport = None;
+    s.clock = None;
     Ok(json!({"stopped":true}))
 }
 fn address(p: &Value) -> Result<Place, CommandError> {
@@ -814,6 +915,7 @@ fn host(
         guests: BTreeSet::new(),
         assets: initial_assets,
         pending_audio: Vec::new(),
+        linked: Linked::new(),
     }));
     events
         .try_send(Event::Ready(invite, initial, Box::new(prepared.snapshot)))
@@ -821,7 +923,7 @@ fn host(
     let pending = Arc::new(AtomicUsize::new(0));
     let mut handlers: Vec<std::thread::JoinHandle<()>> = Vec::new();
     let mut sequence = 1u64;
-    let mut last = (0u64, 0usize);
+    let mut last = (0u64, 0usize, 0u64);
     while !stop.load(Ordering::Relaxed) {
         while let Ok(input) = inputs.try_recv() {
             let result = match input {
@@ -834,6 +936,13 @@ fn host(
                             events,
                         )
                     });
+                    if let Err(error) = result {
+                        let _ = events.try_send(Event::Rejected(error));
+                    }
+                    continue;
+                }
+                Input::Transport(request) => {
+                    let result = canonical.lock().unwrap_or_else(PoisonError::into_inner).linked.apply(request);
                     if let Err(error) = result {
                         let _ = events.try_send(Event::Rejected(error));
                     }
@@ -1126,6 +1235,10 @@ fn serve_link(
                         state.since(*seen_revision)?;
                         (*seen_revision, Some(state.submit(peer, *sequence, *base_revision, edit.clone())))
                     }
+                    (None, ClientMessage::Transport { protocol: PROTOCOL, seen_revision, request }) => {
+                        state.since(*seen_revision)?;
+                        (*seen_revision, Some(state.linked.apply(*request)))
+                    }
                     _ => return Err("unsupported LAN protocol message".into()),
                 };
                 (state.response(seen, outcome)?, state.host.project().clone(), state.assets.clone())
@@ -1264,7 +1377,16 @@ fn guest_link(
     let mut mirror = suhina_session::Session::new(snapshot.project.clone());
     io.renew();
     let first: ServerMessage = protocol::read(&mut io)?;
-    let ServerMessage::State { protocol: PROTOCOL, controls, operations, guests, accepted: None, error: None } = first
+    let ServerMessage::State {
+        protocol: PROTOCOL,
+        controls,
+        operations,
+        guests,
+        accepted: None,
+        error: None,
+        host_ms: _,
+        transport: _,
+    } = first
     else {
         return Err("invitation refused, expired or already used".into());
     };
@@ -1283,15 +1405,24 @@ fn guest_link(
     events.try_send(Event::Connected(controls, Box::new(snapshot), guests)).map_err(|_| "multiplayer view closed")?;
     let mut sequence = 1u64;
     let mut pending: Option<PendingTake> = None;
+    // Linked playback: the host clock estimated from round trips, and what the view last got.
+    let local = crate::linked::Clock::new();
+    let mut estimate = ClockEstimate::default();
+    let mut shown: Option<(Option<SharedTransport>, i64)> = None;
     while !stop.load(Ordering::Relaxed) {
         io.renew();
         let input = if pending.is_none() { inputs.try_recv().ok() } else { None };
+        let mut transport_request = None;
         let edit = match input {
             Some(Input::Publish { base, track, start, audio }) => {
                 pending = Some(prepare_take(base, track, start, audio, storage.clone(), Arc::clone(stop))?);
                 None
             }
             Some(Input::Edit { base, edit }) => Some((base, edit)),
+            Some(Input::Transport(request)) => {
+                transport_request = Some(request);
+                None
+            }
             Some(Input::RenewInvitation) => return Err("only the host can renew invitations".into()),
             None => None,
         };
@@ -1322,9 +1453,12 @@ fn guest_link(
             }
         } else if let Some((base, edit)) = edit {
             ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision: base, seen_revision: revision, edit }
+        } else if let Some(request) = transport_request {
+            ClientMessage::Transport { protocol: PROTOCOL, seen_revision: revision, request }
         } else {
             ClientMessage::Poll { protocol: PROTOCOL, seen_revision: revision }
         };
+        let sent_ms = local.now_ms();
         protocol::write(&mut io, &request)?;
         let response = if let Some(take) = &prepared {
             io.set_deadline(Instant::now() + Duration::from_secs(180));
@@ -1334,11 +1468,28 @@ fn guest_link(
         } else {
             protocol::read(&mut io)?
         };
-        let ServerMessage::State { protocol: PROTOCOL, controls, operations, guests, accepted, error } = response
+        let received_ms = local.now_ms();
+        let ServerMessage::State {
+            protocol: PROTOCOL,
+            controls,
+            operations,
+            guests,
+            accepted,
+            error,
+            host_ms,
+            transport,
+        } = response
         else {
             return Err("invalid host response".into());
         };
         protocol::validate_guest_count(guests)?;
+        if let Some(shared) = &transport {
+            shared.validate()?;
+        }
+        // An upload's round trip includes the sound transfer and says nothing about the clock.
+        if prepared.is_none() {
+            estimate.add(sent_ms, received_ms, host_ms);
+        }
         let controls = *controls;
         let was_publication = prepared.is_some();
         let mut audio = Vec::new();
@@ -1374,6 +1525,27 @@ fn guest_link(
                         .map_err(|_| "multiplayer view closed")?;
                 }
                 None => return Err("host did not acknowledge the edit".into()),
+            }
+        } else if transport_request.is_some() {
+            match accepted {
+                Some(true) => {}
+                Some(false) => {
+                    events
+                        .try_send(Event::Rejected(
+                            error.unwrap_or_else(|| "the host refused this playback change".into()),
+                        ))
+                        .map_err(|_| "multiplayer view closed")?;
+                }
+                None => return Err("host did not acknowledge the playback change".into()),
+            }
+        }
+        if let Some(offset) = estimate.offset() {
+            // A better estimate moves the schedule; a millisecond or two is not worth an event.
+            let changed = shown.is_none_or(|(old, old_offset)| old != transport || old_offset.abs_diff(offset) > 2);
+            if changed
+                && events.try_send(Event::Transport(transport, LocalClock { epoch: local.epoch(), offset })).is_ok()
+            {
+                shown = Some((transport, offset));
             }
         }
         if controls != previous || guests != previous_guests {

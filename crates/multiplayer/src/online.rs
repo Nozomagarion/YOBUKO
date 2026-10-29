@@ -20,7 +20,7 @@ use crate::protocol::PROTOCOL;
 use crate::transport::Link;
 
 const PREFIX: &str = "suhina-net://";
-const ALPN: &[u8] = b"suhina/multiplayer/13";
+const ALPN: &[u8] = b"suhina/multiplayer/14";
 /// Hole punching and relay lookup can take several seconds across the Internet.
 const CONNECT: Duration = Duration::from_secs(20);
 const ONLINE: Duration = Duration::from_secs(10);

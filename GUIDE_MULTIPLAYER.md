@@ -48,6 +48,13 @@ Tester **Set volume** et **Set pan**. Dans **MIDI notes**, choisir un clip et mo
 avec **Apply note** ; l’hôte confirme la modification. Chaque personne peut cliquer **Play locally**
 ou **Stop locally** sans déplacer la lecture de l’autre.
 
+Pour écouter la même chose au même moment, cocher **Link playback** (n’importe quel participant
+peut le faire). Les boutons deviennent **Play together**, **Stop together** et **Everyone from
+beat 16** : chaque clic lance, arrête ou déplace la lecture sur tous les ordinateurs à la fois.
+Le départ est prévu environ 0,3 seconde plus tard pour que tout le monde démarre ensemble ;
+l’audio n’est toujours pas diffusé, chaque ordinateur joue sa propre copie. Garder l’onglet
+partagé au premier plan. Décocher la case rend la lecture de nouveau indépendante.
+
 Si deux modifications partent depuis le même état, l’une peut être refusée : lire le message,
 rafraîchir le brouillon puis refaire l’action souhaitée. Aucun refus ne doit disparaître avant
 de pouvoir être lu ; **Dismiss multiplayer message** permet de l’acquitter. Un refus ne signifie

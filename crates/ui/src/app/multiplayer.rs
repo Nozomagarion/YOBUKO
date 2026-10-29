@@ -42,6 +42,9 @@ pub(super) struct MultiplayerPanel {
     take_file: String,
     take_track: u32,
     take_start: f64,
+    /// Linked playback: the last shared transport played here, and one still waiting for its moment.
+    pub(super) linked_applied: u64,
+    linked_pending: Option<(suhina_multiplayer::SharedTransport, Option<std::time::Instant>)>,
 }
 impl Default for MultiplayerPanel {
     fn default() -> Self {
@@ -69,6 +72,8 @@ impl Default for MultiplayerPanel {
             take_file: String::new(),
             take_track: 0,
             take_start: 0.0,
+            linked_applied: 0,
+            linked_pending: None,
         }
     }
 }
@@ -114,6 +119,8 @@ impl App {
                     self.multiplayer.launcher = Default::default();
                     self.multiplayer.devices = Default::default();
                     self.multiplayer.applied_revision = 0;
+                    self.multiplayer.linked_applied = 0;
+                    self.multiplayer.linked_pending = None;
                 } else if matches!(id, "multiplayer.edit" | "multiplayer.publishTake") {
                     self.multiplayer.submitted = true;
                 }
@@ -294,6 +301,7 @@ impl App {
             self.leave_multiplayer();
             return;
         }
+        self.follow_linked_transport(ctx, &state);
         if self.multiplayer.controls.as_ref() == Some(&controls) {
             if disconnected {
                 self.leave_multiplayer();
@@ -312,6 +320,91 @@ impl App {
         if disconnected {
             self.leave_multiplayer();
         }
+    }
+    /// Linked playback: plays each new shared transport on this computer's own player when it is due.
+    ///
+    /// The service gives the local delay to the scheduled start. A start found late (frames come
+    /// about every 100 ms) jumps ahead by the time already played, so every peer stays aligned.
+    fn follow_linked_transport(&mut self, ctx: &egui::Context, state: &serde_json::Value) {
+        let now = std::time::Instant::now();
+        let shared = serde_json::from_value::<Option<suhina_multiplayer::SharedTransport>>(state["transport"].clone())
+            .ok()
+            .flatten()
+            .filter(|t| t.validate().is_ok());
+        let Some(shared) = shared else {
+            self.multiplayer.linked_pending = None;
+            return;
+        };
+        if shared.seq != self.multiplayer.linked_applied {
+            // Refreshed on every poll: the clock estimate improves while the start waits.
+            let at = state["transport_starts_in_ms"].as_i64().and_then(|ms| {
+                let magnitude = std::time::Duration::from_millis(ms.unsigned_abs());
+                if ms >= 0 { now.checked_add(magnitude) } else { now.checked_sub(magnitude) }
+            });
+            self.multiplayer.linked_pending = Some((shared, at));
+        }
+        let Some((shared, at)) = self.multiplayer.linked_pending else {
+            return;
+        };
+        // Transport commands play the active tab: wait until the shared tab is in front.
+        let Some(id) = self.multiplayer.bound.filter(|id| Some(*id) == self.projects.active()) else {
+            return;
+        };
+        if shared.playing {
+            let Some(at) = at else {
+                return;
+            };
+            if let Some(wait) = at.checked_duration_since(now).filter(|d| !d.is_zero()) {
+                ctx.request_repaint_after(wait);
+                return;
+            }
+            let late = i64::try_from(now.duration_since(at).as_millis()).unwrap_or(i64::MAX);
+            let tempo = self.projects.get(id).map_or(120.0, |s| s.project().transport.tempo_bpm);
+            let beat = suhina_multiplayer::beat_after(shared.beat, late, tempo);
+            self.run(&Action::new("transport.setPosition", json!({"beats": beat})));
+            self.run(&Action::new("transport.play", json!({})));
+        } else {
+            self.run(&Action::new("transport.stop", json!({})));
+            self.run(&Action::new("transport.setPosition", json!({"beats": shared.beat})));
+        }
+        self.multiplayer.linked_applied = shared.seq;
+        self.multiplayer.linked_pending = None;
+    }
+    /// Play, stop and move: this computer's own player, or every participant's while playback is linked.
+    fn show_playback_buttons(&mut self, ui: &mut Ui) {
+        let linked = self.multiplayer.state["linked"].as_bool().unwrap_or(false);
+        let mut link = linked;
+        if ui
+            .checkbox(&mut link, "Link playback")
+            .on_hover_text("Everyone plays, stops and moves together; each computer still renders the project itself.")
+            .changed()
+        {
+            self.multiplayer_command("multiplayer.linkPlayback", json!({"linked": link}));
+        }
+        let beat = self.multiplayer.state["transport"]["beat"].as_f64().unwrap_or(0.0);
+        ui.horizontal(|ui| {
+            if linked {
+                if ui.button("Play together").clicked() {
+                    self.multiplayer_command("multiplayer.transport", json!({"action":"play","beats":beat}));
+                }
+                if ui.button("Stop together").clicked() {
+                    self.multiplayer_command("multiplayer.transport", json!({"action":"stop","beats":beat}));
+                }
+                if ui.button("Everyone from beat 16").clicked() {
+                    self.multiplayer_command("multiplayer.transport", json!({"action":"seek","beats":16}));
+                }
+                return;
+            }
+            if ui.button("Play locally").clicked() {
+                self.run(&Action::new("transport.play", json!({})));
+            }
+            if ui.button("Stop locally").clicked() {
+                self.run(&Action::new("transport.stop", json!({})));
+            }
+            if ui.button("Listen from beat 16").clicked() {
+                self.run(&Action::new("transport.setPosition", json!({"beats":16})));
+            }
+        });
     }
     fn show_publish_take(&mut self, ui: &mut Ui) {
         ui.label("Record in an ordinary local Studio tab, finish the take, then choose its loaded sound here.");
@@ -489,17 +582,7 @@ impl App {
                 ui.weak("One host and up to three guests. Create and privately copy a new invitation for each guest after the previous one joins. Each expires after 5 minutes and works once; replacing an unused invitation revokes it. Connected guests stay.");
             }
             if self.multiplayer.bound == self.projects.active() {
-                ui.horizontal(|ui| {
-                    if ui.button("Play locally").clicked() {
-                        self.run(&Action::new("transport.play", json!({})));
-                    }
-                    if ui.button("Stop locally").clicked() {
-                        self.run(&Action::new("transport.stop", json!({})));
-                    }
-                    if ui.button("Listen from beat 16").clicked() {
-                        self.run(&Action::new("transport.setPosition", json!({"beats":16})));
-                    }
-                });
+                self.show_playback_buttons(ui);
             }
             if let Some(progress) = self.multiplayer.state["sending"].as_array() {
                 let done = progress.first().and_then(serde_json::Value::as_u64).unwrap_or(0);

@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 13;
+pub const PROTOCOL: u16 = 14;
 pub const COPY_FORMAT: u16 = 3;
 
 pub(crate) fn engine_revision() -> Result<String, String> {
@@ -297,6 +297,12 @@ pub enum ClientMessage {
         seen_revision: u64,
         edit: WireEdit,
     },
+    /// Linked playback: a host-ordered change to the shared transport.
+    Transport {
+        protocol: u16,
+        seen_revision: u64,
+        request: crate::linked::TransportRequest,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -336,6 +342,10 @@ pub enum ServerMessage {
         operations: Vec<Operation>,
         accepted: Option<bool>,
         error: Option<String>,
+        /// The host clock when this state was made: milliseconds since the session started.
+        host_ms: u64,
+        /// The shared transport while playback is linked.
+        transport: Option<crate::linked::SharedTransport>,
     },
 }
 

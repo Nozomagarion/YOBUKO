@@ -1,5 +1,24 @@
 # Où en est notre application ?
 
+## Lecture liée « Link playback » — 29 octobre 2026 (branche `feature/online-linked`)
+
+**But :** que tout le monde entende la même chose au même moment, sans diffuser d’audio.
+
+- **Code écrit :** case **Link playback** dans le panneau multijoueur (hôte ou invité). Cochée,
+  les boutons deviennent **Play together**, **Stop together** et **Everyone from beat 16** et
+  agissent sur tous les ordinateurs. L’hôte fixe le départ 0,3 s à l’avance ; chaque invité
+  estime l’horloge de l’hôte à partir de ses échanges et démarre au même instant, en rattrapant
+  le retard éventuel. Décochée, la lecture redevient locale comme avant. Protocole 14 : toutes
+  les personnes doivent avoir la même version. Spécification :
+  [docs/spec/linked-playback.md](docs/spec/linked-playback.md).
+- **Tests passés (Linux, local, sans carte son) :** 100 tests du module multijoueur, dont une
+  session en ligne locale où les départs de l’hôte et de l’invité coïncident à 30 ms près ;
+  18 tests d’interface multijoueur ; clippy strict.
+- **Pas encore fait :** essai réel entre deux ordinateurs (reporté par le propriétaire), paquets.
+- **Limites :** latence de la carte son non compensée ; le rattrapage suit le tempo du projet,
+  pas les changements de tempo ; la barre de transport du Studio et les clips lancés restent locaux.
+- **Critère suivant :** deux ordinateurs à distance entendent le même temps fort ensemble.
+
 ## Multijoueur en ligne par code — 29 octobre 2026 (branche `feature/online`)
 
 **Nouvelle priorité du propriétaire : jouer ensemble par Internet, pas seulement en réseau local.**

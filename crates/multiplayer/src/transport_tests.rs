@@ -16,6 +16,7 @@ fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
         expires: now + Duration::from_secs(1),
         redeemed: false,
         guests: BTreeSet::new(),
+        linked: Linked::new(),
     };
     assert!(host.admit(&"b".repeat(64), now).is_err());
     assert!(!host.redeemed);
@@ -245,6 +246,8 @@ fn sixty_four_tracks_with_json_escaped_names_fit_a_control_frame() {
                 .collect(),
             accepted: None,
             error: None,
+            host_ms: u64::MAX,
+            transport: Some(SharedTransport { seq: u64::MAX, playing: true, beat: 120_000.0, start_ms: u64::MAX }),
         },
     )
     .unwrap();
@@ -279,6 +282,7 @@ fn canonical(project: Project) -> Canonical {
         expires: Instant::now() + Duration::from_secs(300),
         redeemed: false,
         guests: BTreeSet::new(),
+        linked: Linked::new(),
     }
 }
 
@@ -853,14 +857,14 @@ fn a_full_ui_queue_keeps_the_sound_lease_until_its_operation_can_be_delivered_wi
     state.commit_take(Host::owner(), 1, 0, (1, 0.0), asset, Some(collected)).unwrap();
     let (send, receive) = mpsc::sync_channel(1);
     assert!(send.try_send(Event::Upload(None)).is_ok());
-    let mut last = (0, 0);
+    let mut last = (0, 0, 0);
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (0, 0));
+    assert_eq!(last, (0, 0, 0));
     assert_eq!(state.pending_audio.len(), 1);
     assert!(path.exists());
     receive.recv().unwrap();
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (1, 0));
+    assert_eq!(last, (1, 0, 0));
     assert!(state.pending_audio.is_empty());
     let Event::State(controls, operations, _, audio) = receive.recv().unwrap() else { panic!("state") };
     assert_eq!(controls.revision, 1);
@@ -1194,19 +1198,19 @@ fn membership_only_events_survive_backpressure_without_consuming_music_revisions
     state.guests.insert(peer);
     let (send, receive) = mpsc::sync_channel(1);
     assert!(send.try_send(Event::Upload(None)).is_ok());
-    let mut last = (0, 0);
+    let mut last = (0, 0, 0);
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (0, 0));
+    assert_eq!(last, (0, 0, 0));
     receive.try_recv().unwrap();
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (0, 1));
+    assert_eq!(last, (0, 1, 0));
     assert!(
         matches!(receive.try_recv().unwrap(), Event::State(c, o, 1, a) if c.revision == 0 && o.is_empty() && a.is_empty())
     );
     state.host.remove_peer(peer).unwrap();
     state.guests.remove(&peer);
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (0, 0));
+    assert_eq!(last, (0, 0, 0));
     assert_eq!(state.host.revision(), 0);
     assert!(state.journal.is_empty());
 }
@@ -1223,6 +1227,8 @@ fn wire_guest_counts_are_bounded_and_required() {
     assert!(serde_json::from_value::<ServerMessage>(value.clone()).is_err());
     let mut valid = value;
     valid["guests"] = json!(1);
+    assert!(serde_json::from_value::<ServerMessage>(valid.clone()).is_err(), "the host clock is required");
+    valid["host_ms"] = json!(0);
     assert!(serde_json::from_value::<ServerMessage>(valid).is_ok());
 }
 
@@ -1253,4 +1259,51 @@ fn mismatched_engine_and_old_copy_format_refuse_before_spending_the_private_invi
     assert_eq!(guest.mode, "connected", "{:?}", guest.error);
     let pins: Value = serde_json::from_str(include_str!("../../../fork-sources.json")).unwrap();
     assert_eq!(protocol::engine_revision().unwrap(), pins["suhina"]["commit"]);
+}
+
+#[test]
+fn a_linked_transport_change_reaches_the_view_and_every_state_after_backpressure() {
+    let mut state = canonical(crate::starter_project());
+    let (send, receive) = mpsc::sync_channel(1);
+    let mut last = (0, 0, 0);
+    state.emit(&send, &mut last).unwrap();
+    assert!(receive.try_recv().is_err(), "nothing changes while unlinked");
+    state.linked.apply(TransportRequest::Link { linked: true }).unwrap();
+    state.linked.apply(TransportRequest::Play { beat: 4.0 }).unwrap();
+    assert!(send.try_send(Event::Upload(None)).is_ok());
+    state.emit(&send, &mut last).unwrap();
+    assert_eq!(last, (0, 0, 0), "a full view keeps the change for the next round");
+    receive.try_recv().unwrap();
+    state.emit(&send, &mut last).unwrap();
+    assert_eq!(last, (0, 0, 2));
+    let Event::Transport(Some(shared), clock) = receive.try_recv().unwrap() else { panic!("transport") };
+    assert_eq!(clock.offset, 0);
+    assert!(shared.playing && shared.beat == 4.0 && shared.seq == 2);
+    let ServerMessage::State { host_ms, transport, .. } = state.response(0, None).unwrap() else { panic!("state") };
+    assert_eq!(transport, Some(shared));
+    assert!(host_ms < shared.start_ms, "the start is scheduled ahead of the host clock");
+}
+
+#[test]
+fn transport_commands_take_exact_keys_and_need_a_linked_session() {
+    let mut service = Service::default();
+    for (id, params) in [
+        ("multiplayer.linkPlayback", json!({"linked":true})),
+        ("multiplayer.transport", json!({"action":"play","beats":0})),
+    ] {
+        assert!(service.execute(id, &params).is_err(), "{id} needs a session");
+    }
+    for params in [
+        json!({"action":"play"}),
+        json!({"action":"play","beats":1,"extra":1}),
+        json!({"action":"play","beats":-1}),
+        json!({"action":"play","beats":120_001}),
+        json!({"action":"rewind","beats":1}),
+    ] {
+        assert!(service.execute("multiplayer.transport", &params).is_err(), "{params}");
+    }
+    assert!(service.execute("multiplayer.linkPlayback", &json!({"linked":"yes"})).is_err());
+    let state = service.execute("multiplayer.state", &json!({})).unwrap();
+    assert_eq!(state["linked"], false);
+    assert!(state["transport"].is_null() && state["transport_starts_in_ms"].is_null());
 }
