@@ -37,14 +37,19 @@ Le canal de mise à jour commun n’est pas publié. Aucun run GitHub n’appara
 au relevé du 29 octobre à 18 h 31 ; le refus Actions du matin concernait `612aab62`.
 Cela ne valide pas Windows/Linux. La prochaine étape concerne le **calage des platines sur le tempo**.
 
-## Travail parallèle demandé le 29 octobre
+## Priorité rectifiée : intégrer davantage rbxport
 
-Le prochain palier de vitesse est en développement dans une copie Git isolée,
-`../suhina-deck-speed-20261029` : réglage manuel par platine avec hauteur liée à la vitesse.
-Il n’est pas encore intégré ni présent dans le paquet `c3fb269b`. La conservation de hauteur et
-la synchronisation continue restent des fonctions distinctes. Un autre agent prépare le contrat
-des boucles DJ et leurs tests, en coordination avec ce travail. Le dépôt principal et le paquet
-validé restent séparés de ces développements à vérifier.
+Le propriétaire a précisé qu’il attend la reprise des fonctions existantes de rbxport, avant
+d’ajouter des fonctions DJ maison. La copie complète de ses sources est présente, mais **seule
+l’analyse tempo/tonalité est actuellement intégrée** à notre app. Bibliothèque Rekordbox, USB,
+LINK et son moteur de platines/sync existent déjà dans rbxport et restent à raccorder.
+
+Le travail de vitesse manuelle reste isolé dans `../suhina-deck-speed-20261029` ; 9 tests moteur et 5 tests session ciblés passent, mais un test du réglage visible échoue.
+Il n’est pas validé et ne fait pas partie du paquet `c3fb269b`. L’agent vitesse a atteint sa limite
+d’utilisation et le pilote a repris son code. L’autre agent a livré un contrat de boucles,
+sans les implémenter. Les boucles et extensions maison sont différées au profit de l’intégration.
+Le point de raccord identifié est `rbl-export` pour les exports, puis la comparaison de
+`rbl-deck` avec notre sortie audio unique. Aucun module complet n’est annoncé intégré à ce stade.
 
 ## Historique : grille rythmique DJ — 29 octobre 2026
 
@@ -398,12 +403,11 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 
 ## Prochaine étape
 
-**Calage et contrôles musicaux des platines. Statut : à spécifier.**
-La première version A/B fonctionne à vitesse originale. Le prochain critère est de définir les
-réglages de vitesse et le calage sur les grilles enregistrées, puis de vérifier tempo, positions
-et son avec le moteur existant. Le changement de vitesse, la conservation de hauteur et la sync
-continue sont des comportements différents à construire explicitement. Boucles, quantification,
-enregistrement du set et export matériel viennent ensuite. Les métadonnées DJ restent locales.
+**Intégration des modules rbxport existants. Statut : raccord identifié, à construire.**
+Reprendre d’abord le pipeline bibliothèque/export, avec un adaptateur du catalogue DJ et des
+essais vers un dossier temporaire. Examiner le moteur `rbl-deck` existant avant toute nouvelle
+fonction de vitesse/sync/loop. Son interface Tauri ne se colle pas directement dans egui ;
+les bibliothèques Rust sont séparées et réutilisables. Les essais matériels restent distincts.
 
 Le multijoueur reste un prototype LAN : Internet, reconnexion automatique, noms/rôles et reprise
 de l’hôte restent prévus. La version et les mises à jour communes restent à publier. L’essai des
