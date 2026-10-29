@@ -57,6 +57,10 @@ impl Player {
         self.output.as_ref().map(|o| o.info())
     }
 
+    pub fn control_panel_open(&self) -> bool {
+        self.output.as_ref().is_some_and(|output| output.control_panel_open())
+    }
+
     pub fn open_control_panel(&self) -> Result<(), String> {
         self.output.as_ref().ok_or("no audio output is open")?.open_control_panel()
     }

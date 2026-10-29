@@ -85,7 +85,7 @@ host process have their own id, so `grep "\[12345\]"` shows one process. To foll
 | `ara musical context changed` | host | the tempo map or time signatures sent to the plug-in again |
 | `slow frame N ms: part ms, …; what was shown` | app (`kit/frame_trace.rs`) | a frame whose drawing took 25 ms or more, part by part (› UI time) |
 | `frames: N in 1.0 s …` | app | once a second while the window draws: frames, drawing time on average and the longest, the longest wait between frames |
-| `audio: device underruns N (+n), stretched frames late N (+n), … plug-in blocks late N (+n, most <plug-in on track>: n), not sent N (+n), longest trip N µs, engine load …` | app | once a second, while playing, when sound went missing since the last look or the engine's load is 70 % or more (› Audio dropouts) |
+| `audio: device underruns N (+n), stretched frames late N (+n), … plug-in blocks late N (+n, most <plug-in on track>: n), not sent N (+n), longest trip N µs, engine load …` | app | once a second while playing (including clean intervals); while stopped, when sound went missing since the last look or the engine's load is 70 % or more (› Audio dropouts) |
 | `slow engine update: N ms (graph …)` | app (`session/src/lib.rs`) | a project change whose new engine graph took 25 ms or more to make, part by part |
 | `slow <work>: N ms` | app | library listings, browser rows, the sample map and its cache, a drop, adding to a track: anything that took 5 ms or more |
 

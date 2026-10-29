@@ -408,6 +408,8 @@ pub struct Renderer {
     /// What the device has queued ahead of the next block and how much it takes at once, in
     /// frames ([`Renderer::set_render_lead`]): how long the block's plug-ins may take.
     render_lead: Option<(usize, usize)>,
+    #[cfg(test)]
+    observed_deadlines: (usize, [Option<Instant>; 2]),
     /// What is known about the project's plug-in devices, for the graphs built after edits.
     plugin_info: HashMap<u64, PluginSlotInfo>,
     /// The browser's preview voice (ADR 0011).
@@ -540,6 +542,8 @@ impl Renderer {
             block_frame: 0,
             offline: false,
             render_lead: None,
+            #[cfg(test)]
+            observed_deadlines: (0, [None; 2]),
             plugin_info: plugins.info,
             preview: preview::Preview::new(sample_rate),
             cue: cue::Cue::new(),
@@ -831,6 +835,10 @@ impl Renderer {
     /// of the block's playing time, so a late plug-in costs its own sound, not the device's
     /// deadline. `None` offline.
     fn deadline(&self, frames: usize) -> Option<Instant> {
+        self.deadline_at(frames, Instant::now())
+    }
+
+    fn deadline_at(&self, frames: usize, now: Instant) -> Option<Instant> {
         if self.offline {
             return None;
         }
@@ -851,7 +859,6 @@ impl Renderer {
             }
             None => block * DEADLINE_SHARE,
         };
-        let now = Instant::now();
         let duration = Duration::try_from_secs_f64(seconds).unwrap_or(Duration::ZERO);
         Some(now.checked_add(duration).unwrap_or(now))
     }
@@ -861,6 +868,13 @@ impl Renderer {
         self.cue.begin(frames);
         let deadline =
             if self.graph.chains.is_empty() { None } else { batch_deadline.or_else(|| self.deadline(frames)) };
+        #[cfg(test)]
+        {
+            if let Some(observed) = self.observed_deadlines.1.get_mut(self.observed_deadlines.0) {
+                *observed = deadline;
+            }
+            self.observed_deadlines.0 = self.observed_deadlines.0.saturating_add(1);
+        }
         for chain in &mut self.graph.chains {
             chain.begin(frames, deadline);
         }

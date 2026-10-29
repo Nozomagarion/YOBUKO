@@ -103,7 +103,7 @@ engine code.
    decision 10 (before it, up to one block until the render thread started its next one), what
    is queued ahead in the ring, and the device's buffer and its own delay. A player sets the buffer small (64 to 256 frames, with ASIO or
    WASAPI exclusive mode on Windows); the default 1024 frames is too slow to play.
-6. **While a track is armed, the output keeps one block queued instead of two** (amendment,
+6. **While a track is armed, the output keeps one block queued instead of four** (amendment,
    [#265](https://github.com/suhina-daw/suhina-daw/issues/265)). The render thread reads
    `Renderer::live_armed` (a track is armed or monitors MIDI with In) before each block and aims for one block or one device buffer,
    whichever is more, instead of four blocks or a device buffer and a block. It is automatic, not
@@ -202,6 +202,13 @@ engine code.
     transport stopped and starts the transport on the frame it ends. A loopback test (the
     output fed back into the input offline, with a known delay) checks that a recorded frame
     lands on the frame it was played at.
+
+## Amendment: playback reserve (2026-10-29)
+
+Ordinary playback keeps four engine blocks queued, or a device period plus a block
+when that is larger. This leaves hosted plug-ins more scheduling room. The shorter
+armed-input queue is unchanged, preserving its monitoring latency. Decision 6
+compares the armed queue with this new ordinary-playback reserve.
 
 ## Amendment: MIDI monitoring (2026-10-23)
 

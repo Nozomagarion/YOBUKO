@@ -137,20 +137,13 @@ reads the program's RAM for the control bar and the plug-in hosts' reports their
 | `devices/nam-amp-modeler` | The NAM Amp Modeler: a `.nam` model through `nam-rs` (MIT) inference, one instance per side, with the input trim, an EQ (shelves and a mid peak), an HQ toggle (the A2 width dial's widest sub-model), a trim delay and an output trim; a rate mismatch runs both ways through `dsp`'s resampler. The fixed schedule and the one-chunk trail make the sound independent of the host's block sizes ([spec](spec/nam-amp-and-cab.md)). | dsp, device-api, nam-rs |
 | `devices/nam-cab-loader` | The NAM Cab Loader: a `.wav` impulse response through `dsp`'s IR convolution, per side, with a phase invert, a high pass, bass/mid/treble cuts, a trim delay and a volume; the same fixed schedule ([spec](spec/nam-amp-and-cab.md)). | dsp, device-api, hound |
 
-ASIO builds patch cpal's `asio-sys` dependency with the vendored Apache-2.0 copy
-in `third_party/asio-sys`. It initializes the SDK's host inputs and queries the
-current instance's channel count before channel metadata, including after a
-driver reload ([host contract](spec/asio-host.md)). The application's safe audio
-boundary and render path remain in `output`.
+Output startup, shutdown fades and diagnostic publication are described in
+[the output lifecycle spec](spec/asio-host.md#audio-output-startup-and-diagnostics).
 
-ASIO device descriptors are cached before the first stream opens and reused while
-it plays; settings never enumerate other ASIO drivers over a loaded driver.
-The active output's native control-panel request travels from the
-session through the owner's command queue to the retained ASIO stream; it does
-not load a separate driver or launch an external settings application. The native
-dialog runs on the owner thread, independently of render and device callbacks.
-A superseded plug-in start is released on a worker thread, since unloading its host
-may wait for a sibling loading after a sample-rate change.
+The `output` crate owns the ASIO driver and routes native panel requests through its
+owner thread. Its host initialization, enumeration and replacement contracts are in
+[the ASIO host spec](spec/asio-host.md). Superseded plug-in starts are retired on a
+session worker so unloading does not block the UI.
 
 ### Inside the `ui` crate
 
@@ -262,7 +255,7 @@ gesture id grouping both XY axes into one undo step. See [ADR 0021](decisions/00
 | Main / session | The CLI, the desktop app's window (egui, one frame at a time), or the MCP server's tokio runtime. Owns the `Session` (the MCP server: all open `Projects`), runs commands, imports and loads audio, builds the `Renderer` and, after each edit, a new graph for it (ADR 0005). In the desktop app an attached agent's commands run here too, as jobs between frames (ADR 0028). | yes |
 | Background image | At most one short-lived `background-image` worker per UI app decodes, bounds and blurs the user-selected PNG. It returns pixels through a bounded channel; the UI uploads them once and shares the cached image with the liquid offscreen renderer. It never captures desktop pixels or touches the audio graph. | yes |
 | Agent endpoints | The desktop app's `suhina-agents` tokio runtime (two threads): holds the build's endpoints, reads "open these files" from later starts and serves attached agents' MCP; it never touches a project, only hands jobs to the window. | yes |
-| Render | `suhina-render` in `output`, at real-time priority (`realtime`; it says what it got before the device starts, and the first stream in a process adds a notice when real-time scheduling was refused, since playback may then drop out under load): `Renderer::process_with_cue` in blocks of the buffer size the user chose (`engine_block`: 64 … 4096 frames, 1024 when none is chosen, fitted to the sizes the device allows, `SUHINA_ENGINE_BLOCK` to try another in tests), ahead of the device into a lock-free ring (`rtrb`). It keeps two blocks queued, or a device buffer and a block when the device takes more at once; while a track is armed, one block or one device buffer, so a key on a MIDI controller sounds sooner ([ADR 0017](decisions/0017-inputs-and-latency.md)). Every plug-in device's deadline counts from this block, so it follows the buffer size chosen. | **no** (AGENTS.md rule 3) |
+| Render | `suhina-render` in `output`, at real-time priority (`realtime`; it says what it got before the device starts, and the first stream in a process adds a notice when real-time scheduling was refused, since playback may then drop out under load): `Renderer::process_with_cue` in blocks of the buffer size the user chose (`engine_block`: 64 … 4096 frames, 1024 when none is chosen, fitted to the sizes the device allows, `SUHINA_ENGINE_BLOCK` to try another in tests), ahead of the device into a lock-free ring (`rtrb`). It keeps four blocks queued, or a device buffer and a block when that is larger; while a track is armed, one block or one device buffer, so a key on a MIDI controller sounds sooner ([ADR 0017](decisions/0017-inputs-and-latency.md)). Every plug-in device's deadline counts from this block, so it follows the buffer size chosen. | **no** (AGENTS.md rule 3) |
 | Audio | The device callback (cpal's thread; in WASAPI exclusive mode `suhina-wasapi`, an event loop on the device's buffer): copies from the ring (silence, counted as an underrun, for what is not there yet), the main and cue pairs to their channels, sample conversion, setting atomics, measuring the latency from the frames queued and the device's own delay. | **no** (AGENTS.md rule 3) |
 | Stretch worker | One thread, owned by the `Controller`, running a `StretchWorker` and a launcher `Preparer` per graph: renders the arrangement's stretched clips 0.5 s ahead into a lock-free ring per clip, and builds the launcher's stretch voices (the stretcher and its buffers, 1 to 4 ms of allocation each) one per round, handing them to the launcher through an `rtrb` ring (ADR 0003). A new graph's worker and preparer join it, an old one leaves once its graph is freed. | yes: it builds voices and joins graphs; never locks |
 | Audio owner | In the desktop app and over MCP, one thread per open project opens and holds the output stream (`output::open_chosen`) and closes it when the session drops its `Player`. When another output is chosen (`audio.setOutput`) it stops the device and the render thread and hands the renderer's plug-in processors (`Renderer::into_plugins`) to the next owner, which reconfigures them through bounded host control requests when the rate changes, updates their latencies and builds its renderer with the same instances. The session adopts the acknowledged rate so its rack sync does not unload them. A failed reconfiguration reports an error and does not start a mixed-rate graph. Streams are never opened or closed on the render or device thread. | yes, but does nothing while playing |
@@ -503,25 +496,3 @@ resources: one folder per theme with its author's `theme.css` (read, never writt
 custom properties (`kit/theme_vars.rs`); a variant's values apply in their own cascade tier,
 between the theme and device panel sheets. Details and current adapter limits are in
 [ADR 0031](decisions/0031-style-sheets.md) and the [skin spec](spec/theme-skins.md).
-
-### Audio output startup and diagnostics
-
-Before starting a device stream, the output owner primes its ring with silence to the normal
-queue target or two device periods, whichever is larger. This covers immediate startup
-callbacks even when the render thread has not run yet; it does not increase the steady-state
-queue target. Reopening restores the transport at
-its current beat even when read-ahead delays the new renderer's start.
-
-At the device boundary, main and cue audio rise from silence over 5 ms when the
-first nonzero frame arrives; priming silence does not consume this fade. Closing
-a stream requests a 5 ms fade of the actual queued waveform in its device callback.
-The callback then keeps supplying silence for the reported hardware delay plus two
-device periods before acknowledging shutdown. The output owner waits at most
-500 ms, or until a device error, then closes the stream and returns its renderer.
-CPAL and exclusive WASAPI share this envelope. No callback waits, locks or allocates;
-the bounded shutdown wait runs only on the owner. This prevents software signal
-steps at open/close, but cannot suppress a pop generated internally by hardware.
-
-The engine publishes the duration and queue lead of a render call with late plug-in blocks
-through atomics. The UI writes these diagnostics and the actual output identity to the trace;
-the real-time thread never writes the log.

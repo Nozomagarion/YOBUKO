@@ -892,6 +892,10 @@ struct Live {
 }
 
 impl LiveOutput for Live {
+    fn control_panel_open(&self) -> bool {
+        self.panel_pending.load(Ordering::Acquire)
+    }
+
     fn open_control_panel(&self) -> Result<(), String> {
         if self.host != "ASIO" {
             return Err("only the active ASIO output has a native control panel".into());

@@ -952,6 +952,8 @@ than forcing an already audible effect tail to zero. It does not move note times
 of latency, and spans render-block boundaries. Offline command rendering uses the same path.
 
 Stopping a running transport, whether returning to the marker or keeping the current position,
-uses the same latency-aligned transition. Note-off messages still arrive immediately; the guard
-smooths an abrupt hosted instrument release at the output without cutting off effect tails.
+uses the same latency-aligned transition unless all instrument slots provide their own smooth
+stop. Hosted instruments with a transport gate fade their own output over 5 ms instead.
+Note-off messages still arrive immediately; the transition smooths an abrupt release without
+cutting off effect tails.
 Stopping an already stopped transport does not begin a new transition.

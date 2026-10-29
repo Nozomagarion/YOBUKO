@@ -1,6 +1,6 @@
 ---
-description: The host inputs passed when initializing an installed ASIO driver on Windows
-read_when: ASIO, UAD, audio driver initialization, ASIOInit, sysRef, asio-sys
+description: ASIO host initialization and native panels, plus audio output startup, shutdown and diagnostics
+read_when: ASIO, audio driver initialization, native control panel, output startup and shutdown, ASIOInit, sysRef
 type: spec
 status: current
 last_verified: 2026-10-28
@@ -9,9 +9,12 @@ covers:
   - third_party/cpal/
   - Cargo.toml
   - crates/output/
+  - crates/session/src/projects.rs
+  - crates/session/src/player.rs
+  - crates/session/src/audio.rs
 ---
 
-# ASIO host initialization
+# ASIO host and output lifecycle
 
 An ASIO-enabled Windows build lists installed drivers through cpal. Loading a
 driver calls ASIOInit through asio-sys. The host must initialize the entire
@@ -110,6 +113,62 @@ clock source or redesign concurrent epoch extension. Deterministic tests cover
 the arithmetic without hardware. Audible crackling and Windows shared-output
 recovery require separate hardware verification; these tests establish neither.
 
+## Recovery after an output fails to open
+
+An unsuccessful output change can leave the project without a player. A subsequent
+explicit output selection opens a new stopped player even when none remains; it
+must not report success while leaving the project silent. The original driver
+open error and requested host/device configuration are recorded in the diagnostic
+trace. Transport commands without an output direct desktop users to Audio settings.
+This recovery does not silently select a different backend.
+
+## Output changes while the control panel is open
+
+While a native panel request is pending or open, output replacement, project opening,
+tab switching and project closing report "close the ASIO control panel first".
+They leave the current player attached. This prevents waiting on an audio-owner thread
+that is occupied by a modal driver dialog. Application exit still uses bounded
+background session cleanup; driver calls themselves cannot be forcibly timed out.
+
+## Implementation ownership
+
+ASIO builds patch cpal's `asio-sys` dependency with the vendored Apache-2.0 copy
+in `third_party/asio-sys`. It initializes the SDK's host inputs and queries the
+current instance's channel count before channel metadata, including after a
+driver reload (the host contract above). The application's safe audio
+boundary and render path remain in `output`.
+
+ASIO device descriptors are cached before the first stream opens and reused while
+it plays; settings never enumerate other ASIO drivers over a loaded driver.
+The active output's native control-panel request travels from the
+session through the owner's command queue to the retained ASIO stream; it does
+not load a separate driver or launch an external settings application. The native
+dialog runs on the owner thread, independently of render and device callbacks.
+A superseded plug-in start is released on a worker thread, since unloading its host
+may wait for a sibling loading after a sample-rate change.
+
+## Audio output startup and diagnostics
+
+Before starting a device stream, the output owner primes its ring with silence to the normal
+queue target or two device periods, whichever is larger. This covers immediate startup
+callbacks even when the render thread has not run yet; it does not increase the steady-state
+queue target. Reopening restores the transport at
+its current beat even when read-ahead delays the new renderer's start.
+
+At the device boundary, main and cue audio rise from silence over 5 ms when the
+first nonzero frame arrives; priming silence does not consume this fade. Closing
+a stream requests a 5 ms fade of the actual queued waveform in its device callback.
+The callback then keeps supplying silence for the reported hardware delay plus two
+device periods before acknowledging shutdown. The output owner waits at most
+500 ms, or until a device error, then closes the stream and returns its renderer.
+CPAL and exclusive WASAPI share this envelope. No callback waits, locks or allocates;
+the bounded shutdown wait runs only on the owner. This prevents software signal
+steps at open/close, but cannot suppress a pop generated internally by hardware.
+
+The engine publishes the duration and queue lead of a render call with late plug-in blocks
+through atomics. The UI writes these diagnostics and the actual output identity to the trace;
+the real-time thread never writes the log.
+
 ## Sources
 
 - The vendored SDK, `third_party/asiosdk/common/asio.cpp`, ASIOInit.
@@ -121,12 +180,3 @@ recovery require separate hardware verification; these tests establish neither.
 
 - [Steinberg ASIO SDK 2.3 specification, section 5](https://dspace.tul.cz/bitstream/handle/15240/49466/ASIO_SDK_2.3.pdf?sequence=1).
 - [CPAL single-buffer compatibility report](https://github.com/RustAudio/cpal/pull/1077).
-
-### Recovery after an output fails to open
-
-An unsuccessful output change can leave the project without a player. A subsequent
-explicit output selection opens a new stopped player even when none remains; it
-must not report success while leaving the project silent. The original driver
-open error and requested host/device configuration are recorded in the diagnostic
-trace. Transport commands without an output direct desktop users to Audio settings.
-This recovery does not silently select a different backend.

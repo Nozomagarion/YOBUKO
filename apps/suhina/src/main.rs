@@ -670,6 +670,10 @@ impl Window {
 
     /// Decodes a session's audio, starts it playing (stopped) and shows it.
     fn show_session(&mut self, mut session: Session, mut warnings: Vec<String>, how: OpenAs) {
+        if let Err(error) = self.app.projects().ensure_output_can_close() {
+            self.app.set_status(Status::Error(error.to_string()));
+            return;
+        }
         let folder = session.audio_folder().map_or_else(|| PathBuf::from("."), Path::to_path_buf);
         // Outside the project's folder only the person's own saved files and library folders
         // are read (`docs/spec/missing-files.md` › Project file boundaries).

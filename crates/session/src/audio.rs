@@ -393,6 +393,10 @@ impl OutputInfo {
 /// A playing output's live numbers, read from the main thread.
 pub trait LiveOutput: Send + Sync {
     fn info(&self) -> OutputInfo;
+    /// Whether a native panel request still owns the audio thread.
+    fn control_panel_open(&self) -> bool {
+        false
+    }
     /// Requests the active driver's own panel without reopening the output.
     fn open_control_panel(&self) -> Result<(), String> {
         Err("this output has no native control panel".into())
@@ -552,6 +556,7 @@ fn devices(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
 }
 
 fn set_output(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
+    projects.ensure_output_can_close()?;
     let choice = projects.output_choice().with_params(params)?;
     projects.set_output_choice(choice);
     let notice = projects.reopen_output()?;
@@ -561,6 +566,7 @@ fn set_output(projects: &mut Projects, params: &Value) -> Result<Value, CommandE
 }
 
 fn set_cue_pair(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
+    projects.ensure_output_can_close()?;
     if params.get("pair").is_none() {
         return Err("pair must be a whole number from 0 (the main output) to 31".into());
     }
