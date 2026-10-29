@@ -137,3 +137,17 @@ project v4, portable-copy format 3 and matching pinned Suhina engine identities 
 Ordinary old project files remain readable through the studio reader, then share as v4. The
 musical edit permissions and quotas above remain unchanged; newly added studio effects are not
 implicitly permitted in shared tabs. All participants need the updated combined application.
+
+## Local command feedback
+
+Synchronous UI command/validation failures remain visible across state polls that contain no
+new service error. A new service error may replace the message; a successful explicit command
+or **Dismiss multiplayer message** clears it. Dismissal does not resend an edit, change the
+shared revision, or discard the local copy. An unchanged old service error is not repeatedly
+redisplayed after acknowledgement. Polling still applies confirmed project state normally.
+
+Check from an active LAN session: a locally refused edit or loaded-take validation reports its
+reason until acknowledged or a later successful action. After several state refreshes the reason
+must remain visible and both projects/revisions unchanged. Dismiss it: it stays dismissed through
+further polls. A later refusal must appear again. Test with a real loopback service and UI controls;
+physical two-computer validation remains separate.

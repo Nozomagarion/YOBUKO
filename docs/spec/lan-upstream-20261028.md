@@ -46,3 +46,23 @@ curve refusal; mismatched engine/format refusal without consuming a valid token;
 with four participants, verified audio, independent renderers and parameter override; native
 EQ/DJ EQ/registry checks and visual review of the updated app. Workspace checks and package
 extraction/signatures are required. Physical computer testing remains deferred by the owner.
+
+
+## 29 October integration: 7753ffa
+
+The fork now merges official main `7753ffa3d730e6bbbd38f28e120b9e6d3544d4b0`, 56 commits after the preceding pin.
+This includes the task-based settings pages, style resolver/cache work, shared DSP follower/sync
+blocks, automation display fixes and shared fixed parameter formatting. These are the merged
+upstream changes, not separate unmerged PR branches. rbxport remains at b739d369.
+
+Native v4, portable v3 and LAN13 stay unchanged: this update does not change shared data types
+or widen device permissions. Exact compiled engine identity changes, so the previous fork build
+is refused before admission. All participants must use the same new combined package.
+The fork update controls move to Settings → Agents and updates → Updates and retain the
+combined release channel; no official standalone binary may replace the multiplayer module.
+
+Check source ancestry/pins and native canonical roundtrips, then all existing real TLS host +
+three-guest tests, independent players and retained copies. Inspect the entry/participant/edit
+panels, stale-edit refusal and local-error acknowledgement. Test the exact packaged programs
+and source marker after ordinary extraction. Software tests do not stand in for the deferred
+physical two-computer and headphone checks.

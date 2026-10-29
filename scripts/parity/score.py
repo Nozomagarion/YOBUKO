@@ -369,3 +369,6 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+# Fork LAN feedback: local refusals survive polling and can be acknowledged.
+# Parity: no change; this improves the fork collaboration UI, not a studio chapter.

@@ -110,7 +110,7 @@ This does not publish or activate an update channel.
 
 ## Visible GitHub update button
 
-Settings > General starts with an Updates section and **GitHub updates…**. The button opens
+Settings > Agents and updates includes an Updates section and **GitHub updates…**. The button opens
 and checks the combined release plus three source components: Suhina main, rbxport main and
 the fork's feature/multiplayer branch. Each row compares the included commit with GitHub and
 links to that project. Upstream differences say Integration needed; a newer fork source says
@@ -123,7 +123,7 @@ and request timeouts. Local fork revisions come from the existing build identity
 upstream revisions come from the pinned source file. The install action always uses the
 combined fork distribution. The dialog never installs an upstream component separately.
 
-To check: open Options > Settings (Cmd+, on Mac), choose General, and click GitHub updates…
+To check: open Options > Settings (Cmd+, on Mac), choose Agents and updates, and click GitHub updates…
 at the top. The dialog shows all three projects and a combined-release status. Check now
 refreshes them. GitHub links open the matching repositories. If no combined release is
 published the dialog says so; turning off startup checks leaves this button available.

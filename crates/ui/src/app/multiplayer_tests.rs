@@ -982,3 +982,45 @@ mod launcher_tests;
 
 #[path = "multiplayer_guest_tests.rs"]
 mod guest_tests;
+
+#[test]
+fn synchronous_refusals_survive_state_refreshes_and_can_be_acknowledged_without_editing() {
+    let ctx = egui::Context::default();
+    let mut app = App::new();
+    app.multiplayer.open = true;
+    app.multiplayer_command("multiplayer.host", json!({"address":"127.0.0.1:0"}));
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while app.multiplayer.bound.is_none() && Instant::now() < deadline {
+        app.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let id = app.multiplayer.bound.unwrap();
+    let original = app.projects.get(id).unwrap().project().clone();
+    let revision = app.multiplayer.controls.as_ref().unwrap().revision;
+    let refuse = |app: &mut App| {
+        app.multiplayer_command("multiplayer.edit", json!({"base_revision":revision,"edit":"{invalid-json"}));
+    };
+    refuse(&mut app);
+    let error = app.multiplayer.error.clone().unwrap();
+    for _ in 0..8 {
+        app.poll_multiplayer(&ctx);
+        assert_eq!(app.multiplayer.error.as_deref(), Some(error.as_str()));
+    }
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 1000.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run_steps(4);
+    assert!(harness.query_by_label(&error).is_some());
+    harness.get_by_label("Dismiss multiplayer message").click();
+    harness.run_steps(8);
+    assert!(harness.state().multiplayer.error.is_none());
+    assert_eq!(harness.state().projects.get(id).unwrap().project(), &original);
+    assert_eq!(harness.state().multiplayer.controls.as_ref().unwrap().revision, revision);
+    refuse(harness.state_mut());
+    harness.run_steps(4);
+    assert!(harness.state().multiplayer.error.is_some());
+    harness.state_mut().multiplayer_command("multiplayer.renewInvitation", json!({}));
+    harness.run_steps(4);
+    assert!(harness.state().multiplayer.error.is_none());
+    harness.state_mut().leave_multiplayer();
+}

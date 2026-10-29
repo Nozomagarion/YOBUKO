@@ -29,6 +29,7 @@ pub(super) struct MultiplayerPanel {
     pub(super) controls: Option<suhina_multiplayer::Controls>,
     draft: Option<suhina_multiplayer::Controls>,
     pub(super) error: Option<String>,
+    service_error: Option<String>,
     pub(super) submitted: bool,
     applied_revision: u64,
     pub(super) notes: super::multiplayer_notes::NoteEditor,
@@ -54,6 +55,7 @@ impl Default for MultiplayerPanel {
             controls: None,
             draft: None,
             error: None,
+            service_error: None,
             submitted: false,
             applied_revision: 0,
             notes: Default::default(),
@@ -92,6 +94,7 @@ impl App {
         match self.multiplayer.service.execute(id, &params) {
             Ok(_) => {
                 self.multiplayer.error = None;
+                self.multiplayer.service_error = None;
                 if matches!(id, "multiplayer.host" | "multiplayer.hostProject" | "multiplayer.join") {
                     self.multiplayer.controls = None;
                     self.multiplayer.draft = None;
@@ -156,11 +159,16 @@ impl App {
         };
         self.multiplayer.invitation = state["invitation"].as_str().unwrap_or_default().to_owned();
         let error = state["error"].as_str().map(str::to_owned);
-        if error.is_some() && error != self.multiplayer.error {
-            self.multiplayer.draft = self.multiplayer.controls.clone();
-            self.multiplayer.submitted = false;
+        if error != self.multiplayer.service_error {
+            if error.is_some() {
+                self.multiplayer.draft = self.multiplayer.controls.clone();
+                self.multiplayer.submitted = false;
+                self.multiplayer.error = error.clone();
+            } else if self.multiplayer.error == self.multiplayer.service_error {
+                self.multiplayer.error = None;
+            }
+            self.multiplayer.service_error = error;
         }
-        self.multiplayer.error = error;
         self.multiplayer.state = state.clone();
         let disconnected = !self.multiplayer.service.active();
         if disconnected && self.multiplayer.bound.is_none() {
@@ -590,6 +598,9 @@ impl App {
         }
         if let Some(error) = &self.multiplayer.error {
             ui.colored_label(theme::recording(), error);
+            if ui.button("Dismiss multiplayer message").clicked() {
+                self.multiplayer.error = None;
+            }
         }
         ui.add_space(theme::PAD);
         ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Recording directly in the shared tab and external plugins come later.");

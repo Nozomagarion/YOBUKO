@@ -136,12 +136,15 @@ organiser et dupliquer les scènes, puis les lancer chacun de votre côté. Les 
 les originaux ; les scènes et cases modifiées sont confirmées par l’hôte. Les sélections périmées
 sont annulées avant une nouvelle modification. [Fonctionnement](docs/spec/lan-launcher-editing.md).
 
-La mise à jour du socle Suhina du 28 octobre intègre les nouveautés déjà fusionnées : égaliseur
-à huit bandes, améliorations DJ EQ, panneaux et courbes d’automatisation. Les anciens projets
+La mise à jour du socle Suhina du 29 octobre intègre le `main` officiel `7753ffa3`, soit
+56 commits supplémentaires : paramètres réorganisés, corrections d’automation, rendu et cache
+des styles, blocs DSP partagés. Les égaliseurs et courbes d’automation du palier précédent restent présents. Les anciens projets
 restent lisibles ; les nouveaux enregistrements de projet utilisent le format v4. Le partage
 vérifie aussi la révision du moteur. [Compatibilité et limites](docs/spec/lan-upstream-20261028.md).
 
 ## Essayer la version actuelle
+
+Pour un premier essai à plusieurs : [guide multijoueur en français](GUIDE_MULTIPLAYER.md).
 
 Le dépôt s’ouvre directement sur **`feature/multiplayer`**, la branche de cette application.
 La branche `main` reste le miroir intact du projet Suhina d’origine. [Ouvrir la branche du projet](https://github.com/Nozomagarion/suhina-daw/tree/feature/multiplayer#readme)
@@ -191,7 +194,7 @@ Les sources sont suivies par version. Les nouveautés passent d'abord dans une i
 isolée avec nos modules, puis dans les vérifications avant publication. Les conflits sont
 résolus à cette étape. Les amis installent ensuite le paquet combiné validé.
 
-Le bouton **Settings → General → GitHub updates…** compare les sources et cherche une version
+Le bouton **Settings → Agents and updates → GitHub updates…** compare les sources et cherche une version
 commune disponible. La récupération périodique et la publication commune restent à activer.
 [Comment les mises à jour sont préparées](docs/fork-distribution.md).
 

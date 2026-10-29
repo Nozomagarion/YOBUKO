@@ -27,8 +27,8 @@ and USB export are future work. There is no common public release channel yet.
 | Collaborate on a common project while listening independently. | Keep the connection between your production and its rendered audio. | Keep everyone on the same tested combined version. |
 | **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** two independent A/B decks, levels and crossfader; hardware export remains planned. |
 
-The 28 October Suhina source update integrates merged main 9717cc7, including EQs, panels and
-Bezier automation. Old studio projects remain readable; new saves use native v4. LAN uses
+The 29 October Suhina update integrates merged main 7753ffa3: 56 further commits covering
+task-based settings, automation display fixes, style caching and shared DSP blocks. Old studio projects remain readable; new saves use native v4. LAN uses
 protocol 13, portable format 3 and matching compiled Suhina identities. The shared device
 subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.md).
 
@@ -63,7 +63,7 @@ subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.m
   Preview drafts before saving; revision checks protect stale edits and deletion is confirmed.
   Manual BPM stays separate from analysis and survives reimport. A/B performance decks now play original-speed tracks with pause/seek and a crossfader;
   deck headphone cues require a separate output pair. Sync, variable tempo and hardware export remain pending.
-- **Settings → General → GitHub updates…:** inspect the three GitHub source identities and check
+- **Settings → Agents and updates → GitHub updates…:** inspect the three GitHub source identities and check
   availability of a combined app update. An official standalone binary cannot overwrite the fork.
 
 The network exchange is tested with real TLS loopback connections and two desktop project
