@@ -218,13 +218,16 @@ CHAPTERS = [
      "SDK-authored .sd effects and instruments load onto tracks, embed in projects, expose parameters, "
      "graphs and custom panels, and support explicit revision updates. Missing A/B, "
      "hot-swap, preset browser depth, defaults, device delay review."),
-    (24, "Using Plug-Ins", 12, 0.74, "partial",
+    (24, "Using Plug-Ins", 12, 0.76, "partial",
      "CLAP and VST3 hosted out of process, sandboxed, VST3 bundles on Windows, macOS and Linux, "
      "editors (Windows/X11), scans that try failures again and settle files built for another "
      "processor, a plug-in manager (plug-ins switched off, several picked with Ctrl, Cmd or Shift and turned off or on from the right-click menu, folders per format and switched off), latency "
      "compensation (followed when a plug-in changes its latency while it plays), saved state "
      "(a change in an editor counts as unsaved), VST2 read and matched to VST3, parameters set "
-     "and automated from the engine and shown as a generated list in the device panel, the song's tempo, "
+     "and automated from the engine and shown as a generated list in the device panel, in step "
+     "both ways with a plug-in's own editor (VST3 through the host's handler, CLAP through its "
+     "blocks' output parameter events: an edit there becomes the panel's value with the next "
+     "block, and the editor follows the panel and automation), the song's tempo, "
      "transport, position, bar, time signature and loop given to every plug-in, ARA plug-ins per audio "
      "clip (Edit with, the clip's gain and fades after it, its track's other clips past it; edits saved, clip changes followed live, the editor in the clip's place, "
      "one document a plug-in and project so its editor shows every track; warped and looped clips not "

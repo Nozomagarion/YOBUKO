@@ -180,8 +180,9 @@ refused or suspended, never by losing its edits.
   built-in's layout) has a button in its header that opens it over the main area; Escape or its
   close button closes it. Both panels change the same parameters.
 - A running plug-in's device panel lists its parameters under its editor button, as a generated
-  list that sets them by id (hidden and read-only ones left out), and follows changes made in
-  its own editor every two seconds.
+  list that sets them by id (hidden and read-only ones left out), and stays in step both ways
+  with the plug-in: what was changed in its own editor becomes the device's value with the
+  next block, and the plug-in's editor follows the panel and automation.
 
 - **Sampler:** single-source polyphonic sample and granular playback with an editable
   waveform, SDK controls, browser/system sample drops and recording from the armed

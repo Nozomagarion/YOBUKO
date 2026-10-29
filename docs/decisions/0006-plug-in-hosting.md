@@ -163,8 +163,13 @@ workspace forbids.
      session's processor merges them with the notes in frame order, a value before a note at
      the same frame; a block the host could not take carries the latest value of each
      parameter to the next. Nothing allocates on the audio thread: each slot has room for 512
-     events a block. Values go to the processor only, so a VST3 plug-in's editor does not move
-     with its automation yet.
+     events a block. A parameter value that reaches the processor from the engine (a panel
+     set, an automation lane) also goes to the edit controller on the main thread
+     (`setParamNormalized`: the same call a MIDI controller's mapped parameter gets, #812),
+     so the plug-in's editor follows the sound; and the host reports what was changed in its
+     editor back (decision 6: `param_changed`, since version 14, #828), so the session keeps
+     the project's values in step with it — no undo step of its own, and a change since the
+     last save.
    - **Where the shared memory lives, and who frees it.** The engine's side makes each region
      (a link's, or an ARA audio source's, ADR 0028) and the host opens it by an address; the
      operating system frees it when both have let go of it, however they end, so a crash or a
@@ -220,7 +225,15 @@ workspace forbids.
      own range (a VST3 plug-in's normalized, a CLAP plug-in's plain), on a VST3 controller at
      once and on the processor (VST3 parameter changes, CLAP parameter events) at the start of
      the next block. The engine side keeps values set since the state was last read and sets
-     them again after a restart.
+     them again after a restart. `param_changed` (since version 14, unasked, #828) tells the
+     session what the user moved in the plug-in's editor: the value the plug-in runs with now,
+     which the session keeps the project's values in step with — no undo step of its own, and
+     a change since the last save. A VST3 plug-in reports it through the host's component
+     handler (`performEdit`); a CLAP one comes out with the blocks as output parameter events,
+     which the host reads after each block (the only way CLAP has: its host params extension
+     has no call of the kind, and the host does not give that extension today, so its
+     `request_flush` stays unanswered and a change made while no block runs waits for the
+     next one).
 4. **Block sync and deadline.** The engine signals the host, the host processes and signals
    back. Primitives: a futex in the shared memory on Linux; duplicated auto-reset events on
    Windows, waited on together with a high-resolution waitable timer that wakes the wait 1 ms
