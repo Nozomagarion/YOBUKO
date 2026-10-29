@@ -3,7 +3,7 @@ name: Multiplayer fork checks and development builds
 on:
   workflow_dispatch:
   push:
-    branches: [feature/multiplayer, feature/online, 'integration/multiplayer-*']
+    branches: [feature/multiplayer, feature/online, 'feature/online-*', 'integration/multiplayer-*']
   pull_request:
     branches: [feature/multiplayer]
 
