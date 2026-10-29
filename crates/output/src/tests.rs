@@ -7,6 +7,15 @@ use super::*;
 const RINGED: [f32; 8] = [0.5, -0.5, 0.25, -0.25, 1.0, 0.0, 0.1, 0.2];
 
 #[test]
+fn a_missing_callback_or_failed_device_does_not_wait_forever_for_the_close_fade() {
+    let control = transition::Control::default();
+    let start = std::time::Instant::now();
+    assert!(!control.finish(Duration::from_millis(10), || false));
+    assert!(start.elapsed() < Duration::from_secs(2));
+    assert!(!control.finish(Duration::from_secs(60), || true));
+}
+
+#[test]
 fn the_main_output_maps_onto_any_channel_count() {
     let mut mono = [0.0f32; 2];
     write_frames(&mut mono, 1, &RINGED, None);
@@ -354,4 +363,48 @@ fn installed_asio_driver_delivers_more_than_one_callback() {
     let callbacks = count.load(std::sync::atomic::Ordering::Relaxed);
     drop(stream);
     assert!(callbacks > 5, "stream stalled after {callbacks} callbacks");
+}
+
+#[test]
+fn device_switch_fades_the_actual_ring_including_cue_before_acknowledging_close() {
+    for rate in [8_000, 44_100, 48_000, 96_000] {
+        for frames in [32, 480, 2048] {
+            let (mut producer, mut ring) = rtrb::RingBuffer::new(frames * RING_CHANNELS);
+            let progress = Progress::default();
+            progress.set_callback_frames(frames);
+            let mut envelope = transition::Envelope::new(rate);
+            let delay = Duration::from_secs_f64(frames as f64 / f64::from(rate));
+            let mut buffer = vec![0.0; frames * RING_CHANNELS];
+            let mut previous = 0.0f32;
+            let mut biggest_step = 0.0f32;
+            // Startup silence must not consume the onset fade. Then open and close
+            // through the very same ring reader both device backends use.
+            for block in 0..240 {
+                if block == 120 {
+                    progress.transition.request_close();
+                }
+                for _ in 0..frames {
+                    for sample in [0.5, -0.5, 0.25, -0.25] {
+                        producer.push(if block < 60 { 0.0 } else { sample }).unwrap();
+                    }
+                }
+                read_device_ring(&mut ring, &mut buffer, &progress, &mut envelope, delay);
+                for frame in buffer.as_chunks::<RING_CHANNELS>().0 {
+                    biggest_step = biggest_step.max((frame[0] - previous).abs());
+                    previous = frame[0];
+                    assert_eq!(frame[2], frame[0] * 0.5);
+                    assert_eq!(frame[1], -frame[0]);
+                }
+                if block == 119 {
+                    assert_eq!(previous, 0.5);
+                }
+                if block == 120 {
+                    assert!(!progress.transition.drained());
+                }
+            }
+            assert!(biggest_step < 0.02, "rate={rate}, frames={frames}, step={biggest_step}");
+            assert_eq!(previous, 0.0);
+            assert!(progress.transition.drained());
+        }
+    }
 }

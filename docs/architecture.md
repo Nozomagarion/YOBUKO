@@ -505,6 +505,16 @@ callbacks even when the render thread has not run yet; it does not increase the 
 queue target. Reopening restores the transport at
 its current beat even when read-ahead delays the new renderer's start.
 
+At the device boundary, main and cue audio rise from silence over 5 ms when the
+first nonzero frame arrives; priming silence does not consume this fade. Closing
+a stream requests a 5 ms fade of the actual queued waveform in its device callback.
+The callback then keeps supplying silence for the reported hardware delay plus two
+device periods before acknowledging shutdown. The output owner waits at most
+500 ms, or until a device error, then closes the stream and returns its renderer.
+CPAL and exclusive WASAPI share this envelope. No callback waits, locks or allocates;
+the bounded shutdown wait runs only on the owner. This prevents software signal
+steps at open/close, but cannot suppress a pop generated internally by hardware.
+
 The engine publishes the duration and queue lead of a render call with late plug-in blocks
 through atomics. The UI writes these diagnostics and the actual output identity to the trace;
 the real-time thread never writes the log.

@@ -84,9 +84,12 @@ static PRIORITY_TOLD: AtomicBool = AtomicBool::new(false);
 /// The device's end of the ring.
 pub(crate) type Ring = rtrb::Consumer<f32>;
 
+mod transition;
+
 /// State the audio callback shares with the main thread.
 #[derive(Default)]
 pub struct Progress {
+    transition: transition::Control,
     frames: AtomicU64,
     underruns: AtomicU64,
     stream_error: AtomicBool,
@@ -201,6 +204,17 @@ pub(crate) fn read_ring(ring: &mut Ring, out: &mut [f32], progress: &Progress) {
     progress.wake_render();
 }
 
+fn read_device_ring(
+    ring: &mut Ring,
+    out: &mut [f32],
+    progress: &Progress,
+    envelope: &mut transition::Envelope,
+    delay: Duration,
+) {
+    read_ring(ring, out, progress);
+    envelope.apply(out, &progress.transition, delay, progress.callback_frames());
+}
+
 /// The time from the engine to the speaker: the frames queued in the ring, played at
 /// `sample_rate`, and the device's own delay after the callback.
 pub(crate) fn measure_latency(queued_frames: usize, device: Duration, sample_rate: u32) -> Duration {
@@ -300,6 +314,7 @@ impl DeviceStream {
 /// both.
 pub struct Stream {
     device: Option<DeviceStream>,
+    progress: Arc<Progress>,
     stop: Arc<AtomicBool>,
     render: Option<std::thread::JoinHandle<Renderer>>,
     asio: bool,
@@ -321,13 +336,16 @@ impl Stream {
         self.priority_notice.as_deref()
     }
 
-    /// Stops the device, then the render thread, and gives back the renderer, so its plug-ins
+    /// Fades and drains the device, then stops the render thread and returns the renderer, so its plug-ins
     /// can move to the next one ([`Renderer::into_plugins`]).
     pub fn close(mut self) -> Option<Renderer> {
         self.stop_all()
     }
 
     fn stop_all(&mut self) -> Option<Renderer> {
+        if self.device.is_some() {
+            let _drained = self.progress.transition.finish(Duration::from_millis(500), || self.progress.failed());
+        }
         drop(self.device.take());
         if self.asio {
             ASIO_OPEN.store(false, Ordering::Release);
@@ -638,7 +656,15 @@ impl Output {
         // refusal, before anything plays.
         let (priority, notice) = priority.recv_timeout(PRIORITY_WAIT).map_or((None, None), |(p, n)| (Some(p), n));
         let priority_notice = tell_once(&PRIORITY_TOLD, notice);
-        let stream = Stream { device: Some(device), stop, render: Some(render), asio, priority, priority_notice };
+        let stream = Stream {
+            device: Some(device),
+            progress: Arc::clone(progress),
+            stop,
+            render: Some(render),
+            asio,
+            priority,
+            priority_notice,
+        };
         stream
             .device
             .as_ref()
@@ -1073,6 +1099,7 @@ where
     let mut scratch = vec![0.0f32; MAX_DEVICE_FRAMES * RING_CHANNELS];
     let on_data = Arc::clone(progress);
     let on_error = Arc::clone(progress);
+    let mut envelope = transition::Envelope::new(sample_rate);
 
     device
         .build_output_stream(
@@ -1086,7 +1113,7 @@ where
                 for block in data.chunks_mut(MAX_DEVICE_FRAMES * channels) {
                     let frames = block.len() / channels;
                     let Some(ringed) = scratch.get_mut(..frames * RING_CHANNELS) else { return };
-                    read_ring(&mut ring, ringed, &on_data);
+                    read_device_ring(&mut ring, ringed, &on_data, &mut envelope, device_delay);
                     write_frames(block, channels, ringed, cue);
                     on_data.add_frames(frames);
                 }
