@@ -32,6 +32,13 @@ covers:
 
 Releases are built by [`.github/workflows/release.yml`](../.github/workflows/release.yml).
 
+Windows release, nightly and test packages enable `suhina/asio,suhina-cli/asio`, using
+the runner's LLVM installation for libclang and the vendored ASIO SDK. Both the desktop
+app and CLI can use installed ASIO drivers alongside WASAPI; no driver is bundled.
+Local builds need the same features explicitly (README › ASIO on Windows).
+The Windows package smoke test checks that `suhina-cli audio devices` reports the ASIO
+host even when the runner has no ASIO drivers installed.
+
 ## Versions
 
 Versions follow [Semantic Versioning](https://semver.org): `MAJOR.MINOR.PATCH`, with release

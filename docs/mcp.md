@@ -110,6 +110,10 @@ suhina-cli mcp --read-root ./projects --write-root ./renders [--audio]
   at, ADR 0017), `underruns`, `failed` and `fallback` (it plays in
   place of a chosen host or device that is not there), `channels` (opened) and `cue_pair`.
   Without `--audio`, `audio.devices` returns an error.
+  `audio.openControlPanel {}` requests the active ASIO stream's own native panel
+  on its owner thread and returns `requested: true`. It does not reopen the output
+  or load plugins. Other hosts or a missing output return an error; close a modal
+  driver panel before changing output or closing the project.
 
 - **The cue (headphones).** `output.setCuePair {pair}` plays previews and the tracks whose cue
   is on (`track.setCue {track, cue}`, an edit) on another pair of the same device's outputs

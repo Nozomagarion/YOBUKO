@@ -938,3 +938,22 @@ says recording need not be enabled, and Off says live input is silent but can st
 recorded. Tooltips explain the selected mode and the separate record-ready
 button, without requiring knowledge of "armed" or "play-through". The file/API value `in`
 remains unchanged.
+
+### Starting and stopping playback without an output step
+
+For a graph with hosted plug-ins, Play joins the previous main and cue output samples to the
+newly rendered sound over a 2 ms linear transition. The transition waits for the graph's reported
+processing latency, so it covers the new sound reaching the output rather than expiring during
+the preceding delayed audio. During that wait, the old tail is preserved; the transition joins
+from its last sample. Native audio clip readers already have
+start guards; hosted processors can otherwise bypass that protection. This covers
+starting inside a sustained note. The transition begins at the previous output value, rather
+than forcing an already audible effect tail to zero. It does not move note times or add a buffer
+of latency, and spans render-block boundaries. Offline command rendering uses the same path.
+
+Stopping a running transport, whether returning to the marker or keeping the current position,
+uses the same latency-aligned transition unless all instrument slots provide their own smooth
+stop. Hosted instruments with a transport gate fade their own output over 5 ms instead.
+Note-off messages still arrive immediately; the transition smooths an abrupt release without
+cutting off effect tails.
+Stopping an already stopped transport does not begin a new transition.
