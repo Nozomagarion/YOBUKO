@@ -1395,7 +1395,7 @@ impl Renderer {
         // Native clip readers already guard their starts. Hosted processors may
         // produce an immediate step (including ARA or a chased instrument note).
         if !self.plugin_info.is_empty() {
-            self.start_guard.begin();
+            self.start_guard.begin(self.graph.latency);
         }
         let resumed = self.start_target.take();
         let target = resumed.unwrap_or(self.start_beat);

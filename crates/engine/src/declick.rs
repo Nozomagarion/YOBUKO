@@ -8,17 +8,19 @@ pub(crate) struct StartGuard {
     from: [f32; 4],
     left: u32,
     frames: u32,
+    wait: u32,
 }
 
 impl StartGuard {
     pub(crate) fn new(sample_rate: u32) -> Self {
         let frames = (f64::from(sample_rate) * crate::audio::CLICK_GUARD_SECONDS).ceil().max(1.0) as u32;
-        Self { last: [0.0; 4], from: [0.0; 4], left: 0, frames }
+        Self { last: [0.0; 4], from: [0.0; 4], left: 0, frames, wait: 0 }
     }
 
-    pub(crate) fn begin(&mut self) {
+    pub(crate) fn begin(&mut self, latency: u32) {
         self.from = self.last;
         self.left = self.frames;
+        self.wait = latency;
     }
 
     /// Runs after mixing; no allocation, and no per-frame work outside a transition.
@@ -27,6 +29,13 @@ impl StartGuard {
             for (main, cue) in main.as_chunks_mut::<2>().0.iter_mut().zip(cue.as_chunks_mut::<2>().0) {
                 if self.left == 0 {
                     break;
+                }
+                // The new transport audio reaches the output after the graph's latency.
+                // Preserve the old tail while waiting and join from its actual last sample.
+                if self.wait > 0 {
+                    self.from = [main[0], main[1], cue[0], cue[1]];
+                    self.wait -= 1;
+                    continue;
                 }
                 let t = 1.0 - self.left as f32 / self.frames as f32;
                 for (sample, from) in main.iter_mut().chain(cue.iter_mut()).zip(self.from) {
@@ -49,7 +58,7 @@ mod tests {
     fn a_start_continues_from_an_audible_tail_on_both_outputs() {
         let mut guard = StartGuard::new(48_000);
         guard.process(&mut [0.25, -0.25], &mut [0.5, -0.5]);
-        guard.begin();
+        guard.begin(0);
         let mut main = [1.0; 256];
         let mut cue = [-1.0; 256];
         guard.process(&mut main, &mut cue);

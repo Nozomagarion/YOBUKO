@@ -942,7 +942,10 @@ remains unchanged.
 ### Starting playback without an output step
 
 For a graph with hosted plug-ins, Play joins the previous main and cue output samples to the
-newly rendered sound over a 2 ms linear transition. Native audio clip readers already have
+newly rendered sound over a 2 ms linear transition. The transition waits for the graph's reported
+processing latency, so it covers the new sound reaching the output rather than expiring during
+the preceding delayed audio. During that wait, the old tail is preserved; the transition joins
+from its last sample. Native audio clip readers already have
 start guards; hosted processors can otherwise bypass that protection. This covers
 starting inside a sustained note. The transition begins at the previous output value, rather
 than forcing an already audible effect tail to zero. It does not move note times or add a buffer

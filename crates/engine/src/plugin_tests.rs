@@ -1192,3 +1192,62 @@ fn play_chases_a_plugin_note_without_a_step_from_silence() {
     let largest_step = left(&after).windows(2).map(|s| (s[1] - s[0]).abs()).fold(0.0, f32::max);
     assert!(largest_step < 0.01, "the attack must be short and smooth: {largest_step}");
 }
+
+#[test]
+fn play_guard_reaches_a_plugin_note_after_reported_processing_latency() {
+    for beat in [0.0, 2.0] {
+        let p = project(vec![note(0.0, 8.0, 69)], 8.0, vec![plug(vst3()), plug(vst3())]);
+        let mut renderer = Renderer::build(
+            &p,
+            RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins(
+                &p,
+                vec![
+                    (Stand::new(Behaviour::Instrument), INSTRUMENT),
+                    (Stand::new(Behaviour::Delay(512)), PluginSlotInfo { latency: 512, ..EFFECT }),
+                ],
+            )),
+            SR,
+            RenderOptions::STOPPED,
+        )
+        .unwrap();
+        blocks(&mut renderer, 1, 128);
+        renderer.handle(crate::LaunchCommand::SetPosition { beat });
+        renderer.handle(crate::LaunchCommand::Play);
+        let after = blocks(&mut renderer, 24, 32);
+        assert!(peak(&after) > 0.4);
+        let largest_step = left(&after).windows(2).map(|s| (s[1] - s[0]).abs()).fold(0.0, f32::max);
+        assert!(largest_step < 0.01, "delayed onset at beat {beat} has step {largest_step}");
+    }
+}
+
+#[test]
+fn pitch_releases_the_transposed_plugin_note_on_repeated_transport_starts() {
+    let p = project(vec![note(0.0, 8.0, 69)], 8.0, vec![device("pitch", &[("pitch", 12.0)]), plug(vst3())]);
+    let stand = Stand::new(Behaviour::Instrument);
+    let seen = Arc::clone(&stand.seen);
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins(&p, vec![(stand, INSTRUMENT)])),
+        SR,
+        RenderOptions::STOPPED,
+    )
+    .unwrap();
+    for beat in [0.0, 2.0, 2.0, 0.0] {
+        seen.lock().unwrap().clear();
+        renderer.handle(crate::LaunchCommand::SetPosition { beat });
+        renderer.handle(crate::LaunchCommand::Play);
+        blocks(&mut renderer, 1, 256);
+        renderer.handle(crate::LaunchCommand::Stop);
+        blocks(&mut renderer, 1, 256);
+        let events = seen.lock().unwrap();
+        let notes: Vec<_> = events
+            .iter()
+            .filter_map(|(_, e)| match e {
+                NoteEvent::On { key, .. } => Some((true, *key)),
+                NoteEvent::Off { key, .. } => Some((false, *key)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(notes, vec![(true, 81), (false, 81)], "beat {beat}");
+    }
+}
