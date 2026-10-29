@@ -59,6 +59,7 @@ fn capture_instrument_and_mix_around_pause() {
     let track_name = std::env::var("SUHINA_CAPTURE_TRACK").unwrap();
     let spec = std::env::var("SUHINA_CAPTURE_PLUGIN").unwrap();
     let destination = PathBuf::from(std::env::var("SUHINA_CAPTURE_OUT").unwrap());
+    let rate = std::env::var("SUHINA_CAPTURE_RATE").ok().and_then(|s| s.parse::<u32>().ok()).unwrap_or(48_000);
     let (session, _) = Session::open(&project_path).unwrap();
     let mut project = session.project().clone();
     let track = project.tracks.iter().find(|t| t.name == track_name).unwrap().clone();
@@ -75,7 +76,7 @@ fn capture_instrument_and_mix_around_pause() {
     assert_eq!(found.len(), 1, "select a track with one instrument and no hosted effects");
     let device = &project.channels[0].devices[found[0].position];
     let timeout = Duration::from_secs(30);
-    let (mut control, audio) = Plugin::start(Launch {
+    let (mut control, mut audio) = Plugin::start(Launch {
         host: PathBuf::from(env!("CARGO_BIN_EXE_suhina-plugin-host")),
         plugin: spec,
         channels: 2,
@@ -92,6 +93,13 @@ fn capture_instrument_and_mix_around_pause() {
             controller: device.extensions.0.iter().find(|e| e.key == "Vst3ControllerState").map(|e| e.data.clone()),
         })
         .unwrap();
+    if rate != 48_000 {
+        let pid = control.process_id();
+        let seat = audio.seat();
+        audio.reconfigure(f64::from(rate), timeout).unwrap();
+        assert_eq!(control.process_id(), pid);
+        assert_eq!(audio.seat(), seat, "the retained instance changed");
+    }
     let raw = Arc::new(Mutex::new(Vec::new()));
     let mut plugins = Plugins::new();
     plugins.insert(
@@ -99,7 +107,7 @@ fn capture_instrument_and_mix_around_pause() {
         PluginSlotInfo { instrument: true, latency: control.latency() },
         Box::new(Tap {
             hosted: Hosted::new(audio)
-                .with_instrument_transport(std::env::var("SUHINA_CAPTURE_MODE").unwrap_or_default() == "fixed", 48_000),
+                .with_instrument_transport(std::env::var("SUHINA_CAPTURE_MODE").unwrap_or_default() == "fixed", rate),
             samples: Arc::clone(&raw),
             mode: std::env::var("SUHINA_CAPTURE_MODE").unwrap_or_default(),
         }),
@@ -107,7 +115,7 @@ fn capture_instrument_and_mix_around_pause() {
     let mut renderer = Renderer::build(
         &project,
         RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins),
-        48_000,
+        rate,
         RenderOptions::STOPPED,
     )
     .unwrap();
@@ -134,5 +142,5 @@ fn capture_instrument_and_mix_around_pause() {
         let bytes: Vec<u8> = samples.iter().flat_map(|s| s.to_le_bytes()).collect();
         std::fs::write(destination.join(format!("{name}.f32")), bytes).unwrap();
     }
-    eprintln!("48000 Hz stereo f32le: Play at frame 4096, StopHere at frame 28160; latency {}", control.latency());
+    eprintln!("{rate} Hz stereo f32le: Play at frame 4096, stop at frame 28160; latency {}", control.latency());
 }
