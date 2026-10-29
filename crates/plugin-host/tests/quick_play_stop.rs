@@ -184,6 +184,30 @@ fn stopping_a_transport_sensitive_instrument_fades_its_waveform() {
     }
 }
 
+#[test]
+fn a_live_note_during_the_stop_fade_survives_the_stopped_transport() {
+    use suhina_engine::{DeviceEvent, PluginProcessor, SongPosition};
+    // Larger device buffers are split into at most 1024-frame plugin blocks by the engine.
+    for frames in [32, 512, 1024] {
+        let (_control, hosted) = start("test:transport-cut", 48_000);
+        let mut hosted = hosted.with_instrument_transport(true, 48_000);
+        let mut song = SongPosition { playing: true, ..Default::default() };
+        let mut block = vec![0.0; frames * 2];
+        hosted.transport(&song);
+        assert!(hosted.process(&mut block, &[], PATIENT));
+        song.playing = false;
+        hosted.transport(&song);
+        assert!(hosted.process(&mut block, &[(12, DeviceEvent::On { key: 69, velocity: 1.0 })], PATIENT));
+        for _ in 0..32 {
+            hosted.transport(&song);
+            assert!(hosted.process(&mut block, &[], PATIENT));
+        }
+        assert!(block.iter().any(|s| s.abs() > 0.01), "{frames}: the stop reset the new live voice");
+        assert!(hosted.process(&mut block, &[(0, DeviceEvent::Off { key: 69, velocity: 0.5 })], PATIENT));
+        assert!(block.iter().all(|s| *s == 0.0), "live voice stuck after release");
+    }
+}
+
 /// What playing with play and stop pressed every few blocks did.
 #[derive(Debug)]
 struct Run {

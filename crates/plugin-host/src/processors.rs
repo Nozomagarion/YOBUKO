@@ -97,13 +97,25 @@ impl Processor for TransportCut {
     fn process_events(&self, _input: &[f32], events: &[suhina_ipc::Event], output: &mut [f32]) {
         let playing =
             events.iter().any(|event| matches!(event.kind, suhina_ipc::EventKind::Transport { playing: true, .. }));
-        let mut phase = self.0.load(Ordering::Relaxed);
+        let previous = self.0.load(Ordering::Relaxed);
+        let mut phase = previous >> 2;
+        let mut live = previous & 2 != 0;
+        if previous & 1 != 0 && !playing {
+            live = false;
+        }
+        for event in events {
+            match event.kind {
+                suhina_ipc::EventKind::NoteOn { .. } => live = true,
+                suhina_ipc::EventKind::NoteOff { .. } => live = false,
+                _ => {}
+            }
+        }
         for pair in output.as_chunks_mut::<2>().0 {
-            let sample = if playing { (phase as f32 * std::f32::consts::TAU / 960.0).sin() * 0.5 } else { 0.0 };
+            let sample = if playing || live { (phase as f32 * std::f32::consts::TAU / 960.0).sin() * 0.5 } else { 0.0 };
             pair.fill(sample);
             phase = (phase + 1) % 960;
         }
-        self.0.store(phase, Ordering::Relaxed);
+        self.0.store((phase << 2) | u32::from(playing) | (u32::from(live) << 1), Ordering::Relaxed);
     }
     fn state(&self) -> Vec<u8> {
         Vec::new()

@@ -41,6 +41,10 @@ pub struct Hosted {
     gate: Option<super::transport_gate::TransportGate>,
     continuation: suhina_engine::SongPosition,
     rate: u32,
+    /// Live notes arriving during the stop fade wait for the first stopped block, so
+    /// its transport transition cannot reset a newly started voice.
+    stop_notes: Vec<DeviceEvent>,
+    stop_notes_overflow: bool,
     audio: PluginAudio,
     input: Vec<f32>,
     output: Vec<f32>,
@@ -71,6 +75,8 @@ impl Hosted {
             gate: None,
             continuation: suhina_engine::SongPosition::default(),
             rate: 1,
+            stop_notes: Vec::with_capacity(MAX_EVENTS / 2),
+            stop_notes_overflow: false,
             audio,
             input: vec![0.0; MAX_BLOCK_FRAMES * 2],
             output: vec![0.0; MAX_BLOCK_FRAMES * 2],
@@ -215,7 +221,31 @@ impl Hosted {
         self.params.clear();
         // What earlier blocks could not send goes first.
         take_carried(&mut self.carried, &mut self.params, &mut self.notes, SONG_EVENTS);
+        let holding_stop = self.gate.as_ref().is_some_and(|g| g.holds_transport());
+        if !holding_stop {
+            for event in self.stop_notes.drain(..) {
+                if matches!(event, DeviceEvent::On { .. })
+                    && let Some(gate) = &mut self.gate
+                {
+                    gate.live_note(0);
+                }
+                push_event(&mut self.notes, 0, event);
+            }
+            if self.stop_notes_overflow {
+                push_event(&mut self.notes, 0, DeviceEvent::AllNotesOff);
+                self.stop_notes_overflow = false;
+            }
+        }
         for &(frame, event) in events {
+            if holding_stop && (!self.stop_notes.is_empty() || matches!(event, DeviceEvent::On { .. })) {
+                // Reserve room for a final release if hostile input exhausts the bound.
+                if self.stop_notes.len() + 1 < self.stop_notes.capacity() {
+                    self.stop_notes.push(event);
+                } else {
+                    self.stop_notes_overflow = true;
+                }
+                continue;
+            }
             if matches!(event, DeviceEvent::On { .. })
                 && let Some(gate) = &mut self.gate
             {
@@ -305,6 +335,8 @@ impl PluginProcessor for Hosted {
         self.notes.clear();
         self.params.clear();
         self.carried.clear();
+        self.stop_notes.clear();
+        self.stop_notes_overflow = false;
         self.sent_at = None;
         self.rate = sample_rate.max(1);
         if self.gate.is_some() {

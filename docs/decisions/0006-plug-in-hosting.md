@@ -723,6 +723,9 @@ is deferred along with the flag. This is per instrument, before downstream effec
 and delay compensation, so those effects can keep their tails. Instrument releases
 are limited to this stop fade. A Play during the fade reverses it from its current
 gain; a live note while paused reopens the gate at that note's frame offset.
+Live notes arriving during the short fade wait, in order, until the first stopped
+block, so that the delayed transport transition cannot reset their new voices.
+This bounded queue does not allocate while rendering; overflow ends with a release.
 
 While its gate changes or is closed, an instrument processes separately from
 joint followers, so its envelope cannot mute downstream effects. Ordinary playback
