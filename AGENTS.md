@@ -103,7 +103,8 @@ crates/
   flp      L1 FL Studio project (.flp) container and event stream; no model mapping yet (epic #271)
   project-file L1 Suhina's own project file (.suhina, versioned JSON): reads and writes the model (ADR 0010)
   media    L2 finds and decodes a project's audio files (symphonia) into the engine's AudioPool;
-           reads MIDI files, file metadata (tempo, key) and detects tempo; writes the files an
+           reads MIDI files, file metadata (tempo, key) and detects tempo; shared waveform summaries
+           (waveform: min/max/RMS levels and sample readers, without GUI types); writes the files an
            export renders (WAV, FLAC, Ogg Vorbis, MP3)
   mp3      L2 MP3 encoding through the vendored LAME 3.100 encoder (ADR 0029); no file I/O
   library  L2 the browser's library: added folders, an index kept on disk and watched, search, pins,

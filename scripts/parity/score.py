@@ -36,6 +36,9 @@ MANUAL_CHAPTERS = 43  # chapters 1 to 43, the same chapters CHAPTERS lists
 MANUAL_PDF_PAGES = 1039
 COMMANDS = 190
 
+# Fork DJ waveform preparation reuses the existing waveform renderer without extending
+# production feature chapter coverage: it is a local audition/selection view, not beat-grid
+# editing, warping or decks. Parity: no change.
 # num, chapter title, pages of the manual body, coverage 0..1 (None = not a feature chapter),
 # status, note. "coverage" is the share of what the chapter documents that Suhina has today.
 CHAPTERS = [

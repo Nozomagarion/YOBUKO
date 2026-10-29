@@ -20,6 +20,7 @@ mod device_groups;
 mod devices;
 mod dj;
 mod dj_preview;
+mod dj_waveform;
 mod editing;
 mod execute;
 mod export;

@@ -10,6 +10,8 @@ use serde_json::Value;
 mod playlists;
 #[path = "dj_prepare.rs"]
 mod prepare;
+#[path = "dj_waveform.rs"]
+mod waveform;
 
 #[derive(Default)]
 pub(super) struct PlaylistDraft {
@@ -50,6 +52,9 @@ impl App {
     pub(super) fn poll_dj(&mut self, ctx: &egui::Context) {
         if !self.dj.active && self.dj.pending.is_none() {
             self.stop_dj_preview();
+            if self.dj.preparing.take().is_some() {
+                let _ = self.projects.execute("dj.waveform.clear", &json!({}));
+            }
             return;
         }
         if !self.dj.snapshot.is_null()

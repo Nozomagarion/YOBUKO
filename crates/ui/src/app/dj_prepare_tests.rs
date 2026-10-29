@@ -144,3 +144,101 @@ fn render_dj_cues_for_review() {
     std::fs::create_dir_all(&folder).unwrap();
     h.render().unwrap().save(folder.join("dj-cues.png")).unwrap();
 }
+
+#[test]
+fn waveform_prepares_without_playing_reloads_and_is_discarded_on_close() {
+    let dir = tempfile::tempdir().unwrap();
+    let app = fixture(dir.path());
+    let file = dir.path().join("dj-library.json");
+    let mut catalog: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    catalog["tracks"][0]["seconds"] = json!(2.0);
+    std::fs::write(&file, serde_json::to_vec(&catalog).unwrap()).unwrap();
+    let path = dir.path().join("1.wav");
+    let spec = suhina_media::write::AudioFileSpec::float_wav(8000);
+    suhina_media::write::write_audio_file(&path, &vec![0.2; 32000], &spec, suhina_media::write::WriteMode::Replace)
+        .unwrap();
+    let mut h = harness(app);
+    settle(&mut h);
+    let before = h.state().session().unwrap().project().clone();
+    click(&mut h, "Prepare track 1");
+    assert!(h.state().projects.dj_waveform(1).is_some());
+    assert!(!h.state().dj.preview_owned);
+    click(&mut h, "DJ track waveform");
+    assert!((h.state().dj.seek - 1.0).abs() < 0.02);
+    assert!(!h.state().dj.preview_owned, "choosing a position must not play audio");
+    assert_eq!(h.state().session().unwrap().project(), &before);
+    click(&mut h, "Close preparation");
+    assert!(h.state().projects.dj_waveform(1).is_none());
+    click(&mut h, "Prepare track 1");
+    std::fs::remove_file(path).unwrap();
+    click(&mut h, "Reload waveform");
+    assert!(h.state().dj.snapshot["waveform"]["error"].is_string());
+    assert!(h.state().projects.dj_waveform(1).is_none());
+    h.get_by_label("Studio").click();
+    h.run_steps(3);
+    assert!(h.state().dj.preparing.is_none());
+}
+
+#[test]
+#[ignore = "requires a GPU adapter; renders the DJ waveform preparation"]
+fn render_dj_waveform_for_review() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut app = fixture(dir.path());
+    let path = dir.path().join("1.wav");
+    let audio: Vec<f32> = (0..64000)
+        .flat_map(|i| {
+            let t = i as f32 / 8000.0;
+            let envelope = if t < 2.0 {
+                0.2
+            } else if t < 4.0 {
+                0.6
+            } else {
+                0.35
+            };
+            [envelope * (t * 110.0 * std::f32::consts::TAU).sin(), envelope * (t * 165.0 * std::f32::consts::TAU).sin()]
+        })
+        .collect();
+    let spec = suhina_media::write::AudioFileSpec::float_wav(8000);
+    suhina_media::write::write_audio_file(&path, &audio, &spec, suhina_media::write::WriteMode::Replace).unwrap();
+    let file = dir.path().join("dj-library.json");
+    let mut catalog: serde_json::Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
+    catalog["tracks"][0]["seconds"] = json!(8.0);
+    catalog["tracks"][0]["title"] = json!("Night session");
+    std::fs::write(file, serde_json::to_vec(&catalog).unwrap()).unwrap();
+    let ctx = egui::Context::default();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        app.dj.next_poll = None;
+        app.poll_dj(&ctx);
+        if app.dj.snapshot["busy"] == false {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    app.prepare_dj_track(1);
+    loop {
+        app.dj.next_poll = None;
+        app.poll_dj(&ctx);
+        if app.dj.snapshot["busy"] == false {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert!(app.projects.dj_waveform(1).is_some());
+    app.dj.snapshot["cues"] =
+        json!([{"track":1,"points":[{"id":1,"name":"Intro","seconds":0.5},{"id":2,"name":"Drop","seconds":4.0}]}]);
+    app.dj.seek = 2.5;
+    app.dj.snapshot["preview"] = json!({"track":1,"playing":true,"position":3.0});
+    let mut h = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 1000.0))
+        .with_pixels_per_point(1.5)
+        .wgpu()
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    theme::install(&h.ctx);
+    h.run();
+    let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
+    std::fs::create_dir_all(&folder).unwrap();
+    h.render().unwrap().save(folder.join("dj-waveform.png")).unwrap();
+}

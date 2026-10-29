@@ -87,7 +87,8 @@ et leurs noms sont conservés au redémarrage ; les fichiers audio restent à le
 sont refusées. Avec **Prepare**, choisir une position puis **Play from position**, ou écouter un
 repère avec **Play cue**. Les points cue peuvent être nommés, déplacés et supprimés ; ils restent
 liés au morceau dans toutes ses playlists. **Stop audition** et le retour au Studio annulent la
-lecture, y compris pendant son chargement. Les formes d’onde, les grilles rythmiques,
+lecture, y compris pendant son chargement. La forme d’onde du morceau affiche les repères et permet de choisir visuellement
+le départ de la préécoute sans lancer le son. Les grilles rythmiques,
 les platines et l'export vers le matériel DJ restent à construire et à vérifier.
 
 ## Où en est le projet
@@ -98,7 +99,7 @@ les platines et l'export vers le matériel DJ restent à construire et à vérif
 | Partie du projet | Étapes réalisées | Prochain objectif |
 |---|---:|---|
 | Créer ensemble | 16 / 18 | Sessions Internet et reconnexion automatique |
-| Préparer et jouer | 6 / 9 | Édition des grilles rythmiques |
+| Préparer et jouer | 7 / 10 | Édition des grilles rythmiques |
 | Évoluer ensemble | 4 / 7 | Version commune validée sur toutes les plateformes |
 <!-- fork-progress:end -->
 
@@ -111,7 +112,7 @@ leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce
 |---|---|---|
 | **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
 | **Multijoueur** | Session LAN hôte + trois invités maximum, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, grille du lanceur et scènes partagées, publication de prises terminées par les deux participants, réglages FM Synth/Utility et noms/volumes/panoramiques partagés et lectures indépendantes. | Internet et reconnexion automatique. |
-| **DJ** | Bibliothèque audio persistante, analyse rbxport, playlists, préécoute et points cue nommés conservés au redémarrage. | Formes d’onde, grilles rythmiques, platines et compatibilité matérielle. |
+| **DJ** | Bibliothèque, playlists et cues persistants ; analyse rbxport, préécoute et forme d’onde. | Grilles rythmiques, platines et compatibilité matérielle. |
 | **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
 
 Le trafic chiffré est testé entre deux services sur le même ordinateur, avec des vérifications

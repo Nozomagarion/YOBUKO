@@ -1,6 +1,6 @@
 ---
-description: The fork's Studio and DJ workspaces, local playlists and cues, asynchronous rbxport analysis and engine audition
-read_when: DJ library, playlists, cue points, audition, rbxport integration, render a project for DJ preparation
+description: The fork's Studio and DJ workspaces, local playlists and cues, rbxport analysis, engine audition and waveform preparation
+read_when: DJ library, playlists, cue points, audition, waveform preparation, rbxport integration, render a project for DJ preparation
 type: spec
 status: current
 last_verified: 2026-10-26
@@ -12,6 +12,10 @@ covers:
   - crates/ui/src/app/dj_playlists.rs
   - crates/ui/src/app/dj_playlist_tests.rs
   - crates/session/tests/dj.rs
+  - crates/media/src/waveform.rs
+  - crates/session/src/dj_waveform.rs
+  - crates/session/tests/dj_waveform.rs
+  - crates/ui/src/app/dj_waveform.rs
   - crates/session/src/dj_preview.rs
   - crates/session/tests/dj_audition.rs
   - crates/ui/src/app/dj_prepare.rs
@@ -73,9 +77,9 @@ hashes in `fork-sources.json`. The original Rust sources are unchanged; its Carg
 adapted to avoid the other workspace's GUI, databases and development dependencies. Original
 licence files are preserved and included in distribution packages.
 
-Cue editing, decks, USB export, LINK and shared DJ collections are not implemented
-by this slice. Multiplayer remains the trusted in-process experiment in
-[session sharing](session-sharing.md); no network listener is added.
+Decks, USB export, LINK and shared DJ collections are not implemented by this slice.
+The later fork extensions below add cue editing and waveform preparation. The DJ workspace
+adds no network listener; LAN collaboration has its separate [sharing contract](session-sharing.md).
 
 ## Check in a development build
 
@@ -155,9 +159,83 @@ Formats 1 and 2 open without writes. The first mutation saves an exact sibling b
 the original format in its filename before publishing format 3, preserving playlists/counters.
 Future/unknown fields and invalid cue references are refused. Play/Stop never persist a catalog.
 Cue sets are local, not shared over LAN and not exported to a proprietary database or hardware.
-Waveforms, beat grids, quantised cues, decks and USB/LINK export remain deferred.
+Beat grids, quantised cues, decks and USB/LINK export remain deferred. Waveform preparation
+is described below.
 
 Acceptance: audition generated audio through an offline renderer, seek from a cue, stop while
 loading, leave DJ and switch projects without late playback; output failures must keep projects
 intact. Create/rename/move/delete cues with actual UI buttons, preserve their names/positions
 across playlists and restart, refuse stale/invalid edits and verify legacy backups byte-for-byte.
+
+
+## Waveform preparation (fork extension)
+
+Prepare queues `dj.waveform.load` with a track id. The existing bounded DJ worker reuses the
+metadata-checked audition decoder/cache and computes Suhina's existing multiresolution
+min/max/RMS summary, moved without a second algorithm to `media::waveform`. UI drawing still
+uses `kit::waveform`, including stereo lanes and the existing linear/dB preference. Opening
+preparation does not open an audio device, play sound or write the catalog/audio/project.
+
+The library snapshot reports waveform track/loading/error and frame/rate/lane metadata. Native
+clients obtain the immutable Arc summary through Projects; raw samples are not serialized in JSON.
+Only one prepared waveform is retained. Loading is bounded by the existing 20 minute, mono/stereo,
+96 kHz audition limits. Clear/reload/settings changes invalidate the pending request; a late reply
+cannot replace a newer selection. Import invalidates a prepared summary to avoid keeping a picture
+of replaced audio. Reopening Prepare rechecks metadata; no filesystem polling occurs while idle.
+`dj.waveform.clear` works while busy, releases the prepared summary and never opens output.
+Both commands retain the person-only Library policy.
+
+The full-track waveform shows named cue markers, the chosen next start position and actual
+playback position. Clicking or dragging it changes only the local start-position draft; Play from
+position explicitly auditions there. Keyboard users retain the time slider. An endpoint click is
+clamped before the track end. Read/decoding errors are displayed with a Reload waveform button;
+cues remain usable. Closing preparation or leaving DJ cancels the view request and discards it.
+No waveform is persisted, no catalog migration or network format change is introduced. Zoom,
+beat-grid editing, quantisation, decks and hardware export remain separate work.
+
+Acceptance: generated stereo audio with independent impulses preserves both lanes and known
+positions, waveform loading opens no output and writes no files, malformed/missing/changed audio
+reports an error, clear during load prevents a late result, reload resets state, cue markers and
+click/drag seek share the same seconds mapping, playback starts only on Play. Existing waveform
+geometry/budget tests remain applicable; capture the preparation UI for visual review.
+
+
+### Check waveform preparation
+
+1. Open a development build with no project. For a repeatable audio file, run this in a terminal
+   (Python 3 standard library only); it creates an eight-second stereo WAV in the temporary folder:
+
+   ```sh
+   python3 - <<'PYTHON'
+   import math, os, struct, tempfile, wave
+   path = os.path.join(tempfile.gettempdir(), "suhina-dj-waveform-check.wav")
+   with wave.open(path, "wb") as out:
+       out.setnchannels(2)
+       out.setsampwidth(2)
+       out.setframerate(8000)
+       samples = bytearray()
+       for i in range(64000):
+           t = i / 8000
+           gain = 0.2 if t < 2 else 0.6 if t < 4 else 0.35
+           samples += struct.pack("<hh", *(int(32767 * gain * math.sin(math.tau * f * t)) for f in (110, 165)))
+       out.writeframes(samples)
+   print(path)
+   PYTHON
+   ```
+
+2. Click **DJ**, then **Import audio…**, choose the printed file and wait for analysis. Click its
+   **Prepare** button. Two waveform lanes appear, quieter for the first two seconds, louder for
+   the next two. No sound starts. The numeric start-position slider remains available.
+3. Click the middle of the waveform. **Start position seconds** becomes approximately 4.000 s;
+   dragging changes it without sound. Click **Play from position** to listen from there and see
+   the green position advance. Click **Stop audition**; the sound stops and the selected start stays.
+4. Enter a cue name and a cue position, then **Add cue**. A named marker appears at that time.
+   Change its position with **Move cue to position** and verify the marker moves as well.
+5. Click **Close preparation**, reopen Prepare, then **Reload waveform**. A fresh waveform loads;
+   cues remain. Leave via **Studio** during loading and verify no late audio starts. Delete the
+   generated WAV outside the app, then reopen Prepare: a visible waveform error appears instead
+   of a stale drawing. Restore/recreate the file and use **Reload waveform** to recover.
+
+The automated UI checks cover preparation, a centre click, no implicit playback, close and reload
+errors; GPU capture covers the two lanes and markers. Actual headphone routing still needs the
+separate physical test.

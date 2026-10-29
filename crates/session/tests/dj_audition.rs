@@ -10,8 +10,8 @@ use suhina_session::audio::{HostInfo, Opened};
 use suhina_session::{AudioSystem, OutputChoice, Player, Projects, Session};
 
 #[derive(Default)]
-struct Output {
-    renderers: Mutex<Vec<Renderer>>,
+pub(super) struct Output {
+    pub(super) renderers: Mutex<Vec<Renderer>>,
 }
 impl AudioSystem for Output {
     fn hosts(&self) -> Vec<HostInfo> {
@@ -32,7 +32,7 @@ impl AudioSystem for Output {
         Ok(Opened { player, notice: None, plugins_kept: true })
     }
 }
-fn seeded(dir: &std::path::Path) -> (Projects, Arc<Output>) {
+pub(super) fn seeded(dir: &std::path::Path) -> (Projects, Arc<Output>) {
     let path = dir.join("song.wav");
     let spec = suhina_media::write::AudioFileSpec::float_wav(8000);
     let audio: Vec<f32> = (0..16000).flat_map(|i| [if i < 8000 { 0.2 } else { 0.4 }; 2]).collect();

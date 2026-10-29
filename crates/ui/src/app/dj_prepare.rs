@@ -19,7 +19,7 @@ impl App {
             Err(e) => self.status = Status::Error(e.to_string()),
         }
     }
-    pub(super) fn prepare_dj_track(&mut self, id: u64) {
+    pub(in crate::app) fn prepare_dj_track(&mut self, id: u64) {
         self.stop_dj_preview();
         if self.dj.preview_owned {
             return;
@@ -29,6 +29,7 @@ impl App {
         self.dj.cue_selected = None;
         self.dj.cue_revision = None;
         self.dj.cue_delete = None;
+        self.dj_command("dj.waveform.load", json!({"track":id}));
     }
     fn audition_dj(&mut self, track: u64, from: f64) {
         match self.projects.execute("dj.preview.play", &json!({"track":track,"from":from})) {
@@ -93,6 +94,7 @@ impl App {
                 self.stop_dj_preview();
                 if !self.dj.preview_owned {
                     self.dj.preparing = None;
+                    let _ = self.projects.execute("dj.waveform.clear", &json!({}));
                 }
             }
         });
@@ -110,6 +112,7 @@ impl App {
             let position = current["position"].as_f64().unwrap_or(0.0);
             ui.label(format!("{} · {position:.3} s", if playing { "Playing" } else { "Stopped" }));
         });
+        self.show_dj_waveform(ui, id, end, busy, &cues, &current);
         ui.weak("Preview −6 dB · headphones output when configured, otherwise main output.");
         ui.add_enabled_ui(!busy, |ui| {
             ui.horizontal(|ui| {

@@ -5,6 +5,8 @@ type: spec
 status: current
 last_verified: 2026-10-24
 covers:
+  - crates/media/src/waveform.rs
+  - crates/media/src/waveform_tests.rs
   - crates/ui/src/kit/waveform.rs
   - crates/ui/src/kit/waveform/tests.rs
   - crates/ui/tests/waveforms.rs
@@ -13,7 +15,9 @@ covers:
 # Waveforms
 
 One renderer draws every waveform: audio clips in the Arrangement view, the browser's preview
-strip and the tooltip of a point on the sample map. It is in `crates/ui/src/kit/waveform.rs`.
+strip and the tooltip of a point on the sample map. Drawing is in `crates/ui/src/kit/waveform.rs`; the shared summary and its readers
+are in `crates/media/src/waveform.rs`, without a GUI dependency. The DJ preparation panel reuses
+the same renderer and summary, generated on its bounded catalog worker.
 
 ## What other editors do (public documentation)
 
@@ -79,6 +83,8 @@ The RMS of several buckets is the root of their mean square, weighted by frames.
 - **Clips** (Arrangement view): inside the clip under its name, in view only.
 - **Browser preview strip**: the whole file across the strip; a click previews from there
   ([browser spec](browser.md)).
+- **DJ preparation**: the whole selected track, stereo lanes, cues and positions; clicking chooses
+  the next audition position without starting audio ([DJ spec](dj-workspace.md)).
 - **Sample map**: the tooltip of a point the pointer rests on for 0.15 s shows the file's
   waveform, 220 × 36 points, once the browser's reader has decoded it
   ([sample map spec](sample-map.md)).

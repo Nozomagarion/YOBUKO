@@ -130,6 +130,11 @@
           "evidence": "crates/ui/src/app/dj_prepare_tests.rs"
         },
         {
+          "name": "Forme d’onde et choix visuel du départ de préécoute",
+          "done": true,
+          "evidence": "crates/ui/src/app/dj_prepare_tests.rs"
+        },
+        {
           "name": "Édition des grilles rythmiques",
           "done": false
         },

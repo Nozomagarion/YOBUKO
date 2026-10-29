@@ -16,17 +16,20 @@ pub(crate) enum Job {
     Playlist(u64, PlaylistEdit),
     Cue(u64, u32, CueEdit),
     Preview(u64, u32),
+    Waveform(u64, u32),
 }
 struct Reply {
     catalog: Catalog,
     created: Option<u32>,
     audio: Option<crate::dj_preview::Loaded>,
+    waveform: Option<crate::dj_waveform::Loaded>,
 }
 
 #[derive(Default)]
 pub(crate) struct Dj {
     pub(crate) catalog: Catalog,
     pub(crate) audition: crate::dj_preview::Audition,
+    pub(crate) waveform: crate::dj_waveform::Waveform,
     worker: Option<SyncSender<Job>>,
     results: Option<Receiver<Result<Reply, String>>>,
     pub(crate) busy: bool,
@@ -52,11 +55,35 @@ impl Dj {
                         return;
                     }
                 };
-                if done.send(Ok(Reply { catalog: catalog.clone(), created: None, audio: None })).is_err() {
+                if done
+                    .send(Ok(Reply { catalog: catalog.clone(), created: None, waveform: None, audio: None }))
+                    .is_err()
+                {
                     return;
                 }
                 let mut cache = None;
                 while let Ok(job) = jobs.recv() {
+                    if let Job::Waveform(token, track) = job {
+                        let data = catalog
+                            .tracks
+                            .iter()
+                            .find(|t| t.id == track)
+                            .ok_or_else(|| "unknown DJ track".to_string())
+                            .and_then(|t| crate::dj_preview::prepare(t, &mut cache))
+                            .map(|data| std::sync::Arc::new(suhina_media::waveform::peaks(&data).without_samples()));
+                        if done
+                            .send(Ok(Reply {
+                                catalog: catalog.clone(),
+                                created: None,
+                                audio: None,
+                                waveform: Some((token, data)),
+                            }))
+                            .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
                     if let Job::Preview(token, track) = job {
                         let data = catalog
                             .tracks
@@ -65,7 +92,12 @@ impl Dj {
                             .ok_or_else(|| "unknown DJ track".to_string())
                             .and_then(|t| crate::dj_preview::prepare(t, &mut cache));
                         if done
-                            .send(Ok(Reply { catalog: catalog.clone(), created: None, audio: Some((token, data)) }))
+                            .send(Ok(Reply {
+                                catalog: catalog.clone(),
+                                created: None,
+                                waveform: None,
+                                audio: Some((token, data)),
+                            }))
                             .is_err()
                         {
                             break;
@@ -77,7 +109,7 @@ impl Dj {
                         Job::Import(file, project) => next.import(&file, project).map(|_| None),
                         Job::Playlist(revision, edit) => next.edit_playlist(revision, edit),
                         Job::Cue(revision, track, edit) => next.edit_cue(revision, track, edit).map(|_| None),
-                        Job::Preview(..) => Err("invalid DJ worker job".into()),
+                        Job::Preview(..) | Job::Waveform(..) => Err("invalid DJ worker job".into()),
                     }
                     .and_then(|created| {
                         next.save_checked(&catalog, &path)?;
@@ -85,7 +117,7 @@ impl Dj {
                     })
                     .map(|created| {
                         catalog = next;
-                        Reply { catalog: catalog.clone(), created, audio: None }
+                        Reply { catalog: catalog.clone(), created, waveform: None, audio: None }
                     });
                     if done.send(result).is_err() {
                         break;
@@ -108,6 +140,9 @@ impl Dj {
                     match result {
                         Ok(reply) => {
                             self.audition.loaded = reply.audio;
+                            if let Some(waveform) = reply.waveform {
+                                self.waveform.apply(waveform);
+                            }
                             self.catalog = reply.catalog;
                             self.created = reply.created;
                             self.error = None;
@@ -129,11 +164,15 @@ impl Dj {
         if self.busy {
             return Err("the DJ library is busy; wait for its current job".into());
         }
+        let importing = matches!(job, Job::Import(..));
         self.worker
             .as_ref()
             .ok_or("the DJ worker is unavailable")?
             .try_send(job)
             .map_err(|_| CommandError::from("the DJ worker is unavailable; use Refresh DJ library"))?;
+        if importing {
+            self.waveform.clear();
+        }
         self.error = None;
         self.created = None;
         self.busy = true;
@@ -152,6 +191,8 @@ const PLAYLIST: crate::commands::Param = param("playlist", ParamType::Integer, "
 const TRACK: crate::commands::Param = param("track", ParamType::Integer, "local DJ catalog track id");
 const NAME: crate::commands::Param = param("name", ParamType::Text, "playlist name");
 static COMMANDS: &[CommandSpec<Projects>] = &[
+    command!("dj.waveform.load", "Prepare a DJ waveform without playing audio", &[TRACK], waveform_load),
+    command!("dj.waveform.clear", "Cancel and discard the prepared DJ waveform", &[], waveform_clear),
     command!(
         "dj.preview.play",
         "Audition a DJ track from seconds",
@@ -230,6 +271,7 @@ pub(crate) fn ready(projects: &mut Projects) -> Result<(), CommandError> {
 fn library(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
     ready(projects)?;
     Ok(json!({"tracks": projects.dj.catalog.tracks, "playlists": projects.dj.catalog.playlists,
+        "waveform":projects.dj.waveform.snapshot(),
         "cues": projects.dj.catalog.cues, "preview": crate::dj_preview::snapshot(projects),
         "revision": projects.dj.catalog.revision, "created_playlist": projects.dj.created.take(),
         "busy": projects.dj.busy, "error": projects.dj.error, "analysis": "rbxport", "format": suhina_dj::FORMAT}))
@@ -314,4 +356,11 @@ fn cue_move(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn cue_delete(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     cue_edit(p, v, CueEdit::Delete(id(v, "cue")?))
+}
+
+fn waveform_load(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_waveform::load(p, v)
+}
+fn waveform_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_waveform::clear(p, v)
 }

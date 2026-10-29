@@ -1,5 +1,22 @@
 # Où en est notre application ?
 
+## Chantier du 29 octobre : forme d’onde DJ
+
+Le panneau **Prepare** charge maintenant une forme d’onde du morceau en arrière-plan,
+avec les repères cue et les positions de départ et de lecture. Un clic choisit le départ ;
+**Play from position** reste nécessaire pour écouter. Le calcul et le dessin existants du
+studio sont réutilisés ; l’ouverture du panneau ne joue rien et ne modifie pas le morceau.
+
+**3 252 tests Rust réussis, aucun échec, 65 tests ignorés ; 272 tests Python réussis.**
+Les essais automatiques couvrent la fermeture pendant le chargement, les fichiers déplacés/modifiés,
+les impulsions séparées sur les deux canaux et le clic de sélection sans démarrage audio.
+Le contrôle Rust strict passe également ; les quatre captures DJ sont générées et examinées.
+Après la finition du positionnement, les 27 contrôles ciblés DJ passent aussi.
+La fabrication et la vérification du nouveau paquet Mac restent à terminer.
+Le paquet Mac disponible reste `52ec1270` tant qu’un nouveau paquet n’est pas vérifié.
+La grille rythmique, les platines et les exports matériels restent les étapes suivantes.
+
+
 **Bilan du 28 octobre 2026 : préécoute DJ et points cue nommés réalisés et testés.**
 Dans **DJ → Prepare**, on peut écouter un morceau depuis une position choisie, arrêter l’écoute,
 ajouter des repères nommés, les déplacer et les retrouver au redémarrage dans toutes les playlists.
@@ -11,7 +28,8 @@ les sources exactes et ce suivi. L’application installée ou ouverte n’a pas
 Le studio reste basé sur Suhina `9717cc71` et l’analyse rbxport sur `b739d369`. Le multijoueur à
 quatre est conservé : protocole 13, copie portable v3 et projets natifs v4. Seul le catalogue DJ
 passe au format 3, avec sauvegarde exacte de l’ancien catalogue avant le premier changement.
-Les formes d’onde, les grilles rythmiques, les platines et l’export matériel restent à développer.
+Les grilles rythmiques, les platines et l’export matériel restent à développer. La forme d’onde
+a été ajoutée au palier du 29 octobre ci-dessus.
 
 ## Ce qu’on fabrique
 
@@ -35,7 +53,7 @@ complet reste en développement.
 | **Appareils et sons** | Ajouter, retirer et régler FM Synth et Utility depuis l’un ou l’autre participant. | Réorganisation, activation/désactivation, autres effets/instruments et plugins. |
 | **Nouvelles prises** | Les participants publient un son terminé depuis un onglet Studio local ; l’hôte vérifie les envois. | Enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
 | **Écoute personnelle** | Chacun garde son lecteur, sa position, son démarrage et son arrêt. | Essai sur les deux ordinateurs physiques. |
-| **Espace DJ** | Bibliothèque persistante, analyse rbxport, rendu du studio, playlists nommées et ordre du set conservé. | Points cue, grilles rythmiques, platines et export vers le matériel DJ. |
+| **Espace DJ** | Bibliothèque persistante, analyse rbxport, rendu du studio, playlists, préécoute, cues et forme d’onde. | Grilles rythmiques, platines et export vers le matériel DJ. |
 | **Mises à jour** | Bouton dans les paramètres pour comparer les versions GitHub ; suivi des sources et vérification des paquets de notre application. | Intégration régulière des nouveautés, publication et réception automatique d’une version commune. |
 
 ## Nouveau : les changements officiels de Suhina

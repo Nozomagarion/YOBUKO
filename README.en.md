@@ -56,8 +56,10 @@ subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.m
   instance’s changes. Legacy catalogs are backed up before their first format 3 write.
 - **Prepare:** audition a track from a chosen position through the existing preview/headphone output;
   add, rename, move and delete named cue points. Cues belong to the track across its playlists
-  and survive restart. Stop and leaving DJ cancel pending playback. Waveforms, beat grids, decks
-  and hardware export remain pending.
+  and survive restart. Prepare also loads a stereo waveform with cue markers and positions;
+  click or drag to choose the next start without playing. Reload waveform retries a changed
+  or missing file. Stop and leaving DJ cancel pending playback. Beat grids, decks and hardware
+  export remain pending.
 - **Settings → General → GitHub updates…:** inspect the three GitHub source identities and check
   availability of a combined app update. An official standalone binary cannot overwrite the fork.
 
@@ -66,7 +68,7 @@ instances. **A physical two-computer session has not yet been verified.** Loaded
 float32 WAV copies (64 files, 64 MiB each, 256 MiB total). Original encodings/tags are not
 archived. Either participant can publish a finished loaded take from another local Studio tab into an existing shared audio track using **Publish take**, without reconnecting. The whole sound is inserted unwarped; source trims/effects are not baked in. Guest uploads are pulled and verified by the host before publication. Recording directly into the shared tab and external plugins remain unsupported. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
 move, trim, duplicate, enable and delete with revision checks and stack-only placement.
-**Tracks** lets either participant add an audio track or a MIDI track with default FM Synth while connected. Both apps need protocol 10.
+**Tracks** lets either participant add an audio track or a MIDI track with default FM Synth while connected. All participants need protocol 13 and the same compiled Suhina revision.
 [LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-lan-prototype)
 
 ## Progress you can audit

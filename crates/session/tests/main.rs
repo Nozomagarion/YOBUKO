@@ -20,6 +20,7 @@ mod device_groups;
 mod devices;
 mod dj;
 mod dj_audition;
+mod dj_waveform;
 mod editing;
 mod export;
 mod files;
