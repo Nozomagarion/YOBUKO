@@ -6,8 +6,9 @@ confirmées par l’hôte ; l’audio n’est pas diffusé en direct sur le rés
 
 ## Préparer les ordinateurs
 
-Installer **exactement le même paquet combiné** sur tous les ordinateurs : comparer le nom
-complet de l’archive, pas seulement «0.0.1». Une ancienne révision Suhina peut être refusée
+Installer **la même version et le même identifiant de build** sur tous les ordinateurs, avec
+l’archive adaptée à chaque système : Mac et Windows ont des fichiers différents. Ne pas comparer
+seulement le numéro générique «0.0.1». Une ancienne révision Suhina peut être refusée
 même si son interface semble identique. Garder ses projets habituels et une copie de secours.
 La nouvelle version lit les anciens projets ; ses nouvelles sauvegardes utilisent le format v4.
 

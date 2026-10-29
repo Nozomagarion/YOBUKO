@@ -13,16 +13,23 @@ covers:
 
 # Multiplayer fork
 
-## Suhina source update, 28 October 2026
+## Suhina source update, 29 October 2026
 
-The fork integrates official main `9717cc717537010de76554062c64efab895f81cc` (77 commits after
-its former pin), including EQs, panels, Bezier automation and dependency updates. Open PRs
+The fork integrates official main `7753ffa3d730e6bbbd38f28e120b9e6d3544d4b0` (56 commits after
+the 28 October pin `9717cc717537010de76554062c64efab895f81cc`). The earlier integration added
+EQs, panels, Bezier automation and dependency updates; this one adds task-based settings,
+style resolver/cache and shared DSP improvements. Open PRs
 #1040/#1028 are excluded; rbxport remains at its previous checked analysis pin. The shared
 subset stays FM Synth/Utility; new studio devices do not widen remote permissions. Protocol 13,
 portable-copy format 3 and native v4 are required, with exact Suhina revision checked at hello.
 Studio reads earlier files, while new saves use v4; keep the old app/files for backward use.
 No source file is rewritten by sharing and no installed app is replaced. Existing four-person
 LAN workflows are retained. [Integration contract](spec/lan-upstream-20261028.md).
+
+The fork CI and distribution candidate install Python 3.12 explicitly and use UTF-8 mode on
+every runner. The vendored analysis Rust sources use LF even with Windows Git auto-CRLF,
+so the byte-for-byte source verification remains strict. The release workflow uploads candidate
+artifacts only; a successful local Mac run does not validate Windows or publish the shared channel.
 
 ## One host and three guests (protocol 13)
 

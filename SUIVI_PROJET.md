@@ -12,11 +12,67 @@ Le mécanisme précis de bascule reste à réaliser ; aucun basculement complet 
 
 Les développements de platines/vitesse/boucles et le projet de réintégrer séparément les modules
 rbxport ont été engagés à la suite d’une mauvaise interprétation de l’agent. Ces chantiers sont
-arrêtés. Le code et les preuves déjà produits restent historiques ; le prototype de vitesse reste
-isolé dans `../suhina-deck-speed-20261029`, sans intégration ni livraison. Les demandes de travail
+arrêtés. Le code et les preuves déjà produits restent historiques ; le prototype de vitesse a été
+archivé avec son diff dans `../validation/2026-10-29/multiplayer-ready/`, sans intégration ni livraison. Les demandes de travail
 en parallèle ne constituaient pas une demande d’inventer de nouvelles fonctions DJ.
 
-## Dernier palier livré : deux platines DJ A/B — 29 octobre 2026
+## Bêta multijoueur LAN pour Mac — 29 octobre 2026
+
+Le socle officiel **`7753ffa3` est intégré**, soit **56 nouveaux commits Suhina**. Le code du
+paquet est **`91cf0521`**. La branche `main` reste un miroir officiel ; nos ajouts restent sur
+`feature/multiplayer`. rbxport est toujours épinglé à `b739d369`, sans nouvelle version détectée.
+Aucune nouvelle fonction DJ n’est développée pour cette livraison.
+
+Le parcours LAN réunit un hôte et jusqu’à trois invités : invitations individuelles, édition
+MIDI/clips/scènes et réglages pris en charge, partage de sons chargés et publication de prises
+terminées. Chaque personne contrôle son écoute. Les copies sont conservées au départ ; la
+reconnexion passe par une nouvelle invitation. Les refus locaux restent visibles au rafraîchissement
+et peuvent être acquittés avec **Dismiss multiplayer message**, sans changer le projet.
+
+**3 308 tests Rust réussis, aucun échec, 67 ignorés ; 297 tests Python réussis.**
+Le contrôle Rust strict et les neuf contrôles documentaires/source passent. Les huit tests de
+captures multijoueurs passent également. Les vues de connexion, trois invités et publication
+de prise ont été examinées. Les premiers échecs ont été résolus : cache de test pointant vers
+une ancienne copie supprimée, puis test de navigation resté sur l’ancienne page des paramètres.
+
+**Le paquet Mac Apple Silicon est compilé et vérifié après extraction** : trois exécutables,
+signature locale, CRC, manifeste, sources exactes et identités des composants. L’application
+installée n’est pas remplacée. C’est une bêta locale pour macOS 11+ sur Apple Silicon, pas une
+validation de Windows, Linux, Mac Intel ou des deux ordinateurs physiques. Les instruments/effets
+partagés restent FM Synth et Utility ; l’enregistrement direct dans l’onglet partagé et les plugins
+externes ne sont pas encore fournis. Le guide explique le parcours de prise dans un onglet local.
+
+Application : `../builds/suhina-multiplayer-beta-lan-macos-arm64-91cf0521/Suhina.app`.
+ZIP : `../builds/suhina-multiplayer-beta-lan-macos-arm64-91cf0521.zip`.
+Mode d’emploi : [GUIDE_MULTIPLAYER.md](GUIDE_MULTIPLAYER.md).
+Preuves : `../validation/2026-10-29/multiplayer-ready/validation.json`.
+Mises à jour : **Settings → Agents and updates → GitHub updates…**.
+
+Les ordinateurs prévus sont **un Mac et un Windows**, confirmé par le propriétaire. Le paquet
+Mac seul ne suffit donc pas à valider leur essai commun.
+
+**GitHub Actions réactivé par le propriétaire.** Un candidat commun a été lancé sur
+`91cf0521` : [exécution 40942355458](https://github.com/Nozomagarion/suhina-daw/actions/runs/40942355458),
+version `0.1.0-nightly.20261029194125+91cf052`. Au relevé du 29 octobre à 20 h 47,
+Windows et Linux échouent avant la compilation : conversion CRLF des sources vérifiées sur
+Windows ; Python sans `tomllib` sur Ubuntu 22.04. Le job Mac travaille encore. Une correction
+ciblée de l'environnement est appliquée : Python 3.12 explicite, mode UTF-8 et fins de ligne LF
+pour les sources rbxport. Les six tests de distribution et les neuf contrôles locaux passent ;
+un checkout avec `core.autocrlf=true` préserve les neuf empreintes sources. Le canal commun n'est pas publié ; aucune réussite Windows n'est annoncée.
+
+Le handoff global `../handoff.md` décrit la reprise complète. Le dossier parent contient aussi
+`PROPOSITION_STORE_ARTCRAFT.md` : proposition distincte pour raccorder le NZO Store existant au
+launcher ArtCraft officiel, en tenant compte de la PR plugins #225 déjà ouverte. Aucun message
+aux mainteneurs, aucune intégration du store et aucune fusion de périmètre avec Suhina n'ont été faits.
+
+**Ménage :** les anciens paquets vérifiés et trois copies de travail ont été retirés après
+archivage de leurs modifications et sauvegarde Git. La nouvelle bêta et un ZIP de secours
+sont conservés. Le cache Rust de 3,59 Gio a été retiré après les dernières vérifications ; le bilan
+exact et les archives de récupération sont dans `../validation/2026-10-29/multiplayer-ready/`.
+Les sources, projets, réglages et la note historique locale du propriétaire sont conservés.
+Les anciens liens vers des builds retirés sont historiques : utiliser le paquet ci-dessus.
+
+## Historique : palier des deux platines DJ A/B — 29 octobre 2026
 
 Dans **DJ**, les boutons **Load A / Load B** de la bibliothèque ou d’une playlist chargent
 les morceaux sans les démarrer. Le panneau **Performance · decks A / B** permet de lire les deux

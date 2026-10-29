@@ -7,6 +7,9 @@
 # Device files compared byte for byte with what `to_sd` writes: LF on every platform.
 *.sd text eol=lf
 
+# Vendored analysis is checked against upstream byte hashes on Windows too.
+third_party/rbxport-analysis/src/*.rs text eol=lf
+
 # Generated on main after every merge (.github/workflows/docs-generated.yml); collapsed in diffs.
 docs/INDEX.md linguist-generated=true
 docs/commands.md linguist-generated=true
