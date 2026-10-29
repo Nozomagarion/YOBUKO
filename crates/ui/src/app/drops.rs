@@ -266,6 +266,12 @@ impl App {
                 "device.moveToTrack",
                 json!({ "track": from.0, "device": index, "toTrack": to.0, "copy": copy }),
             ));
+            // The track it went to is selected and its chain shown, so the editor opened next is
+            // the moved or copied device's, not the one left on the track it came from.
+            self.selected_device = None;
+            self.device_picks.clear();
+            self.select_tracks(vec![to]);
+            self.detail_showing = detail_view::Showing::Devices;
         }
     }
 
