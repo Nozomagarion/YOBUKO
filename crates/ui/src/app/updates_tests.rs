@@ -5,7 +5,7 @@ use super::*;
 use egui_kittest::kittest::Queryable;
 
 #[test]
-fn the_github_button_is_visible_at_the_top_of_general_and_requests_a_check_without_changing_settings() {
+fn the_github_button_is_visible_on_agents_updates_and_checks_without_changing_settings() {
     use crate::settings::settings_view::{self, About, PageState, PluginsView, Sources, ThemesView};
     use crate::settings::{Settings, keymap::Keymap};
     struct State {
@@ -32,8 +32,13 @@ fn the_github_button_is_visible_at_the_top_of_general_and_requests_a_check_witho
         state,
     );
     harness.run();
+    harness.get_by_label("Settings page: Agents and updates").click();
+    harness.run();
     let button = harness.get_by_label("Check GitHub components and app updates");
-    assert!(button.rect().top() < 250.0, "the update action must be visible without scrolling");
+    assert!(
+        button.rect().top() >= 0.0 && button.rect().bottom() <= 700.0,
+        "the update action must be visible without scrolling"
+    );
     button.click();
     harness.run();
     assert!(harness.state().pressed);

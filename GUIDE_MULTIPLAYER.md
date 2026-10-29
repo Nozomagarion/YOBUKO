@@ -31,7 +31,7 @@ Les réglages et les projets ne doivent pas être placés dans le dossier de l�
 5. Sur l’autre ordinateur, ouvrir **Multiplayer**, coller cette invitation dans le champ prévu
    puis cliquer **Join LAN session**. Attendre l’ouverture de l’onglet partagé. Le nombre
    **Guests: N / 3** permet de vérifier la présence de l’invité.
-6. Pour une autre personne, l’hôte clique **New invitation**, puis répète les étapes4–5.
+6. Pour une autre personne, l’hôte clique **New invitation**, puis répète les étapes 4–5.
    Trois invités au maximum peuvent être présents en même temps.
 
 ## Vérifier que l’on travaille ensemble
@@ -51,14 +51,14 @@ pas que le projet a été modifié. Attendre la confirmation avant d’enchaîne
 Après la démonstration, utiliser **Share current MIDI project** ou **Share project + audio**
 depuis un projet Studio ouvert. Cela partage une copie et conserve l’original. Les instruments
 et effets partagés pris en charge sont **FM Synth et Utility** ; les plugins externes et les
-autres appareils ne sont pas encore partagés. Jusqu’à64 pistes sont admises par le format borné.
+autres appareils ne sont pas encore partagés. Jusqu’à 64 pistes sont admises par le format borné.
 
-L’option audio transfère les sons déjà chargés dans le Studio, jusqu’à64 sons, 64Mio par son
-et256Mio au total. Attendre le transfert vérifié avant l’ouverture de la copie. Les copies audio
+L’option audio transfère les sons déjà chargés dans le Studio, jusqu’à 64 sons, 64 Mio par son
+et 256 Mio au total. Attendre le transfert vérifié avant l’ouverture de la copie. Les copies audio
 sont conservées dans le sous-dossier **Shared projects** du dossier de données de l’application.
 
 Pour une nouvelle prise, enregistrer et terminer dans un onglet Studio local, puis ouvrir
-**Takes**, choisir le son chargé, la piste et la position, et utiliser **Publish loaded take**.
+**Publish take**, choisir le son chargé, la piste et la position, et utiliser **Publish loaded take**.
 Les invités peuvent également publier. Le son entier est envoyé ; les découpes et effets locaux
 ne sont pas automatiquement intégrés. L’enregistrement direct dans l’onglet partagé n’est pas fourni.
 
