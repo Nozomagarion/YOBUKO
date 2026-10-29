@@ -184,6 +184,6 @@ impl App {
         ui.add_space(theme::PAD);
         self.show_dj_decks(ui);
         ui.add_space(theme::PAD);
-        ui.weak("Local library, playlists, cue points and constant beat grids. Decks, USB export and LINK are still to come.");
+        ui.weak("Local library, playlists, cue points, constant beat grids and original-speed A/B decks. Tempo sync, USB export and LINK are still to come.");
     }
 }
