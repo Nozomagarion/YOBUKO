@@ -51,14 +51,20 @@ Mises à jour : **Settings → Agents and updates → GitHub updates…**.
 Les ordinateurs prévus sont **un Mac et un Windows**, confirmé par le propriétaire. Le paquet
 Mac seul ne suffit donc pas à valider leur essai commun.
 
-**GitHub Actions réactivé par le propriétaire.** Un candidat commun a été lancé sur
-`91cf0521` : [exécution 40942355458](https://github.com/Nozomagarion/suhina-daw/actions/runs/40942355458),
-version `0.1.0-nightly.20261029194125+91cf052`. Au relevé du 29 octobre à 20 h 47,
-Windows et Linux échouent avant la compilation : conversion CRLF des sources vérifiées sur
-Windows ; Python sans `tomllib` sur Ubuntu 22.04. Le job Mac travaille encore. Une correction
-ciblée de l'environnement est appliquée : Python 3.12 explicite, mode UTF-8 et fins de ligne LF
-pour les sources rbxport. Les six tests de distribution et les neuf contrôles locaux passent ;
-un checkout avec `core.autocrlf=true` préserve les neuf empreintes sources. Le canal commun n'est pas publié ; aucune réussite Windows n'est annoncée.
+**GitHub Actions réactivé par le propriétaire.** Le premier candidat sur `91cf0521`,
+[exécution 40942355458](https://github.com/Nozomagarion/suhina-daw/actions/runs/40942355458),
+a rencontré deux erreurs de préparation avant compilation : Python trop ancien sur Ubuntu et
+conversion CRLF des sources rbxport sur Windows. La tentative a été arrêtée ; ses logs sont conservés.
+Python 3.12 et le mode UTF-8 sont maintenant explicites ; les neuf sources rbxport restent en LF,
+sans assouplir leurs empreintes. Six tests de distribution, les neuf contrôles locaux et un
+checkout avec `core.autocrlf=true` passent après ces corrections.
+
+**Le candidat corrigé est lancé**, version `0.1.0-nightly.20261029195036+05e3200`, source
+`05e3200b` : [exécution 40943707673](https://github.com/Nozomagarion/suhina-daw/actions/runs/40943707673).
+Au relevé du 29 octobre à 20 h 53, les trois jobs Mac universel, Windows et Linux sont en cours
+dans les contrôles source/régressions. Le contrôle de version du tag est réussi. Ce candidat ne
+change pas le code Rust du paquet Mac local `91cf0521`. La CI dépose des artefacts ; elle ne
+publie pas le canal de mises à jour. Aucune réussite Windows ni validation physique n'est annoncée.
 
 Le handoff global `../handoff.md` décrit la reprise complète. Le dossier parent contient aussi
 `PROPOSITION_STORE_ARTCRAFT.md` : proposition distincte pour raccorder le NZO Store existant au
