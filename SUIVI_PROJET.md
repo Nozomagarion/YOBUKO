@@ -1,18 +1,52 @@
 # Où en est notre application ?
 
-## En cours : platines A/B
+## Dernier palier livré : deux platines DJ A/B — 29 octobre 2026
 
-Deux lectures indépendantes sont ajoutées au même moteur audio : chargement sans lecture,
-Play/Pause/Stop, repositionnement, niveaux et crossfader. Le casque est séparé du crossfader et
-requiert une paire de sorties dédiée ; il n’envoie pas un morceau masqué dans la sortie principale.
-Les pistes du Studio, le catalogue v4 et les formats LAN ne sont pas modifiés par ces lectures.
+Dans **DJ**, les boutons **Load A / Load B** de la bibliothèque ou d’une playlist chargent
+les morceaux sans les démarrer. Le panneau **Performance · decks A / B** permet de lire les deux
+séparément, mettre en pause, reprendre, arrêter, décharger et choisir une position en secondes.
+Les deux niveaux et le crossfader permettent de passer de A à B ou de les mélanger.
 
-Les vérifications sont en cours, notamment pause/reprise, fin du morceau, annulation des chargements,
-files de commandes pleines et changements de projet. Le paquet validé reste `7842c68e` jusqu’à
-vérification d’une nouvelle livraison. Synchronisation, pitch, boucles et export matériel restent à faire.
+Les platines utilisent la même sortie audio que le Studio et réutilisent son lecteur existant.
+Le casque est indépendant du crossfader et demande une paire de sorties dédiée ; sans cette
+paire, un morceau masqué ne sera pas ajouté à la sortie principale. Revenir au Studio arrête les
+deux platines, y compris un chargement encore en cours. Les projets et le catalogue ne sont pas
+modifiés par ces lectures ; catalogue v4, projet v4, LAN 13 et copie portable v3 sont conservés.
 
+**3 272 tests Rust réussis, aucun échec, 67 ignorés ; 272 tests Python réussis.**
+La suite complète porte sur `1838cb8d` ; la seule modification suivante corrige un texte du
+panneau DJ. Les tests DJ de l’interface et les captures ont repassé sur le code final.
+Le contrôle Rust strict, le format et les contrôles documentaires passent. Six tests de captures
+GPU passent ; la nouvelle vue A/B et les vues DJ existantes ont été examinées. Les boutons sont
+également testés avec un vrai moteur de rendu hors ligne. Le README compte **9 jalons DJ réalisés
+sur 10** ; ce décompte ne mesure pas l’achèvement de toutes les fonctions de live.
 
-## Dernier palier livré : grille rythmique DJ — 29 octobre 2026
+Le paquet Mac Apple Silicon **`c3fb269b` est compilé et vérifié après extraction** : signature
+locale, CRC, manifeste, sources exactes et **27 commandes DJ**. Le marqueur `dj_decks=1` permet
+au contrôle des mises à jour de refuser un paquet qui perdrait ces fonctions. L’application
+installée ou ouverte n’a pas été remplacée.
+
+Application : `../builds/suhina-multiplayer-decks-macos-arm64-c3fb269b/Suhina.app`.
+ZIP : `../builds/suhina-multiplayer-decks-macos-arm64-c3fb269b.zip`.
+Preuves : `../validation/2026-10-29/decks-validation.json`.
+
+Ces platines jouent à la vitesse originale : pas encore de sync, pitch, boucles, quantification
+ou enregistrement du set. Le décodage est limité à 128 Mio par platine, environ 6 min 20 s en
+stéréo 44,1 kHz. L’écoute au casque physique et l’essai sur deux ordinateurs restent à faire.
+Le canal de mise à jour commun n’est pas publié. Aucun run GitHub n’apparaît pour `c3fb269b`
+au relevé du 29 octobre à 18 h 31 ; le refus Actions du matin concernait `612aab62`.
+Cela ne valide pas Windows/Linux. La prochaine étape concerne le **calage des platines sur le tempo**.
+
+## Travail parallèle demandé le 29 octobre
+
+Le prochain palier de vitesse est en développement dans une copie Git isolée,
+`../suhina-deck-speed-20261029` : réglage manuel par platine avec hauteur liée à la vitesse.
+Il n’est pas encore intégré ni présent dans le paquet `c3fb269b`. La conservation de hauteur et
+la synchronisation continue restent des fonctions distinctes. Un autre agent prépare le contrat
+des boucles DJ et leurs tests, en coordination avec ce travail. Le dépôt principal et le paquet
+validé restent séparés de ces développements à vérifier.
+
+## Historique : grille rythmique DJ — 29 octobre 2026
 
 Dans **DJ → Prepare**, on peut régler une grille à tempo constant et quatre battements par mesure,
 choisir le premier battement depuis la position sélectionnée et diviser/doubler le tempo.
@@ -364,12 +398,12 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 
 ## Prochaine étape
 
-**Préparer l’espace de performance avec deux platines A/B. Statut : à commencer.**
-La bibliothèque, les playlists, la préécoute, les cues, la forme d’onde et la grille à tempo constant
-sont réalisés. Le prochain critère est de définir puis construire deux lectures DJ contrôlables
-avec le moteur existant, sans modifier les projets Studio. La préécoute actuelle n’est pas encore
-un système de deux platines. Les grilles variables, la quantification et l’export matériel viennent ensuite.
-Les métadonnées DJ restent locales ; elles ne sont pas partagées par LAN.
+**Calage et contrôles musicaux des platines. Statut : à spécifier.**
+La première version A/B fonctionne à vitesse originale. Le prochain critère est de définir les
+réglages de vitesse et le calage sur les grilles enregistrées, puis de vérifier tempo, positions
+et son avec le moteur existant. Le changement de vitesse, la conservation de hauteur et la sync
+continue sont des comportements différents à construire explicitement. Boucles, quantification,
+enregistrement du set et export matériel viennent ensuite. Les métadonnées DJ restent locales.
 
 Le multijoueur reste un prototype LAN : Internet, reconnexion automatique, noms/rôles et reprise
 de l’hôte restent prévus. La version et les mises à jour communes restent à publier. L’essai des
