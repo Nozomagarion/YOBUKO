@@ -94,6 +94,22 @@ rule to input and output, without driver-name checks. This does not change which
 ASIO buffer is read or written. Drivers with missing or repeated timestamps need
 separate validation; the test does not establish their compatibility.
 
+## Backward clock readings
+
+ASIO timestamps are nanoseconds derived from a wrapping 32-bit millisecond clock.
+A small backward reading is not a full clock wrap: the local CPAL patch extends
+the epoch only for a backward step exceeding half that period (about 24.9 days).
+Until a backward clock catches up, the last published instant is repeated.
+Raw clock readings remain separate from this monotonic floor. All operations use
+atomics, without allocation, I/O or locks added to the callback.
+
+This workaround is adapted from the still-open CPAL change
+[#1396](https://github.com/RustAudio/cpal/pull/1396). It guards against erroneous
+driver timestamps and coarse `now()` readings but does not replace that method's
+clock source or redesign concurrent epoch extension. Deterministic tests cover
+the arithmetic without hardware. Audible crackling and Windows shared-output
+recovery require separate hardware verification; these tests establish neither.
+
 ## Sources
 
 - The vendored SDK, `third_party/asiosdk/common/asio.cpp`, ASIOInit.

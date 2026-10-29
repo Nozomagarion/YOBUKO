@@ -27,8 +27,11 @@ use crate::{
 /// monotonic 64-bit nanosecond value, shared between `now()` and audio callbacks.
 #[derive(Default)]
 struct TimeBase {
+    // Raw clock readings detect a wrap; they may move backwards.
     last_ns: AtomicU64,
     epoch_ns: AtomicU64,
+    // Published time has a separate floor, so a small backward step holds time still.
+    latest_ns: AtomicU64,
 }
 
 /// Nanosecond span of one full `timeGetTime()` wrap period (~49.7 days).
@@ -40,14 +43,19 @@ impl TimeBase {
         // `Relaxed` is sufficient: callbacks run on a single ASIO thread. The only
         // cross-thread caller is `now()`, which may race at wrap time (~1µs every 49.7 days).
         let prev = self.last_ns.swap(ns, Ordering::Relaxed);
-        let epoch = if ns < prev {
+        // Only a backward step exceeding half the clock period is a wrap.
+        // Smaller reversals can be a driver bug or now() rounding to milliseconds.
+        let wrapped = ns < prev && prev - ns > TIMEGETIME_WRAP_NS / 2;
+        let epoch = if wrapped {
             self.epoch_ns
                 .fetch_add(TIMEGETIME_WRAP_NS, Ordering::Relaxed)
-                + TIMEGETIME_WRAP_NS
+                .wrapping_add(TIMEGETIME_WRAP_NS)
         } else {
             self.epoch_ns.load(Ordering::Relaxed)
         };
-        StreamInstant::from_nanos(epoch + ns)
+        let ns = epoch.wrapping_add(ns);
+        let latest = self.latest_ns.fetch_max(ns, Ordering::Relaxed);
+        StreamInstant::from_nanos(latest.max(ns))
     }
 }
 
@@ -93,7 +101,9 @@ impl Stream {
     /// Opens the active driver's settings without loading another driver instance.
     /// Call from the stream owner, never from an audio callback.
     pub fn control_panel(&self) -> Result<(), Error> {
-        self.driver.control_panel().map_err(|e| Error::with_message(ErrorKind::BackendError, e.to_string()))
+        self.driver
+            .control_panel()
+            .map_err(|e| Error::with_message(ErrorKind::BackendError, e.to_string()))
     }
 
     pub fn now(&self) -> StreamInstant {
@@ -233,7 +243,6 @@ impl Device {
             if !callback_cycle.accept(callback_info.buffer_index, callback_info.system_time) {
                 return;
             }
-
 
             // There is 0% chance of lock contention the host only locks when recreating streams.
             let stream_lock = asio_streams.lock().unwrap();
@@ -569,7 +578,6 @@ impl Device {
             if !callback_cycle.accept(callback_info.buffer_index, callback_info.system_time) {
                 return;
             }
-
 
             // There is 0% chance of lock contention the host only locks when recreating streams.
             let mut stream_lock = asio_streams.lock().unwrap();
@@ -1463,4 +1471,73 @@ unsafe fn apply_input_callback_to_data<A, D>(
     };
     let info = InputCallbackInfo { timestamp };
     data_callback(&data, &info);
+}
+
+#[cfg(test)]
+mod time_base_tests {
+    use super::*;
+
+    #[test]
+    fn backward_driver_time_repeats_latest_instant() {
+        let clock = TimeBase::default();
+        let before = clock.to_stream_instant(5_000_800_000);
+        assert_eq!(clock.to_stream_instant(5_000_100_000), before);
+        assert_eq!(
+            clock.to_stream_instant(5_003_000_000).as_nanos(),
+            5_003_000_000
+        );
+    }
+
+    #[test]
+    fn coarse_clock_read_does_not_advance_epoch() {
+        // Defensive handling of now() rounding, not a replacement for its clock source.
+        let clock = TimeBase::default();
+        clock.to_stream_instant(5_000_400_000);
+        assert_eq!(
+            clock.to_stream_instant(5_000_000_000).as_nanos(),
+            5_000_400_000
+        );
+        assert_eq!(
+            clock.to_stream_instant(5_003_066_000).as_nanos(),
+            5_003_066_000
+        );
+    }
+
+    #[test]
+    fn repeated_backward_steps_do_not_overflow() {
+        let clock = TimeBase::default();
+        for cycle in 0..5_000u64 {
+            let ns = 5_000_400_000 + cycle * 3_000_000;
+            clock.to_stream_instant(ns);
+            clock.to_stream_instant(ns - 400_000);
+        }
+        assert_eq!(
+            clock.to_stream_instant(20_000_000_000).as_nanos(),
+            20_000_000_000
+        );
+    }
+
+    #[test]
+    fn real_wraps_extend_time() {
+        let clock = TimeBase::default();
+        let before = clock.to_stream_instant(TIMEGETIME_WRAP_NS - 1_000_000);
+        let after = clock.to_stream_instant(2_000_000);
+        assert_eq!(after.duration_since(before), Duration::from_millis(3));
+        clock.to_stream_instant(TIMEGETIME_WRAP_NS - 1_000_000);
+        assert_eq!(
+            clock.to_stream_instant(1_000_000).as_nanos(),
+            u128::from(TIMEGETIME_WRAP_NS) * 2 + 1_000_000
+        );
+    }
+
+    #[test]
+    fn duplicate_time_and_half_period_step_are_not_wraps() {
+        let clock = TimeBase::default();
+        let before = clock.to_stream_instant(TIMEGETIME_WRAP_NS / 2 + 1_000_000);
+        assert_eq!(
+            clock.to_stream_instant(TIMEGETIME_WRAP_NS / 2 + 1_000_000),
+            before
+        );
+        assert_eq!(clock.to_stream_instant(1_000_000), before);
+    }
 }
