@@ -63,12 +63,21 @@ impl AudioSystem for FailedOpen {
     }
     fn open(
         &self,
-        _: &suhina_engine::model::Project,
+        project: &suhina_engine::model::Project,
         _: &suhina_engine::AudioPool,
         _: &suhina_engine::DeviceAssets,
-        _: &OutputChoice,
+        choice: &OutputChoice,
         _: Option<Player>,
     ) -> Result<suhina_session::audio::Opened, String> {
+        if choice.host.as_deref() == Some("WASAPI") {
+            let mut renderer =
+                suhina_engine::Renderer::stopped(project, &Default::default(), 48_000).map_err(|e| e.to_string())?;
+            return Ok(suhina_session::audio::Opened {
+                player: Player::new(renderer.controller(), None),
+                notice: None,
+                plugins_kept: false,
+            });
+        }
         Err("unavailable".into())
     }
 }
@@ -91,4 +100,26 @@ fn failed_device_open_keeps_requested_choice_for_retry_but_not_history() {
     assert_eq!(app.settings.output_choice(), selected);
     assert_eq!(app.projects.output_choice(), &selected);
     assert_eq!(app.settings.audio_devices, history);
+}
+
+#[test]
+fn switching_after_a_failed_open_preserves_the_previous_drivers_working_device() {
+    let mut app = App::new();
+    let (working, failed) = choices();
+    let mut session = Session::new(suhina_engine::model::Project::default());
+    let mut renderer = suhina_engine::Renderer::stopped(session.project(), &Default::default(), 48_000).unwrap();
+    session.attach_player(Player::new(renderer.controller(), None));
+    app.projects.add(session, None).unwrap();
+    app.projects.set_audio_system(Arc::new(FailedOpen));
+    app.projects.set_output_choice(working.clone());
+    app.settings.remember_output(&working, None);
+    app.choose_output(&failed);
+    assert!(matches!(app.status, Status::Error(_)));
+    assert_eq!(app.projects.output_choice(), &failed);
+    let next = OutputChoice { host: Some("WASAPI".into()), device: Some("Speakers".into()), ..Default::default() };
+    app.choose_output(&next);
+    assert!(!matches!(app.status, Status::Error(_)));
+    assert_eq!(app.projects.output_choice(), &next);
+    assert_eq!(app.settings.audio_devices.get("asio"), Some(&working.device));
+    assert_eq!(app.settings.audio_devices.get("wasapi"), Some(&next.device));
 }

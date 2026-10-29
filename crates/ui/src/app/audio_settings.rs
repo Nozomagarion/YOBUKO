@@ -94,6 +94,8 @@ impl App {
             }
             return;
         }
+        let previous_output_open =
+            self.session().and_then(Session::player).and_then(suhina_session::Player::output_info).is_some();
         let params = choice.to_json();
         let params = json!({
             "host": params["host"].as_str().unwrap_or(""),
@@ -106,7 +108,10 @@ impl App {
         match self.projects.execute("audio.setOutput", &params) {
             Ok(result) => {
                 let default = self.about.audio_hosts.iter().find(|h| h.default).map(|h| h.name.as_str());
-                self.settings.remember_output(&current, default);
+                // A failed choice remains selected for retry, but is not a working device.
+                if previous_output_open {
+                    self.settings.remember_output(&current, default);
+                }
                 self.settings.remember_output(choice, default);
                 self.status = match result["notice"].as_str() {
                     Some(notice) => Status::Hint(notice.to_string()),
