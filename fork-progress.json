@@ -135,8 +135,9 @@
           "evidence": "crates/ui/src/app/dj_prepare_tests.rs"
         },
         {
-          "name": "Édition des grilles rythmiques",
-          "done": false
+          "name": "Édition des grilles rythmiques à tempo constant",
+          "done": true,
+          "evidence": "crates/ui/src/app/dj_grid_tests.rs"
         },
         {
           "name": "Platines et espace de performance",

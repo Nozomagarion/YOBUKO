@@ -77,7 +77,8 @@ Il retrouve l’état actuel dans un nouvel onglet ; son ancienne copie et ses m
 Passer du morceau que l'on produit au morceau que l'on joue. Une bibliothèque DJ dans la même
 application, l'analyse du tempo et de la tonalité et des playlists persistantes pour préparer
 l’ordre du set. La préécoute et les points cue nommés permettent maintenant de préparer chaque
-morceau. Les grilles rythmiques et outils de performance viennent ensuite.
+morceau. Une grille à tempo constant se règle maintenant par morceau ; les outils de performance
+viennent ensuite.
 
 rbxport apporte une base libre pour cette direction. Aujourd'hui, son analyse est intégrée à
 la bibliothèque et un rendu du studio peut y être ajouté. Dans **DJ**, créer un set, ajouter les
@@ -88,7 +89,10 @@ sont refusées. Avec **Prepare**, choisir une position puis **Play from position
 repère avec **Play cue**. Les points cue peuvent être nommés, déplacés et supprimés ; ils restent
 liés au morceau dans toutes ses playlists. **Stop audition** et le retour au Studio annulent la
 lecture, y compris pendant son chargement. La forme d’onde du morceau affiche les repères et permet de choisir visuellement
-le départ de la préécoute sans lancer le son. Les grilles rythmiques,
+le départ de la préécoute sans lancer le son. Régler **Grid BPM** et **First beat seconds**,
+prévisualiser puis **Save beat grid** conserve une grille à quatre battements par mesure, distincte
+du BPM analysé. Le catalogue passe en format 4 avec sauvegarde de l’ancien fichier ; les anciennes
+versions du fork ne lisent pas ce catalogue migré. Le tempo variable,
 les platines et l'export vers le matériel DJ restent à construire et à vérifier.
 
 ## Où en est le projet
@@ -99,7 +103,7 @@ les platines et l'export vers le matériel DJ restent à construire et à vérif
 | Partie du projet | Étapes réalisées | Prochain objectif |
 |---|---:|---|
 | Créer ensemble | 16 / 18 | Sessions Internet et reconnexion automatique |
-| Préparer et jouer | 7 / 10 | Édition des grilles rythmiques |
+| Préparer et jouer | 8 / 10 | Platines et espace de performance |
 | Évoluer ensemble | 4 / 7 | Version commune validée sur toutes les plateformes |
 <!-- fork-progress:end -->
 
@@ -112,7 +116,7 @@ leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce
 |---|---|---|
 | **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
 | **Multijoueur** | Session LAN hôte + trois invités maximum, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, grille du lanceur et scènes partagées, publication de prises terminées par les deux participants, réglages FM Synth/Utility et noms/volumes/panoramiques partagés et lectures indépendantes. | Internet et reconnexion automatique. |
-| **DJ** | Bibliothèque, playlists et cues persistants ; analyse rbxport, préécoute et forme d’onde. | Grilles rythmiques, platines et compatibilité matérielle. |
+| **DJ** | Bibliothèque, playlists, cues et grilles à tempo constant persistants ; analyse rbxport, préécoute et forme d’onde. | Platines et compatibilité matérielle. |
 | **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
 
 Le trafic chiffré est testé entre deux services sur le même ordinateur, avec des vérifications

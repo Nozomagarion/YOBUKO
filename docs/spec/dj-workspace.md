@@ -15,6 +15,9 @@ covers:
   - crates/media/src/waveform.rs
   - crates/session/src/dj_waveform.rs
   - crates/session/tests/dj_waveform.rs
+  - crates/ui/src/app/dj_grid.rs
+  - crates/ui/src/app/dj_grid_tests.rs
+  - crates/session/tests/dj_grid.rs
   - crates/ui/src/app/dj_waveform.rs
   - crates/session/src/dj_preview.rs
   - crates/session/tests/dj_audition.rs
@@ -156,10 +159,12 @@ confirmed. A failed write preserves the draft and saved catalog. Reanalysis pres
 playlist references; shortening audio past a cue refuses reimport rather than silently deleting it.
 
 Formats 1 and 2 open without writes. The first mutation saves an exact sibling backup with
-the original format in its filename before publishing format 3, preserving playlists/counters.
+the original format in its filename before publishing the current format, preserving playlists/counters. Format 3 introduced cues;
+the grid extension below writes format 4 and also backs up format 3.
 Future/unknown fields and invalid cue references are refused. Play/Stop never persist a catalog.
 Cue sets are local, not shared over LAN and not exported to a proprietary database or hardware.
-Beat grids, quantised cues, decks and USB/LINK export remain deferred. Waveform preparation
+Quantised cues, decks and USB/LINK export remain deferred. Constant beat-grid editing is
+described below. Waveform preparation
 is described below.
 
 Acceptance: audition generated audio through an offline renderer, seek from a cue, stop while
@@ -191,7 +196,8 @@ position explicitly auditions there. Keyboard users retain the time slider. An e
 clamped before the track end. Read/decoding errors are displayed with a Reload waveform button;
 cues remain usable. Closing preparation or leaving DJ cancels the view request and discards it.
 No waveform is persisted, no catalog migration or network format change is introduced. Zoom,
-beat-grid editing, quantisation, decks and hardware export remain separate work.
+variable-tempo grids, quantisation, decks and hardware export remain separate work. Constant
+beat-grid editing is the following extension.
 
 Acceptance: generated stereo audio with independent impulses preserves both lanes and known
 positions, waveform loading opens no output and writes no files, malformed/missing/changed audio
@@ -239,3 +245,72 @@ geometry/budget tests remain applicable; capture the preparation UI for visual r
 The automated UI checks cover preparation, a centre click, no implicit playback, close and reload
 errors; GPU capture covers the two lanes and markers. Actual headphone routing still needs the
 separate physical test.
+
+
+## Editable constant beat grid (fork extension)
+
+The local preparation panel stores an optional grid per track: a finite 20–400 BPM tempo and
+`first_beat` seconds (finite, nonnegative, strictly before duration). This anchor is beat 1 of
+bar 1; this first slice uses four beats per bar and constant tempo, with no ticks before the
+anchor. It does not warp, quantise, change playback speed or edit audio/cues. The measured
+`Track.bpm` remains separate. Reanalysis keeps the manual grid and refuses shortening audio past
+its anchor rather than removing it. At most one grid exists per catalog track, up to 2000 grids.
+
+`dj.grid.set` takes track, displayed revision, bpm and firstBeat seconds. `dj.grid.clear` takes
+track and revision. Both are person-only Library commands on the existing bounded catalog
+worker, with checked revision, disk snapshot comparison and atomic publication. Invalid,
+unknown, stale or failed edits preserve disk/model. Clear requires an existing grid and UI
+confirmation; it does not delete cues, playlist entries or audio.
+
+Catalog format 4 adds a required grids array. Formats 1/2/3 open without writes, preserving all
+track, playlist and cue identifiers and counters; the first successful mutation keeps an exact
+sibling `dj-library-vN-backup-*.json` before publishing format 4. Unknown fields, duplicate or
+unknown grid tracks, invalid numbers and future formats are rejected. Earlier applications
+cannot read format 4: retain backups and previous audio/project files for recovery.
+
+Prepare distinguishes analysed tempo and the saved grid. The local draft initially copies the
+saved grid or uses analysed BPM (120 when unknown) and anchor zero. Preview beat grid or editing
+the draft shows an explicitly unsaved grid on the waveform; Save beat grid persists it. Use start
+as first beat copies the chosen start position, without playing audio. Half/Double tempo operate
+only within bounds. Changes elsewhere make drafts stale: explicit Refresh grid draft reloads
+saved values, never retargeting an old draft to a newly selected track. Failed writes keep drafts;
+successful writes reset them. Reload restores the saved grid; deletion has its own confirmation.
+
+Grid tick generation is pure, bounded and in file seconds. Drawing uses at most 2048 lines and
+an additional width budget; dense overviews show a subset of bar starts with original bar numbers.
+Cues, selected start and actual playback cursor stay above the ticks. Draft and saved grids are
+visually distinct. No audio device is opened by grid operations. Zoom, variable tempo/meter,
+quantised cue playback and hardware export remain later work.
+
+The distribution marker retains family `dj_catalog=1` and adds `dj_catalog_read_min=1`,
+`dj_catalog_read_max=4`, `dj_catalog_write=4`. The new updater requires a candidate to read all
+formats 1–4 and write a format >=4 within its declared reader range, rejecting older packages
+without these capabilities before replacing files. Older updater clients can accept the new
+package through the unchanged family contract; no shared update channel is published here.
+
+Acceptance: independent impulse fixtures at known seconds, exact tick/bar positions, bounded
+long-track drawing, roundtrip and byte-exact v3 backup, stale/invalid/locked/concurrent writes,
+reimport preservation and shortening refusal, actual UI preview/save/refresh/delete/restart,
+agent denial, no output or project mutations and explicit package compatibility tests.
+
+
+### Check grid editing
+
+1. Use the generated eight-second WAV from **Check waveform preparation** above. Open Suhina
+   without a project, click **DJ**, **Import audio…**, select that file, wait, then **Prepare**.
+   The panel distinguishes analysed BPM and **no saved grid**. Nothing plays.
+2. Set **Grid BPM** to 120 and **First beat seconds** to 0.250. Click **Preview beat grid**.
+   Amber ticks start at 0.250, 0.750, 1.250 seconds; bar 2 begins at 2.250. The draft is not saved.
+3. Click **Save beat grid**. The saved summary shows 120 BPM/0.250 s; ticks turn blue. Quit/reopen
+   with the same library folder, click DJ and Prepare again: the values and ticks remain.
+4. Click a new position on the waveform, then **Use start as first beat**. Only the draft moves.
+   **Half grid tempo** and **Double grid tempo** adjust that draft within 20–400 BPM;
+   **Use analysed tempo** copies analysis without modifying its stored value. Save explicitly.
+5. Make a cue edit while a grid draft exists. **Save beat grid** becomes disabled until
+   **Refresh grid draft**, which reloads the saved values. Changing tracks starts a fresh draft.
+6. Click **Delete beat grid…**, then **Cancel grid deletion**: saved values remain. Repeat and
+   **Confirm delete grid**: ticks and saved grid disappear; cues, playlists and audio remain.
+
+Check legacy migration on a test copy of a format-3 catalog: opening/previewing writes nothing,
+and the first successful edit leaves an exact `dj-library-v3-backup-*.json`. The automatic
+migration and concurrent-write tests cover refusal paths; do not experiment on a sole real catalog.

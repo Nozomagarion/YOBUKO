@@ -18,6 +18,7 @@ mod commands;
 mod device_files;
 mod device_groups;
 mod devices;
+pub use suhina_dj::BeatGrid as DjBeatGrid;
 mod dj;
 mod dj_preview;
 mod dj_waveform;

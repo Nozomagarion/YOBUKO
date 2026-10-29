@@ -3236,3 +3236,7 @@ mod dj_playlist_tests;
 #[cfg(test)]
 #[path = "app/dj_prepare_tests.rs"]
 mod dj_prepare_tests;
+
+#[cfg(test)]
+#[path = "app/dj_grid_tests.rs"]
+mod dj_grid_tests;

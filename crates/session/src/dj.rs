@@ -15,6 +15,7 @@ pub(crate) enum Job {
     Import(PathBuf, Option<PathBuf>),
     Playlist(u64, PlaylistEdit),
     Cue(u64, u32, CueEdit),
+    Grid(u64, u32, Option<(f64, f64)>),
     Preview(u64, u32),
     Waveform(u64, u32),
 }
@@ -109,6 +110,7 @@ impl Dj {
                         Job::Import(file, project) => next.import(&file, project).map(|_| None),
                         Job::Playlist(revision, edit) => next.edit_playlist(revision, edit),
                         Job::Cue(revision, track, edit) => next.edit_cue(revision, track, edit).map(|_| None),
+                        Job::Grid(revision, track, value) => next.set_grid(revision, track, value).map(|_| None),
                         Job::Preview(..) | Job::Waveform(..) => Err("invalid DJ worker job".into()),
                     }
                     .and_then(|created| {
@@ -191,6 +193,23 @@ const PLAYLIST: crate::commands::Param = param("playlist", ParamType::Integer, "
 const TRACK: crate::commands::Param = param("track", ParamType::Integer, "local DJ catalog track id");
 const NAME: crate::commands::Param = param("name", ParamType::Text, "playlist name");
 static COMMANDS: &[CommandSpec<Projects>] = &[
+    command!(
+        "dj.grid.set",
+        "Save the manual constant DJ beat grid",
+        &[
+            TRACK,
+            REVISION,
+            param("bpm", ParamType::Number, "manual tempo in BPM"),
+            param("firstBeat", ParamType::Number, "seconds of beat 1 of bar 1")
+        ],
+        grid_set
+    ),
+    command!(
+        "dj.grid.clear",
+        "Delete the saved DJ beat grid without changing audio or cues",
+        &[TRACK, REVISION],
+        grid_clear
+    ),
     command!("dj.waveform.load", "Prepare a DJ waveform without playing audio", &[TRACK], waveform_load),
     command!("dj.waveform.clear", "Cancel and discard the prepared DJ waveform", &[], waveform_clear),
     command!(
@@ -271,7 +290,7 @@ pub(crate) fn ready(projects: &mut Projects) -> Result<(), CommandError> {
 fn library(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
     ready(projects)?;
     Ok(json!({"tracks": projects.dj.catalog.tracks, "playlists": projects.dj.catalog.playlists,
-        "waveform":projects.dj.waveform.snapshot(),
+        "grids":projects.dj.catalog.grids, "waveform":projects.dj.waveform.snapshot(),
         "cues": projects.dj.catalog.cues, "preview": crate::dj_preview::snapshot(projects),
         "revision": projects.dj.catalog.revision, "created_playlist": projects.dj.created.take(),
         "busy": projects.dj.busy, "error": projects.dj.error, "analysis": "rbxport", "format": suhina_dj::FORMAT}))
@@ -363,4 +382,19 @@ fn waveform_load(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn waveform_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_waveform::clear(p, v)
+}
+
+fn grid_set(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    ready(p)?;
+    let bpm =
+        v["bpm"].as_f64().filter(|n| n.is_finite() && (20.0..=400.0).contains(n)).ok_or("grid BPM must be 20–400")?;
+    let first = v["firstBeat"]
+        .as_f64()
+        .filter(|n| n.is_finite() && *n >= 0.0)
+        .ok_or("grid first beat must be nonnegative seconds")?;
+    p.dj.queue(Job::Grid(number(v, "revision")?, id(v, "track")?, Some((bpm, first))))
+}
+fn grid_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    ready(p)?;
+    p.dj.queue(Job::Grid(number(v, "revision")?, id(v, "track")?, None))
 }

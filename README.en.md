@@ -53,13 +53,16 @@ subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.m
   Studio project into the library. Create/rename local playlists, add/remove tracks, change their
   order and recover the sets after restarting. Audio/source files stay in place; deletion is
   confirmed. Revision checks refuse stale writes, and **Refresh DJ library** reloads another
-  instance’s changes. Legacy catalogs are backed up before their first format 3 write.
+  instance’s changes. Legacy format 1/2/3 catalogs are backed up before their first format 4 write.
 - **Prepare:** audition a track from a chosen position through the existing preview/headphone output;
   add, rename, move and delete named cue points. Cues belong to the track across its playlists
   and survive restart. Prepare also loads a stereo waveform with cue markers and positions;
   click or drag to choose the next start without playing. Reload waveform retries a changed
-  or missing file. Stop and leaving DJ cancel pending playback. Beat grids, decks and hardware
-  export remain pending.
+  or missing file. Stop and leaving DJ cancel pending playback.
+- **Beat grid:** edit a constant 20–400 BPM grid with a first-beat anchor and four beats per bar.
+  Preview drafts before saving; revision checks protect stale edits and deletion is confirmed.
+  Manual BPM stays separate from analysis and survives reimport. Variable tempo, decks and
+  hardware export remain pending.
 - **Settings → General → GitHub updates…:** inspect the three GitHub source identities and check
   availability of a combined app update. An official standalone binary cannot overwrite the fork.
 

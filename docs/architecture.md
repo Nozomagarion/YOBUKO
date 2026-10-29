@@ -497,10 +497,10 @@ keeps Studio and DJ as workspaces around the existing Session/Arrangement views.
 exports explicitly requested from DJ are queued into the catalog, retaining their original
 source project. The [DJ specification](spec/dj-workspace.md) gives the storage and worker contract.
 
-The fork catalog format 3 stores named cue points and ordered local playlists by stable track id, independently of
+The fork catalog format 4 stores manual constant beat grids, named cue points and ordered local playlists by stable track id, independently of
 project/native/network formats. A bounded command channel feeds analysis and playlist edits to
 one worker. Every mutation checks the displayed revision and compares the saved catalog under
-a short advisory lock before atomic publication. Legacy formats 1 and 2 stay readable and are backed
+a short advisory lock before atomic publication. Legacy formats 1, 2 and 3 stay readable and are backed
 up byte-for-byte on the first successful write. Refresh reloads another instance's changes;
 failed/stale writes preserve the current catalog. These playlists are local, without LAN sharing.
 
@@ -512,7 +512,9 @@ is changed. `dj.waveform.load` uses the same worker and decoder/cache to compute
 `media::waveform` summary. The native UI reads an immutable Arc through Projects and draws it
 with the existing waveform kit; JSON snapshots contain only state and metadata. One summary
 without raw samples is retained; clear/reload/folder changes discard it and late results.
-Cue edits share the revision and checked-save contract; audio files remain untouched.
+Cue and grid edits share the revision and checked-save contract; audio files remain untouched.
+Manual grids retain their own BPM/first-beat anchor independently of reanalysis. UI drafts are
+revision-bound; preview ticks use bounded pure grid geometry in file seconds, not a new DSP path.
 
 The updater is confined to the fork distribution, validates the complete package marker before
 replacement, and embeds the two source pins. [Fork distribution](fork-distribution.md) describes

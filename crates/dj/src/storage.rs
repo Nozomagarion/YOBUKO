@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use super::{Catalog, FORMAT, MAX_BYTES, Playlist, Track};
+use super::{Catalog, CueSet, FORMAT, MAX_BYTES, Playlist, Track};
 use serde::Deserialize;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -21,6 +21,17 @@ struct PlaylistCatalog {
     playlists: Vec<Playlist>,
     revision: u64,
     next_playlist_id: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CueCatalog {
+    format: u32,
+    tracks: Vec<Track>,
+    playlists: Vec<Playlist>,
+    revision: u64,
+    next_playlist_id: u64,
+    cues: Vec<CueSet>,
 }
 
 struct LegacyBackup {
@@ -60,6 +71,22 @@ fn read(path: &Path) -> Result<(Catalog, Option<LegacyBackup>), String> {
                 ..Catalog::default()
             },
             Some(LegacyBackup { format: 2, bytes }),
+        )
+    } else if value["format"].as_u64() == Some(3) {
+        let old: CueCatalog = serde_json::from_slice(&bytes).map_err(|e| format!("invalid DJ catalog: {e}"))?;
+        if old.format != 3 {
+            return Err("unsupported DJ catalog format".into());
+        }
+        (
+            Catalog {
+                tracks: old.tracks,
+                playlists: old.playlists,
+                revision: old.revision,
+                next_playlist_id: old.next_playlist_id,
+                cues: old.cues,
+                ..Catalog::default()
+            },
+            Some(LegacyBackup { format: 3, bytes }),
         )
     } else {
         let catalog: Catalog = serde_json::from_slice(&bytes).map_err(|e| format!("invalid DJ catalog: {e}"))?;

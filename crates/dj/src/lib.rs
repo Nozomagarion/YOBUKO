@@ -6,12 +6,14 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const FORMAT: u32 = 3;
+pub const FORMAT: u32 = 4;
 pub const MAX_TRACKS: usize = 2000;
 const MAX_BYTES: u64 = 4 * 1024 * 1024;
 pub const MAX_PLAYLISTS: usize = 128;
 pub const MAX_PLAYLIST_ENTRIES: usize = 16000;
 
+mod grid;
+pub use grid::{BeatGrid, GridLine};
 mod cue;
 pub use cue::{Cue, CueEdit, CueSet};
 mod playlist;
@@ -39,6 +41,7 @@ pub struct Catalog {
     pub revision: u64,
     pub next_playlist_id: u64,
     pub cues: Vec<CueSet>,
+    pub grids: Vec<BeatGrid>,
 }
 
 impl Default for Catalog {
@@ -50,6 +53,7 @@ impl Default for Catalog {
             revision: 0,
             next_playlist_id: 1,
             cues: Vec::new(),
+            grids: Vec::new(),
         }
     }
 }
@@ -81,6 +85,7 @@ impl Catalog {
         }
         self.validate_playlists(&ids)?;
         self.validate_cues()?;
+        self.validate_grids()?;
         Ok(())
     }
 
@@ -162,3 +167,6 @@ mod playlist_tests;
 
 #[cfg(test)]
 mod cue_tests;
+
+#[cfg(test)]
+mod grid_tests;

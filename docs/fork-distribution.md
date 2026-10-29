@@ -98,6 +98,16 @@ to native project format 4; the source update reviewed the Bezier representation
 migration. Hello also verifies the exact compiled pinned Suhina source revision before admission. Future wire changes must change that handshake contract. Combined distribution updates
 do not imply that full project/media transfer or broader remote collaboration exists.
 
+The family marker `dj_catalog=1` is not the local catalog format. Grid-capable packages add
+`dj_catalog_read_min=1`, `dj_catalog_read_max=4`, `dj_catalog_write=4`. Before replacement the
+current updater requires a candidate to read every format 1–4 and write a format >=4 no higher
+than its declared reader maximum. Missing fields and older reader/writer ranges are refused.
+Future formats can be accepted when the candidate declares those backward readers. Older
+updater clients recognise the unchanged family marker and can install the new package.
+Catalog formats 1/2/3 migrate with exact backups on their first write; old applications cannot
+read format 4. Keep these backups for recovery and do not silently overwrite migrated catalogs.
+This does not publish or activate an update channel.
+
 ## Visible GitHub update button
 
 Settings > General starts with an Updates section and **GitHub updates…**. The button opens

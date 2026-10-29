@@ -6,12 +6,15 @@
 use super::*;
 use serde_json::Value;
 
+#[path = "dj_grid.rs"]
+mod grid;
 #[path = "dj_playlists.rs"]
 mod playlists;
 #[path = "dj_prepare.rs"]
 mod prepare;
 #[path = "dj_waveform.rs"]
 mod waveform;
+use grid::GridDraft;
 
 #[derive(Default)]
 pub(super) struct PlaylistDraft {
@@ -34,6 +37,9 @@ pub(super) struct DjPanel {
     pub cue_seconds: f64,
     pub cue_delete: Option<(u64, u64, u64)>,
     pub cue_queued: bool,
+    pub grid_draft: Option<GridDraft>,
+    pub grid_delete: Option<(u64, u64)>,
+    pub grid_queued: bool,
     pub selected_playlist: Option<u64>,
     pub playlist_name: String,
     pub draft: Option<PlaylistDraft>,
@@ -102,6 +108,12 @@ impl App {
                         self.dj.cue_revision = None;
                     }
                 }
+                if self.dj.grid_queued && snapshot["busy"] != true {
+                    self.dj.grid_queued = false;
+                    if snapshot["error"].is_null() {
+                        self.dj.grid_draft = None;
+                    }
+                }
                 self.dj.snapshot = snapshot;
             }
             Err(e) => {
@@ -160,6 +172,6 @@ impl App {
         ui.separator();
         self.show_dj_playlists(ui, busy);
         ui.add_space(theme::PAD);
-        ui.weak("Local library, playlists, audition and cue points. Beat grids, decks, USB export and LINK are still to come.");
+        ui.weak("Local library, playlists, cue points and constant beat grids. Decks, USB export and LINK are still to come.");
     }
 }

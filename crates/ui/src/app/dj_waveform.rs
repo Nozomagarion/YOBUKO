@@ -45,6 +45,29 @@ impl App {
         let geometry = waveform::geometry(&peaks, rect, &columns, waveform::scale(ui.ctx()));
         waveform::paint(&painter, &geometry, waveform::Colors::from(theme::text_secondary()));
         let x = |time: f64| rect.left() + (time / seconds).clamp(0.0, 1.0) as f32 * rect.width();
+        if let Some((grid, draft)) = self.dj_grid_for_waveform(id) {
+            let color =
+                if draft { egui::Color32::from_rgb(235, 185, 83) } else { egui::Color32::from_rgb(83, 170, 235) };
+            let mut previous_label = f32::NEG_INFINITY;
+            for line in grid.lines(seconds, (rect.width() / 12.0).max(1.0) as usize) {
+                let at = x(line.seconds);
+                let bar = line.index % 4 == 0;
+                painter.line_segment(
+                    [egui::pos2(at, rect.top()), egui::pos2(at, rect.bottom())],
+                    egui::Stroke::new(1.0, color.gamma_multiply(if bar { 0.8 } else { 0.35 })),
+                );
+                if bar && at - previous_label >= 48.0 {
+                    painter.text(
+                        egui::pos2(at + 2.0, rect.bottom() - 2.0),
+                        egui::Align2::LEFT_BOTTOM,
+                        (line.index / 4 + 1).to_string(),
+                        egui::FontId::proportional(10.0),
+                        color,
+                    );
+                    previous_label = at;
+                }
+            }
+        }
         for cue in cues {
             let Some(time) = cue["seconds"].as_f64().filter(|s| s.is_finite()) else { continue };
             let at = x(time);

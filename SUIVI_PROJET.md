@@ -1,5 +1,19 @@
 # Où en est notre application ?
 
+## Palier du 29 octobre : grille rythmique DJ réalisée et testée
+
+Le palier suivant ajoute une grille à tempo constant, quatre battements par mesure, réglable dans
+**Prepare**. Le BPM analysé reste séparé de ta correction. On peut prévisualiser le brouillon,
+placer le premier battement au départ choisi, puis enregistrer ou supprimer la grille.
+
+Le catalogue passe au format 4 ; les formats 1/2/3 restent lisibles, avec sauvegarde exacte avant
+la première modification. Les fichiers audio, cues et playlists doivent rester intacts.
+**3 262 tests Rust réussis, aucun échec, 66 ignorés ; 272 tests Python réussis.**
+Le contrôle Rust strict et les contrôles documentaires passent. Cinq tests de captures GPU passent ;
+la grille enregistrée, son brouillon et les vues de préparation ont été examinés.
+Le paquet livré reste `612aab62` tant que le nouveau paquet n’est pas vérifié. Les platines, le tempo variable et l’export matériel restent à construire.
+
+
 ## Palier du 29 octobre livré : forme d’onde DJ
 
 Le panneau **Prepare** charge maintenant une forme d’onde du morceau en arrière-plan,
@@ -16,9 +30,9 @@ Le paquet Mac Apple Silicon **`612aab62` est compilé et vérifié après extrac
 CRC, manifeste et identité source. Le CLI contient 17 commandes DJ. Les sources exactes sont incluses.
 L’application installée ou ouverte n’a pas été remplacée.
 
-[Application Mac](../builds/suhina-multiplayer-waveform-macos-arm64-612aab62/Suhina.app) ·
-[ZIP](../builds/suhina-multiplayer-waveform-macos-arm64-612aab62.zip) ·
-[Preuves](../validation/2026-10-29/waveform-validation.json).
+Application locale : `../builds/suhina-multiplayer-waveform-macos-arm64-612aab62/Suhina.app`.
+ZIP : `../builds/suhina-multiplayer-waveform-macos-arm64-612aab62.zip`.
+Preuves locales : `../validation/2026-10-29/waveform-validation.json`.
 
 Le catalogue DJ reste en format 3, les projets en v4, le protocole LAN en 13 et la copie partagée
 v3. Aucun format ni paquet de mise à jour commun n’est publié par ce palier. Le contrôle distant du 29 octobre pour `612aab62` ne trouve aucun run ; le lancement explicite
@@ -62,7 +76,7 @@ complet reste en développement.
 | **Appareils et sons** | Ajouter, retirer et régler FM Synth et Utility depuis l’un ou l’autre participant. | Réorganisation, activation/désactivation, autres effets/instruments et plugins. |
 | **Nouvelles prises** | Les participants publient un son terminé depuis un onglet Studio local ; l’hôte vérifie les envois. | Enregistrement directement dans l’onglet partagé, publication automatique et rendu des effets/découpes. |
 | **Écoute personnelle** | Chacun garde son lecteur, sa position, son démarrage et son arrêt. | Essai sur les deux ordinateurs physiques. |
-| **Espace DJ** | Bibliothèque persistante, analyse rbxport, rendu du studio, playlists, préécoute, cues et forme d’onde. | Grilles rythmiques, platines et export vers le matériel DJ. |
+| **Espace DJ** | Bibliothèque persistante, analyse rbxport, rendu du studio, playlists, préécoute, cues, forme d’onde et grille à tempo constant. | Platines et export vers le matériel DJ. |
 | **Mises à jour** | Bouton dans les paramètres pour comparer les versions GitHub ; suivi des sources et vérification des paquets de notre application. | Intégration régulière des nouveautés, publication et réception automatique d’une version commune. |
 
 ## Nouveau : les changements officiels de Suhina

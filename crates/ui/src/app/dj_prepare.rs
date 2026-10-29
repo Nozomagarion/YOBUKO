@@ -25,6 +25,8 @@ impl App {
             return;
         }
         self.dj.preparing = Some(id);
+        self.dj.grid_draft = None;
+        self.dj.grid_delete = None;
         self.dj.seek = 0.0;
         self.dj.cue_selected = None;
         self.dj.cue_revision = None;
@@ -112,6 +114,7 @@ impl App {
             let position = current["position"].as_f64().unwrap_or(0.0);
             ui.label(format!("{} · {position:.3} s", if playing { "Playing" } else { "Stopped" }));
         });
+        self.show_dj_grid(ui, &track, revision, busy);
         self.show_dj_waveform(ui, id, end, busy, &cues, &current);
         ui.weak("Preview −6 dB · headphones output when configured, otherwise main output.");
         ui.add_enabled_ui(!busy, |ui| {

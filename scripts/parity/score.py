@@ -38,7 +38,8 @@ COMMANDS = 190
 
 # Fork DJ waveform preparation reuses the existing waveform renderer without extending
 # production feature chapter coverage: it is a local audition/selection view, not beat-grid
-# editing, warping or decks. Parity: no change.
+# warping or decks. The manual constant DJ grid adds metadata and overview ticks, not
+# production tempo/warp editing or quantisation. Parity: no change.
 # num, chapter title, pages of the manual body, coverage 0..1 (None = not a feature chapter),
 # status, note. "coverage" is the share of what the chapter documents that Suhina has today.
 CHAPTERS = [

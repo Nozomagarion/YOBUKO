@@ -988,15 +988,19 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 
 - Local DJ playlists add named ordered sets, revision-checked command edits, explicit deletion,
   refresh after another local instance changes the catalog and a backed-up format 1 migration.
-  Beat-grid editing, decks and USB export remain later work ([contract](docs/spec/dj-workspace.md)).
+  Variable-tempo grids, decks and USB export remain later work ([contract](docs/spec/dj-workspace.md)).
 
 - DJ audition reuses the engine preview voice with worker decoding and cancellation of late loads.
-  Named cue points are saved per track in catalog format 3 with exact format 1/2 backups;
-  beat-grid editing, decks and USB export remain later work ([contract](docs/spec/dj-workspace.md)).
+  Named cue points are saved per track; catalog format 4 adds manual beat grids with exact
+  format 1/2/3 backups. Decks and USB export remain later work ([contract](docs/spec/dj-workspace.md)).
 
 - DJ preparation draws the existing shared min/max/RMS waveform summary, generated on the DJ
   worker without opening output. Cue markers, start selection and playback position use file
   seconds; clear/reload discard obsolete loads without modifying audio or catalog.
+
+- Local DJ constant-tempo 4/4 grids have a manual BPM/first-beat anchor, bounded waveform ticks,
+  unsaved previews, revision-checked saves and confirmed removal. Reanalysis preserves the manual
+  grid; distribution manifests declare catalog readers/writer before replacement.
 
 Parity: no change. These fork additions cover restricted starter networking, DJ preparation and
 distribution; full project coediting remains absent and no production feature chapter gains coverage.

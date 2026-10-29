@@ -3,6 +3,7 @@
 
 """Distribution source pins and complete-package regression checks (no network)."""
 import json
+import re
 from pathlib import Path
 import tempfile
 import unittest
@@ -40,6 +41,12 @@ class ForkDistribution(unittest.TestCase):
             self.assertEqual(marker['source_commit'], 'a' * 40)
             self.assertEqual(marker['multiplayer_api'], 1)
             self.assertEqual(marker['dj_catalog'], 1)
+            self.assertEqual(marker['dj_catalog_read_min'], 1)
+            self.assertEqual(marker['dj_catalog_read_max'], 4)
+            self.assertEqual(marker['dj_catalog_write'], 4)
+            catalog_version = int(re.search(r'pub const FORMAT: u32 = (\d+);',
+                                            (root / 'crates/dj/src/lib.rs').read_text()).group(1))
+            self.assertEqual(marker['dj_catalog_write'], catalog_version)
             pins = json.loads((package / 'FORK-SOURCES.json').read_text())
             self.assertEqual(marker['rbxport_commit'], pins['rbxport']['commit'])
             self.assertTrue((package / 'RBXPORT-COPYING').is_file())
