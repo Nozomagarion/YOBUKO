@@ -4,6 +4,9 @@ name: Multiplayer DJ distribution candidate
 on:
   push:
     tags: ['multiplayer-v*']
+  # Explicitly dispatch an immutable version tag after a CI-only correction marked [skip ci].
+  # Dispatching a branch is rejected by the same version/SHA gate below.
+  workflow_dispatch:
 
 permissions:
   contents: read
