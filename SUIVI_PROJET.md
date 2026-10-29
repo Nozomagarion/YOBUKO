@@ -1,5 +1,21 @@
 # Où en est notre application ?
 
+## Objectif confirmé par le propriétaire — 29 octobre 2026
+
+**Priorité : terminer le multijoueur dans Suhina et conserver ce module lors des évolutions de Suhina.**
+Les changements officiels doivent être intégrés et vérifiés dans notre version combinée ; les
+participants doivent pouvoir installer et mettre à jour la même application.
+
+Pour rbxport, la demande est **un bouton qui bascule vers rbxport existant**. Il ne s’agit pas
+de réécrire ses platines, sa bibliothèque, ses exports ou ses protocoles dans Suhina.
+Le mécanisme précis de bascule reste à réaliser ; aucun basculement complet n’est annoncé disponible.
+
+Les développements de platines/vitesse/boucles et le projet de réintégrer séparément les modules
+rbxport ont été engagés à la suite d’une mauvaise interprétation de l’agent. Ces chantiers sont
+arrêtés. Le code et les preuves déjà produits restent historiques ; le prototype de vitesse reste
+isolé dans `../suhina-deck-speed-20261029`, sans intégration ni livraison. Les demandes de travail
+en parallèle ne constituaient pas une demande d’inventer de nouvelles fonctions DJ.
+
 ## Dernier palier livré : deux platines DJ A/B — 29 octobre 2026
 
 Dans **DJ**, les boutons **Load A / Load B** de la bibliothèque ou d’une playlist chargent
@@ -35,21 +51,7 @@ ou enregistrement du set. Le décodage est limité à 128 Mio par platine, envir
 stéréo 44,1 kHz. L’écoute au casque physique et l’essai sur deux ordinateurs restent à faire.
 Le canal de mise à jour commun n’est pas publié. Aucun run GitHub n’apparaît pour `c3fb269b`
 au relevé du 29 octobre à 18 h 31 ; le refus Actions du matin concernait `612aab62`.
-Cela ne valide pas Windows/Linux. La prochaine étape concerne le **calage des platines sur le tempo**.
-
-## Priorité rectifiée : intégrer davantage rbxport
-
-Le propriétaire a précisé qu’il attend la reprise des fonctions existantes de rbxport, avant
-d’ajouter des fonctions DJ maison. La copie complète de ses sources est présente, mais **seule
-l’analyse tempo/tonalité est actuellement intégrée** à notre app. Bibliothèque Rekordbox, USB,
-LINK et son moteur de platines/sync existent déjà dans rbxport et restent à raccorder.
-
-Le travail de vitesse manuelle reste isolé dans `../suhina-deck-speed-20261029` ; 9 tests moteur et 5 tests session ciblés passent, mais un test du réglage visible échoue.
-Il n’est pas validé et ne fait pas partie du paquet `c3fb269b`. L’agent vitesse a atteint sa limite
-d’utilisation et le pilote a repris son code. L’autre agent a livré un contrat de boucles,
-sans les implémenter. Les boucles et extensions maison sont différées au profit de l’intégration.
-Le point de raccord identifié est `rbl-export` pour les exports, puis la comparaison de
-`rbl-deck` avec notre sortie audio unique. Aucun module complet n’est annoncé intégré à ce stade.
+Cela ne valide pas Windows/Linux. Ce palier DJ décrit un développement engagé à tort ; il ne définit pas la priorité du projet.
 
 ## Historique : grille rythmique DJ — 29 octobre 2026
 
@@ -403,11 +405,11 @@ Le bouton des paramètres compare les versions ; il n’installe pas séparémen
 
 ## Prochaine étape
 
-**Intégration des modules rbxport existants. Statut : raccord identifié, à construire.**
-Reprendre d’abord le pipeline bibliothèque/export, avec un adaptateur du catalogue DJ et des
-essais vers un dossier temporaire. Examiner le moteur `rbl-deck` existant avant toute nouvelle
-fonction de vitesse/sync/loop. Son interface Tauri ne se colle pas directement dans egui ;
-les bibliothèques Rust sont séparées et réutilisables. Les essais matériels restent distincts.
+**Reprendre la finition du multijoueur et le suivi des évolutions Suhina.**
+Établir les fonctions réseau réellement terminées, les défauts restants et les vérifications
+manquantes, puis avancer sur ce périmètre. Conserver l’essai sur deux ordinateurs physiques
+différé selon la décision du propriétaire ; ne pas présenter les tests logiciels comme cet essai.
+Le bouton de bascule vers rbxport reste le besoin DJ à traiter, sans recréer son logiciel.
 
 Le multijoueur reste un prototype LAN : Internet, reconnexion automatique, noms/rôles et reprise
 de l’hôte restent prévus. La version et les mises à jour communes restent à publier. L’essai des
