@@ -161,7 +161,10 @@ impl App {
     /// on an audio track, that holds clips. An empty track takes their kind instead.
     pub(super) fn refused_drop(&self, items: &[BrowserItem], target: Option<DropTarget>) -> Option<String> {
         let track = match target? {
-            DropTarget::Track(t) | DropTarget::Lane { track: t, .. } | DropTarget::Slot { track: t, .. } => t,
+            DropTarget::Track(t)
+            | DropTarget::Chain(t)
+            | DropTarget::Lane { track: t, .. }
+            | DropTarget::Slot { track: t, .. } => t,
             _ => return None,
         };
         let session = self.session()?;
@@ -214,9 +217,12 @@ impl App {
             View::Arrangement => self.arrangement.drop.as_ref().and_then(|p| p.target),
         };
         let to = match target {
-            Some(DropTarget::Track(t) | DropTarget::Lane { track: t, .. } | DropTarget::Slot { track: t, .. }) => {
-                Some(t).filter(|t| *t != from)
-            }
+            Some(
+                DropTarget::Track(t)
+                | DropTarget::Chain(t)
+                | DropTarget::Lane { track: t, .. }
+                | DropTarget::Slot { track: t, .. },
+            ) => Some(t).filter(|t| *t != from),
             _ => None,
         };
         let session = self.session();
@@ -318,7 +324,7 @@ impl App {
                 if detail.contains(pointer)
                     && items.iter().any(|i| i.kind.is_device() || i.kind == drop::ItemKind::Sample) =>
             {
-                Some(DropTarget::Track(track))
+                Some(DropTarget::Chain(track))
             }
             _ => target,
         }
@@ -596,10 +602,9 @@ impl App {
         if let [sample] = items
             && sample.kind == drop::ItemKind::Sample
             && sample.path().is_some_and(|path| !suhina_media::stems::is_stems_path(&path))
-            && let Some(track_id) = match target {
-                DropTarget::Track(t) | DropTarget::Lane { track: t, .. } | DropTarget::Slot { track: t, .. } => Some(t),
-                _ => None,
-            }
+            // Only on the track's devices (the detail area): on its lane, header or slot the sample
+            // is a clip, and an empty MIDI track becomes an audio track for it (#945).
+            && let DropTarget::Chain(track_id) = target
             && let Some(track) = project.track(track_id)
             && track.content.notes
             && !track.content.audio

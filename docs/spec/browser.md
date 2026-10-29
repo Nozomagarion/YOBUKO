@@ -24,7 +24,10 @@ covers:
 A single sample dropped on a Sampler waveform replaces that instrument's source
 through `device.loadSample`; it creates no clip or track. This applies to browser
 items and files dragged from the operating system. MIDI and multi-file drops are
-not accepted by the waveform. Other drop targets keep their existing behavior.
+not accepted by the waveform. A single sample dropped on the devices of a MIDI track that has
+none (the detail area showing its chain) adds a Sampler that plays it; dropped on that track's
+lane, header or slot it is a clip, as on any track, and the empty MIDI track becomes an audio
+track for it (#945). Other drop targets keep their existing behavior.
 
 The panel at the side of the main window where samples, MIDI files, presets, built-in
 instruments and effects and installed plug-ins are found, previewed and dragged into the
