@@ -1,6 +1,6 @@
 # Où en est notre application ?
 
-## Chantier du 29 octobre : forme d’onde DJ
+## Palier du 29 octobre livré : forme d’onde DJ
 
 Le panneau **Prepare** charge maintenant une forme d’onde du morceau en arrière-plan,
 avec les repères cue et les positions de départ et de lecture. Un clic choisit le départ ;
@@ -12,10 +12,19 @@ Les essais automatiques couvrent la fermeture pendant le chargement, les fichier
 les impulsions séparées sur les deux canaux et le clic de sélection sans démarrage audio.
 Le contrôle Rust strict passe également ; les quatre captures DJ sont générées et examinées.
 Après la finition du positionnement, les 27 contrôles ciblés DJ passent aussi.
-La fabrication et la vérification du nouveau paquet Mac restent à terminer.
-Le paquet Mac disponible reste `52ec1270` tant qu’un nouveau paquet n’est pas vérifié.
-La grille rythmique, les platines et les exports matériels restent les étapes suivantes.
+Le paquet Mac Apple Silicon **`612aab62` est compilé et vérifié après extraction** : signature locale,
+CRC, manifeste et identité source. Le CLI contient 17 commandes DJ. Les sources exactes sont incluses.
+L’application installée ou ouverte n’a pas été remplacée.
 
+[Application Mac](../builds/suhina-multiplayer-waveform-macos-arm64-612aab62/Suhina.app) ·
+[ZIP](../builds/suhina-multiplayer-waveform-macos-arm64-612aab62.zip) ·
+[Preuves](../validation/2026-10-29/waveform-validation.json).
+
+Le catalogue DJ reste en format 3, les projets en v4, le protocole LAN en 13 et la copie partagée
+v3. Aucun format ni paquet de mise à jour commun n’est publié par ce palier. Le contrôle distant du 29 octobre pour `612aab62` ne trouve aucun run ; le lancement explicite
+sur le fork est refusé avec **HTTP 422 : Actions has been disabled for this repository**.
+La cause n’est pas établie : ce palier ne valide donc pas Windows/Linux. Les essais sur deux ordinateurs et au casque physique restent différés.
+La grille rythmique, les platines et les exports matériels restent les étapes suivantes.
 
 **Bilan du 28 octobre 2026 : préécoute DJ et points cue nommés réalisés et testés.**
 Dans **DJ → Prepare**, on peut écouter un morceau depuis une position choisie, arrêter l’écoute,
