@@ -266,7 +266,10 @@ impl Projects {
                     opened.player
                 })
             })
-            .map_err(|e| CommandError(format!("no audio output: {e}")))?;
+            .map_err(|e| {
+                suhina_plugins::trace!("audio output open failed: choice {choice:?}, error {e}");
+                CommandError(format!("no audio output: {e}"))
+            })?;
         if kept {
             session.retain_plugins_at_player_rate();
         } else {
@@ -277,14 +280,18 @@ impl Projects {
 
     /// Moves the active project's output to the one chosen now, keeping the transport where
     /// it is (the playhead, playing or stopped, and the metronome) and the plug-ins running.
-    /// Nothing happens while no project plays. Returns a notice as [`Projects::open_output`].
+    /// After a failed opening, a new choice opens a stopped output; an intentionally detached
+    /// project stays detached.
+    /// Returns a notice as [`Projects::open_output`].
     pub fn reopen_output(&mut self) -> Result<Option<String>, CommandError> {
         // The preview output opens on the new choice when next needed.
         self.close_preview_output();
         let Some(system) = self.devices.audio.clone() else { return Ok(None) };
         let choice = self.devices.output_choice.clone();
         let Ok(session) = self.session_mut(None) else { return Ok(None) };
-        let Some(transport) = session.player().map(crate::audio::Transport::of) else { return Ok(None) };
+        let Some(transport) = session.player().map(crate::audio::Transport::of) else {
+            return if session.sync.output_open_failed { self.open_output(None) } else { Ok(None) };
+        };
         let began = std::time::Instant::now();
         suhina_plugins::trace!("audio reopen begin: choice {choice:?}, transport {transport:?}");
         let (mut notice, mut kept) = (None, false);
@@ -296,7 +303,10 @@ impl Projects {
                     opened.player
                 })
             })
-            .map_err(|e| CommandError(format!("no audio output: {e}")))?;
+            .map_err(|e| {
+                suhina_plugins::trace!("audio output open failed: choice {choice:?}, error {e}");
+                CommandError(format!("no audio output: {e}"))
+            })?;
         if kept {
             session.retain_plugins_at_player_rate();
         } else {
@@ -370,7 +380,10 @@ impl Projects {
                 .replace_player(|project, audio, assets, previous| {
                     system.open(project, audio, assets, &choice, previous).map(|opened| opened.player)
                 })
-                .map_err(|e| CommandError(format!("no audio output: {e}")))?;
+                .map_err(|e| {
+                    suhina_plugins::trace!("audio output open failed: choice {choice:?}, error {e}");
+                    CommandError(format!("no audio output: {e}"))
+                })?;
             self.preview = Some(session);
         }
         self.preview.as_mut().ok_or_else(no_project)

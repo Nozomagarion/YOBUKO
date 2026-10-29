@@ -24,6 +24,7 @@ const SR: u32 = 48_000;
 /// Opens players on renderers it keeps, so a test can run them, and records each choice.
 #[derive(Default)]
 struct Stand {
+    reject_next_open: std::sync::atomic::AtomicBool,
     renderers: Mutex<Vec<Renderer>>,
     opened: Mutex<Vec<(OutputChoice, bool)>>,
     /// The device that is "not there": choosing it falls back with a notice. Besides
@@ -95,6 +96,9 @@ impl AudioSystem for Stand {
         }
         self.opened.lock().unwrap().push((choice.clone(), previous.is_some()));
         drop(previous);
+        if self.reject_next_open.swap(false, std::sync::atomic::Ordering::Relaxed) {
+            return Err("test output unavailable".into());
+        }
         let mut renderer = Renderer::stopped(project, audio, choice.sample_rate.unwrap_or(SR)).unwrap();
         let failed = Arc::new(std::sync::atomic::AtomicBool::new(false));
         self.failed.lock().unwrap().push(Arc::clone(&failed));
@@ -491,4 +495,19 @@ fn the_preview_output_closes_before_a_project_or_another_output_opens() {
     assert!(projects.preview_session().is_some_and(|s| s.player().is_none()), "the project's session now");
     run(&mut projects, "preview.play", json!({ "path": wav(&dir) })).unwrap_err();
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn choosing_an_output_recovers_after_a_driver_open_failed() {
+    let (mut projects, stand) = with_stand(None);
+    projects.add(Session::new(project()), None).unwrap();
+    projects.open_output(None).unwrap();
+    stand.reject_next_open.store(true, std::sync::atomic::Ordering::Relaxed);
+    let error = run(&mut projects, "audio.setOutput", json!({"device": "USB"})).unwrap_err();
+    assert!(error.contains("test output unavailable"), "{error}");
+    assert!(projects.session_mut(None).unwrap().player().is_none());
+    run(&mut projects, "audio.setOutput", json!({"device": "Default"})).unwrap();
+    assert!(projects.session_mut(None).unwrap().player().is_some());
+    assert_eq!(stand.opened.lock().unwrap().len(), 3);
+    assert_eq!(run(&mut projects, "audio.info", json!({})).unwrap()["device"], "Default");
 }

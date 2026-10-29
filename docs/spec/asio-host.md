@@ -105,3 +105,12 @@ separate validation; the test does not establish their compatibility.
 
 - [Steinberg ASIO SDK 2.3 specification, section 5](https://dspace.tul.cz/bitstream/handle/15240/49466/ASIO_SDK_2.3.pdf?sequence=1).
 - [CPAL single-buffer compatibility report](https://github.com/RustAudio/cpal/pull/1077).
+
+### Recovery after an output fails to open
+
+An unsuccessful output change can leave the project without a player. A subsequent
+explicit output selection opens a new stopped player even when none remains; it
+must not report success while leaving the project silent. The original driver
+open error and requested host/device configuration are recorded in the diagnostic
+trace. Transport commands without an output direct desktop users to Audio settings.
+This recovery does not silently select a different backend.
