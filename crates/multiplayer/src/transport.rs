@@ -24,12 +24,13 @@ use suhina_engine::AudioPool;
 use suhina_model::Project;
 use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, ParamType, Policy};
 
-use crate::invitation::{Invitation, new_secret, private, secret_hash};
+use crate::invitation::{Invitation, Invite, new_secret, private, secret_hash};
+use crate::online::{Net, OnlineInvitation, Reach};
 use crate::protocol::{self, ClientMessage, Controls, Operation, PROTOCOL, ServerMessage, WireEdit};
 
 pub const MAX_GUESTS: usize = 3;
 
-const TIMEOUT: Duration = Duration::from_secs(3);
+pub(crate) const TIMEOUT: Duration = Duration::from_secs(3);
 const POLL: Duration = Duration::from_millis(100);
 
 struct Canonical {
@@ -175,11 +176,11 @@ impl Canonical {
             error,
         })
     }
-    fn renew(&mut self, invitation: &Invitation, now: Instant, events: &SyncSender<Event>) -> Result<(), String> {
+    fn renew(&mut self, invitation: &dyn Invite, now: Instant, events: &SyncSender<Event>) -> Result<(), String> {
         if self.guests.len() >= MAX_GUESTS {
             return Err("the session already has three guests; wait for a guest to leave".into());
         }
-        let secret = secret_hash(&invitation.secret);
+        let secret = secret_hash(invitation.secret());
         if bool::from(self.secret.ct_eq(&secret)) {
             return Err("could not create a fresh invitation".into());
         }
@@ -562,41 +563,53 @@ fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.sending = None;
     Ok(json!({"stopped":true}))
 }
-fn address(p: &Value) -> Result<SocketAddr, CommandError> {
-    let address: SocketAddr = p["address"]
-        .as_str()
-        .ok_or("address must be text")?
-        .parse()
-        .map_err(|_| CommandError::from("use a private IPv4 address:port"))?;
+fn address(p: &Value) -> Result<Place, CommandError> {
+    let text = p["address"].as_str().ok_or("address must be text")?;
+    match text.trim() {
+        ONLINE => return Ok(Place::Online(Reach::Internet)),
+        ONLINE_LOOPBACK => return Ok(Place::Online(Reach::Loopback)),
+        _ => {}
+    }
+    let address: SocketAddr = text.parse().map_err(|_| CommandError::from("use a private IPv4 address:port"))?;
     if !private(address.ip()) {
         return Err("use a private or loopback IPv4 address".into());
     }
-    Ok(address)
+    Ok(Place::Lan(address))
 }
+/// Host address that invites over the Internet with a code.
+pub const ONLINE: &str = "online";
+/// Online session reachable from this computer only (two instances side by side, tests).
+pub const ONLINE_LOOPBACK: &str = "online-loopback";
 fn start_host(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
     start_source(s, address(p)?, crate::starter_project(), AudioPool::new())
 }
 fn start_selected_host(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
-    let address = address(p)?;
+    let place = address(p)?;
     let (source, audio) = s.selected.take().ok_or("select a local MIDI project first")?;
-    start_source(s, address, source, audio)
+    start_source(s, place, source, audio)
 }
-fn start_source(
-    s: &mut Service,
-    address: SocketAddr,
-    source: Project,
-    audio: AudioPool,
-) -> Result<Value, CommandError> {
+fn start_source(s: &mut Service, place: Place, source: Project, audio: AudioPool) -> Result<Value, CommandError> {
     let storage = s.storage.clone();
     s.start(move |stop, sockets, inputs, events| {
-        if let Err(e) = host(address, source, (audio, storage), &stop, &sockets, inputs, &events) {
+        if let Err(e) = host(place, source, (audio, storage), &stop, &sockets, inputs, &events) {
             let _ = events.try_send(Event::Failed(e));
         }
     })
 }
 fn start_guest(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
-    let invitation =
-        Invitation::decode(p["invitation"].as_str().ok_or("invitation must be text")?).map_err(CommandError::from)?;
+    let text = p["invitation"].as_str().ok_or("invitation must be text")?;
+    if OnlineInvitation::is_online(text) {
+        let invitation = OnlineInvitation::decode(text).map_err(CommandError::from)?;
+        let storage = s.storage.clone();
+        return s.start(move |stop, _, inputs, events| {
+            if let Err(e) = online_guest(invitation, storage, &stop, inputs, &events)
+                && !stop.load(Ordering::Relaxed)
+            {
+                let _ = events.try_send(Event::Failed(e));
+            }
+        });
+    }
+    let invitation = Invitation::decode(text).map_err(CommandError::from)?;
     let storage = s.storage.clone();
     s.start(move |stop, sockets, inputs, events| {
         if let Err(e) = guest(invitation, storage, &stop, &sockets, inputs, &events)
@@ -654,9 +667,6 @@ impl DeadlineSocket {
     fn new(stream: TcpStream) -> Self {
         Self { stream, deadline: Instant::now() + TIMEOUT }
     }
-    fn renew(&mut self) {
-        self.deadline = Instant::now() + TIMEOUT;
-    }
     fn remaining(&self) -> std::io::Result<Duration> {
         self.deadline
             .checked_duration_since(Instant::now())
@@ -682,6 +692,23 @@ impl Write for DeadlineSocket {
     }
     fn flush(&mut self) -> std::io::Result<()> {
         self.stream.flush()
+    }
+}
+/// A blocking, authenticated stream to one peer whose exchanges share an absolute deadline.
+pub(crate) trait Link: Read + Write {
+    fn set_deadline(&mut self, deadline: Instant);
+    fn renew(&mut self) {
+        self.set_deadline(Instant::now() + TIMEOUT);
+    }
+}
+impl Link for StreamOwned<ServerConnection, DeadlineSocket> {
+    fn set_deadline(&mut self, deadline: Instant) {
+        self.sock.deadline = deadline;
+    }
+}
+impl Link for StreamOwned<ClientConnection, DeadlineSocket> {
+    fn set_deadline(&mut self, deadline: Instant) {
+        self.sock.deadline = deadline;
     }
 }
 struct ConnectionGuard {
@@ -715,18 +742,17 @@ fn register(stream: &TcpStream, sockets: &Mutex<Vec<TcpStream>>) -> Result<(), S
     sockets.lock().unwrap_or_else(PoisonError::into_inner).push(stream.try_clone().map_err(|e| e.to_string())?);
     Ok(())
 }
-fn host(
-    address: SocketAddr,
-    source: Project,
-    resources: (AudioPool, Option<PathBuf>),
-    stop: &Arc<AtomicBool>,
-    sockets: &Arc<Mutex<Vec<TcpStream>>>,
-    inputs: Receiver<Input>,
-    events: &SyncSender<Event>,
-) -> Result<(), String> {
-    let prepared = assets::prepare(&source, &resources.0, resources.1.as_deref(), stop)?;
-    let source = prepared.snapshot.project.clone();
-    let initial_assets = prepared.assets;
+/// Where a host listens: a private LAN address, or the Internet through an invitation code.
+#[derive(Clone, Copy, Debug)]
+enum Place {
+    Lan(SocketAddr),
+    Online(Reach),
+}
+enum Acceptor {
+    Lan { listener: TcpListener, tls: Arc<ServerConfig> },
+    Online { _net: Net, incoming: Receiver<crate::online::Stream> },
+}
+fn lan_listener(address: SocketAddr, secret: String) -> Result<(TcpListener, Arc<ServerConfig>, Invitation), String> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let key = rcgen::generate_simple_self_signed(vec!["suhina.local".into()])
         .map_err(|_| "could not create the host certificate")?;
@@ -740,15 +766,41 @@ fn host(
             PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(key.signing_key.serialize_der())),
         )
         .map_err(|e| e.to_string())?;
-    let tls = Arc::new(tls);
     let listener = TcpListener::bind(address).map_err(|e| format!("could not host on {address}: {e}"))?;
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
-    let secret = new_secret()?;
-    let mut invitation = Invitation {
+    let invitation = Invitation {
         protocol: PROTOCOL,
         endpoint: listener.local_addr().map_err(|e| e.to_string())?,
         certificate: URL_SAFE_NO_PAD.encode(der.as_ref()),
-        secret: secret.clone(),
+        secret,
+    };
+    Ok((listener, Arc::new(tls), invitation))
+}
+fn host(
+    place: Place,
+    source: Project,
+    resources: (AudioPool, Option<PathBuf>),
+    stop: &Arc<AtomicBool>,
+    sockets: &Arc<Mutex<Vec<TcpStream>>>,
+    inputs: Receiver<Input>,
+    events: &SyncSender<Event>,
+) -> Result<(), String> {
+    let prepared = assets::prepare(&source, &resources.0, resources.1.as_deref(), stop)?;
+    let source = prepared.snapshot.project.clone();
+    let initial_assets = prepared.assets;
+    let secret = new_secret()?;
+    let (acceptor, mut invitation): (Acceptor, Box<dyn Invite>) = match place {
+        Place::Lan(address) => {
+            let (listener, tls, invitation) = lan_listener(address, secret.clone())?;
+            (Acceptor::Lan { listener, tls }, Box::new(invitation))
+        }
+        Place::Online(reach) => {
+            let net = Net::bind(reach)?;
+            let invitation = OnlineInvitation { protocol: PROTOCOL, endpoint: net.address(), secret: secret.clone() };
+            // Four handshakes at once, as on the LAN: three guests plus one being admitted.
+            let incoming = net.listen(MAX_GUESTS + 1);
+            (Acceptor::Online { _net: net, incoming }, Box::new(invitation))
+        }
     };
     let invite = invitation.encode()?;
     let host = Host::new(source.clone()).map_err(|e| e.to_string())?;
@@ -775,9 +827,9 @@ fn host(
             let result = match input {
                 Input::RenewInvitation => {
                     let result = new_secret().and_then(|secret| {
-                        invitation.secret = secret;
+                        invitation.set_secret(secret);
                         canonical.lock().unwrap_or_else(PoisonError::into_inner).renew(
-                            &invitation,
+                            &*invitation,
                             Instant::now(),
                             events,
                         )
@@ -807,44 +859,62 @@ fn host(
         {
             canonical.lock().unwrap_or_else(PoisonError::into_inner).emit(events, &mut last)?;
         }
-        match listener.accept() {
-            Ok((stream, _)) if pending.load(Ordering::Relaxed) < 4 => {
-                socket(&stream)?;
-                // Keep only live handler sockets; cap retained descriptors independently.
-                {
-                    let mut saved = sockets.lock().unwrap_or_else(PoisonError::into_inner);
-                    if saved.len() >= 16 {
-                        saved.retain(|s| s.peer_addr().is_ok() && s.take_error().ok().flatten().is_none());
+        match &acceptor {
+            Acceptor::Lan { listener, tls } => {
+                match listener.accept() {
+                    Ok((stream, _)) if pending.load(Ordering::Relaxed) < 4 => {
+                        socket(&stream)?;
+                        // Keep only live handler sockets; cap retained descriptors independently.
+                        {
+                            let mut saved = sockets.lock().unwrap_or_else(PoisonError::into_inner);
+                            if saved.len() >= 16 {
+                                saved.retain(|s| s.peer_addr().is_ok() && s.take_error().ok().flatten().is_none());
+                            }
+                            if saved.len() >= 16 {
+                                let _ = stream.shutdown(Shutdown::Both);
+                                continue;
+                            }
+                        }
+                        register(&stream, sockets)?;
+                        let (tls, canonical, stop, pending, registry) = (
+                            Arc::clone(tls),
+                            Arc::clone(&canonical),
+                            Arc::clone(stop),
+                            Arc::clone(&pending),
+                            Arc::clone(sockets),
+                        );
+                        let storage = resources.1.clone();
+                        pending.fetch_add(1, Ordering::Relaxed);
+                        match std::thread::Builder::new().name("suhina-lan-peer".into()).spawn(move || {
+                            let _guard = ConnectionGuard { sockets: registry, peer: stream.peer_addr().ok() };
+                            let _ = serve(stream, tls, &canonical, &stop, storage.as_deref());
+                            pending.fetch_sub(1, Ordering::Relaxed);
+                        }) {
+                            Ok(handle) => handlers.push(handle),
+                            Err(_) => return Err("could not accept a LAN peer".into()),
+                        }
                     }
-                    if saved.len() >= 16 {
+                    Ok((stream, _)) => {
                         let _ = stream.shutdown(Shutdown::Both);
-                        continue;
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                    Err(e) => return Err(format!("LAN listener stopped: {e}")),
+                }
+            }
+            Acceptor::Online { incoming, .. } => match incoming.try_recv() {
+                Ok(stream) => {
+                    let (canonical, stop) = (Arc::clone(&canonical), Arc::clone(stop));
+                    let storage = resources.1.clone();
+                    match std::thread::Builder::new().name("suhina-online-peer".into()).spawn(move || {
+                        let _ = serve_link(stream, &canonical, &stop, storage.as_deref());
+                    }) {
+                        Ok(handle) => handlers.push(handle),
+                        Err(_) => return Err("could not accept an online guest".into()),
                     }
                 }
-                register(&stream, sockets)?;
-                let (tls, canonical, stop, pending, registry) = (
-                    Arc::clone(&tls),
-                    Arc::clone(&canonical),
-                    Arc::clone(stop),
-                    Arc::clone(&pending),
-                    Arc::clone(sockets),
-                );
-                let storage = resources.1.clone();
-                pending.fetch_add(1, Ordering::Relaxed);
-                match std::thread::Builder::new().name("suhina-lan-peer".into()).spawn(move || {
-                    let _guard = ConnectionGuard { sockets: registry, peer: stream.peer_addr().ok() };
-                    let _ = serve(stream, tls, &canonical, &stop, storage.as_deref());
-                    pending.fetch_sub(1, Ordering::Relaxed);
-                }) {
-                    Ok(handle) => handlers.push(handle),
-                    Err(_) => return Err("could not accept a LAN peer".into()),
-                }
-            }
-            Ok((stream, _)) => {
-                let _ = stream.shutdown(Shutdown::Both);
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-            Err(e) => return Err(format!("LAN listener stopped: {e}")),
+                Err(mpsc::TryRecvError::Empty) => {}
+                Err(mpsc::TryRecvError::Disconnected) => return Err("online listener stopped".into()),
+            },
         }
         handlers.retain(|h| !h.is_finished());
         std::thread::sleep(Duration::from_millis(25));
@@ -889,7 +959,7 @@ fn publish(
 }
 
 fn write_update(
-    io: &mut StreamOwned<ServerConnection, DeadlineSocket>,
+    io: &mut impl Link,
     response: &ServerMessage,
     project: &Project,
     assets: &[Arc<assets::Encoded>],
@@ -897,7 +967,7 @@ fn write_update(
     stop: &AtomicBool,
 ) -> Result<(), String> {
     protocol::write(io, response)?;
-    io.sock.deadline = Instant::now() + Duration::from_secs(180);
+    io.set_deadline(Instant::now() + Duration::from_secs(180));
     assets::send(io, &assets::missing(project, known)?, assets, stop)?;
     for a in assets.iter().filter(|a| assets::references(project).contains(&a.meta.path())) {
         known.insert(a.meta.path(), a.meta.clone());
@@ -905,7 +975,7 @@ fn write_update(
     Ok(())
 }
 fn receive_update(
-    io: &mut StreamOwned<ClientConnection, DeadlineSocket>,
+    io: &mut impl Link,
     project: &Project,
     revision: u64,
     root: Option<&std::path::Path>,
@@ -913,7 +983,7 @@ fn receive_update(
     stop: &AtomicBool,
     events: &SyncSender<Event>,
 ) -> Result<Option<AudioAddition>, String> {
-    io.sock.deadline = Instant::now() + Duration::from_secs(180);
+    io.set_deadline(Instant::now() + Duration::from_secs(180));
     let audio =
         assets::receive_known(io, assets::missing(project, known)?, revision, root, stop, known, |done, total| {
             // One notification leaves queue space for Audio/State even during initial admission.
@@ -926,7 +996,7 @@ fn receive_update(
 }
 
 fn receive_publication(
-    io: &mut StreamOwned<ServerConnection, DeadlineSocket>,
+    io: &mut impl Link,
     canonical: &Mutex<Canonical>,
     identity: (suhina_collaboration::PeerId, u64, u64, u64),
     target: (u32, f64),
@@ -948,7 +1018,7 @@ fn receive_publication(
         if storage.0.is_none() {
             return Ok(Err("host has no shared audio storage".into()));
         }
-        io.sock.deadline = Instant::now() + Duration::from_secs(180);
+        io.set_deadline(Instant::now() + Duration::from_secs(180));
         let (asset, audio) = assets::receive_take(io, meta, storage.0, storage.1)?;
         (asset, Some(audio))
     };
@@ -967,7 +1037,14 @@ fn serve(
     storage: Option<&std::path::Path>,
 ) -> Result<(), String> {
     let connection = ServerConnection::new(tls).map_err(|e| e.to_string())?;
-    let mut io = StreamOwned::new(connection, DeadlineSocket::new(stream));
+    serve_link(StreamOwned::new(connection, DeadlineSocket::new(stream)), canonical, stop, storage)
+}
+fn serve_link(
+    mut io: impl Link,
+    canonical: &Mutex<Canonical>,
+    stop: &AtomicBool,
+    storage: Option<&std::path::Path>,
+) -> Result<(), String> {
     let hello: ClientMessage = protocol::read(&mut io)?;
     let peer = {
         let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
@@ -989,28 +1066,28 @@ fn serve(
         }
     };
     let result = (|| {
-        io.sock.deadline = Instant::now() + Duration::from_secs(30);
+        io.set_deadline(Instant::now() + Duration::from_secs(30));
         let (snapshot, revision, assets) = {
             let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
             (state.host.project().clone(), state.host.revision(), state.assets.clone())
         };
         let (_, document) = crate::midi::encode_portable(&snapshot)?;
         crate::transfer::send(&mut io, &document, revision, stop)?;
-        io.sock.deadline = Instant::now() + Duration::from_secs(180);
+        io.set_deadline(Instant::now() + Duration::from_secs(180));
         assets::send(&mut io, &snapshot, &assets, stop)?;
         let mut known: assets::Known = assets
             .iter()
             .filter(|a| assets::references(&snapshot).contains(&a.meta.path()))
             .map(|a| (a.meta.path(), a.meta.clone()))
             .collect();
-        io.sock.renew();
+        io.renew();
         let (initial, project, assets) = {
             let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
             (state.response(revision, None)?, state.host.project().clone(), state.assets.clone())
         };
         write_update(&mut io, &initial, &project, &assets, &mut known, stop)?;
         while !stop.load(Ordering::Relaxed) {
-            io.sock.renew();
+            io.renew();
             let message: ClientMessage = protocol::read(&mut io)?;
             let upload = if let ClientMessage::Publish {
                 protocol: PROTOCOL,
@@ -1126,32 +1203,66 @@ fn guest(
     socket(&stream)?;
     register(&stream, sockets)?;
     let name = ServerName::try_from("suhina.local").map_err(|_| "invalid server name")?;
-    let mut io = StreamOwned::new(
+    let io = StreamOwned::new(
         ClientConnection::new(Arc::new(tls), name).map_err(|e| e.to_string())?,
         DeadlineSocket::new(stream),
     );
+    guest_link(io, invitation.secret, storage, stop, inputs, events)
+}
+fn online_guest(
+    invitation: OnlineInvitation,
+    storage: Option<PathBuf>,
+    stop: &Arc<AtomicBool>,
+    inputs: Receiver<Input>,
+    events: &SyncSender<Event>,
+) -> Result<(), String> {
+    // The guest's own endpoint reaches the host by its key, directly when possible, else by relay.
+    let reach = if invitation
+        .endpoint
+        .addrs
+        .iter()
+        .all(|a| matches!(a, iroh::TransportAddr::Ip(ip) if ip.ip().is_loopback()))
+    {
+        Reach::Loopback
+    } else {
+        Reach::Internet
+    };
+    let net = Net::bind(reach)?;
+    let stream = net.connect(invitation.endpoint)?;
+    let result = guest_link(stream, invitation.secret, storage, stop, inputs, events);
+    drop(net);
+    result
+}
+fn guest_link(
+    mut io: impl Link,
+    secret: String,
+    storage: Option<PathBuf>,
+    stop: &Arc<AtomicBool>,
+    inputs: Receiver<Input>,
+    events: &SyncSender<Event>,
+) -> Result<(), String> {
     protocol::write(
         &mut io,
         &ClientMessage::Hello {
             protocol: PROTOCOL,
             format: crate::protocol::COPY_FORMAT,
             engine: protocol::engine_revision()?,
-            secret: invitation.secret,
+            secret,
         },
     )?;
-    io.sock.deadline = Instant::now() + Duration::from_secs(30);
+    io.set_deadline(Instant::now() + Duration::from_secs(30));
     let offer: ServerMessage = protocol::read(&mut io)?;
     let (document, mut revision) = crate::transfer::receive(&mut io, offer, stop, |done, total| {
         let _ = events.try_send(Event::Receiving(done, total));
     })?;
     let project = crate::midi::decode_portable(&document)?;
-    io.sock.deadline = Instant::now() + Duration::from_secs(180);
+    io.set_deadline(Instant::now() + Duration::from_secs(180));
     let mut snapshot = assets::receive(&mut io, project, revision, storage.as_deref(), stop, |done, total| {
         let _ = events.try_send(Event::Receiving(done, total));
     })?;
     let mut known: assets::Known = snapshot.metas.iter().map(|a| (a.path(), a.clone())).collect();
     let mut mirror = suhina_session::Session::new(snapshot.project.clone());
-    io.sock.renew();
+    io.renew();
     let first: ServerMessage = protocol::read(&mut io)?;
     let ServerMessage::State { protocol: PROTOCOL, controls, operations, guests, accepted: None, error: None } = first
     else {
@@ -1173,7 +1284,7 @@ fn guest(
     let mut sequence = 1u64;
     let mut pending: Option<PendingTake> = None;
     while !stop.load(Ordering::Relaxed) {
-        io.sock.renew();
+        io.renew();
         let input = if pending.is_none() { inputs.try_recv().ok() } else { None };
         let edit = match input {
             Some(Input::Publish { base, track, start, audio }) => {
@@ -1216,7 +1327,7 @@ fn guest(
         };
         protocol::write(&mut io, &request)?;
         let response = if let Some(take) = &prepared {
-            io.sock.deadline = Instant::now() + Duration::from_secs(180);
+            io.set_deadline(Instant::now() + Duration::from_secs(180));
             assets::send_take(&mut io, &take.asset, stop, |done, total| {
                 let _ = events.try_send(Event::Upload(Some((done, total))));
             })?

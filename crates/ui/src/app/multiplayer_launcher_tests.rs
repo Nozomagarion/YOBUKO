@@ -39,6 +39,7 @@ fn buttons(render: bool) {
     let original = host.projects.active().unwrap();
     let source = host.projects.get(original).unwrap().project().arrangement.lanes[0].clips[0].id.0;
     host.multiplayer.open = true;
+    host.multiplayer.online = false;
     host.multiplayer.address = "127.0.0.1:0".into();
     host.host_current_midi();
     let deadline = Instant::now() + Duration::from_secs(10);

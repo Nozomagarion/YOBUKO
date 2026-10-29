@@ -1,8 +1,11 @@
 # Premier essai du multijoueur Suhina
 
-Cette version vise un réseau local : **un hôte et jusqu’à trois invités**. Chaque personne
-écoute et lance la lecture sur son ordinateur. Les modifications prises en charge sont
-confirmées par l’hôte ; l’audio n’est pas diffusé en direct sur le réseau.
+Cette version fonctionne **par Internet, avec un simple code** : l’hôte crée une session, envoie
+le code (sur Discord ou n’importe quelle messagerie) et l’autre personne le colle pour rejoindre,
+même à des centaines de kilomètres. Aucun compte, aucun réglage de box. **Un hôte et jusqu’à trois
+invités.** Chaque personne écoute et lance la lecture sur son ordinateur. Les modifications prises
+en charge sont confirmées par l’hôte ; l’audio n’est pas diffusé en direct. Le mode réseau local
+reste disponible.
 
 ## Préparer les ordinateurs
 
@@ -12,28 +15,31 @@ seulement le numéro générique «0.0.1». Une ancienne révision Suhina peut �
 même si son interface semble identique. Garder ses projets habituels et une copie de secours.
 La nouvelle version lit les anciens projets ; ses nouvelles sauvegardes utilisent le format v4.
 
-Brancher les ordinateurs au même réseau local et choisir la sortie audio dans les paramètres.
-Si le système demande une autorisation réseau pour Suhina, autoriser le réseau privé utilisé.
+Chaque ordinateur a simplement besoin d’Internet. Choisir la sortie audio dans les paramètres.
+Si le système demande une autorisation réseau pour Suhina, l’accepter.
 Les réglages et les projets ne doivent pas être placés dans le dossier de l’application.
 
 ## Se connecter une première fois
 
-1. Sur l’ordinateur hôte, ouvrir Suhina puis **Multiplayer** en haut de la fenêtre. Pour ce
-   premier essai, aucun projet personnel n’est nécessaire.
-2. Dans **Host address**, utiliser l’adresse IPv4 privée de cet ordinateur, suivie de `:0`
-   pour choisir un port libre. L’adresse proposée est un point de départ. `127.0.0.1` ne permet
-   de joindre que ce même ordinateur ; pour la maison, utiliser son adresse `192.168…`, `10…`
-   ou l’autre adresse privée indiquée par les paramètres réseau du système.
-3. Cliquer **Create LAN session** : une copie de démonstration à quatre pistes s’ouvre dans
-   un nouvel onglet partagé. Les éventuels projets déjà ouverts sont conservés.
-4. Cliquer **Copy invitation** et transmettre le texte en privé à une personne. L’invitation
-   expire après cinq minutes et ne sert qu’une fois. Ne pas créer la suivante avant que la
-   personne ait rejoint, car elle remplacerait l’invitation encore inutilisée.
-5. Sur l’autre ordinateur, ouvrir **Multiplayer**, coller cette invitation dans le champ prévu
-   puis cliquer **Join LAN session**. Attendre l’ouverture de l’onglet partagé. Le nombre
-   **Guests: N / 3** permet de vérifier la présence de l’invité.
-6. Pour une autre personne, l’hôte clique **New invitation**, puis répète les étapes 4–5.
+1. Sur l’ordinateur hôte, ouvrir Suhina puis **Multiplayer** en haut de la fenêtre. Laisser
+   **Over the Internet** coché. Pour ce premier essai, aucun projet personnel n’est nécessaire.
+2. Cliquer **Create session**. Suhina se connecte à Internet (quelques secondes) puis une copie
+   de démonstration à quatre pistes s’ouvre dans un nouvel onglet partagé. Les éventuels projets
+   déjà ouverts sont conservés.
+3. Cliquer **Copy invitation code** et envoyer le code en privé à une personne, par exemple sur
+   Discord. Le code expire après cinq minutes et ne sert qu’une fois. Ne pas créer le suivant
+   avant que la personne ait rejoint, car il remplacerait le code encore inutilisé.
+4. Sur l’autre ordinateur, ouvrir **Multiplayer**, coller le code dans **Invitation code from the
+   host** puis cliquer **Join session**. Attendre l’ouverture de l’onglet partagé (jusqu’à une
+   vingtaine de secondes la première fois). Le nombre **Guests: N / 3** confirme la présence de
+   l’invité.
+5. Pour une autre personne, l’hôte clique **New invitation**, puis répète les étapes 3–4.
    Trois invités au maximum peuvent être présents en même temps.
+
+Les ordinateurs se parlent directement à travers les box. Quand une box bloque, un relais public
+gratuit transmet les données chiffrées sans pouvoir les lire. Pour un réseau local sans Internet,
+cocher **On this local network** et saisir dans **Host address** l’adresse privée de l’hôte suivie
+de `:0`.
 
 ## Vérifier que l’on travaille ensemble
 

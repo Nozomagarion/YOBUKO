@@ -54,6 +54,23 @@ impl Invitation {
         Ok(der)
     }
 }
+/// An invitation whose single-use secret the host rotates.
+pub(crate) trait Invite {
+    fn secret(&self) -> &str;
+    fn set_secret(&mut self, secret: String);
+    fn encode(&self) -> Result<String, String>;
+}
+impl Invite for Invitation {
+    fn secret(&self) -> &str {
+        &self.secret
+    }
+    fn set_secret(&mut self, secret: String) {
+        self.secret = secret;
+    }
+    fn encode(&self) -> Result<String, String> {
+        Invitation::encode(self)
+    }
+}
 pub(crate) fn private(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => ip.is_private() || ip.is_loopback() || ip.is_link_local(),

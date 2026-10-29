@@ -70,6 +70,15 @@ exceptions = [
     # (plug-in hosting).
     { crate = "doctest-file", allow = ["0BSD"] },
     { crate = "recvmsg", allow = ["0BSD"] },
+    # CDLA-Permissive-2.0: a permissive data licence, GPL-compatible. The Mozilla root certificate
+    # list that iroh (online sessions) uses to reach its public relays over HTTPS.
+    { crate = "webpki-roots", allow = ["CDLA-Permissive-2.0"] },
+    { crate = "webpki-root-certs", allow = ["CDLA-Permissive-2.0"] },
+    # The Unlicense: public-domain-equivalent, GPL-compatible (FSF). iroh's WebAssembly relay
+    # client; never compiled into the desktop builds.
+    { crate = "async_io_stream", allow = ["Unlicense"] },
+    { crate = "pharos", allow = ["Unlicense"] },
+    { crate = "ws_stream_wasm", allow = ["Unlicense"] },
     # egui's built-in fonts: the code is MIT OR Apache-2.0, the font files inside it are under the
     # SIL Open Font License 1.1 and the Ubuntu Font Licence 1.0. Both let the fonts be bundled with
     # any software; they apply to the font data only, which the program uses and does not
@@ -110,4 +119,8 @@ ignore = [
     { id = "RUSTSEC-2026-0370", reason = "zvariant 5: unmaintained, Linux D-Bus for rtkit and accesskit; waits for accesskit on zbus 6" },
     { id = "RUSTSEC-2026-0371", reason = "zbus_names 4: unmaintained, Linux D-Bus for rtkit and accesskit; waits for accesskit on zbus 6" },
     { id = "RUSTSEC-2026-0372", reason = "zvariant_derive 5: unmaintained, Linux D-Bus for rtkit and accesskit; waits for accesskit on zbus 6" },
+    # paste is an archived compile-time macro, not a vulnerability: it runs only while building
+    # iroh's Linux network-change watcher (netwatch > netlink-packet-core). Remove this when
+    # netlink-packet-core moves off it.
+    { id = "RUSTSEC-2024-0436", reason = "paste: unmaintained build-time macro under iroh's Linux netlink watcher" },
 ]

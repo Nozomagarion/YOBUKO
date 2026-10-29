@@ -39,6 +39,7 @@ fn buttons(render: bool) {
     host.set_session(Session::new(suhina_multiplayer::starter_project()), &[]);
     let original = host.projects.active().unwrap();
     host.multiplayer.open = true;
+    host.multiplayer.online = false;
     host.multiplayer.address = "127.0.0.1:0".into();
     host.host_current_midi();
     let until = Instant::now() + Duration::from_secs(10);

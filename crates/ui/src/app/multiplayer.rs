@@ -22,7 +22,8 @@ pub(super) struct MultiplayerPanel {
     pub open: bool,
     pub bound: Option<ProjectId>,
     service: suhina_multiplayer::Service,
-    address: String,
+    pub(super) online: bool,
+    pub(super) address: String,
     join: String,
     invitation: String,
     state: serde_json::Value,
@@ -48,6 +49,7 @@ impl Default for MultiplayerPanel {
             open: false,
             bound: None,
             service: Default::default(),
+            online: true,
             address: suhina_multiplayer::suggested_address().to_string(),
             join: String::new(),
             invitation: String::new(),
@@ -68,6 +70,12 @@ impl Default for MultiplayerPanel {
             take_track: 0,
             take_start: 0.0,
         }
+    }
+}
+impl MultiplayerPanel {
+    /// The online code by default; the typed private address when hosting on the local network.
+    fn host_address(&self) -> String {
+        if self.online { suhina_multiplayer::ONLINE.to_owned() } else { self.address.clone() }
     }
 }
 impl App {
@@ -122,7 +130,7 @@ impl App {
             self.multiplayer.error = Some(error.to_string());
             return;
         }
-        let address = self.multiplayer.address.clone();
+        let address = self.multiplayer.host_address();
         self.multiplayer_command("multiplayer.hostProject", json!({"address":address}));
     }
     fn host_current_audio(&mut self) {
@@ -134,7 +142,7 @@ impl App {
             self.multiplayer.error = Some(error.to_string());
             return;
         }
-        let address = self.multiplayer.address.clone();
+        let address = self.multiplayer.host_address();
         self.multiplayer_command("multiplayer.hostProject", json!({"address":address}));
     }
     fn leave_multiplayer(&mut self) {
@@ -406,15 +414,23 @@ impl App {
     pub(super) fn show_multiplayer(&mut self, ui: &mut Ui) {
         let active = self.multiplayer.service.active();
         ui.add_space(theme::PAD);
-        ui.heading("Multiplayer · LAN session");
-        ui.label("Create a session, copy its invitation, and join from the same local network.");
+        ui.heading("Multiplayer");
+        ui.label("Make music together over the Internet: create a session, send the invitation code to your partner (in your chat app, for example), and they paste it to join. No account needed.");
         ui.weak("Share a project with its loaded audio, share a MIDI-only copy, or create the four-track demo. MIDI notes, clips and mixer controls are shared; each computer has its own playback.");
         if !active {
             ui.horizontal(|ui| {
-                ui.label("Host address");
-                ui.add(egui::TextEdit::singleline(&mut self.multiplayer.address).desired_width(200.0).char_limit(64));
-                if ui.button("Create LAN session").clicked() {
-                    let address = self.multiplayer.address.clone();
+                ui.radio_value(&mut self.multiplayer.online, true, "Over the Internet");
+                ui.radio_value(&mut self.multiplayer.online, false, "On this local network");
+            });
+            ui.horizontal(|ui| {
+                if !self.multiplayer.online {
+                    ui.label("Host address");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.multiplayer.address).desired_width(200.0).char_limit(64),
+                    );
+                }
+                if ui.button("Create session").clicked() {
+                    let address = self.multiplayer.host_address();
                     self.multiplayer_command("multiplayer.host", json!({"address":address}));
                 }
             });
@@ -426,16 +442,20 @@ impl App {
             }
             ui.weak("Audio sharing copies loaded sounds into portable WAV files, stored under the application data Shared projects folder. Up to 64 sounds, 64 MiB each and 256 MiB total. Original files stay intact.");
             ui.weak("MIDI copies support up to 64 tracks, FM Synth and Utility parameters. Audio, plugins and other instruments are refused. Local metadata and hardware mappings are omitted; the original stays intact.");
-            ui.weak("Use your private network address for another computer. 127.0.0.1 is only for two instances on this computer; :0 selects a free port.");
+            if self.multiplayer.online {
+                ui.weak("Computers connect directly, through home routers, with nothing to configure. When a router blocks that, a free public relay forwards the encrypted traffic; it cannot read the project. Both computers need the same Suhina version.");
+            } else {
+                ui.weak("Use your private network address for another computer. 127.0.0.1 is only for two instances on this computer; :0 selects a free port.");
+            }
             ui.add_space(theme::PAD);
-            ui.label("Invitation from the host");
+            ui.label("Invitation code from the host");
             ui.add(
                 egui::TextEdit::multiline(&mut self.multiplayer.join)
                     .desired_rows(3)
                     .char_limit(8192)
                     .desired_width(f32::INFINITY),
             );
-            if ui.button("Join LAN session").clicked() {
+            if ui.button("Join session").clicked() {
                 let invitation = self.multiplayer.join.clone();
                 self.multiplayer_command("multiplayer.join", json!({"invitation":invitation}));
             }
@@ -449,7 +469,7 @@ impl App {
             });
             if !self.multiplayer.invitation.is_empty() {
                 ui.horizontal(|ui| {
-                    if ui.button("Copy invitation").clicked() {
+                    if ui.button("Copy invitation code").clicked() {
                         ui.ctx().copy_text(self.multiplayer.invitation.clone());
                     }
                     let can_renew = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(3) < 3

@@ -166,7 +166,7 @@ La copie s’ouvre dans un nouvel onglet et conserve l’original. Les plugins e
 instruments non pris en charge sont refusés avec une explication ; les métadonnées locales et affectations matérielles
 sont omises. Le mode démonstration reste utilisable sans projet personnel. Les deux participants
 doivent installer la version de protocole 5 ; les anciennes invitations ne sont pas compatibles.
-Les [instructions détaillées](docs/multiplayer-fork.md#try-the-desktop-lan-prototype) expliquent
+Les [instructions détaillées](docs/multiplayer-fork.md#try-the-desktop-prototype) expliquent
 les adresses réseau et les limites de ce prototype.
 
 Le transfert audio accepte jusqu’à **64 sons, 64 Mio par son et 256 Mio au total**. Les copies

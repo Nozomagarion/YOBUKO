@@ -89,20 +89,25 @@ then prints their different playhead positions. It opens no window, socket or au
 writes no project or audio file. It is a headless test of the first building block.
 
 
-## Try the desktop LAN prototype
+## Try the desktop prototype
+
+**Over the Internet** is the default: **Create session**, copy the invitation code, send it
+through any chat, and the guest pastes it into **Invitation code from the host** and clicks
+**Join session**. No account and no router setting; see
+[online sessions](spec/online-sessions.md). The steps below use **On this local network**.
 
 Use the same combined build commit on both computers. These labels and preservation checks are
 covered by automated UI tests; the physical two-computer procedure below is an acceptance test
 still to perform. No personal project or audio file is needed.
 
 1. Open Suhina. Click **Multiplayer** at the top, beside **Studio** and **DJ**; it is also in
-   **View → Multiplayer LAN**. You should see **Create LAN session** and **Join LAN session**.
-2. On the host, **Host address** should contain its private local IPv4 address followed by `:0`.
-   Click **Create LAN session**. A new **LAN starter session** tab opens, preserving other tabs.
-   Four generated MIDI tracks appear; **Copy invitation** becomes available. `127.0.0.1:0` is
+   **View → Multiplayer LAN**. You should see **Create session** and **Join session**.
+2. On the host, select **On this local network**. **Host address** should contain its private local IPv4 address followed by `:0`.
+   Click **Create session**. A new **LAN starter session** tab opens, preserving other tabs.
+   Four generated MIDI tracks appear; **Copy invitation code** becomes available. `127.0.0.1:0` is
    useful only for two app instances on the same computer, not for a second computer.
-3. Click **Copy invitation** and send it privately to the guest. On the guest computer, open
-   **Multiplayer**, paste it into **Invitation from the host**, and click **Join LAN session**.
+3. Click **Copy invitation code** and send it privately to the guest. On the guest computer, open
+   **Multiplayer**, paste it into **Invitation code from the host**, and click **Join session**.
    Both should show four MIDI tracks and two return tracks; the host should say **Guest connected**. Allow local-network
    access in the OS if requested. A failed connection must display an error, not a joined state.
 4. On the host, change **Pulse** to **Shared pulse**, then click its **Rename** button. The guest
@@ -176,7 +181,7 @@ A newer shared revision disables Apply: **Refresh device draft** reloads the cur
 before making a new edit. Switching to another target explicitly starts its new draft. A
 switched-off device stores values without enabling it; manual changes override that parameter's
 existing automation as ordinary native edits do. No new device/preset/plugin is loaded.
-To start from an empty app, choose **Create LAN session → Devices**, select **Pulse** in
+To start from an empty app, choose **Create session → Devices**, select **Pulse** in
 **Device track**, then **Add FM Synth** or **Add Utility**. Refresh a stale chain draft first.
 Utility is appended; FM Synth is only available for a MIDI track without an instrument.
 **Shared device → Remove selected device** removes its settings/automation and keeps the music.

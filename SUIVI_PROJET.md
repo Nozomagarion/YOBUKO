@@ -1,5 +1,25 @@
 # Où en est notre application ?
 
+## Multijoueur en ligne par code — 29 octobre 2026 (branche `feature/online`)
+
+**Nouvelle priorité du propriétaire : jouer ensemble par Internet, pas seulement en réseau local.**
+L’hôte crée une session, copie un code et l’envoie (Discord par exemple) ; l’autre personne, même
+à 200 km, colle le code et rejoint. Aucun compte, aucun réglage de box.
+
+- **Code écrit :** nouveau transport pair-à-pair [iroh](https://github.com/n0-computer/iroh)
+  (QUIC chiffré, perçage des box, relais public de secours qui ne lit rien). Le protocole
+  d’édition à plusieurs, ses règles et ses limites ne changent pas. **Over the Internet** est le
+  choix par défaut ; **On this local network** reste disponible. Spécification :
+  [docs/spec/online-sessions.md](docs/spec/online-sessions.md).
+- **Tests passés (Linux, local) :** 92 tests du module multijoueur, dont des sessions en ligne
+  complètes à quatre (édition dans les deux sens, code à usage unique, clé d’hôte falsifiée
+  refusée) ; 17 tests d’interface multijoueur ; clippy strict ; `cargo deny` sans erreur.
+- **Pas encore fait :** paquets Mac/Windows de cette branche, essai réel entre deux maisons.
+- **Limites actuelles :** même plafond audio qu’en local (256 Mo) ; pas de reconnexion
+  automatique ; chacun garde sa propre lecture.
+- **Prochaines étapes :** essai à distance, puis bouton « Lier la lecture » (lecture synchronisée),
+  puis gros projets (plusieurs Go de sons, cache, transfert en fond, plugins).
+
 ## Objectif confirmé par le propriétaire — 29 octobre 2026
 
 **Priorité : terminer le multijoueur dans Suhina et conserver ce module lors des évolutions de Suhina.**

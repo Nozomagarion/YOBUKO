@@ -72,7 +72,7 @@ float32 WAV copies (64 files, 64 MiB each, 256 MiB total). Original encodings/ta
 archived. Either participant can publish a finished loaded take from another local Studio tab into an existing shared audio track using **Publish take**, without reconnecting. The whole sound is inserted unwarped; source trims/effects are not baked in. Guest uploads are pulled and verified by the host before publication. Recording directly into the shared tab and external plugins remain unsupported. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
 move, trim, duplicate, enable and delete with revision checks and stack-only placement.
 **Tracks** lets either participant add an audio track or a MIDI track with default FM Synth while connected. All participants need protocol 13 and the same compiled Suhina revision.
-[LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-lan-prototype)
+[LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-prototype)
 
 ## Progress you can audit
 

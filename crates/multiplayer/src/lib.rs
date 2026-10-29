@@ -6,6 +6,7 @@
 mod assets;
 mod invitation;
 mod midi;
+mod online;
 mod protocol;
 mod starter;
 mod transfer;
@@ -14,4 +15,4 @@ mod transport;
 pub use assets::{AudioAddition, SharedSnapshot};
 pub use protocol::{Controls, Operation, TrackControl, WireEdit};
 pub use starter::starter_project;
-pub use transport::{Service, commands, suggested_address};
+pub use transport::{ONLINE, ONLINE_LOOPBACK, Service, commands, suggested_address};
