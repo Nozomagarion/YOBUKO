@@ -52,12 +52,12 @@ and state (`DeviceKind::Clap`, `Vst3`, `Vst2` with `Device::state`); nothing run
 - The VST3 SDK is MIT since version 3.8 (October 2025); GPLv3 and Steinberg's own licence no
   longer apply to it. Rust: `vst3` (MIT/Apache-2.0), bindings generated from the SDK.
 - VST2: Steinberg stopped signing VST2 agreements in 2018 and has said new VST2 hosts cannot be
-  licensed. Its SDK licence is not GPL-compatible. Free headers exist (VeSTige, GPLv2+; FST,
-  GPLv3+), but VeSTige's origin is known only second-hand and was the target of a DMCA notice in
-  2018, and FST takes names from JUCE sources that shipped Steinberg's headers, which our
-  clean-room rules do not allow. A third one exists, Xaymar's `vst2sdk` (BSD-3-Clause, used by
-  DPF and by Lemon Studio); it is a reverse-engineering result like the others, and
-  [ADR 0022](0022-vst2-interface-description.md) decides it is not a source for us either.
+  licensed. Its SDK licence is not GPL-compatible. Free headers exist, all reverse-engineering
+  results: VeSTige (GPLv2+, from LMMS, shipped by Ardour and vendored by yabridge; the target of a
+  DMCA notice in 2018), FST (GPLv3+; takes names from JUCE sources that shipped Steinberg's headers)
+  and Xaymar's `vst2sdk` (BSD-3-Clause, used by DPF and by Lemon Studio).
+  [ADR 0022](0022-vst2-interface-description.md) takes VeSTige, pinned, as the one source of the
+  interface, a named exception to the clean-room rules; the others stay excluded.
 - VST3 has a documented way to replace a VST2 plug-in: the VST3 version declares the VST2 class
   it replaces (`moduleinfo.json` `Compatibility`, SDK 3.7.5 and later, or
   `IPluginCompatibility`, or the documented class-id convention built from the VST2 id and
@@ -585,12 +585,12 @@ workspace forbids.
 
 ## Not decided yet
 
-- **Hosting VST2 directly.** The interface description and where it comes from is
-  [ADR 0022](0022-vst2-interface-description.md) (proposed): our own clean-room description,
-  observed and written in `docs/spec/`, with no third-party reverse-engineered header as a source.
-  The process, scanning, editor and format decisions above are unchanged, and legal advice still
-  precedes a release that ships it. The work starts when we know which plug-ins people still use
-  only as VST2.
+- **Hosting VST2 directly.** Where the interface description comes from is decided in
+  [ADR 0022](0022-vst2-interface-description.md): the VeSTige header as Ardour distributes it,
+  pinned and ported to Rust with its notice, checked by our own mock plug-in and probe and written
+  up in `docs/spec/plugin-vst2.md`. The work is
+  [#1066](https://github.com/suhina-daw/suhina-daw/issues/1066). The process, scanning, editor and
+  format decisions above are unchanged, and legal advice still precedes a release that ships it.
 - **Our own Wine host** for Windows plug-ins on Linux (`suhina-plugin-host` built for Wine,
   speaking the same protocol, so one hop instead of two and one place for crashes, scanning and
   editors). Decided after native CLAP and VST3 work and the cost of the yabridge path has been
@@ -763,6 +763,7 @@ hosting use the same gate. This introduces no delay during ordinary playback.
 - VST3 SDK under MIT: https://github.com/steinbergmedia/vst3sdk; vst3 crate: https://github.com/coupler-rs/vst3-rs
 - VST2 licensing for hosts: https://forums.steinberg.net/t/can-i-create-vst-2-support-for-host-application-vst-3-license/202012
 - DMCA notice against VeSTige (2018): https://lists.linuxaudio.org/archives/linux-audio-dev/2018-June/037132.html
+- VeSTige as Ardour distributes it: https://github.com/Ardour/ardour/blob/365cc92cba0e016c30fea34aed168a0957aeeca0/libs/ardour/ardour/vestige/vestige.h
 - FST: https://sources.debian.org/src/fst/0.177.0-1/README.md
 - VST3 `moduleinfo.json` and compatibility: https://steinbergmedia.github.io/vst3_dev_portal/pages/Technical+Documentation/VST+Module+Architecture/ModuleInfo-JSON.html
 - VST2 compatibility FAQ: https://steinbergmedia.github.io/vst3_dev_portal/pages/FAQ/Compatibility+with+VST+2.x+or+VST+1.html
