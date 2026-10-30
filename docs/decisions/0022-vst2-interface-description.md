@@ -116,10 +116,13 @@ What stays:
 - Decisions 1 to 4 and the naming rules of decision 5: no VST logo, no "VST" in Suhina's name,
   crates, binaries or feature names, the format named only where a format must be named, and
   README's trademark note.
-- Decision 6, widened: a credible claim against the header, a request from Steinberg, or legal
-  advice against shipping turns the default off and stops distributing VST2-enabled builds until
-  this ADR is amended again. Turning it off removes only the `vst2` feature; projects keep their
-  VST2 devices and play them through the VST3 or CLAP copy (ADR 0006 decision 8).
+- Decision 6, made concrete: a request or claim from Steinberg, or a credible new claim against
+  the header, does not by itself stop distribution. Ardour answered such a notice and kept
+  shipping. It is a reason to reconsider: the project weighs what the claim actually says and
+  records the outcome here as a new amendment, whether that is to keep shipping, to answer the
+  claim, or to turn the default off. Legal advice against shipping turns the default off. Turning
+  it off removes only the `vst2` feature; projects keep their VST2 devices and play them through
+  the VST3 or CLAP copy (ADR 0006 decision 8).
 - Release notes name VST2 hosting as built on VeSTige, so a reader can see the source.
 
 ## Alternatives considered
