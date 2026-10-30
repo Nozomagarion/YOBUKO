@@ -75,14 +75,15 @@ has approved their use.
    keeps its copyright and licence notice and the SPDX line `GPL-2.0-or-later`, and is listed in
    `scripts/license_header.py`'s `PORTED`. Suhina's own code around it stays GPL-3.0-or-later. No
    C header is compiled and no crate outside the tree is added.
-4. **The spec says where each fact comes from.** `docs/spec/plugin-vst2.md` describes the interface
-   in our words and marks each field and op-code as *from VeSTige*, *observed* (our mock plug-in, the
-   probe that records what a host and a plug-in send, `#[ignore]` tests against installed plug-ins)
-   or *assumed*. Every fact has a test that keeps it true — a mock assertion, an `offset_of!`
-   assertion or an ignored test against a real plug-in. The VST2 state layouts come from the VST3
+4. **The spec will say where each fact comes from.** `docs/spec/plugin-vst2.md`, written with the
+   first hosting code, describes the interface in our words and marks each field and op-code as
+   *from VeSTige*, *observed* (our mock plug-in, the probe that records what a host and a plug-in
+   send, `#[ignore]` tests against installed plug-ins) or *assumed*. A fact enters the spec before
+   code relies on it, not all of them before the port begins, and comes with a test that keeps it
+   true — a mock assertion, an `offset_of!` assertion or an ignored test against a real plug-in. The VST2 state layouts come from the VST3
    SDK's `vst2persistence.h` (MIT), as the `.als` importer already reads them.
    **The pinned header is incomplete.** It defines only part of the interface; the op-codes that
-   get and set a plug-in's state chunk, for one, are not in it. The spec lists every fact the host
+   get and set a plug-in's state chunk, for one, are not in it. The spec will list every fact the host
    needs that the header lacks, and each one is *observed* or *assumed*, never taken from another
    header (decision 2). A mock plug-in written from our own assumption cannot establish such a
    fact: only the probe or an ignored test against a real plug-in turns *assumed* into *observed*.
