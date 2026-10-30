@@ -146,5 +146,65 @@ fn malformed_online_codes_are_refused_before_connecting() {
     let mut guest = Service::default();
     assert!(guest.execute("multiplayer.join", &json!({"invitation":"suhina-net://not-base64!"})).is_err());
     assert!(guest.execute("multiplayer.join", &json!({"invitation":"suhina-net://e30"})).is_err());
-    assert!(!guest.active());
+    for code in ["7-piano-tigre", "7-piano-tigre-xyzzy", "1000-piano-tigre-lune", "7-piano-tigre-lune-soleil"] {
+        let error = guest.execute("multiplayer.join", &json!({"invitation":code})).unwrap_err();
+        assert!(!error.to_string().is_empty(), "{code}");
+    }
+    assert!(!guest.active(), "nothing was started for a malformed code");
+}
+
+/// The host's short code once its lobby is reachable, with the long invitation beside it.
+fn short_code(host: &mut Service, previous: Option<&str>) -> String {
+    let ready = wait(host, |v| v["short_code"].as_str().is_some_and(|c| Some(c) != previous));
+    assert!(ready["invitation"].as_str().is_some_and(|i| i.starts_with("suhina-net://")), "both stay available");
+    ready["short_code"].as_str().unwrap().to_owned()
+}
+fn join(code: &str) -> Service {
+    let mut guest = Service::default();
+    guest.execute("multiplayer.join", &json!({"invitation":code})).unwrap();
+    guest
+}
+
+#[test]
+fn a_guest_joins_with_the_short_code_alone_and_edits_together() {
+    let (mut host, _) = host();
+    let code = short_code(&mut host, None);
+    assert!(code.starts_with("0-") && code.split('-').count() == 4, "a loopback code: {code}");
+    // Read out loud and typed back: other case and spaces instead of hyphens.
+    let mut guest = join(&format!("  {}  ", code.replace('-', " ").to_uppercase()));
+    wait(&mut guest, |v| v["mode"] == "connected");
+    wait(&mut host, |v| v["guests_connected"] == 1);
+    edit(&mut guest, 0, json!({"command":"track.rename","track":1,"name":"Said out loud"}));
+    let local = wait(&mut host, |v| v["controls"]["revision"] == 1);
+    assert_eq!(local["controls"]["tracks"][0]["name"], "Said out loud");
+}
+
+#[test]
+fn a_short_code_works_once_and_a_wrong_one_admits_nobody() {
+    let (mut host, _) = host();
+    let code = short_code(&mut host, None);
+    let mut wrong = join(&format!("0-{}", if code.ends_with("-zoo") { "piano-tigre-lune" } else { "zoo-zoo-zoo" }));
+    let error = refused(&mut wrong)["error"].as_str().unwrap().to_owned();
+    assert!(error.contains("no session"), "{error}");
+    let mut first = join(&code);
+    wait(&mut first, |v| v["mode"] == "connected");
+    let mut second = join(&code);
+    let error = refused(&mut second)["error"].as_str().unwrap().to_owned();
+    assert!(error.contains("refused"), "a spent code: {error}");
+    assert_eq!(state(&mut host)["guests_connected"], 1);
+}
+
+#[test]
+fn a_new_invitation_replaces_the_short_code_and_revokes_the_old_one() {
+    let (mut host, first_invitation) = host();
+    let old = short_code(&mut host, None);
+    host.execute("multiplayer.renewInvitation", &json!({})).unwrap();
+    let new = short_code(&mut host, Some(&old));
+    assert_ne!(state(&mut host)["invitation"].as_str().unwrap(), first_invitation);
+    let mut late = join(&old);
+    assert!(refused(&mut late)["error"].as_str().is_some(), "the replaced code admits nobody");
+    let mut guest = join(&new);
+    wait(&mut guest, |v| v["mode"] == "connected");
+    host.execute("multiplayer.stop", &json!({})).unwrap();
+    assert!(state(&mut host)["short_code"].is_null(), "leaving forgets the code");
 }

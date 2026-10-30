@@ -91,10 +91,11 @@ writes no project or audio file. It is a headless test of the first building blo
 
 ## Try the desktop prototype
 
-**Over the Internet** is the default: **Create session**, copy the invitation code, send it
-through any chat, and the guest pastes it into **Invitation code from the host** and clicks
-**Join session**. No account and no router setting; see
-[online sessions](spec/online-sessions.md). The steps below use **On this local network**.
+**Over the Internet** is the default: **Create session**, read out the short code shown (such as
+`7-piano-tigre-lune`) or send it with **Copy code**, and the guest types it into **Invitation
+code from the host** and clicks **Join session**. **Copy full invitation** gives the long code,
+which works when a network blocks the short code's address lookup. No account and no router
+setting; see [online sessions](spec/online-sessions.md#short-codes). The steps below use **On this local network**.
 
 Use the same combined build commit on both computers. These labels and preservation checks are
 covered by automated UI tests; the physical two-computer procedure below is an acceptance test

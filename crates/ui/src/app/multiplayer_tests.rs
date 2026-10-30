@@ -40,6 +40,33 @@ fn the_visible_lan_entry_creates_a_separate_tab_and_keeps_other_projects() {
 }
 
 #[test]
+fn an_online_host_shows_the_short_code_beside_the_full_invitation() {
+    let mut app = App::new();
+    app.settings.view.menu_bar = false;
+    app.multiplayer.open = true;
+    app.multiplayer_command("multiplayer.host", json!({"address":suhina_multiplayer::ONLINE_LOOPBACK}));
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 800.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while harness.state().multiplayer.short_code.is_empty() && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    harness.run_steps(2);
+    let code = harness.state().multiplayer.short_code.clone();
+    assert!(code.starts_with("0-"), "a loopback short code: {code:?}");
+    assert!(harness.state().multiplayer.invitation.starts_with("suhina-net://"));
+    assert!(harness.query_by_label(&code).is_some(), "the code is shown to be read out");
+    assert!(harness.query_by_label("Copy code").is_some());
+    assert!(harness.query_by_label("Copy full invitation").is_some());
+    assert!(harness.query_by_label("Copy invitation code").is_none());
+    harness.get_by_label("Leave session").click();
+    harness.run_steps(3);
+    assert!(harness.state().multiplayer.short_code.is_empty());
+}
+
+#[test]
 fn two_desktop_projects_apply_confirmed_controls_and_unlock_on_disconnect() {
     let ctx = egui::Context::default();
     let mut host = App::new();

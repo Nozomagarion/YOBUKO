@@ -26,15 +26,26 @@ Les réglages et les projets ne doivent pas être placés dans le dossier de l�
 2. Cliquer **Create session**. Suhina se connecte à Internet (quelques secondes) puis une copie
    de démonstration à quatre pistes s’ouvre dans un nouvel onglet partagé. Les éventuels projets
    déjà ouverts sont conservés.
-3. Cliquer **Copy invitation code** et envoyer le code en privé à une personne, par exemple sur
-   Discord. Le code expire après cinq minutes et ne sert qu’une fois. Ne pas créer le suivant
-   avant que la personne ait rejoint, car il remplacerait le code encore inutilisé.
-4. Sur l’autre ordinateur, ouvrir **Multiplayer**, coller le code dans **Invitation code from the
-   host** puis cliquer **Join session**. Attendre l’ouverture de l’onglet partagé (jusqu’à une
+3. Après quelques secondes, un **code court** s’affiche, par exemple `7-piano-tigre-lune` : un
+   nombre et trois mots. Le lire à voix haute (sur Discord, par exemple) ou cliquer **Copy code**
+   et l’envoyer en privé. Le code expire après cinq minutes et ne sert qu’une fois. Ne pas créer le
+   suivant avant que la personne ait rejoint, car il remplacerait le code encore inutilisé.
+4. Sur l’autre ordinateur, ouvrir **Multiplayer**, taper le code dans **Invitation code from the
+   host** puis cliquer **Join session**. Majuscules, accents et espaces à la place des tirets
+   sont acceptés ; un mot mal orthographié est signalé tout de suite. Attendre l’ouverture de l’onglet partagé (jusqu’à une
    vingtaine de secondes la première fois). Le nombre **Guests: N / 3** confirme la présence de
    l’invité.
 5. Pour une autre personne, l’hôte clique **New invitation**, puis répète les étapes 3–4.
    Trois invités au maximum peuvent être présents en même temps.
+
+**Code court ou invitation complète ?** Le code court ne passe par aucun compte ni serveur à
+nous : l’hôte ouvre une petite « salle d’attente » dont l’adresse se déduit du code, publiée par
+l’annuaire public d’iroh. L’invité la retrouve grâce au code, prouve qu’il le connaît, reçoit
+l’invitation complète et rejoint la session comme avant. Deviner un code en cinq minutes est
+hors de portée (environ 43 bits, un seul essai réussi possible, puis le code est grillé). Si le
+code court échoue (réseau d’entreprise ou d’école qui bloque cet annuaire, par exemple), l’hôte
+clique **Copy full invitation** et envoie le long texte `suhina-net://…` : il se colle au même
+endroit et fonctionne toujours.
 
 Les ordinateurs se parlent directement à travers les box. Quand une box bloque, un relais public
 gratuit transmet les données chiffrées sans pouvoir les lire. Pour un réseau local sans Internet,

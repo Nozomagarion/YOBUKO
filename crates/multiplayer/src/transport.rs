@@ -26,7 +26,7 @@ use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, ParamType, 
 
 use crate::invitation::{Invitation, Invite, new_secret, private, secret_hash};
 use crate::linked::{ClockEstimate, Linked, SharedTransport, TransportRequest};
-use crate::online::{Net, OnlineInvitation, Reach};
+use crate::online::{Lobby, Net, OnlineInvitation, Reach, ShortCode};
 use crate::protocol::{self, ClientMessage, Controls, Operation, PROTOCOL, ServerMessage, WireEdit};
 
 pub const MAX_GUESTS: usize = 3;
@@ -225,6 +225,8 @@ enum Event {
     Ready(String, Controls, Box<SharedSnapshot>),
     Connected(Controls, Box<SharedSnapshot>, usize),
     Invitation(String),
+    /// The short code of the lobby that hands out the current online invitation.
+    ShortCode(String),
     Receiving(usize, usize),
     Upload(Option<(usize, usize)>),
     State(Controls, Vec<Operation>, usize, Vec<AudioAddition>),
@@ -275,6 +277,7 @@ pub struct Service {
     mode: String,
     controls: Option<Controls>,
     invitation: Option<String>,
+    short_code: Option<String>,
     error: Option<String>,
     guest_count: usize,
     selected: Option<(Project, AudioPool)>,
@@ -400,7 +403,11 @@ impl Service {
                         self.guest_count = guests;
                         self.controls = Some(controls);
                     }
-                    Ok(Event::Invitation(invitation)) => self.invitation = Some(invitation),
+                    Ok(Event::Invitation(invitation)) => {
+                        self.invitation = Some(invitation);
+                        self.short_code = None;
+                    }
+                    Ok(Event::ShortCode(code)) => self.short_code = Some(code),
                     Ok(Event::Upload(progress)) => self.sending = progress,
                     Ok(Event::Receiving(done, total)) => self.receiving = Some((done, total)),
                     Ok(Event::State(controls, operations, guests, audio)) => {
@@ -447,6 +454,7 @@ impl Service {
             self.sending = None;
             self.running = None;
             self.invitation = None;
+            self.short_code = None;
             self.guest_count = 0;
             self.transport = None;
             self.clock = None;
@@ -475,6 +483,7 @@ impl Service {
         self.error = None;
         self.controls = None;
         self.invitation = None;
+        self.short_code = None;
         self.guest_count = 0;
         self.project = None;
         self.operations.clear();
@@ -596,7 +605,7 @@ fn state(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
         _ => None,
     };
     Ok(
-        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"error":s.error,"guest_connected":s.guest_count > 0,"guests_connected":s.guest_count,"max_guests":MAX_GUESTS,"receiving":s.receiving,"sending":s.sending,"linked":s.transport.is_some(),"transport":s.transport,"transport_starts_in_ms":starts_in}),
+        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"short_code":s.short_code,"error":s.error,"guest_connected":s.guest_count > 0,"guests_connected":s.guest_count,"max_guests":MAX_GUESTS,"receiving":s.receiving,"sending":s.sending,"linked":s.transport.is_some(),"transport":s.transport,"transport_starts_in_ms":starts_in}),
     )
 }
 fn queue_transport(s: &mut Service, request: TransportRequest) -> Result<Value, CommandError> {
@@ -652,6 +661,7 @@ fn renew_invitation(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
 fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.running = None;
     s.invitation = None;
+    s.short_code = None;
     s.mode = "idle".into();
     s.guest_count = 0;
     s.selected = None;
@@ -699,11 +709,25 @@ fn start_source(s: &mut Service, place: Place, source: Project, audio: AudioPool
 }
 fn start_guest(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
     let text = p["invitation"].as_str().ok_or("invitation must be text")?;
+    if ShortCode::looks_like(text) {
+        // Checked here, before any network use; the lobby is asked on the session thread.
+        let code = ShortCode::parse(text).map_err(CommandError::from)?;
+        let storage = s.storage.clone();
+        return s.start(move |stop, _, inputs, events| {
+            let joined = crate::online::redeem(&code)
+                .and_then(|(net, invitation)| online_guest(invitation, Some(net), storage, &stop, inputs, &events));
+            if let Err(e) = joined
+                && !stop.load(Ordering::Relaxed)
+            {
+                let _ = events.try_send(Event::Failed(e));
+            }
+        });
+    }
     if OnlineInvitation::is_online(text) {
         let invitation = OnlineInvitation::decode(text).map_err(CommandError::from)?;
         let storage = s.storage.clone();
         return s.start(move |stop, _, inputs, events| {
-            if let Err(e) = online_guest(invitation, storage, &stop, inputs, &events)
+            if let Err(e) = online_guest(invitation, None, storage, &stop, inputs, &events)
                 && !stop.load(Ordering::Relaxed)
             {
                 let _ = events.try_send(Event::Failed(e));
@@ -851,7 +875,7 @@ enum Place {
 }
 enum Acceptor {
     Lan { listener: TcpListener, tls: Arc<ServerConfig> },
-    Online { _net: Net, incoming: Receiver<crate::online::Stream> },
+    Online { net: Net, incoming: Receiver<crate::online::Stream> },
 }
 fn lan_listener(address: SocketAddr, secret: String) -> Result<(TcpListener, Arc<ServerConfig>, Invitation), String> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
@@ -900,7 +924,7 @@ fn host(
             let invitation = OnlineInvitation { protocol: PROTOCOL, endpoint: net.address(), secret: secret.clone() };
             // Four handshakes at once, as on the LAN: three guests plus one being admitted.
             let incoming = net.listen(MAX_GUESTS + 1);
-            (Acceptor::Online { _net: net, incoming }, Box::new(invitation))
+            (Acceptor::Online { net, incoming }, Box::new(invitation))
         }
     };
     let invite = invitation.encode()?;
@@ -918,8 +942,11 @@ fn host(
         linked: Linked::new(),
     }));
     events
-        .try_send(Event::Ready(invite, initial, Box::new(prepared.snapshot)))
+        .try_send(Event::Ready(invite.clone(), initial, Box::new(prepared.snapshot)))
         .map_err(|_| "multiplayer view closed")?;
+    // Online, a lobby trades a short code for the invitation; declared after the acceptor, so it
+    // closes before the endpoint's runtime does.
+    let mut lobby = open_lobby(&acceptor, invite, events);
     let pending = Arc::new(AtomicUsize::new(0));
     let mut handlers: Vec<std::thread::JoinHandle<()>> = Vec::new();
     let mut sequence = 1u64;
@@ -936,8 +963,15 @@ fn host(
                             events,
                         )
                     });
-                    if let Err(error) = result {
-                        let _ = events.try_send(Event::Rejected(error));
+                    match result.and_then(|()| invitation.encode()) {
+                        Ok(invite) => {
+                            // The old code dies with its lobby before the new one is announced.
+                            drop(lobby.take());
+                            lobby = open_lobby(&acceptor, invite, events);
+                        }
+                        Err(error) => {
+                            let _ = events.try_send(Event::Rejected(error));
+                        }
                     }
                     continue;
                 }
@@ -1029,6 +1063,18 @@ fn host(
         std::thread::sleep(Duration::from_millis(25));
     }
     Ok(())
+}
+
+/// Opens the short-code lobby of an online host; the view gets the code once it is reachable.
+fn open_lobby(acceptor: &Acceptor, invite: String, events: &SyncSender<Event>) -> Option<Lobby> {
+    let Acceptor::Online { net, .. } = acceptor else { return None };
+    let events = events.clone();
+    Some(net.open_lobby(invite, move |code| {
+        let _ = events.try_send(match code {
+            Ok(code) => Event::ShortCode(code),
+            Err(error) => Event::Rejected(format!("no short code ({error}); share the full invitation instead")),
+        });
+    }))
 }
 
 fn take_edit(target: (u32, f64), meta: &assets::Asset) -> WireEdit {
@@ -1324,6 +1370,7 @@ fn guest(
 }
 fn online_guest(
     invitation: OnlineInvitation,
+    net: Option<Net>,
     storage: Option<PathBuf>,
     stop: &Arc<AtomicBool>,
     inputs: Receiver<Input>,
@@ -1340,7 +1387,10 @@ fn online_guest(
     } else {
         Reach::Internet
     };
-    let net = Net::bind(reach)?;
+    let net = match net {
+        Some(net) => net,
+        None => Net::bind(reach)?,
+    };
     let stream = net.connect(invitation.endpoint)?;
     let result = guest_link(stream, invitation.secret, storage, stop, inputs, events);
     drop(net);
