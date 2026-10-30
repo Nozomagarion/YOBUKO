@@ -1,10 +1,10 @@
 ---
-description: Where the VST2 interface description comes from — the VeSTige header as Ardour distributes it, pinned to one commit, ported to Rust with its notice kept, as the one named exception to the clean-room rule; checked by our own mock plug-in, probe and tests; legal advice before a release ships it
+description: Where the VST2 interface description comes from — the VeSTige header as Ardour distributes it, pinned to one commit, ported to Rust with its notice kept, as the one named exception to the clean-room rule; checked by our own mock plug-in, probe and tests; amended 2026-10-31 to allow shipping VST2-enabled builds
 read_when: VST2, VST 2, AEffect, ABI, opcode, dispatcher, audioMaster, clean-room, reverse engineering, VeSTige, vestige.h, Ardour, LMMS, vst2sdk, FST, yabridge, plug-in interface description, VST trademark, provenance
 type: decision
 status: accepted
 built: no
-last_verified: 2026-10-30
+last_verified: 2026-10-31
 ---
 
 # 0022: VST2: where the interface description comes from
@@ -99,6 +99,29 @@ has approved their use.
    amend decision 1. The spec and the tests stay as they are either way: they describe the interface,
    and where a fact is observed they do not depend on its source.
 
+## Amendment: shipping VST2 (2026-10-31)
+
+Decision 5's last two sentences are replaced: **VST2-enabled builds may be distributed.** The
+`vst2` feature may be turned on by default and included in nightlies and releases.
+
+Why the gate is lifted without separate legal advice: the reason for the gate was the Steinberg
+SDK, and decisions 1 to 3 already keep it out. What ships is the VeSTige header as Ardour
+distributes it, ported with its GPL-2.0-or-later notice, plus facts observed by our own probe and
+tests. Ardour, LMMS and yabridge have distributed hosts built on the same header for years, and
+the 2018 DMCA notice did not remove it (see Context). This is the project's judgement, recorded
+as such; it is not legal advice and makes no claim that a court has approved the header.
+
+What stays:
+
+- Decisions 1 to 4 and the naming rules of decision 5: no VST logo, no "VST" in Suhina's name,
+  crates, binaries or feature names, the format named only where a format must be named, and
+  README's trademark note.
+- Decision 6, widened: a credible claim against the header, a request from Steinberg, or legal
+  advice against shipping turns the default off and stops distributing VST2-enabled builds until
+  this ADR is amended again. Turning it off removes only the `vst2` feature; projects keep their
+  VST2 devices and play them through the VST3 or CLAP copy (ADR 0006 decision 8).
+- Release notes name VST2 hosting as built on VeSTige, so a reader can see the source.
+
 ## Alternatives considered
 
 - **Our own description from observation only** — the first version of this ADR. The cleanest
@@ -123,7 +146,8 @@ has approved their use.
   (Apache-2.0) and Signalsmith (MIT) ports carry theirs.
 - Nothing here ships VST2 by itself. The licence question (Steinberg no longer licenses new VST2
   hosts), the trademark line and the legal advice before release stay, and ADR 0006 decision 8 — a
-  project's VST2 plug-in is played by its VST3 or CLAP copy meanwhile — stands.
+  project's VST2 plug-in is played by its VST3 or CLAP copy meanwhile — stands. (Superseded for
+  shipping by the 2026-10-31 amendment; the trademark line stays.)
 - ADR 0006's *Not decided yet* item for VST2 moves here; the format, scanning, editor and process
   decisions in 0006 are unchanged.
 

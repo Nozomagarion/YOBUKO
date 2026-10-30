@@ -606,7 +606,8 @@ workspace forbids.
   pinned. Nothing is built yet: the header is to be ported to Rust with its notice, checked by our
   own mock plug-in and probe, and written up in `docs/spec/plugin-vst2.md`. The work is
   [#1066](https://github.com/suhina-daw/suhina-daw/issues/1066). The process, scanning, editor and
-  format decisions above are unchanged, and legal advice still precedes a release that ships it.
+  format decisions above are unchanged; shipping VST2-enabled builds is allowed by ADR 0022's
+  2026-10-31 amendment.
 - **Our own Wine host** for Windows plug-ins on Linux (`suhina-plugin-host` built for Wine,
   speaking the same protocol, so one hop instead of two and one place for crashes, scanning and
   editors). Decided after native CLAP and VST3 work and the cost of the yabridge path has been
