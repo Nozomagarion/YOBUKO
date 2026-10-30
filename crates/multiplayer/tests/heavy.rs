@@ -4,7 +4,8 @@
 #![allow(clippy::unwrap_used)] // Assertions in test-only helpers.
 
 //! Heavy sounds: a sound of tens of MiB streamed in many chunks over LAN and the online
-//! transport, and a second session that takes it from the guest's sound cache.
+//! transport. The guest opens the project before the sound arrives, then a second session takes
+//! it from the guest's sound cache.
 
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -12,9 +13,10 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use suhina_engine::{AudioData, AudioPool};
+use suhina_engine::{AudioData, AudioPool, RenderInputs};
 use suhina_model::{AudioRegion, ContentKinds, LaneData, Project};
 use suhina_multiplayer::{ONLINE_LOOPBACK, Service};
+use suhina_session::Session;
 
 /// About 40 MiB as a canonical float WAV: forty transfer chunks.
 const SAMPLES: usize = 10 * 1024 * 1024;
@@ -50,42 +52,73 @@ fn wait(service: &mut Service, ready: impl Fn(&Value) -> bool) -> Value {
             return state;
         }
         assert!(Instant::now() < deadline, "heavy session timed out: mode={}", state["mode"]);
-        std::thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(5));
     }
 }
-/// Share the project, join it, and return the guest's collected sound file.
-fn session(address: &str, host_dir: &Path, guest_dir: &Path, project: &Project, audio: &AudioPool) -> PathBuf {
+fn render(session: &Session) -> Vec<f32> {
+    suhina_engine::render_offline_from(session.project(), RenderInputs::from_audio(session.audio()), 8000, 512, None)
+        .unwrap()
+}
+/// Share the project, join it, and return the guest's collected sound file. With `early`, the
+/// project opens before its sound arrives, and the sound follows in the background.
+fn session(address: &str, dirs: (&Path, &Path), project: &Project, audio: &AudioPool, early: bool) -> PathBuf {
     let mut host = Service::default();
-    host.set_storage_root(Some(host_dir.into())).unwrap();
+    host.set_storage_root(Some(dirs.0.into())).unwrap();
     host.select_audio_project(project, audio).unwrap();
     host.execute("multiplayer.hostProject", &json!({"address":address})).unwrap();
     let ready = wait(&mut host, |s| s["mode"] == "hosting");
-    host.take_shared().unwrap().keep();
+    let shared = host.take_shared().unwrap();
+    let local = shared.session().unwrap();
+    shared.keep();
+    let expected = render(&local);
+    assert!(expected.iter().any(|s| s.abs() > 0.01));
     let mut guest = Service::default();
-    guest.set_storage_root(Some(guest_dir.into())).unwrap();
+    guest.set_storage_root(Some(dirs.1.into())).unwrap();
     guest.execute("multiplayer.join", &json!({"invitation":ready["invitation"]})).unwrap();
     wait(&mut guest, |s| s["mode"] == "connected");
     let snapshot = guest.take_shared().unwrap();
     let folder = snapshot.folder().unwrap().to_path_buf();
-    let remote = snapshot.session().unwrap();
+    let mut remote = snapshot.session().unwrap();
     snapshot.keep();
+    assert_eq!(remote.project(), local.project());
+    if early {
+        assert!(remote.audio().files.is_empty(), "the project opens before its sound");
+        assert!(render(&remote).iter().all(|s| *s == 0.0), "a region without its sound stays silent");
+        let deadline = Instant::now() + Duration::from_secs(120);
+        loop {
+            let state = guest.execute("multiplayer.state", &json!({})).unwrap();
+            assert_ne!(state["mode"], "error", "{}", state["error"]);
+            if let Some(addition) = guest.take_audio().into_iter().next() {
+                remote.add_collected_audio(&addition.audio, addition.folder().unwrap()).unwrap();
+                addition.keep();
+                break;
+            }
+            assert!(Instant::now() < deadline, "the background sound did not arrive");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    } else {
+        assert_eq!(remote.audio().files.len(), 1, "a cached sound is there when the project opens");
+    }
     let (key, data) = remote.audio().files.iter().next().unwrap();
     assert_eq!(data.as_ref(), audio.files.values().next().unwrap().as_ref());
+    assert_eq!(render(&remote), expected);
     let file = folder.join(key);
     assert!(file.is_file());
+    assert_eq!(guest.execute("multiplayer.state", &json!({})).unwrap()["mode"], "connected");
     host.execute("multiplayer.stop", &json!({})).unwrap();
     file
 }
 fn heavy(address: &str) {
     let host_dir = tempfile::tempdir().unwrap();
     let guest_dir = tempfile::tempdir().unwrap();
+    let dirs = (host_dir.path(), guest_dir.path());
     let (project, audio) = source();
-    let first = session(address, host_dir.path(), guest_dir.path(), &project, &audio);
+    let first = session(address, dirs, &project, &audio, true);
     assert!(std::fs::metadata(&first).unwrap().len() > 40 * 1024 * 1024);
     let cache = guest_dir.path().join("Sound cache");
     let cached = cache.join(first.file_name().unwrap());
     assert!(cached.is_file());
-    let second = session(address, host_dir.path(), guest_dir.path(), &project, &audio);
+    let second = session(address, dirs, &project, &audio, false);
     assert_ne!(first.parent(), second.parent(), "each session keeps its own folder");
     assert_eq!(std::fs::read_dir(&cache).unwrap().count(), 1, "no partial copy or second download");
     #[cfg(unix)]
@@ -99,7 +132,7 @@ fn heavy(address: &str) {
 }
 
 #[test]
-fn a_forty_mib_sound_crosses_the_lan_in_chunks_and_a_second_session_takes_it_from_the_cache() {
+fn a_forty_mib_sound_crosses_the_lan_in_the_background_and_a_second_session_takes_it_from_the_cache() {
     heavy("127.0.0.1:0");
 }
 

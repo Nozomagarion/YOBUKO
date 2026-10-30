@@ -15,8 +15,9 @@ covers:
 
 Self-authored extension of the host-ordered session adapter
 ([several guests](lan-multiple-guests.md)). The collaboration protocol, its limits and its
-admission rules are unchanged; only the transport between computers changes. Protocol 14
-(13 before [linked playback](linked-playback.md) added the shared transport).
+admission rules are unchanged; only the transport between computers changes. Protocol 15
+(14 before [heavy sessions](heavy-sessions.md), 13 before [linked playback](linked-playback.md)
+added the shared transport).
 
 ## What a person does
 
@@ -31,7 +32,7 @@ admission rules are unchanged; only the transport between computers changes. Pro
 
 Each session side opens an [iroh](https://github.com/n0-computer/iroh) endpoint (MIT OR
 Apache-2.0) with a fresh secret key, created for the session and never stored. Connections are
-QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/14`.
+QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/15`.
 
 - The host waits up to ten seconds for a home relay, then puts its endpoint id (public key),
   relay URL and direct addresses in the invitation. Without a relay it still invites with its
@@ -43,8 +44,8 @@ QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multip
   that key, which replaces the LAN invitation's pinned certificate. A forged address under
   another key fails the handshake.
 - One bidirectional stream per guest carries the same length-prefixed frames as the LAN
-  transport, with the same absolute exchange deadlines (3 s per exchange, 30 s for the initial
-  copy, 180 s for sound transfers).
+  transport, with the same exchange deadlines (3 s per exchange, 30 s for the initial
+  document, 60 s per sound chunk).
 
 ## Invitation code
 

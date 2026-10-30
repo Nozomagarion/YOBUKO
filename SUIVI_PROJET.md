@@ -1,5 +1,27 @@
 # Où en est notre application ?
 
+## Gros projets partagés — 30 octobre 2026 (branche `feature/online-heavy`)
+
+**But :** partager des projets de plusieurs gigaoctets de sons, en ligne comme en local.
+
+- **Code écrit :** plafonds relevés à 4096 sons, 2 Go par son et 16 Go par session. Les sons
+  voyagent par morceaux de 1 Mo lus et écrits sur le disque, chacun vérifié avant d’être gardé
+  (arbre BLAKE3 dont la racine est l’empreinte déjà utilisée), en octets bruts au lieu de base64.
+  Chaque ordinateur garde les sons reçus dans **Sound cache** (20 Go au plus, les plus anciens
+  effacés d’abord) : un son déjà reçu n’est jamais renvoyé, et un transfert coupé reprend au
+  dernier morceau vérifié. Quand il manque plus de 32 Mo, l’invité ouvre le projet tout de suite
+  et les sons arrivent ensuite ; leurs clips restent muets en attendant. Protocole 15.
+  Spécification : [docs/spec/heavy-sessions.md](docs/spec/heavy-sessions.md).
+- **Tests passés (Linux, local) :** 118 tests du module multijoueur, dont un son de 40 Mo en
+  local et en ligne (ouverture avant l’arrivée du son, puis seconde session servie par le cache),
+  morceau corrompu refusé, reprise après coupure, plafonds hostiles refusés, nettoyage du cache.
+- **Pas encore fait :** essai réel entre deux ordinateurs avec un vrai projet lourd ; paquets.
+- **Limites :** les sons décodés restent en mémoire comme tout son chargé ; l’hôte écrit d’abord
+  ses copies WAV sur le disque avant de donner le code ; les plugins externes ne sont toujours
+  pas partagés.
+- **Critère suivant :** un projet de plusieurs Go partagé entre deux maisons, puis rejoint une
+  seconde fois sans retransfert.
+
 ## Lecture liée « Link playback » — 29 octobre 2026 (branche `feature/online-linked`)
 
 **But :** que tout le monde entende la même chose au même moment, sans diffuser d’audio.

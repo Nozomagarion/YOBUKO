@@ -63,7 +63,7 @@ fn download(asset: &Encoded, index: usize, from: usize, tree: bool) -> Vec<u8> {
     sound::send(
         &mut sink,
         &asset.source(),
-        (from, tree),
+        sound::Range { from, tree, chunks: usize::MAX },
         |leaves| ServerMessage::AssetTree { protocol: PROTOCOL, asset: index, leaves },
         |offset, len| ServerMessage::AssetChunk { protocol: PROTOCOL, asset: index, offset, len },
         &stop(),
@@ -78,7 +78,7 @@ fn upload(asset: &Encoded, from: usize, tree: bool) -> Vec<u8> {
     sound::send(
         &mut sink,
         &asset.source(),
-        (from, tree),
+        sound::Range { from, tree, chunks: usize::MAX },
         |leaves| ClientMessage::UploadTree { protocol: PROTOCOL, leaves },
         |offset, len| ClientMessage::UploadChunk { protocol: PROTOCOL, offset, len },
         &stop(),
@@ -688,4 +688,108 @@ fn a_host_refuses_repeated_or_unknown_download_requests() {
         let mut io = script(input);
         assert!(send(&mut io, &prepared.snapshot.project, &prepared.assets, &stop()).is_err());
     }
+}
+
+/// What a host answers to one background request.
+fn slice(assets: &[Arc<Encoded>], request: &ClientMessage, budget: &mut u64) -> Result<Vec<u8>, String> {
+    let ClientMessage::Fetch { asset, offset, tree, .. } = request else { panic!("not a fetch") };
+    let mut sink = script(vec![]);
+    serve_slice(&mut sink, assets, (*asset, *offset, *tree), budget, &stop())?;
+    Ok(sink.output)
+}
+
+#[test]
+fn a_heavy_initial_copy_opens_at_once_and_its_sounds_follow_in_resumable_slices() {
+    let host = tempfile::tempdir().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let (project, pool) = source_with(sine(8000, 2, 64 * 1024));
+    let prepared = prepare(&project, &pool, Some(host.path()), &stop()).unwrap();
+    let assets = prepared.assets.clone();
+    let meta = assets[0].meta.clone();
+    assert!(meta.bytes > DEFER && sound::leaves(meta.bytes) > 4 * SLICE);
+    let mut budget = background_budget(&assets);
+    // The guest answers the manifest at once and opens the project without the sound.
+    let mut io = script(pages(std::slice::from_ref(&meta)));
+    let mut snapshot =
+        receive_initial(&mut io, prepared.snapshot.project.clone(), 0, Some(root.path()), &stop(), |_, _| {}).unwrap();
+    assert_eq!(requests(&io.output), (vec![], true));
+    assert!(snapshot.audio.files.is_empty());
+    let folder = snapshot.folder().unwrap().to_path_buf();
+    let mut background = snapshot.take_background().unwrap();
+    assert_eq!(background.progress(), (0, meta.bytes));
+    // Two slices, then the guest leaves.
+    for n in 0..2 {
+        let request = background.request(5, &stop()).unwrap().unwrap();
+        assert!(matches!(
+            request,
+            ClientMessage::Fetch { seen_revision: 5, asset: 0, offset, tree, .. } if offset == n * SLICE * CHUNK && tree == (n == 0)
+        ));
+        let mut io = script(slice(&assets, &request, &mut budget).unwrap());
+        assert!(background.read(&mut io, &stop()).unwrap().is_none());
+        assert_eq!(background.progress().0, (n + 1) * SLICE * CHUNK);
+    }
+    drop(background);
+    drop(snapshot);
+    // Joining again resumes from the cache's partial copy, without asking for the tree again.
+    let mut io = script(pages(std::slice::from_ref(&meta)));
+    let mut snapshot =
+        receive_initial(&mut io, prepared.snapshot.project.clone(), 0, Some(root.path()), &stop(), |_, _| {}).unwrap();
+    let folder_again = snapshot.folder().unwrap().to_path_buf();
+    assert_ne!(folder, folder_again);
+    let mut background = snapshot.take_background().unwrap();
+    let mut arrived = None;
+    let mut first = true;
+    while arrived.is_none() {
+        let request = background.request(5, &stop()).unwrap().unwrap();
+        if first {
+            assert!(matches!(request, ClientMessage::Fetch { offset, tree: false, .. } if offset == 2 * SLICE * CHUNK));
+            first = false;
+        }
+        let mut io = script(slice(&assets, &request, &mut budget).unwrap());
+        arrived = background.read(&mut io, &stop()).unwrap();
+    }
+    assert!(background.is_empty());
+    assert!(background.request(5, &stop()).unwrap().is_none());
+    let arrived = arrived.unwrap();
+    assert_eq!(arrived.folder(), Some(folder_again.as_path()), "linked into the open session's folder");
+    assert!(folder_again.join(meta.path()).is_file());
+    assert_eq!(arrived.audio.files[&meta.path()].as_ref(), pool.files.values().next().unwrap().as_ref());
+    // A guest that keeps asking runs out of the host's budget instead of its bandwidth.
+    let request = ClientMessage::Fetch { protocol: PROTOCOL, seen_revision: 0, asset: 0, offset: 0, tree: true };
+    let mut refused = false;
+    for _ in 0..4 * sound::leaves(meta.bytes) {
+        if slice(&assets, &request, &mut budget).is_err() {
+            refused = true;
+            break;
+        }
+    }
+    assert!(refused);
+    let mut budget = u64::MAX;
+    let unknown = ClientMessage::Fetch { protocol: PROTOCOL, seen_revision: 0, asset: 1, offset: 0, tree: true };
+    assert!(slice(&assets, &unknown, &mut budget).is_err());
+    let misaligned = ClientMessage::Fetch { protocol: PROTOCOL, seen_revision: 0, asset: 0, offset: 3, tree: true };
+    assert!(slice(&assets, &misaligned, &mut budget).is_err());
+}
+
+#[test]
+fn a_light_initial_copy_still_arrives_before_the_project_opens() {
+    let host = tempfile::tempdir().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let (project, pool) = source();
+    let prepared = prepare(&project, &pool, Some(host.path()), &stop()).unwrap();
+    let asset = &prepared.assets[0];
+    assert!(asset.meta.bytes <= DEFER);
+    let mut input = pages(std::slice::from_ref(&asset.meta));
+    input.extend(download(asset, 0, 0, true));
+    let mut snapshot = receive_initial(
+        &mut script(input),
+        prepared.snapshot.project.clone(),
+        0,
+        Some(root.path()),
+        &stop(),
+        |_, _| {},
+    )
+    .unwrap();
+    assert_eq!(snapshot.audio.files.len(), 1);
+    assert!(snapshot.take_background().is_none());
 }

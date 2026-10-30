@@ -77,3 +77,10 @@ project v4, portable-copy format 3 and matching pinned Suhina engine identities 
 Ordinary old project files remain readable through the studio reader, then share as v4. The
 musical edit permissions and quotas above remain unchanged; newly added studio effects are not
 implicitly permitted in shared tabs. All participants need the updated combined application.
+
+
+## Amendment: heavy sessions
+
+Protocol 15 replaces the 16 KiB base64 upload chunks and the limits above with the streamed,
+verified and resumable transfer of [heavy sessions](heavy-sessions.md); an upload the host's
+sound cache already holds is not requested.

@@ -533,7 +533,7 @@ impl App {
             if ui.add_enabled(self.session().is_some(), egui::Button::new("Share project + audio")).clicked() {
                 self.host_current_audio();
             }
-            ui.weak("Audio sharing copies loaded sounds into portable WAV files, stored under the application data Shared projects folder. Up to 64 sounds, 64 MiB each and 256 MiB total. Original files stay intact.");
+            ui.weak("Audio sharing copies loaded sounds into portable WAV files, stored under the application data Shared projects folder. Up to 4096 sounds, 2 GiB each and 16 GiB total. Each computer keeps received sounds in a Sound cache (up to 20 GiB), so a sound is sent only once and a cut transfer resumes. A heavy project opens before all its sounds arrive; their clips stay silent until then. Original files stay intact.");
             ui.weak("MIDI copies support up to 64 tracks, FM Synth and Utility parameters. Audio, plugins and other instruments are refused. Local metadata and hardware mappings are omitted; the original stays intact.");
             if self.multiplayer.online {
                 ui.weak("Computers connect directly, through home routers, with nothing to configure. When a router blocks that, a free public relay forwards the encrypted traffic; it cannot read the project. Both computers need the same Suhina version.");
@@ -596,7 +596,7 @@ impl App {
             if let Some(progress) = self.multiplayer.state["receiving"].as_array() {
                 let done = progress.first().and_then(serde_json::Value::as_u64).unwrap_or(0);
                 let total = progress.get(1).and_then(serde_json::Value::as_u64).unwrap_or(0);
-                ui.label(format!("Receiving project/audio: {} / {} KiB", done / 1024, total / 1024));
+                ui.label(format!("Receiving project/audio: {} / {} MiB", done >> 20, total >> 20));
             }
             if let Some(session) = self.multiplayer.bound.and_then(|id| self.projects.get(id)) {
                 let project = session.project();

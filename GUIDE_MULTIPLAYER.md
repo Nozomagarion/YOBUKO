@@ -67,8 +67,13 @@ depuis un projet Studio ouvert. Cela partage une copie et conserve l’original.
 et effets partagés pris en charge sont **FM Synth et Utility** ; les plugins externes et les
 autres appareils ne sont pas encore partagés. Jusqu’à 64 pistes sont admises par le format borné.
 
-L’option audio transfère les sons déjà chargés dans le Studio, jusqu’à 64 sons, 64 Mio par son
-et 256 Mio au total. Attendre le transfert vérifié avant l’ouverture de la copie. Les copies audio
+L’option audio transfère les sons déjà chargés dans le Studio, jusqu’à 4096 sons, 2 Gio par son
+et 16 Gio au total. Les projets lourds sont pris en charge : les sons voyagent par morceaux
+vérifiés un à un, sans être chargés en entier en mémoire pendant le transfert. Chaque ordinateur
+garde les sons reçus dans le dossier **Sound cache** (jusqu’à 20 Gio, les plus anciens sont
+effacés d’abord) : un son déjà reçu n’est jamais renvoyé, même lors d’une session suivante, et un
+transfert coupé reprend là où il s’était arrêté. Quand il manque plus de 32 Mio de sons, la copie
+s’ouvre tout de suite et les sons arrivent ensuite ; leurs clips restent muets jusque-là. Les copies audio
 sont conservées dans le sous-dossier **Shared projects** du dossier de données de l’application.
 
 Pour une nouvelle prise, enregistrer et terminer dans un onglet Studio local, puis ouvrir

@@ -120,3 +120,12 @@ project v4, portable-copy format 3 and matching pinned Suhina engine identities 
 Ordinary old project files remain readable through the studio reader, then share as v4. The
 musical edit permissions and quotas above remain unchanged; newly added studio effects are not
 implicitly permitted in shared tabs. All participants need the updated combined application.
+
+
+## Amendment: heavy sessions
+
+Protocol 15 supersedes the limits, the 180-second deadline and the base64 chunks above: see
+[heavy sessions](heavy-sessions.md). Up to 4096 sounds, 2 GiB each and 16 GiB per session,
+streamed from and to disk in 1 MiB chunks verified against each sound's BLAKE3 tree, kept in a
+per-computer sound cache, resumed after a cut, and received in the background when a heavy
+initial copy lets the project open first.

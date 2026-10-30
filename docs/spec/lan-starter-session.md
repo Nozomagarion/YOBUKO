@@ -114,7 +114,8 @@ automatic reconnect/resume, presence cursors and host migration remain future wo
 
 ## Initial audio collection
 
-Share project + audio follows the [audio asset contract](lan-audio-assets.md). A manifest of at
+Share project + audio follows the [audio asset contract](lan-audio-assets.md), with the limits
+and streamed transfers of [heavy sessions](heavy-sessions.md) since protocol 15. A manifest of at
 most 64 BLAKE3-addressed WAV copies is pulled in exact-offset chunks after the document; limits
 are 64 MiB per file and 256 MiB total, with an absolute 180-second asset deadline. The receiver
 uses a fresh temporary directory under a trusted local root, verifies every sound before decoding,

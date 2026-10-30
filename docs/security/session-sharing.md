@@ -103,7 +103,9 @@ Only sounds already loaded in the locally selected session are collected. Origin
 do not reach guest file I/O: references use generated Audio/<BLAKE3>.wav paths, backed by an exact
 manifest. Assets are canonical float32 WAV, mono/stereo 8000..192000 Hz, finite and bounded; RIFF
 chunk lengths are checked before hound. Hash, size, metadata, canonical re-encoding and reference
-coverage are all required. Budgets: 64 files, 64 MiB each, 256 MiB total and a 180-second deadline.
+coverage are all required. Budgets: 64 files, 64 MiB each, 256 MiB total and a 180-second deadline
+(protocol 15: 4096 files, 2 GiB each, 16 GiB total, a 60-second stall per chunk, every chunk
+checked against the BLAKE3 tree, a hash-named sound cache; see [heavy sessions](../spec/heavy-sessions.md)).
 A receiver writes create-new files in a fresh private directory at a trusted local root, then
 finalizes the document after the assets. Temporary-directory ownership crosses into the pending
 snapshot; failures and unclaimed snapshots remove it. The desktop retains the completed folder

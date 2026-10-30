@@ -6,7 +6,7 @@
 //! memory and a cut transfer resumes from its last verified chunk.
 
 use crate::assets::{Asset, CHUNK, MAX_ASSET, STALL, validate_asset};
-use crate::cache::Cache;
+use crate::cache::{Cache, Partial};
 use crate::protocol;
 use crate::transport::Link;
 use blake3::hazmat::{ChainingValue, HasherExt, Mode, merge_subtrees_non_root, merge_subtrees_root};
@@ -279,22 +279,32 @@ pub(crate) struct Source<'a> {
     pub tree: &'a [ChainingValue],
 }
 
-/// Stream a sound from `from` to its end: its tree when asked, then chunk headers each followed by
-/// the chunk's raw bytes. Only whole chunk offsets are accepted.
+/// Which part of a sound to send: from a whole-chunk offset, with or without its tree, and at
+/// most this many chunks (`usize::MAX` for the rest of the sound).
+#[derive(Clone, Copy)]
+pub(crate) struct Range {
+    pub from: usize,
+    pub tree: bool,
+    pub chunks: usize,
+}
+
+/// Stream part of a sound: its tree when asked, then chunk headers each followed by the chunk's
+/// raw bytes. Only whole chunk offsets are accepted. Returns the bytes sent.
 pub(crate) fn send<M: Serialize>(
     io: &mut impl Link,
     source: &Source<'_>,
-    (from, with_tree): (usize, bool),
+    range: Range,
     tree_message: impl Fn(usize) -> M,
     chunk_message: impl Fn(usize, usize) -> M,
     stop: &AtomicBool,
     mut progress: impl FnMut(usize),
-) -> Result<(), String> {
+) -> Result<usize, String> {
     let bytes = source.meta.bytes;
-    if !from.is_multiple_of(CHUNK) || from >= bytes {
+    let from = range.from;
+    if !from.is_multiple_of(CHUNK) || from >= bytes || range.chunks == 0 {
         return Err("invalid audio resume offset".into());
     }
-    if with_tree {
+    if range.tree {
         io.set_deadline(Instant::now() + STALL);
         protocol::write(io, &tree_message(source.tree.len()))?;
         io.write_all(&tree_bytes(source.tree)).and_then(|_| io.flush()).map_err(|e| e.to_string())?;
@@ -303,7 +313,8 @@ pub(crate) fn send<M: Serialize>(
     file.seek(SeekFrom::Start(from as u64)).map_err(|e| e.to_string())?;
     let mut buffer = vec![0; CHUNK];
     let mut offset = from;
-    while offset < bytes {
+    let mut sent = 0;
+    while offset < bytes && sent < range.chunks {
         stopped(stop)?;
         let n = (bytes - offset).min(CHUNK);
         let part = buffer.get_mut(..n).ok_or("invalid chunk")?;
@@ -312,15 +323,94 @@ pub(crate) fn send<M: Serialize>(
         protocol::write(io, &chunk_message(offset, n))?;
         io.write_all(part).and_then(|_| io.flush()).map_err(|e| format!("connection write failed: {e}"))?;
         offset += n;
+        sent += 1;
         progress(offset);
     }
-    Ok(())
+    Ok(offset - from)
 }
 
 /// How a receiver reads the sender's tree and chunk headers.
 pub(crate) struct Incoming<T, C> {
     pub tree: T,
     pub chunk: C,
+}
+
+/// One sound being received into the cache, possibly over several requests. It keeps its partial
+/// copy open, so continuing never rereads what was already verified.
+pub(crate) struct Download {
+    pub meta: Asset,
+    partial: Partial,
+    cvs: Option<Vec<ChainingValue>>,
+}
+impl Download {
+    /// Reopen any partial copy in the cache, keeping its verified chunks.
+    pub fn start(meta: &Asset, cache: &Cache, stop: &AtomicBool) -> Result<Self, String> {
+        validate_asset(meta)?;
+        let mut partial = cache.resume(meta, stop)?;
+        let cvs = partial.tree.take();
+        Ok(Self { meta: meta.clone(), partial, cvs })
+    }
+    /// The offset to ask for, and whether the tree is still needed.
+    pub fn next(&self) -> (usize, bool) {
+        (self.partial.verified, self.cvs.is_none())
+    }
+    pub fn complete(&self) -> bool {
+        self.partial.verified >= self.meta.bytes
+    }
+    /// Read the answer to the request [`Download::next`] described: the tree if it was asked,
+    /// then exactly `min(chunks, remaining)` chunks, each verified before it is written.
+    pub fn read<M: DeserializeOwned>(
+        &mut self,
+        io: &mut impl Link,
+        cache: &Cache,
+        parse: &Incoming<impl Fn(M) -> Option<usize>, impl Fn(M) -> Option<(usize, usize)>>,
+        chunks: usize,
+        stop: &AtomicBool,
+        mut progress: impl FnMut(usize),
+    ) -> Result<(), String> {
+        let meta = &self.meta;
+        if self.cvs.is_none() {
+            io.set_deadline(Instant::now() + STALL);
+            let count = (parse.tree)(protocol::read(io)?).ok_or("invalid audio chunk tree")?;
+            let expected = if leaves(meta.bytes) < 2 { 0 } else { leaves(meta.bytes) };
+            if count != expected {
+                return Err("invalid audio chunk tree size".into());
+            }
+            let mut raw = vec![0; count * 32];
+            io.read_exact(&mut raw).map_err(|e| format!("incomplete audio chunk tree: {e}"))?;
+            let cvs = tree_from(&raw);
+            verify_tree(meta, &cvs)?;
+            cache.save_tree(meta, &raw)?;
+            self.cvs = Some(cvs);
+        }
+        let cvs = self.cvs.as_deref().ok_or("audio chunk tree missing")?;
+        let mut buffer = vec![0; CHUNK];
+        let mut read = 0;
+        while self.partial.verified < meta.bytes && read < chunks {
+            stopped(stop)?;
+            let offset = self.partial.verified;
+            io.set_deadline(Instant::now() + STALL);
+            let (at, len) = (parse.chunk)(protocol::read(io)?).ok_or("invalid audio chunk")?;
+            if at != offset || len != (meta.bytes - offset).min(CHUNK) {
+                return Err("invalid audio chunk offset or size".into());
+            }
+            let part = buffer.get_mut(..len).ok_or("invalid chunk")?;
+            io.read_exact(part).map_err(|e| format!("incomplete audio chunk: {e}"))?;
+            verify_chunk(meta, cvs, offset, part)?;
+            self.partial.file.write_all(part).map_err(|e| format!("cannot store shared sound: {e}"))?;
+            self.partial.verified += len;
+            read += 1;
+            progress(len);
+        }
+        Ok(())
+    }
+    /// The verified, complete sound becomes the cached file.
+    pub fn finish(self, cache: &Cache) -> Result<PathBuf, String> {
+        if !self.complete() {
+            return Err("incomplete shared sound".into());
+        }
+        cache.complete(&self.meta, self.partial.file)
+    }
 }
 
 /// Receive one sound into the cache, resuming a verified partial copy. `request` asks the peer
@@ -334,46 +424,14 @@ pub(crate) fn receive<M: DeserializeOwned, L: Link>(
     stop: &AtomicBool,
     mut progress: impl FnMut(usize),
 ) -> Result<PathBuf, String> {
-    validate_asset(meta)?;
-    let mut partial = cache.resume(meta, stop)?;
-    request(io, partial.verified, partial.tree.is_none())?;
-    let cvs = match partial.tree.take() {
-        Some(cvs) => cvs,
-        None => {
-            io.set_deadline(Instant::now() + STALL);
-            let count = (parse.tree)(protocol::read(io)?).ok_or("invalid audio chunk tree")?;
-            let expected = if leaves(meta.bytes) < 2 { 0 } else { leaves(meta.bytes) };
-            if count != expected {
-                return Err("invalid audio chunk tree size".into());
-            }
-            let mut raw = vec![0; count * 32];
-            io.read_exact(&mut raw).map_err(|e| format!("incomplete audio chunk tree: {e}"))?;
-            let cvs = tree_from(&raw);
-            verify_tree(meta, &cvs)?;
-            cache.save_tree(meta, &raw)?;
-            cvs
-        }
-    };
-    if partial.verified > 0 {
-        progress(partial.verified);
+    let mut download = Download::start(meta, cache, stop)?;
+    let (offset, tree) = download.next();
+    request(io, offset, tree)?;
+    if offset > 0 {
+        progress(offset);
     }
-    let mut buffer = vec![0; CHUNK];
-    let mut offset = partial.verified;
-    while offset < meta.bytes {
-        stopped(stop)?;
-        io.set_deadline(Instant::now() + STALL);
-        let (at, len) = (parse.chunk)(protocol::read(io)?).ok_or("invalid audio chunk")?;
-        if at != offset || len != (meta.bytes - offset).min(CHUNK) {
-            return Err("invalid audio chunk offset or size".into());
-        }
-        let part = buffer.get_mut(..len).ok_or("invalid chunk")?;
-        io.read_exact(part).map_err(|e| format!("incomplete audio chunk: {e}"))?;
-        verify_chunk(meta, &cvs, offset, part)?;
-        partial.file.write_all(part).map_err(|e| format!("cannot store shared sound: {e}"))?;
-        offset += len;
-        progress(len);
-    }
-    cache.complete(meta, partial.file)
+    download.read(io, cache, &parse, usize::MAX, stop, progress)?;
+    download.finish(cache)
 }
 
 #[cfg(test)]

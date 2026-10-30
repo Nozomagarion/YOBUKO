@@ -1183,7 +1183,8 @@ fn serve_link(
         let (_, document) = crate::midi::encode_portable(&snapshot)?;
         crate::transfer::send(&mut io, &document, revision, stop)?;
         io.set_deadline(Instant::now() + Duration::from_secs(180));
-        assets::send(&mut io, &snapshot, &assets, stop)?;
+        let offered = assets::send(&mut io, &snapshot, &assets, stop)?;
+        let mut budget = assets::background_budget(&offered);
         let mut known: assets::Known = assets
             .iter()
             .filter(|a| assets::references(&snapshot).contains(&a.meta.path()))
@@ -1198,6 +1199,9 @@ fn serve_link(
         while !stop.load(Ordering::Relaxed) {
             io.renew();
             let message: ClientMessage = protocol::read(&mut io)?;
+            if let ClientMessage::Fetch { protocol: PROTOCOL, asset, offset, tree, .. } = &message {
+                assets::serve_slice(&mut io, &offered, (*asset, *offset, *tree), &mut budget, stop)?;
+            }
             let upload = if let ClientMessage::Publish {
                 protocol: PROTOCOL,
                 sequence,
@@ -1226,7 +1230,8 @@ fn serve_link(
                 let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
                 let (seen, outcome) = match (upload, &message) {
                     (Some((seen, result)), _) => (seen, Some(result)),
-                    (None, ClientMessage::Poll { protocol: PROTOCOL, seen_revision }) => (*seen_revision, None),
+                    (None, ClientMessage::Poll { protocol: PROTOCOL, seen_revision })
+                    | (None, ClientMessage::Fetch { protocol: PROTOCOL, seen_revision, .. }) => (*seen_revision, None),
                     (
                         None,
                         ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision, seen_revision, edit },
@@ -1370,9 +1375,11 @@ fn guest_link(
     })?;
     let project = crate::midi::decode_portable(&document)?;
     io.set_deadline(Instant::now() + Duration::from_secs(180));
-    let mut snapshot = assets::receive(&mut io, project, revision, storage.as_deref(), stop, |done, total| {
+    let mut snapshot = assets::receive_initial(&mut io, project, revision, storage.as_deref(), stop, |done, total| {
         let _ = events.try_send(Event::Receiving(done, total));
     })?;
+    // Sounds of a heavy initial copy that arrive after the project opened.
+    let mut background = snapshot.take_background();
     let mut known: assets::Known = snapshot.metas.iter().map(|a| (a.path(), a.clone())).collect();
     let mut mirror = suhina_session::Session::new(snapshot.project.clone());
     io.renew();
@@ -1441,6 +1448,11 @@ fn guest_link(
             _ => None,
         };
         let edited = prepared.is_some() || edit.is_some();
+        let fetch = match background.as_mut() {
+            Some(sounds) if !edited && transport_request.is_none() => sounds.request(revision, stop)?,
+            _ => None,
+        };
+        let fetching = fetch.is_some();
         let request = if let Some(take) = &prepared {
             ClientMessage::Publish {
                 protocol: PROTOCOL,
@@ -1455,10 +1467,13 @@ fn guest_link(
             ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision: base, seen_revision: revision, edit }
         } else if let Some(request) = transport_request {
             ClientMessage::Transport { protocol: PROTOCOL, seen_revision: revision, request }
+        } else if let Some(fetch) = fetch {
+            fetch
         } else {
             ClientMessage::Poll { protocol: PROTOCOL, seen_revision: revision }
         };
         let sent_ms = local.now_ms();
+        let mut arrived = Vec::new();
         protocol::write(&mut io, &request)?;
         let response = if let Some(take) = &prepared {
             io.set_deadline(Instant::now() + Duration::from_secs(180));
@@ -1466,6 +1481,12 @@ fn guest_link(
                 let _ = events.try_send(Event::Upload(Some((done, total))));
             })?
         } else {
+            if fetching
+                && let Some(sounds) = background.as_mut()
+                && let Some(sound) = sounds.read(&mut io, stop)?
+            {
+                arrived.push(sound);
+            }
             protocol::read(&mut io)?
         };
         let received_ms = local.now_ms();
@@ -1487,12 +1508,12 @@ fn guest_link(
             shared.validate()?;
         }
         // An upload's round trip includes the sound transfer and says nothing about the clock.
-        if prepared.is_none() {
+        if prepared.is_none() && !fetching {
             estimate.add(sent_ms, received_ms, host_ms);
         }
         let controls = *controls;
         let was_publication = prepared.is_some();
-        let mut audio = Vec::new();
+        let mut audio = arrived;
         if let Some(take) = prepared
             && accepted == Some(true)
         {
@@ -1548,14 +1569,25 @@ fn guest_link(
                 shown = Some((transport, offset));
             }
         }
-        if controls != previous || guests != previous_guests {
+        if controls != previous || guests != previous_guests || !audio.is_empty() {
             events
                 .try_send(Event::State(controls.clone(), operations, guests, audio))
                 .map_err(|_| "multiplayer view is not keeping up")?;
             previous = controls;
             previous_guests = guests;
         }
-        std::thread::sleep(POLL);
+        // A State clears the view's progress; background sounds report theirs after it.
+        match &background {
+            Some(sounds) if sounds.is_empty() => background = None,
+            Some(sounds) => {
+                let (done, total) = sounds.progress();
+                let _ = events.try_send(Event::Receiving(done, total));
+            }
+            None => {}
+        }
+        if background.is_none() {
+            std::thread::sleep(POLL);
+        }
     }
     let _ = events.try_send(Event::Closed);
     Ok(())

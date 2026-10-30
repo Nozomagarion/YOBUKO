@@ -752,7 +752,7 @@ fn stream_upload(io: &mut impl Link, asset: &assets::Encoded, path: &std::path::
     crate::sound::send(
         io,
         &source,
-        (0, true),
+        crate::sound::Range { from: 0, tree: true, chunks: usize::MAX },
         |leaves| ClientMessage::UploadTree { protocol: PROTOCOL, leaves },
         |offset, len| ClientMessage::UploadChunk { protocol: PROTOCOL, offset, len },
         &AtomicBool::new(false),
@@ -852,7 +852,7 @@ fn a_bad_hash_upload_disconnects_without_publishing_or_leaving_files() {
     let _ = crate::sound::send(
         &mut io,
         &source,
-        (0, true),
+        crate::sound::Range { from: 0, tree: true, chunks: usize::MAX },
         |leaves| ClientMessage::UploadTree { protocol: PROTOCOL, leaves },
         |offset, len| ClientMessage::UploadChunk { protocol: PROTOCOL, offset, len },
         &AtomicBool::new(false),

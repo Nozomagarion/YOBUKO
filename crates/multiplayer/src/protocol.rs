@@ -274,9 +274,19 @@ pub enum ClientMessage {
         offset: usize,
         tree: bool,
     },
-    /// The guest holds every offered sound (from its cache or just received).
+    /// The guest holds every offered sound it wants now (from its cache or just received).
     AssetsDone {
         protocol: u16,
+    },
+    /// A poll that also asks for the next chunks of a sound of the initial copy, which the guest
+    /// receives in the background; answered by the tree when asked, at most
+    /// `assets::SLICE` chunks, then the usual State.
+    Fetch {
+        protocol: u16,
+        seen_revision: u64,
+        asset: usize,
+        offset: usize,
+        tree: bool,
     },
     Publish {
         protocol: u16,

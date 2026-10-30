@@ -11,7 +11,7 @@ use crate::transport::Link;
 use blake3::hazmat::ChainingValue;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     io::{BufWriter, Write},
     path::{Path, PathBuf},
     sync::{
@@ -39,6 +39,14 @@ pub(crate) const CHUNK: usize = 1 << 20;
 /// Unit tests use small chunks, so small sounds still cross many chunks.
 #[cfg(test)]
 pub(crate) const CHUNK: usize = 4096;
+/// Bytes still to download, after the cache, above which a joining guest opens the project at
+/// once and receives those sounds in the background.
+#[cfg(not(test))]
+pub(crate) const DEFER: usize = 32 << 20;
+#[cfg(test)]
+pub(crate) const DEFER: usize = 64 << 10;
+/// Chunks per background request, so edits and polls keep flowing between them.
+pub(crate) const SLICE: usize = 8;
 /// Manifest entries per frame.
 pub(crate) const PAGE: usize = 128;
 /// The longest wait for one chunk or request before a transfer is considered cut.
@@ -143,15 +151,19 @@ pub struct SharedSnapshot {
     folder: Option<tempfile::TempDir>,
     pub(crate) metas: Vec<Asset>,
     pub(crate) additions: Vec<AudioAddition>,
+    /// Sounds of the initial copy still to arrive, when the project opened before them.
+    pub(crate) background: Option<Background>,
 }
 /// Verified additional sound files, leased until the desktop attaches them successfully.
 pub struct AudioAddition {
     pub audio: AudioPool,
     folder: Option<tempfile::TempDir>,
+    /// A sound that arrived in the background, linked into its session's existing folder.
+    at: Option<PathBuf>,
 }
 impl AudioAddition {
     pub fn folder(&self) -> Option<&Path> {
-        self.folder.as_ref().map(|d| d.path())
+        self.folder.as_ref().map(|d| d.path()).or(self.at.as_deref())
     }
     pub fn keep(mut self) {
         if let Some(folder) = self.folder.take() {
@@ -165,7 +177,10 @@ impl SharedSnapshot {
         self.additions.push(audio);
     }
     pub(crate) fn into_audio(self) -> AudioAddition {
-        AudioAddition { audio: self.audio, folder: self.folder }
+        AudioAddition { audio: self.audio, folder: self.folder, at: None }
+    }
+    pub(crate) fn take_background(&mut self) -> Option<Background> {
+        self.background.take()
     }
     pub fn session(&self) -> Result<suhina_session::Session, String> {
         let mut session = suhina_session::Session::shared_copy(
@@ -343,7 +358,15 @@ pub(crate) fn prepare(
     }
     finish(folder.as_ref(), &project, &metas, stop)?;
     Ok(Prepared {
-        snapshot: SharedSnapshot { project, revision: 0, audio, folder, metas, additions: Vec::new() },
+        snapshot: SharedSnapshot {
+            project,
+            revision: 0,
+            audio,
+            folder,
+            metas,
+            additions: Vec::new(),
+            background: None,
+        },
         assets,
     })
 }
@@ -405,7 +428,7 @@ pub(crate) fn collect_take(
     stopped(stop)?;
     let mut audio = AudioPool::new();
     audio.files.insert(asset.meta.path(), data);
-    Ok(AudioAddition { audio, folder })
+    Ok(AudioAddition { audio, folder, at: None })
 }
 
 /// A cached sound when its contents still verify; a corrupt copy is removed.
@@ -477,7 +500,10 @@ pub(crate) fn receive_take(
     let _ = cache.trim(&BTreeSet::from([meta.hash.clone()]));
     let mut audio = AudioPool::new();
     audio.files.insert(meta.path(), Arc::new(data));
-    Ok((Arc::new(Encoded { meta: meta.clone(), path: served, tree, _lease: lease }), AudioAddition { audio, folder }))
+    Ok((
+        Arc::new(Encoded { meta: meta.clone(), path: served, tree, _lease: lease }),
+        AudioAddition { audio, folder, at: None },
+    ))
 }
 
 /// Answer the host's pull until its terminal State. No source path is transmitted or opened.
@@ -500,7 +526,7 @@ pub(crate) fn send_take(
                 sound::send(
                     io,
                     &asset.source(),
-                    (offset, tree),
+                    sound::Range { from: offset, tree, chunks: usize::MAX },
                     |leaves| ClientMessage::UploadTree { protocol: PROTOCOL, leaves },
                     |offset, len| ClientMessage::UploadChunk { protocol: PROTOCOL, offset, len },
                     stop,
@@ -525,14 +551,15 @@ pub(crate) fn send(
     project: &Project,
     assets: &[Arc<Encoded>],
     stop: &AtomicBool,
-) -> Result<(), String> {
+) -> Result<Vec<Arc<Encoded>>, String> {
     let refs = references(project);
-    let selected: Vec<_> = assets.iter().filter(|a| refs.contains(&a.meta.path())).collect();
+    let selected: Vec<_> = assets.iter().filter(|a| refs.contains(&a.meta.path())).cloned().collect();
     let metas: Vec<_> = selected.iter().map(|a| a.meta.clone()).collect();
     manifest(project, &metas)?;
     let total = metas.len();
     if total == 0 {
-        return protocol::write(io, &ServerMessage::Assets { protocol: PROTOCOL, total, manifest: Vec::new() });
+        protocol::write(io, &ServerMessage::Assets { protocol: PROTOCOL, total, manifest: Vec::new() })?;
+        return Ok(selected);
     }
     for page in metas.chunks(PAGE) {
         protocol::write(io, &ServerMessage::Assets { protocol: PROTOCOL, total, manifest: page.to_vec() })?;
@@ -552,14 +579,14 @@ pub(crate) fn send(
                 sound::send(
                     io,
                     &item.source(),
-                    (offset, tree),
+                    sound::Range { from: offset, tree, chunks: usize::MAX },
                     |leaves| ServerMessage::AssetTree { protocol: PROTOCOL, asset, leaves },
                     |offset, len| ServerMessage::AssetChunk { protocol: PROTOCOL, asset, offset, len },
                     stop,
                     |_| {},
                 )?;
             }
-            ClientMessage::AssetsDone { protocol: PROTOCOL } => return Ok(()),
+            ClientMessage::AssetsDone { protocol: PROTOCOL } => return Ok(selected),
             _ => return Err("invalid audio download request".into()),
         }
     }
@@ -590,6 +617,7 @@ fn read_manifest(io: &mut impl Link) -> Result<Vec<Asset>, String> {
     }
     Ok(metas)
 }
+#[cfg(test)]
 pub(crate) fn receive(
     io: &mut impl Link,
     project: Project,
@@ -611,6 +639,29 @@ pub(crate) fn receive_known(
     root: Option<&Path>,
     stop: &AtomicBool,
     known: &Known,
+    progress: impl FnMut(usize, usize),
+) -> Result<SharedSnapshot, String> {
+    receive_with(io, project, revision, (root, stop), known, false, progress)
+}
+/// The initial copy for a joining guest: when more than [`DEFER`] bytes are missing from the
+/// cache, those sounds are left to [`Background`] and the project opens without them.
+pub(crate) fn receive_initial(
+    io: &mut impl Link,
+    project: Project,
+    revision: u64,
+    root: Option<&Path>,
+    stop: &AtomicBool,
+    progress: impl FnMut(usize, usize),
+) -> Result<SharedSnapshot, String> {
+    receive_with(io, project, revision, (root, stop), &Known::new(), true, progress)
+}
+fn receive_with(
+    io: &mut impl Link,
+    project: Project,
+    revision: u64,
+    (root, stop): (Option<&Path>, &AtomicBool),
+    known: &Known,
+    defer: bool,
     mut progress: impl FnMut(usize, usize),
 ) -> Result<SharedSnapshot, String> {
     let metas = read_manifest(io)?;
@@ -631,11 +682,28 @@ pub(crate) fn receive_known(
             folder: None,
             metas,
             additions: Vec::new(),
+            background: None,
         });
     }
-    let total = usize::try_from(total).map_err(|_| too_much())?;
     let root = storage(root)?;
     let cache = Cache::open(root, CACHE_CAP)?;
+    // Sounds the cache lacks (by size; cached contents are verified as they load).
+    let mut later: BTreeSet<usize> = BTreeSet::new();
+    if defer {
+        let lacking: Vec<usize> =
+            (0..metas.len()).filter(|i| metas.get(*i).is_some_and(|m| cache.find(m).is_none())).collect();
+        let bytes: usize = lacking.iter().filter_map(|i| metas.get(*i)).map(|m| m.bytes).sum();
+        if bytes > DEFER {
+            later.extend(lacking);
+        }
+    }
+    let total = metas
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !later.contains(i))
+        .map(|(_, a)| a.bytes as u64)
+        .fold(0, u64::saturating_add);
+    let total = usize::try_from(total).map_err(|_| too_much())?;
     let folder = staging(Some(root), true)?;
     let dir = folder.as_ref().ok_or("audio storage missing")?.path().to_path_buf();
     let mut done = 0;
@@ -651,6 +719,9 @@ pub(crate) fn receive_known(
     progress(0, total);
     let mut audio = AudioPool::new();
     for (index, meta) in metas.iter().enumerate() {
+        if later.contains(&index) {
+            continue;
+        }
         let (path, data) = match cached(&cache, meta, stop)? {
             Some(found) => {
                 report(meta.bytes, &mut progress);
@@ -695,7 +766,119 @@ pub(crate) fn receive_known(
     protocol::write(io, &ClientMessage::AssetsDone { protocol: PROTOCOL })?;
     let _ = cache.trim(&metas.iter().map(|a| a.hash.clone()).collect());
     finish(folder.as_ref(), &project, &metas, stop)?;
-    Ok(SharedSnapshot { project, revision, audio, folder, metas, additions: Vec::new() })
+    let pending: VecDeque<_> = later.into_iter().filter_map(|i| metas.get(i).map(|m| (i, m.clone()))).collect();
+    let background = (!pending.is_empty()).then(|| Background {
+        total: pending.iter().map(|(_, m)| m.bytes).sum(),
+        cache,
+        folder: dir,
+        pending,
+        current: None,
+        done: 0,
+    });
+    Ok(SharedSnapshot { project, revision, audio, folder, metas, additions: Vec::new(), background })
+}
+
+/// The sounds of a guest's initial copy that arrive after the project opened. Each request asks
+/// for at most [`SLICE`] chunks of one sound, between ordinary polls; a finished sound is
+/// verified, linked into the session folder and handed to the view like a published take.
+/// Until then its regions stay silent.
+pub(crate) struct Background {
+    cache: Cache,
+    folder: PathBuf,
+    pending: VecDeque<(usize, Asset)>,
+    current: Option<(usize, sound::Download)>,
+    done: usize,
+    total: usize,
+}
+impl Background {
+    pub fn is_empty(&self) -> bool {
+        self.current.is_none() && self.pending.is_empty()
+    }
+    /// Bytes received and expected in the background, for the view's progress.
+    pub fn progress(&self) -> (usize, usize) {
+        (self.done.min(self.total), self.total)
+    }
+    /// The next request, starting the next sound (from its cached partial copy) when needed.
+    pub fn request(&mut self, seen_revision: u64, stop: &AtomicBool) -> Result<Option<ClientMessage>, String> {
+        if self.current.is_none()
+            && let Some((index, meta)) = self.pending.pop_front()
+        {
+            let download = sound::Download::start(&meta, &self.cache, stop)?;
+            self.done += download.next().0;
+            self.current = Some((index, download));
+        }
+        Ok(self.current.as_ref().map(|(index, download)| {
+            let (offset, tree) = download.next();
+            ClientMessage::Fetch { protocol: PROTOCOL, seen_revision, asset: *index, offset, tree }
+        }))
+    }
+    /// Read the host's answer to the last request. Returns a sound once it is complete.
+    pub fn read(&mut self, io: &mut impl Link, stop: &AtomicBool) -> Result<Option<AudioAddition>, String> {
+        let Self { cache, current, done, folder, .. } = self;
+        let Some((index, download)) = current.as_mut() else {
+            return Err("no shared sound is being received".into());
+        };
+        let index = *index;
+        let parse = Incoming {
+            tree: |m: ServerMessage| match m {
+                ServerMessage::AssetTree { protocol: PROTOCOL, asset, leaves } if asset == index => Some(leaves),
+                _ => None,
+            },
+            chunk: |m: ServerMessage| match m {
+                ServerMessage::AssetChunk { protocol: PROTOCOL, asset, offset, len } if asset == index => {
+                    Some((offset, len))
+                }
+                _ => None,
+            },
+        };
+        download.read(io, cache, &parse, SLICE, stop, |n| *done += n)?;
+        if !download.complete() {
+            return Ok(None);
+        }
+        let Some((_, download)) = current.take() else {
+            return Err("no shared sound is being received".into());
+        };
+        let meta = download.meta.clone();
+        let path = download.finish(cache)?;
+        let data = decode_received(cache, &path, &meta, stop)?;
+        cache.touch(&path);
+        let mut audio = AudioPool::new();
+        audio.files.insert(meta.path(), Arc::new(data));
+        if link_or_copy(&path, &folder.join(meta.path())).is_ok() {
+            return Ok(Some(AudioAddition { audio, folder: None, at: Some(folder.clone()) }));
+        }
+        // The session folder is gone (the view did not keep it): collect into a new one.
+        let fresh = staging(folder.parent(), true)?;
+        let dir = fresh.as_ref().ok_or("audio storage missing")?;
+        link_or_copy(&path, &dir.path().join(meta.path()))?;
+        Ok(Some(AudioAddition { audio, folder: fresh, at: None }))
+    }
+}
+
+/// Bytes a host serves a connection in the background: twice its initial copy, for retries.
+pub(crate) fn background_budget(initial: &[Arc<Encoded>]) -> u64 {
+    initial.iter().map(|a| a.meta.bytes as u64).fold(0, u64::saturating_add).saturating_mul(2)
+}
+/// Serve one background request for a sound of a connection's initial copy.
+pub(crate) fn serve_slice(
+    io: &mut impl Link,
+    initial: &[Arc<Encoded>],
+    (asset, offset, tree): (usize, usize, bool),
+    budget: &mut u64,
+    stop: &AtomicBool,
+) -> Result<(), String> {
+    let item = initial.get(asset).ok_or("invalid audio download request")?;
+    let sent = sound::send(
+        io,
+        &item.source(),
+        sound::Range { from: offset, tree, chunks: SLICE },
+        |leaves| ServerMessage::AssetTree { protocol: PROTOCOL, asset, leaves },
+        |offset, len| ServerMessage::AssetChunk { protocol: PROTOCOL, asset, offset, len },
+        stop,
+        |_| {},
+    )?;
+    *budget = budget.checked_sub(sent as u64).ok_or("too many audio download requests")?;
+    Ok(())
 }
 
 #[cfg(test)]
