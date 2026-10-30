@@ -137,6 +137,7 @@ fn an_actual_midi_project_crosses_tls_in_chunks_and_keeps_its_ids_notes_and_soun
         state: None,
         params: vec![DeviceParam::new("algorithm", 5.0)],
         automation: vec![],
+        clip_host: false,
         extensions: Extensions::default(),
     });
     assert!(project.validate().is_ok());

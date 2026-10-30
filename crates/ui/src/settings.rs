@@ -247,6 +247,9 @@ pub const MAP_MAX_SECONDS: u32 = 10;
 /// The size of the sample map's points, in percent of their size at first: its range and default.
 pub const MAP_DOT_SIZES: (u32, u32) = (25, 400);
 pub const MAP_DOT_SIZE: u32 = 100;
+/// The sizes the map's cluster labels can take, in percent: off, then smaller to full size.
+pub const MAP_LABEL_SIZES: [u32; 4] = [0, 50, 75, 100];
+pub const MAP_LABEL_SIZE: u32 = 100;
 pub const MAP_MAX_SECONDS_RANGE: (u32, u32) = (1, 60);
 pub const PREVIEW_VOLUMES: (i32, i32) = (-48, 6);
 /// The cue volumes a settings file may hold, in dB; the lowest is silence.
@@ -309,10 +312,10 @@ pub struct Settings {
     /// Where Play starts.
     pub play_from: PlayFrom,
     pub device_layout: DeviceLayout,
-    /// Launching a clip in the Session view selects it, so the detail area shows it
+    /// Launching a clip in the Launcher view selects it, so the detail area shows it
     /// (`docs/spec/ui-session-view.md` › Launching and selecting).
     pub select_on_launch: bool,
-    /// The Session mixer's height, the detail area's layout and double-clicks that make clips.
+    /// The Launcher mixer's height, the detail area's layout and double-clicks that make clips.
     pub view: crate::settings::view_settings::ViewSettings,
     /// Whether and where to check for updates (`docs/spec/updates.md`).
     pub updates: crate::settings::update_settings::UpdateSettings,
@@ -323,7 +326,7 @@ pub struct Settings {
     /// The control bar's grid value sets the piano roll's too; otherwise the piano roll keeps
     /// its own.
     pub piano_grid_follows: bool,
-    /// A track's volume and pan as a field or as a knob (Settings › Session and mixer).
+    /// A track's volume and pan as a field or as a knob (Settings › Launcher and mixer).
     pub mixer_controls: MixerControls,
     /// Where plug-in editors open.
     pub plugin_editors: EditorPlacement,
@@ -362,6 +365,9 @@ pub struct Settings {
     pub map_max_seconds: u32,
     /// The sample map's point size, in percent (Size in the map's top bar).
     pub map_dot_size: u32,
+    /// The size of the sample map's cluster labels, in percent of their full size; 0 hides them
+    /// (Labels in the map's top bar, #864).
+    pub map_label_size: u32,
     /// The sample map is in a window of its own (`docs/spec/sample-map.md` › Where the map is
     /// shown), and where that window was: its left, top, width and height in points, on the
     /// whole desktop, so a second screen counts.
@@ -373,6 +379,8 @@ pub struct Settings {
     /// for the default; sample rate and buffer size, 0 for the device's own.
     pub audio_host: String,
     pub audio_device: String,
+    /// Last explicitly applied device per resolved audio host; None means its default.
+    pub audio_devices: std::collections::BTreeMap<String, Option<String>>,
     pub audio_sample_rate: u32,
     pub audio_buffer: u32,
     /// WASAPI exclusive mode; off, so other programs stay heard.
@@ -449,11 +457,13 @@ impl Default for Settings {
             map_hover_preview: true,
             map_max_seconds: MAP_MAX_SECONDS,
             map_dot_size: MAP_DOT_SIZE,
+            map_label_size: MAP_LABEL_SIZE,
             map_window: false,
             map_window_rect: None,
             waveform_db: false,
             audio_host: String::new(),
             audio_device: String::new(),
+            audio_devices: Default::default(),
             audio_sample_rate: 0,
             audio_buffer: 0,
             audio_exclusive: false,
@@ -473,6 +483,23 @@ impl Default for Settings {
 }
 
 impl Settings {
+    pub(crate) fn remember_output(&mut self, choice: &suhina_session::OutputChoice, default_host: Option<&str>) {
+        let Some(host) = choice.host.as_deref().or(default_host) else { return };
+        let key = host.trim().to_lowercase();
+        if self.audio_devices.len() < 64 || self.audio_devices.contains_key(&key) {
+            self.audio_devices.insert(key, choice.device.clone());
+        }
+    }
+
+    pub(crate) fn remembered_device(&self, host: Option<&str>, default_host: Option<&str>) -> Option<Option<String>> {
+        let key = host.or(default_host)?.trim().to_lowercase();
+        let active = self.output_choice();
+        if active.host.as_deref().or(default_host).is_some_and(|h| h.eq_ignore_ascii_case(&key)) {
+            return Some(active.device);
+        }
+        self.audio_devices.get(&key).cloned()
+    }
+
     /// The audio output these settings choose.
     pub fn output_choice(&self) -> suhina_session::OutputChoice {
         let text = |s: &str| (!s.trim().is_empty()).then(|| s.trim().to_string());
@@ -563,7 +590,7 @@ impl Settings {
             EditorPlacement::DeviceView => "device",
         };
         format!(
-            "# Suhina settings; changed from Options > Settings.\nanimations = {}\ntrack_headers = {headers}\nrenderer = {graphics}\nsample_stacking = {}\nmidi_stacking = {}\nopen_projects = {on_open}\nat_start = {at_start}\nstart_template = {}\nstop = {stop}\nplay_start = {play_from}\ndevice_chain = {devices}\nmixer_controls = {mixer}\nselect_on_launch = {select_on_launch}\nplugin_editors = {editors}\ntheme = {}\nprojects_folder = {}\ntemplates_folder = {}\nnam_models_folder = {}\nirs_folder = {}\nthemes_folder = {}\nbrowser = {}\nbrowser_side = {browser_side}\nbrowser_width = {}\npreview_autoplay = {}\npreview_volume = {}\ndrop_files = {drop}\nwarp_mode = {}\nmap_layout = {map_layout}\nmap_hover_preview = {}\nmap_max_seconds = {}\nmap_dot_size = {}\nmap_window = {}\nmap_window_rect = {}\naudio_host = {}\naudio_device = {}\naudio_sample_rate = {}\naudio_buffer = {}\naudio_exclusive = {}\naudio_cue_pair = {}\naudio_cue_volume = {}\naudio_input = {}\nzoom = {}\nwaveform_scale = {waveform_scale}\npiano_roll_top = {piano_top}\npiano_roll_grid = {piano_grid}\npiano_roll_toolbar = {piano_toolbar}\nbackup = {}\nbackup_clean_up = {}\n",
+            "# Suhina settings; changed from Options > Settings.\nanimations = {}\ntrack_headers = {headers}\nrenderer = {graphics}\nsample_stacking = {}\nmidi_stacking = {}\nopen_projects = {on_open}\nat_start = {at_start}\nstart_template = {}\nstop = {stop}\nplay_start = {play_from}\ndevice_chain = {devices}\nmixer_controls = {mixer}\nselect_on_launch = {select_on_launch}\nplugin_editors = {editors}\ntheme = {}\nprojects_folder = {}\ntemplates_folder = {}\nnam_models_folder = {}\nirs_folder = {}\nthemes_folder = {}\nbrowser = {}\nbrowser_side = {browser_side}\nbrowser_width = {}\npreview_autoplay = {}\npreview_volume = {}\ndrop_files = {drop}\nwarp_mode = {}\nmap_layout = {map_layout}\nmap_hover_preview = {}\nmap_max_seconds = {}\nmap_dot_size = {}\nmap_label_size = {}\nmap_window = {}\nmap_window_rect = {}\naudio_host = {}\naudio_device = {}\naudio_sample_rate = {}\naudio_buffer = {}\naudio_exclusive = {}\naudio_cue_pair = {}\naudio_cue_volume = {}\naudio_input = {}\nzoom = {}\nwaveform_scale = {waveform_scale}\npiano_roll_top = {piano_top}\npiano_roll_grid = {piano_grid}\npiano_roll_toolbar = {piano_toolbar}\nbackup = {}\nbackup_clean_up = {}\n",
             on(self.animations),
             on(self.sample_stacking),
             on(self.midi_stacking),
@@ -582,6 +609,7 @@ impl Settings {
             on(self.map_hover_preview),
             self.map_max_seconds,
             self.map_dot_size,
+            self.map_label_size,
             on(self.map_window),
             self.map_window_rect.map_or_else(|| "none".to_string(), |[x, y, w, h]| format!("{x}, {y}, {w}, {h}")),
             self.audio_host,
@@ -623,6 +651,7 @@ impl Settings {
             + &format!("auto_arm = {}\n", if self.auto_arm { "on" } else { "off" })
             + &format!("setting_descriptions = {}\n", self.setting_descriptions.param())
             + &self.updates.to_text()
+            + &format!("audio_devices = {}\n", serde_json::json!(self.audio_devices))
             + &self.midi_inputs_off.iter().map(|port| format!("midi_input_off = {port}\n")).collect::<String>()
     }
 
@@ -717,6 +746,9 @@ impl Settings {
                     settings.map_dot_size =
                         size.parse::<u32>().unwrap_or(MAP_DOT_SIZE).clamp(MAP_DOT_SIZES.0, MAP_DOT_SIZES.1);
                 }
+                ("map_label_size", size) if size.parse::<u32>().is_ok_and(|s| MAP_LABEL_SIZES.contains(&s)) => {
+                    settings.map_label_size = size.parse::<u32>().unwrap_or(MAP_LABEL_SIZE);
+                }
                 ("map_window", "on" | "off") => settings.map_window = value == "on",
                 ("map_window_rect", "none") => settings.map_window_rect = None,
                 ("map_window_rect", rect) if parse_window_rect(rect).is_some() => {
@@ -732,6 +764,22 @@ impl Settings {
                 }
                 ("audio_host", host) => settings.audio_host = host.to_string(),
                 ("audio_device", device) => settings.audio_device = device.to_string(),
+                ("audio_devices", value) if value.len() <= 32_768 => {
+                    if let Ok(devices) =
+                        serde_json::from_str::<std::collections::BTreeMap<String, Option<String>>>(value)
+                    {
+                        settings.audio_devices = devices
+                            .into_iter()
+                            .filter(|(host, device)| {
+                                host.len() <= 256 && device.as_ref().is_none_or(|d| d.len() <= 1024)
+                            })
+                            .take(64)
+                            .map(|(host, device)| (host.to_lowercase(), device))
+                            .collect();
+                    } else {
+                        warnings.push(format!("settings line {}: invalid audio device history", number + 1));
+                    }
+                }
                 ("audio_sample_rate", rate) if rate.parse::<u32>().is_ok_and(|r| r <= MAX_SAMPLE_RATE) => {
                     settings.audio_sample_rate = rate.parse().unwrap_or(0);
                 }
