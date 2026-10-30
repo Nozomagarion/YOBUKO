@@ -733,8 +733,32 @@ fn offer_take(io: &mut impl Write, meta: &assets::Asset, sequence: u64, base: u6
     )
     .unwrap();
 }
-fn upload_asset() -> Arc<assets::Encoded> {
-    assets::encode_take(&suhina_engine::AudioData { sample_rate: 8000, channels: 1, samples: vec![0.3; 8000] }).unwrap()
+fn upload_data() -> Arc<suhina_engine::AudioData> {
+    Arc::new(suhina_engine::AudioData { sample_rate: 8000, channels: 1, samples: vec![0.3; 8000] })
+}
+fn upload_asset(root: &std::path::Path) -> Arc<assets::Encoded> {
+    assets::encode_take(&upload_data(), Some(root), &AtomicBool::new(false)).unwrap()
+}
+/// Session folders in a storage root; the sound cache and served copies are not sessions.
+fn sessions(root: &std::path::Path) -> usize {
+    std::fs::read_dir(root)
+        .unwrap()
+        .filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().starts_with("session-"))
+        .count()
+}
+/// Send a take's bytes as a guest would after the host's first upload request.
+fn stream_upload(io: &mut impl Link, asset: &assets::Encoded, path: &std::path::Path) {
+    let source = crate::sound::Source { meta: &asset.meta, path, tree: &asset.tree };
+    crate::sound::send(
+        io,
+        &source,
+        (0, true),
+        |leaves| ClientMessage::UploadTree { protocol: PROTOCOL, leaves },
+        |offset, len| ClientMessage::UploadChunk { protocol: PROTOCOL, offset, len },
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
 }
 fn empty_assets(io: &mut impl Read) {
     assert!(
@@ -745,7 +769,8 @@ fn empty_assets(io: &mut impl Read) {
 fn upload_preflight_refuses_bad_offers_before_bytes_and_accepted_retries_add_exactly_one_clip() {
     let (mut host, invite, root) = guest_upload_host();
     let mut io = admitted_upload(&invite);
-    let asset = upload_asset();
+    let guest = tempfile::tempdir().unwrap();
+    let asset = upload_asset(guest.path());
     for (seq, base, track) in [(0, 0, 1), (2, 0, 1), (1, 9, 1), (1, 0, 2)] {
         offer_take(&mut io, &asset.meta, seq, base, 0, track);
         assert!(matches!(read_state(&mut io), ServerMessage::State { accepted: Some(false), .. }));
@@ -766,27 +791,27 @@ fn upload_preflight_refuses_bad_offers_before_bytes_and_accepted_retries_add_exa
     }
     let audio = host.take_audio();
     assert_eq!(audio.len(), 1);
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    assert_eq!(sessions(root.path()), 1);
     offer_take(&mut io, &asset.meta, 1, 0, 1, 1);
     assert!(
         matches!(read_state(&mut io),ServerMessage::State { accepted:Some(true),controls,operations,.. } if controls.revision==1 && operations.is_empty())
     );
     host.poll();
     assert!(host.take_audio().is_empty());
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    assert_eq!(sessions(root.path()), 1);
     drop(audio);
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0, "an unclaimed UI lease cleans up");
+    assert_eq!(sessions(root.path()), 0, "an unclaimed UI lease cleans up");
 }
 
 #[test]
 fn editing_during_upload_never_holds_the_host_mutex_and_refuses_the_finished_stale_take() {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
     let (mut host, invite, root) = guest_upload_host();
     let mut io = admitted_upload(&invite);
-    let asset = upload_asset();
+    let guest = tempfile::tempdir().unwrap();
+    let asset = upload_asset(guest.path());
     offer_take(&mut io, &asset.meta, 1, 0, 0, 1);
     let first = protocol::read::<ServerMessage>(&mut io).unwrap();
-    assert!(matches!(first, ServerMessage::UploadRequest { offset: 0, .. }));
+    assert!(matches!(first, ServerMessage::UploadRequest { offset: 0, tree: true, .. }));
     host.execute("multiplayer.edit",&json!({"base_revision":0,"edit":serde_json::to_string(&WireEdit::Rename { track:1,name:"While receiving".into() }).unwrap()})).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while host.controls.as_ref().unwrap().revision < 1 && Instant::now() < deadline {
@@ -794,22 +819,11 @@ fn editing_during_upload_never_holds_the_host_mutex_and_refuses_the_finished_sta
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(host.controls.as_ref().unwrap().revision, 1, "host edits proceed while peer waits for chunk zero");
-    for (i, chunk) in asset.bytes.chunks(16384).enumerate() {
-        if i > 0 {
-            assert!(
-                matches!(protocol::read::<ServerMessage>(&mut io).unwrap(),ServerMessage::UploadRequest { offset,.. } if offset==i*16384)
-            );
-        }
-        protocol::write(
-            &mut io,
-            &ClientMessage::UploadChunk { protocol: PROTOCOL, offset: i * 16384, data: STANDARD.encode(chunk) },
-        )
-        .unwrap();
-    }
+    stream_upload(&mut io, &asset, &asset.path);
     assert!(
         matches!(read_state(&mut io),ServerMessage::State { accepted:Some(false),controls,.. } if controls.revision==1)
     );
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    assert_eq!(sessions(root.path()), 0);
     assert!(host.take_audio().is_empty());
     offer_take(&mut io, &asset.meta, 1, 1, 1, 1);
     assert!(
@@ -820,28 +834,35 @@ fn editing_during_upload_never_holds_the_host_mutex_and_refuses_the_finished_sta
 
 #[test]
 fn a_bad_hash_upload_disconnects_without_publishing_or_leaving_files() {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
     let (mut host, invite, root) = guest_upload_host();
     let mut io = admitted_upload(&invite);
-    let asset = upload_asset();
+    let guest = tempfile::tempdir().unwrap();
+    let asset = upload_asset(guest.path());
     offer_take(&mut io, &asset.meta, 1, 0, 0, 1);
-    let mut bytes = asset.bytes.clone();
+    assert!(matches!(
+        protocol::read::<ServerMessage>(&mut io).unwrap(),
+        ServerMessage::UploadRequest { offset: 0, .. }
+    ));
+    let mut bytes = std::fs::read(&asset.path).unwrap();
     bytes[100] ^= 1;
-    for (i, chunk) in bytes.chunks(16384).enumerate() {
-        assert!(
-            matches!(protocol::read::<ServerMessage>(&mut io).unwrap(),ServerMessage::UploadRequest { offset,.. } if offset==i*16384)
-        );
-        protocol::write(
-            &mut io,
-            &ClientMessage::UploadChunk { protocol: PROTOCOL, offset: i * 16384, data: STANDARD.encode(chunk) },
-        )
-        .unwrap();
-    }
+    let altered = guest.path().join("altered.wav");
+    std::fs::write(&altered, &bytes).unwrap();
+    // The upload may be cut by the host as soon as the altered chunk fails verification.
+    let source = crate::sound::Source { meta: &asset.meta, path: &altered, tree: &asset.tree };
+    let _ = crate::sound::send(
+        &mut io,
+        &source,
+        (0, true),
+        |leaves| ClientMessage::UploadTree { protocol: PROTOCOL, leaves },
+        |offset, len| ClientMessage::UploadChunk { protocol: PROTOCOL, offset, len },
+        &AtomicBool::new(false),
+        |_| {},
+    );
     assert!(protocol::read::<ServerMessage>(&mut io).is_err());
     host.poll();
     assert_eq!(host.controls.as_ref().unwrap().revision, 0);
     assert!(host.take_audio().is_empty());
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    assert_eq!(sessions(root.path()), 0);
 }
 
 #[test]
@@ -851,8 +872,8 @@ fn a_full_ui_queue_keeps_the_sound_lease_until_its_operation_can_be_delivered_wi
     project.tracks[0].content = suhina_model::ContentKinds { notes: false, audio: true };
     project.contents[0].lanes[0].data = suhina_model::LaneData::Audio(suhina_model::AudioRegion::new(""));
     let mut state = canonical(project);
-    let asset = upload_asset();
-    let collected = assets::collect_take(&asset, Some(root.path()), &AtomicBool::new(false)).unwrap();
+    let asset = upload_asset(root.path());
+    let collected = assets::collect_take(&asset, upload_data(), Some(root.path()), &AtomicBool::new(false)).unwrap();
     let path = collected.folder().unwrap().to_path_buf();
     state.commit_take(Host::owner(), 1, 0, (1, 0.0), asset, Some(collected)).unwrap();
     let (send, receive) = mpsc::sync_channel(1);

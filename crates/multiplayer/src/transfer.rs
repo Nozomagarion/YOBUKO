@@ -1,13 +1,15 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+//! The portable project document: offered with its size and SHA-256, then streamed after one
+//! request as chunk headers each followed by the chunk's raw bytes.
+
 use crate::protocol::{self, ClientMessage, PROTOCOL, ServerMessage};
-use base64::{Engine as _, engine::general_purpose::STANDARD};
 use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-const CHUNK: usize = 4096;
+const CHUNK: usize = 32 * 1024;
 fn hash(bytes: &[u8]) -> String {
     Sha256::digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -26,16 +28,17 @@ pub fn send(io: &mut (impl Read + Write), bytes: &[u8], revision: u64, stop: &At
             sha256: hash(bytes),
         },
     )?;
+    match protocol::read::<ClientMessage>(io)? {
+        ClientMessage::Download { protocol: PROTOCOL, offset: 0 } => {}
+        _ => return Err("invalid MIDI download request".into()),
+    }
     for (index, chunk) in bytes.chunks(CHUNK).enumerate() {
         if stop.load(Ordering::Relaxed) {
             return Err("session stopped".into());
         }
         let offset = index.checked_mul(CHUNK).ok_or("invalid transfer offset")?;
-        match protocol::read::<ClientMessage>(io)? {
-            ClientMessage::Download { protocol: PROTOCOL, offset: requested } if requested == offset => {}
-            _ => return Err("invalid MIDI download request".into()),
-        }
-        protocol::write(io, &ServerMessage::Chunk { protocol: PROTOCOL, offset, data: STANDARD.encode(chunk) })?;
+        protocol::write(io, &ServerMessage::Chunk { protocol: PROTOCOL, offset, len: chunk.len() })?;
+        io.write_all(chunk).and_then(|_| io.flush()).map_err(|e| format!("connection write failed: {e}"))?;
     }
     Ok(())
 }
@@ -58,28 +61,25 @@ pub fn receive(
     {
         return Err("invalid MIDI document offer".into());
     }
-    let mut document = Vec::with_capacity(bytes);
-    while document.len() < bytes {
+    protocol::write(io, &ClientMessage::Download { protocol: PROTOCOL, offset: 0 })?;
+    let mut document = vec![0; bytes];
+    let mut offset = 0;
+    while offset < bytes {
         if stop.load(Ordering::Relaxed) {
             return Err("session stopped".into());
         }
-        let offset = document.len();
-        protocol::write(io, &ClientMessage::Download { protocol: PROTOCOL, offset })?;
-        let ServerMessage::Chunk { protocol: PROTOCOL, offset: received, data } = protocol::read::<ServerMessage>(io)?
+        let ServerMessage::Chunk { protocol: PROTOCOL, offset: received, len } = protocol::read::<ServerMessage>(io)?
         else {
             return Err("invalid MIDI document chunk".into());
         };
-        if received != offset || data.len() > CHUNK.div_ceil(3) * 4 {
+        if received != offset || len != CHUNK.min(bytes - offset) {
             return Err("invalid MIDI chunk offset or size".into());
         }
-        let chunk = STANDARD.decode(data).map_err(|_| "invalid MIDI chunk encoding")?;
-        let expected = CHUNK.min(bytes - offset);
-        if chunk.len() != expected {
-            return Err("incomplete or oversized MIDI chunk".into());
-        }
-        document.extend_from_slice(&chunk);
-        if document.len().is_multiple_of(256 * 1024) || document.len() == bytes {
-            progress(document.len(), bytes);
+        let part = document.get_mut(offset..offset + len).ok_or("invalid MIDI chunk offset or size")?;
+        io.read_exact(part).map_err(|e| format!("incomplete MIDI chunk: {e}"))?;
+        offset += len;
+        if offset.is_multiple_of(256 * 1024) || offset == bytes {
+            progress(offset, bytes);
         }
     }
     if hash(&document) != sha256 {

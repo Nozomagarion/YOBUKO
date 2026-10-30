@@ -121,8 +121,8 @@ impl Canonical {
                 return Err("known sound metadata changed".into());
             }
         } else if self.pending_audio.len() >= 16
-            || self.assets.len() >= 64
-            || self.assets.iter().map(|a| a.meta.bytes).sum::<usize>() + meta.bytes > assets::MAX_TOTAL
+            || self.assets.len() >= assets::MAX_SOUNDS
+            || self.assets.iter().map(|a| a.meta.bytes as u64).sum::<u64>() + meta.bytes as u64 > assets::MAX_TOTAL
         {
             return Err("session audio budget reached or view is busy".into());
         }
@@ -314,8 +314,8 @@ impl Service {
                     if region.file.is_empty() {
                         continue;
                     }
-                    if wanted.files.len() >= 64 && !wanted.files.contains_key(&region.file) {
-                        return Err("at most 64 source sounds can be shared".into());
+                    if wanted.files.len() >= assets::MAX_SOUNDS && !wanted.files.contains_key(&region.file) {
+                        return Err(format!("at most {} source sounds can be shared", assets::MAX_SOUNDS).into());
                     }
                     let data = audio
                         .files
@@ -347,8 +347,8 @@ impl Service {
         if self.sending.is_some() {
             return Err("a take is already being published".into());
         }
-        if audio.samples.len() > (assets::MAX_ASSET - 128) / 4 {
-            return Err("the take exceeds 64 MiB".into());
+        if audio.samples.len() > (assets::MAX_ASSET - 68) / 4 {
+            return Err(format!("the take exceeds {} MiB", assets::MAX_ASSET >> 20).into());
         }
         self.selected_take = Some(audio);
         Ok(())
@@ -953,7 +953,7 @@ fn host(
                 }
                 Input::Publish { base, track, start, audio } => {
                     let result =
-                        publish(&canonical, sequence, base, track, start, &audio, (resources.1.as_deref(), stop));
+                        publish(&canonical, sequence, base, (track, start), &audio, (resources.1.as_deref(), stop));
                     events.try_send(Event::Upload(None)).map_err(|_| "multiplayer view closed")?;
                     result
                 }
@@ -1045,18 +1045,18 @@ fn publish(
     canonical: &Mutex<Canonical>,
     sequence: u64,
     base: u64,
-    track: u32,
-    start: f64,
-    audio: &suhina_engine::AudioData,
+    (track, start): (u32, f64),
+    audio: &Arc<suhina_engine::AudioData>,
     storage: (Option<&std::path::Path>, &AtomicBool),
 ) -> Result<(), String> {
-    let asset = assets::encode_take(audio)?;
+    let asset = assets::encode_take(audio, storage.0, storage.1)?;
     let exists = {
         let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
         state.check_take(Host::owner(), sequence, base, (track, start), &asset.meta)?;
         state.assets.iter().any(|a| a.meta.hash == asset.meta.hash)
     };
-    let collected = if exists { None } else { Some(assets::collect_take(&asset, storage.0, storage.1)?) };
+    let collected =
+        if exists { None } else { Some(assets::collect_take(&asset, Arc::clone(audio), storage.0, storage.1)?) };
     canonical.lock().unwrap_or_else(PoisonError::into_inner).commit_take(
         Host::owner(),
         sequence,
@@ -1286,8 +1286,8 @@ fn prepare_take(
                 if stop.load(Ordering::Relaxed) {
                     return Err("session stopped".into());
                 }
-                let asset = assets::encode_take(&audio)?;
-                let collected = assets::collect_take(&asset, root.as_deref(), &stop)?;
+                let asset = assets::encode_take(&audio, root.as_deref(), &stop)?;
+                let collected = assets::collect_take(&asset, Arc::clone(&audio), root.as_deref(), &stop)?;
                 Ok(PreparedTake { base, track, start, asset, audio: collected })
             })();
             let _ = send.try_send(prepared);

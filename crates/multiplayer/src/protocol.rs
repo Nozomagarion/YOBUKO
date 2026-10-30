@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 14;
+pub const PROTOCOL: u16 = 15;
 pub const COPY_FORMAT: u16 = 3;
 
 pub(crate) fn engine_revision() -> Result<String, String> {
@@ -267,10 +267,16 @@ pub enum ClientMessage {
         protocol: u16,
         offset: usize,
     },
+    /// Ask for one offered sound from a whole-chunk offset; `tree` when the guest has no tree.
     AssetDownload {
         protocol: u16,
         asset: usize,
         offset: usize,
+        tree: bool,
+    },
+    /// The guest holds every offered sound (from its cache or just received).
+    AssetsDone {
+        protocol: u16,
     },
     Publish {
         protocol: u16,
@@ -281,10 +287,16 @@ pub enum ClientMessage {
         start: f64,
         asset: crate::assets::Asset,
     },
+    /// Followed by `len` raw bytes of the sound.
     UploadChunk {
         protocol: u16,
         offset: usize,
-        data: String,
+        len: usize,
+    },
+    /// Followed by `leaves` 32-byte BLAKE3 chaining values, one per chunk.
+    UploadTree {
+        protocol: u16,
+        leaves: usize,
     },
     Poll {
         protocol: u16,
@@ -312,6 +324,7 @@ pub enum ServerMessage {
     UploadRequest {
         protocol: u16,
         offset: usize,
+        tree: bool,
     },
     Project {
         protocol: u16,
@@ -320,20 +333,30 @@ pub enum ServerMessage {
         bytes: usize,
         sha256: String,
     },
+    /// Followed by `len` raw bytes of the document.
     Chunk {
         protocol: u16,
         offset: usize,
-        data: String,
+        len: usize,
     },
+    /// One page of the sound manifest; `total` entries arrive in consecutive pages.
     Assets {
         protocol: u16,
+        total: usize,
         manifest: Vec<crate::assets::Asset>,
     },
+    /// Followed by `len` raw bytes of the sound.
     AssetChunk {
         protocol: u16,
         asset: usize,
         offset: usize,
-        data: String,
+        len: usize,
+    },
+    /// Followed by `leaves` 32-byte BLAKE3 chaining values, one per chunk.
+    AssetTree {
+        protocol: u16,
+        asset: usize,
+        leaves: usize,
     },
     State {
         protocol: u16,

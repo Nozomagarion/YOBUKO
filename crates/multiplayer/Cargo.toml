@@ -12,7 +12,6 @@ suhina-collaboration.workspace = true
 suhina-session.workspace = true
 suhina-model.workspace = true
 suhina-engine.workspace = true
-hound.workspace = true
 blake3 = "1"
 tempfile = "3"
 suhina-project-file.workspace = true
@@ -29,6 +28,8 @@ iroh = { version = "1.4", default-features = false, features = ["tls-ring"] }
 tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }  # MIT
 
 [dev-dependencies]
+# Checks that the streamed WAV copy is byte-identical to hound's canonical float WAV.
+hound.workspace = true
 rtrb.workspace = true
 suhina-media.workspace = true
 
