@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/fork/banner.svg" alt="Suhina Multiplayer + DJ — Create together. Prepare the set. Take it live." width="100%">
+  <img src="assets/fork/banner.svg" alt="YOBUKO Multiplayer + DJ — Create together. Prepare the set. Take it live." width="100%">
 </p>
 
 <p align="center">
@@ -8,16 +8,28 @@
   <a href="https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml?query=branch%3Afeature%2Fmultiplayer"><img src="https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml/badge.svg?branch=feature%2Fmultiplayer" alt="Fork validation"></a>
 </p>
 
-<p align="center"><a href="README.md">Français / product vision</a> · <a href="#what-you-can-try">Try the prototype</a> · <a href="#progress-you-can-audit">Progress</a> · <a href="#standing-on-the-work-of-others">Credits</a> · <a href="docs/fork-distribution.md">Updates</a></p>
+<p align="center"><a href="README.md">Français / product vision</a> · <a href="#why-yobuko">Why YOBUKO</a> · <a href="#what-you-can-try">Try the prototype</a> · <a href="#progress-you-can-audit">Progress</a> · <a href="#standing-on-the-work-of-others">Credits</a> · <a href="docs/fork-distribution.md">Updates</a></p>
 
 **One place to make music together, prepare a set and perform it.** That is the ambition of
-this independent fork. It combines Suhina's native music production foundation with a custom
+YOBUKO, an independent fork. It combines Suhina's native music production foundation with a custom
 collaboration layer and DJ preparation using selected rbxport code.
 
 The destination is a complete production-to-live workflow. The current build is an experimental
 prototype: LAN sessions share a bounded copy of an open MIDI project or a four-track starter, and the DJ workspace provides a
 local audio catalog, analysis and two original-speed A/B decks. Full project coediting, direct shared-tab recording, automatic tempo sync
 and USB export are future work. There is no common public release channel yet.
+
+## Why YOBUKO
+
+**YOBUKO (呼子)** is the app's name. In Japanese folklore, **Yamabiko (山彦)** is the yōkai of
+the echo, a mountain spirit that answers whoever calls into the valley; in several regions it
+was also called *yobuko*, "the calling child". That is the metaphor for the multiplayer side
+of this project: **one musician sends out an idea, another one answers it.** The variant name
+was chosen because a music app called "Yamabiko" already exists on the App Store.
+
+YOBUKO is built on [Suhina](https://github.com/suhina-daw/suhina-daw) and keeps its credits;
+internal machine names (`suhina-*` crates and binaries) are unchanged for now so upstream
+Suhina updates keep merging cleanly.
 
 ## The workflow we are building
 

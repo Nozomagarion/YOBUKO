@@ -23,6 +23,25 @@ cover; never infer success from a queued or running job. Summarize the same conc
 conversation and link this file. Updating this file during work does not imply unattended
 background monitoring. Preserve the owner's decision to defer physical two-computer tests.
 
+## Fork product name: YOBUKO
+
+The owner renamed this fork's application **YOBUKO** (呼子), after the Japanese echo yōkai
+Yamabiko (山彦), of which *yobuko* is a traditional regional name: one musician sends out an
+idea, another answers. "Yamabiko" itself is not used because a music app with that name
+already exists on the App Store. The story is told in [`README.md`](README.md) › Pourquoi
+YOBUKO.
+
+- In the fork's own user-facing text (READMEs, guides, `SUIVI_PROJET.md`, release notes, fork
+  banners, new fork UI strings), call the application **YOBUKO**.
+- **Suhina** remains the name of the upstream project this app is built on: credit it as such
+  ("YOBUKO, built on Suhina") and never remove or rewrite its credits, notices or
+  `UPSTREAM_README.md`. rbxport keeps its credits too.
+- Machine names stay as they are for now (`suhina-*` crates, binaries, bundle ids, data
+  folders, file formats, protocol identifiers) so upstream merges and existing installs keep
+  working. Renaming those is a separate, explicit task.
+- The rest of this file still says "Suhina" where it describes the upstream engine and its
+  rules; those rules apply unchanged to YOBUKO.
+
 ## 1. Golden rules
 
 1. **Clean-room (outranks everything).** Follow [`CONTRIBUTING.md`](CONTRIBUTING.md) › Clean-room.

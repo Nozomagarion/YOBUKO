@@ -1,4 +1,7 @@
-# Studio + Multijoueur + DJ
+# YOBUKO 呼子 — Studio + Multijoueur + DJ
+
+YOBUKO tire son nom d'un autre nom du **Yamabiko**, le yōkai japonais de l'écho : tu lances
+un son, un autre musicien te répond. [Pourquoi ce nom](README.md#pourquoi-yobuko-).
 
 La présentation principale est désormais **en français**, centrée sur l'ambition du projet :
 réunir la production musicale, la création à plusieurs et la préparation DJ dans une seule
