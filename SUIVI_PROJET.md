@@ -1,5 +1,10 @@
 # Où en est notre application ?
 
+## Nouveau nom — 30 octobre 2026
+
+L’app s’appelle désormais **YOBUKO** (nom traditionnel du Yamabiko, yōkai de l’écho) ; les noms
+techniques `suhina-*` restent inchangés.
+
 ## Plugins dans les sessions partagées — 30 octobre 2026 (branche `feature/online`)
 
 **But :** pouvoir partager un vrai projet, avec ses effets et ses plugins.
