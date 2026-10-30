@@ -1121,10 +1121,14 @@ impl Session {
     pub fn sync_device_files(&mut self) {
         // Paths still attached to devices, by kind.
         let mut need: HashMap<String, String> = HashMap::new();
-        for track in &self.project.tracks {
-            let Some(channel) = track.channel.and_then(|ch| self.project.channel(ch)) else {
-                continue;
-            };
+        // Every track's channel and Main's: a file-backed device on Main loads as one on a track.
+        let channels = self
+            .project
+            .tracks
+            .iter()
+            .filter_map(|track| track.channel.and_then(|ch| self.project.channel(ch)))
+            .chain(self.project.main_channel());
+        for channel in channels {
             for device in &channel.devices {
                 let suhina_model::DeviceKind::Builtin(id) = &device.kind else { continue };
                 if !suhina_device_registry::is_file_device(id) {

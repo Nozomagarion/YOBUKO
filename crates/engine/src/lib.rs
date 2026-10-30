@@ -860,6 +860,9 @@ impl Renderer {
         // wrap lands on its exact frame. Commands are applied first: they can start the
         // transport or move it, which changes where the loop end falls.
         while !out.is_empty() {
+            // A jump due at the loop end is made before the wrap, else the wrap moves the
+            // playhead to the loop start first and the jump waits for a boundary it has passed.
+            self.jump_if_due();
             self.wrap_loop();
             self.drain_commands();
             self.jump_if_due();

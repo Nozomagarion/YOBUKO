@@ -1505,8 +1505,6 @@ impl Renderer {
         launcher.monitor.running.store(false, Ordering::Relaxed);
     }
 
-    /// Moves the play start marker to `beat`; while running, playback jumps there. Launches and
-    /// a scene tempo still waiting are queued again for the next boundary from the new beat.
     /// Moves the play start marker without moving playback (#657).
     fn set_start(&mut self, beat: f64) {
         if !beat.is_finite() {
@@ -1556,6 +1554,8 @@ impl Renderer {
         }
     }
 
+    /// Moves the play start marker to `beat`; while running, playback jumps there. Launches and
+    /// a scene tempo still waiting are queued again for the next boundary from the new beat.
     fn set_position(&mut self, beat: f64) {
         if !beat.is_finite() {
             return;

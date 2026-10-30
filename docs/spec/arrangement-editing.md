@@ -620,12 +620,12 @@ launches land on the arrangement's bars.
 
 **A jump while playing** ends the notes that sound (with their release) and the audio clips that
 play, and plays on from the new beat as a start would: a note that sounds there is chased, whether
-the jump moves the marker (a click on the ruler, `transport.setPosition`) or only the playhead
+the jump moves the marker (a click on the ruler, `transport.jump`) or only the playhead
 (`Locate`, when the audio output is opened again); a loop's wrap is not a jump and chases nothing. Launches and a scene tempo that were
 waiting are queued again for the next boundary from the new beat. Time-stretched clips are
 silent until the stretch worker has caught up with the new place (about one block in practice).
 
-**In the Arrangement view** a click on the ruler runs `transport.setPosition`: the beat under the
+**In the Arrangement view** a click on the ruler runs `transport.jump`: the beat under the
 pointer, on [the grid](#the-grid) (Alt held, or the grid `none`: free, to a thousandth of a beat).
 The marker is a small triangle hanging from the ruler's lower edge; the playhead is a line through
 the ruler and the lanes, at the marker while stopped (measurements in

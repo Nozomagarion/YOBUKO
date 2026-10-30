@@ -553,6 +553,6 @@ does with it: reads a file, files or a folder, writes one, a library item or pla
 `confine()` checks every one by that type; the files commands write have each their own rule. A
 test gives every `Path` parameter a path outside the roots and fails when `confine()` lets it
 through, and fails for a text parameter named like a file or a folder (`path`, `paths`, `folder`,
-`file`, `to`, `item`, `preset`, `sd`, `output`, `place`) that is not a `Path`, so a new command
+`file`, `to`, `item`, `items`, `preset`, `sd`, `output`, `place`) that is not a `Path`, so a new command
 cannot take a path unchecked. Which commands an agent may not run is on each command's spec
 (`Policy::agents`: denied, or not to an agent attached to the app). `library.copyTo` reads every file of its `items` below the read root and copies them only into a `folder` below the write root (#865); `library.moveTo` is checked the same way and is not open to an agent attached to the app, since a moved file is gone from where it was (#943).
