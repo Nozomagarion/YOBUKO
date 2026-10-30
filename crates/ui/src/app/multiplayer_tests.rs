@@ -102,6 +102,17 @@ fn two_desktop_projects_apply_confirmed_controls_and_unlock_on_disconnect() {
     assert!(guest.multiplayer.bound.is_none());
     assert_eq!(guest.projects.get(remote).unwrap().project().tracks[0].name, "From the other computer");
     assert!(guest.projects.execute("track.rename", &json!({"track":1,"name":"Retained"})).is_ok());
+    // The guest is told the host left on purpose, not that the network failed.
+    let message = guest.multiplayer.error.clone().unwrap_or_default();
+    assert!(message.starts_with("The host ended the session"), "{message}");
+}
+
+#[test]
+fn the_status_line_names_a_reconnection() {
+    assert_eq!(super::status_text("reconnecting"), "Reconnecting…");
+    assert_eq!(super::status_text("connected"), "Connected");
+    assert_eq!(super::status_text("hosting"), "Hosting");
+    assert_eq!(super::status_text("something new"), "something new");
 }
 
 #[test]

@@ -51,7 +51,7 @@ the shared transport or null while unlinked. `ClientMessage::Transport {protocol
 request}` carries `{"action":"link","linked":bool}`, `{"action":"play","beat":n}`,
 `{"action":"stop"}` or `{"action":"seek","beat":n}`; the reply's `accepted` and `error` report a
 refusal. Unknown fields stay refused everywhere. Protocol 14 and ALPN `suhina/multiplayer/14`
-refuse earlier applications.
+refuse earlier applications; protocol 15 ([session resume](session-resume.md)) now applies.
 
 ## Clock estimate
 

@@ -201,8 +201,23 @@ impl App {
             self.leave_multiplayer();
             return;
         }
+        // A guest that came back after a long cut gets a fresh copy: it replaces the shared tab,
+        // which held nothing of its own (shared tabs take only confirmed edits).
+        let fresh = if self.multiplayer.bound.is_some() { self.multiplayer.service.take_shared() } else { None };
+        if fresh.is_some()
+            && let Some(old) = self.multiplayer.bound.take()
+        {
+            let _ = self.projects.restrict_shared_project(old, false);
+            let _ = self.projects.close(old);
+            self.multiplayer.draft = None;
+            self.multiplayer.notes = Default::default();
+            self.multiplayer.clips = Default::default();
+            self.multiplayer.tracks = Default::default();
+            self.multiplayer.launcher = Default::default();
+            self.multiplayer.devices = Default::default();
+        }
         if self.multiplayer.bound.is_none() {
-            let Some(snapshot) = self.multiplayer.service.take_shared() else {
+            let Some(snapshot) = fresh.or_else(|| self.multiplayer.service.take_shared()) else {
                 self.multiplayer.error = Some("the verified MIDI project is missing; no project was opened".into());
                 self.leave_multiplayer();
                 return;
@@ -555,7 +570,7 @@ impl App {
         } else {
             let mode = self.multiplayer.state["mode"].as_str().unwrap_or("starting").to_owned();
             ui.horizontal(|ui| {
-                ui.label(format!("Status: {mode}"));
+                ui.label(format!("Status: {}", status_text(&mode)));
                 if ui.button("Leave session").clicked() {
                     self.leave_multiplayer();
                 }
@@ -565,8 +580,9 @@ impl App {
                     if ui.button("Copy invitation code").clicked() {
                         ui.ctx().copy_text(self.multiplayer.invitation.clone());
                     }
-                    let can_renew = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(3) < 3
-                        && self.multiplayer.state["sending"].is_null();
+                    let seats = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(3)
+                        + self.multiplayer.state["guests_reconnecting"].as_u64().unwrap_or(0);
+                    let can_renew = seats < 3 && self.multiplayer.state["sending"].is_null();
                     if ui.add_enabled(can_renew, egui::Button::new("New invitation"))
                         .on_hover_text("Create a separate invitation for the next guest. Replaces the previous unused invitation; connected guests stay.")
                         .clicked()
@@ -577,6 +593,15 @@ impl App {
                 });
             }
             ui.label(format!("Guests: {} / 3", self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0)));
+            let away = self.multiplayer.state["guests_reconnecting"].as_u64().unwrap_or(0);
+            if away > 0 {
+                ui.weak(format!(
+                    "{away} guest(s) reconnecting. Their place is kept for two minutes after the connection dropped."
+                ));
+            }
+            if mode == "reconnecting" {
+                ui.weak("The connection to the host dropped. Suhina keeps trying for a minute; your edits wait and are sent once it is back.");
+            }
             if mode == "hosting" {
                 // Keep this row when a guest connects: controls must not move during a click.
                 ui.weak("One host and up to three guests. Create and privately copy a new invitation for each guest after the previous one joins. Each expires after 5 minutes and works once; replacing an unused invitation revokes it. Connected guests stay.");
@@ -707,6 +732,19 @@ impl App {
         }
         ui.add_space(theme::PAD);
         ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Recording directly in the shared tab and external plugins come later.");
+    }
+}
+
+/// The session state as the panel shows it.
+pub(super) fn status_text(mode: &str) -> &str {
+    match mode {
+        "starting" => "Starting…",
+        "hosting" => "Hosting",
+        "connected" => "Connected",
+        "reconnecting" => "Reconnecting…",
+        "disconnected" => "Disconnected",
+        "error" => "Error",
+        other => other,
     }
 }
 

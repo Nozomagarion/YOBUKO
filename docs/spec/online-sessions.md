@@ -3,7 +3,7 @@ description: Internet sessions joined with an invitation code, peer to peer, wit
 read_when: online multiplayer, invitation code, joining from another city, relay, hole punching, iroh transport
 type: spec
 status: draft
-last_verified: 2026-10-29
+last_verified: 2026-10-30
 covers:
   - crates/multiplayer/src/online.rs
   - crates/multiplayer/src/transport.rs
@@ -15,8 +15,9 @@ covers:
 
 Self-authored extension of the host-ordered session adapter
 ([several guests](lan-multiple-guests.md)). The collaboration protocol, its limits and its
-admission rules are unchanged; only the transport between computers changes. Protocol 14
-(13 before [linked playback](linked-playback.md) added the shared transport).
+admission rules are unchanged; only the transport between computers changes. Protocol 15
+(14 before [session resume](session-resume.md) added reconnection and refusal reasons, 13 before
+[linked playback](linked-playback.md) added the shared transport).
 
 ## What a person does
 
@@ -31,7 +32,7 @@ admission rules are unchanged; only the transport between computers changes. Pro
 
 Each session side opens an [iroh](https://github.com/n0-computer/iroh) endpoint (MIT OR
 Apache-2.0) with a fresh secret key, created for the session and never stored. Connections are
-QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/14`.
+QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/15`.
 
 - The host waits up to ten seconds for a home relay, then puts its endpoint id (public key),
   relay URL and direct addresses in the invitation. Without a relay it still invites with its
@@ -60,7 +61,8 @@ whole session, so a renewed code differs only in its secret.
 - At most four handshakes at once (three guests plus one being admitted); further incoming
   connections are refused before any data is read.
 - Sound budgets, frame sizes and journal length are those of the LAN transport.
-- No reconnection after a cut, no host transfer, no live audio between computers: each
+- A guest whose link drops comes back by itself within a minute ([session resume](session-resume.md));
+  a refused guest is told why. No host transfer, no live audio between computers: each
   computer plays the project on its own, as on the LAN; [linked playback](linked-playback.md)
   only starts them together.
 - `online-loopback`, accepted wherever an address is, binds 127.0.0.1 without relays or
@@ -71,4 +73,5 @@ whole session, so a renewed code differs only in its secret.
 `crates/multiplayer/src/online_tests.rs` covers code round trips and tampering, deadline
 timeouts that lose no data, and a forged host key. `crates/multiplayer/tests/online.rs` runs
 whole sessions over loopback: edits in both directions, a stale edit refused, the host leaving,
-three guests with fresh codes, and a spent code refused.
+three guests with fresh codes, and a spent code refused with its reason. Degraded links, cuts and
+resumes are tested with the fault injector described in [session resume](session-resume.md).

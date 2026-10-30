@@ -33,6 +33,7 @@ impl Invitation {
         }
         let body = text.trim().strip_prefix(PREFIX).ok_or("not a Suhina LAN invitation")?;
         let bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| "invalid invitation encoding")?;
+        crate::protocol::invitation_protocol(&bytes)?;
         let value: Self = serde_json::from_slice(&bytes).map_err(|_| "invalid invitation")?;
         if value.protocol != super::protocol::PROTOCOL
             || !private(value.endpoint.ip())

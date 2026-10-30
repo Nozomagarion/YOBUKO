@@ -20,10 +20,12 @@ use crate::protocol::PROTOCOL;
 use crate::transport::Link;
 
 const PREFIX: &str = "suhina-net://";
-const ALPN: &[u8] = b"suhina/multiplayer/14";
+const ALPN: &[u8] = b"suhina/multiplayer/15";
 /// Hole punching and relay lookup can take several seconds across the Internet.
 const CONNECT: Duration = Duration::from_secs(20);
 const ONLINE: Duration = Duration::from_secs(10);
+/// How long a closing stream waits for its last bytes to be acknowledged.
+const FAREWELL: Duration = Duration::from_millis(500);
 
 /// Where the endpoint looks for peers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -53,6 +55,7 @@ impl OnlineInvitation {
         }
         let body = text.trim().strip_prefix(PREFIX).ok_or("not a Suhina online invitation")?;
         let bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| "invalid invitation encoding")?;
+        crate::protocol::invitation_protocol(&bytes)?;
         let value: Self = serde_json::from_slice(&bytes).map_err(|_| "invalid invitation")?;
         if value.protocol != PROTOCOL
             || value.secret.len() != 64
@@ -233,6 +236,9 @@ impl Link for Stream {
 impl Drop for Stream {
     fn drop(&mut self) {
         let _ = self.out.finish();
+        // Closing at once would discard a goodbye still in flight; wait briefly for its delivery.
+        let stopped = self.out.stopped();
+        let _ = self.handle.block_on(async { tokio::time::timeout(FAREWELL, stopped).await });
         self.connection.close(0u32.into(), b"session ended");
     }
 }

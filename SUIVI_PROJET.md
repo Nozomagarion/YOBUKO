@@ -1,5 +1,26 @@
 # Où en est notre application ?
 
+## Multijoueur plus robuste — 30 octobre 2026 (branche `feature/online-robust`)
+
+**But :** préparer l’essai entre deux maisons en rendant les sessions solides face aux coupures.
+
+- **Code écrit :** un invité dont la connexion coupe affiche **Reconnecting…** et revient seul
+  pendant une minute, sans nouveau code ; l’hôte lui garde sa place deux minutes. Une
+  modification en cours au moment de la coupure est renvoyée et n’est appliquée qu’une fois.
+  Un refus dit maintenant pourquoi (version différente avec les deux identifiants, code expiré,
+  déjà utilisé, remplacé, session complète), et l’invité distingue « l’hôte a fermé la session »
+  d’une coupure réseau. Protocole 15 : toutes les personnes doivent avoir la même version.
+  Spécification : [docs/spec/session-resume.md](docs/spec/session-resume.md).
+- **Tests passés (Linux, local, coupures simulées) :** 109 tests du module multijoueur, dont des
+  sessions complètes en ligne et en réseau local avec 150 ms de latence et 64 Ko/s, des coupures
+  provoquées pendant une modification, une absence plus longue que l’historique et une coupure
+  définitive ; tests d’interface multijoueur ; clippy strict. Tests réseau lancés trois fois.
+- **Pas encore fait :** essai réel entre deux maisons (reporté par le propriétaire), paquets.
+- **Limites :** la reprise ne survit pas à un hôte qui quitte ou plante ; une seule requête en
+  attente est renvoyée ; une absence de plus de 32 modifications recharge une copie complète.
+- **Critère suivant :** couper le Wi-Fi d’un invité pendant 20 s lors de l’essai réel et le
+  voir revenir seul, modifications comprises.
+
 ## Lecture liée « Link playback » — 29 octobre 2026 (branche `feature/online-linked`)
 
 **But :** que tout le monde entende la même chose au même moment, sans diffuser d’audio.

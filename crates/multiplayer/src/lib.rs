@@ -4,11 +4,14 @@
 //! Restricted LAN MIDI/audio sessions: portable snapshots, verified sound files and ordered musical edits.
 
 mod assets;
+#[cfg(test)]
+mod faults;
 mod invitation;
 mod linked;
 mod midi;
 mod online;
 mod protocol;
+mod resume;
 mod starter;
 mod transfer;
 mod transport;
