@@ -320,7 +320,11 @@ fn a_background_sound_cut_midway_completes_after_the_resume_from_its_partial_cop
         faults.cut();
         wait(&mut guest, "reconnecting", |v| v["mode"] == "reconnecting");
         let cache = guest_dir.path().join("Sound cache");
-        let partial: u64 = std::fs::read_dir(&cache).unwrap().map(|e| e.unwrap().metadata().unwrap().len()).sum();
+        let partial: u64 = std::fs::read_dir(&cache)
+            .unwrap()
+            // Windows reports a stale size for a file still open in a directory listing.
+            .map(|e| std::fs::metadata(e.unwrap().path()).unwrap().len())
+            .sum();
         assert!(partial >= total / 4, "{place}: the partial sound stays in the cache ({partial})");
         assert!(guest.take_audio().is_empty(), "{place}: the sound is not complete yet");
         let before = faults.carried();

@@ -134,7 +134,7 @@ pub(crate) fn tree_bytes(cvs: &[ChainingValue]) -> Vec<u8> {
     cvs.iter().flatten().copied().collect()
 }
 pub(crate) fn tree_from(bytes: &[u8]) -> Vec<ChainingValue> {
-    bytes.chunks_exact(32).filter_map(|c| <ChainingValue>::try_from(c).ok()).collect()
+    bytes.as_chunks::<32>().0.to_vec()
 }
 
 /// Hashes a byte stream as it is written: the whole-file hash and one chaining value per chunk.
@@ -257,8 +257,8 @@ pub(crate) fn decode(path: &Path, meta: &Asset, stop: &AtomicBool) -> Result<Aud
         let part = buffer.get_mut(..n).ok_or("invalid chunk")?;
         file.read_exact(part).map_err(|e| e.to_string())?;
         hasher.update(part);
-        for word in part.chunks_exact(4) {
-            let sample = f32::from_le_bytes(<[u8; 4]>::try_from(word).map_err(|_| "truncated sample")?);
+        for word in part.as_chunks::<4>().0 {
+            let sample = f32::from_le_bytes(*word);
             if !sample.is_finite() || sample.abs() > 16.0 {
                 return Err("shared sound holds an invalid sample".into());
             }
