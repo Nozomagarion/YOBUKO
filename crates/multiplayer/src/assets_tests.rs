@@ -621,7 +621,9 @@ impl Write for Pipe {
 impl Link for Pipe {
     fn set_deadline(&mut self, deadline: Instant) {
         let left = deadline.saturating_duration_since(Instant::now()).max(std::time::Duration::from_millis(1));
-        self.stream.set_read_timeout(Some(left)).unwrap();
+        // macOS refuses a timeout (EINVAL) on a socket whose peer already hung up; the next
+        // read then reports the cut.
+        let _ = self.stream.set_read_timeout(Some(left));
     }
 }
 fn pipes(guest_budget: usize) -> (Pipe, Pipe) {
