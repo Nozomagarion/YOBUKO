@@ -141,3 +141,56 @@ fn buttons(render: bool) {
         assert!(g.projects.get(id).is_some());
     }
 }
+
+#[test]
+fn a_guest_sees_which_shared_plug_ins_are_missing_on_this_computer() {
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    let mut project = suhina_multiplayer::starter_project();
+    let channel = project.channels[0].name.clone();
+    let mut serum = suhina_engine::model::Device::new(
+        "Serum",
+        suhina_engine::model::DeviceKind::Vst3 { id: "0123456789abcdef0123456789abcdef".into() },
+    );
+    serum.state = Some(vec![9; 1000]);
+    project.channels[0].devices = vec![
+        serum,
+        suhina_engine::model::Device::new("Reverb", suhina_engine::model::DeviceKind::Builtin("reverb".into())),
+    ];
+    let mut host = App::new();
+    host.set_default_data_folder(root.path().join("Host"));
+    host.set_session(Session::new(project), &[]);
+    host.multiplayer.open = true;
+    host.multiplayer.online = false;
+    host.multiplayer.address = "127.0.0.1:0".into();
+    host.host_current_audio();
+    let until = Instant::now() + Duration::from_secs(10);
+    while host.multiplayer.bound.is_none() && Instant::now() < until {
+        host.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(host.multiplayer.bound.is_some(), "{:?}", host.multiplayer.error);
+    let mut guest = App::new();
+    guest.set_default_data_folder(root.path().join("Guest"));
+    guest.multiplayer_command("multiplayer.join", json!({"invitation":host.multiplayer.invitation}));
+    let until = Instant::now() + Duration::from_secs(10);
+    while guest.multiplayer.bound.is_none() && Instant::now() < until {
+        host.poll_multiplayer(&ctx);
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let bound = guest.multiplayer.bound.unwrap();
+    // The settings arrived with the copy; only the plug-in itself is not installed here.
+    let devices = &guest.projects.get(bound).unwrap().project().channels[0].devices;
+    assert_eq!(devices[0].state, Some(vec![9; 1000]));
+    assert_eq!(guest.multiplayer.missing_plugins, vec![format!("Serum (vst3) on {channel}")]);
+    guest.multiplayer.open = true;
+    let mut h = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1400., 1000.))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), guest);
+    theme::install(&h.ctx);
+    h.run_steps(3);
+    assert!(h.query_by_label("Plug-ins missing on this computer").is_some());
+    h.state_mut().leave_multiplayer();
+    assert!(h.state().multiplayer.missing_plugins.is_empty());
+}

@@ -36,9 +36,8 @@ impl App {
         for track in &project.tracks {
             let Some(channel) = track.channel.and_then(|id| project.channel(id)) else { continue };
             for (index, device) in channel.devices.iter().enumerate().take(16) {
+                // Every built-in's parameters are shared; plug-ins keep their own settings.
                 if let DeviceKind::Builtin(kind) = &device.kind
-                    && matches!(kind.as_str(), "fm-synth" | "utility")
-                    && device.state.is_none()
                     && let Some(panel) = suhina_device_registry::panel(kind)
                 {
                     targets.push((
@@ -51,7 +50,7 @@ impl App {
             }
         }
         if targets.is_empty() {
-            ui.weak("No shared devices yet. Choose Device track above and add FM Synth or Utility.");
+            ui.weak("No built-in devices yet. Choose Device track above and add FM Synth or Utility.");
             return;
         }
         let revision = self.multiplayer.controls.as_ref().map_or(0, |c| c.revision);
@@ -158,7 +157,9 @@ impl App {
         let ready = editor.base == Some(revision) && !self.multiplayer.submitted;
         let (apply, remove) = ui.horizontal(|ui| {
             let apply = ui.add_enabled(ready, egui::Button::new("Apply shared parameter")).clicked();
-            let remove = ui.add_enabled(ready, egui::Button::new("Remove selected device"))
+            let removable = row.2.state.is_none()
+                && matches!(&row.2.kind, DeviceKind::Builtin(kind) if matches!(kind.as_str(), "fm-synth" | "utility"));
+            let remove = ui.add_enabled(ready && removable, egui::Button::new("Remove selected device"))
                 .on_hover_text("Removes this device, its settings and automation from both shared copies. Notes and clips are kept.")
                 .clicked();
             (apply, remove)

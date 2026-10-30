@@ -15,7 +15,7 @@ fn hash(bytes: &[u8]) -> String {
 }
 
 pub fn send(io: &mut (impl Read + Write), bytes: &[u8], revision: u64, stop: &AtomicBool) -> Result<(), String> {
-    if bytes.is_empty() || bytes.len() > crate::midi::MAX_DOCUMENT {
+    if bytes.is_empty() || bytes.len() > crate::midi::MAX_PORTABLE_DOCUMENT {
         return Err("invalid MIDI document size".into());
     }
     protocol::write(
@@ -55,7 +55,7 @@ pub fn receive(
         return Err("invitation refused or incompatible MIDI format".into());
     };
     if bytes == 0
-        || bytes > crate::midi::MAX_DOCUMENT
+        || bytes > crate::midi::MAX_PORTABLE_DOCUMENT
         || sha256.len() != 64
         || !sha256.bytes().all(|b| b.is_ascii_hexdigit())
     {

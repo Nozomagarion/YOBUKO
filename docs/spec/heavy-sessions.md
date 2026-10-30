@@ -20,7 +20,7 @@ Self-authored fork behaviour. It extends the [audio asset contract](lan-audio-as
 over the LAN or [online](online-sessions.md). Everything that contract says about portable
 canonical float32 WAV copies, content-addressed `Audio/<BLAKE3>.wav` references, strict
 manifests and peer paths still holds; only the limits, the wire format of sound bytes and the
-storage change. Protocol 16 (ALPN `suhina/multiplayer/16`), shared with
+storage change. Protocol 16 (ALPN `suhina/multiplayer/16`, 17 since [plug-ins in shared sessions](shared-plugins.md)), shared with
 [session resume](session-resume.md); this change was developed as protocol 15 alongside it.
 
 ## Limits

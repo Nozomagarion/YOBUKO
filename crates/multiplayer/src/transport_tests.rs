@@ -664,14 +664,16 @@ fn shared_track_quotas_refuse_without_mutation_ids_or_consuming_an_author_sequen
     }
     lanes.assign_ids().unwrap();
     let mut devices = crate::starter_project();
-    devices.channels.push(Channel::new(ChannelId(200), "Unused"));
+    for id in 200..209 {
+        devices.channels.push(Channel::new(ChannelId(id), "Unused"));
+    }
     for c in &mut devices.channels {
         c.devices.clear();
     }
     for c in &mut devices.channels {
         c.devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into())); 16];
     }
-    assert_eq!(devices.channels.iter().map(|c| c.devices.len()).sum::<usize>(), 128);
+    assert_eq!(devices.channels.iter().map(|c| c.devices.len()).sum::<usize>(), 256);
     for project in [tracks.project().clone(), channels, lanes, devices] {
         let mut state = canonical(project);
         let before = state.host.project().clone();

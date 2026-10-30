@@ -17,7 +17,7 @@ fn invitations_round_trip_and_reject_tampering() {
     assert!(OnlineInvitation::decode(&short.encode().unwrap()).is_err());
     let old = OnlineInvitation { protocol: PROTOCOL - 1, secret: "a".repeat(64), ..short };
     let error = OnlineInvitation::decode(&old.encode().unwrap()).unwrap_err();
-    assert!(error.starts_with("This invitation comes from a different Suhina version (protocol 15"), "{error}");
+    assert!(error.starts_with("This invitation comes from a different Suhina version (protocol 16"), "{error}");
 }
 
 #[test]

@@ -47,6 +47,8 @@ pub(super) struct MultiplayerPanel {
     /// Linked playback: the last shared transport played here, and one still waiting for its moment.
     pub(super) linked_applied: u64,
     linked_pending: Option<(suhina_multiplayer::SharedTransport, Option<std::time::Instant>)>,
+    /// Plug-ins the shared tab uses that are not installed here: "Serum (vst3) on Lead".
+    pub(super) missing_plugins: Vec<String>,
 }
 impl Default for MultiplayerPanel {
     fn default() -> Self {
@@ -77,6 +79,7 @@ impl Default for MultiplayerPanel {
             take_start: 0.0,
             linked_applied: 0,
             linked_pending: None,
+            missing_plugins: Vec::new(),
         }
     }
 }
@@ -155,8 +158,30 @@ impl App {
         let address = self.multiplayer.host_address();
         self.multiplayer_command("multiplayer.hostProject", json!({"address":address}));
     }
+    /// The shared tab's plug-ins that this computer cannot load: each runs the plug-ins installed
+    /// here, and the settings travel with the copy.
+    fn missing_plugins(&mut self, id: ProjectId) -> Vec<String> {
+        let Ok(check) = self.projects.execute("plugin.check", &json!({"project": id.0})) else {
+            return Vec::new();
+        };
+        check["devices"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|d| d.get("found").is_none())
+            .map(|d| {
+                format!(
+                    "{} ({}) on {}",
+                    d["device"].as_str().unwrap_or("?"),
+                    d["format"].as_str().unwrap_or("?"),
+                    d["channel"].as_str().unwrap_or("?")
+                )
+            })
+            .collect()
+    }
     fn leave_multiplayer(&mut self) {
         let _ = self.multiplayer.service.execute("multiplayer.stop", &json!({}));
+        self.multiplayer.missing_plugins.clear();
         if let Some(id) = self.multiplayer.bound.take() {
             let _ = self.projects.restrict_shared_project(id, false);
         }
@@ -245,6 +270,7 @@ impl App {
                         return;
                     }
                     snapshot.keep();
+                    self.multiplayer.missing_plugins = self.missing_plugins(id);
                     self.multiplayer.bound = Some(id);
                     self.multiplayer.applied_revision = revision;
                     self.multiplayer.controls = None;
@@ -750,6 +776,14 @@ impl App {
                 }
             }
         }
+        if !self.multiplayer.missing_plugins.is_empty() {
+            ui.add_space(theme::PAD);
+            ui.colored_label(theme::recording(), "Plug-ins missing on this computer");
+            for plugin in &self.multiplayer.missing_plugins {
+                ui.label(plugin);
+            }
+            ui.weak("These devices stay silent here; their settings are kept. Install the same plug-ins to hear what the host hears.");
+        }
         if let Some(error) = &self.multiplayer.error {
             ui.colored_label(theme::recording(), error);
             if ui.button("Dismiss multiplayer message").clicked() {
@@ -757,7 +791,7 @@ impl App {
             }
         }
         ui.add_space(theme::PAD);
-        ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Recording directly in the shared tab and external plugins come later.");
+        ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Plug-ins and their settings travel with the copy; each computer runs its own installed plug-ins. Recording directly in the shared tab comes later.");
     }
 }
 

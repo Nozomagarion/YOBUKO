@@ -74,9 +74,17 @@ pas que le projet a été modifié. Attendre la confirmation avant d’enchaîne
 ## Partager son morceau et ses prises
 
 Après la démonstration, utiliser **Share current MIDI project** ou **Share project + audio**
-depuis un projet Studio ouvert. Cela partage une copie et conserve l’original. Les instruments
-et effets partagés pris en charge sont **FM Synth et Utility** ; les plugins externes et les
-autres appareils ne sont pas encore partagés. Jusqu’à 64 pistes sont admises par le format borné.
+depuis un projet Studio ouvert. Cela partage une copie et conserve l’original. Jusqu’à 64 pistes
+sont admises par le format borné.
+
+Avec **Share project + audio** (et en ligne), tous les effets et instruments Suhina, les groupes
+et les plugins **CLAP, VST3 et VST2** sont partagés **avec leurs réglages**. Le plugin lui-même
+ne voyage pas : chaque ordinateur utilise les plugins installés chez lui. Si l’invité n’a pas un
+plugin, Suhina l’affiche sous **Plug-ins missing on this computer** (nom, format, piste) : ce
+plugin reste muet chez lui, mais ses réglages sont gardés. Installer le même plugin puis
+rejoindre à nouveau suffit. À plusieurs, on peut régler les paramètres de tous les effets Suhina
+(page **Devices**), mais pas encore les boutons d’un plugin. Un Sampler avec un sample, ou un
+NAM avec un fichier, est refusé pour l’instant : ces fichiers ne voyagent pas encore.
 
 L’option audio transfère les sons déjà chargés dans le Studio, jusqu’à 4096 sons, 2 Gio par son
 et 16 Gio au total. Les projets lourds sont pris en charge : les sons voyagent par morceaux

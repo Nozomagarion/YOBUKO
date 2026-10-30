@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 16;
+pub const PROTOCOL: u16 = 17;
 pub const COPY_FORMAT: u16 = 3;
 
 pub(crate) fn engine_revision() -> Result<String, String> {

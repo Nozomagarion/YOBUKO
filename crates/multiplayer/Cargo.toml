@@ -11,6 +11,7 @@ publish = false
 suhina-collaboration.workspace = true
 suhina-session.workspace = true
 suhina-model.workspace = true
+suhina-device-registry.workspace = true
 suhina-engine.workspace = true
 blake3 = "1"
 tempfile = "3"

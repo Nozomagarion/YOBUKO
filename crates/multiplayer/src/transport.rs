@@ -1441,6 +1441,11 @@ fn serve_link(
 /// What the host sent a guest with its copy: the sounds it holds, and the sounds the copy offered
 /// (in manifest order), which the guest may still fetch in the background on this connection.
 type Copy = (assets::Known, Vec<Arc<assets::Encoded>>);
+/// Time allowed for the portable copy: 30 s, plus enough for a slow relayed link (128 KiB/s)
+/// when plug-in settings make the copy large.
+fn document_time(bytes: usize) -> Duration {
+    Duration::from_secs(30 + (bytes as u64 >> 17))
+}
 /// Sends a guest the whole project: the portable copy, its sounds and a first state.
 fn send_copy(io: &mut impl Link, canonical: &Mutex<Canonical>, stop: &AtomicBool) -> Result<Copy, String> {
     io.set_deadline(Instant::now() + Duration::from_secs(30));
@@ -1449,6 +1454,7 @@ fn send_copy(io: &mut impl Link, canonical: &Mutex<Canonical>, stop: &AtomicBool
         (state.host.project().clone(), state.host.revision(), state.assets.clone())
     };
     let (_, document) = crate::midi::encode_portable(&snapshot)?;
+    io.set_deadline(Instant::now() + document_time(document.len()));
     crate::transfer::send(io, &document, revision, stop)?;
     io.set_deadline(Instant::now() + Duration::from_secs(180));
     let offered = assets::send(io, &snapshot, &assets, stop)?;
@@ -1852,6 +1858,9 @@ fn receive_copy(
 ) -> Result<Mirror, String> {
     io.set_deadline(Instant::now() + Duration::from_secs(30));
     let offer: ServerMessage = protocol::read(io)?;
+    if let ServerMessage::Project { bytes, .. } = &offer {
+        io.set_deadline(Instant::now() + document_time(*bytes));
+    }
     let (document, mut revision) = crate::transfer::receive(io, offer, stop, |done, total| {
         let _ = events.try_send(Event::Receiving(done, total));
     })?;

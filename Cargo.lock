@@ -6912,6 +6912,7 @@ dependencies = [
  "sha2 0.10.9",
  "subtle",
  "suhina-collaboration",
+ "suhina-device-registry",
  "suhina-engine",
  "suhina-media",
  "suhina-model",

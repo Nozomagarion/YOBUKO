@@ -52,8 +52,12 @@ impl App {
         }
         let ready =
             draft.base == Some(revision) && !self.multiplayer.submitted && channel.devices.len() < 16 && count < 128;
+        // Any device but a built-in effect might already be the track's instrument.
         let fm = track.content.notes
-            && !channel.devices.iter().any(|d| matches!(&d.kind,DeviceKind::Builtin(id) if id=="fm-synth"));
+            && channel.devices.iter().all(|d| {
+                matches!(&d.kind, DeviceKind::Builtin(id) if suhina_device_registry::info(id)
+                    .is_some_and(|info| info.role != suhina_device_api::Role::Instrument))
+            });
         let kind = ui.horizontal(|ui| {
             let fm = ui.add_enabled(ready && fm,egui::Button::new("Add FM Synth"))
                 .on_hover_text("Adds the default instrument to a MIDI track without an instrument. Existing instruments are never replaced.").clicked();

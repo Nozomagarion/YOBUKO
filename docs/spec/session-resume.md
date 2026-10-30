@@ -16,7 +16,7 @@ covers:
 
 Self-authored extension of the host-ordered session adapter ([online sessions](online-sessions.md),
 [several guests](lan-multiple-guests.md), [linked playback](linked-playback.md)). It applies to
-the Internet and the LAN transports alike. Protocol 16 and ALPN `suhina/multiplayer/16`,
+the Internet and the LAN transports alike. Protocol 16 and ALPN `suhina/multiplayer/16` (17 since [plug-ins in shared sessions](shared-plugins.md)),
 shared with [heavy sessions](heavy-sessions.md); this change was developed as protocol 15 alongside it.
 
 ## What a person sees

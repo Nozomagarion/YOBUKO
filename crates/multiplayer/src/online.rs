@@ -27,7 +27,7 @@ mod short_code;
 pub(crate) use short_code::ShortCode;
 
 const PREFIX: &str = "suhina-net://";
-const ALPN: &[u8] = b"suhina/multiplayer/16";
+const ALPN: &[u8] = b"suhina/multiplayer/17";
 /// The lobby that trades a short code for the full invitation speaks only this protocol.
 const LOBBY_ALPN: &[u8] = b"suhina/lobby/1";
 /// A lobby lives as long as the invitation it hands out.

@@ -34,7 +34,7 @@ fn chunk(input: &mut Vec<u8>, offset: usize, data: &[u8]) {
 #[test]
 fn offered_sizes_hashes_offsets_and_truncation_are_checked_before_opening_a_project() {
     let stop = AtomicBool::new(false);
-    for size in [0, crate::midi::MAX_DOCUMENT + 1, usize::MAX] {
+    for size in [0, crate::midi::MAX_PORTABLE_DOCUMENT + 1, usize::MAX] {
         let mut io = Script { input: Cursor::new(vec![]), output: vec![] };
         assert!(receive(&mut io, header(size, "a".repeat(64)), &stop, |_, _| {}).is_err());
         assert!(io.output.is_empty(), "an invalid offer must not request or allocate the document");

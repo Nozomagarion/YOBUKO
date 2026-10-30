@@ -1,5 +1,22 @@
 # Où en est notre application ?
 
+## Plugins dans les sessions partagées — 30 octobre 2026 (branche `feature/online`)
+
+**But :** pouvoir partager un vrai projet, avec ses effets et ses plugins.
+
+- **Code écrit :** la copie partagée accepte maintenant tous les effets et instruments Suhina,
+  les groupes et les plugins CLAP, VST3 et VST2, avec leurs réglages (jusqu’à 4 Mio par plugin,
+  32 Mio en tout). Chaque ordinateur fait tourner ses propres plugins ; l’invité voit la liste de
+  ceux qui lui manquent. Les paramètres de tous les effets Suhina se règlent à plusieurs.
+  **Protocole 17** : toutes les personnes doivent avoir cette version.
+- **Tests passés (Linux, local) :** copie d’un plugin VST3 de 3 Mo en ligne et en réseau local,
+  réglage d’une Reverb depuis l’invité, refus des fichiers de l’hôte (Sampler, NAM), liste des
+  plugins manquants dans l’interface.
+- **Pas encore fait :** régler les boutons d’un plugin à plusieurs, figer une piste en audio pour
+  un invité sans le plugin, partager les samples du Sampler.
+- **Critère suivant :** lors de l’essai réel, partager un projet avec un plugin que les deux ont,
+  et un que seul l’hôte a.
+
 ## Branches réunies — 30 octobre 2026 (branche `feature/online-merge`)
 
 **But :** avoir dans une seule version les gros projets, les codes courts et la reprise après coupure.
