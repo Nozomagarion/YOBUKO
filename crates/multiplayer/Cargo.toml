@@ -21,6 +21,8 @@ base64.workspace = true
 getrandom = "0.4"
 sha2 = "0.10"
 subtle = "2.6"
+# Short codes: memory-hard derivation of the lobby key from a human code. MIT OR Apache-2.0.
+argon2 = { version = "0.6", default-features = false, features = ["alloc"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
 rcgen = { version = "0.14", default-features = false, features = ["ring", "crypto"] }
 # Internet sessions: peer-to-peer QUIC with hole punching and relay fallback. MIT OR Apache-2.0.

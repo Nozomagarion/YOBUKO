@@ -6,24 +6,39 @@
 //! relays that only forward end-to-end encrypted traffic.
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use iroh::endpoint::{Connection, RecvStream, SendStream, presets};
-use iroh::{Endpoint, EndpointAddr, RelayMode, SecretKey};
+use iroh::address_lookup::MemoryLookup;
+use iroh::endpoint::{Connection, Incoming, RecvStream, SendStream, presets};
+use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode, SecretKey};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
-use std::sync::{Arc, mpsc};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, mpsc};
 use std::time::{Duration, Instant};
+use subtle::ConstantTimeEq;
 use tokio::runtime::{Handle, Runtime};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::invitation::Invite;
 use crate::protocol::PROTOCOL;
-use crate::transport::Link;
+use crate::transport::{Link, TIMEOUT};
+
+#[path = "short_code.rs"]
+mod short_code;
+pub(crate) use short_code::ShortCode;
 
 const PREFIX: &str = "suhina-net://";
 const ALPN: &[u8] = b"suhina/multiplayer/15";
+/// The lobby that trades a short code for the full invitation speaks only this protocol.
+const LOBBY_ALPN: &[u8] = b"suhina/lobby/1";
+/// A lobby lives as long as the invitation it hands out.
+const LOBBY_LIFE: Duration = Duration::from_secs(300);
+const LOBBY_SLOTS: usize = 4;
+const MAX_INVITATION: usize = 8192;
 /// Hole punching and relay lookup can take several seconds across the Internet.
 const CONNECT: Duration = Duration::from_secs(20);
 const ONLINE: Duration = Duration::from_secs(10);
+/// A lobby's address record can take a few seconds to appear in the public address lookup.
+const LOOKUP_RETRY: Duration = Duration::from_secs(2);
 
 /// Where the endpoint looks for peers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,10 +95,50 @@ impl Invite for OnlineInvitation {
     }
 }
 
+/// Where loopback endpoints find each other by id alone: this process only, never published.
+/// It stands in for the public address lookup that Internet endpoints use.
+fn directory() -> &'static MemoryLookup {
+    static DIRECTORY: OnceLock<MemoryLookup> = OnceLock::new();
+    DIRECTORY.get_or_init(MemoryLookup::new)
+}
+
+/// Opens an endpoint under `key` that accepts `alpn`. On the Internet it publishes its address
+/// through iroh's public lookup (pkarr and DNS), so it can be dialled by its id alone.
+async fn endpoint(reach: Reach, key: SecretKey, alpn: &[u8]) -> Result<Endpoint, String> {
+    let builder = match reach {
+        Reach::Loopback => Endpoint::builder(presets::Minimal)
+            .relay_mode(RelayMode::Disabled)
+            .clear_address_lookup()
+            .address_lookup(directory().clone())
+            .clear_ip_transports()
+            .bind_addr("127.0.0.1:0")
+            .map_err(|e| e.to_string())?,
+        Reach::Internet => Endpoint::builder(presets::N0),
+    };
+    let endpoint = builder
+        .secret_key(key)
+        .alpns(vec![alpn.to_vec()])
+        .bind()
+        .await
+        .map_err(|e| format!("could not open the network connection: {e}"))?;
+    if reach == Reach::Internet {
+        // Wait for a home relay so the invitation can be reached from behind any router.
+        // A computer that gets none still invites with its direct addresses.
+        let _ = tokio::time::timeout(ONLINE, endpoint.online()).await;
+    }
+    Ok(endpoint)
+}
+
 /// One iroh endpoint and the runtime driving it. Owned by a plain (non-runtime) thread.
 pub(crate) struct Net {
     runtime: Runtime,
     endpoint: Endpoint,
+    reach: Reach,
+}
+impl std::fmt::Debug for Net {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Net").field("reach", &self.reach).finish_non_exhaustive()
+    }
 }
 impl Net {
     pub fn bind(reach: Reach) -> Result<Self, String> {
@@ -93,30 +148,8 @@ impl Net {
             .enable_all()
             .build()
             .map_err(|e| format!("could not start the network runtime: {e}"))?;
-        let endpoint = runtime.block_on(async {
-            let builder = match reach {
-                Reach::Loopback => Endpoint::builder(presets::Minimal)
-                    .relay_mode(RelayMode::Disabled)
-                    .clear_address_lookup()
-                    .clear_ip_transports()
-                    .bind_addr("127.0.0.1:0")
-                    .map_err(|e| e.to_string())?,
-                Reach::Internet => Endpoint::builder(presets::N0),
-            };
-            let endpoint = builder
-                .secret_key(SecretKey::generate())
-                .alpns(vec![ALPN.to_vec()])
-                .bind()
-                .await
-                .map_err(|e| format!("could not open the network connection: {e}"))?;
-            if reach == Reach::Internet {
-                // Wait for a home relay so the invitation can be reached from behind any router.
-                // A computer that gets none still invites with its direct addresses.
-                let _ = tokio::time::timeout(ONLINE, endpoint.online()).await;
-            }
-            Ok::<_, String>(endpoint)
-        })?;
-        Ok(Self { runtime, endpoint })
+        let endpoint = runtime.block_on(endpoint(reach, SecretKey::generate(), ALPN))?;
+        Ok(Self { runtime, endpoint, reach })
     }
     pub fn address(&self) -> EndpointAddr {
         self.endpoint.addr()
@@ -163,6 +196,55 @@ impl Net {
         }
         Ok(Stream::new(self.runtime.handle().clone(), connection, out, into, None))
     }
+    /// Opens, in the background, a lobby that hands `invitation` to the first guest who proves a
+    /// fresh short code. `ready` gets the code once the lobby can be reached, or why it cannot;
+    /// it is never called after the returned lobby is dropped. Never blocks.
+    pub fn open_lobby(&self, invitation: String, ready: impl FnOnce(Result<String, String>) + Send + 'static) -> Lobby {
+        let shared = Arc::new(Mutex::new(LobbyState::default()));
+        let (state, reach) = (Arc::clone(&shared), self.reach);
+        self.runtime.spawn(async move {
+            let (endpoint, proof) = match open_lobby(reach).await {
+                Err(error) => {
+                    if !state.lock().unwrap_or_else(PoisonError::into_inner).closed {
+                        ready(Err(error));
+                    }
+                    return;
+                }
+                Ok((code, proof, endpoint)) => {
+                    let live = {
+                        let mut guard = state.lock().unwrap_or_else(PoisonError::into_inner);
+                        if !guard.closed {
+                            if reach == Reach::Loopback {
+                                directory().set_endpoint_info(endpoint.addr());
+                            }
+                            guard.endpoint = Some(endpoint.clone());
+                            // Under the lock: a lobby dropped from now on never reaches `ready`.
+                            ready(Ok(code));
+                        }
+                        !guard.closed
+                    };
+                    if !live {
+                        endpoint.close().await;
+                        return;
+                    }
+                    (endpoint, proof)
+                }
+            };
+            // Spent or not, the lobby refuses everyone after its first guest, until it expires
+            // or the host renews or stops; then nobody can reach it any more.
+            let _ = tokio::time::timeout(LOBBY_LIFE, serve_lobby(&endpoint, proof, invitation.into())).await;
+            let taken = {
+                let mut guard = state.lock().unwrap_or_else(PoisonError::into_inner);
+                guard.closed = true;
+                guard.endpoint.take()
+            };
+            if let Some(endpoint) = taken {
+                retire(reach, &endpoint);
+                endpoint.close().await;
+            }
+        });
+        Lobby { shared, handle: self.runtime.handle().clone(), reach }
+    }
 }
 impl Drop for Net {
     fn drop(&mut self) {
@@ -171,6 +253,147 @@ impl Drop for Net {
     }
 }
 
+/// A host's lobby for one short code. Dropping it closes the lobby and forgets its address.
+pub(crate) struct Lobby {
+    shared: Arc<Mutex<LobbyState>>,
+    handle: Handle,
+    reach: Reach,
+}
+#[derive(Default)]
+struct LobbyState {
+    closed: bool,
+    endpoint: Option<Endpoint>,
+}
+impl Drop for Lobby {
+    fn drop(&mut self) {
+        let taken = {
+            let mut guard = self.shared.lock().unwrap_or_else(PoisonError::into_inner);
+            guard.closed = true;
+            guard.endpoint.take()
+        };
+        if let Some(endpoint) = taken {
+            retire(self.reach, &endpoint);
+            self.handle.spawn(async move { endpoint.close().await });
+        }
+    }
+}
+fn retire(reach: Reach, endpoint: &Endpoint) {
+    if reach == Reach::Loopback {
+        directory().remove_endpoint_info(endpoint.id());
+    }
+}
+
+/// A fresh code and its lobby endpoint, bound under the key derived from the code.
+async fn open_lobby(reach: Reach) -> Result<(String, [u8; 32], Endpoint), String> {
+    let (code, keys) = tokio::task::spawn_blocking(move || {
+        let code = if reach == Reach::Loopback { ShortCode::local()? } else { ShortCode::generate()? };
+        Ok::<_, String>((code.text()?, code.keys()?))
+    })
+    .await
+    .map_err(|_| "the short-code worker stopped".to_owned())??;
+    let endpoint = endpoint(reach, keys.key, LOBBY_ALPN).await?;
+    Ok((code, keys.proof, endpoint))
+}
+async fn serve_lobby(endpoint: &Endpoint, proof: [u8; 32], invitation: Arc<str>) {
+    let slots = Arc::new(Semaphore::new(LOBBY_SLOTS));
+    let spent = Arc::new(AtomicBool::new(false));
+    while let Some(incoming) = endpoint.accept().await {
+        let Ok(permit) = Arc::clone(&slots).try_acquire_owned() else {
+            incoming.refuse();
+            continue;
+        };
+        let (spent, invitation) = (Arc::clone(&spent), Arc::clone(&invitation));
+        tokio::spawn(async move {
+            let _slot = permit;
+            hand_over(incoming, &proof, &spent, &invitation).await;
+        });
+    }
+}
+/// One lobby exchange: 32 proof bytes in; a big-endian u16 length and the invitation out, or a
+/// zero length when the proof is wrong or the code was already used.
+async fn hand_over(incoming: Incoming, proof: &[u8; 32], spent: &AtomicBool, invitation: &str) {
+    let Ok(Ok(connection)) = tokio::time::timeout(CONNECT, incoming).await else { return };
+    let Ok(Ok((mut out, mut into))) = tokio::time::timeout(CONNECT, connection.accept_bi()).await else {
+        return;
+    };
+    let mut claim = [0u8; 32];
+    if !matches!(tokio::time::timeout(TIMEOUT, into.read_exact(&mut claim)).await, Ok(Ok(()))) {
+        return;
+    }
+    // Constant time, and the single use is claimed only by a correct proof.
+    let admitted = bool::from(claim.ct_eq(proof)) && !spent.swap(true, Ordering::SeqCst);
+    let reply = if admitted { invitation.as_bytes() } else { &[] };
+    let Ok(length) = u16::try_from(reply.len()) else { return };
+    let _ = tokio::time::timeout(TIMEOUT, async {
+        out.write_all(&length.to_be_bytes()).await?;
+        out.write_all(reply).await
+    })
+    .await;
+    let _ = out.finish();
+    // Let the guest read everything and hang up first.
+    let _ = tokio::time::timeout(TIMEOUT, connection.closed()).await;
+}
+
+/// Trades a short code for the full invitation at the host's lobby, dialled by the id derived
+/// from the code alone. Returns the guest's endpoint too, to reach the host with. Blocking:
+/// plain threads only. Errors before any network use when the code cannot be stretched.
+pub(crate) fn redeem(code: &ShortCode) -> Result<(Net, OnlineInvitation), String> {
+    let keys = code.keys()?;
+    let reach = if code.is_local() { Reach::Loopback } else { Reach::Internet };
+    let net = Net::bind(reach)?;
+    let retry = reach == Reach::Internet;
+    let reply = net.runtime.block_on(ask_lobby(&net.endpoint, keys.key.public(), &keys.proof, retry))?;
+    let text = String::from_utf8(reply).map_err(|_| "the session sent an invalid invitation")?;
+    let invitation = OnlineInvitation::decode(&text)?;
+    Ok((net, invitation))
+}
+/// `retry` keeps dialling for a while: public address records can lag a fresh lobby.
+async fn ask_lobby(endpoint: &Endpoint, lobby: EndpointId, proof: &[u8; 32], retry: bool) -> Result<Vec<u8>, String> {
+    const ABSENT: &str =
+        "no session answers this code; check it, or ask the host for a new code or the full invitation";
+    let deadline = tokio::time::Instant::now() + CONNECT;
+    let connection = loop {
+        match tokio::time::timeout_at(deadline, endpoint.connect(EndpointAddr::new(lobby), LOBBY_ALPN)).await {
+            Ok(Ok(connection)) => break connection,
+            // The host may have just read the code out before its address record propagated.
+            Ok(Err(_)) if retry && tokio::time::Instant::now() + LOOKUP_RETRY < deadline => {
+                tokio::time::sleep(LOOKUP_RETRY).await;
+            }
+            _ => return Err(ABSENT.into()),
+        }
+    };
+    // The handshake proves the lobby holds the key derived from the code.
+    if connection.remote_id() != lobby {
+        return Err(ABSENT.into());
+    }
+    let exchange = async {
+        let (mut out, mut into) = connection.open_bi().await.map_err(|e| e.to_string())?;
+        out.write_all(proof).await.map_err(|e| e.to_string())?;
+        let _ = out.finish();
+        let mut length = [0u8; 2];
+        into.read_exact(&mut length).await.map_err(|e| e.to_string())?;
+        let length = usize::from(u16::from_be_bytes(length));
+        if length == 0 {
+            return Ok(None);
+        }
+        if length > MAX_INVITATION {
+            return Err("the session sent an oversized invitation".to_owned());
+        }
+        let mut body = vec![0u8; length];
+        into.read_exact(&mut body).await.map_err(|e| e.to_string())?;
+        Ok(Some(body))
+    };
+    let result = tokio::time::timeout(TIMEOUT, exchange).await;
+    connection.close(0u32.into(), b"invitation received");
+    match result {
+        Ok(Ok(Some(body))) => Ok(body),
+        Ok(Ok(None)) => {
+            Err("this code was refused: it is wrong, already used or expired; ask the host for a new one".into())
+        }
+        Ok(Err(error)) => Err(format!("the code exchange failed: {error}")),
+        Err(_) => Err("the session did not answer the code in time".into()),
+    }
+}
 /// A blocking view of one bidirectional QUIC stream, for plain threads only.
 pub(crate) struct Stream {
     handle: Handle,

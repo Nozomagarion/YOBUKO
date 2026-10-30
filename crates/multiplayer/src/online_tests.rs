@@ -48,3 +48,63 @@ fn a_forged_host_key_is_refused() {
     let guest = Net::bind(Reach::Loopback).unwrap();
     assert!(guest.connect(forged).is_err());
 }
+
+/// A loopback host endpoint with an open lobby, and the short code once the lobby is reachable.
+fn lobby(invitation: &str) -> (Net, Lobby, String) {
+    let host = Net::bind(Reach::Loopback).unwrap();
+    let (send, ready) = mpsc::channel();
+    let lobby = host.open_lobby(invitation.to_owned(), move |code| send.send(code).unwrap());
+    let code = ready.recv_timeout(Duration::from_secs(20)).unwrap().unwrap();
+    (host, lobby, code)
+}
+fn invitation_text(net: &Net) -> String {
+    OnlineInvitation { protocol: PROTOCOL, endpoint: net.address(), secret: "b".repeat(64) }.encode().unwrap()
+}
+
+#[test]
+fn a_lobby_hands_the_invitation_to_the_first_guest_with_the_code_only() {
+    let main = Net::bind(Reach::Loopback).unwrap();
+    let text = invitation_text(&main);
+    let (_host, _lobby, code) = lobby(&text);
+    let parsed = ShortCode::parse(&code).unwrap();
+    assert!(parsed.is_local(), "a loopback lobby gives a code for this computer: {code}");
+    let (_guest, invitation) = redeem(&parsed).unwrap();
+    assert_eq!(invitation.encode().unwrap(), text);
+    let again = redeem(&parsed).unwrap_err();
+    assert!(again.contains("refused"), "single use: {again}");
+}
+
+#[test]
+fn a_wrong_proof_is_refused_and_does_not_spend_the_code() {
+    let main = Net::bind(Reach::Loopback).unwrap();
+    let (_host, _lobby, code) = lobby(&invitation_text(&main));
+    let parsed = ShortCode::parse(&code).unwrap();
+    let keys = parsed.keys().unwrap();
+    let guest = Net::bind(Reach::Loopback).unwrap();
+    let mut forged = keys.proof;
+    forged[0] ^= 1;
+    let refused = guest.runtime.block_on(ask_lobby(&guest.endpoint, keys.key.public(), &forged, false));
+    assert!(refused.unwrap_err().contains("refused"));
+    assert!(redeem(&parsed).is_ok(), "the right code still works once");
+}
+
+#[test]
+fn an_unknown_or_withdrawn_code_finds_no_session() {
+    let main = Net::bind(Reach::Loopback).unwrap();
+    let (host, lobby, code) = lobby(&invitation_text(&main));
+    let mut other = ShortCode::local().unwrap();
+    while other.text().unwrap() == code {
+        other = ShortCode::local().unwrap();
+    }
+    let started = Instant::now();
+    assert!(redeem(&other).unwrap_err().contains("no session"));
+    assert!(started.elapsed() < Duration::from_secs(10), "a local miss fails fast");
+    drop(lobby);
+    assert!(redeem(&ShortCode::parse(&code).unwrap()).unwrap_err().contains("no session"));
+    // A lobby dropped before it is reachable never reports a code.
+    let (send, ready) = mpsc::channel();
+    drop(host.open_lobby(invitation_text(&main), move |code| {
+        let _ = send.send(code);
+    }));
+    assert!(ready.recv_timeout(Duration::from_secs(3)).is_err());
+}

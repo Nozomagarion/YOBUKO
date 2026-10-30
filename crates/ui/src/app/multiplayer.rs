@@ -26,6 +26,8 @@ pub(super) struct MultiplayerPanel {
     pub(super) address: String,
     join: String,
     invitation: String,
+    /// The online host's short code (`7-piano-tigre-lune`); empty on the LAN or until ready.
+    short_code: String,
     state: serde_json::Value,
     pub(super) controls: Option<suhina_multiplayer::Controls>,
     draft: Option<suhina_multiplayer::Controls>,
@@ -56,6 +58,7 @@ impl Default for MultiplayerPanel {
             address: suhina_multiplayer::suggested_address().to_string(),
             join: String::new(),
             invitation: String::new(),
+            short_code: String::new(),
             state: serde_json::Value::Null,
             controls: None,
             draft: None,
@@ -158,6 +161,7 @@ impl App {
             let _ = self.projects.restrict_shared_project(id, false);
         }
         self.multiplayer.invitation.clear();
+        self.multiplayer.short_code.clear();
         self.multiplayer.join.clear();
     }
     pub(super) fn poll_multiplayer(&mut self, ctx: &egui::Context) {
@@ -173,6 +177,7 @@ impl App {
             }
         };
         self.multiplayer.invitation = state["invitation"].as_str().unwrap_or_default().to_owned();
+        self.multiplayer.short_code = state["short_code"].as_str().unwrap_or_default().to_owned();
         let error = state["error"].as_str().map(str::to_owned);
         if error != self.multiplayer.service_error {
             if error.is_some() {
@@ -188,6 +193,7 @@ impl App {
         let disconnected = !self.multiplayer.service.active();
         if disconnected && self.multiplayer.bound.is_none() {
             self.multiplayer.invitation.clear();
+            self.multiplayer.short_code.clear();
             return;
         }
         let Ok(controls) = serde_json::from_value::<suhina_multiplayer::Controls>(state["controls"].clone()) else {
@@ -508,7 +514,7 @@ impl App {
         let active = self.multiplayer.service.active();
         ui.add_space(theme::PAD);
         ui.heading("Multiplayer");
-        ui.label("Make music together over the Internet: create a session, send the invitation code to your partner (in your chat app, for example), and they paste it to join. No account needed.");
+        ui.label("Make music together over the Internet: create a session, read the short code to your partner (in a voice chat, for example) or send it, and they type it to join. No account needed.");
         ui.weak("Share a project with its loaded audio, share a MIDI-only copy, or create the four-track demo. MIDI notes, clips and mixer controls are shared; each computer has its own playback.");
         if !active {
             ui.horizontal(|ui| {
@@ -544,6 +550,7 @@ impl App {
             ui.label("Invitation code from the host");
             ui.add(
                 egui::TextEdit::multiline(&mut self.multiplayer.join)
+                    .hint_text("Short code such as 7-piano-tigre-lune, or the full invitation")
                     .desired_rows(3)
                     .char_limit(8192)
                     .desired_width(f32::INFINITY),
@@ -560,10 +567,29 @@ impl App {
                     self.leave_multiplayer();
                 }
             });
+            if !self.multiplayer.short_code.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.label("Code to read out:");
+                    ui.label(egui::RichText::new(&self.multiplayer.short_code).monospace().strong().size(20.0));
+                });
+            }
             if !self.multiplayer.invitation.is_empty() {
                 ui.horizontal(|ui| {
-                    if ui.button("Copy invitation code").clicked() {
-                        ui.ctx().copy_text(self.multiplayer.invitation.clone());
+                    if self.multiplayer.short_code.is_empty() {
+                        if ui.button("Copy invitation code").clicked() {
+                            ui.ctx().copy_text(self.multiplayer.invitation.clone());
+                        }
+                    } else {
+                        if ui.button("Copy code").clicked() {
+                            ui.ctx().copy_text(self.multiplayer.short_code.clone());
+                        }
+                        if ui
+                            .button("Copy full invitation")
+                            .on_hover_text("The long invitation works when a network blocks the short code's address lookup.")
+                            .clicked()
+                        {
+                            ui.ctx().copy_text(self.multiplayer.invitation.clone());
+                        }
                     }
                     let can_renew = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(3) < 3
                         && self.multiplayer.state["sending"].is_null();
