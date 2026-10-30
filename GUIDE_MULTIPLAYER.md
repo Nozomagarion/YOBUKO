@@ -100,6 +100,21 @@ nouvelle copie s’ouvre dans un autre onglet, sans fusionner les anciennes modi
 Le départ de l’hôte ferme les connexions ; les copies des participants restent conservées.
 Enregistrer normalement les copies que l’on souhaite garder.
 
+**Coupure de connexion.** Si Internet ou le Wi-Fi coupe chez un invité, son état affiche
+**Reconnecting…** et Suhina réessaie tout seul pendant environ une minute, sans nouveau code.
+Les modifications faites pendant ce temps partent dès le retour de la connexion, et une
+modification en cours au moment de la coupure n’est appliquée qu’une fois. L’hôte voit
+« guest(s) reconnecting » et garde la place de l’invité deux minutes. Si l’hôte quitte la session
+volontairement, l’invité lit « The host ended the session » et Suhina ne réessaie pas. Après une
+minute sans succès, le message « Lost the connection to the host » invite à demander un nouveau
+code ; la copie reste conservée.
+
+**Messages de refus.** Un refus dit maintenant pourquoi : versions différentes (« Your partner
+runs a different Suhina build (host abc1234, this computer def5678) » : installer la même version
+sur les deux ordinateurs), code expiré après cinq minutes, code déjà utilisé, code remplacé par un
+plus récent ou mal copié, ou session complète (trois invités). Dans tous les cas, demander un
+nouveau code à l’hôte, sauf pour une différence de version.
+
 ## Versions et aide
 
 **Settings → Agents and updates → GitHub updates…** compare les sources et recherche un paquet
@@ -109,6 +124,6 @@ paquet. Le canal public commun et ses plateformes validées sont indiqués dans 
 
 L’état exact de livraison, les contrôles et les essais physiques encore à faire sont dans
 [SUIVI_PROJET.md](SUIVI_PROJET.md). Ce guide ne prétend pas que l’essai sur les deux ordinateurs
-de la maison a déjà été effectué. Internet, reprise automatique après coupure et transfert du
-rôle d’hôte restent des extensions ultérieures. La bascule vers rbxport est un chantier distinct ;
+de la maison a déjà été effectué. Le transfert du rôle d’hôte reste une extension
+ultérieure ; la reprise après coupure n’a encore été testée qu’avec des coupures simulées. La bascule vers rbxport est un chantier distinct ;
 aucune nouvelle fonction de platines, vitesse ou boucles n’est développée pour cette version.

@@ -81,6 +81,6 @@ implicitly permitted in shared tabs. All participants need the updated combined 
 
 ## Amendment: heavy sessions
 
-Protocol 15 replaces the 16 KiB base64 upload chunks and the limits above with the streamed,
+Protocol 16 replaces the 16 KiB base64 upload chunks and the limits above with the streamed,
 verified and resumable transfer of [heavy sessions](heavy-sessions.md); an upload the host's
 sound cache already holds is not requested.

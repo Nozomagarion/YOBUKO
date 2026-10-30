@@ -61,7 +61,10 @@ fn an_online_guest_joins_by_code_exchanges_edits_and_sees_the_host_leave() {
     let stale = wait(&mut guest, |v| v["error"].as_str().is_some());
     assert_eq!(stale["controls"]["revision"], 2);
     host.execute("multiplayer.stop", &json!({})).unwrap();
-    assert_eq!(refused(&mut guest)["controls"]["revision"], 2, "disconnect retains confirmed controls");
+    let left = refused(&mut guest);
+    assert_eq!(left["controls"]["revision"], 2, "disconnect retains confirmed controls");
+    assert_eq!(left["mode"], "disconnected");
+    assert!(left["error"].as_str().unwrap().starts_with("The host ended the session"), "{left}");
 }
 
 #[test]
@@ -86,7 +89,9 @@ fn an_online_code_works_once_and_three_guests_can_join_with_fresh_codes() {
     }
     let mut late = Service::default();
     late.execute("multiplayer.join", &json!({"invitation":first})).unwrap();
-    assert!(refused(&mut late)["error"].as_str().is_some(), "a spent code admits nobody");
+    let spent = refused(&mut late);
+    let error = spent["error"].as_str().unwrap();
+    assert!(error.starts_with("This invitation code is not valid for this session"), "{error}");
     edit(&mut host, 0, json!({"command":"track.rename","track":1,"name":"Everyone"}));
     for guest in &mut guests {
         let seen = wait(guest, |v| v["controls"]["revision"] == 1);

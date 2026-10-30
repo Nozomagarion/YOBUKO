@@ -27,7 +27,7 @@ mod short_code;
 pub(crate) use short_code::ShortCode;
 
 const PREFIX: &str = "suhina-net://";
-const ALPN: &[u8] = b"suhina/multiplayer/15";
+const ALPN: &[u8] = b"suhina/multiplayer/16";
 /// The lobby that trades a short code for the full invitation speaks only this protocol.
 const LOBBY_ALPN: &[u8] = b"suhina/lobby/1";
 /// A lobby lives as long as the invitation it hands out.
@@ -39,6 +39,8 @@ const CONNECT: Duration = Duration::from_secs(20);
 const ONLINE: Duration = Duration::from_secs(10);
 /// A lobby's address record can take a few seconds to appear in the public address lookup.
 const LOOKUP_RETRY: Duration = Duration::from_secs(2);
+/// How long a closing stream waits for its last bytes to be acknowledged.
+const FAREWELL: Duration = Duration::from_millis(500);
 
 /// Where the endpoint looks for peers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,6 +70,7 @@ impl OnlineInvitation {
         }
         let body = text.trim().strip_prefix(PREFIX).ok_or("not a Suhina online invitation")?;
         let bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| "invalid invitation encoding")?;
+        crate::protocol::invitation_protocol(&bytes)?;
         let value: Self = serde_json::from_slice(&bytes).map_err(|_| "invalid invitation")?;
         if value.protocol != PROTOCOL
             || value.secret.len() != 64
@@ -456,6 +459,9 @@ impl Link for Stream {
 impl Drop for Stream {
     fn drop(&mut self) {
         let _ = self.out.finish();
+        // Closing at once would discard a goodbye still in flight; wait briefly for its delivery.
+        let stopped = self.out.stopped();
+        let _ = self.handle.block_on(async { tokio::time::timeout(FAREWELL, stopped).await });
         self.connection.close(0u32.into(), b"session ended");
     }
 }

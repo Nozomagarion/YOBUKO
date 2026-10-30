@@ -66,3 +66,10 @@ project v4, portable-copy format 3 and matching pinned Suhina engine identities 
 Ordinary old project files remain readable through the studio reader, then share as v4. The
 musical edit permissions and quotas above remain unchanged; newly added studio effects are not
 implicitly permitted in shared tabs. All participants need the updated combined application.
+
+## Amendment: session resume (protocol 16)
+
+[Session resume](session-resume.md) changes what a departure does. A guest that leaves on purpose
+or breaks the protocol is still removed at once. A guest whose link fails keeps its PeerId and its
+place for two minutes and can come back with its resume token; `guests_connected` counts connected
+guests only, `guests_reconnecting` the places held, and both count toward the three places.

@@ -16,9 +16,10 @@ covers:
 
 Self-authored extension of the host-ordered session adapter
 ([several guests](lan-multiple-guests.md)). The collaboration protocol, its limits and its
-admission rules are unchanged; only the transport between computers changes. Protocol 15
-(14 before [heavy sessions](heavy-sessions.md), 13 before [linked playback](linked-playback.md)
-added the shared transport).
+admission rules are unchanged; only the transport between computers changes. Protocol 16
+(14 before [heavy sessions](heavy-sessions.md) and [session resume](session-resume.md), each
+developed as 15 on its own, 13 before [linked playback](linked-playback.md) added the shared
+transport).
 
 ## What a person does
 
@@ -33,7 +34,7 @@ added the shared transport).
 
 Each session side opens an [iroh](https://github.com/n0-computer/iroh) endpoint (MIT OR
 Apache-2.0) with a fresh secret key, created for the session and never stored. Connections are
-QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/15`.
+QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/16`.
 
 - The host waits up to ten seconds for a home relay, then puts its endpoint id (public key),
   relay URL and direct addresses in the invitation. Without a relay it still invites with its
@@ -117,7 +118,8 @@ five minutes can take the seat, exactly as with the long code.
 - At most four handshakes at once (three guests plus one being admitted); further incoming
   connections are refused before any data is read.
 - Sound budgets, frame sizes and journal length are those of the LAN transport.
-- No reconnection after a cut, no host transfer, no live audio between computers: each
+- A guest whose link drops comes back by itself within a minute ([session resume](session-resume.md));
+  a refused guest is told why. No host transfer, no live audio between computers: each
   computer plays the project on its own, as on the LAN; [linked playback](linked-playback.md)
   only starts them together.
 - `online-loopback`, accepted wherever an address is, binds 127.0.0.1 without relays or
@@ -133,4 +135,5 @@ accents, malformed codes, and the derivation. `crates/multiplayer/tests/online.r
 sessions over loopback: edits in both directions, a stale edit refused, the host leaving,
 three guests with fresh codes, a spent code refused, and short codes: a join by short code
 alone, single use, a wrong code, renewal revoking the old code, malformed codes refused before
-any network use. All run offline.
+any network use. All run offline. Degraded links, cuts and resumes are tested with the fault
+injector described in [session resume](session-resume.md).

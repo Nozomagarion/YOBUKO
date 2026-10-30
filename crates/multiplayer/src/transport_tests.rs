@@ -15,7 +15,8 @@ fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
         secret: secret_hash(&secret),
         expires: now + Duration::from_secs(1),
         redeemed: false,
-        guests: BTreeSet::new(),
+        members: BTreeMap::new(),
+        away_shown: 0,
         linked: Linked::new(),
     };
     assert!(host.admit(&"b".repeat(64), now).is_err());
@@ -125,6 +126,14 @@ fn invitation_from(service: &mut Service) -> Invitation {
     Invitation::decode(service.invitation.as_ref().unwrap()).unwrap()
 }
 
+/// Reads the admission and returns the guest's resume token.
+fn admitted(io: &mut impl Read) -> String {
+    match protocol::read::<ServerMessage>(io).unwrap() {
+        ServerMessage::Admitted { protocol: PROTOCOL, token } => token,
+        other => panic!("expected an admission, got {other:?}"),
+    }
+}
+
 fn connect(invitation: &Invitation) -> StreamOwned<ClientConnection, DeadlineSocket> {
     let mut roots = RootCertStore::empty();
     roots.add(CertificateDer::from(invitation.der().unwrap())).unwrap();
@@ -156,7 +165,10 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
         },
     )
     .unwrap();
-    assert!(matches!(protocol::read::<ServerMessage>(&mut incompatible).unwrap(), ServerMessage::Denied));
+    assert!(matches!(
+        protocol::read_answer(&mut incompatible).unwrap(),
+        ServerMessage::Denied { refusal: Refusal::Protocol { host: PROTOCOL, guest } } if guest == PROTOCOL + 1
+    ));
     let mut io = connect(&invitation);
     protocol::write(
         &mut io,
@@ -168,6 +180,7 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
         },
     )
     .unwrap();
+    admitted(&mut io);
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     let document = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
     let project = crate::midi::decode_portable(&document.0).unwrap();
@@ -281,7 +294,8 @@ fn canonical(project: Project) -> Canonical {
         secret: [0; 32],
         expires: Instant::now() + Duration::from_secs(300),
         redeemed: false,
-        guests: BTreeSet::new(),
+        members: BTreeMap::new(),
+        away_shown: 0,
         linked: Linked::new(),
     }
 }
@@ -378,6 +392,7 @@ fn notes_and_tracks_changed_during_download_are_applied_before_joining() {
         },
     )
     .unwrap();
+    admitted(&mut io);
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     assert!(matches!(offer, ServerMessage::Project { revision: 0, .. }));
     host.execute(
@@ -558,6 +573,7 @@ fn a_take_published_during_initial_download_is_verified_before_the_join_finishes
         },
     )
     .unwrap();
+    admitted(&mut io);
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     assert!(matches!(offer, ServerMessage::Project { revision: 0, .. }));
     host.select_take(Arc::new(suhina_engine::AudioData { sample_rate: 8000, channels: 1, samples: vec![0.4; 8000] }))
@@ -704,6 +720,7 @@ fn admitted_upload(invite: &Invitation) -> StreamOwned<ClientConnection, Deadlin
         },
     )
     .unwrap();
+    admitted(&mut io);
     let offer = protocol::read(&mut io).unwrap();
     let (doc, revision) = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
     assets::receive(
@@ -920,14 +937,14 @@ fn renewal_revokes_expired_and_spent_secrets_without_resetting_music_or_owner_se
     assert_eq!(state.journal.len(), 1);
     assert!(state.admit(&original, now).is_err());
     assert!(!state.redeemed);
-    let peer = state.admit(&invite.secret, now + Duration::from_secs(299)).unwrap();
+    let peer = state.admit(&invite.secret, now + Duration::from_secs(299)).unwrap().0;
     // Rotation replaces the outstanding capability, while authenticated peers keep their identity.
     let next = Invitation { secret: "c".repeat(64), ..invite };
     state.renew(&next, now, &send).unwrap();
     receive.try_recv().unwrap();
     state.apply(peer, 1, 1, WireEdit::Pan { track: 1, pan: 0.25 }).unwrap();
     state.host.remove_peer(peer).unwrap();
-    state.guests.remove(&peer);
+    state.members.remove(&peer);
     assert!(state.admit(&next.secret, now + Duration::from_secs(300)).is_err());
     assert!(!state.redeemed);
     state.submit(Host::owner(), 2, 2, WireEdit::Pan { track: 1, pan: -0.25 }).unwrap();
@@ -956,7 +973,7 @@ fn renewal_backpressure_and_closed_views_preserve_the_previous_invitation() {
         assert!(state.renew(&invite, now, &send).is_err());
         assert!(state.secret == secret_hash(&original));
         assert_eq!(state.expires, expires);
-        assert!(!state.redeemed && state.guests.is_empty());
+        assert!(!state.redeemed && state.members.is_empty());
         assert!(state.admit(&original, now).is_ok());
     }
 }
@@ -1003,7 +1020,10 @@ fn a_hello_started_before_renewal_cannot_consume_the_new_invitation() {
         },
     )
     .unwrap();
-    assert!(matches!(protocol::read::<ServerMessage>(&mut old_io).unwrap(), ServerMessage::Denied));
+    assert!(matches!(
+        protocol::read::<ServerMessage>(&mut old_io).unwrap(),
+        ServerMessage::Denied { refusal: Refusal::Invalid }
+    ));
     let mut guest = Service::default();
     guest.execute("multiplayer.join", &json!({"invitation":host.invitation})).unwrap();
     while guest.mode != "connected" && Instant::now() < deadline {
@@ -1181,9 +1201,9 @@ fn several_admissions_rotate_capabilities_keep_peer_sequences_and_refuse_full_se
         };
         state.renew(&invite, now, &send).unwrap();
         receive.try_recv().unwrap();
-        let peer = state.admit(&invite.secret, now).unwrap();
+        let peer = state.admit(&invite.secret, now).unwrap().0;
         peers.push(peer);
-        assert_eq!(state.guests.len(), n + 1);
+        assert_eq!(state.connected(), n + 1);
         assert!(state.admit(&invite.secret, now).is_err());
         state.submit(peer, 1, n as u64, WireEdit::Pan { track: 1, pan: n as f64 / 4. }).unwrap();
     }
@@ -1203,9 +1223,9 @@ fn several_admissions_rotate_capabilities_keep_peer_sequences_and_refuse_full_se
     assert!(!state.redeemed);
     assert_eq!(state.host.revision(), 3);
     state.host.remove_peer(peers[1]).unwrap();
-    state.guests.remove(&peers[1]);
+    state.members.remove(&peers[1]);
     assert!(state.admit(&invite.secret, now).is_ok());
-    assert_eq!(state.guests.len(), 3);
+    assert_eq!(state.connected(), 3);
     assert!(state.submit(peers[1], 2, 3, WireEdit::Pan { track: 1, pan: 0. }).is_err());
     state.submit(peers[0], 2, 3, WireEdit::Pan { track: 1, pan: -0.5 }).unwrap();
     state.submit(peers[2], 2, 4, WireEdit::Pan { track: 1, pan: 0.5 }).unwrap();
@@ -1216,7 +1236,7 @@ fn several_admissions_rotate_capabilities_keep_peer_sequences_and_refuse_full_se
 fn membership_only_events_survive_backpressure_without_consuming_music_revisions() {
     let mut state = canonical(crate::starter_project());
     let peer = state.host.add_peer(Role::Editor).unwrap();
-    state.guests.insert(peer);
+    state.members.insert(peer, Member { token: [0; 32], generation: 0, away: None, known: assets::Known::new() });
     let (send, receive) = mpsc::sync_channel(1);
     assert!(send.try_send(Event::Upload(None)).is_ok());
     let mut last = (0, 0, 0);
@@ -1229,7 +1249,7 @@ fn membership_only_events_survive_backpressure_without_consuming_music_revisions
         matches!(receive.try_recv().unwrap(), Event::State(c, o, 1, a) if c.revision == 0 && o.is_empty() && a.is_empty())
     );
     state.host.remove_peer(peer).unwrap();
-    state.guests.remove(&peer);
+    state.members.remove(&peer);
     state.emit(&send, &mut last).unwrap();
     assert_eq!(last, (0, 0, 0));
     assert_eq!(state.host.revision(), 0);
@@ -1268,7 +1288,10 @@ fn mismatched_engine_and_old_copy_format_refuse_before_spending_the_private_invi
             &ClientMessage::Hello { protocol: PROTOCOL, format, engine, secret: invitation.secret.clone() },
         )
         .unwrap();
-        assert!(matches!(protocol::read::<ServerMessage>(&mut io).unwrap(), ServerMessage::Denied));
+        assert!(matches!(
+            protocol::read::<ServerMessage>(&mut io).unwrap(),
+            ServerMessage::Denied { refusal: Refusal::Build { .. } }
+        ));
     }
     let mut guest = Service::default();
     guest.execute("multiplayer.join", &json!({"invitation":invitation.encode().unwrap()})).unwrap();
@@ -1327,4 +1350,117 @@ fn transport_commands_take_exact_keys_and_need_a_linked_session() {
     let state = service.execute("multiplayer.state", &json!({})).unwrap();
     assert_eq!(state["linked"], false);
     assert!(state["transport"].is_null() && state["transport_starts_in_ms"].is_null());
+}
+
+fn hello(secret: &str) -> Value {
+    json!({"kind":"Hello","protocol":PROTOCOL,"format":protocol::COPY_FORMAT,"engine":protocol::engine_revision().unwrap(),"secret":secret})
+}
+fn resume(token: &str, seen: Option<u64>) -> Value {
+    json!({"kind":"Resume","protocol":PROTOCOL,"format":protocol::COPY_FORMAT,"engine":protocol::engine_revision().unwrap(),"token":token,"seen_revision":seen})
+}
+fn refusal(state: &mut Canonical, hello: Value, now: Instant) -> Refusal {
+    match state.open(hello, now) {
+        Err(refusal) => refusal,
+        Ok(_) => panic!("expected a refusal"),
+    }
+}
+
+#[test]
+fn hellos_are_refused_with_a_reason_and_only_the_code_holder_learns_the_code_state() {
+    let now = Instant::now();
+    let secret = "a".repeat(64);
+    let mut state = canonical(crate::starter_project());
+    state.secret = secret_hash(&secret);
+    state.expires = now + Duration::from_secs(300);
+    let mut old = hello(&secret);
+    old["protocol"] = json!(PROTOCOL - 1);
+    old["extra"] = json!("a field this version does not know");
+    assert_eq!(refusal(&mut state, old, now), Refusal::Protocol { host: PROTOCOL, guest: PROTOCOL - 1 });
+    let mut other = hello(&secret);
+    other["engine"] = json!("def5678".repeat(5) + "abcde");
+    let Refusal::Build { host, guest } = refusal(&mut state, other, now) else { panic!("build") };
+    let ours = protocol::engine_revision().unwrap();
+    assert_eq!((host.as_str(), guest.as_str()), (&ours[..7], "def5678"));
+    let message = Refusal::Build { host, guest }.message();
+    assert!(message.contains(&format!("host {}, this computer def5678", &ours[..7])), "{message}");
+    assert!(message.ends_with("Install the same version on both computers."));
+    let mut format = hello(&secret);
+    format["format"] = json!(2);
+    let Refusal::Build { host, guest } = refusal(&mut state, format, now) else { panic!("format") };
+    assert!(Refusal::Build { host, guest }.message().contains("copy format 3, this computer"));
+    assert_eq!(refusal(&mut state, json!({"kind":"Poll","protocol":PROTOCOL}), now), Refusal::Unsupported);
+    // A wrong code says nothing about the right one: neither its age nor the session's size.
+    let mut close = secret.clone();
+    close.replace_range(63.., "b");
+    assert_eq!(refusal(&mut state, hello(&close), now + Duration::from_secs(400)), Refusal::Invalid);
+    assert_eq!(refusal(&mut state, hello("short"), now), Refusal::Invalid);
+    assert_eq!(refusal(&mut state, hello(&secret), now + Duration::from_secs(300)), Refusal::Expired);
+    assert!(!state.redeemed, "refusals do not spend the code");
+    assert!(matches!(state.open(hello(&secret), now), Ok(Opening::Admitted { .. })));
+    assert_eq!(refusal(&mut state, hello(&secret), now), Refusal::Used);
+    for n in 0..2 {
+        state.secret = secret_hash(&format!("{n:064x}"));
+        state.redeemed = false;
+        assert!(state.open(hello(&format!("{n:064x}")), now).is_ok());
+    }
+    state.secret = secret_hash(&secret);
+    state.redeemed = false;
+    assert_eq!(refusal(&mut state, hello(&secret), now), Refusal::Full);
+    assert_eq!(state.seats(), MAX_GUESTS);
+    // Every refusal names what to do, and a host's text is cut to a short build identifier.
+    let hostile = Refusal::Build { host: "\u{1b}[31m../../etc/passwd/9".into(), guest: String::new() }.message();
+    assert!(hostile.contains("host 31metcp copy format 9, this computer unknown"), "{hostile}");
+}
+
+#[test]
+fn resume_tokens_are_bound_rotated_refused_when_forged_and_expire_with_the_grace_period() {
+    let now = Instant::now();
+    let grace = Duration::from_secs(120);
+    let secret = "a".repeat(64);
+    let mut state = canonical(crate::starter_project());
+    state.secret = secret_hash(&secret);
+    let Ok(Opening::Admitted { peer, generation, token }) = state.open(hello(&secret), now) else { panic!("admit") };
+    state.submit(peer, 1, 0, WireEdit::Rename { track: 1, name: "Before the drop".into() }).unwrap();
+    state.remember(peer, generation, &assets::Known::new());
+    state.depart(peer, generation, Departure::Dropped, now, grace);
+    assert_eq!((state.connected(), state.seats()), (0, 1), "the place is held while away");
+    assert_eq!(refusal(&mut state, resume(&"f".repeat(64), Some(1)), now), Refusal::Resume);
+    assert_eq!(refusal(&mut state, resume(&secret, Some(1)), now), Refusal::Resume, "the code is not a token");
+    let Ok(Opening::Resumed { peer: back, generation: second, token: next, resume: held }) =
+        state.open(resume(&token, Some(1)), now + Duration::from_secs(60))
+    else {
+        panic!("resume")
+    };
+    assert_eq!(back, peer, "the same participant, with its sequence");
+    assert_eq!(held.map(|h| h.1), Some(1), "the journal covers it: no fresh copy");
+    assert_ne!(next, token);
+    assert_eq!(state.connected(), 1);
+    // The retry cache still knows the peer's last edit, so a resent one applies once.
+    state.submit(peer, 1, 0, WireEdit::Rename { track: 1, name: "Before the drop".into() }).unwrap();
+    assert_eq!(state.host.revision(), 1);
+    assert_eq!(refusal(&mut state, resume(&token, Some(1)), now), Refusal::Resume, "the old token is spent");
+    // The superseded connection's end changes nothing; the current one's drop starts a new grace.
+    state.depart(peer, generation, Departure::Dropped, now, grace);
+    assert_eq!(state.connected(), 1);
+    let Ok(Opening::Resumed { resume: none, token: last, generation: third, .. }) =
+        state.open(resume(&next, None), now)
+    else {
+        panic!("resume for a copy")
+    };
+    assert!(none.is_none(), "no revision asks for a fresh copy");
+    assert!(third > second);
+    state.depart(peer, third, Departure::Dropped, now, grace);
+    state.expire(now + grace);
+    assert_eq!(state.seats(), 0, "the grace period ended: the place is free");
+    assert_eq!(refusal(&mut state, resume(&last, Some(1)), now + grace), Refusal::Resume);
+    assert!(state.submit(peer, 2, 1, WireEdit::Pan { track: 1, pan: 0.5 }).is_err(), "the peer is gone");
+    // A guest that leaves on purpose frees its place at once.
+    state.secret = secret_hash(&"c".repeat(64));
+    state.redeemed = false;
+    let Ok(Opening::Admitted { peer, generation, token }) = state.open(hello(&"c".repeat(64)), now) else {
+        panic!("admit")
+    };
+    state.depart(peer, generation, Departure::Left, now, grace);
+    assert_eq!(state.seats(), 0);
+    assert_eq!(refusal(&mut state, resume(&token, None), now), Refusal::Resume);
 }

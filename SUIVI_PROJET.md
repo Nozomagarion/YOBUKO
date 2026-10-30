@@ -1,5 +1,43 @@
 # Où en est notre application ?
 
+## Branches réunies — 30 octobre 2026 (branche `feature/online-merge`)
+
+**But :** avoir dans une seule version les gros projets, les codes courts et la reprise après coupure.
+
+- **Code écrit :** les trois branches `feature/online-heavy`, `feature/online-shortcode` et
+  `feature/online-robust` sont réunies. Comme deux d’entre elles utilisaient chacune le numéro 15,
+  la version réunie passe au **protocole 16** : toutes les personnes doivent avoir cette même
+  version. Un invité qui perd la connexion pendant que des sons arrivent encore en arrière-plan
+  revient seul, recharge une copie fraîche du projet et ne télécharge que la fin des sons : ce
+  qui était déjà arrivé reste dans **Sound cache**.
+- **Tests passés (Linux, local, coupures simulées) :** 140 tests du module multijoueur, lancés
+  trois fois, dont un son reçu en arrière-plan coupé au milieu puis terminé après la reprise, en
+  ligne et en réseau local ; tests d’interface multijoueur ; clippy strict.
+- **Pas encore fait :** essai réel entre deux maisons (reporté par le propriétaire), paquets.
+- **Critère suivant :** rejoindre un gros projet par code court lors de l’essai réel, couper le
+  Wi-Fi pendant l’arrivée des sons, et voir la session reprendre seule.
+
+## Multijoueur plus robuste — 30 octobre 2026 (branche `feature/online-robust`)
+
+**But :** préparer l’essai entre deux maisons en rendant les sessions solides face aux coupures.
+
+- **Code écrit :** un invité dont la connexion coupe affiche **Reconnecting…** et revient seul
+  pendant une minute, sans nouveau code ; l’hôte lui garde sa place deux minutes. Une
+  modification en cours au moment de la coupure est renvoyée et n’est appliquée qu’une fois.
+  Un refus dit maintenant pourquoi (version différente avec les deux identifiants, code expiré,
+  déjà utilisé, remplacé, session complète), et l’invité distingue « l’hôte a fermé la session »
+  d’une coupure réseau. Protocole 15 : toutes les personnes doivent avoir la même version.
+  Spécification : [docs/spec/session-resume.md](docs/spec/session-resume.md).
+- **Tests passés (Linux, local, coupures simulées) :** 109 tests du module multijoueur, dont des
+  sessions complètes en ligne et en réseau local avec 150 ms de latence et 64 Ko/s, des coupures
+  provoquées pendant une modification, une absence plus longue que l’historique et une coupure
+  définitive ; tests d’interface multijoueur ; clippy strict. Tests réseau lancés trois fois.
+- **Pas encore fait :** essai réel entre deux maisons (reporté par le propriétaire), paquets.
+- **Limites :** la reprise ne survit pas à un hôte qui quitte ou plante ; une seule requête en
+  attente est renvoyée ; une absence de plus de 32 modifications recharge une copie complète.
+- **Critère suivant :** couper le Wi-Fi d’un invité pendant 20 s lors de l’essai réel et le
+  voir revenir seul, modifications comprises.
+
 ## Gros projets partagés — 30 octobre 2026 (branche `feature/online-heavy`)
 
 **But :** partager des projets de plusieurs gigaoctets de sons, en ligne comme en local.

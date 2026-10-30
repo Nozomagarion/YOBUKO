@@ -8,7 +8,7 @@ use rustls::{
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
 };
 use serde_json::{Value, json};
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -27,7 +27,8 @@ use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, ParamType, 
 use crate::invitation::{Invitation, Invite, new_secret, private, secret_hash};
 use crate::linked::{ClockEstimate, Linked, SharedTransport, TransportRequest};
 use crate::online::{Lobby, Net, OnlineInvitation, Reach, ShortCode};
-use crate::protocol::{self, ClientMessage, Controls, Operation, PROTOCOL, ServerMessage, WireEdit};
+use crate::protocol::{self, ClientMessage, Controls, Operation, PROTOCOL, Refusal, ServerMessage, WireEdit};
+use crate::resume::{Backoff, FAREWELL, Tuning, Watch};
 
 pub const MAX_GUESTS: usize = 3;
 
@@ -40,12 +41,141 @@ struct Canonical {
     secret: [u8; 32],
     expires: Instant,
     redeemed: bool,
-    guests: BTreeSet<PeerId>,
+    /// Admitted guests, connected or holding their place after a dropped link.
+    members: BTreeMap<PeerId, Member>,
+    /// Away guests the view was last told about.
+    away_shown: usize,
     assets: Vec<Arc<assets::Encoded>>,
     pending_audio: Vec<AudioAddition>,
     linked: Linked,
 }
+/// One admitted guest. Its place lasts while it is connected and for a grace period after its
+/// link drops, during which its token resumes it as the same peer.
+struct Member {
+    /// SHA-256 of the current resume token; replaced at every resume.
+    token: [u8; 32],
+    /// Counts this guest's connections; a resumed connection supersedes the older one.
+    generation: u64,
+    /// When the place is released, while the guest is away.
+    away: Option<Instant>,
+    /// Sounds this guest is known to hold, kept for a resume without a fresh copy.
+    known: assets::Known,
+}
+/// What a hello opens on the host.
+enum Opening {
+    Admitted { peer: PeerId, generation: u64, token: String },
+    Resumed { peer: PeerId, generation: u64, token: String, resume: Option<(assets::Known, u64)> },
+}
+/// How a guest's connection ended, as its handler saw it.
+#[derive(Clone, Copy)]
+enum Departure {
+    /// The guest said goodbye, or broke the protocol: its place is freed at once.
+    Left,
+    /// The link dropped: the place is kept for the grace period.
+    Dropped,
+    /// A newer connection of the same guest took over.
+    Superseded,
+}
 impl Canonical {
+    /// Guests connected now.
+    fn connected(&self) -> usize {
+        self.members.values().filter(|m| m.away.is_none()).count()
+    }
+    /// Guests connected now, or away and holding their place.
+    fn seats(&self) -> usize {
+        self.members.len()
+    }
+    /// Releases the places whose grace period has ended; their tokens stop working.
+    fn expire(&mut self, now: Instant) {
+        let ended: Vec<PeerId> =
+            self.members.iter().filter(|(_, m)| m.away.is_some_and(|until| now >= until)).map(|(p, _)| *p).collect();
+        for peer in ended {
+            self.members.remove(&peer);
+            let _ = self.host.remove_peer(peer);
+        }
+    }
+    /// Records how a guest's connection ended, unless a newer connection already replaced it.
+    fn depart(&mut self, peer: PeerId, generation: u64, how: Departure, now: Instant, grace: Duration) {
+        if self.members.get(&peer).is_none_or(|m| m.generation != generation) {
+            return;
+        }
+        match how {
+            Departure::Superseded => {}
+            Departure::Left => {
+                self.members.remove(&peer);
+                let _ = self.host.remove_peer(peer);
+            }
+            Departure::Dropped => {
+                if let Some(member) = self.members.get_mut(&peer) {
+                    member.away = now.checked_add(grace).or(Some(now));
+                }
+            }
+        }
+    }
+    /// Whether this connection is still the guest's current one.
+    fn current(&self, peer: PeerId, generation: u64) -> bool {
+        self.members.get(&peer).is_some_and(|m| m.generation == generation)
+    }
+    /// Saves what the guest holds after a complete exchange, for a later resume.
+    fn remember(&mut self, peer: PeerId, generation: u64, known: &assets::Known) {
+        if let Some(member) = self.members.get_mut(&peer).filter(|m| m.generation == generation) {
+            member.known.clone_from(known);
+        }
+    }
+    /// Checks a hello and admits or resumes its guest. Secrets and tokens are compared in
+    /// constant time and a wrong one says nothing about how close it was.
+    fn open(&mut self, hello: Value, now: Instant) -> Result<Opening, Refusal> {
+        let guest = hello.get("protocol").and_then(Value::as_u64);
+        if guest != Some(u64::from(PROTOCOL)) {
+            let guest = guest.and_then(|n| u16::try_from(n).ok()).unwrap_or(0);
+            return Err(Refusal::Protocol { host: PROTOCOL, guest });
+        }
+        let hello: ClientMessage = serde_json::from_value(hello).map_err(|_| Refusal::Unsupported)?;
+        let ours = protocol::engine_revision().map_err(|_| Refusal::Unsupported)?;
+        let (format, engine) = match &hello {
+            ClientMessage::Hello { format, engine, .. } | ClientMessage::Resume { format, engine, .. } => {
+                (*format, engine.clone())
+            }
+            _ => return Err(Refusal::Unsupported),
+        };
+        if engine != ours || format != protocol::COPY_FORMAT {
+            let formats = (engine == ours).then_some((protocol::COPY_FORMAT, format));
+            return Err(Refusal::Build {
+                host: protocol::build_identity(&ours, formats.map(|f| f.0)),
+                guest: protocol::build_identity(&engine, formats.map(|f| f.1)),
+            });
+        }
+        self.expire(now);
+        match hello {
+            ClientMessage::Hello { secret, .. } => {
+                let (peer, token) = self.admit(&secret, now)?;
+                Ok(Opening::Admitted { peer, generation: 0, token })
+            }
+            ClientMessage::Resume { token, seen_revision, .. } => self.resume(&token, seen_revision),
+            _ => Err(Refusal::Unsupported),
+        }
+    }
+    fn resume(&mut self, token: &str, seen: Option<u64>) -> Result<Opening, Refusal> {
+        let presented = secret_hash(token);
+        // Compare against every member, without stopping early.
+        let mut found = None;
+        for (peer, member) in &self.members {
+            if bool::from(member.token.ct_eq(&presented)) && token.len() == 64 {
+                found = Some(*peer);
+            }
+        }
+        let peer = found.ok_or(Refusal::Resume)?;
+        let fresh = new_secret().map_err(|_| Refusal::Unsupported)?;
+        let member = self.members.get_mut(&peer).ok_or(Refusal::Resume)?;
+        member.token = secret_hash(&fresh);
+        member.generation = member.generation.wrapping_add(1);
+        member.away = None;
+        let generation = member.generation;
+        let known = member.known.clone();
+        // A resume without a fresh copy needs the history since the guest's revision.
+        let resume = seen.filter(|seen| self.since(*seen).is_ok()).map(|seen| (known, seen));
+        Ok(Opening::Resumed { peer, generation, token: fresh, resume })
+    }
     fn since(&self, seen: u64) -> Result<Vec<Operation>, String> {
         let revision = self.host.revision();
         if seen > revision || revision - seen > self.journal.len() as u64 {
@@ -152,7 +282,8 @@ impl Canonical {
         Ok(())
     }
     fn emit(&mut self, events: &SyncSender<Event>, last: &mut (u64, usize, u64)) -> Result<(), String> {
-        let current = (self.host.revision(), self.guests.len());
+        self.expire(Instant::now());
+        let current = (self.host.revision(), self.connected());
         if current != (last.0, last.1) {
             let controls = Controls::from_project(self.host.project(), current.0)?;
             let operations = self.since(last.0)?;
@@ -160,6 +291,14 @@ impl Canonical {
             match events.try_send(Event::State(controls, operations, current.1, audio)) {
                 Ok(()) => (last.0, last.1) = current,
                 Err(mpsc::TrySendError::Full(Event::State(_, _, _, audio))) => self.pending_audio = audio,
+                Err(_) => return Err("multiplayer view closed".into()),
+            }
+        }
+        let away = self.seats() - self.connected();
+        if away != self.away_shown {
+            match events.try_send(Event::Away(away)) {
+                Ok(()) => self.away_shown = away,
+                Err(mpsc::TrySendError::Full(_)) => {}
                 Err(_) => return Err("multiplayer view closed".into()),
             }
         }
@@ -181,7 +320,7 @@ impl Canonical {
         let error = outcome.and_then(Result::err);
         Ok(ServerMessage::State {
             protocol: PROTOCOL,
-            guests: self.guests.len(),
+            guests: self.connected(),
             controls: Box::new(Controls::from_project(self.host.project(), self.host.revision())?),
             operations,
             accepted,
@@ -191,8 +330,13 @@ impl Canonical {
         })
     }
     fn renew(&mut self, invitation: &dyn Invite, now: Instant, events: &SyncSender<Event>) -> Result<(), String> {
-        if self.guests.len() >= MAX_GUESTS {
-            return Err("the session already has three guests; wait for a guest to leave".into());
+        self.expire(now);
+        if self.seats() >= MAX_GUESTS {
+            return Err(if self.connected() < MAX_GUESTS {
+                "a guest whose connection dropped still holds a place for two minutes; wait for it to come back or for its place to free".into()
+            } else {
+                "the session already has three guests; wait for a guest to leave".into()
+            });
         }
         let secret = secret_hash(invitation.secret());
         if bool::from(self.secret.ct_eq(&secret)) {
@@ -206,19 +350,30 @@ impl Canonical {
         self.redeemed = false;
         Ok(())
     }
-    fn admit(&mut self, secret: &str, now: Instant) -> Result<suhina_collaboration::PeerId, String> {
-        if secret.len() != 64
-            || !bool::from(self.secret.ct_eq(&secret_hash(secret)))
-            || self.redeemed
-            || self.guests.len() >= MAX_GUESTS
-            || now >= self.expires
-        {
-            return Err("admission refused".into());
+    /// Admits the holder of the current code and gives it a resume token. Only the holder of the
+    /// right code learns that it expired, was used or that the session is full.
+    fn admit(&mut self, secret: &str, now: Instant) -> Result<(PeerId, String), Refusal> {
+        let matches = bool::from(self.secret.ct_eq(&secret_hash(secret)));
+        if secret.len() != 64 || !matches {
+            return Err(Refusal::Invalid);
         }
-        let peer = self.host.add_peer(Role::Editor).map_err(|e| e.to_string())?;
+        if self.redeemed {
+            return Err(Refusal::Used);
+        }
+        if now >= self.expires {
+            return Err(Refusal::Expired);
+        }
+        if self.seats() >= MAX_GUESTS {
+            return Err(Refusal::Full);
+        }
+        let token = new_secret().map_err(|_| Refusal::Unsupported)?;
+        let peer = self.host.add_peer(Role::Editor).map_err(|_| Refusal::Full)?;
         self.redeemed = true;
-        self.guests.insert(peer);
-        Ok(peer)
+        self.members.insert(
+            peer,
+            Member { token: secret_hash(&token), generation: 0, away: None, known: assets::Known::new() },
+        );
+        Ok((peer, token))
     }
 }
 enum Event {
@@ -233,6 +388,14 @@ enum Event {
     Transport(Option<SharedTransport>, LocalClock),
     Rejected(String),
     Failed(String),
+    /// Host: guests whose link dropped and who still hold their place.
+    Away(usize),
+    /// Guest: the link dropped; trying to come back.
+    Reconnecting,
+    /// Guest: back in the session as the same participant.
+    Resumed,
+    /// Guest: the host ended the session on purpose.
+    Ended,
     Closed,
 }
 enum Input {
@@ -264,8 +427,21 @@ struct Running {
 impl Drop for Running {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        for socket in self.sockets.lock().unwrap_or_else(PoisonError::into_inner).iter() {
-            let _ = socket.shutdown(Shutdown::Both);
+        // Leave the workers a moment to say goodbye (a guest leaving, a host ending the session)
+        // before the remaining sockets are shut down.
+        let sockets = Arc::clone(&self.sockets);
+        let close = move || {
+            for socket in sockets.lock().unwrap_or_else(PoisonError::into_inner).iter() {
+                let _ = socket.shutdown(Shutdown::Both);
+            }
+        };
+        let later = close.clone();
+        let spawned = std::thread::Builder::new().name("suhina-lan-close".into()).spawn(move || {
+            std::thread::sleep(FAREWELL + FAREWELL);
+            later();
+        });
+        if spawned.is_err() {
+            close();
         }
     }
 }
@@ -290,9 +466,17 @@ pub struct Service {
     sending: Option<(usize, usize)>,
     transport: Option<SharedTransport>,
     clock: Option<LocalClock>,
+    /// Host: guests whose link dropped and who still hold their place.
+    guests_away: usize,
+    tuning: Tuning,
 }
 
 impl Service {
+    /// Test timings and fault injection for the next session.
+    #[cfg(test)]
+    pub(crate) fn set_tuning(&mut self, tuning: Tuning) {
+        self.tuning = tuning;
+    }
     /// Trusted local selection only; remote inputs must use the bounded MIDI decoder instead.
     pub fn select_project(&mut self, project: &Project) -> Result<(), CommandError> {
         if self.active() {
@@ -431,6 +615,15 @@ impl Service {
                         self.clock = Some(clock);
                     }
                     Ok(Event::Rejected(error)) => self.error = Some(error),
+                    Ok(Event::Away(count)) => self.guests_away = count,
+                    Ok(Event::Reconnecting) => self.mode = "reconnecting".into(),
+                    Ok(Event::Resumed) => self.mode = "connected".into(),
+                    Ok(Event::Ended) => {
+                        self.error = Some("The host ended the session. Your copy of the project is kept.".into());
+                        self.mode = "disconnected".into();
+                        closed = true;
+                        break;
+                    }
                     Ok(Event::Failed(error)) => {
                         self.error = Some(error);
                         self.mode = "error".into();
@@ -456,6 +649,7 @@ impl Service {
             self.invitation = None;
             self.short_code = None;
             self.guest_count = 0;
+            self.guests_away = 0;
             self.transport = None;
             self.clock = None;
         }
@@ -493,6 +687,7 @@ impl Service {
         self.sending = None;
         self.transport = None;
         self.clock = None;
+        self.guests_away = 0;
         self.running = Some(Running { stop, sockets, inputs, events });
         Ok(json!({"queued":true}))
     }
@@ -605,7 +800,7 @@ fn state(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
         _ => None,
     };
     Ok(
-        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"short_code":s.short_code,"error":s.error,"guest_connected":s.guest_count > 0,"guests_connected":s.guest_count,"max_guests":MAX_GUESTS,"receiving":s.receiving,"sending":s.sending,"linked":s.transport.is_some(),"transport":s.transport,"transport_starts_in_ms":starts_in}),
+        json!({"mode":s.mode,"controls":s.controls,"operations":std::mem::take(&mut s.operations),"invitation":s.invitation,"short_code":s.short_code,"error":s.error,"guest_connected":s.guest_count > 0,"guests_connected":s.guest_count,"guests_reconnecting":s.guests_away,"reconnecting":s.mode == "reconnecting","max_guests":MAX_GUESTS,"receiving":s.receiving,"sending":s.sending,"linked":s.transport.is_some(),"transport":s.transport,"transport_starts_in_ms":starts_in}),
     )
 }
 fn queue_transport(s: &mut Service, request: TransportRequest) -> Result<Value, CommandError> {
@@ -646,7 +841,7 @@ fn shared_transport(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
 }
 fn renew_invitation(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.poll();
-    if s.mode != "hosting" || s.guest_count >= MAX_GUESTS {
+    if s.mode != "hosting" || s.guest_count + s.guests_away >= MAX_GUESTS {
         return Err("only a host with space for another guest can create a new invitation".into());
     }
     s.running
@@ -672,6 +867,7 @@ fn stop(s: &mut Service, _: &Value) -> Result<Value, CommandError> {
     s.sending = None;
     s.transport = None;
     s.clock = None;
+    s.guests_away = 0;
     Ok(json!({"stopped":true}))
 }
 fn address(p: &Value) -> Result<Place, CommandError> {
@@ -700,9 +896,9 @@ fn start_selected_host(s: &mut Service, p: &Value) -> Result<Value, CommandError
     start_source(s, place, source, audio)
 }
 fn start_source(s: &mut Service, place: Place, source: Project, audio: AudioPool) -> Result<Value, CommandError> {
-    let storage = s.storage.clone();
+    let (storage, tuning) = (s.storage.clone(), s.tuning.clone());
     s.start(move |stop, sockets, inputs, events| {
-        if let Err(e) = host(place, source, (audio, storage), &stop, &sockets, inputs, &events) {
+        if let Err(e) = host((place, &tuning), source, (audio, storage), &stop, &sockets, inputs, &events) {
             let _ = events.try_send(Event::Failed(e));
         }
     })
@@ -712,10 +908,11 @@ fn start_guest(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
     if ShortCode::looks_like(text) {
         // Checked here, before any network use; the lobby is asked on the session thread.
         let code = ShortCode::parse(text).map_err(CommandError::from)?;
-        let storage = s.storage.clone();
+        let (storage, tuning) = (s.storage.clone(), s.tuning.clone());
         return s.start(move |stop, _, inputs, events| {
-            let joined = crate::online::redeem(&code)
-                .and_then(|(net, invitation)| online_guest(invitation, Some(net), storage, &stop, inputs, &events));
+            let joined = crate::online::redeem(&code).and_then(|(net, invitation)| {
+                online_guest(invitation, Some(net), storage, &tuning, &stop, inputs, &events)
+            });
             if let Err(e) = joined
                 && !stop.load(Ordering::Relaxed)
             {
@@ -725,9 +922,9 @@ fn start_guest(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
     }
     if OnlineInvitation::is_online(text) {
         let invitation = OnlineInvitation::decode(text).map_err(CommandError::from)?;
-        let storage = s.storage.clone();
+        let (storage, tuning) = (s.storage.clone(), s.tuning.clone());
         return s.start(move |stop, _, inputs, events| {
-            if let Err(e) = online_guest(invitation, None, storage, &stop, inputs, &events)
+            if let Err(e) = online_guest(invitation, None, storage, &tuning, &stop, inputs, &events)
                 && !stop.load(Ordering::Relaxed)
             {
                 let _ = events.try_send(Event::Failed(e));
@@ -735,9 +932,9 @@ fn start_guest(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
         });
     }
     let invitation = Invitation::decode(text).map_err(CommandError::from)?;
-    let storage = s.storage.clone();
+    let (storage, tuning) = (s.storage.clone(), s.tuning.clone());
     s.start(move |stop, sockets, inputs, events| {
-        if let Err(e) = guest(invitation, storage, &stop, &sockets, inputs, &events)
+        if let Err(e) = guest(invitation, storage, &tuning, &stop, &sockets, inputs, &events)
             && !stop.load(Ordering::Relaxed)
         {
             let _ = events.try_send(Event::Failed(e));
@@ -826,6 +1023,11 @@ pub(crate) trait Link: Read + Write {
         self.set_deadline(Instant::now() + TIMEOUT);
     }
 }
+impl<L: Link + ?Sized> Link for Box<L> {
+    fn set_deadline(&mut self, deadline: Instant) {
+        (**self).set_deadline(deadline);
+    }
+}
 impl Link for StreamOwned<ServerConnection, DeadlineSocket> {
     fn set_deadline(&mut self, deadline: Instant) {
         self.sock.deadline = deadline;
@@ -902,7 +1104,7 @@ fn lan_listener(address: SocketAddr, secret: String) -> Result<(TcpListener, Arc
     Ok((listener, Arc::new(tls), invitation))
 }
 fn host(
-    place: Place,
+    (place, tuning): (Place, &Tuning),
     source: Project,
     resources: (AudioPool, Option<PathBuf>),
     stop: &Arc<AtomicBool>,
@@ -936,7 +1138,8 @@ fn host(
         secret: secret_hash(&secret),
         expires: Instant::now() + Duration::from_secs(300),
         redeemed: false,
-        guests: BTreeSet::new(),
+        members: BTreeMap::new(),
+        away_shown: 0,
         assets: initial_assets,
         pending_audio: Vec::new(),
         linked: Linked::new(),
@@ -1026,11 +1229,11 @@ fn host(
                             Arc::clone(&pending),
                             Arc::clone(sockets),
                         );
-                        let storage = resources.1.clone();
+                        let (storage, tuning) = (resources.1.clone(), tuning.clone());
                         pending.fetch_add(1, Ordering::Relaxed);
                         match std::thread::Builder::new().name("suhina-lan-peer".into()).spawn(move || {
                             let _guard = ConnectionGuard { sockets: registry, peer: stream.peer_addr().ok() };
-                            let _ = serve(stream, tls, &canonical, &stop, storage.as_deref());
+                            let _ = serve(stream, tls, &canonical, &stop, storage.as_deref(), &tuning);
                             pending.fetch_sub(1, Ordering::Relaxed);
                         }) {
                             Ok(handle) => handlers.push(handle),
@@ -1047,9 +1250,9 @@ fn host(
             Acceptor::Online { incoming, .. } => match incoming.try_recv() {
                 Ok(stream) => {
                     let (canonical, stop) = (Arc::clone(&canonical), Arc::clone(stop));
-                    let storage = resources.1.clone();
+                    let (storage, tuning) = (resources.1.clone(), tuning.clone());
                     match std::thread::Builder::new().name("suhina-online-peer".into()).spawn(move || {
-                        let _ = serve_link(stream, &canonical, &stop, storage.as_deref());
+                        let _ = serve_link(tuning.wrap(stream), &canonical, &stop, storage.as_deref(), tuning.grace);
                     }) {
                         Ok(handle) => handlers.push(handle),
                         Err(_) => return Err("could not accept an online guest".into()),
@@ -1061,6 +1264,11 @@ fn host(
         }
         handlers.retain(|h| !h.is_finished());
         std::thread::sleep(Duration::from_millis(25));
+    }
+    // Give each guest's handler a moment to say the host left before the endpoint closes.
+    let farewell = Instant::now() + FAREWELL + FAREWELL;
+    while handlers.iter().any(|h| !h.is_finished()) && Instant::now() < farewell {
+        std::thread::sleep(Duration::from_millis(10));
     }
     Ok(())
 }
@@ -1190,125 +1398,182 @@ fn serve(
     canonical: &Mutex<Canonical>,
     stop: &AtomicBool,
     storage: Option<&std::path::Path>,
+    tuning: &Tuning,
 ) -> Result<(), String> {
     let connection = ServerConnection::new(tls).map_err(|e| e.to_string())?;
-    serve_link(StreamOwned::new(connection, DeadlineSocket::new(stream)), canonical, stop, storage)
+    let link = tuning.wrap(StreamOwned::new(connection, DeadlineSocket::new(stream)));
+    serve_link(link, canonical, stop, storage, tuning.grace)
 }
 fn serve_link(
-    mut io: impl Link,
+    io: impl Link,
     canonical: &Mutex<Canonical>,
     stop: &AtomicBool,
     storage: Option<&std::path::Path>,
+    grace: Duration,
 ) -> Result<(), String> {
-    let hello: ClientMessage = protocol::read(&mut io)?;
-    let peer = {
-        let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-        let result = match hello {
-            ClientMessage::Hello { protocol: PROTOCOL, format: crate::protocol::COPY_FORMAT, engine, secret }
-                if engine == protocol::engine_revision()? =>
-            {
-                state.admit(&secret, Instant::now())
-            }
-            _ => Err("admission refused".into()),
-        };
-        match result {
-            Ok(peer) => peer,
-            Err(_) => {
-                drop(state);
-                protocol::write(&mut io, &ServerMessage::Denied)?;
-                return Err("admission refused".into());
-            }
+    let mut io = Watch::new(io);
+    let hello: Value = protocol::read(&mut io)?;
+    let opening = canonical.lock().unwrap_or_else(PoisonError::into_inner).open(hello, Instant::now());
+    let (peer, generation, resume, answer) = match opening {
+        Ok(Opening::Admitted { peer, generation, token }) => {
+            (peer, generation, None, ServerMessage::Admitted { protocol: PROTOCOL, token })
+        }
+        Ok(Opening::Resumed { peer, generation, token, resume }) => {
+            let copy = resume.is_none();
+            (peer, generation, resume, ServerMessage::Resumed { protocol: PROTOCOL, token, copy })
+        }
+        Err(refusal) => {
+            protocol::write(&mut io, &ServerMessage::Denied { refusal: refusal.clone() })?;
+            return Err(refusal.message());
         }
     };
-    let result = (|| {
-        io.set_deadline(Instant::now() + Duration::from_secs(30));
-        let (snapshot, revision, assets) = {
-            let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-            (state.host.project().clone(), state.host.revision(), state.assets.clone())
-        };
-        let (_, document) = crate::midi::encode_portable(&snapshot)?;
-        crate::transfer::send(&mut io, &document, revision, stop)?;
-        io.set_deadline(Instant::now() + Duration::from_secs(180));
-        let offered = assets::send(&mut io, &snapshot, &assets, stop)?;
-        let mut budget = assets::background_budget(&offered);
-        let mut known: assets::Known = assets
-            .iter()
-            .filter(|a| assets::references(&snapshot).contains(&a.meta.path()))
-            .map(|a| (a.meta.path(), a.meta.clone()))
-            .collect();
-        io.renew();
-        let (initial, project, assets) = {
-            let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-            (state.response(revision, None)?, state.host.project().clone(), state.assets.clone())
-        };
-        write_update(&mut io, &initial, &project, &assets, &mut known, stop)?;
-        while !stop.load(Ordering::Relaxed) {
+    let result = protocol::write(&mut io, &answer)
+        .and_then(|()| serve_member(&mut io, canonical, (peer, generation), resume, stop, storage));
+    let how = match &result {
+        Ok(how) => *how,
+        // A broken protocol frees the place; only a failed network keeps it for a resume.
+        Err(_) if !io.failed() => Departure::Left,
+        Err(_) => Departure::Dropped,
+    };
+    canonical.lock().unwrap_or_else(PoisonError::into_inner).depart(peer, generation, how, Instant::now(), grace);
+    result.map(|_| ())
+}
+/// What the host sent a guest with its copy: the sounds it holds, and the sounds the copy offered
+/// (in manifest order), which the guest may still fetch in the background on this connection.
+type Copy = (assets::Known, Vec<Arc<assets::Encoded>>);
+/// Sends a guest the whole project: the portable copy, its sounds and a first state.
+fn send_copy(io: &mut impl Link, canonical: &Mutex<Canonical>, stop: &AtomicBool) -> Result<Copy, String> {
+    io.set_deadline(Instant::now() + Duration::from_secs(30));
+    let (snapshot, revision, assets) = {
+        let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+        (state.host.project().clone(), state.host.revision(), state.assets.clone())
+    };
+    let (_, document) = crate::midi::encode_portable(&snapshot)?;
+    crate::transfer::send(io, &document, revision, stop)?;
+    io.set_deadline(Instant::now() + Duration::from_secs(180));
+    let offered = assets::send(io, &snapshot, &assets, stop)?;
+    let mut known: assets::Known = assets
+        .iter()
+        .filter(|a| assets::references(&snapshot).contains(&a.meta.path()))
+        .map(|a| (a.meta.path(), a.meta.clone()))
+        .collect();
+    io.renew();
+    let (initial, project, assets) = {
+        let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+        (state.response(revision, None)?, state.host.project().clone(), state.assets.clone())
+    };
+    write_update(io, &initial, &project, &assets, &mut known, stop)?;
+    Ok((known, offered))
+}
+/// Serves one admitted or resumed guest until it leaves, its link drops or the host stops.
+/// `resume` holds what a resumed guest has and its revision; without it the guest gets a copy.
+fn serve_member(
+    io: &mut impl Link,
+    canonical: &Mutex<Canonical>,
+    member: (PeerId, u64),
+    resume: Option<(assets::Known, u64)>,
+    stop: &AtomicBool,
+    storage: Option<&std::path::Path>,
+) -> Result<Departure, String> {
+    let (peer, generation) = member;
+    // Background slices index the copy's manifest, so only a connection that sent a copy serves
+    // them; a resumed guest still missing sounds asks for a fresh copy instead.
+    let (mut known, offered) = match resume {
+        None => send_copy(io, canonical, stop)?,
+        Some((mut known, seen)) => {
             io.renew();
-            let message: ClientMessage = protocol::read(&mut io)?;
-            if let ClientMessage::Fetch { protocol: PROTOCOL, asset, offset, tree, .. } = &message {
-                assets::serve_slice(&mut io, &offered, (*asset, *offset, *tree), &mut budget, stop)?;
-            }
-            let upload = if let ClientMessage::Publish {
-                protocol: PROTOCOL,
-                sequence,
-                base_revision,
-                seen_revision,
-                track,
-                start,
-                asset,
-            } = &message
-            {
-                Some((
-                    *seen_revision,
-                    receive_publication(
-                        &mut io,
-                        canonical,
-                        (peer, *sequence, *base_revision, *seen_revision),
-                        (*track, *start),
-                        asset,
-                        (storage, stop),
-                    )?,
-                ))
-            } else {
-                None
-            };
             let (response, project, assets) = {
-                let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-                let (seen, outcome) = match (upload, &message) {
-                    (Some((seen, result)), _) => (seen, Some(result)),
-                    (None, ClientMessage::Poll { protocol: PROTOCOL, seen_revision })
-                    | (None, ClientMessage::Fetch { protocol: PROTOCOL, seen_revision, .. }) => (*seen_revision, None),
-                    (
-                        None,
-                        ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision, seen_revision, edit },
-                    ) if *sequence > 0 => {
-                        // Validate delivery cursor before allowing a mutation.
-                        state.since(*seen_revision)?;
-                        (*seen_revision, Some(state.submit(peer, *sequence, *base_revision, edit.clone())))
-                    }
-                    (None, ClientMessage::Transport { protocol: PROTOCOL, seen_revision, request }) => {
-                        state.since(*seen_revision)?;
-                        (*seen_revision, Some(state.linked.apply(*request)))
-                    }
-                    _ => return Err("unsupported LAN protocol message".into()),
-                };
-                (state.response(seen, outcome)?, state.host.project().clone(), state.assets.clone())
+                let state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+                (state.response(seen, None)?, state.host.project().clone(), state.assets.clone())
             };
-            if let (ClientMessage::Publish { asset, .. }, ServerMessage::State { accepted: Some(true), .. }) =
-                (&message, &response)
-            {
-                known.insert(asset.path(), asset.clone());
-            }
-            write_update(&mut io, &response, &project, &assets, &mut known, stop)?;
-            // Rate bound also applies to a guest bypassing our client's polling cadence.
-            std::thread::sleep(Duration::from_millis(50));
+            write_update(io, &response, &project, &assets, &mut known, stop)?;
+            (known, Vec::new())
         }
-        Ok(())
-    })();
-    let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
-    let _ = state.host.remove_peer(peer);
-    state.guests.remove(&peer);
-    result
+    };
+    let mut budget = assets::background_budget(&offered);
+    canonical.lock().unwrap_or_else(PoisonError::into_inner).remember(peer, generation, &known);
+    loop {
+        if stop.load(Ordering::Relaxed) {
+            // Tell the guest the host left on purpose, so it does not try to come back.
+            io.set_deadline(Instant::now() + FAREWELL);
+            if protocol::write(io, &ServerMessage::Ended { protocol: PROTOCOL }).is_ok() {
+                // Wait for the guest's next request, so the link stays open until it has read why.
+                let _ = protocol::read::<Value>(io);
+            }
+            return Ok(Departure::Left);
+        }
+        if !canonical.lock().unwrap_or_else(PoisonError::into_inner).current(peer, generation) {
+            return Ok(Departure::Superseded);
+        }
+        io.renew();
+        let message: ClientMessage = protocol::read(io)?;
+        if matches!(message, ClientMessage::Leave { protocol: PROTOCOL }) {
+            return Ok(Departure::Left);
+        }
+        if let ClientMessage::Fetch { protocol: PROTOCOL, asset, offset, tree, .. } = &message {
+            if offered.is_empty() {
+                return Err("no background sounds on this connection".into());
+            }
+            assets::serve_slice(io, &offered, (*asset, *offset, *tree), &mut budget, stop)?;
+        }
+        let upload = if let ClientMessage::Publish {
+            protocol: PROTOCOL,
+            sequence,
+            base_revision,
+            seen_revision,
+            track,
+            start,
+            asset,
+        } = &message
+        {
+            Some((
+                *seen_revision,
+                receive_publication(
+                    io,
+                    canonical,
+                    (peer, *sequence, *base_revision, *seen_revision),
+                    (*track, *start),
+                    asset,
+                    (storage, stop),
+                )?,
+            ))
+        } else {
+            None
+        };
+        let (response, project, assets) = {
+            let mut state = canonical.lock().unwrap_or_else(PoisonError::into_inner);
+            if !state.current(peer, generation) {
+                return Ok(Departure::Superseded);
+            }
+            let (seen, outcome) = match (upload, &message) {
+                (Some((seen, result)), _) => (seen, Some(result)),
+                (None, ClientMessage::Poll { protocol: PROTOCOL, seen_revision })
+                | (None, ClientMessage::Fetch { protocol: PROTOCOL, seen_revision, .. }) => (*seen_revision, None),
+                (None, ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision, seen_revision, edit })
+                    if *sequence > 0 =>
+                {
+                    // Validate delivery cursor before allowing a mutation.
+                    state.since(*seen_revision)?;
+                    (*seen_revision, Some(state.submit(peer, *sequence, *base_revision, edit.clone())))
+                }
+                (None, ClientMessage::Transport { protocol: PROTOCOL, seen_revision, request }) => {
+                    state.since(*seen_revision)?;
+                    (*seen_revision, Some(state.linked.apply(*request)))
+                }
+                _ => return Err("unsupported LAN protocol message".into()),
+            };
+            (state.response(seen, outcome)?, state.host.project().clone(), state.assets.clone())
+        };
+        if let (ClientMessage::Publish { asset, .. }, ServerMessage::State { accepted: Some(true), .. }) =
+            (&message, &response)
+        {
+            known.insert(asset.path(), asset.clone());
+        }
+        write_update(io, &response, &project, &assets, &mut known, stop)?;
+        canonical.lock().unwrap_or_else(PoisonError::into_inner).remember(peer, generation, &known);
+        // Rate bound also applies to a guest bypassing our client's polling cadence.
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 struct PreparedTake {
@@ -1350,6 +1615,7 @@ fn prepare_take(
 fn guest(
     invitation: Invitation,
     storage: Option<PathBuf>,
+    tuning: &Tuning,
     stop: &Arc<AtomicBool>,
     sockets: &Mutex<Vec<TcpStream>>,
     inputs: Receiver<Input>,
@@ -1357,26 +1623,34 @@ fn guest(
 ) -> Result<(), String> {
     let mut roots = RootCertStore::empty();
     roots.add(CertificateDer::from(invitation.der()?)).map_err(|_| "invalid invitation certificate")?;
-    let tls = ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-        .with_protocol_versions(&[&rustls::version::TLS13])
-        .map_err(|e| e.to_string())?
-        .with_root_certificates(roots)
-        .with_no_client_auth();
-    let stream = TcpStream::connect_timeout(&invitation.endpoint, TIMEOUT)
-        .map_err(|e| format!("could not reach the LAN host: {e}"))?;
-    socket(&stream)?;
-    register(&stream, sockets)?;
-    let name = ServerName::try_from("suhina.local").map_err(|_| "invalid server name")?;
-    let io = StreamOwned::new(
-        ClientConnection::new(Arc::new(tls), name).map_err(|e| e.to_string())?,
-        DeadlineSocket::new(stream),
+    let tls = Arc::new(
+        ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .map_err(|e| e.to_string())?
+            .with_root_certificates(roots)
+            .with_no_client_auth(),
     );
-    guest_link(io, invitation.secret, storage, stop, inputs, events)
+    let name = ServerName::try_from("suhina.local").map_err(|_| "invalid server name")?;
+    let endpoint = invitation.endpoint;
+    let dial = || -> Result<Box<dyn Link + Send>, String> {
+        // A dropped link's socket is closed before the next attempt.
+        for old in sockets.lock().unwrap_or_else(PoisonError::into_inner).drain(..) {
+            let _ = old.shutdown(Shutdown::Both);
+        }
+        let stream =
+            TcpStream::connect_timeout(&endpoint, TIMEOUT).map_err(|e| format!("could not reach the LAN host: {e}"))?;
+        socket(&stream)?;
+        register(&stream, sockets)?;
+        let connection = ClientConnection::new(Arc::clone(&tls), name.clone()).map_err(|e| e.to_string())?;
+        Ok(tuning.wrap(StreamOwned::new(connection, DeadlineSocket::new(stream))))
+    };
+    guest_link(dial, invitation.secret, storage, tuning, stop, inputs, events)
 }
 fn online_guest(
     invitation: OnlineInvitation,
     net: Option<Net>,
     storage: Option<PathBuf>,
+    tuning: &Tuning,
     stop: &Arc<AtomicBool>,
     inputs: Receiver<Input>,
     events: &SyncSender<Event>,
@@ -1392,48 +1666,206 @@ fn online_guest(
     } else {
         Reach::Internet
     };
+    // A short code's lobby endpoint is reused; a long code binds one.
     let net = match net {
         Some(net) => net,
         None => Net::bind(reach)?,
     };
-    let stream = net.connect(invitation.endpoint)?;
-    let result = guest_link(stream, invitation.secret, storage, stop, inputs, events);
+    let endpoint = invitation.endpoint;
+    let dial = || net.connect(endpoint.clone()).map(|stream| tuning.wrap(stream));
+    let result = guest_link(dial, invitation.secret, storage, tuning, stop, inputs, events);
     drop(net);
     result
 }
-fn guest_link(
-    mut io: impl Link,
+
+/// The guest's verified copy of the shared project, kept across reconnections.
+struct Mirror {
+    session: suhina_session::Session,
+    revision: u64,
+    known: assets::Known,
+    previous: Controls,
+    previous_guests: usize,
+    /// Set while an update is half applied: a resume then asks for a fresh copy.
+    dirty: bool,
+    /// Sounds of a heavy copy still arriving in the background. Their slices refer to the
+    /// copy's manifest, which only the connection that sent it knows, so a resume with sounds
+    /// pending asks for a fresh copy (cheap: the sound cache keeps what already arrived).
+    background: Option<assets::Background>,
+}
+impl Mirror {
+    /// The revision a resume can continue from, or `None` to ask for a fresh copy.
+    fn resumable(&self) -> Option<u64> {
+        (!self.dirty && self.background.is_none()).then_some(self.revision)
+    }
+}
+/// A request sent and not yet answered. After a resume it is sent again with the same sequence,
+/// which the host's retry cache applies at most once.
+enum Flight {
+    Edit { base: u64, edit: WireEdit },
+    Publish(PreparedTake),
+    Transport(TransportRequest),
+}
+/// The guest's own progress, kept across reconnections.
+struct Progress {
+    sequence: u64,
+    pending: Option<PendingTake>,
+    flight: Option<Flight>,
+    /// Linked playback: the host clock estimated from round trips, and what the view last got.
+    local: crate::linked::Clock,
+    estimate: ClockEstimate,
+    shown: Option<(Option<SharedTransport>, i64)>,
+}
+/// Why a guest's exchanges ended without an error.
+enum GuestEnd {
+    /// This computer left the session.
+    Stopped,
+    /// The host ended the session on purpose.
+    Ended,
+}
+const LOST: &str = "Lost the connection to the host and could not reconnect. Your copy of the project is kept; ask the host for a new invitation code to rejoin.";
+
+fn hello_fields() -> Result<(u16, u16, String), String> {
+    Ok((PROTOCOL, crate::protocol::COPY_FORMAT, protocol::engine_revision()?))
+}
+fn guest_link<L: Link>(
+    mut dial: impl FnMut() -> Result<L, String>,
     secret: String,
     storage: Option<PathBuf>,
+    tuning: &Tuning,
     stop: &Arc<AtomicBool>,
     inputs: Receiver<Input>,
     events: &SyncSender<Event>,
 ) -> Result<(), String> {
-    protocol::write(
-        &mut io,
-        &ClientMessage::Hello {
-            protocol: PROTOCOL,
-            format: crate::protocol::COPY_FORMAT,
-            engine: protocol::engine_revision()?,
-            secret,
-        },
-    )?;
+    let (protocol, format, engine) = hello_fields()?;
+    let mut io = Watch::new(dial()?);
+    protocol::write(&mut io, &ClientMessage::Hello { protocol, format, engine: engine.clone(), secret })?;
     io.set_deadline(Instant::now() + Duration::from_secs(30));
-    let offer: ServerMessage = protocol::read(&mut io)?;
-    let (document, mut revision) = crate::transfer::receive(&mut io, offer, stop, |done, total| {
+    let mut token = match protocol::read_answer(&mut io)? {
+        ServerMessage::Admitted { protocol: PROTOCOL, token } => token,
+        ServerMessage::Denied { refusal } => return Err(refusal.message()),
+        _ => return Err("invalid host answer".into()),
+    };
+    let mut mirror: Option<Mirror> = None;
+    let mut progress = Progress {
+        sequence: 1,
+        pending: None,
+        flight: None,
+        local: crate::linked::Clock::new(),
+        estimate: ClockEstimate::default(),
+        shown: None,
+    };
+    let context = (storage.as_deref(), stop, &inputs, events);
+    let mut copy = true;
+    let mut resumed = false;
+    loop {
+        match guest_round(&mut io, &mut mirror, &mut progress, (copy, resumed), context) {
+            Ok(GuestEnd::Stopped) => {
+                io.set_deadline(Instant::now() + FAREWELL);
+                let _ = protocol::write(&mut io, &ClientMessage::Leave { protocol: PROTOCOL });
+                let _ = events.try_send(Event::Closed);
+                return Ok(());
+            }
+            Ok(GuestEnd::Ended) => {
+                let _ = events.try_send(Event::Ended);
+                return Ok(());
+            }
+            Err(_) if io.failed() && !stop.load(Ordering::Relaxed) => {}
+            Err(error) => return Err(error),
+        }
+        // The link dropped: come back as the same participant, without a new code.
+        let _ = events.try_send(Event::Reconnecting);
+        let mut backoff = Backoff::new(tuning.retry);
+        let (link, fresh) = loop {
+            if stop.load(Ordering::Relaxed) {
+                let _ = events.try_send(Event::Closed);
+                return Ok(());
+            }
+            let Some(wait) = backoff.wait() else {
+                return Err(LOST.into());
+            };
+            pause(wait, stop);
+            let Ok(link) = dial() else {
+                continue;
+            };
+            let mut link = Watch::new(link);
+            let seen_revision = mirror.as_ref().and_then(Mirror::resumable);
+            let hello =
+                ClientMessage::Resume { protocol, format, engine: engine.clone(), token: token.clone(), seen_revision };
+            match protocol::write(&mut link, &hello).and_then(|()| protocol::read_answer(&mut link)) {
+                Ok(ServerMessage::Resumed { protocol: PROTOCOL, token: next, copy }) => {
+                    token = next;
+                    break (link, copy);
+                }
+                Ok(ServerMessage::Denied { refusal }) => return Err(refusal.message()),
+                Ok(_) => return Err("invalid host answer".into()),
+                Err(_) if link.failed() && !backoff.spent() => {}
+                Err(_) if link.failed() => return Err(LOST.into()),
+                Err(error) => return Err(error),
+            }
+        };
+        io = link;
+        if !fresh && mirror.as_ref().is_some_and(|m| m.resumable().is_none()) {
+            return Err("the host did not send the fresh copy this guest asked for".into());
+        }
+        copy = fresh || mirror.is_none();
+        resumed = true;
+    }
+}
+/// Sleeps for `wait`, waking early when the session stops.
+fn pause(wait: Duration, stop: &AtomicBool) {
+    let until = Instant::now() + wait;
+    while !stop.load(Ordering::Relaxed) {
+        let Some(left) = until.checked_duration_since(Instant::now()).filter(|d| !d.is_zero()) else {
+            return;
+        };
+        std::thread::sleep(left.min(Duration::from_millis(50)));
+    }
+}
+type GuestContext<'a> = (Option<&'a std::path::Path>, &'a Arc<AtomicBool>, &'a Receiver<Input>, &'a SyncSender<Event>);
+/// One connection's exchanges: a copy first when needed, then polls, edits and publications.
+/// `start` says whether a copy comes first and whether this link resumed an earlier one.
+fn guest_round(
+    io: &mut impl Link,
+    mirror: &mut Option<Mirror>,
+    progress: &mut Progress,
+    start: (bool, bool),
+    context: GuestContext<'_>,
+) -> Result<GuestEnd, String> {
+    let (copy, resumed) = start;
+    if copy {
+        // An unfinished background download lets go of its partial sound before the new copy.
+        if let Some(old) = mirror.as_mut() {
+            old.background = None;
+        }
+        *mirror = Some(receive_copy(io, context.0, context.1, context.3)?);
+    }
+    let mirror = mirror.as_mut().ok_or("the shared copy is missing")?;
+    // A link resumed without a copy starts with the host's state since our revision.
+    exchange(io, mirror, progress, (resumed && !copy, resumed), context)
+}
+/// Receives the whole shared project and tells the view.
+fn receive_copy(
+    io: &mut impl Link,
+    storage: Option<&std::path::Path>,
+    stop: &Arc<AtomicBool>,
+    events: &SyncSender<Event>,
+) -> Result<Mirror, String> {
+    io.set_deadline(Instant::now() + Duration::from_secs(30));
+    let offer: ServerMessage = protocol::read(io)?;
+    let (document, mut revision) = crate::transfer::receive(io, offer, stop, |done, total| {
         let _ = events.try_send(Event::Receiving(done, total));
     })?;
     let project = crate::midi::decode_portable(&document)?;
     io.set_deadline(Instant::now() + Duration::from_secs(180));
-    let mut snapshot = assets::receive_initial(&mut io, project, revision, storage.as_deref(), stop, |done, total| {
+    let mut snapshot = assets::receive_initial(io, project, revision, storage, stop, |done, total| {
         let _ = events.try_send(Event::Receiving(done, total));
     })?;
     // Sounds of a heavy initial copy that arrive after the project opened.
-    let mut background = snapshot.take_background();
+    let background = snapshot.take_background();
     let mut known: assets::Known = snapshot.metas.iter().map(|a| (a.path(), a.clone())).collect();
-    let mut mirror = suhina_session::Session::new(snapshot.project.clone());
+    let mut session = suhina_session::Session::new(snapshot.project.clone());
     io.renew();
-    let first: ServerMessage = protocol::read(&mut io)?;
+    let first: ServerMessage = protocol::read(io)?;
     let ServerMessage::State {
         protocol: PROTOCOL,
         controls,
@@ -1445,101 +1877,122 @@ fn guest_link(
         transport: _,
     } = first
     else {
-        return Err("invitation refused, expired or already used".into());
+        return Err("invalid host response".into());
     };
     protocol::validate_guest_count(guests)?;
-    let mut previous_guests = guests;
     let controls = *controls;
-    protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations)?;
-    if let Some(audio) =
-        receive_update(&mut io, mirror.project(), revision, storage.as_deref(), &mut known, stop, events)?
-    {
+    protocol::apply_operations(&mut session, &mut revision, &controls, &operations)?;
+    if let Some(audio) = receive_update(io, session.project(), revision, storage, &mut known, stop, events)? {
         snapshot.add_audio(audio);
     }
-    let mut previous = controls.clone();
-    snapshot.project = mirror.project().clone();
+    snapshot.project = session.project().clone();
     snapshot.revision = revision;
+    let mirror = Mirror {
+        session,
+        revision,
+        known,
+        previous: controls.clone(),
+        previous_guests: guests,
+        dirty: false,
+        background,
+    };
     events.try_send(Event::Connected(controls, Box::new(snapshot), guests)).map_err(|_| "multiplayer view closed")?;
-    let mut sequence = 1u64;
-    let mut pending: Option<PendingTake> = None;
-    // Linked playback: the host clock estimated from round trips, and what the view last got.
-    let local = crate::linked::Clock::new();
-    let mut estimate = ClockEstimate::default();
-    let mut shown: Option<(Option<SharedTransport>, i64)> = None;
+    Ok(mirror)
+}
+/// Polls, edits and publications over one link until it fails, the guest stops or the host ends.
+/// `start.0`: the first message is a state the host sends unasked (a resume);
+/// `start.1`: tell the view once the first state is through (after a reconnection).
+fn exchange(
+    io: &mut impl Link,
+    mirror: &mut Mirror,
+    progress: &mut Progress,
+    start: (bool, bool),
+    context: GuestContext<'_>,
+) -> Result<GuestEnd, String> {
+    let (storage, stop, inputs, events) = context;
+    let (mut unasked, mut announce) = start;
     while !stop.load(Ordering::Relaxed) {
         io.renew();
-        let input = if pending.is_none() { inputs.try_recv().ok() } else { None };
-        let mut transport_request = None;
-        let edit = match input {
-            Some(Input::Publish { base, track, start, audio }) => {
-                pending = Some(prepare_take(base, track, start, audio, storage.clone(), Arc::clone(stop))?);
-                None
+        if !unasked && progress.flight.is_none() {
+            let input = if progress.pending.is_none() { inputs.try_recv().ok() } else { None };
+            match input {
+                Some(Input::Publish { base, track, start, audio }) => {
+                    let root = storage.map(std::path::Path::to_path_buf);
+                    progress.pending = Some(prepare_take(base, track, start, audio, root, Arc::clone(stop))?);
+                }
+                Some(Input::Edit { base, edit }) => progress.flight = Some(Flight::Edit { base, edit }),
+                Some(Input::Transport(request)) => progress.flight = Some(Flight::Transport(request)),
+                Some(Input::RenewInvitation) => return Err("only the host can renew invitations".into()),
+                None => {}
             }
-            Some(Input::Edit { base, edit }) => Some((base, edit)),
-            Some(Input::Transport(request)) => {
-                transport_request = Some(request);
-                None
+            match progress.pending.as_ref().map(|p| p.ready.try_recv()) {
+                Some(Ok(Ok(take))) => {
+                    progress.pending = None;
+                    progress.flight = Some(Flight::Publish(take));
+                }
+                Some(Ok(Err(error))) => {
+                    progress.pending = None;
+                    events.try_send(Event::Upload(None)).map_err(|_| "multiplayer view closed")?;
+                    events.try_send(Event::Rejected(error)).map_err(|_| "multiplayer view closed")?;
+                }
+                Some(Err(mpsc::TryRecvError::Disconnected)) => return Err("take preparation stopped".into()),
+                _ => {}
             }
-            Some(Input::RenewInvitation) => return Err("only the host can renew invitations".into()),
-            None => None,
-        };
-        let prepared = match pending.as_ref().map(|p| p.ready.try_recv()) {
-            Some(Ok(Ok(take))) => {
-                pending = None;
-                Some(take)
-            }
-            Some(Ok(Err(error))) => {
-                pending = None;
-                events.try_send(Event::Upload(None)).map_err(|_| "multiplayer view closed")?;
-                events.try_send(Event::Rejected(error)).map_err(|_| "multiplayer view closed")?;
-                None
-            }
-            Some(Err(mpsc::TryRecvError::Disconnected)) => return Err("take preparation stopped".into()),
-            _ => None,
-        };
-        let edited = prepared.is_some() || edit.is_some();
-        let fetch = match background.as_mut() {
-            Some(sounds) if !edited && transport_request.is_none() => sounds.request(revision, stop)?,
+        }
+        let seen_revision = mirror.revision;
+        // Background sounds take the place of an idle poll, never of a request.
+        let fetch = match mirror.background.as_mut() {
+            Some(sounds) if !unasked && progress.flight.is_none() => sounds.request(seen_revision, stop)?,
             _ => None,
         };
         let fetching = fetch.is_some();
-        let request = if let Some(take) = &prepared {
-            ClientMessage::Publish {
-                protocol: PROTOCOL,
-                sequence,
-                base_revision: take.base,
-                seen_revision: revision,
-                track: take.track,
-                start: take.start,
-                asset: take.asset.meta.clone(),
-            }
-        } else if let Some((base, edit)) = edit {
-            ClientMessage::Edit { protocol: PROTOCOL, sequence, base_revision: base, seen_revision: revision, edit }
-        } else if let Some(request) = transport_request {
-            ClientMessage::Transport { protocol: PROTOCOL, seen_revision: revision, request }
-        } else if let Some(fetch) = fetch {
-            fetch
-        } else {
-            ClientMessage::Poll { protocol: PROTOCOL, seen_revision: revision }
-        };
-        let sent_ms = local.now_ms();
         let mut arrived = Vec::new();
-        protocol::write(&mut io, &request)?;
-        let response = if let Some(take) = &prepared {
-            io.set_deadline(Instant::now() + Duration::from_secs(180));
-            assets::send_take(&mut io, &take.asset, stop, |done, total| {
-                let _ = events.try_send(Event::Upload(Some((done, total))));
-            })?
+        let sent_ms = progress.local.now_ms();
+        let response = if unasked {
+            protocol::read(io)?
         } else {
-            if fetching
-                && let Some(sounds) = background.as_mut()
-                && let Some(sound) = sounds.read(&mut io, stop)?
-            {
-                arrived.push(sound);
+            let request = match &progress.flight {
+                Some(Flight::Publish(take)) => ClientMessage::Publish {
+                    protocol: PROTOCOL,
+                    sequence: progress.sequence,
+                    base_revision: take.base,
+                    seen_revision,
+                    track: take.track,
+                    start: take.start,
+                    asset: take.asset.meta.clone(),
+                },
+                Some(Flight::Edit { base, edit }) => ClientMessage::Edit {
+                    protocol: PROTOCOL,
+                    sequence: progress.sequence,
+                    base_revision: *base,
+                    seen_revision,
+                    edit: edit.clone(),
+                },
+                Some(Flight::Transport(request)) => {
+                    ClientMessage::Transport { protocol: PROTOCOL, seen_revision, request: *request }
+                }
+                None => fetch.unwrap_or(ClientMessage::Poll { protocol: PROTOCOL, seen_revision }),
+            };
+            protocol::write(io, &request)?;
+            if let Some(Flight::Publish(take)) = &progress.flight {
+                io.set_deadline(Instant::now() + Duration::from_secs(180));
+                assets::send_take(io, &take.asset, stop, |done, total| {
+                    let _ = events.try_send(Event::Upload(Some((done, total))));
+                })?
+            } else {
+                if fetching
+                    && let Some(sounds) = mirror.background.as_mut()
+                    && let Some(sound) = sounds.read(io, stop)?
+                {
+                    arrived.push(sound);
+                }
+                protocol::read(io)?
             }
-            protocol::read(&mut io)?
         };
-        let received_ms = local.now_ms();
+        let received_ms = progress.local.now_ms();
+        if matches!(response, ServerMessage::Ended { protocol: PROTOCOL }) {
+            return Ok(GuestEnd::Ended);
+        }
         let ServerMessage::State {
             protocol: PROTOCOL,
             controls,
@@ -1557,90 +2010,109 @@ fn guest_link(
         if let Some(shared) = &transport {
             shared.validate()?;
         }
+        // The answer settles the request: count an accepted edit and show a refusal now, so a
+        // link lost while the update arrives cannot repeat or hide either.
+        let flight = if unasked { None } else { progress.flight.take() };
+        let mut publication = None;
+        match flight {
+            Some(Flight::Edit { .. } | Flight::Publish(_)) if accepted == Some(true) => {
+                progress.sequence = progress.sequence.checked_add(1).ok_or("operation counter exhausted")?;
+                if let Some(Flight::Publish(take)) = flight {
+                    publication = Some(take);
+                }
+            }
+            Some(Flight::Transport(_)) if accepted == Some(true) => {}
+            Some(flight) => {
+                let fallback = match flight {
+                    Flight::Transport(_) => "the host refused this playback change",
+                    Flight::Edit { .. } | Flight::Publish(_) => "the host refused this edit",
+                };
+                if accepted.is_none() {
+                    return Err("host did not acknowledge the request".into());
+                }
+                let publication = matches!(flight, Flight::Publish(_));
+                // A refused take's local preparation is cleaned up before the view hears of it.
+                drop(flight);
+                if publication {
+                    events.try_send(Event::Upload(None)).map_err(|_| "multiplayer view closed")?;
+                }
+                events
+                    .try_send(Event::Rejected(error.unwrap_or_else(|| fallback.into())))
+                    .map_err(|_| "multiplayer view closed")?;
+            }
+            None => {}
+        }
         // An upload's round trip includes the sound transfer and says nothing about the clock.
-        if prepared.is_none() && !fetching {
-            estimate.add(sent_ms, received_ms, host_ms);
+        if !unasked && publication.is_none() && !fetching {
+            progress.estimate.add(sent_ms, received_ms, host_ms);
         }
         let controls = *controls;
-        let was_publication = prepared.is_some();
         let mut audio = arrived;
-        if let Some(take) = prepared
-            && accepted == Some(true)
-        {
+        mirror.dirty = true;
+        if let Some(take) = &publication {
             let expected = take_edit((take.track, take.start), &take.asset.meta);
-            if !operations.iter().any(|op| Some(op.revision) == take.base.checked_add(1) && op.edit == expected) {
+            let confirmed =
+                operations.iter().any(|op| Some(op.revision) == take.base.checked_add(1) && op.edit == expected);
+            // A take sent again after a resume may already be in the copy this guest holds.
+            let held = take.base < mirror.revision;
+            if !confirmed && !held {
                 return Err("host did not confirm the offered take operation".into());
             }
-            if assets::remember_take(&mut known, &take.asset.meta)? {
+        }
+        if let Some(take) = publication {
+            if assets::remember_take(&mut mirror.known, &take.asset.meta)? {
                 audio.push(take.audio);
             }
+            events.try_send(Event::Upload(None)).map_err(|_| "multiplayer view closed")?;
         }
-        protocol::apply_operations(&mut mirror, &mut revision, &controls, &operations)?;
+        protocol::apply_operations(&mut mirror.session, &mut mirror.revision, &controls, &operations)?;
         if let Some(addition) =
-            receive_update(&mut io, mirror.project(), revision, storage.as_deref(), &mut known, stop, events)?
+            receive_update(io, mirror.session.project(), mirror.revision, storage, &mut mirror.known, stop, events)?
         {
             audio.push(addition);
         }
-        if controls.revision < previous.revision || controls.revision == previous.revision && controls != previous {
+        let previous = &mirror.previous;
+        if controls.revision < previous.revision || controls.revision == previous.revision && controls != *previous {
             return Err("host control revision mismatch".into());
         }
-        if was_publication {
-            events.try_send(Event::Upload(None)).map_err(|_| "multiplayer view closed")?;
-        }
-        if edited {
-            match accepted {
-                Some(true) => sequence = sequence.checked_add(1).ok_or("operation counter exhausted")?,
-                Some(false) => {
-                    events
-                        .try_send(Event::Rejected(error.unwrap_or_else(|| "the host refused this edit".into())))
-                        .map_err(|_| "multiplayer view closed")?;
-                }
-                None => return Err("host did not acknowledge the edit".into()),
-            }
-        } else if transport_request.is_some() {
-            match accepted {
-                Some(true) => {}
-                Some(false) => {
-                    events
-                        .try_send(Event::Rejected(
-                            error.unwrap_or_else(|| "the host refused this playback change".into()),
-                        ))
-                        .map_err(|_| "multiplayer view closed")?;
-                }
-                None => return Err("host did not acknowledge the playback change".into()),
-            }
-        }
-        if let Some(offset) = estimate.offset() {
+        if let Some(offset) = progress.estimate.offset() {
             // A better estimate moves the schedule; a millisecond or two is not worth an event.
-            let changed = shown.is_none_or(|(old, old_offset)| old != transport || old_offset.abs_diff(offset) > 2);
+            let changed =
+                progress.shown.is_none_or(|(old, old_offset)| old != transport || old_offset.abs_diff(offset) > 2);
             if changed
-                && events.try_send(Event::Transport(transport, LocalClock { epoch: local.epoch(), offset })).is_ok()
+                && events
+                    .try_send(Event::Transport(transport, LocalClock { epoch: progress.local.epoch(), offset }))
+                    .is_ok()
             {
-                shown = Some((transport, offset));
+                progress.shown = Some((transport, offset));
             }
         }
-        if controls != previous || guests != previous_guests || !audio.is_empty() {
+        if controls != mirror.previous || guests != mirror.previous_guests || !audio.is_empty() {
             events
                 .try_send(Event::State(controls.clone(), operations, guests, audio))
                 .map_err(|_| "multiplayer view is not keeping up")?;
-            previous = controls;
-            previous_guests = guests;
+            mirror.previous = controls;
+            mirror.previous_guests = guests;
+        }
+        mirror.dirty = false;
+        unasked = false;
+        if announce && events.try_send(Event::Resumed).is_ok() {
+            announce = false;
         }
         // A State clears the view's progress; background sounds report theirs after it.
-        match &background {
-            Some(sounds) if sounds.is_empty() => background = None,
+        match &mirror.background {
+            Some(sounds) if sounds.is_empty() => mirror.background = None,
             Some(sounds) => {
                 let (done, total) = sounds.progress();
                 let _ = events.try_send(Event::Receiving(done, total));
             }
             None => {}
         }
-        if background.is_none() {
+        if mirror.background.is_none() {
             std::thread::sleep(POLL);
         }
     }
-    let _ = events.try_send(Event::Closed);
-    Ok(())
+    Ok(GuestEnd::Stopped)
 }
 
 /// Local routing lookup only: UDP connect does not send a datagram. Never use this as admission.

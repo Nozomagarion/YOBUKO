@@ -1,6 +1,6 @@
 ---
 description: Shared projects with gigabytes of sounds - chunked streaming from disk, per-chunk BLAKE3 verification, a per-computer sound cache, resumed transfers and opening before the sounds arrive
-read_when: heavy project, large samples, sound cache, resume transfer, protocol 15, chunk tree, multiplayer audio limits, gigabytes of audio
+read_when: heavy project, large samples, sound cache, resume transfer, protocol 16, chunk tree, multiplayer audio limits, gigabytes of audio
 type: spec
 status: draft
 last_verified: 2026-10-30
@@ -20,7 +20,8 @@ Self-authored fork behaviour. It extends the [audio asset contract](lan-audio-as
 over the LAN or [online](online-sessions.md). Everything that contract says about portable
 canonical float32 WAV copies, content-addressed `Audio/<BLAKE3>.wav` references, strict
 manifests and peer paths still holds; only the limits, the wire format of sound bytes and the
-storage change. Protocol 15 (ALPN `suhina/multiplayer/15`).
+storage change. Protocol 16 (ALPN `suhina/multiplayer/16`), shared with
+[session resume](session-resume.md); this change was developed as protocol 15 alongside it.
 
 ## Limits
 
@@ -121,6 +122,11 @@ serves a connection at most twice its initial copy in background slices. Smaller
 arrive before the project opens, as before.
 
 Leaving before everything arrived keeps the partial copies in the cache for the next session.
+Background slices name sounds by their index in the copy's manifest, which only the connection
+that sent the copy knows: a host serves `Fetch` only on that connection, and refuses it on a
+resumed one. A guest whose link drops while sounds are still pending therefore resumes with
+`seen_revision: null` and gets a fresh copy ([session resume](session-resume.md)); its sound
+cache keeps the sounds and partial chunks already received, so only the rest crosses again.
 A copy saved before its sounds arrived refers to sounds its folder does not hold yet.
 
 ## Tests
@@ -132,7 +138,9 @@ foreign files, resume after the last chunk matching the tree, invalid names. `as
 hostile manifests, pages and totals refused before allocation, a corrupted chunk refused with
 only verified chunks kept, a cut download and upload resumed, a cached sound never requested
 again, a corrupt cache entry replaced, a multi-chunk sound over a real socket cut and resumed,
-background slices resumed after leaving, the host's background budget.
+background slices resumed after leaving, the host's background budget. `faults_tests.rs`: a
+multi-chunk background sound cut midway by the fault injector, completed after the resume from
+its partial copy, over `online-loopback` and the LAN.
 `tests/heavy.rs`: a 40 MiB sound over the LAN and over `online-loopback`, opened before it
 arrives, silent then identical, and a second session that takes it from the cache (the same file
 on disk).

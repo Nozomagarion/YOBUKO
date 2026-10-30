@@ -5,11 +5,14 @@
 
 mod assets;
 mod cache;
+#[cfg(test)]
+mod faults;
 mod invitation;
 mod linked;
 mod midi;
 mod online;
 mod protocol;
+mod resume;
 mod sound;
 mod starter;
 mod transfer;
