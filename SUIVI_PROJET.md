@@ -1,5 +1,14 @@
 # Où en est notre application ?
 
+## Nouveau nom de l'application : YOBUKO — 30 octobre 2026
+
+L'application s'appelle désormais **YOBUKO (呼子)**, d'après un nom traditionnel du
+**Yamabiko**, le yōkai japonais de l'écho : un musicien lance une idée, un autre lui répond.
+« Yamabiko » n'est pas repris car une application musicale de ce nom existe déjà sur l'App Store.
+Le README présente le nom ; les textes du fork l'utilisent. Suhina reste crédité comme socle.
+Les noms techniques (`suhina-*`, binaires, dossiers de données, protocole) ne changent pas pour
+l'instant : ce serait un chantier séparé.
+
 ## Objectif confirmé par le propriétaire — 29 octobre 2026
 
 **Priorité : terminer le multijoueur dans Suhina et conserver ce module lors des évolutions de Suhina.**

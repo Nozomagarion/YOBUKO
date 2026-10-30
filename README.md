@@ -1,9 +1,10 @@
 <p align="center">
-  <img src="assets/fork/music-workflow.svg" alt="Suhina — Studio + Multijoueur + DJ. Ta musique, de A à Z." width="100%">
+  <img src="assets/fork/music-workflow.svg" alt="YOBUKO — Studio + Multijoueur + DJ. Ta musique, de A à Z." width="100%">
 </p>
 
-<h1 align="center">Studio + Multijoueur + DJ</h1>
-<p align="center"><strong>Une seule application, du premier son au dernier morceau de ton set.</strong></p>
+<h1 align="center">YOBUKO 呼子</h1>
+<p align="center"><strong>Studio + Multijoueur + DJ. Une seule application, du premier son au dernier morceau de ton set.</strong></p>
+<p align="center"><em>Tu lances un son, un autre musicien te répond.</em></p>
 
 <p align="center">
   <a href="#la-vision"><img src="https://img.shields.io/badge/PRODUIRE-ffcf75?style=for-the-badge" alt="Produire"></a>
@@ -11,13 +12,39 @@
   <a href="#préparer-et-jouer-son-set"><img src="https://img.shields.io/badge/PR%C3%89PARER_%26_JOUER-aba7ff?style=for-the-badge" alt="Préparer et jouer"></a>
 </p>
 
-<p align="center"><a href="#la-vision">La vision</a> · <a href="#où-en-est-le-projet">Avancement</a> · <a href="#essayer-la-version-actuelle">Essayer</a> · <a href="#les-projets-qui-rendent-cela-possible">Suhina &amp; rbxport</a> · <a href="README.en.md">English / technical overview</a></p>
+<p align="center"><a href="#pourquoi-yobuko-">Pourquoi YOBUKO</a> · <a href="#la-vision">La vision</a> · <a href="#où-en-est-le-projet">Avancement</a> · <a href="#essayer-la-version-actuelle">Essayer</a> · <a href="#les-projets-qui-rendent-cela-possible">Suhina &amp; rbxport</a> · <a href="README.en.md">English / technical overview</a></p>
 
 **Pour suivre le travail en cours : [état du projet, limites et prochaine étape](SUIVI_PROJET.md).**
 
+## Pourquoi YOBUKO ?
+
+<table><tr><td>
+
+**山彦 Yamabiko** est, dans les légendes japonaises, le **yōkai de l'écho** : un esprit des
+montagnes à qui l'on attribuait les échos. Quand on crie dans la vallée, c'est lui qui répond.
+Dans plusieurs régions, on l'appelait aussi **呼子 Yobuko**, « l'enfant qui appelle »
+(ou « qui répond à l'appel »).
+
+C'est exactement l'esprit du multijoueur de cette application :
+
+> **Un musicien lance une idée. Un autre lui répond.**
+> Une boucle appelle une basse, une mélodie appelle une réponse, et le morceau se construit
+> comme un écho entre amis, même à des centaines de kilomètres.
+
+Le nom **YOBUKO** a été préféré à « Yamabiko » parce qu'une application musicale portant ce
+nom existe déjà sur l'App Store. YOBUKO garde la même légende, avec un nom qui n'appartient
+qu'à ce projet.
+
+</td></tr></table>
+
+**En bref :** YOBUKO est le nom de l'application (studio, multijoueur et DJ). Elle est
+construite sur le logiciel libre **Suhina**, dont elle garde le moteur et les crédits, et sur
+l'analyse de **rbxport**. Les noms techniques internes (`suhina-*`) restent inchangés pour
+l'instant afin de pouvoir continuer à intégrer les nouveautés de Suhina.
+
 ## La vision
 
-**Je construis le logiciel dans lequel j'aimerais faire toute ma musique.**
+**Je construis YOBUKO, le logiciel dans lequel j'aimerais faire toute ma musique.**
 
 L'idée : réunir **la production musicale dans l'esprit d'Ableton Live**, **la création à
 plusieurs** et **la préparation DJ apportée par rbxport**, dans une seule et même application.
