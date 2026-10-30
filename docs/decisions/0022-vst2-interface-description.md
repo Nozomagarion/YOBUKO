@@ -81,6 +81,11 @@ has approved their use.
    or *assumed*. Every fact has a test that keeps it true — a mock assertion, an `offset_of!`
    assertion or an ignored test against a real plug-in. The VST2 state layouts come from the VST3
    SDK's `vst2persistence.h` (MIT), as the `.als` importer already reads them.
+   **The pinned header is incomplete.** It defines only part of the interface; the op-codes that
+   get and set a plug-in's state chunk, for one, are not in it. The spec lists every fact the host
+   needs that the header lacks, and each one is *observed* or *assumed*, never taken from another
+   header (decision 2). A mock plug-in written from our own assumption cannot establish such a
+   fact: only the probe or an ignored test against a real plug-in turns *assumed* into *observed*.
 5. **The name, and shipping.** No VST logo, and no "VST" in Suhina's own name, branding, crate,
    binary or feature name (`suhina-plugin-host`, feature `vst2`, `DeviceKind::Vst2`). The format is
    named only where a format has to be named — the plug-in manager's format column, the spec, the

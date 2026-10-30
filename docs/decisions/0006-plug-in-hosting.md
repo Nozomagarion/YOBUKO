@@ -587,8 +587,8 @@ workspace forbids.
 
 - **Hosting VST2 directly.** Where the interface description comes from is decided in
   [ADR 0022](0022-vst2-interface-description.md): the VeSTige header as Ardour distributes it,
-  pinned and ported to Rust with its notice, checked by our own mock plug-in and probe and written
-  up in `docs/spec/plugin-vst2.md`. The work is
+  pinned. Nothing is built yet: the header is to be ported to Rust with its notice, checked by our
+  own mock plug-in and probe, and written up in `docs/spec/plugin-vst2.md`. The work is
   [#1066](https://github.com/suhina-daw/suhina-daw/issues/1066). The process, scanning, editor and
   format decisions above are unchanged, and legal advice still precedes a release that ships it.
 - **Our own Wine host** for Windows plug-ins on Linux (`suhina-plugin-host` built for Wine,
