@@ -26,7 +26,7 @@ pub(crate) fn set_param(session: &mut Session, params: &Value) -> Result<Value, 
         })
         .ok_or("invalid shared parameter id")?;
     let value = crate::commands::number(params, "value")?;
-    let channel = crate::commands::channel_read(session, params)?;
+    let channel = crate::commands::device_channel_read(session, params)?;
     let device = channel.devices.get(index).ok_or("shared device is missing")?;
     let DeviceKind::Builtin(kind) = &device.kind else {
         return Err("only built-in device parameters can be edited in a shared session".into());
@@ -73,7 +73,7 @@ pub(crate) fn add(session: &mut Session, params: &Value) -> Result<Value, Comman
         .as_str()
         .filter(|s| matches!(*s, "fm-synth" | "utility"))
         .ok_or("only FM Synth and Utility can be added to a shared chain")?;
-    let channel = crate::commands::channel_read(session, params)?;
+    let channel = crate::commands::device_channel_read(session, params)?;
     if !allowed_chain(&channel.devices) {
         return Err("a shared channel holds at most 16 devices".into());
     }
@@ -105,7 +105,7 @@ pub(crate) fn remove(session: &mut Session, params: &Value) -> Result<Value, Com
         .filter(|n| *n < 16)
         .and_then(|n| usize::try_from(n).ok())
         .ok_or("shared device index must be 0..15")?;
-    let channel = crate::commands::channel_read(session, params)?;
+    let channel = crate::commands::device_channel_read(session, params)?;
     if !allowed_chain(&channel.devices) {
         return Err("a shared channel holds at most 16 devices".into());
     }

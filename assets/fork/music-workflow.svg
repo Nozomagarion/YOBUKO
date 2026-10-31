@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="510" viewBox="0 0 1280 510" role="img" aria-labelledby="title desc">
 <!-- Copyright (C) 2026 The Suhina contributors; SPDX-License-Identifier: GPL-3.0-or-later -->
-<title id="title">Suhina — Studio + Multijoueur + DJ</title>
+<title id="title">YOBUKO — Studio + Multijoueur + DJ</title>
 <desc id="desc">Ta musique, de A à Z. Composer, enregistrer, créer ensemble, mixer et jouer dans une seule application. Projet en développement sur les fondations de Suhina et rbxport.</desc>
 <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#111822"/><stop offset="1" stop-color="#202137"/></linearGradient><linearGradient id="line"><stop stop-color="#ffcf75"/><stop offset=".5" stop-color="#63e5c1"/><stop offset="1" stop-color="#aba7ff"/></linearGradient></defs>
 <rect width="1280" height="510" rx="24" fill="url(#bg)"/>
 <path d="M56 272H1224" stroke="url(#line)" stroke-width="2" opacity=".65"/>
 <g font-family="system-ui, sans-serif">
-<text x="56" y="58" fill="#c4cddd" font-size="16" font-weight="600" letter-spacing="2.5">SUHINA · STUDIO + MULTIJOUEUR + DJ</text>
+<text x="56" y="58" fill="#c4cddd" font-size="16" font-weight="600" letter-spacing="2.5">YOBUKO 呼子 · STUDIO + MULTIJOUEUR + DJ</text>
 <text x="52" y="140" fill="#f6f4ef" font-size="67" font-weight="800" letter-spacing="-2">TA MUSIQUE, DE A À Z.</text>
 <text x="56" y="191" fill="#d2d8e4" font-size="24">Composer. Enregistrer. Créer ensemble. Mixer. Jouer.</text>
 <text x="56" y="229" fill="#a6b2c8" font-size="18">Une seule application, du premier son à la scène.</text>

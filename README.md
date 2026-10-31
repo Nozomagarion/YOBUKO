@@ -1,224 +1,155 @@
 <p align="center">
-  <img src="assets/fork/music-workflow.svg" alt="Suhina — Studio + Multijoueur + DJ. Ta musique, de A à Z." width="100%">
+  <img src="assets/fork/banner.svg" alt="YOBUKO Multiplayer + DJ — Create together. Prepare the set. Take it live." width="100%">
 </p>
-
-<h1 align="center">Studio + Multijoueur + DJ</h1>
-<p align="center"><strong>Une seule application, du premier son au dernier morceau de ton set.</strong></p>
 
 <p align="center">
-  <a href="#la-vision"><img src="https://img.shields.io/badge/PRODUIRE-ffcf75?style=for-the-badge" alt="Produire"></a>
-  <a href="#créer-à-plusieurs"><img src="https://img.shields.io/badge/CR%C3%89ER_ENSEMBLE-63e5c1?style=for-the-badge" alt="Créer ensemble"></a>
-  <a href="#préparer-et-jouer-son-set"><img src="https://img.shields.io/badge/PR%C3%89PARER_%26_JOUER-aba7ff?style=for-the-badge" alt="Préparer et jouer"></a>
+  <a href="https://github.com/Nozomagarion/suhina-daw/tree/feature/multiplayer"><img src="https://img.shields.io/badge/status-experimental%20prototype-ffb18d" alt="Experimental prototype"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-63e5c1" alt="GPL 3.0 or later"></a>
+  <a href="https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml?query=branch%3Afeature%2Fmultiplayer"><img src="https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml/badge.svg?branch=feature%2Fmultiplayer" alt="Fork validation"></a>
 </p>
 
-<p align="center"><a href="#la-vision">La vision</a> · <a href="#où-en-est-le-projet">Avancement</a> · <a href="#essayer-la-version-actuelle">Essayer</a> · <a href="#les-projets-qui-rendent-cela-possible">Suhina &amp; rbxport</a> · <a href="README.en.md">English / technical overview</a></p>
+<h1 align="center">YOBUKO 呼子</h1>
+<p align="center"><strong>Studio + Multiplayer + DJ. One app, from the first sound to the last track of your set.</strong></p>
+<p align="center"><em>You send out a sound, another musician answers.</em></p>
 
-**Pour suivre le travail en cours : [état du projet, limites et prochaine étape](SUIVI_PROJET.md).**
+<p align="center"><a href="README.fr.md">Français</a> · <a href="#why-yobuko">Why YOBUKO</a> · <a href="#what-you-can-try">Try the prototype</a> · <a href="#progress-you-can-audit">Progress</a> · <a href="#standing-on-the-work-of-others">Credits</a> · <a href="docs/fork-distribution.md">Updates</a></p>
 
-## La vision
+**One place to make music together, prepare a set and perform it.** That is the ambition of
+YOBUKO, an independent fork. It combines Suhina's native music production foundation with a custom
+collaboration layer and DJ preparation using selected rbxport code.
 
-**Je construis le logiciel dans lequel j'aimerais faire toute ma musique.**
+The destination is a complete production-to-live workflow. The current build is an experimental
+prototype: LAN sessions share a bounded copy of an open MIDI project or a four-track starter, and the DJ workspace provides a
+local audio catalog, analysis and two original-speed A/B decks. Full project coediting, direct shared-tab recording, automatic tempo sync
+and USB export are future work. There is no common public release channel yet.
 
-L'idée : réunir **la production musicale dans l'esprit d'Ableton Live**, **la création à
-plusieurs** et **la préparation DJ apportée par rbxport**, dans une seule et même application.
-Le socle de production est le logiciel libre **Suhina**. Le multijoueur et la liaison entre
-studio et DJ sont les ajouts de ce projet.
+## Why YOBUKO
 
-Composer une idée, enregistrer une prise, construire un morceau avec ses amis, le mixer,
-préparer son set et le jouer en live : garder le même fil du début à la fin.
+**YOBUKO (呼子)** is the app's name. In Japanese folklore, **Yamabiko (山彦)** is the yōkai of
+the echo, a mountain spirit that answers whoever calls into the valley; in several regions it
+was also called *yobuko*, "the calling child". That is the metaphor for the multiplayer side
+of this project: **one musician sends out an idea, another one answers it.** The variant name
+was chosen because a music app called "Yamabiko" already exists on the App Store.
 
-> **Un studio pour créer. Un espace commun pour avancer ensemble. Un espace DJ pour emmener
-> sa musique sur scène.**
+YOBUKO is built on [Suhina](https://github.com/suhina-daw/suhina-daw) and keeps its credits;
+internal machine names (`suhina-*` crates and binaries) are unchanged for now so upstream
+Suhina updates keep merging cleanly.
 
-Le projet est en développement. Cette page présente sa destination, puis distingue ce qui
-fonctionne aujourd'hui de ce qui reste à construire. La partie DJ n'intègre actuellement que
-le module d'analyse de rbxport ; ses autres fonctions viendront progressivement.
+## The workflow we are building
 
-## De l'idée au live
-
-| Imaginer | Produire | Créer ensemble | Préparer | Jouer |
-|---|---|---|---|---|
-| Poser une mélodie, un rythme, une ambiance. | Enregistrer, arranger, travailler le son et mixer son morceau. | Construire un projet commun tout en gardant sa propre écoute. | Retrouver ses rendus, analyser les morceaux et organiser son set. | Passer de la création au live et au mix DJ. |
-
-**C'est le parcours que je veux réunir dans une seule app.** Les instruments, effets,
-plugins, clips et outils de production reposent sur le travail de Suhina. Ce fork construit
-les ponts vers la collaboration et le DJ, avec une interface et une distribution communes.
-
-### Produire sa musique
-
-Un vrai espace de création : pistes audio et MIDI, instruments, effets, clips, arrangement,
-enregistrement et rendu. Le moteur et les outils de Suhina donnent les fondations du studio.
-L'objectif est de pouvoir développer un morceau complet et l'emmener jusqu'à sa préparation
-pour le live, en conservant le lien avec son projet d'origine.
-
-### Créer à plusieurs
-
-Avancer sur la même musique avec ses amis. Pouvoir travailler sur un projet partagé tout en
-écoutant une autre partie du morceau que les autres : chacun garde sa lecture et sa position.
-
-Le prototype relie un hôte et jusqu’à trois invités sur le réseau local. Il peut maintenant transmettre
-une copie d’un projet MIDI/audio ouvert, avec ses notes, ses clips et ses réglages FM Synth/Utility,
-ou créer une démonstration. Les notes MIDI, noms, volumes et panoramiques se modifient ensemble.
-Un éditeur permet d’ajouter, modifier et supprimer une note ; les modifications concurrentes
-sont vérifiées par l’hôte. L’onglet **Clips** permet aussi de créer, déplacer, redimensionner,
-dupliquer, activer et supprimer des clips MIDI/audio. Les sons déjà chargés peuvent être copiés vers l’invité sous forme de WAV portables.
-Chaque participant peut aussi publier une nouvelle prise terminée depuis un onglet local : le son arrive chez l’invité puis son clip apparaît, sans recréer la session.
-L’onglet **Tracks** permet à chacun d’ajouter une piste audio vide ou une piste MIDI avec FM Synth pendant la connexion.
-L’onglet **Devices** permet d’ajouter et retirer FM Synth/Utility pendant le partage, puis de modifier leurs réglages.
-Choisir **Device track**, puis **Add FM Synth** ou **Add Utility** ; **Remove selected device** retire l’appareil sélectionné.
-Après un ajout ou retrait, il faut choisir à nouveau l’appareil pour éviter de réutiliser une ancienne sélection.
-Les contrôles reprennent les plages et types du studio ; on prépare une valeur, puis on l’applique
-aux deux copies. Un brouillon périmé doit être rafraîchi avant l’envoi.
-Après le départ de l’invité, **New invitation** permet de le réinviter sans fermer le morceau de l’hôte.
-Il retrouve l’état actuel dans un nouvel onglet ; son ancienne copie et ses modifications locales sont conservées.
-
-### Préparer et jouer son set
-
-Passer du morceau que l'on produit au morceau que l'on joue. Une bibliothèque DJ dans la même
-application, l'analyse du tempo et de la tonalité et des playlists persistantes pour préparer
-l’ordre du set. La préécoute et les points cue nommés permettent maintenant de préparer chaque
-morceau. Une grille à tempo constant se règle par morceau, et deux platines A/B permettent
-une première lecture de set dans la même application.
-
-rbxport apporte une base libre pour cette direction. Aujourd'hui, son analyse est intégrée à
-la bibliothèque et un rendu du studio peut y être ajouté. Dans **DJ**, créer un set, ajouter les
-morceaux depuis **Add from library**, puis utiliser les flèches pour choisir leur ordre. Les listes
-et leurs noms sont conservés au redémarrage ; les fichiers audio restent à leur emplacement.
-**Refresh DJ library** recharge les changements d’une autre instance et les écritures périmées
-sont refusées. Avec **Prepare**, choisir une position puis **Play from position**, ou écouter un
-repère avec **Play cue**. Les points cue peuvent être nommés, déplacés et supprimés ; ils restent
-liés au morceau dans toutes ses playlists. **Stop audition** et le retour au Studio annulent la
-lecture, y compris pendant son chargement. La forme d’onde du morceau affiche les repères et permet de choisir visuellement
-le départ de la préécoute sans lancer le son. Régler **Grid BPM** et **First beat seconds**,
-prévisualiser puis **Save beat grid** conserve une grille à quatre battements par mesure, distincte
-du BPM analysé. Le catalogue passe en format 4 avec sauvegarde de l’ancien fichier ; les anciennes
-versions du fork ne lisent pas ce catalogue migré. Deux platines A/B lisent maintenant les morceaux à leur vitesse originale, avec pause,
-repositionnement, volumes et crossfader ; les cues casque demandent une paire de sorties séparée.
-Le calage automatique, le tempo variable et l’export vers le matériel restent à construire.
-
-## Où en est le projet
-
-<img src="assets/fork/progress-fr.svg" alt="Étapes réalisées pour le multijoueur, l'espace DJ et les mises à jour communes" width="960">
-
-<!-- fork-progress:begin -->
-| Partie du projet | Étapes réalisées | Prochain objectif |
-|---|---:|---|
-| Créer ensemble | 16 / 18 | Sessions Internet et reconnexion automatique |
-| Préparer et jouer | 9 / 10 | Export USB et compatibilité matérielle |
-| Évoluer ensemble | 4 / 7 | Version commune validée sur toutes les plateformes |
-<!-- fork-progress:end -->
-
-Les barres comptent les étapes listées dans [fork-progress.json](fork-progress.json), avec des
-liens vers le code ou les vérifications. Elles ne représentent pas un pourcentage de réalisation
-du logiciel final, ni une estimation du travail restant. Les fonctions héritées de Suhina ont
-leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce fork.
-
-| Partie | Disponible dans le prototype | Prochaine étape |
+| Create | Prepare | Perform |
 |---|---|---|
-| **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
-| **Multijoueur** | Session LAN hôte + trois invités maximum, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, grille du lanceur et scènes partagées, publication de prises terminées par les deux participants, réglages FM Synth/Utility et noms/volumes/panoramiques partagés et lectures indépendantes. | Internet et reconnexion automatique. |
-| **DJ** | Bibliothèque, playlists, cues et grilles à tempo constant persistants ; analyse rbxport, préécoute et forme d’onde. | Synchronisation, tempo et compatibilité matérielle. |
-| **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
+| Produce with Suhina's engine, instruments and clip workflow. | Render a project into the DJ library; analyse tempo and key with rbxport code. | Build toward set preparation and live performance in the same app. |
+| Collaborate on a common project while listening independently. | Keep the connection between your production and its rendered audio. | Keep everyone on the same tested combined version. |
+| **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** two independent A/B decks, levels and crossfader; hardware export remains planned. |
 
-Le trafic chiffré est testé entre deux services sur le même ordinateur, avec des vérifications
-sur deux projets de bureau et des moteurs audio indépendants. **Le test sur deux ordinateurs
-physiques reste à faire.** Le document partagé est limité à 2 Mio et aux appareils FM Synth/Utility
-sans état opaque. Les notes se modifient dans **MIDI notes**, et l’arrangement dans **Clips**. Les déplacements
-conservent les clips voisins ; les brouillons obsolètes doivent être rafraîchis. Les sons présents au départ peuvent être transmis par **Share project + audio**. L’onglet **Publish take** permet à chacun de publier le son entier d’une prise terminée depuis un autre onglet Studio vers une piste audio existante, au temps choisi. L’onglet **Tracks** permet d’ajouter les pistes nécessaires sans repartir d’un nouveau partage. Toutes les applications doivent utiliser le protocole 13. L’invité envoie sa prise à l’hôte pour vérification avant son ajout au morceau. L’enregistrement direct dans l’onglet partagé et les plugins restent à construire.
+The 29 October Suhina update integrates merged main 7753ffa3: 56 further commits covering
+task-based settings, automation display fixes, style caching and shared DSP blocks. Old studio projects remain readable; new saves use native v4. LAN uses
+protocol 13, portable format 3 and matching compiled Suhina identities. The shared device
+subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.md).
 
-Pour inviter plusieurs musiciens, créer une nouvelle invitation pour chacun avec **New invitation**,
-après l’arrivée du précédent. Les invités déjà connectés restent présents. Le compteur **Guests: N / 3**
-affiche les places occupées ; un départ libère une place sans fermer la session des autres.
-[Invitations et limites](docs/spec/lan-multiple-guests.md).
+## What you can try
 
-Dans **Multiplayer → Launcher**, vous pouvez copier vos clips vers la grille, créer des cases,
-organiser et dupliquer les scènes, puis les lancer chacun de votre côté. Les copies conservent
-les originaux ; les scènes et cases modifiées sont confirmées par l’hôte. Les sélections périmées
-sont annulées avant une nouvelle modification. [Fonctionnement](docs/spec/lan-launcher-editing.md).
+- **Studio / Multiplayer / DJ** entry points in the native app.
+- **Create LAN session / Join LAN session:** separate single-use invitations connect one host and up to three guests.
+  Share the current project (up to 64 tracks, FM Synth/Utility parameters only) or use the
+  generated starter. Clips arrive in the verified initial copy; single-note add/update/delete, track names, volume
+  and pan are live shared edits. The **MIDI notes** editor rejects stale drafts before indices shift. Play, stop and listening position stay local to each computer.
+- **Launcher (protocol 13):** organize scenes and slots together, copy arrangement clips into empty
+  compatible slots with independent contents, move/swap slots, and launch privately on each computer.
+  Scene structural changes invalidate hidden selections; stale drafts require explicit refresh.
+- **Devices:** add/remove top-level FM Synth and Utility without loading presets or replacing an
+  existing instrument; chain edits discard old device selections. Edit parameters using generated SDK controls. Draft values
+  are submitted explicitly, validated by the host and rejected after a newer revision until refreshed.
+- **New invitation:** invite another guest while existing connections stay, up to three guests;
+  rotating replaces the previous outstanding invitation. Guests: N / 3 shows occupancy. Renew admission without replacing the hosted
+  music/player. Rejoining downloads the current verified copy into a new tab; the previous local
+  copy and solo edits are retained, without merging. No automatic resume or Internet routing.
+- **DJ library:** import audio, keep a persistent local catalog, analyse tempo/key and render a
+  Studio project into the library. Create/rename local playlists, add/remove tracks, change their
+  order and recover the sets after restarting. Audio/source files stay in place; deletion is
+  confirmed. Revision checks refuse stale writes, and **Refresh DJ library** reloads another
+  instance’s changes. Legacy format 1/2/3 catalogs are backed up before their first format 4 write.
+- **Prepare:** audition a track from a chosen position through the existing preview/headphone output;
+  add, rename, move and delete named cue points. Cues belong to the track across its playlists
+  and survive restart. Prepare also loads a stereo waveform with cue markers and positions;
+  click or drag to choose the next start without playing. Reload waveform retries a changed
+  or missing file. Stop and leaving DJ cancel pending playback.
+- **Beat grid:** edit a constant 20–400 BPM grid with a first-beat anchor and four beats per bar.
+  Preview drafts before saving; revision checks protect stale edits and deletion is confirmed.
+  Manual BPM stays separate from analysis and survives reimport. A/B performance decks now play original-speed tracks with pause/seek and a crossfader;
+  deck headphone cues require a separate output pair. Sync, variable tempo and hardware export remain pending.
+- **Settings → Agents and updates → GitHub updates…:** inspect the three GitHub source identities and check
+  availability of a combined app update. An official standalone binary cannot overwrite the fork.
 
-La mise à jour du socle Suhina du 29 octobre intègre le `main` officiel `7753ffa3`, soit
-56 commits supplémentaires : paramètres réorganisés, corrections d’automation, rendu et cache
-des styles, blocs DSP partagés. Les égaliseurs et courbes d’automation du palier précédent restent présents. Les anciens projets
-restent lisibles ; les nouveaux enregistrements de projet utilisent le format v4. Le partage
-vérifie aussi la révision du moteur. [Compatibilité et limites](docs/spec/lan-upstream-20261028.md).
+**Online by code (branch `feature/online`):** the host creates a session over the Internet and
+reads out one short code such as `7-piano-tigre-lune`; up to seven friends type the same code
+and join, with no account and no server of ours (peer to peer through iroh, with public relays
+as a fallback). Links that drop come back by themselves, **Link playback** starts and stops
+everyone together, and projects keep their built-in effects and CLAP/VST3/VST2 plug-in settings
+(each computer runs its own plug-ins). [Online sessions](docs/spec/online-sessions.md) ·
+[Plug-ins](docs/spec/shared-plugins.md)
 
-## Essayer la version actuelle
+The network exchange is tested with real loopback connections and desktop project
+instances. **A session between two homes has not yet been verified.** Loaded project audio is shared with **Share project + audio** as verified portable
+float32 WAV copies (4096 sounds, 2 GiB each, 16 GiB total, kept in a 20 GiB sound cache). Original encodings/tags are not
+archived. Either participant can publish a finished loaded take from another local Studio tab into an existing shared audio track using **Publish take**, without reconnecting. The whole sound is inserted unwarped; source trims/effects are not baked in. Guest uploads are pulled and verified by the host before publication. Recording directly into the shared tab remains unsupported. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
+move, trim, duplicate, enable and delete with revision checks and stack-only placement.
+**Tracks** lets either participant add an audio track or a MIDI track with default FM Synth while connected. All participants need the same build (protocol 18).
+[LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-prototype)
 
-Pour un premier essai à plusieurs : [guide multijoueur en français](GUIDE_MULTIPLAYER.md).
+## Progress you can audit
 
-Le dépôt s’ouvre directement sur **`feature/multiplayer`**, la branche de cette application.
-La branche `main` reste le miroir intact du projet Suhina d’origine. [Ouvrir la branche du projet](https://github.com/Nozomagarion/suhina-daw/tree/feature/multiplayer#readme)
-pour voir cette présentation et les ajouts.
+See the current [milestone table in the French overview](README.fr.md#où-en-est-le-projet).
 
-Dans l'application, trois accès : **Studio**, **Multiplayer** et **DJ**.
+These bars count the explicitly listed criteria in [fork-progress.json](fork-progress.json).
+They are **not percentages of engineering effort, stability or completion of the ultimate app**.
+Implemented items link to code or validation evidence; pending items stay pending until their
+acceptance gate is met. Rebuild the graphic with `python3 scripts/fork_readme.py`.
 
-1. Ouvrir son projet dans **Studio**, puis **Multiplayer → Share project + audio**
-   pour inclure les sons déjà chargés, ou **Share current MIDI project** pour une copie MIDI seule,
-   sur l’ordinateur hôte. **Create LAN session** reste disponible pour la démonstration.
-2. Copier l'invitation privée avec **Copy invitation**.
-3. Sur l'autre instance, coller l'invitation puis choisir **Join LAN session**.
-4. Dans **MIDI notes**, choisir un clip et ajouter/modifier/supprimer une note.
-   **Clips** permet de créer et arranger les clips MIDI ; **Mixer** partage les noms, volumes
-   et panoramiques. Chacun utilise **Play locally**
-   et **Stop locally** pour son écoute. **Leave session** conserve le projet en local.
+Portable media, shared notes/clips/tracks and verified take publication are covered by local
+TLS, desktop and audio tests. Next development expands LAN participant capacity; automatic
+resume and Internet sessions remain planned. Physical two-computer acceptance is deferred at
+the owner's request and remains necessary before claiming a verified household session.
 
-La copie s’ouvre dans un nouvel onglet et conserve l’original. Les plugins et autres
-instruments non pris en charge sont refusés avec une explication ; les métadonnées locales et affectations matérielles
-sont omises. Le mode démonstration reste utilisable sans projet personnel. Les deux participants
-doivent installer la version de protocole 5 ; les anciennes invitations ne sont pas compatibles.
-Les [instructions détaillées](docs/multiplayer-fork.md#try-the-desktop-prototype) expliquent
-les adresses réseau et les limites de ce prototype.
-
-Le transfert audio accepte jusqu’à **64 sons, 64 Mio par son et 256 Mio au total**. Les copies
-restent dans **Shared projects**, sous le dossier de données de l’application, pour pouvoir
-rouvrir le morceau. Les fichiers d’origine restent intacts. Un transfert incomplet ouvre
-une erreur et aucun onglet partiel.
-
-Les paquets de développement proviennent des [contrôles GitHub du fork](https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml?query=branch%3Afeature%2Fmultiplayer).
-Vérifier le commit et le résultat de sa plateforme. Le canal public commun n'est pas encore
-publié ; ce projet ne propose pas encore une distribution stable.
-
-## La même app pour tout le groupe
-
-Le but est que chacun installe la même version et conserve le studio, le multijoueur et le DJ
-lors des mises à jour de Suhina ou de rbxport.
+## One app, one update path
 
 ```text
-Nouveautés Suhina ───┐
-                    ├── Intégration avec nos ajouts ── Tests ── Nouvelle version commune
-Nouveautés rbxport ──┘                                              │
-                                                          Mise à jour dans l'app
+Suhina upstream ─┐
+                ├─ isolated source integration ─ checks ─ combined build ─ in-app update
+rbxport upstream┘               ↑
+                      custom multiplayer + DJ modules
 ```
 
-Les sources sont suivies par version. Les nouveautés passent d'abord dans une intégration
-isolée avec nos modules, puis dans les vérifications avant publication. Les conflits sont
-résolus à cette étape. Les amis installent ensuite le paquet combiné validé.
+Friends should install the same combined distribution. Source updates are integrated and tested
+with the custom modules before publication. Installed apps download that tested package; they
+do not compile random upstream changes or replace themselves with an official standalone app.
 
-Le bouton **Settings → Agents and updates → GitHub updates…** compare les sources et cherche une version
-commune disponible. La récupération périodique et la publication commune restent à activer.
-[Comment les mises à jour sont préparées](docs/fork-distribution.md).
+Already implemented: source pins, an isolated integration candidate tool, component checks in
+Settings, package source identity and a guard before replacement. Still pending: publishing and
+validating the common update channel, and activating scheduled integration. A GitHub source
+change is information; it does not mean a compatible combined update has been released.
+[Distribution and maintenance design](docs/fork-distribution.md)
 
-## Les projets qui rendent cela possible
+## Standing on the work of others
 
-**Ce logiciel se construit grâce au travail de deux projets libres et de leurs auteurs.**
+This project exists because of substantial work by other open-source authors.
 
-| Fondation | Apport au projet |
-|---|---|
-| **[Suhina](https://github.com/suhina-daw/suhina-daw)** et ses contributeurs | Le logiciel de production : interface native, moteur audio, projets, instruments, effets, hébergement des plugins et outils de création. C'est la fondation du studio. |
-| **[rbxport](https://github.com/chrisle/rbxport)**, par chrisle et ses contributeurs | Le module `rbl-analysis` utilisé ici pour l'analyse du tempo et de la tonalité. Il fournit une première brique vers la préparation DJ ; le reste de rbxport n'est pas encore intégré. |
-| **Ce fork** | La collaboration, l'espace DJ relié au studio, la présentation d'un parcours musical commun et les outils pour distribuer l'ensemble sans perdre ces ajouts. |
+| Project | What comes from it | What this fork adds |
+|---|---|---|
+| **[Suhina](https://github.com/suhina-daw/suhina-daw)** | The DAW foundation: native interface, audio engine, project model, session commands, instruments, effects, plugin hosting, CLI and automation. | Restricted collaboration, the DJ workspace/bridge and combined distribution controls. |
+| **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The pinned `rbl-analysis` sources used for offline tempo/key analysis. The vendored subset is recorded with its license and source hashes. | Integration into the local DJ catalog. The rest of rbxport is not yet integrated; this fork does not claim its full feature set. |
 
-Les auteurs d'origine conservent leurs crédits et leurs droits. Voir le
-[README original de Suhina](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md), [NOTICE](NOTICE),
-la [provenance du code rbxport](third_party/rbxport-analysis/VENDORED.md) et les
-[versions intégrées](fork-sources.json).
+Read [Suhina's original README](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md),
+[NOTICE](NOTICE), [rbxport provenance](third_party/rbxport-analysis/VENDORED.md) and the exact
+[source pins](fork-sources.json). Original authors retain their copyright. This is an independent
+experimental fork, not an official release or endorsement from either upstream project.
+It contains no proprietary music-software code or content.
 
-La référence à Ableton Live décrit l'idée de workflow recherchée. Le code du studio provient de
-Suhina ; aucun code d'Ableton n'est intégré. Ce projet est indépendant et n'est affilié ni à
-Ableton AG, ni aux équipes officielles de Suhina ou de rbxport. Les marques appartiennent à
-leurs propriétaires.
+## Build and inspect
 
-## Construire et contribuer
+Use **`feature/multiplayer`** for the combined app. `main` deliberately stays an exact upstream
+mirror, so the custom modules and this presentation live on the feature branch.
 
 ```sh
 git clone --branch feature/multiplayer https://github.com/Nozomagarion/suhina-daw.git
@@ -227,13 +158,22 @@ cargo test --locked -p suhina-collaboration -p suhina-multiplayer -p suhina-dj -
 cargo build --locked -p suhina -p suhina-cli -p suhina-plugin-host
 ```
 
-[Prérequis de compilation](UPSTREAM_README.md#building) · [Guide du fork](docs/multiplayer-fork.md) ·
-[Contrat du prototype LAN](docs/spec/lan-starter-session.md) · [Limites de sécurité](docs/security/session-sharing.md)
+Follow [build instructions](UPSTREAM_README.md#building) for platform prerequisites. Development artifacts are available
+from successful [fork workflow runs](https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml?query=branch%3Afeature%2Fmultiplayer).
+Check the run's commit and platform results; a compiled app alone does not establish that every
+validation passed. A stable installer, production support and signed/notarized distribution are
+not yet offered by this fork.
 
-Les prochaines contributions utiles concernent les essais sur deux ordinateurs, les projets et
-fichiers partagés, les enregistrements et la préparation DJ. Pour un retour de bug,
-préciser le système, le commit, les étapes et le résultat attendu/observé. Garder les invitations
-privées. Suivre [CONTRIBUTING.md](CONTRIBUTING.md) et discuter les ajouts de ce fork ici.
+## Help shape it
 
-**Logiciel libre — GPL-3.0-or-later.** Conserver les crédits, notices et sources correspondantes
-dans les distributions. Voir [LICENSE](LICENSE) et le [contrat de distribution](docs/fork-distribution.md).
+Useful next contributions are reproducible two-computer results, portable project/media design,
+shared note/clip editing and DJ preparation workflows. Include OS, build commit, precise steps
+and expected/observed behavior in reports. Keep invitations private; they grant access to the
+session for their short lifetime.
+
+Follow [CONTRIBUTING.md](CONTRIBUTING.md), the [fork guide](docs/multiplayer-fork.md) and
+[security boundary](docs/security/session-sharing.md). Discuss fork work on this fork; the
+upstream projects have their own direction and contribution rules.
+
+**GPL-3.0-or-later.** Packages must include required notices and corresponding source. See
+[LICENSE](LICENSE) and the [distribution contract](docs/fork-distribution.md).

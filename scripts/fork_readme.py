@@ -64,7 +64,7 @@ def table(areas):
 def generate(check=False):
     areas = progress(ROOT)
     graphic = ROOT / "assets/fork/progress-fr.svg"
-    readme = ROOT / "README.md"
+    readme = ROOT / "README.fr.md"
     text = readme.read_text()
     start, end = "<!-- fork-progress:begin -->", "<!-- fork-progress:end -->"
     if text.count(start) != 1 or text.count(end) != 1:

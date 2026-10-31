@@ -100,7 +100,7 @@ impl App {
             Item::new("workspace.multiplayer", "Multiplayer LAN").into(),
             Item::new("workspace.dj", "DJ library").into(),
             Entry::Separator,
-            item("view.session", "Session").enabled(has_project).into(),
+            item("view.session", "Launcher").enabled(has_project).into(),
             item("view.arrangement", "Arrangement").enabled(has_project).into(),
             item(
                 "view.sampleMapWindow",

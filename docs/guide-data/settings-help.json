@@ -182,50 +182,9 @@
   "Audio/Status/Audio status": {
     "sourceFingerprint": "eb0a60ba1e649ad33f5e2e0229c3ca47bdb5303128d92eac8de6603b6a1659c0",
     "summary": "Inspect the audio device actually running and its timing reports.",
-    "description": "This panel reports live audio rather than saving a preference. Output identifies the device currently playing, including fallback to another output. Latency reports the engine-to-speaker delay and underruns: occasions when audio was not supplied in time. Key to sound estimates the current delay for live notes; arming a track makes the engine keep less audio queued ahead. Input now reports the open input, its channel count and input underruns, or says none is open. List devices again refreshes the available hardware list; it does not itself choose another device. With no playing project, live reports may be empty.",
+    "description": "This panel reports live audio rather than saving a preference. Output identifies the device currently playing, including fallback to another output. Delay to the speakers reports the engine-to-speaker delay and underruns: occasions when audio was not supplied in time. Delay when you play a key estimates the current delay for live notes; arming a track makes the engine keep less audio queued ahead. Recording input reports the open input, its channel count and input underruns, or says none is open. List devices again refreshes the available hardware list; it does not itself choose another device. With no playing project, live reports may be empty. Active buffers reports the engine render block and measured driver callback separately. Internal driver buffers can differ, and these frame counts are not the total measured latency. The native driver panel is under Output, beside Device settings.",
     "options": [],
     "whenToChange": "Check this when the selected interface is unplugged, live notes feel late, or playback breaks up. Compare the reports after changing Output settings.",
-    "references": [
-      "crates/ui/src/settings/settings_rows.rs",
-      "crates/ui/src/settings.rs",
-      "crates/ui/src/settings/settings_view.rs",
-      "crates/session/src/audio.rs",
-      "crates/output/src/lib.rs",
-      "docs/decisions/0020-latency-and-its-readout.md",
-      "docs/spec/cue-output.md"
-    ]
-  },
-  "Audio/Output/audio_host,audio_device,audio_sample_rate,audio_buffer,audio_exclusive,audio_input": {
-    "sourceFingerprint": "8dd26e41c1ca957fd8b007b176696f28788338229a3a93e1208e884e288e3308",
-    "summary": "Choose audio hardware, its driver, timing settings and recording input.",
-    "description": "Driver selects the audio system used to reach your hardware; the listed drivers depend on the platform and build. Device selects an output on that driver. Default follows the system choice; a missing chosen output can fall back to the default. Sample rate is the number of audio frames per second; choose a listed rate or Device’s own. Buffer size controls the device buffer where supported, including WASAPI exclusive mode; when labelled Engine block it controls Suhina’s rendering chunks, while the operating system or driver keeps its own device buffer. Smaller chunks alone do not guarantee the same reduction in the latency shown under Now. Exclusive mode applies to supported WASAPI devices and reserves the device for Suhina; other applications are then not heard on it. Input independently selects Off, the default input or a named microphone/interface input on the chosen driver. Input is Off initially. Choosing an input supplies audio to tracks configured to use it; it does not itself arm or record a track.",
-    "options": [
-      {
-        "name": "Driver: Default / listed driver",
-        "description": "Use the default audio system or explicitly select one. WASAPI is Windows’ audio system; ASIO uses an interface’s ASIO driver when available."
-      },
-      {
-        "name": "Device: Default / listed output",
-        "description": "Use the driver’s default output or a named output device. The list follows Driver."
-      },
-      {
-        "name": "Sample rate: Device’s own / listed Hz value",
-        "description": "Keep the device’s preferred rate or request one of its advertised rates. Hz means frames per second."
-      },
-      {
-        "name": "Buffer size / Engine block: Default / listed frames",
-        "description": "Use the default render block or a listed frame count. Read the row’s label and note to see whether this also sets the device buffer."
-      },
-      {
-        "name": "Exclusive mode: On / Off",
-        "description": "On requests WASAPI exclusive access where supported. Off uses shared access. It does not switch ASIO between shared and exclusive operation."
-      },
-      {
-        "name": "Input: Off / Default / listed input",
-        "description": "Off opens no audio input. Default follows the driver’s default input; a named choice uses that input device."
-      }
-    ],
-    "whenToChange": "Select your audio interface and input before recording. If key-to-sound delay is distracting, inspect Now and try a supported smaller buffer; if underruns increase, try a larger one.",
     "references": [
       "crates/ui/src/settings/settings_rows.rs",
       "crates/ui/src/settings.rs",
@@ -1007,6 +966,52 @@
       "docs/spec/arrangement-editing.md"
     ]
   },
+  "Arrangement/Tracks/new_project_returns": {
+    "sourceFingerprint": "7914528ff4c1b1a88ad36b8e8bc402fb7e087c4dfb3005225ed0b9e80115144c",
+    "summary": "Choose whether a new blank project starts with return tracks.",
+    "description": "Return tracks receive sound sent from other channels, often for shared effects. This preference decides whether a new blank project gets the A and B return tracks. With None the project has no returns, so no track shows send controls until you insert a return track. It only affects new blank projects: a project you open that already has returns always shows them, and the New or open dialog offers the other kind for a single project.",
+    "options": [
+      {
+        "name": "A and B",
+        "description": "New blank projects get two return tracks, A and B. This is the default."
+      },
+      {
+        "name": "None",
+        "description": "New blank projects have no return tracks and no send controls."
+      }
+    ],
+    "whenToChange": "Choose None if you never use return tracks and want new projects without them and without send controls; keep A and B if you often send several tracks to shared effects.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/app.rs",
+      "crates/ui/src/app/project_dialog.rs",
+      "crates/session/src/blank.rs",
+      "docs/decisions/0010-project-files.md"
+    ]
+  },
+  "Arrangement/Tracks/alt_wheel": {
+    "sourceFingerprint": "08e96feac6a5daa0c402e1340ff71c6a861ec32d09f8bd88225f7b8fad4eb1a7",
+    "summary": "Choose whether Alt and the mouse wheel resize all tracks or only the one under the pointer.",
+    "description": "In the Arrangement view, holding Alt and turning the mouse wheel over the tracks makes them taller or shorter. All tracks changes every track and its automation lanes together. The one under the pointer changes only the track or the automation lane the pointer is over.",
+    "options": [
+      {
+        "name": "All tracks",
+        "description": "Every track and automation lane changes height together. This is the default."
+      },
+      {
+        "name": "The one under the pointer",
+        "description": "Only the track or automation lane under the pointer changes height."
+      }
+    ],
+    "whenToChange": "Pick The one under the pointer when you want to make one track or one automation lane bigger without changing the others.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/arrangement/arrangement_view.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
   "Arrangement/Track sizes/arrangement_track_size": {
     "sourceFingerprint": "f5c03a2f1e905bf9a71e0940f03483e10226addcea8dbb781d9c05fac1ab1714",
     "summary": "Choose the default Arrangement height for ordinary tracks.",
@@ -1140,6 +1145,121 @@
       "docs/spec/arrangement-editing.md"
     ]
   },
+  "Arrangement/Tools/arrangement_toolbar": {
+    "sourceFingerprint": "dfbb527972fe530e0f7873b810a0cc3a2824a3eeddebb9dafaa6640b320d085d",
+    "summary": "Show a row of tools over the Arrangement and let the number keys choose them.",
+    "description": "With this on, a toolbar runs along the top of the Arrangement with six tools: Select (moves, trims and selects clips, as without the toolbar), Range (a drag selects time anywhere), Split (a click cuts a clip where you click), Erase (a click deletes a clip), Draw (a drag on a lane makes an empty clip as long as the drag) and Mute (a click mutes or unmutes a clip). The keys 1 to 6 choose them while the Arrangement was clicked last; when the piano roll was clicked last, the same keys choose its own tools. The Arrangement is outlined in the accent colour while it has the keys.",
+    "options": [
+      {
+        "name": "Off",
+        "description": "No toolbar; the Arrangement always works as the Select tool. This is the default."
+      },
+      {
+        "name": "On",
+        "description": "The toolbar shows and the keys 1 to 6 choose its tools while the Arrangement has the focus."
+      }
+    ],
+    "whenToChange": "Turn it on if you prefer to pick a tool (split, erase, draw) and click, rather than using menus and modifier keys.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/arrangement/arrangement_view/tools.rs",
+      "crates/ui/src/arrangement/arrangement_view/clip.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Tools/arrangement_grid": {
+    "sourceFingerprint": "cf4e204d5bf10b8bf78d76727dfded8fda752be1a68795a77039fd74a18930c2",
+    "summary": "Choose the Arrangement's grid when Suhina starts.",
+    "description": "The Arrangement has a grid of its own, apart from the control bar's Quantize box: its lines, and where clips, fades, automation points and ruler clicks snap. This sets what it starts on. A fixed value keeps its lines that far apart (coarser when zoomed far out); an adaptive grid makes its lines finer as you zoom in. From there the grid menu (the toolbar, an empty lane's right-click menu, an automation lane's menu) and Ctrl+1 to Ctrl+4 change it; changing this setting sets the grid again.",
+    "options": [
+      {
+        "name": "Adaptive widest",
+        "description": "The lines follow the zoom, as far apart as the adaptive widths go."
+      },
+      {
+        "name": "Adaptive wide",
+        "description": "The lines follow the zoom, wide apart."
+      },
+      {
+        "name": "Adaptive medium",
+        "description": "The lines follow the zoom, a medium distance apart."
+      },
+      {
+        "name": "Adaptive narrow",
+        "description": "The lines follow the zoom, close together."
+      },
+      {
+        "name": "Adaptive narrowest",
+        "description": "The lines follow the zoom, as close as the adaptive widths go."
+      },
+      {
+        "name": "8 bars",
+        "description": "Lines and snapping every eight bars."
+      },
+      {
+        "name": "4 bars",
+        "description": "Every four bars."
+      },
+      {
+        "name": "2 bars",
+        "description": "Every two bars."
+      },
+      {
+        "name": "1 bar",
+        "description": "Every bar."
+      },
+      {
+        "name": "1/2",
+        "description": "Every half note."
+      },
+      {
+        "name": "1/4",
+        "description": "Every beat (quarter note). This is the default."
+      },
+      {
+        "name": "1/8",
+        "description": "Every eighth note."
+      },
+      {
+        "name": "1/16",
+        "description": "Every sixteenth note."
+      },
+      {
+        "name": "1/32",
+        "description": "Every thirty-second note."
+      }
+    ],
+    "whenToChange": "Pick an adaptive grid if you zoom a lot and want the lines to follow; pick a fixed value such as 1 bar for arranging whole sections or 1/16 for detailed edits.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/app.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
+  "Arrangement/Automation/automation_click": {
+    "sourceFingerprint": "1f827ef5968036a13c39b01f476bbc40dc56a4a98a2f84fadf88f02b25b04462",
+    "summary": "Choose whether a single click anywhere on an automation lane adds a point.",
+    "description": "Off (the default), a click on an automation lane adds a point only on or near the envelope's line, where the pointer turns into a hand and the line's value shows beside it; a click away from the line only ends the painted range and the selected points, and a double-click there adds a point at the pointer. On, a click anywhere on the lane adds a point at the pointer's beat and height, as before.",
+    "options": [
+      {
+        "name": "Off",
+        "description": "A click adds a point only on or near the line; a double-click adds one anywhere. This is the default."
+      },
+      {
+        "name": "On",
+        "description": "A click anywhere on the lane adds a point at the pointer."
+      }
+    ],
+    "whenToChange": "Turn it on if you mostly draw automation point by point and want every click to add one.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/arrangement/automation_lanes.rs",
+      "docs/spec/automation.md"
+    ]
+  },
   "Arrangement/Advanced/stretch_alt_drag": {
     "sourceFingerprint": "d307d0f36d87c685d466649069303bdddc108805201f2a31711875d69d88e8ae",
     "summary": "Enable pitch-preserving audio stretching with Ctrl+Alt at a clip edge.",
@@ -1211,8 +1331,31 @@
       "docs/spec/arrangement-editing.md"
     ]
   },
+  "Arrangement/Advanced/copy_names": {
+    "sourceFingerprint": "a90400a7c63e6034f55c05ac70435b7f386f7b8deda47d2e559e392a4331be59",
+    "summary": "Choose how a duplicated or pasted track is named when its name is taken.",
+    "description": "When a track named Bass is duplicated or pasted and Bass is already taken, the copy gets a number. Wrapped names it Bass (2), Hash names it Bass #2. A name that contains # without a number after it shows the track's number, so it is kept as it is and every copy shows its own number. Tracks that were never renamed are called # MIDI or # Audio and keep that name.",
+    "options": [
+      {
+        "name": "Wrapped (2)",
+        "description": "Copies read Bass (2), Bass (3). This is the default."
+      },
+      {
+        "name": "Hash #2",
+        "description": "Copies read Bass #2, Bass #3."
+      }
+    ],
+    "whenToChange": "Pick Hash if you prefer numbered names without brackets, for example to match how your other projects are named.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/session/src/track_copy.rs",
+      "crates/model/src/names.rs",
+      "docs/spec/arrangement-editing.md"
+    ]
+  },
   "Session/Launching/select_on_launch": {
-    "sourceFingerprint": "472f1211e33f3116c9415321f86be26f7ad105b2d676a9e2ee479e981eff5e6c",
+    "sourceFingerprint": "6778f0162430bda77f5213f31f41e621e2f3cd6c19aebacbdafff6090352445e",
     "summary": "Select a Session clip when its launch control is pressed.",
     "description": "The Session view is the grid used to launch clips independently of the Arrangement timeline. With this enabled, launching a clip with its slot’s launch control also selects the clip and its track, so the detail area follows that clip. With it off, launch playback can change while you keep editing the previously selected clip. Clicking the clip name still selects it without launching.",
     "options": [
@@ -1408,6 +1551,34 @@
       "docs/spec/browser.md"
     ]
   },
+  "Browser/Browser/browser_folder_drop": {
+    "sourceFingerprint": "15bd78b04b1425e655480f656db49531ee802447d76b1dc7bb07ea08d0f4b209",
+    "summary": "Choose what dragging samples onto a folder in the browser does.",
+    "description": "Samples dragged in the browser and dropped on one of its folders go into that folder. Ask shows a question with Move, Copy and Cancel, and a Remember my choice box that sets this setting. Move takes the files out of where they were; their pins, recent places and colour tags go with them, and a file an open project plays is left where it is. Copy leaves the originals. A name already taken in the folder gets a number (Kick 2.wav); nothing is overwritten. Holding Ctrl while dropping always copies, Shift always moves.",
+    "options": [
+      {
+        "name": "Ask",
+        "description": "Ask each time whether to move or copy. This is the default."
+      },
+      {
+        "name": "Move",
+        "description": "Move the samples into the folder without asking."
+      },
+      {
+        "name": "Copy",
+        "description": "Copy the samples into the folder without asking."
+      }
+    ],
+    "whenToChange": "Set Move or Copy once you always want the same result and the question gets in the way.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings/view_settings.rs",
+      "crates/ui/src/app/drops.rs",
+      "crates/ui/src/app/folder_drop_dialog.rs",
+      "crates/session/src/library.rs",
+      "docs/spec/browser.md"
+    ]
+  },
   "Browser/Previews/preview_autoplay": {
     "sourceFingerprint": "75e9c47c46f4226f24d39d2ca3963176035759e254de27c12b831de39302848b",
     "summary": "Preview a browser sample or MIDI file when you select it.",
@@ -1543,6 +1714,35 @@
       "crates/ui/src/browser/sample_map.rs",
       "crates/ui/src/browser/sample_map_panel.rs",
       "crates/session/src/soundmap.rs",
+      "docs/spec/sample-map.md"
+    ]
+  },
+  "Browser/Sample map/map_label_size": {
+    "sourceFingerprint": "3f65b23994aed1b587df0e467df0d9b39668200a2c0daee5113a37fc00e7962c",
+    "summary": "Set how large the names of the sample map's clusters are, or hide them.",
+    "description": "The sample map names its groups of similar sounds (Kick, Snare, Vocal and so on) with labels drawn over the points. In a narrow map, large labels can cover the very points they name. This setting scales every label by the same amount, so bigger groups keep their larger labels and labels still never overlap. It is the same choice as Labels in the map's top bar.",
+    "options": [
+      {
+        "name": "Off",
+        "description": "Hide the labels; the legend under the map still names the kinds."
+      },
+      {
+        "name": "50 %",
+        "description": "Labels at half their full size."
+      },
+      {
+        "name": "75 %",
+        "description": "Labels at three quarters of their full size."
+      },
+      {
+        "name": "100 %",
+        "description": "Labels at their full size. This is the default."
+      }
+    ],
+    "whenToChange": "Make the labels smaller or turn them off when they hide samples you want to see or click, most often in the map docked in the browser.",
+    "references": [
+      "crates/ui/src/browser/sample_map.rs",
+      "crates/ui/src/settings.rs",
       "docs/spec/sample-map.md"
     ]
   },
@@ -2074,6 +2274,47 @@
       "crates/ui/src/app/updates.rs",
       "crates/update/src/components.rs",
       "docs/fork-distribution.md"
+    ]
+  },
+  "Audio/Output/audio_host,audio_device,audio_devices,audio_sample_rate,audio_buffer,audio_exclusive,audio_input": {
+    "sourceFingerprint": "3faf6e1ef9f62aae5381067a023101e0cedd4bb20fb910c598313a7ae04ee4bb",
+    "summary": "Choose audio hardware, its driver, timing settings and recording input.",
+    "description": "Driver selects the audio system used to reach your hardware; the listed drivers depend on the platform and build. Each driver remembers its last applied device across restarts, including an explicit Default selection. Choosing Driver restores that device and applies the pair together when it is available. Default and the same host selected by name share this memory. For a new driver or an unavailable remembered device, choose Device, including Default if wanted, before the new driver opens. Until then the current output keeps playing; closing Settings cancels the pending driver choice. Installed ASIO devices stay listed while ASIO plays; restart Suhina after installing a new ASIO driver. Default follows the system choice; a missing chosen output can fall back to the default. Sample rate is the number of audio frames per second; choose a listed rate or Device’s own. Buffer size controls the device buffer where supported, including WASAPI exclusive mode; when labelled Engine block it controls Suhina’s rendering chunks, while the operating system or driver keeps its own device buffer. Smaller chunks alone do not guarantee the same reduction in the latency shown under Now. Exclusive mode applies to supported WASAPI devices and reserves the device for Suhina; other applications are then not heard on it. Input independently selects Off, the default input or a named microphone/interface input on the chosen driver. Input is Off initially. Choosing an input supplies audio to tracks configured to use it; it does not itself arm or record a track. Device changes retain running plug-in instances. If the effective sample rate changes, Suhina stops processing while it reconfigures those instances and updates their latency; it does not reload their presets or editors. A plug-in that refuses reconfiguration prevents the new output from starting and reports an error. A plug-in still loading when the rate changes starts again at the new rate. When changing outputs, Suhina fades the old device to silence before closing it and fades in the first audio on the new device. The shutdown drain is limited to 500 ms if a device stops responding; the change still interrupts audio and cannot prevent a pop generated inside the hardware. Device settings, immediately below Device, opens Control panel… for the matching active ASIO driver. The button is hidden while a driver choice is pending, when another device is running, or with a non-ASIO host. The native panel configures the running instance, not an external defaults editor; opening it does not reload plug-ins. While the native panel is open, output changes and project closing are rejected until it is closed. A rejected output choice restores the displayed selection and does not replace the driver’s remembered device. If the device itself fails to open, the requested choice stays selected for retry; device history is updated only after a successful selection. Switching to another driver after a failed opening preserves the previous driver’s last working device. Buffer size requests a supported processing buffer; it does not describe every internal driver or hardware buffer. Exclusive mode is shown only for WASAPI. If opening a device fails, selecting an available device opens a new stopped audio engine; restarting the application is not required to retry.",
+    "options": [
+      {
+        "name": "Driver: Default / listed driver",
+        "description": "Use the default audio system or explicitly select one. WASAPI is Windows’ audio system; ASIO uses an interface’s ASIO driver when available. Returning to a driver restores its available remembered device in the same operation."
+      },
+      {
+        "name": "Device: Default / listed output",
+        "description": "Use the driver’s default output or a named output device. The list follows Driver. The applied selection is saved separately for each driver."
+      },
+      {
+        "name": "Sample rate: Device’s own / listed Hz value",
+        "description": "Keep the device’s preferred rate or request one of its advertised rates. Hz means frames per second."
+      },
+      {
+        "name": "Buffer size / Engine block: Default / listed frames",
+        "description": "Use the default render block or a listed frame count. Read the row’s label and note to see whether this also sets the device buffer."
+      },
+      {
+        "name": "Exclusive mode: On / Off",
+        "description": "On requests WASAPI exclusive access where supported. Off uses shared access. It does not switch ASIO between shared and exclusive operation."
+      },
+      {
+        "name": "Input: Off / Default / listed input",
+        "description": "Off opens no audio input. Default follows the driver’s default input; a named choice uses that input device."
+      }
+    ],
+    "whenToChange": "Select your audio interface and input before recording. If key-to-sound delay is distracting, inspect Now and try a supported smaller buffer; if underruns increase, try a larger one. Use Control panel… for driver-specific buffer and hardware settings.",
+    "references": [
+      "crates/ui/src/settings/settings_rows.rs",
+      "crates/ui/src/settings.rs",
+      "crates/ui/src/settings/settings_view.rs",
+      "crates/session/src/audio.rs",
+      "crates/output/src/lib.rs",
+      "docs/decisions/0020-latency-and-its-readout.md",
+      "docs/spec/cue-output.md"
     ]
   }
 }
