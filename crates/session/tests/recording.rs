@@ -402,10 +402,15 @@ fn moving_back_while_recording_keeps_each_pass_as_a_take_and_the_latest_plays() 
     assert_eq!(live[0].notes.len(), 1, "its note so far: {live:?}");
     rig.run("transport.setPosition", json!({ "beats": 0.0 })).unwrap();
     rig.render_to(BEAT * 3 + BLOCK * 2, 0.0);
+    // The jump comes through the recording thread too: once it has, the first pass is still drawn
+    // (finished, as a take lane) and the new pass is the last one, so look at that one.
+    std::thread::sleep(Duration::from_millis(50));
     rig.session.poll_recording();
     let live = rig.session.live_takes();
-    assert!(close(live[0].start, 0.0) && live[0].end < 0.1, "a new pass from beat 0: {live:?}");
-    assert!(live[0].notes.is_empty(), "the first pass's note is not in it: {live:?}");
+    let new_pass = live.last().expect("the take is still drawn");
+    assert!(close(new_pass.start, 0.0) && new_pass.end < 0.1, "a new pass from beat 0: {live:?}");
+    assert!(!new_pass.finished, "the new pass is the one recording: {live:?}");
+    assert!(new_pass.notes.is_empty(), "the first pass's note is not in it: {live:?}");
     // The second pass: a note at its beat 0.5, ended at its beat 2.
     rig.render_to(BEAT * 3 + BEAT / 2, 0.0);
     rig.live.send(LiveEvent::NoteOn { key: 64, velocity: 1.0 });
