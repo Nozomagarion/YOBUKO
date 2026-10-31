@@ -11,6 +11,9 @@ serde.workspace = true
 serde_json.workspace = true
 suhina-media.workspace = true
 rbl-analysis = { path = "../../third_party/rbxport-analysis" }
+rbl-export = { path = "../../third_party/rbxport-export/rbl-export" }
+rbl-anlz = { path = "../../third_party/rbxport-export/rbl-anlz" }
+rbl-core = { path = "../../third_party/rbxport-export/rbl-core" }
 tempfile = "3"
 
 [lints]

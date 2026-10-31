@@ -144,7 +144,7 @@ leur [propre suivi](UPSTREAM_README.md) : elles ne sont pas réattribuées à ce
 |---|---|---|
 | **Studio** | Le socle Suhina et son espace de production ; rendu d'un projet vers la bibliothèque DJ. | Approfondir les liens entre projet, collaboration et préparation du set. |
 | **Multijoueur** | Session LAN hôte + trois invités maximum, copie MIDI/audio du projet ouvert ou démo ; jusqu’à 64 pistes, édition des notes et du placement des clips MIDI/audio, grille du lanceur et scènes partagées, publication de prises terminées par les deux participants, réglages FM Synth/Utility et noms/volumes/panoramiques partagés et lectures indépendantes. | Internet et reconnexion automatique. |
-| **DJ** | Bibliothèque, playlists, cues et grilles à tempo constant persistants ; analyse rbxport, préécoute et forme d’onde. | Synchronisation, tempo et compatibilité matérielle. |
+| **DJ** | Bibliothèque, playlists, cues et grilles à tempo constant persistants ; analyse rbxport, préécoute et forme d’onde ; export clé USB Rekordbox (CDJ/XDJ) et bouton « Open rbxport ». | Synchronisation du tempo entre platines. |
 | **Mises à jour** | Comparaison des sources GitHub dans les paramètres, outils d'intégration et vérification d'un paquet commun. | Valider et publier le canal commun, puis activer l'intégration périodique. |
 
 Le trafic chiffré est testé entre deux services sur le même ordinateur, avec des vérifications
@@ -236,12 +236,12 @@ commune disponible. La récupération périodique et la publication commune rest
 | Fondation | Apport au projet |
 |---|---|
 | **[Suhina](https://github.com/suhina-daw/suhina-daw)** et ses contributeurs | Le logiciel de production : interface native, moteur audio, projets, instruments, effets, hébergement des plugins et outils de création. C'est la fondation du studio. |
-| **[rbxport](https://github.com/chrisle/rbxport)**, par chrisle et ses contributeurs | Le module `rbl-analysis` utilisé ici pour l'analyse du tempo et de la tonalité. Il fournit une première brique vers la préparation DJ ; le reste de rbxport n'est pas encore intégré. |
+| **[rbxport](https://github.com/chrisle/rbxport)**, par chrisle et ses contributeurs | Le module `rbl-analysis` (analyse du tempo et de la tonalité) et son moteur d'export USB (`rbl-export` et ses briques), qui écrit la bibliothèque DJ sur une clé Rekordbox lisible par les CDJ/XDJ. Le bouton « Open rbxport » ouvre l'application rbxport complète (PRO DJ LINK, gestion de bibliothèque). |
 | **Ce fork** | La collaboration, l'espace DJ relié au studio, la présentation d'un parcours musical commun et les outils pour distribuer l'ensemble sans perdre ces ajouts. |
 
 Les auteurs d'origine conservent leurs crédits et leurs droits. Voir le
 [README original de Suhina](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md), [NOTICE](NOTICE),
-la [provenance du code rbxport](third_party/rbxport-analysis/VENDORED.md) et les
+la [provenance du code rbxport](third_party/rbxport-analysis/VENDORED.md) ([export USB](third_party/rbxport-export/VENDORED.md)) et les
 [versions intégrées](fork-sources.json).
 
 La référence à Ableton Live décrit l'idée de workflow recherchée. Le code du studio provient de
