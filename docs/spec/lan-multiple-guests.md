@@ -73,3 +73,13 @@ implicitly permitted in shared tabs. All participants need the updated combined 
 or breaks the protocol is still removed at once. A guest whose link fails keeps its PeerId and its
 place for two minutes and can come back with its resume token; `guests_connected` counts connected
 guests only, `guests_reconnecting` the places held, and both count toward the three places.
+
+
+## Amendment: one code for the whole group (protocol 18)
+
+A host admits up to seven guests (eight musicians). One invitation, long or short, admits
+every guest who has it for thirty minutes, until the session is full; **New invitation**
+replaces it and revokes the old one. The `used` refusal is no longer sent. `tests/guests.rs`
+lets seven guests in with one code, refuses an eighth and admits a returning one after a
+departure. Protocol 18, since a protocol 17 guest refuses a host announcing more than three
+guests.

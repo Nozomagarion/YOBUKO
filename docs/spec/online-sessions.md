@@ -16,8 +16,8 @@ covers:
 
 Self-authored extension of the host-ordered session adapter
 ([several guests](lan-multiple-guests.md)). The collaboration protocol, its limits and its
-admission rules are unchanged; only the transport between computers changes. Protocol 17
-(16 before [plug-ins in shared sessions](shared-plugins.md), 14 before [heavy sessions](heavy-sessions.md) and [session resume](session-resume.md), each
+admission rules are unchanged; only the transport between computers changes. Protocol 18
+(17 before one code admitted the whole group, 16 before [plug-ins in shared sessions](shared-plugins.md), 14 before [heavy sessions](heavy-sessions.md) and [session resume](session-resume.md), each
 developed as 15 on its own, 13 before [linked playback](linked-playback.md) added the shared
 transport).
 
@@ -34,7 +34,7 @@ transport).
 
 Each session side opens an [iroh](https://github.com/n0-computer/iroh) endpoint (MIT OR
 Apache-2.0) with a fresh secret key, created for the session and never stored. Connections are
-QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/17`.
+QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multiplayer/18`.
 
 - The host waits up to ten seconds for a home relay, then puts its endpoint id (public key),
   relay URL and direct addresses in the invitation. Without a relay it still invites with its
@@ -52,10 +52,11 @@ QUIC with TLS 1.3 under the `ring` provider, application protocol `suhina/multip
 ## Invitation code
 
 `suhina-net://` followed by unpadded URL-safe base64 of JSON `{protocol, endpoint, secret}`:
-the protocol number, the iroh endpoint address and the 64-hex single-use secret. At most
-8192 characters and 32 addresses; unknown fields are refused. The secret keeps the LAN rules:
-valid five minutes, admits one guest, one outstanding invitation, rotated with **New
-invitation** while fewer than three guests are connected. The endpoint stays the same for the
+the protocol number, the iroh endpoint address and the 64-hex secret. At most
+8192 characters and 32 addresses; unknown fields are refused. **One code serves the whole
+group**: it admits every guest who has it, up to seven, for thirty minutes. There is one
+outstanding invitation; **New invitation** replaces it (the old code stops admitting anyone)
+while fewer than seven guests hold a place, for example when a code reached the wrong person. The endpoint stays the same for the
 whole session, so a renewed code differs only in its secret.
 
 ## Short codes
@@ -82,10 +83,11 @@ order: a code is the positions of its words. Still no account and no server of o
   derived from the code; the lobby compares the proof in constant time. For the first correct
   proof it answers with the full invitation (u16 big-endian length, then the `suhina-net://`
   text, at most 8192 bytes); for any other it answers a zero length. The guest then joins the
-  session endpoint exactly as with the long code, single-use secret included.
-- **Life.** A lobby serves one code. It admits one guest, then refuses everyone, and closes
-  after five minutes, when the host leaves, or when **New invitation** replaces it with a new
-  code and a new lobby. A wrong proof does not spend the code.
+  session endpoint exactly as with the long code.
+- **Life.** A lobby serves one code and hands the invitation to every correct proof, eight
+  exchanges at once at most; the session admits the guests until it is full. It closes after
+  thirty minutes, when the host leaves, or when **New invitation** replaces it with a new code
+  and a new lobby.
 - **Join field.** Text starting with a digit is a short code, `suhina-net://` a long online
   code, `suhina-lan://` a LAN code. Case, accents and the separators between parts (spaces,
   hyphens, dots, commas, underscores) do not matter. A malformed code (wrong number, unknown
@@ -103,19 +105,19 @@ order: a code is the positions of its words. Still no account and no server of o
 
 An Internet code carries log2(999 × 2048³) ≈ 43 bits. The only way to use a code is to ask its
 lobby online: an attacker guesses a code, derives its lobby id, and must find a live lobby
-under it through the public lookup, then race the guest to it, all within five minutes and
-before the single use is spent. Even at a thousand lookups a second, an attacker covers
-300 000 codes per five-minute window, a chance of about 3 × 10⁻⁸ for one outstanding code
-(still about 3 × 10⁻⁵ if a thousand codes were outstanding worldwide at once). The derived
+under it through the public lookup, all within the code's thirty minutes. Even at a thousand
+lookups a second, an attacker covers 1.8 million codes per thirty-minute window, a chance of
+about 2 × 10⁻⁷ for one outstanding code (still about 2 × 10⁻⁴ if a thousand codes were
+outstanding worldwide at once). The host sees every guest arrive and can replace the code. The derived
 lobby id is public in the address records, so the code must not be recoverable from it
 offline: Argon2id makes every guess cost 32 MiB and about 70 ms of a recent processor core, which puts the
-2⁴³ space far beyond any five-minute window. A guess of the proof itself is a guess of 256 bits.
+2⁴³ space far beyond any thirty-minute window. A guess of the proof itself is a guess of 256 bits.
 The person who reads the code out still chooses who hears it: anyone who hears it within the
-five minutes can take the seat, exactly as with the long code.
+thirty minutes can take a seat, exactly as with the long code.
 
 ## Limits
 
-- At most four handshakes at once (three guests plus one being admitted); further incoming
+- At most eight connections at once (seven guests plus one being admitted); further incoming
   connections are refused before any data is read.
 - Sound budgets, frame sizes and journal length are those of the LAN transport.
 - A guest whose link drops comes back by itself within a minute ([session resume](session-resume.md));
@@ -129,11 +131,11 @@ five minutes can take the seat, exactly as with the long code.
 
 `crates/multiplayer/src/online_tests.rs` covers code round trips and tampering, deadline
 timeouts that lose no data, a forged host key, and the lobby: one hand-over, a forged proof
-refused without spending the code, unknown and withdrawn codes. `short_code_tests.rs` checks
+refused, the same code handed to a second guest, unknown and withdrawn codes. `short_code_tests.rs` checks
 the word list (2048 distinct plain words, sorted), round trips whatever the case, spacing or
 accents, malformed codes, and the derivation. `crates/multiplayer/tests/online.rs` runs whole
 sessions over loopback: edits in both directions, a stale edit refused, the host leaving,
-three guests with fresh codes, a spent code refused, and short codes: a join by short code
-alone, single use, a wrong code, renewal revoking the old code, malformed codes refused before
+guests with fresh codes, a replaced code refused, and short codes: a join by short code
+alone, three guests on one short code, a wrong code, renewal revoking the old code, malformed codes refused before
 any network use. All run offline. Degraded links, cuts and resumes are tested with the fault
 injector described in [session resume](session-resume.md).

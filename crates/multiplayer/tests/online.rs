@@ -68,7 +68,7 @@ fn an_online_guest_joins_by_code_exchanges_edits_and_sees_the_host_leave() {
 }
 
 #[test]
-fn an_online_code_works_once_and_three_guests_can_join_with_fresh_codes() {
+fn a_replaced_online_code_admits_nobody_and_guests_can_join_with_fresh_codes() {
     let (mut host, first) = host();
     let mut guests = Vec::new();
     let mut code = first.clone();
@@ -185,7 +185,7 @@ fn a_guest_joins_with_the_short_code_alone_and_edits_together() {
 }
 
 #[test]
-fn a_short_code_works_once_and_a_wrong_one_admits_nobody() {
+fn one_short_code_lets_the_group_in_and_a_wrong_one_admits_nobody() {
     let (mut host, _) = host();
     let code = short_code(&mut host, None);
     let mut wrong = join(&format!("0-{}", if code.ends_with("-zoo") { "piano-tigre-lune" } else { "zoo-zoo-zoo" }));
@@ -193,10 +193,17 @@ fn a_short_code_works_once_and_a_wrong_one_admits_nobody() {
     assert!(error.contains("no session"), "{error}");
     let mut first = join(&code);
     wait(&mut first, |v| v["mode"] == "connected");
+    // The friends all type the same code.
     let mut second = join(&code);
-    let error = refused(&mut second)["error"].as_str().unwrap().to_owned();
-    assert!(error.contains("refused"), "a spent code: {error}");
-    assert_eq!(state(&mut host)["guests_connected"], 1);
+    wait(&mut second, |v| v["mode"] == "connected");
+    let mut third = join(&code);
+    wait(&mut third, |v| v["mode"] == "connected");
+    wait(&mut host, |v| v["guests_connected"] == 3);
+    edit(&mut third, 0, json!({"command":"track.rename","track":1,"name":"Same code"}));
+    for guest in [&mut first, &mut second] {
+        let seen = wait(guest, |v| v["controls"]["revision"] == 1);
+        assert_eq!(seen["controls"]["tracks"][0]["name"], "Same code");
+    }
 }
 
 #[test]

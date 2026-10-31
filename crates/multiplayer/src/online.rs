@@ -11,7 +11,6 @@ use iroh::endpoint::{Connection, Incoming, RecvStream, SendStream, presets};
 use iroh::{Endpoint, EndpointAddr, EndpointId, RelayMode, SecretKey};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, mpsc};
 use std::time::{Duration, Instant};
 use subtle::ConstantTimeEq;
@@ -27,12 +26,12 @@ mod short_code;
 pub(crate) use short_code::ShortCode;
 
 const PREFIX: &str = "suhina-net://";
-const ALPN: &[u8] = b"suhina/multiplayer/17";
+const ALPN: &[u8] = b"suhina/multiplayer/18";
 /// The lobby that trades a short code for the full invitation speaks only this protocol.
 const LOBBY_ALPN: &[u8] = b"suhina/lobby/1";
 /// A lobby lives as long as the invitation it hands out.
-const LOBBY_LIFE: Duration = Duration::from_secs(300);
-const LOBBY_SLOTS: usize = 4;
+const LOBBY_LIFE: Duration = crate::transport::CODE_LIFE;
+const LOBBY_SLOTS: usize = 8;
 const MAX_INVITATION: usize = 8192;
 /// Hole punching and relay lookup can take several seconds across the Internet.
 const CONNECT: Duration = Duration::from_secs(20);
@@ -299,22 +298,22 @@ async fn open_lobby(reach: Reach) -> Result<(String, [u8; 32], Endpoint), String
 }
 async fn serve_lobby(endpoint: &Endpoint, proof: [u8; 32], invitation: Arc<str>) {
     let slots = Arc::new(Semaphore::new(LOBBY_SLOTS));
-    let spent = Arc::new(AtomicBool::new(false));
     while let Some(incoming) = endpoint.accept().await {
         let Ok(permit) = Arc::clone(&slots).try_acquire_owned() else {
             incoming.refuse();
             continue;
         };
-        let (spent, invitation) = (Arc::clone(&spent), Arc::clone(&invitation));
+        let invitation = Arc::clone(&invitation);
         tokio::spawn(async move {
             let _slot = permit;
-            hand_over(incoming, &proof, &spent, &invitation).await;
+            hand_over(incoming, &proof, &invitation).await;
         });
     }
 }
 /// One lobby exchange: 32 proof bytes in; a big-endian u16 length and the invitation out, or a
-/// zero length when the proof is wrong or the code was already used.
-async fn hand_over(incoming: Incoming, proof: &[u8; 32], spent: &AtomicBool, invitation: &str) {
+/// zero length when the proof is wrong. Every guest with the code gets the invitation; the
+/// session itself admits them until it is full.
+async fn hand_over(incoming: Incoming, proof: &[u8; 32], invitation: &str) {
     let Ok(Ok(connection)) = tokio::time::timeout(CONNECT, incoming).await else { return };
     let Ok(Ok((mut out, mut into))) = tokio::time::timeout(CONNECT, connection.accept_bi()).await else {
         return;
@@ -323,8 +322,8 @@ async fn hand_over(incoming: Incoming, proof: &[u8; 32], spent: &AtomicBool, inv
     if !matches!(tokio::time::timeout(TIMEOUT, into.read_exact(&mut claim)).await, Ok(Ok(()))) {
         return;
     }
-    // Constant time, and the single use is claimed only by a correct proof.
-    let admitted = bool::from(claim.ct_eq(proof)) && !spent.swap(true, Ordering::SeqCst);
+    // Constant time.
+    let admitted = bool::from(claim.ct_eq(proof));
     let reply = if admitted { invitation.as_bytes() } else { &[] };
     let Ok(length) = u16::try_from(reply.len()) else { return };
     let _ = tokio::time::timeout(TIMEOUT, async {

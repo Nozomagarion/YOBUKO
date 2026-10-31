@@ -28,21 +28,23 @@ Les réglages et les projets ne doivent pas être placés dans le dossier de l�
    déjà ouverts sont conservés.
 3. Après quelques secondes, un **code court** s’affiche, par exemple `7-piano-tigre-lune` : un
    nombre et trois mots. Le lire à voix haute (sur Discord, par exemple) ou cliquer **Copy code**
-   et l’envoyer en privé. Le code expire après cinq minutes et ne sert qu’une fois. Ne pas créer le
-   suivant avant que la personne ait rejoint, car il remplacerait le code encore inutilisé.
+   l’envoyer en privé. **Le même code sert à tout le groupe** : chaque ami le tape, pendant
+   trente minutes, jusqu’à sept invités.
 4. Sur l’autre ordinateur, ouvrir **Multiplayer**, taper le code dans **Invitation code from the
    host** puis cliquer **Join session**. Majuscules, accents et espaces à la place des tirets
    sont acceptés ; un mot mal orthographié est signalé tout de suite. Attendre l’ouverture de l’onglet partagé (jusqu’à une
-   vingtaine de secondes la première fois). Le nombre **Guests: N / 3** confirme la présence de
-   l’invité.
-5. Pour une autre personne, l’hôte clique **New invitation**, puis répète les étapes 3–4.
-   Trois invités au maximum peuvent être présents en même temps.
+   vingtaine de secondes la première fois). Le nombre **Guests: N / 7** confirme la présence des
+   invités.
+5. Les autres amis tapent le même code. **New invitation** ne sert que si le code est arrivé chez
+   quelqu’un qui ne devait pas l’avoir : il crée un nouveau code et l’ancien ne marche plus (les
+   personnes déjà connectées restent). Huit personnes au maximum en tout : l’hôte et sept invités.
 
 **Code court ou invitation complète ?** Le code court ne passe par aucun compte ni serveur à
 nous : l’hôte ouvre une petite « salle d’attente » dont l’adresse se déduit du code, publiée par
 l’annuaire public d’iroh. L’invité la retrouve grâce au code, prouve qu’il le connaît, reçoit
-l’invitation complète et rejoint la session comme avant. Deviner un code en cinq minutes est
-hors de portée (environ 43 bits, un seul essai réussi possible, puis le code est grillé). Si le
+l’invitation complète et rejoint la session comme avant. Deviner un code en trente minutes est
+hors de portée (environ 43 bits, et chaque essai coûte du calcul) ; l’hôte voit arriver chaque
+invité. Si le
 code court échoue (réseau d’entreprise ou d’école qui bloque cet annuaire, par exemple), l’hôte
 clique **Copy full invitation** et envoie le long texte `suhina-net://…` : il se colle au même
 endroit et fonctionne toujours.
@@ -119,8 +121,8 @@ code ; la copie reste conservée.
 
 **Messages de refus.** Un refus dit maintenant pourquoi : versions différentes (« Your partner
 runs a different Suhina build (host abc1234, this computer def5678) » : installer la même version
-sur les deux ordinateurs), code expiré après cinq minutes, code déjà utilisé, code remplacé par un
-plus récent ou mal copié, ou session complète (trois invités). Dans tous les cas, demander un
+sur les deux ordinateurs), code expiré après trente minutes, code remplacé par un
+plus récent ou mal copié, ou session complète (sept invités). Dans tous les cas, demander un
 nouveau code à l’hôte, sauf pour une différence de version.
 
 ## Versions et aide
