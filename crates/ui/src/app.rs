@@ -1626,7 +1626,8 @@ impl App {
             | PickField::McpWriteFolder
             | PickField::CopyToFolder
             | PickField::BackgroundImage
-            | PickField::DjAudio => None,
+            | PickField::DjAudio
+            | PickField::DjUsb => None,
         };
         self.pick_request = Some(PickRequest { field, start });
     }
@@ -1644,6 +1645,10 @@ impl App {
         match field {
             PickField::DjAudio => {
                 self.dj.pending = Some((path, None));
+                return;
+            }
+            PickField::DjUsb => {
+                self.start_dj_usb_export(&path);
                 return;
             }
             PickField::ProjectsFolder => self.settings.projects_folder = text,

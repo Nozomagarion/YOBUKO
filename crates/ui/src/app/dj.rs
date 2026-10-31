@@ -14,6 +14,8 @@ mod grid;
 mod playlists;
 #[path = "dj_prepare.rs"]
 mod prepare;
+#[path = "dj_rbxport.rs"]
+mod rbxport;
 #[path = "dj_waveform.rs"]
 mod waveform;
 use grid::GridDraft;
@@ -136,6 +138,82 @@ impl App {
         }
     }
 
+    /// Writes the DJ library to the chosen USB stick for Rekordbox players, on the DJ worker.
+    pub(super) fn start_dj_usb_export(&mut self, destination: &Path) {
+        self.dj_command("dj.usb.export", json!({"destination": destination}));
+        if self.dj.snapshot["error"].is_null() {
+            self.status = Status::Hint("Exporting the DJ library to the USB stick…".into());
+        }
+    }
+
+    /// Hands over to the rbxport app, or opens its download page when it is not installed.
+    fn open_rbxport(&mut self, ctx: &egui::Context) {
+        match rbxport::installed() {
+            Some(app) => match rbxport::launch(&app) {
+                Ok(()) => self.status = Status::Hint("Opening rbxport…".into()),
+                Err(e) => self.status = Status::Error(format!("could not open rbxport: {e}")),
+            },
+            None => {
+                ctx.open_url(egui::OpenUrl::new_tab(rbxport::DOWNLOAD_PAGE));
+                self.status = Status::Hint("rbxport is not installed: its download page is open".into());
+            }
+        }
+    }
+
+    fn show_dj_usb(&mut self, ui: &mut Ui, busy: bool) {
+        ui.strong("USB stick for Rekordbox players (CDJ / XDJ)");
+        ui.weak("Writes every track, cue and playlist of the DJ library to a stick, the way rekordbox does (rbxport's exporter). A stick exported before is only updated.");
+        let has_tracks = self.dj.snapshot["tracks"].as_array().is_some_and(|t| !t.is_empty());
+        ui.horizontal(|ui| {
+            if ui
+                .add_enabled(!busy && has_tracks, egui::Button::new("Export to USB stick (Rekordbox)…"))
+                .on_disabled_hover_text("Import or render a track into the DJ library first")
+                .clicked()
+            {
+                self.ask_pick(PickField::DjUsb);
+            }
+            let installed = rbxport::installed().is_some();
+            let label = if installed { "Open rbxport" } else { "Get rbxport" };
+            if ui
+                .button(label)
+                .on_hover_text("rbxport: the full DJ library app (USB sync, PRO DJ LINK), by Chris Le")
+                .clicked()
+            {
+                self.open_rbxport(ui.ctx());
+            }
+        });
+        let usb = &self.dj.snapshot["usb"];
+        if let Some(progress) = usb["progress"].as_object() {
+            let stage = progress.get("stage").and_then(Value::as_str).unwrap_or("working");
+            let done = progress.get("done").and_then(Value::as_u64).unwrap_or(0);
+            let total = progress.get("total").and_then(Value::as_u64).unwrap_or(0);
+            let title = progress.get("title").and_then(Value::as_str).unwrap_or("");
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(format!("USB export: {stage} {done}/{total} {title}"));
+            });
+        } else if let Some(error) = usb["error"].as_str() {
+            ui.colored_label(theme::accent(), error);
+        } else if let Some(summary) = usb["summary"].as_object() {
+            let n = |key: &str| summary.get(key).and_then(Value::as_u64).unwrap_or(0);
+            let place = summary.get("destination").and_then(Value::as_str).unwrap_or("the stick");
+            ui.label(format!(
+                "✔ {} tracks and {} playlists on {place} ({} copied, {} already there, {} converted). Ready for the player.",
+                n("tracks"),
+                n("playlists"),
+                n("copied"),
+                n("reused"),
+                n("converted"),
+            ));
+            if let Some(failed) = summary.get("failed").and_then(Value::as_array).filter(|f| !f.is_empty()) {
+                ui.colored_label(
+                    theme::accent(),
+                    format!("Left out: {}", failed.iter().filter_map(Value::as_str).collect::<Vec<_>>().join("; ")),
+                );
+            }
+        }
+    }
+
     fn dj_command(&mut self, command: &str, params: Value) {
         match self.projects.execute(command, &params) {
             Ok(_) => {
@@ -179,11 +257,13 @@ impl App {
             ui.colored_label(theme::accent(), error);
         }
         ui.add_space(theme::PAD);
+        self.show_dj_usb(ui, busy);
+        ui.add_space(theme::PAD);
         ui.separator();
         self.show_dj_playlists(ui, busy);
         ui.add_space(theme::PAD);
         self.show_dj_decks(ui);
         ui.add_space(theme::PAD);
-        ui.weak("Local library, playlists, cue points, constant beat grids and original-speed A/B decks. Tempo sync, USB export and LINK are still to come.");
+        ui.weak("Local library, playlists, cue points, constant beat grids, original-speed A/B decks and Rekordbox USB export. Tempo sync and PRO DJ LINK: use rbxport.");
     }
 }
