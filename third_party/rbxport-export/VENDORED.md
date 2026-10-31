@@ -28,5 +28,8 @@ YOBUKO calls it from `crates/dj/src/usb.rs` (command `dj.usb.export`, button
 - `rbl-audio`: symphonia's `ogg` and `vorbis` features are on, so Ogg tracks in the DJ
   library can be converted for the player.
 
+- The sources are run through the workspace's `cargo fmt` (CI checks `cargo fmt --all`,
+  which covers path dependencies); layout only, no code change.
+
 No other source line is changed. To update: copy `crates/<name>/src` from a newer rbxport
 revision, keep the two `rbl-audio` changes above, and run `cargo test -p suhina-dj`.

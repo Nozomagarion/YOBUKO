@@ -11,17 +11,17 @@
 //! Nothing here touches the user's library: it reads from an already-loaded
 //! index and writes only under the destination directory.
 
+pub mod cache;
 pub mod device_import;
 pub mod device_library;
 pub mod estimate;
 pub mod ext_pdb;
-pub mod manifest;
 pub mod incremental;
-pub mod cache;
+pub mod manifest;
 pub mod plan;
-pub mod sync_record;
-pub mod snapshot;
 mod reconcile;
+pub mod snapshot;
+pub mod sync_record;
 mod verification;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -32,9 +32,8 @@ pub use sync_record::{SyncNode, SyncRecord, SyncSource};
 
 use rbl_pdb::build::FileBuilder;
 use rbl_pdb::rows::{
-    artwork_row,
-    album_row, artist_row, color_row, key_row, playlist_entry_row, playlist_row,
-    simple_named_row, track_row, TrackInput,
+    album_row, artist_row, artwork_row, color_row, key_row, playlist_entry_row, playlist_row, simple_named_row,
+    track_row, TrackInput,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -278,8 +277,7 @@ pub struct ExportWarning {
 }
 
 /// The eight colour labels rekordbox writes to every export.
-const COLORS: [&str; 8] =
-    ["Pink", "Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple"];
+const COLORS: [&str; 8] = ["Pink", "Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple"];
 
 /// The longest directory name rekordbox writes under `Contents/`: an artist
 /// or album longer than this is cut, not the file name [OBS 7.2.11, four
@@ -298,7 +296,11 @@ fn dir_name(name: &str) -> String {
     while cut.ends_with('.') || cut.ends_with(' ') {
         cut.pop();
     }
-    if cut.is_empty() { "Unknown".to_owned() } else { cut }
+    if cut.is_empty() {
+        "Unknown".to_owned()
+    } else {
+        cut
+    }
 }
 
 /// Makes a name safe for FAT32, which is what a DJ stick is formatted as.
@@ -337,9 +339,13 @@ fn fat_file_name(name: &str) -> String {
         .filter(|(stem, extension)| !stem.is_empty() && !extension.is_empty() && extension.len() < FILE_NAME_MAX)
         .map_or((safe.as_str(), String::new()), |(stem, extension)| (stem, format!(".{extension}")));
     let mut end = stem.len().min(FILE_NAME_MAX.saturating_sub(suffix.len()));
-    while !stem.is_char_boundary(end) { end -= 1; }
+    while !stem.is_char_boundary(end) {
+        end -= 1;
+    }
     let mut shortened = stem[..end].trim_end_matches(['.', ' ']).to_owned();
-    if shortened.is_empty() { shortened.push_str("Unknown"); }
+    if shortened.is_empty() {
+        shortened.push_str("Unknown");
+    }
     shortened.push_str(&suffix);
     shortened
 }
@@ -375,10 +381,7 @@ impl Intern {
     }
 
     fn entries(&self) -> impl Iterator<Item = (u32, &str)> {
-        self.order
-            .iter()
-            .enumerate()
-            .map(|(i, name)| (u32::try_from(i).unwrap_or(0) + 1, name.as_str()))
+        self.order.iter().enumerate().map(|(i, name)| (u32::try_from(i).unwrap_or(0) + 1, name.as_str()))
     }
 }
 
@@ -399,10 +402,13 @@ struct Layout {
 /// CDJ-3000 firmware 3.20, `sub_12f3f28`: UTF-16 path hash and shard.
 /// Matches all 61 independently exported rekordbox reference tracks.
 fn analysis_directory(audio: &str, root: &str) -> String {
-    let hash = audio.encode_utf16().take_while(|c| *c != 0)
-        .fold(0_u32, |h, c| h.wrapping_mul(0x34f5_501d).wrapping_add(u32::from(c) * 0x93b6)) % 0x0003_0d43;
-    let shard = [0, 2, 6, 7, 9, 13, 16].iter().enumerate()
-        .fold(0_u32, |shard, (i, bit)| shard | ((hash >> bit) & 1) << i);
+    let hash = audio
+        .encode_utf16()
+        .take_while(|c| *c != 0)
+        .fold(0_u32, |h, c| h.wrapping_mul(0x34f5_501d).wrapping_add(u32::from(c) * 0x93b6))
+        % 0x0003_0d43;
+    let shard =
+        [0, 2, 6, 7, 9, 13, 16].iter().enumerate().fold(0_u32, |shard, (i, bit)| shard | ((hash >> bit) & 1) << i);
     format!("/{root}/USBANLZ/P{shard:03X}/{hash:08X}")
 }
 
@@ -432,10 +438,14 @@ pub fn export_root_name(root: &Path) -> Result<&'static str> {
 pub fn export_root_name_with(root: &Path, preferred: Option<ExportRoot>) -> Result<&'static str> {
     let present = |name: &str| {
         let p = root.join(name);
-        p.join("rekordbox/export.pdb").exists() || p.join("rekordbox/exportLibrary.db").exists() || p.join("DEVSETTING.DAT").exists()
+        p.join("rekordbox/export.pdb").exists()
+            || p.join("rekordbox/exportLibrary.db").exists()
+            || p.join("DEVSETTING.DAT").exists()
     };
     match (present("PIONEER"), present(".PIONEER")) {
-        (true, true) => Err(ExportError::Conflict("Both PIONEER and .PIONEER contain libraries. Reconcile them before syncing.".into())),
+        (true, true) => Err(ExportError::Conflict(
+            "Both PIONEER and .PIONEER contain libraries. Reconcile them before syncing.".into(),
+        )),
         (false, true) => Ok(".PIONEER"),
         (true, false) => Ok("PIONEER"),
         (false, false) => Ok(preferred.unwrap_or(ExportRoot::Standard).name()),
@@ -483,12 +493,16 @@ fn on_stick(destination: &Path, source: &Path) -> Option<String> {
         let name = name.to_str()?;
         // `fat_safe` changes nothing but the characters a stick cannot carry
         // (and the normal form, which a lookup on the stick ignores).
-        if fat_safe(name) != name.nfc().collect::<String>() { return None; }
+        if fat_safe(name) != name.nfc().collect::<String>() {
+            return None;
+        }
         parts.push(name);
     }
     // Never adopt our own staging area or the rekordbox folders as music.
     let first = parts.first()?;
-    if ["PIONEER", ".PIONEER", PUBLICATION].iter().any(|r| first.eq_ignore_ascii_case(r)) { return None; }
+    if ["PIONEER", ".PIONEER", PUBLICATION].iter().any(|r| first.eq_ignore_ascii_case(r)) {
+        return None;
+    }
     Some(format!("/{}", parts.join("/")))
 }
 
@@ -502,8 +516,7 @@ fn on_stick(destination: &Path, source: &Path) -> Option<String> {
 /// that export then copied it onto itself: a library track whose source is the
 /// very file its audio path names is the library's too.
 fn owns_library_file(destination: &Path, entry: &ManifestTrack) -> bool {
-    entry.in_place
-        || (entry.library_id != 0 && same_file(Path::new(&entry.source), &under(destination, &entry.audio)))
+    entry.in_place || (entry.library_id != 0 && same_file(Path::new(&entry.source), &under(destination, &entry.audio)))
 }
 
 /// Whether a previous export's entry is a device track it only carried, as
@@ -525,8 +538,12 @@ fn owns_library_file(destination: &Path, entry: &ManifestTrack) -> bool {
 /// keeping a file rather than deleting another writer's; the record says
 /// which it is from then on.
 pub(crate) fn carried_entry(destination: &Path, entry: &ManifestTrack) -> bool {
-    if let Some(preserved) = entry.preserved { return preserved; }
-    if entry.library_id != 0 || entry.audio.is_empty() { return false; }
+    if let Some(preserved) = entry.preserved {
+        return preserved;
+    }
+    if entry.library_id != 0 || entry.audio.is_empty() {
+        return false;
+    }
     let on_stick = under(destination, &entry.audio);
     Path::new(&entry.source) == on_stick || same_file(Path::new(&entry.source), &on_stick)
 }
@@ -534,7 +551,9 @@ pub(crate) fn carried_entry(destination: &Path, entry: &ManifestTrack) -> bool {
 /// The audio paths, by [`path_key`], of every library file a previous export
 /// left in place (see [`owns_library_file`]).
 fn previous_in_place(destination: &Path, previous: Option<&Manifest>) -> BTreeSet<String> {
-    previous.into_iter().flat_map(|m| &m.tracks)
+    previous
+        .into_iter()
+        .flat_map(|m| &m.tracks)
         .filter(|t| owns_library_file(destination, t))
         .map(|t| path_key(&t.audio))
         .collect()
@@ -550,15 +569,18 @@ fn previous_in_place(destination: &Path, previous: Option<&Manifest>) -> BTreeSe
 /// it, and the record keeps saying the file is not the export's.
 fn in_place_paths(destination: &Path, tracks: &[SourceTrack], previous: &BTreeSet<String>) -> Vec<Option<String>> {
     let mut claimed = BTreeSet::new();
-    tracks.iter().map(|track| {
-        if let Some(device) = track.device.as_ref().filter(|d| d.preserve) {
-            return (previous.contains(&path_key(&device.audio))
-                && same_file(&track.source_path, &under(destination, &device.audio))
-                && claimed.insert(path_key(&device.audio)))
+    tracks
+        .iter()
+        .map(|track| {
+            if let Some(device) = track.device.as_ref().filter(|d| d.preserve) {
+                return (previous.contains(&path_key(&device.audio))
+                    && same_file(&track.source_path, &under(destination, &device.audio))
+                    && claimed.insert(path_key(&device.audio)))
                 .then(|| device.audio.clone());
-        }
-        on_stick(destination, &track.source_path).filter(|path| claimed.insert(path_key(path)))
-    }).collect()
+            }
+            on_stick(destination, &track.source_path).filter(|path| claimed.insert(path_key(path)))
+        })
+        .collect()
 }
 
 /// For each selected track, the stick's own copy of it that the sync keeps
@@ -577,71 +599,128 @@ fn in_place_paths(destination: &Path, tracks: &[SourceTrack], previous: &BTreeSe
 /// A sync that names no library (`db_id` 0) adopts nothing: rows whose
 /// master DB id is 0 do not say which library they came from.
 #[allow(clippy::too_many_arguments, reason = "cold adoption progress and cancellation")]
-fn adopted_paths(destination: &Path, tracks: &[SourceTrack], previous: Option<&Manifest>, in_place: &[Option<String>], db_id: u64, progress: &mut dyn FnMut(&ExportProgress), cancelled: &dyn Fn() -> bool) -> Result<Vec<Option<String>>> {
-    if db_id == 0 { return Ok(vec![None; tracks.len()]); }
+fn adopted_paths(
+    destination: &Path,
+    tracks: &[SourceTrack],
+    previous: Option<&Manifest>,
+    in_place: &[Option<String>],
+    db_id: u64,
+    progress: &mut dyn FnMut(&ExportProgress),
+    cancelled: &dyn Fn() -> bool,
+) -> Result<Vec<Option<String>>> {
+    if db_id == 0 {
+        return Ok(vec![None; tracks.len()]);
+    }
     let recorded: BTreeSet<String> = previous.into_iter().flat_map(|m| &m.tracks).map(ManifestTrack::key).collect();
     let mut claimed: BTreeSet<String> = in_place.iter().flatten().map(|path| path_key(path)).collect();
-    tracks.iter().zip(in_place).enumerate().map(|(index, (track, in_place))| -> Result<Option<String>> {
-        let candidate = (|| {
-        let device = track.device.as_ref().filter(|d| !d.preserve && !d.audio.is_empty())?;
-        if in_place.is_some() || recorded.contains(&track_key(track.id, &track.source_path.to_string_lossy())) { return None; }
-        let source = std::fs::metadata(&track.source_path).ok()?;
-        let copy = std::fs::metadata(under(destination, &device.audio)).ok()?;
-        (copy.is_file() && copy.len() == source.len()).then(|| device.audio.clone())
-        })();
-        match candidate {
-            Some(audio) if files_equal_observed(&track.source_path, &under(destination, &audio), &mut |done, total| {
-                progress(&ExportProgress { stage: "checking", done: index, total: tracks.len(), unit: "bytes", bytes_done: done, bytes_total: total, title: track.title.clone(), tracks_done: index, tracks_total: tracks.len(), ..Default::default() });
-                !cancelled()
-            }).map_err(|e| if cancelled() { ExportError::Cancelled } else { e.into() })? && claimed.insert(path_key(&audio)) => Ok(Some(audio)),
-            _ => Ok(None),
-        }
-    }).collect()
+    tracks
+        .iter()
+        .zip(in_place)
+        .enumerate()
+        .map(|(index, (track, in_place))| -> Result<Option<String>> {
+            let candidate = (|| {
+                let device = track.device.as_ref().filter(|d| !d.preserve && !d.audio.is_empty())?;
+                if in_place.is_some() || recorded.contains(&track_key(track.id, &track.source_path.to_string_lossy())) {
+                    return None;
+                }
+                let source = std::fs::metadata(&track.source_path).ok()?;
+                let copy = std::fs::metadata(under(destination, &device.audio)).ok()?;
+                (copy.is_file() && copy.len() == source.len()).then(|| device.audio.clone())
+            })();
+            match candidate {
+                Some(audio)
+                    if files_equal_observed(&track.source_path, &under(destination, &audio), &mut |done, total| {
+                        progress(&ExportProgress {
+                            stage: "checking",
+                            done: index,
+                            total: tracks.len(),
+                            unit: "bytes",
+                            bytes_done: done,
+                            bytes_total: total,
+                            title: track.title.clone(),
+                            tracks_done: index,
+                            tracks_total: tracks.len(),
+                            ..Default::default()
+                        });
+                        !cancelled()
+                    })
+                    .map_err(|e| if cancelled() { ExportError::Cancelled } else { e.into() })?
+                        && claimed.insert(path_key(&audio)) =>
+                {
+                    Ok(Some(audio))
+                }
+                _ => Ok(None),
+            }
+        })
+        .collect()
 }
 
-fn layouts(tracks: &[SourceTrack], ids: &[u32], root: &str, previous: Option<&Manifest>, in_place: &[Option<String>], previous_in_place: &BTreeSet<String>) -> Vec<Layout> {
+fn layouts(
+    tracks: &[SourceTrack],
+    ids: &[u32],
+    root: &str,
+    previous: Option<&Manifest>,
+    in_place: &[Option<String>],
+    previous_in_place: &BTreeSet<String>,
+) -> Vec<Layout> {
     let recorded: BTreeMap<_, _> = previous.into_iter().flat_map(|m| &m.tracks).map(|t| (t.key(), t)).collect();
     // Library files on the stick keep their names, and nothing copied may land
     // on one: not this run's, nor one an earlier run pointed at and left.
-    let mut used: BTreeSet<String> = in_place.iter().flatten().map(|path| path_key(path))
-        .chain(previous_in_place.iter().cloned())
-        .collect();
-    tracks.iter().zip(ids).zip(in_place).map(|((track, id), in_place)| {
-        let mut place = layout(track, *id);
-        if let Some(device) = track.device.as_ref().filter(|d| d.preserve) {
-            place.audio.clone_from(&device.audio);
-            place.file_name = Path::new(&place.audio).file_name().unwrap_or_default().to_string_lossy().into_owned();
-            place.anlz_dir.clone_from(&device.analysis_dir);
-        } else if let Some(audio) = in_place {
-            place.audio.clone_from(audio);
-            audio.rsplit('/').next().unwrap_or_default().clone_into(&mut place.file_name);
-        }
-        place.anlz_dir = place.anlz_dir.replacen("/PIONEER/", &format!("/{root}/"), 1);
-        // A file left in place is where the library keeps it: never renamed.
-        if in_place.is_some() { return place; }
-        // Keep a previous collision suffix when another colliding track goes away.
-        if let Some(old) = recorded.get(&track_key(track.id, &track.source_path.to_string_lossy())) {
-            if old.conversion.is_empty() && Path::new(&old.audio).parent() == Path::new(&place.audio).parent() && old.source == track.source_path.to_string_lossy() {
-                place.audio.clone_from(&old.audio);
-                place.file_name = Path::new(&old.audio).file_name().map_or_else(|| place.file_name.clone(), |f| f.to_string_lossy().into_owned());
+    let mut used: BTreeSet<String> =
+        in_place.iter().flatten().map(|path| path_key(path)).chain(previous_in_place.iter().cloned()).collect();
+    tracks
+        .iter()
+        .zip(ids)
+        .zip(in_place)
+        .map(|((track, id), in_place)| {
+            let mut place = layout(track, *id);
+            if let Some(device) = track.device.as_ref().filter(|d| d.preserve) {
+                place.audio.clone_from(&device.audio);
+                place.file_name =
+                    Path::new(&place.audio).file_name().unwrap_or_default().to_string_lossy().into_owned();
+                place.anlz_dir.clone_from(&device.analysis_dir);
+            } else if let Some(audio) = in_place {
+                place.audio.clone_from(audio);
+                audio.rsplit('/').next().unwrap_or_default().clone_into(&mut place.file_name);
             }
-        }
-        if !used.insert(path_key(&place.audio)) {
-            let original = Path::new(&place.audio);
-            let stem = original.file_stem().unwrap_or_default().to_string_lossy();
-            let ext = original.extension().map_or(String::new(), |s| format!(".{}", s.to_string_lossy()));
-            let parent = original.parent().unwrap_or(Path::new("/Contents"));
-            let mut serial = 0_u32;
-            loop {
-                let suffix = if serial == 0 { format!("-{id}") } else { format!("-{id}-{serial}") };
-                let name = format!("{stem}{suffix}{ext}");
-                let audio = parent.join(&name).to_string_lossy().into_owned();
-                if used.insert(path_key(&audio)) { place.audio = audio; place.file_name = name; break; }
-                serial += 1;
+            place.anlz_dir = place.anlz_dir.replacen("/PIONEER/", &format!("/{root}/"), 1);
+            // A file left in place is where the library keeps it: never renamed.
+            if in_place.is_some() {
+                return place;
             }
-        }
-        place
-    }).collect()
+            // Keep a previous collision suffix when another colliding track goes away.
+            if let Some(old) = recorded.get(&track_key(track.id, &track.source_path.to_string_lossy())) {
+                if old.conversion.is_empty()
+                    && Path::new(&old.audio).parent() == Path::new(&place.audio).parent()
+                    && old.source == track.source_path.to_string_lossy()
+                {
+                    place.audio.clone_from(&old.audio);
+                    place.file_name = Path::new(&old.audio)
+                        .file_name()
+                        .map_or_else(|| place.file_name.clone(), |f| f.to_string_lossy().into_owned());
+                }
+            }
+            if !used.insert(path_key(&place.audio)) {
+                let original = Path::new(&place.audio);
+                let stem = original.file_stem().unwrap_or_default().to_string_lossy();
+                let ext = original.extension().map_or(String::new(), |s| format!(".{}", s.to_string_lossy()));
+                let parent = original.parent().unwrap_or(Path::new("/Contents"));
+                let mut serial = 0_u32;
+                loop {
+                    let suffix = if serial == 0 { format!("-{id}") } else { format!("-{id}-{serial}") };
+                    let name = format!("{stem}{suffix}{ext}");
+                    let audio = parent.join(&name).to_string_lossy().into_owned();
+                    if used.insert(path_key(&audio)) {
+                        place.audio = audio;
+                        place.file_name = name;
+                        break;
+                    }
+                    serial += 1;
+                }
+            }
+            place
+        })
+        .collect()
 }
 
 /// Compare bytes, not merely size/mtime: removable media may have been edited.
@@ -649,21 +728,40 @@ fn files_equal(a: &Path, b: &Path) -> std::io::Result<bool> {
     files_equal_observed(a, b, &mut |_, _| true)
 }
 
-fn files_equal_observed(a_path: &Path, b_path: &Path, progress: &mut dyn FnMut(u64, u64) -> bool) -> std::io::Result<bool> {
+fn files_equal_observed(
+    a_path: &Path,
+    b_path: &Path,
+    progress: &mut dyn FnMut(u64, u64) -> bool,
+) -> std::io::Result<bool> {
     use std::io::Read;
     let mut a = std::fs::File::open(a_path)?;
-    let mut b = match std::fs::File::open(b_path) { Ok(f) => f, Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false), Err(e) => return Err(e) };
-    if a.metadata()?.len() != b.metadata()?.len() { return Ok(false); }
-    let total = a.metadata()?.len(); let mut done = 0;
-    let mut left = vec![0_u8; 65536]; let mut right = vec![0_u8; 65536];
+    let mut b = match std::fs::File::open(b_path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(e) => return Err(e),
+    };
+    if a.metadata()?.len() != b.metadata()?.len() {
+        return Ok(false);
+    }
+    let total = a.metadata()?.len();
+    let mut done = 0;
+    let mut left = vec![0_u8; 65536];
+    let mut right = vec![0_u8; 65536];
     loop {
-        if !progress(done, total) { return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Export stopped")); }
+        if !progress(done, total) {
+            return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Export stopped"));
+        }
         let n = a.read(&mut left)?;
-        if n == 0 { return Ok(true); }
+        if n == 0 {
+            return Ok(true);
+        }
         b.read_exact(&mut right[..n])?;
-        incremental::read_bytes(a_path, n as u64); incremental::read_bytes(b_path, n as u64);
+        incremental::read_bytes(a_path, n as u64);
+        incremental::read_bytes(b_path, n as u64);
         done += n as u64;
-        if left[..n] != right[..n] { return Ok(false); }
+        if left[..n] != right[..n] {
+            return Ok(false);
+        }
     }
 }
 
@@ -677,33 +775,59 @@ fn file_hash_cancellable(path: &Path, cancelled: &dyn Fn() -> bool) -> std::io::
     let mut h = 0xcbf2_9ce4_8422_2325_u64;
     let mut buffer = vec![0_u8; 65536];
     loop {
-        if cancelled() { return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Export stopped.")); }
+        if cancelled() {
+            return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Export stopped."));
+        }
         let n = f.read(&mut buffer)?;
-        if n == 0 { break; }
+        if n == 0 {
+            break;
+        }
         incremental::read_bytes(path, n as u64);
-        for b in &buffer[..n] { h = (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3); }
+        for b in &buffer[..n] {
+            h = (h ^ u64::from(*b)).wrapping_mul(0x0100_0000_01b3);
+        }
     }
     Ok(h)
 }
 
 fn playlist_ids(playlists: &[SourcePlaylist], previous: Option<&Manifest>) -> Result<Vec<u32>> {
-    let mut used: BTreeSet<u32> = previous.into_iter().flat_map(|m| &m.playlists).map(|p| p.export_id).filter(|id| *id != 0).collect();
+    let mut used: BTreeSet<u32> =
+        previous.into_iter().flat_map(|m| &m.playlists).map(|p| p.export_id).filter(|id| *id != 0).collect();
     used.extend(playlists.iter().map(|p| p.device_id).filter(|id| *id != 0));
     let mut result = Vec::new();
     let mut keys = BTreeSet::new();
     for (position, p) in playlists.iter().enumerate() {
-        if p.id != 0 && !keys.insert(p.id) { return Err(ExportError::Conflict("Duplicate source playlist ID".into())); }
-        let known = previous.and_then(|m| m.playlists.iter().enumerate().find(|(_, old)| if p.id != 0 { p.id == old.library_id } else { p.name == old.name && p.folder == old.folder })).map(|(i, old)| if old.export_id == 0 { u32::try_from(i + 1).unwrap_or(0) } else { old.export_id });
+        if p.id != 0 && !keys.insert(p.id) {
+            return Err(ExportError::Conflict("Duplicate source playlist ID".into()));
+        }
+        let known = previous
+            .and_then(|m| {
+                m.playlists.iter().enumerate().find(|(_, old)| {
+                    if p.id != 0 {
+                        p.id == old.library_id
+                    } else {
+                        p.name == old.name && p.folder == old.folder
+                    }
+                })
+            })
+            .map(|(i, old)| if old.export_id == 0 { u32::try_from(i + 1).unwrap_or(0) } else { old.export_id });
         let id = (p.device_id != 0).then_some(p.device_id).or(known).unwrap_or_else(|| {
             let mut id = u32::try_from(position + 1).unwrap_or(1);
-            while used.contains(&id) { id = id.saturating_add(1); }
+            while used.contains(&id) {
+                id = id.saturating_add(1);
+            }
             id
         });
-        if result.contains(&id) { return Err(ExportError::Conflict("Ambiguous playlist identity".into())); }
-        used.insert(id); result.push(id);
+        if result.contains(&id) {
+            return Err(ExportError::Conflict("Ambiguous playlist identity".into()));
+        }
+        used.insert(id);
+        result.push(id);
     }
     for p in playlists {
-        if p.parent_id != 0 && !playlists.iter().any(|n| n.id == p.parent_id && n.folder) { return Err(ExportError::Conflict(format!("Missing parent folder for '{}'", p.name))); }
+        if p.parent_id != 0 && !playlists.iter().any(|n| n.id == p.parent_id && n.folder) {
+            return Err(ExportError::Conflict(format!("Missing parent folder for '{}'", p.name)));
+        }
     }
     Ok(result)
 }
@@ -830,11 +954,7 @@ fn same_file(a: &Path, b: &Path) -> bool {
 /// and only what changed is copied. Tracks that have left the selection are
 /// removed. Without a manifest — a fresh stick, or one rekordbox wrote —
 /// everything is written.
-pub fn export(
-    destination: &Path,
-    tracks: &[SourceTrack],
-    playlists: &[SourcePlaylist],
-) -> Result<ExportReport> {
+pub fn export(destination: &Path, tracks: &[SourceTrack], playlists: &[SourcePlaylist]) -> Result<ExportReport> {
     export_with(destination, tracks, playlists, None)
 }
 
@@ -867,12 +987,23 @@ pub fn export_full(
     sync: Option<&SyncSource>,
     progress: &mut dyn FnMut(&ExportProgress),
 ) -> Result<ExportReport> {
-    export_with_options(destination, tracks, playlists, my_tags, &ExportOptions { defaults, sync, ..Default::default() }, progress)
+    export_with_options(
+        destination,
+        tracks,
+        playlists,
+        my_tags,
+        &ExportOptions { defaults, sync, ..Default::default() },
+        progress,
+    )
 }
 
 #[derive(Clone, Copy, Debug, serde::Deserialize, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
-pub enum CompatibilityFormat { Wav, Aiff, Mp3 }
+pub enum CompatibilityFormat {
+    Wav,
+    Aiff,
+    Mp3,
+}
 impl CompatibilityFormat {
     fn audio(self) -> rbl_audio::compatibility::Format {
         match self {
@@ -929,8 +1060,13 @@ pub fn export_cancellable(
     progress: &mut dyn FnMut(&ExportProgress),
     cancelled: &dyn Fn() -> bool,
 ) -> Result<ExportReport> {
-    export_cancellable_inner(destination, tracks, playlists, my_tags, options, progress, cancelled)
-        .map_err(|error| if cancelled() { ExportError::Cancelled } else { error })
+    export_cancellable_inner(destination, tracks, playlists, my_tags, options, progress, cancelled).map_err(|error| {
+        if cancelled() {
+            ExportError::Cancelled
+        } else {
+            error
+        }
+    })
 }
 
 #[allow(clippy::too_many_lines, reason = "ordered export publication pipeline")]
@@ -943,13 +1079,27 @@ fn export_cancellable_inner(
     progress: &mut dyn FnMut(&ExportProgress),
     cancelled: &dyn Fn() -> bool,
 ) -> Result<ExportReport> {
-    if cancelled() { return Err(ExportError::Cancelled); }
+    if cancelled() {
+        return Err(ExportError::Cancelled);
+    }
     incremental::reset_metrics();
     let _inspection = incremental::Inspection::new();
     let started = std::time::Instant::now();
     let requested_tracks = tracks;
-    let &ExportOptions { defaults, sync, compatibility, root, keep_unlisted: _, settings_files, cache, expected_volume, verify_all } = options;
-    if let Some(volume) = expected_volume { volume.check(destination)?; }
+    let &ExportOptions {
+        defaults,
+        sync,
+        compatibility,
+        root,
+        keep_unlisted: _,
+        settings_files,
+        cache,
+        expected_volume,
+        verify_all,
+    } = options;
+    if let Some(volume) = expected_volume {
+        volume.check(destination)?;
+    }
     if destination.exists() && !destination.is_dir() {
         return Err(ExportError::NotADirectory(destination.to_owned()));
     }
@@ -967,26 +1117,48 @@ fn export_cancellable_inner(
     }
     recover(destination)?;
     let publication = rbl_core::durable::Publication::new(destination, PUBLICATION)?;
-    if let Some(volume) = expected_volume { volume.check(destination)?; }
+    if let Some(volume) = expected_volume {
+        volume.check(destination)?;
+    }
     let mut previous = Manifest::load(destination);
     let mut full_source_hashes = BTreeMap::new();
     if verify_all && previous.is_some() {
         progress(&ExportProgress { stage: "verifying", ..Default::default() });
         let check = verification::verify_content(destination)?;
-        if !check.is_ok() { return Err(ExportError::Conflict(format!("Full integrity check failed: {}", verification_failure(&check)))); }
+        if !check.is_ok() {
+            return Err(ExportError::Conflict(format!(
+                "Full integrity check failed: {}",
+                verification_failure(&check)
+            )));
+        }
         if let Some(manifest) = &mut previous {
             let recorded: BTreeMap<_, _> = manifest.tracks.iter().map(|track| (track.key(), track)).collect();
             for (index, track) in tracks.iter().enumerate() {
-                if cancelled() { return Err(ExportError::Cancelled); }
-                if !track.source_path.is_file() { continue; }
-                progress(&ExportProgress { stage: "checking", done: index, total: tracks.len(), unit: "tracks", title: track.title.clone(), ..Default::default() });
+                if cancelled() {
+                    return Err(ExportError::Cancelled);
+                }
+                if !track.source_path.is_file() {
+                    continue;
+                }
+                progress(&ExportProgress {
+                    stage: "checking",
+                    done: index,
+                    total: tracks.len(),
+                    unit: "tracks",
+                    title: track.title.clone(),
+                    ..Default::default()
+                });
                 let hash = file_hash_cancellable(&track.source_path, cancelled)?;
                 full_source_hashes.insert(track.source_path.clone(), hash);
                 if let Some(old) = recorded.get(&track_key(track.id, &track.source_path.to_string_lossy())) {
                     let expected = if old.conversion.is_empty() { old.audio_hash } else { old.conversion_source_hash };
                     if expected != hash {
-                        if let Some(cache) = cache { let _ = cache.invalidate(&track.source_path); }
-                        if let Some(generation) = &mut manifest.generation { generation.inputs.insert(track.source_path.to_string_lossy().into_owned(), None); }
+                        if let Some(cache) = cache {
+                            let _ = cache.invalidate(&track.source_path);
+                        }
+                        if let Some(generation) = &mut manifest.generation {
+                            generation.inputs.insert(track.source_path.to_string_lossy().into_owned(), None);
+                        }
                     }
                 }
             }
@@ -998,25 +1170,40 @@ fn export_cancellable_inner(
     let request = incremental::request(tracks, playlists, my_tags, options)?;
     let source_revisions = incremental::inputs(tracks)?;
     let database_signatures = incremental::databases(destination)?;
-    let generation_matches = previous.as_ref().and_then(|m| m.generation.as_ref())
+    let generation_matches = previous
+        .as_ref()
+        .and_then(|m| m.generation.as_ref())
         .is_some_and(|g| g.transform_version == incremental::TRANSFORM_VERSION && g.databases == database_signatures);
     if let Some(old) = previous.as_ref().filter(|_| generation_matches) {
         if old.generation.as_ref().is_some_and(|g| g.request == request && g.inputs == source_revisions)
-            && settings_files.is_empty() && incremental::receipts_match(destination, old.generation.as_ref().ok_or_else(|| ExportError::Conflict("Missing generation receipt".into()))?)? {
+            && settings_files.is_empty()
+            && incremental::receipts_match(
+                destination,
+                old.generation.as_ref().ok_or_else(|| ExportError::Conflict("Missing generation receipt".into()))?,
+            )?
+        {
             return Ok(ExportReport {
-                verified: true, up_to_date: true, tracks: old.tracks.len(), playlists: old.playlists.len(),
+                verified: true,
+                up_to_date: true,
+                tracks: old.tracks.len(),
+                playlists: old.playlists.len(),
                 kept_existing: old.generation.as_ref().map_or(0, |g| g.kept_existing),
                 warnings: old.generation.as_ref().map_or_else(Vec::new, |g| g.warnings.clone()),
-                elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX), metrics: incremental::metrics(),
-                reused: old.tracks.len(), bytes_reused: old.tracks.iter().filter_map(|t| t.copy_stamp.map(|s| s.0)).sum(),
+                elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                metrics: incremental::metrics(),
+                reused: old.tracks.len(),
+                bytes_reused: old.tracks.iter().filter_map(|t| t.copy_stamp.map(|s| s.0)).sum(),
                 in_place: old.tracks.iter().filter(|t| t.in_place).count(),
-                one_library: true, ..Default::default()
+                one_library: true,
+                ..Default::default()
             });
         }
     }
     let mut before = if generation_matches {
         previous.as_ref().and_then(|m| m.baseline.clone()).map_or_else(|| snapshot::Snapshot::read(destination), Ok)?
-    } else { snapshot::Snapshot::read(destination)? };
+    } else {
+        snapshot::Snapshot::read(destination)?
+    };
     let trusted = incremental::trusted_paths(destination, previous.as_ref())?;
     let db_id = sync.map_or(0, |s| s.db_id);
     if let Some(old) = previous.as_mut().filter(|m| m.db_id == 0 && db_id != 0) {
@@ -1027,7 +1214,8 @@ fn export_cancellable_inner(
         }
     }
     let playlist_record = reconcile::playlist_namespace(destination, &mut before, previous.as_ref(), db_id);
-    let rewritten = reconcile::rewritten(playlist_record.as_ref(), &before, previous.as_ref(), tracks, playlists, db_id);
+    let rewritten =
+        reconcile::rewritten(playlist_record.as_ref(), &before, previous.as_ref(), tracks, playlists, db_id);
     before.check_baseline_except(previous.as_ref(), db_id, &rewritten)?;
     // Read every analysis file the stick names only once the sync is going
     // ahead: on a large stick that is most of what preparing takes, and a
@@ -1038,64 +1226,169 @@ fn export_cancellable_inner(
     let library_entries: BTreeMap<u64, Vec<String>> = playlists
         .iter()
         .filter(|p| !p.folder && !p.device_only && p.id != 0 && p.id < reconcile::DEVICE_PLAYLIST_ID_BASE)
-        .map(|p| (p.id, p.track_indices.iter().filter_map(|i| tracks.get(*i)).map(|t| track_key(t.id, &t.source_path.to_string_lossy())).collect()))
+        .map(|p| {
+            (
+                p.id,
+                p.track_indices
+                    .iter()
+                    .filter_map(|i| tracks.get(*i))
+                    .map(|t| track_key(t.id, &t.source_path.to_string_lossy()))
+                    .collect(),
+            )
+        })
         .collect();
-    let plan = plan::from_baseline(destination, &before, previous.as_ref(), tracks, playlists, options, playlist_record.as_ref())?;
+    let plan = plan::from_baseline(
+        destination,
+        &before,
+        previous.as_ref(),
+        tracks,
+        playlists,
+        options,
+        playlist_record.as_ref(),
+    )?;
     if !plan.unknown_size && fs2::available_space(destination)? < plan.peak_bytes {
         return Err(ExportError::Conflict(format!("Not enough temporary space to sync safely: approximately {} bytes required while the previous library is retained", plan.peak_bytes)));
     }
     let (mut tracks, playlists, device_additions) = (plan.tracks, plan.playlists, plan.device_additions);
     let mut source_contents_unchanged = BTreeSet::new();
     let mut inspected_source_hashes = BTreeMap::new();
-    let recorded_sources: BTreeMap<_, _> = previous.as_ref().into_iter().flat_map(|m| &m.tracks).map(|t| (t.key(), t)).collect();
+    let recorded_sources: BTreeMap<_, _> =
+        previous.as_ref().into_iter().flat_map(|m| &m.tracks).map(|t| (t.key(), t)).collect();
     for (index, track) in tracks.iter().enumerate() {
-        if cancelled() { return Err(ExportError::Cancelled); }
+        if cancelled() {
+            return Err(ExportError::Cancelled);
+        }
         let key = track_key(track.id, &track.source_path.to_string_lossy());
-        let Some(old) = recorded_sources.get(&key) else { continue; };
+        let Some(old) = recorded_sources.get(&key) else {
+            continue;
+        };
         let revision_changed = previous.as_ref().and_then(|m| m.generation.as_ref()).is_some_and(|g| {
-            g.inputs.get(&track.source_path.to_string_lossy().into_owned()).is_some_and(|old| incremental::revision(&track.source_path).is_ok_and(|now| now != *old))
+            g.inputs
+                .get(&track.source_path.to_string_lossy().into_owned())
+                .is_some_and(|old| incremental::revision(&track.source_path).is_ok_and(|now| now != *old))
         });
-        if !revision_changed || track.source_unavailable || track.device.as_ref().is_some_and(|d| d.preserve) { continue; }
-        progress(&ExportProgress { stage: "planning", done: index, total: tracks.len(), title: track.title.clone(), unit: "tracks", ..Default::default() });
-        let hash = cache.map_or_else(|| file_hash_cancellable(&track.source_path, cancelled), |cache| cache.source_hash(&track.source_path, cancelled).map_err(std::io::Error::other));
+        if !revision_changed || track.source_unavailable || track.device.as_ref().is_some_and(|d| d.preserve) {
+            continue;
+        }
+        progress(&ExportProgress {
+            stage: "planning",
+            done: index,
+            total: tracks.len(),
+            title: track.title.clone(),
+            unit: "tracks",
+            ..Default::default()
+        });
+        let hash = cache.map_or_else(
+            || file_hash_cancellable(&track.source_path, cancelled),
+            |cache| cache.source_hash(&track.source_path, cancelled).map_err(std::io::Error::other),
+        );
         if let Ok(hash) = hash {
             let expected = if old.conversion.is_empty() { old.audio_hash } else { old.conversion_source_hash };
-            if expected != 0 && hash == expected { source_contents_unchanged.insert(key.clone()); }
+            if expected != 0 && hash == expected {
+                source_contents_unchanged.insert(key.clone());
+            }
             inspected_source_hashes.insert(key, hash);
         }
     }
     if let Some(cache) = cache {
-        let recorded: BTreeMap<_, _> = previous.as_ref().into_iter().flat_map(|m| &m.tracks).map(|t| (t.key(), t)).collect();
+        let recorded: BTreeMap<_, _> =
+            previous.as_ref().into_iter().flat_map(|m| &m.tracks).map(|t| (t.key(), t)).collect();
         let count = tracks.len();
         for (index, track) in tracks.iter_mut().enumerate() {
-            if cancelled() { return Err(ExportError::Cancelled); }
-            if !track.source_path.is_file() || track.device.as_ref().is_some_and(|d| d.preserve) || on_stick(destination, &track.source_path).is_some() { continue; }
+            if cancelled() {
+                return Err(ExportError::Cancelled);
+            }
+            if !track.source_path.is_file()
+                || track.device.as_ref().is_some_and(|d| d.preserve)
+                || on_stick(destination, &track.source_path).is_some()
+            {
+                continue;
+            }
             let old = recorded.get(&track_key(track.id, &track.source_path.to_string_lossy())).copied();
-            let same_source = old.is_some_and(|old| std::fs::metadata(&track.source_path).is_ok_and(|m| source_stamp(&m) == (old.size, old.modified)))
-                && previous.as_ref().and_then(|m| m.generation.as_ref()).is_none_or(|g| g.inputs.get(&track.source_path.to_string_lossy().into_owned()).is_none_or(|r| incremental::revision(&track.source_path).is_ok_and(|now| now == *r)));
+            let same_source = old.is_some_and(|old| {
+                std::fs::metadata(&track.source_path).is_ok_and(|m| source_stamp(&m) == (old.size, old.modified))
+            }) && previous.as_ref().and_then(|m| m.generation.as_ref()).is_none_or(|g| {
+                g.inputs
+                    .get(&track.source_path.to_string_lossy().into_owned())
+                    .is_none_or(|r| incremental::revision(&track.source_path).is_ok_and(|now| now == *r))
+            });
             let prepared = (|| -> Result<Option<PathBuf>> {
                 let conversion = if let Some(target) = compatibility {
                     cache.needs_conversion(&track.source_path)?.then_some(target.audio())
-                } else { None };
-                if old.is_some() && !same_source { let _ = cache.properties(&track.source_path)?; }
-                let same_profile = old.is_some_and(|old| old.conversion == conversion.map_or("", rbl_audio::compatibility::Format::profile));
-                if (same_source || source_contents_unchanged.contains(&track_key(track.id, &track.source_path.to_string_lossy()))) && same_profile { return Ok(None); }
+                } else {
+                    None
+                };
+                if old.is_some() && !same_source {
+                    let _ = cache.properties(&track.source_path)?;
+                }
+                let same_profile = old.is_some_and(|old| {
+                    old.conversion == conversion.map_or("", rbl_audio::compatibility::Format::profile)
+                });
+                if (same_source
+                    || source_contents_unchanged.contains(&track_key(track.id, &track.source_path.to_string_lossy())))
+                    && same_profile
+                {
+                    return Ok(None);
+                }
                 if let Some(target) = conversion {
-                    let (path, _, _) = cache.converted(&track.source_path, target, &mut |done, total| {
-                        progress(&ExportProgress { stage: "converting", done: usize::try_from(done).unwrap_or(usize::MAX), total: total.and_then(|n| usize::try_from(n).ok()).unwrap_or(usize::from(track.duration_sec) * 1000), unit: "milliseconds", title: track.title.clone(), tracks_done: index, tracks_total: count, ..Default::default() });
-                    }, cancelled)?;
+                    let (path, _, _) = cache.converted(
+                        &track.source_path,
+                        target,
+                        &mut |done, total| {
+                            progress(&ExportProgress {
+                                stage: "converting",
+                                done: usize::try_from(done).unwrap_or(usize::MAX),
+                                total: total
+                                    .and_then(|n| usize::try_from(n).ok())
+                                    .unwrap_or(usize::from(track.duration_sec) * 1000),
+                                unit: "milliseconds",
+                                title: track.title.clone(),
+                                tracks_done: index,
+                                tracks_total: count,
+                                ..Default::default()
+                            });
+                        },
+                        cancelled,
+                    )?;
                     Ok(Some(path))
                 } else if track.device.is_some() && old.is_none() {
                     // Cold adoption is checked against the existing copy below.
                     Ok(None)
-                } else { cache.original(&track.source_path, &mut |done, total| {
-                    progress(&ExportProgress { stage: "preparing", done: 0, total: 0, title: track.title.clone(), unit: "bytes", bytes_done: done, bytes_total: total, tracks_done: index, tracks_total: count, ..Default::default() });
-                }, cancelled).map(Some) }
+                } else {
+                    cache
+                        .original(
+                            &track.source_path,
+                            &mut |done, total| {
+                                progress(&ExportProgress {
+                                    stage: "preparing",
+                                    done: 0,
+                                    total: 0,
+                                    title: track.title.clone(),
+                                    unit: "bytes",
+                                    bytes_done: done,
+                                    bytes_total: total,
+                                    tracks_done: index,
+                                    tracks_total: count,
+                                    ..Default::default()
+                                });
+                            },
+                            cancelled,
+                        )
+                        .map(Some)
+                }
             })();
             match prepared {
                 Ok(path) => track.prepared_audio = path,
                 Err(ExportError::Cancelled) => return Err(ExportError::Cancelled),
-                Err(ExportError::Io(error)) if matches!(error.kind(), std::io::ErrorKind::StorageFull | std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem | std::io::ErrorKind::NotADirectory) && std::fs::File::open(&track.source_path).is_ok() => {
+                Err(ExportError::Io(error))
+                    if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::StorageFull
+                            | std::io::ErrorKind::PermissionDenied
+                            | std::io::ErrorKind::ReadOnlyFilesystem
+                            | std::io::ErrorKind::NotADirectory
+                    ) && std::fs::File::open(&track.source_path).is_ok() =>
+                {
                     track.cache_bypass = true;
                 }
                 Err(error) => {
@@ -1105,8 +1398,15 @@ fn export_cancellable_inner(
                         track.id = id;
                         track.source_unavailable = true;
                         track.retained_reason = Some(error.to_string());
-                        if let Some(device) = &mut track.device { device.preserve = true; device.master_db_id = db_id; device.master_content_id = id; device.exported = old.is_some_and(|c| c.preserved != Some(true)); }
-                    } else { track.preparation_error = Some(error.to_string()); }
+                        if let Some(device) = &mut track.device {
+                            device.preserve = true;
+                            device.master_db_id = db_id;
+                            device.master_content_id = id;
+                            device.exported = old.is_some_and(|c| c.preserved != Some(true));
+                        }
+                    } else {
+                        track.preparation_error = Some(error.to_string());
+                    }
                 }
             }
         }
@@ -1114,13 +1414,19 @@ fn export_cancellable_inner(
     let tracks = tracks.as_slice();
     let mut merged_tags = my_tags.to_vec();
     for tag in &before.my_tags {
-        if !merged_tags.iter().any(|t|t.id==tag.id) { merged_tags.push(tag.clone()); }
+        if !merged_tags.iter().any(|t| t.id == tag.id) {
+            merged_tags.push(tag.clone());
+        }
     }
     let my_tags = merged_tags.as_slice();
     let playlists = playlists.as_slice();
     let playlist_ids = playlist_ids(playlists, previous.as_ref())?;
     let ids = assign_ids(tracks, previous.as_ref());
-    if ids.iter().collect::<BTreeSet<_>>().len() != ids.len() || playlists.iter().any(|p| p.track_indices.iter().any(|i| *i >= tracks.len()) || (p.folder && !p.track_indices.is_empty())) {
+    if ids.iter().collect::<BTreeSet<_>>().len() != ids.len()
+        || playlists
+            .iter()
+            .any(|p| p.track_indices.iter().any(|i| *i >= tracks.len()) || (p.folder && !p.track_indices.is_empty()))
+    {
         return Err(ExportError::Conflict("Duplicate tracks or invalid playlist membership".into()));
     }
     // Before anything is copied: a player's cue on a track this sync takes
@@ -1129,10 +1435,8 @@ fn export_cancellable_inner(
     before.check_removed_cues(previous.as_ref(), &ids.iter().copied().collect(), &[])?;
     // Entries are taken out as they are matched; whatever is left at the end
     // is what the selection no longer holds.
-    let mut stale: BTreeMap<String, &ManifestTrack> = previous
-        .as_ref()
-        .map(|m| m.tracks.iter().map(|entry| (entry.key(), entry)).collect())
-        .unwrap_or_default();
+    let mut stale: BTreeMap<String, &ManifestTrack> =
+        previous.as_ref().map(|m| m.tracks.iter().map(|entry| (entry.key(), entry)).collect()).unwrap_or_default();
 
     let mut report = ExportReport::default();
     let mut analysis_recipes = BTreeMap::new();
@@ -1165,10 +1469,12 @@ fn export_cancellable_inner(
 
     let previous_in_place = previous_in_place(destination, previous.as_ref());
     let in_place_paths = in_place_paths(destination, tracks, &previous_in_place);
-    let adopted_paths = adopted_paths(destination, tracks, previous.as_ref(), &in_place_paths, db_id, progress, cancelled)?;
+    let adopted_paths =
+        adopted_paths(destination, tracks, previous.as_ref(), &in_place_paths, db_id, progress, cancelled)?;
     // An adopted copy keeps its place as a library file on the stick does:
     // never renamed, and nothing else copied over it.
-    let kept_paths: Vec<Option<String>> = in_place_paths.iter().zip(&adopted_paths).map(|(a, b)| a.clone().or_else(|| b.clone())).collect();
+    let kept_paths: Vec<Option<String>> =
+        in_place_paths.iter().zip(&adopted_paths).map(|(a, b)| a.clone().or_else(|| b.clone())).collect();
     let layouts = layouts(tracks, &ids, root_name, previous.as_ref(), &kept_paths, &previous_in_place);
     // Losing access to a selected source must never delete its good USB copy.
     // A track only carried from the stick has no other source; its missing
@@ -1178,22 +1484,40 @@ fn export_cancellable_inner(
     // before this export: the databases keep naming it, as they did.
     let mut absent_audio: BTreeSet<String> = BTreeSet::new();
     let mut written_audio_paths = BTreeSet::new();
-    let mut written_analysis_paths: BTreeSet<String> = tracks.iter()
+    let mut written_analysis_paths: BTreeSet<String> = tracks
+        .iter()
         .filter_map(|t| t.device.as_ref().filter(|d| d.preserve).map(|d| path_key(&d.analysis_dir)))
         .collect();
     for (index, track) in tracks.iter().enumerate() {
         // Reported before the track is dealt with, so a skip reports too:
         // whatever happens below, the count moves on by one.
         publication.check_root()?;
-        progress(&ExportProgress { stage: "checking", done: index, total: tracks.len(), title: track.title.clone(), unit: "tracks", reused: report.reused, copied: report.tracks_added + report.tracks_updated, converted: report.converted, ..Default::default() });
-        if cancelled() { return Err(ExportError::Cancelled); }
+        progress(&ExportProgress {
+            stage: "checking",
+            done: index,
+            total: tracks.len(),
+            title: track.title.clone(),
+            unit: "tracks",
+            reused: report.reused,
+            copied: report.tracks_added + report.tracks_updated,
+            converted: report.converted,
+            ..Default::default()
+        });
+        if cancelled() {
+            return Err(ExportError::Cancelled);
+        }
         if let Some(error) = &track.preparation_error {
             fail_track(&mut report, track, error);
             continue;
         }
         if track.source_unavailable {
             report.kept_existing += 1;
-            report.warnings.push(ExportWarning { track_id: track.id, title: track.title.clone(), reason: if track.retained_reason.is_some() { "update-failed" } else { "source-unavailable" }.into(), detail: track.retained_reason.clone() });
+            report.warnings.push(ExportWarning {
+                track_id: track.id,
+                title: track.title.clone(),
+                reason: if track.retained_reason.is_some() { "update-failed" } else { "source-unavailable" }.into(),
+                detail: track.retained_reason.clone(),
+            });
         }
         let export_id = ids.get(index).copied().unwrap_or(0);
         let mut place = layouts[index].clone();
@@ -1229,11 +1553,15 @@ fn export_cancellable_inner(
 
         // Reconciliation may carry unrelated device tracks alongside this
         // selection. Their files remain untouched by compatibility conversion.
-        let conversion = compatibility.filter(|_| !track.device.as_ref().is_some_and(|d| d.preserve))
+        let conversion = compatibility
+            .filter(|_| !track.device.as_ref().is_some_and(|d| d.preserve))
             .map(CompatibilityFormat::audio);
         let conversion = match conversion {
             Some(target) => match cache.map_or_else(
-                || rbl_audio::compatibility::needs_conversion(&track.source_path).map_err(|e| std::io::Error::other(e.to_string()).into()),
+                || {
+                    rbl_audio::compatibility::needs_conversion(&track.source_path)
+                        .map_err(|e| std::io::Error::other(e.to_string()).into())
+                },
                 |cache| cache.needs_conversion(&track.source_path),
             ) {
                 Ok(true) => Some(target),
@@ -1265,19 +1593,26 @@ fn export_cancellable_inner(
             let mut suffix = 0_u32;
             while !written_analysis_paths.insert(path_key(&place.anlz_dir)) {
                 suffix += 1;
-                if suffix > 200_003 { return Err(ExportError::Conflict("Analysis directory space exhausted".into())); }
+                if suffix > 200_003 {
+                    return Err(ExportError::Conflict("Analysis directory space exhausted".into()));
+                }
                 place.file_name = format!("{stem}-{export_id}-{suffix}{ext}");
                 place.audio = format!("{}/{}", parent.display(), place.file_name);
                 place.anlz_dir = analysis_directory(&place.audio, root_name);
             }
         }
         if !written_audio_paths.insert(path_key(&place.audio)) {
-            return Err(ExportError::Conflict(format!("Conversion would create duplicate audio path: {}", place.audio)));
+            return Err(ExportError::Conflict(format!(
+                "Conversion would create duplicate audio path: {}",
+                place.audio
+            )));
         }
         // Still the library's own file on the stick, not renamed for a
         // conversion or an analysis collision: point at it, copy nothing.
         let in_place = absent || in_place_paths.get(index).and_then(Option::as_deref) == Some(place.audio.as_str());
-        if absent { absent_audio.insert(path_key(&place.audio)); }
+        if absent {
+            absent_audio.insert(path_key(&place.audio));
+        }
         // The stick's own copy, still where its row says and not renamed for
         // a conversion or an analysis collision: kept, nothing copied.
         let adopted = !in_place && adopted_paths.get(index).and_then(Option::as_deref) == Some(place.audio.as_str());
@@ -1288,12 +1623,19 @@ fn export_cancellable_inner(
         // its entry in `stale`.
         let previous_entry = stale.get(&key).copied();
         let source_receipt_matches = previous.as_ref().and_then(|m| m.generation.as_ref()).is_none_or(|g| {
-            g.inputs.get(&source).is_none_or(|old| incremental::revision(&track.source_path).is_ok_and(|now| now == *old))
+            g.inputs
+                .get(&source)
+                .is_none_or(|old| incremental::revision(&track.source_path).is_ok_and(|now| now == *old))
         });
-        let moved = previous_entry.filter(|c| c.audio != place.audio && c.size == size && c.conversion == profile
-            && ((c.modified == modified && source_receipt_matches) || source_contents_unchanged.contains(&key))
-            && !owns_library_file(destination, c) && !audio_dest.exists()
-            && copy_stamp(&under(destination, &c.audio)).is_ok_and(|now| same_copy(c.copy_stamp, now)));
+        let moved = previous_entry.filter(|c| {
+            c.audio != place.audio
+                && c.size == size
+                && c.conversion == profile
+                && ((c.modified == modified && source_receipt_matches) || source_contents_unchanged.contains(&key))
+                && !owns_library_file(destination, c)
+                && !audio_dest.exists()
+                && copy_stamp(&under(destination, &c.audio)).is_ok_and(|now| same_copy(c.copy_stamp, now))
+        });
         if let Some(old) = moved {
             let from = PathBuf::from(old.audio.trim_start_matches('/'));
             let to = PathBuf::from(place.audio.trim_start_matches('/'));
@@ -1303,10 +1645,13 @@ fn export_cancellable_inner(
         }
         // Unchanged means: same source bytes by size and time, same place on
         // the stick, and still actually there.
-        let unchanged_metadata = !in_place && previous_entry.is_some_and(|c| {
-            c.audio == place.audio && c.size == size && c.conversion == profile
-                && ((c.modified == modified && source_receipt_matches) || source_contents_unchanged.contains(&key))
-        });
+        let unchanged_metadata = !in_place
+            && previous_entry.is_some_and(|c| {
+                c.audio == place.audio
+                    && c.size == size
+                    && c.conversion == profile
+                    && ((c.modified == modified && source_receipt_matches) || source_contents_unchanged.contains(&key))
+            });
         // The stick's copy as it is now, by size and time only.
         let copy_now = if unchanged_metadata { copy_stamp(&audio_dest)? } else { None };
         // The copy is still the one this export recorded: nothing has
@@ -1317,7 +1662,15 @@ fn export_cancellable_inner(
         let source_hash = if let Some(c) = previous_entry.filter(|_| conversion.is_some() && copy_unchanged) {
             c.conversion_source_hash
         } else if conversion.is_some() {
-            match inspected_source_hashes.get(&key).map_or_else(|| cache.map_or_else(|| file_hash_cancellable(&track.source_path, cancelled), |cache| cache.source_hash(&track.source_path, cancelled).map_err(std::io::Error::other)), |hash| Ok(*hash)) {
+            match inspected_source_hashes.get(&key).map_or_else(
+                || {
+                    cache.map_or_else(
+                        || file_hash_cancellable(&track.source_path, cancelled),
+                        |cache| cache.source_hash(&track.source_path, cancelled).map_err(std::io::Error::other),
+                    )
+                },
+                |hash| Ok(*hash),
+            ) {
                 Ok(hash) => hash,
                 Err(e) if is_device_gone(&e) => return Err(ExportError::DeviceGone),
                 Err(e) if e.kind() == std::io::ErrorKind::StorageFull => return Err(e.into()),
@@ -1326,11 +1679,15 @@ fn export_cancellable_inner(
                     continue;
                 }
             }
-        } else { 0 };
+        } else {
+            0
+        };
         let carried = stale.remove(&key);
         // A track kept without its audio writes nothing, so adds nothing;
         // nor does one whose copy the stick already holds.
-        if carried.is_none() && !absent && !adopted { report.tracks_added += 1; }
+        if carried.is_none() && !absent && !adopted {
+            report.tracks_added += 1;
+        }
         // Otherwise the copy was written since this export recorded it, or
         // the record predates `copy_stamp`. Hash the USB copy once against
         // the recorded hash and the source: a same-size rewrite on the stick
@@ -1347,19 +1704,34 @@ fn export_cancellable_inner(
                 },
                 None => None,
             }
-        } else { None };
+        } else {
+            None
+        };
         let current_source_hash = if unchanged_metadata && !copy_unchanged && conversion.is_none() {
-            Some(inspected_source_hashes.get(&key).copied().map_or_else(|| file_hash_cancellable(&track.source_path, cancelled), Ok)?)
-        } else { None };
-        let unchanged = unchanged_metadata && if let Some(c) = carried {
-            if copy_unchanged { true }
-            else if conversion.is_some() && c.conversion_source_hash != source_hash { false }
-            else if c.audio_hash != 0 {
-                existing_audio_hash == Some(c.audio_hash)
-                    && (conversion.is_some() || current_source_hash == existing_audio_hash)
-            }
-            else { files_equal(&track.source_path, &audio_dest)? }
-        } else { false };
+            Some(
+                inspected_source_hashes
+                    .get(&key)
+                    .copied()
+                    .map_or_else(|| file_hash_cancellable(&track.source_path, cancelled), Ok)?,
+            )
+        } else {
+            None
+        };
+        let unchanged = unchanged_metadata
+            && if let Some(c) = carried {
+                if copy_unchanged {
+                    true
+                } else if conversion.is_some() && c.conversion_source_hash != source_hash {
+                    false
+                } else if c.audio_hash != 0 {
+                    existing_audio_hash == Some(c.audio_hash)
+                        && (conversion.is_some() || current_source_hash == existing_audio_hash)
+                } else {
+                    files_equal(&track.source_path, &audio_dest)?
+                }
+            } else {
+                false
+            };
 
         let output_size;
         let copied_hash = std::cell::Cell::new(None);
@@ -1383,53 +1755,147 @@ fn export_cancellable_inner(
             report.reused += 1;
             report.bytes_reused += output_size;
         } else {
-            if carried.is_some() { report.tracks_updated += 1; }
-            progress(&ExportProgress { stage: "copying", done: index, total: tracks.len(), title: track.title.clone(), unit: "tracks", ..Default::default() });
+            if carried.is_some() {
+                report.tracks_updated += 1;
+            }
+            progress(&ExportProgress {
+                stage: "copying",
+                done: index,
+                total: tracks.len(),
+                title: track.title.clone(),
+                unit: "tracks",
+                ..Default::default()
+            });
             let audio_dest = under(publication.stage(), &place.audio);
             if let Some(parent) = audio_dest.parent() {
-                std::fs::create_dir_all(parent).map_err(context(format!("Could not create the folder for '{}'", track.title)))?;
+                std::fs::create_dir_all(parent)
+                    .map_err(context(format!("Could not create the folder for '{}'", track.title)))?;
             }
             let written = match conversion {
                 Some(target) => {
                     report.converted += 1;
                     if let Some(cache) = cache.filter(|_| !track.cache_bypass) {
-                        match cache.converted(&track.source_path, target, &mut |done, total| {
-                            progress(&ExportProgress { stage: "converting", done: usize::try_from(done).unwrap_or(usize::MAX), total: total.and_then(|n| usize::try_from(n).ok()).unwrap_or(usize::from(track.duration_sec) * 1000), title: track.title.clone(), unit: "milliseconds", reused: report.reused, converted: report.converted, tracks_done: index, tracks_total: tracks.len(), ..Default::default() });
-                        }, cancelled) {
-                            Ok((path, _, _)) => {
-                                copy_staged_observed(&path, &audio_dest, &mut |done, total| {
-                                    progress(&ExportProgress { stage: "copying", done: 0, total: 0, title: track.title.clone(), unit: "bytes", bytes_done: done, bytes_total: total, reused: report.reused, copied: report.tracks_added + report.tracks_updated, converted: report.converted, tracks_done: index, tracks_total: tracks.len() });
-                                    !cancelled()
-                                }).map(|(bytes, hash)| { copied_hash.set(Some(hash)); bytes })
-                            }
+                        match cache.converted(
+                            &track.source_path,
+                            target,
+                            &mut |done, total| {
+                                progress(&ExportProgress {
+                                    stage: "converting",
+                                    done: usize::try_from(done).unwrap_or(usize::MAX),
+                                    total: total
+                                        .and_then(|n| usize::try_from(n).ok())
+                                        .unwrap_or(usize::from(track.duration_sec) * 1000),
+                                    title: track.title.clone(),
+                                    unit: "milliseconds",
+                                    reused: report.reused,
+                                    converted: report.converted,
+                                    tracks_done: index,
+                                    tracks_total: tracks.len(),
+                                    ..Default::default()
+                                });
+                            },
+                            cancelled,
+                        ) {
+                            Ok((path, _, _)) => copy_staged_observed(&path, &audio_dest, &mut |done, total| {
+                                progress(&ExportProgress {
+                                    stage: "copying",
+                                    done: 0,
+                                    total: 0,
+                                    title: track.title.clone(),
+                                    unit: "bytes",
+                                    bytes_done: done,
+                                    bytes_total: total,
+                                    reused: report.reused,
+                                    copied: report.tracks_added + report.tracks_updated,
+                                    converted: report.converted,
+                                    tracks_done: index,
+                                    tracks_total: tracks.len(),
+                                });
+                                !cancelled()
+                            })
+                            .map(|(bytes, hash)| {
+                                copied_hash.set(Some(hash));
+                                bytes
+                            }),
                             Err(ExportError::Cancelled) => return Err(ExportError::Cancelled),
                             Err(e) => Err(std::io::Error::other(e.to_string())),
                         }
                     } else {
-                        rbl_audio::compatibility::convert_observed(&track.source_path, &audio_dest, target, &mut |done, total| {
-                            progress(&ExportProgress { stage: "converting", done: usize::try_from(done).unwrap_or(usize::MAX), total: total.and_then(|n| usize::try_from(n).ok()).unwrap_or(usize::from(track.duration_sec) * 1000), title: track.title.clone(), unit: "milliseconds", reused: report.reused, converted: report.converted, tracks_done: index, tracks_total: tracks.len(), ..Default::default() });
-                            !cancelled()
-                        }).map_err(|e| std::io::Error::other(format!("{}: {e}", track.title)))
+                        rbl_audio::compatibility::convert_observed(
+                            &track.source_path,
+                            &audio_dest,
+                            target,
+                            &mut |done, total| {
+                                progress(&ExportProgress {
+                                    stage: "converting",
+                                    done: usize::try_from(done).unwrap_or(usize::MAX),
+                                    total: total
+                                        .and_then(|n| usize::try_from(n).ok())
+                                        .unwrap_or(usize::from(track.duration_sec) * 1000),
+                                    title: track.title.clone(),
+                                    unit: "milliseconds",
+                                    reused: report.reused,
+                                    converted: report.converted,
+                                    tracks_done: index,
+                                    tracks_total: tracks.len(),
+                                    ..Default::default()
+                                });
+                                !cancelled()
+                            },
+                        )
+                        .map_err(|e| std::io::Error::other(format!("{}: {e}", track.title)))
                     }
-                },
-                None => copy_staged_observed(track.prepared_audio.as_deref().unwrap_or(&track.source_path), &audio_dest, &mut |done, total| {
-                    progress(&ExportProgress { stage: "copying", done: 0, total: 0, title: track.title.clone(), unit: "bytes", bytes_done: done, bytes_total: total, reused: report.reused, copied: report.tracks_added + report.tracks_updated, converted: report.converted, tracks_done: index, tracks_total: tracks.len() });
-                    !cancelled()
-                }).map(|(bytes, hash)| { copied_hash.set(Some(hash)); bytes }),
+                }
+                None => copy_staged_observed(
+                    track.prepared_audio.as_deref().unwrap_or(&track.source_path),
+                    &audio_dest,
+                    &mut |done, total| {
+                        progress(&ExportProgress {
+                            stage: "copying",
+                            done: 0,
+                            total: 0,
+                            title: track.title.clone(),
+                            unit: "bytes",
+                            bytes_done: done,
+                            bytes_total: total,
+                            reused: report.reused,
+                            copied: report.tracks_added + report.tracks_updated,
+                            converted: report.converted,
+                            tracks_done: index,
+                            tracks_total: tracks.len(),
+                        });
+                        !cancelled()
+                    },
+                )
+                .map(|(bytes, hash)| {
+                    copied_hash.set(Some(hash));
+                    bytes
+                }),
             };
             match written {
-                Ok(bytes) => { output_size = bytes; report.bytes_copied += bytes; },
+                Ok(bytes) => {
+                    output_size = bytes;
+                    report.bytes_copied += bytes;
+                }
                 Err(_) if cancelled() => return Err(ExportError::Cancelled),
                 Err(e) if is_device_gone(&e) => return Err(ExportError::DeviceGone),
                 Err(e) if e.kind() == std::io::ErrorKind::StorageFull || carried.is_some() => return Err(e.into()),
                 Err(e) => {
-                    if conversion.is_some() { report.converted = report.converted.saturating_sub(1); }
+                    if conversion.is_some() {
+                        report.converted = report.converted.saturating_sub(1);
+                    }
                     // One bad file must not stop the sync. Take back what this
                     // track had counted, leave any earlier copy to be handled
                     // as for a track that is no longer selected, and go on.
                     let _ = std::fs::remove_file(&audio_dest);
-                    if carried.is_some() { report.tracks_updated -= 1; } else { report.tracks_added -= 1; }
-                    if let Some(c) = carried { stale.insert(key, c); }
+                    if carried.is_some() {
+                        report.tracks_updated -= 1;
+                    } else {
+                        report.tracks_added -= 1;
+                    }
+                    if let Some(c) = carried {
+                        stale.insert(key, c);
+                    }
                     fail_track(&mut report, track, &format!("Could not copy it to the USB: {e}"));
                     continue;
                 }
@@ -1440,7 +1906,10 @@ fn export_cancellable_inner(
         // otherwise sit on the stick forever, unreferenced.
         if let Some(c) = carried {
             // A file that was the library's own is never ours to delete.
-            if c.audio != place.audio && !owns_library_file(destination, c) && !same_file(&under(destination, &c.audio), &audio_dest) {
+            if c.audio != place.audio
+                && !owns_library_file(destination, c)
+                && !same_file(&under(destination, &c.audio), &audio_dest)
+            {
                 obsolete.push((c.audio.clone(), false));
             }
             if c.anlz_dir != place.anlz_dir {
@@ -1451,40 +1920,74 @@ fn export_cancellable_inner(
         let recipe = incremental::analysis_recipe(track, &place.audio)?;
         analysis_recipes.insert(key.clone(), recipe.clone());
         let comparison_recipe = if source_contents_unchanged.contains(&key) {
-            previous.as_ref().and_then(|m| m.generation.as_ref()).and_then(|g| g.inputs.get(&source))
-                .map_or_else(|| Ok(recipe.clone()), |revision| incremental::analysis_recipe_with_revision(track, &place.audio, revision))?
-        } else { recipe.clone() };
-        let mut analysis_reused = carried.filter(|c| c.anlz_dir == place.anlz_dir)
-            .filter(|c| previous.as_ref().and_then(|m| m.generation.as_ref())
-                .is_some_and(|g| g.transform_version == incremental::TRANSFORM_VERSION && g.analysis_recipes.get(&key) == Some(&comparison_recipe))
-                && c.analysis_extensions.iter().all(|e| trusted.contains(&format!("{}/ANLZ0000.{e}", c.anlz_dir.trim_start_matches('/')))));
-        let mut hydrated = track.clone();
-        let source_changed = !source_receipt_matches && !source_contents_unchanged.contains(&key) && !track.source_unavailable && !preserved;
-        let content_changed = source_changed && carried.is_some_and(|c| {
-            let old_hash = if c.conversion.is_empty() { c.audio_hash } else { c.conversion_source_hash };
-            let now = if conversion.is_some() { Some(source_hash) } else { copied_hash.get() };
-            now.is_none_or(|now| old_hash == 0 || old_hash != now)
+            previous.as_ref().and_then(|m| m.generation.as_ref()).and_then(|g| g.inputs.get(&source)).map_or_else(
+                || Ok(recipe.clone()),
+                |revision| incremental::analysis_recipe_with_revision(track, &place.audio, revision),
+            )?
+        } else {
+            recipe.clone()
+        };
+        let mut analysis_reused = carried.filter(|c| c.anlz_dir == place.anlz_dir).filter(|c| {
+            previous.as_ref().and_then(|m| m.generation.as_ref()).is_some_and(|g| {
+                g.transform_version == incremental::TRANSFORM_VERSION
+                    && g.analysis_recipes.get(&key) == Some(&comparison_recipe)
+            }) && c
+                .analysis_extensions
+                .iter()
+                .all(|e| trusted.contains(&format!("{}/ANLZ0000.{e}", c.anlz_dir.trim_start_matches('/'))))
         });
+        let mut hydrated = track.clone();
+        let source_changed = !source_receipt_matches
+            && !source_contents_unchanged.contains(&key)
+            && !track.source_unavailable
+            && !preserved;
+        let content_changed = source_changed
+            && carried.is_some_and(|c| {
+                let old_hash = if c.conversion.is_empty() { c.audio_hash } else { c.conversion_source_hash };
+                let now = if conversion.is_some() { Some(source_hash) } else { copied_hash.get() };
+                now.is_none_or(|now| old_hash == 0 || old_hash != now)
+            });
         if content_changed {
             hydrated.file_size = size;
-            let properties = cache.map_or_else(|| rbl_audio::compatibility::inspect(&track.source_path).map_err(|e| std::io::Error::other(e.to_string()).into()), |cache| cache.properties(&track.source_path));
+            let properties = cache.map_or_else(
+                || {
+                    rbl_audio::compatibility::inspect(&track.source_path)
+                        .map_err(|e| std::io::Error::other(e.to_string()).into())
+                },
+                |cache| cache.properties(&track.source_path),
+            );
             if let Ok(properties) = properties {
                 if let Some(rate) = properties.sample_rate.filter(|r| *r > 0) {
                     hydrated.sample_rate = rate;
-                    if let Some(frames) = properties.frames { hydrated.duration_sec = u16::try_from(frames / u64::from(rate)).unwrap_or(u16::MAX); }
+                    if let Some(frames) = properties.frames {
+                        hydrated.duration_sec = u16::try_from(frames / u64::from(rate)).unwrap_or(u16::MAX);
+                    }
                 }
-                if let Some(depth) = properties.bit_depth { hydrated.metadata.bit_depth = u16::try_from(depth).unwrap_or(0); }
+                if let Some(depth) = properties.bit_depth {
+                    hydrated.metadata.bit_depth = u16::try_from(depth).unwrap_or(0);
+                }
             }
         }
-        let analysis_not_updated = track.analysis_source.as_ref().is_some_and(|base| previous.as_ref().and_then(|m| m.generation.as_ref()).is_some_and(|g| {
-            ["DAT", "EXT", "2EX"].iter().all(|ext| {
-                let path = base.with_extension(ext);
-                g.inputs.get(&path.to_string_lossy().into_owned()).is_some_and(|old| incremental::revision(&path).is_ok_and(|now| now == *old))
+        let analysis_not_updated = track.analysis_source.as_ref().is_some_and(|base| {
+            previous.as_ref().and_then(|m| m.generation.as_ref()).is_some_and(|g| {
+                ["DAT", "EXT", "2EX"].iter().all(|ext| {
+                    let path = base.with_extension(ext);
+                    g.inputs
+                        .get(&path.to_string_lossy().into_owned())
+                        .is_some_and(|old| incremental::revision(&path).is_ok_and(|now| now == *old))
+                })
             })
-        }));
-        if content_changed && analysis_not_updated { analysis_reused = None; }
+        });
+        if content_changed && analysis_not_updated {
+            analysis_reused = None;
+        }
         hydrated.analysis = if content_changed && analysis_not_updated {
-            report.warnings.push(ExportWarning { track_id: track.id, title: track.title.clone(), reason: "analysis-stale".into(), detail: None });
+            report.warnings.push(ExportWarning {
+                track_id: track.id,
+                title: track.title.clone(),
+                reason: "analysis-stale".into(),
+                detail: None,
+            });
             hydrated.cues = Some(Vec::new());
             hydrated.metadata.analysed = 0;
             Vec::new()
@@ -1494,11 +1997,19 @@ fn export_cancellable_inner(
             let loaded = incremental::load_analysis(track);
             let missing = track.analysis_source.as_ref().is_some_and(|p| !p.is_file());
             if missing || loaded.is_err() {
-                let retained = carried.filter(|c| (unchanged || retained_audio || in_place || adopted || moved.is_some()) && !c.anlz_dir.is_empty());
+                let retained = carried.filter(|c| {
+                    (unchanged || retained_audio || in_place || adopted || moved.is_some()) && !c.anlz_dir.is_empty()
+                });
                 let (kept, is_kept) = match retained {
                     Some(c) => {
-                        let fallback = SourceTrack { analysis_source: Some(under(destination, &format!("{}/ANLZ0000.DAT", c.anlz_dir))), ..Default::default() };
-                        if c.analysis_extensions.iter().all(|e| trusted.contains(&format!("{}/ANLZ0000.{e}", c.anlz_dir.trim_start_matches('/')))) {
+                        let fallback = SourceTrack {
+                            analysis_source: Some(under(destination, &format!("{}/ANLZ0000.DAT", c.anlz_dir))),
+                            ..Default::default()
+                        };
+                        if c.analysis_extensions
+                            .iter()
+                            .all(|e| trusted.contains(&format!("{}/ANLZ0000.{e}", c.anlz_dir.trim_start_matches('/'))))
+                        {
                             (incremental::load_analysis(&fallback)?, true)
                         } else {
                             // Changed since the last sync, most likely by a
@@ -1517,50 +2028,67 @@ fn export_cancellable_inner(
                     None => (Vec::new(), false),
                 };
                 let detail = loaded.as_ref().err().map(ToString::to_string);
-                report.warnings.push(ExportWarning { track_id: track.id, title: track.title.clone(),
-                    reason: if is_kept { "analysis-kept" } else { "analysis-unavailable" }.into(), detail });
+                report.warnings.push(ExportWarning {
+                    track_id: track.id,
+                    title: track.title.clone(),
+                    reason: if is_kept { "analysis-kept" } else { "analysis-unavailable" }.into(),
+                    detail,
+                });
                 kept
-            } else { loaded? }
+            } else {
+                loaded?
+            }
         };
         let track = &hydrated;
-        let exported_analysis = if analysis_reused.is_some() || track.device.as_ref().is_some_and(|d| d.preserve) { None } else {
-            Some(track.analysis.iter().map(|(extension, bytes)| {
-                let mut parsed = rbl_anlz::parse(bytes).map_err(|e| std::io::Error::other(e.to_string()))?;
-                let path_bytes = rbl_anlz::AnlzBuilder::new().path(&place.audio).finish();
-                let path = rbl_anlz::parse(&path_bytes).map_err(|e| std::io::Error::other(e.to_string()))?;
-                // A DAT/EXT/2EX has one PPTH. Drop it by tag rather than by
-                // decoded value, so a malformed legacy path cannot survive
-                // alongside the replacement path.
-                parsed.sections.retain(|s| s.tag != rbl_core::FourCc::new(b"PPTH"));
-                parsed.sections.splice(0..0, path.sections);
-                // Older RBXport analysis files predate the PVBR section. A
-                // freshly initialized Pioneer DAT always writes it between
-                // PPTH and PQTZ, even when there are no VBR frames. Repair
-                // those stale files while exporting rather than asking the
-                // user to re-analyse every affected track.
-                if extension.eq_ignore_ascii_case("DAT") && (conversion.is_some() || parsed.section(b"PVBR").is_none()) {
-                    // Seek offsets from the source must never point into a
-                    // different encoding. Compatibility outputs are PCM or
-                    // CBR MP3, so they need no source VBR seek table.
-                    parsed.sections.retain(|s| s.tag != rbl_core::FourCc::new(b"PVBR"));
-                    parsed.sections.insert(1, rbl_anlz::write::vbr_table_zero_section());
-                }
-                parsed.sections = parsed.sections.iter().map(rbl_anlz::Section::with_export_phrase_mask).collect();
-                // Analysis written before issue #278 put whiteness bits in
-                // `PWV2` and zero-height preview columns, neither of which
-                // rekordbox writes; a Nexus player (XDJ-1000MK2) then rejects
-                // the track's whole preview, and with it the detail waveform
-                // and hot-cue markers on load. rekordbox-written `PWAV` and
-                // `PWV2` pass through unchanged.
-                parsed.sections = parsed.sections.iter().map(rbl_anlz::encode::with_device_preview).collect();
-                if let Some(cues) = &track.cues {
-                    if extension == "DAT" || extension == "EXT" {
-                        parsed.sections.retain(|s| !s.is_cue_list());
-                        parsed.sections.extend(rbl_anlz::cues::sections(cues, extension == "EXT"));
-                    }
-                }
-                Ok::<_, std::io::Error>((extension.clone(), parsed.to_bytes()))
-            }).collect::<std::io::Result<Vec<_>>>()?)
+        let exported_analysis = if analysis_reused.is_some() || track.device.as_ref().is_some_and(|d| d.preserve) {
+            None
+        } else {
+            Some(
+                track
+                    .analysis
+                    .iter()
+                    .map(|(extension, bytes)| {
+                        let mut parsed = rbl_anlz::parse(bytes).map_err(|e| std::io::Error::other(e.to_string()))?;
+                        let path_bytes = rbl_anlz::AnlzBuilder::new().path(&place.audio).finish();
+                        let path = rbl_anlz::parse(&path_bytes).map_err(|e| std::io::Error::other(e.to_string()))?;
+                        // A DAT/EXT/2EX has one PPTH. Drop it by tag rather than by
+                        // decoded value, so a malformed legacy path cannot survive
+                        // alongside the replacement path.
+                        parsed.sections.retain(|s| s.tag != rbl_core::FourCc::new(b"PPTH"));
+                        parsed.sections.splice(0..0, path.sections);
+                        // Older RBXport analysis files predate the PVBR section. A
+                        // freshly initialized Pioneer DAT always writes it between
+                        // PPTH and PQTZ, even when there are no VBR frames. Repair
+                        // those stale files while exporting rather than asking the
+                        // user to re-analyse every affected track.
+                        if extension.eq_ignore_ascii_case("DAT")
+                            && (conversion.is_some() || parsed.section(b"PVBR").is_none())
+                        {
+                            // Seek offsets from the source must never point into a
+                            // different encoding. Compatibility outputs are PCM or
+                            // CBR MP3, so they need no source VBR seek table.
+                            parsed.sections.retain(|s| s.tag != rbl_core::FourCc::new(b"PVBR"));
+                            parsed.sections.insert(1, rbl_anlz::write::vbr_table_zero_section());
+                        }
+                        parsed.sections =
+                            parsed.sections.iter().map(rbl_anlz::Section::with_export_phrase_mask).collect();
+                        // Analysis written before issue #278 put whiteness bits in
+                        // `PWV2` and zero-height preview columns, neither of which
+                        // rekordbox writes; a Nexus player (XDJ-1000MK2) then rejects
+                        // the track's whole preview, and with it the detail waveform
+                        // and hot-cue markers on load. rekordbox-written `PWAV` and
+                        // `PWV2` pass through unchanged.
+                        parsed.sections = parsed.sections.iter().map(rbl_anlz::encode::with_device_preview).collect();
+                        if let Some(cues) = &track.cues {
+                            if extension == "DAT" || extension == "EXT" {
+                                parsed.sections.retain(|s| !s.is_cue_list());
+                                parsed.sections.extend(rbl_anlz::cues::sections(cues, extension == "EXT"));
+                            }
+                        }
+                        Ok::<_, std::io::Error>((extension.clone(), parsed.to_bytes()))
+                    })
+                    .collect::<std::io::Result<Vec<_>>>()?,
+            )
         };
         let analysis = exported_analysis.as_deref().unwrap_or(&track.analysis);
         // The stick's cues and beat grid may have been edited on a player
@@ -1571,19 +2099,20 @@ fn export_cancellable_inner(
         // and asked for an import the user may not want.
         let mut analysis_hash: u64 = analysis_reused.map_or(0, |c| c.analysis);
         for (extension, bytes) in analysis.iter().filter(|_| analysis_reused.is_none()) {
-            analysis_hash = analysis_hash.rotate_left(7)
-                ^ manifest::hash(extension.as_bytes())
-                ^ manifest::hash(bytes);
+            analysis_hash = analysis_hash.rotate_left(7) ^ manifest::hash(extension.as_bytes()) ^ manifest::hash(bytes);
         }
         let anlz_dir = under(destination, &place.anlz_dir);
-        let analysis_current = analysis_reused.is_some() || carried
-            .is_some_and(|c| c.anlz_dir == place.anlz_dir && c.analysis == analysis_hash)
-            && analysis
-                .iter()
-                .all(|(extension, bytes)| std::fs::read(anlz_dir.join(format!("ANLZ0000.{extension}"))).is_ok_and(|b| b == *bytes));
+        let analysis_current = analysis_reused.is_some()
+            || carried.is_some_and(|c| c.anlz_dir == place.anlz_dir && c.analysis == analysis_hash)
+                && analysis.iter().all(|(extension, bytes)| {
+                    std::fs::read(anlz_dir.join(format!("ANLZ0000.{extension}"))).is_ok_and(|b| b == *bytes)
+                });
         for extension in ["DAT", "EXT", "2EX"] {
-            if !track.analysis.iter().any(|(e, _)| e == extension) && anlz_dir.join(format!("ANLZ0000.{extension}")).exists() {
-                deletions.push(PathBuf::from(format!("{}/ANLZ0000.{extension}", place.anlz_dir.trim_start_matches('/'))));
+            if !track.analysis.iter().any(|(e, _)| e == extension)
+                && anlz_dir.join(format!("ANLZ0000.{extension}")).exists()
+            {
+                deletions
+                    .push(PathBuf::from(format!("{}/ANLZ0000.{extension}", place.anlz_dir.trim_start_matches('/'))));
             }
         }
         if !track.analysis.is_empty() && !analysis_current {
@@ -1608,15 +2137,26 @@ fn export_cancellable_inner(
         let artwork_id = match track.artwork.as_deref().filter(|p| p.is_file()) {
             Some(image) => {
                 let id = artwork.id(&image.to_string_lossy());
-                let stamp = incremental::digest(&artwork_names(id).iter().map(|(_, medium)| {
-                    let source = artwork_source(image, *medium);
-                    Ok((source.clone(), incremental::revision(&source)?))
-                }).collect::<std::io::Result<Vec<_>>>()?)?;
+                let stamp = incremental::digest(
+                    &artwork_names(id)
+                        .iter()
+                        .map(|(_, medium)| {
+                            let source = artwork_source(image, *medium);
+                            Ok((source.clone(), incremental::revision(&source)?))
+                        })
+                        .collect::<std::io::Result<Vec<_>>>()?,
+                )?;
                 let art_key = format!("{root_name}/Artwork/{id}");
-                let reuse = previous.as_ref().and_then(|m| m.generation.as_ref())
+                let reuse = previous
+                    .as_ref()
+                    .and_then(|m| m.generation.as_ref())
                     .is_some_and(|g| g.artwork_recipes.get(&art_key) == Some(&stamp))
-                    && artwork_names(id).iter().all(|(p, _)| trusted.contains(&p.trim_start_matches('/').replacen("PIONEER/", &format!("{root_name}/"), 1)));
-                if !reuse { report.artwork_files += write_artwork(publication.stage(), destination, root_name, id, image)?; }
+                    && artwork_names(id).iter().all(|(p, _)| {
+                        trusted.contains(&p.trim_start_matches('/').replacen("PIONEER/", &format!("{root_name}/"), 1))
+                    });
+                if !reuse {
+                    report.artwork_files += write_artwork(publication.stage(), destination, root_name, id, image)?;
+                }
                 artwork_recipes.insert(art_key, stamp);
                 id
             }
@@ -1636,7 +2176,9 @@ fn export_cancellable_inner(
         } else if unchanged {
             existing_audio_hash.map_or_else(|| file_hash_cancellable(&audio_dest, cancelled), Ok)?
         } else {
-            copied_hash.get().map_or_else(|| file_hash_cancellable(&under(publication.stage(), &place.audio), cancelled), Ok)?
+            copied_hash
+                .get()
+                .map_or_else(|| file_hash_cancellable(&under(publication.stage(), &place.audio), cancelled), Ok)?
         };
         // Publication renames the staged copy into place, which keeps its
         // size and time, so the staged file's stamp is the published one's.
@@ -1652,11 +2194,18 @@ fn export_cancellable_inner(
             copy_stamp(&under(publication.stage(), &place.audio))?
         };
         recorded.push(ManifestTrack {
-            analysis_hashes: analysis_reused.map_or_else(|| analysis.iter().map(|(e, b)| (e.clone(), manifest::hash(b))).collect(), |c| c.analysis_hashes.clone()),
+            analysis_hashes: analysis_reused.map_or_else(
+                || analysis.iter().map(|(e, b)| (e.clone(), manifest::hash(b))).collect(),
+                |c| c.analysis_hashes.clone(),
+            ),
             analysis_extensions: analysis.iter().map(|(e, _)| e.clone()).collect(),
             export_id,
             library_id: track.id,
-            source: if track.source_unavailable { carried.map_or(source.clone(), |c| c.source.clone()) } else { source },
+            source: if track.source_unavailable {
+                carried.map_or(source.clone(), |c| c.source.clone())
+            } else {
+                source
+            },
             audio: place.audio.clone(),
             anlz_dir: if track.analysis.is_empty() { String::new() } else { place.anlz_dir.clone() },
             size: if track.source_unavailable { carried.map_or(size, |old| old.size) } else { size },
@@ -1667,8 +2216,16 @@ fn export_cancellable_inner(
             } else {
                 artwork_path(artwork_id, "a", false).replacen("/PIONEER/", &format!("/{root_name}/"), 1)
             },
-            conversion: if track.source_unavailable { carried.map_or_else(|| profile.to_owned(), |old| old.conversion.clone()) } else { profile.to_owned() },
-            conversion_source_hash: if track.source_unavailable { carried.map_or(source_hash, |old| old.conversion_source_hash) } else { source_hash },
+            conversion: if track.source_unavailable {
+                carried.map_or_else(|| profile.to_owned(), |old| old.conversion.clone())
+            } else {
+                profile.to_owned()
+            },
+            conversion_source_hash: if track.source_unavailable {
+                carried.map_or(source_hash, |old| old.conversion_source_hash)
+            } else {
+                source_hash
+            },
             audio_hash,
             in_place: in_place && !absent,
             preserved: Some(preserved && !track.device.as_ref().is_some_and(|d| d.exported)),
@@ -1679,13 +2236,16 @@ fn export_cancellable_inner(
         // Gathered here rather than re-derived later, so the two databases
         // cannot disagree about a path or a size.
         let mut metadata = track.metadata.clone();
-        if conversion.is_some() { metadata.bit_depth = 16; }
+        if conversion.is_some() {
+            metadata.bit_depth = 16;
+        }
         let library_id = track.device.as_ref().map_or(track.id, |d| d.master_content_id);
         let master_db_id = track.device.as_ref().map_or(db_id, |d| d.master_db_id);
         one_library_tracks.push(OneLibraryTrack {
             metadata,
             cues: track.cues.clone(),
-            year: track.year, release_date: track.release_date.clone(),
+            year: track.year,
+            release_date: track.release_date.clone(),
             bitrate: if conversion.is_some() { 0 } else { track.bitrate },
             sample_rate: if conversion.is_some() { 44_100 } else { track.sample_rate },
             export_id,
@@ -1730,7 +2290,14 @@ fn export_cancellable_inner(
             // The library's figure when it has one, as rekordbox writes it,
             // even where the file has since changed by a few bytes of tags.
             file_size: u32::try_from(
-                (if conversion.is_some() { output_size } else if track.file_size > 0 { track.file_size } else { size }).min(u64::from(u32::MAX)),
+                (if conversion.is_some() {
+                    output_size
+                } else if track.file_size > 0 {
+                    track.file_size
+                } else {
+                    size
+                })
+                .min(u64::from(u32::MAX)),
             )
             .unwrap_or(0),
             track_number: track.metadata.track_number,
@@ -1759,9 +2326,13 @@ fn export_cancellable_inner(
     // Whatever the previous export left that this one does not name.
     for entry in stale.values() {
         // A track the export only carried is the stick's, files and all.
-        if carried_entry(destination, entry) { continue; }
+        if carried_entry(destination, entry) {
+            continue;
+        }
         // A file that was the library's own is never ours to delete.
-        if !owns_library_file(destination, entry) { obsolete.push((entry.audio.clone(), false)); }
+        if !owns_library_file(destination, entry) {
+            obsolete.push((entry.audio.clone(), false));
+        }
         obsolete.push((entry.anlz_dir.clone(), true));
         report.removed += 1;
     }
@@ -1787,10 +2358,16 @@ fn export_cancellable_inner(
         }
         report.playlists += 1;
     }
-    let previous_playlists: BTreeSet<u32> = before.legacy.as_ref().into_iter()
-        .flat_map(|library| &library.playlists).filter(|playlist| !playlist.folder).map(|playlist| playlist.id).collect();
-    let current_playlists: BTreeSet<u32> = playlists.iter().zip(&playlist_ids)
-        .filter(|(playlist, _)| !playlist.folder).map(|(_, id)| *id).collect();
+    let previous_playlists: BTreeSet<u32> = before
+        .legacy
+        .as_ref()
+        .into_iter()
+        .flat_map(|library| &library.playlists)
+        .filter(|playlist| !playlist.folder)
+        .map(|playlist| playlist.id)
+        .collect();
+    let current_playlists: BTreeSet<u32> =
+        playlists.iter().zip(&playlist_ids).filter(|(playlist, _)| !playlist.folder).map(|(_, id)| *id).collect();
     report.playlists_added = current_playlists.difference(&previous_playlists).count();
     report.playlists_removed = previous_playlists.difference(&current_playlists).count();
 
@@ -1798,12 +2375,16 @@ fn export_cancellable_inner(
     let existing_database = db_dir.join("exportLibrary.db");
     let settings = if existing_database.exists() {
         Some(rbl_onelibrary::settings::StickSettings::read(&existing_database).map_err(|e| one_library_error(&e))?)
-    } else { None };
+    } else {
+        None
+    };
     // The artwork table names the small image of each; a player derives the
     // others from the same name [ASSUME: what the `artwork` row of a
     // rekordbox export names, of the four files it writes per image].
-    let artwork_paths: Vec<(u32, String)> =
-        artwork.entries().map(|(id, _)| (id, artwork_path(id, "a", false).replacen("/PIONEER/", &format!("/{root_name}/"), 1))).collect();
+    let artwork_paths: Vec<(u32, String)> = artwork
+        .entries()
+        .map(|(id, _)| (id, artwork_path(id, "a", false).replacen("/PIONEER/", &format!("/{root_name}/"), 1)))
+        .collect();
     let artwork_rows: Vec<Vec<u8>> = artwork_paths.iter().map(|(id, path)| artwork_row(*id, path)).collect();
 
     // A DeviceSQL row has to fit on one page. Without this check the page
@@ -1823,8 +2404,11 @@ fn export_cancellable_inner(
     let label_rows: Vec<_> = labels.entries().map(|(id, n)| simple_named_row(id, n)).collect();
     let key_rows: Vec<_> = keys.entries().map(|(id, n)| key_row(id, n)).collect();
     for (kind, names, rows) in [
-        ("genre", &genres, &genre_rows), ("artist", &artists, &artist_rows), ("album", &albums, &album_rows),
-        ("label", &labels, &label_rows), ("key", &keys, &key_rows),
+        ("genre", &genres, &genre_rows),
+        ("artist", &artists, &artist_rows),
+        ("album", &albums, &album_rows),
+        ("label", &labels, &label_rows),
+        ("key", &keys, &key_rows),
     ] {
         if let Some(((_, name), row)) = names.entries().zip(rows).find(|(_, row)| row.len() > limit) {
             let start: String = name.chars().take(40).collect();
@@ -1842,7 +2426,16 @@ fn export_cancellable_inner(
         )));
     }
 
-    progress(&ExportProgress { stage: "database", done: 0, total: 0, title: String::new(), reused: report.reused, copied: report.tracks_added + report.tracks_updated, converted: report.converted, ..Default::default() });
+    progress(&ExportProgress {
+        stage: "database",
+        done: 0,
+        total: 0,
+        title: String::new(),
+        reused: report.reused,
+        copied: report.tracks_added + report.tracks_updated,
+        converted: report.converted,
+        ..Default::default()
+    });
     incremental::count(true, false, false);
     let pdb = build_pdb(&PdbTables {
         tracks: &track_rows,
@@ -1866,9 +2459,22 @@ fn export_cancellable_inner(
     // The tags and the tracks carrying them, for the player's Track Filter.
     let master_db_id = my_tag_master_db_id(sync);
     let tagged: Vec<(u32, &[u64])> = one_library_tracks.iter().map(|t| (t.export_id, t.my_tags.as_slice())).collect();
-    std::fs::write(staged_db.join("exportExt.pdb"), ext_pdb::build(my_tags, &tagged, master_db_id)).map_err(context("Could not write exportExt.pdb".to_owned()))?;
+    std::fs::write(staged_db.join("exportExt.pdb"), ext_pdb::build(my_tags, &tagged, master_db_id))
+        .map_err(context("Could not write exportExt.pdb".to_owned()))?;
 
-    write_one_library(&staged_db, &one_library_tracks, playlists, &playlist_ids, &export_ids, &artwork_paths, my_tags, settings.as_ref().or(defaults), master_db_id, &before, Some(&existing_database))?;
+    write_one_library(
+        &staged_db,
+        &one_library_tracks,
+        playlists,
+        &playlist_ids,
+        &export_ids,
+        &artwork_paths,
+        my_tags,
+        settings.as_ref().or(defaults),
+        master_db_id,
+        &before,
+        Some(&existing_database),
+    )?;
     report.one_library = true;
 
     // The DJ's My Settings, as rekordbox puts them on every stick it writes.
@@ -1884,11 +2490,19 @@ fn export_cancellable_inner(
     // The sync record, so rekordbox's Sync Manager opens on this selection
     // too. A playlist that is not the library's has no id to record.
     if let Some(sync) = sync {
-        let ticked: Vec<u64> = playlists.iter().filter(|p| !p.folder && !p.device_only).map(|p| p.id).filter(|&id| id != 0 && id < reconcile::DEVICE_PLAYLIST_ID_BASE).collect();
+        let ticked: Vec<u64> = playlists
+            .iter()
+            .filter(|p| !p.folder && !p.device_only)
+            .map(|p| p.id)
+            .filter(|&id| id != 0 && id < reconcile::DEVICE_PLAYLIST_ID_BASE)
+            .collect();
         let kept = sync_record::read(destination).map(|r| r.timestamps).unwrap_or_default();
         let device_ids = playlists.iter().zip(&playlist_ids).map(|(p, id)| (p.id, *id)).collect();
         let bytes = sync_record::render_with_ids(sync, &ticked, rbl_core::time::unix_millis(), &kept, &device_ids);
-        for file in sync_record::FILES { std::fs::write(publication.stage().join(file.replacen("PIONEER/", &format!("{root_name}/"), 1)), &bytes).map_err(context(format!("Could not write {file}")))?; }
+        for file in sync_record::FILES {
+            std::fs::write(publication.stage().join(file.replacen("PIONEER/", &format!("{root_name}/"), 1)), &bytes)
+                .map_err(context(format!("Could not write {file}")))?;
+        }
     }
 
     // Last, so a run that fails part way leaves the older record standing and
@@ -1899,21 +2513,46 @@ fn export_cancellable_inner(
     let loose: Vec<u64> = tracks
         .iter()
         .enumerate()
-        .filter(|(index, track)| !in_a_playlist.contains(index) && track.id != 0 && !track.device.as_ref().is_some_and(|d| d.preserve) && export_ids[*index].is_some())
+        .filter(|(index, track)| {
+            !in_a_playlist.contains(index)
+                && track.id != 0
+                && !track.device.as_ref().is_some_and(|d| d.preserve)
+                && export_ids[*index].is_some()
+        })
         .map(|(_, track)| track.id)
         .collect();
-    let retained: BTreeSet<String> = recorded.iter().flat_map(|track| [track.audio.to_lowercase(), track.anlz_dir.to_lowercase()]).collect();
+    let retained: BTreeSet<String> =
+        recorded.iter().flat_map(|track| [track.audio.to_lowercase(), track.anlz_dir.to_lowercase()]).collect();
     // The audio paths as both databases name them, which is what the staged
     // copies are published under.
     let named: Vec<String> = recorded.iter().map(|track| track.audio.clone()).collect();
     let after = snapshot::Snapshot::read_at(publication.stage(), root_name)?;
     before.check_retained_history(&after)?;
     before.check_changes_except(previous.as_ref(), &after, &device_additions)?;
-    progress(&ExportProgress { stage: "verifying", done: 0, total: 0, title: String::new(), reused: report.reused, copied: report.tracks_added + report.tracks_updated, converted: report.converted, ..Default::default() });
-    let verified_reused: BTreeSet<String> = trusted.iter().filter(|p| !publication.stage().join(p).is_file()).cloned().collect();
-    let verified = verification::verify_staged_incremental(publication.stage(), destination, &after, &absent_audio, &verified_reused)?;
+    progress(&ExportProgress {
+        stage: "verifying",
+        done: 0,
+        total: 0,
+        title: String::new(),
+        reused: report.reused,
+        copied: report.tracks_added + report.tracks_updated,
+        converted: report.converted,
+        ..Default::default()
+    });
+    let verified_reused: BTreeSet<String> =
+        trusted.iter().filter(|p| !publication.stage().join(p).is_file()).cloned().collect();
+    let verified = verification::verify_staged_incremental(
+        publication.stage(),
+        destination,
+        &after,
+        &absent_audio,
+        &verified_reused,
+    )?;
     if !verified.is_ok() {
-        return Err(ExportError::Conflict(format!("The export did not verify, so the USB was left as it was: {}", verification_failure(&verified))));
+        return Err(ExportError::Conflict(format!(
+            "The export did not verify, so the USB was left as it was: {}",
+            verification_failure(&verified)
+        )));
     }
     for (name, bytes) in settings_files {
         if !MY_SETTINGS_FILES.contains(&name.as_str()) && name != "DEVSETTING.DAT" {
@@ -1926,9 +2565,15 @@ fn export_cancellable_inner(
         generation: Some(incremental::Generation {
             structure: String::new(),
             device_sources: reconcile::capture_sources(publication.stage(), &after)?,
-            kept_existing: report.kept_existing, warnings: report.warnings.clone(),
-            request, inputs: source_revisions.clone(), outputs: BTreeMap::new(), databases: BTreeMap::new(),
-            analysis_recipes, artwork_recipes, transform_version: incremental::TRANSFORM_VERSION,
+            kept_existing: report.kept_existing,
+            warnings: report.warnings.clone(),
+            request,
+            inputs: source_revisions.clone(),
+            outputs: BTreeMap::new(),
+            databases: BTreeMap::new(),
+            analysis_recipes,
+            artwork_recipes,
+            transform_version: incremental::TRANSFORM_VERSION,
         }),
         db_id,
         baseline: Some(after),
@@ -1939,58 +2584,104 @@ fn export_cancellable_inner(
             .iter()
             .enumerate()
             .map(|(i, p)| manifest::ManifestPlaylist {
-                library_id: p.id, name: p.name.clone(), export_id: playlist_ids[i], folder: p.folder, device_only: p.device_only,
+                library_id: p.id,
+                name: p.name.clone(),
+                export_id: playlist_ids[i],
+                folder: p.folder,
+                device_only: p.device_only,
                 library_entries: if p.device_only { None } else { library_entries.get(&p.id).cloned() },
             })
             .collect(),
         loose,
     };
     let structure = incremental::manifest_structure(&manifest)?;
-    if let Some(g) = &mut manifest.generation { g.structure = structure; }
-    manifest.save_at(publication.stage(), root_name)
-    .map_err(context("Could not write the rbxport manifest".to_owned()))?;
+    if let Some(g) = &mut manifest.generation {
+        g.structure = structure;
+    }
+    manifest
+        .save_at(publication.stage(), root_name)
+        .map_err(context("Could not write the rbxport manifest".to_owned()))?;
     let named: Vec<&str> = named.iter().map(String::as_str).collect();
     let mut files = staged_files(publication.stage(), &named)?;
     files.extend(moved_audio);
     // A rebuilt database never inherits WAL pages from its previous image.
-    files.splice(0..0, [format!("{root_name}/rekordbox/exportLibrary.db-wal").into(), format!("{root_name}/rekordbox/exportLibrary.db-shm").into()]);
+    files.splice(
+        0..0,
+        [
+            format!("{root_name}/rekordbox/exportLibrary.db-wal").into(),
+            format!("{root_name}/rekordbox/exportLibrary.db-shm").into(),
+        ],
+    );
     files.extend(deletions);
     // Reclaim only our known files, inside the recoverable transaction. Never
     // recursively remove an analysis directory: another writer may own extras.
     for (path, directory) in &obsolete {
-        if retained.contains(&path.to_lowercase()) || path.is_empty() { continue; }
+        if retained.contains(&path.to_lowercase()) || path.is_empty() {
+            continue;
+        }
         let candidates: Vec<String> = if *directory {
             ["DAT", "EXT", "2EX"].iter().map(|ext| format!("{}/ANLZ0000.{ext}", path.trim_start_matches('/'))).collect()
-        } else { vec![path.trim_start_matches('/').to_owned()] };
+        } else {
+            vec![path.trim_start_matches('/').to_owned()]
+        };
         for candidate in candidates {
             // Relocation owns the source rename. A separate deletion entry
             // could run first in path order and remove its input.
-            if relocated_sources.contains(&candidate) { continue; }
-            let unchanged = trusted.contains(&candidate) || previous.as_ref().is_some_and(|m| m.tracks.iter().any(|t| {
-                t.audio.trim_start_matches('/') == candidate && copy_stamp(&under(destination, &candidate)).is_ok_and(|now| same_copy(t.copy_stamp, now))
-            }));
-            if unchanged { files.push(candidate.into()); }
+            if relocated_sources.contains(&candidate) {
+                continue;
+            }
+            let unchanged = trusted.contains(&candidate)
+                || previous.as_ref().is_some_and(|m| {
+                    m.tracks.iter().any(|t| {
+                        t.audio.trim_start_matches('/') == candidate
+                            && copy_stamp(&under(destination, &candidate)).is_ok_and(|now| same_copy(t.copy_stamp, now))
+                    })
+                });
+            if unchanged {
+                files.push(candidate.into());
+            }
         }
     }
-    files.sort(); files.dedup();
+    files.sort();
+    files.dedup();
     // Catch another writer changing a database while this export was staging.
     incremental::recheck();
     for (path, expected) in &full_source_hashes {
-        if file_hash_cancellable(path, cancelled)? != *expected { return Err(ExportError::Conflict("Source changed while it was being prepared".into())); }
+        if file_hash_cancellable(path, cancelled)? != *expected {
+            return Err(ExportError::Conflict("Source changed while it was being prepared".into()));
+        }
     }
     let trusted_after = incremental::trusted_paths(destination, previous.as_ref())?;
     if !trusted.is_subset(&trusted_after) {
-        return Err(ExportError::Conflict("Exported media changed during sync. Retry after closing other writers.".into()));
+        return Err(ExportError::Conflict(
+            "Exported media changed during sync. Retry after closing other writers.".into(),
+        ));
     }
-    if incremental::databases(destination)? != database_signatures || snapshot::analysis_stamp(destination, &before)? != analysis_before || incremental::inputs(requested_tracks)? != source_revisions {
+    if incremental::databases(destination)? != database_signatures
+        || snapshot::analysis_stamp(destination, &before)? != analysis_before
+        || incremental::inputs(requested_tracks)? != source_revisions
+    {
         return Err(ExportError::Conflict("The device changed during sync. Close other writers and retry.".into()));
     }
-    if cancelled() { return Err(ExportError::Cancelled); }
-    progress(&ExportProgress { stage: "publishing", done: 0, total: 0, title: String::new(), reused: report.reused, copied: report.tracks_added + report.tracks_updated, converted: report.converted, ..Default::default() });
+    if cancelled() {
+        return Err(ExportError::Cancelled);
+    }
+    progress(&ExportProgress {
+        stage: "publishing",
+        done: 0,
+        total: 0,
+        title: String::new(),
+        reused: report.reused,
+        copied: report.tracks_added + report.tracks_updated,
+        converted: report.converted,
+        ..Default::default()
+    });
     if let Err(error) = publication.commit_retained(&files) {
         if rbl_core::durable::Publication::validation_pending(destination, PUBLICATION) {
             if let Err(rollback) = publication.rollback() {
-                return Err(ExportError::Conflict(format!("Publication failed: {error}; recovery required: {rollback}")));
+                return Err(ExportError::Conflict(format!(
+                    "Publication failed: {error}; recovery required: {rollback}"
+                )));
             }
         }
         return Err(error.into());
@@ -1999,7 +2690,10 @@ fn export_cancellable_inner(
         incremental::recheck();
         let check = verification::verify_databases(destination)?;
         if !check.is_ok() || check.tracks != report.tracks {
-            return Err(ExportError::Conflict(format!("Published generation did not verify: {}", verification_failure(&check))));
+            return Err(ExportError::Conflict(format!(
+                "Published generation did not verify: {}",
+                verification_failure(&check)
+            )));
         }
         if let Some(g) = &mut manifest.generation {
             g.outputs = incremental::output_revisions(destination, &manifest.tracks)?;
@@ -2021,11 +2715,15 @@ fn export_cancellable_inner(
     // Content reclamation was journaled. Empty folders are only cosmetic;
     // remove_dir refuses any directory another writer has populated.
     for (relative, directory) in obsolete {
-        if retained.contains(&relative.to_lowercase()) { continue; }
+        if retained.contains(&relative.to_lowercase()) {
+            continue;
+        }
         let path = checked_under(destination, &relative)?;
         let mut empty = if directory { Some(path.as_path()) } else { path.parent() };
         while let Some(dir) = empty.filter(|p| *p != destination && p.starts_with(destination)) {
-            if std::fs::remove_dir(dir).is_err() { break; }
+            if std::fs::remove_dir(dir).is_err() {
+                break;
+            }
             empty = dir.parent();
         }
     }
@@ -2084,9 +2782,9 @@ fn build_pdb(tables: &PdbTables<'_>) -> Vec<u8> {
             .iter()
             .enumerate()
             .map(|(i, name)| {
-                let id=u16::try_from(i).unwrap_or(0)+1;
-                let name=tables.colors.iter().find(|c|c.id==i64::from(id)).map_or(*name,|c|c.name.as_str());
-                color_row(id,name)
+                let id = u16::try_from(i).unwrap_or(0) + 1;
+                let name = tables.colors.iter().find(|c| c.id == i64::from(id)).map_or(*name, |c| c.name.as_str());
+                color_row(id, name)
             })
             .collect::<Vec<_>>(),
     );
@@ -2098,13 +2796,32 @@ fn build_pdb(tables: &PdbTables<'_>) -> Vec<u8> {
         // rekordbox export names, of the four files it writes per image].
         let rows;
         let table = match page_type {
-            11 => { rows = tables.history.iter().filter(|h| !h.folder).map(|h| simple_named_row(u32::try_from(h.id).unwrap_or(0), &h.name)).collect::<Vec<_>>(); &rows },
-            12 => { rows = tables.history.iter().filter(|h| !h.folder).flat_map(|h| h.tracks.iter().enumerate().map(move |(i,id)| {
-                let mut row = Vec::with_capacity(12);
-                row.extend_from_slice(&id.to_le_bytes());
-                row.extend_from_slice(&u32::try_from(h.id).unwrap_or(0).to_le_bytes());
-                row.extend_from_slice(&u32::try_from(i+1).unwrap_or(0).to_le_bytes()); row
-            })).collect::<Vec<_>>(); &rows },
+            11 => {
+                rows = tables
+                    .history
+                    .iter()
+                    .filter(|h| !h.folder)
+                    .map(|h| simple_named_row(u32::try_from(h.id).unwrap_or(0), &h.name))
+                    .collect::<Vec<_>>();
+                &rows
+            }
+            12 => {
+                rows = tables
+                    .history
+                    .iter()
+                    .filter(|h| !h.folder)
+                    .flat_map(|h| {
+                        h.tracks.iter().enumerate().map(move |(i, id)| {
+                            let mut row = Vec::with_capacity(12);
+                            row.extend_from_slice(&id.to_le_bytes());
+                            row.extend_from_slice(&u32::try_from(h.id).unwrap_or(0).to_le_bytes());
+                            row.extend_from_slice(&u32::try_from(i + 1).unwrap_or(0).to_le_bytes());
+                            row
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                &rows
+            }
             13 => tables.artwork,
             _ => &[],
         };
@@ -2122,7 +2839,11 @@ fn build_pdb(tables: &PdbTables<'_>) -> Vec<u8> {
         background_color: tables.background,
         ..rbl_pdb::rows::PdbProperty::default()
     };
-    file.add_table_numbered(19, &rbl_pdb::rows::property_row(&property).map_or_else(Vec::new, |row| vec![row]), numbered);
+    file.add_table_numbered(
+        19,
+        &rbl_pdb::rows::property_row(&property).map_or_else(Vec::new, |row| vec![row]),
+        numbered,
+    );
     file.finish()
 }
 
@@ -2158,7 +2879,9 @@ pub fn create_library_with_root(
     let db_dir = destination.join(root_name).join("rekordbox");
     let legacy = db_dir.join("export.pdb").exists();
     let one = db_dir.join("exportLibrary.db").exists();
-    if legacy && one { return Ok(false); }
+    if legacy && one {
+        return Ok(false);
+    }
     if legacy || one {
         // Convert by reading and retaining the existing content. Never publish
         // an empty sibling over a populated library.
@@ -2193,7 +2916,19 @@ pub fn create_library_with_root(
     // the blank stick's `exportExt.pdb` held all 99].
     let master_db_id = my_tag_master_db_id(sync);
     rbl_core::durable::write(&db_dir.join("exportExt.pdb"), &ext_pdb::build(my_tags, &[], master_db_id))?;
-    write_one_library(&db_dir, &[], &[], &[], &[], &[], my_tags, defaults, master_db_id, &snapshot::Snapshot::default(), None)?;
+    write_one_library(
+        &db_dir,
+        &[],
+        &[],
+        &[],
+        &[],
+        &[],
+        my_tags,
+        defaults,
+        master_db_id,
+        &snapshot::Snapshot::default(),
+        None,
+    )?;
     let files = staged_files(publication.stage(), &[])?;
     publication.commit(&files)?;
     Ok(true)
@@ -2213,7 +2948,10 @@ fn my_tag_master_db_id(sync: Option<&SyncSource>) -> u32 {
 struct OneLibraryTrack {
     metadata: rbl_core::ExportMetadata,
     cues: Option<Vec<rbl_anlz::cues::ExportCue>>,
-    year: u16, release_date: String, bitrate: u32, sample_rate: u32,
+    year: u16,
+    release_date: String,
+    bitrate: u32,
+    sample_rate: u32,
     export_id: u32,
     library_id: u64,
     master_db_id: u64,
@@ -2254,9 +2992,12 @@ fn artwork_path(id: u32, prefix: &str, medium: bool) -> String {
 }
 
 fn artwork_id_from_path(path: &str) -> u32 {
-    Path::new(path).file_stem().and_then(|s| s.to_str())
+    Path::new(path)
+        .file_stem()
+        .and_then(|s| s.to_str())
         .and_then(|s| s.trim_start_matches(['a', 'b']).split('_').next())
-        .and_then(|s| s.parse().ok()).unwrap_or(0)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
 }
 
 /// Images to a stick artwork folder.
@@ -2279,7 +3020,11 @@ fn artwork_names(id: u32) -> [(String, bool); 4] {
 /// artwork was added by hand still gets a picture rather than none.
 fn artwork_source(image: &Path, medium: bool) -> PathBuf {
     let sibling = image.with_file_name(if medium { "artwork_m.jpg" } else { "artwork_s.jpg" });
-    if sibling.is_file() { sibling } else { image.to_path_buf() }
+    if sibling.is_file() {
+        sibling
+    } else {
+        image.to_path_buf()
+    }
 }
 
 /// Copies an image to its four places, skipping any already there at the
@@ -2330,11 +3075,7 @@ fn write_one_library(
     // none starts from the defaults it was given or the reference rows.
     // An unreadable existing database is refused, preserving its settings.
     let fresh = || defaults.cloned().unwrap_or_default();
-    let settings = if path.exists() {
-        StickSettings::read(&path).map_err(|e| one_library_error(&e))?
-    } else {
-        fresh()
-    };
+    let settings = if path.exists() { StickSettings::read(&path).map_err(|e| one_library_error(&e))? } else { fresh() };
     // An export is written into a fresh directory, but a resumed one may find
     // the previous attempt's file; replacing it is correct, keeping it is not.
     let staging = tempfile::tempdir_in(db_dir)?;
@@ -2370,7 +3111,10 @@ fn write_one_library(
     let positions = sibling_positions(playlists);
     for (i, playlist) in playlists.iter().enumerate() {
         let playlist_id = i64::from(playlist_ids[i]);
-        let parent = playlists.iter().position(|p| p.id != 0 && p.id == playlist.parent_id).map_or(0, |p| i64::from(playlist_ids[p]));
+        let parent = playlists
+            .iter()
+            .position(|p| p.id != 0 && p.id == playlist.parent_id)
+            .map_or(0, |p| i64::from(playlist_ids[p]));
         builder
             .add_playlist_node(playlist_id, &playlist.name, parent, i64::from(positions[i]), playlist.folder)
             .map_err(|e| one_library_error(&e))?;
@@ -2378,9 +3122,7 @@ fn write_one_library(
         for &track_index in &playlist.track_indices {
             let Some(Some(export_id)) = export_ids.get(track_index).copied() else { continue };
             position += 1;
-            builder
-                .add_to_playlist(playlist_id, i64::from(export_id), position)
-                .map_err(|e| one_library_error(&e))?;
+            builder.add_to_playlist(playlist_id, i64::from(export_id), position).map_err(|e| one_library_error(&e))?;
         }
     }
 
@@ -2396,14 +3138,19 @@ fn write_one_library(
         }
     }
     for history in &before.history {
-        builder.add_history(history.id, &history.name, history.parent, history.sequence, history.folder).map_err(|e| one_library_error(&e))?;
+        builder
+            .add_history(history.id, &history.name, history.parent, history.sequence, history.folder)
+            .map_err(|e| one_library_error(&e))?;
         for (position, id) in history.tracks.iter().enumerate() {
-            builder.add_history_track(history.id, i64::from(*id), i64::try_from(position + 1).unwrap_or(0)).map_err(|e| one_library_error(&e))?;
+            builder
+                .add_history_track(history.id, i64::from(*id), i64::try_from(position + 1).unwrap_or(0))
+                .map_err(|e| one_library_error(&e))?;
         }
     }
     let created = rbl_core::time::local_date();
     builder.finish(&settings.device_name, &created, master_db_id).map_err(|e| one_library_error(&e))?;
-    rbl_core::durable::replace(&staged, &path).map_err(|e| ExportError::OneLibrary(format!("could not stage it: {e}")))?;
+    rbl_core::durable::replace(&staged, &path)
+        .map_err(|e| ExportError::OneLibrary(format!("could not stage it: {e}")))?;
     Ok(())
 }
 
@@ -2425,8 +3172,10 @@ fn add_tracks(
             .add_track(&Track {
                 metadata: track.metadata.clone(),
                 file_type: i64::from(rbl_pdb::rows::audio_file_type(&track.file_name)),
-                year: i64::from(track.year), release_date: track.release_date.clone(),
-                bitrate: i64::from(track.bitrate), sample_rate: i64::from(track.sample_rate),
+                year: i64::from(track.year),
+                release_date: track.release_date.clone(),
+                bitrate: i64::from(track.bitrate),
+                sample_rate: i64::from(track.sample_rate),
                 content_id: i64::from(track.export_id),
                 title: track.title.clone(),
                 artist_id: Some(artist),
@@ -2487,7 +3236,11 @@ fn copy_staged(from: &Path, to: &Path) -> std::io::Result<u64> {
     copy_data_with_durability(from, to, false)
 }
 
-fn copy_staged_observed(from: &Path, to: &Path, progress: &mut dyn FnMut(u64, u64) -> bool) -> std::io::Result<(u64, u64)> {
+fn copy_staged_observed(
+    from: &Path,
+    to: &Path,
+    progress: &mut dyn FnMut(u64, u64) -> bool,
+) -> std::io::Result<(u64, u64)> {
     copy_data_observed(from, to, false, progress)
 }
 
@@ -2495,12 +3248,20 @@ fn copy_data_with_durability(from: &Path, to: &Path, durable: bool) -> std::io::
     copy_data_observed(from, to, durable, &mut |_, _| true).map(|(size, _)| size)
 }
 
-fn copy_data_observed(from: &Path, to: &Path, durable: bool, progress: &mut dyn FnMut(u64, u64) -> bool) -> std::io::Result<(u64, u64)> {
+fn copy_data_observed(
+    from: &Path,
+    to: &Path,
+    durable: bool,
+    progress: &mut dyn FnMut(u64, u64) -> bool,
+) -> std::io::Result<(u64, u64)> {
     use std::io::{Read, Write};
     let mut source = std::fs::File::open(from)?;
     let total = source.metadata()?.len();
     if fs2::available_space(to.parent().unwrap_or(Path::new(".")))? < total {
-        return Err(std::io::Error::new(std::io::ErrorKind::StorageFull, "Not enough space to stage the audio while keeping the previous library"));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::StorageFull,
+            "Not enough space to stage the audio while keeping the previous library",
+        ));
     }
     let mut hash = 0xcbf2_9ce4_8422_2325_u64;
     let parent = to.parent().unwrap_or(Path::new("."));
@@ -2516,13 +3277,19 @@ fn copy_data_observed(from: &Path, to: &Path, durable: bool, progress: &mut dyn 
             total += chunk.len() as u64;
             let _ = ack.send(total);
         }
-        if durable { rbl_core::durable::flush(&target)?; }
+        if durable {
+            rbl_core::durable::flush(&target)?;
+        }
         Ok(total)
     });
     let read_result = (|| -> std::io::Result<()> {
         loop {
-            if let Some(done) = acknowledgements.try_iter().last() { acknowledged = done; }
-            if !progress(acknowledged, total) { return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Export stopped")); }
+            if let Some(done) = acknowledgements.try_iter().last() {
+                acknowledged = done;
+            }
+            if !progress(acknowledged, total) {
+                return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Export stopped"));
+            }
             let mut buffer = vec![0_u8; COPY_BUFFER];
             let read = source.read(&mut buffer)?;
             if read == 0 {
@@ -2530,7 +3297,9 @@ fn copy_data_observed(from: &Path, to: &Path, durable: bool, progress: &mut dyn 
             }
             buffer.truncate(read);
             incremental::read_bytes(from, read as u64);
-            for byte in &buffer { hash = (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3); }
+            for byte in &buffer {
+                hash = (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
+            }
             if send.send(buffer).is_err() {
                 // The writer stopped early; its error is the one to report.
                 return Ok(());
@@ -2538,13 +3307,15 @@ fn copy_data_observed(from: &Path, to: &Path, durable: bool, progress: &mut dyn 
         }
     })();
     drop(send);
-    let written = writer
-        .join()
-        .map_err(|_| std::io::Error::other("the copy's writer thread panicked"))??;
+    let written = writer.join().map_err(|_| std::io::Error::other("the copy's writer thread panicked"))??;
     read_result?;
-    if !progress(written, total) { return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Export stopped")); }
+    if !progress(written, total) {
+        return Err(std::io::Error::new(std::io::ErrorKind::Interrupted, "Export stopped"));
+    }
     staging.persist(to).map_err(|e| e.error)?;
-    if durable { rbl_core::durable::sync_dir(parent)?; }
+    if durable {
+        rbl_core::durable::sync_dir(parent)?;
+    }
     Ok((written, hash))
 }
 
@@ -2630,7 +3401,11 @@ pub fn verification_failure(report: &VerifyReport) -> String {
         const SHOWN: usize = 3;
         let missing = report.missing_audio.iter().take(SHOWN).cloned().collect::<Vec<_>>().join(", ");
         let more = report.missing_audio.len().saturating_sub(SHOWN);
-        problems.push(if more > 0 { format!("audio missing: {missing} and {more} more") } else { format!("audio missing: {missing}") });
+        problems.push(if more > 0 {
+            format!("audio missing: {missing} and {more} more")
+        } else {
+            format!("audio missing: {missing}")
+        });
     }
     problems.join("; ")
 }
@@ -2649,11 +3424,19 @@ const PUBLICATION: &str = ".rbxport-publication";
 /// `rbl_core::durable::Publication::set_aside`), and its journal is set aside
 /// under `rbxport/recovered-<ms>/` in the library root, so the next export
 /// starts from the device as it is now.
-pub fn recovery_pending(destination: &Path) -> bool { destination.join(PUBLICATION).exists() }
+pub fn recovery_pending(destination: &Path) -> bool {
+    destination.join(PUBLICATION).exists()
+}
 
 pub fn recover(destination: &Path) -> std::io::Result<()> {
     match rbl_core::durable::Publication::recover(destination, PUBLICATION) {
-        Err(error) if rbl_core::durable::is_device_changed(&error) && (rbl_core::durable::Publication::validation_pending(destination, PUBLICATION) || destination.join(PUBLICATION).join(".moves.json").exists()) => return Err(error),
+        Err(error)
+            if rbl_core::durable::is_device_changed(&error)
+                && (rbl_core::durable::Publication::validation_pending(destination, PUBLICATION)
+                    || destination.join(PUBLICATION).join(".moves.json").exists()) =>
+        {
+            return Err(error)
+        }
         Err(error) if rbl_core::durable::is_device_changed(&error) => {
             let root_name = export_root_name(destination).unwrap_or("PIONEER");
             let keep = destination.join(root_name).join(format!("rbxport/recovered-{}", rbl_core::time::unix_millis()));
@@ -2702,8 +3485,11 @@ fn staged_files(root: &Path, named: &[&str]) -> std::io::Result<Vec<PathBuf>> {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
                 Err(e) => return Err(e),
             };
-            if file_type.is_dir() { walk(root, &entry.path(), files)?; }
-            else { files.push(entry.path().strip_prefix(root).map_err(std::io::Error::other)?.to_owned()); }
+            if file_type.is_dir() {
+                walk(root, &entry.path(), files)?;
+            } else {
+                files.push(entry.path().strip_prefix(root).map_err(std::io::Error::other)?.to_owned());
+            }
         }
         Ok(())
     }
@@ -2736,8 +3522,20 @@ mod tests {
 
     #[test]
     fn analysis_paths_match_independent_rekordbox_exports() {
-        assert_eq!(analysis_directory("/Contents/Hosanna, Westend/Drum Death - Extended Mix/20130688_drum_death_(extended_mix).mp3", "PIONEER"), "/PIONEER/USBANLZ/P002/0002583E");
-        assert_eq!(analysis_directory("/Contents/Meduza, Aya Anne, GENESI (ITA)/Freak EP/20063130_freak_(feat._aya_anne)_(feat._aya_a.mp3", "PIONEER"), "/PIONEER/USBANLZ/P018/00008F82");
+        assert_eq!(
+            analysis_directory(
+                "/Contents/Hosanna, Westend/Drum Death - Extended Mix/20130688_drum_death_(extended_mix).mp3",
+                "PIONEER"
+            ),
+            "/PIONEER/USBANLZ/P002/0002583E"
+        );
+        assert_eq!(
+            analysis_directory(
+                "/Contents/Meduza, Aya Anne, GENESI (ITA)/Freak EP/20063130_freak_(feat._aya_anne)_(feat._aya_a.mp3",
+                "PIONEER"
+            ),
+            "/PIONEER/USBANLZ/P018/00008F82"
+        );
     }
 
     #[test]
@@ -2766,11 +3564,11 @@ mod tests {
         let original = format!("Relative Progress , Steve Nash , 120 Dance Moves {}.aiff", "extended ".repeat(20));
         let shortened = fat_file_name(&original);
         assert!(shortened.len() <= FILE_NAME_MAX);
-        assert!(Path::new(&shortened)
-            .extension()
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("aiff")));
-        assert_eq!(fat_file_name("Omega - The Hidden Beauty Of Dutch House '94-'98 - 04 Le Rève.aiff"),
-            "Omega - The Hidden Beauty Of Dutch House '94-'98 - 04 Le Rève.aiff");
+        assert!(Path::new(&shortened).extension().is_some_and(|extension| extension.eq_ignore_ascii_case("aiff")));
+        assert_eq!(
+            fat_file_name("Omega - The Hidden Beauty Of Dutch House '94-'98 - 04 Le Rève.aiff"),
+            "Omega - The Hidden Beauty Of Dutch House '94-'98 - 04 Le Rève.aiff"
+        );
     }
 
     /// macOS lists a FAT32 or exFAT stick's names in NFD whatever form they
@@ -2793,11 +3591,14 @@ mod tests {
         // One named by the databases (in NFC, as `fat_safe` writes names),
         // one not named at all.
         let files = staged_files(stage.path(), &["/Contents/Bj\u{f6}rk/Album/Kes\u{e4}.mp3"]).unwrap();
-        assert_eq!(files, vec![
-            PathBuf::from("Contents/Bj\u{f6}rk/Album/Eban\u{f3}.mp3"),
-            PathBuf::from("Contents/Bj\u{f6}rk/Album/Kes\u{e4}.mp3"),
-            PathBuf::from("PIONEER/rekordbox/export.pdb"),
-        ]);
+        assert_eq!(
+            files,
+            vec![
+                PathBuf::from("Contents/Bj\u{f6}rk/Album/Eban\u{f3}.mp3"),
+                PathBuf::from("Contents/Bj\u{f6}rk/Album/Kes\u{e4}.mp3"),
+                PathBuf::from("PIONEER/rekordbox/export.pdb"),
+            ]
+        );
     }
 
     #[test]

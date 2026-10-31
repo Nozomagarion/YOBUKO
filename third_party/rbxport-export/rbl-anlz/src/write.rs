@@ -12,8 +12,7 @@ use crate::{Beat, Section, SECTION_FRAME};
 ///
 /// Taken from real files; the meaning of the fields is not documented, so they
 /// are reproduced rather than derived.
-const DEFAULT_HEADER_EXTRA: [u8; 16] =
-    [0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0];
+const DEFAULT_HEADER_EXTRA: [u8; 16] = [0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0];
 
 fn be16(v: u16) -> [u8; 2] {
     v.to_be_bytes()
@@ -25,10 +24,7 @@ fn be32(v: u32) -> [u8; 4] {
 /// Renders a file from its header extras and sections.
 pub fn render(header_extra: &[u8], sections: &[Section]) -> Vec<u8> {
     let len_header = SECTION_FRAME + header_extra.len();
-    let body_len: usize = sections
-        .iter()
-        .map(|s| SECTION_FRAME + s.header.len() + s.payload.len())
-        .sum();
+    let body_len: usize = sections.iter().map(|s| SECTION_FRAME + s.header.len() + s.payload.len()).sum();
 
     let mut out = Vec::with_capacity(len_header + body_len);
     out.extend_from_slice(b"PMAI");

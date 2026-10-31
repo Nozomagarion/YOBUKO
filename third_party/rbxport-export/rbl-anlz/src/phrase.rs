@@ -48,10 +48,8 @@ use rbl_core::FourCc;
 
 /// The XOR pad rekordbox 6 masks the body with, before `len_entries` is added
 /// to every byte.
-const MASK_BASE: [u8; 19] = [
-    0xCB, 0xE1, 0xEE, 0xFA, 0xE5, 0xEE, 0xAD, 0xEE, 0xE9, 0xD2, 0xE9, 0xEB, 0xE1, 0xE9, 0xF3, 0xE8,
-    0xE9, 0xF4, 0xE1,
-];
+const MASK_BASE: [u8; 19] =
+    [0xCB, 0xE1, 0xEE, 0xFA, 0xE5, 0xEE, 0xAD, 0xEE, 0xE9, 0xD2, 0xE9, 0xEB, 0xE1, 0xE9, 0xF3, 0xE8, 0xE9, 0xF4, 0xE1];
 
 /// Bytes of the body before the first entry.
 const BODY_PREAMBLE: usize = 14;
@@ -160,10 +158,7 @@ fn label_for(mood: Mood, kind: u16, k1: u8, k2: u8, k3: u8) -> &'static str {
 }
 
 fn be16(bytes: &[u8], at: usize) -> u16 {
-    u16::from_be_bytes([
-        bytes.get(at).copied().unwrap_or(0),
-        bytes.get(at + 1).copied().unwrap_or(0),
-    ])
+    u16::from_be_bytes([bytes.get(at).copied().unwrap_or(0), bytes.get(at + 1).copied().unwrap_or(0)])
 }
 
 fn be32(bytes: &[u8], at: usize) -> u32 {
@@ -182,11 +177,7 @@ fn unmask(body: &mut [u8], len_entries: u16) {
     #[allow(clippy::cast_possible_truncation)]
     let add = len_entries as u8;
     for (at, byte) in body.iter_mut().enumerate() {
-        let pad = MASK_BASE
-            .get(at % MASK_BASE.len())
-            .copied()
-            .unwrap_or(0)
-            .wrapping_add(add);
+        let pad = MASK_BASE.get(at % MASK_BASE.len()).copied().unwrap_or(0).wrapping_add(add);
         *byte ^= pad;
     }
 }
@@ -245,12 +236,7 @@ impl Section {
             });
         }
 
-        Some(SongStructure {
-            mood,
-            end_beat: be16(&body, 8),
-            bank: body.get(0x0c).copied().unwrap_or(0),
-            phrases,
-        })
+        Some(SongStructure { mood, end_beat: be16(&body, 8), bank: body.get(0x0c).copied().unwrap_or(0), phrases })
     }
 }
 
@@ -294,12 +280,8 @@ impl Section {
         }
         let preamble = body.get(..BODY_PREAMBLE)?.to_vec();
         let count = (len_entries as usize).min(body.get(BODY_PREAMBLE..)?.len() / entry_bytes);
-        let mut entries: Vec<Vec<u8>> = body
-            .get(BODY_PREAMBLE..)?
-            .chunks_exact(entry_bytes)
-            .take(count)
-            .map(<[u8]>::to_vec)
-            .collect();
+        let mut entries: Vec<Vec<u8>> =
+            body.get(BODY_PREAMBLE..)?.chunks_exact(entry_bytes).take(count).map(<[u8]>::to_vec).collect();
 
         let at = match edit {
             PhraseEdit::Cut { beat } | PhraseEdit::Clear { beat } => {
@@ -366,16 +348,19 @@ impl crate::Anlz {
     }
 }
 
-
 impl Section {
     /// Mask a plaintext phrase section as rekordbox does on USB export.
     /// Existing masked bytes and all unknown fields are preserved.
     #[must_use]
     pub fn with_export_phrase_mask(&self) -> Self {
-        if self.tag != FourCc::new(b"PSSI") { return self.clone(); }
+        if self.tag != FourCc::new(b"PSSI") {
+            return self.clone();
+        }
         let mut raw = self.header.clone();
         raw.extend_from_slice(&self.payload);
-        if raw.len() < 8 || Mood::from_u16(be16(&raw, 6)).is_none() { return self.clone(); }
+        if raw.len() < 8 || Mood::from_u16(be16(&raw, 6)).is_none() {
+            return self.clone();
+        }
         let count = be16(&raw, 4);
         unmask(&mut raw[6..], count);
         Self::new(b"PSSI", raw[..self.header.len()].to_vec(), raw[self.header.len()..].to_vec())

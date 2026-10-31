@@ -52,103 +52,94 @@ const SCHEMA: &[&str] = &[
 /// [`StickSettings::default`] is built from so a stick's own settings can
 /// replace them row for row.
 pub mod reference {
-/// Browse menu definitions.
-///
-/// The names are wrapped in U+FFFA and U+FFFB — interlinear annotation
-/// markers, which is how rekordbox flags a string for translation at display
-/// time. Writing the bare word instead leaves a player showing English
-/// whatever its language is set to, so the wrapping is reproduced.
-pub const MENU_ITEMS: &[(i64, i64, &str)] = &[
-    (1, 128, "GENRE"),
-    (2, 129, "ARTIST"),
-    (3, 130, "ALBUM"),
-    (4, 131, "TRACK"),
-    (5, 133, "BPM"),
-    (6, 134, "RATING"),
-    (7, 135, "YEAR"),
-    (8, 136, "REMIXER"),
-    (9, 137, "LABEL"),
-    (10, 138, "ORIGINAL ARTIST"),
-    (11, 139, "KEY"),
-    (12, 141, "CUE"),
-    (13, 142, "COLOR"),
-    (14, 146, "TIME"),
-    (15, 147, "BITRATE"),
-    (16, 148, "FILE NAME"),
-    (17, 132, "PLAYLIST"),
-    (18, 152, "HOT CUE BANK"),
-    (19, 149, "HISTORY"),
-    (20, 145, "SEARCH"),
-    (21, 150, "COMMENTS"),
-    (22, 140, "DATE ADDED"),
-    (23, 151, "DJ PLAY COUNT"),
-    (24, 144, "FOLDER"),
-    (25, 161, "DEFAULT"),
-    (26, 162, "ALPHABET"),
-    (27, 170, "MATCHING"),
-];
+    /// Browse menu definitions.
+    ///
+    /// The names are wrapped in U+FFFA and U+FFFB — interlinear annotation
+    /// markers, which is how rekordbox flags a string for translation at display
+    /// time. Writing the bare word instead leaves a player showing English
+    /// whatever its language is set to, so the wrapping is reproduced.
+    pub const MENU_ITEMS: &[(i64, i64, &str)] = &[
+        (1, 128, "GENRE"),
+        (2, 129, "ARTIST"),
+        (3, 130, "ALBUM"),
+        (4, 131, "TRACK"),
+        (5, 133, "BPM"),
+        (6, 134, "RATING"),
+        (7, 135, "YEAR"),
+        (8, 136, "REMIXER"),
+        (9, 137, "LABEL"),
+        (10, 138, "ORIGINAL ARTIST"),
+        (11, 139, "KEY"),
+        (12, 141, "CUE"),
+        (13, 142, "COLOR"),
+        (14, 146, "TIME"),
+        (15, 147, "BITRATE"),
+        (16, 148, "FILE NAME"),
+        (17, 132, "PLAYLIST"),
+        (18, 152, "HOT CUE BANK"),
+        (19, 149, "HISTORY"),
+        (20, 145, "SEARCH"),
+        (21, 150, "COMMENTS"),
+        (22, 140, "DATE ADDED"),
+        (23, 151, "DJ PLAY COUNT"),
+        (24, 144, "FOLDER"),
+        (25, 161, "DEFAULT"),
+        (26, 162, "ALPHABET"),
+        (27, 170, "MATCHING"),
+    ];
 
-/// Which menu items appear as browse categories, and in what order:
-/// `(category_id, menuItem_id, sequenceNo, isVisible)`.
-pub const CATEGORIES: &[(i64, i64, i64, i64)] = &[
-    (1, 1, 0, 0),
-    (2, 2, 1, 1),
-    (3, 3, 2, 1),
-    (4, 4, 3, 1),
-    (5, 17, 5, 1),
-    (6, 5, 0, 0),
-    (7, 6, 0, 0),
-    (8, 7, 0, 0),
-    (9, 8, 0, 0),
-    (10, 9, 0, 0),
-    (11, 10, 0, 0),
-    (12, 11, 4, 1),
-    (15, 13, 0, 0),
-    (17, 24, 9, 1),
-    (18, 20, 7, 1),
-    (19, 14, 0, 0),
-    (20, 15, 0, 0),
-    (21, 16, 0, 0),
-    (22, 19, 6, 1),
-    (23, 18, 0, 0),
-    (26, 27, 8, 1),
-    (27, 22, 10, 1),
-];
+    /// Which menu items appear as browse categories, and in what order:
+    /// `(category_id, menuItem_id, sequenceNo, isVisible)`.
+    pub const CATEGORIES: &[(i64, i64, i64, i64)] = &[
+        (1, 1, 0, 0),
+        (2, 2, 1, 1),
+        (3, 3, 2, 1),
+        (4, 4, 3, 1),
+        (5, 17, 5, 1),
+        (6, 5, 0, 0),
+        (7, 6, 0, 0),
+        (8, 7, 0, 0),
+        (9, 8, 0, 0),
+        (10, 9, 0, 0),
+        (11, 10, 0, 0),
+        (12, 11, 4, 1),
+        (15, 13, 0, 0),
+        (17, 24, 9, 1),
+        (18, 20, 7, 1),
+        (19, 14, 0, 0),
+        (20, 15, 0, 0),
+        (21, 16, 0, 0),
+        (22, 19, 6, 1),
+        (23, 18, 0, 0),
+        (26, 27, 8, 1),
+        (27, 22, 10, 1),
+    ];
 
-/// Which menu items appear as sort columns:
-/// `(sort_id, menuItem_id, sequenceNo, isVisible, isSelectedAsSubColumn)`.
-pub const SORTS: &[(i64, i64, i64, i64, i64)] = &[
-    (0, 25, 1, 1, 0),
-    (1, 26, 2, 1, 0),
-    (2, 2, 3, 1, 0),
-    (3, 3, 4, 1, 0),
-    (4, 5, 5, 1, 0),
-    (5, 6, 6, 1, 0),
-    (6, 1, 0, 0, 0),
-    (7, 21, 0, 0, 1),
-    (8, 14, 0, 0, 0),
-    (9, 8, 0, 0, 0),
-    (10, 9, 0, 0, 0),
-    (11, 10, 0, 0, 0),
-    (12, 11, 7, 1, 0),
-    (13, 15, 0, 0, 0),
-    (15, 13, 0, 0, 0),
-    (16, 23, 0, 0, 0),
-    (17, 22, 0, 0, 0),
-];
+    /// Which menu items appear as sort columns:
+    /// `(sort_id, menuItem_id, sequenceNo, isVisible, isSelectedAsSubColumn)`.
+    pub const SORTS: &[(i64, i64, i64, i64, i64)] = &[
+        (0, 25, 1, 1, 0),
+        (1, 26, 2, 1, 0),
+        (2, 2, 3, 1, 0),
+        (3, 3, 4, 1, 0),
+        (4, 5, 5, 1, 0),
+        (5, 6, 6, 1, 0),
+        (6, 1, 0, 0, 0),
+        (7, 21, 0, 0, 1),
+        (8, 14, 0, 0, 0),
+        (9, 8, 0, 0, 0),
+        (10, 9, 0, 0, 0),
+        (11, 10, 0, 0, 0),
+        (12, 11, 7, 1, 0),
+        (13, 15, 0, 0, 0),
+        (15, 13, 0, 0, 0),
+        (16, 23, 0, 0, 0),
+        (17, 22, 0, 0, 0),
+    ];
 
-/// The eight colours in rekordbox's own order, so `color_id` lines up with the
-/// `ColorID` stored against a track.
-pub const COLORS: &[&str] = &[
-    "Pink",
-    "Red",
-    "Orange",
-    "Yellow",
-    "Green",
-    "Aqua",
-    "Blue",
-    "Purple",
-];
+    /// The eight colours in rekordbox's own order, so `color_id` lines up with the
+    /// `ColorID` stored against a track.
+    pub const COLORS: &[&str] = &["Pink", "Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple"];
 }
 
 /// Wraps a menu name in the annotation markers rekordbox uses.
@@ -225,9 +216,12 @@ impl Builder {
         if path.exists() {
             return Err(Error::Exists(path.display().to_string()));
         }
-        let staged = tempfile::NamedTempFile::new_in(path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")))?.into_temp_path();
-        let conn = Connection::open(&staged)
-            .map_err(|source| Error::Open { path: path.display().to_string(), source })?;
+        let staged = tempfile::NamedTempFile::new_in(
+            path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")),
+        )?
+        .into_temp_path();
+        let conn =
+            Connection::open(&staged).map_err(|source| Error::Open { path: path.display().to_string(), source })?;
         // The cipher settings must precede every other statement, or the file
         // is created as plain SQLite and no player can read it.
         unlock(&conn, &key::passphrase()?)?;
@@ -265,18 +259,17 @@ impl Builder {
         // the reference names where it has them.
         for (index, name) in COLORS.iter().enumerate() {
             let id = i64::try_from(index + 1).unwrap_or(1);
-            let name = settings
-                .colors
-                .iter()
-                .find(|c| c.id == id)
-                .map_or(*name, |c| c.name.as_str());
-            conn.execute(
-                "INSERT INTO color (color_id, name) VALUES (?1, ?2)",
-                params![id, name],
-            )?;
+            let name = settings.colors.iter().find(|c| c.id == id).map_or(*name, |c| c.name.as_str());
+            conn.execute("INSERT INTO color (color_id, name) VALUES (?1, ?2)", params![id, name])?;
         }
 
-        Ok(Self { conn, staged, target: path.to_owned(), tracks: 0, background_color_type: settings.background_color_type })
+        Ok(Self {
+            conn,
+            staged,
+            target: path.to_owned(),
+            tracks: 0,
+            background_color_type: settings.background_color_type,
+        })
     }
 
     /// Adds a lookup row and returns its id, reusing one that already matches.
@@ -289,23 +282,13 @@ impl Builder {
         let (table, id_column) = (table.name(), table.id_column());
         let existing: Option<i64> = self
             .conn
-            .query_row(
-                &format!("SELECT {id_column} FROM {table} WHERE name = ?1"),
-                params![name],
-                |r| r.get(0),
-            )
+            .query_row(&format!("SELECT {id_column} FROM {table} WHERE name = ?1"), params![name], |r| r.get(0))
             .optional()?;
         if let Some(id) = existing {
             return Ok(id);
         }
-        let next: i64 = self
-            .conn
-            .query_row(
-                &format!("SELECT COALESCE(MAX({id_column}), 0) + 1 FROM {table}"),
-                [],
-                |r| r.get(0),
-            )
-            ?;
+        let next: i64 =
+            self.conn.query_row(&format!("SELECT COALESCE(MAX({id_column}), 0) + 1 FROM {table}"), [], |r| r.get(0))?;
         if table == "artist" {
             // Artist is the only lookup the reference export fills a search
             // column for.
@@ -314,10 +297,8 @@ impl Builder {
                 params![next, name],
             )?;
         } else {
-            self.conn.execute(
-                &format!("INSERT INTO {table} ({id_column}, name) VALUES (?1, ?2)"),
-                params![next, name],
-            )?;
+            self.conn
+                .execute(&format!("INSERT INTO {table} ({id_column}, name) VALUES (?1, ?2)"), params![next, name])?;
         }
         Ok(next)
     }
@@ -351,7 +332,7 @@ impl Builder {
                 track.file_name,
                 track.file_size,
                 track.analysis_path,
-            
+
                 track.image_id,
                 track.master_db_id,
                 track.master_content_id,
@@ -399,10 +380,7 @@ impl Builder {
     /// `/PIONEER/Artwork/00001/a1.jpg`, under the id the pdb's `artwork`
     /// table uses for it.
     pub fn add_image(&mut self, id: i64, path: &str) -> Result<()> {
-        self.conn.execute(
-            "INSERT OR REPLACE INTO image (image_id, path) VALUES (?1, ?2)",
-            params![id, path],
-        )?;
+        self.conn.execute("INSERT OR REPLACE INTO image (image_id, path) VALUES (?1, ?2)", params![id, path])?;
         Ok(())
     }
 
@@ -419,10 +397,8 @@ impl Builder {
 
     /// Marks a track with a My Tag.
     pub fn tag_track(&mut self, my_tag: i64, content: i64) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO myTag_content (myTag_id, content_id) VALUES (?1, ?2)",
-            params![my_tag, content],
-        )?;
+        self.conn
+            .execute("INSERT INTO myTag_content (myTag_id, content_id) VALUES (?1, ?2)", params![my_tag, content])?;
         Ok(())
     }
 
@@ -438,9 +414,13 @@ impl Builder {
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             let content: i64 = row.get(content_column)?;
-            let exists: bool = self.conn.query_row("SELECT EXISTS(SELECT 1 FROM content WHERE content_id=?1)", [content], |r| r.get(0))?;
+            let exists: bool =
+                self.conn
+                    .query_row("SELECT EXISTS(SELECT 1 FROM content WHERE content_id=?1)", [content], |r| r.get(0))?;
             if exists {
-                let values = (0..columns.len()).map(|i| row.get::<_,rusqlite::types::Value>(i)).collect::<std::result::Result<Vec<_>,_>>()?;
+                let values = (0..columns.len())
+                    .map(|i| row.get::<_, rusqlite::types::Value>(i))
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
                 self.conn.execute(&insert, rusqlite::params_from_iter(values))?;
             }
         }
@@ -463,11 +443,14 @@ impl Builder {
     }
 
     pub fn add_history(&mut self, id: i64, name: &str, parent: i64, seq: i64, folder: bool) -> Result<()> {
-        self.conn.execute("INSERT INTO history VALUES (?1,?2,?3,?4,?5)", params![id,seq,name,i64::from(folder),parent])?;
+        self.conn.execute(
+            "INSERT INTO history VALUES (?1,?2,?3,?4,?5)",
+            params![id, seq, name, i64::from(folder), parent],
+        )?;
         Ok(())
     }
     pub fn add_history_track(&mut self, history: i64, content: i64, seq: i64) -> Result<()> {
-        self.conn.execute("INSERT INTO history_content VALUES (?1,?2,?3)", params![history,content,seq])?;
+        self.conn.execute("INSERT INTO history_content VALUES (?1,?2,?3)", params![history, content, seq])?;
         Ok(())
     }
 
@@ -499,7 +482,9 @@ impl Builder {
             .map_err(|e| std::io::Error::new(e.kind(), format!("could not flush the new database: {e}")))?;
         rbl_core::durable::persist_new(self.staged, &self.target)
             .map_err(|e| std::io::Error::new(e.kind(), format!("could not move the new database into place: {e}")))?;
-        rbl_core::durable::sync_dir(self.target.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")))?;
+        rbl_core::durable::sync_dir(
+            self.target.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")),
+        )?;
         Ok(())
     }
 }

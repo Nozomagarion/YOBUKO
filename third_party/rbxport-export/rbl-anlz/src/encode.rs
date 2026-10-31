@@ -165,7 +165,10 @@ const PWV2_FLOOR: u8 = 1;
 /// `PWAV`: 400 columns, one byte each, the height at least [`PWAV_FLOOR`].
 #[must_use]
 pub fn pwav(columns: &[BandColumn]) -> Vec<u8> {
-    resample(columns, PREVIEW_COLUMNS).into_iter().map(|c| device_preview_byte(mono_byte(c, band_height(c, PWAV_CEILING)))).collect()
+    resample(columns, PREVIEW_COLUMNS)
+        .into_iter()
+        .map(|c| device_preview_byte(mono_byte(c, band_height(c, PWAV_CEILING))))
+        .collect()
 }
 
 /// `PWV2`: 100 columns, one byte each: the height alone, 1..=15.
@@ -222,7 +225,11 @@ pub fn with_device_preview(section: &Section) -> Section {
     } else {
         return section.clone();
     };
-    Section { tag: section.tag, header: section.header.clone(), payload: section.payload.iter().map(|&b| repair(b)).collect() }
+    Section {
+        tag: section.tag,
+        header: section.header.clone(),
+        payload: section.payload.iter().map(|&b| repair(b)).collect(),
+    }
 }
 
 /// `PWV3`: every column, one byte each, at [`detail_height`].
@@ -324,10 +331,7 @@ pub fn pwv5(columns: &[BandColumn]) -> Vec<u8> {
     let mut out = Vec::with_capacity(columns.len() * 2);
     for &column in columns {
         let (red, green, blue) = pwv5_colour(column);
-        let word = (red << 13)
-            | (green << 10)
-            | (blue << 7)
-            | (u16::try_from(detail_height(column)).unwrap_or(0) << 2);
+        let word = (red << 13) | (green << 10) | (blue << 7) | (u16::try_from(detail_height(column)).unwrap_or(0) << 2);
         out.extend_from_slice(&word.to_be_bytes());
     }
     out
@@ -437,8 +441,11 @@ pub fn author(ppth: &str, beats: &[Beat], columns: &[BandColumn], existing: Exis
 /// Callers with only detail columns can pass `None` for the legacy approximation.
 #[must_use]
 pub fn author_with_overview(
-    ppth: &str, beats: &[Beat], columns: &[BandColumn],
-    overview: Option<&[[u8; 3]; OVERVIEW_COLUMNS]>, existing: Existing<'_>,
+    ppth: &str,
+    beats: &[Beat],
+    columns: &[BandColumn],
+    overview: Option<&[[u8; 3]; OVERVIEW_COLUMNS]>,
+    existing: Existing<'_>,
 ) -> AnalysisFiles {
     let dat = {
         let mut builder = AnlzBuilder::new();
@@ -451,8 +458,12 @@ pub fn author_with_overview(
         // file that has none gets the zero table rekordbox itself writes for a
         // track with no VBR frames to index — see [`AnlzBuilder::vbr_table_zero`].
         match existing.dat.and_then(|file| file.section(b"PVBR")) {
-            Some(pvbr) => { builder.copy_section(pvbr); }
-            None => { builder.vbr_table_zero(); }
+            Some(pvbr) => {
+                builder.copy_section(pvbr);
+            }
+            None => {
+                builder.vbr_table_zero();
+            }
         }
         builder.beat_grid(beats);
         builder.waveform_preview(b"PWAV", &pwav(columns));
@@ -476,7 +487,8 @@ pub fn author_with_overview(
         let mut builder = AnlzBuilder::new();
         header_of(&mut builder, existing.two_ex);
         builder.path(ppth);
-        let preview = overview.map_or_else(|| pwv6(columns), |bands| bands.iter().flatten().map(|v| (*v).min(127)).collect());
+        let preview =
+            overview.map_or_else(|| pwv6(columns), |bands| bands.iter().flatten().map(|v| (*v).min(127)).collect());
         builder.waveform_scroll(b"PWV7", 3, &pwv7(columns));
         builder.waveform_scroll(b"PWV6", 3, &preview);
         carry(&mut builder, existing.two_ex);
@@ -499,9 +511,8 @@ fn header_of(builder: &mut AnlzBuilder, existing: Option<&Anlz>) {
 /// first, a zero last word, `PCO2` with a twelve-byte header and no `PCOB`
 /// in the `.EXT`); a re-analysis replaces those.
 fn cue_lists_of(builder: &mut AnlzBuilder, existing: Option<&Anlz>, extended: bool) {
-    let carried: Vec<&Section> = existing
-        .map(|file| file.sections.iter().filter(|s| is_cue_list(s)).collect())
-        .unwrap_or_default();
+    let carried: Vec<&Section> =
+        existing.map(|file| file.sections.iter().filter(|s| is_cue_list(s)).collect()).unwrap_or_default();
     if carried.iter().any(|s| !s.payload.is_empty()) {
         for section in carried {
             builder.copy_section(section);
@@ -533,10 +544,7 @@ fn is_cue_list(section: &Section) -> bool {
 /// field names but not the type.
 #[must_use]
 pub fn beat_grid_of(beats: impl IntoIterator<Item = (u16, u16, u32)>) -> Vec<Beat> {
-    beats
-        .into_iter()
-        .map(|(beat_number, tempo_x100, time_ms)| Beat { beat_number, tempo_x100, time_ms })
-        .collect()
+    beats.into_iter().map(|(beat_number, tempo_x100, time_ms)| Beat { beat_number, tempo_x100, time_ms }).collect()
 }
 
 /// A `PQTZ` on its own, for callers that replace a grid in place.
@@ -761,7 +769,11 @@ mod tests {
         let columns = ramp(3000);
         assert!(pwv2(&columns).iter().all(|&b| b <= PWV2_MAX_BYTE));
         assert_eq!(pwv2(&columns).iter().max(), Some(&15));
-        assert_eq!(pwv2(&[BandColumn::default()]), vec![1; TINY_COLUMNS], "a silent column at rekordbox's floor, not 0");
+        assert_eq!(
+            pwv2(&[BandColumn::default()]),
+            vec![1; TINY_COLUMNS],
+            "a silent column at rekordbox's floor, not 0"
+        );
     }
 
     #[test]
@@ -793,13 +805,15 @@ mod tests {
         // A previous `.DAT` whose `PVBR` holds a real seek table (a nonzero
         // payload rekordbox derived from the file's frames), plus a section
         // this app cannot author.
-        let mut previous = crate::parse(&author("/Music/track.mp3", &beats, &columns, Existing::default()).dat).unwrap();
+        let mut previous =
+            crate::parse(&author("/Music/track.mp3", &beats, &columns, Existing::default()).dat).unwrap();
         let pvbr = previous.sections.iter_mut().find(|s| s.tag == FourCc::new(b"PVBR")).unwrap();
         pvbr.payload.iter_mut().enumerate().for_each(|(i, b)| *b = u8::try_from(i % 251).unwrap_or(0));
         let real_table = previous.section(b"PVBR").unwrap().clone();
         previous.sections.push(Section::new(b"PVDI", vec![0; 8], vec![7, 7, 7]));
 
-        let again = author("/Music/track.mp3", &beats, &columns, Existing { dat: Some(&previous), ..Existing::default() });
+        let again =
+            author("/Music/track.mp3", &beats, &columns, Existing { dat: Some(&previous), ..Existing::default() });
         let reread = crate::parse(&again.dat).unwrap();
         // Exactly one `PVBR`, and it is the real table carried through, not the
         // zero table nor a duplicate.
@@ -842,7 +856,8 @@ mod tests {
         previous.header_extra = vec![9; 16];
         previous.sections.push(Section::new(b"PSSI", vec![0; 8], vec![1, 2, 3]));
         previous.sections.push(Section::new(b"PQT2", vec![0; 32], vec![0; 8]));
-        let again = author("/Music/track.mp3", &beats, &columns, Existing { ext: Some(&previous), ..Existing::default() });
+        let again =
+            author("/Music/track.mp3", &beats, &columns, Existing { ext: Some(&previous), ..Existing::default() });
         let reread = crate::parse(&again.ext).unwrap();
         assert!(reread.section(b"PSSI").is_some());
         assert!(!reread.has_extended_grid());
@@ -908,14 +923,33 @@ mod tests {
         // first with a zero last word, and only twelve-byte-header `PCO2`s
         // after the waveforms in the `.EXT`.
         let mut old_ext = AnlzBuilder::new();
-        old_ext.path("/Music/track.wav").waveform_scroll(b"PWV3", 1, &[0; 4]).waveform_scroll(b"PWV4", 6, &[0; 6])
-            .waveform_scroll(b"PWV5", 2, &[0; 2]).empty_cue_list_of(true, 0).empty_cue_list_of(true, 1);
+        old_ext
+            .path("/Music/track.wav")
+            .waveform_scroll(b"PWV3", 1, &[0; 4])
+            .waveform_scroll(b"PWV4", 6, &[0; 6])
+            .waveform_scroll(b"PWV5", 2, &[0; 2])
+            .empty_cue_list_of(true, 0)
+            .empty_cue_list_of(true, 1);
         let old_ext = crate::parse(&old_ext.finish()).unwrap();
         let mut old_dat = AnlzBuilder::new();
-        old_dat.path("/Music/track.wav").vbr_table_zero().beat_grid(&beats).empty_cue_list_of(false, 0).empty_cue_list_of(false, 1);
+        old_dat
+            .path("/Music/track.wav")
+            .vbr_table_zero()
+            .beat_grid(&beats)
+            .empty_cue_list_of(false, 0)
+            .empty_cue_list_of(false, 1);
         let old_dat = crate::parse(&old_dat.finish()).unwrap();
-        let again = author("?/track.wav", &beats, &columns, Existing { dat: Some(&old_dat), ext: Some(&old_ext), two_ex: None });
-        assert_eq!(again, author("?/track.wav", &beats, &columns, Existing::default()), "the same files as a fresh analysis");
+        let again = author(
+            "?/track.wav",
+            &beats,
+            &columns,
+            Existing { dat: Some(&old_dat), ext: Some(&old_ext), two_ex: None },
+        );
+        assert_eq!(
+            again,
+            author("?/track.wav", &beats, &columns, Existing::default()),
+            "the same files as a fresh analysis"
+        );
 
         // A rekordbox-analysed track keeps its phrases, vocals and `PWVC`,
         // after the authored sections as rekordbox orders them.
@@ -924,7 +958,12 @@ mod tests {
         let mut rb_two = crate::parse(&again.two_ex).unwrap();
         rb_two.sections.push(Section::new(b"PWVC", vec![0; 2], vec![0, 0x50, 0, 0xd7, 1, 0xf4]));
         rb_two.sections.push(Section::new(b"PVDI", vec![0; 12], vec![7]));
-        let kept = author("?/track.wav", &beats, &columns, Existing { ext: Some(&rb_ext), two_ex: Some(&rb_two), ..Existing::default() });
+        let kept = author(
+            "?/track.wav",
+            &beats,
+            &columns,
+            Existing { ext: Some(&rb_ext), two_ex: Some(&rb_two), ..Existing::default() },
+        );
         assert_eq!(tags(&kept.ext), ["PPTH", "PWV3", "PCOB", "PCOB", "PCO2", "PCO2", "PWV5", "PWV4", "PSSI"]);
         assert_eq!(tags(&kept.two_ex), ["PPTH", "PWV7", "PWV6", "PWVC", "PVDI"]);
 

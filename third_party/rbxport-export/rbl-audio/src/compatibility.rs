@@ -7,9 +7,8 @@ use std::path::Path;
 use symphonia::core::{
     audio::SampleBuffer,
     codecs::{
-        DecoderOptions, CODEC_TYPE_FLAC, CODEC_TYPE_MP3, CODEC_TYPE_PCM_F32LE,
-        CODEC_TYPE_PCM_S16BE, CODEC_TYPE_PCM_S16LE, CODEC_TYPE_PCM_S24BE, CODEC_TYPE_PCM_S24LE,
-        CODEC_TYPE_PCM_S32LE,
+        DecoderOptions, CODEC_TYPE_FLAC, CODEC_TYPE_MP3, CODEC_TYPE_PCM_F32LE, CODEC_TYPE_PCM_S16BE,
+        CODEC_TYPE_PCM_S16LE, CODEC_TYPE_PCM_S24BE, CODEC_TYPE_PCM_S24LE, CODEC_TYPE_PCM_S32LE,
     },
     formats::FormatOptions,
     io::{MediaSourceStream, MediaSourceStreamOptions},
@@ -52,10 +51,7 @@ fn error(e: impl std::fmt::Display) -> AudioError {
     AudioError::Unsupported(e.to_string())
 }
 fn open(path: &Path) -> Result<Box<dyn symphonia::core::formats::FormatReader>> {
-    let stream = MediaSourceStream::new(
-        Box::new(File::open(path)?),
-        MediaSourceStreamOptions::default(),
-    );
+    let stream = MediaSourceStream::new(Box::new(File::open(path)?), MediaSourceStreamOptions::default());
     let mut hint = Hint::new();
     if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
         hint.with_extension(ext);
@@ -64,10 +60,7 @@ fn open(path: &Path) -> Result<Box<dyn symphonia::core::formats::FormatReader>> 
         .format(
             &hint,
             stream,
-            &FormatOptions {
-                enable_gapless: true,
-                ..Default::default()
-            },
+            &FormatOptions { enable_gapless: true, ..Default::default() },
             &MetadataOptions::default(),
         )
         .map_err(error)?
@@ -94,22 +87,22 @@ pub fn inspect(path: &Path) -> Result<AudioProperties> {
     let format = open(path)?;
     let track = format.default_track().ok_or(AudioError::NoTrack)?;
     let p = &track.codec_params;
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_ascii_lowercase();
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     let codec_ok = match ext.as_str() {
         "mp3" => p.codec == CODEC_TYPE_MP3,
         "wav" => p.codec == CODEC_TYPE_PCM_S16LE || p.codec == CODEC_TYPE_PCM_S24LE,
         "aif" | "aiff" => p.codec == CODEC_TYPE_PCM_S16BE || p.codec == CODEC_TYPE_PCM_S24BE,
         _ => false,
     };
-    Ok(AudioProperties { compatible: codec_ok
-        && matches!(p.sample_rate, Some(44_100 | 48_000))
-        && p.channels.is_some_and(|c| matches!(c.count(), 1 | 2)),
-        sample_rate: p.sample_rate, bit_depth: p.bits_per_sample,
-        channels: p.channels.and_then(|c| u32::try_from(c.count()).ok()), frames: p.n_frames })
+    Ok(AudioProperties {
+        compatible: codec_ok
+            && matches!(p.sample_rate, Some(44_100 | 48_000))
+            && p.channels.is_some_and(|c| matches!(c.count(), 1 | 2)),
+        sample_rate: p.sample_rate,
+        bit_depth: p.bits_per_sample,
+        channels: p.channels.and_then(|c| u32::try_from(c.count()).ok()),
+        frames: p.n_frames,
+    })
 }
 
 struct Output {
@@ -144,13 +137,7 @@ impl Output {
             file.write_all(&vec![0; header])?;
             None
         };
-        Ok(Self {
-            file,
-            format,
-            encoder,
-            bytes: Vec::with_capacity(16384),
-            frames: 0,
-        })
+        Ok(Self { file, format, encoder, bytes: Vec::with_capacity(16384), frames: 0 })
     }
     fn write(&mut self, left: &[f32], right: &[f32]) -> Result<()> {
         self.bytes.clear();
@@ -170,9 +157,7 @@ impl Output {
             }
             for (&l, &r) in left.iter().zip(right) {
                 for sample in [l, r] {
-                    let pcm = (sample.clamp(-1.0, 1.0) * 32768.0)
-                        .round()
-                        .clamp(-32768.0, 32767.0) as i16;
+                    let pcm = (sample.clamp(-1.0, 1.0) * 32768.0).round().clamp(-32768.0, 32767.0) as i16;
                     let bytes = match self.format {
                         Format::Aiff => pcm.to_be_bytes(),
                         Format::Wav | Format::Mp3 => pcm.to_le_bytes(),
@@ -247,47 +232,39 @@ impl Output {
 /// Decode in bounded packets, resample with an anti-aliasing filter, and
 /// encode to a new staging file. Any decode failure aborts publication.
 /// Mono is duplicated to stereo; unsupported surround layouts are refused.
-#[allow(
-    clippy::too_many_lines,
-    reason = "linear streaming decode and resample loop"
-)]
+#[allow(clippy::too_many_lines, reason = "linear streaming decode and resample loop")]
 pub fn convert(source: &Path, destination: &Path, target: Format) -> Result<u64> {
     convert_observed(source, destination, target, &mut |_, _| true)
 }
 
 /// Progress is decoded milliseconds; false cancels between audio packets.
 #[allow(clippy::too_many_lines, reason = "linear streaming decode and resample loop")]
-pub fn convert_observed(source: &Path, destination: &Path, target: Format, progress: &mut dyn FnMut(u64, Option<u64>) -> bool) -> Result<u64> {
+pub fn convert_observed(
+    source: &Path,
+    destination: &Path,
+    target: Format,
+    progress: &mut dyn FnMut(u64, Option<u64>) -> bool,
+) -> Result<u64> {
     let mut format = open(source)?;
     let track = format.default_track().ok_or(AudioError::NoTrack)?;
     let track_id = track.id;
     let params = &track.codec_params;
     let expected_frames = if matches!(
         params.codec,
-        CODEC_TYPE_FLAC
-            | CODEC_TYPE_PCM_S16LE
-            | CODEC_TYPE_PCM_S24LE
-            | CODEC_TYPE_PCM_S32LE
-            | CODEC_TYPE_PCM_F32LE
+        CODEC_TYPE_FLAC | CODEC_TYPE_PCM_S16LE | CODEC_TYPE_PCM_S24LE | CODEC_TYPE_PCM_S32LE | CODEC_TYPE_PCM_F32LE
     ) {
         params.n_frames
     } else {
         None
     };
-    let rate = params
-        .sample_rate
-        .ok_or_else(|| error("unknown sample rate"))?;
+    let rate = params.sample_rate.ok_or_else(|| error("unknown sample rate"))?;
     // Some containers (AAC in MP4) do not declare the layout up front; it is
     // then taken from the first decoded packet.
-    let mut channels = params
-        .channels
-        .map(symphonia::core::audio::Channels::count);
+    let mut channels = params.channels.map(symphonia::core::audio::Channels::count);
     if rate == 0 {
         return Err(error("unknown sample rate"));
     }
-    let mut decoder = symphonia::default::get_codecs()
-        .make(params, &DecoderOptions::default())
-        .map_err(error)?;
+    let mut decoder = symphonia::default::get_codecs().make(params, &DecoderOptions::default()).map_err(error)?;
     let mut output = Output::new(destination, target)?;
     let mut resampler = if rate == RATE {
         None
@@ -303,11 +280,7 @@ pub fn convert_observed(source: &Path, destination: &Path, target: Format, progr
         }
         let packet = match format.next_packet() {
             Ok(p) => p,
-            Err(symphonia::core::errors::Error::IoError(e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
-                break
-            }
+            Err(symphonia::core::errors::Error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
             Err(e) => return Err(error(e)),
         };
         if packet.track_id() != track_id {
@@ -317,9 +290,7 @@ pub fn convert_observed(source: &Path, destination: &Path, target: Format, progr
         let frame_channels = audio.spec().channels.count();
         let channels = *channels.get_or_insert(frame_channels);
         if !matches!(channels, 1 | 2) {
-            return Err(error(
-                "compatibility conversion requires mono or stereo audio",
-            ));
+            return Err(error("compatibility conversion requires mono or stereo audio"));
         }
         if audio.spec().rate != rate || frame_channels != channels {
             return Err(error("audio format changed mid-track"));
@@ -335,12 +306,7 @@ pub fn convert_observed(source: &Path, destination: &Path, target: Format, progr
             while pending[0].len() >= CHUNK {
                 let input = [&pending[0][..CHUNK], &pending[1][..CHUNK]];
                 let converted = resampler.process(&input, None).map_err(error)?;
-                emit(
-                    &mut output,
-                    &converted,
-                    &mut delay,
-                    input_frames * u64::from(RATE) / u64::from(rate),
-                )?;
+                emit(&mut output, &converted, &mut delay, input_frames * u64::from(RATE) / u64::from(rate))?;
                 for channel in &mut pending {
                     channel.drain(..CHUNK);
                 }
@@ -370,19 +336,11 @@ pub fn convert_observed(source: &Path, destination: &Path, target: Format, progr
     }
     output.finish()
 }
-fn emit(
-    output: &mut Output,
-    samples: &[Vec<f32>],
-    delay: &mut usize,
-    target_frames: u64,
-) -> Result<()> {
+fn emit(output: &mut Output, samples: &[Vec<f32>], delay: &mut usize, target_frames: u64) -> Result<()> {
     let skip = (*delay).min(samples[0].len());
     *delay -= skip;
     let count = (samples[0].len() - skip).min(target_frames.saturating_sub(output.frames) as usize);
-    output.write(
-        &samples[0][skip..skip + count],
-        &samples[1][skip..skip + count],
-    )
+    output.write(&samples[0][skip..skip + count], &samples[1][skip..skip + count])
 }
 
 #[cfg(test)]

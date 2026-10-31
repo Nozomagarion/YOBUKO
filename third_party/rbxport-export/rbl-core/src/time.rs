@@ -15,12 +15,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub fn format_utc(unix_seconds: i64, millis: u32) -> String {
     let (year, month, day) = civil_from_days(unix_seconds.div_euclid(86_400));
     let secs_of_day = unix_seconds.rem_euclid(86_400);
-    let (hour, minute, second) =
-        (secs_of_day / 3600, (secs_of_day % 3600) / 60, secs_of_day % 60);
-    format!(
-        "{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}.{:03} +00:00",
-        millis.min(999)
-    )
+    let (hour, minute, second) = (secs_of_day / 3600, (secs_of_day % 3600) / 60, secs_of_day % 60);
+    format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}.{:03} +00:00", millis.min(999))
 }
 
 /// The current moment, formatted for the database.

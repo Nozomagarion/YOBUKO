@@ -20,8 +20,7 @@ const BLOB: &str = "PN_1dH8$oLJY)16j_RvM6qphWw`476>;C1cWmI#se(PG`j}~xAjlufj?`#0i
 const XOR_KEY: &[u8] = b"657f48f84c437cc1";
 
 /// RFC 1924 base85, which is not the same alphabet as Ascii85.
-const ALPHABET: &[u8; 85] =
-    b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
+const ALPHABET: &[u8; 85] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
 
 /// Every derived passphrase starts with this. A cheap check that the constants
 /// above are intact.
@@ -49,9 +48,7 @@ pub fn passphrase() -> Result<String, KeyError> {
         .collect();
 
     let mut inflated = Vec::new();
-    ZlibDecoder::new(xored.as_slice())
-        .read_to_end(&mut inflated)
-        .map_err(|e| KeyError::Inflate(e.to_string()))?;
+    ZlibDecoder::new(xored.as_slice()).read_to_end(&mut inflated).map_err(|e| KeyError::Inflate(e.to_string()))?;
 
     let key = String::from_utf8(inflated).map_err(|_| KeyError::NotText)?;
     if !key.starts_with(EXPECTED_PREFIX) {
@@ -68,10 +65,8 @@ fn base85_decode(text: &str) -> Result<Vec<u8>, KeyError> {
     for group in chars.chunks(5) {
         let mut value: u64 = 0;
         for character in group {
-            let digit = ALPHABET
-                .iter()
-                .position(|c| char::from(*c) == *character)
-                .ok_or(KeyError::Alphabet(*character))?;
+            let digit =
+                ALPHABET.iter().position(|c| char::from(*c) == *character).ok_or(KeyError::Alphabet(*character))?;
             value = value * 85 + digit as u64;
         }
         let bytes = [

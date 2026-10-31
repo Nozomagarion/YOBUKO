@@ -12,8 +12,8 @@ use std::path::Path;
 use crate::manifest::{track_key, Manifest};
 use crate::snapshot::Snapshot;
 use crate::{
-    in_place_paths, owns_library_file, path_key, previous_in_place, source_stamp, under,
-    CompatibilityFormat, SourceTrack,
+    in_place_paths, owns_library_file, path_key, previous_in_place, source_stamp, under, CompatibilityFormat,
+    SourceTrack,
 };
 
 /// The space a sync would use and give back on one stick.
@@ -40,14 +40,23 @@ pub struct Estimate {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AudioAction { Reuse, Adopt, InPlace, Copy, Convert, Missing }
+pub enum AudioAction {
+    Reuse,
+    Adopt,
+    InPlace,
+    Copy,
+    Convert,
+    Missing,
+}
 
 /// The audio path of each library track the stick's database already holds
 /// for library `db_id`, by library id: the first device row naming it, as a
 /// sync ties them. Empty for no library (`db_id` 0), or when the stick's
 /// database cannot be read; the sync itself says why.
 fn held_copies(destination: &Path, db_id: u64) -> BTreeMap<u64, String> {
-    if db_id == 0 { return BTreeMap::new(); }
+    if db_id == 0 {
+        return BTreeMap::new();
+    }
     let Ok(snapshot) = Snapshot::read(destination) else { return BTreeMap::new() };
     held_copies_from(&snapshot, db_id)
 }
@@ -57,7 +66,9 @@ fn held_copies_from(snapshot: &Snapshot, db_id: u64) -> BTreeMap<u64, String> {
     let paths: BTreeMap<u32, &str> = library.tracks.iter().map(|t| (t.id, t.path.as_str())).collect();
     let mut held = BTreeMap::new();
     for (device, (db, content)) in &snapshot.identity {
-        if *db != db_id || *content == 0 { continue; }
+        if *db != db_id || *content == 0 {
+            continue;
+        }
         if let Some(path) = paths.get(device).filter(|p| !p.is_empty()) {
             held.entry(*content).or_insert_with(|| (*path).to_owned());
         }
@@ -78,8 +89,13 @@ pub fn estimate(
 }
 
 pub(crate) fn estimate_inspected(
-    destination: &Path, db_id: u64, tracks: &[SourceTrack], delete_unlisted_music: bool,
-    compatibility: Option<CompatibilityFormat>, snapshot: Option<&Snapshot>, cache: Option<&crate::cache::PreparationCache>,
+    destination: &Path,
+    db_id: u64,
+    tracks: &[SourceTrack],
+    delete_unlisted_music: bool,
+    compatibility: Option<CompatibilityFormat>,
+    snapshot: Option<&Snapshot>,
+    cache: Option<&crate::cache::PreparationCache>,
 ) -> Estimate {
     let previous = Manifest::load(destination).filter(|m| m.db_id == db_id);
     let previous_place = previous_in_place(destination, previous.as_ref());
@@ -113,12 +129,19 @@ pub(crate) fn estimate_inspected(
         let conversion = compatibility
             .filter(|_| !track.device.as_ref().is_some_and(|d| d.preserve))
             .map(CompatibilityFormat::audio)
-            .filter(|_| cache.map_or_else(|| rbl_audio::compatibility::needs_conversion(&track.source_path).unwrap_or(false), |cache| cache.needs_conversion(&track.source_path).unwrap_or(false)));
+            .filter(|_| {
+                cache.map_or_else(
+                    || rbl_audio::compatibility::needs_conversion(&track.source_path).unwrap_or(false),
+                    |cache| cache.needs_conversion(&track.source_path).unwrap_or(false),
+                )
+            });
         let profile = conversion.map_or("", rbl_audio::compatibility::Format::profile);
         let carried = recorded.get(&key).copied();
         // The stick's own copy of a track another writer exported from this
         // library, which the sync keeps as it is (`adopted_paths`).
-        let adopted = carried.is_none() && conversion.is_none() && track.id != 0
+        let adopted = carried.is_none()
+            && conversion.is_none()
+            && track.id != 0
             && held.get(&track.id).is_some_and(|audio| {
                 std::fs::metadata(under(destination, audio)).is_ok_and(|m| m.is_file() && m.len() == size)
                     && claimed.insert(path_key(audio))
@@ -131,10 +154,15 @@ pub(crate) fn estimate_inspected(
             continue;
         }
         let unchanged = carried.is_some_and(|c| {
-            !c.in_place && c.size == size && c.modified == modified && c.conversion == profile
+            !c.in_place
+                && c.size == size
+                && c.modified == modified
+                && c.conversion == profile
                 && crate::copy_stamp(&under(destination, &c.audio)).is_ok_and(|now| crate::same_copy(c.copy_stamp, now))
                 && previous.as_ref().and_then(|m| m.generation.as_ref()).is_none_or(|g| {
-                    g.inputs.get(&track.source_path.to_string_lossy().into_owned()).is_none_or(|old| crate::incremental::revision(&track.source_path).is_ok_and(|now| now == *old))
+                    g.inputs
+                        .get(&track.source_path.to_string_lossy().into_owned())
+                        .is_none_or(|old| crate::incremental::revision(&track.source_path).is_ok_and(|now| now == *old))
                 })
         });
         if unchanged {
@@ -149,13 +177,20 @@ pub(crate) fn estimate_inspected(
             result.tracks_new += 1;
         }
         result.copy_bytes += conversion.map_or(size, |target| {
-            if let Some(size) = cache.and_then(|cache| cache.converted_size(&track.source_path, target)) { return size; }
-            let duration = cache.and_then(|cache| cache.properties(&track.source_path).ok())
+            if let Some(size) = cache.and_then(|cache| cache.converted_size(&track.source_path, target)) {
+                return size;
+            }
+            let duration = cache
+                .and_then(|cache| cache.properties(&track.source_path).ok())
                 .and_then(|p| p.frames.zip(p.sample_rate.filter(|rate| *rate > 0)))
                 .map_or(u64::from(track.duration_sec), |(frames, rate)| frames.div_ceil(u64::from(rate)));
             match target {
-                rbl_audio::compatibility::Format::Wav | rbl_audio::compatibility::Format::Aiff => duration.saturating_add(1).saturating_mul(44_100 * 4).saturating_add(4096),
-                rbl_audio::compatibility::Format::Mp3 => duration.saturating_add(1).saturating_mul(40_000).saturating_add(8192),
+                rbl_audio::compatibility::Format::Wav | rbl_audio::compatibility::Format::Aiff => {
+                    duration.saturating_add(1).saturating_mul(44_100 * 4).saturating_add(4096)
+                }
+                rbl_audio::compatibility::Format::Mp3 => {
+                    duration.saturating_add(1).saturating_mul(40_000).saturating_add(8192)
+                }
             }
         });
         result.actions.insert(key, if conversion.is_some() { AudioAction::Convert } else { AudioAction::Copy });
@@ -167,8 +202,12 @@ pub(crate) fn estimate_inspected(
         for entry in manifest.tracks.iter().filter(|t| !seen.contains(&t.key())) {
             // The library's own files are never the sync's to delete, and a
             // track put on the stick on its own stays unless cleanup is on.
-            if owns_library_file(destination, entry) { continue; }
-            if !delete_unlisted_music && loose.contains(&entry.library_id) { continue; }
+            if owns_library_file(destination, entry) {
+                continue;
+            }
+            if !delete_unlisted_music && loose.contains(&entry.library_id) {
+                continue;
+            }
             result.tracks_removed += 1;
             let on_disk = std::fs::metadata(under(destination, &entry.audio)).map_or(entry.size, |m| m.len());
             result.free_bytes += on_disk;

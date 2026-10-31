@@ -144,7 +144,10 @@ impl Copies {
         // F_FULLFSYNC: `durable::flush` falls back to fsync there.
         rbl_core::durable::flush(temp.as_file())?;
         if !same_bytes(source, temp.path())? {
-            return Err(std::io::Error::other(format!("the copy of {} did not match the device's file", source.display())));
+            return Err(std::io::Error::other(format!(
+                "the copy of {} did not match the device's file",
+                source.display()
+            )));
         }
         let target = (0..10_000_u32)
             .map(|n| if n == 0 { parent.join(&name) } else { parent.join(numbered(&name, n)) })

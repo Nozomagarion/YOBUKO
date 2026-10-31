@@ -157,8 +157,12 @@ impl Manifest {
     pub fn load(destination: &Path) -> Option<Self> {
         let bytes = std::fs::read(Self::path(destination)).ok()?;
         let mut manifest: Self = serde_json::from_slice(&bytes).ok()?;
-        if manifest.version == 1 || manifest.tracks.iter().any(|t| !t.in_place && t.preserved != Some(true) && t.copy_stamp.is_none())
-            || manifest.generation.as_ref().is_some_and(|g| !crate::incremental::manifest_structure(&manifest).is_ok_and(|hash| hash == g.structure)) {
+        if manifest.version == 1
+            || manifest.tracks.iter().any(|t| !t.in_place && t.preserved != Some(true) && t.copy_stamp.is_none())
+            || manifest.generation.as_ref().is_some_and(|g| {
+                !crate::incremental::manifest_structure(&manifest).is_ok_and(|hash| hash == g.structure)
+            })
+        {
             manifest.generation = None;
         }
         (matches!(manifest.version, 1 | MANIFEST_VERSION)).then_some(manifest)
@@ -176,8 +180,8 @@ impl Manifest {
         if let Some(parent) = path.parent() {
             rbl_core::durable::create_dir_all(parent)?;
         }
-        let bytes = serde_json::to_vec_pretty(self)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let bytes =
+            serde_json::to_vec_pretty(self).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
         rbl_core::durable::write(&path, &bytes)?;
         Ok(())
     }
@@ -229,7 +233,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let manifest = Manifest {
             generation: None,
-            db_id: 0, baseline: None,
+            db_id: 0,
+            baseline: None,
             version: MANIFEST_VERSION,
             written: "2026-09-08 00:00:00.000 +00:00".to_owned(),
             tracks: vec![ManifestTrack {
@@ -251,7 +256,14 @@ mod tests {
                 preserved: Some(false),
                 copy_stamp: Some((1234, 1_789_000_000_000_000_000)),
             }],
-            playlists: vec![ManifestPlaylist { device_only: false, export_id: 1, folder: false, library_id: 9, name: "Set".to_owned(), library_entries: Some(vec!["#42".to_owned()]) }],
+            playlists: vec![ManifestPlaylist {
+                device_only: false,
+                export_id: 1,
+                folder: false,
+                library_id: 9,
+                name: "Set".to_owned(),
+                library_entries: Some(vec!["#42".to_owned()]),
+            }],
             loose: vec![42],
         };
         manifest.save(dir.path()).unwrap();

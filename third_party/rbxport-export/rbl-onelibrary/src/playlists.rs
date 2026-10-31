@@ -40,7 +40,13 @@ pub fn read(conn: &Connection) -> Result<Playlists> {
     )?;
     let rows = statement
         .query_map([], |r| {
-            Ok(PlaylistRow { id: r.get(0)?, parent: r.get(1)?, name: r.get(2)?, attribute: r.get(3)?, sequence: r.get(4)? })
+            Ok(PlaylistRow {
+                id: r.get(0)?,
+                parent: r.get(1)?,
+                name: r.get(2)?,
+                attribute: r.get(3)?,
+                sequence: r.get(4)?,
+            })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let mut statement =

@@ -104,11 +104,7 @@ impl Snapshot {
         // Merge histories by full session contents. Equal numeric IDs alone
         // are insufficient when the stick was used by both generations of player.
         for legacy in &out.legacy_history {
-            if out
-                .history
-                .iter()
-                .any(|h| h.name == legacy.name && h.tracks == legacy.tracks)
-            {
+            if out.history.iter().any(|h| h.name == legacy.name && h.tracks == legacy.tracks) {
                 continue;
             }
             let mut h = legacy.clone();
@@ -184,17 +180,11 @@ impl Snapshot {
         }
         if let Some(previous) = previous {
             if let Some(baseline) = &previous.baseline {
-                if self
-                    .identity
-                    .iter()
-                    .any(|(id, owner)| baseline.identity.get(id).is_some_and(|old| old != owner))
-                {
+                if self.identity.iter().any(|(id, owner)| baseline.identity.get(id).is_some_and(|old| old != owner)) {
                     return Err(ExportError::Conflict("rekordbox changed the device track identities. Reconcile this device before reusing its previous selection.".into()));
                 }
             }
-            if previous.db_id != db_id
-                && (!previous.tracks.is_empty() || !previous.playlists.is_empty())
-            {
+            if previous.db_id != db_id && (!previous.tracks.is_empty() || !previous.playlists.is_empty()) {
                 return Err(ExportError::Conflict("This USB belongs to a different or older unverified master library. Import its contents in rekordbox before changing its ownership.".into()));
             }
         }
@@ -207,23 +197,24 @@ impl Snapshot {
     /// [`Self::check_changes`], leaving out the playlists, by device id,
     /// that the sync rewrites on purpose although the stick added entries
     /// to them (`reconcile::Prepared::device_additions`, #429).
-    pub fn check_changes_except(&self, previous: Option<&Manifest>, next: &Self, device_additions: &BTreeSet<u32>) -> Result<()> {
+    pub fn check_changes_except(
+        &self,
+        previous: Option<&Manifest>,
+        next: &Self,
+        device_additions: &BTreeSet<u32>,
+    ) -> Result<()> {
         for (label, current, target, baseline) in [
             (
                 "Device Library",
                 &self.legacy,
                 &next.legacy,
-                previous
-                    .and_then(|m| m.baseline.as_ref())
-                    .and_then(|s| s.legacy.as_ref()),
+                previous.and_then(|m| m.baseline.as_ref()).and_then(|s| s.legacy.as_ref()),
             ),
             (
                 "OneLibrary",
                 &self.one,
                 &next.one,
-                previous
-                    .and_then(|m| m.baseline.as_ref())
-                    .and_then(|s| s.one.as_ref()),
+                previous.and_then(|m| m.baseline.as_ref()).and_then(|s| s.one.as_ref()),
             ),
         ] {
             if let Some(current) = current {
@@ -235,26 +226,15 @@ impl Snapshot {
         }
         if let Some(baseline) = previous.and_then(|m| m.baseline.as_ref()) {
             for tag in &self.my_tags {
-                if baseline
-                    .my_tags
-                    .iter()
-                    .find(|t| t.id == tag.id)
-                    .is_some_and(|old| old != tag)
+                if baseline.my_tags.iter().find(|t| t.id == tag.id).is_some_and(|old| old != tag)
                     && !next.my_tags.contains(tag)
                 {
-                    return Err(ExportError::Conflict(format!(
-                        "My Tag '{name}' changed on the USB",
-                        name = tag.name
-                    )));
+                    return Err(ExportError::Conflict(format!("My Tag '{name}' changed on the USB", name = tag.name)));
                 }
             }
             for (id, tags) in &self.tag_memberships {
-                if baseline.tag_memberships.get(id) != Some(tags)
-                    && next.tag_memberships.get(id) != Some(tags)
-                {
-                    return Err(ExportError::Conflict(format!(
-                        "My Tags changed on USB track {id}"
-                    )));
+                if baseline.tag_memberships.get(id) != Some(tags) && next.tag_memberships.get(id) != Some(tags) {
+                    return Err(ExportError::Conflict(format!("My Tags changed on USB track {id}")));
                 }
             }
         }
@@ -275,25 +255,30 @@ impl Snapshot {
     /// record changing: neither rbx's import nor rekordbox's touches it, so
     /// the message names the track and asks to keep it or delete it on
     /// purpose.
-    pub fn check_removed_cues(&self, previous: Option<&Manifest>, kept: &BTreeSet<u32>, written: &[String]) -> Result<()> {
+    pub fn check_removed_cues(
+        &self,
+        previous: Option<&Manifest>,
+        kept: &BTreeSet<u32>,
+        written: &[String],
+    ) -> Result<()> {
         let Some(baseline) = previous.and_then(|m| m.baseline.as_ref()) else { return Ok(()) };
         // A row of an unknown shape cannot be placed on a kept track, so it
         // counts as lost.
-        let lost = self.cues.iter().filter(|row| !baseline.cues.contains(row) && !written.contains(row))
+        let lost = self
+            .cues
+            .iter()
+            .filter(|row| !baseline.cues.contains(row) && !written.contains(row))
             .map(|row| cue_content(row))
             .find(|id| !id.is_some_and(|id| kept.contains(&id)));
         let Some(id) = lost else { return Ok(()) };
-        let title = id.and_then(|id| self.one.iter().flat_map(|l| &l.tracks).find(|t| t.id == id))
+        let title = id
+            .and_then(|id| self.one.iter().flat_map(|l| &l.tracks).find(|t| t.id == id))
             .map_or_else(|| format!("USB track {}", id.unwrap_or_default()), |t| t.title.clone());
         Err(ExportError::Conflict(format!("'{title}' has cue points added or changed on a player, and this sync would take it off the USB. Keep a playlist that holds it in the sync, or delete the track from the USB in rekordbox, then sync again.")))
     }
     pub fn check_retained_history(&self, next: &Self) -> Result<()> {
         let tracks = next.one.as_ref().map(|l| &l.tracks);
-        if self
-            .history
-            .iter()
-            .flat_map(|h| &h.tracks)
-            .any(|id| !tracks.is_some_and(|t| t.iter().any(|t| t.id == *id)))
+        if self.history.iter().flat_map(|h| &h.tracks).any(|id| !tracks.is_some_and(|t| t.iter().any(|t| t.id == *id)))
         {
             return Err(ExportError::Conflict("A track being removed is still referenced by USB history. Import and clear that history in rekordbox first.".into()));
         }
@@ -397,13 +382,19 @@ pub(crate) fn legacy_playlist_ids(legacy: &Library, one: &Library, floor: u32) -
 }
 
 /// Explicit pairs have already been checked against both sync records and trees.
-pub(crate) fn legacy_playlist_ids_with(legacy: &Library, one: &Library, floor: u32, pairs: &BTreeMap<u32, u32>) -> BTreeMap<u32, u32> {
+pub(crate) fn legacy_playlist_ids_with(
+    legacy: &Library,
+    one: &Library,
+    floor: u32,
+    pairs: &BTreeMap<u32, u32>,
+) -> BTreeMap<u32, u32> {
     let same = |a: &Playlist, b: &Playlist| a.name == b.name && a.folder == b.folder;
     let by_id: BTreeMap<u32, &Playlist> = one.playlists.iter().map(|p| (p.id, p)).collect();
     let mut ids = pairs.clone();
     let mut claimed: BTreeSet<u32> = pairs.values().copied().collect();
     for p in &legacy.playlists {
-        if !ids.contains_key(&p.id) && !claimed.contains(&p.id) && by_id.get(&p.id).is_some_and(|other| same(p, other)) {
+        if !ids.contains_key(&p.id) && !claimed.contains(&p.id) && by_id.get(&p.id).is_some_and(|other| same(p, other))
+        {
             ids.insert(p.id, p.id);
             claimed.insert(p.id);
         }
@@ -463,31 +454,16 @@ pub(crate) fn legacy_playlist_ids_with(legacy: &Library, one: &Library, floor: u
 fn read_legacy_into(out: &mut Snapshot, pdb: &Path) -> Result<()> {
     use rbl_pdb::PageType;
     let bytes = std::fs::read(pdb)?;
-    let parsed = rbl_pdb::Pdb::parse(&bytes)
-        .map_err(|e| ExportError::Conflict(format!("Cannot read Device Library: {e}")))?;
+    let parsed =
+        rbl_pdb::Pdb::parse(&bytes).map_err(|e| ExportError::Conflict(format!("Cannot read Device Library: {e}")))?;
     out.legacy_background = parsed.property().map_or(0, |p| p.background_color);
-    let tracks = parsed
-        .table(PageType::Tracks)
-        .map(|t| parsed.track_rows(t))
-        .unwrap_or_default();
-    let entries = parsed
-        .table(PageType::PlaylistEntries)
-        .map(|t| parsed.playlist_entries(t))
-        .unwrap_or_default();
-    let nodes = parsed
-        .table(PageType::PlaylistTree)
-        .map(|t| parsed.playlist_nodes(t))
-        .unwrap_or_default();
+    let tracks = parsed.table(PageType::Tracks).map(|t| parsed.track_rows(t)).unwrap_or_default();
+    let entries = parsed.table(PageType::PlaylistEntries).map(|t| parsed.playlist_entries(t)).unwrap_or_default();
+    let nodes = parsed.table(PageType::PlaylistTree).map(|t| parsed.playlist_nodes(t)).unwrap_or_default();
     let names = |kind| -> BTreeMap<u32, String> {
         parsed
             .table(kind)
-            .map(|t| {
-                parsed
-                    .named_rows(t)
-                    .into_iter()
-                    .map(|n| (n.id, n.name))
-                    .collect()
-            })
+            .map(|t| parsed.named_rows(t).into_iter().map(|n| (n.id, n.name)).collect())
             .unwrap_or_default()
     };
     let artists = names(PageType::Artists);
@@ -517,8 +493,7 @@ fn read_legacy_into(out: &mut Snapshot, pdb: &Path) -> Result<()> {
         playlists: nodes
             .into_iter()
             .map(|n| {
-                let mut rows: Vec<_> =
-                    entries.iter().filter(|e| e.playlist_id == n.id).collect();
+                let mut rows: Vec<_> = entries.iter().filter(|e| e.playlist_id == n.id).collect();
                 rows.sort_by_key(|e| e.entry_index);
                 Playlist {
                     id: n.id,
@@ -553,17 +528,11 @@ fn read_one_into(out: &mut Snapshot, path: &Path) -> Result<()> {
     let db = rbl_onelibrary::ExportLibrary::open_read_only(path).map_err(sql)?;
     let conn = db.connection();
     conn.execute_batch("BEGIN").map_err(sql)?;
-    let integrity: String = conn
-        .query_row("PRAGMA quick_check", [], |r| r.get(0))
-        .map_err(sql)?;
+    let integrity: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0)).map_err(sql)?;
     if integrity != "ok" {
-        return Err(ExportError::Conflict(format!(
-            "OneLibrary integrity check failed: {integrity}",
-        )));
+        return Err(ExportError::Conflict(format!("OneLibrary integrity check failed: {integrity}",)));
     }
-    let version: String = conn
-        .query_row("SELECT dbVersion FROM property LIMIT 1", [], |r| r.get(0))
-        .map_err(sql)?;
+    let version: String = conn.query_row("SELECT dbVersion FROM property LIMIT 1", [], |r| r.get(0)).map_err(sql)?;
     if version != rbl_onelibrary::build::DB_VERSION {
         return Err(ExportError::Conflict(format!(
             "Unsupported OneLibrary schema {version}; the device was left unchanged."
@@ -596,10 +565,7 @@ fn read_one_library(db: &rbl_onelibrary::ExportLibrary, out: &mut Snapshot) -> R
                     color: r.get(6)?,
                     comment: r.get(7)?,
                 },
-                (
-                    u64::try_from(r.get::<_, i64>(8)?).unwrap_or(0),
-                    u64::try_from(r.get::<_, i64>(9)?).unwrap_or(0),
-                ),
+                (u64::try_from(r.get::<_, i64>(8)?).unwrap_or(0), u64::try_from(r.get::<_, i64>(9)?).unwrap_or(0)),
             ))
         })
         .map_err(sql)?;
@@ -624,12 +590,11 @@ fn read_one_library(db: &rbl_onelibrary::ExportLibrary, out: &mut Snapshot) -> R
         .map_err(sql)?;
     for node in nodes {
         let mut node = node.map_err(sql)?;
-        let mut q = conn.prepare("SELECT content_id FROM playlist_content WHERE playlist_id=?1 ORDER BY sequenceNo").map_err(sql)?;
-        node.tracks = q
-            .query_map([node.id], |r| r.get(0))
-            .map_err(sql)?
-            .collect::<std::result::Result<_, _>>()
+        let mut q = conn
+            .prepare("SELECT content_id FROM playlist_content WHERE playlist_id=?1 ORDER BY sequenceNo")
             .map_err(sql)?;
+        node.tracks =
+            q.query_map([node.id], |r| r.get(0)).map_err(sql)?.collect::<std::result::Result<_, _>>().map_err(sql)?;
         library.playlists.push(node);
     }
     library.normalize();
@@ -656,12 +621,11 @@ fn read_one_history_and_tags(db: &rbl_onelibrary::ExportLibrary, out: &mut Snaps
         .map_err(sql)?;
     for h in histories {
         let mut h = h.map_err(sql)?;
-        let mut q = conn.prepare("SELECT content_id FROM history_content WHERE history_id=?1 ORDER BY sequenceNo").map_err(sql)?;
-        h.tracks = q
-            .query_map([h.id], |r| r.get(0))
-            .map_err(sql)?
-            .collect::<std::result::Result<_, _>>()
+        let mut q = conn
+            .prepare("SELECT content_id FROM history_content WHERE history_id=?1 ORDER BY sequenceNo")
             .map_err(sql)?;
+        h.tracks =
+            q.query_map([h.id], |r| r.get(0)).map_err(sql)?.collect::<std::result::Result<_, _>>().map_err(sql)?;
         out.history.push(h);
     }
     let mut tags=conn.prepare("SELECT myTag_id, COALESCE(sequenceNo,0), COALESCE(name,''), COALESCE(attribute,0), COALESCE(myTag_id_parent,0) FROM myTag ORDER BY myTag_id").map_err(sql)?;
@@ -678,27 +642,17 @@ fn read_one_history_and_tags(db: &rbl_onelibrary::ExportLibrary, out: &mut Snaps
         .map_err(sql)?
         .collect::<std::result::Result<_, _>>()
         .map_err(sql)?;
-    let mut tags = conn
-        .prepare(
-            "SELECT content_id, myTag_id FROM myTag_content ORDER BY content_id, myTag_id",
-        )
-        .map_err(sql)?;
+    let mut tags =
+        conn.prepare("SELECT content_id, myTag_id FROM myTag_content ORDER BY content_id, myTag_id").map_err(sql)?;
     for row in tags
-        .query_map([], |r| {
-            Ok((
-                r.get::<_, u32>(0)?,
-                u64::try_from(r.get::<_, i64>(1)?).unwrap_or(0),
-            ))
-        })
+        .query_map([], |r| Ok((r.get::<_, u32>(0)?, u64::try_from(r.get::<_, i64>(1)?).unwrap_or(0))))
         .map_err(sql)?
     {
         let (id, tag) = row.map_err(sql)?;
         out.tag_memberships.entry(id).or_default().push(tag);
     }
     // Preserve a fingerprint of every cue column, including format-specific data.
-    let mut q = conn
-        .prepare("SELECT * FROM cue ORDER BY cue_id")
-        .map_err(sql)?;
+    let mut q = conn.prepare("SELECT * FROM cue ORDER BY cue_id").map_err(sql)?;
     let columns = q.column_count();
     out.cues = q
         .query_map([], |r| {
@@ -726,7 +680,8 @@ fn check_database_changes(
     let originals: BTreeMap<_, _> = baseline.into_iter().flat_map(|b| &b.tracks).map(|t| (t.id, t)).collect();
     let targets: BTreeMap<_, _> = target.tracks.iter().map(|t| (t.id, t)).collect();
     let current_ids: BTreeSet<_> = current.tracks.iter().map(|t| t.id).collect();
-    let original_playlists: BTreeMap<_, _> = baseline.into_iter().flat_map(|b| &b.playlists).map(|p| (p.id, p)).collect();
+    let original_playlists: BTreeMap<_, _> =
+        baseline.into_iter().flat_map(|b| &b.playlists).map(|p| (p.id, p)).collect();
     let target_playlists: BTreeMap<_, _> = target.playlists.iter().map(|p| (p.id, p)).collect();
     let current_playlist_ids: BTreeSet<_> = current.playlists.iter().map(|p| p.id).collect();
     for track in &current.tracks {
@@ -737,7 +692,9 @@ fn check_database_changes(
                 let mut corrected = track.clone();
                 corrected.rating = old.rating;
                 &corrected == old
-            } else { old == track }
+            } else {
+                old == track
+            }
         });
         if original.is_some() && !unchanged && next != Some(track) {
             return Err(ExportError::Conflict(format!(
@@ -757,14 +714,16 @@ fn check_database_changes(
         let next = target_playlists.get(&playlist.id).copied();
         // Position changes caused only by inserting/removing siblings are harmless.
         let same = |a: &Playlist, b: &Playlist| {
-            a.id == b.id
-                && a.parent == b.parent
-                && a.name == b.name
-                && a.folder == b.folder
-                && a.tracks == b.tracks
+            a.id == b.id && a.parent == b.parent && a.name == b.name && a.folder == b.folder && a.tracks == b.tracks
         };
-        if original.is_some_and(|b| !same(b, playlist)) && !next.is_some_and(|n| same(n, playlist)) && !device_additions.contains(&playlist.id) {
-            return Err(ExportError::Conflict(format!("{label}: playlist '{name}' changed on the USB. Import or reconcile it before syncing.", name = playlist.name)));
+        if original.is_some_and(|b| !same(b, playlist))
+            && !next.is_some_and(|n| same(n, playlist))
+            && !device_additions.contains(&playlist.id)
+        {
+            return Err(ExportError::Conflict(format!(
+                "{label}: playlist '{name}' changed on the USB. Import or reconcile it before syncing.",
+                name = playlist.name
+            )));
         }
         if original.is_none() && next.is_none() {
             return Err(ExportError::Conflict(format!(
@@ -775,12 +734,15 @@ fn check_database_changes(
     }
     // A deletion on the device is also an edit; don't silently resurrect it.
     if let Some(baseline) = baseline {
-        if baseline.tracks.iter().any(|t| {
-            !current_ids.contains(&t.id) && targets.contains_key(&t.id)
-        }) || baseline.playlists.iter().any(|p| {
-            !current_playlist_ids.contains(&p.id) && target_playlists.contains_key(&p.id)
-        }) {
-            return Err(ExportError::Conflict(format!("{label} contains device-side deletions. Reconcile them before syncing.")));
+        if baseline.tracks.iter().any(|t| !current_ids.contains(&t.id) && targets.contains_key(&t.id))
+            || baseline
+                .playlists
+                .iter()
+                .any(|p| !current_playlist_ids.contains(&p.id) && target_playlists.contains_key(&p.id))
+        {
+            return Err(ExportError::Conflict(format!(
+                "{label} contains device-side deletions. Reconcile them before syncing."
+            )));
         }
     }
     Ok(())
@@ -808,29 +770,24 @@ fn cue_content(row: &str) -> Option<u32> {
     row.split('|').nth(1)?.strip_prefix("Integer(")?.strip_suffix(')')?.parse().ok()
 }
 pub fn analysis_hash(files: &[(String, Vec<u8>)]) -> u64 {
-    files.iter().fold(0_u64, |h, (e, b)| {
-        h.rotate_left(7) ^ crate::manifest::hash(e.as_bytes()) ^ crate::manifest::hash(b)
-    })
+    files
+        .iter()
+        .fold(0_u64, |h, (e, b)| h.rotate_left(7) ^ crate::manifest::hash(e.as_bytes()) ^ crate::manifest::hash(b))
 }
 
 /// Capture mutable player-side analysis before staging, then check it again
 /// before publication so a late cue edit cannot be overwritten unnoticed.
-pub fn analysis_stamp(root: &Path, snapshot: &Snapshot) -> Result<BTreeMap<String, Option<crate::incremental::FileRevision>>> {
+pub fn analysis_stamp(
+    root: &Path,
+    snapshot: &Snapshot,
+) -> Result<BTreeMap<String, Option<crate::incremental::FileRevision>>> {
     let mut files = BTreeMap::new();
-    for t in snapshot
-        .merged_library()
-        .as_ref()
-        .into_iter()
-        .flat_map(|l| &l.tracks)
-    {
+    for t in snapshot.merged_library().as_ref().into_iter().flat_map(|l| &l.tracks) {
         if t.analysis.is_empty() {
             continue;
         }
         for extension in ["DAT", "EXT", "2EX"] {
-            let relative = Path::new(&t.analysis)
-                .with_extension(extension)
-                .to_string_lossy()
-                .into_owned();
+            let relative = Path::new(&t.analysis).with_extension(extension).to_string_lossy().into_owned();
             let path = crate::checked_under(root, &relative)?;
             let stamp = crate::incremental::revision(&path)?;
             files.insert(relative, stamp);

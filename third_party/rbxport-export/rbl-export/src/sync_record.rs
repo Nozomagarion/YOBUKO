@@ -70,11 +70,17 @@ pub const FILES: [&str; 2] = ["PIONEER/rekordbox/playlists3.sync", "PIONEER/reko
 /// its first-ticked time across syncs, as rekordbox's does.
 #[must_use]
 pub fn render(source: &SyncSource, ticked: &[u64], synced_at_ms: u64, kept: &BTreeMap<u64, u64>) -> Vec<u8> {
-    let device_ids = ticked.iter().enumerate().map(|(i,id)| (*id, u32::try_from(i+1).unwrap_or(0))).collect();
+    let device_ids = ticked.iter().enumerate().map(|(i, id)| (*id, u32::try_from(i + 1).unwrap_or(0))).collect();
     render_with_ids(source, ticked, synced_at_ms, kept, &device_ids)
 }
 
-pub fn render_with_ids(source: &SyncSource, ticked: &[u64], synced_at_ms: u64, kept: &BTreeMap<u64,u64>, device_ids: &BTreeMap<u64,u32>) -> Vec<u8> {
+pub fn render_with_ids(
+    source: &SyncSource,
+    ticked: &[u64],
+    synced_at_ms: u64,
+    kept: &BTreeMap<u64, u64>,
+    device_ids: &BTreeMap<u64, u32>,
+) -> Vec<u8> {
     let by_id: BTreeMap<u64, &SyncNode> = source.tree.iter().map(|node| (node.id, node)).collect();
     // The ticked playlists that the tree knows, and every folder above them.
     let mut folders: BTreeSet<u64> = BTreeSet::new();
@@ -162,7 +168,9 @@ pub struct SyncRecord {
 #[must_use]
 pub fn read(mount: &Path) -> Option<SyncRecord> {
     let root = crate::export_root(mount).join("rekordbox");
-    ["playlists3.sync", "playlists3Plus.sync"].into_iter().find_map(|name| std::fs::read(root.join(name)).ok().and_then(|b| parse(&b)))
+    ["playlists3.sync", "playlists3Plus.sync"]
+        .into_iter()
+        .find_map(|name| std::fs::read(root.join(name)).ok().and_then(|b| parse(&b)))
 }
 
 /// Parses a record's bytes. The file is small and regular enough that
@@ -181,10 +189,15 @@ pub fn parse(bytes: &[u8]) -> Option<SyncRecord> {
     let mut timestamps = BTreeMap::new();
     for node in text.split("<NODE ").skip(1) {
         let node = &node[..node.find('>').unwrap_or(node.len())];
-        if let (Some(id), Some(device)) = (attribute(node, "Id").and_then(|s| u64::from_str_radix(s,16).ok()), attribute(node, "Dev_ID").and_then(|s| s.parse::<u32>().ok())) {
+        if let (Some(id), Some(device)) = (
+            attribute(node, "Id").and_then(|s| u64::from_str_radix(s, 16).ok()),
+            attribute(node, "Dev_ID").and_then(|s| s.parse::<u32>().ok()),
+        ) {
             if id != 0 && device != 0 {
                 device_ids.insert(id, device);
-                if attribute(node, "Attribute") == Some("1") { folders.insert(id); }
+                if attribute(node, "Attribute") == Some("1") {
+                    folders.insert(id);
+                }
             }
         }
         if attribute(node, "Attribute") == Some("1") || attribute(node, "CheckType") != Some("1") {
@@ -207,7 +220,8 @@ fn attribute<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
         let after = &rest[at + name.len()..];
         // The name must start a word and be followed by `="`, or it is part
         // of another attribute's name (`Id` inside `Dev_ID`, say).
-        let starts_word = at == 0 || !rest.as_bytes()[at - 1].is_ascii_alphanumeric() && rest.as_bytes()[at - 1] != b'_';
+        let starts_word =
+            at == 0 || !rest.as_bytes()[at - 1].is_ascii_alphanumeric() && rest.as_bytes()[at - 1] != b'_';
         if starts_word {
             if let Some(value) = after.strip_prefix("=\"") {
                 return value.find('"').map(|end| &value[..end]);
@@ -227,7 +241,9 @@ pub fn write(destination: &Path, source: &SyncSource, ticked: &[u64], synced_at_
     let bytes = render(source, ticked, synced_at_ms, &kept);
     for file in FILES {
         let path = publication.stage().join(file);
-        if let Some(parent) = path.parent() { rbl_core::durable::create_dir_all(parent)?; }
+        if let Some(parent) = path.parent() {
+            rbl_core::durable::create_dir_all(parent)?;
+        }
         rbl_core::durable::write(&path, &bytes)?;
     }
     publication.commit(&FILES.map(std::path::PathBuf::from))?;
@@ -301,7 +317,10 @@ mod tests {
         assert_eq!(nodes.len(), 5, "root, two folders, two playlists; the unknown id is left out:\n{text}");
         assert!(nodes[1].contains("Id=\"10\" ParentId=\"0\" Attribute=\"1\"") && nodes[1].contains("CheckType=\"2\""));
         assert!(nodes[2].contains("Id=\"20\" ParentId=\"10\" Attribute=\"1\""));
-        assert!(nodes[3].contains("Id=\"30\" ParentId=\"20\" Attribute=\"0\"") && nodes[3].contains("Timestamp=\"5\" CheckType=\"1\""));
+        assert!(
+            nodes[3].contains("Id=\"30\" ParentId=\"20\" Attribute=\"0\"")
+                && nodes[3].contains("Timestamp=\"5\" CheckType=\"1\"")
+        );
         assert!(nodes[4].contains("Id=\"40\" ParentId=\"10\" Attribute=\"4\""));
         assert!(text.contains("AutomaticSync=\"0\""));
         assert!(!text.contains("Id=\"50\""));

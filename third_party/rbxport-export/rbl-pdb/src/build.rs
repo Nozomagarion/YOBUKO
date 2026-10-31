@@ -76,7 +76,11 @@ pub fn long_utf16le(text: &str) -> Vec<u8> {
 /// for longer ASCII, UTF-16 for anything else.
 pub fn device_sql_string(text: &str) -> Vec<u8> {
     if text.is_ascii() {
-        if text.len() < 0x7e { short_ascii(text) } else { long_ascii(text) }
+        if text.len() < 0x7e {
+            short_ascii(text)
+        } else {
+            long_ascii(text)
+        }
     } else {
         long_utf16le(text)
     }
@@ -186,10 +190,7 @@ impl PageBuilder {
     pub fn free_space(&self) -> usize {
         let groups = self.row_offsets.len().div_ceil(16).max(1);
         let index = groups * ROW_GROUP_LEN;
-        self.page_size
-            .saturating_sub(PAGE_HEADER_LEN)
-            .saturating_sub(self.heap.len())
-            .saturating_sub(index)
+        self.page_size.saturating_sub(PAGE_HEADER_LEN).saturating_sub(self.heap.len()).saturating_sub(index)
     }
 
     pub fn row_count(&self) -> usize {
@@ -312,7 +313,13 @@ fn groups_for(num_rows: usize) -> usize {
 /// then 1004 copies of `ff 1f f8 ff` [OBS 7.2.11, every table of an empty
 /// and of a 61-track export]. rekordbox reads a file whose tables start
 /// with a plain data page as corrupted.
-fn index_page(page_size: usize, page_index: u32, page_type: u32, next_page: u32, first_data_page: Option<u32>) -> Vec<u8> {
+fn index_page(
+    page_size: usize,
+    page_index: u32,
+    page_type: u32,
+    next_page: u32,
+    first_data_page: Option<u32>,
+) -> Vec<u8> {
     let mut page = vec![0_u8; page_size];
     page[0x04..0x08].copy_from_slice(&page_index.to_le_bytes());
     page[0x08..0x0c].copy_from_slice(&page_type.to_le_bytes());
@@ -384,7 +391,13 @@ impl FileBuilder {
 
     /// [`add_table_numbered`](Self::add_table_numbered), with the data
     /// pages filled and headed in `style`.
-    pub fn add_table_styled(&mut self, page_type: u32, rows: &[Vec<u8>], number: impl Fn(&mut Vec<u8>, u16), style: PageStyle) {
+    pub fn add_table_styled(
+        &mut self,
+        page_type: u32,
+        rows: &[Vec<u8>],
+        number: impl Fn(&mut Vec<u8>, u16),
+        style: PageStyle,
+    ) {
         // Page indices are assigned in `finish`, so use a placeholder for now
         // and patch the links afterwards.
         let mut pages: Vec<Vec<u8>> = Vec::new();
@@ -426,7 +439,8 @@ impl FileBuilder {
         let mut held: Vec<(usize, Vec<Vec<u8>>)> = Vec::new();
         for (table_at, (page_type, mut table_pages)) in self.tables.into_iter().enumerate() {
             // The row index's length is the low 13 bits of `0x18..0x1b`.
-            let has_rows = table_pages.iter().any(|p| p[0x18] != 0 || p[0x19] & 0x1f != 0 || p[0x22] != 0 || p[0x23] != 0);
+            let has_rows =
+                table_pages.iter().any(|p| p[0x18] != 0 || p[0x19] & 0x1f != 0 || p[0x22] != 0 || p[0x23] != 0);
             let index_at = next_index;
             next_index += 1;
             if has_rows {
@@ -636,7 +650,8 @@ pub fn replace_table(file: &[u8], page_type: u32, rows: &[Vec<u8>]) -> Option<Ve
     // or an unused page with data in it means the file is not what the
     // header says, and writing over it would destroy another table.
     let is_free = |index: u32| -> bool {
-        page_at(index).is_some_and(|offset| file.get(offset..offset + page_size).is_none_or(|p| p.iter().all(|&b| b == 0)))
+        page_at(index)
+            .is_some_and(|offset| file.get(offset..offset + page_size).is_none_or(|p| p.iter().all(|&b| b == 0)))
     };
     if assigned.iter().filter(|i| !data_pages.contains(i)).any(|&i| !is_free(i)) || !is_free(candidate) {
         return None;
@@ -667,7 +682,8 @@ pub fn replace_table(file: &[u8], page_type: u32, rows: &[Vec<u8>]) -> Option<Ve
     // with no data page named when the table is empty, as a fresh file has it.
     let (index_next, first_data) = assigned.first().map_or((candidate, NO_PAGE), |&f| (f, f));
     out.get_mut(index_at + 0x0c..index_at + 0x10)?.copy_from_slice(&index_next.to_le_bytes());
-    out.get_mut(index_at + PAGE_HEADER_LEN + 4..index_at + PAGE_HEADER_LEN + 8)?.copy_from_slice(&first_data.to_le_bytes());
+    out.get_mut(index_at + PAGE_HEADER_LEN + 4..index_at + PAGE_HEADER_LEN + 8)?
+        .copy_from_slice(&first_data.to_le_bytes());
 
     let new_last = assigned.last().copied().unwrap_or(first);
     out.get_mut(0x0c..0x10)?.copy_from_slice(&next_unused.to_le_bytes());
@@ -704,7 +720,8 @@ pub fn replace_single_page_table(file: &[u8], page_type: u32, rows: &[Vec<u8>]) 
     // The index page names the data page; a table on one page has it as
     // its last page too.
     let index_at = usize::try_from(first).ok()? * page_size;
-    let data_index = u32::from_le_bytes(file.get(index_at + PAGE_HEADER_LEN + 4..index_at + PAGE_HEADER_LEN + 8)?.try_into().ok()?);
+    let data_index =
+        u32::from_le_bytes(file.get(index_at + PAGE_HEADER_LEN + 4..index_at + PAGE_HEADER_LEN + 8)?.try_into().ok()?);
     if data_index != last || data_index == 0x03ff_ffff {
         return None;
     }

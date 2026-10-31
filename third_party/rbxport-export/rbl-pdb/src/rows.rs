@@ -190,10 +190,7 @@ pub fn track_row(input: &TrackInput) -> Vec<u8> {
 /// `DeviceSQL`'s audio format code, from the exported filename (which can
 /// differ from the source after compatibility conversion).
 pub fn audio_file_type(filename: &str) -> u16 {
-    let extension = std::path::Path::new(filename)
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or_default();
+    let extension = std::path::Path::new(filename).extension().and_then(|s| s.to_str()).unwrap_or_default();
     match extension.to_ascii_lowercase().as_str() {
         "mp3" => 1,
         "m4a" | "mp4" | "aac" => 4,

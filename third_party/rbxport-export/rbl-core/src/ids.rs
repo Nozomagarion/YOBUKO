@@ -48,17 +48,15 @@ impl Rng {
     pub fn from_entropy() -> Self {
         // Built from seconds and the sub-second part rather than `as_nanos`,
         // which is a u128 and would need a truncating cast.
-        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| {
-            d.as_secs().wrapping_mul(1_000_000_000).wrapping_add(u64::from(d.subsec_nanos()))
-        });
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs().wrapping_mul(1_000_000_000).wrapping_add(u64::from(d.subsec_nanos())));
         let local = 0_u8;
         let address = std::ptr::from_ref(&local) as u64;
         let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
         // Multiplied by an odd constant so successive counter values land far
         // apart in the state space rather than in adjacent slots.
-        Self::from_seed(
-            nanos ^ address.rotate_left(17) ^ sequence.wrapping_mul(0x9e37_79b9_7f4a_7c15),
-        )
+        Self::from_seed(nanos ^ address.rotate_left(17) ^ sequence.wrapping_mul(0x9e37_79b9_7f4a_7c15))
     }
 
     #[must_use]

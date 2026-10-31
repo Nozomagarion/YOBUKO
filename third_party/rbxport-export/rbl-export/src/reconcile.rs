@@ -18,17 +18,30 @@ fn sql(e: impl std::fmt::Display) -> ExportError {
 /// [OBS: fixture] the two USB databases can describe the same tree with different
 /// IDs. Each sync file is interpreted against its own database, never the other.
 /// Existing rbxport baselines already use one namespace and keep their edit checks.
-pub(crate) fn playlist_namespace(root: &Path, before: &mut Snapshot, previous: Option<&Manifest>, db_id: u64) -> Option<SyncRecord> {
+pub(crate) fn playlist_namespace(
+    root: &Path,
+    before: &mut Snapshot,
+    previous: Option<&Manifest>,
+    db_id: u64,
+) -> Option<SyncRecord> {
     let dir = crate::export_root(root).join("rekordbox");
-    let read = |name: &str, library: &Library| std::fs::read(dir.join(name)).ok()
-        .and_then(|bytes| crate::sync_record::parse(&bytes))
-        .filter(|r| r.db_id == db_id && db_id != 0)
-        .map(|mut r| {
-            let mut counts = BTreeMap::<u32, usize>::new();
-            for id in r.device_ids.values() { *counts.entry(*id).or_default() += 1; }
-            r.device_ids.retain(|master, id| counts.get(id) == Some(&1) && library.playlists.iter().any(|p| p.id == *id && p.folder == r.folders.contains(master)));
-            r
-        });
+    let read = |name: &str, library: &Library| {
+        std::fs::read(dir.join(name))
+            .ok()
+            .and_then(|bytes| crate::sync_record::parse(&bytes))
+            .filter(|r| r.db_id == db_id && db_id != 0)
+            .map(|mut r| {
+                let mut counts = BTreeMap::<u32, usize>::new();
+                for id in r.device_ids.values() {
+                    *counts.entry(*id).or_default() += 1;
+                }
+                r.device_ids.retain(|master, id| {
+                    counts.get(id) == Some(&1)
+                        && library.playlists.iter().any(|p| p.id == *id && p.folder == r.folders.contains(master))
+                });
+                r
+            })
+    };
     let legacy_record = before.legacy.as_ref().and_then(|library| read("playlists3.sync", library));
     let plus_record = before.one.as_ref().and_then(|library| read("playlists3Plus.sync", library));
     if previous.and_then(|m| m.baseline.as_ref()).is_some() {
@@ -39,14 +52,17 @@ pub(crate) fn playlist_namespace(root: &Path, before: &mut Snapshot, previous: O
     };
     let mut pairs = BTreeMap::new();
     if let (Some(left), Some(right)) = (&legacy_record, &plus_record) {
-        let unique = |record: &SyncRecord, id: u32| record.device_ids.values().filter(|value| **value == id).count() == 1;
+        let unique =
+            |record: &SyncRecord, id: u32| record.device_ids.values().filter(|value| **value == id).count() == 1;
         // Place parents first, so a same-named row in another folder cannot
         // silently stand in for this row. Conflicting contents remain separate.
         loop {
             let count = pairs.len();
             for (master, id) in &left.device_ids {
                 let Some(other_id) = right.device_ids.get(master) else { continue };
-                if pairs.contains_key(id) || !unique(left, *id) || !unique(right, *other_id) { continue; }
+                if pairs.contains_key(id) || !unique(left, *id) || !unique(right, *other_id) {
+                    continue;
+                }
                 let Some(a) = legacy.playlists.iter().find(|p| p.id == *id) else { continue };
                 let Some(b) = one.playlists.iter().find(|p| p.id == *other_id) else { continue };
                 let same_parent = (a.parent == 0 && b.parent == 0) || pairs.get(&a.parent) == Some(&b.parent);
@@ -54,19 +70,29 @@ pub(crate) fn playlist_namespace(root: &Path, before: &mut Snapshot, previous: O
                     pairs.insert(*id, *other_id);
                 }
             }
-            if pairs.len() == count { break; }
+            if pairs.len() == count {
+                break;
+            }
         }
     }
     let floor = previous.into_iter().flat_map(|m| &m.playlists).map(|p| p.export_id).max().unwrap_or(0);
     let ids = crate::snapshot::legacy_playlist_ids_with(legacy, one, floor, &pairs);
     for node in &mut legacy.playlists {
         node.id = ids.get(&node.id).copied().unwrap_or(node.id);
-        if node.parent != 0 { node.parent = ids.get(&node.parent).copied().unwrap_or(node.parent); }
+        if node.parent != 0 {
+            node.parent = ids.get(&node.parent).copied().unwrap_or(node.parent);
+        }
     }
-    plus_record.or_else(|| legacy_record.map(|mut record| {
-        record.device_ids = record.device_ids.into_iter().filter_map(|(master, id)| ids.get(&id).map(|mapped| (master, *mapped))).collect();
-        record
-    }))
+    plus_record.or_else(|| {
+        legacy_record.map(|mut record| {
+            record.device_ids = record
+                .device_ids
+                .into_iter()
+                .filter_map(|(master, id)| ids.get(&id).map(|mapped| (master, *mapped)))
+                .collect();
+            record
+        })
+    })
 }
 
 #[allow(clippy::too_many_arguments, reason = "shared validated playlist record accompanies the snapshot")]
@@ -113,7 +139,19 @@ pub fn prepare(
         additions.extend(rekordbox_device_additions(before, record, &tracks, &playlists));
     }
     let kept: BTreeSet<u32> = additions.values().flatten().flatten().copied().collect();
-    retain_device_only(root, &current, &mut tracks, &mut playlists, before, previous, &existing_sources, record, keep_unlisted, &kept, &dropped)?;
+    retain_device_only(
+        root,
+        &current,
+        &mut tracks,
+        &mut playlists,
+        before,
+        previous,
+        &existing_sources,
+        record,
+        keep_unlisted,
+        &kept,
+        &dropped,
+    )?;
     keep_device_additions(&tracks, &mut playlists, &additions)?;
     if keep_unlisted {
         keep_stick_order(&mut playlists, previous);
@@ -174,7 +212,9 @@ fn device_additions(
 ) -> (BTreeMap<u32, Option<Vec<u32>>>, BTreeSet<u32>) {
     let mut out = BTreeMap::new();
     let mut dropped = BTreeSet::new();
-    let Some((previous, baseline)) = previous.and_then(|m| m.baseline.as_ref().map(|b| (m, b))) else { return (out, dropped) };
+    let Some((previous, baseline)) = previous.and_then(|m| m.baseline.as_ref().map(|b| (m, b))) else {
+        return (out, dropped);
+    };
     // A library track's device id, as the last sync recorded it: the track
     // it exported before one it only carried.
     let mut export_ids: BTreeMap<String, u32> = BTreeMap::new();
@@ -184,19 +224,32 @@ fn device_additions(
         }
     }
     let keys_by_id: BTreeMap<u32, String> = export_ids.iter().map(|(key, id)| (*id, key.clone())).collect();
-    for p in playlists.iter().filter(|p| !p.folder && !p.device_only && p.device_id != 0 && p.id != 0 && p.id < DEVICE_PLAYLIST_ID_BASE) {
-        let Some(recorded) = previous.playlists.iter().find(|m| m.export_id == p.device_id && m.library_id == p.id && !m.device_only && !m.folder) else { continue };
+    for p in playlists
+        .iter()
+        .filter(|p| !p.folder && !p.device_only && p.device_id != 0 && p.id != 0 && p.id < DEVICE_PLAYLIST_ID_BASE)
+    {
+        let Some(recorded) = previous
+            .playlists
+            .iter()
+            .find(|m| m.export_id == p.device_id && m.library_id == p.id && !m.device_only && !m.folder)
+        else {
+            continue;
+        };
         let Some((stick, at_sync)) = stick_copy(before, baseline, p.device_id) else { continue };
-        let library_then: Option<Vec<String>> = recorded.library_entries.clone()
-            .or_else(|| at_sync.iter().map(|id| keys_by_id.get(id).cloned()).collect());
+        let library_then: Option<Vec<String>> =
+            recorded.library_entries.clone().or_else(|| at_sync.iter().map(|id| keys_by_id.get(id).cloned()).collect());
         let Some(library_then) = library_then else { continue };
         // The library's entries at that sync, as the stick numbers them.
-        let Some(written) = library_then.iter().map(|key| export_ids.get(key).copied()).collect::<Option<Vec<u32>>>() else { continue };
+        let Some(written) = library_then.iter().map(|key| export_ids.get(key).copied()).collect::<Option<Vec<u32>>>()
+        else {
+            continue;
+        };
         if stick == written || !is_subsequence(&written, &stick) {
             continue;
         }
         let library_now: Option<Vec<&String>> = p.track_indices.iter().map(|i| keys.get(*i)).collect();
-        let unchanged = library_now.is_some_and(|now| now.len() == library_then.len() && now.iter().zip(&library_then).all(|(a, b)| *a == b));
+        let unchanged = library_now
+            .is_some_and(|now| now.len() == library_then.len() && now.iter().zip(&library_then).all(|(a, b)| *a == b));
         if !unchanged {
             dropped.extend(stick.iter().filter(|id| !written.contains(id)));
         }
@@ -236,7 +289,10 @@ fn rekordbox_device_additions(
 ) -> BTreeMap<u32, Option<Vec<u32>>> {
     let mut out = BTreeMap::new();
     let Some(record) = record else { return out };
-    for p in playlists.iter().filter(|p| !p.folder && !p.device_only && p.device_id != 0 && p.id != 0 && p.id < DEVICE_PLAYLIST_ID_BASE) {
+    for p in playlists
+        .iter()
+        .filter(|p| !p.folder && !p.device_only && p.device_id != 0 && p.id != 0 && p.id < DEVICE_PLAYLIST_ID_BASE)
+    {
         let (Some(recorded), Some(changed)) = (record.timestamps.get(&p.id), p.entries_changed_ms) else { continue };
         if recorded.abs_diff(changed) > SAME_CHANGE_MS {
             continue;
@@ -244,7 +300,14 @@ fn rekordbox_device_additions(
         let Some(stick) = stick_now(before, p.device_id) else { continue };
         // The library's entries as the stick numbers them; one the stick
         // does not hold means the library's playlist has changed after all.
-        let Some(library) = p.track_indices.iter().map(|i| tracks.get(*i).and_then(|t| t.device.as_ref()).map(|d| d.id)).collect::<Option<Vec<u32>>>() else { continue };
+        let Some(library) = p
+            .track_indices
+            .iter()
+            .map(|i| tracks.get(*i).and_then(|t| t.device.as_ref()).map(|d| d.id))
+            .collect::<Option<Vec<u32>>>()
+        else {
+            continue;
+        };
         if stick == library || !is_subsequence(&library, &stick) {
             continue;
         }
@@ -311,7 +374,14 @@ fn keep_device_additions(
         let Some(Some(entries)) = additions.get(&playlist.device_id) else { continue };
         playlist.track_indices = entries
             .iter()
-            .map(|id| positions.get(id).copied().ok_or_else(|| ExportError::Conflict(format!("Playlist '{}' on the USB names a track it no longer holds", playlist.name))))
+            .map(|id| {
+                positions.get(id).copied().ok_or_else(|| {
+                    ExportError::Conflict(format!(
+                        "Playlist '{}' on the USB names a track it no longer holds",
+                        playlist.name
+                    ))
+                })
+            })
             .collect::<Result<_>>()?;
     }
     Ok(())
@@ -380,23 +450,39 @@ fn identify_tracks(
 ) {
     let mut identities = BTreeMap::new();
     for (id, (db, content)) in &before.identity {
-        if *db == db_id && *content != 0 { identities.entry(*content).or_insert(*id); }
+        if *db == db_id && *content != 0 {
+            identities.entry(*content).or_insert(*id);
+        }
     }
-    let recorded: BTreeMap<_, _> = previous.filter(|m| m.db_id == db_id).into_iter().flat_map(|m| &m.tracks)
-        .map(|t| (t.key(), t.export_id)).collect();
-    let exported: BTreeSet<_> = previous.into_iter().flat_map(|m| &m.tracks).filter(|t| t.preserved != Some(true)).map(|t| t.export_id).collect();
+    let recorded: BTreeMap<_, _> = previous
+        .filter(|m| m.db_id == db_id)
+        .into_iter()
+        .flat_map(|m| &m.tracks)
+        .map(|t| (t.key(), t.export_id))
+        .collect();
+    let exported: BTreeSet<_> = previous
+        .into_iter()
+        .flat_map(|m| &m.tracks)
+        .filter(|t| t.preserved != Some(true))
+        .map(|t| t.export_id)
+        .collect();
     for track in tracks {
         if track.device.is_some() {
             continue;
         }
-        let identity = identities.get(&track.id).copied().or_else(|| recorded.get(&crate::track_key(track.id, &track.source_path.to_string_lossy())).copied());
+        let identity = identities
+            .get(&track.id)
+            .copied()
+            .or_else(|| recorded.get(&crate::track_key(track.id, &track.source_path.to_string_lossy())).copied());
         if let Some(id) = identity {
             if let Some(source) = existing_sources.get(&id) {
                 track.fallback = Some(Box::new(source.clone()));
-                let source_changed = previous.and_then(|m| m.generation.as_ref())
+                let source_changed = previous
+                    .and_then(|m| m.generation.as_ref())
                     .and_then(|g| g.inputs.get(&track.source_path.to_string_lossy().into_owned()))
                     .is_some_and(|old| crate::incremental::revision(&track.source_path).is_ok_and(|now| now != *old));
-                let unavailable = !track.source_path.is_file() || (source_changed && std::fs::File::open(&track.source_path).is_err());
+                let unavailable = !track.source_path.is_file()
+                    || (source_changed && std::fs::File::open(&track.source_path).is_err());
                 if unavailable && source.source_path.is_file() {
                     let master_id = track.id;
                     *track = source.clone();
@@ -433,13 +519,17 @@ fn identify_playlists(
         }
         p.device_id = previous
             .and_then(|m| {
-                m.playlists
-                    .iter()
-                    .find(|old| old.library_id == p.id && p.id != 0 && p.id < DEVICE_PLAYLIST_ID_BASE)
+                m.playlists.iter().find(|old| old.library_id == p.id && p.id != 0 && p.id < DEVICE_PLAYLIST_ID_BASE)
             })
             .map(|p| p.export_id)
             .or_else(|| record.and_then(|r| r.device_ids.get(&p.id).copied()))
-            .filter(|id| before.legacy.iter().chain(&before.one).any(|library| library.playlists.iter().any(|node| node.id == *id && node.folder == p.folder)))
+            .filter(|id| {
+                before
+                    .legacy
+                    .iter()
+                    .chain(&before.one)
+                    .any(|library| library.playlists.iter().any(|node| node.id == *id && node.folder == p.folder))
+            })
             .unwrap_or(0);
     }
 }
@@ -478,9 +568,11 @@ fn retain_device_only(
     // establishes ownership; carried playlists remain device-only thereafter.
     let owned: BTreeMap<u32, u64> = previous
         .filter(|m| m.baseline.is_some())
-        .into_iter().flat_map(|m| &m.playlists)
+        .into_iter()
+        .flat_map(|m| &m.playlists)
         .filter(|p| !p.device_only && p.export_id != 0)
-        .map(|p| (p.export_id, p.library_id)).collect();
+        .map(|p| (p.export_id, p.library_id))
+        .collect();
     // Kept as the library's: owned, with a library id the selection does not
     // already use for another playlist.
     let kept_owned: BTreeMap<u32, u64> = if keep_unlisted {
@@ -495,17 +587,33 @@ fn retain_device_only(
     let retained: Vec<_> = current
         .playlists
         .iter()
-        .filter(|p| (!owned.contains_key(&p.id) || kept_owned.contains_key(&p.id)) && !playlists.iter().any(|n| n.device_id == p.id))
+        .filter(|p| {
+            (!owned.contains_key(&p.id) || kept_owned.contains_key(&p.id))
+                && !playlists.iter().any(|n| n.device_id == p.id)
+        })
         .collect();
     // Preserve a known correspondence without granting deletion ownership.
     // This lets a later selection adopt a carried playlist instead of duplicating it.
-    let identities: BTreeMap<u32, u64> = record.into_iter().flat_map(|r| &r.device_ids)
+    let identities: BTreeMap<u32, u64> = record
+        .into_iter()
+        .flat_map(|r| &r.device_ids)
         .map(|(master, device)| (*device, *master))
-        .chain(previous.into_iter().flat_map(|m| &m.playlists)
-            .filter(|p| p.library_id != 0 && p.library_id < DEVICE_PLAYLIST_ID_BASE)
-            .map(|p| (p.export_id, p.library_id)))
-        .filter(|(_, master)| !playlists.iter().any(|p| p.id == *master)).collect();
-    let retained_id = |device: u32| kept_owned.get(&device).or_else(|| identities.get(&device)).copied().unwrap_or(DEVICE_PLAYLIST_ID_BASE + u64::from(device));
+        .chain(
+            previous
+                .into_iter()
+                .flat_map(|m| &m.playlists)
+                .filter(|p| p.library_id != 0 && p.library_id < DEVICE_PLAYLIST_ID_BASE)
+                .map(|p| (p.export_id, p.library_id)),
+        )
+        .filter(|(_, master)| !playlists.iter().any(|p| p.id == *master))
+        .collect();
+    let retained_id = |device: u32| {
+        kept_owned
+            .get(&device)
+            .or_else(|| identities.get(&device))
+            .copied()
+            .unwrap_or(DEVICE_PLAYLIST_ID_BASE + u64::from(device))
+    };
     let mut needed: BTreeSet<u32> = retained
         .iter()
         .flat_map(|p| &p.tracks)
@@ -525,29 +633,16 @@ fn retain_device_only(
     // previous selection. Retain them even when no playlist references them,
     // as rekordbox does: its export only adds and updates the tracks it is
     // given and never revisits the rest of the device library.
-    needed.extend(
-        current
-            .tracks
-            .iter()
-            .filter(|t| !previously_owned.contains(&t.id))
-            .map(|t| t.id),
-    );
-    let mut positions: BTreeMap<u32, usize> = tracks
-        .iter()
-        .enumerate()
-        .filter_map(|(i, t)| t.device.as_ref().map(|d| (d.id, i)))
-        .collect();
+    needed.extend(current.tracks.iter().filter(|t| !previously_owned.contains(&t.id)).map(|t| t.id));
+    let mut positions: BTreeMap<u32, usize> =
+        tracks.iter().enumerate().filter_map(|(i, t)| t.device.as_ref().map(|d| (d.id, i))).collect();
     for id in needed {
         if positions.contains_key(&id) {
             continue;
         }
         let mut track = existing_sources
             .get(&id)
-            .ok_or_else(|| {
-                ExportError::Conflict(format!(
-                    "Device playlist/history references missing track {id}"
-                ))
-            })?
+            .ok_or_else(|| ExportError::Conflict(format!("Device playlist/history references missing track {id}")))?
             .clone();
         // A track an earlier export put there that a device playlist or the
         // history still names: carried for now, but still ours to take off
@@ -574,18 +669,11 @@ fn retain_device_only(
             .ok_or_else(|| ExportError::Conflict("Missing device playlist ancestor".into()))?;
         parents.push(p.parent);
     }
-    for p in current
-        .playlists
-        .iter()
-        .filter(|p| retained_ids.contains(&p.id))
-    {
+    for p in current.playlists.iter().filter(|p| retained_ids.contains(&p.id)) {
         let parent_id = if p.parent == 0 {
             0
         } else {
-            playlists
-                .iter()
-                .find(|n| n.device_id == p.parent)
-                .map_or_else(|| retained_id(p.parent), |n| n.id)
+            playlists.iter().find(|n| n.device_id == p.parent).map_or_else(|| retained_id(p.parent), |n| n.id)
         };
         playlists.push(SourcePlaylist {
             id: retained_id(p.id),
@@ -598,9 +686,10 @@ fn retain_device_only(
                 .tracks
                 .iter()
                 .map(|id| {
-                    positions.get(id).copied().ok_or_else(|| {
-                        ExportError::Conflict("Unresolved device playlist track".into())
-                    })
+                    positions
+                        .get(id)
+                        .copied()
+                        .ok_or_else(|| ExportError::Conflict("Unresolved device playlist track".into()))
                 })
                 .collect::<Result<_>>()?,
             entries_changed_ms: None,
@@ -613,13 +702,19 @@ fn retain_device_only(
 /// share the audio and analysis files; only the explicit identity map is trusted.
 fn sources(root: &Path, before: &Snapshot) -> Result<BTreeMap<u32, SourceTrack>> {
     let manifest = Manifest::load(root);
-    if let Some(generation) = manifest.as_ref().and_then(|m| m.generation.as_ref())
-        .filter(|g| !g.device_sources.is_empty() && crate::incremental::databases(root).is_ok_and(|signatures| signatures == g.databases)) {
+    if let Some(generation) = manifest.as_ref().and_then(|m| m.generation.as_ref()).filter(|g| {
+        !g.device_sources.is_empty()
+            && crate::incremental::databases(root).is_ok_and(|signatures| signatures == g.databases)
+    }) {
         let mut sources = generation.device_sources.clone();
         for source in sources.values_mut() {
             source.source_path = crate::checked_under(root, &source.source_path.to_string_lossy())?;
-            if let Some(path) = &source.analysis_source { source.analysis_source = Some(crate::checked_under(root, &path.to_string_lossy())?); }
-            if let Some(path) = &source.artwork { source.artwork = Some(crate::checked_under(root, &path.to_string_lossy())?); }
+            if let Some(path) = &source.analysis_source {
+                source.analysis_source = Some(crate::checked_under(root, &path.to_string_lossy())?);
+            }
+            if let Some(path) = &source.artwork {
+                source.artwork = Some(crate::checked_under(root, &path.to_string_lossy())?);
+            }
         }
         return Ok(sources);
     }
@@ -632,8 +727,12 @@ pub(crate) fn capture_sources(root: &Path, before: &Snapshot) -> Result<BTreeMap
     let mut sources = read_sources(root, before)?;
     for source in sources.values_mut() {
         source.source_path = source.source_path.strip_prefix(root).map_err(std::io::Error::other)?.to_owned();
-        if let Some(path) = &source.analysis_source { source.analysis_source = Some(path.strip_prefix(root).map_err(std::io::Error::other)?.to_owned()); }
-        if let Some(path) = &source.artwork { source.artwork = Some(path.strip_prefix(root).map_err(std::io::Error::other)?.to_owned()); }
+        if let Some(path) = &source.analysis_source {
+            source.analysis_source = Some(path.strip_prefix(root).map_err(std::io::Error::other)?.to_owned());
+        }
+        if let Some(path) = &source.artwork {
+            source.artwork = Some(path.strip_prefix(root).map_err(std::io::Error::other)?.to_owned());
+        }
     }
     Ok(sources)
 }
@@ -654,8 +753,7 @@ fn read_sources(root: &Path, before: &Snapshot) -> Result<BTreeMap<u32, SourceTr
 
 /// `OneLibrary`'s share of [`sources`]: every track it has metadata for.
 fn sources_from_one(root: &Path, dir: &Path, out: &mut BTreeMap<u32, SourceTrack>) -> Result<()> {
-    let db = rbl_onelibrary::ExportLibrary::open_read_only(&dir.join("exportLibrary.db"))
-        .map_err(sql)?;
+    let db = rbl_onelibrary::ExportLibrary::open_read_only(&dir.join("exportLibrary.db")).map_err(sql)?;
     let mut q = db.connection().prepare("SELECT c.content_id, COALESCE(c.title,''), COALESCE(a.name,''), COALESCE(al.name,''), COALESCE(g.name,''), COALESCE(l.name,''), COALESCE(k.name,''), COALESCE(c.djComment,''), COALESCE(c.dateAdded,''), COALESCE(c.releaseDate,''), COALESCE(c.bpmx100,0), COALESCE(c.length,0), COALESCE(c.rating,0), COALESCE(c.color_id,0), COALESCE(c.releaseYear,0), COALESCE(c.bitrate,0), COALESCE(c.samplingRate,0), COALESCE(c.fileSize,0), COALESCE(i.path,''), COALESCE(c.trackNo,0), COALESCE(c.discNo,0), COALESCE(c.bitDepth,0), COALESCE(c.djPlayCount,0), COALESCE(c.analysedBits,0), COALESCE(c.isHotCueAutoLoadOn,0), COALESCE(c.dateCreated,''), COALESCE(c.isrc,'') FROM content c LEFT JOIN artist a ON a.artist_id=c.artist_id_artist LEFT JOIN album al ON al.album_id=c.album_id LEFT JOIN genre g ON g.genre_id=c.genre_id LEFT JOIN label l ON l.label_id=c.label_id LEFT JOIN key k ON k.key_id=c.key_id LEFT JOIN image i ON i.image_id=c.image_id").map_err(sql)?;
     let rows = q
         .query_map([], |r| {
@@ -663,9 +761,14 @@ fn sources_from_one(root: &Path, dir: &Path, out: &mut BTreeMap<u32, SourceTrack
                 r.get::<_, u32>(0)?,
                 SourceTrack {
                     metadata: rbl_core::ExportMetadata {
-                        track_number: r.get(19)?, disc_number: r.get(20)?, bit_depth: r.get(21)?,
-                        play_count: r.get(22)?, analysed: r.get(23)?, hot_cue_auto_load: r.get(24)?,
-                        date_created: r.get(25)?, isrc: r.get(26)?,
+                        track_number: r.get(19)?,
+                        disc_number: r.get(20)?,
+                        bit_depth: r.get(21)?,
+                        play_count: r.get(22)?,
+                        analysed: r.get(23)?,
+                        hot_cue_auto_load: r.get(24)?,
+                        date_created: r.get(25)?,
+                        isrc: r.get(26)?,
                     },
                     title: r.get(1)?,
                     artist: r.get(2)?,
@@ -708,14 +811,7 @@ fn sources_from_legacy(root: &Path, dir: &Path, out: &mut BTreeMap<u32, SourceTr
     let bytes = std::fs::read(dir.join("export.pdb"))?;
     let pdb = rbl_pdb::Pdb::parse(&bytes).map_err(sql)?;
     let names = |kind| -> BTreeMap<u32, String> {
-        pdb.table(kind)
-            .map(|t| {
-                pdb.named_rows(t)
-                    .into_iter()
-                    .map(|n| (n.id, n.name))
-                    .collect()
-            })
-            .unwrap_or_default()
+        pdb.table(kind).map(|t| pdb.named_rows(t).into_iter().map(|n| (n.id, n.name)).collect()).unwrap_or_default()
     };
     let artists = names(PageType::Artists);
     let albums = names(PageType::Albums);
@@ -723,13 +819,16 @@ fn sources_from_legacy(root: &Path, dir: &Path, out: &mut BTreeMap<u32, SourceTr
     let labels = names(PageType::Labels);
     let keys = names(PageType::Keys);
     let art = names(PageType::Artwork);
-    for t in pdb
-        .table(PageType::Tracks)
-        .map(|t| pdb.track_rows(t))
-        .unwrap_or_default()
-    {
+    for t in pdb.table(PageType::Tracks).map(|t| pdb.track_rows(t)).unwrap_or_default() {
         out.entry(t.id).or_insert(SourceTrack {
-            metadata: rbl_core::ExportMetadata { track_number: t.track_number, play_count: u32::from(t.play_count), bit_depth: t.sample_depth, disc_number: t.disc_number, hot_cue_auto_load: t.hot_cue_auto_load, ..Default::default() },
+            metadata: rbl_core::ExportMetadata {
+                track_number: t.track_number,
+                play_count: u32::from(t.play_count),
+                bit_depth: t.sample_depth,
+                disc_number: t.disc_number,
+                hot_cue_auto_load: t.hot_cue_auto_load,
+                ..Default::default()
+            },
             title: t.title,
             artist: artists.get(&t.artist_id).cloned().unwrap_or_default(),
             album: albums.get(&t.album_id).cloned().unwrap_or_default(),
@@ -747,10 +846,7 @@ fn sources_from_legacy(root: &Path, dir: &Path, out: &mut BTreeMap<u32, SourceTr
             bitrate: t.bitrate,
             sample_rate: t.sample_rate,
             file_size: u64::from(t.file_size),
-            artwork: art
-                .get(&t.artwork_id)
-                .map(|p| crate::checked_under(root, p))
-                .transpose()?,
+            artwork: art.get(&t.artwork_id).map(|p| crate::checked_under(root, p)).transpose()?,
             ..SourceTrack::default()
         });
     }
@@ -769,32 +865,19 @@ fn fill_source_details(
     // Tracks only. Its playlist ids use no recorded floor, unlike
     // `prepare`'s `merged_library_above`: do not rely on them here.
     let current = before.merged_library();
-    let recorded: BTreeMap<_, _> = manifest.into_iter().flat_map(|m| m.tracks.iter().map(|t| (t.export_id, (m.db_id, t.library_id)))).collect();
+    let recorded: BTreeMap<_, _> =
+        manifest.into_iter().flat_map(|m| m.tracks.iter().map(|t| (t.export_id, (m.db_id, t.library_id)))).collect();
     for t in current.as_ref().into_iter().flat_map(|l| &l.tracks) {
-        let track = out
-            .get_mut(&t.id)
-            .ok_or_else(|| ExportError::Conflict("Missing USB track metadata".into()))?;
+        let track = out.get_mut(&t.id).ok_or_else(|| ExportError::Conflict("Missing USB track metadata".into()))?;
         track.source_path = crate::checked_under(root, &t.path)?;
-        track.my_tags = before
-            .tag_memberships
-            .get(&t.id)
-            .cloned()
-            .unwrap_or_default();
-        let analysis_dir = Path::new(&t.analysis)
-            .parent()
-            .map_or(String::new(), |p| p.to_string_lossy().into_owned());
+        track.my_tags = before.tag_memberships.get(&t.id).cloned().unwrap_or_default();
+        let analysis_dir = Path::new(&t.analysis).parent().map_or(String::new(), |p| p.to_string_lossy().into_owned());
         if !t.analysis.is_empty() {
             let base = crate::checked_under(root, &t.analysis)?;
             track.analysis_source = Some(base);
         }
-        let (master_db_id, master_content_id) = before
-            .identity
-            .get(&t.id)
-            .copied()
-            .or_else(|| {
-                recorded.get(&t.id).copied()
-            })
-            .unwrap_or_default();
+        let (master_db_id, master_content_id) =
+            before.identity.get(&t.id).copied().or_else(|| recorded.get(&t.id).copied()).unwrap_or_default();
         track.device = Some(DeviceTrack {
             id: t.id,
             master_db_id,
@@ -818,8 +901,7 @@ pub fn all(
     // the floor `prepare` passes to `merged_library_above` cannot matter.
     let current = before.merged_library();
     let sources = sources(root, before)?;
-    let positions: BTreeMap<u32, usize> =
-        sources.keys().enumerate().map(|(i, id)| (*id, i)).collect();
+    let positions: BTreeMap<u32, usize> = sources.keys().enumerate().map(|(i, id)| (*id, i)).collect();
     let tracks = sources.into_values().collect();
     let ids: BTreeMap<u32, u64> = current
         .as_ref()
@@ -850,9 +932,10 @@ pub fn all(
                     .tracks
                     .iter()
                     .map(|id| {
-                        positions.get(id).copied().ok_or_else(|| {
-                            ExportError::Conflict("Missing track in existing playlist".into())
-                        })
+                        positions
+                            .get(id)
+                            .copied()
+                            .ok_or_else(|| ExportError::Conflict("Missing track in existing playlist".into()))
                     })
                     .collect::<Result<_>>()?,
                 entries_changed_ms: None,

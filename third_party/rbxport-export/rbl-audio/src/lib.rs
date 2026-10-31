@@ -145,13 +145,20 @@ impl MonoStream {
             .make(&track.codec_params, &DecoderOptions::default())
             .map_err(|e| AudioError::Unsupported(e.to_string()))?;
         let sample_rate = track.codec_params.sample_rate.unwrap_or(44_100);
-        let source_channels = track
-            .codec_params
-            .channels
-            .map_or(2, |c| u16::try_from(c.count()).unwrap_or(2));
+        let source_channels = track.codec_params.channels.map_or(2, |c| u16::try_from(c.count()).unwrap_or(2));
         let lead = rekordbox_lead(path, track.codec_params.codec);
         let expected = track.codec_params.n_frames.map(|frames| frames.saturating_add_signed(lead));
-        Ok(Self { format, decoder, track_id, sample_rate, source_channels, buffer: None, mono: Vec::new(), lead, expected })
+        Ok(Self {
+            format,
+            decoder,
+            track_id,
+            sample_rate,
+            source_channels,
+            buffer: None,
+            mono: Vec::new(),
+            lead,
+            expected,
+        })
     }
 
     /// How many samples the stream is expected to hand out in all, from the
@@ -209,13 +216,14 @@ impl MonoStream {
             self.sample_rate = spec.rate;
             self.source_channels = u16::try_from(spec.channels.count()).unwrap_or(2);
 
-            let interleaved =
-                self.buffer.get_or_insert_with(|| SampleBuffer::new(frames.capacity() as u64, spec));
+            let interleaved = self.buffer.get_or_insert_with(|| SampleBuffer::new(frames.capacity() as u64, spec));
             interleaved.copy_interleaved_ref(frames);
 
             let channels = spec.channels.count().max(1);
             self.mono.clear();
-            self.mono.extend(interleaved.samples().chunks(channels).map(|frame| frame.iter().sum::<f32>() / channels as f32));
+            self.mono.extend(
+                interleaved.samples().chunks(channels).map(|frame| frame.iter().sum::<f32>() / channels as f32),
+            );
             if self.drop_lead() {
                 return Some(&self.mono);
             }
@@ -402,9 +410,8 @@ mod tests {
     fn decodes_a_mono_wav() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("tone.wav");
-        let samples: Vec<f32> = (0..44_100)
-            .map(|i| (i as f32 * 2.0 * std::f32::consts::PI * 440.0 / 44_100.0).sin() * 0.5)
-            .collect();
+        let samples: Vec<f32> =
+            (0..44_100).map(|i| (i as f32 * 2.0 * std::f32::consts::PI * 440.0 / 44_100.0).sin() * 0.5).collect();
         write_wav(&path, 44_100, 1, &samples);
 
         let audio = decode_mono(&path, None).unwrap();
@@ -501,7 +508,8 @@ mod tests {
             .unwrap()
             .format;
         let track = format.default_track().unwrap().clone();
-        let mut decoder = symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default()).unwrap();
+        let mut decoder =
+            symphonia::default::get_codecs().make(&track.codec_params, &DecoderOptions::default()).unwrap();
         let mut mono = Vec::new();
         while let Ok(packet) = format.next_packet() {
             let Ok(decoded) = decoder.decode(&packet) else { continue };

@@ -143,9 +143,7 @@ pub(crate) fn u4(b: &[u8], at: usize) -> u32 {
 /// still read whole. It now writes them as rekordbox does. On rekordbox's pages `0x22`
 /// is a row's index, so it is never above the packed length.
 fn row_index_len(page: &[u8]) -> u32 {
-    let packed = u32::from(u1(page, 0x18))
-        | u32::from(u1(page, 0x19)) << 8
-        | u32::from(u1(page, 0x1a)) << 16;
+    let packed = u32::from(u1(page, 0x18)) | u32::from(u1(page, 0x19)) << 8 | u32::from(u1(page, 0x1a)) << 16;
     let offsets = packed & 0x1fff;
     let legacy = u32::from(u2(page, 0x22));
     if offsets == 0xff && legacy > offsets && legacy != 0x1fff {
@@ -218,8 +216,7 @@ impl<'a> Pdb<'a> {
                     let base = self.page_size as usize - (group as usize * 0x24);
                     let flags_at = page + base.wrapping_sub(4);
                     let present = u2(self.bytes, flags_at);
-                    let in_group =
-                        if group < groups - 1 { 16 } else { (num_rows - 1) % 16 + 1 };
+                    let in_group = if group < groups - 1 { 16 } else { (num_rows - 1) % 16 + 1 };
                     for row in 0..in_group {
                         if present & (1 << row) == 0 {
                             continue; // deleted: index entry survives, data does not
@@ -279,9 +276,7 @@ impl<'a> Pdb<'a> {
             mangled if mangled % 2 == 1 => {
                 // "incremented, doubled, and incremented again"
                 let len = ((mangled as usize).saturating_sub(1) / 2).saturating_sub(1);
-                b.get(offset + 1..offset + 1 + len)
-                    .map(|s| String::from_utf8_lossy(s).into_owned())
-                    .unwrap_or_default()
+                b.get(offset + 1..offset + 1 + len).map(|s| String::from_utf8_lossy(s).into_owned()).unwrap_or_default()
             }
             _ => String::new(),
         }
@@ -323,10 +318,7 @@ impl<'a> Pdb<'a> {
 
     /// Row counts per table, which is the cheapest useful summary of a file.
     pub fn census(&self) -> BTreeMap<String, usize> {
-        self.tables
-            .iter()
-            .map(|t| (t.page_type.name(), self.rows(t).len()))
-            .collect()
+        self.tables.iter().map(|t| (t.page_type.name(), self.rows(t).len())).collect()
     }
 }
 
@@ -400,10 +392,7 @@ impl Pdb<'_> {
     fn simple_named(&self, table: &TableRef, id_at: usize, name_at: usize) -> Vec<NamedRow> {
         self.rows(table)
             .into_iter()
-            .map(|row| NamedRow {
-                id: self.u4_at(row, id_at),
-                name: self.string_at(row.offset + name_at),
-            })
+            .map(|row| NamedRow { id: self.u4_at(row, id_at), name: self.string_at(row.offset + name_at) })
             .collect()
     }
 
@@ -413,9 +402,18 @@ impl Pdb<'_> {
         self.table(PageType::Other(11)).map(|t| self.simple_named(t, 0, 4)).unwrap_or_default()
     }
     pub fn played_history_entries(&self) -> Vec<PlaylistEntry> {
-        self.table(PageType::Other(12)).map(|t| self.rows(t).into_iter().map(|r| PlaylistEntry {
-            track_id: self.u4_at(r,0), playlist_id: self.u4_at(r,4), entry_index: self.u4_at(r,8),
-        }).collect()).unwrap_or_default()
+        self.table(PageType::Other(12))
+            .map(|t| {
+                self.rows(t)
+                    .into_iter()
+                    .map(|r| PlaylistEntry {
+                        track_id: self.u4_at(r, 0),
+                        playlist_id: self.u4_at(r, 4),
+                        entry_index: self.u4_at(r, 8),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Decodes a name table, dispatching on its layout.
@@ -429,10 +427,7 @@ impl Pdb<'_> {
             PageType::Colors => self
                 .rows(table)
                 .into_iter()
-                .map(|row| NamedRow {
-                    id: u32::from(self.u2_at(row, 5)),
-                    name: self.string_at(row.offset + 8),
-                })
+                .map(|row| NamedRow { id: u32::from(self.u2_at(row, 5)), name: self.string_at(row.offset + 8) })
                 .collect(),
             // Artists and albums point at their name by offset, and artists use
             // a two-byte offset when the subtype says the name is far away.

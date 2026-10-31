@@ -18,11 +18,7 @@ pub struct ExportCue {
 
 impl ExportCue {
     pub fn slot(&self) -> u32 {
-        u32::from(if self.kind >= 5 {
-            self.kind - 1
-        } else {
-            self.kind
-        })
+        u32::from(if self.kind >= 5 { self.kind - 1 } else { self.kind })
     }
 }
 
@@ -46,13 +42,7 @@ pub fn sections(cues: &[ExportCue], extended: bool) -> Vec<Section> {
                 .iter()
                 .copied()
                 .filter(|c| {
-                    (c.kind != 0) == hot
-                        && (modern
-                            || if extended {
-                                hot && c.slot() > 3
-                            } else {
-                                c.slot() <= 3
-                            })
+                    (c.kind != 0) == hot && (modern || if extended { hot && c.slot() > 3 } else { c.slot() <= 3 })
                 })
                 .collect();
             let count = u16::try_from(list.len()).unwrap_or(u16::MAX);
@@ -60,26 +50,14 @@ pub fn sections(cues: &[ExportCue], extended: bool) -> Vec<Section> {
             put32(&mut header, 0, u32::from(hot));
             put16(&mut header, if modern { 4 } else { 6 }, count);
             if !modern {
-                put32(
-                    &mut header,
-                    8,
-                    if hot || count == 0 {
-                        u32::MAX
-                    } else {
-                        u32::from(count - 1)
-                    },
-                );
+                put32(&mut header, 8, if hot || count == 0 { u32::MAX } else { u32::from(count - 1) });
             }
             let mut payload = Vec::new();
             for (index, cue) in list.into_iter().take(usize::from(count)).enumerate() {
                 let comment: Vec<u8> = if cue.comment.is_empty() {
                     Vec::new()
                 } else {
-                    cue.comment
-                        .encode_utf16()
-                        .chain([0])
-                        .flat_map(u16::to_be_bytes)
-                        .collect()
+                    cue.comment.encode_utf16().chain([0]).flat_map(u16::to_be_bytes).collect()
                 };
                 let length = if modern { 88 + comment.len() } else { 56 };
                 let mut entry = vec![0; length];
@@ -97,11 +75,7 @@ pub fn sections(cues: &[ExportCue], extended: bool) -> Vec<Section> {
                     entry[29] = 1;
                     put16(&mut entry, 36, cue.loop_numerator);
                     put16(&mut entry, 38, cue.loop_denominator);
-                    put32(
-                        &mut entry,
-                        40,
-                        u32::try_from(comment.len()).unwrap_or(u32::MAX),
-                    );
+                    put32(&mut entry, 40, u32::try_from(comment.len()).unwrap_or(u32::MAX));
                     entry[44..44 + comment.len()].copy_from_slice(&comment);
                     entry[44 + comment.len()] = cue.color_code;
                     entry[45 + comment.len()..48 + comment.len()]
@@ -112,11 +86,7 @@ pub fn sections(cues: &[ExportCue], extended: bool) -> Vec<Section> {
                     put16(
                         &mut entry,
                         24,
-                        if hot || index == 0 {
-                            u16::MAX
-                        } else {
-                            u16::try_from(index - 1).unwrap_or(u16::MAX)
-                        },
+                        if hot || index == 0 { u16::MAX } else { u16::try_from(index - 1).unwrap_or(u16::MAX) },
                     );
                     put16(
                         &mut entry,
@@ -130,11 +100,7 @@ pub fn sections(cues: &[ExportCue], extended: bool) -> Vec<Section> {
                 }
                 payload.extend(entry);
             }
-            out.push(Section::new(
-                if modern { b"PCO2" } else { b"PCOB" },
-                header,
-                payload,
-            ));
+            out.push(Section::new(if modern { b"PCO2" } else { b"PCOB" }, header, payload));
         }
     }
     out
@@ -222,10 +188,7 @@ pub fn export_colour(code: u8, slot: u32) -> [u8; 3] {
         4 | 12 => 60,
         _ => 0,
     };
-    DEVICE_PALETTE
-        .get(usize::from(if code == 0 { default } else { code }))
-        .copied()
-        .unwrap_or([0; 3])
+    DEVICE_PALETTE.get(usize::from(if code == 0 { default } else { code })).copied().unwrap_or([0; 3])
 }
 
 #[cfg(test)]
@@ -234,12 +197,7 @@ mod tests {
     use super::*;
     #[test]
     fn matches_a_rekordbox_hot_cue_record_and_complete_palette() {
-        let cue = ExportCue {
-            kind: 1,
-            time_ms: 83_032,
-            color_code: 46,
-            ..Default::default()
-        };
+        let cue = ExportCue { kind: 1, time_ms: 83_032, color_code: 46, ..Default::default() };
         let sections = sections(&[cue], true);
         let entry = &sections[2].payload;
         let expected = "50435032000000100000005800000001010003e800014458ffffffff000100000000000000000000000000002eff005c00000000000000000000000000000000000000000000000000000000000000000000000000000000";
@@ -258,13 +216,7 @@ mod tests {
     #[test]
     fn exports_memory_loop_comments_colors_and_the_d_slot() {
         let cues = vec![
-            ExportCue {
-                kind: 5,
-                time_ms: 1000,
-                color_code: 8,
-                comment: "Drop 🎵".into(),
-                ..Default::default()
-            },
+            ExportCue { kind: 5, time_ms: 1000, color_code: 8, comment: "Drop 🎵".into(), ..Default::default() },
             ExportCue {
                 time_ms: 2000,
                 loop_time_ms: Some(4000),
@@ -284,10 +236,7 @@ mod tests {
         assert_eq!(decoded[0].comment.as_deref(), Some("Drop 🎵"));
         assert_eq!(decoded[0].rgb, Some([0, 196, 255]));
         let memory = ext[3].as_cue_entries().unwrap();
-        assert_eq!(
-            (memory[0].kind, memory[0].time_ms, memory[0].loop_time_ms),
-            (2, 2000, 4000)
-        );
+        assert_eq!((memory[0].kind, memory[0].time_ms, memory[0].loop_time_ms), (2, 2000, 4000));
         assert_eq!(&ext[3].payload[36..40], &[0, 4, 0, 1]);
     }
 }

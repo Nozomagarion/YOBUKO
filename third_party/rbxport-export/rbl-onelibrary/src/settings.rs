@@ -121,10 +121,7 @@ impl Default for StickSettings {
             colors: reference::COLORS
                 .iter()
                 .enumerate()
-                .map(|(i, name)| ColorName {
-                    id: i64::try_from(i).unwrap_or(0) + 1,
-                    name: (*name).to_owned(),
-                })
+                .map(|(i, name)| ColorName { id: i64::try_from(i).unwrap_or(0) + 1, name: (*name).to_owned() })
                 .collect(),
         }
     }
@@ -138,11 +135,9 @@ fn plain(name: &str) -> String {
 impl StickSettings {
     /// Reads the settings out of an existing `exportLibrary.db`, read-only.
     pub fn read(path: &Path) -> Result<Self> {
-        let conn = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|source| crate::Error::Open { path: path.display().to_string(), source })?;
+        let conn =
+            Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
+                .map_err(|source| crate::Error::Open { path: path.display().to_string(), source })?;
         unlock(&conn, &key::passphrase()?)?;
         Self::read_from(&conn)
     }
@@ -207,11 +202,9 @@ impl StickSettings {
     /// stick does not have is skipped rather than inserted, so a database
     /// from a newer rekordbox is never given rows it did not ask for.
     pub fn write(&self, path: &Path) -> Result<()> {
-        let conn = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|source| crate::Error::Open { path: path.display().to_string(), source })?;
+        let conn =
+            Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX)
+                .map_err(|source| crate::Error::Open { path: path.display().to_string(), source })?;
         unlock(&conn, &key::passphrase()?)?;
 
         crate::durable_writes(&conn)?;
@@ -238,10 +231,7 @@ impl StickSettings {
             )?;
         }
         for color in &self.colors {
-            tx.execute(
-                "UPDATE color SET name = ?1 WHERE color_id = ?2",
-                params![color.name, color.id],
-            )?;
+            tx.execute("UPDATE color SET name = ?1 WHERE color_id = ?2", params![color.name, color.id])?;
         }
         tx.commit()?;
 
@@ -316,4 +306,3 @@ mod renumber_tests {
         assert_eq!(out.iter().find(|s| s.id == 2).unwrap().seq, 3);
     }
 }
-

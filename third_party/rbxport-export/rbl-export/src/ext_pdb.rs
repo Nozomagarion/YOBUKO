@@ -142,11 +142,8 @@ fn listed_order(my_tags: &[SourceMyTag]) -> Vec<&SourceMyTag> {
     let mut placed = vec![false; my_tags.len()];
     for category in &categories {
         order.push(*category);
-        let mut under: Vec<(usize, &SourceMyTag)> = my_tags
-            .iter()
-            .enumerate()
-            .filter(|(_, t)| t.attribute != 1 && t.parent == category.id)
-            .collect();
+        let mut under: Vec<(usize, &SourceMyTag)> =
+            my_tags.iter().enumerate().filter(|(_, t)| t.attribute != 1 && t.parent == category.id).collect();
         under.sort_by_key(|(_, t)| (t.seq, t.id));
         for (index, tag) in under {
             placed[index] = true;
@@ -202,11 +199,8 @@ fn song_tag_row(track: u32, tag_id: u32) -> Vec<u8> {
 
 fn tag_row(tag: &SourceMyTag) -> Vec<u8> {
     let category = tag.attribute == 1;
-    let name: Vec<u8> = if tag.name.is_ascii() && tag.name.len() < 0x7e {
-        short_ascii(&tag.name)
-    } else {
-        long_utf16le(&tag.name)
-    };
+    let name: Vec<u8> =
+        if tag.name.is_ascii() && tag.name.len() < 0x7e { short_ascii(&tag.name) } else { long_utf16le(&tag.name) };
     // A short string sits right after the offsets; a long one starts on
     // the even byte after.
     let name_at: usize = if name[0] == 0x90 || name[0] == 0x40 { 0x20 } else { 0x1f };
@@ -393,7 +387,8 @@ mod tests {
         // own number, link and sequence, which move with the new table.
         let pages_of = |bytes: &[u8], kind: rbl_pdb::PageType| -> Vec<Vec<u8>> {
             let pdb = rbl_pdb::Pdb::parse(bytes).expect("parses");
-            let mut pages: Vec<usize> = pdb.rows(pdb.table(kind).expect("table")).iter().map(|r| r.page_offset).collect();
+            let mut pages: Vec<usize> =
+                pdb.rows(pdb.table(kind).expect("table")).iter().map(|r| r.page_offset).collect();
             pages.dedup();
             pages.iter().map(|&at| bytes[at + 0x18..at + 4096].to_vec()).collect()
         };

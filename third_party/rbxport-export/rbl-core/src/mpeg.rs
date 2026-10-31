@@ -86,7 +86,9 @@ impl Header {
         };
         let samples = if version == 3 { 1152 } else { 576 };
         let padding = usize::from((c >> 1) & 1);
-        let length = usize::try_from(u64::from(samples / 8) * u64::from(bitrate) * 1000 / u64::from(sample_rate)).ok()? + padding;
+        let length = usize::try_from(u64::from(samples / 8) * u64::from(bitrate) * 1000 / u64::from(sample_rate))
+            .ok()?
+            + padding;
         Some(Self { version, layer, sample_rate_index, channel_mode: d >> 6, length, samples })
     }
 
@@ -174,10 +176,10 @@ fn first_frames(bytes: &[u8]) -> Vec<(usize, Header)> {
     let mut frames = Vec::with_capacity(FRAMES_LOOKED_AT);
     let Some(start) = (0..bytes.len()).find(|&at| {
         let Some(header) = bytes.get(at..).and_then(Header::parse) else { return false };
-        bytes
-            .get(at + header.length..)
-            .and_then(Header::parse)
-            .is_some_and(|next| (next.version, next.layer, next.sample_rate_index) == (header.version, header.layer, header.sample_rate_index))
+        bytes.get(at + header.length..).and_then(Header::parse).is_some_and(|next| {
+            (next.version, next.layer, next.sample_rate_index)
+                == (header.version, header.layer, header.sample_rate_index)
+        })
     }) else {
         return frames;
     };

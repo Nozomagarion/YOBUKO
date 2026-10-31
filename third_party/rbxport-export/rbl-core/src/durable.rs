@@ -57,9 +57,14 @@ fn flush_with(file: &std::fs::File, full: impl FnOnce(&std::fs::File) -> std::io
 #[must_use]
 pub fn unsupported(error: &std::io::Error) -> bool {
     // macOS: ENOTSUP 45, EOPNOTSUPP 102. Linux: EOPNOTSUPP/ENOTSUP 95.
-    const CODES: &[i32] = if cfg!(target_vendor = "apple") { &[45, 102] } else if cfg!(target_os = "linux") { &[95] } else { &[] };
-    error.kind() == std::io::ErrorKind::Unsupported
-        || error.raw_os_error().is_some_and(|code| CODES.contains(&code))
+    const CODES: &[i32] = if cfg!(target_vendor = "apple") {
+        &[45, 102]
+    } else if cfg!(target_os = "linux") {
+        &[95]
+    } else {
+        &[]
+    };
+    error.kind() == std::io::ErrorKind::Unsupported || error.raw_os_error().is_some_and(|code| CODES.contains(&code))
 }
 
 /// Moves a temporary file to `to`, refusing to replace an existing `to`.
@@ -215,20 +220,13 @@ pub fn create_dir_all(path: impl AsRef<Path>) -> std::io::Result<()> {
     }
     std::fs::create_dir_all(path)?;
     for dir in missing.iter().rev() {
-        sync_dir(
-            dir.parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .unwrap_or_else(|| Path::new(".")),
-        )?;
+        sync_dir(dir.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new(".")))?;
     }
     Ok(())
 }
 
 pub fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let parent = path
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
+    let parent = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
     let mut temp = tempfile::NamedTempFile::new_in(parent)?;
     temp.write_all(bytes)?;
     flush(temp.as_file())?;
@@ -241,20 +239,12 @@ pub fn write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 pub fn replace(staged: &Path, target: &Path) -> std::io::Result<()> {
     flush(&std::fs::OpenOptions::new().write(true).open(staged)?)?;
     std::fs::rename(staged, target)?;
-    sync_dir(
-        target
-            .parent()
-            .filter(|p| !p.as_os_str().is_empty())
-            .unwrap_or(Path::new(".")),
-    )
+    sync_dir(target.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")))
 }
 
 /// Copy without truncating the destination, then durably publish it.
 pub fn copy(source: &Path, target: &Path) -> std::io::Result<u64> {
-    let parent = target
-        .parent()
-        .filter(|p| !p.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
+    let parent = target.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let mut temp = tempfile::NamedTempFile::new_in(parent)?;
     let bytes = std::io::copy(&mut std::fs::File::open(source)?, &mut temp)?;
     flush(temp.as_file())?;
@@ -363,7 +353,9 @@ impl Publication {
         match std::fs::read(journal.join(".moves.json")) {
             Ok(bytes) => {
                 let moves: std::collections::BTreeMap<PathBuf, PathBuf> = serde_json::from_slice(&bytes)?;
-                for (to, from) in &moves { validate_paths(&[to.clone(), from.clone()])?; }
+                for (to, from) in &moves {
+                    validate_paths(&[to.clone(), from.clone()])?;
+                }
                 Ok(moves)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(std::collections::BTreeMap::new()),
@@ -419,7 +411,9 @@ impl Publication {
         self.check_root()?;
         validate_paths(&[path.to_path_buf()])?;
         let receipt = self.journal.join(".sealed").join(path);
-        if let Some(parent) = receipt.parent() { create_dir_all(parent)?; }
+        if let Some(parent) = receipt.parent() {
+            create_dir_all(parent)?;
+        }
         write(&receipt, bytes)?;
         write(&self.root.join(path), bytes)
     }
@@ -432,7 +426,9 @@ impl Publication {
             let source = root.join(from);
             let moved = root.join(to);
             if moved.try_exists()? && !source.try_exists()? {
-                if let Some(parent) = source.parent() { create_dir_all(parent)?; }
+                if let Some(parent) = source.parent() {
+                    create_dir_all(parent)?;
+                }
                 rename(&moved, &source)?;
                 sync_dir(source.parent().unwrap_or(root))?;
             } else if moved.try_exists()? && source.try_exists()? {
@@ -449,19 +445,32 @@ impl Publication {
             let rejected = journal.join(".rejected").join(&path);
             if old.try_exists()? {
                 if target.try_exists()? && !rejected.try_exists()? {
-                    if let Some(parent) = rejected.parent() { create_dir_all(parent)?; }
+                    if let Some(parent) = rejected.parent() {
+                        create_dir_all(parent)?;
+                    }
                     rename(&target, &rejected)?;
                     sync_dir(target.parent().unwrap_or(root))?;
                 }
-                if let Some(parent) = target.parent() { create_dir_all(parent)?; }
+                if let Some(parent) = target.parent() {
+                    create_dir_all(parent)?;
+                }
                 rename(&old, &target)?;
                 sync_dir(target.parent().unwrap_or(root))?;
-            } else if entry.had_target == Some(false) && target.try_exists()? && !journal.join(&path).try_exists()? && !rejected.try_exists()? {
-                if let Some(parent) = rejected.parent() { create_dir_all(parent)?; }
+            } else if entry.had_target == Some(false)
+                && target.try_exists()?
+                && !journal.join(&path).try_exists()?
+                && !rejected.try_exists()?
+            {
+                if let Some(parent) = rejected.parent() {
+                    create_dir_all(parent)?;
+                }
                 rename(&target, &rejected)?;
                 sync_dir(target.parent().unwrap_or(root))?;
             } else if entry.had_target == Some(true) && !target.try_exists()? {
-                return Err(std::io::Error::other(format!("Previous generation is unavailable for {}; recovery data retained", path.display())));
+                return Err(std::io::Error::other(format!(
+                    "Previous generation is unavailable for {}; recovery data retained",
+                    path.display()
+                )));
             }
         }
         Self::retire(root, journal)
@@ -527,12 +536,7 @@ impl Publication {
             }
             let target = self.root.join(path);
             let had_target = target.try_exists()? && std::fs::metadata(&target)?.is_file();
-            entries.push(PublicationEntry {
-                path: path.clone(),
-                present,
-                had_target: Some(had_target),
-                exact: true,
-            });
+            entries.push(PublicationEntry { path: path.clone(), present, had_target: Some(had_target), exact: true });
             let mut parent = image.parent();
             while let Some(dir) = parent.filter(|p| p.starts_with(self.stage.path())) {
                 if dir.try_exists()? {
@@ -545,10 +549,7 @@ impl Publication {
         for directory in directories.iter().rev() {
             sync_dir(directory)?;
         }
-        write(
-            &self.stage.path().join("publication.json"),
-            &serde_json::to_vec(&entries)?,
-        )?;
+        write(&self.stage.path().join("publication.json"), &serde_json::to_vec(&entries)?)?;
         std::fs::rename(self.stage.path(), &self.journal).map_err(at("start publishing to", &self.root))?;
         sync_dir(&self.root)?;
         // This run wrote the journal and holds the lock: nothing else can
@@ -613,7 +614,9 @@ impl Publication {
             .iter()
             .map(|entry| written_since(&root.join(&entry.path), since))
             .collect::<std::io::Result<_>>()?;
-        let base_of = |entry: &PublicationEntry| sqlite_companion_of(&entry.path).and_then(|base| entries.iter().position(|e| e.path == base));
+        let base_of = |entry: &PublicationEntry| {
+            sqlite_companion_of(&entry.path).and_then(|base| entries.iter().position(|e| e.path == base))
+        };
         let published = |entry: &PublicationEntry| !journal.join(&entry.path).try_exists().unwrap_or(true);
         let forward = entries
             .iter()
@@ -633,7 +636,8 @@ impl Publication {
             }
             rename(&root.join(path), &to).map_err(at("move aside", &root.join(path)))
         };
-        let kept_paths: Vec<PathBuf> = entries.iter().zip(&theirs).filter(|(_, t)| **t).map(|(e, _)| e.path.clone()).collect();
+        let kept_paths: Vec<PathBuf> =
+            entries.iter().zip(&theirs).filter(|(_, t)| **t).map(|(e, _)| e.path.clone()).collect();
         // The device's earlier version of what stays theirs is kept.
         for path in &kept_paths {
             let previous = journal.join(".previous").join(path);
@@ -657,7 +661,12 @@ impl Publication {
                 .iter()
                 .zip(&theirs)
                 .filter(|(_, theirs)| !**theirs)
-                .map(|(entry, _)| PublicationEntry { path: entry.path.clone(), present: entry.present, had_target: entry.had_target, exact: true })
+                .map(|(entry, _)| PublicationEntry {
+                    path: entry.path.clone(),
+                    present: entry.present,
+                    had_target: entry.had_target,
+                    exact: true,
+                })
                 .collect();
             write(&record, &serde_json::to_vec(&rest)?)?;
             Self::finish(root, &journal, false)?;
@@ -694,17 +703,14 @@ impl Publication {
     /// `replay`: the journal was left by a run that stopped, so the device
     /// may have been written to since; see [`check_external_changes`].
     fn finish(root: &Path, journal: &Path, replay: bool) -> std::io::Result<()> {
-        if journal.join(".rollback").try_exists()? { return Self::rollback_at(root, journal); }
+        if journal.join(".rollback").try_exists()? {
+            return Self::rollback_at(root, journal);
+        }
         let record = journal.join("publication.json");
         let entries: Vec<PublicationEntry> = serde_json::from_slice(
             &std::fs::read(&record).map_err(at("read the interrupted publication record", &record))?,
         )?;
-        validate_paths(
-            &entries
-                .iter()
-                .map(|entry| entry.path.clone())
-                .collect::<Vec<_>>(),
-        )?;
+        validate_paths(&entries.iter().map(|entry| entry.path.clone()).collect::<Vec<_>>())?;
         let entries: Vec<PublicationEntry> = entries
             .into_iter()
             .map(|entry| PublicationEntry { path: publish_as(journal, &entry), exact: true, ..entry })
@@ -735,7 +741,9 @@ impl Publication {
             if let Some(from) = moves.get(&entry.path) {
                 let source = root.join(from);
                 if source.try_exists()? && !target.try_exists()? {
-                    if let Some(parent) = target.parent() { create_dir_all(parent)?; }
+                    if let Some(parent) = target.parent() {
+                        create_dir_all(parent)?;
+                    }
                     rename(&source, &target)?;
                     sync_dir(source.parent().unwrap_or(root))?;
                     sync_dir(target.parent().unwrap_or(root))?;
@@ -760,10 +768,7 @@ impl Publication {
             }
             if entry.present {
                 if image.try_exists()? {
-                    if entry.had_target == Some(true)
-                        && !target.try_exists()?
-                        && !previous.try_exists()?
-                    {
+                    if entry.had_target == Some(true) && !target.try_exists()? && !previous.try_exists()? {
                         return Err(std::io::Error::other(format!(
                             "Publication target vanished at {}; recovery data was retained",
                             entry.path.display()
@@ -799,9 +804,7 @@ impl Publication {
                     }
                     rename(&image, &target).map_err(at("publish", &target))?;
                     sync_dir(target.parent().unwrap_or(root))?;
-                } else if !target.try_exists()?
-                    || (entry.had_target == Some(true) && !previous.try_exists()?)
-                {
+                } else if !target.try_exists()? || (entry.had_target == Some(true) && !previous.try_exists()?) {
                     // A lost new image must never silently become a deletion.
                     // Mark this journal before restoring the old file, so a
                     // later recovery cannot mistake that old file for a
@@ -849,7 +852,9 @@ impl Publication {
                 }
             })?;
         }
-        if journal.join(".verification-required").try_exists()? { return Ok(()); }
+        if journal.join(".verification-required").try_exists()? {
+            return Ok(());
+        }
         Self::retire(root, journal)
     }
 
@@ -857,8 +862,7 @@ impl Publication {
         // Remove the commit intent atomically BEFORE deleting its images.
         // A crash during cleanup must never replay a missing image as deletion.
         let discarded = tempfile::Builder::new().prefix(RETIRED_PREFIX).tempdir_in(root)?;
-        std::fs::rename(journal, discarded.path().join("completed"))
-            .map_err(at("finish publishing to", root))?;
+        std::fs::rename(journal, discarded.path().join("completed")).map_err(at("finish publishing to", root))?;
         if let Err(error) = sync_dir(root) {
             // Until retirement is durable, a crash may resurrect the journal.
             // Keep its images instead of deleting them during TempDir::drop.
@@ -893,7 +897,11 @@ fn publish_as(journal: &Path, entry: &PublicationEntry) -> PathBuf {
     }
     let nfc = nfc_path(&entry.path);
     let answers = |path: &Path| journal.join(path).exists() || journal.join(".previous").join(path).exists();
-    if nfc != entry.path && answers(&nfc) { nfc } else { entry.path.clone() }
+    if nfc != entry.path && answers(&nfc) {
+        nfc
+    } else {
+        entry.path.clone()
+    }
 }
 
 /// The database a SQLite `-wal` or `-shm` file belongs to.
@@ -917,18 +925,12 @@ fn remove_leftovers(root: &Path) {
 }
 
 fn is_appledouble(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|name| name.to_str())
-        .is_some_and(|name| name.starts_with("._"))
+    path.file_name().and_then(|name| name.to_str()).is_some_and(|name| name.starts_with("._"))
 }
 
 /// Check all real paths before replay so a late conflict cannot cause another
 /// partially applied pass over a device that has changed since publication.
-fn check_external_changes(
-    root: &Path,
-    journal: &Path,
-    entries: &[PublicationEntry],
-) -> std::io::Result<()> {
+fn check_external_changes(root: &Path, journal: &Path, entries: &[PublicationEntry]) -> std::io::Result<()> {
     let since = published_at(journal)?;
     for entry in entries {
         if is_appledouble(&entry.path) {
@@ -996,15 +998,11 @@ fn same_file_contents(left: &Path, right: &Path) -> std::io::Result<bool> {
 }
 
 fn validate_paths(paths: &[std::path::PathBuf]) -> std::io::Result<()> {
-    if paths.iter().any(|p| {
-        p.as_os_str().is_empty()
-            || p.components()
-                .any(|c| !matches!(c, std::path::Component::Normal(_)))
-    }) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "publication paths must be relative",
-        ));
+    if paths
+        .iter()
+        .any(|p| p.as_os_str().is_empty() || p.components().any(|c| !matches!(c, std::path::Component::Normal(_))))
+    {
+        return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "publication paths must be relative"));
     }
     Ok(())
 }
@@ -1053,14 +1051,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn only_an_unsupported_directory_flush_is_optional() {
-        assert!(unsupported(&std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            "directory fsync is unsupported",
-        )));
-        assert!(!unsupported(&std::io::Error::new(
-            std::io::ErrorKind::PermissionDenied,
-            "permission denied",
-        )));
+        assert!(unsupported(&std::io::Error::new(std::io::ErrorKind::Unsupported, "directory fsync is unsupported",)));
+        assert!(!unsupported(&std::io::Error::new(std::io::ErrorKind::PermissionDenied, "permission denied",)));
     }
 
     /// A filesystem without `F_FULLFSYNC` (exFAT on macOS) answers ENOTSUP;
@@ -1093,9 +1085,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_enotsup_from_directory_flush_is_optional() {
-        assert!(unsupported(
-            &std::io::Error::from_raw_os_error(45)
-        ));
+        assert!(unsupported(&std::io::Error::from_raw_os_error(45)));
     }
 
     fn write_file(path: &Path, bytes: &[u8]) {
@@ -1103,8 +1093,7 @@ mod tests {
         write(path, bytes).unwrap();
     }
     fn mark_newer(path: &Path) {
-        let times = std::fs::FileTimes::new()
-            .set_modified(std::time::SystemTime::now() + Duration::from_secs(10));
+        let times = std::fs::FileTimes::new().set_modified(std::time::SystemTime::now() + Duration::from_secs(10));
         std::fs::File::open(path).unwrap().set_times(times).unwrap();
     }
     #[test]
@@ -1117,23 +1106,15 @@ mod tests {
         let publication = Publication::new(root.path(), ".journal").unwrap();
         write(&publication.stage().join("first"), b"new first").unwrap();
         write(&publication.stage().join("second"), b"new second").unwrap();
-        assert!(publication
-            .commit(&["first".into(), "second".into(), "obsolete".into()])
-            .is_err());
+        assert!(publication.commit(&["first".into(), "second".into(), "obsolete".into()]).is_err());
         drop(publication);
-        assert_eq!(
-            std::fs::read(root.path().join("first")).unwrap(),
-            b"new first"
-        );
+        assert_eq!(std::fs::read(root.path().join("first")).unwrap(), b"new first");
         assert!(Publication::recover(root.path(), ".journal").is_err());
         assert!(root.path().join(".journal/.previous/first").is_file());
         std::fs::remove_dir(root.path().join("second")).unwrap();
         Publication::recover(root.path(), ".journal").unwrap();
         Publication::recover(root.path(), ".journal").unwrap();
-        assert_eq!(
-            std::fs::read(root.path().join("second")).unwrap(),
-            b"new second"
-        );
+        assert_eq!(std::fs::read(root.path().join("second")).unwrap(), b"new second");
         assert!(!root.path().join("obsolete").exists());
         assert!(!root.path().join(".journal").exists());
     }
@@ -1152,72 +1133,28 @@ mod tests {
     fn publication_ignores_appledouble_companions() {
         let root = tempfile::tempdir().unwrap();
         let publication = Publication::new(root.path(), ".journal").unwrap();
-        write_file(
-            &publication
-                .stage()
-                .join("PIONEER/rekordbox/exportLibrary.db"),
-            b"new db",
-        );
-        write_file(
-            &publication
-                .stage()
-                .join("PIONEER/rekordbox/._exportLibrary.db"),
-            b"metadata",
-        );
+        write_file(&publication.stage().join("PIONEER/rekordbox/exportLibrary.db"), b"new db");
+        write_file(&publication.stage().join("PIONEER/rekordbox/._exportLibrary.db"), b"metadata");
         publication
-            .commit(&[
-                "PIONEER/rekordbox/exportLibrary.db".into(),
-                "PIONEER/rekordbox/._exportLibrary.db".into(),
-            ])
+            .commit(&["PIONEER/rekordbox/exportLibrary.db".into(), "PIONEER/rekordbox/._exportLibrary.db".into()])
             .unwrap();
-        assert_eq!(
-            std::fs::read(root.path().join("PIONEER/rekordbox/exportLibrary.db")).unwrap(),
-            b"new db"
-        );
-        assert!(!root
-            .path()
-            .join("PIONEER/rekordbox/._exportLibrary.db")
-            .exists());
+        assert_eq!(std::fs::read(root.path().join("PIONEER/rekordbox/exportLibrary.db")).unwrap(), b"new db");
+        assert!(!root.path().join("PIONEER/rekordbox/._exportLibrary.db").exists());
     }
 
     #[test]
     fn old_sidecar_entries_do_not_block_real_database_recovery() {
         let root = tempfile::tempdir().unwrap();
         let journal = root.path().join(".journal");
-        write_file(
-            &root.path().join("PIONEER/._rekordbox"),
-            b"current metadata",
-        );
+        write_file(&root.path().join("PIONEER/._rekordbox"), b"current metadata");
         write_file(&journal.join("PIONEER/._rekordbox"), b"staged metadata");
-        write_file(
-            &journal.join(".previous/PIONEER/._rekordbox"),
-            b"old metadata",
-        );
-        write_file(
-            &journal.join(".previous/Contents/._01"),
-            b"restore metadata",
-        );
-        write_file(
-            &root.path().join("PIONEER/rekordbox/exportLibrary.db"),
-            b"old db",
-        );
-        write_file(
-            &journal.join("PIONEER/rekordbox/exportLibrary.db"),
-            b"new db",
-        );
+        write_file(&journal.join(".previous/PIONEER/._rekordbox"), b"old metadata");
+        write_file(&journal.join(".previous/Contents/._01"), b"restore metadata");
+        write_file(&root.path().join("PIONEER/rekordbox/exportLibrary.db"), b"old db");
+        write_file(&journal.join("PIONEER/rekordbox/exportLibrary.db"), b"new db");
         let entries = [
-            PublicationEntry {
-                path: "PIONEER/._rekordbox".into(),
-                present: true,
-                had_target: None,
-                exact: false,
-            },
-            PublicationEntry {
-                path: "Contents/._01".into(),
-                present: true,
-                had_target: None,
-                exact: false,
-            },
+            PublicationEntry { path: "PIONEER/._rekordbox".into(), present: true, had_target: None, exact: false },
+            PublicationEntry { path: "Contents/._01".into(), present: true, had_target: None, exact: false },
             PublicationEntry {
                 path: "Contents/01/._missing.wav".into(),
                 present: true,
@@ -1231,25 +1168,13 @@ mod tests {
                 exact: false,
             },
         ];
-        write_file(
-            &journal.join("publication.json"),
-            &serde_json::to_vec(&entries).unwrap(),
-        );
+        write_file(&journal.join("publication.json"), &serde_json::to_vec(&entries).unwrap());
 
         Publication::recover(root.path(), ".journal").unwrap();
 
-        assert_eq!(
-            std::fs::read(root.path().join("PIONEER/._rekordbox")).unwrap(),
-            b"current metadata"
-        );
-        assert_eq!(
-            std::fs::read(root.path().join("Contents/._01")).unwrap(),
-            b"restore metadata"
-        );
-        assert_eq!(
-            std::fs::read(root.path().join("PIONEER/rekordbox/exportLibrary.db")).unwrap(),
-            b"new db"
-        );
+        assert_eq!(std::fs::read(root.path().join("PIONEER/._rekordbox")).unwrap(), b"current metadata");
+        assert_eq!(std::fs::read(root.path().join("Contents/._01")).unwrap(), b"restore metadata");
+        assert_eq!(std::fs::read(root.path().join("PIONEER/rekordbox/exportLibrary.db")).unwrap(), b"new db");
         assert!(!journal.exists());
     }
 
@@ -1272,10 +1197,7 @@ mod tests {
 
         assert!(Publication::recover(root.path(), ".journal").is_err());
         assert_eq!(std::fs::read(root.path().join(path)).unwrap(), b"old db");
-        assert_eq!(
-            std::fs::read(journal.join(".previous").join(path)).unwrap(),
-            b"old db"
-        );
+        assert_eq!(std::fs::read(journal.join(".previous").join(path)).unwrap(), b"old db");
         assert!(Publication::recover(root.path(), ".journal").is_err());
         assert!(journal.exists());
     }
@@ -1324,15 +1246,9 @@ mod tests {
         );
 
         assert!(Publication::recover(root.path(), ".journal").is_err());
-        assert_eq!(
-            std::fs::read(root.path().join(path)).unwrap(),
-            b"external db"
-        );
+        assert_eq!(std::fs::read(root.path().join(path)).unwrap(), b"external db");
         assert_eq!(std::fs::read(journal.join(path)).unwrap(), b"new db");
-        assert_eq!(
-            std::fs::read(journal.join(".previous").join(path)).unwrap(),
-            b"old db"
-        );
+        assert_eq!(std::fs::read(journal.join(".previous").join(path)).unwrap(), b"old db");
     }
 
     #[test]
@@ -1356,9 +1272,24 @@ mod tests {
         write_file(
             &journal.join("publication.json"),
             &serde_json::to_vec(&[
-                PublicationEntry { path: "Contents/new.mp3".into(), present: true, had_target: Some(false), exact: true },
-                PublicationEntry { path: "PIONEER/first.pdb".into(), present: true, had_target: Some(true), exact: true },
-                PublicationEntry { path: "PIONEER/later.pdb".into(), present: true, had_target: Some(true), exact: true },
+                PublicationEntry {
+                    path: "Contents/new.mp3".into(),
+                    present: true,
+                    had_target: Some(false),
+                    exact: true,
+                },
+                PublicationEntry {
+                    path: "PIONEER/first.pdb".into(),
+                    present: true,
+                    had_target: Some(true),
+                    exact: true,
+                },
+                PublicationEntry {
+                    path: "PIONEER/later.pdb".into(),
+                    present: true,
+                    had_target: Some(true),
+                    exact: true,
+                },
                 PublicationEntry { path: db.into(), present: true, had_target: Some(true), exact: true },
             ])
             .unwrap(),
@@ -1385,7 +1316,11 @@ mod tests {
         // The device is usable again, and a second call finds nothing to do.
         Publication::recover(root.path(), ".journal").unwrap();
         assert!(Publication::set_aside(root.path(), ".journal", &keep).unwrap().is_none());
-        assert!(std::fs::read_dir(root.path()).unwrap().all(|e| !e.unwrap().file_name().to_string_lossy().starts_with(RETIRED_PREFIX)));
+        assert!(std::fs::read_dir(root.path()).unwrap().all(|e| !e
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with(RETIRED_PREFIX)));
     }
 
     #[test]
@@ -1408,7 +1343,12 @@ mod tests {
             &journal.join("publication.json"),
             &serde_json::to_vec(&[
                 PublicationEntry { path: wal.into(), present: false, had_target: Some(false), exact: true },
-                PublicationEntry { path: "PIONEER/first.pdb".into(), present: true, had_target: Some(true), exact: true },
+                PublicationEntry {
+                    path: "PIONEER/first.pdb".into(),
+                    present: true,
+                    had_target: Some(true),
+                    exact: true,
+                },
                 PublicationEntry { path: db.into(), present: true, had_target: Some(true), exact: true },
                 PublicationEntry { path: "PIONEER/sync".into(), present: true, had_target: Some(true), exact: true },
             ])
@@ -1451,7 +1391,12 @@ mod tests {
             &journal.join("publication.json"),
             &serde_json::to_vec(&[
                 PublicationEntry { path: wal.into(), present: false, had_target: Some(false), exact: true },
-                PublicationEntry { path: "PIONEER/other.pdb".into(), present: true, had_target: Some(true), exact: true },
+                PublicationEntry {
+                    path: "PIONEER/other.pdb".into(),
+                    present: true,
+                    had_target: Some(true),
+                    exact: true,
+                },
                 PublicationEntry { path: db.into(), present: true, had_target: Some(true), exact: true },
             ])
             .unwrap(),
@@ -1480,32 +1425,16 @@ mod tests {
         write_file(
             &journal.join("publication.json"),
             &serde_json::to_vec(&[
-                PublicationEntry {
-                    path: "PIONEER/first.pdb".into(),
-                    present: true,
-                    had_target: None,
-                    exact: false,
-                },
-                PublicationEntry {
-                    path: db.into(),
-                    present: true,
-                    had_target: None,
-                    exact: false,
-                },
+                PublicationEntry { path: "PIONEER/first.pdb".into(), present: true, had_target: None, exact: false },
+                PublicationEntry { path: db.into(), present: true, had_target: None, exact: false },
             ])
             .unwrap(),
         );
         mark_newer(&root.path().join(db));
 
         assert!(Publication::recover(root.path(), ".journal").is_err());
-        assert_eq!(
-            std::fs::read(root.path().join(db)).unwrap(),
-            b"external edit"
-        );
-        assert_eq!(
-            std::fs::read(root.path().join("PIONEER/first.pdb")).unwrap(),
-            b"old first"
-        );
+        assert_eq!(std::fs::read(root.path().join(db)).unwrap(), b"external edit");
+        assert_eq!(std::fs::read(root.path().join("PIONEER/first.pdb")).unwrap(), b"old first");
         assert!(journal.exists());
     }
 
@@ -1551,14 +1480,8 @@ mod tests {
             .unwrap(),
         );
         assert!(Publication::recover(root.path(), ".journal").is_err());
-        assert_eq!(
-            std::fs::read(root.path().join(path)).unwrap(),
-            b"new sqlite writes"
-        );
-        assert_eq!(
-            std::fs::read(journal.join(".previous").join(path)).unwrap(),
-            b"old sqlite writes"
-        );
+        assert_eq!(std::fs::read(root.path().join(path)).unwrap(), b"new sqlite writes");
+        assert_eq!(std::fs::read(journal.join(".previous").join(path)).unwrap(), b"old sqlite writes");
     }
 
     #[test]
@@ -1603,10 +1526,7 @@ mod tests {
         );
 
         assert!(Publication::recover(root.path(), ".journal").is_err());
-        assert_eq!(
-            std::fs::read(root.path().join(path)).unwrap(),
-            b"external db"
-        );
+        assert_eq!(std::fs::read(root.path().join(path)).unwrap(), b"external db");
         assert_eq!(std::fs::read(journal.join(path)).unwrap(), b"staged db");
     }
 
@@ -1725,7 +1645,13 @@ mod tests {
         write_file(&journal.join(nfd), b"audio");
         write_file(
             &journal.join("publication.json"),
-            &serde_json::to_vec(&[PublicationEntry { path: nfd.into(), present: true, had_target: Some(false), exact: true }]).unwrap(),
+            &serde_json::to_vec(&[PublicationEntry {
+                path: nfd.into(),
+                present: true,
+                had_target: Some(false),
+                exact: true,
+            }])
+            .unwrap(),
         );
         Publication::recover(root.path(), ".journal").unwrap();
         assert_eq!(std::fs::read(root.path().join(nfd)).unwrap(), b"audio");
@@ -1763,10 +1689,8 @@ mod tests {
         write_file(&publication.stage().join("PIONEER/rekordbox/export.pdb"), b"pdb");
         publication.commit(&["PIONEER/rekordbox/export.pdb".into()]).unwrap();
         drop(publication);
-        let left: Vec<String> = std::fs::read_dir(root.path())
-            .unwrap()
-            .map(|e| e.unwrap().file_name().into_string().unwrap())
-            .collect();
+        let left: Vec<String> =
+            std::fs::read_dir(root.path()).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
         assert!(left.iter().all(|n| n == "PIONEER" || n == ".rbxport-write.lock"), "{left:?}");
     }
 
@@ -1779,7 +1703,13 @@ mod tests {
         write_file(&root.path().join("Contents"), b"not a folder");
         write_file(
             &journal.join("publication.json"),
-            &serde_json::to_vec(&[PublicationEntry { path: "Contents/a.mp3".into(), present: true, had_target: Some(false), exact: true }]).unwrap(),
+            &serde_json::to_vec(&[PublicationEntry {
+                path: "Contents/a.mp3".into(),
+                present: true,
+                had_target: Some(false),
+                exact: true,
+            }])
+            .unwrap(),
         );
         let error = Publication::recover(root.path(), ".journal").unwrap_err();
         assert!(error.to_string().contains("Contents"), "{error}");
@@ -1874,27 +1804,48 @@ mod tests {
             for rollback in [false, true] {
                 let root = tempfile::tempdir().unwrap();
                 let journal = root.path().join(".journal");
-                let entries: Vec<_> = ["a", "b", "obsolete"].iter().map(|name| PublicationEntry {
-                    path: (*name).into(), present: *name != "obsolete", had_target: Some(true), exact: true,
-                }).collect();
-                for name in ["a", "b", "obsolete"] { write_file(&root.path().join(name), b"old"); }
-                for name in ["a", "b"] { write_file(&journal.join(name), b"new"); }
+                let entries: Vec<_> = ["a", "b", "obsolete"]
+                    .iter()
+                    .map(|name| PublicationEntry {
+                        path: (*name).into(),
+                        present: *name != "obsolete",
+                        had_target: Some(true),
+                        exact: true,
+                    })
+                    .collect();
+                for name in ["a", "b", "obsolete"] {
+                    write_file(&root.path().join(name), b"old");
+                }
+                for name in ["a", "b"] {
+                    write_file(&journal.join(name), b"new");
+                }
                 write_file(&journal.join(".verification-required"), b"1");
                 create_dir_all(journal.join(".previous")).unwrap();
                 let steps = [("a", true), ("a", false), ("b", true), ("b", false), ("obsolete", true)];
                 for (name, backup) in steps.iter().take(boundary) {
-                    if *backup { rename(&root.path().join(name), &journal.join(".previous").join(name)).unwrap(); }
-                    else { rename(&journal.join(name), &root.path().join(name)).unwrap(); }
+                    if *backup {
+                        rename(&root.path().join(name), &journal.join(".previous").join(name)).unwrap();
+                    } else {
+                        rename(&journal.join(name), &root.path().join(name)).unwrap();
+                    }
                 }
                 write_file(&journal.join("publication.json"), &serde_json::to_vec(&entries).unwrap());
-                if rollback { write_file(&journal.join(".rollback"), b"1"); }
+                if rollback {
+                    write_file(&journal.join(".rollback"), b"1");
+                }
                 Publication::recover(root.path(), ".journal").unwrap();
                 Publication::recover(root.path(), ".journal").unwrap();
                 let expected: &[u8] = if rollback { b"old" } else { b"new" };
-                assert_eq!(std::fs::read(root.path().join("a")).unwrap(), expected, "boundary {boundary}, rollback {rollback}");
+                assert_eq!(
+                    std::fs::read(root.path().join("a")).unwrap(),
+                    expected,
+                    "boundary {boundary}, rollback {rollback}"
+                );
                 assert_eq!(std::fs::read(root.path().join("b")).unwrap(), expected);
                 assert_eq!(root.path().join("obsolete").exists(), rollback);
-                if !rollback { Publication::finalize_pending(root.path(), ".journal").unwrap(); }
+                if !rollback {
+                    Publication::finalize_pending(root.path(), ".journal").unwrap();
+                }
                 assert!(!journal.exists());
             }
         }

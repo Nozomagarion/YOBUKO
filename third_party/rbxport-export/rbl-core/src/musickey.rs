@@ -59,8 +59,7 @@ impl Key {
     /// The same key written the way rekordbox writes it: flats, except `F#`.
     #[must_use]
     pub fn name(self) -> String {
-        const NAMES: [&str; 12] =
-            ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+        const NAMES: [&str; 12] = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
         let root = NAMES.get(usize::from(self.pitch % 12)).copied().unwrap_or("C");
         match self.mode {
             Mode::Major => root.to_owned(),
@@ -207,12 +206,30 @@ mod tests {
         // 8A is A minor and 8B its relative major, C — walking the wheel a
         // fifth at a time has to land on the same keys the names do.
         let pairs = [
-            ("1A", "Abm"), ("2A", "Ebm"), ("3A", "Bbm"), ("4A", "Fm"),
-            ("5A", "Cm"), ("6A", "Gm"), ("7A", "Dm"), ("8A", "Am"),
-            ("9A", "Em"), ("10A", "Bm"), ("11A", "F#m"), ("12A", "Dbm"),
-            ("1B", "B"), ("2B", "F#"), ("3B", "Db"), ("4B", "Ab"),
-            ("5B", "Eb"), ("6B", "Bb"), ("7B", "F"), ("8B", "C"),
-            ("9B", "G"), ("10B", "D"), ("11B", "A"), ("12B", "E"),
+            ("1A", "Abm"),
+            ("2A", "Ebm"),
+            ("3A", "Bbm"),
+            ("4A", "Fm"),
+            ("5A", "Cm"),
+            ("6A", "Gm"),
+            ("7A", "Dm"),
+            ("8A", "Am"),
+            ("9A", "Em"),
+            ("10A", "Bm"),
+            ("11A", "F#m"),
+            ("12A", "Dbm"),
+            ("1B", "B"),
+            ("2B", "F#"),
+            ("3B", "Db"),
+            ("4B", "Ab"),
+            ("5B", "Eb"),
+            ("6B", "Bb"),
+            ("7B", "F"),
+            ("8B", "C"),
+            ("9B", "G"),
+            ("10B", "D"),
+            ("11B", "A"),
+            ("12B", "E"),
         ];
         for (code, name) in pairs {
             assert_eq!(parse(code), parse(name), "{code} should be {name}");

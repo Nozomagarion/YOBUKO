@@ -201,7 +201,10 @@ pub fn read(root: &Path, format: Format) -> Result<Library> {
     loop {
         crate::recover(root)?;
         let lease = rbl_core::durable::read_lease(root)?;
-        if crate::recovery_pending(root) { drop(lease); continue; }
+        if crate::recovery_pending(root) {
+            drop(lease);
+            continue;
+        }
         return read_unlocked(root, format);
     }
 }
@@ -363,20 +366,36 @@ fn read_one(path: &Path) -> Result<(Vec<Node>, Vec<Track>)> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Edit {
     /// A playlist, or a folder, at the top of `parent` (0 for the top level).
-    Create { parent: u32, name: String, folder: bool },
-    Rename { id: u32, name: String },
+    Create {
+        parent: u32,
+        name: String,
+        folder: bool,
+    },
+    Rename {
+        id: u32,
+        name: String,
+    },
     /// A playlist, or a folder and everything under it. The tracks stay on
     /// the stick.
-    Delete { id: u32 },
+    Delete {
+        id: u32,
+    },
     /// Tracks of this library appended to a playlist, in the order given.
     /// A track the playlist already holds is appended again with
     /// `duplicates`, and left out without it: rekordbox's "Add" and "Skip"
     /// on the question it asks first (see [`Library::held`]).
-    Add { playlist: u32, tracks: Vec<u32>, duplicates: bool },
+    Add {
+        playlist: u32,
+        tracks: Vec<u32>,
+        duplicates: bool,
+    },
     /// Every entry of these tracks taken out of a playlist. The interface
     /// names a stick's rows by their file, so two entries of one track are
     /// one row id there and are selected, and taken out, together.
-    Remove { playlist: u32, tracks: Vec<u32> },
+    Remove {
+        playlist: u32,
+        tracks: Vec<u32>,
+    },
 }
 
 /// What an edit did.
@@ -513,7 +532,13 @@ fn plan(nodes: &[Node], tracks: &BTreeSet<u32>, edit: &Edit) -> Result<(Vec<Node
                 return Err(refused("That folder is no longer on the device."));
             }
             let name = checked_name(name)?;
-            let id = nodes.iter().map(|n| n.id).max().unwrap_or(0).checked_add(1).ok_or_else(|| ExportError::Conflict("The device has no room for another playlist.".to_owned()))?;
+            let id = nodes
+                .iter()
+                .map(|n| n.id)
+                .max()
+                .unwrap_or(0)
+                .checked_add(1)
+                .ok_or_else(|| ExportError::Conflict("The device has no room for another playlist.".to_owned()))?;
             for sibling in after.iter_mut().filter(|n| n.parent == *parent) {
                 sibling.sequence = sibling.sequence.saturating_add(1);
             }
@@ -534,7 +559,8 @@ fn plan(nodes: &[Node], tracks: &BTreeSet<u32>, edit: &Edit) -> Result<(Vec<Node
             let parent = nodes[at].parent;
             let mut gone: BTreeSet<u32> = BTreeSet::from([*id]);
             loop {
-                let more: Vec<u32> = nodes.iter().filter(|n| gone.contains(&n.parent) && !gone.contains(&n.id)).map(|n| n.id).collect();
+                let more: Vec<u32> =
+                    nodes.iter().filter(|n| gone.contains(&n.parent) && !gone.contains(&n.id)).map(|n| n.id).collect();
                 if more.is_empty() {
                     break;
                 }
@@ -711,11 +737,15 @@ fn rewrite_pdb(bytes: &[u8], before: &[Node], after: &[Node]) -> Result<Vec<u8>>
     let pdb = rbl_pdb::Pdb::parse(bytes).map_err(unreadable)?;
     let old: BTreeMap<u32, &Node> = before.iter().map(|n| (n.id, n)).collect();
     let new: BTreeMap<u32, &Node> = after.iter().map(|n| (n.id, n)).collect();
-    let cannot = || ExportError::Conflict("This device's library could not be changed in place. Nothing was changed.".to_owned());
+    let cannot = || {
+        ExportError::Conflict("This device's library could not be changed in place. Nothing was changed.".to_owned())
+    };
 
     let mut next = bytes.to_vec();
     let same_row = |was: &Node, now: &Node| was.name == now.name && was.sequence == now.sequence;
-    if old.iter().any(|(id, n)| new.get(id).is_none_or(|m| !same_row(n, m))) || new.keys().any(|id| !old.contains_key(id)) {
+    if old.iter().any(|(id, n)| new.get(id).is_none_or(|m| !same_row(n, m)))
+        || new.keys().any(|id| !old.contains_key(id))
+    {
         let table = pdb.table(PageType::PlaylistTree).ok_or_else(cannot)?;
         let mut tree_rows = Vec::with_capacity(after.len());
         let mut written = BTreeSet::new();
@@ -829,7 +859,10 @@ mod tests {
         // keeps it; either way the file it names is the one there.
         assert!(files.locate("/MUSIC/140 club vi/03-Von_D-Thl-z0ne.mp3").is_file());
         assert!(files.locate("\\Music\\140 Club VI\\03-von_d-thl-z0ne.mp3").is_file());
-        assert_eq!(files.locate("/Music/140 Club VI/03-von_d-thl-z0ne.mp3"), root.path().join("Music/140 Club VI/03-von_d-thl-z0ne.mp3"));
+        assert_eq!(
+            files.locate("/Music/140 Club VI/03-von_d-thl-z0ne.mp3"),
+            root.path().join("Music/140 Club VI/03-von_d-thl-z0ne.mp3")
+        );
     }
 
     #[test]
@@ -876,13 +909,16 @@ mod tests {
 
     #[test]
     fn a_new_playlist_takes_the_next_id_and_the_top_of_its_parent() {
-        let (after, applied) = plan(&library(), &tracks(), &Edit::Create { parent: 0, name: " New playlist ".into(), folder: false }).unwrap();
+        let (after, applied) =
+            plan(&library(), &tracks(), &Edit::Create { parent: 0, name: " New playlist ".into(), folder: false })
+                .unwrap();
         assert_eq!(applied, Applied { id: 6, changed: 1 });
         assert_eq!(after.last().unwrap(), &node(6, 0, "New playlist", false, 0, &[]));
         // Every sibling moves down one; the folder's child does not.
         let sequences: Vec<(u32, u32)> = after.iter().map(|n| (n.id, n.sequence)).collect();
         assert_eq!(sequences, vec![(1, 3), (2, 2), (3, 1), (4, 4), (5, 1), (6, 0)]);
-        let (after, _) = plan(&library(), &tracks(), &Edit::Create { parent: 4, name: "Saturday".into(), folder: true }).unwrap();
+        let (after, _) =
+            plan(&library(), &tracks(), &Edit::Create { parent: 4, name: "Saturday".into(), folder: true }).unwrap();
         assert_eq!(after.last().unwrap(), &node(6, 4, "Saturday", true, 0, &[]));
         assert_eq!(after.iter().find(|n| n.id == 5).unwrap().sequence, 2);
     }
@@ -894,11 +930,14 @@ mod tests {
     #[test]
     fn rekordboxs_own_device_edits_come_out_the_same() {
         let shape = |nodes: &[Node]| -> Vec<(u32, u32, u32, String, Vec<u32>)> {
-            let mut out: Vec<_> = nodes.iter().map(|n| (n.id, n.parent, n.sequence, n.name.clone(), n.tracks.clone())).collect();
+            let mut out: Vec<_> =
+                nodes.iter().map(|n| (n.id, n.parent, n.sequence, n.name.clone(), n.tracks.clone())).collect();
             out.sort();
             out
         };
-        let row = |id: u32, parent: u32, sequence: u32, name: &str, tracks: &[u32]| (id, parent, sequence, name.to_owned(), tracks.to_vec());
+        let row = |id: u32, parent: u32, sequence: u32, name: &str, tracks: &[u32]| {
+            (id, parent, sequence, name.to_owned(), tracks.to_vec())
+        };
         let tracks: BTreeSet<u32> = (1..=4).collect();
         let step = |nodes: &[Node], edit: Edit| plan(nodes, &tracks, &edit).unwrap().0;
 
@@ -911,29 +950,53 @@ mod tests {
         // Create New Playlist, then typed over: rig-stick-1-created.
         let created = step(&start, Edit::Create { parent: 0, name: "Untitled Playlist".into(), folder: false });
         let created = step(&created, Edit::Rename { id: 4, name: "RB New".into() });
-        assert_eq!(shape(&created), vec![
-            row(1, 0, 2, "Folder A", &[]), row(2, 1, 2, "Inside A", &[1, 2]), row(3, 0, 4, "Top List", &[3, 4, 1]), row(4, 0, 0, "RB New", &[]),
-        ]);
+        assert_eq!(
+            shape(&created),
+            vec![
+                row(1, 0, 2, "Folder A", &[]),
+                row(2, 1, 2, "Inside A", &[1, 2]),
+                row(3, 0, 4, "Top List", &[3, 4, 1]),
+                row(4, 0, 0, "RB New", &[]),
+            ]
+        );
         // Create New Folder, its name kept: rig-stick-2.
         let folder = step(&created, Edit::Create { parent: 0, name: "Untitled Folder".into(), folder: true });
-        assert_eq!(shape(&folder), vec![
-            row(1, 0, 3, "Folder A", &[]), row(2, 1, 2, "Inside A", &[1, 2]), row(3, 0, 5, "Top List", &[3, 4, 1]),
-            row(4, 0, 1, "RB New", &[]), row(5, 0, 0, "Untitled Folder", &[]),
-        ]);
+        assert_eq!(
+            shape(&folder),
+            vec![
+                row(1, 0, 3, "Folder A", &[]),
+                row(2, 1, 2, "Inside A", &[1, 2]),
+                row(3, 0, 5, "Top List", &[3, 4, 1]),
+                row(4, 0, 1, "RB New", &[]),
+                row(5, 0, 0, "Untitled Folder", &[]),
+            ]
+        );
         // Add To Playlist > RB New, then Remove from Playlist in Top List,
         // then the rename: rig-stick-4, -6 and -7.
         let added = step(&folder, Edit::Add { playlist: 4, tracks: vec![3], duplicates: false });
         let removed = step(&added, Edit::Remove { playlist: 3, tracks: vec![4] });
         let renamed = step(&removed, Edit::Rename { id: 3, name: "Top Renamed".into() });
-        assert_eq!(shape(&renamed), vec![
-            row(1, 0, 3, "Folder A", &[]), row(2, 1, 2, "Inside A", &[1, 2]), row(3, 0, 5, "Top Renamed", &[3, 1]),
-            row(4, 0, 1, "RB New", &[3]), row(5, 0, 0, "Untitled Folder", &[]),
-        ]);
+        assert_eq!(
+            shape(&renamed),
+            vec![
+                row(1, 0, 3, "Folder A", &[]),
+                row(2, 1, 2, "Inside A", &[1, 2]),
+                row(3, 0, 5, "Top Renamed", &[3, 1]),
+                row(4, 0, 1, "RB New", &[3]),
+                row(5, 0, 0, "Untitled Folder", &[]),
+            ]
+        );
         // Delete Playlist on RB New: rig-stick-8.
         let deleted = step(&renamed, Edit::Delete { id: 4 });
-        assert_eq!(shape(&deleted), vec![
-            row(1, 0, 1, "Folder A", &[]), row(2, 1, 2, "Inside A", &[1, 2]), row(3, 0, 2, "Top Renamed", &[3, 1]), row(5, 0, 0, "Untitled Folder", &[]),
-        ]);
+        assert_eq!(
+            shape(&deleted),
+            vec![
+                row(1, 0, 1, "Folder A", &[]),
+                row(2, 1, 2, "Inside A", &[1, 2]),
+                row(3, 0, 2, "Top Renamed", &[3, 1]),
+                row(5, 0, 0, "Untitled Folder", &[]),
+            ]
+        );
 
         // OneLibrary, from its own starting rows: rig-stick-3 and -9.
         let start = vec![
@@ -942,13 +1005,24 @@ mod tests {
             node(3, 0, "Top List", false, 2, &[3, 4, 1]),
         ];
         let created = step(&start, Edit::Create { parent: 0, name: "Untitled Playlist".into(), folder: false });
-        assert_eq!(shape(&created), vec![
-            row(1, 0, 1, "Folder A", &[]), row(2, 1, 1, "Inside A", &[1, 2]), row(3, 0, 3, "Top List", &[3, 4, 1]), row(4, 0, 0, "Untitled Playlist", &[]),
-        ]);
+        assert_eq!(
+            shape(&created),
+            vec![
+                row(1, 0, 1, "Folder A", &[]),
+                row(2, 1, 1, "Inside A", &[1, 2]),
+                row(3, 0, 3, "Top List", &[3, 4, 1]),
+                row(4, 0, 0, "Untitled Playlist", &[]),
+            ]
+        );
         let deleted = step(&created, Edit::Delete { id: 4 });
-        assert_eq!(shape(&deleted), vec![
-            row(1, 0, 0, "Folder A", &[]), row(2, 1, 1, "Inside A", &[1, 2]), row(3, 0, 1, "Top List", &[3, 4, 1]),
-        ]);
+        assert_eq!(
+            shape(&deleted),
+            vec![
+                row(1, 0, 0, "Folder A", &[]),
+                row(2, 1, 1, "Inside A", &[1, 2]),
+                row(3, 0, 1, "Top List", &[3, 4, 1]),
+            ]
+        );
     }
 
     /// rekordbox's answers to its duplicate question, replayed from the
@@ -965,7 +1039,10 @@ mod tests {
         let p186 = |nodes: &[Node]| nodes[0].tracks.clone();
 
         // Device Library: Track 2 and 3 picked, rekordbox asks, Skip.
-        assert_eq!(Library { format: Format::DeviceLibrary, nodes: start.clone(), tracks: Vec::new() }.held(1, &[2, 3]), vec![2]);
+        assert_eq!(
+            Library { format: Format::DeviceLibrary, nodes: start.clone(), tracks: Vec::new() }.held(1, &[2, 3]),
+            vec![2]
+        );
         let (skipped, applied) = add(&start, &[2, 3], false);
         assert_eq!((p186(&skipped), applied.changed), (vec![1, 2, 3], 1));
         // Then Track 2, 3 and 4, and Add: every copy goes on the end.
@@ -1011,7 +1088,9 @@ mod tests {
 
     #[test]
     fn adding_appends_what_is_not_there_yet_and_removing_takes_every_entry() {
-        let (after, applied) = plan(&library(), &tracks(), &Edit::Add { playlist: 2, tracks: vec![6, 1, 1, 3], duplicates: false }).unwrap();
+        let (after, applied) =
+            plan(&library(), &tracks(), &Edit::Add { playlist: 2, tracks: vec![6, 1, 1, 3], duplicates: false })
+                .unwrap();
         assert_eq!(applied.changed, 2);
         assert_eq!(after[1].tracks, vec![5, 6, 1, 3]);
         let mut nodes = library();
@@ -1023,8 +1102,14 @@ mod tests {
 
     #[test]
     fn tracks_go_into_playlists_of_their_own_library_only() {
-        assert!(plan(&library(), &tracks(), &Edit::Add { playlist: 4, tracks: vec![1], duplicates: false }).is_err(), "a folder");
-        assert!(plan(&library(), &tracks(), &Edit::Add { playlist: 2, tracks: vec![99], duplicates: false }).is_err(), "a stranger");
+        assert!(
+            plan(&library(), &tracks(), &Edit::Add { playlist: 4, tracks: vec![1], duplicates: false }).is_err(),
+            "a folder"
+        );
+        assert!(
+            plan(&library(), &tracks(), &Edit::Add { playlist: 2, tracks: vec![99], duplicates: false }).is_err(),
+            "a stranger"
+        );
     }
 
     #[test]

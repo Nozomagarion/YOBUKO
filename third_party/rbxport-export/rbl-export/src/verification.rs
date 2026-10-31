@@ -1,4 +1,7 @@
-use crate::{snapshot::{Library, Snapshot}, Result};
+use crate::{
+    snapshot::{Library, Snapshot},
+    Result,
+};
 use std::{collections::BTreeSet, path::Path};
 #[derive(Debug, Clone, Default)]
 pub struct VerifyReport {
@@ -44,13 +47,19 @@ pub fn verify_content(root: &Path) -> Result<VerifyReport> {
     if let Some(manifest) = crate::Manifest::load(root) {
         for track in manifest.tracks {
             let audio = crate::checked_under(root, &track.audio)?;
-            if !track.in_place && track.audio_hash != 0 && audio.is_file() && crate::file_hash(&audio)? != track.audio_hash {
+            if !track.in_place
+                && track.audio_hash != 0
+                && audio.is_file()
+                && crate::file_hash(&audio)? != track.audio_hash
+            {
                 report.errors.push(format!("Exported audio content changed: {}", track.audio));
             }
             for (extension, expected) in track.analysis_hashes {
                 let path = format!("{}/ANLZ0000.{extension}", track.anlz_dir);
                 let file = crate::checked_under(root, &path)?;
-                if file.is_file() && crate::file_hash(&file)? != expected { report.errors.push(format!("Exported analysis content changed: {path}")); }
+                if file.is_file() && crate::file_hash(&file)? != expected {
+                    report.errors.push(format!("Exported analysis content changed: {path}"));
+                }
             }
         }
     }
@@ -71,7 +80,9 @@ pub fn verify_databases(root: &Path) -> Result<VerifyReport> {
     };
     report.parsed = true;
     verify_track_records(root, &mut report.errors)?;
-    if legacy != one { report.errors.push(disagreement(legacy, one)); }
+    if legacy != one {
+        report.errors.push(disagreement(legacy, one));
+    }
     report.tracks = legacy.tracks.len();
     report.playlists = legacy.playlists.len();
     report.playlist_entries = legacy.playlists.iter().map(|playlist| playlist.tracks.len()).sum();
@@ -98,11 +109,12 @@ pub(crate) fn verify_staged_incremental(
     trusted: &BTreeSet<String>,
 ) -> Result<VerifyReport> {
     let mut report = VerifyReport::default();
-    let moves: std::collections::BTreeMap<std::path::PathBuf, std::path::PathBuf> = match std::fs::read(root.join(".moves.json")) {
-        Ok(bytes) => serde_json::from_slice(&bytes).map_err(std::io::Error::other)?,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => std::collections::BTreeMap::default(),
-        Err(e) => return Err(e.into()),
-    };
+    let moves: std::collections::BTreeMap<std::path::PathBuf, std::path::PathBuf> =
+        match std::fs::read(root.join(".moves.json")) {
+            Ok(bytes) => serde_json::from_slice(&bytes).map_err(std::io::Error::other)?,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => std::collections::BTreeMap::default(),
+            Err(e) => return Err(e.into()),
+        };
     let resolve = |relative: &str| -> Result<std::path::PathBuf> {
         let path = crate::checked_under(root, relative)?;
         if path.is_file() {
@@ -115,9 +127,7 @@ pub(crate) fn verify_staged_incremental(
         }
     };
     let (Some(legacy), Some(one)) = (&snapshot.legacy, &snapshot.one) else {
-        report
-            .errors
-            .push("Both Device Library and OneLibrary must be present".into());
+        report.errors.push("Both Device Library and OneLibrary must be present".into());
         return Ok(report);
     };
     report.parsed = true;
@@ -134,15 +144,8 @@ pub(crate) fn verify_staged_incremental(
     verify_assets(root, legacy, &resolve, absent, trusted, &mut report)?;
     let playlists: BTreeSet<_> = legacy.playlists.iter().map(|p| p.id).collect();
     for p in &legacy.playlists {
-        if p.parent != 0
-            && !legacy
-                .playlists
-                .iter()
-                .any(|n| n.id == p.parent && n.folder)
-        {
-            report
-                .errors
-                .push(format!("Missing parent folder for {}", p.name));
+        if p.parent != 0 && !legacy.playlists.iter().any(|n| n.id == p.parent && n.folder) {
+            report.errors.push(format!("Missing parent folder for {}", p.name));
         }
         let mut seen = BTreeSet::new();
         let mut parent = p.parent;
@@ -151,22 +154,14 @@ pub(crate) fn verify_staged_incremental(
                 report.errors.push("Playlist folder cycle".into());
                 break;
             }
-            parent = legacy
-                .playlists
-                .iter()
-                .find(|n| n.id == parent)
-                .map_or(0, |n| n.parent);
+            parent = legacy.playlists.iter().find(|n| n.id == parent).map_or(0, |n| n.parent);
         }
         if p.folder && !p.tracks.is_empty() {
-            report
-                .errors
-                .push("Folder contains direct track entries".into());
+            report.errors.push("Folder contains direct track entries".into());
         }
         report.playlist_entries += p.tracks.len();
         if p.tracks.iter().any(|id| !ids.contains(id)) {
-            report
-                .errors
-                .push(format!("Dangling playlist entry in {}", p.name));
+            report.errors.push(format!("Dangling playlist entry in {}", p.name));
         }
     }
     if playlists.len() != legacy.playlists.len() {
@@ -216,13 +211,18 @@ fn verify_track_records(root: &Path, errors: &mut Vec<String>) -> Result<()> {
     let bytes = std::fs::read(pdb_path)?;
     let pdb = rbl_pdb::Pdb::parse(&bytes)
         .map_err(|e| crate::ExportError::Conflict(format!("Invalid Device Library: {e}")))?;
-    let one = rbl_onelibrary::ExportLibrary::open_read_only(&root.join(crate::export_root_name(root)?).join("rekordbox/exportLibrary.db"))
+    let one = rbl_onelibrary::ExportLibrary::open_read_only(
+        &root.join(crate::export_root_name(root)?).join("rekordbox/exportLibrary.db"),
+    )
+    .map_err(|e| crate::ExportError::OneLibrary(e.to_string()))?;
+    let mut query = one
+        .connection()
+        .prepare("SELECT content_id, COALESCE(isHotCueAutoLoadOn,0) FROM content")
         .map_err(|e| crate::ExportError::OneLibrary(e.to_string()))?;
-    let mut query = one.connection().prepare("SELECT content_id, COALESCE(isHotCueAutoLoadOn,0) FROM content")
-        .map_err(|e| crate::ExportError::OneLibrary(e.to_string()))?;
-    let flags = query.query_map([], |r| Ok((r.get::<_, u32>(0)?, r.get::<_, bool>(1)?)))
+    let flags = query
+        .query_map([], |r| Ok((r.get::<_, u32>(0)?, r.get::<_, bool>(1)?)))
         .map_err(|e| crate::ExportError::OneLibrary(e.to_string()))?
-        .collect::<std::result::Result<std::collections::BTreeMap<_,_>,_>>()
+        .collect::<std::result::Result<std::collections::BTreeMap<_, _>, _>>()
         .map_err(|e| crate::ExportError::OneLibrary(e.to_string()))?;
     if let Some(table) = pdb.table(rbl_pdb::PageType::Tracks) {
         for row in pdb.rows(table) {
@@ -258,9 +258,7 @@ fn verify_assets(
     let mut paths = BTreeSet::new();
     for track in &legacy.tracks {
         if !paths.insert(crate::path_key(&track.path)) {
-            report
-                .errors
-                .push(format!("Audio path collision: {}", track.path));
+            report.errors.push(format!("Audio path collision: {}", track.path));
         }
         let path = resolve(&track.path)?;
         if path.is_file() {
@@ -269,9 +267,13 @@ fn verify_assets(
             report.missing_audio.push(track.path.clone());
         }
         if !track.analysis.is_empty() {
-            let expected = format!("{}/ANLZ0000.DAT", crate::analysis_directory(&track.path, crate::export_root_name(root)?));
+            let expected =
+                format!("{}/ANLZ0000.DAT", crate::analysis_directory(&track.path, crate::export_root_name(root)?));
             if track.analysis != expected {
-                report.errors.push(format!("Analysis path is not discoverable by the CDJ: {} (expected {expected})", track.analysis));
+                report.errors.push(format!(
+                    "Analysis path is not discoverable by the CDJ: {} (expected {expected})",
+                    track.analysis
+                ));
             }
             let base = Path::new(&track.analysis);
             let companions_trusted = ["DAT", "EXT", "2EX"].iter().all(|ext| {
@@ -291,7 +293,9 @@ fn verify_assets(
                 for extension in ["DAT", "EXT", "2EX"] {
                     let relative = Path::new(&track.analysis).with_extension(extension).to_string_lossy().into_owned();
                     let companion = resolve(&relative)?;
-                    if !companion.is_file() { continue; }
+                    if !companion.is_file() {
+                        continue;
+                    }
                     let parsed = std::fs::read(&companion).map_err(std::io::Error::other).and_then(|bytes| {
                         crate::incremental::read_bytes(&companion, bytes.len() as u64);
                         rbl_anlz::parse(&bytes).map_err(std::io::Error::other)
@@ -309,13 +313,22 @@ fn verify_assets(
                                     b"PQTZ" => grid |= section.as_beat_grid().is_some_and(|b| !b.is_empty()),
                                     b"PCO2" => {
                                         let entries = section.as_cue_entries().unwrap_or_default();
-                                        let declared = section.header.get(4..6).map_or(0, |b| usize::from(u16::from_be_bytes([b[0], b[1]])));
-                                        if entries.len() != declared { report.errors.push(format!("Truncated cue list: {relative}")); }
+                                        let declared = section
+                                            .header
+                                            .get(4..6)
+                                            .map_or(0, |b| usize::from(u16::from_be_bytes([b[0], b[1]])));
+                                        if entries.len() != declared {
+                                            report.errors.push(format!("Truncated cue list: {relative}"));
+                                        }
                                         for cue in entries {
-                                            if cue.hot_cue == 0 { report.memory_cues += 1; } else { report.hot_cues += 1; }
+                                            if cue.hot_cue == 0 {
+                                                report.memory_cues += 1;
+                                            } else {
+                                                report.hot_cues += 1;
+                                            }
                                         }
                                     }
-                                    _ => {},
+                                    _ => {}
                                 }
                             }
                         }
@@ -327,9 +340,7 @@ fn verify_assets(
                 report.detail_waveforms += usize::from(detail);
                 report.beat_grids += usize::from(grid);
             } else {
-                report
-                    .errors
-                    .push(format!("Missing or invalid analysis: {}", track.analysis));
+                report.errors.push(format!("Missing or invalid analysis: {}", track.analysis));
             }
         }
     }
@@ -349,12 +360,18 @@ mod tests {
         let track = Track { id: 1, title: "Kesä".into(), comment: "é".into(), ..Track::default() };
         let legacy = Library { tracks: vec![track.clone()], playlists: vec![] };
         let one = Library { tracks: vec![Track { comment: "é\0x".into(), ..track }], playlists: vec![] };
-        assert_eq!(disagreement(&legacy, &one), "Device Library and OneLibrary disagree on the comment of track 'Kesä'");
+        assert_eq!(
+            disagreement(&legacy, &one),
+            "Device Library and OneLibrary disagree on the comment of track 'Kesä'"
+        );
 
         let playlist = Playlist { id: 4, name: "Warm up".into(), ..Playlist::default() };
         let legacy = Library { tracks: vec![], playlists: vec![playlist.clone()] };
         let one = Library { tracks: vec![], playlists: vec![Playlist { tracks: vec![1], ..playlist }] };
         assert_eq!(disagreement(&legacy, &one), "Device Library and OneLibrary disagree on playlist 'Warm up'");
-        assert_eq!(disagreement(&legacy, &Library::default()), "Device Library and OneLibrary disagree: playlist 'Warm up' is only in export.pdb");
+        assert_eq!(
+            disagreement(&legacy, &Library::default()),
+            "Device Library and OneLibrary disagree: playlist 'Warm up' is only in export.pdb"
+        );
     }
 }

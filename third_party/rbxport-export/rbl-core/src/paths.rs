@@ -76,7 +76,9 @@ pub fn with_setting_value(settings: Option<&str>, name: &str, value: &str) -> Op
         let end = start + text.get(start..)?.find('>')? + 1;
         let element = text.get(start..end)?;
         let named = crate::xml::tags(element).into_iter().any(|tag| match tag {
-            crate::xml::Tag::Open { attributes, .. } => attributes.iter().any(|(key, val)| key == "name" && val == name),
+            crate::xml::Tag::Open { attributes, .. } => {
+                attributes.iter().any(|(key, val)| key == "name" && val == name)
+            }
             crate::xml::Tag::Close { .. } => false,
         });
         if named {
@@ -140,17 +142,16 @@ mod tests {
 
     #[test]
     fn a_value_is_replaced_in_place_and_nothing_else_changes() {
-        let edited = with_setting_value(Some(SETTINGS), "masterDbDirectory", "/Users/x/Library/Pioneer/rekordbox").unwrap();
-        assert_eq!(
-            edited,
-            SETTINGS.replace("/Volumes/DJ SSD/PIONEER/Master", "/Users/x/Library/Pioneer/rekordbox"),
-        );
+        let edited =
+            with_setting_value(Some(SETTINGS), "masterDbDirectory", "/Users/x/Library/Pioneer/rekordbox").unwrap();
+        assert_eq!(edited, SETTINGS.replace("/Volumes/DJ SSD/PIONEER/Master", "/Users/x/Library/Pioneer/rekordbox"),);
         assert_eq!(setting_value(&edited, "masterDbDirectory").unwrap(), "/Users/x/Library/Pioneer/rekordbox");
     }
 
     #[test]
     fn a_missing_value_is_added_before_the_end() {
-        let without = SETTINGS.replace("  <VALUE name=\"masterDbDirectory\" val=\"/Volumes/DJ SSD/PIONEER/Master\"/>\n", "");
+        let without =
+            SETTINGS.replace("  <VALUE name=\"masterDbDirectory\" val=\"/Volumes/DJ SSD/PIONEER/Master\"/>\n", "");
         let edited = with_setting_value(Some(&without), "masterDbDirectory", "E:\\PIONEER\\Master").unwrap();
         assert!(edited.starts_with(&without.replace("</PROPERTIES>\n", "")));
         assert!(edited.ends_with("  <VALUE name=\"masterDbDirectory\" val=\"E:\\PIONEER\\Master\"/>\n</PROPERTIES>\n"));
@@ -159,9 +160,13 @@ mod tests {
 
     #[test]
     fn values_are_escaped_as_juce_writes_them() {
-        let edited = with_setting_value(None, "masterDbDirectory", "/Volumes/Chris\u{2019}s \"A&B\"/PIONEER/Master").unwrap();
+        let edited =
+            with_setting_value(None, "masterDbDirectory", "/Volumes/Chris\u{2019}s \"A&B\"/PIONEER/Master").unwrap();
         assert!(edited.contains("val=\"/Volumes/Chris&#8217;s &quot;A&amp;B&quot;/PIONEER/Master\""));
-        assert_eq!(setting_value(&edited, "masterDbDirectory").unwrap(), "/Volumes/Chris\u{2019}s \"A&B\"/PIONEER/Master");
+        assert_eq!(
+            setting_value(&edited, "masterDbDirectory").unwrap(),
+            "/Volumes/Chris\u{2019}s \"A&B\"/PIONEER/Master"
+        );
         assert!(edited.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\n<PROPERTIES>\n"));
     }
 

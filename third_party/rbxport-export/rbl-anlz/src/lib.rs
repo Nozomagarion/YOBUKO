@@ -34,17 +34,9 @@ pub enum AnlzError {
     #[error("file declares {declared} bytes but contains {actual}")]
     BadFileLength { declared: u64, actual: u64 },
     #[error("section {tag} declares {declared} bytes but only {available} remain")]
-    BadSectionLength {
-        tag: String,
-        declared: u64,
-        available: u64,
-    },
+    BadSectionLength { tag: String, declared: u64, available: u64 },
     #[error("section {tag} has header length {declared}, outside its {section_len}-byte frame")]
-    BadSectionHeaderLength {
-        tag: String,
-        declared: u64,
-        section_len: u64,
-    },
+    BadSectionHeaderLength { tag: String, declared: u64, section_len: u64 },
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }
@@ -83,11 +75,7 @@ pub struct Section {
 
 impl Section {
     pub fn new(tag: &[u8; 4], header: Vec<u8>, payload: Vec<u8>) -> Self {
-        Self {
-            tag: FourCc::new(tag),
-            header,
-            payload,
-        }
+        Self { tag: FourCc::new(tag), header, payload }
     }
 
     /// `len_header` as written: the frame plus the tag header.
@@ -287,10 +275,7 @@ pub const MEASURED_CUE_COLOURS: &[(u8, [u8; 3])] = &[
 
 /// The RGB for a `ColorTableIndex`, or `None` where it has not been read.
 pub fn cue_colour(index: u8) -> Option<[u8; 3]> {
-    MEASURED_CUE_COLOURS
-        .iter()
-        .find(|&&(i, _)| i == index)
-        .map(|&(_, rgb)| rgb)
+    MEASURED_CUE_COLOURS.iter().find(|&&(i, _)| i == index).map(|&(_, rgb)| rgb)
 }
 
 /// The complete RGB palette rekordbox paints on screen.
@@ -368,10 +353,7 @@ pub const DRAWN_CUE_COLOURS: &[(u8, [u8; 3])] = &[
 /// The RGB rekordbox paints for a `ColorTableIndex`, or `None` if it is not a
 /// valid palette index.
 pub fn cue_colour_drawn(index: u8) -> Option<[u8; 3]> {
-    DRAWN_CUE_COLOURS
-        .iter()
-        .find(|&&(i, _)| i == index)
-        .map(|&(_, rgb)| rgb)
+    DRAWN_CUE_COLOURS.iter().find(|&&(i, _)| i == index).map(|&(_, rgb)| rgb)
 }
 
 fn cue_entry(e: &[u8], len_entry: usize) -> CueEntry {
@@ -393,10 +375,7 @@ fn cue_entry(e: &[u8], len_entry: usize) -> CueEntry {
     }
     let len_comment = be32(e, CUE_ENTRY_MIN) as usize;
     let start = CUE_ENTRY_MIN + 4;
-    let Some(end) = start
-        .checked_add(len_comment)
-        .filter(|&end| end <= len_entry)
-    else {
+    let Some(end) = start.checked_add(len_comment).filter(|&end| end <= len_entry) else {
         return entry;
     };
     if len_comment > 0 {
@@ -443,10 +422,7 @@ pub fn parse(bytes: &[u8]) -> Result<Anlz> {
     }
     let file_len = be32(bytes, 8) as usize;
     if file_len != bytes.len() {
-        return Err(AnlzError::BadFileLength {
-            declared: file_len as u64,
-            actual: bytes.len() as u64,
-        });
+        return Err(AnlzError::BadFileLength { declared: file_len as u64, actual: bytes.len() as u64 });
     }
     let header_extra = bytes.get(SECTION_FRAME..len_header).unwrap_or(&[]).to_vec();
 
@@ -480,14 +456,8 @@ pub fn parse(bytes: &[u8]) -> Result<Anlz> {
         let header_end = at + section_header;
         sections.push(Section {
             tag,
-            header: bytes
-                .get(at + SECTION_FRAME..header_end)
-                .unwrap_or(&[])
-                .to_vec(),
-            payload: bytes
-                .get(header_end..at + section_len)
-                .unwrap_or(&[])
-                .to_vec(),
+            header: bytes.get(at + SECTION_FRAME..header_end).unwrap_or(&[]).to_vec(),
+            payload: bytes.get(header_end..at + section_len).unwrap_or(&[]).to_vec(),
         });
         at += section_len;
     }
@@ -495,20 +465,12 @@ pub fn parse(bytes: &[u8]) -> Result<Anlz> {
         return Err(AnlzError::Truncated("section frame"));
     }
 
-    Ok(Anlz {
-        header_extra,
-        sections,
-    })
+    Ok(Anlz { header_extra, sections })
 }
 
 fn utf16be_to_string(raw: &[u8]) -> String {
-    let units: Vec<u16> = raw
-        .as_chunks::<2>()
-        .0
-        .iter()
-        .map(|c| u16::from_be_bytes([c[0], c[1]]))
-        .take_while(|&u| u != 0)
-        .collect();
+    let units: Vec<u16> =
+        raw.as_chunks::<2>().0.iter().map(|c| u16::from_be_bytes([c[0], c[1]])).take_while(|&u| u != 0).collect();
     String::from_utf16_lossy(&units)
 }
 
@@ -535,24 +497,14 @@ impl Anlz {
 
     pub fn with_grid_offset(&self, offset_ms: i16) -> Option<Vec<u8>> {
         let mut next = self.clone();
-        let section = next
-            .sections
-            .iter_mut()
-            .find(|s| s.tag == FourCc::new(b"PQTZ"))?;
-        section
-            .header
-            .get_mut(6..8)?
-            .copy_from_slice(&offset_ms.to_be_bytes());
+        let section = next.sections.iter_mut().find(|s| s.tag == FourCc::new(b"PQTZ"))?;
+        section.header.get_mut(6..8)?.copy_from_slice(&offset_ms.to_be_bytes());
         Some(next.to_bytes())
     }
 
     /// Every extended cue entry in the file, across every `PCO2` section.
     pub fn cue_entries(&self) -> Vec<CueEntry> {
-        self.sections
-            .iter()
-            .filter_map(Section::as_cue_entries)
-            .flatten()
-            .collect()
+        self.sections.iter().filter_map(Section::as_cue_entries).flatten().collect()
     }
 
     pub fn path(&self) -> Option<String> {
@@ -591,10 +543,7 @@ impl Anlz {
     /// `rbl-db/src/write.rs`).
     #[must_use]
     pub fn with_extended_grid_cleared(&self) -> Option<Vec<u8>> {
-        let at = self
-            .sections
-            .iter()
-            .position(|s| s.tag == FourCc::new(b"PQT2"))?;
+        let at = self.sections.iter().position(|s| s.tag == FourCc::new(b"PQT2"))?;
         if self.sections.get(at).is_some_and(|s| s.payload.is_empty()) {
             return None;
         }
@@ -609,30 +558,16 @@ impl Anlz {
     /// offset and every new time/tempo still agree (`CAnalyzerIF`'s save path).
     /// Beat-number-only edits refresh the header without inventing payload.
     #[must_use]
-    pub fn with_extended_grid_edit(
-        &self,
-        old: &[Beat],
-        new: &[Beat],
-        offset: i16,
-    ) -> Option<Vec<u8>> {
-        let at = self
-            .sections
-            .iter()
-            .position(|s| s.tag == FourCc::new(b"PQT2"))?;
+    pub fn with_extended_grid_edit(&self, old: &[Beat], new: &[Beat], offset: i16) -> Option<Vec<u8>> {
+        let at = self.sections.iter().position(|s| s.tag == FourCc::new(b"PQT2"))?;
         let section = self.sections.get(at)?;
         let word = |at: usize| {
-            section
-                .header
-                .get(at..at + 4)
-                .and_then(|b| <[u8; 4]>::try_from(b).ok())
-                .map(u32::from_be_bytes)
+            section.header.get(at..at + 4).and_then(|b| <[u8; 4]>::try_from(b).ok()).map(u32::from_be_bytes)
         };
         let packed = |b: &Beat| (u32::from(b.beat_number) << 16) | u32::from(b.tempo_x100);
         let checksum = |beats: &[Beat]| {
             beats.iter().fold(0_u32, |sum, b| {
-                sum.wrapping_add(b.time_ms)
-                    .wrapping_add(u32::from(b.beat_number))
-                    .wrapping_add(u32::from(b.tempo_x100))
+                sum.wrapping_add(b.time_ms).wrapping_add(u32::from(b.beat_number)).wrapping_add(u32::from(b.tempo_x100))
             })
         };
         let preserve = !old.is_empty()
@@ -647,8 +582,7 @@ impl Anlz {
             && word(32) == Some(checksum(old))
             && section.header.get(8..10) == Some(offset.to_be_bytes().as_slice())
             && old.iter().zip(new).all(|(a, b)| {
-                i64::from(a.time_ms) + i64::from(offset) == i64::from(b.time_ms)
-                    && a.tempo_x100 == b.tempo_x100
+                i64::from(a.time_ms) + i64::from(offset) == i64::from(b.time_ms) && a.tempo_x100 == b.tempo_x100
             });
         let mut next = self.clone();
         let slot = next.sections.get_mut(at)?;
@@ -667,9 +601,7 @@ impl Anlz {
                     (28, u32::try_from(new.len()).ok()?),
                     (32, checksum(new)),
                 ] {
-                    slot.header
-                        .get_mut(at..at + 4)?
-                        .copy_from_slice(&value.to_be_bytes());
+                    slot.header.get_mut(at..at + 4)?.copy_from_slice(&value.to_be_bytes());
                 }
             } else {
                 slot.payload.clear();
@@ -717,15 +649,8 @@ mod grid_offset_tests {
     use super::*;
     #[test]
     fn offset_edits_preserve_every_other_byte_and_the_original_beats() {
-        let beats = vec![Beat {
-            beat_number: 1,
-            tempo_x100: 12800,
-            time_ms: 1000,
-        }];
-        let original = Anlz {
-            header_extra: vec![0; 16],
-            sections: vec![write::beat_grid_section(&beats)],
-        };
+        let beats = vec![Beat { beat_number: 1, tempo_x100: 12800, time_ms: 1000 }];
+        let original = Anlz { header_extra: vec![0; 16], sections: vec![write::beat_grid_section(&beats)] };
         let before = original.to_bytes();
         for offset in [234, -467, i16::MIN, i16::MAX, 0] {
             let changed = original.with_grid_offset(offset).unwrap();

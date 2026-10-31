@@ -80,11 +80,9 @@ pub struct ExportLibrary {
 impl ExportLibrary {
     /// Opens one read-only.
     pub fn open_read_only(path: &Path) -> Result<Self> {
-        let conn = Connection::open_with_flags(
-            path,
-            OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .map_err(|source| Error::Open { path: path.display().to_string(), source })?;
+        let conn =
+            Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX)
+                .map_err(|source| Error::Open { path: path.display().to_string(), source })?;
         unlock(&conn, &key::passphrase()?)?;
         // The first real read is what proves the passphrase.
         conn.query_row("SELECT COUNT(*) FROM sqlite_master", [], |r| r.get::<_, i64>(0))?;
@@ -101,10 +99,7 @@ impl ExportLibrary {
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
              ORDER BY name",
         )?;
-        let names = stmt
-            .query_map([], |r| r.get::<_, String>(0))?
-            .filter_map(std::result::Result::ok)
-            .collect();
+        let names = stmt.query_map([], |r| r.get::<_, String>(0))?.filter_map(std::result::Result::ok).collect();
         Ok(names)
     }
 
@@ -112,11 +107,9 @@ impl ExportLibrary {
     pub fn schema_of(&self, table: &str) -> Result<Option<String>> {
         let sql = self
             .conn
-            .query_row(
-                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1",
-                [table],
-                |r| r.get::<_, String>(0),
-            )
+            .query_row("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?1", [table], |r| {
+                r.get::<_, String>(0)
+            })
             .ok();
         Ok(sql)
     }
