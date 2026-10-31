@@ -1,0 +1,138 @@
+name: Multiplayer Internet session test
+
+# A real Internet session between separate GitHub machines: a Linux host, then guests on
+# Linux, macOS and Windows who join with the same short code, exactly as friends would.
+# The host's code travels to the guests as a short-lived artifact of this run.
+on:
+  workflow_dispatch:
+    inputs:
+      guests:
+        description: 'Guests joining with the same code (1 to 3)'
+        default: '3'
+  push:
+    branches: ['claude/project-thread-*', 'release-check/*']
+    paths:
+      - 'crates/multiplayer/**'
+      - '.github/workflows/multiplayer-internet-test.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: multiplayer-internet-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_PROFILE_DEV_DEBUG: 'false'
+  GUESTS: ${{ inputs.guests || '1' }}
+
+jobs:
+  host:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - name: Build the probe
+        run: cargo build --locked --release -p suhina-multiplayer --example internet_session
+      - name: Wait until every guest has built its probe
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 360); do
+            ready=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              --jq '[.artifacts[].name | select(startswith("guest-ready-"))] | length')
+            echo "guests ready: $ready / $GUESTS"
+            [ "$ready" -ge "$GUESTS" ] && exit 0
+            sleep 5
+          done
+          exit 1
+      - name: Host over the Internet
+        run: |
+          mkdir -p code
+          target/release/examples/internet_session host --guests "$GUESTS" --code-file code/code.txt \
+            --timeout 1800 --linger 60 > host.log 2>&1 &
+          echo $! > host.pid
+          for _ in $(seq 120); do [ -s code/code.txt ] && break; sleep 1; done
+          cat host.log
+          test -s code/code.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: internet-session-code
+          path: code/code.txt
+          retention-days: 1
+      - name: Wait for the guests
+        run: |
+          pid=$(cat host.pid)
+          while kill -0 "$pid" 2>/dev/null; do sleep 2; done
+          cat host.log
+          grep -q 'HOST OK' host.log
+
+  guest:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            index: 1
+          - os: macos-latest
+            index: 2
+          - os: windows-latest
+            index: 3
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: matrix.index <= fromJSON(inputs.guests || '1')
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        if: matrix.index <= fromJSON(inputs.guests || '1')
+        with:
+          python-version: '3.12'
+      - if: runner.os == 'Linux' && matrix.index <= fromJSON(inputs.guests || '1')
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        if: matrix.index <= fromJSON(inputs.guests || '1')
+      - name: Build the probe
+        if: matrix.index <= fromJSON(inputs.guests || '1')
+        run: cargo build --locked --release -p suhina-multiplayer --example internet_session
+      - name: Say this guest is ready
+        if: matrix.index <= fromJSON(inputs.guests || '1')
+        run: echo ready > ready.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: matrix.index <= fromJSON(inputs.guests || '1')
+        with:
+          name: guest-ready-${{ matrix.index }}
+          path: ready.txt
+          retention-days: 1
+      - name: Wait for the host's code
+        if: matrix.index <= fromJSON(inputs.guests || '1')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 240); do
+            id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              --jq '[.artifacts[] | select(.name == "internet-session-code") | .id][0] // empty')
+            if [ -n "$id" ]; then
+              gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" > code.zip
+              python -m zipfile -e code.zip code
+              break
+            fi
+            sleep 5
+          done
+          test -s code/code.txt
+      - name: Join with the code
+        if: matrix.index <= fromJSON(inputs.guests || '1')
+        run: |
+          probe=target/release/examples/internet_session
+          [ "$RUNNER_OS" = Windows ] && probe="$probe.exe"
+          "$probe" join --code-file code/code.txt --index ${{ matrix.index }} --guests "$GUESTS" --timeout 900
