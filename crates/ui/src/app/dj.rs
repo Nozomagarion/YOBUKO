@@ -140,10 +140,8 @@ impl App {
 
     /// Writes the DJ library to the chosen USB stick for Rekordbox players, on the DJ worker.
     pub(super) fn start_dj_usb_export(&mut self, destination: &Path) {
+        // The panel's own progress line says how far it has got, and then what the stick holds.
         self.dj_command("dj.usb.export", json!({"destination": destination}));
-        if self.dj.snapshot["error"].is_null() {
-            self.status = Status::Hint("Exporting the DJ library to the USB stick…".into());
-        }
     }
 
     /// Hands over to the rbxport app, or opens its download page when it is not installed.
