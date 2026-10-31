@@ -26,7 +26,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # The oldest supported Ubuntu, so the Linux packages run on distributions as old as it.
+          - os: ubuntu-22.04
             package: linux
           - os: windows-latest
             package: windows-x86_64
@@ -47,7 +48,7 @@ jobs:
           python-version: '3.12'
       - name: Linux prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt, clippy
@@ -121,6 +122,22 @@ jobs:
                    for p in sorted(root.iterdir()) if p.is_file()]
           (root / 'SHA256SUMS.txt').write_text('\n'.join(lines) + '\n')
           PY
+      - name: Linux AppImage and .deb
+        if: runner.os == 'Linux'
+        run: |
+          package="dist/suhina-multiplayer-experiment-$PLATFORM"
+          version=$("$package/suhina-cli" --version | awk '{print $2}')
+          bash scripts/linux_package.sh "$package" "$version" linux-installers
+          ls -l linux-installers
+        env:
+          PLATFORM: ${{ matrix.package }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: runner.os == 'Linux'
+        with:
+          name: yobuko-linux-installers-${{ github.sha }}
+          path: linux-installers/
+          retention-days: 7
+          if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: multiplayer-experiment-${{ matrix.package }}-${{ github.sha }}
