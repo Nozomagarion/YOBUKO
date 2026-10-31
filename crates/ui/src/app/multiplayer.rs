@@ -632,11 +632,12 @@ impl App {
                             ui.ctx().copy_text(self.multiplayer.invitation.clone());
                         }
                     }
-                    let seats = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(3)
+                    let max = suhina_multiplayer::MAX_GUESTS as u64;
+                    let seats = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(max)
                         + self.multiplayer.state["guests_reconnecting"].as_u64().unwrap_or(0);
-                    let can_renew = seats < 3 && self.multiplayer.state["sending"].is_null();
+                    let can_renew = seats < max && self.multiplayer.state["sending"].is_null();
                     if ui.add_enabled(can_renew, egui::Button::new("New invitation"))
-                        .on_hover_text("Create a separate invitation for the next guest. Replaces the previous unused invitation; connected guests stay.")
+                        .on_hover_text("Replace the code, for example if it reached someone it should not have. The old code stops working; connected guests stay.")
                         .clicked()
                     {
                         self.multiplayer_command("multiplayer.renewInvitation", json!({}));
@@ -644,7 +645,11 @@ impl App {
 
                 });
             }
-            ui.label(format!("Guests: {} / 3", self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0)));
+            ui.label(format!(
+                "Guests: {} / {}",
+                self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0),
+                suhina_multiplayer::MAX_GUESTS
+            ));
             let away = self.multiplayer.state["guests_reconnecting"].as_u64().unwrap_or(0);
             if away > 0 {
                 ui.weak(format!(
@@ -656,7 +661,7 @@ impl App {
             }
             if mode == "hosting" {
                 // Keep this row when a guest connects: controls must not move during a click.
-                ui.weak("One host and up to three guests. Create and privately copy a new invitation for each guest after the previous one joins. Each expires after 5 minutes and works once; replacing an unused invitation revokes it. Connected guests stay.");
+                ui.weak("One host and up to seven guests. Send the same code to everyone: it lets each of them in for 30 minutes, until the session is full. New invitation replaces it and the old one stops working; connected guests stay.");
             }
             if self.multiplayer.bound == self.projects.active() {
                 self.show_playback_buttons(ui);

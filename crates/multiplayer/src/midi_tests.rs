@@ -44,6 +44,7 @@ fn audio_external_devices_opaque_state_and_excessive_sources_are_refused() {
             state: None,
             params: vec![],
             automation: vec![],
+            clip_host: false,
             extensions: Extensions::default(),
         }];
         assert!(encode(&source).is_err());

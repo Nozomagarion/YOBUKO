@@ -1,5 +1,19 @@
 # Où en est notre application ?
 
+## Un seul code pour tout le groupe — 31 octobre 2026 (branche `feature/online`)
+
+**But :** que l’hôte donne un seul code et que plusieurs amis rejoignent la même session.
+
+- **Code écrit :** le même code (court ou long) fait entrer tous ceux qui l’ont, pendant trente
+  minutes, jusqu’à **sept invités** (huit personnes avec l’hôte). **New invitation** sert
+  seulement à remplacer un code arrivé chez la mauvaise personne. **Protocole 18** : tout le monde
+  doit avoir cette version.
+- **Tests passés (Linux, local) :** sept invités avec un seul code, un huitième refusé puis une
+  place libérée et reprise ; trois invités par le même code court ; tests d’interface.
+- **Pas encore fait :** essai réel à plusieurs maisons.
+- **Critère suivant :** lors de l’essai réel, l’hôte lit un seul code et deux ou trois amis
+  rejoignent.
+
 ## Nouveau nom — 30 octobre 2026
 
 L’app s’appelle désormais **YOBUKO** (nom traditionnel du Yamabiko, yōkai de l’écho) ; les noms

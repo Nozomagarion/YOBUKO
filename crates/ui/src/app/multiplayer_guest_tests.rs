@@ -71,8 +71,11 @@ fn buttons(render: bool) {
         guest.multiplayer_command("multiplayer.join", json!({"invitation":h.state().multiplayer.invitation}));
         guests.push(guest);
         pump(&mut h, &mut guests, n + 1);
-        assert!(h.query_by_label(&format!("Guests: {} / 3", n + 1)).is_some());
-        assert_eq!(h.get_by_label("New invitation").accesskit_node().is_disabled(), n == 2);
+        assert!(h.query_by_label(&format!("Guests: {} / 7", n + 1)).is_some());
+        assert!(
+            !h.get_by_label("New invitation").accesskit_node().is_disabled(),
+            "a code stays renewable below seven guests"
+        );
         assert_eq!(h.state().multiplayer.applied_revision, 0);
     }
     let old_guest = guests[1].multiplayer.bound.unwrap();
@@ -118,7 +121,7 @@ fn buttons(render: bool) {
     h.get_by_label("Launcher").click();
     h.run_steps(3);
     assert!(h.query_by_label("Scene 1 · Four musicians").is_some());
-    assert!(h.query_by_label("Guests: 3 / 3").is_some());
+    assert!(h.query_by_label("Guests: 3 / 7").is_some());
     assert_eq!(h.state().projects.get(original).unwrap().project(), &before);
     let copies: Vec<_> = guests.iter().map(|g| g.multiplayer.bound.unwrap()).collect();
     if render {

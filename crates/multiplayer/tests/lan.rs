@@ -66,15 +66,21 @@ fn two_encrypted_services_exchange_edits_reject_stale_requests_and_disconnect() 
 }
 
 #[test]
-fn consumed_invitations_and_public_addresses_are_refused() {
+fn replaced_invitations_and_public_addresses_are_refused() {
     let mut service = Service::default();
     assert!(service.execute("multiplayer.host", &json!({"address":"8.8.8.8:1234"})).is_err());
     assert!(service.execute("multiplayer.host", &json!({"address":"127.0.0.1:0","extra":true})).is_err());
     assert!(service.execute("multiplayer.join", &json!({"invitation":"not an invitation"})).is_err());
-    let (_host, invitation) = host();
+    let (mut owner, invitation) = host();
     let mut a = Service::default();
     a.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
     wait(&mut a, |v| v["mode"] == "connected");
+    // The same code lets a second friend in; once the host replaces it, it admits nobody.
+    let mut friend = Service::default();
+    friend.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
+    wait(&mut friend, |v| v["mode"] == "connected");
+    owner.execute("multiplayer.renewInvitation", &json!({})).unwrap();
+    wait(&mut owner, |v| v["invitation"].as_str() != Some(invitation.as_str()));
     let mut b = Service::default();
     b.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -137,6 +143,7 @@ fn an_actual_midi_project_crosses_tls_in_chunks_and_keeps_its_ids_notes_and_soun
         state: None,
         params: vec![DeviceParam::new("algorithm", 5.0)],
         automation: vec![],
+        clip_host: false,
         extensions: Extensions::default(),
     });
     assert!(project.validate().is_ok());

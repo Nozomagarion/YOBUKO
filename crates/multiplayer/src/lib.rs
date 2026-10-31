@@ -22,4 +22,4 @@ pub use assets::{AudioAddition, SharedSnapshot};
 pub use linked::{LEAD_MS, SharedTransport, TransportRequest, beat_after, starts_in_ms};
 pub use protocol::{Controls, Operation, TrackControl, WireEdit};
 pub use starter::starter_project;
-pub use transport::{ONLINE, ONLINE_LOOPBACK, Service, commands, suggested_address};
+pub use transport::{MAX_GUESTS, ONLINE, ONLINE_LOOPBACK, Service, commands, suggested_address};

@@ -418,7 +418,7 @@ impl eframe::App for Window {
             }
             self.see_through = Some(see_through);
         }
-        self.draw(ui);
+        self.draw(ui, frame);
         suhina_ui::kit::liquid::finish_backdrops(ui.ctx());
         suhina_ui::kit::surface::finish_frame(ui.ctx());
         self.blur(frame);
@@ -441,7 +441,7 @@ impl eframe::App for Window {
 
 impl Window {
     /// One frame of the window: the splash while starting, then the app and what it asked for.
-    fn draw(&mut self, ui: &mut eframe::egui::Ui) {
+    fn draw(&mut self, ui: &mut eframe::egui::Ui, frame: &mut eframe::Frame) {
         if let Some(splash) = self.splash.as_mut()
             && splash.take_start(ui.ctx())
             && let Some(start_up) = self.start_up.take()
@@ -464,6 +464,10 @@ impl Window {
             }
         }
         suhina_plugins::trace::timed("desktop UI", || self.app.ui(ui));
+        if let Some(files) = self.app.take_drag_out() {
+            let result = drag_out(frame, files);
+            self.app.drag_out_ended(result);
+        }
         #[cfg(target_os = "macos")]
         if let Some(menu) = &mut self.mac_menu {
             menu.sync(&self.app.menus());
@@ -477,7 +481,9 @@ impl Window {
         }
         if let Some(offer) = self.app.take_recovery_request() {
             match Session::recover(&offer.backup, offer.file.as_deref()) {
-                Ok((session, warnings)) => self.show_session(session, warnings, OpenAs::NewTab),
+                Ok((session, warnings)) => {
+                    self.show_session(session, warnings, OpenAs::NewTab);
+                }
                 Err(e) => self.app.set_status(Status::Error(e.message().to_owned())),
             }
         }
@@ -649,8 +655,9 @@ impl Window {
         }
         match Session::open(path) {
             Ok((session, warnings)) => {
-                self.show_session(session, warnings, how);
-                self.remember(path);
+                if self.show_session(session, warnings, how) {
+                    self.remember(path);
+                }
             }
             Err(e) => self.app.set_status(Status::Error(e.message().to_owned())),
         }
@@ -659,17 +666,25 @@ impl Window {
     /// Makes a new project, blank or from a template, and opens it in a new tab.
     fn new_project(&mut self, new: NewProject) {
         let made = match new {
-            NewProject::Blank => Ok((Session::new(suhina_session::blank_project()), Vec::new())),
+            NewProject::Blank { returns } => {
+                Ok((Session::new(suhina_session::blank_project_with(returns)), Vec::new()))
+            }
             NewProject::Template(path) => Session::from_template(&path),
         };
         match made {
-            Ok((session, warnings)) => self.show_session(session, warnings, OpenAs::NewTab),
+            Ok((session, warnings)) => {
+                self.show_session(session, warnings, OpenAs::NewTab);
+            }
             Err(e) => self.app.set_status(Status::Error(e.message().to_owned())),
         }
     }
 
     /// Decodes a session's audio, starts it playing (stopped) and shows it.
-    fn show_session(&mut self, mut session: Session, mut warnings: Vec<String>, how: OpenAs) {
+    fn show_session(&mut self, mut session: Session, mut warnings: Vec<String>, how: OpenAs) -> bool {
+        if let Err(error) = self.app.projects().ensure_output_can_close() {
+            self.app.set_status(Status::Error(error.to_string()));
+            return false;
+        }
         let folder = session.audio_folder().map_or_else(|| PathBuf::from("."), Path::to_path_buf);
         // Outside the project's folder only the person's own saved files and library folders
         // are read (`docs/spec/missing-files.md` › Project file boundaries).
@@ -685,11 +700,13 @@ impl Window {
         self.app.projects_mut().close_preview_output();
         let (session, output_warnings) = with_audio(session, &choice);
         warnings.extend(output_warnings);
-        if self.app.open_project(session, &warnings, how).is_some() {
+        let opened = self.app.open_project(session, &warnings, how).is_some();
+        if opened {
             self.app.set_waveforms(waveforms);
         }
         let _closed = self.app.take_closed();
         self.share_about();
+        opened
     }
 
     /// Puts a project opened or saved first among the recent ones.
@@ -858,6 +875,35 @@ fn pick(request: &suhina_ui::interaction::pick::PickRequest) -> Option<PathBuf> 
     } else {
         dialog.add_filter(request.field.filter_label(), request.field.extensions()).pick_file()
     }
+}
+
+/// The picture beside the pointer while samples are dragged out of the window.
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+const DRAG_OUT_IMAGE: &[u8] = include_bytes!("drag_out.png");
+
+/// Hands `files` to the system as a drag the file manager copies where they are dropped, never
+/// moves (#865): whether they were dropped, when the system says so before it returns (Windows
+/// does; macOS reports later and the status line says nothing).
+#[cfg(any(target_os = "windows", target_os = "macos"))]
+fn drag_out(frame: &eframe::Frame, files: Vec<PathBuf>) -> Result<bool, String> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    drag::start_drag(
+        frame,
+        drag::DragItem::Files(files),
+        drag::Image::Raw(DRAG_OUT_IMAGE.to_vec()),
+        move |result, _| {
+            let _ = sender.send(matches!(result, drag::DragResult::Dropped));
+        },
+        drag::Options { mode: drag::DragMode::Copy, ..Default::default() },
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(receiver.try_recv().unwrap_or(false))
+}
+
+/// Linux has no drag of files out of a winit window yet: Copy to folder… does the same.
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn drag_out(_frame: &eframe::Frame, _files: Vec<PathBuf>) -> Result<bool, String> {
+    Err("dragging samples out is not available on this system yet; right-click one and choose Copy to folder…".into())
 }
 
 fn saved(path: &Path, what: &str) -> String {
@@ -1140,3 +1186,6 @@ mod tests {
         assert!(!is_bundle_program(Path::new("suhina")));
     }
 }
+
+#[cfg(test)]
+mod open_tests;

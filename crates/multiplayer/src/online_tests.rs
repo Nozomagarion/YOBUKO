@@ -17,7 +17,7 @@ fn invitations_round_trip_and_reject_tampering() {
     assert!(OnlineInvitation::decode(&short.encode().unwrap()).is_err());
     let old = OnlineInvitation { protocol: PROTOCOL - 1, secret: "a".repeat(64), ..short };
     let error = OnlineInvitation::decode(&old.encode().unwrap()).unwrap_err();
-    assert!(error.starts_with("This invitation comes from a different Suhina version (protocol 16"), "{error}");
+    assert!(error.starts_with("This invitation comes from a different Suhina version (protocol 17"), "{error}");
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn invitation_text(net: &Net) -> String {
 }
 
 #[test]
-fn a_lobby_hands_the_invitation_to_the_first_guest_with_the_code_only() {
+fn a_lobby_hands_the_invitation_to_every_guest_with_the_code() {
     let main = Net::bind(Reach::Loopback).unwrap();
     let text = invitation_text(&main);
     let (_host, _lobby, code) = lobby(&text);
@@ -71,12 +71,13 @@ fn a_lobby_hands_the_invitation_to_the_first_guest_with_the_code_only() {
     assert!(parsed.is_local(), "a loopback lobby gives a code for this computer: {code}");
     let (_guest, invitation) = redeem(&parsed).unwrap();
     assert_eq!(invitation.encode().unwrap(), text);
-    let again = redeem(&parsed).unwrap_err();
-    assert!(again.contains("refused"), "single use: {again}");
+    // The whole group uses the same code.
+    let (_friend, again) = redeem(&parsed).unwrap();
+    assert_eq!(again.encode().unwrap(), text);
 }
 
 #[test]
-fn a_wrong_proof_is_refused_and_does_not_spend_the_code() {
+fn a_wrong_proof_is_refused() {
     let main = Net::bind(Reach::Loopback).unwrap();
     let (_host, _lobby, code) = lobby(&invitation_text(&main));
     let parsed = ShortCode::parse(&code).unwrap();
@@ -86,7 +87,7 @@ fn a_wrong_proof_is_refused_and_does_not_spend_the_code() {
     forged[0] ^= 1;
     let refused = guest.runtime.block_on(ask_lobby(&guest.endpoint, keys.key.public(), &forged, false));
     assert!(refused.unwrap_err().contains("refused"));
-    assert!(redeem(&parsed).is_ok(), "the right code still works once");
+    assert!(redeem(&parsed).is_ok(), "the right code still works");
 }
 
 #[test]

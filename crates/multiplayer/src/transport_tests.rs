@@ -4,7 +4,7 @@
 use super::*;
 
 #[test]
-fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
+fn expiration_and_wrong_secrets_do_not_admit_a_peer_while_one_code_admits_the_group() {
     let now = Instant::now();
     let secret = "a".repeat(64);
     let mut host = Canonical {
@@ -14,17 +14,18 @@ fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
         host: Host::new(crate::starter_project()).unwrap(),
         secret: secret_hash(&secret),
         expires: now + Duration::from_secs(1),
-        redeemed: false,
         members: BTreeMap::new(),
         away_shown: 0,
         linked: Linked::new(),
     };
     assert!(host.admit(&"b".repeat(64), now).is_err());
-    assert!(!host.redeemed);
     assert!(host.admit(&secret, now + Duration::from_secs(2)).is_err());
-    assert!(!host.redeemed);
-    assert!(host.admit(&secret, now).is_ok());
-    assert!(host.admit(&secret, now).is_err());
+    assert!(host.members.is_empty());
+    // The same code lets the whole group in, then the full session refuses it.
+    for _ in 0..MAX_GUESTS {
+        assert!(host.admit(&secret, now).is_ok());
+    }
+    assert_eq!(host.admit(&secret, now).unwrap_err(), Refusal::Full);
 }
 
 #[test]
@@ -293,7 +294,6 @@ fn canonical(project: Project) -> Canonical {
         pending_audio: Vec::new(),
         secret: [0; 32],
         expires: Instant::now() + Duration::from_secs(300),
-        redeemed: false,
         members: BTreeMap::new(),
         away_shown: 0,
         linked: Linked::new(),
@@ -916,13 +916,12 @@ fn a_full_ui_queue_keeps_the_sound_lease_until_its_operation_can_be_delivered_wi
 }
 
 #[test]
-fn renewal_revokes_expired_and_spent_secrets_without_resetting_music_or_owner_sequences() {
+fn renewal_revokes_expired_and_replaced_secrets_without_resetting_music_or_owner_sequences() {
     let now = Instant::now();
     let mut state = canonical(crate::starter_project());
     let original = "a".repeat(64);
     state.secret = secret_hash(&original);
     state.expires = now;
-    state.redeemed = true;
     state.submit(Host::owner(), 1, 0, WireEdit::Rename { track: 1, name: "Keep this".into() }).unwrap();
     let music = state.host.project().clone();
     let (send, receive) = mpsc::sync_channel(1);
@@ -938,8 +937,7 @@ fn renewal_revokes_expired_and_spent_secrets_without_resetting_music_or_owner_se
     assert_eq!(state.host.revision(), 1);
     assert_eq!(state.journal.len(), 1);
     assert!(state.admit(&original, now).is_err());
-    assert!(!state.redeemed);
-    let peer = state.admit(&invite.secret, now + Duration::from_secs(299)).unwrap().0;
+    let peer = state.admit(&invite.secret, now + CODE_LIFE - Duration::from_secs(1)).unwrap().0;
     // Rotation replaces the outstanding capability, while authenticated peers keep their identity.
     let next = Invitation { secret: "c".repeat(64), ..invite };
     state.renew(&next, now, &send).unwrap();
@@ -947,8 +945,7 @@ fn renewal_revokes_expired_and_spent_secrets_without_resetting_music_or_owner_se
     state.apply(peer, 1, 1, WireEdit::Pan { track: 1, pan: 0.25 }).unwrap();
     state.host.remove_peer(peer).unwrap();
     state.members.remove(&peer);
-    assert!(state.admit(&next.secret, now + Duration::from_secs(300)).is_err());
-    assert!(!state.redeemed);
+    assert!(state.admit(&next.secret, now + CODE_LIFE).is_err());
     state.submit(Host::owner(), 2, 2, WireEdit::Pan { track: 1, pan: -0.25 }).unwrap();
     assert_eq!(state.host.revision(), 3);
 }
@@ -975,7 +972,7 @@ fn renewal_backpressure_and_closed_views_preserve_the_previous_invitation() {
         assert!(state.renew(&invite, now, &send).is_err());
         assert!(state.secret == secret_hash(&original));
         assert_eq!(state.expires, expires);
-        assert!(!state.redeemed && state.members.is_empty());
+        assert!(state.members.is_empty());
         assert!(state.admit(&original, now).is_ok());
     }
 }
@@ -1206,8 +1203,7 @@ fn several_admissions_rotate_capabilities_keep_peer_sequences_and_refuse_full_se
         let peer = state.admit(&invite.secret, now).unwrap().0;
         peers.push(peer);
         assert_eq!(state.connected(), n + 1);
-        assert!(state.admit(&invite.secret, now).is_err());
-        state.submit(peer, 1, n as u64, WireEdit::Pan { track: 1, pan: n as f64 / 4. }).unwrap();
+        state.submit(peer, 1, n as u64, WireEdit::Pan { track: 1, pan: n as f64 / 8. }).unwrap();
     }
     let invite = Invitation {
         protocol: PROTOCOL,
@@ -1220,18 +1216,17 @@ fn several_admissions_rotate_capabilities_keep_peer_sequences_and_refuse_full_se
     assert!(state.secret == old);
     // Even a valid unused capability cannot allocate another peer or be consumed at capacity.
     state.secret = secret_hash(&invite.secret);
-    state.redeemed = false;
     assert!(state.admit(&invite.secret, now).is_err());
-    assert!(!state.redeemed);
-    assert_eq!(state.host.revision(), 3);
+    let full = MAX_GUESTS as u64;
+    assert_eq!(state.host.revision(), full);
     state.host.remove_peer(peers[1]).unwrap();
     state.members.remove(&peers[1]);
     assert!(state.admit(&invite.secret, now).is_ok());
-    assert_eq!(state.connected(), 3);
-    assert!(state.submit(peers[1], 2, 3, WireEdit::Pan { track: 1, pan: 0. }).is_err());
-    state.submit(peers[0], 2, 3, WireEdit::Pan { track: 1, pan: -0.5 }).unwrap();
-    state.submit(peers[2], 2, 4, WireEdit::Pan { track: 1, pan: 0.5 }).unwrap();
-    assert_eq!(state.host.revision(), 5);
+    assert_eq!(state.connected(), MAX_GUESTS);
+    assert!(state.submit(peers[1], 2, full, WireEdit::Pan { track: 1, pan: 0. }).is_err());
+    state.submit(peers[0], 2, full, WireEdit::Pan { track: 1, pan: -0.5 }).unwrap();
+    state.submit(peers[2], 2, full + 1, WireEdit::Pan { track: 1, pan: 0.5 }).unwrap();
+    assert_eq!(state.host.revision(), full + 2);
 }
 
 #[test]
@@ -1260,10 +1255,10 @@ fn membership_only_events_survive_backpressure_without_consuming_music_revisions
 
 #[test]
 fn wire_guest_counts_are_bounded_and_required() {
-    for count in [0, 4, usize::MAX] {
+    for count in [0, MAX_GUESTS + 1, usize::MAX] {
         assert!(protocol::validate_guest_count(count).is_err());
     }
-    for count in 1..=3 {
+    for count in 1..=MAX_GUESTS {
         assert!(protocol::validate_guest_count(count).is_ok());
     }
     let value = json!({"kind":"State","protocol":PROTOCOL,"controls":Controls::from_project(&crate::starter_project(),0).unwrap(),"operations":[],"accepted":null,"error":null});
@@ -1397,16 +1392,11 @@ fn hellos_are_refused_with_a_reason_and_only_the_code_holder_learns_the_code_sta
     assert_eq!(refusal(&mut state, hello(&close), now + Duration::from_secs(400)), Refusal::Invalid);
     assert_eq!(refusal(&mut state, hello("short"), now), Refusal::Invalid);
     assert_eq!(refusal(&mut state, hello(&secret), now + Duration::from_secs(300)), Refusal::Expired);
-    assert!(!state.redeemed, "refusals do not spend the code");
-    assert!(matches!(state.open(hello(&secret), now), Ok(Opening::Admitted { .. })));
-    assert_eq!(refusal(&mut state, hello(&secret), now), Refusal::Used);
-    for n in 0..2 {
-        state.secret = secret_hash(&format!("{n:064x}"));
-        state.redeemed = false;
-        assert!(state.open(hello(&format!("{n:064x}")), now).is_ok());
+    assert!(state.members.is_empty(), "refusals admit nobody");
+    // One code for the whole group, until the session is full.
+    for _ in 0..MAX_GUESTS {
+        assert!(matches!(state.open(hello(&secret), now), Ok(Opening::Admitted { .. })));
     }
-    state.secret = secret_hash(&secret);
-    state.redeemed = false;
     assert_eq!(refusal(&mut state, hello(&secret), now), Refusal::Full);
     assert_eq!(state.seats(), MAX_GUESTS);
     // Every refusal names what to do, and a host's text is cut to a short build identifier.
@@ -1458,7 +1448,6 @@ fn resume_tokens_are_bound_rotated_refused_when_forged_and_expire_with_the_grace
     assert!(state.submit(peer, 2, 1, WireEdit::Pan { track: 1, pan: 0.5 }).is_err(), "the peer is gone");
     // A guest that leaves on purpose frees its place at once.
     state.secret = secret_hash(&"c".repeat(64));
-    state.redeemed = false;
     let Ok(Opening::Admitted { peer, generation, token }) = state.open(hello(&"c".repeat(64)), now) else {
         panic!("admit")
     };

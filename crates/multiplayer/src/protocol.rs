@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 17;
+pub const PROTOCOL: u16 = 18;
 pub const COPY_FORMAT: u16 = 3;
 
 pub(crate) fn engine_revision() -> Result<String, String> {
@@ -456,13 +456,13 @@ impl Refusal {
                     .into()
             }
             Self::Expired => {
-                "This invitation code has expired (codes last five minutes). Ask the host for a new code.".into()
+                "This invitation code has expired (codes last thirty minutes). Ask the host for a new code.".into()
             }
             Self::Used => {
                 "This invitation code was already used by another guest. Each code works once; ask the host for a new code."
                     .into()
             }
-            Self::Full => "The session already has three guests. Wait for a guest to leave, then ask for a new code.".into(),
+            Self::Full => "The session is full (seven guests). Wait for a guest to leave, then try the code again.".into(),
             Self::Resume => {
                 "The connection was lost and the host no longer holds your place. Ask the host for a new invitation code to rejoin."
                     .into()

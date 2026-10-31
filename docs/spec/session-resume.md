@@ -108,3 +108,13 @@ resumed with the edit applied once; a guest away for more than the journal, resu
 copy; a background sound cut midway and completed after the resume from its partial copy; the
 host ending the session told apart from a lost network. `transport_tests.rs` checks every
 refusal code, that wrong codes leak nothing, and token rotation, forgery, supersession and expiry.
+
+
+## Amendment: one code for the whole group (protocol 18)
+
+A host admits up to seven guests (eight musicians). One invitation, long or short, admits
+every guest who has it for thirty minutes, until the session is full; **New invitation**
+replaces it and revokes the old one. The `used` refusal is no longer sent. `tests/guests.rs`
+lets seven guests in with one code, refuses an eighth and admits a returning one after a
+departure. Protocol 18, since a protocol 17 guest refuses a host announcing more than three
+guests.

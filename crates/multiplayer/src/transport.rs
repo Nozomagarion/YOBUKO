@@ -30,7 +30,10 @@ use crate::online::{Lobby, Net, OnlineInvitation, Reach, ShortCode};
 use crate::protocol::{self, ClientMessage, Controls, Operation, PROTOCOL, Refusal, ServerMessage, WireEdit};
 use crate::resume::{Backoff, FAREWELL, Tuning, Watch};
 
-pub const MAX_GUESTS: usize = 3;
+pub const MAX_GUESTS: usize = 7;
+/// How long one invitation code lets guests in. A code is shared by the whole group: everyone
+/// who has it may join until the session is full, it expires or the host replaces it.
+pub(crate) const CODE_LIFE: Duration = Duration::from_secs(30 * 60);
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(3);
 const POLL: Duration = Duration::from_millis(100);
@@ -40,7 +43,6 @@ struct Canonical {
     journal: VecDeque<Operation>,
     secret: [u8; 32],
     expires: Instant,
-    redeemed: bool,
     /// Admitted guests, connected or holding their place after a dropped link.
     members: BTreeMap<PeerId, Member>,
     /// Away guests the view was last told about.
@@ -335,30 +337,27 @@ impl Canonical {
             return Err(if self.connected() < MAX_GUESTS {
                 "a guest whose connection dropped still holds a place for two minutes; wait for it to come back or for its place to free".into()
             } else {
-                "the session already has three guests; wait for a guest to leave".into()
+                "the session is full (seven guests); wait for a guest to leave".into()
             });
         }
         let secret = secret_hash(invitation.secret());
         if bool::from(self.secret.ct_eq(&secret)) {
             return Err("could not create a fresh invitation".into());
         }
-        let expires = now.checked_add(Duration::from_secs(300)).ok_or("invitation clock exhausted")?;
+        let expires = now.checked_add(CODE_LIFE).ok_or("invitation clock exhausted")?;
         // Publish under the admission lock before revoking: backpressure must leave the old token usable.
         events.try_send(Event::Invitation(invitation.encode()?)).map_err(|_| "invitation view is busy; try again")?;
         self.secret = secret;
         self.expires = expires;
-        self.redeemed = false;
         Ok(())
     }
-    /// Admits the holder of the current code and gives it a resume token. Only the holder of the
-    /// right code learns that it expired, was used or that the session is full.
+    /// Admits a holder of the current code and gives it a resume token. The code admits every
+    /// guest who has it until the session is full. Only a holder of the right code learns that it
+    /// expired or that the session is full.
     fn admit(&mut self, secret: &str, now: Instant) -> Result<(PeerId, String), Refusal> {
         let matches = bool::from(self.secret.ct_eq(&secret_hash(secret)));
         if secret.len() != 64 || !matches {
             return Err(Refusal::Invalid);
-        }
-        if self.redeemed {
-            return Err(Refusal::Used);
         }
         if now >= self.expires {
             return Err(Refusal::Expired);
@@ -368,7 +367,6 @@ impl Canonical {
         }
         let token = new_secret().map_err(|_| Refusal::Unsupported)?;
         let peer = self.host.add_peer(Role::Editor).map_err(|_| Refusal::Full)?;
-        self.redeemed = true;
         self.members.insert(
             peer,
             Member { token: secret_hash(&token), generation: 0, away: None, known: assets::Known::new() },
@@ -1124,7 +1122,7 @@ fn host(
         Place::Online(reach) => {
             let net = Net::bind(reach)?;
             let invitation = OnlineInvitation { protocol: PROTOCOL, endpoint: net.address(), secret: secret.clone() };
-            // Four handshakes at once, as on the LAN: three guests plus one being admitted.
+            // As on the LAN: every guest's connection plus one being admitted.
             let incoming = net.listen(MAX_GUESTS + 1);
             (Acceptor::Online { net, incoming }, Box::new(invitation))
         }
@@ -1136,8 +1134,7 @@ fn host(
         host,
         journal: VecDeque::new(),
         secret: secret_hash(&secret),
-        expires: Instant::now() + Duration::from_secs(300),
-        redeemed: false,
+        expires: Instant::now() + CODE_LIFE,
         members: BTreeMap::new(),
         away_shown: 0,
         assets: initial_assets,
@@ -1208,7 +1205,8 @@ fn host(
         match &acceptor {
             Acceptor::Lan { listener, tls } => {
                 match listener.accept() {
-                    Ok((stream, _)) if pending.load(Ordering::Relaxed) < 4 => {
+                    // Every guest's connection plus one being admitted.
+                    Ok((stream, _)) if pending.load(Ordering::Relaxed) <= MAX_GUESTS => {
                         socket(&stream)?;
                         // Keep only live handler sockets; cap retained descriptors independently.
                         {
