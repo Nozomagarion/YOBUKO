@@ -72,7 +72,7 @@ jobs:
           components: rustfmt, clippy
       - name: Linux prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick
       - name: Source and regression gates
         run: |
           python3 scripts/fork_sources.py check
@@ -135,6 +135,10 @@ jobs:
           else
             tar -czf "dist/suhina-multiplayer-$PLATFORM.tar.gz" -C dist "suhina-multiplayer-$PLATFORM"
           fi
+          if [ "$RUNNER_OS" = Linux ]; then
+            # The files a Linux user installs from: one AppImage and one .deb.
+            bash scripts/linux_package.sh "dist/suhina-multiplayer-$PLATFORM" "$VERSION" dist
+          fi
           # Corresponding source at the exact tagged commit, including pinned rbxport code.
           git archive --format=tar.gz --prefix=suhina-source/ HEAD > "dist/source-$PLATFORM.tar.gz"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -143,6 +147,8 @@ jobs:
           path: |
             dist/*.zip
             dist/*.tar.gz
+            dist/*.AppImage
+            dist/*.deb
           retention-days: 14
           if-no-files-found: error
 
