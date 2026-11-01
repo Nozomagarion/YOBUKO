@@ -37,25 +37,25 @@ def svg(areas):
              '<!-- Copyright (C) 2026 The Suhina contributors; SPDX-License-Identifier: GPL-3.0-or-later -->',
              '<rect width="960" height="310" rx="20" fill="#111726"/>',
              '<g font-family="system-ui, sans-serif">',
-             '<text x="32" y="40" fill="#f1f4ff" font-size="19" font-weight="700">Un même parcours musical, trois chantiers qui avancent</text>']
+             '<text x="32" y="40" fill="#f1f4ff" font-size="19" font-weight="700">One musical journey, three areas moving forward</text>']
     for i, area in enumerate(areas):
         done = sum(m["done"] for m in area["milestones"])
         total = len(area["milestones"])
         y = 81 + i * 67
         color = html.escape(area["color"], quote=True)
         parts += [f'<text x="32" y="{y}" fill="#dce3f5" font-size="16">{html.escape(area["name"])}</text>',
-                  f'<text x="928" y="{y}" text-anchor="end" fill="{color}" font-size="15">{done} / {total} étapes réalisées</text>',
+                  f'<text x="928" y="{y}" text-anchor="end" fill="{color}" font-size="15">{done} / {total} steps done</text>',
                   f'<rect x="32" y="{y + 12}" width="896" height="9" rx="4.5" fill="#283147"/>',
                   f'<rect x="32" y="{y + 12}" width="{896 * done / total:.2f}" height="9" rx="4.5" fill="{color}"/>']
-    parts += ['<text x="32" y="286" fill="#9caac2" font-size="13">Étapes vérifiables du projet. Ce suivi ne mesure ni le travail restant ni la stabilité du logiciel.</text>', '</g></svg>']
+    parts += ['<text x="32" y="286" fill="#9caac2" font-size="13">Verifiable project steps. This does not measure remaining work or the software’s stability.</text>', '</g></svg>']
     return "\n".join(parts) + "\n"
 
 
 def table(areas):
-    lines = ["<!-- fork-progress:begin -->", "| Partie du projet | Étapes réalisées | Prochain objectif |", "|---|---:|---|"]
+    lines = ["<!-- fork-progress:begin -->", "| Area | Steps done | Next goal |", "|---|---:|---|"]
     for area in areas:
         done = sum(m["done"] for m in area["milestones"])
-        pending = next((m["name"] for m in area["milestones"] if not m["done"]), "Toutes les étapes listées sont réalisées")
+        pending = next((m["name"] for m in area["milestones"] if not m["done"]), "Every listed step is done")
         lines.append(f'| {area["name"]} | {done} / {len(area["milestones"])} | {pending} |')
     lines.append("<!-- fork-progress:end -->")
     return "\n".join(lines)
@@ -63,8 +63,8 @@ def table(areas):
 
 def generate(check=False):
     areas = progress(ROOT)
-    graphic = ROOT / "assets/fork/progress-fr.svg"
-    readme = ROOT / "README.fr.md"
+    graphic = ROOT / "assets/fork/progress.svg"
+    readme = ROOT / "README.md"
     text = readme.read_text()
     start, end = "<!-- fork-progress:begin -->", "<!-- fork-progress:end -->"
     if text.count(start) != 1 or text.count(end) != 1:
