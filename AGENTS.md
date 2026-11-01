@@ -34,6 +34,10 @@ YOBUKO.
 - Everything in this repository and on its GitHub pages is written in **English**: READMEs,
   guides, `PROGRESS.md`, release notes, installers, pull requests and commit messages (owner's
   request, 1 November 2026). Conversation with the owner may stay in French.
+- **Never open a pull request, issue or comment on the upstream projects** (suhina-daw/suhina-daw,
+  chrisle/rbxport). Every pull request targets Nozomagarion/YOBUKO; check the base repository
+  before creating one, because a fork's pull requests default to its parent. Upstream changes
+  are only pulled in (owner's rule, 1 November 2026).
 - In the fork's own user-facing text (READMEs, guides, `PROGRESS.md`, release notes, fork
   banners, new fork UI strings), call the application **YOBUKO**.
 - **Suhina** remains the name of the upstream project this app is built on: credit it as such

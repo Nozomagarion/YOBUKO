@@ -42,10 +42,14 @@ if [ -z "$iscc" ]; then
   exit 1
 fi
 
+echo "Inno Setup compiler: $iscc"
+
 # Windows' file version takes up to four numbers: 0.1.0 of 0.1.0-nightly.20261101032500+3612917.
 short=${version%%[-+]*}
 
-"$iscc" /Q \
+# Git Bash rewrites arguments that start with "/" into Windows paths ("/Q" would become "Q:/");
+# ISCC's options start with "/", so path conversion is turned off for this one call.
+MSYS2_ARG_CONV_EXCL='*' "$iscc" /Q \
   "/DAppVersion=$version" \
   "/DShortVersion=$short" \
   "/DSourceDir=$(cygpath -w "$package")" \
