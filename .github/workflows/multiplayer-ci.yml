@@ -46,6 +46,12 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
+      # The Rekordbox USB export (rbxport's exportLibrary.db) builds SQLCipher with a vendored
+      # OpenSSL, whose Configure needs a full Perl; Git Bash's own perl lacks modules it uses.
+      - name: Windows Perl for the vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
       - name: Linux prerequisites
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick

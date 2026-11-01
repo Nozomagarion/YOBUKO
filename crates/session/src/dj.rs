@@ -19,6 +19,8 @@ pub(crate) enum Job {
     Preview(u64, u32),
     Waveform(u64, u32),
     Deck(usize, u64, u32),
+    /// Write the library to a Rekordbox USB stick (rbxport's exporter) at this folder.
+    UsbExport(PathBuf),
 }
 struct Reply {
     catalog: Catalog,
@@ -26,6 +28,7 @@ struct Reply {
     audio: Option<crate::dj_preview::Loaded>,
     waveform: Option<crate::dj_waveform::Loaded>,
     deck: Option<crate::dj_decks::Loaded>,
+    usb: Option<Result<suhina_dj::UsbSummary, String>>,
 }
 
 #[derive(Default)]
@@ -39,6 +42,10 @@ pub(crate) struct Dj {
     pub(crate) busy: bool,
     pub(crate) error: Option<String>,
     created: Option<u32>,
+    /// Where a running USB export has got to, written by the worker.
+    pub(crate) usb_progress: std::sync::Arc<std::sync::Mutex<Option<suhina_dj::UsbProgress>>>,
+    /// The last USB export's outcome, until the next one starts.
+    pub(crate) usb: Option<Result<suhina_dj::UsbSummary, String>>,
 }
 
 impl Dj {
@@ -49,6 +56,7 @@ impl Dj {
         let path = path.ok_or("the DJ library needs a settings folder")?;
         let (send, jobs) = mpsc::sync_channel::<Job>(1);
         let (done, results) = mpsc::sync_channel(2);
+        let usb_progress = self.usb_progress.clone();
         std::thread::Builder::new()
             .name("suhina-dj".into())
             .spawn(move || {
@@ -62,6 +70,7 @@ impl Dj {
                 if done
                     .send(Ok(Reply {
                         deck: None,
+                        usb: None,
                         catalog: catalog.clone(),
                         created: None,
                         waveform: None,
@@ -90,6 +99,7 @@ impl Dj {
                                 audio: None,
                                 waveform: None,
                                 deck: Some((i, token, data)),
+                                usb: None,
                             }))
                             .is_err()
                         {
@@ -108,10 +118,36 @@ impl Dj {
                         if done
                             .send(Ok(Reply {
                                 deck: None,
+                                usb: None,
                                 catalog: catalog.clone(),
                                 created: None,
                                 audio: None,
                                 waveform: Some((token, data)),
+                            }))
+                            .is_err()
+                        {
+                            break;
+                        }
+                        continue;
+                    }
+                    if let Job::UsbExport(destination) = job {
+                        let shown = usb_progress.clone();
+                        let summary = suhina_dj::export_usb(&catalog, &destination, &mut |p| {
+                            if let Ok(mut slot) = shown.lock() {
+                                *slot = Some(p.clone());
+                            }
+                        });
+                        if let Ok(mut slot) = usb_progress.lock() {
+                            *slot = None;
+                        }
+                        if done
+                            .send(Ok(Reply {
+                                deck: None,
+                                usb: Some(summary),
+                                catalog: catalog.clone(),
+                                created: None,
+                                waveform: None,
+                                audio: None,
                             }))
                             .is_err()
                         {
@@ -129,6 +165,7 @@ impl Dj {
                         if done
                             .send(Ok(Reply {
                                 deck: None,
+                                usb: None,
                                 catalog: catalog.clone(),
                                 created: None,
                                 waveform: None,
@@ -146,7 +183,9 @@ impl Dj {
                         Job::Playlist(revision, edit) => next.edit_playlist(revision, edit),
                         Job::Cue(revision, track, edit) => next.edit_cue(revision, track, edit).map(|_| None),
                         Job::Grid(revision, track, value) => next.set_grid(revision, track, value).map(|_| None),
-                        Job::Preview(..) | Job::Waveform(..) | Job::Deck(..) => Err("invalid DJ worker job".into()),
+                        Job::Preview(..) | Job::Waveform(..) | Job::Deck(..) | Job::UsbExport(..) => {
+                            Err("invalid DJ worker job".into())
+                        }
                     }
                     .and_then(|created| {
                         next.save_checked(&catalog, &path)?;
@@ -154,7 +193,7 @@ impl Dj {
                     })
                     .map(|created| {
                         catalog = next;
-                        Reply { deck: None, catalog: catalog.clone(), created, waveform: None, audio: None }
+                        Reply { deck: None, usb: None, catalog: catalog.clone(), created, waveform: None, audio: None }
                     });
                     if done.send(result).is_err() {
                         break;
@@ -179,6 +218,9 @@ impl Dj {
                             self.audition.loaded = reply.audio;
                             if let Some(deck) = reply.deck {
                                 self.decks.apply(deck);
+                            }
+                            if let Some(usb) = reply.usb {
+                                self.usb = Some(usb);
                             }
                             if let Some(waveform) = reply.waveform {
                                 self.waveform.apply(waveform);
@@ -205,6 +247,9 @@ impl Dj {
             return Err("the DJ library is busy; wait for its current job".into());
         }
         let importing = matches!(job, Job::Import(..));
+        if matches!(job, Job::UsbExport(..)) {
+            self.usb = None;
+        }
         self.worker
             .as_ref()
             .ok_or("the DJ worker is unavailable")?
@@ -322,6 +367,12 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
         ],
         import
     ),
+    command!(
+        "dj.usb.export",
+        "Write the DJ library and its playlists to a Rekordbox USB stick (rbxport's exporter)",
+        &[param("destination", ParamType::Path(PathKind::WriteFolder), "USB stick root or folder")],
+        usb_export
+    ),
     command!("dj.playlist.create", "Create a local DJ playlist", &[NAME, REVISION], create),
     command!("dj.playlist.rename", "Rename a local DJ playlist", &[PLAYLIST, NAME, REVISION], rename),
     command!("dj.playlist.delete", "Delete a local DJ playlist without deleting audio", &[PLAYLIST, REVISION], delete),
@@ -357,7 +408,7 @@ fn library(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
         "performance":crate::dj_decks::snapshot(projects), "grids":projects.dj.catalog.grids, "waveform":projects.dj.waveform.snapshot(),
         "cues": projects.dj.catalog.cues, "preview": crate::dj_preview::snapshot(projects),
         "revision": projects.dj.catalog.revision, "created_playlist": projects.dj.created.take(),
-        "busy": projects.dj.busy, "error": projects.dj.error, "analysis": "rbxport", "format": suhina_dj::FORMAT}))
+        "busy": projects.dj.busy, "error": projects.dj.error, "analysis": "rbxport", "usb": usb_snapshot(projects), "format": suhina_dj::FORMAT}))
 }
 fn reload(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
     ready(projects)?;
@@ -375,6 +426,26 @@ fn import(projects: &mut Projects, params: &Value) -> Result<Value, CommandError
     let path = params["path"].as_str().filter(|p| !p.is_empty()).ok_or("choose an audio file")?;
     let project = params["sourceProject"].as_str().map(PathBuf::from);
     projects.dj.queue(Job::Import(PathBuf::from(path), project))
+}
+fn usb_export(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
+    ready(projects)?;
+    let path = params["destination"].as_str().filter(|p| !p.is_empty()).ok_or("choose the USB stick")?;
+    let path = PathBuf::from(path);
+    if !path.is_dir() {
+        return Err("choose a folder or the root of a USB stick".into());
+    }
+    if projects.dj.catalog.tracks.is_empty() {
+        return Err("the DJ library is empty: import or render a track first".into());
+    }
+    projects.dj.queue(Job::UsbExport(path))
+}
+fn usb_snapshot(projects: &Projects) -> Value {
+    let progress = projects.dj.usb_progress.lock().ok().and_then(|p| p.clone());
+    json!({
+        "progress": progress.map(|p| json!({"stage": p.stage, "done": p.done, "total": p.total, "title": p.title})),
+        "summary": projects.dj.usb.as_ref().and_then(|r| r.as_ref().ok()),
+        "error": projects.dj.usb.as_ref().and_then(|r| r.as_ref().err()),
+    })
 }
 fn number(params: &Value, name: &str) -> Result<u64, CommandError> {
     params[name].as_u64().ok_or_else(|| CommandError::from(format!("{name} must be an unsigned integer")))

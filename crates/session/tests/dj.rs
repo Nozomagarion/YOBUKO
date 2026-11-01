@@ -156,3 +156,48 @@ fn failed_catalog_publication_keeps_the_saved_and_worker_copies() {
     let saved = edit(&mut p, "dj.playlist.create", json!({"name":"Retry me"}));
     assert_eq!(saved["playlists"][0]["id"], 1);
 }
+
+#[test]
+fn dj_usb_export_writes_a_rekordbox_stick_and_refuses_an_empty_library() {
+    let dir = TempDir::new("dj-usb-export");
+    let mut p = projects(&dir);
+    idle(&mut p);
+    // Nothing in the library yet: refused before the worker is asked.
+    let stick = dir.join("stick");
+    std::fs::create_dir(&stick).unwrap();
+    assert!(p.execute("dj.usb.export", &json!({"destination": stick})).is_err());
+    assert!(p.execute("dj.usb.export", &json!({"destination": dir.join("missing")})).is_err());
+
+    let audio = dir.join("tone.wav");
+    let rate = 44_100u32;
+    let stereo: Vec<f32> = (0..rate * 2)
+        .flat_map(|i| {
+            let s = (i as f32 * 220.0 * std::f32::consts::TAU / rate as f32).sin() * 0.3;
+            [s, s]
+        })
+        .collect();
+    suhina_media::write::write_audio_file(
+        &audio,
+        &stereo,
+        &suhina_media::write::AudioFileSpec::float_wav(rate),
+        suhina_media::write::WriteMode::Export { overwrite: false },
+    )
+    .unwrap();
+    p.execute("dj.import", &json!({"path": audio})).unwrap();
+    assert!(idle(&mut p)["error"].is_null());
+
+    p.execute("dj.usb.export", &json!({"destination": stick})).unwrap();
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let result = loop {
+        let result = p.execute("dj.library", &json!({})).unwrap();
+        if result["busy"] != true {
+            break result;
+        }
+        assert!(std::time::Instant::now() < until, "USB export timed out");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    };
+    assert!(result["usb"]["error"].is_null(), "{result}");
+    assert_eq!(result["usb"]["summary"]["tracks"], 1, "{result}");
+    assert!(result["usb"]["progress"].is_null());
+    assert!(stick.join("PIONEER/rekordbox/export.pdb").is_file());
+}

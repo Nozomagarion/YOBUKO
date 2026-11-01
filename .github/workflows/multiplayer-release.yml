@@ -70,6 +70,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
         with:
           components: rustfmt, clippy
+      # The Rekordbox USB export (rbxport's exportLibrary.db) builds SQLCipher with a vendored
+      # OpenSSL, whose Configure needs a full Perl; Git Bash's own perl lacks modules it uses.
+      - name: Windows Perl for the vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
       - name: Linux prerequisites
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick

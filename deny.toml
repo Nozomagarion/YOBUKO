@@ -37,6 +37,14 @@ confidence-threshold = 0.93
 exceptions = [
     # rbxport permits any later GPL version; distributed with Suhina under GPLv3.
     { crate = "rbl-analysis", allow = ["GPL-2.0-or-later"] },
+    { crate = "rbl-core", allow = ["GPL-2.0-or-later"] },
+    { crate = "rbl-pdb", allow = ["GPL-2.0-or-later"] },
+    { crate = "rbl-anlz", allow = ["GPL-2.0-or-later"] },
+    { crate = "rbl-audio", allow = ["GPL-2.0-or-later"] },
+    { crate = "rbl-onelibrary", allow = ["GPL-2.0-or-later"] },
+    { crate = "rbl-export", allow = ["GPL-2.0-or-later"] },
+    # The rbxport exporter normalises file names for FAT sticks; Unicode-3.0 as for unicode-ident.
+    { crate = "unicode-normalization", allow = ["Unicode-3.0"] },
     # Unicode License v3: a permissive licence for Unicode data tables, GPL-compatible. The ICU4X
     # crates (pulled in through url/idna) and unicode-ident (whose other part is MIT OR Apache-2.0)
     # carry it.

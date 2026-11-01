@@ -1,0 +1,19 @@
+[package]
+name = "rbl-onelibrary"
+version = "1.9.0"
+edition = "2021"
+rust-version = "1.89"
+license = "GPL-2.0-or-later"
+description = "exportLibrary.db: the SQLCipher database rekordbox reads a stick back from."
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+tempfile = "3"
+rbl-anlz = { path = "../rbl-anlz" }
+rbl-core = { path = "../rbl-core" }
+thiserror = "2"
+tracing = "0.1"
+rusqlite = { version = "0.40", features = ["bundled-sqlcipher-vendored-openssl"] }
+flate2 = "1"

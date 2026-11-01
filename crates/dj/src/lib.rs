@@ -106,24 +106,7 @@ impl Catalog {
             return Err("DJ analysis accepts up to 20 minutes of mono/stereo audio at up to 96 kHz".into());
         }
         let before = std::fs::metadata(&path).map_err(|e| e.to_string())?;
-        let audio = suhina_media::decode_file(&path)?;
-        let channels = usize::from(audio.channels);
-        if !(1..=2).contains(&channels) || !(1000..=96000).contains(&audio.sample_rate) {
-            return Err("unsupported decoded audio format".into());
-        }
-        let mono: Vec<f32> = audio
-            .samples
-            .chunks_exact(channels)
-            .map(|frame| frame.iter().copied().sum::<f32>() / channels as f32)
-            .collect();
-        if mono.is_empty()
-            || mono.len() as u64 > u64::from(audio.sample_rate) * 1200
-            || mono.iter().any(|s| !s.is_finite())
-        {
-            return Err("invalid or oversized audio".into());
-        }
-        let result =
-            rbl_analysis::analyse_with(&mono, audio.sample_rate, rbl_analysis::AnalysisPreset::Rbxport.options());
+        let (result, seconds) = analyse(&path)?;
         let after = std::fs::metadata(&path).map_err(|e| e.to_string())?;
         if before.len() != after.len() || before.modified().ok() != after.modified().ok() {
             return Err("the audio file changed during analysis; import it again".into());
@@ -141,7 +124,7 @@ impl Catalog {
             path,
             source_project: source_project
                 .or_else(|| existing.and_then(|i| self.tracks.get(i)).and_then(|t| t.source_project.clone())),
-            seconds: mono.len() as f64 / f64::from(audio.sample_rate),
+            seconds,
             bpm: (result.tempo.bpm.is_finite() && (20.0..=400.0).contains(&result.tempo.bpm))
                 .then_some(result.tempo.bpm),
             key: result.key.map(|k| k.name),
@@ -158,6 +141,29 @@ impl Catalog {
         Ok(id)
     }
 }
+
+/// Decodes one file and runs rbxport's analysis on it: the result and the length in seconds.
+pub(crate) fn analyse(path: &Path) -> Result<(rbl_analysis::Analysis, f64), String> {
+    let audio = suhina_media::decode_file(path)?;
+    let channels = usize::from(audio.channels);
+    if !(1..=2).contains(&channels) || !(1000..=96000).contains(&audio.sample_rate) {
+        return Err("unsupported decoded audio format".into());
+    }
+    let mono: Vec<f32> = audio
+        .samples
+        .chunks_exact(channels)
+        .map(|frame| frame.iter().copied().sum::<f32>() / channels as f32)
+        .collect();
+    if mono.is_empty() || mono.len() as u64 > u64::from(audio.sample_rate) * 1200 || mono.iter().any(|s| !s.is_finite())
+    {
+        return Err("invalid or oversized audio".into());
+    }
+    let result = rbl_analysis::analyse_with(&mono, audio.sample_rate, rbl_analysis::AnalysisPreset::Rbxport.options());
+    Ok((result, mono.len() as f64 / f64::from(audio.sample_rate)))
+}
+
+pub mod usb;
+pub use usb::{UsbProgress, UsbSummary, export_usb};
 
 #[cfg(test)]
 mod tests;

@@ -138,10 +138,10 @@ This project exists because of substantial work by other open-source authors.
 | Project | What comes from it | What this fork adds |
 |---|---|---|
 | **[Suhina](https://github.com/suhina-daw/suhina-daw)** | The DAW foundation: native interface, audio engine, project model, session commands, instruments, effects, plugin hosting, CLI and automation. | Restricted collaboration, the DJ workspace/bridge and combined distribution controls. |
-| **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The pinned `rbl-analysis` sources used for offline tempo/key analysis. The vendored subset is recorded with its license and source hashes. | Integration into the local DJ catalog. The rest of rbxport is not yet integrated; this fork does not claim its full feature set. |
+| **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The pinned `rbl-analysis` sources (offline tempo/key analysis) and its USB exporter (`rbl-export`, `rbl-pdb`, `rbl-anlz`, `rbl-onelibrary`, `rbl-audio`, `rbl-core`), which write the DJ library to a Rekordbox stick for CDJ/XDJ players. Each vendored subset is recorded with its license and provenance. | Integration into the local DJ catalog, the "Export to USB stick (Rekordbox)" button and an "Open rbxport" button that hands over to the rbxport app. PRO DJ LINK and rbxport's library manager stay in rbxport itself. |
 
 Read [Suhina's original README](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md),
-[NOTICE](NOTICE), [rbxport provenance](third_party/rbxport-analysis/VENDORED.md) and the exact
+[NOTICE](NOTICE), [rbxport provenance](third_party/rbxport-analysis/VENDORED.md) ([exporter](third_party/rbxport-export/VENDORED.md)) and the exact
 [source pins](fork-sources.json). Original authors retain their copyright. This is an independent
 experimental fork, not an official release or endorsement from either upstream project.
 It contains no proprietary music-software code or content.
