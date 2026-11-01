@@ -1,32 +1,38 @@
+<h2 align="center">🙏 Made possible by two open-source projects</h2>
+
+<p align="center">YOBUKO is built on the work of these two projects and their authors.<br>
+<strong>Please go and star them first.</strong></p>
+
+<table align="center">
+  <tr>
+    <th width="50%"><a href="https://github.com/suhina-daw/suhina-daw">🎛️ Suhina</a></th>
+    <th width="50%"><a href="https://github.com/chrisle/rbxport">💿 rbxport</a></th>
+  </tr>
+  <tr>
+    <td valign="top">An open-source, native, clip-launching <strong>DAW written in Rust</strong>, comparable in workflow to Ableton Live. Its engine, interface, instruments, effects and plug-in hosting are <strong>the whole studio side of YOBUKO</strong>.<br><br><a href="https://github.com/suhina-daw/suhina-daw"><strong>github.com/suhina-daw/suhina-daw</strong></a></td>
+    <td valign="top">By <strong>chrisle and contributors</strong>: tempo/key analysis and a real <strong>Rekordbox USB exporter</strong> that writes sticks Pioneer CDJ/XDJ players read. YOBUKO's DJ library and its "Export to USB stick (Rekordbox)" button <strong>use its code</strong>.<br><br><a href="https://github.com/chrisle/rbxport"><strong>github.com/chrisle/rbxport</strong></a></td>
+  </tr>
+</table>
+
+<p align="center"><sub>Their authors keep their copyright and credits. YOBUKO is an independent fork, not endorsed by either project. Details: <a href="#standing-on-the-work-of-others">Standing on the work of others</a>.</sub></p>
+
+---
+
 <p align="center">
   <img src="assets/fork/banner.svg" alt="YOBUKO Multiplayer + DJ — Create together. Prepare the set. Take it live." width="100%">
 </p>
 
 <p align="center">
-  <a href="https://github.com/Nozomagarion/suhina-daw/tree/feature/multiplayer"><img src="https://img.shields.io/badge/status-experimental%20prototype-ffb18d" alt="Experimental prototype"></a>
+  <a href="https://github.com/Nozomagarion/YOBUKO"><img src="https://img.shields.io/badge/status-experimental%20prototype-ffb18d" alt="Experimental prototype"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-63e5c1" alt="GPL 3.0 or later"></a>
-  <a href="https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml?query=branch%3Afeature%2Fmultiplayer"><img src="https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml/badge.svg?branch=feature%2Fmultiplayer" alt="Fork validation"></a>
+  <a href="https://github.com/Nozomagarion/YOBUKO/actions/workflows/multiplayer-ci.yml"><img src="https://github.com/Nozomagarion/YOBUKO/actions/workflows/multiplayer-ci.yml/badge.svg?branch=feature%2Fonline" alt="Fork validation"></a>
 </p>
 
 <h1 align="center">YOBUKO 呼子</h1>
-<p align="center"><strong>Studio + Multiplayer + DJ. One app, from the first sound to the last track of your set.</strong></p>
+<p align="center"><strong>Make music with your friends, even when you're not in the same room.</strong></p>
 <p align="center"><em>You send out a sound, another musician answers.</em></p>
 
-<p align="center"><a href="#-built-on-suhina-and-rbxport">Credits</a> · <a href="#download">Download</a> · <a href="#why-yobuko">Why YOBUKO</a> · <a href="#what-you-can-try">Try the prototype</a> · <a href="#progress-you-can-audit">Progress</a> · <a href="docs/fork-distribution.md">Updates</a></p>
-
-## 🙏 Built on Suhina and rbxport
-
-YOBUKO would not exist without them. Please go and star them first:
-
-- **[Suhina](https://github.com/suhina-daw/suhina-daw)** — an open-source, native, clip-launching
-  DAW written in Rust, comparable in workflow to Ableton Live. Its engine, interface, instruments,
-  effects and plug-in hosting are the whole studio side of YOBUKO.
-- **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** — tempo/key
-  analysis and a real Rekordbox USB exporter that writes sticks Pioneer CDJ/XDJ players read.
-  YOBUKO's DJ library and its "Export to USB stick (Rekordbox)" button use its code.
-
-Their authors keep their copyright and credits; YOBUKO is an independent fork, not endorsed by
-either project. Details: [Standing on the work of others](#standing-on-the-work-of-others).
+<p align="center"><a href="#download">Download</a> · <a href="#why-yobuko">Why YOBUKO</a> · <a href="#what-you-can-try">Try the prototype</a> · <a href="#progress-you-can-audit">Progress</a> · <a href="#standing-on-the-work-of-others">Credits</a></p>
 
 ## What YOBUKO is
 
@@ -194,18 +200,18 @@ It contains no proprietary music-software code or content.
 
 ## Build and inspect
 
-Use **`feature/multiplayer`** for the combined app. `main` deliberately stays an exact upstream
+The default branch holds the combined app. `main` deliberately stays an exact upstream
 mirror, so the custom modules and this presentation live on the feature branch.
 
 ```sh
-git clone --branch feature/multiplayer https://github.com/Nozomagarion/suhina-daw.git
-cd suhina-daw
+git clone https://github.com/Nozomagarion/YOBUKO.git
+cd YOBUKO
 cargo test --locked -p suhina-collaboration -p suhina-multiplayer -p suhina-dj -p suhina-update
 cargo build --locked -p suhina -p suhina-cli -p suhina-plugin-host
 ```
 
 Follow [build instructions](UPSTREAM_README.md#building) for platform prerequisites. Development artifacts are available
-from successful [fork workflow runs](https://github.com/Nozomagarion/suhina-daw/actions/workflows/multiplayer-ci.yml?query=branch%3Afeature%2Fmultiplayer).
+from successful [fork workflow runs](https://github.com/Nozomagarion/YOBUKO/actions/workflows/multiplayer-ci.yml).
 Check the run's commit and platform results; a compiled app alone does not establish that every
 validation passed. A stable installer, production support and signed/notarized distribution are
 not yet offered by this fork.
