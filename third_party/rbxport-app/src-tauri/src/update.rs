@@ -366,6 +366,20 @@ pub async fn check_for_update(
     updates: tauri::State<'_, std::sync::Arc<Updates>>,
 ) -> AppResult<UpdateCheckDto> {
     let current_version = app.package_info().version.to_string();
+    // YOBUKO patch: YOBUKO's releases update this copy; never swap in upstream's.
+    if crate::yobuko::BUNDLED {
+        *updates.pending.lock() = None;
+        return Ok(UpdateCheckDto {
+            current_version,
+            version: None,
+            date: None,
+            changes: Vec::new(),
+            ready: None,
+            store_install: false,
+            nix_install: false,
+            previous_failure: None,
+        });
+    }
     if store_install() {
         *updates.pending.lock() = None;
         return Ok(store_check(current_version));

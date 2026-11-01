@@ -3257,7 +3257,8 @@ pub async fn import_files_slice<R: tauri::Runtime>(
     import_files_then(app, state, paths, false).await
 }
 
-async fn import_files_then<R: tauri::Runtime>(
+// YOBUKO patch: pub(crate), for the inbox (yobuko.rs).
+pub(crate) async fn import_files_then<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     state: State<'_, Arc<AppState>>,
     paths: Vec<String>,

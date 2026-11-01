@@ -53,6 +53,8 @@ pub mod state;
 mod test_port;
 mod elevated_update;
 mod update;
+// YOBUKO patch: this copy ships inside YOBUKO (inbox, no self-update).
+mod yobuko;
 
 pub use error::{AppError, AppResult, ErrorKind};
 
@@ -443,6 +445,8 @@ pub fn run() {
             // scriptable classes, before any Apple Event can arrive.
             crate::scripting::install(app.handle());
             spawn_library_load(app.handle().clone());
+            // YOBUKO patch: tracks rendered in YOBUKO come in through its inbox.
+            crate::yobuko::start(app.handle().clone());
             // Join the network on start: a passive watcher that hears every
             // player and mixer and reports them, so the shell can offer LINK
             // the moment one appears. Nothing is transmitted until LINK is on.
