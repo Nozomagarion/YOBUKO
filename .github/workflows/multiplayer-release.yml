@@ -145,6 +145,14 @@ jobs:
             # The files a Linux user installs from: one AppImage and one .deb.
             bash scripts/linux_package.sh "dist/suhina-multiplayer-$PLATFORM" "$VERSION" dist
           fi
+          if [ "$RUNNER_OS" = macOS ]; then
+            # The file a Mac user installs from: a disk image to drag YOBUKO into Applications.
+            bash scripts/macos_dmg.sh "$package" dist/YOBUKO-Mac.dmg
+          fi
+          if [ "$RUNNER_OS" = Windows ]; then
+            # The file a Windows user installs from: a setup program with Start menu entry.
+            bash scripts/windows_installer.sh "$package" "$VERSION" dist YOBUKO-Windows-Setup
+          fi
           # Corresponding source at the exact tagged commit, including pinned rbxport code.
           git archive --format=tar.gz --prefix=suhina-source/ HEAD > "dist/source-$PLATFORM.tar.gz"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -155,9 +163,49 @@ jobs:
             dist/*.tar.gz
             dist/*.AppImage
             dist/*.deb
+            dist/*.dmg
+            dist/*.exe
           retention-days: 14
           if-no-files-found: error
 
-  # Upload-only artifacts are intentional. Publishing the shared `multiplayer` channel is a
-  # separate reviewed action after testing installation on Mac and Windows. No write token
-  # is available to any build script, and creating this workflow does not activate a release.
+  # The ready-to-install files go on this tag's own GitHub release, so friends download them
+  # from the Releases page: the Mac disk image, the Windows setup program, the Linux AppImage and
+  # .deb. Only this job has a write token, and only after every platform passed its gates. The
+  # in-app updater reads the separate `multiplayer` release, which this does not touch.
+  publish:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: ${{ github.ref_name }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/yobuko-release-notes.md
+          sparse-checkout-cone-mode: false
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: multiplayer-distribution-*
+          path: dist
+          merge-multiple: true
+      - name: Attach the installers to the release
+        run: |
+          set -euo pipefail
+          ls -l dist
+          files=(dist/YOBUKO-Mac.dmg dist/YOBUKO-Windows-Setup.exe dist/*.AppImage dist/*.deb)
+          for file in "${files[@]}"; do
+            if [ ! -f "$file" ]; then echo "missing installer: $file" >&2; exit 1; fi
+          done
+          notes=$(mktemp)
+          sed "s/@VERSION@/$VERSION/g" .github/yobuko-release-notes.md > "$notes"
+          if ! gh release view "$TAG" > /dev/null 2>&1; then
+            gh release create "$TAG" --verify-tag --prerelease --title "YOBUKO $VERSION" --notes-file "$notes"
+          else
+            gh release edit "$TAG" --notes-file "$notes"
+          fi
+          gh release upload "$TAG" "${files[@]}" --clobber

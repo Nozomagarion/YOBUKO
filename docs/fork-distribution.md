@@ -80,8 +80,13 @@ known baseline failures block distribution too. There is no implicit skip/overri
 and rbxport notices. For a Mac app pass Contents/MacOS; it places metadata in Contents/Resources
 before the final ad hoc signature. Non-code files must not sit in MacOS: their detached signature attributes would
 be lost by the updater's archive extraction. Resource signatures survive ordinary ZIP/tar extraction.
-Candidates contain corresponding source archives at the exact commit. The workflow uploads
-candidate artifacts only; it has no write token and does not publish a release.
+Candidates contain corresponding source archives at the exact commit. Once every platform
+passed, a separate `publish` job (the only one with a write token) attaches the ready-to-install
+files to the tag's own GitHub release: `YOBUKO-Mac.dmg` (scripts/macos_dmg.sh),
+`YOBUKO-Windows-Setup.exe` (Inno Setup, scripts/windows_installer.sh), the Linux AppImage and
+`.deb`, with the notes in `.github/yobuko-release-notes.md`. It does not touch the `multiplayer`
+release the updater reads. `multiplayer-ci.yml` builds the same disk image and installer from
+development binaries on every pull request.
 
 Activation requires enabling the reviewed fork workflow, testing candidate installation on
 Mac and Windows, then publishing those exact assets on the fork's `multiplayer` release with
