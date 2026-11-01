@@ -41,7 +41,6 @@ impl App {
             return;
         }
         self.dj.running_export_to_dj = self.dj.next_export_to_dj;
-        self.dj.export_source = self.projects.get(id).and_then(|s| s.source()).map(Path::to_path_buf);
         // The running plug-ins' states are gathered over this window's frames, never waited
         // for on its thread ([`App::gather_export`]): a plug-in that answers slowly keeps the
         // window drawing, and the export starts once the states are in, at most a second out.
@@ -142,12 +141,11 @@ impl App {
                 self.status = match result {
                     Ok(summary) => {
                         self.export_dialog = None;
-                        if self.dj.running_export_to_dj {
-                            if let Some(path) = summary["path"].as_str() {
-                                self.dj.pending = Some((PathBuf::from(path), self.dj.export_source.clone()));
-                                self.dj.active = true;
-                            }
-                            self.dj.running_export_to_dj = false;
+                        if std::mem::take(&mut self.dj.running_export_to_dj)
+                            && let Some(path) = summary["path"].as_str()
+                        {
+                            self.dj.active = true;
+                            self.send_to_rbxport(Path::new(path), ctx);
                         }
                         let where_to = summary["path"].as_str().unwrap_or("the file").to_string();
                         let warnings = summary["warnings"]

@@ -50,7 +50,7 @@ jobs:
           - os: ubuntu-22.04
             platform: linux-x86_64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    timeout-minutes: 150
     defaults:
       run:
         shell: bash
@@ -76,9 +76,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
+      # rbxport (DJ mode) is a Tauri app: its interface is built with Node.js and pnpm.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
       - name: Linux prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev patchelf
       - name: Source and regression gates
         run: |
           python3 scripts/fork_sources.py check
@@ -128,9 +132,13 @@ jobs:
           cp devices/fm-synth/LICENSE-APACHE crates/stretch/LICENSE-signalsmith.txt "$package/"
           if [ "$RUNNER_OS" = macOS ]; then
             bash scripts/macos_app.sh "$package" "$VERSION"
+            # DJ mode: rbxport, built from third_party/rbxport-app, inside YOBUKO.app.
+            bash scripts/rbxport_build.sh "$package"
             python3 scripts/fork_package.py "$package/Suhina.app/Contents/MacOS" "$VERSION"
             codesign --force --deep --sign - "$package/Suhina.app"
           else
+            # DJ mode: rbxport, built from third_party/rbxport-app, beside YOBUKO.
+            bash scripts/rbxport_build.sh "$package"
             python3 scripts/fork_package.py "$package" "$VERSION"
           fi
           cli="$package/suhina-cli"

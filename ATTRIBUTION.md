@@ -77,6 +77,15 @@ Copyright (c) 2026 Chris Le, GPL-2.0-or-later (used under GPLv3 with Suhina).
 The original source is unchanged; only the crate manifest is adapted.
 See its LICENSE, COPYING and VENDORED.md. No proprietary resources are included.
 
+## rbxport app (DJ mode)
+
+The whole rbxport desktop app (`third_party/rbxport-app/`) is copied from Chris Le's rbxport
+at revision `b739d369665b492534dc2eae0733322c040a26d5` (version 1.9.0) and shipped inside
+YOBUKO as its DJ mode.
+Copyright (c) 2026 Chris Le, GPL-2.0-or-later (used under GPLv3 with Suhina).
+YOBUKO's small changes (an inbox for rendered tracks, no self-update, its own identifier)
+are listed in its VENDORED.md.
+
 ## rbxport USB exporter
 
 The Rekordbox USB export (`third_party/rbxport-export/`: `rbl-export`, `rbl-pdb`, `rbl-anlz`,

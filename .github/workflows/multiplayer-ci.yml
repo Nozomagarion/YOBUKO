@@ -34,7 +34,7 @@ jobs:
           - os: macos-latest
             package: macos-universal
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 120
     defaults:
       run:
         shell: bash
@@ -52,9 +52,13 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
+      # rbxport (DJ mode) is a Tauri app: its interface is built with Node.js and pnpm.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
       - name: Linux prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev patchelf
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt, clippy
@@ -133,6 +137,8 @@ jobs:
         run: |
           package="dist/suhina-multiplayer-experiment-$PLATFORM"
           version=$("$package/suhina-cli" --version | awk '{print $2}')
+          # DJ mode: rbxport, built from third_party/rbxport-app, beside YOBUKO.
+          bash scripts/rbxport_build.sh "$package"
           bash scripts/linux_package.sh "$package" "$version" linux-installers
           ls -l linux-installers
         env:
@@ -151,10 +157,13 @@ jobs:
           if [ "$RUNNER_OS" = macOS ]; then
             version=$("$staging/suhina-cli" --version | awk '{print $2}')
             bash scripts/macos_app.sh "$staging" "$version"
+            # DJ mode: rbxport, built from third_party/rbxport-app, inside YOBUKO.app.
+            bash scripts/rbxport_build.sh "$staging"
             codesign --force --deep --sign - "$staging/Suhina.app"
             bash scripts/macos_dmg.sh "$staging" installers/YOBUKO-Mac.dmg
           else
             version=$("$staging/suhina-cli.exe" --version | awk '{print $2}')
+            bash scripts/rbxport_build.sh "$staging"
             bash scripts/windows_installer.sh "$staging" "$version" installers YOBUKO-Windows-Setup
           fi
           ls -l installers
