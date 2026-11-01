@@ -123,27 +123,27 @@
         {
           "name": "Playlists and set preparation",
           "done": true,
-          "evidence": "crates/ui/src/app/dj_playlist_tests.rs"
+          "evidence": "third_party/rbxport-app/src-tauri/src/commands.rs"
         },
         {
           "name": "Preview and named cue points",
           "done": true,
-          "evidence": "crates/ui/src/app/dj_prepare_tests.rs"
+          "evidence": "third_party/rbxport-app/src-tauri/src/analysis.rs"
         },
         {
           "name": "Waveform and visual choice of the preview start",
           "done": true,
-          "evidence": "crates/ui/src/app/dj_prepare_tests.rs"
+          "evidence": "third_party/rbxport-app/src-tauri/src/analysis.rs"
         },
         {
           "name": "Constant-tempo beat grid editing",
           "done": true,
-          "evidence": "crates/ui/src/app/dj_grid_tests.rs"
+          "evidence": "third_party/rbxport-app/src-tauri/src/grid.rs"
         },
         {
           "name": "Decks and performance space",
           "done": true,
-          "evidence": "crates/ui/src/app/dj_decks_tests.rs"
+          "evidence": "third_party/rbxport-app/src-tauri/src/player.rs"
         },
         {
           "name": "USB export and hardware compatibility",

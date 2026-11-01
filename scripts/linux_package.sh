@@ -93,7 +93,7 @@ Version: $deb_version
 Architecture: amd64
 Maintainer: YOBUKO contributors <noreply@github.com>
 Installed-Size: $size
-Depends: libasound2t64 | libasound2, libc6 (>= 2.35), libgl1, libxkbcommon0
+Depends: libasound2t64 | libasound2, libc6 (>= 2.35), libgl1, libxkbcommon0, libwebkit2gtk-4.1-0, libgtk-3-0
 Recommends: libx11-6, libxcursor1, libxi6, libxrandr2, libxkbcommon-x11-0, libwayland-client0, xdg-desktop-portal
 Section: sound
 Priority: optional

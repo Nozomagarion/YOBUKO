@@ -18,7 +18,7 @@ fn the_visible_lan_entry_creates_a_separate_tab_and_keeps_other_projects() {
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
     let before = harness.state().projects.get(original).unwrap().project().clone();
-    harness.get_by_label("Multiplayer").click();
+    super::menu_bar::pick_mode(&mut harness, "Multiplayer");
     harness.run();
     assert!(harness.query_by_label("Create session").is_some());
     harness.get_by_label("Create session").click();

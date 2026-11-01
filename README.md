@@ -10,7 +10,7 @@
   </tr>
   <tr>
     <td valign="top">An open-source, native, clip-launching <strong>DAW written in Rust</strong>, comparable in workflow to Ableton Live. Its engine, interface, instruments, effects and plug-in hosting are <strong>the whole studio side of YOBUKO</strong>.<br><br><a href="https://github.com/suhina-daw/suhina-daw"><strong>github.com/suhina-daw/suhina-daw</strong></a></td>
-    <td valign="top">By <strong>chrisle and contributors</strong>: tempo/key analysis and a real <strong>Rekordbox USB exporter</strong> that writes sticks Pioneer CDJ/XDJ players read. YOBUKO's DJ library and its "Export to USB stick (Rekordbox)" button <strong>use its code</strong>.<br><br><a href="https://github.com/chrisle/rbxport"><strong>github.com/chrisle/rbxport</strong></a></td>
+    <td valign="top">By <strong>chrisle and contributors</strong>: a full DJ library app: track analysis, decks, a real <strong>Rekordbox USB exporter</strong> for Pioneer CDJ/XDJ players and PRO DJ LINK. <strong>YOBUKO's DJ mode is rbxport itself</strong>, shipped inside YOBUKO.<br><br><a href="https://github.com/chrisle/rbxport"><strong>github.com/chrisle/rbxport</strong></a></td>
   </tr>
 </table>
 
@@ -83,7 +83,7 @@ Suhina updates keep merging cleanly.
 
 | Create | Prepare | Perform |
 |---|---|---|
-| Produce with Suhina's engine, instruments and clip workflow. | Render a project into the DJ library; analyse tempo and key with rbxport code. | Build toward set preparation and live performance in the same app. |
+| Produce with Suhina's engine, instruments and clip workflow. | Switch to DJ mode: rbxport opens, and a rendered project lands in its collection. | Build toward set preparation and live performance in the same app. |
 | Collaborate on a common project while listening independently. | Keep the connection between your production and its rendered audio. | Keep everyone on the same tested combined version. |
 | **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** two independent A/B decks, levels, crossfader and Rekordbox USB export (not yet tried on a real CDJ). |
 
@@ -190,10 +190,10 @@ This project exists because of substantial work by other open-source authors.
 | Project | What comes from it | What this fork adds |
 |---|---|---|
 | **[Suhina](https://github.com/suhina-daw/suhina-daw)** | The DAW foundation: native interface, audio engine, project model, session commands, instruments, effects, plugin hosting, CLI and automation. | Restricted collaboration, the DJ workspace/bridge and combined distribution controls. |
-| **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The pinned `rbl-analysis` sources (offline tempo/key analysis) and its USB exporter (`rbl-export`, `rbl-pdb`, `rbl-anlz`, `rbl-onelibrary`, `rbl-audio`, `rbl-core`), which write the DJ library to a Rekordbox stick for CDJ/XDJ players. Each vendored subset is recorded with its license and provenance. | Integration into the local DJ catalog, the "Export to USB stick (Rekordbox)" button and an "Open rbxport" button that hands over to the rbxport app. PRO DJ LINK and rbxport's library manager stay in rbxport itself. |
+| **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The whole rbxport desktop app (library, analysis, decks, USB export, PRO DJ LINK), plus the pinned `rbl-analysis` sources (offline tempo/key analysis) and its USB exporter (`rbl-export`, `rbl-pdb`, `rbl-anlz`, `rbl-onelibrary`, `rbl-audio`, `rbl-core`), which write the DJ library to a Rekordbox stick for CDJ/XDJ players. Each vendored subset is recorded with its license and provenance. | The whole rbxport app (`third_party/rbxport-app`) is YOBUKO's DJ mode and ships in its installers; "Send this project to rbxport" adds a render to its collection. |
 
 Read [Suhina's original README](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md),
-[NOTICE](NOTICE), [rbxport provenance](third_party/rbxport-analysis/VENDORED.md) ([exporter](third_party/rbxport-export/VENDORED.md)) and the exact
+[NOTICE](NOTICE), [rbxport provenance](third_party/rbxport-analysis/VENDORED.md) ([exporter](third_party/rbxport-export/VENDORED.md), [app](third_party/rbxport-app/VENDORED.md)) and the exact
 [source pins](fork-sources.json). Original authors retain their copyright. This is an independent
 experimental fork, not an official release or endorsement from either upstream project.
 It contains no proprietary music-software code or content.
