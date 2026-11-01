@@ -1,46 +1,59 @@
 ---
-description: The fork's Studio and DJ workspaces, local playlists and cues, rbxport analysis, engine audition and waveform preparation
+description: The fork's Studio and DJ workspaces (DJ mode is the rbxport app), local playlists and cues, rbxport analysis, engine audition and waveform preparation
 read_when: DJ library, playlists, cue points, audition, waveform preparation, rbxport integration, render a project for DJ preparation
 type: spec
 status: current
-last_verified: 2026-10-26
+last_verified: 2026-11-01
 covers:
   - crates/engine/src/decks.rs
   - crates/engine/src/decks_tests.rs
   - crates/session/src/dj_decks.rs
   - crates/session/tests/dj_decks.rs
-  - crates/ui/src/app/dj_decks.rs
-  - crates/ui/src/app/dj_decks_tests.rs
   - crates/dj
   - crates/session/src/dj.rs
   - crates/ui/src/app/dj.rs
   - crates/ui/src/app/dj_tests.rs
-  - crates/ui/src/app/dj_playlists.rs
-  - crates/ui/src/app/dj_playlist_tests.rs
   - crates/session/tests/dj.rs
   - crates/media/src/waveform.rs
   - crates/session/src/dj_waveform.rs
   - crates/session/tests/dj_waveform.rs
-  - crates/ui/src/app/dj_grid.rs
-  - crates/ui/src/app/dj_grid_tests.rs
   - crates/session/tests/dj_grid.rs
-  - crates/ui/src/app/dj_waveform.rs
   - crates/session/src/dj_preview.rs
   - crates/session/tests/dj_audition.rs
-  - crates/ui/src/app/dj_prepare.rs
-  - crates/ui/src/app/dj_prepare_tests.rs
   - crates/ui/src/interaction/pick.rs
   - third_party/rbxport-analysis
+  - crates/ui/src/app/dj_rbxport.rs
+  - crates/ui/src/app/menu_bar.rs
+  - scripts/rbxport_build.sh
+  - third_party/rbxport-app/VENDORED.md
 ---
 
 # DJ workspace
 
-The multiplayer fork adds Studio and DJ buttons at the right of the menu bar. DJ opens a local library
-without requiring an open project. When the menu bar is hidden (the Mac default), a compact
-workspace row keeps both buttons visible; View > DJ library is also available in the native menu. Studio returns to the existing Session/Arrangement view.
-Entering DJ stops the active project's transport and sample preview through existing commands;
-changing views does not edit the project. Studio keyboard shortcuts are suspended in DJ mode.
-The output engine, project model and collaboration prototype remain unchanged.
+## DJ mode is rbxport
+
+The app's mode (Studio, Multiplayer or DJ) is one small colored pill at the right end of the
+menu bar (or of its own row when the menu bar is hidden): blue Studio, green Multiplayer, pink
+DJ. Clicking it lists the three modes; View > Studio workspace / Multiplayer / DJ library do the
+same from the native menu.
+
+Switching to DJ stops the active project's transport and sample preview, then starts
+**rbxport**, Chris Le's DJ library app, or brings it forward when it is already open. YOBUKO
+ships its own copy, built from `third_party/rbxport-app` by `scripts/rbxport_build.sh`:
+`YOBUKO.app/Contents/Helpers/rbxport.app` on macOS, `rbxport/rbxport[.exe]` beside the program
+on Windows and Linux. Without it (a development build) an rbxport installed on its own is
+used, else its download page opens. rbxport brings the library, analysis, decks, USB sticks for
+CDJ/XDJ players and PRO DJ LINK.
+
+The DJ page itself only says this, with **Open rbxport** and **Send this project to rbxport…**.
+The latter opens the normal export dialog; when the render is done, YOBUKO writes a `.paths`
+request (the file's path) into `<data dir>/YOBUKO/rbxport-inbox` and brings rbxport forward.
+YOBUKO's copy of rbxport looks at that folder every two seconds and imports the files into its
+collection (`third_party/rbxport-app/src-tauri/src/yobuko.rs`); a request it cannot import yet
+(no library open, or a read-only one) waits there. A normal File > Export sends nothing.
+
+The sections below describe the `dj.*` session commands, the in-house catalog and the engine's
+decks. They remain for the CLI and the session layer, but the window no longer shows them.
 
 ## Commands and storage
 

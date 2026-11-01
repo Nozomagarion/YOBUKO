@@ -782,15 +782,7 @@ impl App {
     /// Uses `library` for the browser and the `library.*` commands (ADR 0012); the app gives
     /// it Suhina's settings folder and starts it.
     pub fn set_file_library(&mut self, library: suhina_library::Library) {
-        self.stop_dj_preview();
-        self.stop_dj_decks();
         self.projects.set_file_library(library);
-        self.dj = dj::DjPanel {
-            active: self.dj.active,
-            preview_owned: self.dj.preview_owned,
-            decks_owned: self.dj.decks_owned,
-            ..dj::DjPanel::default()
-        };
         self.browser.relist();
     }
 
@@ -1625,9 +1617,7 @@ impl App {
             PickField::BrowserFolder
             | PickField::McpWriteFolder
             | PickField::CopyToFolder
-            | PickField::BackgroundImage
-            | PickField::DjAudio
-            | PickField::DjUsb => None,
+            | PickField::BackgroundImage => None,
         };
         self.pick_request = Some(PickRequest { field, start });
     }
@@ -1643,14 +1633,6 @@ impl App {
     pub fn set_picked(&mut self, field: PickField, path: PathBuf) {
         let text = path.display().to_string();
         match field {
-            PickField::DjAudio => {
-                self.dj.pending = Some((path, None));
-                return;
-            }
-            PickField::DjUsb => {
-                self.start_dj_usb_export(&path);
-                return;
-            }
             PickField::ProjectsFolder => self.settings.projects_folder = text,
             PickField::BackgroundImage => {
                 self.settings.background_image = text;
@@ -2677,7 +2659,6 @@ impl App {
         self.poll_scan(ui.ctx());
         self.frame_trace.mark("plug-in scan");
         self.poll_export(ui.ctx());
-        self.poll_dj(ui.ctx());
         self.poll_multiplayer(ui.ctx());
         self.frame_trace.mark("export");
         self.poll_plugins(ui.ctx());
@@ -3611,19 +3592,3 @@ mod tests;
 #[cfg(test)]
 #[path = "app/dj_tests.rs"]
 mod dj_tests;
-
-#[cfg(test)]
-#[path = "app/dj_playlist_tests.rs"]
-mod dj_playlist_tests;
-
-#[cfg(test)]
-#[path = "app/dj_prepare_tests.rs"]
-mod dj_prepare_tests;
-
-#[cfg(test)]
-#[path = "app/dj_grid_tests.rs"]
-mod dj_grid_tests;
-
-#[cfg(test)]
-#[path = "app/dj_decks_tests.rs"]
-mod dj_decks_tests;

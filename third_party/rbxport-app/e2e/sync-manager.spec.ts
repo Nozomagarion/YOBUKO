@@ -1,0 +1,230 @@
+import { expect, test, type Page } from "@playwright/test";
+
+/**
+ * The Sync Manager on the mock backend: opened from the foot of the rail,
+ * playlists ticked on the left and both sticks on the right, SYNC writes to
+ * both and reports on each, and Close puts it away.
+ */
+async function openManager(page: Page) {
+  await page.goto("/?writable=1");
+  await expect(page.getByTestId("browser-title")).toContainText("Tracks)");
+  await page.getByRole("button", { name: "Sync Manager" }).click();
+  const dialog = page.getByRole("dialog", { name: "Sync Manager" });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+test("eject after syncing removes successfully synced devices", async ({ page }) => {
+  const dialog = await openManager(page);
+  await dialog.getByRole("checkbox", { name: "Melodic Vox", exact: true }).check();
+  await dialog.getByRole("checkbox", { name: "DJ STICK", exact: true }).check();
+  await expect(dialog.getByRole("meter", { name: "DJ STICK storage used" })).toBeVisible();
+  await dialog.getByRole("checkbox", { name: "Eject after syncing" }).check();
+  await dialog.getByRole("button", { name: "SYNC", exact: true }).click();
+  await expect(dialog.getByRole("status")).toContainText("Safely ejected.");
+  await expect(dialog.getByRole("checkbox", { name: "DJ STICK", exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("checkbox", { name: "TEST", exact: true })).toBeVisible();
+});
+
+test("Import brings back only what Preferences turns on, and Change import preferences opens them (#199)", async ({ page }) => {
+  const dialog = await openManager(page);
+  // Two actions, no import ticks in the window.
+  await expect(dialog.getByRole("checkbox", { name: "Track ratings", exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("checkbox", { name: "Play history", exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Change import preferences" }).click();
+  const preferences = page.getByRole("dialog", { name: "Preferences" });
+  await expect(preferences).toBeVisible();
+  await expect(preferences.getByRole("switch", { name: "Import track ratings" })).toBeChecked();
+  await preferences.getByRole("switch", { name: "Import cues and beat grids" }).uncheck();
+  await preferences.getByRole("switch", { name: "Import play history" }).uncheck();
+  await preferences.getByRole("button", { name: "Close" }).click();
+  await expect(preferences).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("checkbox", { name: "DJ STICK", exact: true }).check();
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog.getByRole("status")).toContainText("DJ STICK: no new track ratings.");
+  await expect(dialog.getByRole("status")).not.toContainText("play-history");
+  await expect(dialog.getByRole("status")).not.toContainText("cues and beat grids");
+});
+
+test("each settings button opens USB Export at its own section", async ({ page }) => {
+  const dialog = await openManager(page);
+  const preferences = page.getByRole("dialog", { name: "Preferences" });
+  const heading = (name: string) => preferences.getByRole("heading", { name, exact: true });
+
+  await dialog.getByRole("button", { name: "Change import preferences" }).click();
+  await expect(heading("Import")).toBeInViewport();
+  await preferences.getByRole("button", { name: "Close" }).click();
+  await expect(preferences).toBeHidden();
+
+  await dialog.getByRole("button", { name: "Change sync preferences" }).click();
+  await expect(heading("Sync")).toBeInViewport();
+  await expect(preferences.getByRole("switch", { name: "Verify all files (slower)" })).toBeVisible();
+});
+
+test("the rail opens it with the library's playlists on the left and the devices on the right", async ({ page }) => {
+  const dialog = await openManager(page);
+  const tree = dialog.getByRole("tree", { name: "Playlists", exact: true });
+  // The mock's top folders, open one level: their playlists show, the third
+  // folder is empty.
+  // rekordbox roots the column at [Playlists]; its folders follow.
+  await expect(tree.getByRole("treeitem").first()).toHaveText(/Playlists/);
+  await expect(tree.getByRole("treeitem").nth(1)).toHaveText(/CURRENT/);
+  await expect(tree.getByRole("checkbox", { name: "Melodic Vox" })).toBeVisible();
+  await expect(tree.getByRole("checkbox", { name: "Fresh 128s" })).toBeVisible();
+  await expect(tree.getByRole("treeitem", { name: /All Tracks/ })).toHaveCount(0);
+  const devices = dialog.getByRole("tree", { name: "Devices" });
+  await expect(devices.getByRole("checkbox", { name: "DJ STICK", exact: true })).toBeVisible();
+  await expect(devices.getByRole("checkbox", { name: "TEST", exact: true })).toBeVisible();
+  // Nothing ticked yet, so nothing to sync.
+  await expect(dialog.getByRole("button", { name: "SYNC", exact: true })).toBeDisabled();
+});
+
+test("ticking a folder ticks its playlists, and a device shows what it holds", async ({ page }) => {
+  const dialog = await openManager(page);
+  const tree = dialog.getByRole("tree", { name: "Playlists", exact: true });
+  await tree.getByRole("checkbox", { name: "CURRENT" }).check();
+  await expect(tree.getByRole("checkbox", { name: "Melodic Vox" })).toBeChecked();
+  await expect(tree.getByRole("checkbox", { name: "Hardstyle" })).toBeChecked();
+  await expect(tree.getByRole("checkbox", { name: "Fresh 128s" })).toBeChecked();
+  await tree.getByRole("checkbox", { name: "Hardstyle" }).uncheck();
+  await expect(tree.getByRole("checkbox", { name: "CURRENT" })).toHaveAttribute("aria-checked", "mixed");
+
+  // TEST is rekordbox's stick: it holds playlists but remembers no selection.
+  // It starts closed; opening it shows its playlists without ticking it, and
+  // nothing is ticked for it from their names.
+  const library = dialog.getByLabel("TEST library");
+  await expect(dialog.getByRole("checkbox", { name: "TEST", exact: true })).not.toBeChecked();
+  await expect(library).toBeHidden();
+  await dialog.getByRole("button", { name: "Expand TEST", exact: true }).click();
+  await expect(dialog.getByRole("checkbox", { name: "TEST", exact: true })).not.toBeChecked();
+  await expect(library).toContainText("Device Library");
+  await expect(library).toContainText("Main Set");
+  await expect(library).toContainText("OneLibrary");
+  await expect(dialog.getByRole("tree", { name: "Devices" })).toContainText(/GB free \(\d+%\)/);
+  await dialog.getByRole("button", { name: "Collapse TEST", exact: true }).click();
+  await expect(library).toBeHidden();
+  await expect(dialog.getByRole("checkbox", { name: "TEST", exact: true })).not.toBeChecked();
+});
+
+test("SYNC writes the ticked playlists to both sticks, reports on each, and Close closes it", async ({ page }) => {
+  const dialog = await openManager(page);
+  const tree = dialog.getByRole("tree", { name: "Playlists", exact: true });
+  await tree.getByRole("checkbox", { name: "Melodic Vox" }).check();
+  await dialog.getByRole("checkbox", { name: "DJ STICK", exact: true }).check();
+  await dialog.getByRole("checkbox", { name: "TEST", exact: true }).check();
+  const sync = dialog.getByRole("button", { name: "SYNC", exact: true });
+  await expect(sync).toBeEnabled();
+  await sync.click();
+
+  await expect(dialog.getByLabel("DJ STICK export report")).toContainText(/\d+ tracks updated/);
+  await expect(dialog.getByLabel("TEST export report")).toContainText(/\d+ tracks updated/);
+  // Both sticks now hold the one playlist, and say so.
+  await dialog.getByRole("button", { name: "Expand DJ STICK", exact: true }).click();
+  await dialog.getByRole("button", { name: "Expand TEST", exact: true }).click();
+  await expect(dialog.getByLabel("DJ STICK library")).toContainText("Melodic Vox");
+  await expect(dialog.getByLabel("TEST library")).toContainText("Melodic Vox");
+  await expect(dialog.getByLabel("TEST library")).not.toContainText("Main Set");
+
+  // The footer's Close, not the ✕ in the title bar, which is also named Close.
+  await dialog.getByRole("button", { name: "Close" }).filter({ hasText: "Close" }).click();
+  await expect(dialog).toBeHidden();
+
+  // The shell's device tree saw the write: DJ STICK now holds an export.
+  await page.getByRole("tablist", { name: "Library sources" }).getByRole("tab", { name: "Devices" }).click();
+  await page.getByRole("treeitem", { name: /DJ STICK/ }).click();
+  await expect(page.getByRole("region", { name: "Device DJ STICK" })).toContainText("last synced");
+});
+
+test("ticking a stick again brings back what it was last synced with", async ({ page }) => {
+  const dialog = await openManager(page);
+  const tree = dialog.getByRole("tree", { name: "Playlists", exact: true });
+  await tree.getByRole("checkbox", { name: "Hardstyle" }).check();
+  await dialog.getByRole("checkbox", { name: "DJ STICK", exact: true }).check();
+  await dialog.getByRole("button", { name: "SYNC", exact: true }).click();
+  await expect(dialog.getByLabel("DJ STICK export report")).toContainText(/\d+ tracks updated/);
+
+  // Untick everything, tick the stick: its last selection comes back.
+  await dialog.getByRole("checkbox", { name: "DJ STICK", exact: true }).uncheck();
+  await tree.getByRole("checkbox", { name: "Hardstyle" }).uncheck();
+  await expect(tree.getByRole("checkbox", { name: "Hardstyle" })).not.toBeChecked();
+  await dialog.getByRole("checkbox", { name: "DJ STICK", exact: true }).check();
+  await expect(tree.getByRole("checkbox", { name: "Hardstyle" })).toBeChecked();
+});
+
+test("reopened, it shows the stick's playlists and ticks what it was last synced with (#178)", async ({ page }) => {
+  let dialog = await openManager(page);
+  let tree = dialog.getByRole("tree", { name: "Playlists", exact: true });
+  await tree.getByRole("checkbox", { name: "Hardstyle" }).check();
+  await dialog.getByRole("checkbox", { name: "DJ STICK", exact: true }).check();
+  await dialog.getByRole("button", { name: "SYNC", exact: true }).click();
+  await expect(dialog.getByLabel("DJ STICK export report")).toContainText(/\d+ tracks updated/);
+  await dialog.getByRole("button", { name: "Close" }).filter({ hasText: "Close" }).click();
+  await expect(dialog).toBeHidden();
+
+  await page.getByRole("button", { name: "Sync Manager" }).click();
+  dialog = page.getByRole("dialog", { name: "Sync Manager" });
+  tree = dialog.getByRole("tree", { name: "Playlists", exact: true });
+  // Without a click: the stick with a record is chosen and its selection is
+  // back. Opened, each stick shows its playlists.
+  await expect(dialog.getByRole("checkbox", { name: "DJ STICK", exact: true })).toBeChecked();
+  await expect(tree.getByRole("checkbox", { name: "Hardstyle" })).toBeChecked();
+  await expect(tree.getByRole("checkbox", { name: "Melodic Vox" })).not.toBeChecked();
+  await dialog.getByRole("button", { name: "Expand DJ STICK", exact: true }).click();
+  await dialog.getByRole("button", { name: "Expand TEST", exact: true }).click();
+  await expect(dialog.getByLabel("DJ STICK library")).toContainText("Hardstyle");
+  await expect(dialog.getByLabel("TEST library")).toContainText("Main Set");
+  // TEST has no record, so it is not chosen.
+  await expect(dialog.getByRole("checkbox", { name: "TEST", exact: true })).not.toBeChecked();
+});
+
+test("playlist search preserves selections and explains what is needed to sync", async ({ page }) => {
+  const dialog = await openManager(page);
+  const search = dialog.getByRole("searchbox", { name: "Search playlists" });
+  const sync = dialog.getByRole("button", { name: "SYNC", exact: true });
+  await expect(sync).toHaveAccessibleDescription("Select playlists and a USB device.");
+  await dialog.getByRole("checkbox", { name: "Melodic Vox", exact: true }).check();
+  await search.fill("hardstyle");
+  await expect(dialog.getByRole("checkbox", { name: "Melodic Vox", exact: true })).toHaveCount(0);
+  await dialog.getByRole("checkbox", { name: "Hardstyle", exact: true }).check();
+  await dialog.getByRole("button", { name: "Clear playlist search" }).click();
+  await expect(dialog.getByRole("checkbox", { name: "Melodic Vox", exact: true })).toBeChecked();
+  await expect(dialog.getByRole("checkbox", { name: "Hardstyle", exact: true })).toBeChecked();
+  await expect(sync).toHaveAccessibleDescription("Select a USB device to sync to.");
+  await dialog.getByRole("checkbox", { name: "DJ STICK", exact: true }).check();
+  await expect(dialog.getByText("2 playlists → 1 USB device", { exact: true })).toBeVisible();
+  await expect(sync).toBeEnabled();
+  await dialog.getByRole("button", { name: "Clear selection" }).click();
+  await expect(sync).toBeDisabled();
+  await expect(dialog.getByRole("checkbox", { name: "DJ STICK", exact: true })).toBeChecked();
+  await expect(sync).toHaveAccessibleDescription("Select playlists to sync.");
+  await search.fill("no matching playlist");
+  await expect(dialog.getByText("No playlists match “no matching playlist”.", { exact: true })).toBeVisible();
+});
+
+test("the [Playlists] box selects every playlist, shows mixed, and SYNC writes them all (#335)", async ({ page }) => {
+  const dialog = await openManager(page);
+  const tree = dialog.getByRole("tree", { name: "Playlists", exact: true });
+  const all = tree.getByRole("checkbox", { name: "Playlists", exact: true });
+  await expect(all).not.toBeChecked();
+  await all.check();
+  await expect(tree.getByRole("checkbox", { name: "Melodic Vox" })).toBeChecked();
+  await expect(tree.getByRole("checkbox", { name: "Hardstyle" })).toBeChecked();
+  await expect(tree.getByRole("checkbox", { name: "CURRENT" })).toBeChecked();
+  await tree.getByRole("checkbox", { name: "Hardstyle" }).uncheck();
+  await expect(all).toHaveAttribute("aria-checked", "mixed");
+  await all.click();
+  await expect(all).toBeChecked();
+  await expect(tree.getByRole("checkbox", { name: "Hardstyle" })).toBeChecked();
+
+  await dialog.getByRole("checkbox", { name: "DJ STICK", exact: true }).check();
+  await dialog.getByRole("button", { name: "SYNC", exact: true }).click();
+  await expect(dialog.getByLabel("DJ STICK export report")).toContainText(/\d+ tracks updated/);
+  await dialog.getByRole("button", { name: "Expand DJ STICK", exact: true }).click();
+  await expect(dialog.getByLabel("DJ STICK library")).toContainText("Melodic Vox");
+  await expect(dialog.getByLabel("DJ STICK library")).toContainText("Hardstyle");
+
+  await all.uncheck();
+  await expect(tree.getByRole("checkbox", { name: "Melodic Vox" })).not.toBeChecked();
+  await expect(dialog.getByRole("button", { name: "SYNC", exact: true })).toBeDisabled();
+});

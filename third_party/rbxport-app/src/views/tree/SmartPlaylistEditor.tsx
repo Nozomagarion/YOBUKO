@@ -1,0 +1,422 @@
+/**
+ * The intelligent playlist editor: a name and a rule.
+ *
+ * rekordbox 7.2.11's dialog, captured 2026-09-18
+ * (`docs/screenshots/intelligent-playlist-*-7.2.11@2x.png`): "List Name"
+ * with "Untitled Intelligent List" selected, then "Match the following
+ * condition:" over one row — "Match [all of the ▾] following conditions:"
+ * once there are two — a ⊕ at the right of that line, one row per
+ * condition (a property popup, an operator popup, the value, a ⊖), and
+ * OK / Cancel. A new row is Artist = (empty). The operators are drawn as
+ * `=`, `≠`, `>`, `<` and words for the rest; a text property offers
+ * `=`, `≠`, contains, does not contain, starts with, ends with; a number
+ * `=`, `≠`, `>`, `<`, is in the range; a date those plus is in the last
+ * and is not in the last. The dialog has no Update automatically
+ * control; the rule is always live.
+ *
+ * The property list is rekordbox's, in its order, each under the name
+ * `SmartList` holds for it. My Tag picks one of the library's tags and
+ * stores its `djmdMyTag.ID`; rekordbox answers it only with "contains" and
+ * "does not contain" (operators 8 and 9) [OBS: static, rekordbox 7.2.19
+ * `db::operate`], so those are the two offered [ASSUME: the words its own
+ * dialog uses for them]. A property this list does not know — one a newer
+ * rekordbox wrote — is shown as it is and cannot be chosen again.
+ *
+ * Values are shown and typed as rekordbox's dialog shows them; the backend
+ * stores them as rekordbox stores them (a BPM in hundredths, see
+ * `rbl_index::smart`), checked against rules rekordbox 7.2.14 wrote
+ * (issue #151). A colour is picked from the eight and No Color, as
+ * rekordbox's list offers, and stored by its `ColorID`.
+ */
+import { useEffect, useRef, useState } from "react";
+
+import type { SmartCondition, SmartRule, TrackLookups } from "@/ipc/types";
+import { COLOR_NAMES } from "@/lib/trackFilter";
+import styles from "./SmartPlaylistEditor.module.css";
+
+export interface SmartPlaylistEditorProps {
+  /** "Create New Intelligent Playlist" or "Edit the Intelligent Playlist". */
+  title: string;
+  name: string;
+  rule: SmartRule;
+  /** The library's My Tags by category, for a My Tag condition's value. */
+  myTags?: TrackLookups["myTagCategories"];
+  onSave: (name: string, rule: SmartRule) => void;
+  onCancel: () => void;
+}
+
+type Kind = "text" | "number" | "date" | "tag" | "color";
+
+/**
+ * The properties, in rekordbox's order and words [OBS 7.2.11]. `value` is
+ * the name `SmartList` holds [OBS: static, the names rekordbox 7.2.19's
+ * `db::getSmartlistCondition` compares against].
+ */
+const PROPERTIES: readonly { value: string; label: string; kind: Kind }[] = [
+  { value: "album", label: "Album", kind: "text" },
+  { value: "albumArtist", label: "Album artist", kind: "text" },
+  { value: "artist", label: "Artist", kind: "text" },
+  { value: "bpm", label: "BPM", kind: "number" },
+  { value: "grouping", label: "Color", kind: "color" },
+  { value: "comments", label: "Comments", kind: "text" },
+  { value: "producer", label: "Composer", kind: "text" },
+  { value: "stockDate", label: "Date Added", kind: "date" },
+  { value: "dateCreated", label: "Date Created", kind: "date" },
+  { value: "counter", label: "DJ play count", kind: "number" },
+  { value: "fileName", label: "File name", kind: "text" },
+  { value: "genre", label: "Genre", kind: "text" },
+  { value: "key", label: "Key", kind: "text" },
+  { value: "label", label: "Label", kind: "text" },
+  { value: "mixName", label: "Mix name", kind: "text" },
+  { value: "myTag", label: "My Tag", kind: "tag" },
+  { value: "originalArtist", label: "Original artist", kind: "text" },
+  { value: "rating", label: "Rating", kind: "number" },
+  { value: "dateReleased", label: "Release Date", kind: "date" },
+  { value: "remixedBy", label: "Remixer", kind: "text" },
+  { value: "duration", label: "Time", kind: "number" },
+  { value: "name", label: "Track Title", kind: "text" },
+  { value: "year", label: "Year", kind: "number" },
+];
+
+/** The operators, numbered as rekordbox numbers them and drawn as it draws them [OBS 7.2.11]. */
+const OPERATORS: readonly { value: string; label: string; for: readonly Kind[] }[] = [
+  { value: "1", label: "=", for: ["text", "number", "date", "color"] },
+  { value: "2", label: "≠", for: ["text", "number", "date", "color"] },
+  { value: "3", label: ">", for: ["number", "date"] },
+  { value: "4", label: "<", for: ["number", "date"] },
+  { value: "6", label: "is in the last", for: ["date"] },
+  { value: "7", label: "is not in the last", for: ["date"] },
+  { value: "5", label: "is in the range", for: ["number", "date"] },
+  { value: "8", label: "contains", for: ["text", "tag"] },
+  { value: "9", label: "does not contain", for: ["text", "tag"] },
+  { value: "10", label: "starts with", for: ["text"] },
+  { value: "11", label: "ends with", for: ["text"] },
+];
+
+/**
+ * The units of "is in the last", and the words `ValueUnit` holds for them:
+ * rekordbox offers only these two [OBS: rekordbox 7.2.14's unit list on
+ * chris-win11, issue #151; static, 7.2.19 `Condition::getRangeUnitList` and
+ * the `xml_range_unit` table, `day` and `month`]. Any other unit counts days
+ * in rekordbox, so offering more would write rules it reads differently.
+ */
+const UNITS: readonly { value: string; label: string }[] = [
+  { value: "day", label: "day(s)" },
+  { value: "month", label: "month(s)" },
+];
+
+/**
+ * The colours a Color condition picks from, and the `ColorID` it stores:
+ * the eight colours in `ColorID` order, then No Color, stored as `0`
+ * [OBS: rekordbox 7.2.14's Color condition on chris-win11, issue #151, is a
+ * list of the eight and No Color with only `=` and `≠`, and it wrote Pink
+ * as `ValueLeft="1"` and No Color as `ValueLeft="0"`; static, 7.2.19
+ * `db::getSmartlistCondition` reads `grouping` with `getIntAttribute`].
+ */
+const COLOURS: readonly { value: string; label: string }[] = [
+  ...COLOR_NAMES.map((label, i) => ({ value: String(i + 1), label })),
+  { value: "0", label: "No Color" },
+];
+
+function kindOf(property: string): Kind {
+  return PROPERTIES.find((p) => p.value === property)?.kind ?? "text";
+}
+
+/**
+ * A My Tag id as rekordbox compares it: a 32-bit signed integer, so a rule
+ * value rekordbox rewrote into that form still names its tag. Mirrors
+ * `rbl_index::smart::my_tag_key`.
+ */
+function tagKey(id: string): number {
+  const match = /^\s*([+-]?\d+)/.exec(id);
+  return match?.[1] ? Number(BigInt.asIntN(32, BigInt(match[1]))) : 0;
+}
+
+/**
+ * A stored condition as the editor shows it: the way rekordbox and rbx read
+ * it, so the dialog never shows a rule the playlist does not list.
+ *
+ * - A Color value that is not a ColorID (rbx 1.6.0 and earlier stored the
+ *   colour's name, such as `"Pink"`) is read as rekordbox reads it, as an
+ *   integer [static, 7.2.19 `db::getSmartlistCondition` reads `grouping`
+ *   with `getIntAttribute`; `rbl_index::smart::color_id`], so `"Pink"` is
+ *   `0`, No Color. A number that names no colour is left as written.
+ * - A unit of "is in the last" other than `day` or `month` (an earlier rbx
+ *   offered `week` and `year`) counts days in both apps [static, 7.2.19
+ *   `xml_range_unit`; `rbl_index::smart::Date::minus`], so it is shown as
+ *   day(s).
+ *
+ * Nothing is written unless the user saves, and saving the converted value
+ * does not change what rekordbox lists.
+ */
+export function asRead(condition: SmartCondition): SmartCondition {
+  const c = { ...condition };
+  if (kindOf(c.property) === "color" && !COLOURS.some((colour) => colour.value === c.left)) {
+    const id = String(tagKey(c.left));
+    if (COLOURS.some((colour) => colour.value === id)) c.left = id;
+  }
+  if ((c.operator === "6" || c.operator === "7") && !UNITS.some((u) => u.value === c.unit)) {
+    // rbx counts months for any spelling of `month` (`Date::minus`).
+    c.unit = c.unit.toLowerCase() === "month" ? "month" : "day";
+  }
+  return c;
+}
+
+/** A fresh condition: Artist = (empty), as rekordbox's new row is [OBS 7.2.11]. */
+export function emptyCondition(): SmartCondition {
+  return { property: "artist", operator: "1", left: "", right: "", unit: "" };
+}
+
+export function SmartPlaylistEditor({ title, name: initialName, rule: initialRule, myTags = [], onSave, onCancel }: SmartPlaylistEditorProps) {
+  const [name, setName] = useState(initialName);
+  const [logic, setLogic] = useState<"all" | "any">(initialRule.logic === "any" ? "any" : "all");
+  const [conditions, setConditions] = useState<SmartCondition[]>(
+    initialRule.conditions.length === 0 ? [emptyCondition()] : initialRule.conditions.map(asRead),
+  );
+  const nameField = useRef<HTMLInputElement>(null);
+  const cancel = useRef(onCancel);
+  useEffect(() => {
+    cancel.current = onCancel;
+  }, [onCancel]);
+
+  // The name is focused and selected once, when the editor opens. The parent
+  // hands down a new `onCancel` each time it renders, and it renders on its
+  // own (the window regaining focus refreshes the devices and LINK status),
+  // so focusing on every new `onCancel` pulled focus back to the name and
+  // shut a dropdown the moment it opened (#131, #215).
+  useEffect(() => {
+    nameField.current?.focus();
+    nameField.current?.select();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") cancel.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const update = (at: number, patch: Partial<SmartCondition>) =>
+    setConditions((current) => current.map((c, i) => (i === at ? { ...c, ...patch } : c)));
+
+  const changeProperty = (at: number, property: string) => {
+    // An operator the new property cannot take falls back to its first.
+    const kind = kindOf(property);
+    const current = conditions[at];
+    const keep = current && OPERATORS.some((o) => o.value === current.operator && o.for.includes(kind));
+    const operator = keep ? current.operator : (OPERATORS.find((o) => o.for.includes(kind))?.value ?? "1");
+    // A tag or a colour is picked, not typed: text carried into it would
+    // name nothing, and an id carried out of it is not a word anyone wrote.
+    const picked = (k: Kind) => k === "tag" || k === "color";
+    const crossesTag = current !== undefined && (picked(kind) || picked(kindOf(current.property))) && kind !== kindOf(current.property);
+    update(at, {
+      property,
+      operator,
+      unit: operator === "6" || operator === "7" ? "day" : "",
+      ...(crossesTag ? { left: "", right: "" } : {}),
+    });
+  };
+
+  const changeOperator = (at: number, operator: string) => {
+    const relative = operator === "6" || operator === "7";
+    update(at, { operator, unit: relative ? (conditions[at]?.unit || "day") : "", right: operator === "5" ? (conditions[at]?.right ?? "") : "" });
+  };
+
+  const canSave = name.trim() !== "" && conditions.every((c) => c.left.trim() !== "");
+
+  return (
+    <div className={styles.backdrop} onMouseDown={onCancel} role="presentation">
+      <div
+        className={styles.window}
+        onMouseDown={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+      >
+        <header className={styles.titlebar}>{title}</header>
+        <div className={styles.body}>
+          <label className={styles.nameRow}>
+            <span>List name</span>
+            <input
+              ref={nameField}
+              className={styles.input}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              aria-label="List name"
+            />
+          </label>
+          <div className={styles.matchRow}>
+            {conditions.length > 1 ? (
+              <>
+                <span>Match</span>
+                <select
+                  className={styles.select}
+                  aria-label="Match"
+                  value={logic}
+                  onChange={(e) => setLogic(e.target.value === "any" ? "any" : "all")}
+                >
+                  <option value="all">all of the</option>
+                  <option value="any">any of the</option>
+                </select>
+                <span>following conditions:</span>
+              </>
+            ) : (
+              <span>Match the following condition:</span>
+            )}
+            <span className={styles.grow} />
+            <button
+              type="button"
+              className={styles.small}
+              aria-label="Add condition"
+              onClick={() => setConditions((current) => [...current, emptyCondition()])}
+            >
+              +
+            </button>
+          </div>
+          <div className={styles.conditions}>
+            {conditions.map((condition, at) => {
+              const kind = kindOf(condition.property);
+              const relative = condition.operator === "6" || condition.operator === "7";
+              const known = PROPERTIES.some((p) => p.value === condition.property);
+              const pickedTag =
+                kind === "tag" && condition.left !== ""
+                  ? myTags.flatMap((c) => c.tags).find((t) => tagKey(t.id) === tagKey(condition.left))
+                  : undefined;
+              return (
+                // Rows have no identity of their own; their place is what tells them apart.
+                <div key={at} className={styles.condition} role="group" aria-label={`Condition ${at + 1}`}>
+                  <select
+                    className={styles.select}
+                    aria-label="Property"
+                    value={condition.property}
+                    onChange={(e) => changeProperty(at, e.target.value)}
+                  >
+                    {known ? null : (
+                      <option value={condition.property} disabled>
+                        {condition.property || "—"}
+                      </option>
+                    )}
+                    {PROPERTIES.map((p) => (
+                      <option key={p.label} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    className={styles.select}
+                    aria-label="Operator"
+                    value={condition.operator}
+                    onChange={(e) => changeOperator(at, e.target.value)}
+                  >
+                    {OPERATORS.filter((o) => o.for.includes(kind)).map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  {kind === "color" ? (
+                    <select
+                      className={styles.select}
+                      aria-label="Value"
+                      value={condition.left}
+                      onChange={(e) => update(at, { left: e.target.value })}
+                    >
+                      <option value="" disabled />
+                      {condition.left !== "" && !COLOURS.some((c) => c.value === condition.left) ? (
+                        // A number that names no colour (see `asRead`):
+                        // kept as it is rather than silently swapped.
+                        <option value={condition.left} disabled>
+                          {condition.left}
+                        </option>
+                      ) : null}
+                      {COLOURS.map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
+                    </select>
+                  ) : kind === "tag" ? (
+                    <select
+                      className={styles.select}
+                      aria-label="Value"
+                      value={pickedTag?.id ?? condition.left}
+                      onChange={(e) => update(at, { left: e.target.value })}
+                    >
+                      <option value="" disabled />
+                      {condition.left !== "" && pickedTag === undefined ? (
+                        // A tag the library no longer has: kept as it is
+                        // rather than silently swapped for another.
+                        <option value={condition.left} disabled>
+                          {condition.left}
+                        </option>
+                      ) : null}
+                      {myTags.map((category, c) => (
+                        // Category names repeat ("Empty Category"), so their place keys them.
+                        <optgroup key={c} label={category.name}>
+                          {category.tags.map((tag) => (
+                            <option key={tag.id} value={tag.id}>{tag.name}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className={styles.input}
+                      aria-label="Value"
+                      type={kind === "number" || relative ? "number" : kind === "date" ? "date" : "text"}
+                      step={condition.property === "bpm" ? "0.01" : undefined}
+                      value={condition.left}
+                      onChange={(e) => update(at, { left: e.target.value })}
+                    />
+                  )}
+                  {condition.operator === "5" ? (
+                    <>
+                      <span>to</span>
+                      <input
+                        className={styles.input}
+                        aria-label="Upper value"
+                        type={kind === "date" ? "date" : "number"}
+                        step={condition.property === "bpm" ? "0.01" : undefined}
+                        value={condition.right}
+                        onChange={(e) => update(at, { right: e.target.value })}
+                      />
+                    </>
+                  ) : null}
+                  {relative ? (
+                    <select
+                      className={styles.select}
+                      aria-label="Unit"
+                      value={condition.unit || "day"}
+                      onChange={(e) => update(at, { unit: e.target.value })}
+                    >
+                      {UNITS.map((u) => (
+                        <option key={u.value} value={u.value}>{u.label}</option>
+                      ))}
+                    </select>
+                  ) : null}
+                  <button
+                    type="button"
+                    className={styles.small}
+                    aria-label="Remove condition"
+                    disabled={conditions.length === 1}
+                    onClick={() => setConditions((current) => current.filter((_, i) => i !== at))}
+                  >
+                    −
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <footer className={styles.footer}>
+          <button
+            type="button"
+            className={styles.button}
+            disabled={!canSave}
+            onClick={() => onSave(name.trim(), { logic, conditions: conditions.map((c) => ({ ...c, left: c.left.trim(), right: c.right.trim() })) })}
+          >
+            OK
+          </button>
+          <button type="button" className={styles.button} onClick={onCancel}>
+            Cancel
+          </button>
+        </footer>
+      </div>
+    </div>
+  );
+}
