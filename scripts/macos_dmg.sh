@@ -28,18 +28,9 @@ stage=$(mktemp -d)/YOBUKO
 mkdir -p "$stage"
 cp -R "$package/Suhina.app" "$stage/YOBUKO.app"
 ln -s /Applications "$stage/Applications"
-cat > "$stage/LISEZ-MOI - READ ME.txt" <<'EOF'
-YOBUKO
+cat > "$stage/READ ME.txt" <<'EOF'
+YOBUKO, built on Suhina (github.com/suhina-daw/suhina-daw) and rbxport (github.com/chrisle/rbxport)
 
-FR
-1. Glisse YOBUKO.app sur le dossier Applications.
-2. La premiere fois : clic droit (ou Ctrl + clic) sur YOBUKO dans Applications, puis Ouvrir,
-   puis Ouvrir encore. macOS previent car l'app ne vient pas de l'App Store ; ensuite elle
-   s'ouvre normalement.
-   Si macOS dit seulement qu'il ne peut pas l'ouvrir : Reglages Systeme > Confidentialite et
-   securite, tout en bas, bouton "Ouvrir quand meme".
-
-EN
 1. Drag YOBUKO.app onto the Applications folder.
 2. The first time: right-click (or Ctrl-click) YOBUKO in Applications, choose Open, then Open
    again. macOS warns because the app is not from the App Store; after that it opens normally.

@@ -12,16 +12,48 @@
 <p align="center"><strong>Studio + Multiplayer + DJ. One app, from the first sound to the last track of your set.</strong></p>
 <p align="center"><em>You send out a sound, another musician answers.</em></p>
 
-<p align="center"><a href="README.fr.md">Français</a> · <a href="#why-yobuko">Why YOBUKO</a> · <a href="#what-you-can-try">Try the prototype</a> · <a href="#progress-you-can-audit">Progress</a> · <a href="#standing-on-the-work-of-others">Credits</a> · <a href="docs/fork-distribution.md">Updates</a></p>
+<p align="center"><a href="#-built-on-suhina-and-rbxport">Credits</a> · <a href="#download">Download</a> · <a href="#why-yobuko">Why YOBUKO</a> · <a href="#what-you-can-try">Try the prototype</a> · <a href="#progress-you-can-audit">Progress</a> · <a href="docs/fork-distribution.md">Updates</a></p>
+
+## 🙏 Built on Suhina and rbxport
+
+YOBUKO would not exist without them. Please go and star them first:
+
+- **[Suhina](https://github.com/suhina-daw/suhina-daw)** — an open-source, native, clip-launching
+  DAW written in Rust, comparable in workflow to Ableton Live. Its engine, interface, instruments,
+  effects and plug-in hosting are the whole studio side of YOBUKO.
+- **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** — tempo/key
+  analysis and a real Rekordbox USB exporter that writes sticks Pioneer CDJ/XDJ players read.
+  YOBUKO's DJ library and its "Export to USB stick (Rekordbox)" button use its code.
+
+Their authors keep their copyright and credits; YOBUKO is an independent fork, not endorsed by
+either project. Details: [Standing on the work of others](#standing-on-the-work-of-others).
+
+## What YOBUKO is
 
 **One place to make music together, prepare a set and perform it.** That is the ambition of
 YOBUKO, an independent fork. It combines Suhina's native music production foundation with a custom
 collaboration layer and DJ preparation using selected rbxport code.
 
 The destination is a complete production-to-live workflow. The current build is an experimental
-prototype: LAN sessions share a bounded copy of an open MIDI project or a four-track starter, and the DJ workspace provides a
-local audio catalog, analysis and two original-speed A/B decks. Full project coediting, direct shared-tab recording, automatic tempo sync
-and USB export are future work. There is no common public release channel yet.
+prototype: up to eight people join one session **over the Internet with a single short code**,
+the DJ workspace provides a local audio catalog, analysis, two A/B decks and **export to a
+Rekordbox USB stick**, and three buttons at the top right switch between **Multiplayer**,
+**Studio** and **DJ**. Direct shared-tab recording, editing third-party plug-in knobs together and
+automatic tempo sync are future work.
+
+## Download
+
+Get the latest version from the **[Releases page](https://github.com/Nozomagarion/YOBUKO/releases)**:
+
+| System | File | Install |
+|---|---|---|
+| 🍎 macOS 11+ (Apple Silicon and Intel) | `YOBUKO-Mac.dmg` | Open it and drag **YOBUKO** into **Applications**. First launch: right-click › **Open** › **Open**. |
+| 🪟 Windows 10 / 11 | `YOBUKO-Windows-Setup.exe` | Run it. If SmartScreen warns: **More info** › **Run anyway**. |
+| 🐧 Linux (most distributions) | `YOBUKO-…-x86_64.AppImage` | Make it executable, then double-click it. |
+| 🐧 Debian, Ubuntu, Mint… | `yobuko_…_amd64.deb` | Install it; YOBUKO appears in the menu. |
+
+Everyone in a session needs the same version. The apps are not signed by Apple or Microsoft yet,
+hence the first-launch warnings. First session: [multiplayer guide](GUIDE_MULTIPLAYER.md).
 
 ## Why YOBUKO
 
@@ -41,7 +73,7 @@ Suhina updates keep merging cleanly.
 |---|---|---|
 | Produce with Suhina's engine, instruments and clip workflow. | Render a project into the DJ library; analyse tempo and key with rbxport code. | Build toward set preparation and live performance in the same app. |
 | Collaborate on a common project while listening independently. | Keep the connection between your production and its rendered audio. | Keep everyone on the same tested combined version. |
-| **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** two independent A/B decks, levels and crossfader; hardware export remains planned. |
+| **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** two independent A/B decks, levels, crossfader and Rekordbox USB export (not yet tried on a real CDJ). |
 
 The 29 October Suhina update integrates merged main 7753ffa3: 56 further commits covering
 task-based settings, automation display fixes, style caching and shared DSP blocks. Old studio projects remain readable; new saves use native v4. LAN uses
@@ -82,7 +114,7 @@ subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.m
 - **Settings → Agents and updates → GitHub updates…:** inspect the three GitHub source identities and check
   availability of a combined app update. An official standalone binary cannot overwrite the fork.
 
-**Online by code (branch `feature/online`):** the host creates a session over the Internet and
+**Online by code:** the host creates a session over the Internet and
 reads out one short code such as `7-piano-tigre-lune`; up to seven friends type the same code
 and join, with no account and no server of ours (peer to peer through iroh, with public relays
 as a fallback). Links that drop come back by themselves, **Link playback** starts and stops
@@ -100,7 +132,15 @@ move, trim, duplicate, enable and delete with revision checks and stack-only pla
 
 ## Progress you can audit
 
-See the current [milestone table in the French overview](README.fr.md#où-en-est-le-projet).
+<p align="center"><img src="assets/fork/progress.svg" alt="Project milestones" width="100%"></p>
+
+<!-- fork-progress:begin -->
+| Area | Steps done | Next goal |
+|---|---:|---|
+| Create together | 17 / 18 | Real test on two computers |
+| Prepare and perform | 9 / 10 | USB export and hardware compatibility |
+| Evolve together | 4 / 7 | Common version validated on every platform |
+<!-- fork-progress:end -->
 
 These bars count the explicitly listed criteria in [fork-progress.json](fork-progress.json).
 They are **not percentages of engineering effort, stability or completion of the ultimate app**.
@@ -108,9 +148,9 @@ Implemented items link to code or validation evidence; pending items stay pendin
 acceptance gate is met. Rebuild the graphic with `python3 scripts/fork_readme.py`.
 
 Portable media, shared notes/clips/tracks and verified take publication are covered by local
-TLS, desktop and audio tests. Next development expands LAN participant capacity; automatic
-resume and Internet sessions remain planned. Physical two-computer acceptance is deferred at
-the owner's request and remains necessary before claiming a verified household session.
+TLS, desktop and audio tests; Internet sessions with one code were also run between GitHub
+machines on Linux, macOS and Windows. A session between two real homes is the next acceptance
+step. Day-to-day progress is in [PROGRESS.md](PROGRESS.md).
 
 ## One app, one update path
 

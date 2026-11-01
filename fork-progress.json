@@ -2,188 +2,189 @@
   "schema": 1,
   "areas": [
     {
-      "name": "Créer ensemble",
+      "name": "Create together",
       "color": "#63e5c1",
       "milestones": [
         {
-          "name": "Ordre des modifications validé par un hôte",
+          "name": "Edit order confirmed by a host",
           "done": true,
           "evidence": "crates/collaboration/tests/session.rs"
         },
         {
-          "name": "Lectures audio locales indépendantes",
+          "name": "Independent local playback",
           "done": true,
           "evidence": "crates/multiplayer/tests/lan.rs"
         },
         {
-          "name": "LAN chiffré et invitations à usage unique",
+          "name": "Encrypted LAN and single-use invitations",
           "done": true,
           "evidence": "crates/multiplayer/src/transport_tests.rs"
         },
         {
-          "name": "Créer/rejoindre et contrôles confirmés dans l’interface",
+          "name": "Create/join and confirmed controls in the interface",
           "done": true,
           "evidence": "crates/ui/src/app/multiplayer_tests.rs"
         },
         {
-          "name": "Partager une copie MIDI du projet ouvert",
+          "name": "Share a MIDI copy of the open project",
           "done": true,
           "evidence": "crates/multiplayer/tests/lan.rs"
         },
         {
-          "name": "Édition commune des notes MIDI",
+          "name": "Shared MIDI note editing",
           "done": true,
           "evidence": "crates/ui/src/app/multiplayer_tests.rs"
         },
         {
-          "name": "Placement des clips en commun",
+          "name": "Shared clip placement",
           "done": true,
           "evidence": "crates/multiplayer/tests/lan.rs"
         },
         {
-          "name": "Partager un projet MIDI/audio et ses sons chargés",
+          "name": "Share a MIDI/audio project and its loaded sounds",
           "done": true,
           "evidence": "crates/multiplayer/tests/audio.rs"
         },
         {
-          "name": "Publier une prise terminée depuis l’hôte",
+          "name": "Publish a finished take from the host",
           "done": true,
           "evidence": "crates/multiplayer/tests/audio.rs"
         },
         {
-          "name": "Ajouter des pistes pendant une session",
+          "name": "Add tracks during a session",
           "done": true,
           "evidence": "crates/multiplayer/tests/lan.rs"
         },
         {
-          "name": "Envoyer une prise depuis l’invité",
+          "name": "Send a take from a guest",
           "done": true,
           "evidence": "crates/multiplayer/tests/audio.rs"
         },
         {
-          "name": "Réinviter après une coupure sans fermer le morceau",
+          "name": "Re-invite after a drop without closing the song",
           "done": true,
           "evidence": "crates/multiplayer/tests/audio.rs"
         },
         {
-          "name": "Modifier les réglages FM Synth et Utility en commun",
+          "name": "Edit FM Synth and Utility settings together",
           "done": true,
           "evidence": "crates/multiplayer/tests/lan.rs"
         },
         {
-          "name": "Ajouter et retirer des appareils pendant la session",
+          "name": "Add and remove devices during the session",
           "done": true,
           "evidence": "crates/ui/src/app/multiplayer_chain_tests.rs"
         },
         {
-          "name": "Organiser les scènes et la grille du lanceur en commun",
+          "name": "Organise scenes and the launcher grid together",
           "done": true,
           "evidence": "crates/ui/src/app/multiplayer_launcher_tests.rs"
         },
         {
-          "name": "Inviter plusieurs participants sur le réseau local",
+          "name": "Invite several participants on the local network",
           "done": true,
           "evidence": "crates/multiplayer/tests/guests.rs"
         },
         {
-          "name": "Sessions Internet et reconnexion automatique",
-          "done": false
+          "name": "Internet sessions and automatic reconnection",
+          "done": true,
+          "evidence": "crates/multiplayer/tests/online.rs"
         },
         {
-          "name": "Essai réel sur deux ordinateurs",
+          "name": "Real test on two computers",
           "done": false
         }
       ]
     },
     {
-      "name": "Préparer et jouer",
+      "name": "Prepare and perform",
       "color": "#b9a1ff",
       "milestones": [
         {
-          "name": "Espaces Studio / DJ dans l’application",
+          "name": "Studio / DJ workspaces in the app",
           "done": true,
           "evidence": "crates/ui/src/app/dj_tests.rs"
         },
         {
-          "name": "Bibliothèque audio locale persistante",
+          "name": "Persistent local audio library",
           "done": true,
           "evidence": "crates/dj/src/tests.rs"
         },
         {
-          "name": "Analyse tempo et tonalité de rbxport intégrée",
+          "name": "rbxport tempo and key analysis integrated",
           "done": true,
           "evidence": "third_party/rbxport-analysis/VENDORED.md"
         },
         {
-          "name": "Rendu du projet vers la bibliothèque DJ",
+          "name": "Render the project into the DJ library",
           "done": true,
           "evidence": "crates/ui/src/app/dj_tests.rs"
         },
         {
-          "name": "Playlists et préparation de set",
+          "name": "Playlists and set preparation",
           "done": true,
           "evidence": "crates/ui/src/app/dj_playlist_tests.rs"
         },
         {
-          "name": "Préécoute et points cue nommés",
+          "name": "Preview and named cue points",
           "done": true,
           "evidence": "crates/ui/src/app/dj_prepare_tests.rs"
         },
         {
-          "name": "Forme d’onde et choix visuel du départ de préécoute",
+          "name": "Waveform and visual choice of the preview start",
           "done": true,
           "evidence": "crates/ui/src/app/dj_prepare_tests.rs"
         },
         {
-          "name": "Édition des grilles rythmiques à tempo constant",
+          "name": "Constant-tempo beat grid editing",
           "done": true,
           "evidence": "crates/ui/src/app/dj_grid_tests.rs"
         },
         {
-          "name": "Platines et espace de performance",
+          "name": "Decks and performance space",
           "done": true,
           "evidence": "crates/ui/src/app/dj_decks_tests.rs"
         },
         {
-          "name": "Export USB et compatibilité matérielle",
+          "name": "USB export and hardware compatibility",
           "done": false
         }
       ]
     },
     {
-      "name": "Évoluer ensemble",
+      "name": "Evolve together",
       "color": "#ffb18d",
       "milestones": [
         {
-          "name": "Versions sources suivies et intégration isolée",
+          "name": "Tracked source versions and isolated integration",
           "done": true,
           "evidence": "scripts/test_fork_distribution.py"
         },
         {
-          "name": "Contrôles GitHub et mises à jour dans les paramètres",
+          "name": "GitHub checks and updates in Settings",
           "done": true,
           "evidence": "crates/ui/src/app/updates_tests.rs"
         },
         {
-          "name": "Vérification de la distribution avant remplacement",
+          "name": "Distribution verified before replacement",
           "done": true,
           "evidence": "crates/update/src/distribution/tests.rs"
         },
         {
-          "name": "Paquets complets avec crédits et identité source",
+          "name": "Complete packages with credits and source identity",
           "done": true,
           "evidence": "scripts/fork_package.py"
         },
         {
-          "name": "Version commune validée sur toutes les plateformes",
+          "name": "Common version validated on every platform",
           "done": false
         },
         {
-          "name": "Publication du canal de mise à jour commun",
+          "name": "Common update channel published",
           "done": false
         },
         {
-          "name": "Intégration périodique et publication des versions",
+          "name": "Periodic integration and version publishing",
           "done": false
         }
       ]

@@ -42,7 +42,6 @@ WizardStyle=modern
 CloseApplications=yes
 
 [Languages]
-Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
