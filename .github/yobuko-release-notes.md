@@ -7,6 +7,8 @@ YOBUKO is made from two open-source projects. All credit for the foundations goe
 
 ## 🎶 YOBUKO @VERSION@
 
+**YOBUKO is about making music with your friends, even when you're not in the same room.** One person starts a session and shares a short code; the others type it and everyone is in the same project, each on their own computer.
+
 Make music alone or **together over the Internet** with one invitation code, prepare your DJ library and **export it to a Rekordbox USB stick**. Three buttons at the top right switch between **Multiplayer**, **Studio** and **DJ**.
 
 ### ⬇️ Download

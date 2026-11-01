@@ -30,6 +30,12 @@ either project. Details: [Standing on the work of others](#standing-on-the-work-
 
 ## What YOBUKO is
 
+**YOBUKO is about making music with your friends, even when you're not in the same room.**
+One of you starts a session and reads out a short code on Discord; the others type it, and you
+are all in the same project, from the next street or from the other side of the country. Each
+person plays and hears it on their own computer, every change lands for everyone, and when the
+track is ready you can prepare it for a DJ set in the same app.
+
 **One place to make music together, prepare a set and perform it.** That is the ambition of
 YOBUKO, an independent fork. It combines Suhina's native music production foundation with a custom
 collaboration layer and DJ preparation using selected rbxport code.
@@ -60,7 +66,7 @@ hence the first-launch warnings. First session: [multiplayer guide](GUIDE_MULTIP
 **YOBUKO (呼子)** is the app's name. In Japanese folklore, **Yamabiko (山彦)** is the yōkai of
 the echo, a mountain spirit that answers whoever calls into the valley; in several regions it
 was also called *yobuko*, "the calling child". That is the metaphor for the multiplayer side
-of this project: **one musician sends out an idea, another one answers it.** The variant name
+of this project: **one musician sends out an idea, another one answers it**, wherever they are. The variant name
 was chosen because a music app called "Yamabiko" already exists on the App Store.
 
 YOBUKO is built on [Suhina](https://github.com/suhina-daw/suhina-daw) and keeps its credits;
