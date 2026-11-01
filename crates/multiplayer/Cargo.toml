@@ -1,6 +1,6 @@
 [package]
 name = "suhina-multiplayer"
-description = "Explicit LAN sessions with authenticated TLS and independent local audio"
+description = "Explicit LAN and Internet sessions, authenticated end to end, with independent local audio"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,8 +11,8 @@ publish = false
 suhina-collaboration.workspace = true
 suhina-session.workspace = true
 suhina-model.workspace = true
+suhina-device-registry.workspace = true
 suhina-engine.workspace = true
-hound.workspace = true
 blake3 = "1"
 tempfile = "3"
 suhina-project-file.workspace = true
@@ -22,10 +22,17 @@ base64.workspace = true
 getrandom = "0.4"
 sha2 = "0.10"
 subtle = "2.6"
+# Short codes: memory-hard derivation of the lobby key from a human code. MIT OR Apache-2.0.
+argon2 = { version = "0.6", default-features = false, features = ["alloc"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
 rcgen = { version = "0.14", default-features = false, features = ["ring", "crypto"] }
+# Internet sessions: peer-to-peer QUIC with hole punching and relay fallback. MIT OR Apache-2.0.
+iroh = { version = "1.4", default-features = false, features = ["tls-ring"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time", "sync"] }  # MIT
 
 [dev-dependencies]
+# Checks that the streamed WAV copy is byte-identical to hound's canonical float WAV.
+hound.workspace = true
 rtrb.workspace = true
 suhina-media.workspace = true
 

@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 13;
+pub const PROTOCOL: u16 = 18;
 pub const COPY_FORMAT: u16 = 3;
 
 pub(crate) fn engine_revision() -> Result<String, String> {
@@ -263,14 +263,43 @@ pub enum ClientMessage {
         engine: String,
         secret: String,
     },
+    /// An admitted guest coming back after its link dropped, with the token the host gave it.
+    /// `seen_revision` is the last revision it applied completely; `None` asks for a fresh copy.
+    Resume {
+        protocol: u16,
+        format: u16,
+        engine: String,
+        token: String,
+        seen_revision: Option<u64>,
+    },
+    /// The guest leaves on purpose: the host frees its place at once.
+    Leave {
+        protocol: u16,
+    },
     Download {
         protocol: u16,
         offset: usize,
     },
+    /// Ask for one offered sound from a whole-chunk offset; `tree` when the guest has no tree.
     AssetDownload {
         protocol: u16,
         asset: usize,
         offset: usize,
+        tree: bool,
+    },
+    /// The guest holds every offered sound it wants now (from its cache or just received).
+    AssetsDone {
+        protocol: u16,
+    },
+    /// A poll that also asks for the next chunks of a sound of the initial copy, which the guest
+    /// receives in the background; answered by the tree when asked, at most
+    /// `assets::SLICE` chunks, then the usual State.
+    Fetch {
+        protocol: u16,
+        seen_revision: u64,
+        asset: usize,
+        offset: usize,
+        tree: bool,
     },
     Publish {
         protocol: u16,
@@ -281,10 +310,16 @@ pub enum ClientMessage {
         start: f64,
         asset: crate::assets::Asset,
     },
+    /// Followed by `len` raw bytes of the sound.
     UploadChunk {
         protocol: u16,
         offset: usize,
-        data: String,
+        len: usize,
+    },
+    /// Followed by `leaves` 32-byte BLAKE3 chaining values, one per chunk.
+    UploadTree {
+        protocol: u16,
+        leaves: usize,
     },
     Poll {
         protocol: u16,
@@ -297,15 +332,41 @@ pub enum ClientMessage {
         seen_revision: u64,
         edit: WireEdit,
     },
+    /// Linked playback: a host-ordered change to the shared transport.
+    Transport {
+        protocol: u16,
+        seen_revision: u64,
+        request: crate::linked::TransportRequest,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ServerMessage {
-    Denied,
+    /// The host refuses this hello and says why.
+    Denied {
+        refusal: Refusal,
+    },
+    /// The hello was accepted. `token` lets this guest resume after a dropped link.
+    Admitted {
+        protocol: u16,
+        token: String,
+    },
+    /// A resume was accepted: `token` replaces the old one. With `copy` a fresh copy follows,
+    /// otherwise a state carrying the operations since the guest's revision.
+    Resumed {
+        protocol: u16,
+        token: String,
+        copy: bool,
+    },
+    /// The host ended the session on purpose.
+    Ended {
+        protocol: u16,
+    },
     UploadRequest {
         protocol: u16,
         offset: usize,
+        tree: bool,
     },
     Project {
         protocol: u16,
@@ -314,20 +375,30 @@ pub enum ServerMessage {
         bytes: usize,
         sha256: String,
     },
+    /// Followed by `len` raw bytes of the document.
     Chunk {
         protocol: u16,
         offset: usize,
-        data: String,
+        len: usize,
     },
+    /// One page of the sound manifest; `total` entries arrive in consecutive pages.
     Assets {
         protocol: u16,
+        total: usize,
         manifest: Vec<crate::assets::Asset>,
     },
+    /// Followed by `len` raw bytes of the sound.
     AssetChunk {
         protocol: u16,
         asset: usize,
         offset: usize,
-        data: String,
+        len: usize,
+    },
+    /// Followed by `leaves` 32-byte BLAKE3 chaining values, one per chunk.
+    AssetTree {
+        protocol: u16,
+        asset: usize,
+        leaves: usize,
     },
     State {
         protocol: u16,
@@ -336,7 +407,108 @@ pub enum ServerMessage {
         operations: Vec<Operation>,
         accepted: Option<bool>,
         error: Option<String>,
+        /// The host clock when this state was made: milliseconds since the session started.
+        host_ms: u64,
+        /// The shared transport while playback is linked.
+        transport: Option<crate::linked::SharedTransport>,
     },
+}
+
+/// Why a host refused a hello. Told to the guest so it can show what to do.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "code", rename_all = "snake_case", deny_unknown_fields)]
+pub enum Refusal {
+    /// A different Suhina build: engine revision or copy format.
+    Build { host: String, guest: String },
+    /// A different protocol number.
+    Protocol { host: u16, guest: u16 },
+    /// The hello could not be read.
+    Unsupported,
+    /// The code is not this session's current code (never redeemed, replaced or mistyped).
+    Invalid,
+    /// The right code, used after its five minutes.
+    Expired,
+    /// The right code, already used by another guest.
+    Used,
+    /// The right code, while three guests already hold a place.
+    Full,
+    /// The resume token is unknown, replaced or held past its grace period.
+    Resume,
+}
+impl Refusal {
+    /// The sentence the guest shows. Text from the host is reduced to a short build identifier.
+    pub fn message(&self) -> String {
+        match self {
+            Self::Build { host, guest } => format!(
+                "Your partner runs a different Suhina build (host {}, this computer {}). Install the same version on both computers.",
+                build_label(host),
+                build_label(guest)
+            ),
+            Self::Protocol { host, guest } => format!(
+                "Your partner runs a different Suhina version (protocol {host} vs {guest}). Install the same version on both computers."
+            ),
+            Self::Unsupported => {
+                "The host could not read this computer's request. Install the same Suhina version on both computers."
+                    .into()
+            }
+            Self::Invalid => {
+                "This invitation code is not valid for this session: it was replaced by a newer one or mistyped. Ask the host for a new code."
+                    .into()
+            }
+            Self::Expired => {
+                "This invitation code has expired (codes last thirty minutes). Ask the host for a new code.".into()
+            }
+            Self::Used => {
+                "This invitation code was already used by another guest. Each code works once; ask the host for a new code."
+                    .into()
+            }
+            Self::Full => "The session is full (seven guests). Wait for a guest to leave, then try the code again.".into(),
+            Self::Resume => {
+                "The connection was lost and the host no longer holds your place. Ask the host for a new invitation code to rejoin."
+                    .into()
+            }
+        }
+    }
+}
+/// A short, printable build identifier from text a peer sent: at most 7 letters or digits, then
+/// an optional copy format.
+fn build_label(text: &str) -> String {
+    let (revision, format) = text.rsplit_once('/').unwrap_or((text, ""));
+    let short: String = revision.chars().filter(char::is_ascii_alphanumeric).take(7).collect();
+    let short = if short.is_empty() { "unknown".to_owned() } else { short };
+    let format: String = format.chars().filter(char::is_ascii_digit).take(5).collect();
+    if format.is_empty() { short } else { format!("{short} copy format {format}") }
+}
+/// How a build names itself in a refusal: its engine revision, and its copy format when asked.
+pub(crate) fn build_identity(engine: &str, format: Option<u16>) -> String {
+    let short: String = engine.chars().filter(char::is_ascii_alphanumeric).take(7).collect();
+    match format {
+        Some(format) => format!("{short}/{format}"),
+        None => short,
+    }
+}
+
+/// Checks an invitation's protocol before its exact shape, so a code from another version says so.
+pub(crate) fn invitation_protocol(json: &[u8]) -> Result<(), String> {
+    let value: Value = serde_json::from_slice(json).map_err(|_| "invalid invitation")?;
+    match value.get("protocol").and_then(Value::as_u64) {
+        Some(n) if n == u64::from(PROTOCOL) => Ok(()),
+        Some(n) => Err(format!(
+            "This invitation comes from a different Suhina version (protocol {n}, this computer uses {PROTOCOL}). Install the same version on both computers."
+        )),
+        None => Err("invalid invitation".into()),
+    }
+}
+
+/// Reads the host's answer to a hello. A refusal is read leniently, so a newer host's reason
+/// still yields a sentence the person can act on.
+pub(crate) fn read_answer(io: &mut impl Read) -> Result<ServerMessage, String> {
+    let value: Value = read(io)?;
+    if value.get("kind").and_then(Value::as_str) == Some("Denied") {
+        let refusal = value.get("refusal").cloned().and_then(|r| serde_json::from_value::<Refusal>(r).ok());
+        return Ok(ServerMessage::Denied { refusal: refusal.unwrap_or(Refusal::Unsupported) });
+    }
+    serde_json::from_value(value).map_err(|_| "invalid network message".into())
 }
 
 pub(crate) fn validate_guest_count(guests: usize) -> Result<(), String> {

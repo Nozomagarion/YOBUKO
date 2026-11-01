@@ -1,85 +1,129 @@
-# Premier essai du multijoueur Suhina
+# Playing together in YOBUKO: first session
 
-Cette version vise un réseau local : **un hôte et jusqu’à trois invités**. Chaque personne
-écoute et lance la lecture sur son ordinateur. Les modifications prises en charge sont
-confirmées par l’hôte ; l’audio n’est pas diffusé en direct sur le réseau.
+YOBUKO connects **over the Internet with a simple code**: the host creates a session, sends the
+code (on Discord or any messaging app) and the others type it to join, even hundreds of
+kilometres away. No account, no router settings. **One host and up to seven guests.** Each
+person listens and starts playback on their own computer. Supported edits are confirmed by the
+host; audio is not streamed live. A local-network mode is still available.
 
-## Préparer les ordinateurs
+## Prepare the computers
 
-Installer **la même version et le même identifiant de build** sur tous les ordinateurs, avec
-l’archive adaptée à chaque système : Mac et Windows ont des fichiers différents. Ne pas comparer
-seulement le numéro générique «0.0.1». Une ancienne révision Suhina peut être refusée
-même si son interface semble identique. Garder ses projets habituels et une copie de secours.
-La nouvelle version lit les anciens projets ; ses nouvelles sauvegardes utilisent le format v4.
+Install **the same version** on every computer, with the installer for each system (Mac,
+Windows and Linux have different files) from the
+[Releases page](https://github.com/Nozomagarion/YOBUKO/releases). Don't compare only the generic
+number "0.1.0": an older build can be refused even if its interface looks identical. Keep your
+usual projects and a backup copy. The new version reads older projects; its new saves use format
+v4.
 
-Brancher les ordinateurs au même réseau local et choisir la sortie audio dans les paramètres.
-Si le système demande une autorisation réseau pour Suhina, autoriser le réseau privé utilisé.
-Les réglages et les projets ne doivent pas être placés dans le dossier de l’application.
+Each computer just needs Internet. Choose the audio output in the settings. If the system asks
+for a network permission for YOBUKO, accept it. Don't put settings or projects inside the
+application's folder.
 
-## Se connecter une première fois
+## Connect for the first time
 
-1. Sur l’ordinateur hôte, ouvrir Suhina puis **Multiplayer** en haut de la fenêtre. Pour ce
-   premier essai, aucun projet personnel n’est nécessaire.
-2. Dans **Host address**, utiliser l’adresse IPv4 privée de cet ordinateur, suivie de `:0`
-   pour choisir un port libre. L’adresse proposée est un point de départ. `127.0.0.1` ne permet
-   de joindre que ce même ordinateur ; pour la maison, utiliser son adresse `192.168…`, `10…`
-   ou l’autre adresse privée indiquée par les paramètres réseau du système.
-3. Cliquer **Create LAN session** : une copie de démonstration à quatre pistes s’ouvre dans
-   un nouvel onglet partagé. Les éventuels projets déjà ouverts sont conservés.
-4. Cliquer **Copy invitation** et transmettre le texte en privé à une personne. L’invitation
-   expire après cinq minutes et ne sert qu’une fois. Ne pas créer la suivante avant que la
-   personne ait rejoint, car elle remplacerait l’invitation encore inutilisée.
-5. Sur l’autre ordinateur, ouvrir **Multiplayer**, coller cette invitation dans le champ prévu
-   puis cliquer **Join LAN session**. Attendre l’ouverture de l’onglet partagé. Le nombre
-   **Guests: N / 3** permet de vérifier la présence de l’invité.
-6. Pour une autre personne, l’hôte clique **New invitation**, puis répète les étapes 4–5.
-   Trois invités au maximum peuvent être présents en même temps.
+1. On the host computer, open YOBUKO, then **Multiplayer** at the top right of the window. Leave
+   **Over the Internet** selected. No personal project is needed for this first try.
+2. Click **Create session**. YOBUKO goes online (a few seconds), then a four-track demo copy
+   opens in a new shared tab. Projects that were already open stay open.
+3. After a few seconds a **short code** appears, for example `7-piano-tigre-lune`: a number and
+   three words. Read it out (on Discord, for example) or click **Copy code** to send it
+   privately. **The same code works for the whole group**: each friend types it, for thirty
+   minutes, up to seven guests.
+4. On another computer, open **Multiplayer**, type the code in **Invitation code from the host**
+   and click **Join session**. Capitals, accents and spaces instead of dashes are accepted; a
+   misspelt word is pointed out at once. Wait for the shared tab to open (up to about twenty
+   seconds the first time). **Guests: N / 7** confirms who is there.
+5. The other friends type the same code. **New invitation** is only needed if the code reached
+   someone who shouldn't have it: it makes a new code and the old one stops working (people
+   already connected stay). Eight people at most in total: the host and seven guests.
 
-## Vérifier que l’on travaille ensemble
+**Short code or full invitation?** The short code goes through no account and no server of ours:
+the host opens a small "waiting room" whose address is derived from the code and published by
+iroh's public directory. The guest finds it with the code, proves they know it, receives the full
+invitation and joins the session. Guessing a code within thirty minutes is out of reach (about 43
+bits, and each guess costs computation); the host sees every guest arrive. If the short code
+fails (for example a company or school network that blocks that directory), the host clicks
+**Copy full invitation** and sends the long `suhina-net://…` text: it is pasted in the same place
+and always works.
 
-Sur un ordinateur, renommer une piste avec **Rename**, puis constater le même nom sur l’autre.
-Tester **Set volume** et **Set pan**. Dans **MIDI notes**, choisir un clip et modifier une note
-avec **Apply note** ; l’hôte confirme la modification. Chaque personne peut cliquer **Play locally**
-ou **Stop locally** sans déplacer la lecture de l’autre.
+Computers talk to each other directly through home routers. When a router blocks that, a free
+public relay forwards the encrypted data without being able to read it. For a local network
+without Internet, select **On this local network** and enter the host's private address followed
+by `:0` in **Host address**.
 
-Si deux modifications partent depuis le même état, l’une peut être refusée : lire le message,
-rafraîchir le brouillon puis refaire l’action souhaitée. Aucun refus ne doit disparaître avant
-de pouvoir être lu ; **Dismiss multiplayer message** permet de l’acquitter. Un refus ne signifie
-pas que le projet a été modifié. Attendre la confirmation avant d’enchaîner les changements.
+## Check that you are working together
 
-## Partager son morceau et ses prises
+On one computer, rename a track with **Rename** and see the same name on the other. Try **Set
+volume** and **Set pan**. In **MIDI notes**, choose a clip and change a note with **Apply note**;
+the host confirms the change. Each person can click **Play locally** or **Stop locally** without
+moving the other's playback.
 
-Après la démonstration, utiliser **Share current MIDI project** ou **Share project + audio**
-depuis un projet Studio ouvert. Cela partage une copie et conserve l’original. Les instruments
-et effets partagés pris en charge sont **FM Synth et Utility** ; les plugins externes et les
-autres appareils ne sont pas encore partagés. Jusqu’à 64 pistes sont admises par le format borné.
+To hear the same thing at the same time, tick **Link playback** (any participant can). The
+buttons become **Play together**, **Stop together** and **Everyone from beat 16**: each click
+starts, stops or moves playback on every computer at once. The start is scheduled about 0.3
+seconds later so everyone starts together; audio is still not streamed, each computer plays its
+own copy. Keep the shared tab in front. Unticking the box makes playback independent again.
 
-L’option audio transfère les sons déjà chargés dans le Studio, jusqu’à 64 sons, 64 Mio par son
-et 256 Mio au total. Attendre le transfert vérifié avant l’ouverture de la copie. Les copies audio
-sont conservées dans le sous-dossier **Shared projects** du dossier de données de l’application.
+If two edits start from the same state, one may be refused: read the message, refresh the draft
+and redo the action. No refusal disappears before it can be read; **Dismiss multiplayer message**
+acknowledges it. A refusal does not mean the project changed. Wait for confirmation before
+chaining changes.
 
-Pour une nouvelle prise, enregistrer et terminer dans un onglet Studio local, puis ouvrir
-**Publish take**, choisir le son chargé, la piste et la position, et utiliser **Publish loaded take**.
-Les invités peuvent également publier. Le son entier est envoyé ; les découpes et effets locaux
-ne sont pas automatiquement intégrés. L’enregistrement direct dans l’onglet partagé n’est pas fourni.
+## Share your track and your takes
 
-## Quitter et reprendre
+After the demo, use **Share current MIDI project** or **Share project + audio** from an open
+Studio project. This shares a copy and keeps the original. Up to 64 tracks are accepted.
 
-**Leave session** conserve la dernière copie reçue et la rend modifiable localement. Le départ
-d’un invité laisse les autres connectés. Pour revenir, demander une nouvelle invitation : une
-nouvelle copie s’ouvre dans un autre onglet, sans fusionner les anciennes modifications locales.
-Le départ de l’hôte ferme les connexions ; les copies des participants restent conservées.
-Enregistrer normalement les copies que l’on souhaite garder.
+With **Share project + audio** (and online), all built-in effects and instruments, groups and
+**CLAP, VST3 and VST2** plug-ins are shared **with their settings**. The plug-in itself does not
+travel: each computer uses the plug-ins installed on it. If a guest lacks a plug-in, YOBUKO shows
+it under **Plug-ins missing on this computer** (name, format, track): that plug-in stays silent
+for them, but its settings are kept. Installing the same plug-in and joining again is enough.
+Together you can adjust the parameters of every built-in effect (**Devices** page), but not yet a
+third-party plug-in's knobs. A Sampler with a sample, or a NAM with a file, is refused for now:
+those files don't travel yet.
 
-## Versions et aide
+The audio option transfers the sounds already loaded in the Studio, up to 4096 sounds, 2 GiB per
+sound and 16 GiB in total. Heavy projects are supported: sounds travel in pieces checked one by
+one, without being loaded whole into memory during the transfer. Each computer keeps received
+sounds in its **Sound cache** folder (up to 20 GiB, oldest removed first): a sound already
+received is never sent again, even in a later session, and an interrupted transfer resumes where
+it stopped. When more than 32 MiB of sounds are missing, the copy opens at once and the sounds
+arrive afterwards; their clips stay silent until then. Audio copies are kept in the **Shared
+projects** subfolder of the application's data folder.
 
-**Settings → Agents and updates → GitHub updates…** compare les sources et recherche un paquet
-combiné. Une nouvelle révision officielle peut nécessiter une intégration : ce bouton ne remplace
-pas notre application par Suhina officiel. Tous les participants doivent passer au même nouveau
-paquet. Le canal public commun et ses plateformes validées sont indiqués dans le suivi.
+For a new take, record and finish it in a local Studio tab, then open **Publish take**, choose the
+loaded sound, the track and the position, and use **Publish loaded take**. Guests can publish
+too. The whole sound is sent; local trims and effects are not baked in. Recording directly into
+the shared tab is not provided.
 
-L’état exact de livraison, les contrôles et les essais physiques encore à faire sont dans
-[SUIVI_PROJET.md](SUIVI_PROJET.md). Ce guide ne prétend pas que l’essai sur les deux ordinateurs
-de la maison a déjà été effectué. Internet, reprise automatique après coupure et transfert du
-rôle d’hôte restent des extensions ultérieures. La bascule vers rbxport est un chantier distinct ;
-aucune nouvelle fonction de platines, vitesse ou boucles n’est développée pour cette version.
+## Leave and come back
+
+**Leave session** keeps the last copy received and makes it editable locally. A guest leaving
+leaves the others connected. To come back, ask for a new invitation: a new copy opens in another
+tab, without merging older local edits. The host leaving closes the connections; participants'
+copies are kept. Save the copies you want to keep as usual.
+
+**Connection drops.** If a guest's Internet or Wi-Fi drops, their status shows
+**Reconnecting…** and YOBUKO retries by itself for about a minute, without a new code. Edits made
+meanwhile are sent as soon as the connection is back, and an edit in flight when it dropped is
+applied only once. The host sees "guest(s) reconnecting" and keeps the guest's seat for two
+minutes. If the host ends the session on purpose, the guest reads "The host ended the session"
+and YOBUKO does not retry. After a minute without success, "Lost the connection to the host" asks
+for a new code; the copy is kept.
+
+**Refusal messages.** A refusal says why: different versions ("Your partner runs a different
+Suhina build (host abc1234, this computer def5678)": install the same version on both
+computers), code expired after thirty minutes, code replaced by a newer one or mistyped, or
+session full (seven guests). In every case ask the host for a new code, except for a version
+difference.
+
+## Versions and help
+
+**Settings → Agents and updates → GitHub updates…** compares the sources and looks for a combined
+package. A new official Suhina revision may need integration first: this button never replaces
+YOBUKO with the official Suhina app. All participants must move to the same new version.
+
+The exact delivery state, checks and physical tests still to do are in
+[PROGRESS.md](PROGRESS.md). Handing the host role to someone else is a later extension; resuming
+after a drop has so far been tested only with simulated drops.

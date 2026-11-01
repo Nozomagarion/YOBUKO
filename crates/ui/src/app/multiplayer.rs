@@ -22,9 +22,12 @@ pub(super) struct MultiplayerPanel {
     pub open: bool,
     pub bound: Option<ProjectId>,
     service: suhina_multiplayer::Service,
-    address: String,
+    pub(super) online: bool,
+    pub(super) address: String,
     join: String,
     invitation: String,
+    /// The online host's short code (`7-piano-tigre-lune`); empty on the LAN or until ready.
+    short_code: String,
     state: serde_json::Value,
     pub(super) controls: Option<suhina_multiplayer::Controls>,
     draft: Option<suhina_multiplayer::Controls>,
@@ -41,6 +44,11 @@ pub(super) struct MultiplayerPanel {
     take_file: String,
     take_track: u32,
     take_start: f64,
+    /// Linked playback: the last shared transport played here, and one still waiting for its moment.
+    pub(super) linked_applied: u64,
+    linked_pending: Option<(suhina_multiplayer::SharedTransport, Option<std::time::Instant>)>,
+    /// Plug-ins the shared tab uses that are not installed here: "Serum (vst3) on Lead".
+    pub(super) missing_plugins: Vec<String>,
 }
 impl Default for MultiplayerPanel {
     fn default() -> Self {
@@ -48,9 +56,11 @@ impl Default for MultiplayerPanel {
             open: false,
             bound: None,
             service: Default::default(),
+            online: true,
             address: suhina_multiplayer::suggested_address().to_string(),
             join: String::new(),
             invitation: String::new(),
+            short_code: String::new(),
             state: serde_json::Value::Null,
             controls: None,
             draft: None,
@@ -67,7 +77,16 @@ impl Default for MultiplayerPanel {
             take_file: String::new(),
             take_track: 0,
             take_start: 0.0,
+            linked_applied: 0,
+            linked_pending: None,
+            missing_plugins: Vec::new(),
         }
+    }
+}
+impl MultiplayerPanel {
+    /// The online code by default; the typed private address when hosting on the local network.
+    fn host_address(&self) -> String {
+        if self.online { suhina_multiplayer::ONLINE.to_owned() } else { self.address.clone() }
     }
 }
 impl App {
@@ -106,6 +125,8 @@ impl App {
                     self.multiplayer.launcher = Default::default();
                     self.multiplayer.devices = Default::default();
                     self.multiplayer.applied_revision = 0;
+                    self.multiplayer.linked_applied = 0;
+                    self.multiplayer.linked_pending = None;
                 } else if matches!(id, "multiplayer.edit" | "multiplayer.publishTake") {
                     self.multiplayer.submitted = true;
                 }
@@ -122,7 +143,7 @@ impl App {
             self.multiplayer.error = Some(error.to_string());
             return;
         }
-        let address = self.multiplayer.address.clone();
+        let address = self.multiplayer.host_address();
         self.multiplayer_command("multiplayer.hostProject", json!({"address":address}));
     }
     fn host_current_audio(&mut self) {
@@ -134,15 +155,38 @@ impl App {
             self.multiplayer.error = Some(error.to_string());
             return;
         }
-        let address = self.multiplayer.address.clone();
+        let address = self.multiplayer.host_address();
         self.multiplayer_command("multiplayer.hostProject", json!({"address":address}));
+    }
+    /// The shared tab's plug-ins that this computer cannot load: each runs the plug-ins installed
+    /// here, and the settings travel with the copy.
+    fn missing_plugins(&mut self, id: ProjectId) -> Vec<String> {
+        let Ok(check) = self.projects.execute("plugin.check", &json!({"project": id.0})) else {
+            return Vec::new();
+        };
+        check["devices"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|d| d.get("found").is_none())
+            .map(|d| {
+                format!(
+                    "{} ({}) on {}",
+                    d["device"].as_str().unwrap_or("?"),
+                    d["format"].as_str().unwrap_or("?"),
+                    d["channel"].as_str().unwrap_or("?")
+                )
+            })
+            .collect()
     }
     fn leave_multiplayer(&mut self) {
         let _ = self.multiplayer.service.execute("multiplayer.stop", &json!({}));
+        self.multiplayer.missing_plugins.clear();
         if let Some(id) = self.multiplayer.bound.take() {
             let _ = self.projects.restrict_shared_project(id, false);
         }
         self.multiplayer.invitation.clear();
+        self.multiplayer.short_code.clear();
         self.multiplayer.join.clear();
     }
     pub(super) fn poll_multiplayer(&mut self, ctx: &egui::Context) {
@@ -158,6 +202,7 @@ impl App {
             }
         };
         self.multiplayer.invitation = state["invitation"].as_str().unwrap_or_default().to_owned();
+        self.multiplayer.short_code = state["short_code"].as_str().unwrap_or_default().to_owned();
         let error = state["error"].as_str().map(str::to_owned);
         if error != self.multiplayer.service_error {
             if error.is_some() {
@@ -173,6 +218,7 @@ impl App {
         let disconnected = !self.multiplayer.service.active();
         if disconnected && self.multiplayer.bound.is_none() {
             self.multiplayer.invitation.clear();
+            self.multiplayer.short_code.clear();
             return;
         }
         let Ok(controls) = serde_json::from_value::<suhina_multiplayer::Controls>(state["controls"].clone()) else {
@@ -186,8 +232,23 @@ impl App {
             self.leave_multiplayer();
             return;
         }
+        // A guest that came back after a long cut gets a fresh copy: it replaces the shared tab,
+        // which held nothing of its own (shared tabs take only confirmed edits).
+        let fresh = if self.multiplayer.bound.is_some() { self.multiplayer.service.take_shared() } else { None };
+        if fresh.is_some()
+            && let Some(old) = self.multiplayer.bound.take()
+        {
+            let _ = self.projects.restrict_shared_project(old, false);
+            let _ = self.projects.close(old);
+            self.multiplayer.draft = None;
+            self.multiplayer.notes = Default::default();
+            self.multiplayer.clips = Default::default();
+            self.multiplayer.tracks = Default::default();
+            self.multiplayer.launcher = Default::default();
+            self.multiplayer.devices = Default::default();
+        }
         if self.multiplayer.bound.is_none() {
-            let Some(snapshot) = self.multiplayer.service.take_shared() else {
+            let Some(snapshot) = fresh.or_else(|| self.multiplayer.service.take_shared()) else {
                 self.multiplayer.error = Some("the verified MIDI project is missing; no project was opened".into());
                 self.leave_multiplayer();
                 return;
@@ -209,6 +270,7 @@ impl App {
                         return;
                     }
                     snapshot.keep();
+                    self.multiplayer.missing_plugins = self.missing_plugins(id);
                     self.multiplayer.bound = Some(id);
                     self.multiplayer.applied_revision = revision;
                     self.multiplayer.controls = None;
@@ -286,6 +348,7 @@ impl App {
             self.leave_multiplayer();
             return;
         }
+        self.follow_linked_transport(ctx, &state);
         if self.multiplayer.controls.as_ref() == Some(&controls) {
             if disconnected {
                 self.leave_multiplayer();
@@ -304,6 +367,91 @@ impl App {
         if disconnected {
             self.leave_multiplayer();
         }
+    }
+    /// Linked playback: plays each new shared transport on this computer's own player when it is due.
+    ///
+    /// The service gives the local delay to the scheduled start. A start found late (frames come
+    /// about every 100 ms) jumps ahead by the time already played, so every peer stays aligned.
+    fn follow_linked_transport(&mut self, ctx: &egui::Context, state: &serde_json::Value) {
+        let now = std::time::Instant::now();
+        let shared = serde_json::from_value::<Option<suhina_multiplayer::SharedTransport>>(state["transport"].clone())
+            .ok()
+            .flatten()
+            .filter(|t| t.validate().is_ok());
+        let Some(shared) = shared else {
+            self.multiplayer.linked_pending = None;
+            return;
+        };
+        if shared.seq != self.multiplayer.linked_applied {
+            // Refreshed on every poll: the clock estimate improves while the start waits.
+            let at = state["transport_starts_in_ms"].as_i64().and_then(|ms| {
+                let magnitude = std::time::Duration::from_millis(ms.unsigned_abs());
+                if ms >= 0 { now.checked_add(magnitude) } else { now.checked_sub(magnitude) }
+            });
+            self.multiplayer.linked_pending = Some((shared, at));
+        }
+        let Some((shared, at)) = self.multiplayer.linked_pending else {
+            return;
+        };
+        // Transport commands play the active tab: wait until the shared tab is in front.
+        let Some(id) = self.multiplayer.bound.filter(|id| Some(*id) == self.projects.active()) else {
+            return;
+        };
+        if shared.playing {
+            let Some(at) = at else {
+                return;
+            };
+            if let Some(wait) = at.checked_duration_since(now).filter(|d| !d.is_zero()) {
+                ctx.request_repaint_after(wait);
+                return;
+            }
+            let late = i64::try_from(now.duration_since(at).as_millis()).unwrap_or(i64::MAX);
+            let tempo = self.projects.get(id).map_or(120.0, |s| s.project().transport.tempo_bpm);
+            let beat = suhina_multiplayer::beat_after(shared.beat, late, tempo);
+            self.run(&Action::new("transport.setPosition", json!({"beats": beat})));
+            self.run(&Action::new("transport.play", json!({})));
+        } else {
+            self.run(&Action::new("transport.stop", json!({})));
+            self.run(&Action::new("transport.setPosition", json!({"beats": shared.beat})));
+        }
+        self.multiplayer.linked_applied = shared.seq;
+        self.multiplayer.linked_pending = None;
+    }
+    /// Play, stop and move: this computer's own player, or every participant's while playback is linked.
+    fn show_playback_buttons(&mut self, ui: &mut Ui) {
+        let linked = self.multiplayer.state["linked"].as_bool().unwrap_or(false);
+        let mut link = linked;
+        if ui
+            .checkbox(&mut link, "Link playback")
+            .on_hover_text("Everyone plays, stops and moves together; each computer still renders the project itself.")
+            .changed()
+        {
+            self.multiplayer_command("multiplayer.linkPlayback", json!({"linked": link}));
+        }
+        let beat = self.multiplayer.state["transport"]["beat"].as_f64().unwrap_or(0.0);
+        ui.horizontal(|ui| {
+            if linked {
+                if ui.button("Play together").clicked() {
+                    self.multiplayer_command("multiplayer.transport", json!({"action":"play","beats":beat}));
+                }
+                if ui.button("Stop together").clicked() {
+                    self.multiplayer_command("multiplayer.transport", json!({"action":"stop","beats":beat}));
+                }
+                if ui.button("Everyone from beat 16").clicked() {
+                    self.multiplayer_command("multiplayer.transport", json!({"action":"seek","beats":16}));
+                }
+                return;
+            }
+            if ui.button("Play locally").clicked() {
+                self.run(&Action::new("transport.play", json!({})));
+            }
+            if ui.button("Stop locally").clicked() {
+                self.run(&Action::new("transport.stop", json!({})));
+            }
+            if ui.button("Listen from beat 16").clicked() {
+                self.run(&Action::new("transport.setPosition", json!({"beats":16})));
+            }
+        });
     }
     fn show_publish_take(&mut self, ui: &mut Ui) {
         ui.label("Record in an ordinary local Studio tab, finish the take, then choose its loaded sound here.");
@@ -406,15 +554,23 @@ impl App {
     pub(super) fn show_multiplayer(&mut self, ui: &mut Ui) {
         let active = self.multiplayer.service.active();
         ui.add_space(theme::PAD);
-        ui.heading("Multiplayer · LAN session");
-        ui.label("Create a session, copy its invitation, and join from the same local network.");
+        ui.heading("Multiplayer");
+        ui.label("Make music together over the Internet: create a session, read the short code to your partner (in a voice chat, for example) or send it, and they type it to join. No account needed.");
         ui.weak("Share a project with its loaded audio, share a MIDI-only copy, or create the four-track demo. MIDI notes, clips and mixer controls are shared; each computer has its own playback.");
         if !active {
             ui.horizontal(|ui| {
-                ui.label("Host address");
-                ui.add(egui::TextEdit::singleline(&mut self.multiplayer.address).desired_width(200.0).char_limit(64));
-                if ui.button("Create LAN session").clicked() {
-                    let address = self.multiplayer.address.clone();
+                ui.radio_value(&mut self.multiplayer.online, true, "Over the Internet");
+                ui.radio_value(&mut self.multiplayer.online, false, "On this local network");
+            });
+            ui.horizontal(|ui| {
+                if !self.multiplayer.online {
+                    ui.label("Host address");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.multiplayer.address).desired_width(200.0).char_limit(64),
+                    );
+                }
+                if ui.button("Create session").clicked() {
+                    let address = self.multiplayer.host_address();
                     self.multiplayer_command("multiplayer.host", json!({"address":address}));
                 }
             });
@@ -424,38 +580,64 @@ impl App {
             if ui.add_enabled(self.session().is_some(), egui::Button::new("Share project + audio")).clicked() {
                 self.host_current_audio();
             }
-            ui.weak("Audio sharing copies loaded sounds into portable WAV files, stored under the application data Shared projects folder. Up to 64 sounds, 64 MiB each and 256 MiB total. Original files stay intact.");
+            ui.weak("Audio sharing copies loaded sounds into portable WAV files, stored under the application data Shared projects folder. Up to 4096 sounds, 2 GiB each and 16 GiB total. Each computer keeps received sounds in a Sound cache (up to 20 GiB), so a sound is sent only once and a cut transfer resumes. A heavy project opens before all its sounds arrive; their clips stay silent until then. Original files stay intact.");
             ui.weak("MIDI copies support up to 64 tracks, FM Synth and Utility parameters. Audio, plugins and other instruments are refused. Local metadata and hardware mappings are omitted; the original stays intact.");
-            ui.weak("Use your private network address for another computer. 127.0.0.1 is only for two instances on this computer; :0 selects a free port.");
+            if self.multiplayer.online {
+                ui.weak("Computers connect directly, through home routers, with nothing to configure. When a router blocks that, a free public relay forwards the encrypted traffic; it cannot read the project. Both computers need the same Suhina version.");
+            } else {
+                ui.weak("Use your private network address for another computer. 127.0.0.1 is only for two instances on this computer; :0 selects a free port.");
+            }
             ui.add_space(theme::PAD);
-            ui.label("Invitation from the host");
+            ui.label("Invitation code from the host");
             ui.add(
                 egui::TextEdit::multiline(&mut self.multiplayer.join)
+                    .hint_text("Short code such as 7-piano-tigre-lune, or the full invitation")
                     .desired_rows(3)
                     .char_limit(8192)
                     .desired_width(f32::INFINITY),
             );
-            if ui.button("Join LAN session").clicked() {
+            if ui.button("Join session").clicked() {
                 let invitation = self.multiplayer.join.clone();
                 self.multiplayer_command("multiplayer.join", json!({"invitation":invitation}));
             }
         } else {
             let mode = self.multiplayer.state["mode"].as_str().unwrap_or("starting").to_owned();
             ui.horizontal(|ui| {
-                ui.label(format!("Status: {mode}"));
+                ui.label(format!("Status: {}", status_text(&mode)));
                 if ui.button("Leave session").clicked() {
                     self.leave_multiplayer();
                 }
             });
+            if !self.multiplayer.short_code.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.label("Code to read out:");
+                    ui.label(egui::RichText::new(&self.multiplayer.short_code).monospace().strong().size(20.0));
+                });
+            }
             if !self.multiplayer.invitation.is_empty() {
                 ui.horizontal(|ui| {
-                    if ui.button("Copy invitation").clicked() {
-                        ui.ctx().copy_text(self.multiplayer.invitation.clone());
+                    if self.multiplayer.short_code.is_empty() {
+                        if ui.button("Copy invitation code").clicked() {
+                            ui.ctx().copy_text(self.multiplayer.invitation.clone());
+                        }
+                    } else {
+                        if ui.button("Copy code").clicked() {
+                            ui.ctx().copy_text(self.multiplayer.short_code.clone());
+                        }
+                        if ui
+                            .button("Copy full invitation")
+                            .on_hover_text("The long invitation works when a network blocks the short code's address lookup.")
+                            .clicked()
+                        {
+                            ui.ctx().copy_text(self.multiplayer.invitation.clone());
+                        }
                     }
-                    let can_renew = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(3) < 3
-                        && self.multiplayer.state["sending"].is_null();
+                    let max = suhina_multiplayer::MAX_GUESTS as u64;
+                    let seats = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(max)
+                        + self.multiplayer.state["guests_reconnecting"].as_u64().unwrap_or(0);
+                    let can_renew = seats < max && self.multiplayer.state["sending"].is_null();
                     if ui.add_enabled(can_renew, egui::Button::new("New invitation"))
-                        .on_hover_text("Create a separate invitation for the next guest. Replaces the previous unused invitation; connected guests stay.")
+                        .on_hover_text("Replace the code, for example if it reached someone it should not have. The old code stops working; connected guests stay.")
                         .clicked()
                     {
                         self.multiplayer_command("multiplayer.renewInvitation", json!({}));
@@ -463,23 +645,26 @@ impl App {
 
                 });
             }
-            ui.label(format!("Guests: {} / 3", self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0)));
+            ui.label(format!(
+                "Guests: {} / {}",
+                self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0),
+                suhina_multiplayer::MAX_GUESTS
+            ));
+            let away = self.multiplayer.state["guests_reconnecting"].as_u64().unwrap_or(0);
+            if away > 0 {
+                ui.weak(format!(
+                    "{away} guest(s) reconnecting. Their place is kept for two minutes after the connection dropped."
+                ));
+            }
+            if mode == "reconnecting" {
+                ui.weak("The connection to the host dropped. Suhina keeps trying for a minute; your edits wait and are sent once it is back.");
+            }
             if mode == "hosting" {
                 // Keep this row when a guest connects: controls must not move during a click.
-                ui.weak("One host and up to three guests. Create and privately copy a new invitation for each guest after the previous one joins. Each expires after 5 minutes and works once; replacing an unused invitation revokes it. Connected guests stay.");
+                ui.weak("One host and up to seven guests. Send the same code to everyone: it lets each of them in for 30 minutes, until the session is full. New invitation replaces it and the old one stops working; connected guests stay.");
             }
             if self.multiplayer.bound == self.projects.active() {
-                ui.horizontal(|ui| {
-                    if ui.button("Play locally").clicked() {
-                        self.run(&Action::new("transport.play", json!({})));
-                    }
-                    if ui.button("Stop locally").clicked() {
-                        self.run(&Action::new("transport.stop", json!({})));
-                    }
-                    if ui.button("Listen from beat 16").clicked() {
-                        self.run(&Action::new("transport.setPosition", json!({"beats":16})));
-                    }
-                });
+                self.show_playback_buttons(ui);
             }
             if let Some(progress) = self.multiplayer.state["sending"].as_array() {
                 let done = progress.first().and_then(serde_json::Value::as_u64).unwrap_or(0);
@@ -493,7 +678,7 @@ impl App {
             if let Some(progress) = self.multiplayer.state["receiving"].as_array() {
                 let done = progress.first().and_then(serde_json::Value::as_u64).unwrap_or(0);
                 let total = progress.get(1).and_then(serde_json::Value::as_u64).unwrap_or(0);
-                ui.label(format!("Receiving project/audio: {} / {} KiB", done / 1024, total / 1024));
+                ui.label(format!("Receiving project/audio: {} / {} MiB", done >> 20, total >> 20));
             }
             if let Some(session) = self.multiplayer.bound.and_then(|id| self.projects.get(id)) {
                 let project = session.project();
@@ -596,6 +781,14 @@ impl App {
                 }
             }
         }
+        if !self.multiplayer.missing_plugins.is_empty() {
+            ui.add_space(theme::PAD);
+            ui.colored_label(theme::recording(), "Plug-ins missing on this computer");
+            for plugin in &self.multiplayer.missing_plugins {
+                ui.label(plugin);
+            }
+            ui.weak("These devices stay silent here; their settings are kept. Install the same plug-ins to hear what the host hears.");
+        }
         if let Some(error) = &self.multiplayer.error {
             ui.colored_label(theme::recording(), error);
             if ui.button("Dismiss multiplayer message").clicked() {
@@ -603,7 +796,20 @@ impl App {
             }
         }
         ui.add_space(theme::PAD);
-        ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Recording directly in the shared tab and external plugins come later.");
+        ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Plug-ins and their settings travel with the copy; each computer runs its own installed plug-ins. Recording directly in the shared tab comes later.");
+    }
+}
+
+/// The session state as the panel shows it.
+pub(super) fn status_text(mode: &str) -> &str {
+    match mode {
+        "starting" => "Starting…",
+        "hosting" => "Hosting",
+        "connected" => "Connected",
+        "reconnecting" => "Reconnecting…",
+        "disconnected" => "Disconnected",
+        "error" => "Error",
+        other => other,
     }
 }
 

@@ -1,0 +1,25 @@
+[package]
+name = "rbl-export"
+version = "1.9.0"
+edition = "2021"
+rust-version = "1.89"
+license = "GPL-2.0-or-later"
+description = "Writes rekordbox-compatible USB exports."
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+blake3 = "1"
+fs2 = "0.4"
+unicode-normalization = "0.1"
+rbl-audio = { path = "../rbl-audio" }
+tempfile = "3"
+rbl-core = { path = "../rbl-core" }
+rbl-pdb = { path = "../rbl-pdb" }
+rbl-onelibrary = { path = "../rbl-onelibrary" }
+rbl-anlz = { path = "../rbl-anlz" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"

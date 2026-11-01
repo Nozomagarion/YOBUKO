@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-exclude = ["third_party/rbxport-analysis", "third_party/asio-sys", "third_party/cpal"]
+exclude = ["third_party/rbxport-analysis", "third_party/rbxport-export/rbl-core", "third_party/rbxport-export/rbl-pdb", "third_party/rbxport-export/rbl-anlz", "third_party/rbxport-export/rbl-audio", "third_party/rbxport-export/rbl-onelibrary", "third_party/rbxport-export/rbl-export", "third_party/asio-sys", "third_party/cpal"]
 members = ["crates/*", "devices/*", "apps/*"]
 
 [patch.crates-io]

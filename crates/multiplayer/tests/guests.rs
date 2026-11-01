@@ -165,7 +165,6 @@ fn four_musicians_keep_independent_sequences_players_and_copies_when_a_guest_lea
     refused(first);
     b.counts(3);
     assert_eq!(b.members.len(), 4);
-    assert!(b.members[0].service.execute("multiplayer.renewInvitation", &json!({})).is_err());
     assert_eq!(b.members[0].session.project(), &original);
     for i in 0..4 {
         b.members[i].session.execute("transport.setPosition", &json!({"beats":i * 8})).unwrap();
@@ -304,4 +303,22 @@ fn several_guests_publish_verified_takes_and_retry_competing_uploads_without_los
     for m in &b.members {
         assert_eq!(m.session.audio().files.len(), 3);
     }
+}
+
+#[test]
+fn one_code_lets_the_whole_band_in_until_the_session_is_full() {
+    let mut b = Band::new(false);
+    let code = b.members[0].invitation.clone();
+    for _ in 0..suhina_multiplayer::MAX_GUESTS {
+        b.join(code.clone());
+    }
+    assert_eq!(b.members.len(), suhina_multiplayer::MAX_GUESTS + 1);
+    // Full: the same code is refused, and no new code can be made until someone leaves.
+    refused(code.clone());
+    assert!(b.members[0].service.execute("multiplayer.renewInvitation", &json!({})).is_err());
+    b.members[3].service.execute("multiplayer.stop", &json!({})).unwrap();
+    b.counts(suhina_multiplayer::MAX_GUESTS as u64 - 1);
+    b.join(code);
+    b.members[7].edit(0, WireEdit::Rename { track: 1, name: "Eight of us".into() });
+    b.revision(1);
 }

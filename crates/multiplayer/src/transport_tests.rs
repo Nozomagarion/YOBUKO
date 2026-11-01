@@ -4,7 +4,7 @@
 use super::*;
 
 #[test]
-fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
+fn expiration_and_wrong_secrets_do_not_admit_a_peer_while_one_code_admits_the_group() {
     let now = Instant::now();
     let secret = "a".repeat(64);
     let mut host = Canonical {
@@ -14,15 +14,18 @@ fn expiration_wrong_secrets_and_reuse_do_not_admit_a_peer() {
         host: Host::new(crate::starter_project()).unwrap(),
         secret: secret_hash(&secret),
         expires: now + Duration::from_secs(1),
-        redeemed: false,
-        guests: BTreeSet::new(),
+        members: BTreeMap::new(),
+        away_shown: 0,
+        linked: Linked::new(),
     };
     assert!(host.admit(&"b".repeat(64), now).is_err());
-    assert!(!host.redeemed);
     assert!(host.admit(&secret, now + Duration::from_secs(2)).is_err());
-    assert!(!host.redeemed);
-    assert!(host.admit(&secret, now).is_ok());
-    assert!(host.admit(&secret, now).is_err());
+    assert!(host.members.is_empty());
+    // The same code lets the whole group in, then the full session refuses it.
+    for _ in 0..MAX_GUESTS {
+        assert!(host.admit(&secret, now).is_ok());
+    }
+    assert_eq!(host.admit(&secret, now).unwrap_err(), Refusal::Full);
 }
 
 #[test]
@@ -124,6 +127,14 @@ fn invitation_from(service: &mut Service) -> Invitation {
     Invitation::decode(service.invitation.as_ref().unwrap()).unwrap()
 }
 
+/// Reads the admission and returns the guest's resume token.
+fn admitted(io: &mut impl Read) -> String {
+    match protocol::read::<ServerMessage>(io).unwrap() {
+        ServerMessage::Admitted { protocol: PROTOCOL, token } => token,
+        other => panic!("expected an admission, got {other:?}"),
+    }
+}
+
 fn connect(invitation: &Invitation) -> StreamOwned<ClientConnection, DeadlineSocket> {
     let mut roots = RootCertStore::empty();
     roots.add(CertificateDer::from(invitation.der().unwrap())).unwrap();
@@ -155,7 +166,10 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
         },
     )
     .unwrap();
-    assert!(matches!(protocol::read::<ServerMessage>(&mut incompatible).unwrap(), ServerMessage::Denied));
+    assert!(matches!(
+        protocol::read_answer(&mut incompatible).unwrap(),
+        ServerMessage::Denied { refusal: Refusal::Protocol { host: PROTOCOL, guest } } if guest == PROTOCOL + 1
+    ));
     let mut io = connect(&invitation);
     protocol::write(
         &mut io,
@@ -167,6 +181,7 @@ fn incompatible_hello_does_not_consume_the_invitation_and_wire_retries_are_idemp
         },
     )
     .unwrap();
+    admitted(&mut io);
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     let document = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
     let project = crate::midi::decode_portable(&document.0).unwrap();
@@ -245,6 +260,8 @@ fn sixty_four_tracks_with_json_escaped_names_fit_a_control_frame() {
                 .collect(),
             accepted: None,
             error: None,
+            host_ms: u64::MAX,
+            transport: Some(SharedTransport { seq: u64::MAX, playing: true, beat: 120_000.0, start_ms: u64::MAX }),
         },
     )
     .unwrap();
@@ -277,8 +294,9 @@ fn canonical(project: Project) -> Canonical {
         pending_audio: Vec::new(),
         secret: [0; 32],
         expires: Instant::now() + Duration::from_secs(300),
-        redeemed: false,
-        guests: BTreeSet::new(),
+        members: BTreeMap::new(),
+        away_shown: 0,
+        linked: Linked::new(),
     }
 }
 
@@ -374,6 +392,7 @@ fn notes_and_tracks_changed_during_download_are_applied_before_joining() {
         },
     )
     .unwrap();
+    admitted(&mut io);
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     assert!(matches!(offer, ServerMessage::Project { revision: 0, .. }));
     host.execute(
@@ -554,6 +573,7 @@ fn a_take_published_during_initial_download_is_verified_before_the_join_finishes
         },
     )
     .unwrap();
+    admitted(&mut io);
     let offer = protocol::read::<ServerMessage>(&mut io).unwrap();
     assert!(matches!(offer, ServerMessage::Project { revision: 0, .. }));
     host.select_take(Arc::new(suhina_engine::AudioData { sample_rate: 8000, channels: 1, samples: vec![0.4; 8000] }))
@@ -644,14 +664,16 @@ fn shared_track_quotas_refuse_without_mutation_ids_or_consuming_an_author_sequen
     }
     lanes.assign_ids().unwrap();
     let mut devices = crate::starter_project();
-    devices.channels.push(Channel::new(ChannelId(200), "Unused"));
+    for id in 200..209 {
+        devices.channels.push(Channel::new(ChannelId(id), "Unused"));
+    }
     for c in &mut devices.channels {
         c.devices.clear();
     }
     for c in &mut devices.channels {
         c.devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into())); 16];
     }
-    assert_eq!(devices.channels.iter().map(|c| c.devices.len()).sum::<usize>(), 128);
+    assert_eq!(devices.channels.iter().map(|c| c.devices.len()).sum::<usize>(), 256);
     for project in [tracks.project().clone(), channels, lanes, devices] {
         let mut state = canonical(project);
         let before = state.host.project().clone();
@@ -700,6 +722,7 @@ fn admitted_upload(invite: &Invitation) -> StreamOwned<ClientConnection, Deadlin
         },
     )
     .unwrap();
+    admitted(&mut io);
     let offer = protocol::read(&mut io).unwrap();
     let (doc, revision) = crate::transfer::receive(&mut io, offer, &AtomicBool::new(false), |_, _| {}).unwrap();
     assets::receive(
@@ -729,8 +752,32 @@ fn offer_take(io: &mut impl Write, meta: &assets::Asset, sequence: u64, base: u6
     )
     .unwrap();
 }
-fn upload_asset() -> Arc<assets::Encoded> {
-    assets::encode_take(&suhina_engine::AudioData { sample_rate: 8000, channels: 1, samples: vec![0.3; 8000] }).unwrap()
+fn upload_data() -> Arc<suhina_engine::AudioData> {
+    Arc::new(suhina_engine::AudioData { sample_rate: 8000, channels: 1, samples: vec![0.3; 8000] })
+}
+fn upload_asset(root: &std::path::Path) -> Arc<assets::Encoded> {
+    assets::encode_take(&upload_data(), Some(root), &AtomicBool::new(false)).unwrap()
+}
+/// Session folders in a storage root; the sound cache and served copies are not sessions.
+fn sessions(root: &std::path::Path) -> usize {
+    std::fs::read_dir(root)
+        .unwrap()
+        .filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().starts_with("session-"))
+        .count()
+}
+/// Send a take's bytes as a guest would after the host's first upload request.
+fn stream_upload(io: &mut impl Link, asset: &assets::Encoded, path: &std::path::Path) {
+    let source = crate::sound::Source { meta: &asset.meta, path, tree: &asset.tree };
+    crate::sound::send(
+        io,
+        &source,
+        crate::sound::Range { from: 0, tree: true, chunks: usize::MAX },
+        |leaves| ClientMessage::UploadTree { protocol: PROTOCOL, leaves },
+        |offset, len| ClientMessage::UploadChunk { protocol: PROTOCOL, offset, len },
+        &AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
 }
 fn empty_assets(io: &mut impl Read) {
     assert!(
@@ -741,7 +788,8 @@ fn empty_assets(io: &mut impl Read) {
 fn upload_preflight_refuses_bad_offers_before_bytes_and_accepted_retries_add_exactly_one_clip() {
     let (mut host, invite, root) = guest_upload_host();
     let mut io = admitted_upload(&invite);
-    let asset = upload_asset();
+    let guest = tempfile::tempdir().unwrap();
+    let asset = upload_asset(guest.path());
     for (seq, base, track) in [(0, 0, 1), (2, 0, 1), (1, 9, 1), (1, 0, 2)] {
         offer_take(&mut io, &asset.meta, seq, base, 0, track);
         assert!(matches!(read_state(&mut io), ServerMessage::State { accepted: Some(false), .. }));
@@ -762,27 +810,27 @@ fn upload_preflight_refuses_bad_offers_before_bytes_and_accepted_retries_add_exa
     }
     let audio = host.take_audio();
     assert_eq!(audio.len(), 1);
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    assert_eq!(sessions(root.path()), 1);
     offer_take(&mut io, &asset.meta, 1, 0, 1, 1);
     assert!(
         matches!(read_state(&mut io),ServerMessage::State { accepted:Some(true),controls,operations,.. } if controls.revision==1 && operations.is_empty())
     );
     host.poll();
     assert!(host.take_audio().is_empty());
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+    assert_eq!(sessions(root.path()), 1);
     drop(audio);
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0, "an unclaimed UI lease cleans up");
+    assert_eq!(sessions(root.path()), 0, "an unclaimed UI lease cleans up");
 }
 
 #[test]
 fn editing_during_upload_never_holds_the_host_mutex_and_refuses_the_finished_stale_take() {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
     let (mut host, invite, root) = guest_upload_host();
     let mut io = admitted_upload(&invite);
-    let asset = upload_asset();
+    let guest = tempfile::tempdir().unwrap();
+    let asset = upload_asset(guest.path());
     offer_take(&mut io, &asset.meta, 1, 0, 0, 1);
     let first = protocol::read::<ServerMessage>(&mut io).unwrap();
-    assert!(matches!(first, ServerMessage::UploadRequest { offset: 0, .. }));
+    assert!(matches!(first, ServerMessage::UploadRequest { offset: 0, tree: true, .. }));
     host.execute("multiplayer.edit",&json!({"base_revision":0,"edit":serde_json::to_string(&WireEdit::Rename { track:1,name:"While receiving".into() }).unwrap()})).unwrap();
     let deadline = Instant::now() + Duration::from_secs(5);
     while host.controls.as_ref().unwrap().revision < 1 && Instant::now() < deadline {
@@ -790,22 +838,11 @@ fn editing_during_upload_never_holds_the_host_mutex_and_refuses_the_finished_sta
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(host.controls.as_ref().unwrap().revision, 1, "host edits proceed while peer waits for chunk zero");
-    for (i, chunk) in asset.bytes.chunks(16384).enumerate() {
-        if i > 0 {
-            assert!(
-                matches!(protocol::read::<ServerMessage>(&mut io).unwrap(),ServerMessage::UploadRequest { offset,.. } if offset==i*16384)
-            );
-        }
-        protocol::write(
-            &mut io,
-            &ClientMessage::UploadChunk { protocol: PROTOCOL, offset: i * 16384, data: STANDARD.encode(chunk) },
-        )
-        .unwrap();
-    }
+    stream_upload(&mut io, &asset, &asset.path);
     assert!(
         matches!(read_state(&mut io),ServerMessage::State { accepted:Some(false),controls,.. } if controls.revision==1)
     );
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    assert_eq!(sessions(root.path()), 0);
     assert!(host.take_audio().is_empty());
     offer_take(&mut io, &asset.meta, 1, 1, 1, 1);
     assert!(
@@ -816,28 +853,35 @@ fn editing_during_upload_never_holds_the_host_mutex_and_refuses_the_finished_sta
 
 #[test]
 fn a_bad_hash_upload_disconnects_without_publishing_or_leaving_files() {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
     let (mut host, invite, root) = guest_upload_host();
     let mut io = admitted_upload(&invite);
-    let asset = upload_asset();
+    let guest = tempfile::tempdir().unwrap();
+    let asset = upload_asset(guest.path());
     offer_take(&mut io, &asset.meta, 1, 0, 0, 1);
-    let mut bytes = asset.bytes.clone();
+    assert!(matches!(
+        protocol::read::<ServerMessage>(&mut io).unwrap(),
+        ServerMessage::UploadRequest { offset: 0, .. }
+    ));
+    let mut bytes = std::fs::read(&asset.path).unwrap();
     bytes[100] ^= 1;
-    for (i, chunk) in bytes.chunks(16384).enumerate() {
-        assert!(
-            matches!(protocol::read::<ServerMessage>(&mut io).unwrap(),ServerMessage::UploadRequest { offset,.. } if offset==i*16384)
-        );
-        protocol::write(
-            &mut io,
-            &ClientMessage::UploadChunk { protocol: PROTOCOL, offset: i * 16384, data: STANDARD.encode(chunk) },
-        )
-        .unwrap();
-    }
+    let altered = guest.path().join("altered.wav");
+    std::fs::write(&altered, &bytes).unwrap();
+    // The upload may be cut by the host as soon as the altered chunk fails verification.
+    let source = crate::sound::Source { meta: &asset.meta, path: &altered, tree: &asset.tree };
+    let _ = crate::sound::send(
+        &mut io,
+        &source,
+        crate::sound::Range { from: 0, tree: true, chunks: usize::MAX },
+        |leaves| ClientMessage::UploadTree { protocol: PROTOCOL, leaves },
+        |offset, len| ClientMessage::UploadChunk { protocol: PROTOCOL, offset, len },
+        &AtomicBool::new(false),
+        |_| {},
+    );
     assert!(protocol::read::<ServerMessage>(&mut io).is_err());
     host.poll();
     assert_eq!(host.controls.as_ref().unwrap().revision, 0);
     assert!(host.take_audio().is_empty());
-    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 0);
+    assert_eq!(sessions(root.path()), 0);
 }
 
 #[test]
@@ -847,20 +891,20 @@ fn a_full_ui_queue_keeps_the_sound_lease_until_its_operation_can_be_delivered_wi
     project.tracks[0].content = suhina_model::ContentKinds { notes: false, audio: true };
     project.contents[0].lanes[0].data = suhina_model::LaneData::Audio(suhina_model::AudioRegion::new(""));
     let mut state = canonical(project);
-    let asset = upload_asset();
-    let collected = assets::collect_take(&asset, Some(root.path()), &AtomicBool::new(false)).unwrap();
+    let asset = upload_asset(root.path());
+    let collected = assets::collect_take(&asset, upload_data(), Some(root.path()), &AtomicBool::new(false)).unwrap();
     let path = collected.folder().unwrap().to_path_buf();
     state.commit_take(Host::owner(), 1, 0, (1, 0.0), asset, Some(collected)).unwrap();
     let (send, receive) = mpsc::sync_channel(1);
     assert!(send.try_send(Event::Upload(None)).is_ok());
-    let mut last = (0, 0);
+    let mut last = (0, 0, 0);
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (0, 0));
+    assert_eq!(last, (0, 0, 0));
     assert_eq!(state.pending_audio.len(), 1);
     assert!(path.exists());
     receive.recv().unwrap();
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (1, 0));
+    assert_eq!(last, (1, 0, 0));
     assert!(state.pending_audio.is_empty());
     let Event::State(controls, operations, _, audio) = receive.recv().unwrap() else { panic!("state") };
     assert_eq!(controls.revision, 1);
@@ -872,13 +916,12 @@ fn a_full_ui_queue_keeps_the_sound_lease_until_its_operation_can_be_delivered_wi
 }
 
 #[test]
-fn renewal_revokes_expired_and_spent_secrets_without_resetting_music_or_owner_sequences() {
+fn renewal_revokes_expired_and_replaced_secrets_without_resetting_music_or_owner_sequences() {
     let now = Instant::now();
     let mut state = canonical(crate::starter_project());
     let original = "a".repeat(64);
     state.secret = secret_hash(&original);
     state.expires = now;
-    state.redeemed = true;
     state.submit(Host::owner(), 1, 0, WireEdit::Rename { track: 1, name: "Keep this".into() }).unwrap();
     let music = state.host.project().clone();
     let (send, receive) = mpsc::sync_channel(1);
@@ -894,17 +937,15 @@ fn renewal_revokes_expired_and_spent_secrets_without_resetting_music_or_owner_se
     assert_eq!(state.host.revision(), 1);
     assert_eq!(state.journal.len(), 1);
     assert!(state.admit(&original, now).is_err());
-    assert!(!state.redeemed);
-    let peer = state.admit(&invite.secret, now + Duration::from_secs(299)).unwrap();
+    let peer = state.admit(&invite.secret, now + CODE_LIFE - Duration::from_secs(1)).unwrap().0;
     // Rotation replaces the outstanding capability, while authenticated peers keep their identity.
     let next = Invitation { secret: "c".repeat(64), ..invite };
     state.renew(&next, now, &send).unwrap();
     receive.try_recv().unwrap();
     state.apply(peer, 1, 1, WireEdit::Pan { track: 1, pan: 0.25 }).unwrap();
     state.host.remove_peer(peer).unwrap();
-    state.guests.remove(&peer);
-    assert!(state.admit(&next.secret, now + Duration::from_secs(300)).is_err());
-    assert!(!state.redeemed);
+    state.members.remove(&peer);
+    assert!(state.admit(&next.secret, now + CODE_LIFE).is_err());
     state.submit(Host::owner(), 2, 2, WireEdit::Pan { track: 1, pan: -0.25 }).unwrap();
     assert_eq!(state.host.revision(), 3);
 }
@@ -931,7 +972,7 @@ fn renewal_backpressure_and_closed_views_preserve_the_previous_invitation() {
         assert!(state.renew(&invite, now, &send).is_err());
         assert!(state.secret == secret_hash(&original));
         assert_eq!(state.expires, expires);
-        assert!(!state.redeemed && state.guests.is_empty());
+        assert!(state.members.is_empty());
         assert!(state.admit(&original, now).is_ok());
     }
 }
@@ -978,7 +1019,10 @@ fn a_hello_started_before_renewal_cannot_consume_the_new_invitation() {
         },
     )
     .unwrap();
-    assert!(matches!(protocol::read::<ServerMessage>(&mut old_io).unwrap(), ServerMessage::Denied));
+    assert!(matches!(
+        protocol::read::<ServerMessage>(&mut old_io).unwrap(),
+        ServerMessage::Denied { refusal: Refusal::Invalid }
+    ));
     let mut guest = Service::default();
     guest.execute("multiplayer.join", &json!({"invitation":host.invitation})).unwrap();
     while guest.mode != "connected" && Instant::now() < deadline {
@@ -1156,11 +1200,10 @@ fn several_admissions_rotate_capabilities_keep_peer_sequences_and_refuse_full_se
         };
         state.renew(&invite, now, &send).unwrap();
         receive.try_recv().unwrap();
-        let peer = state.admit(&invite.secret, now).unwrap();
+        let peer = state.admit(&invite.secret, now).unwrap().0;
         peers.push(peer);
-        assert_eq!(state.guests.len(), n + 1);
-        assert!(state.admit(&invite.secret, now).is_err());
-        state.submit(peer, 1, n as u64, WireEdit::Pan { track: 1, pan: n as f64 / 4. }).unwrap();
+        assert_eq!(state.connected(), n + 1);
+        state.submit(peer, 1, n as u64, WireEdit::Pan { track: 1, pan: n as f64 / 8. }).unwrap();
     }
     let invite = Invitation {
         protocol: PROTOCOL,
@@ -1173,56 +1216,57 @@ fn several_admissions_rotate_capabilities_keep_peer_sequences_and_refuse_full_se
     assert!(state.secret == old);
     // Even a valid unused capability cannot allocate another peer or be consumed at capacity.
     state.secret = secret_hash(&invite.secret);
-    state.redeemed = false;
     assert!(state.admit(&invite.secret, now).is_err());
-    assert!(!state.redeemed);
-    assert_eq!(state.host.revision(), 3);
+    let full = MAX_GUESTS as u64;
+    assert_eq!(state.host.revision(), full);
     state.host.remove_peer(peers[1]).unwrap();
-    state.guests.remove(&peers[1]);
+    state.members.remove(&peers[1]);
     assert!(state.admit(&invite.secret, now).is_ok());
-    assert_eq!(state.guests.len(), 3);
-    assert!(state.submit(peers[1], 2, 3, WireEdit::Pan { track: 1, pan: 0. }).is_err());
-    state.submit(peers[0], 2, 3, WireEdit::Pan { track: 1, pan: -0.5 }).unwrap();
-    state.submit(peers[2], 2, 4, WireEdit::Pan { track: 1, pan: 0.5 }).unwrap();
-    assert_eq!(state.host.revision(), 5);
+    assert_eq!(state.connected(), MAX_GUESTS);
+    assert!(state.submit(peers[1], 2, full, WireEdit::Pan { track: 1, pan: 0. }).is_err());
+    state.submit(peers[0], 2, full, WireEdit::Pan { track: 1, pan: -0.5 }).unwrap();
+    state.submit(peers[2], 2, full + 1, WireEdit::Pan { track: 1, pan: 0.5 }).unwrap();
+    assert_eq!(state.host.revision(), full + 2);
 }
 
 #[test]
 fn membership_only_events_survive_backpressure_without_consuming_music_revisions() {
     let mut state = canonical(crate::starter_project());
     let peer = state.host.add_peer(Role::Editor).unwrap();
-    state.guests.insert(peer);
+    state.members.insert(peer, Member { token: [0; 32], generation: 0, away: None, known: assets::Known::new() });
     let (send, receive) = mpsc::sync_channel(1);
     assert!(send.try_send(Event::Upload(None)).is_ok());
-    let mut last = (0, 0);
+    let mut last = (0, 0, 0);
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (0, 0));
+    assert_eq!(last, (0, 0, 0));
     receive.try_recv().unwrap();
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (0, 1));
+    assert_eq!(last, (0, 1, 0));
     assert!(
         matches!(receive.try_recv().unwrap(), Event::State(c, o, 1, a) if c.revision == 0 && o.is_empty() && a.is_empty())
     );
     state.host.remove_peer(peer).unwrap();
-    state.guests.remove(&peer);
+    state.members.remove(&peer);
     state.emit(&send, &mut last).unwrap();
-    assert_eq!(last, (0, 0));
+    assert_eq!(last, (0, 0, 0));
     assert_eq!(state.host.revision(), 0);
     assert!(state.journal.is_empty());
 }
 
 #[test]
 fn wire_guest_counts_are_bounded_and_required() {
-    for count in [0, 4, usize::MAX] {
+    for count in [0, MAX_GUESTS + 1, usize::MAX] {
         assert!(protocol::validate_guest_count(count).is_err());
     }
-    for count in 1..=3 {
+    for count in 1..=MAX_GUESTS {
         assert!(protocol::validate_guest_count(count).is_ok());
     }
     let value = json!({"kind":"State","protocol":PROTOCOL,"controls":Controls::from_project(&crate::starter_project(),0).unwrap(),"operations":[],"accepted":null,"error":null});
     assert!(serde_json::from_value::<ServerMessage>(value.clone()).is_err());
     let mut valid = value;
     valid["guests"] = json!(1);
+    assert!(serde_json::from_value::<ServerMessage>(valid.clone()).is_err(), "the host clock is required");
+    valid["host_ms"] = json!(0);
     assert!(serde_json::from_value::<ServerMessage>(valid).is_ok());
 }
 
@@ -1241,7 +1285,10 @@ fn mismatched_engine_and_old_copy_format_refuse_before_spending_the_private_invi
             &ClientMessage::Hello { protocol: PROTOCOL, format, engine, secret: invitation.secret.clone() },
         )
         .unwrap();
-        assert!(matches!(protocol::read::<ServerMessage>(&mut io).unwrap(), ServerMessage::Denied));
+        assert!(matches!(
+            protocol::read::<ServerMessage>(&mut io).unwrap(),
+            ServerMessage::Denied { refusal: Refusal::Build { .. } }
+        ));
     }
     let mut guest = Service::default();
     guest.execute("multiplayer.join", &json!({"invitation":invitation.encode().unwrap()})).unwrap();
@@ -1253,4 +1300,158 @@ fn mismatched_engine_and_old_copy_format_refuse_before_spending_the_private_invi
     assert_eq!(guest.mode, "connected", "{:?}", guest.error);
     let pins: Value = serde_json::from_str(include_str!("../../../fork-sources.json")).unwrap();
     assert_eq!(protocol::engine_revision().unwrap(), pins["suhina"]["commit"]);
+}
+
+#[test]
+fn a_linked_transport_change_reaches_the_view_and_every_state_after_backpressure() {
+    let mut state = canonical(crate::starter_project());
+    let (send, receive) = mpsc::sync_channel(1);
+    let mut last = (0, 0, 0);
+    state.emit(&send, &mut last).unwrap();
+    assert!(receive.try_recv().is_err(), "nothing changes while unlinked");
+    state.linked.apply(TransportRequest::Link { linked: true }).unwrap();
+    state.linked.apply(TransportRequest::Play { beat: 4.0 }).unwrap();
+    assert!(send.try_send(Event::Upload(None)).is_ok());
+    state.emit(&send, &mut last).unwrap();
+    assert_eq!(last, (0, 0, 0), "a full view keeps the change for the next round");
+    receive.try_recv().unwrap();
+    state.emit(&send, &mut last).unwrap();
+    assert_eq!(last, (0, 0, 2));
+    let Event::Transport(Some(shared), clock) = receive.try_recv().unwrap() else { panic!("transport") };
+    assert_eq!(clock.offset, 0);
+    assert!(shared.playing && shared.beat == 4.0 && shared.seq == 2);
+    let ServerMessage::State { host_ms, transport, .. } = state.response(0, None).unwrap() else { panic!("state") };
+    assert_eq!(transport, Some(shared));
+    assert!(host_ms < shared.start_ms, "the start is scheduled ahead of the host clock");
+}
+
+#[test]
+fn transport_commands_take_exact_keys_and_need_a_linked_session() {
+    let mut service = Service::default();
+    for (id, params) in [
+        ("multiplayer.linkPlayback", json!({"linked":true})),
+        ("multiplayer.transport", json!({"action":"play","beats":0})),
+    ] {
+        assert!(service.execute(id, &params).is_err(), "{id} needs a session");
+    }
+    for params in [
+        json!({"action":"play"}),
+        json!({"action":"play","beats":1,"extra":1}),
+        json!({"action":"play","beats":-1}),
+        json!({"action":"play","beats":120_001}),
+        json!({"action":"rewind","beats":1}),
+    ] {
+        assert!(service.execute("multiplayer.transport", &params).is_err(), "{params}");
+    }
+    assert!(service.execute("multiplayer.linkPlayback", &json!({"linked":"yes"})).is_err());
+    let state = service.execute("multiplayer.state", &json!({})).unwrap();
+    assert_eq!(state["linked"], false);
+    assert!(state["transport"].is_null() && state["transport_starts_in_ms"].is_null());
+}
+
+fn hello(secret: &str) -> Value {
+    json!({"kind":"Hello","protocol":PROTOCOL,"format":protocol::COPY_FORMAT,"engine":protocol::engine_revision().unwrap(),"secret":secret})
+}
+fn resume(token: &str, seen: Option<u64>) -> Value {
+    json!({"kind":"Resume","protocol":PROTOCOL,"format":protocol::COPY_FORMAT,"engine":protocol::engine_revision().unwrap(),"token":token,"seen_revision":seen})
+}
+fn refusal(state: &mut Canonical, hello: Value, now: Instant) -> Refusal {
+    match state.open(hello, now) {
+        Err(refusal) => refusal,
+        Ok(_) => panic!("expected a refusal"),
+    }
+}
+
+#[test]
+fn hellos_are_refused_with_a_reason_and_only_the_code_holder_learns_the_code_state() {
+    let now = Instant::now();
+    let secret = "a".repeat(64);
+    let mut state = canonical(crate::starter_project());
+    state.secret = secret_hash(&secret);
+    state.expires = now + Duration::from_secs(300);
+    let mut old = hello(&secret);
+    old["protocol"] = json!(PROTOCOL - 1);
+    old["extra"] = json!("a field this version does not know");
+    assert_eq!(refusal(&mut state, old, now), Refusal::Protocol { host: PROTOCOL, guest: PROTOCOL - 1 });
+    let mut other = hello(&secret);
+    other["engine"] = json!("def5678".repeat(5) + "abcde");
+    let Refusal::Build { host, guest } = refusal(&mut state, other, now) else { panic!("build") };
+    let ours = protocol::engine_revision().unwrap();
+    assert_eq!((host.as_str(), guest.as_str()), (&ours[..7], "def5678"));
+    let message = Refusal::Build { host, guest }.message();
+    assert!(message.contains(&format!("host {}, this computer def5678", &ours[..7])), "{message}");
+    assert!(message.ends_with("Install the same version on both computers."));
+    let mut format = hello(&secret);
+    format["format"] = json!(2);
+    let Refusal::Build { host, guest } = refusal(&mut state, format, now) else { panic!("format") };
+    assert!(Refusal::Build { host, guest }.message().contains("copy format 3, this computer"));
+    assert_eq!(refusal(&mut state, json!({"kind":"Poll","protocol":PROTOCOL}), now), Refusal::Unsupported);
+    // A wrong code says nothing about the right one: neither its age nor the session's size.
+    let mut close = secret.clone();
+    close.replace_range(63.., "b");
+    assert_eq!(refusal(&mut state, hello(&close), now + Duration::from_secs(400)), Refusal::Invalid);
+    assert_eq!(refusal(&mut state, hello("short"), now), Refusal::Invalid);
+    assert_eq!(refusal(&mut state, hello(&secret), now + Duration::from_secs(300)), Refusal::Expired);
+    assert!(state.members.is_empty(), "refusals admit nobody");
+    // One code for the whole group, until the session is full.
+    for _ in 0..MAX_GUESTS {
+        assert!(matches!(state.open(hello(&secret), now), Ok(Opening::Admitted { .. })));
+    }
+    assert_eq!(refusal(&mut state, hello(&secret), now), Refusal::Full);
+    assert_eq!(state.seats(), MAX_GUESTS);
+    // Every refusal names what to do, and a host's text is cut to a short build identifier.
+    let hostile = Refusal::Build { host: "\u{1b}[31m../../etc/passwd/9".into(), guest: String::new() }.message();
+    assert!(hostile.contains("host 31metcp copy format 9, this computer unknown"), "{hostile}");
+}
+
+#[test]
+fn resume_tokens_are_bound_rotated_refused_when_forged_and_expire_with_the_grace_period() {
+    let now = Instant::now();
+    let grace = Duration::from_secs(120);
+    let secret = "a".repeat(64);
+    let mut state = canonical(crate::starter_project());
+    state.secret = secret_hash(&secret);
+    let Ok(Opening::Admitted { peer, generation, token }) = state.open(hello(&secret), now) else { panic!("admit") };
+    state.submit(peer, 1, 0, WireEdit::Rename { track: 1, name: "Before the drop".into() }).unwrap();
+    state.remember(peer, generation, &assets::Known::new());
+    state.depart(peer, generation, Departure::Dropped, now, grace);
+    assert_eq!((state.connected(), state.seats()), (0, 1), "the place is held while away");
+    assert_eq!(refusal(&mut state, resume(&"f".repeat(64), Some(1)), now), Refusal::Resume);
+    assert_eq!(refusal(&mut state, resume(&secret, Some(1)), now), Refusal::Resume, "the code is not a token");
+    let Ok(Opening::Resumed { peer: back, generation: second, token: next, resume: held }) =
+        state.open(resume(&token, Some(1)), now + Duration::from_secs(60))
+    else {
+        panic!("resume")
+    };
+    assert_eq!(back, peer, "the same participant, with its sequence");
+    assert_eq!(held.map(|h| h.1), Some(1), "the journal covers it: no fresh copy");
+    assert_ne!(next, token);
+    assert_eq!(state.connected(), 1);
+    // The retry cache still knows the peer's last edit, so a resent one applies once.
+    state.submit(peer, 1, 0, WireEdit::Rename { track: 1, name: "Before the drop".into() }).unwrap();
+    assert_eq!(state.host.revision(), 1);
+    assert_eq!(refusal(&mut state, resume(&token, Some(1)), now), Refusal::Resume, "the old token is spent");
+    // The superseded connection's end changes nothing; the current one's drop starts a new grace.
+    state.depart(peer, generation, Departure::Dropped, now, grace);
+    assert_eq!(state.connected(), 1);
+    let Ok(Opening::Resumed { resume: none, token: last, generation: third, .. }) =
+        state.open(resume(&next, None), now)
+    else {
+        panic!("resume for a copy")
+    };
+    assert!(none.is_none(), "no revision asks for a fresh copy");
+    assert!(third > second);
+    state.depart(peer, third, Departure::Dropped, now, grace);
+    state.expire(now + grace);
+    assert_eq!(state.seats(), 0, "the grace period ended: the place is free");
+    assert_eq!(refusal(&mut state, resume(&last, Some(1)), now + grace), Refusal::Resume);
+    assert!(state.submit(peer, 2, 1, WireEdit::Pan { track: 1, pan: 0.5 }).is_err(), "the peer is gone");
+    // A guest that leaves on purpose frees its place at once.
+    state.secret = secret_hash(&"c".repeat(64));
+    let Ok(Opening::Admitted { peer, generation, token }) = state.open(hello(&"c".repeat(64)), now) else {
+        panic!("admit")
+    };
+    state.depart(peer, generation, Departure::Left, now, grace);
+    assert_eq!(state.seats(), 0);
+    assert_eq!(refusal(&mut state, resume(&token, None), now), Refusal::Resume);
 }

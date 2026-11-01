@@ -1,0 +1,19 @@
+[package]
+name = "rbl-audio"
+version = "1.9.0"
+edition = "2021"
+rust-version = "1.89"
+license = "GPL-2.0-or-later"
+description = "Audio decoding for analysis."
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+tracing = "0.1"
+symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "alac", "isomp4", "flac", "wav", "aiff", "pcm", "adpcm", "ogg", "vorbis"] }
+rbl-core = { path = "../rbl-core" }
+suhina-mp3 = { path = "../../../crates/mp3" }
+rubato = "0.16"

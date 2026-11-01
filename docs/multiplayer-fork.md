@@ -89,20 +89,26 @@ then prints their different playhead positions. It opens no window, socket or au
 writes no project or audio file. It is a headless test of the first building block.
 
 
-## Try the desktop LAN prototype
+## Try the desktop prototype
+
+**Over the Internet** is the default: **Create session**, read out the short code shown (such as
+`7-piano-tigre-lune`) or send it with **Copy code**, and the guest types it into **Invitation
+code from the host** and clicks **Join session**. **Copy full invitation** gives the long code,
+which works when a network blocks the short code's address lookup. No account and no router
+setting; see [online sessions](spec/online-sessions.md#short-codes). The steps below use **On this local network**.
 
 Use the same combined build commit on both computers. These labels and preservation checks are
 covered by automated UI tests; the physical two-computer procedure below is an acceptance test
 still to perform. No personal project or audio file is needed.
 
 1. Open Suhina. Click **Multiplayer** at the top, beside **Studio** and **DJ**; it is also in
-   **View → Multiplayer LAN**. You should see **Create LAN session** and **Join LAN session**.
-2. On the host, **Host address** should contain its private local IPv4 address followed by `:0`.
-   Click **Create LAN session**. A new **LAN starter session** tab opens, preserving other tabs.
-   Four generated MIDI tracks appear; **Copy invitation** becomes available. `127.0.0.1:0` is
+   **View → Multiplayer LAN**. You should see **Create session** and **Join session**.
+2. On the host, select **On this local network**. **Host address** should contain its private local IPv4 address followed by `:0`.
+   Click **Create session**. A new **LAN starter session** tab opens, preserving other tabs.
+   Four generated MIDI tracks appear; **Copy invitation code** becomes available. `127.0.0.1:0` is
    useful only for two app instances on the same computer, not for a second computer.
-3. Click **Copy invitation** and send it privately to the guest. On the guest computer, open
-   **Multiplayer**, paste it into **Invitation from the host**, and click **Join LAN session**.
+3. Click **Copy invitation code** and send it privately to the guest. On the guest computer, open
+   **Multiplayer**, paste it into **Invitation code from the host**, and click **Join session**.
    Both should show four MIDI tracks and two return tracks; the host should say **Guest connected**. Allow local-network
    access in the OS if requested. A failed connection must display an error, not a joined state.
 4. On the host, change **Pulse** to **Shared pulse**, then click its **Rename** button. The guest
@@ -141,8 +147,9 @@ Both participants need the new protocol-10 build; old demo invitations no longer
 To include loaded audio, use **Share project + audio**. Configure the application data folder
 when using a custom host: collected copies stay in its **Shared projects** subfolder. Only sounds
 already loaded in Studio are copied; missing audio must first be loaded/relinked. They become
-portable float32 WAV copies, without changing the originals, up to 64 files, 64 MiB each and
-256 MiB total. Wait for the complete transfer before a shared tab appears. FM Synth/Utility
+portable float32 WAV copies, without changing the originals, up to 4096 files, 2 GiB each and
+16 GiB total ([heavy sessions](spec/heavy-sessions.md)). A guest's Sound cache keeps received
+sounds, so they are not sent again; a heavy copy opens first and its sounds follow. FM Synth/Utility
 parameters remain supported; other devices/plugins and streamed stems are refused. Existing
 audio clips can be moved/trimmed/duplicated with the same Clips controls. New audio clips are
 empty. To publish a finished take while connected, either participant records/finishes it in an ordinary
@@ -176,7 +183,7 @@ A newer shared revision disables Apply: **Refresh device draft** reloads the cur
 before making a new edit. Switching to another target explicitly starts its new draft. A
 switched-off device stores values without enabling it; manual changes override that parameter's
 existing automation as ordinary native edits do. No new device/preset/plugin is loaded.
-To start from an empty app, choose **Create LAN session → Devices**, select **Pulse** in
+To start from an empty app, choose **Create session → Devices**, select **Pulse** in
 **Device track**, then **Add FM Synth** or **Add Utility**. Refresh a stale chain draft first.
 Utility is appended; FM Synth is only available for a MIDI track without an instrument.
 **Shared device → Remove selected device** removes its settings/automation and keeps the music.

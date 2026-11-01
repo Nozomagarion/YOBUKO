@@ -11,6 +11,7 @@ fn the_visible_lan_entry_creates_a_separate_tab_and_keeps_other_projects() {
     app.set_session(Session::new(crate::demo::demo_project()), &[]);
     let original = app.projects.active().unwrap();
     app.settings.view.menu_bar = false;
+    app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let mut harness = egui_kittest::Harness::builder()
         .with_size(Vec2::new(1280.0, 800.0))
@@ -19,8 +20,8 @@ fn the_visible_lan_entry_creates_a_separate_tab_and_keeps_other_projects() {
     let before = harness.state().projects.get(original).unwrap().project().clone();
     harness.get_by_label("Multiplayer").click();
     harness.run();
-    assert!(harness.query_by_label("Create LAN session").is_some());
-    harness.get_by_label("Create LAN session").click();
+    assert!(harness.query_by_label("Create session").is_some());
+    harness.get_by_label("Create session").click();
     let deadline = Instant::now() + Duration::from_secs(5);
     while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
         harness.run_steps(2);
@@ -29,13 +30,40 @@ fn the_visible_lan_entry_creates_a_separate_tab_and_keeps_other_projects() {
     let shared = harness.state().multiplayer.bound.unwrap();
     assert_ne!(original, shared);
     assert_eq!(harness.state().projects.get(original).unwrap().project(), &before);
-    assert!(harness.query_by_label("Copy invitation").is_some());
+    assert!(harness.query_by_label("Copy invitation code").is_some());
     assert!(harness.query_by_label("Play locally").is_some());
     harness.get_by_label("Leave session").click();
     harness.run_steps(3);
     assert!(harness.state().multiplayer.bound.is_none());
     assert!(harness.state().projects.get(shared).is_some());
     assert_eq!(harness.state().projects.get(original).unwrap().project(), &before);
+}
+
+#[test]
+fn an_online_host_shows_the_short_code_beside_the_full_invitation() {
+    let mut app = App::new();
+    app.settings.view.menu_bar = false;
+    app.multiplayer.open = true;
+    app.multiplayer_command("multiplayer.host", json!({"address":suhina_multiplayer::ONLINE_LOOPBACK}));
+    let mut harness = egui_kittest::Harness::builder()
+        .with_size(Vec2::new(1280.0, 800.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while harness.state().multiplayer.short_code.is_empty() && Instant::now() < deadline {
+        harness.run_steps(2);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    harness.run_steps(2);
+    let code = harness.state().multiplayer.short_code.clone();
+    assert!(code.starts_with("0-"), "a loopback short code: {code:?}");
+    assert!(harness.state().multiplayer.invitation.starts_with("suhina-net://"));
+    assert!(harness.query_by_label(&code).is_some(), "the code is shown to be read out");
+    assert!(harness.query_by_label("Copy code").is_some());
+    assert!(harness.query_by_label("Copy full invitation").is_some());
+    assert!(harness.query_by_label("Copy invitation code").is_none());
+    harness.get_by_label("Leave session").click();
+    harness.run_steps(3);
+    assert!(harness.state().multiplayer.short_code.is_empty());
 }
 
 #[test]
@@ -101,6 +129,17 @@ fn two_desktop_projects_apply_confirmed_controls_and_unlock_on_disconnect() {
     assert!(guest.multiplayer.bound.is_none());
     assert_eq!(guest.projects.get(remote).unwrap().project().tracks[0].name, "From the other computer");
     assert!(guest.projects.execute("track.rename", &json!({"track":1,"name":"Retained"})).is_ok());
+    // The guest is told the host left on purpose, not that the network failed.
+    let message = guest.multiplayer.error.clone().unwrap_or_default();
+    assert!(message.starts_with("The host ended the session"), "{message}");
+}
+
+#[test]
+fn the_status_line_names_a_reconnection() {
+    assert_eq!(super::status_text("reconnecting"), "Reconnecting…");
+    assert_eq!(super::status_text("connected"), "Connected");
+    assert_eq!(super::status_text("hosting"), "Hosting");
+    assert_eq!(super::status_text("something new"), "something new");
 }
 
 #[test]
@@ -108,6 +147,7 @@ fn two_desktop_projects_apply_confirmed_controls_and_unlock_on_disconnect() {
 fn render_multiplayer_panel_for_review() {
     let mut app = App::new();
     app.set_session(Session::new(suhina_multiplayer::starter_project()), &[]);
+    app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     app.multiplayer.open = true;
     let mut harness = egui_kittest::Harness::builder()
@@ -156,6 +196,7 @@ fn sharing_the_current_midi_project_opens_a_copy_of_its_real_music() {
     let original_bytes = std::fs::read(&source_file).unwrap();
     app.set_session(session, &[]);
     app.multiplayer.open = true;
+    app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let original = app.projects.active().unwrap();
     let mut harness = egui_kittest::Harness::builder()
@@ -221,6 +262,7 @@ fn visible_note_buttons_edit_the_shared_music_and_refuse_a_stale_draft() {
     app.set_session(Session::new(suhina_multiplayer::starter_project()), &[]);
     let original = app.projects.active().unwrap();
     app.multiplayer.open = true;
+    app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let mut harness = egui_kittest::Harness::builder()
         .with_size(Vec2::new(1280.0, 900.0))
@@ -304,6 +346,7 @@ fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_reboun
     app.set_session(Session::new(project), &[]);
     let original = app.projects.active().unwrap();
     app.multiplayer.open = true;
+    app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let mut harness = egui_kittest::Harness::builder()
         .with_size(Vec2::new(1280.0, 900.0))
@@ -397,6 +440,7 @@ fn the_audio_share_button_opens_a_collected_copy_and_keeps_the_original_file() {
     app.set_default_data_folder(root.path().join("Application data"));
     app.set_session(session, &[]);
     app.multiplayer.open = true;
+    app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let original = app.projects.active().unwrap();
     let mut harness = egui_kittest::Harness::builder()
@@ -466,6 +510,7 @@ fn render_shared_audio_panel_for_review() {
     let original = app.projects.active().unwrap();
     app.set_default_data_folder(root.path().into());
     app.multiplayer.open = true;
+    app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let mut harness = egui_kittest::Harness::builder()
         .with_size(Vec2::new(1280.0, 900.0))
@@ -515,6 +560,7 @@ fn the_publish_button_uses_a_finished_local_sound_and_keeps_original_and_shared_
     app.set_session(Session::new(project), &[]);
     let original = app.projects.active().unwrap();
     app.multiplayer.open = true;
+    app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     app.host_current_audio();
     let ctx = egui::Context::default();
@@ -573,6 +619,7 @@ fn visible_track_creation_adds_midi_and_audio_to_both_tabs_and_refuses_a_stale_d
     let mut host = App::new();
     host.set_session(Session::new(suhina_multiplayer::starter_project()), &[]);
     host.multiplayer.open = true;
+    host.multiplayer.online = false;
     host.multiplayer.address = "127.0.0.1:0".into();
     let original = host.projects.active().unwrap();
     host.host_current_midi();
@@ -669,6 +716,7 @@ fn guest_take_button(render: bool) {
     let mut host = App::new();
     host.set_default_data_folder(root.path().join("Host"));
     host.set_session(Session::new(shared.clone()), &[]);
+    host.multiplayer.online = false;
     host.multiplayer.address = "127.0.0.1:0".into();
     host.host_current_audio();
     let deadline = Instant::now() + Duration::from_secs(10);
@@ -856,6 +904,7 @@ fn shared_device_buttons(render: bool) {
     host.set_session(source, &[]);
     let original = host.projects.active().unwrap();
     host.multiplayer.open = true;
+    host.multiplayer.online = false;
     host.multiplayer.address = "127.0.0.1:0".into();
     host.host_current_midi();
     let deadline = Instant::now() + Duration::from_secs(20);
@@ -982,6 +1031,9 @@ mod launcher_tests;
 
 #[path = "multiplayer_guest_tests.rs"]
 mod guest_tests;
+
+#[path = "multiplayer_linked_tests.rs"]
+mod linked_tests;
 
 #[test]
 fn synchronous_refusals_survive_state_refreshes_and_can_be_acknowledged_without_editing() {

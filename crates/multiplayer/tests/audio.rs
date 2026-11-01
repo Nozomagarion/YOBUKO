@@ -46,6 +46,13 @@ fn source() -> (Project, AudioPool) {
     );
     (project, audio)
 }
+/// Session folders in a storage root; the sound cache and served copies are not sessions.
+fn sessions(root: &std::path::Path) -> usize {
+    std::fs::read_dir(root)
+        .unwrap()
+        .filter(|e| e.as_ref().unwrap().file_name().to_string_lossy().starts_with("session-"))
+        .count()
+}
 fn wait(service: &mut Service, ready: impl Fn(&Value) -> bool) -> Value {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
@@ -317,7 +324,7 @@ fn rejected_publication_keeps_revision_and_late_join_gets_the_new_take() {
         let rejected = wait(&mut host, |s| s["error"].is_string());
         assert_eq!(rejected["controls"]["revision"], 0);
         assert!(host.take_audio().is_empty());
-        assert_eq!(std::fs::read_dir(host_dir.path()).unwrap().count(), 1, "failed take folders are removed");
+        assert_eq!(sessions(host_dir.path()), 1, "failed take folders are removed");
     }
     publish_take(&mut host, Arc::clone(&data), 0, 2, 4.0);
     let state = wait(&mut host, |s| s["controls"]["revision"] == 1);
@@ -504,8 +511,8 @@ fn guest_uploads_reuse_verified_sounds_preserve_players_and_save_both_copies() {
         assert_eq!(render(&local), render(&remote));
         assert_eq!(local.audio().files.len(), 2);
     }
-    assert_eq!(std::fs::read_dir(host_dir.path()).unwrap().count(), 2, "duplicate creates no new host folder");
-    assert_eq!(std::fs::read_dir(guest_dir.path()).unwrap().count(), 2, "duplicate local preparation is discarded");
+    assert_eq!(sessions(host_dir.path()), 2, "duplicate creates no new host folder");
+    assert_eq!(sessions(guest_dir.path()), 2, "duplicate local preparation is discarded");
     publish_take(
         &mut host,
         Arc::new(AudioData { sample_rate: 8000, channels: 2, samples: vec![0.1; 8000] }),
@@ -519,13 +526,13 @@ fn guest_uploads_reuse_verified_sounds_preserve_players_and_save_both_copies() {
     let s = wait(&mut guest, |s| s["controls"]["revision"] == 3);
     accept_audio(&mut guest, &mut remote);
     apply(&mut remote, &s, &mut br);
-    let folders = std::fs::read_dir(guest_dir.path()).unwrap().count();
+    let folders = sessions(guest_dir.path());
     let candidate = Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.4; 8000] });
     publish_take(&mut guest, Arc::clone(&candidate), 0, 2, 32.0);
     let s = wait(&mut guest, |s| s["error"].is_string());
     assert_eq!(s["controls"]["revision"], 3);
     assert!(guest.take_audio().is_empty());
-    assert_eq!(std::fs::read_dir(guest_dir.path()).unwrap().count(), folders, "stale local preparation is cleaned up");
+    assert_eq!(sessions(guest_dir.path()), folders, "stale local preparation is cleaned up");
     publish_take(&mut guest, Arc::clone(&candidate), 3, 2, 32.0);
     let s = wait(&mut host, |s| s["controls"]["revision"] == 4);
     accept_audio(&mut host, &mut local);
@@ -591,11 +598,7 @@ fn a_failed_guest_preparation_keeps_the_connection_and_next_publication_sequence
     assert_eq!(state["controls"]["revision"], 0);
     assert!(state["sending"].is_null());
     assert!(guest.take_audio().is_empty());
-    assert_eq!(
-        std::fs::read_dir(b.path()).unwrap().count(),
-        1,
-        "bad local data leaves only the original collected folder"
-    );
+    assert_eq!(sessions(b.path()), 1, "bad local data leaves only the original collected folder");
     publish_take(
         &mut guest,
         Arc::new(AudioData { sample_rate: 8000, channels: 1, samples: vec![0.2; 8000] }),

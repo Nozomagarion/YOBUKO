@@ -13,7 +13,7 @@ the documents that match your task.
 
 ## Fork owner progress updates
 
-The owner requested one plain-French progress file: [`SUIVI_PROJET.md`](SUIVI_PROJET.md).
+The owner requested one plain-English progress file: [`PROGRESS.md`](PROGRESS.md).
 Read it when continuing fork development. Update that same file at each meaningful milestone,
 priority change or blocker; do not create another milestone audit as the main status report.
 Explain the user-visible change and its purpose, current limitations, verified checks and the
@@ -28,10 +28,17 @@ background monitoring. Preserve the owner's decision to defer physical two-compu
 The owner renamed this fork's application **YOBUKO** (呼子), after the Japanese echo yōkai
 Yamabiko (山彦), of which *yobuko* is a traditional regional name: one musician sends out an
 idea, another answers. "Yamabiko" itself is not used because a music app with that name
-already exists on the App Store. The story is told in [`README.md`](README.md) › Pourquoi
+already exists on the App Store. The story is told in [`README.md`](README.md) › Why
 YOBUKO.
 
-- In the fork's own user-facing text (READMEs, guides, `SUIVI_PROJET.md`, release notes, fork
+- Everything in this repository and on its GitHub pages is written in **English**: READMEs,
+  guides, `PROGRESS.md`, release notes, installers, pull requests and commit messages (owner's
+  request, 1 November 2026). Conversation with the owner may stay in French.
+- **Never open a pull request, issue or comment on the upstream projects** (suhina-daw/suhina-daw,
+  chrisle/rbxport). Every pull request targets Nozomagarion/YOBUKO; check the base repository
+  before creating one, because a fork's pull requests default to its parent. Upstream changes
+  are only pulled in (owner's rule, 1 November 2026).
+- In the fork's own user-facing text (READMEs, guides, `PROGRESS.md`, release notes, fork
   banners, new fork UI strings), call the application **YOBUKO**.
 - **Suhina** remains the name of the upstream project this app is built on: credit it as such
   ("YOBUKO, built on Suhina") and never remove or rewrite its credits, notices or

@@ -3,9 +3,9 @@ name: Multiplayer fork checks and development builds
 on:
   workflow_dispatch:
   push:
-    branches: [feature/multiplayer, 'integration/multiplayer-*']
+    branches: [feature/multiplayer, feature/online, 'feature/online-*', 'integration/multiplayer-*']
   pull_request:
-    branches: [feature/multiplayer]
+    branches: [feature/multiplayer, feature/online]
 
 permissions:
   contents: read
@@ -26,7 +26,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # The oldest supported Ubuntu, so the Linux packages run on distributions as old as it.
+          - os: ubuntu-22.04
             package: linux
           - os: windows-latest
             package: windows-x86_64
@@ -45,9 +46,15 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
+      # The Rekordbox USB export (rbxport's exportLibrary.db) builds SQLCipher with a vendored
+      # OpenSSL, whose Configure needs a full Perl; Git Bash's own perl lacks modules it uses.
+      - name: Windows Perl for the vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
       - name: Linux prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt, clippy
@@ -121,6 +128,50 @@ jobs:
                    for p in sorted(root.iterdir()) if p.is_file()]
           (root / 'SHA256SUMS.txt').write_text('\n'.join(lines) + '\n')
           PY
+      - name: Linux AppImage and .deb
+        if: runner.os == 'Linux'
+        run: |
+          package="dist/suhina-multiplayer-experiment-$PLATFORM"
+          version=$("$package/suhina-cli" --version | awk '{print $2}')
+          bash scripts/linux_package.sh "$package" "$version" linux-installers
+          ls -l linux-installers
+        env:
+          PLATFORM: ${{ matrix.package }}
+      # The same installers the release attaches, made from these development binaries so a
+      # pull request shows they still build: the Mac disk image and the Windows setup program.
+      - name: Mac disk image and Windows installer
+        if: runner.os != 'Linux'
+        env:
+          PLATFORM: ${{ matrix.package }}
+        run: |
+          package="dist/suhina-multiplayer-experiment-$PLATFORM"
+          staging="installer-staging/yobuko-$PLATFORM"
+          mkdir -p "$staging" installers
+          cp -R "$package/." "$staging/"
+          if [ "$RUNNER_OS" = macOS ]; then
+            version=$("$staging/suhina-cli" --version | awk '{print $2}')
+            bash scripts/macos_app.sh "$staging" "$version"
+            codesign --force --deep --sign - "$staging/Suhina.app"
+            bash scripts/macos_dmg.sh "$staging" installers/YOBUKO-Mac.dmg
+          else
+            version=$("$staging/suhina-cli.exe" --version | awk '{print $2}')
+            bash scripts/windows_installer.sh "$staging" "$version" installers YOBUKO-Windows-Setup
+          fi
+          ls -l installers
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: runner.os != 'Linux'
+        with:
+          name: yobuko-${{ matrix.package }}-installer-${{ github.sha }}
+          path: installers/
+          retention-days: 7
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: runner.os == 'Linux'
+        with:
+          name: yobuko-linux-installers-${{ github.sha }}
+          path: linux-installers/
+          retention-days: 7
+          if-no-files-found: error
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: multiplayer-experiment-${{ matrix.package }}-${{ github.sha }}

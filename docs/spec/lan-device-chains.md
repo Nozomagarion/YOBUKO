@@ -88,3 +88,10 @@ project v4, portable-copy format 3 and matching pinned Suhina engine identities 
 Ordinary old project files remain readable through the studio reader, then share as v4. The
 musical edit permissions and quotas above remain unchanged; newly added studio effects are not
 implicitly permitted in shared tabs. All participants need the updated combined application.
+
+
+## Amendment: plug-ins in shared sessions
+
+[Protocol 17](shared-plugins.md) lets shared chains hold any device, plug-ins included, and lets
+`device.setSharedParam` set any built-in device's parameters. Adding still covers FM Synth and
+Utility only, and FM Synth is refused next to anything that might be an instrument.

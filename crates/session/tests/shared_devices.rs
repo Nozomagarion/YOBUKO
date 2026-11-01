@@ -44,6 +44,19 @@ fn shared_parameters_accept_native_canonical_values_and_preserve_undo_and_file_r
 }
 
 #[test]
+fn shared_parameters_reach_every_built_in_device() {
+    let mut p = session().unwrap().project().clone();
+    p.channels[0].devices.push(Device::new("Reverb", DeviceKind::Builtin("reverb".into())));
+    let index = p.channels[0].devices.len() - 1;
+    let info = suhina_device_registry::info("reverb").unwrap();
+    let spec = &info.params[0];
+    let value = spec.clamp(spec.max);
+    let mut s = Session::new(p);
+    s.execute("device.setSharedParam", &json!({"track":1,"device":index,"param":spec.id,"value":value})).unwrap();
+    assert!(s.project().channels[0].devices[index].params.iter().any(|x| x.id == spec.id && x.value == value));
+}
+
+#[test]
 fn shared_parameters_refuse_bad_types_paths_values_and_opaque_or_other_devices_atomically() {
     let mut s = session().unwrap();
     let good = json!({"track":1,"device":0,"param":"algorithm","value":8});
@@ -87,11 +100,12 @@ fn shared_parameters_refuse_bad_types_paths_values_and_opaque_or_other_devices_a
         assert!(s.execute("device.setSharedParam", &good).is_err());
         assert_eq!(s.project(), &p);
     }
+    // A built-in's parameters can be set whatever its state holds, and the state stays as it was.
     let mut p = before.clone();
     p.channels[0].devices[0].state = Some(vec![1, 2, 3]);
     let mut s = Session::new(p.clone());
-    assert!(s.execute("device.setSharedParam", &good).is_err());
-    assert_eq!(s.project(), &p);
+    s.execute("device.setSharedParam", &good).unwrap();
+    assert_eq!(s.project().channels[0].devices[0].state, Some(vec![1, 2, 3]));
     let mut p = before.clone();
     p.channels[0].devices[0].params = (0..512).map(|i| DeviceParam::new(format!("unknown{i}"), 0.)).collect();
     let mut s = Session::new(p.clone());
@@ -232,13 +246,21 @@ fn shared_chain_guards_reject_paths_unknown_kinds_opaque_chains_wrong_indices_an
                 Device::new("Unsupported", DeviceKind::Clap { id: "/must-not-load.clap".into() });
         }
         let mut s = Session::new(p.clone());
+        // Neither the plug-in nor a built-in holding state is removed, and FM Synth never joins
+        // a chain that may already hold an instrument.
         for (id, params) in [
-            ("device.addShared", json!({"track":1,"kind":"utility"})),
-            ("device.removeShared", json!({"track":1,"device":1})),
+            ("device.removeShared", json!({"track":1,"device":0})),
+            ("device.addShared", json!({"track":1,"kind":"fm-synth"})),
         ] {
             assert!(s.execute(id, &params).is_err());
             assert_eq!(s.project(), &p);
         }
+        // Utility still joins and leaves such a chain, which keeps the plug-in untouched.
+        s.execute("device.addShared", &json!({"track":1,"kind":"utility"})).unwrap();
+        assert_eq!(s.project().channels[0].devices[0], p.channels[0].devices[0]);
+        let last = s.project().channels[0].devices.len() - 1;
+        s.execute("device.removeShared", &json!({"track":1,"device":last})).unwrap();
+        assert_eq!(s.project(), &p);
     }
     let mut audio = Session::new(ProjectBuilder::new().audio_track(1, "Audio").build());
     let before = audio.project().clone();

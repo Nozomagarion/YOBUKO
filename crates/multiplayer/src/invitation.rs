@@ -33,6 +33,7 @@ impl Invitation {
         }
         let body = text.trim().strip_prefix(PREFIX).ok_or("not a Suhina LAN invitation")?;
         let bytes = URL_SAFE_NO_PAD.decode(body).map_err(|_| "invalid invitation encoding")?;
+        crate::protocol::invitation_protocol(&bytes)?;
         let value: Self = serde_json::from_slice(&bytes).map_err(|_| "invalid invitation")?;
         if value.protocol != super::protocol::PROTOCOL
             || !private(value.endpoint.ip())
@@ -52,6 +53,23 @@ impl Invitation {
             return Err("invalid invitation certificate size".into());
         }
         Ok(der)
+    }
+}
+/// An invitation whose single-use secret the host rotates.
+pub(crate) trait Invite {
+    fn secret(&self) -> &str;
+    fn set_secret(&mut self, secret: String);
+    fn encode(&self) -> Result<String, String>;
+}
+impl Invite for Invitation {
+    fn secret(&self) -> &str {
+        &self.secret
+    }
+    fn set_secret(&mut self, secret: String) {
+        self.secret = secret;
+    }
+    fn encode(&self) -> Result<String, String> {
+        Invitation::encode(self)
     }
 }
 pub(crate) fn private(ip: IpAddr) -> bool {

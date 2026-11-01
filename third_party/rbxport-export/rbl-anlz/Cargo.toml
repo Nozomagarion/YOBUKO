@@ -1,0 +1,16 @@
+[package]
+name = "rbl-anlz"
+version = "1.9.0"
+edition = "2021"
+rust-version = "1.89"
+license = "GPL-2.0-or-later"
+description = "Reader for rekordbox ANLZ analysis files (.DAT/.EXT/.2EX)."
+
+[lints.rust]
+unsafe_code = "deny"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+rbl-core = { path = "../rbl-core" }
+thiserror = "2"
+tracing = "0.1"

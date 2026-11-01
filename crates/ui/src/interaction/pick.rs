@@ -13,6 +13,8 @@ use std::path::PathBuf;
 pub enum PickField {
     /// Audio for the fork’s DJ library.
     DjAudio,
+    /// The USB stick (or folder) the DJ library is exported to for Rekordbox players.
+    DjUsb,
     /// Settings › Appearance › Background image: a user-owned PNG; no desktop capture.
     BackgroundImage,
     /// Settings › Projects and backups › Projects folder.
@@ -56,6 +58,7 @@ impl PickField {
     pub fn title(self) -> &'static str {
         match self {
             Self::DjAudio => "Import audio into DJ library",
+            Self::DjUsb => "Export the DJ library to a USB stick (Rekordbox)",
             Self::BackgroundImage => "Background image (PNG)",
             Self::ProjectsFolder => "Projects folder",
             Self::TemplatesFolder => "Templates folder",
