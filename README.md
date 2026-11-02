@@ -1,150 +1,111 @@
-<h2 align="center">🙏 Made possible by two open-source projects</h2>
+<p align="center">
+  <img src="assets/readme/hero.webp" alt="YOBUKO 呼子: make music with your friends, even when you're not in the same room. Studio, Multiplayer and DJ." width="100%">
+</p>
 
-<p align="center">YOBUKO is built on the work of these two projects and their authors.<br>
-<strong>Please go and star them first.</strong></p>
+<p align="center">
+  <a href="https://github.com/Nozomagarion/YOBUKO/releases"><img src="https://img.shields.io/badge/download-latest%20release-ff6fb5?style=for-the-badge" alt="Download the latest release"></a>
+  <img src="https://img.shields.io/badge/macOS%20·%20Windows%20·%20Linux-5b8cff?style=for-the-badge" alt="macOS, Windows and Linux">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-3fd6a0?style=for-the-badge" alt="GPL 3.0 or later"></a>
+</p>
 
-<table align="center">
+<br>
+
+## 💜 Built on two wonderful open-source projects
+
+<p>YOBUKO would not exist without these two projects and their authors. <strong>Please go and give them a star first.</strong></p>
+
+<table>
   <tr>
-    <th width="50%"><a href="https://github.com/suhina-daw/suhina-daw">🎛️ Suhina</a></th>
-    <th width="50%"><a href="https://github.com/chrisle/rbxport">💿 rbxport</a></th>
-  </tr>
-  <tr>
-    <td valign="top">An open-source, native, clip-launching <strong>DAW written in Rust</strong>, comparable in workflow to Ableton Live. Its engine, interface, instruments, effects and plug-in hosting are <strong>the whole studio side of YOBUKO</strong>.<br><br><a href="https://github.com/suhina-daw/suhina-daw"><strong>github.com/suhina-daw/suhina-daw</strong></a></td>
-    <td valign="top">By <strong>chrisle and contributors</strong>: a full DJ library app: track analysis, decks, a real <strong>Rekordbox USB exporter</strong> for Pioneer CDJ/XDJ players and PRO DJ LINK. <strong>YOBUKO's DJ mode is rbxport itself</strong>, shipped inside YOBUKO.<br><br><a href="https://github.com/chrisle/rbxport"><strong>github.com/chrisle/rbxport</strong></a></td>
+    <td width="50%" valign="top">
+      <p align="center"><a href="https://github.com/suhina-daw/suhina-daw"><img src="assets/brand/suhina-icon.png" alt="Suhina logo" width="84"></a></p>
+      <h3 align="center"><a href="https://github.com/suhina-daw/suhina-daw">Suhina</a></h3>
+      <p align="center">An open-source, native, clip-launching <strong>music studio written in Rust</strong>, in the spirit of Ableton Live. Its engine, interface, instruments, effects and plug-in hosting are <strong>the whole Studio side of YOBUKO</strong>.</p>
+      <p align="center"><a href="https://github.com/suhina-daw/suhina-daw"><code>github.com/suhina-daw/suhina-daw</code></a></p>
+    </td>
+    <td width="50%" valign="top">
+      <p align="center"><a href="https://github.com/chrisle/rbxport"><img src="assets/readme/rbxport-icon.png" alt="rbxport logo" width="84"></a></p>
+      <h3 align="center"><a href="https://github.com/chrisle/rbxport">rbxport</a></h3>
+      <p align="center">By <strong>chrisle and contributors</strong>: a fast DJ library app with track analysis, cue points and a real <strong>Rekordbox USB exporter</strong> for Pioneer CDJ/XDJ players. <strong>YOBUKO's DJ mode is rbxport itself</strong>, shipped inside YOBUKO.</p>
+      <p align="center"><a href="https://github.com/chrisle/rbxport"><code>github.com/chrisle/rbxport</code></a></p>
+    </td>
   </tr>
 </table>
 
-<p align="center"><sub>Their authors keep their copyright and credits. YOBUKO is an independent fork, not endorsed by either project. Details: <a href="#standing-on-the-work-of-others">Standing on the work of others</a>.</sub></p>
+<sub>Their authors keep their copyright and credits. YOBUKO is an independent fork, not endorsed by either project. More in <a href="#-credits-and-licence">Credits and licence</a>.</sub>
 
----
+<br>
 
-<p align="center">
-  <img src="assets/fork/banner.svg" alt="YOBUKO Multiplayer + DJ — Create together. Prepare the set. Take it live." width="100%">
-</p>
-
-<p align="center">
-  <a href="https://github.com/Nozomagarion/YOBUKO"><img src="https://img.shields.io/badge/status-experimental%20prototype-ffb18d" alt="Experimental prototype"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--or--later-63e5c1" alt="GPL 3.0 or later"></a>
-  <a href="https://github.com/Nozomagarion/YOBUKO/actions/workflows/multiplayer-ci.yml"><img src="https://github.com/Nozomagarion/YOBUKO/actions/workflows/multiplayer-ci.yml/badge.svg?branch=feature%2Fonline" alt="Fork validation"></a>
-</p>
-
-<h1 align="center">YOBUKO 呼子</h1>
-<p align="center"><strong>Make music with your friends, even when you're not in the same room.</strong></p>
-<p align="center"><em>You send out a sound, another musician answers.</em></p>
-
-<p align="center"><a href="#download">Download</a> · <a href="#why-yobuko">Why YOBUKO</a> · <a href="#what-you-can-try">Try the prototype</a> · <a href="#progress-you-can-audit">Progress</a> · <a href="#standing-on-the-work-of-others">Credits</a></p>
-
-## What YOBUKO is
+## 🎶 What YOBUKO is
 
 **YOBUKO is about making music with your friends, even when you're not in the same room.**
-One of you starts a session and reads out a short code on Discord; the others type it, and you
-are all in the same project, from the next street or from the other side of the country. Each
-person plays and hears it on their own computer, every change lands for everyone, and when the
-track is ready you can prepare it for a DJ set in the same app.
 
-**One place to make music together, prepare a set and perform it.** That is the ambition of
-YOBUKO, an independent fork. It combines Suhina's native music production foundation with a custom
-collaboration layer and DJ preparation using selected rbxport code.
+One of you starts a session and reads out a short code. The others type it, and you are all in the same project, whether you live on the next street or on the other side of the country. Each person plays and listens on their own computer, and every change lands for everyone.
 
-The destination is a complete production-to-live workflow. The current build is an experimental
-prototype: up to eight people join one session **over the Internet with a single short code**,
-the DJ workspace provides a local audio catalog, analysis, two A/B decks and **export to a
-Rekordbox USB stick**, and three buttons at the top right switch between **Multiplayer**,
-**Studio** and **DJ**. Direct shared-tab recording, editing third-party plug-in knobs together and
-automatic tempo sync are future work.
+When the track is ready, switch to **DJ** mode to prepare it for your set and put it on a USB stick for the club's players. **Make it together, prepare the set, play it live: one app.**
 
-## Download
+<br>
 
-Get the latest version from the **[Releases page](https://github.com/Nozomagarion/YOBUKO/releases)**:
+## 🤝 Multiplayer
 
-| System | File | Install |
-|---|---|---|
-| 🍎 macOS 11+ (Apple Silicon and Intel) | `YOBUKO-Mac.dmg` | Open it and drag **YOBUKO** into **Applications**. First launch: right-click › **Open** › **Open**. |
-| 🪟 Windows 10 / 11 | `YOBUKO-Windows-Setup.exe` | Run it. If SmartScreen warns: **More info** › **Run anyway**. |
-| 🐧 Linux (most distributions) | `YOBUKO-…-x86_64.AppImage` | Make it executable, then double-click it. |
-| 🐧 Debian, Ubuntu, Mint… | `yobuko_…_amd64.deb` | Install it; YOBUKO appears in the menu. |
+<p align="center"><img src="assets/readme/multi.webp" alt="Multiplayer in three steps: create a session, share the code, jam together" width="100%"></p>
 
-Everyone in a session needs the same version. The apps are not signed by Apple or Microsoft yet,
-hence the first-launch warnings. First session: [multiplayer guide](GUIDE_MULTIPLAYER.md).
+- **No account, no server of ours.** Computers connect directly over the Internet, with public relays as a fallback.
+- **Up to 8 people** in one session, with one short code.
+- **Link playback** starts and stops everyone together.
+- Shared notes, clips, tracks, mixer, built-in effects and plug-in settings. Audio can be shared too.
+- Voice chat? Keep using the app you already love (Discord, etc.).
 
-## Why YOBUKO
+First time? Follow the **[multiplayer guide](GUIDE_MULTIPLAYER.md)**.
 
-**YOBUKO (呼子)** is the app's name. In Japanese folklore, **Yamabiko (山彦)** is the yōkai of
-the echo, a mountain spirit that answers whoever calls into the valley; in several regions it
-was also called *yobuko*, "the calling child". That is the metaphor for the multiplayer side
-of this project: **one musician sends out an idea, another one answers it**, wherever they are. The variant name
-was chosen because a music app called "Yamabiko" already exists on the App Store.
+<br>
 
-YOBUKO is built on [Suhina](https://github.com/suhina-daw/suhina-daw) and keeps its credits;
-internal machine names (`suhina-*` crates and binaries) are unchanged for now so upstream
-Suhina updates keep merging cleanly.
+## 🎛️ Studio
 
-## The workflow we are building
+<p align="center"><img src="assets/readme/studio.webp" alt="YOBUKO Studio, arrangement view" width="100%"></p>
 
-| Create | Prepare | Perform |
-|---|---|---|
-| Produce with Suhina's engine, instruments and clip workflow. | Switch to DJ mode: rbxport opens, and a rendered project lands in its collection. | Build toward set preparation and live performance in the same app. |
-| Collaborate on a common project while listening independently. | Keep the connection between your production and its rendered audio. | Keep everyone on the same tested combined version. |
-| **Today:** restricted LAN MIDI notes, arrangement clips and mixer controls. | **Today:** native catalog, import, analysis and render bridge. | **Today:** two independent A/B decks, levels, crossfader and Rekordbox USB export (not yet tried on a real CDJ). |
+<p align="center"><img src="assets/readme/session.webp" alt="YOBUKO Studio, session view with the meadow theme" width="100%"></p>
 
-The 29 October Suhina update integrates merged main 7753ffa3: 56 further commits covering
-task-based settings, automation display fixes, style caching and shared DSP blocks. Old studio projects remain readable; new saves use native v4. LAN uses
-protocol 13, portable format 3 and matching compiled Suhina identities. The shared device
-subset stays FM Synth/Utility. [Compatibility](docs/spec/lan-upstream-20261028.md).
+The full Suhina studio: session and arrangement views, MIDI and audio tracks, instruments, effects, CLAP / VST3 / VST2 plug-ins and themes.
 
-## What you can try
+<br>
 
-- **Studio / Multiplayer / DJ** entry points in the native app.
-- **Create LAN session / Join LAN session:** separate single-use invitations connect one host and up to three guests.
-  Share the current project (up to 64 tracks, FM Synth/Utility parameters only) or use the
-  generated starter. Clips arrive in the verified initial copy; single-note add/update/delete, track names, volume
-  and pan are live shared edits. The **MIDI notes** editor rejects stale drafts before indices shift. Play, stop and listening position stay local to each computer.
-- **Launcher (protocol 13):** organize scenes and slots together, copy arrangement clips into empty
-  compatible slots with independent contents, move/swap slots, and launch privately on each computer.
-  Scene structural changes invalidate hidden selections; stale drafts require explicit refresh.
-- **Devices:** add/remove top-level FM Synth and Utility without loading presets or replacing an
-  existing instrument; chain edits discard old device selections. Edit parameters using generated SDK controls. Draft values
-  are submitted explicitly, validated by the host and rejected after a newer revision until refreshed.
-- **New invitation:** invite another guest while existing connections stay, up to three guests;
-  rotating replaces the previous outstanding invitation. Guests: N / 3 shows occupancy. Renew admission without replacing the hosted
-  music/player. Rejoining downloads the current verified copy into a new tab; the previous local
-  copy and solo edits are retained, without merging. No automatic resume or Internet routing.
-- **DJ library:** import audio, keep a persistent local catalog, analyse tempo/key and render a
-  Studio project into the library. Create/rename local playlists, add/remove tracks, change their
-  order and recover the sets after restarting. Audio/source files stay in place; deletion is
-  confirmed. Revision checks refuse stale writes, and **Refresh DJ library** reloads another
-  instance’s changes. Legacy format 1/2/3 catalogs are backed up before their first format 4 write.
-- **Prepare:** audition a track from a chosen position through the existing preview/headphone output;
-  add, rename, move and delete named cue points. Cues belong to the track across its playlists
-  and survive restart. Prepare also loads a stereo waveform with cue markers and positions;
-  click or drag to choose the next start without playing. Reload waveform retries a changed
-  or missing file. Stop and leaving DJ cancel pending playback.
-- **Beat grid:** edit a constant 20–400 BPM grid with a first-beat anchor and four beats per bar.
-  Preview drafts before saving; revision checks protect stale edits and deletion is confirmed.
-  Manual BPM stays separate from analysis and survives reimport. A/B performance decks now play original-speed tracks with pause/seek and a crossfader;
-  deck headphone cues require a separate output pair. Sync, variable tempo and hardware export remain pending.
-- **Settings → Agents and updates → GitHub updates…:** inspect the three GitHub source identities and check
-  availability of a combined app update. An official standalone binary cannot overwrite the fork.
+## 💿 DJ
 
-**Online by code:** the host creates a session over the Internet and
-reads out one short code such as `7-piano-tigre-lune`; up to seven friends type the same code
-and join, with no account and no server of ours (peer to peer through iroh, with public relays
-as a fallback). Links that drop come back by themselves, **Link playback** starts and stops
-everyone together, and projects keep their built-in effects and CLAP/VST3/VST2 plug-in settings
-(each computer runs its own plug-ins). [Online sessions](docs/spec/online-sessions.md) ·
-[Plug-ins](docs/spec/shared-plugins.md)
+<p align="center"><img src="assets/readme/dj.webp" alt="DJ mode: the rbxport app with a waveform, cue points and a playlist" width="100%"></p>
 
-The network exchange is tested with real loopback connections and desktop project
-instances. **A session between two homes has not yet been verified.** Loaded project audio is shared with **Share project + audio** as verified portable
-float32 WAV copies (4096 sounds, 2 GiB each, 16 GiB total, kept in a 20 GiB sound cache). Original encodings/tags are not
-archived. Either participant can publish a finished loaded take from another local Studio tab into an existing shared audio track using **Publish take**, without reconnecting. The whole sound is inserted unwarped; source trims/effects are not baked in. Guest uploads are pulled and verified by the host before publication. Recording directly into the shared tab remains unsupported. MIDI notes and arrangement clips can be edited while connected. **Clips** supports create,
-move, trim, duplicate, enable and delete with revision checks and stack-only placement.
-**Tracks** lets either participant add an audio track or a MIDI track with default FM Synth while connected. All participants need the same build (protocol 18).
-[LAN contract and limits](docs/spec/lan-starter-session.md) · [Validation steps](docs/multiplayer-fork.md#try-the-desktop-prototype)
+- Click the mode pill at the top right and pick **DJ**: the real **rbxport** opens.
+- **Send this project to rbxport** puts your finished track straight into your DJ collection.
+- Analyse tempo and key, set cue points, build playlists and **export to a Rekordbox USB stick** for CDJ / XDJ players.
 
-## Progress you can audit
+<br>
 
-<p align="center"><img src="assets/fork/progress.svg" alt="Project milestones" width="100%"></p>
+## ⬇️ Download
+
+Grab the latest version from the **[Releases page](https://github.com/Nozomagarion/YOBUKO/releases)**.
+
+| | System | File | How to install |
+|:-:|---|---|---|
+| 🍎 | macOS 11+ (Apple Silicon and Intel) | `YOBUKO-Mac.dmg` | Open it and drag **YOBUKO** into **Applications**. First launch: right-click › **Open** › **Open**. |
+| 🪟 | Windows 10 / 11 | `YOBUKO-Windows-Setup.exe` | Run it. If SmartScreen warns you: **More info** › **Run anyway**. |
+| 🐧 | Linux (most distributions) | `YOBUKO-…-x86_64.AppImage` | Make it executable, then double-click it. |
+| 🐧 | Debian, Ubuntu, Mint… | `yobuko_…_amd64.deb` | Install it, and YOBUKO appears in your menu. |
+
+> [!NOTE]
+> Everyone in a session needs **the same version**. The apps are not signed by Apple or Microsoft yet, which is why you see a warning the first time you open them.
+
+<br>
+
+## 🏔️ Why "YOBUKO"?
+
+In Japanese folklore, **Yamabiko (山彦)** is the spirit of the echo: a little mountain yōkai that answers whoever calls into the valley. In some regions it was also called **yobuko (呼子)**, *"the calling child"*.
+
+That is exactly the idea here: **one musician sends out a sound, another one answers**, wherever they are. That little echo spirit with headphones is our mascot.
+
+<br>
+
+## 🧪 Where the project stands
+
+YOBUKO is an **experimental prototype**, built one tested step at a time.
 
 <!-- fork-progress:begin -->
 | Area | Steps done | Next goal |
@@ -154,54 +115,42 @@ move, trim, duplicate, enable and delete with revision checks and stack-only pla
 | Evolve together | 4 / 7 | Common version validated on every platform |
 <!-- fork-progress:end -->
 
-These bars count the explicitly listed criteria in [fork-progress.json](fork-progress.json).
-They are **not percentages of engineering effort, stability or completion of the ultimate app**.
-Implemented items link to code or validation evidence; pending items stay pending until their
-acceptance gate is met. Rebuild the graphic with `python3 scripts/fork_readme.py`.
+These numbers count the steps listed in [fork-progress.json](fork-progress.json). They are not a percentage of the work left. Day-to-day progress lives in [PROGRESS.md](PROGRESS.md).
 
-Portable media, shared notes/clips/tracks and verified take publication are covered by local
-TLS, desktop and audio tests; Internet sessions with one code were also run between GitHub
-machines on Linux, macOS and Windows. A session between two real homes is the next acceptance
-step. Day-to-day progress is in [PROGRESS.md](PROGRESS.md).
+<details>
+<summary><strong>What has been tested, and what has not yet</strong></summary>
+<br>
 
-## One app, one update path
+- ✅ Online sessions with one short code were run between GitHub machines on **Linux, macOS and Windows**.
+- ✅ Shared notes, clips, tracks and audio are covered by local network, desktop and audio tests.
+- ⏳ **A session between two real homes** is the next acceptance step.
+- ⏳ USB export has not been tried on a real CDJ yet.
+- 🚧 Recording directly into a shared track, editing third-party plug-in knobs together and automatic tempo sync are future work.
+
+Technical details: [online sessions](docs/spec/online-sessions.md) · [shared plug-ins](docs/spec/shared-plugins.md) · [network contract and limits](docs/spec/lan-starter-session.md) · [validation steps](docs/multiplayer-fork.md#try-the-desktop-prototype).
+
+</details>
+
+<details>
+<summary><strong>How updates work</strong></summary>
+<br>
 
 ```text
-Suhina upstream ─┐
-                ├─ isolated source integration ─ checks ─ combined build ─ in-app update
-rbxport upstream┘               ↑
-                      custom multiplayer + DJ modules
+Suhina upstream ──┐
+                  ├─ isolated integration ─ checks ─ combined build ─ in-app update
+rbxport upstream ─┘            ↑
+                    YOBUKO multiplayer + DJ modules
 ```
 
-Friends should install the same combined distribution. Source updates are integrated and tested
-with the custom modules before publication. Installed apps download that tested package; they
-do not compile random upstream changes or replace themselves with an official standalone app.
+Updates from Suhina and rbxport are merged into YOBUKO and tested together before a release. Installed apps only download that tested combined package; they never replace themselves with an official standalone app. Internal names (`suhina-*` crates and binaries) are kept so upstream updates keep merging cleanly. [Distribution design](docs/fork-distribution.md)
 
-Already implemented: source pins, an isolated integration candidate tool, component checks in
-Settings, package source identity and a guard before replacement. Still pending: publishing and
-validating the common update channel, and activating scheduled integration. A GitHub source
-change is information; it does not mean a compatible combined update has been released.
-[Distribution and maintenance design](docs/fork-distribution.md)
+</details>
 
-## Standing on the work of others
+<details>
+<summary><strong>Build it yourself</strong></summary>
+<br>
 
-This project exists because of substantial work by other open-source authors.
-
-| Project | What comes from it | What this fork adds |
-|---|---|---|
-| **[Suhina](https://github.com/suhina-daw/suhina-daw)** | The DAW foundation: native interface, audio engine, project model, session commands, instruments, effects, plugin hosting, CLI and automation. | Restricted collaboration, the DJ workspace/bridge and combined distribution controls. |
-| **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The whole rbxport desktop app (library, analysis, decks, USB export, PRO DJ LINK), plus the pinned `rbl-analysis` sources (offline tempo/key analysis) and its USB exporter (`rbl-export`, `rbl-pdb`, `rbl-anlz`, `rbl-onelibrary`, `rbl-audio`, `rbl-core`), which write the DJ library to a Rekordbox stick for CDJ/XDJ players. Each vendored subset is recorded with its license and provenance. | The whole rbxport app (`third_party/rbxport-app`) is YOBUKO's DJ mode and ships in its installers; "Send this project to rbxport" adds a render to its collection. |
-
-Read [Suhina's original README](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md),
-[NOTICE](NOTICE), [rbxport provenance](third_party/rbxport-analysis/VENDORED.md) ([exporter](third_party/rbxport-export/VENDORED.md), [app](third_party/rbxport-app/VENDORED.md)) and the exact
-[source pins](fork-sources.json). Original authors retain their copyright. This is an independent
-experimental fork, not an official release or endorsement from either upstream project.
-It contains no proprietary music-software code or content.
-
-## Build and inspect
-
-The default branch holds the combined app. `main` deliberately stays an exact upstream
-mirror, so the custom modules and this presentation live on the feature branch.
+The default branch holds the combined app. `main` stays an exact mirror of upstream Suhina.
 
 ```sh
 git clone https://github.com/Nozomagarion/YOBUKO.git
@@ -210,22 +159,31 @@ cargo test --locked -p suhina-collaboration -p suhina-multiplayer -p suhina-dj -
 cargo build --locked -p suhina -p suhina-cli -p suhina-plugin-host
 ```
 
-Follow [build instructions](UPSTREAM_README.md#building) for platform prerequisites. Development artifacts are available
-from successful [fork workflow runs](https://github.com/Nozomagarion/YOBUKO/actions/workflows/multiplayer-ci.yml).
-Check the run's commit and platform results; a compiled app alone does not establish that every
-validation passed. A stable installer, production support and signed/notarized distribution are
-not yet offered by this fork.
+Platform prerequisites are in [Suhina's build instructions](UPSTREAM_README.md#building). Development builds are available from the [fork workflow runs](https://github.com/Nozomagarion/YOBUKO/actions/workflows/multiplayer-ci.yml).
 
-## Help shape it
+</details>
 
-Useful next contributions are reproducible two-computer results, portable project/media design,
-shared note/clip editing and DJ preparation workflows. Include OS, build commit, precise steps
-and expected/observed behavior in reports. Keep invitations private; they grant access to the
-session for their short lifetime.
+<br>
 
-Follow [CONTRIBUTING.md](CONTRIBUTING.md), the [fork guide](docs/multiplayer-fork.md) and
-[security boundary](docs/security/session-sharing.md). Discuss fork work on this fork; the
-upstream projects have their own direction and contribution rules.
+## 🙌 Help shape it
 
-**GPL-3.0-or-later.** Packages must include required notices and corresponding source. See
-[LICENSE](LICENSE) and the [distribution contract](docs/fork-distribution.md).
+The most useful help right now: **real sessions between two homes**, DJ preparation feedback and clear bug reports (your OS, the version, the exact steps, what you expected and what happened).
+
+Please follow [CONTRIBUTING.md](CONTRIBUTING.md) and the [security notes](docs/security/session-sharing.md), and keep session codes private. Discuss YOBUKO here, on this fork: Suhina and rbxport have their own direction and rules.
+
+<br>
+
+## 📜 Credits and licence
+
+| Project | What comes from it | What YOBUKO adds |
+|---|---|---|
+| **[Suhina](https://github.com/suhina-daw/suhina-daw)** | The music studio: native interface, audio engine, project model, instruments, effects, plug-in hosting, CLI and automation. | Online multiplayer, the DJ bridge and the combined distribution. |
+| **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The whole rbxport desktop app (library, analysis, decks, USB export, PRO DJ LINK) and its analysis and Rekordbox USB export libraries. | rbxport ships inside YOBUKO as its DJ mode; "Send this project to rbxport" adds a render to its collection. |
+
+Read [Suhina's original README](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md), [NOTICE](NOTICE), the rbxport provenance files ([analysis](third_party/rbxport-analysis/VENDORED.md), [exporter](third_party/rbxport-export/VENDORED.md), [app](third_party/rbxport-app/VENDORED.md)) and the exact [source pins](fork-sources.json). Original authors keep their copyright. This is an independent experimental fork, not an official release or endorsement from either project, and it contains no proprietary music-software code or content.
+
+**GPL-3.0-or-later.** Packages include the required notices and source. See [LICENSE](LICENSE) and the [distribution contract](docs/fork-distribution.md).
+
+<br>
+
+<p align="center"><sub>The DJ screenshot shows rbxport's built-in demo library. The Studio screenshots show Suhina's themes.</sub></p>
