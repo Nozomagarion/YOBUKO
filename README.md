@@ -99,7 +99,11 @@ Grab the latest version from the **[Releases page](https://github.com/Nozomagari
 
 In Japanese folklore, **Yamabiko (山彦)** is the spirit of the echo: a little mountain yōkai that answers whoever calls into the valley. In some regions it was also called **yobuko (呼子)**, *"the calling child"*.
 
-That is exactly the idea here: **one musician sends out a sound, another one answers**, wherever they are. That little echo spirit with headphones is our mascot.
+That is exactly the idea here: **one musician sends out a sound, another one answers**, wherever they are.
+
+<p align="center"><img src="assets/readme/piou-group.webp" alt="The YOBUKO mascots: three little round birds with blue, green and pink headphones" width="420"></p>
+
+Our mascots are three little birds who call and answer each other across the mountains. Their headphones match the three modes: 💙 Studio, 💚 Multiplayer and 🩷 DJ.
 
 <br>
 
