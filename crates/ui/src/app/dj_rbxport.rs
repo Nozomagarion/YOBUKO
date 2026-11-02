@@ -62,9 +62,25 @@ pub(crate) fn find() -> Option<PathBuf> {
     shipped.or_else(|| candidates(home().as_deref(), &|name| std::env::var(name).ok()).into_iter().find(|p| p.exists()))
 }
 
+/// Whether `app` is the copy shipped inside this YOBUKO.
+fn is_bundled(app: &Path) -> bool {
+    std::env::current_exe().is_ok_and(|exe| bundled(&exe) == app)
+}
+
 /// Starts rbxport, detached; YOBUKO keeps running. Started again, it is only brought forward.
 pub(crate) fn launch(app: &Path) -> std::io::Result<()> {
     let mut command = if cfg!(target_os = "macos") {
+        // The copy inside YOBUKO.app arrives quarantined from the disk image. The person already
+        // allowed YOBUKO itself, so its helper is cleared too, or macOS would refuse to open it
+        // ("rbxport is damaged" / "cannot be opened"). Nothing to clear is fine.
+        if is_bundled(app) {
+            let _ = std::process::Command::new("xattr")
+                .args(["-dr", "com.apple.quarantine"])
+                .arg(app)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
         let mut c = std::process::Command::new("open");
         c.arg(app);
         c
