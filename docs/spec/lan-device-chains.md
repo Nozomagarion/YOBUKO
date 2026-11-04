@@ -74,13 +74,6 @@ devices, hidden pages and empty chains while retaining source tabs. GPU captures
 Reordering, nested groups, other devices, plugins, presets, device enable/disable and shared
 history remain separate work. Physical two-computer acceptance is deferred by the owner.
 
-## Sources
-
-- [Native device handlers](../../crates/session/src/devices.rs), placement and removal semantics.
-- [LAN contract](lan-starter-session.md), admission and operation ordering.
-- [Device parameter contract](lan-device-parameters.md), SDK drafts and guarded scalar edits.
-
-
 ## Compatibility amendment: Suhina update of 28 October
 
 [Protocol 13](lan-upstream-20261028.md) supersedes earlier version pins in this contract: native
@@ -95,3 +88,9 @@ implicitly permitted in shared tabs. All participants need the updated combined 
 [Protocol 17](shared-plugins.md) lets shared chains hold any device, plug-ins included, and lets
 `device.setSharedParam` set any built-in device's parameters. Adding still covers FM Synth and
 Utility only, and FM Synth is refused next to anything that might be an instrument.
+
+## Sources
+
+- [Native device handlers](../../crates/session/src/devices.rs), placement and removal semantics.
+- [LAN contract](lan-starter-session.md), admission and operation ordering.
+- [Device parameter contract](lan-device-parameters.md), SDK drafts and guarded scalar edits.

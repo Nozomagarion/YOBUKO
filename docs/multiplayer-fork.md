@@ -103,7 +103,7 @@ still to perform. No personal project or audio file is needed.
 
 1. Open Suhina. Click **Multiplayer** at the top, beside **Studio** and **DJ**; it is also in
    **View → Multiplayer LAN**. You should see **Create session** and **Join session**.
-2. On the host, select **On this local network**. **Host address** should contain its private local IPv4 address followed by `:0`.
+2. On the host, select **On this local network**. **Host address** should contain its private local IPv4 address followed by port zero, which picks any free port.
    Click **Create session**. A new **LAN starter session** tab opens, preserving other tabs.
    Four generated MIDI tracks appear; **Copy invitation code** becomes available. `127.0.0.1:0` is
    useful only for two app instances on the same computer, not for a second computer.

@@ -86,6 +86,7 @@ pub(crate) struct Chain {
     /// whether a new chain holds the same devices as an old one.
     ids: Vec<String>,
     sample_slices: Vec<Option<std::sync::Arc<[f64]>>>,
+    sample_edits: Vec<Option<std::sync::Arc<suhina_device_api::sample_edits::SampleEdits>>>,
     /// Every parameter's value from the project (its default when the project has none), per
     /// device.
     params: Vec<Vec<f64>>,
@@ -163,7 +164,7 @@ pub(crate) struct Chain {
     /// The scale last sent to the devices ([`Chain::set_scale`]); `None` before the first.
     scale: Option<Option<MusicalScale>>,
     /// When its first slot is the channel's clip host, the ARA plug-in its clips play through
-    /// (ADR 0028 › Amendment: the ARA plug-in belongs to the clip, #990): what scales the host's
+    /// (ADR 0033 › 2, #990): what scales the host's
     /// output frame by frame and the other clips' sound, added after it.
     pub(crate) ara: Option<AraHost>,
 }
@@ -226,6 +227,11 @@ pub(crate) fn device_identity(id: &str, stored: &suhina_model::Device, audio: &c
 }
 
 impl Chain {
+    /// The first device in the chain that has live values for its panel, with its position.
+    pub(crate) fn readouts(&self, visit: &mut dyn FnMut(u64, [f32; suhina_device_api::MAX_READOUTS])) {
+        crate::group::visit_readouts(&self.slots, &self.positions, crate::meters::READOUT_PATH, visit);
+    }
+
     pub(crate) fn sample_positions(&self) -> Option<(usize, [Option<f32>; 32])> {
         self.slots.iter().zip(&self.positions).find_map(|(slot, &position)| match slot {
             Slot::Device(device) => {
@@ -396,6 +402,7 @@ impl Chain {
                 device.load_shared_sample(source.sample_rate, source.channels, source.clone());
             }
             device.load_sample_slices(stored.sample_slices().map(std::sync::Arc::from));
+            device.load_sample_edits(crate::assets::sample_edits(stored));
             if device.prepare(f64::from(sample_rate)).is_err() {
                 continue;
             }
@@ -442,6 +449,10 @@ impl Chain {
             track,
             column,
             slots,
+            sample_edits: positions
+                .iter()
+                .map(|&i| channel.devices.get(i).and_then(crate::assets::sample_edits))
+                .collect(),
             sample_slices: positions
                 .iter()
                 .map(|&i| {
@@ -499,6 +510,7 @@ impl Chain {
             positions: Vec::new(),
             ids: Vec::new(),
             sample_slices: Vec::new(),
+            sample_edits: Vec::new(),
             params: Vec::new(),
             instrument: false,
             latency: 0,
@@ -745,7 +757,7 @@ impl Chain {
                 Slot::Plugin(plugin) => {
                     // A plug-in still at a block it was late with is waited for like an answer,
                     // until this block's deadline, while the other chains go on (#506).
-                    if deadline.is_some() && *caught_up != Some(*stage) && !plugin.ready(Instant::now()) {
+                    if deadline.is_some() && *caught_up != Some(*stage) && !plugin.ready(crate::clock::now()) {
                         *behind = Some(*stage);
                         *waiting = Some(*stage);
                         return true;
@@ -763,7 +775,7 @@ impl Chain {
                     match sent {
                         Sent::Out => {
                             *waiting = Some(*stage);
-                            *sent_at = Some(Instant::now());
+                            *sent_at = Some(crate::clock::now());
                             return true;
                         }
                         // A miss already counted: running it again would count it twice.
@@ -800,13 +812,13 @@ impl Chain {
     pub(crate) fn answered(&mut self, until: Instant) -> bool {
         let Some(index) = self.waiting else { return true };
         let Some(limit) = self.limit() else { return true };
-        if Instant::now() >= limit {
+        if crate::clock::now() >= limit {
             return true;
         }
         let behind = self.behind == Some(index);
         match self.slots.get_mut(index) {
-            Some(Slot::Plugin(plugin)) if behind => plugin.ready(until.min(limit)) || Instant::now() >= limit,
-            Some(Slot::Plugin(plugin)) => plugin.poll(until.min(limit)) || Instant::now() >= limit,
+            Some(Slot::Plugin(plugin)) if behind => plugin.ready(until.min(limit)) || crate::clock::now() >= limit,
+            Some(Slot::Plugin(plugin)) => plugin.poll(until.min(limit)) || crate::clock::now() >= limit,
             _ => true,
         }
     }
@@ -1259,6 +1271,9 @@ impl Chain {
                     if let Some(points) = self.sample_slices.get_mut(position) {
                         device.swap_sample_slices(points);
                     }
+                    if let Some(edits) = self.sample_edits.get_mut(position) {
+                        device.swap_sample_edits(edits);
+                    }
                     // A parameter that follows a lane keeps its running value until the lane
                     // sets it in the next block.
                     for (index, &value) in
@@ -1328,7 +1343,7 @@ pub(crate) const ANSWER_SLICE: Duration = Duration::from_micros(50);
 /// [`OFFLINE_TIMEOUT`].
 pub(crate) fn run_as_answered(chains: &mut [Chain], frames: usize, context: &ProcessContext) {
     loop {
-        let now = Instant::now();
+        let now = crate::clock::now();
         let mut out = false;
         let mut moved = false;
         for chain in chains.iter_mut().filter(|chain| chain.is_waiting()) {

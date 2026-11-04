@@ -17,7 +17,7 @@ can exchange permitted edits through a host. The separate [LAN starter adapter](
 now reuses its allowed edits behind authenticated TLS. Initial music uses the separate bounded
 [MIDI-copy decoder](lan-midi-copy.md); trusted Project snapshots are never deserialized as wire
 acknowledgements or arbitrary native projects.
-The original core experiment is specified by [ADR 0030](../decisions/0030-multiplayer-local-spike.md).
+The original core experiment is specified by [ADR 9030](../decisions/9030-multiplayer-local-spike.md).
 
 ## Project and peers
 

@@ -38,6 +38,12 @@ jobs:
           persist-credentials: false
       - run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      # The Rekordbox USB export (rbxport's exportLibrary.db) builds SQLCipher with a vendored
+      # OpenSSL, whose Configure needs a full Perl; Git Bash's own perl lacks modules it uses.
+      - name: Windows Perl for the vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
       - name: Build the probe
         run: cargo build --locked --release -p suhina-multiplayer --example internet_session
       - name: Wait until every guest has built its probe
@@ -102,6 +108,12 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         if: matrix.index <= fromJSON(inputs.guests || '3')
+      # The Rekordbox USB export (rbxport's exportLibrary.db) builds SQLCipher with a vendored
+      # OpenSSL, whose Configure needs a full Perl; Git Bash's own perl lacks modules it uses.
+      - name: Windows Perl for the vendored OpenSSL
+        if: runner.os == 'Windows'
+        shell: bash
+        run: echo 'OPENSSL_SRC_PERL=C:\Strawberry\perl\bin\perl.exe' >> "$GITHUB_ENV"
       - name: Build the probe
         if: matrix.index <= fromJSON(inputs.guests || '3')
         run: cargo build --locked --release -p suhina-multiplayer --example internet_session

@@ -74,14 +74,6 @@ presets, automation editing, continuous shared gestures and simultaneous multi-p
 remain separate work. Physical two-computer acceptance is still deferred by the owner.
 
 
-## Sources
-
-- [Native device decision](../decisions/0004-built-in-devices.md), metadata and parameter-message semantics.
-- [SDK panel implementation](../../crates/device-sdk/src/builtin.rs), generated parameter controls.
-- [Native setter](../../crates/session/src/devices.rs), manual parameter and automation override behaviour.
-- [LAN session contract](lan-starter-session.md), authentication and revision ordering.
-
-
 ## Compatibility amendment: Suhina update of 28 October
 
 [Protocol 13](lan-upstream-20261028.md) supersedes earlier version pins in this contract: native
@@ -96,3 +88,10 @@ implicitly permitted in shared tabs. All participants need the updated combined 
 [Protocol 17](shared-plugins.md) lets shared chains hold any device, plug-ins included, and lets
 `device.setSharedParam` set any built-in device's parameters. Adding still covers FM Synth and
 Utility only, and FM Synth is refused next to anything that might be an instrument.
+
+## Sources
+
+- [Native device decision](../decisions/0004-built-in-devices.md), metadata and parameter-message semantics.
+- [SDK panel implementation](../../crates/device-sdk/src/builtin.rs), generated parameter controls.
+- [Native setter](../../crates/session/src/devices.rs), manual parameter and automation override behaviour.
+- [LAN session contract](lan-starter-session.md), authentication and revision ordering.
