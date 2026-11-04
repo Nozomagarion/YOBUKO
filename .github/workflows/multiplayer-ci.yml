@@ -193,7 +193,7 @@ jobs:
         if: always() && !cancelled()
         run: |
           if [ "$RUNNER_OS" = 'Linux' ]; then
-            xvfb-run -a cargo test --locked --workspace --no-fail-fast
+            xvfb-run -a -s "-screen 0 1280x1024x24 -noreset" cargo test --locked --workspace --no-fail-fast
           else
             cargo test --locked --workspace --no-fail-fast
           fi
