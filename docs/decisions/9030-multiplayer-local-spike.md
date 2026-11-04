@@ -9,7 +9,7 @@ covers:
   - crates/collaboration
 ---
 
-# 0030: An offline collaboration experiment in the multiplayer fork
+# 9030: An offline collaboration experiment in the multiplayer fork
 
 ## Context
 
