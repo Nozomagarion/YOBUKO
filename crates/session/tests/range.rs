@@ -9,25 +9,18 @@
 use serde_json::json;
 use suhina_model::*;
 use suhina_session::{Session, blank_project};
+use suhina_test_support::ProjectBuilder;
 
 use crate::support::run;
 
 /// The blank project with a 4-beat notes clip at beat 0 on tracks 1 and 2.
 fn project() -> Project {
-    let mut p = blank_project();
-    for id in [1, 2] {
-        p.contents.push(ClipContent {
-            id: ContentId(id),
-            name: format!("Riff {id}"),
-            length: 4.0,
-            lanes: vec![ContentLane { target: None, data: LaneData::Notes(vec![Note::new(0.0, 4.0, 60, 0.8)]) }],
-            extensions: Extensions::default(),
-            scale: None,
-        });
-        let lane = p.arrangement.lanes.iter_mut().find(|l| l.track == Some(TrackId(id))).unwrap();
-        lane.clips = vec![Clip::new(ContentId(id), 0.0, 4.0)];
-    }
-    p
+    ProjectBuilder::from(blank_project())
+        .notes(1, "Riff 1", 4.0, vec![Note::new(0.0, 4.0, 60, 0.8)])
+        .clip(1, Clip::new(ContentId(1), 0.0, 4.0))
+        .notes(2, "Riff 2", 4.0, vec![Note::new(0.0, 4.0, 60, 0.8)])
+        .clip(2, Clip::new(ContentId(2), 0.0, 4.0))
+        .build_without_ids()
 }
 
 /// Each clip of `track` as (start, length).
@@ -183,7 +176,7 @@ fn adding_a_section_inserts_empty_time_and_moves_everything_after_it() {
     let main = p.channels.iter().position(|c| c.role == ChannelRole::Master).unwrap();
     p.channels[main].automation.push(AutomationLane {
         param: "volume".into(),
-        points: vec![AutomationPoint::new(1.0, 1.0), AutomationPoint::new(8.0, 0.5)],
+        points: vec![AutomationPoint::new(1.0, 1.0), AutomationPoint::new(8.0, 0.5)].into(),
         enabled: true,
     });
     let mut session = Session::new(p);
@@ -218,7 +211,7 @@ fn adding_a_section_refuses_to_push_any_beat_past_the_end_of_the_song() {
         ("an automation point", |p, last, main| {
             p.channels[main].automation.push(AutomationLane {
                 param: "volume".into(),
-                points: vec![AutomationPoint::new(last - 1000.0, 0.5)],
+                points: vec![AutomationPoint::new(last - 1000.0, 0.5)].into(),
                 enabled: true,
             });
         }),
@@ -280,7 +273,7 @@ fn keeping_ara_edits_moves_plain_clips_as_ever() {
             .unwrap();
     assert_eq!(moved["edits_carried"], 0, "no plug-in edits these clips");
     assert!(spans(&session, 1).is_empty());
-    assert!(!session.carrying_ara_edits());
+    assert!(!session.rack().carrying());
     let back = json!([{ "track": 2, "index": 0 }]);
     assert!(
         run(&mut session, "clip.moveMany", json!({ "clips": back, "beats": 0.0, "toTrack": 1, "araEdits": "maybe" }))

@@ -38,6 +38,7 @@ fn audio_external_devices_opaque_state_and_excessive_sources_are_refused() {
         DeviceKind::Builtin("nam-amp-modeler".into()),
     ] {
         source.channels[0].devices = vec![Device {
+            id: Default::default(),
             name: "Device".into(),
             kind,
             enabled: false,
@@ -50,7 +51,7 @@ fn audio_external_devices_opaque_state_and_excessive_sources_are_refused() {
         assert!(encode(&source).is_err());
     }
     source.channels[0].devices[0].kind = DeviceKind::Builtin("fm-synth".into());
-    source.channels[0].devices[0].state = Some(vec![0; 4]);
+    source.channels[0].devices[0].state = Some(vec![0; 4].into());
     assert!(encode(&source).is_err());
     source.channels[0].devices.clear();
     let first = source.tracks[0].clone();
@@ -64,8 +65,8 @@ fn the_remote_document_requires_canonical_bytes_and_the_file_free_subset() {
     assert!(decode(&vec![b' '; MAX_DOCUMENT + 1]).is_err());
     for altered in [
         String::from_utf8(bytes.clone()).unwrap() + " ",
-        String::from_utf8(bytes.clone()).unwrap().replace("\"version\": 5", "\"version\": 5, \"version\": 5"),
-        String::from_utf8(bytes.clone()).unwrap().replace("\"version\": 5", "\"version\": 99"),
+        String::from_utf8(bytes.clone()).unwrap().replace("\"version\": 9", "\"version\": 9, \"version\": 9"),
+        String::from_utf8(bytes.clone()).unwrap().replace("\"version\": 9", "\"version\": 99"),
         String::from_utf8(bytes.clone()).unwrap().replacen(
             "\"project\": {",
             "\"project\": {\"file\":\"/private/audio.wav\",",
@@ -87,7 +88,7 @@ fn authored_v3_automation_migrates_to_the_current_version_before_canonical_shari
     p.channels[0].automation.push(AutomationLane {
         param: "volume".into(),
         enabled: true,
-        points: vec![AutomationPoint::new(0., 0.1), AutomationPoint::new(4., 0.8)],
+        points: vec![AutomationPoint::new(0., 0.1), AutomationPoint::new(4., 0.8)].into(),
     });
     let mut old: Value = serde_json::from_str(&suhina_project_file::to_json(&p)).unwrap();
     old["version"] = serde_json::json!(3);
@@ -100,11 +101,11 @@ fn authored_v3_automation_migrates_to_the_current_version_before_canonical_shari
     assert_eq!(input, before);
     assert_eq!(decode(&bytes).unwrap(), copy);
     assert!(decode(input.as_bytes()).is_err(), "portable copies require the current exact version");
-    assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap()["version"], 5);
+    assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap()["version"], 9);
     assert_eq!(migrated.channels[0].automation, copy.channels[0].automation);
     assert_eq!(
-        suhina_engine::render_offline(&migrated, 8000, 512).unwrap(),
-        suhina_engine::render_offline(&copy, 8000, 512).unwrap()
+        suhina_engine::render_offline(&migrated, 8000, 512, suhina_session::devices()).unwrap(),
+        suhina_engine::render_offline(&copy, 8000, 512, suhina_session::devices()).unwrap()
     );
 }
 
@@ -117,7 +118,7 @@ fn v4_bezier_controls_survive_sharing_and_invalid_or_noncanonical_controls_are_r
     p.channels[0].automation.push(AutomationLane {
         param: "volume".into(),
         enabled: true,
-        points: vec![point, AutomationPoint::new(4., 0.8)],
+        points: vec![point, AutomationPoint::new(4., 0.8)].into(),
     });
     let (copy, bytes) = encode(&p).unwrap();
     assert_eq!(copy.channels[0].automation, p.channels[0].automation);
@@ -139,13 +140,13 @@ fn portable_copies_carry_built_ins_plug_ins_and_groups_with_their_settings() {
     let mut source = crate::starter_project();
     let private = || Extension { format: "als".into(), key: "editor".into(), data: b"/private/host".to_vec() };
     let mut serum = Device::new("Serum", DeviceKind::Vst3 { id: "0123456789abcdef0123456789abcdef".into() });
-    serum.state = Some((0..300_000u32).map(|i| (i % 251) as u8).collect());
+    serum.state = Some((0..300_000u32).map(|i| (i % 251) as u8).collect::<Vec<u8>>().into());
     serum.params = vec![suhina_model::DeviceParam::new("12", 0.25)];
     serum.extensions.0.push(private());
     let mut reverb = Device::new("Reverb", DeviceKind::Builtin("reverb".into()));
-    reverb.state = Some(vec![7; 16]);
+    reverb.state = Some(vec![7; 16].into());
     let mut clap = Device::new("Comp", DeviceKind::Clap { id: "com.example.comp".into() });
-    clap.state = Some(vec![1, 2, 3]);
+    clap.state = Some(vec![1, 2, 3].into());
     let mut branch = Branch::new("Wet");
     branch.devices = vec![clap, Device::new("Old", DeviceKind::Vst2 { id: 1234 })];
     branch.extensions.0.push(private());
@@ -160,9 +161,9 @@ fn portable_copies_carry_built_ins_plug_ins_and_groups_with_their_settings() {
     let devices = &received.channels[0].devices;
     assert_eq!(devices[0].state, source.channels[0].devices[0].state, "plug-in settings arrive unchanged");
     assert_eq!(devices[0].params, source.channels[0].devices[0].params);
-    assert_eq!(devices[1].state, Some(vec![7; 16]));
+    assert_eq!(devices[1].state, Some(vec![7; 16].into()));
     let inner = &devices[2].as_group().unwrap().branches[0].devices;
-    assert_eq!(inner[0].state, Some(vec![1, 2, 3]));
+    assert_eq!(inner[0].state, Some(vec![1, 2, 3].into()));
     assert_eq!(inner[1].kind, DeviceKind::Vst2 { id: 1234 });
     // The MIDI-only copy keeps its narrow device subset.
     assert!(encode(&source).is_err());
@@ -179,11 +180,11 @@ fn portable_copies_refuse_host_files_and_oversized_settings() {
     let mut sampler = Device::new("Sampler", DeviceKind::Builtin("sampler".into()));
     sampler.set_sample_file("/Users/host/kick.wav");
     let mut amp = Device::new("Amp", DeviceKind::Builtin("nam-amp-modeler".into()));
-    amp.state = Some(b"/Users/host/amp.nam".to_vec());
+    amp.state = Some(b"/Users/host/amp.nam".to_vec().into());
     let mut graph = Device::new("Graph", DeviceKind::Sd);
     graph.set_sample_file("/Users/host/loop.wav");
     let mut big = Device::new("Big", DeviceKind::Clap { id: "com.example.big".into() });
-    big.state = Some(vec![0; MAX_STATE + 1]);
+    big.state = Some(vec![0; MAX_STATE + 1].into());
     for device in [sampler, amp, graph, big, Device::new("Unknown", DeviceKind::Builtin("not-a-device".into()))] {
         let name = device.name.clone();
         let error = encode_portable(&with(device)).unwrap_err();
@@ -196,12 +197,12 @@ fn portable_copies_refuse_host_files_and_oversized_settings() {
     // All settings together are bounded too.
     let mut project = base.clone();
     let mut heavy = Device::new("Heavy", DeviceKind::Clap { id: "com.example.heavy".into() });
-    heavy.state = Some(vec![0; MAX_STATE]);
+    heavy.state = Some(vec![0; MAX_STATE].into());
     project.channels[0].devices = vec![heavy; 9];
     assert!(encode_portable(&project).unwrap_err().contains("32 MiB"));
     // A received state larger than the bound is refused before the native reader runs.
     let mut small = Device::new("Small", DeviceKind::Clap { id: "com.example.small".into() });
-    small.state = Some(vec![0; 3]);
+    small.state = Some(vec![0; 3].into());
     let (_, bytes) = encode_portable(&with(small)).unwrap();
     let text = std::str::from_utf8(&bytes).unwrap();
     let forged = text.replace("\"AAAA\"", &format!("\"{}\"", "A".repeat(MAX_STATE.div_ceil(3) * 4 + 4)));

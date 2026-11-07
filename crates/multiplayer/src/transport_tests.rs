@@ -330,7 +330,7 @@ fn quota_preflight_refuses_copy_on_write_growth_before_the_host_or_sequence_chan
             id: ContentId(2000 + i as u32),
             name: "Empty".into(),
             length: 4.0,
-            lanes: vec![],
+            lanes: vec![].into(),
             extensions: Default::default(),
             scale: None,
         });
@@ -464,7 +464,7 @@ fn creating_a_clip_cannot_overrun_the_content_quota_or_consume_an_operation_numb
             id: ContentId(2000 + i as u32),
             name: "Empty".into(),
             length: 4.0,
-            lanes: vec![],
+            lanes: vec![].into(),
             extensions: Default::default(),
             scale: None,
         });

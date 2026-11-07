@@ -107,20 +107,91 @@ fn sheet_menu_and_toolbar_paint_their_scoped_backgrounds_without_editing_the_pro
             _ => None,
         }
     }
-    for (color, height) in [(0x217346, theme::MENU_BAR), (0xf3f5f3, theme::CONTROL_BAR)] {
-        let ink = egui::Color32::from_rgb((color >> 16) as u8, (color >> 8) as u8, color as u8);
+    for (ink, height) in [(theme::accent(), theme::MENU_BAR), (theme::panel_background(), theme::CONTROL_BAR)] {
         let bar = h
             .output()
             .shapes
             .iter()
             .find_map(|shape| find_bar(&shape.shape, ink, height))
-            .unwrap_or_else(|| panic!("missing scoped bar background {color:x}"));
+            .unwrap_or_else(|| panic!("missing scoped bar background {ink:?}"));
         if let Some(bottom) = previous_bottom {
             assert!((bar.top() - bottom).abs() <= 1.0);
         }
         previous_bottom = Some(bar.bottom());
     }
     assert_eq!(h.state().session().unwrap().project(), &before);
+}
+
+/// Suhina Glass: the bars of the main window, a menu opened from a view and a dialog are glass at
+/// full strength, and the views at half of it.
+#[test]
+fn glass_clears_the_views_of_the_main_window_half_as_far_as_its_bars_menus_and_dialogs() {
+    let mut h = window(demo_app());
+    let ctx = h.ctx.clone();
+    h.state_mut().use_theme(&ctx, "suhina-glass");
+    for _ in 0..4 {
+        h.step();
+    }
+    let glass = theme::panel_background();
+    assert!(glass.a() < 255);
+    fn fills(shape: &egui::Shape, found: &mut Vec<(egui::Rect, egui::Color32)>) {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|shape| fills(shape, found)),
+            egui::Shape::Rect(rect) => found.push((rect.rect, rect.fill)),
+            _ => {}
+        }
+    }
+    let shapes = |h: &Harness<'static, App>| {
+        let mut found = Vec::new();
+        h.output().shapes.iter().for_each(|shape| fills(&shape.shape, &mut found));
+        found
+    };
+    let main = shapes(&h);
+    let wide = SIZE.0 * 0.9;
+    for (height, bar) in [(theme::CONTROL_BAR, "toolbar"), (theme::STATUS_BAR, "status bar")] {
+        assert!(
+            main.iter()
+                .any(|(rect, fill)| *fill == glass && rect.width() >= wide && (rect.height() - height).abs() <= 1.0),
+            "the {bar} is glass"
+        );
+    }
+    // What ends up on top in the views lets through half as much: the browser, the launcher and
+    // the empty detail, then the arrangement.
+    let half = u8::MAX - (u8::MAX - glass.a()) / 2;
+    let views_are_half = |found: &[(egui::Rect, egui::Color32)]| {
+        for point in [egui::pos2(100.0, 400.0), egui::pos2(800.0, 300.0), egui::pos2(800.0, 800.0)] {
+            let top = found.iter().rev().find(|(rect, fill)| rect.contains(point) && fill.a() > 0);
+            assert!(top.is_some_and(|(_, fill)| fill.a().abs_diff(half) <= 1), "{half} at {point:?}: {top:?}");
+        }
+    };
+    views_are_half(&main);
+    h.get_by_label("Arrangement view").click();
+    h.run_steps(4);
+    views_are_half(&shapes(&h));
+    h.get_by_label("Launcher view").click();
+    h.run_steps(4);
+
+    // A menu opened from a view.
+    h.get_by_label("Launch Root on Bass (scene 1)").click_secondary();
+    h.run_steps(4);
+    let menu = shapes(&h);
+    assert!(
+        menu.iter()
+            .any(|(rect, fill)| *fill == glass && rect.height() > theme::CONTROL_BAR + 2.0 && rect.height() < 800.0),
+        "a menu from a view is glass"
+    );
+    h.key_press(egui::Key::Escape);
+    h.run_steps(2);
+
+    // A dialog: Settings.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Comma);
+    h.run_steps(4);
+    let dialog = shapes(&h);
+    assert!(
+        dialog.iter().any(|(rect, fill)| fill.a() == glass.a() && rect.height() > 200.0 && rect.height() < 800.0),
+        "a dialog is glass"
+    );
+    theme::set_palette(&ctx, theme::Palette::DARK);
 }
 
 #[test]
@@ -140,7 +211,7 @@ fn blocks_artwork_covers_slot_columns_and_keeps_native_clip_launches() {
     assert!(has_body(&h), "colour-keyed body artwork spans the slot column");
     assert_eq!(
         clicked(&mut h, "Launch Walk on Bass (scene 2)"),
-        [Action::new("clip.launch", json!({"track":2,"scene":2}))]
+        [Action::new("clip.launch", json!({"track":2,"scene":1}))]
     );
     blocks.skin.styles.get_mut(".track-column").unwrap().insert("--suhina-track-artwork".into(), "off".into());
     skin::configure(&blocks.skin);
@@ -172,7 +243,7 @@ fn a_horizontal_session_fader_drags_on_its_drawn_axis_and_keeps_the_native_comma
     assert!(!changes.is_empty());
     assert_eq!(changes.last().unwrap().params["tracks"], json!([1]));
     assert_eq!(changes.last().unwrap().params["db"], json!(-6.0));
-    assert_eq!(changes.last().unwrap().params["continue"], json!(true));
+    assert!(changes.last().unwrap().params["gesture"].is_string());
     skin::configure(&skin::Skin::default());
 }
 
@@ -225,7 +296,7 @@ fn session_density_keeps_slot_launches_and_clip_drop_targets_on_the_drawn_cells(
     assert!((first.height() - 18.0).abs() < 0.01);
     assert_eq!(
         clicked(&mut harness, "Launch Walk on Bass (scene 2)"),
-        [Action::new("clip.launch", json!({"track": 2, "scene": 2}))]
+        [Action::new("clip.launch", json!({"track": 2, "scene": 1}))]
     );
     harness.state_mut().state.drop = Some(DropProbe::for_clip(second.center()));
     harness.run_steps(2);
@@ -262,13 +333,12 @@ fn session_pan_knob_keeps_the_native_drag_command_and_value() {
 fn a_variant_swatch_in_settings_uses_that_variant_and_new_variant_makes_one() {
     let mut harness = window(demo_app());
     let sheet = "@property --glow { syntax: \"<number>\"; initial-value: 0.5; label: \"Glow\"; range: 0 1; }\n\
-                 :root { --accent: #123456; }\ntheme { name: \"Ink\"; }";
-    let (ink, warnings) = theme::from_sheet(sheet, "");
+                 :root { --accent: #123456; }";
+    let (ink, warnings) = theme::from_folder(theme::ThemeMeta::new("Ink", theme::DEFAULT_SWATCH), sheet);
     assert!(warnings.is_empty(), "{warnings:?}");
     let dim = suhina_ui::kit::theme_vars::Variant {
         id: "dim".into(),
         name: "Dim".into(),
-        light: Some(false),
         values: [("--accent".to_string(), "#ABCDEF".to_string())].into(),
     };
     let (ink_dim, warnings) = suhina_ui::kit::theme_vars::with_variant(&ink, Some(&dim));
@@ -290,7 +360,7 @@ fn a_variant_swatch_in_settings_uses_that_variant_and_new_variant_makes_one() {
     assert_eq!(theme::accent(), egui::Color32::from_rgb(0xAB, 0xCD, 0xEF));
     assert_eq!(harness.state_mut().take_changed_settings().map(|s| s.theme), Some("ink@dim".into()));
     // The theme in use shows its swatches on its large card and on its card in the list; both work.
-    let own: Vec<_> = harness.get_all_by_label("Variant: Theme's own").collect();
+    let own: Vec<_> = harness.get_all_by_label("Variant: Default").collect();
     assert_eq!(own.len(), 2, "the large card's swatch and the list card's");
     own[0].click();
     harness.run();
@@ -326,6 +396,7 @@ fn ctrl_and_the_wheel_over_a_fader_change_the_volume_and_the_wheel_alone_does_no
         delta: egui::vec2(0.0, 1.0),
         modifiers,
         phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Unknown,
     };
     // The wheel alone scrolls the view: scrolling down the headers never moves a fader.
     harness.input_mut().events.push(tick(Modifiers::NONE));
@@ -363,6 +434,7 @@ fn horizontal_wheel_over_track_headers_does_not_scroll_the_timeline() {
         delta: egui::vec2(-120.0, 0.0),
         modifiers: Modifiers::SHIFT,
         phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Unknown,
     });
     harness.run();
     assert_eq!(harness.state().arrangement().scroll.x, before);
@@ -384,6 +456,7 @@ fn shift_wheel_over_clip_gain_scrolls_timeline_without_editing_gain() {
         delta: egui::vec2(-120.0, 0.0),
         modifiers: Modifiers::SHIFT,
         phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Unknown,
     });
     harness.run();
     assert!(harness.state().arrangement().scroll.x > scroll);
@@ -453,7 +526,7 @@ fn ara_note_overlays_use_the_same_content_colour_as_midi_and_waveforms() {
             high: 60,
         },
     );
-    let mut h = Harness::builder().with_size(SIZE).build_ui_state(
+    let mut h = Harness::builder().allow_missing_glyphs().with_size(SIZE).build_ui_state(
         |ui, state: &mut (Timeline, ArrangementViewState, Vec<Action>)| {
             arrangement_view::show(ui, &state.0, &mut state.1, &mut state.2)
         },
@@ -717,6 +790,65 @@ fn the_loop_lines_reach_down_past_the_returns_to_main() {
     assert!(tallest > main, "it reaches down past Main's row: ends at {tallest}, Main at {main}");
 }
 
+/// Scrolled so the loop's start lies under the track headers, its line is hidden under them:
+/// the loop lines stay in the timeline (#1197).
+#[test]
+fn a_loop_line_under_the_track_headers_is_not_drawn_over_them() {
+    fn lines(shape: &egui::Shape, ink: egui::Color32, out: &mut Vec<f32>) {
+        match shape {
+            egui::Shape::Vec(shapes) => shapes.iter().for_each(|s| lines(s, ink, out)),
+            egui::Shape::LineSegment { points, stroke } if stroke.color == ink && points[0].x == points[1].x => {
+                out.push(points[0].x);
+            }
+            _ => {}
+        }
+    }
+    let mut project = demo_project();
+    project.transport.loop_range = Some(suhina_engine::model::LoopRange { start: 0.0, end: 16.0 });
+    project.transport.loop_enabled = true;
+    let mut app = App::new();
+    app.set_session(Session::new(project), &[]);
+    suhina_ui::kit::native_css::set_user_sheet(Some(".loop-line { color: #00ff00; }".into()));
+    let mut h = window(app);
+    h.get_by_label("Arrangement view").click();
+    h.run();
+    // The wheel sideways over the lanes scrolls the timeline a little to the right.
+    let lane = h.get_by_label("Clip Beat B on Drums at bar 17").rect().center();
+    h.hover_at(lane);
+    h.step();
+    h.input_mut().events.push(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(-60.0, 0.0),
+        modifiers: egui::Modifiers::NONE,
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Unknown,
+    });
+    h.run();
+    let state = h.state().arrangement();
+    let (scroll, beat_width, header_width, left) =
+        (state.scroll.x, state.beat_width, state.header_width, state.headers_left);
+    let timeline = h.get_by_label("Ruler").rect().x_range();
+    let green = egui::Color32::from_rgb(0, 0xFF, 0);
+    let mut drawn = Vec::new();
+    h.output().shapes.iter().for_each(|s| lines(&s.shape, green, &mut drawn));
+    suhina_ui::kit::native_css::set_user_sheet(None);
+    assert!(left, "the headers are on the left by default");
+    let start = timeline.min - scroll;
+    assert!(
+        start < timeline.min - 1.0 && start > timeline.min - 1.0 - header_width,
+        "the loop's start lies under the headers: {start}, timeline from {}",
+        timeline.min
+    );
+    assert!(
+        drawn.iter().all(|x| timeline.contains(*x)),
+        "a loop line over the headers: {drawn:?}, timeline {timeline:?}"
+    );
+    let end = start + 16.0 * beat_width;
+    if timeline.contains(end) {
+        assert!(drawn.iter().any(|x| (x - end).abs() <= 1.0), "the end's line is drawn: {drawn:?}, at {end}");
+    }
+}
+
 #[test]
 fn choosing_another_themes_folder_asks_before_its_themes_move() {
     use suhina_ui::interaction::pick::PickField;
@@ -735,4 +867,19 @@ fn choosing_another_themes_folder_asks_before_its_themes_move() {
     h.run();
     assert_eq!(h.state().settings().themes_folder, chosen.display().to_string());
     assert!(h.state_mut().take_theme_move().is_some_and(|(_, to)| to == chosen));
+}
+
+#[test]
+fn a_theme_with_a_background_image_lets_the_window_rest() {
+    // Its window style changes palette colours; the background once set the palette again each
+    // frame to undo them, and the window never stopped repainting.
+    let mut h = window(demo_app());
+    let ctx = h.ctx.clone();
+    h.state_mut().use_theme(&ctx, "suhina-meadow");
+    // The first frame starts loading the image; the next one, after the load, shows it.
+    h.step();
+    h.state_mut().wait_for_background();
+    h.step();
+    assert!(suhina_ui::kit::liquid::background_image(&ctx).is_some(), "the background image loaded");
+    assert!(h.try_run().is_ok(), "the window settles within a second of frames: {:?}", ctx.repaint_causes());
 }

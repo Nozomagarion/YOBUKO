@@ -64,7 +64,7 @@ impl FollowInfo {
 
     /// `clip.setFollowAction` for this clip, changing what `change` holds.
     fn action(&self, change: Value) -> Action {
-        let mut params = json!({ "track": self.track.0, "scene": self.scene + 1 });
+        let mut params = json!({ "track": self.track.0, "scene": self.scene });
         if let (Some(params), Value::Object(change)) = (params.as_object_mut(), change) {
             params.extend(change);
         }
@@ -116,7 +116,7 @@ pub fn show(ui: &mut Ui, area: Rect, info: &FollowInfo, stacked: bool, actions: 
     let painter = ui.painter_at(column);
     painter.fill_background(column, 0.0, theme::panel_background());
     let f = &info.follow;
-    let id = Id::new(("follow", info.track.0, info.scene));
+    let id = Id::unique(("follow", info.track.0, info.scene));
 
     // The title, and the switch that turns the follow action on or off.
     let title = Rect::from_min_size(column.min, Vec2::new(column.width(), ROW)).shrink2(Vec2::new(PAD, 0.0));
@@ -345,7 +345,7 @@ mod tests {
         let info = FollowInfo::build(&demo_project(), TrackId(2), 1).expect("the clip");
         let action = info.action(json!({ "chanceA": 40 }));
         assert_eq!(action.id, "clip.setFollowAction");
-        assert_eq!(action.params, json!({ "track": 2, "scene": 2, "chanceA": 40 }));
+        assert_eq!(action.params, json!({ "track": 2, "scene": 1, "chanceA": 40 }));
     }
 
     #[test]

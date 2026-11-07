@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use suhina_device_api::Role;
 use suhina_library::{FileKind, FileSearch, Group, Item, Library, Query};
 
-use crate::commands::{CommandKind, CommandSpec, Param, ParamType, optional, param};
+use crate::commands::{Args, CommandKind, CommandSpec, Param, ParamType, optional, param};
 use crate::devices::role_name;
 use crate::{Agents, CommandError, PathKind, Policy, Projects, Session};
 
@@ -29,7 +29,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.folders",
         label: "List the browser's folders with how each is kept up to date (watching, polling, scanning, missing, idle) and how many files it holds",
         params: &[],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: folders,
         policy: Policy::DEFAULT,
     },
@@ -37,7 +37,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.addFolder",
         label: "Add a folder to the browser and index the samples, MIDI files, presets and projects in it",
         params: &[FOLDER],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: add_folder,
         policy: Policy { agents: Agents::Denied("the user chooses the browser's folders"), ..Policy::DEFAULT },
     },
@@ -45,7 +45,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.removeFolder",
         label: "Remove a folder from the browser (the files stay where they are)",
         params: &[FOLDER],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: remove_folder,
         policy: Policy { agents: Agents::Denied("the user chooses the browser's folders"), ..Policy::DEFAULT },
     },
@@ -53,7 +53,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.refresh",
         label: "Read a folder, or every folder, again",
         params: &[optional("folder", ParamType::Text, "a folder (default: every folder)")],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: refresh,
         policy: Policy::DEFAULT,
     },
@@ -61,7 +61,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.list",
         label: "List what is directly in a folder: sub-folders first, then samples, MIDI files, presets and projects",
         params: &[param("folder", ParamType::Path(PathKind::Folder), "any folder")],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: list,
         policy: Policy::DEFAULT,
     },
@@ -83,7 +83,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
             optional("tags", ParamType::Texts, "only items carrying any of these tags"),
             optional("limit", ParamType::Integer, "at most this many (default and most 500)"),
         ],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: search,
         policy: Policy::DEFAULT,
     },
@@ -91,7 +91,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.info",
         label: "What an item is: a sample's length, rate, channels, tempo (and whether it was detected) and key; a MIDI file's tracks; a preset bank's voices; a device's or plug-in's role",
         params: &[ITEM],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: info,
         policy: Policy::DEFAULT,
     },
@@ -99,7 +99,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.pinned",
         label: "List the pinned items, oldest first",
         params: &[],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: pinned,
         policy: Policy::DEFAULT,
     },
@@ -107,7 +107,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.pin",
         label: "Pin an item, so it is listed under Pinned",
         params: &[ITEM],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: pin,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -115,7 +115,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.unpin",
         label: "Unpin an item",
         params: &[ITEM],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: unpin,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -123,7 +123,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.recent",
         label: "List the items used lately, newest first, by group (projects, samples, midi, instruments, effects, plugins, presets)",
         params: &[optional("group", ParamType::Text, "one group (default: every group)")],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: recent,
         policy: Policy::DEFAULT,
     },
@@ -131,7 +131,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.tags",
         label: "List the colour tags (name, colour), the items carrying them and the most tags there may be",
         params: &[],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: tags,
         policy: Policy::DEFAULT,
     },
@@ -144,7 +144,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
             optional("rename", ParamType::Text, "a new name for it"),
             optional("limit", ParamType::Integer, "the most tags there may be, from 1 to 1024 (default 64)"),
         ],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: set_tag,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -152,7 +152,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.removeTag",
         label: "Remove a colour tag from the list and from every item",
         params: &[param("name", ParamType::Text, "the tag")],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: remove_tag,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -164,7 +164,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
             param("tag", ParamType::Text, "the tag's name"),
             param("on", ParamType::Bool, "true sets it, false clears it"),
         ],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: tag,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -179,7 +179,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
                 "walk this folder instead (depth 32, at most 1 000 000 entries)",
             ),
         ],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: crate::relink::find_files,
         policy: Policy::DEFAULT,
     },
@@ -194,7 +194,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
             ),
             param("folder", ParamType::Path(PathKind::WriteFolder), "a folder that exists, to move them into"),
         ],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: move_to,
         // Moves files on disk: kept from agents, as removing a file from where it was is not
         // something `confine` can undo.
@@ -211,7 +211,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
             ),
             param("folder", ParamType::Path(PathKind::WriteFolder), "a folder that exists, to copy them into"),
         ],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: copy_to,
         // Copies files on disk: open to agents, below the roots `confine` keeps them in.
         policy: Policy::DEFAULT,
@@ -220,7 +220,7 @@ static LIBRARY_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "library.setPluginsView",
         label: "Choose which installed plug-ins the browser's Plug-ins category lists, kept for the next start: the instruments (the default) or the effects",
         params: &[param("view", ParamType::Text, "instruments (default) or effects")],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: set_plugins_view,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -231,19 +231,10 @@ pub fn library_commands() -> &'static [CommandSpec<Projects>] {
     LIBRARY_COMMANDS
 }
 
-fn text<'a>(params: &'a Value, name: &str) -> Result<&'a str, CommandError> {
-    params
-        .get(name)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-        .ok_or_else(|| CommandError(format!("{name} must be a text")))
-}
-
 fn optional_text<'a>(params: &'a Value, name: &str) -> Result<Option<&'a str>, CommandError> {
-    match params.get(name) {
-        None | Some(Value::Null) => Ok(None),
-        Some(_) => text(params, name).map(Some),
+    match Args::new(params).value(name) {
+        None => Ok(None),
+        Some(_) => Args::new(params).text(name).map(Some),
     }
 }
 
@@ -259,13 +250,13 @@ fn folders(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
 }
 
 fn add_folder(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let folder = text(params, "folder")?;
+    let folder = Args::new(params).text("folder")?;
     let added = projects.file_library_mut().add_folder(Path::new(folder)).map_err(CommandError)?;
     Ok(json!({ "folder": added.display().to_string() }))
 }
 
 fn remove_folder(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let folder = text(params, "folder")?;
+    let folder = Args::new(params).text("folder")?;
     projects.file_library_mut().remove_folder(Path::new(folder)).map_err(CommandError)?;
     Ok(json!({ "removed": folder }))
 }
@@ -277,7 +268,7 @@ fn refresh(projects: &mut Projects, params: &Value) -> Result<Value, CommandErro
 }
 
 fn list(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let folder = text(params, "folder")?;
+    let folder = Args::new(params).text("folder")?;
     let entries = projects.file_library_mut().list(Path::new(folder)).map_err(CommandError)?;
     let items: Vec<Value> = entries
         .into_iter()
@@ -365,6 +356,8 @@ pub struct Found {
     /// For a plug-in: its format and vendor.
     pub detail: Option<String>,
     pub plugin: bool,
+    /// For a plug-in: its format, which a list shows beside its name and filters by.
+    pub format: Option<suhina_plugins::scan::PluginFormat>,
     /// For a file: the library folder it is in.
     pub folder: Option<PathBuf>,
 }
@@ -377,6 +370,7 @@ impl Found {
             "name": self.name,
             "kind": self.kind,
             "plugin": self.plugin,
+            "format": self.format.map(|f| f.name()),
             "detail": self.detail,
             "folder": self.folder.as_ref().map(|f| f.display().to_string()),
             "tags": library.item_tags(&key),
@@ -397,19 +391,40 @@ fn describe(projects: &mut Projects, item: Item) -> Option<Found> {
             if let Item::Voice(_, voice) = &item {
                 name = format!("{name} #{voice}");
             }
-            Some(Found { name, kind: file_kind_name(kind), detail: None, plugin: false, folder: None, item })
+            Some(Found {
+                name,
+                kind: file_kind_name(kind),
+                detail: None,
+                plugin: false,
+                format: None,
+                folder: None,
+                item,
+            })
         }
         Item::Device(id) => {
             let info = suhina_device_registry::info(id)?;
             let kind = role_name(info.role);
-            Some(Found { name: info.name.to_string(), kind, detail: None, plugin: false, folder: None, item })
+            Some(Found {
+                name: info.name.to_string(),
+                kind,
+                detail: None,
+                plugin: false,
+                format: None,
+                folder: None,
+                item,
+            })
         }
         Item::Plugin(spec) => {
             let env = projects.plugin_env();
             let plugin = env.catalog.plugins().find(|p| p.spec() == *spec || p.name == *spec)?;
             let kind = if crate::is_instrument(plugin) { "instrument" } else { "effect" };
             let detail = Some(format!("{} {}", plugin.format(), plugin.vendor).trim().to_string());
-            Some(Found { name: plugin.name.clone(), kind, detail, plugin: true, folder: None, item })
+            let format = Some(plugin.plugin_format());
+            Some(Found { name: plugin.name.clone(), kind, detail, plugin: true, format, folder: None, item })
+        }
+        Item::Stock(key) => {
+            let name = suhina_device_registry::stock_preset(key)?.preset.name.clone();
+            Some(Found { name, kind: "preset", detail: None, plugin: false, format: None, folder: None, item })
         }
     }
 }
@@ -496,6 +511,7 @@ impl PreparedSearch {
                     kind: file_kind_name(file.kind),
                     detail: None,
                     plugin: false,
+                    format: None,
                     folder: Some(file.folder.clone()),
                     item: Item::File(file.path),
                 },
@@ -557,9 +573,27 @@ pub fn prepare_search(
                 kind,
                 detail: None,
                 plugin: false,
+                format: None,
                 folder: None,
             };
-            if let Some(rank) = suhina_library::rank(&words, info.name, info.id)
+            if let Some(rank) = suhina_library::rank(&words, &info.name, &info.id)
+                && fits(&found, category)
+                && tagged(projects.file_library_mut(), &found.item.key())
+            {
+                ranked.push((rank, found));
+            }
+        }
+        for stock in suhina_device_registry::stock_presets() {
+            let found = Found {
+                item: Item::Stock(stock.key.to_string()),
+                name: stock.preset.name.clone(),
+                kind: "preset",
+                detail: None,
+                plugin: false,
+                format: None,
+                folder: None,
+            };
+            if let Some(rank) = suhina_library::rank(&words, &stock.preset.name, &stock.tags.join(" "))
                 && fits(&found, category)
                 && tagged(projects.file_library_mut(), &found.item.key())
             {
@@ -575,6 +609,7 @@ pub fn prepare_search(
                 kind,
                 detail: Some(format!("{} {}", plugin.format(), plugin.vendor).trim().to_string()),
                 plugin: true,
+                format: Some(plugin.plugin_format()),
                 folder: None,
             };
             let haystack = format!("{} {}", plugin.vendor, plugin.format());
@@ -597,8 +632,8 @@ pub fn prepare_search(
 }
 
 fn search(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let words = match params.get("text") {
-        None | Some(Value::Null) => "",
+    let words = match Args::new(params).value("text") {
+        None => "",
         Some(v) => v.as_str().ok_or("text must be a text")?,
     };
     let category = match optional_text(params, "category")? {
@@ -608,8 +643,8 @@ fn search(projects: &mut Projects, params: &Value) -> Result<Value, CommandError
         }
     };
     let place = optional_text(params, "place")?;
-    let tags: Vec<String> = match params.get("tags") {
-        None | Some(Value::Null) => Vec::new(),
+    let tags: Vec<String> = match Args::new(params).value("tags") {
+        None => Vec::new(),
         Some(v) => v
             .as_array()
             .ok_or("tags must be a list of tag names")?
@@ -617,8 +652,8 @@ fn search(projects: &mut Projects, params: &Value) -> Result<Value, CommandError
             .map(|t| t.as_str().map(str::to_string).ok_or("tags must be a list of tag names"))
             .collect::<Result<_, _>>()?,
     };
-    let limit = match params.get("limit") {
-        None | Some(Value::Null) => 0,
+    let limit = match Args::new(params).value("limit") {
+        None => 0,
         Some(v) => v
             .as_u64()
             .and_then(|n| usize::try_from(n).ok())
@@ -632,7 +667,7 @@ fn search(projects: &mut Projects, params: &Value) -> Result<Value, CommandError
 }
 
 fn info(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let key = text(params, "item")?;
+    let key = Args::new(params).text("item")?;
     let item = Item::parse(key).ok_or("item must be a path or an item key")?;
     let tags = projects.file_library_mut().item_tags(&item.key());
     let mut out = match &item {
@@ -652,6 +687,10 @@ fn info(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> 
                 "kind": if crate::is_instrument(plugin) { "instrument" } else { "effect" },
                 "name": plugin.name, "vendor": plugin.vendor, "format": plugin.format(), "version": plugin.version,
             })
+        }
+        Item::Stock(key) => {
+            let stock = suhina_device_registry::stock_preset(key).ok_or_else(|| format!("no stock preset {key:?}"))?;
+            json!({ "kind": "preset", "name": stock.preset.name, "device": stock.preset.device, "preset_tags": stock.tags })
         }
         Item::File(path) | Item::Voice(path, _) => file_info(path, &item)?,
     };
@@ -714,7 +753,8 @@ pub fn file_info(path: &Path, item: &Item) -> Result<Value, CommandError> {
             let data = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
             let voices =
                 suhina_device_registry::preset_voices(&data).map_err(|e| format!("{}: {e}", path.display()))?;
-            out["device"] = json!("fm-synth");
+            let preset = suhina_device_registry::preset(&data, 1).map_err(|e| format!("{}: {e}", path.display()))?;
+            out["device"] = json!(preset.device);
             out["voices"] =
                 json!(voices.iter().map(|(n, name)| json!({ "voice": n, "name": name })).collect::<Vec<_>>());
             if let Item::Voice(_, voice) = item {
@@ -737,7 +777,7 @@ fn pinned(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
 }
 
 fn pin(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let key = text(params, "item")?;
+    let key = Args::new(params).text("item")?;
     let item = Item::parse(key).ok_or("item must be a path or an item key")?;
     let pinned = projects.file_library_mut().pin(&item.key()).map_err(CommandError)?;
     Ok(json!({ "item": item.key(), "pinned": true, "changed": pinned }))
@@ -752,11 +792,12 @@ const MAX_COPY_NAMES: u32 = 9999;
 /// one free there. A copy is made with a file that must not exist yet, so nothing in the folder
 /// is ever overwritten, even by a file that appeared meanwhile.
 fn copy_to(_projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let folder = PathBuf::from(text(params, "folder")?);
+    let folder = PathBuf::from(Args::new(params).text("folder")?);
     if !folder.is_dir() {
         return Err(format!("{} is not a folder that exists", folder.display()).into());
     }
-    let items = params.get("items").and_then(Value::as_array).ok_or("items must be a list of file paths")?;
+    let items =
+        Args::new(params).value("items").and_then(Value::as_array).ok_or("items must be a list of file paths")?;
     if items.is_empty() || items.len() > MAX_COPIES {
         return Err(format!("items must list from 1 to {MAX_COPIES} files").into());
     }
@@ -779,11 +820,12 @@ fn copy_to(_projects: &mut Projects, params: &Value) -> Result<Value, CommandErr
 /// one free there, as `library.copyTo` names them. A file already in that folder, one gone, or one
 /// an open project plays is left where it is and listed.
 fn move_to(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let folder = PathBuf::from(text(params, "folder")?);
+    let folder = PathBuf::from(Args::new(params).text("folder")?);
     if !folder.is_dir() {
         return Err(format!("{} is not a folder that exists", folder.display()).into());
     }
-    let items = params.get("items").and_then(Value::as_array).ok_or("items must be a list of file paths")?;
+    let items =
+        Args::new(params).value("items").and_then(Value::as_array).ok_or("items must be a list of file paths")?;
     if items.is_empty() || items.len() > MAX_COPIES {
         return Err(format!("items must list from 1 to {MAX_COPIES} files").into());
     }
@@ -872,7 +914,7 @@ fn copy_into(from: &Path, folder: &Path) -> Result<PathBuf, String> {
 }
 
 fn set_plugins_view(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let name = text(params, "view")?;
+    let name = Args::new(params).text("view")?;
     let view = suhina_library::store::PluginsView::parse(name)
         .ok_or_else(|| CommandError("view must be instruments or effects".into()))?;
     projects.file_library_mut().set_plugins_view(view).map_err(CommandError)?;
@@ -880,7 +922,7 @@ fn set_plugins_view(projects: &mut Projects, params: &Value) -> Result<Value, Co
 }
 
 fn unpin(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let key = text(params, "item")?;
+    let key = Args::new(params).text("item")?;
     let item = Item::parse(key).ok_or("item must be a path or an item key")?;
     let changed = projects.file_library_mut().unpin(&item.key()).map_err(CommandError)?;
     Ok(json!({ "item": item.key(), "pinned": false, "changed": changed }))
@@ -914,7 +956,7 @@ fn tags(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
 fn set_tag(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
     let library = projects.file_library_mut();
     let mut done = false;
-    if let Some(limit) = params.get("limit").filter(|v| !v.is_null()) {
+    if let Some(limit) = Args::new(params).value("limit").filter(|v| !v.is_null()) {
         let limit = limit.as_u64().and_then(|n| usize::try_from(n).ok()).ok_or("limit must be a whole number")?;
         library.set_tag_limit(limit).map_err(CommandError)?;
         done = true;
@@ -932,16 +974,16 @@ fn set_tag(projects: &mut Projects, params: &Value) -> Result<Value, CommandErro
 }
 
 fn remove_tag(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let name = text(params, "name")?;
+    let name = Args::new(params).text("name")?;
     projects.file_library_mut().remove_tag(name).map_err(CommandError)?;
     Ok(json!({ "removed": name }))
 }
 
 fn tag(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let key = text(params, "item")?;
+    let key = Args::new(params).text("item")?;
     let item = Item::parse(key).ok_or("item must be a path or an item key")?;
-    let name = text(params, "tag")?;
-    let on = params.get("on").and_then(Value::as_bool).ok_or("on must be true or false")?;
+    let name = Args::new(params).text("tag")?;
+    let on = Args::new(params).bool("on")?;
     let library = projects.file_library_mut();
     library.tag(&item.key(), name, on).map_err(CommandError)?;
     Ok(json!({ "item": item.key(), "tags": library.item_tags(&item.key()) }))
@@ -949,7 +991,7 @@ fn tag(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
 
 /// Records what a successful command added to a project among the recent items
 /// (`docs/spec/browser.md` › Sidebar).
-pub(crate) fn record_use(library: &mut Library, id: &str, params: &Value, result: &Value) {
+pub(crate) fn record_use(library: &mut Library, recent: crate::Recent, params: &Value, result: &Value) {
     let mut record = |group: Group, item: String| {
         let _ = library.record(group, &item);
     };
@@ -960,14 +1002,14 @@ pub(crate) fn record_use(library: &mut Library, id: &str, params: &Value, result
         }
     };
     let preset = |record: &mut dyn FnMut(Group, String), params: &Value| {
-        if let Some(path) = params.get("preset").and_then(Value::as_str) {
+        if let Some(path) = Args::new(params).raw_str("preset") {
             let path = crate::files::absolute(Path::new(path)).display().to_string();
-            let voice = params.get("voice").and_then(Value::as_u64).unwrap_or(1);
+            let voice = Args::new(params).value("voice").and_then(Value::as_u64).unwrap_or(1);
             record(Group::Presets, if voice > 1 { format!("{path}#{voice}") } else { path });
         }
     };
-    match id {
-        "clip.addFiles" => {
+    match recent {
+        crate::Recent::Files => {
             let skipped: Vec<&str> = result["skipped"]
                 .as_array()
                 .map(|s| s.iter().filter_map(|x| x["path"].as_str()).collect())
@@ -985,29 +1027,32 @@ pub(crate) fn record_use(library: &mut Library, id: &str, params: &Value, result
                 record(group, absolute.display().to_string());
             }
         }
-        "device.add" | "track.add" => {
-            if let Some(path) = params.get("sd").and_then(Value::as_str) {
+        crate::Recent::Device => {
+            if let Some(key) = Args::new(params).raw_str("stock") {
+                record(Group::Presets, format!("stock:{key}"));
+            } else if let Some(path) = Args::new(params).raw_str("sd") {
                 record(Group::Effects, path.to_string());
-            } else if params.get("preset").is_some_and(|p| !p.is_null()) {
+            } else if Args::new(params).has("preset") {
                 preset(&mut record, params);
-            } else if let Some(id) = params.get("id").or_else(|| params.get("device")).and_then(Value::as_str) {
+            } else if let Some(id) =
+                Args::new(params).value("id").or_else(|| Args::new(params).value("device")).and_then(Value::as_str)
+            {
                 if suhina_device_registry::info(id).is_some() {
                     device(&mut record, id);
-                } else if id == params.get("device").and_then(Value::as_str).unwrap_or("") {
+                } else if id == Args::new(params).raw_str("device").unwrap_or("") {
                     record(Group::Plugins, format!("plugin:{id}"));
                 }
             }
         }
-        "device.addSd" => {
-            if let Some(path) = params.get("path").and_then(Value::as_str) {
+        crate::Recent::SdFile => {
+            if let Some(path) = Args::new(params).raw_str("path") {
                 record(Group::Effects, path.to_string());
             }
         }
-        "device.addPlugin" => {
-            if let Some(name) = params.get("plugin").and_then(Value::as_str) {
+        crate::Recent::Plugin => {
+            if let Some(name) = Args::new(params).raw_str("plugin") {
                 record(Group::Plugins, format!("plugin:{name}"));
             }
         }
-        _ => {}
     }
 }

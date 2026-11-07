@@ -19,7 +19,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use suhina_engine::model::{LaneData, Project};
 use suhina_session::{
-    Agents, AudioSystem, CommandKind, MidiSystem, Player, ProjectId, Projects, Session, all_commands, project_commands,
+    Agents, AudioSystem, MidiSystem, Player, ProjectId, Projects, Session, all_commands, project_commands,
 };
 
 use crate::attach::AppHost;
@@ -42,6 +42,12 @@ const MAX_BATCH_STEPS: usize = 256;
 
 #[cfg(test)]
 mod export_tests;
+
+mod audio;
+mod policy;
+
+use audio::{audio_snapshot, play_active, start_audio};
+use policy::{Files, refused, save_source};
 
 #[derive(Clone)]
 pub struct SuhinaMcp {
@@ -140,11 +146,11 @@ pub struct BatchParams {
 pub struct RenderParams {
     /// Output `.wav` path, relative to the write root.
     pub output: String,
-    /// Render this launcher scene (1-based) instead of the arrangement.
+    /// Render this launcher scene (from 0, as `project.launcher` numbers them) instead of the arrangement.
     #[serde(default)]
     pub scene: Option<usize>,
     /// Render clip launches instead: commands run at times in seconds, starting with the transport
-    /// stopped, e.g. `[{"at": 0, "id": "scene.launch", "params": {"scene": 1}}]`. Needs `seconds`.
+    /// stopped, e.g. `[{"at": 0, "id": "scene.launch", "params": {"scene": 0}}]`. Needs `seconds`.
     #[serde(default)]
     pub launches: Option<Vec<LaunchParams>>,
     /// Length of a `launches` render in seconds (at most 600).
@@ -342,7 +348,10 @@ impl SuhinaMcp {
         let output = self.audio_output;
         let result = self
             .with_projects(move |projects| {
-                let (opened, mut warnings) = Session::open(&path).map_err(String::from)?;
+                // Opened as the window and the CLI open it; its audio is decoded, trusted as they
+                // trust it, when the server plays it (#764 › 3).
+                let options = suhina_session::OpenOptions { audio: output };
+                let (opened, mut warnings) = projects.open_path(&path, options).map_err(String::from)?;
                 let id = projects.add(opened, None).map_err(String::from)?;
                 let session = projects.session_mut(Some(id)).map_err(String::from)?;
                 let mut info = session.execute("project.info", &json!({})).map_err(String::from)?;
@@ -368,7 +377,7 @@ impl SuhinaMcp {
     }
 
     #[tool(
-        description = "List command ids with a description, kind (read, edit, history, transport, projects, plugins, plugin, library, audio) and parameter schema. Run them with command_run."
+        description = "List command ids with a description, what each runs on (target: project, projects, plugins, plugin, library, audio), what it does (effect: read, edit, history, transport, change) and parameter schema. Run them with command_run."
     )]
     async fn command_list(&self, Parameters(p): Parameters<ListParams>) -> Result<CallToolResult, McpError> {
         let filter = p.filter.unwrap_or_default();
@@ -528,7 +537,6 @@ impl SuhinaMcp {
                 if launches.is_none() && seconds.is_some() {
                     return Err("seconds applies only to launches".into());
                 }
-                let scene = scene.map(|n| n.checked_sub(1).ok_or("scenes are numbered from 1")).transpose()?;
                 // The running plug-ins' state as it is now, so the render plays what is heard.
                 let heard = session.project_as_heard();
                 let project = match (scene, &launches) {
@@ -587,101 +595,6 @@ impl SuhinaMcp {
     }
 }
 
-/// Starts project `id` playing on the chosen output. Returns the device description, or why it
-/// is not available; missing audio files and a fallback to the default device are added to
-/// `warnings`.
-fn start_audio(projects: &mut Projects, id: ProjectId, warnings: &mut Vec<String>) -> Value {
-    let Ok(session) = projects.session_mut(Some(id)) else { return Value::Null };
-    let project = session.project().clone();
-    let (audio, audio_warnings) = project_audio(session, &project);
-    warnings.extend(audio_warnings);
-    session.set_audio(audio);
-    match projects.open_output(Some(id)) {
-        Ok(notice) => {
-            warnings.extend(notice);
-            let described = projects.get(id).and_then(Session::player).and_then(Player::output_info);
-            json!(described.map(|i| i.describe()))
-        }
-        Err(e) => json!(format!("not available: {e}")),
-    }
-}
-
-/// The audio `project` (the session's, or a scene of it) plays: its files decoded from where
-/// the session's project file is, with what the session has decoded already (files added since
-/// it opened, ADR 0011) for the rest.
-fn project_audio(session: &Session, project: &Project) -> (suhina_media::AudioPool, Vec<String>) {
-    audio_snapshot(session).complete(project)
-}
-
-/// What [`project_audio`] needs from the session, taken quickly so that decoding the files it
-/// lacks can run off the window's thread.
-struct AudioSnapshot {
-    folder: Option<PathBuf>,
-    have: suhina_media::AudioPool,
-}
-
-fn audio_snapshot(session: &Session) -> AudioSnapshot {
-    let folder = session
-        .audio_folder()
-        .map(Path::to_path_buf)
-        .or_else(|| session.source().and_then(|s| s.parent()).map(Path::to_path_buf));
-    AudioSnapshot { folder, have: session.audio().clone() }
-}
-
-impl AudioSnapshot {
-    /// The pool `project` plays, decoding the files the session has not, and the warnings.
-    fn complete(self, project: &Project) -> (suhina_media::AudioPool, Vec<String>) {
-        let AudioSnapshot { folder, mut have } = self;
-        let missing = project
-            .contents
-            .iter()
-            .flat_map(|c| &c.lanes)
-            .any(|lane| matches!(&lane.data, LaneData::Audio(region) if !have.files.contains_key(&region.file)));
-        let mut warnings = Vec::new();
-        if missing {
-            let (loaded, found) =
-                suhina_media::load_project_audio(project, folder.as_deref().unwrap_or(Path::new(".")));
-            for (key, data) in loaded.files {
-                have.files.entry(key).or_insert(data);
-            }
-            warnings = found;
-        }
-        (have, warnings)
-    }
-}
-
-/// The file `project.save` without a path would write, and whose folder `project.autosave` and
-/// `project.collect` without a folder write into: the source of the project it runs in. `None` for every other command.
-fn save_source(projects: &mut Projects, target: Option<ProjectId>, id: &str) -> Option<PathBuf> {
-    if !matches!(id, "project.save" | "project.autosave" | "project.collect") {
-        return None;
-    }
-    projects.session_mut(target).ok()?.source().map(Path::to_path_buf)
-}
-
-/// Why an agent may not run command `id` with `params`, if it may not; `attached` when it works
-/// on the app's open tabs.
-fn refused(id: &str, params: Option<&Value>, attached: bool) -> Option<String> {
-    match suhina_session::policy(id).map(|p| p.agents) {
-        Some(Agents::Denied(why)) => return Some(format!("{id} is not available to agents: {why}")),
-        Some(Agents::NotWhenAttached(why)) if attached => {
-            // A reason that is a whole sentence of its own is given as it is.
-            return Some(if why == Agents::SETTINGS { format!("{id} {why}") } else { why.to_string() });
-        }
-        _ => {}
-    }
-    if !attached {
-        return None;
-    }
-    let sets_backups = params.is_some_and(|p| p.get("interval").is_some() || p.get("cleanUp").is_some());
-    if id == "project.autosave" && sets_backups {
-        return Some(
-            "the backup settings are the person's; agents attached to the app may only back up now (now: true)".into(),
-        );
-    }
-    None
-}
-
 /// One attached export's identity and authorized destination, fixed on its first frame.
 struct ExportRequest {
     target: Option<ProjectId>,
@@ -719,7 +632,7 @@ impl ExportRequest {
         self.params = confine(&workspace, "project.export", self.params.clone(), None)?;
         let env = projects.plugin_env();
         let session = projects.get_mut(id).ok_or("the export's project was closed")?;
-        session.set_plugin_env(env);
+        session.rack_mut().set_env(env);
         let gathered = if let Some((_, deadline)) = self.pending {
             session.gather_export_data(deadline)
         } else {
@@ -746,33 +659,6 @@ impl ExportRequest {
     }
 }
 
-/// The file rules a call follows.
-#[derive(Clone)]
-enum Files {
-    /// The roots `suhina-cli mcp` was given at launch.
-    Fixed(Arc<Workspace>),
-    /// Attached to the app: the folder of the project the call acts on, and the library to read.
-    PerProject,
-}
-
-impl Files {
-    fn workspace(&self, projects: &mut Projects, target: Option<ProjectId>) -> Workspace {
-        match self {
-            Files::Fixed(workspace) => Workspace::clone(workspace),
-            Files::PerProject => {
-                let folder = projects
-                    .session_mut(target)
-                    .ok()
-                    .and_then(|s| s.source().and_then(Path::parent).map(Path::to_path_buf))
-                    .filter(|f| !f.as_os_str().is_empty());
-                let library: Vec<PathBuf> = projects.file_library_mut().folders().into_iter().map(|f| f.path).collect();
-                let (include_project, folders) = projects.mcp_write_folders();
-                Workspace::attached(folder.as_deref(), &library).with_write_folders(include_project, folders)
-            }
-        }
-    }
-}
-
 /// One step of `command_run` or `command_batch`, on the projects, once the agent may run it:
 /// its paths confined to the agent's roots, the command run, and a project it switched to started
 /// playing, which the result names as `audio_output`.
@@ -794,24 +680,6 @@ fn run_step(
         object.insert("audio_output".into(), audio_output);
     }
     Ok(value)
-}
-
-/// After a project command, starts the newly active project playing when the server has audio
-/// output, since switching closes the previous project's player. Returns what was started.
-fn play_active(projects: &mut Projects, id: &str, output: bool) -> Option<Value> {
-    if !output {
-        return None;
-    }
-    if !project_commands().iter().any(|c| c.id == id && c.kind == CommandKind::Projects) {
-        return None;
-    }
-    let active = projects.active()?;
-    if projects.get(active)?.player().is_some() {
-        return None;
-    }
-    let mut warnings = Vec::new();
-    let started = start_audio(projects, active, &mut warnings);
-    Some(json!({ "device": started, "warnings": warnings }))
 }
 
 /// Adds a title and behaviour hints to each tool, and closes its schema to unknown arguments.
@@ -887,6 +755,7 @@ mod refused_tests {
         for id in [
             "project.close",
             "audio.setOutput",
+            "audio.setTrackInput",
             "midi.setInput",
             "plugin.setHosting",
             "plugin.setEnabled",

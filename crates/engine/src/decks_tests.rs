@@ -8,7 +8,13 @@ fn signal(value: f32, rate: u32) -> Arc<AudioData> {
     Arc::new(AudioData { sample_rate: rate, channels: 2, samples: vec![value; rate as usize * 4] })
 }
 fn setup() -> (Renderer, Controller) {
-    let mut r = Renderer::stopped(&suhina_model::Project::default(), &AudioPool::new(), 8000).unwrap();
+    let mut r = Renderer::stopped(
+        &suhina_model::Project::default(),
+        &AudioPool::new(),
+        8000,
+        suhina_device_registry::factory(),
+    )
+    .unwrap();
     let c = r.controller();
     (r, c)
 }

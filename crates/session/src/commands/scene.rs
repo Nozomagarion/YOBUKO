@@ -10,7 +10,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "scene.launch",
         label: "Launch a scene: every track launches its slot in that row at the next quantisation boundary",
         params: &[SCENE],
-        kind: CommandKind::Transport,
+        kind: CommandKind::TRANSPORT,
         run: launch_scene,
         policy: Policy::DEFAULT,
     },
@@ -18,7 +18,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "scene.stop",
         label: "Stop a scene's row: every track whose slot in that row has a clip stops at the next quantisation boundary",
         params: &[SCENE],
-        kind: CommandKind::Transport,
+        kind: CommandKind::TRANSPORT,
         run: stop_scene,
         policy: Policy::DEFAULT,
     },
@@ -28,12 +28,12 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         params: &[
             optional(
                 "scene",
-                ParamType::Integer,
-                "number the new scene gets, from 1 to one past the last scene; after the last scene if left out",
+                ParamType::Item,
+                "number the new scene gets, from 0 to one past the last scene, or {\"id\": n} with a scene_id to insert before that scene; after the last scene if left out",
             ),
             optional("name", ParamType::Text, "the new scene's name; empty if left out"),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: insert_scene,
         policy: Policy::DEFAULT,
     },
@@ -41,7 +41,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "scene.duplicate",
         label: "Copy a scene, with its name, tempo, time signature and the clips in its row, to a new scene right below it",
         params: &[SCENE],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: duplicate_scene,
         policy: Policy::DEFAULT,
     },
@@ -49,7 +49,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "scene.delete",
         label: "Delete a scene and the clips in its row; the last scene left cannot be deleted",
         params: &[SCENE],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: delete_scene,
         policy: Policy::DEFAULT,
     },
@@ -57,7 +57,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "scene.rename",
         label: "Rename a scene",
         params: &[SCENE, param("name", ParamType::Text, "the new name; empty clears it")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: rename_scene,
         policy: Policy::UNHEARD,
     },
@@ -68,7 +68,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             SCENE,
             optional("bpm", ParamType::Number, "20 … 999; left out or null, the scene keeps the tempo playing"),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_scene_tempo,
         policy: Policy::DEFAULT,
     },
@@ -84,7 +84,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             ),
             optional("denominator", ParamType::Integer, "the note value of a beat: 1, 2, 4, 8 or 16"),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_scene_time_signature,
         policy: Policy::DEFAULT,
     },
@@ -93,13 +93,13 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
 fn launch_scene(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let scene = scene_index(session.project(), params)?;
     send(session, LaunchCommand::LaunchScene { scene })?;
-    Ok(json!({ "scene": scene + 1, "queued": "launch" }))
+    Ok(json!({ "scene": scene, "scene_id": scene_id(session.project(), scene), "queued": "launch" }))
 }
 
 fn stop_scene(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let scene = scene_index(session.project(), params)?;
     send(session, LaunchCommand::StopScene { scene })?;
-    Ok(json!({ "scene": scene + 1, "queued": "stop" }))
+    Ok(json!({ "scene": scene, "scene_id": scene_id(session.project(), scene), "queued": "stop" }))
 }
 
 /// Scenes a project can have; inserting stops there.
@@ -116,8 +116,8 @@ fn even_slots(p: &mut Project) {
 
 /// An optional scene name: trimmed text, empty when left out.
 fn scene_name(params: &Value) -> Result<String, CommandError> {
-    match params.get("name") {
-        None | Some(Value::Null) => Ok(String::new()),
+    match Args::new(params).value("name") {
+        None => Ok(String::new()),
         Some(Value::String(name)) => Ok(name.trim().to_string()),
         Some(_) => Err("name must be a text".into()),
     }
@@ -129,23 +129,20 @@ fn insert_scene(session: &mut Session, params: &Value) -> Result<Value, CommandE
     if count >= MAX_SCENES {
         return Err(format!("the project has {count} scenes, as many as it can have").into());
     }
-    let at = match params.get("scene") {
-        None | Some(Value::Null) => count,
-        Some(value) => value
-            .as_u64()
-            .and_then(|n| usize::try_from(n).ok())
-            .and_then(|n| n.checked_sub(1))
-            .filter(|i| *i <= count)
-            .ok_or_else(|| format!("scene must be a whole number from 1 to {}", count + 1))?,
+    let at = match opt_scene_at(p, params, "scene")? {
+        None => count,
+        Some(at) if at <= count => at,
+        Some(_) => return Err(format!("scene must be a whole number from 0 to {count}, or {{\"id\": n}}").into()),
     };
     let name = scene_name(params)?;
     even_slots(p);
     let id = p.new_scene_id()?;
     p.launcher.scenes.insert(at, Scene { id, name, ..Scene::default() });
+    crate::mapping::scenes_inserted(p, at);
     for column in &mut p.launcher.columns {
         column.slots.insert(at, Slot { clip: None, has_stop: true });
     }
-    Ok(json!({ "scene": at + 1 }))
+    Ok(json!({ "scene": at, "scene_id": id.0 }))
 }
 
 fn duplicate_scene(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
@@ -158,6 +155,7 @@ fn duplicate_scene(session: &mut Session, params: &Value) -> Result<Value, Comma
     let mut copy = p.launcher.scenes.get(scene).cloned().unwrap_or_default();
     copy.id = p.new_scene_id()?;
     p.launcher.scenes.insert(scene + 1, copy);
+    crate::mapping::scenes_inserted(p, scene + 1);
     let mut next_content = p.contents.iter().map(|c| c.id.0).max().unwrap_or(0);
     for column in &mut p.launcher.columns {
         let mut slot = column.slots.get(scene).cloned().unwrap_or(Slot { clip: None, has_stop: true });
@@ -176,7 +174,7 @@ fn duplicate_scene(session: &mut Session, params: &Value) -> Result<Value, Comma
         }
         column.slots.insert(scene + 1, slot);
     }
-    Ok(json!({ "scene": scene + 2 }))
+    Ok(json!({ "scene": scene + 1, "scene_id": scene_id(&session.project, scene + 1) }))
 }
 
 fn delete_scene(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
@@ -186,23 +184,24 @@ fn delete_scene(session: &mut Session, params: &Value) -> Result<Value, CommandE
         return Err("the last scene cannot be deleted".into());
     }
     even_slots(p);
-    p.launcher.scenes.remove(scene);
+    let deleted = p.launcher.scenes.remove(scene);
+    crate::mapping::scene_deleted(p, scene);
     for column in &mut p.launcher.columns {
         column.slots.remove(scene);
     }
-    Ok(json!({ "deleted": scene + 1 }))
+    Ok(json!({ "deleted": scene, "scene_id": deleted.id.0 }))
 }
 
 fn rename_scene(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let scene = scene_index(&session.project, params)?;
-    let name = match params.get("name") {
+    let name = match Args::new(params).value("name") {
         Some(Value::String(name)) => name.trim().to_string(),
         _ => return Err("name must be a text (empty clears it)".into()),
     };
     if let Some(s) = session.project.launcher.scenes.get_mut(scene) {
         s.name.clone_from(&name);
     }
-    Ok(json!({ "scene": scene + 1, "name": name }))
+    Ok(json!({ "scene": scene, "scene_id": scene_id(&session.project, scene), "name": name }))
 }
 
 fn set_scene_tempo(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
@@ -216,13 +215,13 @@ fn set_scene_tempo(session: &mut Session, params: &Value) -> Result<Value, Comma
     if let Some(s) = session.project.launcher.scenes.get_mut(scene) {
         s.tempo_bpm = bpm;
     }
-    Ok(json!({ "scene": scene + 1, "tempo_bpm": bpm }))
+    Ok(json!({ "scene": scene, "scene_id": scene_id(&session.project, scene), "tempo_bpm": bpm }))
 }
 
 fn set_scene_time_signature(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let scene = scene_index(&session.project, params)?;
-    let part = |key: &str| match params.get(key) {
-        None | Some(Value::Null) => Ok(None),
+    let part = |key: &str| match Args::new(params).value(key) {
+        None => Ok(None),
         Some(value) => value
             .as_u64()
             .and_then(|n| u8::try_from(n).ok())
@@ -245,5 +244,7 @@ fn set_scene_time_signature(session: &mut Session, params: &Value) -> Result<Val
     if let Some(s) = session.project.launcher.scenes.get_mut(scene) {
         s.time_signature = signature;
     }
-    Ok(json!({ "scene": scene + 1, "time_signature": signature.map(signature_text) }))
+    Ok(
+        json!({ "scene": scene, "scene_id": scene_id(&session.project, scene), "time_signature": signature.map(signature_text) }),
+    )
 }

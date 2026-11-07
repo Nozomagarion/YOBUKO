@@ -439,9 +439,8 @@ pub fn show(
     crate::kit::liquid::paint(painter, rect, tint, crate::kit::liquid::Surface::Track);
     crate::kit::native_css::background(painter, rect);
     // The strip's own background, under its controls: a double-click shows the track's devices.
-    strip.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("{} channel strip", column.name))
-    });
+    strip
+        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, true, format!("{} channel strip", column.name)));
     if strip.double_clicked() {
         state.open_devices = Some(column.track);
     }
@@ -522,12 +521,11 @@ fn divider(ui: &Ui, painter: &egui::Painter, strip: Rect, rect: Rect, fader: f32
     let response = ui
         .interact(
             rect.intersect(painter.clip_rect()),
-            Id::new(("strip-divider", strip.left() as i32)),
+            Id::unique(("strip-divider", strip.left() as i32)),
             Sense::click_and_drag(),
         )
         .on_hover_cursor(egui::CursorIcon::ResizeVertical);
-    response
-        .widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Other, true, "Device list and controls divider"));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Unknown, true, "Device list and controls divider"));
     if response.double_clicked() {
         state.strip_fader_dragged = None;
         state.strip_fader = 0.0;
@@ -557,7 +555,7 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
         crate::kit::native_css::hex(colour_picker::fill(column.color, column.mute)),
     );
     crate::kit::native_css::mark(crate::kit::native_css::HostState::Selected, selected);
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, format!("{} strip", column.name)));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, format!("{} strip", column.name)));
     // The name stands on the track's colour, as in the column's header.
     let native_fill = colour_picker::fill(column.color, column.mute);
     // An alpha material layers over the track colour. An explicitly authored
@@ -706,7 +704,7 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
         }
         let response = ui.interact(row.intersect(clip), id.with(("device", index)), Sense::click_and_drag());
         let label = format!("Show {} on {}", device.name, column.name);
-        response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
+        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
         // Dragged onto another track: moved there, Ctrl copies it (#688).
         if response.drag_started_by(egui::PointerButton::Primary) {
             crate::interaction::drop::start_device_carry(ui.ctx(), track, index);
@@ -766,7 +764,7 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
     // A device of this track carried over its list: a line where it would go, and its place
     // for the drop (#688).
     let carrying = ui.data(|d| {
-        d.get_temp::<(suhina_engine::model::TrackId, usize)>(Id::new(crate::interaction::drop::DEVICE_CARRYING))
+        d.get_temp::<(suhina_engine::model::TrackId, usize)>(Id::unique(crate::interaction::drop::DEVICE_CARRYING))
     });
     if let Some((_, from)) = carrying.filter(|(t, _)| *t == track)
         && let Some(pointer) = ui.ctx().pointer_latest_pos().filter(|p| clip.contains(*p))
@@ -897,10 +895,10 @@ fn shown(state: &SessionViewState, column: &Column, control: Control, value: f64
     }
 }
 
-/// A finished or moving volume drag as its command; every frame of a drag but the first
-/// continues its undo step, so the drag is one step.
-fn set_volume(track: u32, v: f64, continued: bool) -> Action {
-    commands::set_volume(&[track], v, Some(continued))
+/// A finished or moving volume drag as its command; every frame of a drag is in one gesture, so
+/// the drag is one step.
+fn set_volume(track: u32, v: f64) -> Action {
+    commands::set_volume(&[track], v, true)
 }
 
 /// Runs a volume drag on `response`; returns the value to draw this frame.
@@ -922,17 +920,17 @@ fn volume_drag(
     match volume_gesture(ui, response, &mut preview, column.volume_db, fader) {
         Drag::Moving(v) => {
             state.drag = Some((track, Control::Volume, v));
-            actions.push(set_volume(track.0, v, continued));
+            actions.push(set_volume(track.0, v));
         }
         Drag::Done(v) => {
             state.drag = None;
             committed = Some(v);
-            actions.push(set_volume(track.0, v, continued));
+            actions.push(set_volume(track.0, v));
         }
         Drag::Set(v) => {
             state.drag = None;
             committed = Some(v);
-            actions.push(commands::set_volume(&[track.0], v, None));
+            actions.push(commands::set_volume(&[track.0], v, false));
         }
         Drag::None => {
             if continued {
@@ -1045,24 +1043,30 @@ pub fn main_fader(
         _ => None,
     };
     let label = widgets::format_db(preview.unwrap_or(volume_db));
-    let response = volume_response(ui, painter, readout, fader, Id::new("main-volume"), "Main volume", &label);
+    let response = volume_response(ui, painter, readout, fader, Id::unique("main-volume"), "Main volume", &label);
     let continued = preview.is_some();
-    let send = |v: f64, continued: bool| {
-        Action::new(
-            "mixer.setMainVolume",
-            json!({ "db": commands::db_param(v, VOLUME_RANGE.0), "continue": continued }),
-        )
+    let send = |v: f64, dragged: bool| {
+        let mut params = json!({ "db": commands::db_param(v, VOLUME_RANGE.0) });
+        if dragged {
+            params["gesture"] = commands::gesture("main-volume");
+        }
+        Action::new("mixer.setMainVolume", params)
     };
     let mut db = volume_db;
     match volume_gesture(ui, &response, &mut preview, volume_db, fader) {
         Drag::Moving(v) => {
             state.drag = Some((MAIN, Control::Volume, v));
-            actions.push(send(v, continued));
+            actions.push(send(v, true));
             db = v;
         }
-        Drag::Done(v) | Drag::Set(v) => {
+        Drag::Done(v) => {
             state.drag = None;
-            actions.push(send(v, continued));
+            actions.push(send(v, true));
+            db = v;
+        }
+        Drag::Set(v) => {
+            state.drag = None;
+            actions.push(send(v, false));
             db = v;
         }
         Drag::None => {
@@ -1309,33 +1313,15 @@ fn pan_row(
         Some((t, Control::Pan, v)) if t == track => Some(v),
         _ => None,
     };
-    // Every frame of a drag sets the value, so it is heard while dragging; all but the first
-    // continue its undo step, so the drag is one step.
-    let continued = preview.is_some();
-    let set_pan = |v: f64| {
-        Action::new(
-            "track.setPan",
-            json!({ "tracks": [track.0], "pan": (v * 100.0).round() / 100.0, "continue": continued }),
-        )
-    };
+    // Every frame of a drag sets the value, so it is heard while dragging, all in one gesture,
+    // so the drag is one step (`ChannelControlDrag`, as the Arrangement's headers do).
     let mut committed = None;
-    match widgets::drag_value(ui, &pan_response, &mut preview, column.pan, 0.01, 0.02, (-1.0, 1.0), 0.0) {
-        Drag::Moving(v) => {
-            state.drag = Some((track, Control::Pan, v));
-            actions.push(set_pan(v));
-        }
-        Drag::Done(v) => {
-            state.drag = None;
-            committed = Some(v);
-            actions.push(set_pan(v));
-        }
-        Drag::Set(v) => {
-            state.drag = None;
-            committed = Some(v);
-            actions
-                .push(Action::new("track.setPan", json!({ "tracks": [track.0], "pan": (v * 100.0).round() / 100.0 })));
-        }
-        Drag::None => {}
+    let drag = widgets::drag_value(ui, &pan_response, &mut preview, column.pan, 0.01, 0.02, (-1.0, 1.0), 0.0);
+    if !matches!(drag, Drag::None) {
+        let frame = commands::ChannelControlDrag { track, control: commands::ChannelControl::Pan }.frame(drag);
+        state.drag = frame.moving.map(|v| (track, Control::Pan, v));
+        committed = frame.committed;
+        actions.extend(frame.action);
     }
     // Shown after this frame's drag, so the knob never trails the pointer.
     let pan = match state.drag {
@@ -1442,8 +1428,7 @@ fn send_knobs(
         let level = if send.level_db.is_finite() { send.level_db } else { widgets::SEND_RANGE.0 };
         let mut committed = None;
         // Heard while it is dragged, every frame of it in one undo step, as the fader is (#705).
-        let continued = preview.is_some();
-        match widgets::drag_value(
+        let drag = widgets::drag_value(
             ui,
             &response,
             &mut preview,
@@ -1452,22 +1437,13 @@ fn send_knobs(
             1.0,
             widgets::SEND_RANGE,
             widgets::SEND_RANGE.0,
-        ) {
-            Drag::Moving(v) => {
-                state.drag = Some((track, control, v));
-                actions.push(commands::set_send(track, send.target, v, continued));
-            }
-            Drag::Done(v) => {
-                state.drag = None;
-                committed = Some(v);
-                actions.push(commands::set_send(track, send.target, v, continued));
-            }
-            Drag::Set(v) => {
-                state.drag = None;
-                committed = Some(v);
-                actions.push(commands::set_send_outright(track, send.target, v));
-            }
-            Drag::None => {}
+        );
+        if !matches!(drag, Drag::None) {
+            let frame = commands::ChannelControlDrag { track, control: commands::ChannelControl::Send(send.target) }
+                .frame(drag);
+            state.drag = frame.moving.map(|v| (track, control, v));
+            committed = frame.committed;
+            actions.extend(frame.action);
         }
         response.context_menu(|ui| {
             for (pre, label) in [(true, "Before the fader (pre)"), (false, "After the fader (post)")] {

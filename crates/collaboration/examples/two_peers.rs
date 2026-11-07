@@ -13,8 +13,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let guest = host.add_peer(Role::Editor)?;
     let mut a = Replica::new(host.snapshot());
     let mut b = Replica::new(host.snapshot());
-    let mut render_a = Renderer::stopped(a.project(), &AudioPool::default(), 8000)?;
-    let mut render_b = Renderer::stopped(b.project(), &AudioPool::default(), 8000)?;
+    let mut render_a = Renderer::stopped(a.project(), &AudioPool::default(), 8000, suhina_session::devices())?;
+    let mut render_b = Renderer::stopped(b.project(), &AudioPool::default(), 8000, suhina_session::devices())?;
     let monitor_a = render_a.monitor();
     let monitor_b = render_b.monitor();
     a.attach_player(Player::new(render_a.controller(), None));

@@ -17,9 +17,9 @@
 //! added); opens the MIDI inputs the settings leave on. On macOS `mac_menu.rs` builds the system's
 //! menu bar from the window's menus (`ui::app::menus`) and keeps it in step every frame; a pick
 //! runs the same item as the window's bar. With the GPU renderer the window is asked to be
-//! transparent; on the first frame `surface.rs` asks the GPU whether the swapchain hands alpha to
+//! transparent; on the first frame `suhina_ui_gpu::surface` asks the GPU whether the swapchain hands alpha to
 //! the compositor (macOS always, DX12 through a DirectComposition visual on Windows, a probe
-//! surface for Vulkan and OpenGL). Where it does, `surface.rs` draws `kit::surface`'s backgrounds
+//! surface for Vulkan and OpenGL). Where it does, it draws `kit::surface`'s backgrounds
 //! with a wgpu pipeline that writes their colour and alpha unblended, and the system blurs what is
 //! behind while the theme has a see-through background (winit's blur on macOS and Wayland, DWM
 //! acrylic through `window-vibrancy` on Windows); on macOS the content runs under the title bar.
@@ -34,14 +34,14 @@
 
 mod crash_log;
 mod data_folder;
-mod liquid;
 #[cfg(target_os = "macos")]
 mod mac_menu;
 mod recent;
 mod save_error;
-mod surface;
 mod theme_files;
 mod theme_io;
+
+use suhina_ui_gpu::{liquid, surface};
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -241,6 +241,9 @@ fn main() -> ExitCode {
     }
     window.app.projects_mut().set_audio_system(std::sync::Arc::new(suhina_output::DeviceOutput::new()));
     window.app.projects_mut().set_output_choice(settings.output_choice());
+    // Each audio device keeps its input and its default track input (Settings › Audio,
+    // `audio.setTrackInput`): new audio tracks hear the chosen device's.
+    window.app.projects_mut().set_device_inputs(settings.device_inputs());
     // The MIDI controllers, every port on but the ones the settings turn off (Settings › MIDI,
     // `midi.*`, ADR 0017).
     window.app.projects_mut().set_midi_inputs_off(settings.midi_inputs_off.clone());
@@ -501,6 +504,7 @@ impl Window {
         #[cfg(target_os = "macos")]
         if let Some(menu) = &mut self.mac_menu {
             menu.sync(&self.app.menus());
+            menu.follow_theme(suhina_ui::kit::theme::is_light());
         }
         self.answer_agents();
         if let Some((path, how)) = self.app.take_open_request() {
@@ -715,16 +719,10 @@ impl Window {
             self.app.set_status(Status::Error(error.to_string()));
             return false;
         }
-        let folder = session.audio_folder().map_or_else(|| PathBuf::from("."), Path::to_path_buf);
         // Outside the project's folder only the person's own saved files and library folders
-        // are read (`docs/spec/missing-files.md` › Project file boundaries).
-        let source = session.source().map(Path::to_path_buf);
-        let trusted = self.app.projects_mut().trusted_audio_for(source.as_deref());
-        let (audio, audio_warnings) = suhina_media::load_project_audio_trusted(session.project(), &folder, &trusted);
-        session.set_trusted(trusted);
-        warnings.extend(audio_warnings);
-        let waveforms = suhina_ui::kit::waveform::from_pool(&audio);
-        session.set_audio(audio);
+        // are read (`docs/spec/missing-files.md` › Project file boundaries), as the CLI and MCP do.
+        warnings.extend(self.app.projects_mut().load_audio(&mut session));
+        let waveforms = suhina_ui::kit::waveform::from_pool(session.audio());
         let choice = self.app.projects().output_choice().clone();
         // A device may only be open once: the previews' own output closes first (ADR 0011).
         self.app.projects_mut().close_preview_output();
@@ -849,6 +847,9 @@ impl Window {
             if let Some(css) = reply.user_css {
                 suhina_ui::kit::native_css::set_user_sheet(css);
                 ctx.request_repaint();
+            }
+            if let Some(names) = reply.reserved {
+                self.app.reserve_theme_ids(names);
             }
             if reply.replace {
                 self.app.set_themes(ctx, reply.entries, reply.folder);
@@ -1150,13 +1151,7 @@ fn save_file(name: &str, text: &str) -> Result<(), String> {
 /// crash or a full disk while writing never leaves the settings half written (they would then be
 /// read as defaults).
 fn write_whole(path: &Path, text: &str) -> std::io::Result<()> {
-    let mut temporary = path.as_os_str().to_owned();
-    temporary.push(".tmp");
-    let temporary = PathBuf::from(temporary);
-    std::fs::write(&temporary, text)?;
-    std::fs::rename(&temporary, path).inspect_err(|_| {
-        let _removed = std::fs::remove_file(&temporary);
-    })
+    suhina_fs::write_atomic(path, text)
 }
 
 #[cfg(test)]

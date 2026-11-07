@@ -81,8 +81,14 @@ fn submit(service: &mut Service, base: u64, edit: WireEdit) {
         .unwrap();
 }
 fn render(session: &Session) -> Vec<f32> {
-    suhina_engine::render_offline_from(session.project(), RenderInputs::from_audio(session.audio()), 8000, 512, None)
-        .unwrap()
+    suhina_engine::render_offline_from(
+        session.project(),
+        RenderInputs::from_audio(session.audio(), suhina_session::devices()),
+        8000,
+        512,
+        None,
+    )
+    .unwrap()
 }
 
 #[test]
@@ -91,8 +97,14 @@ fn missing_guest_files_cross_tls_sound_identical_and_survive_disconnect_save_and
     let guest_dir = tempfile::tempdir().unwrap();
     let (project, audio) = source();
     let before = project.clone();
-    let original =
-        suhina_engine::render_offline_from(&project, RenderInputs::from_audio(&audio), 8000, 512, None).unwrap();
+    let original = suhina_engine::render_offline_from(
+        &project,
+        RenderInputs::from_audio(&audio, suhina_session::devices()),
+        8000,
+        512,
+        None,
+    )
+    .unwrap();
     let mut host = Service::default();
     host.set_storage_root(Some(host_dir.path().into())).unwrap();
     host.select_audio_project(&project, &audio).unwrap();
@@ -123,8 +135,8 @@ fn missing_guest_files_cross_tls_sound_identical_and_survive_disconnect_save_and
     assert_eq!(render(&local), original);
     assert_eq!(render(&remote), original);
     assert!(original.iter().any(|s| s.abs() > 0.001));
-    let mut a = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
-    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000).unwrap();
+    let mut a = Renderer::stopped(local.project(), local.audio(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000, suhina_session::devices()).unwrap();
     local.attach_player(Player::new(a.controller(), None));
     remote.attach_player(Player::new(b.controller(), None));
     local.execute("transport.setPosition", &json!({"beats":1})).unwrap();
@@ -160,8 +172,14 @@ fn missing_guest_files_cross_tls_sound_identical_and_survive_disconnect_save_and
     let reopened = suhina_project_file::read_file(&saved).unwrap();
     let (audio, warnings) = suhina_media::load_project_audio(&reopened, &folder);
     assert!(warnings.is_empty(), "{warnings:?}");
-    let output =
-        suhina_engine::render_offline_from(&reopened, RenderInputs::from_audio(&audio), 8000, 512, None).unwrap();
+    let output = suhina_engine::render_offline_from(
+        &reopened,
+        RenderInputs::from_audio(&audio, suhina_session::devices()),
+        8000,
+        512,
+        None,
+    )
+    .unwrap();
     assert!(output.iter().any(|s| s.abs() > 0.001));
     assert_eq!(project, before);
 }
@@ -229,8 +247,8 @@ fn new_takes_publish_without_reconnecting_reuse_sound_and_preserve_players_and_s
     let folder = snapshot.folder().unwrap().to_path_buf();
     let mut remote = snapshot.session().unwrap();
     snapshot.keep();
-    let mut a = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
-    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000).unwrap();
+    let mut a = Renderer::stopped(local.project(), local.audio(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000, suhina_session::devices()).unwrap();
     local.attach_player(Player::new(a.controller(), None));
     remote.attach_player(Player::new(b.controller(), None));
     local.execute("transport.setPosition", &json!({"beats":2})).unwrap();
@@ -298,7 +316,14 @@ fn new_takes_publish_without_reconnecting_reuse_sound_and_preserve_players_and_s
     let (pool, warnings) = suhina_media::load_project_audio_trusted(&reopened, &folder, &trusted);
     assert!(warnings.is_empty(), "{warnings:?}");
     assert_eq!(
-        suhina_engine::render_offline_from(&reopened, RenderInputs::from_audio(&pool), 8000, 512, None).unwrap(),
+        suhina_engine::render_offline_from(
+            &reopened,
+            RenderInputs::from_audio(&pool, suhina_session::devices()),
+            8000,
+            512,
+            None
+        )
+        .unwrap(),
         rendered
     );
     assert_eq!(project, source_before);
@@ -370,7 +395,7 @@ fn a_native_microphone_take_recorded_after_join_can_be_published_without_changin
     let mut remote = snapshot.session().unwrap();
     snapshot.keep();
     // Drive the normal recorder with a synthetic microphone, after both services have joined.
-    let mut renderer = Renderer::stopped(studio.project(), studio.audio(), 8000).unwrap();
+    let mut renderer = Renderer::stopped(studio.project(), studio.audio(), 8000, suhina_session::devices()).unwrap();
     let (mut input, consumer) = rtrb::RingBuffer::new(32768);
     renderer.set_audio_input(consumer, 1, Arc::new(AtomicU64::new(0)));
     studio.attach_player(Player::new(renderer.controller(), None));
@@ -484,8 +509,8 @@ fn guest_uploads_reuse_verified_sounds_preserve_players_and_save_both_copies() {
     let mut remote = snapshot.session().unwrap();
     let guest_folder = snapshot.folder().unwrap().to_path_buf();
     snapshot.keep();
-    let mut a = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
-    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000).unwrap();
+    let mut a = Renderer::stopped(local.project(), local.audio(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000, suhina_session::devices()).unwrap();
     local.attach_player(Player::new(a.controller(), None));
     remote.attach_player(Player::new(b.controller(), None));
     local.execute("transport.setPosition", &json!({"beats":1})).unwrap();
@@ -558,7 +583,14 @@ fn guest_uploads_reuse_verified_sounds_preserve_players_and_save_both_copies() {
         let (audio, warnings) = suhina_media::load_project_audio_trusted(&opened, &folder, &trusted);
         assert!(warnings.is_empty(), "{warnings:?}");
         assert_eq!(
-            suhina_engine::render_offline_from(&opened, RenderInputs::from_audio(&audio), 8000, 512, None).unwrap(),
+            suhina_engine::render_offline_from(
+                &opened,
+                RenderInputs::from_audio(&audio, suhina_session::devices()),
+                8000,
+                512,
+                None
+            )
+            .unwrap(),
             render(session)
         );
     }
@@ -629,7 +661,7 @@ fn returning_guest_gets_current_tracks_and_takes_while_both_previous_copies_surv
     let initial = host.take_shared().unwrap();
     let mut local = initial.session().unwrap();
     initial.keep();
-    let mut player = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
+    let mut player = Renderer::stopped(local.project(), local.audio(), 8000, suhina_session::devices()).unwrap();
     local.attach_player(Player::new(player.controller(), None));
     local.execute("transport.setPosition", &json!({"beats":3})).unwrap();
     local.execute("transport.play", &json!({})).unwrap();
@@ -694,7 +726,7 @@ fn shared_chain_edits_cross_tls_preserve_collected_takes_notes_and_independent_p
     let host_dir = tempfile::tempdir().unwrap();
     let guest_dir = tempfile::tempdir().unwrap();
     let (mut project, pool) = source();
-    project.contents[2].lanes[0].data = LaneData::Notes(vec![suhina_model::Note::new(0., 2., 60, 0.8)]);
+    project.contents[2].lanes[0].data = LaneData::Notes(vec![suhina_model::Note::new(0., 2., 60, 0.8)].into());
     let before = project.clone();
     let mut host = Service::default();
     host.set_storage_root(Some(host_dir.path().into())).unwrap();
@@ -711,8 +743,8 @@ fn shared_chain_edits_cross_tls_preserve_collected_takes_notes_and_independent_p
     let snap = guest.take_shared().unwrap();
     let mut remote = snap.session().unwrap();
     snap.keep();
-    let mut a = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
-    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000).unwrap();
+    let mut a = Renderer::stopped(local.project(), local.audio(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000, suhina_session::devices()).unwrap();
     local.attach_player(Player::new(a.controller(), None));
     remote.attach_player(Player::new(b.controller(), None));
     for (s, beat) in [(&mut local, 1.), (&mut remote, 5.)] {
@@ -837,8 +869,8 @@ fn audio_copies_to_launcher_keep_verified_assets_after_scene_duplicate_and_delet
     assert!(folder.join(asset).is_file());
     let reopened = suhina_project_file::from_json(&suhina_project_file::to_json(remote.project())).unwrap();
     assert_eq!(&reopened, remote.project());
-    let mut a = Renderer::stopped(local.project(), local.audio(), 8000).unwrap();
-    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000).unwrap();
+    let mut a = Renderer::stopped(local.project(), local.audio(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(remote.project(), remote.audio(), 8000, suhina_session::devices()).unwrap();
     local.attach_player(Player::new(a.controller(), None));
     remote.attach_player(Player::new(b.controller(), None));
     local.execute("launcher.setQuantization", &json!({"value":"none"})).unwrap();

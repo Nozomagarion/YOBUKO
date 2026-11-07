@@ -3,7 +3,7 @@ description: User guide to the keyboard shortcuts, one entry per action with its
 read_when: user guide, keyboard shortcuts, what does this key do, list of keys, every shortcut explained, keybindings, hotkeys, action ids, which action a key runs, back up keys, share keymap, keymap.json, rebind a key, keys for agents
 type: howto
 status: current
-last_verified: 2026-10-31
+last_verified: 2026-11-05
 covers:
   - crates/ui/src/settings/keymap.rs
   - crates/ui/src/settings/settings_view.rs
@@ -79,6 +79,7 @@ The project you leave stops playing.
 | Alt+M | `view.araEditor` | Arrangement | Opens the selected audio clip in its track's plug-in that edits clips (such as a pitch editor): the detail area shows the clip with the plug-in's editor. |
 | Ctrl+B | `view.browser` | Anywhere | Shows or hides the browser, the panel on the left that lists your samples, presets, effects, instruments and plug-ins. With the Draw-first preset this is Ctrl+Shift+B. |
 | Ctrl+F | `browser.search` | Anywhere | Puts the cursor in the browser's search field, and shows the browser when it is hidden. In the field, Up and Down move through the results, Enter adds the selected result to the selected track, and Escape clears the search and then leaves the field. |
+| Ctrl+P | `view.quickAdd` | Anywhere, with a project open | Opens the quick-add palette in the middle of the window. The buttons along its bottom (Instruments, Effects, Samples, Presets) narrow what it lists, and with Instruments or Effects on, buttons under the field narrow plug-ins to VST2, VST3 or CLAP; each plug-in shows its format at the right. Type part of a name: Up and Down move through what it finds, and Enter (or a click) adds the lit effect or instrument to the selected track, or puts the lit sample or MIDI file on that track (on a new track below it when the track cannot hold the file), at the beat under the pointer or at the play start marker. With no track selected, a device gets a new track of its own. Escape or a click outside closes it. |
 | Ctrl+Alt+Shift+M | `view.sampleMap` | Anywhere | Shows or hides the sample map in the main area. The sample map places your samples on a map by how they sound, so similar sounds are close together. Escape on the map closes it too. |
 | Ctrl+Alt+M | `view.sampleMapWindow` | Anywhere | Opens the sample map in a window of its own, or puts it back in the main window. |
 | 1 to 6 | `arrangement.tool1` … `arrangement.tool6` | Arrangement | With the Arrangement's toolbar on (Settings › Arrangement › Toolbar) and the Arrangement clicked last, choose its Select, Range, Split, Erase, Draw and Mute tools. With the piano roll clicked last, the same keys choose the piano roll's tools. |
@@ -106,7 +107,7 @@ The zoom level is remembered the next time Suhina starts.
 | Delete or Backspace | `selection.delete` | Selection | Deletes the selected clips, or in the piano roll the selected notes. |
 | 0 | `selection.mute` | Selection | Mutes the selected clips, or unmutes them if they are muted. A muted clip stays in place but makes no sound. |
 | Ctrl+A | `selection.selectAll` | Anywhere | Selects every clip in the arrangement. In the piano roll, after a click in it, selects every note instead. |
-| Ctrl+E | `selection.split` | Selection | Splits the selected clip in two at the playhead. |
+| Ctrl+E | `selection.split` | Selection | Splits the selected clip in two where you clicked inside it, while playing too. It never splits at the playhead. |
 | Ctrl+J | `selection.consolidate` | Selection | Joins the selected clips, and the space between them, into one new clip. |
 
 Every key that acts on clips acts on the whole selection, and all of it is one undo step.
@@ -166,15 +167,19 @@ of one square of the grid, which follows the zoom and the grid setting.
 | B | `pianoRoll.draw` | Piano roll | Switches between the Select and Draw tools. |
 | Ctrl+A | `pianoRoll.selectAll` | Piano roll | Selects every note in the clip. |
 | Escape | `pianoRoll.deselect` | Piano roll | Clears the note selection. |
-| Left | `pianoRoll.earlier` | Piano roll | Moves the selected notes one grid step earlier. |
-| Right | `pianoRoll.later` | Piano roll | Moves the selected notes one grid step later. |
+| Left | `pianoRoll.earlier` | Piano roll | Moves the selected notes to the previous grid line: the first of them lands on it, and the others keep their distance to it. |
+| Right | `pianoRoll.later` | Piano roll | Moves the selected notes to the next grid line: the first of them lands on it, and the others keep their distance to it. |
 | Up | `pianoRoll.up` | Piano roll | Moves the selected notes one semitone higher. |
 | Down | `pianoRoll.down` | Piano roll | Moves the selected notes one semitone lower. |
+| Alt+Left | `pianoRoll.earlierFine` | Piano roll | Moves the selected notes a fine step (a 1/128 note) earlier, off the grid. |
+| Alt+Right | `pianoRoll.laterFine` | Piano roll | Moves the selected notes a fine step (a 1/128 note) later, off the grid. |
 | Shift+Up | `pianoRoll.octaveUp` | Piano roll | Moves the selected notes one octave (12 semitones) higher. |
 | Shift+Down | `pianoRoll.octaveDown` | Piano roll | Moves the selected notes one octave lower. |
 | Shift+Left | `pianoRoll.shorter` | Piano roll | Makes the selected notes one grid step shorter. A note never gets shorter than one step. |
-| Shift+Right | `pianoRoll.longer` | Piano roll | Makes the selected notes one grid step longer. |
-| Ctrl+U | `pianoRoll.quantize` | Anywhere | Quantises the piano roll's notes: moves them onto the grid, with the settings in the quantise block of the MIDI tools column. With notes selected it moves only those, otherwise every note. |
+| Shift+Right | `pianoRoll.longer` | Piano roll | Takes each selected note's end to the next grid line, or to the start of the next note of its key when that comes first (unless stacked notes are allowed). |
+| Alt+Shift+Left | `pianoRoll.shorterFine` | Piano roll | Makes the selected notes a fine step (a 1/128 note) shorter, off the grid. |
+| Alt+Shift+Right | `pianoRoll.longerFine` | Piano roll | Makes the selected notes a fine step (a 1/128 note) longer, off the grid, stopping at the next note of their key unless stacked notes are allowed. |
+| Ctrl+U | `pianoRoll.quantize` | Anywhere | Quantises the piano roll's notes: moves them onto the grid, with the settings in the quantise block of the MIDI tools column. With notes selected it moves only those; with none, those that start in a time selection, otherwise every note. |
 
 Copy, cut, paste, duplicate and delete in the piano roll use the [Editing](#editing) keys. With no
 note selected (or nothing copied, for paste) they act on the clip instead.

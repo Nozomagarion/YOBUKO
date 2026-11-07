@@ -17,7 +17,7 @@ pub const MAX_STATES: usize = 32 * 1024 * 1024;
 const MAX_PORTABLE_DEVICES: usize = 256;
 pub const MAX_TRACKS: usize = 64;
 // Upstream source integration must explicitly review this adapter when the native format changes.
-const NATIVE_VERSION: u64 = 5;
+const NATIVE_VERSION: u64 = 9;
 
 fn input() -> MidiInput {
     MidiInput { port: MidiPort::Nothing, channel: None, monitor: Monitor::Off }
@@ -179,7 +179,7 @@ fn portable_device(device: &suhina_model::Device, channel: &str) -> Result<usize
         | DeviceKind::Foreign { .. }
         | DeviceKind::Group(_) => {}
     }
-    let size = device.state.as_ref().map_or(0, Vec::len);
+    let size = device.state.as_ref().map_or(0, |state| state.len());
     if size > MAX_STATE {
         return Err(named("a device's settings exceed 4 MiB"));
     }
@@ -212,7 +212,6 @@ fn encode_inner(project: &Project, audio: bool) -> Result<(Project, Vec<u8>), St
     }
     let mut copy = project.clone();
     copy.extensions = Extensions::default();
-    copy.launcher.mappings.clear();
     for track in &mut copy.tracks {
         track.extensions = Extensions::default();
         track.midi_input = input();

@@ -402,7 +402,7 @@ fn hostile_project(metas: &[Asset]) -> Project {
             id: suhina_model::ContentId(1000 + i as u32),
             name: "Audio".into(),
             length: 4.0,
-            lanes: vec![suhina_model::ContentLane { target: None, data: LaneData::Audio(region) }],
+            lanes: vec![suhina_model::ContentLane { target: None, data: LaneData::Audio(region) }].into(),
             extensions: Default::default(),
             scale: None,
         });

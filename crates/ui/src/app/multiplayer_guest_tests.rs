@@ -155,7 +155,7 @@ fn a_guest_sees_which_shared_plug_ins_are_missing_on_this_computer() {
         "Serum",
         suhina_engine::model::DeviceKind::Vst3 { id: "0123456789abcdef0123456789abcdef".into() },
     );
-    serum.state = Some(vec![9; 1000]);
+    serum.state = Some(vec![9; 1000].into());
     project.channels[0].devices = vec![
         serum,
         suhina_engine::model::Device::new("Reverb", suhina_engine::model::DeviceKind::Builtin("reverb".into())),
@@ -185,7 +185,7 @@ fn a_guest_sees_which_shared_plug_ins_are_missing_on_this_computer() {
     let bound = guest.multiplayer.bound.unwrap();
     // The settings arrived with the copy; only the plug-in itself is not installed here.
     let devices = &guest.projects.get(bound).unwrap().project().channels[0].devices;
-    assert_eq!(devices[0].state, Some(vec![9; 1000]));
+    assert_eq!(devices[0].state, Some(vec![9; 1000].into()));
     assert_eq!(guest.multiplayer.missing_plugins, vec![format!("Serum (vst3) on {channel}")]);
     guest.multiplayer.open = true;
     let mut h = egui_kittest::Harness::builder()

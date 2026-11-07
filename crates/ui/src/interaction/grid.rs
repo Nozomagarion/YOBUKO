@@ -403,7 +403,7 @@ impl TrackGrid {
             LauncherMonitor::meter,
         );
         let mut mapped: Vec<(MappingTarget, String)> = Vec::new();
-        for m in project.launcher.mappings.iter().filter(|m| suhina_session::target_exists(project, &m.target)) {
+        for m in project.controller_mappings.iter().filter(|m| suhina_session::target_exists(project, &m.target)) {
             match mapped.iter_mut().find(|(t, _)| *t == m.target) {
                 Some((_, label)) => *label = format!("{label} {}", m.source.label()),
                 None => mapped.push((m.target, m.source.label())),
@@ -536,7 +536,7 @@ mod tests {
         let channel = project.tracks[0].channel.unwrap();
         project.channel_mut(channel).unwrap().automation.push(AutomationLane {
             param: "pan".into(),
-            points: vec![AutomationPoint::new(0.0, 1.0)],
+            points: vec![AutomationPoint::new(0.0, 1.0)].into(),
             enabled: true,
         });
         let grid = TrackGrid::build(&project, None);

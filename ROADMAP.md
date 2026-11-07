@@ -15,13 +15,13 @@ primary platform; Windows and macOS are supported.
 | M7 | **More formats:** DAWproject import and export | not started |
 | M8 | **UI:** Launcher and Arrangement views on top of the commands; familiar workflow, Suhina's own look; installers (AppImage, deb, Flatpak, MSI) and signed macOS and Windows builds | in progress: Launcher and Arrangement views, browser, sample map, settings, themes and a nightly build work; installers and signed builds to come ([#180](https://github.com/suhina-daw/suhina-daw/issues/180)) |
 
-How far this is from a full clip-launching DAW, and the order the gap is built in: the
-[parity report](docs/research/parity-live-12.md) and
-[ADR 0016](docs/decisions/0016-parity-target.md) (proposed).
+What Suhina aims at, what it leaves out and the order the missing parts are built in:
+[ADR 0016](docs/decisions/0016-scope.md) (proposed). The README's status figure shows how much of
+each area works today.
 
 ## Next (order proposed in ADR 0016)
 
-The gaps that matter most, in the order [ADR 0016](docs/decisions/0016-parity-target.md) proposes
+The gaps that matter most, in the order [ADR 0016](docs/decisions/0016-scope.md) proposes
 (its build order has the reasons and sizes):
 
 1. **MIDI note editing:** the piano roll in the detail area and note commands (add, move, resize,
@@ -69,7 +69,7 @@ its copyright notices kept and credited in [`ATTRIBUTION.md`](ATTRIBUTION.md).
   sampler as import targets: [#101](https://github.com/suhina-daw/suhina-daw/issues/101).
 - **Order:** EQ and filter first, then bus compressor and the modulation delay (the delay and
   reverb are done, and multiband dynamics); saturation, the sampler and drum sampler later
-  ([ADR 0016](docs/decisions/0016-parity-target.md)).
+  ([ADR 0016](docs/decisions/0016-scope.md)).
 
 ### The devices
 
@@ -96,9 +96,9 @@ exists in `devices/`, passes its tests and runs in track chains.
 | convolution reverb | own convolution | planned |
 | saturator: eight curves, Color filters and their inverse, post clip, waveshaper, dry/wet | own, oversampled | done |
 | multi-stage saturation | own, oversampled | planned |
-| EQ: eight bands of eight types, two curves for Stereo, Left/Right or Mid/Side, Scale, Adaptive Q | own (`dsp` state-variable filters) | done; analyser, Audition and a curve display planned |
+| EQ: eight bands of eight types, two curves for Stereo, Left/Right or Mid/Side, Scale, Adaptive Q | own (`dsp` state-variable filters) | done, with the panel's response display and its output spectrum's analyser; Audition planned |
 | filter | own (`dsp` filters) | planned |
-| FM synth | MSFA (Apache-2.0) via Dexed | DX7-style engine (32 algorithms) done; more waveforms and a filter planned |
+| FM synth: six operators, 43 algorithms, waveforms and drawn partials, DX7 and time envelopes, filter and shaper, two LFOs, modulation matrix, spread, randomizer ([spec](docs/spec/fm-synth.md)) | MSFA (Apache-2.0) via Dexed, own parts around it | done; import from Live Sets planned |
 | wavetable synth | Vital (GPL-3.0), under its own name | planned |
 | subtractive synth | own, Surge XT (GPL-3.0) for reference | planned |
 | sampler | own | single-source Simple/Grain instrument, SDK panel, source loading and recording, tempo-synchronised sample Warp with six selectable modes and automatically initialized, editable source BPM |
@@ -123,7 +123,7 @@ command with undo. Behaviour, detectors and tests: [`docs/spec/audio-to-midi.md`
 ## Later, not ordered
 
 FL Studio projects (`.flp`), MIDI controllers and remote mapping (hardware controllers: scope in
-[ADR 0016](docs/decisions/0016-parity-target.md)), devices of an imported project that
+[ADR 0016](docs/decisions/0016-scope.md)), devices of an imported project that
 Suhina cannot run kept as placeholders and copied along with the project
 ([device import](docs/spec/device-import.md)), bridging Windows plug-ins.
 
@@ -140,7 +140,8 @@ refused or suspended, never by losing its edits.
 
 ## What works now
 
-<!-- A new bullet goes in a file of its own under docs/works-now/ (its README says how), not here. -->
+<!-- FM Synth as a full FM instrument: operator waveforms and drawn partials, envelopes in seconds that loop, a filter and shaper per note, a second LFO up to audio rate, a modulation matrix, stereo spread, its own panel, and Random, which gives a sound new values by section (`device.randomize`).
+- A new bullet goes in a file of its own under docs/works-now/ (its README says how), not here. -->
 
 - Audio settings can open the active ASIO driver's native control panel, and
   show the engine block separately from the measured driver callback size.
@@ -150,7 +151,7 @@ refused or suspended, never by losing its edits.
 - Theme control shapes: buttons, the toolbar's fields and the volume and pan fields take their background, border, corner radius, thickness and shadows from the theme's CSS (`#arrangement-volume`, `.value-fill`, `volume.track` artwork and the rest); a workspace panel can float over the view; a theme can put the Arrangement track headers on a side; Settings › Themes has a search.
 - Theme presentation: native Launcher column widths and row heights come from the theme's CSS; mixer/name backgrounds consume authored materials, and stereo meter gradients retain fixed dBFS colour positions with native peak/RMS opacity and lit-region glow. Fader scales move independently of the rail/cap.
 
-- Forest Amber, the green-and-white Suhina Sheet, blue/cream glass Suhina Meadow and brown pixel-textured Suhina Blocks are available as built-in themes. Sheet and Meadow include compact Session geometry, native CSS and original editable SVG controls; Meadow embeds an original generated green-hill background and liquid settings. Blocks uses brown plank CSS without landscape wallpaper, plus colour-keyed SVG track textures.
+- The green-and-white Suhina Sheet, blue/cream glass Suhina Meadow and brown pixel-textured Suhina Blocks are available as built-in themes. Sheet and Meadow include compact Session geometry, native CSS and original editable SVG controls; Meadow embeds an original generated green-hill background and liquid settings. Blocks uses brown plank CSS without landscape wallpaper, plus colour-keyed SVG track textures.
 
 - Private image backgrounds use a cached source and display-scaled, alpha-correct blur; Settings keeps its own readable material. Native Mica has been removed.
 
@@ -212,6 +213,14 @@ refused or suspended, never by losing its edits.
 - Bluetooth headphones are in Settings › Audio › Output's Device list: a device that cannot say what
   it offers yet stays listed, an output connected while the page shows appears within a few seconds,
   and on Linux a running PulseAudio or PipeWire server is a driver of its own to choose them on.
+
+- **Take lanes as child rows:** take lanes appear when a recording stops, with a mark on the clip
+  while it runs; each lane sizes and zooms like a track; Ctrl and a drag paints an area across lanes
+  to delete or cut (`take.deleteRange`, `take.cutRange`), pieces move like clips (`take.movePieces`),
+  and a piece's lower corners bring back the recording around it (`take.trimPiece`); crossfades
+  between parts show on the track and are set by a handle (`take.setCrossfade`), with their default
+  in Settings; and a part moved or copied on the track takes its takes along
+  ([#1078](https://github.com/suhina-daw/suhina-daw/issues/1078)).
 
 ### M0 Foundation
 - Rust workspace, GPL-3.0-or-later, CI (fmt, clippy `-D warnings`, tests) on Linux, Windows and
@@ -409,10 +418,10 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   release of a slot's launch button; in the Launcher view a slot launches as the mouse button goes
   down, and right-clicking a clip sets its launch settings
   ([spec](docs/spec/clip-launching.md#launch-settings)).
-- Computer keys launch slots, scenes and stop buttons: Ctrl+M or **Map keys** in the title bar maps
+- Computer keys launch slots, scenes and stop buttons: Ctrl+M or **Map** in the title bar maps
   the next key to the clicked control, and a key down and up are the press and release, so gate
-  and repeat clips play from the keyboard. `launcher.addMapping` maps MIDI notes too, kept in the
-  project; playing them waits for MIDI input
+  and repeat clips play from the keyboard. `mapping.add` maps MIDI notes too, kept in the
+  project's controller mappings; playing them waits for MIDI input
   ([spec](docs/spec/clip-launching.md#launching-from-keys-and-notes)).
 - Still to do: launching from live MIDI notes, fades on launched clips
   ([#104](https://github.com/suhina-daw/suhina-daw/issues/104)), reading the global
@@ -656,9 +665,8 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
 - **Themes**: every colour comes from the theme in use, a folder with a `theme.css` in the
   `themes` folder (`theme { name: …; } :root { --accent: #A6A3FF; … }`), which Suhina never
   rewrites; themes from earlier versions are converted once, keeping the originals; track colours and the sample map's
-  kind colours are theme tokens too (`track.1`–`track.8`, `kind.*`). Nine come with Suhina (Suhina
-  Dark and Light, Editor Dark, High Contrast, Dracula, Nord, Catppuccin Mocha and Latte, Solarized
-  Dark). Settings › Appearance › Theme picks one, changes its colours, renames, duplicates, reads
+  kind colours are theme tokens too (`track.1`–`track.8`, `kind.*`). Among those that come with Suhina are Suhina
+  Studio and Suhina Light, High Contrast, Nord, Catppuccin Mocha and Latte). Settings › Appearance › Theme picks one, changes its colours, renames, duplicates, reads
   the files again, backs every theme up into a zip and exports a template zip with a README an AI
   agent can make a theme from; a theme file or backup dropped on the window is added, and a file
   saved in an editor shows within a second.
@@ -810,7 +818,11 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   always (In) or never (Off), through its devices and mix (`track.setAudioInput`); arm many
   tracks at once to hear a band on separate tracks; the source and the monitor sit on the
   track's strip — Audio From and the three buttons — where the picker is visible without a
-  menu ([#267](https://github.com/suhina-daw/suhina-daw/issues/267), ADR 0017).
+  menu ([#267](https://github.com/suhina-daw/suhina-daw/issues/267), ADR 0017). Settings › Audio ›
+  Default track input gives new audio tracks, and armed ones that hear nothing, a channel or a
+  pair of the input device; each audio device keeps its own with its Input, so choosing another
+  sound card brings both back (`audio.setTrackInput`,
+  [#1191](https://github.com/suhina-daw/suhina-daw/issues/1191)).
 - **A MIDI input per track:** each track hears every MIDI port, one port, or none, and every
   channel or one, so a keyboard and a pad controller (or two players) each play their own armed
   track; set from the track's menu or the Arrangement header (`track.setMidiInput`), saved with
@@ -1060,3 +1072,14 @@ distribution; full project coediting remains absent and no production feature ch
   worker loading, independent pause/seek/stop, smoothed crossfader/channel levels and separate
   headphone cues. Transient sources do not change Studio/catalog formats; sync, pitch/loop
   controls, hardware export and physical routing validation remain pending.
+- The piano roll's keys look like a keyboard in a choice of styles (Bone, Stone, Night), name the
+  keys you choose, select ranges by dragging (Shift adds another), and a strip beside them names the
+  row under the pointer and zooms the rows. Notes replace what they land on unless stacked notes are
+  allowed, Legato follows the next note on any key, Shift+arrow stops at the grid and the next note,
+  and the audition sounds notes from the press and at each pitch of a drag. A rectangle over no note
+  selects a stretch of time for the keys to act on, a bar on the ruler shows what is selected in time,
+  and a click leaves a mark where a paste goes. Shift goes on from a time selection, here and in the
+  Arrangement, a selected note has a colour of its own, and a double-click with the right button on
+  a ghost note opens its clip. With several MIDI clips picked, a strip over the ruler shows them all,
+  and a click on a bar or a faint note gives that clip the focus.
+

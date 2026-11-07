@@ -204,8 +204,8 @@ fn two_real_renderers_keep_different_positions_and_stop_independently_during_edi
     let editor = host.add_peer(Role::Editor).unwrap();
     let mut a = Replica::new(host.snapshot());
     let mut b = Replica::new(host.snapshot());
-    let mut render_a = Renderer::stopped(a.project(), &AudioPool::default(), SR).unwrap();
-    let mut render_b = Renderer::stopped(b.project(), &AudioPool::default(), SR).unwrap();
+    let mut render_a = Renderer::stopped(a.project(), &AudioPool::default(), SR, suhina_session::devices()).unwrap();
+    let mut render_b = Renderer::stopped(b.project(), &AudioPool::default(), SR, suhina_session::devices()).unwrap();
     let monitor_a = render_a.monitor();
     let monitor_b = render_b.monitor();
     a.attach_player(Player::new(render_a.controller(), None));
@@ -246,7 +246,8 @@ fn two_real_renderers_keep_different_positions_and_stop_independently_during_edi
 fn a_failed_player_update_requires_explicit_recovery_instead_of_silent_retry() {
     let mut host = Host::new(project()).unwrap();
     let mut replica = Replica::new(host.snapshot());
-    let mut render = Renderer::stopped(replica.project(), &AudioPool::default(), 8000).unwrap();
+    let mut render =
+        Renderer::stopped(replica.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
     replica.attach_player(Player::new(render.controller(), None));
     drop(render);
     let mut failed = None;

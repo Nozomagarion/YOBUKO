@@ -133,6 +133,26 @@ impl App {
         }
     }
 
+    /// New audio tracks hear the default track input the settings keep for the audio device
+    /// chosen (`audio.setTrackInput`, #1191); the tracks that are there keep theirs.
+    pub(super) fn choose_track_input(&mut self) {
+        let input = suhina_session::audio::input_channels_text(self.settings.track_input());
+        match self.projects.execute("audio.setTrackInput", &json!({ "input": input })) {
+            Ok(result) => {
+                let shown = match result["track_input"].as_str() {
+                    Some("none") | None => "none".to_string(),
+                    Some(input) => format!("In {input}"),
+                };
+                self.status = Status::Done(format!("Default track input on this audio device: {shown}"));
+            }
+            Err(e) => {
+                let kept = self.projects.track_input();
+                self.settings.set_track_input(kept);
+                self.status = Status::Error(e.message().to_owned());
+            }
+        }
+    }
+
     /// Settings can stay over the main view or move into an independent native window.
     pub(super) fn settings_dialog(&mut self, ui: &Ui, window: Rect) {
         if suhina_plugins::trace::on() {
@@ -169,11 +189,11 @@ impl App {
             });
             return;
         }
-        egui::Area::new(Id::new("settings-dialog")).order(egui::Order::Foreground).fixed_pos(window.min).show(
+        egui::Area::new(Id::unique("settings-dialog")).order(egui::Order::Foreground).fixed_pos(window.min).show(
             ui.ctx(),
             |ui| {
                 ui.set_min_size(window.size());
-                let behind = ui.interact(window, Id::new("settings-behind"), Sense::click_and_drag());
+                let behind = ui.interact(window, Id::unique("settings-behind"), Sense::click_and_drag());
                 let _swallowed = behind.clicked();
                 let tint = ui.painter().add(egui::Shape::Noop);
                 // The panel stays above the status bar, which shows what the page reports.
@@ -182,20 +202,18 @@ impl App {
                 let size = Vec2::new(SETTINGS_SIZE.x.min(bounds.width()), SETTINGS_SIZE.y.min(bounds.height()));
                 let position = ui
                     .ctx()
-                    .data(|data| data.get_temp::<Pos2>(Id::new("settings-panel-position")))
+                    .data(|data| data.get_temp::<Pos2>(Id::unique("settings-panel-position")))
                     .unwrap_or(window.center() - size / 2.0);
                 let position = egui::pos2(
                     position.x.clamp(bounds.left(), (bounds.right() - size.x).max(bounds.left())),
                     position.y.clamp(bounds.top(), (bounds.bottom() - size.y).max(bounds.top())),
                 );
                 let panel = Rect::from_min_size(position, size);
-                let adjusting = self.settings_contents(ui, panel);
-                let previewing = adjusting;
+                // Only holding a control clears the dimming: a click that changes a setting or
+                // chooses a theme does not, or the window behind would flash for one frame.
+                let previewing = self.settings_contents(ui, panel);
                 if suhina_plugins::trace::on() {
-                    suhina_plugins::trace::state(
-                        "settings overlay",
-                        format!("adjusting={adjusting} previewing={previewing} rect={panel:?}"),
-                    );
+                    suhina_plugins::trace::state("settings overlay", format!("previewing={previewing} rect={panel:?}"));
                 }
                 if !previewing {
                     // The status bar stays undimmed at the bottom: an error or a confirmation from
@@ -240,9 +258,6 @@ impl App {
         }
         let mut themes = self.themes.view(&self.settings.theme);
         themes.global_liquid = self.settings.view.liquid;
-        if let Some(session) = self.session() {
-            themes.preview_scene = crate::kit::theme_preview::Scene::from_project(session.project());
-        }
         self.about.projects_default = self.default_folders.0.display().to_string();
         self.about.templates_default = self.default_folders.1.display().to_string();
         self.about.themes_default = self.themes_default_folder.display().to_string();
@@ -324,7 +339,12 @@ impl App {
         if let Some((port, enabled)) = outcome.midi_input.clone() {
             self.set_midi_input(&port, enabled);
         }
+        if outcome.changed && self.settings.track_input() != self.projects.track_input() {
+            self.choose_track_input();
+        }
         if outcome.changed {
+            // Each audio device keeps its input and default track input as the session has them.
+            self.settings.keep_device_inputs(self.projects.device_inputs());
             self.projects.set_backup_settings(self.settings.backup, self.settings.backup_clean_up);
             motion::set_enabled(ui.ctx(), self.settings.animations);
             self.arrangement.headers_left = headers_left(self.settings.track_headers);
@@ -340,22 +360,10 @@ impl App {
         }
         if outcome.move_by.is_finite() && outcome.move_by != Vec2::ZERO {
             let position = ui.max_rect().min + outcome.move_by;
-            ui.ctx().data_mut(|data| data.insert_temp(Id::new("settings-panel-position"), position));
+            ui.ctx().data_mut(|data| data.insert_temp(Id::unique("settings-panel-position"), position));
             ui.ctx().request_repaint();
         }
-        outcome.changed
-            || outcome.adjusting
-            || outcome.themes.as_ref().is_some_and(|request| {
-                !matches!(
-                    request,
-                    crate::settings::settings_view::ThemeRequest::Edit(_)
-                        | crate::settings::settings_view::ThemeRequest::EditRgba { .. }
-                        | crate::settings::settings_view::ThemeRequest::EditLiquid(_)
-                        | crate::settings::settings_view::ThemeRequest::EditSkin(_)
-                        | crate::settings::settings_view::ThemeRequest::EditCss(_)
-                        | crate::settings::settings_view::ThemeRequest::EditGradients(_)
-                )
-            })
+        outcome.adjusting
     }
 }
 

@@ -3,7 +3,7 @@ description: How arrangement clips behave when moved (along a lane, to another t
 read_when: start marker, clip offset, loop start, moving clips, clip.move, overlapping clips, clip stacking, trimming, splitting, clip.split, split at playhead, cut a clip, consolidate, clip.consolidate, join clips, render a range, bounce, allow sample stacking, allow MIDI stacking, fades, fade-in, fade-out, clip.setFades, fade handles, fade shape, fade curve, curve handle, inShape, outShape, inCurve, outCurve, linear, equal_power, fast, slow, s_curve, FadeShape, FadeCurve, play position, play start marker, ruler click, transport.setPosition, stop returns, playhead, grid, grid lines, snapping, snap to grid, launcher.setQuantization, quantisation, Alt, off the grid, markers, locators, marker row, marker.add, marker.move, marker.rename, marker.delete, marker.jump, project.markers, fold, folded group, unfold, group triangle, group lane, volume, pan, mute, solo, mixer controls, knob, the wheel over a value, deselect, click on empty space, clip note preview, short lane
 type: spec
 status: draft
-last_verified: 2026-11-02
+last_verified: 2026-11-06
 covers:
   - crates/session/src/commands.rs
   - crates/ui/src/arrangement/timeline.rs
@@ -101,9 +101,7 @@ and snapping) and is chosen from the same menu, at the right end of the Arrangem
 under **Grid** in the right-click menu of an empty spot of a lane and at the end of an automation
 lane's menus, all in the menu itself (no submenu): **Snap to grid**, an **adaptive** grid (Widest, Wide, Medium, Narrow, Narrowest:
 its lines follow the zoom) or a **fixed** value (`8 bars` … `1 bar`, `1/2` … `1/32`), **Narrow
-grid**, **Widen grid** and **Triplet grid**. A fixed value or no snapping picked in a right-click menu (a lane's, or an automation lane's)
-also sets the control bar's grid box to it (`launcher.setQuantization`), so the two show the same;
-an adaptive grid, which the box has no value for, stays the Arrangement's alone. While the Arrangement has the keyboard (it was
+grid**, **Widen grid** and **Triplet grid**. Picking here never changes the **Quantize** box, and the box never changes this grid. While the Arrangement has the keyboard (it was
 clicked last), Ctrl+1 makes the grid finer, Ctrl+2 coarser, Ctrl+3 turns triplets on or off and
 Ctrl+4 snapping; with the piano roll clicked last the same keys change its grid. Note values are
 quarter-note beats (`1/16` is a quarter of a beat, a triplet two thirds of that note), and bars are
@@ -132,7 +130,7 @@ goes to beat 3, not 4.
 **One grid for every timeline.** The arrangement, its automation lanes and the piano roll
 ([clip editor](ui-clip-editor.md) › Grid and snapping) draw and snap with the same code,
 `TimelineGrid` in `crates/ui/src/interaction/timeline_grid.rs` (#734). Each view keeps its own grid
-value (the control bar's here, the piano roll's grid menu there) and its own least spacing between
+value (the Arrangement's grid menu here, the piano roll's there) and its own least spacing between
 lines; only the arithmetic is shared.
 
 ## Selecting clips
@@ -168,7 +166,9 @@ After a header click Delete removes the selected tracks, not a clip (a clip on t
 selected for the detail area until another is picked); a click on a clip or a lane gives Delete
 back to the clips. In the Launcher view a header click does the same for its track (#690). After a
 header click **Ctrl+C**, **Ctrl+X**, **Ctrl+V** and **Ctrl+D** copy, cut, paste and duplicate the
-selected tracks, in their order, one undo step each (Tracks, #919). The
+selected tracks, in their order, one undo step each (Tracks, #919). A time selection painted
+afterwards, in the lanes or on the ruler, or a click in a lane takes these keys back from the
+tracks: they then act on the painted time, until a header is clicked again (#1199). The
 header shows its track's colour strongly (60 % over the panel); a selected track's is brighter
 and more saturated, with an outline in it. A track keeps the colour it shows when tracks are
 added, removed or moved: one without a colour of its own gets its place's palette colour stored
@@ -277,7 +277,7 @@ whole span, its empty part silent.
 
 ## Time selection
 
-A time selection is a span of beats over some tracks; the keys then act on what plays inside it,
+A drag with Shift, in a lane or on the ruler, goes on from the time selection there is: it holds the time and the tracks of both. A time selection is a span of beats over some tracks; the keys then act on what plays inside it,
 not on whole clips. It is made by:
 
 - a drag from an empty spot of a lane (the rectangle's tracks and beats);
@@ -307,8 +307,10 @@ itself) is not built yet.
 
 ## Duplicating and deleting
 
-`clip.duplicate {clips, stack?}` places a copy of each named clip right after it, replacing what
-the copies cover unless stacked, as a moved clip does (the window stacks when the setting for the
+`clip.duplicate {clips, stack?}` places copies of the named clips right after them as one block:
+each copy is moved by the span from the first clip's start to the last one's end, over every
+track at once, so the copies keep their places among each other and never land on the clips they
+copy (one clip goes right after itself; #1206). They replace what they cover unless stacked, as a moved clip does (the window stacks when the setting for the
 clip's kind is on); `clip.delete {clips}` removes them. Both take a list of `{ track, index }` as
 `project.clips` lists them, at least one, and make one undo step for the whole list
 (`clip.delete` also takes one clip as `{track, index}`, or a slot's clip as `{track, scene}`). In the
@@ -330,7 +332,7 @@ in the [automation spec](automation.md#in-the-arrangement-view).
 after its kind (a "MIDI clip" or an "Audio clip"), on a track that holds clips: MIDI on a track
 that plays notes, an "Audio clip" with no file yet on a track that plays audio and not notes; an
 audio clip so far plays silence until a sample is dropped on its slot or lane. A group or a return
-is refused. It goes either in clip slot `scene` (from 1, an existing scene; the slot must be
+is refused. It goes either in clip slot `scene` (from 0, an existing scene; the slot must be
 empty), where it loops over its length, or at beat `start` in the arrangement (0 up to the
 engine's last beat), where it replaces what it covers unless stacked, as a pasted clip does.
 `length` is in beats, one bar of the project's time signature by default (four beats in 4/4, three
@@ -406,8 +408,10 @@ both sides (2 ms), and for a warped clip, whose second part starts its time-stre
 without the audio before it, very slightly for its first moments, as when playback starts there
 (Play position).
 
-In the Arrangement view **Ctrl+E** splits the selected clip at the playhead (nothing happens,
-with a hint in the status bar, when the playhead is not inside it), and a clip's right-click
+In the Arrangement view **Ctrl+E** splits the selected clip where its body was clicked (the
+play start marker that click put there, on the grid; Alt: free), playing or stopped, never at
+the playhead (#1186); when the clip was picked without a click inside it (by its name bar, a
+rectangle, Ctrl+A), nothing happens and a hint in the status bar asks for one. A clip's right-click
 menu has **Split here**, which cuts where the clip was right-clicked, on the grid clips snap to
 at that zoom (Alt held while right-clicking: exactly there).
 
@@ -640,7 +644,7 @@ pass the setting **Stop** (Settings › Arrangement › Time and play): **Marker
 **Playing from the selected clip.** A clip's start is often where one wants to listen from;
 moving the marker there by hand first is a step too many. **Suhina:** the play/stop key and the
 Play button pass the setting **Play from** (Settings › Arrangement › Time and play): **Selected clip** (default) or
-**Marker**, saved as `play_start = clip | marker` (the older `play_from` key, which every file got as `marker` while that was the default, is read and ignored). Whatever way clips are picked whole (a click on a name bar, a rectangle, Ctrl+A, a paste), the play start marker also moves to the first of them; while playing, playback goes on and the next start begins there. A click where a drag would move the clip (by default its name bar; with the lower half moving it, that half) picks it whole and moves the marker to its exact start, off the grid too, even when it was picked already. A click where a drag would paint time picks it but sets the play start on the grid line at or before the click, never before the clip's start, and play starts there, not from the clip's start, until the clip is picked whole again.
+**Marker**, saved as `play_start = clip | marker` (the older `play_from` key, which every file got as `marker` while that was the default, is read and ignored). Whatever way clips are picked whole (a click on a name bar, a rectangle, Ctrl+A, a paste), the play start marker also moves to the first of them; while playing, playback goes on and the next start begins there. A click where a drag would move the clip (by default its name bar; with the lower half moving it, that half) picks it whole and moves the marker to its exact start, off the grid too, even when it was picked already. A click where a drag would paint time picks it but sets the play start on the grid line nearest the click (the line before it when the nearest is at or past the clip's end), never before the clip's start, and play starts there, not from the clip's start, until the clip is picked whole again.
 A loop the clip starts before still catches playback when it reaches the loop's end. With **Selected clip** and a clip
 selected in the Arrangement view, they run `transport.play {from: "clip"}` on that clip; with a
 time selection painted after the clip was picked, no clip selected, or while the Launcher view is shown (where the selection is not seen), they play
@@ -746,7 +750,8 @@ while playing; offline it plays without a gap.
 the tracks (returns and Main left out), in every view, message and file name: "# Bass" on the
 third track shows as "3 Bass" and follows the track when tracks move. New tracks are "# MIDI" and
 "# Audio". A track the user never renamed is named after its instrument with its number
-("# FM Synth", shown "3 FM Synth"), and gets the new tracks' name back when the instrument goes
+("# FM Synth", shown "3 FM Synth"), or after the preset the instrument was added with ("# Warm
+FM Bass"); an effect does not rename it. It gets the new tracks' name back when the instrument goes
 or the track becomes an audio track; a name the user chose stays. Commands find a track by its
 name as shown ("3 FM Synth") or as written.
 
@@ -861,7 +866,7 @@ and the commands land when it is let go; a number typed or a double-click sets t
 value), one click on a track-on or a solo button turns them all
 off or on, and the whole list is one undo step. With one track selected, or with a click outside
 the selection, they act on that track alone, and it is heard while it is dragged: each frame sets
-the value with `continue`, so the drag is one undo step.
+the value in one `gesture`, so the drag is one undo step.
 
 **Ctrl (Cmd on macOS) and the wheel over a field** change its value instead of scrolling the view: one tick of a
 wheel is one step (1 dB, or 0.02 of pan), Shift as well makes it ten times finer, and the view

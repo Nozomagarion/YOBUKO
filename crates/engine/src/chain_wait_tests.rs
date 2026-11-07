@@ -94,6 +94,58 @@ impl PluginProcessor for Timed {
     }
 }
 
+/// A plug-in whose blocks take the times in `delays`, one each. One it is late with stays out, as
+/// in a real host: until its answer is due, it takes no block.
+struct Catching {
+    name: &'static str,
+    delays: std::vec::IntoIter<Duration>,
+    due: Option<Instant>,
+    result: Vec<f32>,
+    log: Arc<Mutex<Vec<Hand>>>,
+}
+
+impl Catching {
+    fn answer_in(&self, until: Instant) -> bool {
+        let Some(due) = self.due else { return true };
+        Manual::advance_to(until.min(due));
+        clock::now() >= due
+    }
+}
+
+impl PluginProcessor for Catching {
+    fn process(&mut self, _: &mut [f32], _: &[(usize, NoteEvent)], _: Duration) -> bool {
+        false
+    }
+
+    fn send(&mut self, buffer: &[f32], _: &[(usize, NoteEvent)], _: Duration) -> Sent {
+        let sent = clock::now();
+        if self.due.is_some_and(|due| due > sent) {
+            return Sent::Refused;
+        }
+        let due = sent + self.delays.next().unwrap_or(QUICK);
+        self.due = Some(due);
+        self.result = buffer.to_vec();
+        self.log.lock().unwrap().push(Hand { name: self.name, sent, due });
+        Sent::Out
+    }
+
+    fn poll(&mut self, until: Instant) -> bool {
+        self.answer_in(until)
+    }
+
+    fn ready(&mut self, until: Instant) -> bool {
+        self.answer_in(until)
+    }
+
+    fn wait(&mut self, buffer: &mut [f32], timeout: Duration) -> bool {
+        if !self.answer_in(clock::now() + timeout) {
+            return false;
+        }
+        buffer.copy_from_slice(&self.result[..buffer.len()]);
+        true
+    }
+}
+
 fn plug() -> Device {
     let mut d = device("plug-in", &[]);
     d.kind = DeviceKind::Vst3 { id: "565354416263646566".into() };
@@ -151,8 +203,13 @@ fn find(log: &[Hand], name: &str) -> Hand {
 #[test]
 fn a_large_device_period_does_not_cut_plugin_time_to_a_quarter_block() {
     let p = tracks(vec![vec![plug()]]);
-    let mut renderer =
-        Renderer::build(&p, RenderInputs::from_audio(&AudioPool::new()), SR, RenderOptions::PLAYING).unwrap();
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new(), suhina_device_registry::factory()),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
     renderer.set_render_lead(FRAMES, FRAMES * 2);
     let now = Instant::now();
     assert_eq!(renderer.deadline_at(FRAMES, now), Some(now + Duration::from_millis(64)));
@@ -161,8 +218,13 @@ fn a_large_device_period_does_not_cut_plugin_time_to_a_quarter_block() {
 #[test]
 fn a_queued_device_period_leaves_time_for_the_next_plugin_block() {
     let p = tracks(vec![vec![plug()]]);
-    let mut renderer =
-        Renderer::build(&p, RenderInputs::from_audio(&AudioPool::new()), SR, RenderOptions::PLAYING).unwrap();
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new(), suhina_device_registry::factory()),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
     renderer.set_render_lead(FRAMES * 2, FRAMES * 2);
     let now = Instant::now();
     assert_eq!(renderer.deadline_at(FRAMES, now), Some(now + Duration::from_millis(253)));
@@ -193,7 +255,8 @@ fn one_block_with_slow_plug_ins_at_different_places() -> Result<(), String> {
     ];
     let mut renderer = Renderer::build(
         &p,
-        RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins(&p, stands)),
+        RenderInputs::from_audio(&AudioPool::new(), suhina_device_registry::factory())
+            .with_plugins(plugins(&p, stands)),
         SR,
         RenderOptions::PLAYING,
     )
@@ -235,7 +298,8 @@ fn a_hung_plug_in_holds_up_only_its_own_chain_and_only_until_the_deadline() {
     ];
     let mut renderer = Renderer::build(
         &p,
-        RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins(&p, stands)),
+        RenderInputs::from_audio(&AudioPool::new(), suhina_device_registry::factory())
+            .with_plugins(plugins(&p, stands)),
         SR,
         RenderOptions::PLAYING,
     )
@@ -259,6 +323,56 @@ fn a_hung_plug_in_holds_up_only_its_own_chain_and_only_until_the_deadline() {
     assert_eq!(&missed[1..], [0, 0], "the other chains answered in time");
 }
 
+/// A plug-in that takes longer than a whole block over a burst of work (the notes of a start or a
+/// stop) misses that block only: the next block goes to it as soon as it has caught up, in time
+/// for that block's deadline, rather than being refused and lost too (#506). While its chain waits
+/// for that, the other chain goes on.
+#[test]
+fn a_plug_in_catching_up_costs_that_block_only_and_holds_up_no_other_chain() {
+    const BURST: Duration = Duration::from_millis(140);
+    let p = tracks(vec![vec![plug()], vec![plug()]]);
+    let log: Arc<Mutex<Vec<Hand>>> = Arc::default();
+    Manual::start();
+    let stands: Vec<Box<dyn PluginProcessor>> = vec![
+        Box::new(Catching {
+            name: "slow",
+            delays: vec![BURST, QUICK].into_iter(),
+            due: None,
+            result: Vec::new(),
+            log: Arc::clone(&log),
+        }),
+        Box::new(Timed::new("other", 0.5, QUICK, &log)),
+    ];
+    let mut plugs = Plugins::new();
+    for (found, stand) in plugin_devices(&p).into_iter().zip(stands) {
+        plugs.insert(found.key, EFFECT, stand);
+    }
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new(), suhina_device_registry::factory()).with_plugins(plugs),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
+    let started = clock::now();
+    play(&mut renderer, 1);
+    let missed: Vec<u64> = renderer.graph.chains.iter_mut().map(|c| c.missed()).collect();
+    assert_eq!(missed, [1, 0], "the burst is past the block's deadline");
+
+    // The next block starts in time, with the burst over a little into it.
+    let second = started + Duration::from_secs_f64(FRAMES as f64 / f64::from(SR));
+    assert!(second < started + BURST);
+    Manual::advance_to(second);
+    play(&mut renderer, 1);
+    let log = log.lock().unwrap().clone();
+    let last = |name: &str| *log.iter().rev().find(|hand| hand.name == name).unwrap();
+    assert_eq!(last("other").sent, second, "the other chain did not wait for the plug-in catching up: {log:?}");
+    assert!(last("slow").sent >= started + BURST, "{log:?}");
+    assert_eq!(log.iter().filter(|hand| hand.name == "slow").count(), 2, "not refused: {log:?}");
+    let missed: Vec<u64> = renderer.graph.chains.iter_mut().map(|c| c.missed()).collect();
+    assert_eq!(missed, [1, 0], "the burst cost its own block only");
+}
+
 /// An offline render sounds the same whatever order the chains' plug-ins answer in, and the
 /// same as plug-ins that each answer at once: one render path, bit for bit. A built-in device
 /// and an `.sd` device between the plug-ins run in the same loop.
@@ -276,7 +390,7 @@ fn offline_the_order_plug_ins_answer_in_changes_nothing() {
         vec![suhina_device_sdk::Connection::new("in", "gain"), suhina_device_sdk::Connection::new("gain", "out")];
     let mut sd = device("sd", &[]);
     sd.kind = DeviceKind::Sd;
-    sd.state = graph.to_sd().ok().map(String::into_bytes);
+    sd.state = graph.to_sd().ok().map(String::into_bytes).map(Into::into);
     let mut p =
         tracks(vec![vec![plug(), device("utility", &[("gain", -6.0)]), plug()], vec![plug(), sd, plug(), plug()]]);
     for content in &mut p.contents {
@@ -294,7 +408,8 @@ fn offline_the_order_plug_ins_answer_in_changes_nothing() {
         let stands = (0..5).map(|i| Timed::new(names[i], gains[i], delays[i], &log)).collect();
         crate::render_offline_from(
             &p,
-            RenderInputs::from_audio(&AudioPool::new()).with_plugins(plugins(&p, stands)),
+            RenderInputs::from_audio(&AudioPool::new(), suhina_device_registry::factory())
+                .with_plugins(plugins(&p, stands)),
             SR,
             512,
             None,
@@ -308,7 +423,7 @@ fn offline_the_order_plug_ins_answer_in_changes_nothing() {
     assert_eq!(at_once, first_slow);
     assert_eq!(at_once, last_slow);
     // And it is the plug-ins' sound: not the dry track.
-    let dry = crate::render_offline(&tracks(vec![vec![], vec![]]), SR, 512).unwrap();
+    let dry = crate::render_offline(&tracks(vec![vec![], vec![]]), SR, 512, suhina_device_registry::factory()).unwrap();
     assert!(max_diff(&at_once[..dry.len().min(at_once.len())], &dry) > 1e-3);
 }
 
@@ -318,7 +433,7 @@ fn late_plugin_diagnostics_capture_render_time_and_queue_lead() {
     let log = Arc::default();
     let mut renderer = Renderer::build(
         &p,
-        RenderInputs::from_audio(&AudioPool::new())
+        RenderInputs::from_audio(&AudioPool::new(), suhina_device_registry::factory())
             .with_plugins(plugins(&p, vec![Timed::new("hung", 0.5, HUNG, &log)])),
         SR,
         RenderOptions::PLAYING,
@@ -335,8 +450,13 @@ fn late_plugin_diagnostics_capture_render_time_and_queue_lead() {
 #[test]
 fn queued_audio_covers_a_start_burst_longer_than_an_internal_chunk() {
     let p = tracks(vec![vec![plug()]]);
-    let mut renderer =
-        Renderer::build(&p, RenderInputs::from_audio(&AudioPool::new()), SR, RenderOptions::PLAYING).unwrap();
+    let mut renderer = Renderer::build(
+        &p,
+        RenderInputs::from_audio(&AudioPool::new(), suhina_device_registry::factory()),
+        SR,
+        RenderOptions::PLAYING,
+    )
+    .unwrap();
     renderer.set_render_lead(FRAMES * 3, FRAMES);
     let now = Instant::now();
     assert_eq!(renderer.deadline_at(FRAMES * 2, now), Some(now + Duration::from_millis(381)));
@@ -348,7 +468,7 @@ fn internal_chunks_share_the_device_deadline_instead_of_restarting_it() {
     let log = Arc::default();
     let mut renderer = Renderer::build(
         &p,
-        RenderInputs::from_audio(&AudioPool::new())
+        RenderInputs::from_audio(&AudioPool::new(), suhina_device_registry::factory())
             .with_plugins(plugins(&p, vec![Timed::new("instant", 0.5, Duration::ZERO, &log)])),
         SR,
         RenderOptions::PLAYING,

@@ -92,7 +92,7 @@ pub(crate) fn stop(p: &mut Projects, _: &Value) -> Result<Value, CommandError> {
         && target == p.active()
         && p.preview_session().and_then(|s| s.player()).is_some()
     {
-        p.preview_session_mut()?.player_mut()?.controller_mut().preview_stop().map_err(CommandError)?;
+        p.preview_session_mut()?.player_mut()?.controller_mut().preview_stop().map_err(|e| CommandError(e.into()))?;
     }
     p.dj.audition.active = None;
     p.dj.audition.stopping = false;
@@ -136,7 +136,12 @@ pub(crate) fn sync(p: &mut Projects) {
     }
     let result = result.and_then(|data| {
         let session = p.preview_session_mut().map_err(String::from)?;
-        session.player_mut().map_err(String::from)?.controller_mut().preview_sample(data, request.from, 0.501_187_2)
+        session
+            .player_mut()
+            .map_err(String::from)?
+            .controller_mut()
+            .preview_sample(data, request.from, 0.501_187_2)
+            .map_err(String::from)
     });
     match result {
         Ok(()) => p.dj.audition.active = Some((request.track, request.target)),

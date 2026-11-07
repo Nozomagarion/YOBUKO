@@ -902,7 +902,7 @@ fn paint_variant(
     let scale = painter.ctx().pixels_per_point();
     let w = (rect.width() * scale).ceil().clamp(1.0, 1024.0) as u32;
     let h = (rect.height() * scale).ceil().clamp(1.0, 1024.0) as u32;
-    let cache_id = egui::Id::new("skin-textures");
+    let cache_id = egui::Id::unique("skin-textures");
     let cache = painter
         .ctx()
         .data_mut(|data| data.get_temp_mut_or_default::<Arc<std::sync::Mutex<Textures>>>(cache_id).clone());
@@ -1024,6 +1024,39 @@ fn paint_variant(
     mesh.add_rect_with_uv(rect, Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)), Color32::WHITE);
     mesh.rotate(egui::emath::Rot2::from_angle(angle), rect.center());
     painter.add(egui::Shape::mesh(mesh));
+    true
+}
+
+/// Draws a whole SVG (a theme's thumbnail, its `var()` values already substituted) into `rect`,
+/// rounded by `radius`. Returns whether it drew. Each picture is rastered once per size.
+pub fn paint_svg(painter: &Painter, rect: Rect, source: &str, radius: f32) -> bool {
+    if !rect.is_positive() || !rect.is_finite() {
+        return false;
+    }
+    let scale = painter.ctx().pixels_per_point();
+    let w = (rect.width() * scale).ceil().clamp(1.0, 1024.0) as u32;
+    let h = (rect.height() * scale).ceil().clamp(1.0, 1024.0) as u32;
+    let mut hash = std::hash::DefaultHasher::new();
+    (source, w, h).hash(&mut hash);
+    let key = hash.finish();
+    let cache_id = egui::Id::unique("svg-pictures");
+    let cache = painter
+        .ctx()
+        .data_mut(|data| data.get_temp_mut_or_default::<Arc<std::sync::Mutex<Textures>>>(cache_id).clone());
+    let Ok(mut textures) = cache.lock() else { return false };
+    if !textures.images.contains_key(&key) {
+        if textures.images.len() >= 64 {
+            textures.images.clear();
+        }
+        let texture = raster_artwork(source, Color32::WHITE, w, h, false)
+            .map(|image| painter.ctx().load_texture(format!("svg-{key}"), image, egui::TextureOptions::LINEAR));
+        textures.images.insert(key, texture);
+    }
+    let Some(Some(texture)) = textures.images.get(&key) else { return false };
+    painter.add(
+        egui::epaint::RectShape::filled(rect, radius, Color32::WHITE)
+            .with_texture(texture.id(), Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0))),
+    );
     true
 }
 

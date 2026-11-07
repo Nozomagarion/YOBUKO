@@ -34,7 +34,8 @@ impl Member {
         let revision = snapshot.revision;
         let mut session = snapshot.session().unwrap();
         snapshot.keep();
-        let mut renderer = Renderer::stopped(session.project(), session.audio(), 8000).unwrap();
+        let mut renderer =
+            Renderer::stopped(session.project(), session.audio(), 8000, suhina_session::devices()).unwrap();
         session.attach_player(Player::new(renderer.controller(), None));
         Self { service, session, renderer, revision, guests: 0, invitation: String::new(), error: None }
     }
@@ -79,7 +80,7 @@ impl Band {
         project.channels[0].automation.push(suhina_model::AutomationLane {
             param: "volume".into(),
             enabled: true,
-            points: vec![point, suhina_model::AutomationPoint::new(4., 0.2)],
+            points: vec![point, suhina_model::AutomationPoint::new(4., 0.2)].into(),
         });
         if audio {
             project.tracks[3].content = suhina_model::ContentKinds { notes: false, audio: true };
@@ -281,7 +282,7 @@ fn several_guests_publish_verified_takes_and_retry_competing_uploads_without_los
     let render = |m: &Member| {
         suhina_engine::render_offline_from(
             m.session.project(),
-            RenderInputs::from_audio(m.session.audio()),
+            RenderInputs::from_audio(m.session.audio(), suhina_session::devices()),
             8000,
             512,
             None,

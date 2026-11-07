@@ -44,7 +44,7 @@ impl Edit {
             "clip.setEnabled" => "clip.setEnabled",
             _ => return Err(Error::UnsupportedCommand),
         };
-        if !commands().iter().any(|spec| spec.id == command && spec.kind == CommandKind::Edit && !spec.policy.critical)
+        if !commands().iter().any(|spec| spec.id == command && spec.kind == CommandKind::EDIT && !spec.policy.critical)
         {
             return Err(Error::UnsupportedCommand);
         }
@@ -257,7 +257,7 @@ pub(crate) fn audition(session: &mut Session, command: &str, params: &Value) -> 
     if !valid {
         return Err(Error::InvalidParameters);
     }
-    if !commands().iter().any(|spec| spec.id == command && spec.kind == CommandKind::Transport) {
+    if !commands().iter().any(|spec| spec.id == command && spec.kind == CommandKind::TRANSPORT) {
         return Err(Error::UnsupportedCommand);
     }
     session.execute(command, params).map_err(Error::from)

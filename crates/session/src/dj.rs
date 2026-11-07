@@ -268,7 +268,14 @@ impl Dj {
 const LOCAL: Policy = Policy { agents: Agents::Denied("the person manages their local DJ library"), ..Policy::DEFAULT };
 macro_rules! command {
     ($id:literal, $label:literal, $params:expr, $run:ident) => {
-        CommandSpec { id: $id, label: $label, params: $params, kind: CommandKind::Library, run: $run, policy: LOCAL }
+        CommandSpec {
+            id: $id,
+            label: $label,
+            params: $params,
+            kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
+            run: $run,
+            policy: LOCAL,
+        }
     };
 }
 const REVISION: crate::commands::Param = param("revision", ParamType::Integer, "displayed DJ catalog revision");

@@ -3,7 +3,7 @@ description: How Suhina hosts plug-ins in detail - host processes and instances,
 read_when: plug-in host process, hosting choice, plugin-hosting.json, joint round trip, deadline, late blocks, real-time priority, rtkit, MMCSS, plug-in state, VST2 replacement, scanning, scan worker, plug-in editor, embedded editor, Device view, plug-in latency, retained instances, output change, stop fade
 type: spec
 status: current
-last_verified: 2026-11-02
+last_verified: 2026-11-05
 covers:
   - crates/plugins/**
   - crates/plugin-host/**
@@ -283,7 +283,7 @@ ports and stereo side ports); `SUHINA_TEST_CLAP` runs them against a real file t
 VST3 goes through the `vst3` bindings to the SDK: the component and controller on the main
 thread (connected through their connection points, the controller given the component's
 state; the host makes the messages and attribute lists they send each other,
-`IHostApplication::createInstance` in `crates/plugin-host/src/vst3_message.rs`, without which
+`IHostApplication::createInstance` in `crates/plugin-host/src/vst3/message.rs`, without which
 some plug-ins crash as soon as they are connected and others when given a state), `setProcessing` and `process` on the audio thread, the link on the main buses (by the rule above) and
 silent buffers for any other bus. A plug-in is named `vst3:<bundle or file>[#<class id>]`;
 in a bundle, the executable is looked up per system: `Contents/<arch>-win/<name>` on Windows,
@@ -292,7 +292,15 @@ after the bundle without the extension, or else the first non-hidden file in the
 the bundle format lets the executable be named anything). The module's entry is called the
 same way per system, and it is optional: `InitDll`/`ExitDll` on Windows,
 `ModuleEntry`/`ModuleExit` on Linux, `bundleEntry`/`bundleExit` on macOS, all called only
-when the module exports them. The entry matters where modules build the plugin their class
+when the module exports them. On macOS the host makes the plug-in bundle a `CFBundle`
+and passes its handle (`crates/plugin-host/src/vst3/bundle.rs`), released when the module
+is; null stays where there is nothing to give (the plug-in is a bare file, or the path
+will not read as UTF-8, or CoreFoundation will not make the bundle) and on the other
+platforms (where the entry takes nothing or the library handle). A module may keep the
+handle and read it later without a null check, so the null a bundle-less call passed has
+been seen to crash one in its editor's open: Xfer's Serum 2 2.1.5 died on the main
+thread inside its editor's first `createView`, before any callback reached the host
+(#1223). The entry matters where modules build the plugin their class
 information is read from in it, as DPF-built modules (Cardinal, plugdata) do on macOS:
 answering a class query before the entry has run crashes them (a null dereference in the
 module), which a scan would then report as a crash while loading.
@@ -342,7 +350,7 @@ settings); a third takes a parameter bank (`FxBk`) in `setState` without applyin
 parameters, value `i` to parameter id `i`, the numbering a VST3 version keeps from its VST2
 one, but only when the plug-in has every id from 0 to the last value's: on the controller
 (`setParamNormalized`) and on the processor through the next block's parameter changes
-(`crates/plugin-host/src/vst3_params.rs`). With that the third plays with the project's settings.
+(`crates/plugin-host/src/vst3/params.rs`). With that the third plays with the project's settings.
 A newer version of an EQ refuses its predecessor's state and runs with its defaults. An
 instrument found by the id convention plays a project's notes with its saved settings. A
 synth's second version refuses the first version's state in every form tried: the bank, a
@@ -368,8 +376,9 @@ Both ways note whether a plug-in supports ARA (an `ARA Main Factory Class` paire
 - Everything else goes to a few long-lived `suhina-plugin-host --scan-worker` processes
 (half the processor's threads, at most 4), each reading file after file. A worker that
 crashes or hangs on a file is ended, the file is marked failed with the reason, and a new
-worker takes the rest. Shells (files with many plug-ins, such as a vendor's shell plug-in) go first
-and get 180 s, other files 30 s.
+worker takes the rest. With no files left a worker is ended at once: it has nothing to save, and a
+normal exit would run the exit code of every plug-in it has loaded. Shells (files with many
+plug-ins, such as a vendor's shell plug-in) go first and get 180 s, other files 30 s.
 - Measured on a Windows machine with 443 plug-in files: a process per file took 11.5 min and
 timed the shells out; this takes 86 s and finds every plug-in (733). Starting a process
 cost about a second there (antivirus checks each start), more than most plug-ins take to
@@ -475,14 +484,15 @@ editor's frame and CLAP's `posix-fd-support` give it the descriptors it waits on
 without waiting each turn) and timers; CLAP's `timer-support` serves timers on every system.
 Tested in CI under Xvfb with the VST3 test plug-in, floating and embedded in a window the
 test makes; no real Linux plug-in has been tried yet. macOS: floating editors open (the
-test VST3 through the engine's commands, a real plug-in by hand); Wayland comes later.
+test VST3 through the engine's commands; real ones by hand, among them Xfer's Serum 2
+2.1.5 once its module's `bundleEntry` was handed the bundle's `CFBundle`, which its
+editor's view creation otherwise kept and dereferenced as null, #1223); Wayland comes later.
 
 ## Plug-ins inside device groups
 
 A plug-in inside a group still runs out of
-process; a group is not a process boundary. Its key counts "how many of the same plug-in
-come before it" depth-first through the channel's whole tree of devices, so moving it into or
-out of a group keeps its process and state while the order of identical plug-ins stays.
+process; a group is not a process boundary. Its key is made from its device id (#763 › 1), so
+moving it into or out of a group keeps its process and state.
 Inside a branch it runs its round trip and is waited for within the block's deadline, one
 after another with the branch's other devices; it does not take part in the joint blocks or
 the staged runs of 4, which a later change can extend to a group's branches. A missed block
@@ -507,9 +517,10 @@ all-notes-off, which many plug-ins ignore. Offline (`Renderer::set_offline`, eve
 `render_*` function, the CLI's and MCP's WAV renders) each block waits up to 10 s for a
 host still busy with the block before, and up to 10 s for its own answer, through the same
 round trips as playback, so no block of a render is lost to a slow plug-in.
-Each plug-in device has a key made from its channel, its plug-in and how many of the same
-plug-in come before it on that channel, so it keeps its running plug-in when devices are
-added, removed or moved around it; its processor reaches the audio thread as a message
+Each plug-in device has a key made from its channel, its plug-in and its device id (#763 › 1),
+so it keeps its running plug-in when devices are added, removed or moved around it, identical
+plug-ins included (before, a key counted how many of the same plug-in came first, so removing
+the first of two handed the second the first one's process and state); its processor reaches the audio thread as a message
 (`Controller::send_plugin`), waits there for a graph that has its slot, and is handed from
 graph to graph; a restarted plug-in's processor replaces the crashed one, which goes back to
 be dropped off the audio thread.

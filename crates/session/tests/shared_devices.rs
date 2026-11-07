@@ -23,7 +23,7 @@ fn shared_parameters_accept_native_canonical_values_and_preserve_undo_and_file_r
     let mut s = session().unwrap();
     let ids = s.project().next_id;
     for (device, kind) in [(0, "fm-synth"), (1, "utility")] {
-        for p in suhina_device_registry::info(kind).unwrap().params {
+        for p in suhina_device_registry::info(kind).unwrap().params.iter() {
             for value in [p.min, p.max, p.default] {
                 s.execute("device.setSharedParam", &json!({"track":1,"device":device,"param":p.id,"value":value}))
                     .unwrap();
@@ -102,10 +102,10 @@ fn shared_parameters_refuse_bad_types_paths_values_and_opaque_or_other_devices_a
     }
     // A built-in's parameters can be set whatever its state holds, and the state stays as it was.
     let mut p = before.clone();
-    p.channels[0].devices[0].state = Some(vec![1, 2, 3]);
+    p.channels[0].devices[0].state = Some(vec![1, 2, 3].into());
     let mut s = Session::new(p.clone());
     s.execute("device.setSharedParam", &good).unwrap();
-    assert_eq!(s.project().channels[0].devices[0].state, Some(vec![1, 2, 3]));
+    assert_eq!(s.project().channels[0].devices[0].state, Some(vec![1, 2, 3].into()));
     let mut p = before.clone();
     p.channels[0].devices[0].params = (0..512).map(|i| DeviceParam::new(format!("unknown{i}"), 0.)).collect();
     let mut s = Session::new(p.clone());
@@ -135,8 +135,8 @@ fn shared_parameter_messages_sound_like_native_edits_during_a_held_note_without_
     use suhina_engine::{AudioPool, Renderer};
     let mut shared = session().unwrap();
     let mut ordinary = Session::new(shared.project().clone());
-    let mut a = Renderer::stopped(shared.project(), &AudioPool::default(), 8000).unwrap();
-    let mut b = Renderer::stopped(ordinary.project(), &AudioPool::default(), 8000).unwrap();
+    let mut a = Renderer::stopped(shared.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(ordinary.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
     shared.attach_player(Player::new(a.controller(), None));
     ordinary.attach_player(Player::new(b.controller(), None));
     for s in [&mut shared, &mut ordinary] {
@@ -240,7 +240,7 @@ fn shared_chain_guards_reject_paths_unknown_kinds_opaque_chains_wrong_indices_an
     for opaque in [false, true] {
         let mut p = before.clone();
         if opaque {
-            p.channels[0].devices[0].state = Some(vec![1]);
+            p.channels[0].devices[0].state = Some(vec![1].into());
         } else {
             p.channels[0].devices[0] =
                 Device::new("Unsupported", DeviceKind::Clap { id: "/must-not-load.clap".into() });
@@ -305,8 +305,8 @@ fn shared_chain_graph_updates_match_native_audio_without_replacing_players() {
     shared.execute("device.add", &json!({"track":1,"id":"fm-synth"})).unwrap();
     shared.execute("device.add", &json!({"track":1,"id":"utility"})).unwrap();
     let mut ordinary = Session::new(shared.project().clone());
-    let mut a = Renderer::stopped(shared.project(), &AudioPool::default(), 8000).unwrap();
-    let mut b = Renderer::stopped(ordinary.project(), &AudioPool::default(), 8000).unwrap();
+    let mut a = Renderer::stopped(shared.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(ordinary.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
     shared.attach_player(Player::new(a.controller(), None));
     ordinary.attach_player(Player::new(b.controller(), None));
     for s in [&mut shared, &mut ordinary] {

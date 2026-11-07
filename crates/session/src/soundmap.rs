@@ -14,7 +14,7 @@ use suhina_soundmap::cache::Analysis;
 use suhina_soundmap::kinds::Kind;
 use suhina_soundmap::{DEFAULT_MAX_SECONDS, MAX_SECONDS_RANGE, MAX_SIMILAR, Map, SoundMap, SourceFile};
 
-use crate::commands::{CommandKind, CommandSpec, ParamType, optional, param};
+use crate::commands::{Args, CommandKind, CommandSpec, ParamType, optional, param};
 use crate::{Agents, CommandError, PathKind, Policy, Projects};
 
 const PLACE: &str = "pinned, recent:all, recent:samples, or a folder (default: every folder)";
@@ -24,7 +24,7 @@ static SOUND_MAP_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "soundmap.status",
         label: "How far the sample map's analysis of the browser's samples is, per folder: analysed, queued, failed",
         params: &[],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: status,
         policy: Policy::DEFAULT,
     },
@@ -36,7 +36,7 @@ static SOUND_MAP_COMMANDS: &[CommandSpec<Projects>] = &[
             ParamType::Path(PathKind::Folder),
             "a folder, as library.folders lists them (default: every folder)",
         )],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: analyse,
         policy: Policy::DEFAULT,
     },
@@ -51,7 +51,7 @@ static SOUND_MAP_COMMANDS: &[CommandSpec<Projects>] = &[
             optional("aspect", ParamType::Number, "the grid's width over its height, 0.1 to 10 (default 1, square)"),
             optional("maxSeconds", ParamType::Number, "leave out samples longer than this, 1 to 60 (default 10)"),
         ],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: layout,
         policy: Policy::DEFAULT,
     },
@@ -63,7 +63,7 @@ static SOUND_MAP_COMMANDS: &[CommandSpec<Projects>] = &[
             optional("count", ParamType::Integer, "how many, 1 to 100 (default 16)"),
             optional("place", ParamType::Path(PathKind::Place), PLACE),
         ],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: similar,
         policy: Policy::DEFAULT,
     },
@@ -71,7 +71,7 @@ static SOUND_MAP_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "soundmap.info",
         label: "What the sample map knows of a sample: its kind and where it comes from (set by hand, its name, or a guess from its sound), its length and its features",
         params: &[param("item", ParamType::Path(PathKind::File), "a sample's path")],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Read),
         run: info,
         policy: Policy::DEFAULT,
     },
@@ -82,7 +82,7 @@ static SOUND_MAP_COMMANDS: &[CommandSpec<Projects>] = &[
             param("item", ParamType::Path(PathKind::File), "a sample's path"),
             param("kind", ParamType::Text, KIND_PARAM),
         ],
-        kind: CommandKind::Library,
+        kind: CommandKind::on(crate::commands::Target::Library, crate::commands::Effect::Change),
         run: set_kind,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -194,19 +194,10 @@ pub fn scope_files(projects: &mut Projects, place: Option<&str>) -> Result<Vec<S
     })
 }
 
-fn text<'a>(params: &'a Value, name: &str) -> Result<&'a str, CommandError> {
-    params
-        .get(name)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|t| !t.is_empty())
-        .ok_or_else(|| CommandError(format!("{name} must be a text")))
-}
-
 fn optional_text<'a>(params: &'a Value, name: &str) -> Result<Option<&'a str>, CommandError> {
-    match params.get(name) {
-        None | Some(Value::Null) => Ok(None),
-        Some(_) => text(params, name).map(Some),
+    match Args::new(params).value(name) {
+        None => Ok(None),
+        Some(_) => Args::new(params).text(name).map(Some),
     }
 }
 
@@ -253,8 +244,8 @@ fn analyse(projects: &mut Projects, params: &Value) -> Result<Value, CommandErro
 }
 
 fn max_seconds(params: &Value) -> Result<f32, CommandError> {
-    match params.get("maxSeconds") {
-        None | Some(Value::Null) => Ok(DEFAULT_MAX_SECONDS),
+    match Args::new(params).value("maxSeconds") {
+        None => Ok(DEFAULT_MAX_SECONDS),
         Some(v) => v
             .as_f64()
             .map(|s| s as f32)
@@ -264,8 +255,8 @@ fn max_seconds(params: &Value) -> Result<f32, CommandError> {
 }
 
 fn tags(params: &Value) -> Result<Vec<String>, CommandError> {
-    match params.get("tags") {
-        None | Some(Value::Null) => Ok(Vec::new()),
+    match Args::new(params).value("tags") {
+        None => Ok(Vec::new()),
         Some(v) => v
             .as_array()
             .ok_or("tags must be a list of tag names")?
@@ -294,12 +285,12 @@ fn layout(projects: &mut Projects, params: &Value) -> Result<Value, CommandError
     let place = optional_text(params, "place")?;
     let words = suhina_library::words(optional_text(params, "text")?.unwrap_or(""));
     let tags = tags(params)?;
-    let grid = match params.get("grid") {
-        None | Some(Value::Null) => false,
+    let grid = match Args::new(params).value("grid") {
+        None => false,
         Some(v) => v.as_bool().ok_or("grid must be true or false")?,
     };
-    let aspect = match params.get("aspect") {
-        None | Some(Value::Null) => 1.0,
+    let aspect = match Args::new(params).value("aspect") {
+        None => 1.0,
         Some(v) => {
             v.as_f64().filter(|a| (0.1..=10.0).contains(a)).ok_or("aspect must be a number from 0.1 to 10")? as f32
         }
@@ -338,9 +329,9 @@ fn layout(projects: &mut Projects, params: &Value) -> Result<Value, CommandError
 }
 
 fn similar(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let item = PathBuf::from(text(params, "item")?);
-    let count = match params.get("count") {
-        None | Some(Value::Null) => 16,
+    let item = PathBuf::from(Args::new(params).text("item")?);
+    let count = match Args::new(params).value("count") {
+        None => 16,
         Some(v) => v
             .as_u64()
             .and_then(|n| usize::try_from(n).ok())
@@ -369,7 +360,7 @@ fn sample_file(projects: &mut Projects, path: &Path) -> Result<SourceFile, Comma
 }
 
 fn info(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let path = PathBuf::from(text(params, "item")?);
+    let path = PathBuf::from(Args::new(params).text("item")?);
     projects.poll_sound_map();
     let file = sample_file(projects, &path)?;
     let hand = projects.sound_map_mut().kind_by_hand(&file.path);
@@ -418,8 +409,8 @@ fn info(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> 
 }
 
 fn set_kind(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let path = PathBuf::from(text(params, "item")?);
-    let id = text(params, "kind")?;
+    let path = PathBuf::from(Args::new(params).text("item")?);
+    let id = Args::new(params).text("kind")?;
     let kind = match id {
         "auto" => None,
         id => Some(Kind::from_id(id).ok_or_else(|| format!("unknown kind {id:?}: {KIND_PARAM}"))?),

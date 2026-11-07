@@ -144,9 +144,7 @@ impl App {
                 ui.allocate_ui(Vec2::new(260.0, 28.0), |ui| {
                     let rect = ui.available_rect_before_wrap();
                     let response = parameter_widget(ui, &graph, rect, None, &mut editor.value);
-                    response.widget_info(|| {
-                        egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, "Parameter value")
-                    });
+                    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::SpinButton, true, "Parameter value"));
                 });
                 ui.label(value_text(&graph, editor.value));
             });

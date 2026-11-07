@@ -56,8 +56,14 @@ fn wait(service: &mut Service, ready: impl Fn(&Value) -> bool) -> Value {
     }
 }
 fn render(session: &Session) -> Vec<f32> {
-    suhina_engine::render_offline_from(session.project(), RenderInputs::from_audio(session.audio()), 8000, 512, None)
-        .unwrap()
+    suhina_engine::render_offline_from(
+        session.project(),
+        RenderInputs::from_audio(session.audio(), suhina_session::devices()),
+        8000,
+        512,
+        None,
+    )
+    .unwrap()
 }
 /// Share the project, join it, and return the guest's collected sound file. With `early`, the
 /// project opens before its sound arrives, and the sound follows in the background.

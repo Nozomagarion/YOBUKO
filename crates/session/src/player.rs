@@ -72,7 +72,7 @@ impl Player {
     }
 
     pub fn send(&mut self, command: suhina_engine::LaunchCommand) -> Result<(), CommandError> {
-        self.controller.send(command).map_err(CommandError)?;
+        self.controller.send(command).map_err(CommandError::from)?;
         if let suhina_engine::LaunchCommand::SetQuantization(q) = command {
             self.quantization = Some(q);
         }
@@ -91,7 +91,7 @@ impl Player {
     /// Makes the engine play `project` from now on, keeping what is playing (ADR 0005).
     pub fn update(&mut self, project: &Project) -> Result<(), CommandError> {
         let began = std::time::Instant::now();
-        let updated = self.controller.update(project).map_err(CommandError);
+        let updated = self.controller.update(project).map_err(CommandError::from);
         trace_update(began);
         updated
     }
@@ -102,9 +102,9 @@ impl Player {
         &mut self,
         project: &Project,
         scenes: Option<suhina_engine::SceneShift>,
-    ) -> Result<(), CommandError> {
+    ) -> Result<(), suhina_engine::ControlError> {
         let began = std::time::Instant::now();
-        let updated = self.controller.update_with_scenes(project, scenes).map_err(CommandError);
+        let updated = self.controller.update_with_scenes(project, scenes);
         trace_update(began);
         updated
     }
@@ -112,7 +112,9 @@ impl Player {
     /// Sets one parameter of a device on a track from the next audio block, without building a
     /// new graph (ADR 0005, amendment).
     pub fn set_device_param(&mut self, change: ParamEdit) -> Result<(), CommandError> {
-        self.controller.set_device_param(change.track, change.device, change.param, change.value).map_err(CommandError)
+        self.controller
+            .set_device_param(change.track, change.device, change.param, change.value)
+            .map_err(CommandError::from)
     }
 
     /// Builds the engine's graphs from now on with the project's file-backed devices' parsed
@@ -179,6 +181,12 @@ impl Player {
         self.controller.meter_monitor()
     }
 
+    /// The level meters' monitor by its own arc, for a front end's frame data (the EQ panel's
+    /// analyser, docs/spec/eq.md › The panel › The analyser).
+    pub fn meter_monitor_arc(&self) -> std::sync::Arc<suhina_engine::MeterMonitor> {
+        self.controller.meter_monitor_arc()
+    }
+
     pub(crate) fn controller_mut(&mut self) -> &mut Controller {
         &mut self.controller
     }
@@ -199,7 +207,7 @@ impl Player {
         key: u64,
         processor: Box<dyn suhina_engine::PluginProcessor>,
     ) -> Result<(), CommandError> {
-        self.controller.send_plugin(key, processor).map_err(CommandError)
+        self.controller.send_plugin(key, processor).map_err(CommandError::from)
     }
 }
 

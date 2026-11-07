@@ -102,8 +102,8 @@ fn the_starter_is_deterministic_has_no_files_or_plugins_and_real_players_are_ind
     assert!(project.channels.iter().all(|c| c.devices.is_empty()));
     let mut a = Session::new(project.clone());
     let mut b = Session::new(project);
-    let mut ra = Renderer::stopped(a.project(), &AudioPool::default(), 8000).unwrap();
-    let mut rb = Renderer::stopped(b.project(), &AudioPool::default(), 8000).unwrap();
+    let mut ra = Renderer::stopped(a.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
+    let mut rb = Renderer::stopped(b.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
     a.attach_player(Player::new(ra.controller(), None));
     b.attach_player(Player::new(rb.controller(), None));
     a.execute("transport.setPosition", &json!({"beats":4})).unwrap();
@@ -137,6 +137,7 @@ fn an_actual_midi_project_crosses_tls_in_chunks_and_keeps_its_ids_notes_and_soun
         (0..256).map(|i| suhina_model::Note { time: f64::from(i) * 0.25, key: 40 + (i % 48) as u8, ..first }).collect();
     project.contents[0].length = 64.0;
     project.channels[0].devices.push(Device {
+        id: Default::default(),
         name: "My FM sound".into(),
         kind: DeviceKind::Builtin("fm-synth".into()),
         enabled: true,
@@ -165,8 +166,8 @@ fn an_actual_midi_project_crosses_tls_in_chunks_and_keeps_its_ids_notes_and_soun
     assert_eq!(project, before, "the source is never mutated");
     assert!(suhina_project_file::to_json(&received).len() > 32768, "must exercise multiple frames");
     // The receiver prepares a real independent renderer from the received musical document.
-    let a = suhina_engine::render_offline(&project, 8000, 512).unwrap();
-    let b = suhina_engine::render_offline(&received, 8000, 512).unwrap();
+    let a = suhina_engine::render_offline(&project, 8000, 512, suhina_session::devices()).unwrap();
+    let b = suhina_engine::render_offline(&received, 8000, 512, suhina_session::devices()).unwrap();
     assert!(b.iter().any(|sample| sample.abs() > 0.00001));
     assert_eq!(a, b);
     guest.execute("multiplayer.edit",&json!({"base_revision":0,"edit":json!({"command":"track.rename","track":17,"name":"Shared real lead"}).to_string()})).unwrap();
@@ -210,8 +211,8 @@ fn live_notes_cross_tls_in_both_directions_keep_players_and_reject_stale_indices
     wait(&mut guest, |v| v["mode"] == "connected");
     let (project, mut guest_revision) = guest.take_snapshot().unwrap();
     let mut remote = Session::new(project);
-    let mut ra = Renderer::stopped(local.project(), &AudioPool::default(), 8000).unwrap();
-    let mut rb = Renderer::stopped(remote.project(), &AudioPool::default(), 8000).unwrap();
+    let mut ra = Renderer::stopped(local.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
+    let mut rb = Renderer::stopped(remote.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
     local.attach_player(Player::new(ra.controller(), None));
     remote.attach_player(Player::new(rb.controller(), None));
     local.execute("transport.setPosition", &json!({"beats":4})).unwrap();
@@ -250,13 +251,13 @@ fn live_notes_cross_tls_in_both_directions_keep_players_and_reject_stale_indices
     ra.process(&mut out);
     rb.process(&mut out);
     assert!(!ra.monitor().running() && rb.monitor().running());
-    let a = suhina_engine::render_offline(local.project(), 8000, 512).unwrap();
-    let b = suhina_engine::render_offline(remote.project(), 8000, 512).unwrap();
+    let a = suhina_engine::render_offline(local.project(), 8000, 512, suhina_session::devices()).unwrap();
+    let b = suhina_engine::render_offline(remote.project(), 8000, 512, suhina_session::devices()).unwrap();
     assert_eq!(a, b);
     assert!(a.iter().any(|s| s.abs() > 0.00001));
     assert_ne!(
         a,
-        suhina_engine::render_offline(&original, 8000, 512).unwrap(),
+        suhina_engine::render_offline(&original, 8000, 512, suhina_session::devices()).unwrap(),
         "shared notes actually change the sound"
     );
 }
@@ -342,8 +343,10 @@ fn clip_creation_movement_trim_duplicate_notes_and_delete_converge_over_tls() {
     let clip = source.arrangement.lanes[0].clips[0].id.0;
     let neighbour = source.arrangement.lanes[1].clips[0].clone();
     let mut pair = ClipPair::new(&source);
-    let mut ra = Renderer::stopped(pair.local.project(), &AudioPool::default(), 8000).unwrap();
-    let mut rb = Renderer::stopped(pair.remote.project(), &AudioPool::default(), 8000).unwrap();
+    let mut ra =
+        Renderer::stopped(pair.local.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
+    let mut rb =
+        Renderer::stopped(pair.remote.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
     pair.local.attach_player(Player::new(ra.controller(), None));
     pair.remote.attach_player(Player::new(rb.controller(), None));
     pair.local.execute("transport.setPosition", &json!({"beats":1})).unwrap();
@@ -389,11 +392,11 @@ fn clip_creation_movement_trim_duplicate_notes_and_delete_converge_over_tls() {
     ra.process(&mut out);
     rb.process(&mut out);
     assert!(!ra.monitor().running() && rb.monitor().running());
-    let a = suhina_engine::render_offline(pair.local.project(), 8000, 512).unwrap();
-    let b = suhina_engine::render_offline(pair.remote.project(), 8000, 512).unwrap();
+    let a = suhina_engine::render_offline(pair.local.project(), 8000, 512, suhina_session::devices()).unwrap();
+    let b = suhina_engine::render_offline(pair.remote.project(), 8000, 512, suhina_session::devices()).unwrap();
     assert_eq!(a, b);
     assert!(a.iter().any(|s| s.abs() > 0.00001));
-    assert_ne!(a, suhina_engine::render_offline(&before, 8000, 512).unwrap());
+    assert_ne!(a, suhina_engine::render_offline(&before, 8000, 512, suhina_session::devices()).unwrap());
     assert_eq!(source, before, "the original is untouched");
 }
 
@@ -459,7 +462,7 @@ fn an_empty_midi_project_can_be_composed_together_without_a_demo_clip() {
     pair.step(true, WireEdit::ClipCreate { track: 1, start: 0.0, length: 4.0 });
     let clip = pair.local.project().arrangement.lanes[0].clips[0].id.0;
     pair.step(false, WireEdit::NoteAdd { clip, time: 0.0, length: 1.0, key: 60, velocity: 100.0 });
-    let audio = suhina_engine::render_offline(pair.remote.project(), 8000, 512).unwrap();
+    let audio = suhina_engine::render_offline(pair.remote.project(), 8000, 512, suhina_session::devices()).unwrap();
     assert!(audio.iter().any(|s| s.abs() > 0.00001));
     assert!(source.contents.is_empty());
 }
@@ -476,8 +479,8 @@ fn both_authors_add_tracks_then_compose_on_the_new_midi_track_without_replacing_
     }
     let before = source.clone();
     let mut pair = ClipPair::new(&source);
-    let mut a = Renderer::stopped(pair.local.project(), &AudioPool::new(), 8000).unwrap();
-    let mut b = Renderer::stopped(pair.remote.project(), &AudioPool::new(), 8000).unwrap();
+    let mut a = Renderer::stopped(pair.local.project(), &AudioPool::new(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(pair.remote.project(), &AudioPool::new(), 8000, suhina_session::devices()).unwrap();
     pair.local.attach_player(Player::new(a.controller(), None));
     pair.remote.attach_player(Player::new(b.controller(), None));
     pair.local.execute("transport.setPosition", &json!({"beats":1})).unwrap();
@@ -511,8 +514,11 @@ fn both_authors_add_tracks_then_compose_on_the_new_midi_track_without_replacing_
         .id
         .0;
     pair.step(false, WireEdit::NoteAdd { clip, time: 0.0, length: 1.0, key: 60, velocity: 100.0 });
-    let local = suhina_engine::render_offline(pair.local.project(), 8000, 512).unwrap();
-    assert_eq!(local, suhina_engine::render_offline(pair.remote.project(), 8000, 512).unwrap());
+    let local = suhina_engine::render_offline(pair.local.project(), 8000, 512, suhina_session::devices()).unwrap();
+    assert_eq!(
+        local,
+        suhina_engine::render_offline(pair.remote.project(), 8000, 512, suhina_session::devices()).unwrap()
+    );
     assert!(local.iter().any(|s| s.abs() > 0.00001), "new MIDI track has an audible default instrument");
     let mut out = [0.0; 512];
     a.process(&mut out);
@@ -603,7 +609,7 @@ fn device_parameters_cross_tls_both_ways_keep_players_and_rejoin_with_current_so
     project.channels[0].devices[0].automation.push(suhina_model::AutomationLane {
         param: "volume".into(),
         enabled: true,
-        points: vec![point, suhina_model::AutomationPoint::new(4., -6.)],
+        points: vec![point, suhina_model::AutomationPoint::new(4., -6.)].into(),
     });
     let source = Session::new(project);
     let original = source.project().clone();
@@ -616,9 +622,9 @@ fn device_parameters_cross_tls_both_ways_keep_players_and_rejoin_with_current_so
     guest.execute("multiplayer.join", &json!({"invitation":invitation})).unwrap();
     wait(&mut guest, |v| v["mode"] == "connected");
     let mut remote = Session::new(guest.take_project().unwrap());
-    let initial = suhina_engine::render_offline(local.project(), 8000, 256).unwrap();
-    let mut a = Renderer::stopped(local.project(), &AudioPool::default(), 8000).unwrap();
-    let mut b = Renderer::stopped(remote.project(), &AudioPool::default(), 8000).unwrap();
+    let initial = suhina_engine::render_offline(local.project(), 8000, 256, suhina_session::devices()).unwrap();
+    let mut a = Renderer::stopped(local.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(remote.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
     local.attach_player(Player::new(a.controller(), None));
     remote.attach_player(Player::new(b.controller(), None));
     for (s, beat) in [(&mut local, 1.), (&mut remote, 9.)] {
@@ -646,8 +652,8 @@ fn device_parameters_cross_tls_both_ways_keep_players_and_rejoin_with_current_so
             original.channels[0].devices[0].automation[0].points
         );
 
-        let left = suhina_engine::render_offline(local.project(), 8000, 256).unwrap();
-        let right = suhina_engine::render_offline(remote.project(), 8000, 256).unwrap();
+        let left = suhina_engine::render_offline(local.project(), 8000, 256, suhina_session::devices()).unwrap();
+        let right = suhina_engine::render_offline(remote.project(), 8000, 256, suhina_session::devices()).unwrap();
         assert_eq!(left, right);
         assert_ne!(left, initial);
         let mut out = [0.; 256];
@@ -697,8 +703,8 @@ fn launcher_scenes_cross_tls_keep_originals_private_launches_and_rejoin_state() 
     wait(&mut guest, |v| v["mode"] == "connected");
     let (project, mut br) = guest.take_snapshot().unwrap();
     let mut remote = Session::new(project);
-    let mut a = Renderer::stopped(local.project(), &AudioPool::default(), 8000).unwrap();
-    let mut b = Renderer::stopped(remote.project(), &AudioPool::default(), 8000).unwrap();
+    let mut a = Renderer::stopped(local.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
+    let mut b = Renderer::stopped(remote.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
     local.attach_player(Player::new(a.controller(), None));
     remote.attach_player(Player::new(b.controller(), None));
     local.execute("transport.setPosition", &json!({"beats":4})).unwrap();
