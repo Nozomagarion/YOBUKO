@@ -145,7 +145,7 @@ impl App {
                             && let Some(path) = summary["path"].as_str()
                         {
                             self.dj.active = true;
-                            self.send_to_rbxport(Path::new(path), ctx);
+                            self.send_to_dj(Path::new(path), ctx);
                         }
                         let where_to = summary["path"].as_str().unwrap_or("the file").to_string();
                         let warnings = summary["warnings"]

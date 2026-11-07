@@ -17,8 +17,8 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
     super::menu_bar::pick_mode(&mut harness, "DJ");
     harness.run();
     assert!(harness.state().dj.active);
-    assert!(harness.query_by_label("DJ mode · rbxport").is_some());
-    assert!(harness.state().dj.note.is_some(), "switching to DJ starts rbxport or says why not");
+    assert!(harness.query_by_label("DJ mode · Mixxx").is_some());
+    assert!(harness.state().dj.note.is_some(), "switching to DJ starts Mixxx or says why not");
     super::menu_bar::pick_mode(&mut harness, "Studio");
     harness.run();
     assert!(!harness.state().dj.active);
@@ -31,19 +31,20 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
         .with_size(Vec2::new(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
-    assert!(harness.query_by_label("Open rbxport").is_some());
+    assert!(harness.query_by_label("Open Mixxx").is_some());
+    assert!(harness.query_by_label("Prepare a USB stick (rbxport)").is_some());
     assert!(harness.query_by_label("App mode: DJ").is_some());
 }
 
 #[test]
-fn a_project_rendered_for_dj_mode_goes_to_rbxport_even_when_another_tab_is_selected() {
+fn a_project_rendered_for_dj_mode_joins_the_dj_library_even_when_another_tab_is_selected() {
     let inbox = tempfile::tempdir().unwrap();
     let mut app = App::new();
     app.dj.inbox = Some(inbox.path().to_path_buf());
     app.set_session(Session::new(crate::demo::demo_project()), &[]);
     app.dj.next_export_to_dj = true;
     app.open_export();
-    assert!(!app.dj.next_export_to_dj, "a normal export must not go to rbxport");
+    assert!(!app.dj.next_export_to_dj, "a normal export must not go to the DJ library");
     app.dj.running_export_to_dj = true;
     let id = app.projects.active().unwrap();
     app.export_project = Some((id, "original".into()));

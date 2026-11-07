@@ -1,29 +1,34 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! DJ mode: rbxport, the DJ library app by Chris Le, shipped inside YOBUKO. Switching to DJ
-//! starts it (or brings it forward); this page says so and sends rendered projects to it.
+//! DJ mode: Mixxx, free DJ software shipped inside YOBUKO, to mix live with a controller
+//! (the Pioneer DDJ-FLX4 is set up by itself), and rbxport by Chris Le, also shipped inside,
+//! to prepare USB sticks for CDJ / XDJ players. Both open in their own windows; YOBUKO shares
+//! one music library between them each time either is opened (`suhina_dj::mixxx`).
 
 use super::*;
 
+#[path = "dj_mixxx.rs"]
+pub(super) mod mixxx;
 #[path = "dj_rbxport.rs"]
 pub(super) mod rbxport;
 
 #[derive(Default)]
 pub(super) struct DjPanel {
     pub active: bool,
-    /// The next export (File › Export… opened from this page) goes to rbxport's library.
+    /// The next export (File › Export… opened from this page) goes to the DJ library.
     pub next_export_to_dj: bool,
-    /// The running export goes to rbxport's library.
+    /// The running export goes to the DJ library.
     pub running_export_to_dj: bool,
-    /// What happened last, said on the page: rbxport opened, a track sent, or why not.
+    /// What happened last, said on the page: Mixxx or rbxport opened, the library shared, or
+    /// why not.
     pub(super) note: Option<Result<String, String>>,
     /// Where requests for rbxport go instead of this user's inbox (tests).
     pub(super) inbox: Option<PathBuf>,
 }
 
 impl App {
-    /// DJ mode starts: rbxport opens, or comes forward when it is already open.
+    /// DJ mode starts: Mixxx opens, or comes forward when it is already open.
     pub(super) fn enter_dj(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         self.dj.active = true;
         self.settings_open = false;
@@ -31,14 +36,99 @@ impl App {
             actions.push(Action::new("transport.stop", json!({})));
         }
         actions.push(Action::new("preview.stop", json!({})));
+        self.open_mixxx(ctx);
+    }
+
+    fn rbxport_inbox(&self) -> Option<PathBuf> {
+        self.dj.inbox.clone().or_else(|| rbxport::user_data_dir().map(|d| d.join("YOBUKO").join("rbxport-inbox")))
+    }
+
+    /// Shares the library between Mixxx and rbxport, for the Mixxx this computer has.
+    /// `None` when there is no Mixxx (or no data folder) to share with.
+    fn share_library(&self, mixxx_closed: bool) -> Option<mixxx::Synced> {
+        let found = mixxx::find()?;
+        let data = rbxport::user_data_dir()?;
+        let (profile, _) =
+            mixxx::profile(&found, &data, std::env::var_os("HOME").map(PathBuf::from).as_deref(), &|n| {
+                std::env::var(n).ok()
+            })?;
+        let inbox = self.rbxport_inbox()?;
+        Some(mixxx::sync(&profile, &data, &inbox, mixxx_closed))
+    }
+
+    /// Starts Mixxx with the FLX4 set up and the library shared, or opens its download page
+    /// when this computer has none.
+    pub(super) fn open_mixxx(&mut self, ctx: &egui::Context) {
+        let Some(found) = mixxx::find() else {
+            ctx.open_url(egui::OpenUrl::new_tab(mixxx::DOWNLOAD_PAGE));
+            self.dj.note = Some(Err(
+                "Mixxx is not on this computer: its download page is open. Install it, then come back to DJ mode."
+                    .into(),
+            ));
+            return;
+        };
+        if mixxx::is_running() {
+            let shared = self.share_library(false).map(|s| s.summary()).unwrap_or_default();
+            self.dj.note = Some(Ok(format!("Mixxx is already open. {shared}").trim_end().to_owned()));
+            return;
+        }
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        let env = |n: &str| std::env::var(n).ok();
+        let mut problems = Vec::new();
+        let profile = rbxport::user_data_dir().and_then(|data| mixxx::profile(&found, &data, home.as_deref(), &env));
+        if let Some((profile, _)) = &profile {
+            let mapping = suhina_dj::mixxx::Mapping::for_version(mixxx::version(&found));
+            if let Err(e) = suhina_dj::mixxx::configure(profile, mapping) {
+                problems.push(format!("The DDJ-FLX4 could not be set up: {e}"));
+            }
+        }
+        let shared = self.share_library(true);
+        if let Some(shared) = &shared {
+            problems.extend(shared.problems.iter().cloned());
+        }
+        let told = profile.as_ref().filter(|(_, told)| *told).map(|(p, _)| p.as_path());
+        self.dj.note = Some(match mixxx::launch(&found, told) {
+            Ok(()) => {
+                let mut text = String::from("Mixxx is open in its own window.");
+                if let Some(shared) = shared {
+                    text.push(' ');
+                    text.push_str(&shared.summary());
+                }
+                for problem in problems {
+                    text.push_str("\n• ");
+                    text.push_str(&problem);
+                }
+                Ok(text)
+            }
+            Err(e) => Err(format!("Could not open Mixxx: {e}")),
+        });
+    }
+
+    /// Shares the library now, without opening anything.
+    pub(super) fn share_library_now(&mut self) {
+        self.dj.note = Some(match self.share_library(!mixxx::is_running()) {
+            None => Err("Mixxx is not on this computer, so there is nothing to share with yet.".into()),
+            Some(shared) if shared.problems.is_empty() => Ok(shared.summary()),
+            Some(shared) => Err(format!("{}\n• {}", shared.summary(), shared.problems.join("\n• "))),
+        });
+    }
+
+    /// Opens rbxport to prepare a USB stick, with Mixxx's tracks and playlists sent to it first.
+    pub(super) fn prepare_usb(&mut self, ctx: &egui::Context) {
+        let shared = self.share_library(!mixxx::is_running());
         self.open_rbxport(ctx);
+        if let (Some(Ok(text)), Some(shared)) = (&self.dj.note, shared) {
+            self.dj.note = Some(Ok(format!("{text} {}", shared.summary())));
+        }
     }
 
     /// Starts rbxport, or opens its download page when this build has none.
     pub(super) fn open_rbxport(&mut self, ctx: &egui::Context) {
         self.dj.note = Some(match rbxport::find() {
             Some(app) => match rbxport::launch(&app) {
-                Ok(()) => Ok("rbxport is open in its own window.".into()),
+                Ok(()) => {
+                    Ok("rbxport is open in its own window: choose a playlist and export it to your USB stick.".into())
+                }
                 Err(e) => Err(format!("Could not open rbxport: {e}")),
             },
             None => {
@@ -48,48 +138,87 @@ impl App {
         });
     }
 
-    /// A finished export meant for DJ mode: into rbxport's library, and rbxport forward.
-    pub(super) fn send_to_rbxport(&mut self, track: &Path, ctx: &egui::Context) {
+    /// A finished export meant for DJ mode: into the shared library (rbxport now, Mixxx now
+    /// when it is closed, else the next time it opens), and Mixxx forward.
+    pub(super) fn send_to_dj(&mut self, track: &Path, ctx: &egui::Context) {
         let tracks = [track.to_path_buf()];
         let sent = match &self.dj.inbox {
             Some(inbox) => rbxport::send_to(inbox, &tracks),
             None => rbxport::send(&tracks),
         };
-        match sent {
-            Ok(_) => {
-                self.open_rbxport(ctx);
-                let name =
-                    track.file_name().map_or_else(|| track.display().to_string(), |n| n.to_string_lossy().into());
-                self.dj.note = Some(Ok(format!("{name} is on its way to rbxport's collection.")));
-            }
-            Err(e) => self.dj.note = Some(Err(format!("Could not send the track to rbxport: {e}"))),
+        let name = track.file_name().map_or_else(|| track.display().to_string(), |n| n.to_string_lossy().into());
+        if let Err(e) = sent {
+            self.dj.note = Some(Err(format!("Could not add {name} to the DJ library: {e}")));
+            return;
         }
+        let mut in_mixxx = false;
+        if let Some(found) = mixxx::find()
+            && !mixxx::is_running()
+            && let Some(data) = rbxport::user_data_dir()
+            && let Some((profile, _)) =
+                mixxx::profile(&found, &data, std::env::var_os("HOME").map(PathBuf::from).as_deref(), &|n| {
+                    std::env::var(n).ok()
+                })
+        {
+            let rendered =
+                suhina_dj::mixxx::MirrorTrack { path: track.to_string_lossy().into_owned(), ..Default::default() };
+            in_mixxx = suhina_dj::mixxx::add_to_mixxx(&profile.join(suhina_dj::mixxx::DATABASE), &[rendered]).is_ok();
+        }
+        self.open_mixxx(ctx);
+        let place = if in_mixxx { "Mixxx and rbxport" } else { "rbxport (and Mixxx the next time it opens)" };
+        let opened = match &self.dj.note {
+            Some(Ok(text)) => format!(" {text}"),
+            _ => String::new(),
+        };
+        self.dj.note = Some(Ok(format!("{name} is in your DJ library: {place}.{opened}")));
     }
 
     pub(super) fn show_dj(&mut self, ui: &mut Ui) {
         egui::ScrollArea::vertical().id_salt("dj-workspace").show(ui, |ui| {
             ui.add_space(theme::PAD * 4.0);
             ui.vertical_centered(|ui| {
-                ui.set_max_width(560.0);
-                ui.heading("DJ mode · rbxport");
+                ui.set_max_width(600.0);
+                ui.heading("DJ mode · Mixxx");
                 ui.add_space(theme::PAD);
                 ui.label(
-                    "Your DJ library, track analysis, decks, USB sticks for CDJ / XDJ players and PRO DJ LINK \
-                     all live in rbxport, which comes with YOBUKO and opens in its own window.",
+                    "Mix live in Mixxx, which comes with YOBUKO and opens in its own window. Plug in your \
+                     controller: a Pioneer DDJ-FLX4 is set up by itself, and Mixxx knows hundreds of others \
+                     (choose yours once in Mixxx › Preferences › Controllers).",
+                );
+                ui.add_space(theme::PAD);
+                ui.label(
+                    "Playing on CDJ or XDJ players? rbxport, also inside YOBUKO, prepares the USB stick. Your \
+                     tracks, playlists and hot cues are shared between the two each time you open one.",
                 );
                 ui.add_space(theme::PAD * 2.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Open rbxport").clicked() {
-                        self.open_rbxport(ui.ctx());
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("Open Mixxx").clicked() {
+                        self.open_mixxx(ui.ctx());
                     }
                     if ui
-                        .add_enabled(self.session().is_some(), egui::Button::new("Send this project to rbxport…"))
-                        .on_hover_text("Render the project to audio and add it to rbxport's collection")
+                        .button("Prepare a USB stick (rbxport)")
+                        .on_hover_text(
+                            "Open rbxport with your Mixxx tracks and playlists, to export them for CDJ / XDJ",
+                        )
+                        .clicked()
+                    {
+                        self.prepare_usb(ui.ctx());
+                    }
+                    if ui
+                        .add_enabled(self.session().is_some(), egui::Button::new("Send this project to DJ…"))
+                        .on_hover_text("Render the project to audio and add it to your DJ library")
                         .on_disabled_hover_text("Open a project first")
                         .clicked()
                     {
                         self.open_export();
                         self.dj.next_export_to_dj = true;
+                    }
+                    if ui
+                        .button("Share library now")
+                        .on_hover_text("Bring Mixxx and rbxport up to date with each other")
+                        .clicked()
+                    {
+                        self.share_library_now();
                     }
                 });
                 ui.add_space(theme::PAD);
@@ -103,7 +232,9 @@ impl App {
                     None => {}
                 }
                 ui.add_space(theme::PAD * 3.0);
+                ui.weak("Mixxx by the Mixxx team, free software (GPL-2.0-or-later): mixxx.org");
                 ui.weak("rbxport by Chris Le, free software (GPL-2.0-or-later): github.com/chrisle/rbxport");
+                ui.weak("DDJ-FLX4 mapping by Robert904 and ElHanko (MIT): github.com/ElHanko/mixxx-ddj-flx4-mapping");
             });
         });
     }

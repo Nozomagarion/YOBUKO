@@ -1,9 +1,10 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! DJ mode is rbxport (Chris Le's DJ library app, vendored in `third_party/rbxport-app`):
-//! where the copy shipped inside YOBUKO is, how it is started, and how a track rendered here
-//! reaches its library (the inbox, read by `third_party/rbxport-app/src-tauri/src/yobuko.rs`).
+//! rbxport (Chris Le's DJ library app, vendored in `third_party/rbxport-app`) prepares USB
+//! sticks for CDJ / XDJ players in DJ mode: where the copy shipped inside YOBUKO is, how it is
+//! started, and how tracks reach its library (the inbox, read by
+//! `third_party/rbxport-app/src-tauri/src/yobuko.rs`).
 
 use std::path::{Path, PathBuf};
 
@@ -86,7 +87,12 @@ pub(crate) fn launch(app: &Path) -> std::io::Result<()> {
 /// The folder rbxport imports requests from: the system's per-user data folder (what the
 /// `dirs` crate calls `data_dir`) › YOBUKO › rbxport-inbox. Keep in step with `yobuko.rs`.
 pub(crate) fn inbox(home: Option<&Path>, env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
-    let data = if cfg!(target_os = "macos") {
+    Some(data_dir(home, env)?.join("YOBUKO").join("rbxport-inbox"))
+}
+
+/// The system's per-user data folder, as the `dirs` crate (which rbxport uses) finds it.
+pub(crate) fn data_dir(home: Option<&Path>, env: &dyn Fn(&str) -> Option<String>) -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
         home.map(|home| home.join("Library").join("Application Support"))
     } else if cfg!(windows) {
         env("APPDATA").map(PathBuf::from)
@@ -95,8 +101,12 @@ pub(crate) fn inbox(home: Option<&Path>, env: &dyn Fn(&str) -> Option<String>) -
             .map(PathBuf::from)
             .filter(|p| p.is_absolute())
             .or_else(|| home.map(|home| home.join(".local").join("share")))
-    }?;
-    Some(data.join("YOBUKO").join("rbxport-inbox"))
+    }
+}
+
+/// [`data_dir`] of this user.
+pub(crate) fn user_data_dir() -> Option<PathBuf> {
+    data_dir(home().as_deref(), &|name| std::env::var(name).ok())
 }
 
 /// Asks rbxport to import `tracks`: a `.paths` request in `inbox`, written whole before it is
@@ -105,8 +115,9 @@ pub(crate) fn send_to(inbox: &Path, tracks: &[PathBuf]) -> std::io::Result<PathB
     std::fs::create_dir_all(inbox)?;
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
     let text: String = tracks.iter().map(|t| format!("{}\n", t.display())).collect();
-    let partial = inbox.join(format!("{stamp}.tmp"));
-    let request = inbox.join(format!("{stamp}.paths"));
+    // `render-`: rbxport imports it without coming forward (DJ mode is in Mixxx).
+    let partial = inbox.join(format!("render-{stamp}.tmp"));
+    let request = inbox.join(format!("render-{stamp}.paths"));
     std::fs::write(&partial, text)?;
     std::fs::rename(&partial, &request)?;
     Ok(request)

@@ -15,6 +15,9 @@ rbl-export = { path = "../../third_party/rbxport-export/rbl-export" }
 rbl-anlz = { path = "../../third_party/rbxport-export/rbl-anlz" }
 rbl-core = { path = "../../third_party/rbxport-export/rbl-core" }
 tempfile = "3"
+# Mixxx's library (DJ mode). Already built for rbl-onelibrary, with SQLCipher, which opens
+# plain SQLite files too.
+rusqlite = "0.40"
 
 [lints]
 workspace = true
