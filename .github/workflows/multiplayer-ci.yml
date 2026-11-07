@@ -29,7 +29,7 @@ jobs:
           # The oldest supported Ubuntu, so the Linux packages run on distributions as old as it.
           - os: ubuntu-22.04
             package: linux
-          - os: windows-latest
+          - os: yobuko-windows  # the owner's own PC (self-hosted runner): no GitHub minutes
             package: windows-x86_64
           - os: yobuko-mac  # the owner's own Mac (self-hosted runner): no GitHub macOS minutes
             package: macos-universal
