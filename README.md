@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/readme/hero.webp" alt="YOBUKO 呼子: make music with your friends, even when you're not in the same room. Studio, Multiplayer and DJ." width="100%">
+  <img src="assets/readme/hero.webp" alt="YOBUKO 呼子: make music with your friends, even when you're not in the same room. Built on Suhina, Mixxx and rbxport." width="100%">
 </p>
 
 <p align="center">
@@ -10,28 +10,39 @@
 
 <br>
 
-## 💜 Built on two wonderful open-source projects
+## 💜 Built on three wonderful open-source projects
 
-<p>YOBUKO would not exist without these two projects and their authors. <strong>Please go and give them a star first.</strong></p>
+<p>YOBUKO is a mix of three projects. It would not exist without them and their authors. <strong>Please go and give them a star first.</strong></p>
 
 <table>
   <tr>
-    <td width="50%" valign="top">
-      <p align="center"><a href="https://github.com/suhina-daw/suhina-daw"><img src="assets/brand/suhina-icon.png" alt="Suhina logo" width="84"></a></p>
+    <td width="33%" valign="top">
+      <p align="center"><a href="https://github.com/suhina-daw/suhina-daw"><img src="assets/readme/logo-suhina.png" alt="Suhina logo" width="88"></a></p>
       <h3 align="center"><a href="https://github.com/suhina-daw/suhina-daw">Suhina</a></h3>
-      <p align="center">An open-source, native, clip-launching <strong>music studio written in Rust</strong>, in the spirit of Ableton Live. Its engine, interface, instruments, effects and plug-in hosting are <strong>the whole Studio side of YOBUKO</strong>.</p>
-      <p align="center"><a href="https://github.com/suhina-daw/suhina-daw"><code>github.com/suhina-daw/suhina-daw</code></a></p>
+      <p align="center"><strong>🎛️ The studio</strong></p>
+      <p align="center">An open-source, clip-launching <strong>music studio written in Rust</strong>, in the spirit of Ableton Live. Its engine, instruments, effects and plug-in hosting are <strong>the whole Studio side of YOBUKO</strong>.</p>
+      <p align="center"><a href="https://github.com/suhina-daw/suhina-daw"><code>suhina-daw/suhina-daw</code></a></p>
     </td>
-    <td width="50%" valign="top">
-      <p align="center"><a href="https://github.com/chrisle/rbxport"><img src="assets/readme/rbxport-icon.png" alt="rbxport logo" width="84"></a></p>
+    <td width="33%" valign="top">
+      <p align="center"><a href="https://github.com/mixxxdj/mixxx"><img src="assets/readme/logo-mixxx.png" alt="Mixxx logo" width="88"></a></p>
+      <h3 align="center"><a href="https://github.com/mixxxdj/mixxx">Mixxx</a></h3>
+      <p align="center"><strong>🎧 The live DJ</strong></p>
+      <p align="center">The free DJ software <strong>by the Mixxx team</strong>: decks, effects, hot cues and mappings for hundreds of controllers. <strong>YOBUKO's DJ mode is Mixxx itself</strong>, ready for the Pioneer DDJ-FLX4.</p>
+      <p align="center"><a href="https://github.com/mixxxdj/mixxx"><code>mixxxdj/mixxx</code></a></p>
+    </td>
+    <td width="33%" valign="top">
+      <p align="center"><a href="https://github.com/chrisle/rbxport"><img src="assets/readme/logo-rbxport.png" alt="rbxport logo" width="88"></a></p>
       <h3 align="center"><a href="https://github.com/chrisle/rbxport">rbxport</a></h3>
-      <p align="center">By <strong>chrisle and contributors</strong>: a fast DJ library app with track analysis, cue points and a real <strong>Rekordbox USB exporter</strong> for Pioneer CDJ/XDJ players. <strong>YOBUKO's DJ mode is rbxport itself</strong>, shipped inside YOBUKO.</p>
-      <p align="center"><a href="https://github.com/chrisle/rbxport"><code>github.com/chrisle/rbxport</code></a></p>
+      <p align="center"><strong>💾 The USB export</strong></p>
+      <p align="center">A fast DJ library app <strong>by chrisle and contributors</strong>, with a real <strong>Rekordbox USB exporter</strong>. YOBUKO uses it to put your music on a stick for Pioneer CDJ / XDJ players.</p>
+      <p align="center"><a href="https://github.com/chrisle/rbxport"><code>chrisle/rbxport</code></a></p>
     </td>
   </tr>
 </table>
 
-<sub>Their authors keep their copyright and credits. YOBUKO is an independent fork, not endorsed by either project. More in <a href="#-credits-and-licence">Credits and licence</a>.</sub>
+<p align="center"><img src="assets/readme/trio.webp" alt="One app, three open-source projects: Suhina for the studio, Mixxx for live DJing, rbxport for USB export, with one shared music library between Mixxx and rbxport" width="100%"></p>
+
+<sub>Their authors keep their copyright and credits. YOBUKO is an independent fork, not endorsed by any of these projects. More in <a href="#-credits-and-licence">Credits and licence</a>.</sub>
 
 <br>
 
@@ -41,7 +52,7 @@
 
 One of you starts a session and reads out a short code. The others type it, and you are all in the same project, whether you live on the next street or on the other side of the country. Each person plays and listens on their own computer, and every change lands for everyone.
 
-When the track is ready, switch to **DJ** mode to prepare it for your set and put it on a USB stick for the club's players. **Make it together, prepare the set, play it live: one app.**
+When the track is ready, switch to **DJ** mode: play it live in **Mixxx** with your controller, or put it on a USB stick for the club's players with **rbxport**. **Make it together, play it live, take it to the club: one app.**
 
 <br>
 
@@ -71,11 +82,28 @@ The full Suhina studio: session and arrangement views, MIDI and audio tracks, in
 
 ## 💿 DJ
 
-<p align="center"><img src="assets/readme/dj.webp" alt="DJ mode: the rbxport app with a waveform, cue points and a playlist" width="100%"></p>
+> [!NOTE]
+> The Mixxx DJ mode and the shared library are **coming in the next version**. Until then, the DJ pill opens rbxport.
 
-- Click the mode pill at the top right and pick **DJ**: the real **rbxport** opens.
-- **Send this project to rbxport** puts your finished track straight into your DJ collection.
-- Analyse tempo and key, set cue points, build playlists and **export to a Rekordbox USB stick** for CDJ / XDJ players.
+<p align="center"><img src="assets/readme/mixxx.webp" alt="DJ mode: Mixxx with two decks, hot cues and the music library" width="100%"></p>
+
+**Play live with Mixxx.** Click the mode pill at the top right, pick **DJ**, then **Open Mixxx**.
+
+- **Plug in a Pioneer DDJ-FLX4 and play.** YOBUKO sets up its mapping for you. Other controllers work too: Mixxx has 200+ built-in mappings and MIDI Learn.
+- Mixxx comes **inside YOBUKO** on macOS (Apple Silicon) and Windows. On Linux, YOBUKO uses the Mixxx installed on your computer.
+- Already use Mixxx? Your own copy keeps its settings: the one inside YOBUKO has its own profile.
+
+<p align="center"><img src="assets/readme/rbxport.webp" alt="USB export: the rbxport app with a waveform, cue points and a playlist" width="100%"></p>
+
+**Take it to the club with rbxport.** Click **Prepare a USB stick (rbxport)** to write your music, playlists and cues to a Rekordbox stick for Pioneer CDJ / XDJ players.
+
+### 📚 One music library for both
+
+| You do this | YOBUKO does this |
+|---|---|
+| Add tracks, playlists or crates in **Mixxx** | They appear in rbxport, in a **Mixxx** folder, ready for the USB stick |
+| Make playlists in **rbxport** | They appear in Mixxx as **rbxport · Folder / Name**, with hot cues and loops |
+| Finish a track in the **Studio** | **Send this project to DJ…** puts it in your DJ library |
 
 <br>
 
@@ -142,11 +170,11 @@ Technical details: [online sessions](docs/spec/online-sessions.md) · [shared pl
 ```text
 Suhina upstream ──┐
                   ├─ isolated integration ─ checks ─ combined build ─ in-app update
-rbxport upstream ─┘            ↑
-                    YOBUKO multiplayer + DJ modules
+rbxport upstream ─┘            ↑                          ↑
+                    YOBUKO multiplayer + DJ modules     pinned Mixxx release
 ```
 
-Updates from Suhina and rbxport are merged into YOBUKO and tested together before a release. Installed apps only download that tested combined package; they never replace themselves with an official standalone app. Internal names (`suhina-*` crates and binaries) are kept so upstream updates keep merging cleanly. [Distribution design](docs/fork-distribution.md)
+Updates from Suhina and rbxport are merged into YOBUKO and tested together before a release, and Mixxx ships as a pinned official release. Installed apps only download that tested combined package; they never replace themselves with an official standalone app. Internal names (`suhina-*` crates and binaries) are kept so upstream updates keep merging cleanly. [Distribution design](docs/fork-distribution.md)
 
 </details>
 
@@ -173,7 +201,7 @@ Platform prerequisites are in [Suhina's build instructions](UPSTREAM_README.md#b
 
 The most useful help right now: **real sessions between two homes**, DJ preparation feedback and clear bug reports (your OS, the version, the exact steps, what you expected and what happened).
 
-Please follow [CONTRIBUTING.md](CONTRIBUTING.md) and the [security notes](docs/security/session-sharing.md), and keep session codes private. Discuss YOBUKO here, on this fork: Suhina and rbxport have their own direction and rules.
+Please follow [CONTRIBUTING.md](CONTRIBUTING.md) and the [security notes](docs/security/session-sharing.md), and keep session codes private. Discuss YOBUKO here, on this fork: Suhina, Mixxx and rbxport have their own direction and rules.
 
 <br>
 
@@ -182,12 +210,13 @@ Please follow [CONTRIBUTING.md](CONTRIBUTING.md) and the [security notes](docs/s
 | Project | What comes from it | What YOBUKO adds |
 |---|---|---|
 | **[Suhina](https://github.com/suhina-daw/suhina-daw)** | The music studio: native interface, audio engine, project model, instruments, effects, plug-in hosting, CLI and automation. | Online multiplayer, the DJ bridge and the combined distribution. |
-| **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The whole rbxport desktop app (library, analysis, decks, USB export, PRO DJ LINK) and its analysis and Rekordbox USB export libraries. | rbxport ships inside YOBUKO as its DJ mode; "Send this project to rbxport" adds a render to its collection. |
+| **[Mixxx](https://github.com/mixxxdj/mixxx)** by **the Mixxx team** | The Mixxx DJ application (GPL-2.0-or-later), shipped as YOBUKO's live DJ mode, and the community DDJ-FLX4 mapping by [ElHanko](https://github.com/ElHanko/mixxx-ddj-flx4-mapping) (MIT). | YOBUKO opens Mixxx from its DJ pill, installs the FLX4 mapping and keeps its library in sync with rbxport. |
+| **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The rbxport desktop app (library, analysis, USB export, PRO DJ LINK) and its analysis and Rekordbox USB export libraries. | rbxport ships inside YOBUKO for USB export, and shares its library with Mixxx. |
 
-Read [Suhina's original README](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md), [NOTICE](NOTICE), the rbxport provenance files ([analysis](third_party/rbxport-analysis/VENDORED.md), [exporter](third_party/rbxport-export/VENDORED.md), [app](third_party/rbxport-app/VENDORED.md)) and the exact [source pins](fork-sources.json). Original authors keep their copyright. This is an independent experimental fork, not an official release or endorsement from either project, and it contains no proprietary music-software code or content.
+Read [Suhina's original README](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md), [NOTICE](NOTICE), the rbxport provenance files ([analysis](third_party/rbxport-analysis/VENDORED.md), [exporter](third_party/rbxport-export/VENDORED.md), [app](third_party/rbxport-app/VENDORED.md)) and the exact [source pins](fork-sources.json). Original authors keep their copyright. This is an independent experimental fork, not an official release or endorsement from any of these projects, and it contains no proprietary music-software code or content.
 
 **GPL-3.0-or-later.** Packages include the required notices and source. See [LICENSE](LICENSE) and the [distribution contract](docs/fork-distribution.md).
 
 <br>
 
-<p align="center"><sub>The DJ screenshot shows rbxport's built-in demo library. The Studio screenshots show Suhina's themes.</sub></p>
+<p align="center"><sub>The Mixxx screenshot uses demo tracks made for this page; the rbxport screenshot shows its built-in demo library; the Studio screenshots show Suhina's themes.</sub></p>
