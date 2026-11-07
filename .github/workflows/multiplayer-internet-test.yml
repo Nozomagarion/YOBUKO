@@ -86,7 +86,7 @@ jobs:
         include:
           - os: ubuntu-latest
             index: 1
-          - os: macos-latest
+          - os: yobuko-mac  # the owner's own Mac (self-hosted runner): no GitHub macOS minutes
             index: 2
           - os: windows-latest
             index: 3

@@ -43,7 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: yobuko-mac  # the owner's own Mac (self-hosted runner): no GitHub macOS minutes
             platform: macos-universal
           - os: windows-latest
             platform: windows-x86_64

@@ -31,7 +31,7 @@ jobs:
             package: linux
           - os: windows-latest
             package: windows-x86_64
-          - os: macos-latest
+          - os: yobuko-mac  # the owner's own Mac (self-hosted runner): no GitHub macOS minutes
             package: macos-universal
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
