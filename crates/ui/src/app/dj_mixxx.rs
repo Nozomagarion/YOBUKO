@@ -135,31 +135,115 @@ pub(crate) fn is_running() -> bool {
     }
 }
 
-/// Starts Mixxx, detached; YOBUKO keeps running.
+/// The arguments Mixxx is started with: full screen, so DJ mode fills the screen in YOBUKO's
+/// look instead of opening one more window, and the YOBUKO profile when there is one.
+pub(crate) fn arguments(settings_path: Option<&Path>) -> Vec<std::ffi::OsString> {
+    let mut args = vec![std::ffi::OsString::from("--full-screen")];
+    if let Some(profile) = settings_path {
+        args.push("--settings-path".into());
+        args.push(profile.as_os_str().to_owned());
+    }
+    args
+}
+
+/// Starts Mixxx full screen, detached; YOBUKO keeps running behind it.
 pub(crate) fn launch(mixxx: &Mixxx, settings_path: Option<&Path>) -> std::io::Result<()> {
     let mut command = if cfg!(target_os = "macos") {
         let mut c = std::process::Command::new("open");
-        c.arg(&mixxx.path);
-        if let Some(profile) = settings_path {
-            c.arg("--args").arg("--settings-path").arg(profile);
-        }
+        c.arg(&mixxx.path).arg("--args").args(arguments(settings_path));
         c
     } else {
         let mut c = std::process::Command::new(&mixxx.path);
-        if let Some(profile) = settings_path {
-            c.arg("--settings-path").arg(profile);
-        }
+        c.args(arguments(settings_path));
         if let Some(dir) = mixxx.path.parent() {
             c.current_dir(dir);
         }
         c
     };
-    command
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(drop)
+    quiet(&mut command).spawn().map(drop)
+}
+
+/// Brings the Mixxx that is already running in front of everything, without starting another.
+/// Best effort: on Linux it needs `wmctrl`, which not every desktop has.
+pub(crate) fn bring_forward(mixxx: &Mixxx) {
+    if cfg!(test) {
+        return;
+    }
+    let mut command = if cfg!(target_os = "macos") {
+        // `open` on an app that runs only brings it forward.
+        let mut c = std::process::Command::new("open");
+        c.arg(&mixxx.path);
+        c
+    } else if cfg!(windows) {
+        let mut c = std::process::Command::new("powershell");
+        c.args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$p = Get-Process mixxx -ErrorAction SilentlyContinue | Select-Object -First 1; \
+             if ($p) { (New-Object -ComObject WScript.Shell).AppActivate($p.Id) | Out-Null }",
+        ]);
+        c
+    } else {
+        let mut c = std::process::Command::new("wmctrl");
+        c.args(["-x", "-a", "mixxx"]);
+        c
+    };
+    let _ = quiet(&mut command).spawn();
+}
+
+fn quiet(command: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // No console window flashing up beside Mixxx.
+        command.creation_flags(0x0800_0000);
+    }
+    command.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
+}
+
+/// Watches the Mixxx YOBUKO started: once it has been seen running and then closes, `closed`
+/// says so and YOBUKO's window is asked to repaint, so it can come back to the studio.
+pub(crate) struct Watch {
+    closed: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl Watch {
+    /// How long Mixxx may take to appear (a first start scans the library) before the watch
+    /// gives up, and how often it looks.
+    const APPEAR: std::time::Duration = std::time::Duration::from_secs(90);
+    const EVERY: std::time::Duration = std::time::Duration::from_millis(if cfg!(test) { 5 } else { 1500 });
+
+    pub(crate) fn start(ctx: egui::Context) -> Self {
+        Self::start_with(ctx, is_running)
+    }
+
+    pub(crate) fn start_with(ctx: egui::Context, running: fn() -> bool) -> Self {
+        let closed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = closed.clone();
+        let spawned = std::thread::Builder::new().name("mixxx-watch".into()).spawn(move || {
+            let since = std::time::Instant::now();
+            while !running() {
+                if since.elapsed() > Self::APPEAR {
+                    return;
+                }
+                std::thread::sleep(Self::EVERY);
+            }
+            while running() {
+                std::thread::sleep(Self::EVERY);
+            }
+            flag.store(true, std::sync::atomic::Ordering::Release);
+            ctx.request_repaint();
+        });
+        if spawned.is_err() {
+            eprintln!("YOBUKO: could not watch Mixxx, so the studio will not come back by itself when it closes");
+        }
+        Self { closed }
+    }
+
+    pub(crate) fn closed(&self) -> bool {
+        self.closed.load(std::sync::atomic::Ordering::Acquire)
+    }
 }
 
 /// What one library sync did, said on the DJ page.
@@ -228,6 +312,40 @@ pub(crate) fn sync(profile: &Path, data: &Path, inbox: &Path, mixxx_closed: bool
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mixxx_starts_full_screen_with_yobukos_profile() {
+        assert_eq!(arguments(None), vec![std::ffi::OsString::from("--full-screen")]);
+        let args = arguments(Some(Path::new("/data/YOBUKO/Mixxx")));
+        assert_eq!(args, ["--full-screen", "--settings-path", "/data/YOBUKO/Mixxx"].map(std::ffi::OsString::from));
+    }
+
+    #[test]
+    fn the_watch_tells_once_mixxx_has_opened_and_closed() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        // Not yet running, running for a while, then closed.
+        static LOOKS: AtomicUsize = AtomicUsize::new(0);
+        fn running() -> bool {
+            matches!(LOOKS.fetch_add(1, Ordering::SeqCst), 2..=5)
+        }
+        let watch = Watch::start_with(egui::Context::default(), running);
+        let since = std::time::Instant::now();
+        while !watch.closed() {
+            assert!(since.elapsed() < std::time::Duration::from_secs(10), "the watch never saw Mixxx close");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(LOOKS.load(Ordering::SeqCst) >= 7);
+    }
+
+    #[test]
+    fn a_mixxx_that_never_runs_is_not_taken_for_closed() {
+        fn never() -> bool {
+            false
+        }
+        let watch = Watch::start_with(egui::Context::default(), never);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        assert!(!watch.closed());
+    }
 
     #[test]
     fn the_shipped_mixxx_sits_where_the_packages_put_it() {

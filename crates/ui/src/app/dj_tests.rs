@@ -37,6 +37,36 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
 }
 
 #[test]
+fn quitting_mixxx_brings_the_studio_back_with_the_project_intact() {
+    let mut app = App::new();
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
+        .with_size(Vec2::new(1280.0, 800.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    super::menu_bar::pick_mode(&mut harness, "DJ");
+    harness.run();
+    let before = harness.state().session().unwrap().project().clone();
+    // A Mixxx that ran and has now closed.
+    fn ran() -> bool {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static LOOKS: AtomicUsize = AtomicUsize::new(0);
+        LOOKS.fetch_add(1, Ordering::SeqCst) == 0
+    }
+    let watch = super::dj::mixxx::Watch::start_with(egui::Context::default(), ran);
+    let since = std::time::Instant::now();
+    while !watch.closed() {
+        assert!(since.elapsed() < std::time::Duration::from_secs(10));
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    harness.state_mut().dj.mixxx_watch = Some(watch);
+    harness.run();
+    assert!(!harness.state().dj.active, "the studio is back once Mixxx closes");
+    assert!(harness.state().dj.mixxx_watch.is_none());
+    assert_eq!(harness.state().session().unwrap().project(), &before);
+}
+
+#[test]
 fn a_project_rendered_for_dj_mode_joins_the_dj_library_even_when_another_tab_is_selected() {
     let inbox = tempfile::tempdir().unwrap();
     let mut app = App::new();

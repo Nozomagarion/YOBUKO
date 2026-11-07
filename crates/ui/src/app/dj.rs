@@ -3,8 +3,9 @@
 
 //! DJ mode: Mixxx, free DJ software shipped inside YOBUKO, to mix live with a controller
 //! (the Pioneer DDJ-FLX4 is set up by itself), and rbxport by Chris Le, also shipped inside,
-//! to prepare USB sticks for CDJ / XDJ players. Both open in their own windows; YOBUKO shares
-//! one music library between them each time either is opened (`suhina_dj::mixxx`).
+//! to prepare USB sticks for CDJ / XDJ players. Mixxx fills the screen in YOBUKO's look, and
+//! quitting it brings the studio back; rbxport opens in its own window. YOBUKO shares one music
+//! library between them each time either is opened (`suhina_dj::mixxx`).
 
 use super::*;
 
@@ -27,7 +28,16 @@ pub(super) struct DjPanel {
     pub(super) inbox: Option<PathBuf>,
     /// The theme revision and mode last written to `look.json` (`look.rs`).
     pub(super) look_published: Option<(u64, super::menu_bar::WorkspaceMode)>,
+    /// The Mixxx YOBUKO started or brought forward: when it closes, the studio comes back.
+    pub(super) mixxx_watch: Option<mixxx::Watch>,
 }
+
+/// What the DJ page says while Mixxx is open, so nobody looks for a way back.
+pub(super) const WAY_BACK: &str = if cfg!(target_os = "macos") {
+    "Mixxx fills the screen in YOBUKO's look. To come back to the studio, quit Mixxx (Cmd+Q): YOBUKO comes back by itself."
+} else {
+    "Mixxx fills the screen in YOBUKO's look. To come back to the studio, quit Mixxx (Ctrl+Q): YOBUKO comes back by itself."
+};
 
 impl App {
     /// DJ mode starts: Mixxx opens, or comes forward when it is already open.
@@ -70,8 +80,12 @@ impl App {
             return;
         };
         if mixxx::is_running() {
+            mixxx::bring_forward(&found);
+            if self.dj.mixxx_watch.is_none() {
+                self.dj.mixxx_watch = Some(mixxx::Watch::start(ctx.clone()));
+            }
             let shared = self.share_library(false).map(|s| s.summary()).unwrap_or_default();
-            self.dj.note = Some(Ok(format!("Mixxx is already open. {shared}").trim_end().to_owned()));
+            self.dj.note = Some(Ok(format!("{WAY_BACK} {shared}").trim_end().to_owned()));
             return;
         }
         let home = std::env::var_os("HOME").map(PathBuf::from);
@@ -97,7 +111,8 @@ impl App {
         let told = profile.as_ref().filter(|(_, told)| *told).map(|(p, _)| p.as_path());
         self.dj.note = Some(match mixxx::launch(&found, told) {
             Ok(()) => {
-                let mut text = String::from("Mixxx is open in its own window.");
+                self.dj.mixxx_watch = Some(mixxx::Watch::start(ctx.clone()));
+                let mut text = String::from(WAY_BACK);
                 if let Some(shared) = shared {
                     text.push(' ');
                     text.push_str(&shared.summary());
@@ -110,6 +125,25 @@ impl App {
             }
             Err(e) => Err(format!("Could not open Mixxx: {e}")),
         });
+    }
+
+    /// Once the Mixxx DJ mode opened has closed: back to the studio, YOBUKO's window in front.
+    pub(super) fn after_mixxx(&mut self, ctx: &egui::Context) {
+        if !self.dj.mixxx_watch.as_ref().is_some_and(mixxx::Watch::closed) {
+            return;
+        }
+        self.dj.mixxx_watch = None;
+        self.come_back_from_mixxx(ctx);
+    }
+
+    pub(super) fn come_back_from_mixxx(&mut self, ctx: &egui::Context) {
+        self.dj.note = Some(Ok("Mixxx is closed: welcome back to the studio. DJ mode opens it again.".into()));
+        if self.dj.active {
+            self.dj.active = false;
+            self.multiplayer.open = false;
+        }
+        ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+        ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
     }
 
     /// Shares the library now, without opening anything.
@@ -190,7 +224,7 @@ impl App {
                 ui.heading("DJ mode · Mixxx");
                 ui.add_space(theme::PAD);
                 ui.label(
-                    "Mix live in Mixxx, which comes with YOBUKO and opens in its own window. Plug in your \
+                    "Mix live in Mixxx, which comes with YOBUKO and fills the screen in YOBUKO's look. Plug in your \
                      controller: a Pioneer DDJ-FLX4 is set up by itself, and Mixxx knows hundreds of others \
                      (choose yours once in Mixxx › Preferences › Controllers).",
                 );
