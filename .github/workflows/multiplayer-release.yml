@@ -43,7 +43,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
+          - os: yobuko-mac  # the owner's own Mac (self-hosted runner): no GitHub macOS minutes
             platform: macos-universal
           - os: windows-latest
             platform: windows-x86_64
@@ -65,8 +65,27 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        # The Mac's own Python is used on the self-hosted runner: the downloaded
+        # macOS build installs only into /Users/runner, which exists on GitHub's machines alone.
+        if: runner.environment == 'github-hosted'
         with:
           python-version: '3.12'
+      - name: Keep jobs apart from the owner's own files
+        # The owner's Mac and PC hold real YOBUKO settings and plug-ins. Tests must not read or change
+        # them, so later steps get an empty home; Rust stays where it is installed. The Mac also has
+        # only python3 while the scripts call python.
+        if: runner.environment == 'self-hosted'
+        run: |
+          echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> "$GITHUB_ENV"
+          echo "RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}" >> "$GITHUB_ENV"
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> "$GITHUB_PATH"
+          rm -rf "$RUNNER_TEMP/home" && mkdir -p "$RUNNER_TEMP/home"
+          echo "HOME=$RUNNER_TEMP/home" >> "$GITHUB_ENV"
+          if ! command -v python >/dev/null 2>&1; then
+            mkdir -p "$RUNNER_TEMP/bin"
+            ln -sf "$(command -v python3)" "$RUNNER_TEMP/bin/python"
+            echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          fi
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
         with:
           components: rustfmt, clippy
