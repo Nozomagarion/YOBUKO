@@ -116,6 +116,8 @@ fn a_cut_that_lasts_ends_with_a_clear_error_and_the_place_frees_after_its_grace(
         join(&mut guest, &invitation);
         edit(&mut guest, 0, json!({"command":"track.rename","track":1,"name":"Before the cut"}));
         wait(&mut owner, "guest edit", |v| v["controls"]["revision"] == 1);
+        // The cut must come after the guest has its confirmed copy, or there is no revision 1 to keep.
+        wait(&mut guest, "guest confirmed", |v| v["controls"]["revision"] == 1);
         let before = state(&mut owner)["controls"].clone();
         faults.cut();
         // The guest retries for its window, then says what happened and keeps its copy.
