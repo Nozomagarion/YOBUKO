@@ -256,7 +256,7 @@ pub fn is_light() -> bool {
 
 /// Whether `p` is a light theme: one with dark text. A background can be see-through, so its
 /// colour alone does not tell, but text is always made to read on what the theme looks like.
-fn light(p: &Palette) -> bool {
+pub fn light(p: &Palette) -> bool {
     luminance(p.text_primary) < 0.18
 }
 
@@ -274,8 +274,12 @@ pub fn set_palette(ctx: &egui::Context, palette: Palette) {
     ctx.request_repaint();
 }
 
-/// The id of the default theme, Suhina Studio, in the settings file.
+/// The id of Suhina Studio, the theme every other one falls back to, in the settings file.
 pub const BUILT_IN: &str = "suhina-studio";
+
+/// The theme a new YOBUKO install starts with: YOBUKO's own (Ink & Echo), whose colours
+/// Mixxx and rbxport follow too (`app/look.rs`).
+pub const YOBUKO: &str = "yobuko";
 
 /// The swatch of a theme that says none: its panels with a little of its accent.
 pub const DEFAULT_SWATCH: &str = "color-mix(in oklab, var(--panel-background), var(--accent) 35%)";
@@ -294,8 +298,9 @@ macro_rules! folder {
 /// The themes that come with Suhina, Suhina Studio first. Nord and Catppuccin
 /// are popular open palettes (MIT, their licences in `themes/licenses/`), mapped onto Suhina's
 /// tokens.
-const BUILT_IN_FOLDERS: [BuiltInFolder; 10] = [
+const BUILT_IN_FOLDERS: [BuiltInFolder; 11] = [
     folder!("suhina-studio": "theme.json", "theme.css", "thumbnail.svg", "variants/blue.json", "variants/darker.json", "variants/darkest.json", "variants/forest.json", "variants/light.json"),
+    folder!("yobuko": "theme.json", "theme.css", "thumbnail.svg", "variants/lagoon.json", "variants/lantern.json", "variants/lavender.json", "variants/matcha.json", "variants/midnight.json", "variants/mint.json", "variants/mountain-night.json", "variants/neon-candy.json", "variants/piou-pop.json", "variants/sakura.json", "variants/washi.json"),
     folder!("suhina-light": "theme.json", "theme.css", "thumbnail.svg"),
     folder!("high-contrast": "theme.json", "theme.css", "thumbnail.svg", "variants/light.json"),
     folder!("nord": "theme.json", "theme.css", "thumbnail.svg", "variants/snow-storm.json"),
@@ -321,7 +326,7 @@ pub fn built_in_themes() -> Vec<(&'static str, Theme)> {
                     // Every built-in folder reads whole (`the_themes_that_come_with_suhina_read_whole`).
                     debug_assert!(read.as_ref().is_ok_and(|(_, warnings)| warnings.is_empty()), "{id}: {read:?}");
                     let mut theme = read.map_or_else(|_| Theme::default(), |(theme, _)| theme);
-                    if *id == BUILT_IN {
+                    if *id == BUILT_IN || *id == YOBUKO {
                         // Suhina Studio's sheet sets only colours, which are in the palette now, so
                         // the style engine has nothing to do for the default theme and stays off.
                         theme.vars.sheet = theme.skin.css.take();

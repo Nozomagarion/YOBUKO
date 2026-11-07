@@ -4,6 +4,7 @@ import "./styles/base.css";
 import { Localization } from "./i18n";
 import { syncRekordboxBrowseAtStartup } from "./lib/rekordboxBrowse";
 import { initializeSentry } from "./lib/sentry";
+import { startYobukoLook } from "./lib/yobukoLook";
 import * as Sentry from "@sentry/react";
 
 // Suppress the webview's Reload/Inspect menu in every app window. Leave
@@ -59,4 +60,6 @@ function secondaryWindow(): Promise<ReactNode> | null {
 const view = secondaryWindow();
 const browse = preferences || sync || log ? Promise.resolve() : syncRekordboxBrowseAtStartup().catch(() => {});
 const mainWindow = view ?? import("./app/App").then(({ App }) => <App />);
-void Promise.all([mainWindow, browse]).then(([element]) => mount(element));
+// YOBUKO patch: the studio's colours are on before the first paint.
+const look = startYobukoLook().catch(() => {});
+void Promise.all([mainWindow, browse, look]).then(([element]) => mount(element));

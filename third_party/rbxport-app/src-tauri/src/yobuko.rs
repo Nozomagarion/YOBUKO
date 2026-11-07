@@ -15,6 +15,9 @@
 //!   track with its tags and hot cues, and every playlist, in
 //!   `<data dir>/YOBUKO/library/rbxport.json` (see [`Mirror`]). Rewritten
 //!   whenever the library changes.
+//! - It looks like the rest of YOBUKO: YOBUKO's studio writes the colours of
+//!   the theme in use to `<data dir>/YOBUKO/look.json`, and the window takes
+//!   them (`src/lib/yobukoLook.ts`, through [`yobuko_look`]).
 //! - Updates come with YOBUKO's own releases, so the built-in updater, which
 //!   would replace this copy with the upstream one, stays off.
 
@@ -57,6 +60,19 @@ pub fn inbox() -> Option<PathBuf> {
 /// `crates/dj/src/mixxx.rs` (`mirror_path`).
 pub fn mirror_path() -> Option<PathBuf> {
     dirs::data_dir().map(|dir| dir.join("YOBUKO").join("library").join("rbxport.json"))
+}
+
+/// Where YOBUKO's studio writes the colours of its theme. Keep in step with
+/// YOBUKO's `crates/dj/src/look.rs` (`path`).
+pub fn look_path() -> Option<PathBuf> {
+    dirs::data_dir().map(|dir| dir.join("YOBUKO").join("look.json"))
+}
+
+/// The look YOBUKO's studio wrote, as its JSON text, or `None` when there is
+/// none yet. The window reads it at start and every few seconds after.
+#[tauri::command]
+pub fn yobuko_look() -> Option<String> {
+    std::fs::read_to_string(look_path()?).ok().filter(|text| text.len() < 64 * 1024)
 }
 
 /// The finished requests in `dir`, oldest name first.

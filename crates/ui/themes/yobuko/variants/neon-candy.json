@@ -1,0 +1,13 @@
+{
+  "name": "Neon Candy",
+  "values": {
+    "--ground": "#170A24",
+    "--surface": "#24103A",
+    "--ink": "#FFF0FF",
+    "--tint": "#FF3EC8",
+    "--highlight": "#3EF0FF",
+    "--recording": "#FF4D6D",
+    "--meter-normal": "#3EF0A0",
+    "--meter-hot": "#FFE14D"
+  }
+}

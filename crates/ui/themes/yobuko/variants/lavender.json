@@ -1,0 +1,13 @@
+{
+  "name": "Lavender",
+  "values": {
+    "--ground": "#F1EEFA",
+    "--surface": "#E4DFF4",
+    "--ink": "#352F4A",
+    "--tint": "#6E5BD6",
+    "--highlight": "#E07AA8",
+    "--recording": "#D93036",
+    "--meter-normal": "#3F9B4A",
+    "--meter-hot": "#C9A227"
+  }
+}

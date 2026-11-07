@@ -1,0 +1,8 @@
+{
+  "format": 1,
+  "name": "YOBUKO",
+  "author": "The YOBUKO contributors",
+  "description": "YOBUKO's own looks, shared by the studio, Mixxx and rbxport: Ink & Echo, night, pastel, light and playful variants.",
+  "swatch": "color-mix(in oklab, var(--panel-background), var(--accent) 35%)",
+  "default-variant": "Ink & Echo"
+}

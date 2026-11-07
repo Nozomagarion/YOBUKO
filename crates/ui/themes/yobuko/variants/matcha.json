@@ -1,0 +1,10 @@
+{
+  "name": "Matcha",
+  "values": {
+    "--ground": "#161C17",
+    "--surface": "#1F2720",
+    "--ink": "#E6EEDF",
+    "--tint": "#9BCB6B",
+    "--highlight": "#E8C26A"
+  }
+}

@@ -162,7 +162,9 @@ pub(crate) fn analyse(path: &Path) -> Result<(rbl_analysis::Analysis, f64), Stri
     Ok((result, mono.len() as f64 / f64::from(audio.sample_rate)))
 }
 
+pub mod look;
 pub mod mixxx;
+pub mod mixxx_skin;
 pub mod usb;
 pub use usb::{UsbProgress, UsbSummary, export_usb};
 

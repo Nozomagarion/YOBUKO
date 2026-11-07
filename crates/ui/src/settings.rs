@@ -522,7 +522,7 @@ impl Default for Settings {
             piano_key_names: PianoKeyNames::default(),
             mixer_controls: MixerControls::Field,
             plugin_editors: EditorPlacement::Window,
-            theme: crate::kit::theme::BUILT_IN.into(),
+            theme: crate::kit::theme::YOBUKO.into(),
             projects_folder: String::new(),
             templates_folder: String::new(),
             nam_models_folder: String::new(),

@@ -1,0 +1,10 @@
+{
+  "name": "Mountain Night",
+  "values": {
+    "--ground": "#17132B",
+    "--surface": "#201A3A",
+    "--ink": "#F3EEFF",
+    "--tint": "#FFE3A3",
+    "--highlight": "#FF6FB5"
+  }
+}

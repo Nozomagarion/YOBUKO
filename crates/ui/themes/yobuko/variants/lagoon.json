@@ -1,0 +1,10 @@
+{
+  "name": "Lagoon",
+  "values": {
+    "--ground": "#0F1E26",
+    "--surface": "#152A34",
+    "--ink": "#E2F2F6",
+    "--tint": "#5FD0D8",
+    "--highlight": "#FFB38A"
+  }
+}
