@@ -106,6 +106,15 @@ jobs:
         if: runner.environment == 'github-hosted' && matrix.index <= fromJSON(inputs.guests || '3')
         with:
           python-version: '3.12'
+      - name: Python on the owner's own machines
+        # A personal Mac has python3 but no python command; the scripts call python.
+        if: runner.environment == 'self-hosted'
+        run: |
+          if ! command -v python >/dev/null 2>&1; then
+            mkdir -p "$RUNNER_TEMP/bin"
+            ln -sf "$(command -v python3)" "$RUNNER_TEMP/bin/python"
+            echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          fi
       - if: runner.os == 'Linux' && matrix.index <= fromJSON(inputs.guests || '3')
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
