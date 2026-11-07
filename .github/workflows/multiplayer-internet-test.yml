@@ -101,6 +101,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        # On the self-hosted Mac the default tool cache (/Users/runner) does not exist.
+        env:
+          AGENT_TOOLSDIRECTORY: ${{ runner.tool_cache }}
         if: matrix.index <= fromJSON(inputs.guests || '3')
         with:
           python-version: '3.12'

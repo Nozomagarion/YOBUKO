@@ -65,6 +65,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        # On the self-hosted Mac the default tool cache (/Users/runner) does not exist.
+        env:
+          AGENT_TOOLSDIRECTORY: ${{ runner.tool_cache }}
         with:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec
