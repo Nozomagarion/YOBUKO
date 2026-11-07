@@ -149,6 +149,13 @@ pub(crate) fn arguments(settings_path: Option<&Path>) -> Vec<std::ffi::OsString>
 /// Starts Mixxx full screen, detached; YOBUKO keeps running behind it.
 pub(crate) fn launch(mixxx: &Mixxx, settings_path: Option<&Path>) -> std::io::Result<()> {
     let mut command = if cfg!(target_os = "macos") {
+        // The copy inside YOBUKO.app arrives quarantined from the disk image. The person already
+        // allowed YOBUKO itself, so its Mixxx is cleared too, or macOS would refuse to open it
+        // ("Mixxx is damaged" / "cannot be opened"). Nothing to clear is fine.
+        if mixxx.shipped {
+            let _ = quiet(std::process::Command::new("xattr").args(["-dr", "com.apple.quarantine"]).arg(&mixxx.path))
+                .status();
+        }
         let mut c = std::process::Command::new("open");
         c.arg(&mixxx.path).arg("--args").args(arguments(settings_path));
         c
