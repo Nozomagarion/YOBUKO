@@ -48,7 +48,7 @@ fn buttons(render: bool) {
         std::thread::sleep(Duration::from_millis(10));
     }
     let bound = host.multiplayer.bound.unwrap();
-    let builder = egui_kittest::Harness::builder().with_size(Vec2::new(1400., 1000.));
+    let builder = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(Vec2::new(1400., 1000.));
     let builder = if render { builder.wgpu() } else { builder };
     let mut h = builder.build_ui_state(|ui, app: &mut App| app.ui(ui), host);
     theme::install(&h.ctx);
@@ -189,6 +189,7 @@ fn a_guest_sees_which_shared_plug_ins_are_missing_on_this_computer() {
     assert_eq!(guest.multiplayer.missing_plugins, vec![format!("Serum (vst3) on {channel}")]);
     guest.multiplayer.open = true;
     let mut h = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1400., 1000.))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), guest);
     theme::install(&h.ctx);
