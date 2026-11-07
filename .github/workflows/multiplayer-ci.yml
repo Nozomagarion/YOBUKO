@@ -177,11 +177,14 @@ jobs:
             bash scripts/macos_app.sh "$staging" "$version"
             # DJ mode: rbxport, built from third_party/rbxport-app, inside YOBUKO.app.
             bash scripts/rbxport_build.sh "$staging"
+            # DJ mode: Mixxx, the official release, inside YOBUKO.app (Apple Silicon).
+            bash scripts/mixxx_fetch.sh "$staging"
             codesign --force --deep --sign - "$staging/Suhina.app"
             bash scripts/macos_dmg.sh "$staging" installers/YOBUKO-Mac.dmg
           else
             version=$("$staging/suhina-cli.exe" --version | awk '{print $2}')
             bash scripts/rbxport_build.sh "$staging"
+            bash scripts/mixxx_fetch.sh "$staging"
             bash scripts/windows_installer.sh "$staging" "$version" installers YOBUKO-Windows-Setup
           fi
           ls -l installers

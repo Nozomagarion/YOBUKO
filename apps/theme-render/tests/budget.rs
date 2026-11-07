@@ -9,8 +9,6 @@
 use suhina_theme_render::budget::{Counts, count};
 use suhina_theme_render::{Subject, scenes};
 
-/// YOBUKO fork: one more theme-change approximation than upstream in each scene, for the app-mode
-/// pill (Studio, Multiplayer, DJ) in the menu bar.
 /// The counts recorded for each scene. `approximations` and `context_misses` are those of a
 /// settled frame; the `*_approximations` are summed over the frames a change takes to settle.
 #[cfg(not(windows))]
@@ -18,13 +16,13 @@ const RECORDED: [(&str, Counts); 2] = [
     (
         "launcher",
         Counts {
-            nodes: 318,
-            contexts: 64,
+            nodes: 319,
+            contexts: 65,
             approximations: 0,
             context_misses: 0,
             paint_callbacks: 138,
             theme_change_frames: 3,
-            theme_change_approximations: 1041,
+            theme_change_approximations: 1044,
             hover_frames: 3,
             hover_approximations: 0,
         },
@@ -32,13 +30,13 @@ const RECORDED: [(&str, Counts); 2] = [
     (
         "expanded-fm-synth",
         Counts {
-            nodes: 541,
-            contexts: 82,
+            nodes: 543,
+            contexts: 84,
             approximations: 0,
             context_misses: 0,
             paint_callbacks: 163,
             theme_change_frames: 3,
-            theme_change_approximations: 2158,
+            theme_change_approximations: 2164,
             hover_frames: 4,
             hover_approximations: 0,
         },
@@ -52,13 +50,13 @@ const RECORDED: [(&str, Counts); 2] = [
     (
         "launcher",
         Counts {
-            nodes: 326,
-            contexts: 67,
+            nodes: 327,
+            contexts: 68,
             approximations: 0,
             context_misses: 0,
             paint_callbacks: 139,
             theme_change_frames: 3,
-            theme_change_approximations: 1098,
+            theme_change_approximations: 1101,
             hover_frames: 4,
             hover_approximations: 0,
         },
@@ -66,13 +64,13 @@ const RECORDED: [(&str, Counts); 2] = [
     (
         "expanded-fm-synth",
         Counts {
-            nodes: 549,
-            contexts: 85,
+            nodes: 551,
+            contexts: 87,
             approximations: 0,
             context_misses: 0,
             paint_callbacks: 164,
             theme_change_frames: 3,
-            theme_change_approximations: 2215,
+            theme_change_approximations: 2221,
             hover_frames: 4,
             hover_approximations: 0,
         },

@@ -22,6 +22,7 @@ suhina-device-eq.workspace = true
 suhina-dsp.workspace = true
 suhina-soundmap.workspace = true
 suhina-update.workspace = true
+suhina-dj.workspace = true
 suhina-style.workspace = true
 suhina-theme-package.workspace = true
 rustfft = "6.4"  # MIT OR Apache-2.0, pure Rust; the EQ panel's analyser bands

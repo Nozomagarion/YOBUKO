@@ -153,11 +153,15 @@ jobs:
             bash scripts/macos_app.sh "$package" "$VERSION"
             # DJ mode: rbxport, built from third_party/rbxport-app, inside YOBUKO.app.
             bash scripts/rbxport_build.sh "$package"
+            # DJ mode: Mixxx, the official release, inside YOBUKO.app (Apple Silicon).
+            bash scripts/mixxx_fetch.sh "$package"
             python3 scripts/fork_package.py "$package/Suhina.app/Contents/MacOS" "$VERSION"
             codesign --force --deep --sign - "$package/Suhina.app"
           else
             # DJ mode: rbxport, built from third_party/rbxport-app, beside YOBUKO.
             bash scripts/rbxport_build.sh "$package"
+            # DJ mode: Mixxx, the official release, beside YOBUKO (Windows; Linux uses the system's).
+            bash scripts/mixxx_fetch.sh "$package"
             python3 scripts/fork_package.py "$package" "$VERSION"
           fi
           cli="$package/suhina-cli"

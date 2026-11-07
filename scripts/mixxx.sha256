@@ -1,0 +1,2 @@
+# SHA-256 of the Mixxx downloads scripts/mixxx_fetch.sh ships, one "<sha256>  <file name>" per line.
+# Pin a new file with the checksum the script reports the first time it downloads it.

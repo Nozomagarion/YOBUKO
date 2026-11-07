@@ -75,14 +75,29 @@ Copyright (c) 2026 Chris Le, GPL-2.0-or-later (used under GPLv3 with Suhina).
 The original source is unchanged; only the crate manifest is adapted.
 See its LICENSE, COPYING and VENDORED.md. No proprietary resources are included.
 
-## rbxport app (DJ mode)
+## Mixxx (DJ mode)
+
+DJ mode mixes live in Mixxx, by the Mixxx team and contributors (https://mixxx.org),
+GPL-2.0-or-later. The macOS and Windows packages ship the official, unmodified Mixxx release
+fetched by `scripts/mixxx_fetch.sh` (its version and source location are in the package's
+`LICENSE-Mixxx.txt`); on Linux YOBUKO uses the distribution's Mixxx. YOBUKO only starts it and
+reads and writes its library database to share it with rbxport (`crates/dj/src/mixxx.rs`).
+
+## Pioneer DDJ-FLX4 mapping for Mixxx
+
+`third_party/mixxx-ddj-flx4-mapping/` is copied unchanged from ElHanko's
+mixxx-ddj-flx4-mapping (https://github.com/ElHanko/mixxx-ddj-flx4-mapping) at revision
+`231e902216498d69c9de59ed69f7e8196cd02dd1`, which builds on Robert904's DDJ-FLX4 mapping
+shipped with Mixxx. Copyright (c) 2026 ElHanko, MIT; see its LICENSE and VENDORED.md.
+
+## rbxport app (USB sticks in DJ mode)
 
 The whole rbxport desktop app (`third_party/rbxport-app/`) is copied from Chris Le's rbxport
 at revision `b739d369665b492534dc2eae0733322c040a26d5` (version 1.9.0) and shipped inside
-YOBUKO as its DJ mode.
+YOBUKO to prepare USB sticks for CDJ / XDJ players.
 Copyright (c) 2026 Chris Le, GPL-2.0-or-later (used under GPLv3 with Suhina).
-YOBUKO's small changes (an inbox for rendered tracks, no self-update, its own identifier)
-are listed in its VENDORED.md.
+YOBUKO's small changes (an inbox for rendered tracks and Mixxx playlists, the library published
+for Mixxx, no self-update, its own identifier) are listed in its VENDORED.md.
 
 ## rbxport USB exporter
 
