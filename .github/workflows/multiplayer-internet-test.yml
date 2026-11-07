@@ -1,6 +1,6 @@
 name: Multiplayer Internet session test
 
-# A real Internet session between separate GitHub machines: a Linux host, then guests on
+# A real Internet session between separate machines (the owner's own runners): a Linux host, then guests on
 # Linux, macOS and Windows who join with the same short code, exactly as friends would.
 # The host's code travels to the guests as a short-lived artifact of this run.
 on:
@@ -30,13 +30,20 @@ env:
 
 jobs:
   host:
-    runs-on: ubuntu-22.04
+    # The owner's Linux runner registers two instances (yobuko-linux-1 and -2), so the host and the
+    # Linux guest below run side by side instead of waiting on each other.
+    runs-on: yobuko-linux  # Ubuntu 22.04 in WSL on the owner's own PC (self-hosted runner): no GitHub minutes
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+      - name: Linux prerequisites
+        # The owner's Linux runner has these installed by scripts/self-hosted/yobuko-linux-runner.sh,
+        # so apt only runs (with sudo) when one is missing.
+        run: |
+          missing=$(for p in libasound2-dev pkg-config; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || echo "$p"; done)
+          if [ -n "$missing" ]; then sudo apt-get update && sudo apt-get install -y $missing; fi
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       # The Rekordbox USB export (rbxport's exportLibrary.db) builds SQLCipher with a vendored
       # OpenSSL, whose Configure needs a full Perl; Git Bash's own perl lacks modules it uses.
@@ -84,7 +91,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: yobuko-linux  # Ubuntu 22.04 in WSL on the owner's own PC (self-hosted runner): no GitHub minutes
             index: 1
           - os: yobuko-mac  # the owner's own Mac (self-hosted runner): no GitHub macOS minutes
             index: 2
@@ -123,7 +130,11 @@ jobs:
             echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           fi
       - if: runner.os == 'Linux' && matrix.index <= fromJSON(inputs.guests || '3')
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+        # The owner's Linux runner has these installed by scripts/self-hosted/yobuko-linux-runner.sh,
+        # so apt only runs (with sudo) when one is missing.
+        run: |
+          missing=$(for p in libasound2-dev pkg-config; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || echo "$p"; done)
+          if [ -n "$missing" ]; then sudo apt-get update && sudo apt-get install -y $missing; fi
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         if: matrix.index <= fromJSON(inputs.guests || '3')
       # The Rekordbox USB export (rbxport's exportLibrary.db) builds SQLCipher with a vendored

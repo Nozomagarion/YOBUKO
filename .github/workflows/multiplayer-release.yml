@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   version:
-    runs-on: ubuntu-latest
+    runs-on: yobuko-linux  # Ubuntu 22.04 in WSL on the owner's own PC (self-hosted runner): no GitHub minutes
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -47,7 +47,7 @@ jobs:
             platform: macos-universal
           - os: yobuko-windows  # the owner's own PC (self-hosted runner): no GitHub minutes
             platform: windows-x86_64
-          - os: ubuntu-22.04
+          - os: yobuko-linux  # Ubuntu 22.04 in WSL on the owner's own PC (self-hosted runner): no GitHub minutes
             platform: linux-x86_64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 150
@@ -101,7 +101,11 @@ jobs:
           node-version: '22'
       - name: Linux prerequisites
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config xvfb imagemagick libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev patchelf
+        # The owner's Linux runner has these installed by scripts/self-hosted/yobuko-linux-runner.sh,
+        # so apt only runs (with sudo) when one is missing.
+        run: |
+          missing=$(for p in libasound2-dev pkg-config xvfb imagemagick libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev patchelf; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || echo "$p"; done)
+          if [ -n "$missing" ]; then sudo apt-get update && sudo apt-get install -y $missing; fi
       - name: Source and regression gates
         run: |
           python3 scripts/fork_sources.py check
@@ -205,7 +209,7 @@ jobs:
   # in-app updater reads the separate `multiplayer` release, which this does not touch.
   publish:
     needs: [version, build]
-    runs-on: ubuntu-latest
+    runs-on: yobuko-linux  # Ubuntu 22.04 in WSL on the owner's own PC (self-hosted runner): no GitHub minutes
     permissions:
       contents: write
     env:
