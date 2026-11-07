@@ -45,7 +45,7 @@ jobs:
         include:
           - os: yobuko-mac  # the owner's own Mac (self-hosted runner): no GitHub macOS minutes
             platform: macos-universal
-          - os: windows-latest
+          - os: yobuko-windows  # the owner's own PC (self-hosted runner): no GitHub minutes
             platform: windows-x86_64
           - os: ubuntu-22.04
             platform: linux-x86_64

@@ -88,7 +88,7 @@ jobs:
             index: 1
           - os: yobuko-mac  # the owner's own Mac (self-hosted runner): no GitHub macOS minutes
             index: 2
-          - os: windows-latest
+          - os: yobuko-windows  # the owner's own PC (self-hosted runner): no GitHub minutes
             index: 3
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
