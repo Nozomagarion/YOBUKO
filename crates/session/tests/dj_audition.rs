@@ -26,7 +26,7 @@ impl AudioSystem for Output {
         previous: Option<Player>,
     ) -> Result<Opened, String> {
         drop(previous);
-        let mut renderer = Renderer::stopped(p, audio, 8000).map_err(|e| e.to_string())?;
+        let mut renderer = Renderer::stopped(p, audio, 8000, suhina_session::devices()).map_err(|e| e.to_string())?;
         let player = Player::new(renderer.controller(), None);
         self.renderers.lock().unwrap().push(renderer);
         Ok(Opened { player, notice: None, plugins_kept: true })

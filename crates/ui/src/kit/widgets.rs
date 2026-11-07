@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use egui::text::{LayoutJob, TextWrapping};
 use egui::{
-    Align2, Color32, FontId, Galley, Id, Painter, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2, WidgetInfo, WidgetType,
+    Align2, Color32, FontId, Galley, Id, Painter, Pos2, Rect, Response, Role, Sense, Stroke, Ui, Vec2, WidgetInfo,
 };
 use serde_json::Value;
 
@@ -57,7 +57,7 @@ struct ValueDrag {
 }
 
 fn value_drag_id() -> Id {
-    Id::new("value-drag-holds-pointer")
+    Id::unique("value-drag-holds-pointer")
 }
 
 /// How far a drag on a value control (knob, value field) moved this frame, called while it is
@@ -105,7 +105,9 @@ pub fn release_value_drag(ctx: &egui::Context) {
         return;
     };
     if drag.released {
-        ctx.send_viewport_cmd(egui::ViewportCommand::CursorVisible(true));
+        // The next icon shows the pointer: nothing else may, as the window applies a command after
+        // the frame's icon, which would show it over a view that keeps it hidden for a shape of its
+        // own (a magnifier).
         ctx.data_mut(|d| d.remove::<ValueDrag>(value_drag_id()));
     } else if !ctx.input(|i| i.pointer.any_down() && i.focused) {
         ctx.send_viewport_cmd(egui::ViewportCommand::CursorGrab(egui::CursorGrab::None));
@@ -164,15 +166,26 @@ pub fn fitted(painter: &Painter, text: &str, font: FontId, color: Color32, max_w
     painter.layout_job(job)
 }
 
+/// Whether `galley`, laid out by [`fitted`] for `width`, is worth drawing there: it fits, and a
+/// cut kept at least one letter before the ellipsis.
+fn fits(galley: &Galley, width: f32) -> bool {
+    let glyphs = galley.rows.first().map_or(0, |row| row.row.glyphs.len());
+    galley.size().x <= width.max(0.0) + 0.5 && !(galley.elided && glyphs <= 1)
+}
+
 /// How wide `text` is in `font`.
 pub fn text_width(ui: &Ui, text: &str, font: FontId) -> f32 {
     ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font, Color32::WHITE).size().x)
 }
 
 /// Draws one line of text in `rect`, cut to its width, aligned horizontally by `align` and
-/// centred vertically.
+/// centred vertically. Where not even one letter and the ellipsis fit, nothing is drawn: a cut
+/// never leaves a lone ellipsis, or one wider than `rect` (#1198).
 pub fn text_in(painter: &Painter, rect: Rect, align: Align2, text: &str, font: FontId, color: Color32) {
     let galley = fitted(painter, text, font, color, rect.width());
+    if !fits(&galley, rect.width()) {
+        return;
+    }
     let pos = align.align_size_within_rect(galley.size(), rect).min;
     paint_text(painter, pos, galley, color);
 }
@@ -185,7 +198,7 @@ pub fn paint_text(painter: &Painter, pos: Pos2, galley: Arc<Galley>, color: Colo
 pub fn button_area(ui: &Ui, rect: Rect, id: egui::Id, label: impl ToString) -> Response {
     let response = ui.interact(rect, id, Sense::click());
     let label = label.to_string();
-    response.widget_info(|| WidgetInfo::labeled(WidgetType::Button, true, &label));
+    response.widget_info(|| WidgetInfo::labeled(Role::Button, true, &label));
     response
 }
 
@@ -514,6 +527,9 @@ pub fn text_input_at(ui: &mut Ui, rect: Rect, edit: egui::TextEdit<'_>) -> Respo
 }
 
 /// Closed choice fields show their surrounding surface; their menus retain normal styling.
+/// The chosen value stays on one line, as it did when egui laid the field out in a row of its
+/// own (before 0.37): a field given its width wraps "1 bar" otherwise. A field's own
+/// `wrap_mode` still wins.
 pub fn combo_box<R>(
     ui: &mut Ui,
     combo: egui::ComboBox,
@@ -525,6 +541,7 @@ pub fn combo_box<R>(
     let menu_style = ui.style().clone();
     ui.scope(|ui| {
         transparent_control(ui);
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
         let response = combo.show_ui(ui, |ui| {
             ui.set_style(menu_style);
             contents(ui)
@@ -683,7 +700,7 @@ const ACTIVE_VALUE: &str = "active-value";
 pub fn value_active(ctx: &egui::Context) -> bool {
     let pass = ctx.cumulative_pass_nr();
     let active = ctx
-        .data(|d| d.get_temp::<(egui::Id, u64)>(egui::Id::new(ACTIVE_VALUE)))
+        .data(|d| d.get_temp::<(egui::Id, u64)>(egui::Id::unique(ACTIVE_VALUE)))
         .is_some_and(|(_, drawn)| pass.saturating_sub(drawn) <= 2);
     active
         && ctx.input(|i| {
@@ -710,7 +727,7 @@ pub fn value_active(ctx: &egui::Context) -> bool {
 /// [`value_active`] says.
 pub(crate) fn value_keys(ui: &Ui, response: &Response) -> (i32, bool, Option<String>) {
     let ctx = ui.ctx();
-    let key = egui::Id::new(ACTIVE_VALUE);
+    let key = egui::Id::unique(ACTIVE_VALUE);
     let typed_id = response.id.with("typed");
     let pass = ctx.cumulative_pass_nr();
     if response.clicked() || response.drag_started_by(egui::PointerButton::Primary) {
@@ -903,7 +920,7 @@ pub fn value_area(ui: &Ui, rect: Rect, id: egui::Id, label: impl ToString, value
     let response = ui.interact(rect, id, Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical);
     let (label, value) = (label.to_string(), value.to_string());
     response.widget_info(|| {
-        let mut info = WidgetInfo::labeled(WidgetType::DragValue, true, &label);
+        let mut info = WidgetInfo::labeled(Role::SpinButton, true, &label);
         info.current_text_value = Some(value.clone());
         info
     });
@@ -943,6 +960,36 @@ pub fn knob(painter: &Painter, center: Pos2, size: f32, position: f32, pointer: 
     if !super::skin::paint(painter, rect, tip_role, state, pointer, angle) {
         painter.line_segment([center, tip], Stroke::new(1.5, pointer));
     }
+}
+
+/// A dial as an `.sd` control's dial draws it, the built-in canvases' wheels (the reverb's and
+/// the delay's): the rim arc, the ring's disc, the inner disc, the pointer line to 72 % of the
+/// radius, 270° with the gap under. The colours are the tokens the `.knob` scope gives — the
+/// same scope the canvases' dials take theirs from, so a theme's own colouring applies — and
+/// no artwork stands for the face, as a canvas has none.
+pub fn dial(painter: &Painter, center: Pos2, size: f32, position: f32, response: Option<&Response>) {
+    let _style = response
+        .map(|response| crate::kit::style_class::enter_response("knob", response))
+        .unwrap_or_else(|| crate::kit::style_class::enter("knob"));
+    let radius = (size * 0.5).max(1.0);
+    // The face: the rim arc (2.35 to 7.05 rad as an `.sd` dial's is, i.e. 135° past each side
+    // over the top), the ring disc inside it, the inner disc — the theme's tokens.
+    let points: Vec<Pos2> = (0..=48)
+        .map(|i| {
+            let a = (-135.0 + 270.0 * i as f32 / 48.0).to_radians();
+            center + Vec2::new(a.sin(), -a.cos()) * (radius - 2.0).max(0.0)
+        })
+        .collect();
+    painter.add(egui::Shape::line(points, Stroke::new(4.0, theme::border())));
+    painter.circle_filled(center, (radius - 4.0).max(0.0), theme::panel_background());
+    painter.circle_filled(center, (radius - 8.0).max(0.0), theme::control_background());
+    // The pointer: a quarter in, three quarters to the rim, in the accent token.
+    let angle = (-135.0 + 270.0 * position.clamp(0.0, 1.0)).to_radians();
+    let dir = Vec2::new(angle.sin(), -angle.cos());
+    painter.line_segment(
+        [center + dir * (radius * 0.25), center + dir * (radius * 0.72)],
+        Stroke::new(2.0, theme::accent()),
+    );
 }
 
 /// A volume in dB as the mixer shows it.
@@ -1010,7 +1057,7 @@ pub(crate) fn play_glyph(painter: &egui::Painter, center: Pos2, playing: bool, c
 }
 
 pub(crate) fn button(ui: &Ui, painter: &egui::Painter, rect: Rect, text: &str, label: &str) -> bool {
-    let response = button_area(ui, rect, Id::new(("dialog-button", label)), label);
+    let response = button_area(ui, rect, Id::unique(("dialog-button", label)), label);
     let _style = super::style_class::enter_response("button", &response);
     let fill = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
     let radius = super::style_class::radius(0.0);

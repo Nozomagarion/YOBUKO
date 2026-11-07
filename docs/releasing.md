@@ -3,7 +3,7 @@ description: How versions are numbered, how release builds, the nightly and test
 read_when: release, version, release candidate, tag, binaries, release workflow, nightly, past nightlies, development build, download, test build, pull request build, try a pull request, merge queue, merge group, ready to merge label, auto-merge, update branch, merging many pull requests, batch build, Discord announcement, Discord bot, testing forum, merged thread, release notes, changelog
 type: howto
 status: current
-last_verified: 2026-11-01
+last_verified: 2026-11-07
 covers:
   - .github/workflows/ci.yml
   - .github/workflows/release.yml
@@ -12,6 +12,7 @@ covers:
   - .github/workflows/test-build-links.yml
   - .github/workflows/ready-to-merge.yml
   - scripts/build_reuse.py
+  - scripts/release_packages_check.sh
   - scripts/test_build_reuse.py
   - scripts/test_merge_approval.py
   - scripts/branch_update.py
@@ -71,7 +72,11 @@ becomes the latest.
 5. For the next candidate, or the final release, repeat from step 1 with `0.1.0-rc.2` or `0.1.0`.
 
 Running the workflow by hand (Actions › Release › Run workflow) builds the same packages as
-workflow artifacts without creating a release, to test the pipeline.
+workflow artifacts without creating a release, to test the pipeline. Every run's artifacts are
+kept for 7 days; a nightly or a release keeps its packages on its release page. A release or a
+nightly is published only with all three platforms' packages
+(`scripts/release_packages_check.sh`): when one build failed, re-run the whole workflow, since a
+build re-run after the others' artifacts expired brings only its own.
 
 On Windows the three executables carry version information, which the file's Properties ›
 Details and Task Manager show: the product name Suhina, what each program is (Suhina, Suhina
@@ -139,7 +144,8 @@ request there, and is grouped by its head repository and branch instead.
 | Pull request | Built |
 |---|---|
 | opened and pushed by a maintainer | on every push; a newer push cancels a build still running |
-| anyone else's, from a fork or a branch | when a maintainer adds `test-build`, or a trusted contributor comments `/test-build`, for the authorized commit |
+| anyone else's, from a branch in this repository | when a maintainer adds `test-build`, or a trusted contributor comments `/test-build`, for the authorized commit |
+| from a fork | when a maintainer or trusted contributor comments `/test-build`, for that commit; the label alone, a maintainer's too, is refused |
 
 A pull request with the `test-build-windows` label is built for Windows only, which keeps the
 shared runners free while only that platform is being tried; its comment lists the other two as
@@ -191,8 +197,12 @@ merge cleanly fails the run and is named in the error.
 
 The build has a read-only token and no secrets, and for a fork GitHub runs `test-build.yml` as the
 fork has it; so `test-build-links.yml`, which runs from `main` and never runs pull request code,
-links only runs a maintainer started or a `suhina-bot[bot]` run with a bot-authored authorization
-for that exact commit, written before the run started. It rechecks the original human comment
+links only a maintainer's run of a branch in this repository, or a run with a bot-authored
+authorization for that exact commit, written before the run started. A fork's run needs that
+authorization even when a maintainer started it: adding a label, *Update branch*, closing and
+reopening all start one, and the fork's own workflow files decide what it builds, so who started it
+says nothing about its code. `scripts/build_reuse.py` counts a fork's earlier build under the same
+rule. It rechecks the original human comment
 and current `TRUSTED_CONTRIBUTORS` membership. The build checks the App's proof without relying
 on repository variables, which may be unavailable in fork PR runs; the default-branch gateway
 and linker check membership. A rerun retains the original run actor's authorization, not the
@@ -201,9 +211,16 @@ a forged or stale proof, removed trusted user, edited/deleted request or another
 cannot authorize a link. All role checks read the repository variable `MAINTAINERS`, using
 comma/whitespace-separated logins, optional `@` prefixes and case-insensitive exact matching.
 An empty list grants no maintainer authority. Set it at repository level, not as an environment
-override. For fork PRs, maintainers also use `/test-build`: the build may not receive repository
-variables, so direct maintainer labels cannot reliably be authorized there. Automatic builds
+override. For fork PRs, maintainers also use `/test-build`: a label is refused there, since it
+binds no commit the maintainer read, and the build may not receive repository variables anyway. Automatic builds
 of maintainer PRs continue for branches in this repository.
+
+Suhina's updater cannot tell from an artifact's name who made it, since a fork's run names its
+artifacts as it likes. So when `test-build-links.yml` links a fork's build, it links only the
+artifacts named for that pull request (`suhina-pr<number>-<platform>`) and uploads a marker from its
+own run, an artifact named `suhina-linked-pr<number>-run<run id>` kept for 7 days like the build.
+The updater lists a fork's build only when the artifacts list holds that marker from a run of this
+repository ([updates.md › Channels](spec/updates.md#channels)).
 
 Trusted contributors use `/test-build` on an open PR, as described in
 [Trusted bot requests](claim-bot.md#trusted-bot-requests). The bot attributes the request, records
@@ -251,6 +268,16 @@ The test build follows the same rule: its `cache` job builds the test build's bi
 push to `main` that changes them, only to save the cache, and pull requests' test builds restore it
 and save none. Their own caches, 0.6 to 0.8 GB per system on every build, had filled the 10 GB and
 evicted the others.
+
+**What the tests compile.** `cargo test` builds all of the workspace's crates in every run, with
+the `test` profile, and about 90% of that time is LLVM at `opt-level = 1`; linking is 1 to 3% on
+each system, so a faster linker has nothing to win. The crates that process no sound are built at
+`opt-level = 0` in that profile (`[profile.test.package]` in `Cargo.toml`). Measured on one machine,
+that takes the compile from 236 to 114 seconds on Linux, 600 to 300 on Windows and 380 to 183 on
+macOS, and the tests' run from 108 to 147, 138 to 203 and 148 to 192, about three quarters of it in
+the window tests (`crates/ui/tests/main.rs`). The crates that process sound stay at 1: with them
+at 0, `suhina-engine`'s tests take 93 seconds instead of 7. A new crate starts at 1, and joins the
+list if it processes no sound and takes long to compile.
 
 The queue is a setting, not code: Settings › Rules (or Branches) › the rule for `main` › **Require
 merge queue**, with the merge method used today, a group size of about 5 and *Only merge
@@ -316,8 +343,11 @@ network, no AI service). A change is one commit on `main`'s first-parent line, s
 request, listed by its title with a link to the pull request: a squash merge's subject, or for a
 merge commit ("Merge pull request #N from …") the first line of its message, which is the pull
 request's title. Changes that touch only documentation, CI, scripts and tests are counted, not
-listed. Pull request titles are the release notes, so they say what changed for a user: "Clip
-fades: shapes and an adjustable curve".
+listed, and so are changes whose title's area word says they are code structure, tests,
+dependencies or repository work ("Architecture: …", "Code structure: …", "Tests: …", "Deps: …",
+"CI: …", "Docs: …", "Refactor: …"), which touch the programs without a user noticing. Pull
+request titles are the release notes, so they say what changed for a user: "Clip fades: shapes
+and an adjustable curve".
 
 - **Nightly:** the changes since the previous nightly, on its release page and in the Discord post.
 - **Draft of a tagged release:** first *New and changed*, the bullets of ROADMAP.md › What works now

@@ -13,6 +13,7 @@
 //! relative to the project file; [`rebase_audio`] moves those paths when a project is saved
 //! somewhere else.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
@@ -22,24 +23,24 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde_json::{Map, Value, json};
 use suhina_model::{
     Arrangement, ArrangementLane, AudioInput, AudioRegion, AutomationLane, AutomationPoint, Branch, Channel, ChannelId,
-    ChannelRole, Clip, ClipContent, ClipId, ContentId, ContentKinds, ContentLane, Device, DeviceGroup, DeviceKind,
-    DeviceParam, Extension, Extensions, FadeCurve, FadeShape, FollowAction, FollowKind, InputChannels, LaneData,
-    LaneId, LaunchMapping, LaunchMode, LaunchQuantization, LaunchSettings, Launcher, LauncherColumn, LoopRange,
-    MAX_CHANGE_BEAT, MAX_INPUT_CHANNEL, MAX_TEMPO_CHANGES, MAX_TIME_SIGNATURE_CHANGES, Macro, MacroMapping,
-    MappingSource, MappingTarget, Marker, MidiInput, MidiPort, Monitor, Note, Project, Rgb, Scale, ScaleMode, Scene,
-    SceneId, Send, Slot, StretchMode, TakeLane, TempoPoint, TimeSignature, TimeSignatureChange, Track, TrackId,
-    Transport, WarpMarker, automation, valid_bpm,
+    ChannelRole, Clip, ClipContent, ClipId, ContentId, ContentKinds, ContentLane, ControllerMapping, Device,
+    DeviceGroup, DeviceId, DeviceKind, DeviceParam, Extension, Extensions, FadeCurve, FadeShape, FollowAction,
+    FollowKind, InputChannels, LaneData, LaneId, LaunchMode, LaunchQuantization, LaunchSettings, Launcher,
+    LauncherColumn, LoopRange, MAX_CHANGE_BEAT, MAX_INPUT_CHANNEL, MAX_MAPPINGS, MAX_TEMPO_CHANGES,
+    MAX_TIME_SIGNATURE_CHANGES, Macro, MacroMapping, MappedDevice, MappingSource, MappingTarget, Marker, MidiInput,
+    MidiPort, Monitor, Note, Project, Rgb, Scale, ScaleMode, Scene, SceneId, Send, Slot, StretchMode, TakeLane,
+    TempoPoint, TimeSignature, TimeSignatureChange, Track, TrackId, Transport, WarpMarker, automation, valid_bpm,
 };
 
 /// The file extension, without the dot.
-pub const EXTENSION: &str = "suhina";
+pub const EXTENSION: &str = suhina_model::PROJECT_EXTENSION;
 /// The `format` every file names.
 const FORMAT: &str = "suhina";
 /// The version every file is written as, and the newest this crate reads. It rises with every
 /// change to what a file holds, so a Suhina that reads up to an older version refuses the file
 /// rather than dropping what it does not know (ADR 0010 › Amendment: format versions,
 /// `docs/spec/suhina-format.md` › Versions). Files of every earlier version are still read.
-pub const VERSION: u64 = 5;
+pub const VERSION: u64 = 9;
 /// A larger file is refused before it is parsed.
 const MAX_FILE: u64 = 512 * 1024 * 1024;
 
@@ -67,10 +68,7 @@ impl From<&str> for ProjectFileError {
     }
 }
 
-/// Whether `path` names a project file by its extension, `.suhina` in either case.
-pub fn is_project_file(path: &Path) -> bool {
-    path.extension().is_some_and(|e| e.eq_ignore_ascii_case(EXTENSION))
-}
+pub use suhina_model::{is_preset_file, is_project_file};
 
 /// Reads a project file.
 pub fn read_file(path: &Path) -> Result<Project, ProjectFileError> {
@@ -86,18 +84,8 @@ pub fn read_file(path: &Path) -> Result<Project, ProjectFileError> {
 /// Writes `project` to `path`: to a file beside it first, then moved over it, so a failed save
 /// never leaves half a project.
 pub fn write_file(path: &Path, project: &Project) -> Result<(), ProjectFileError> {
-    let failed = |e: std::io::Error| ProjectFileError(format!("could not save {}: {e}", path.display()));
-    if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(failed)?;
-    }
-    let mut temporary = path.as_os_str().to_owned();
-    temporary.push(".saving");
-    let temporary = PathBuf::from(temporary);
-    std::fs::write(&temporary, to_json(project)).map_err(failed)?;
-    std::fs::rename(&temporary, path).map_err(|e| {
-        let _gone = std::fs::remove_file(&temporary);
-        failed(e)
-    })
+    suhina_fs::write_atomic(path, to_json(project))
+        .map_err(|e| ProjectFileError(format!("could not save {}: {e}", path.display())))
 }
 
 /// The project as the text of a `.suhina` file.
@@ -124,7 +112,7 @@ pub fn from_json(text: &str) -> Result<Project, ProjectFileError> {
     if version == 0 || version > VERSION {
         return Err(format!("the project is version {version}; this Suhina reads up to version {VERSION}").into());
     }
-    let project = read_project(root.get("project").ok_or("the project is missing")?)?;
+    let project = read_project(root.get("project").ok_or("the project is missing")?, version)?;
     project.validate().map_err(|errors| {
         let list: Vec<String> = errors.iter().take(5).map(ToString::to_string).collect();
         format!("the project does not hold together: {}", list.join("; "))
@@ -266,6 +254,7 @@ fn project_value(p: &Project) -> Value {
     }).collect::<Vec<_>>() });
     // Left out when there are none, so a project without markers is written as before.
     if !p.arrangement.markers.is_empty() {
+        // A marker's id lives only while the project is open, so it is not written (#763 › 1).
         arrangement["markers"] =
             p.arrangement.markers.iter().map(|m| json!({ "beat": number(m.beat), "name": m.name })).collect();
     }
@@ -290,18 +279,19 @@ fn project_value(p: &Project) -> Value {
             .collect();
     }
     out.insert("arrangement".into(), arrangement);
-    let mut launcher = json!({
+    let launcher = json!({
         "scenes": p.launcher.scenes.iter().map(scene_value).collect::<Vec<_>>(),
         "columns": p.launcher.columns.iter().map(|c| json!({
             "track": c.track.0,
             "slots": c.slots.iter().map(|s| json!({ "clip": s.clip.as_ref().map(clip_value), "has_stop": s.has_stop })).collect::<Vec<_>>(),
         })).collect::<Vec<_>>(),
     });
-    // Left out when there are none, so a project without mappings is written as before.
-    if let (Some(map), false) = (launcher.as_object_mut(), p.launcher.mappings.is_empty()) {
-        map.insert("mappings".into(), p.launcher.mappings.iter().map(mapping_value).collect());
-    }
     out.insert("launcher".into(), launcher);
+    // From version 9 (#1162); left out when there are none, so a project without mappings is
+    // written as before. The launcher's `mappings` of earlier versions is never written again.
+    if !p.controller_mappings.is_empty() {
+        out.insert("controller_mappings".into(), p.controller_mappings.iter().map(mapping_value).collect());
+    }
     // Left out when there is none, so a project without one is written as before.
     if let Some(scale) = p.default_scale {
         out.insert("default_scale".into(), scale_value(scale));
@@ -476,6 +466,9 @@ fn device_value(d: &Device) -> Value {
         "params": d.params.iter().map(|p| json!({ "id": p.id, "value": number(p.value) })).collect::<Vec<_>>(),
     });
     if let Some(map) = out.as_object_mut() {
+        if d.id.is_some() {
+            map.insert("id".into(), json!(d.id.0));
+        }
         // Only devices with automation say so, so files without any keep their shape.
         if !d.automation.is_empty() {
             map.insert("automation".into(), lanes_value(&d.automation));
@@ -515,7 +508,23 @@ fn group_value(g: &DeviceGroup) -> Value {
             let mappings: Vec<Value> = m
                 .mappings
                 .iter()
-                .map(|x| json!({ "device": x.device, "param": x.param, "min": number(x.min), "max": number(x.max) }))
+                .filter_map(|x| {
+                    // From version 7 the device's id (#763 › 1). A device with none yet (a
+                    // project built without a session) is written by its path in the group,
+                    // which every version reads; a mapping whose device is gone is left out, as
+                    // no reader could place it.
+                    let device = match x.device {
+                        MappedDevice::Id(id) => {
+                            g.inner_devices().iter().any(|(_, d)| id.is_some() && d.id == id).then(|| json!(id.0))?
+                        }
+                        MappedDevice::Nth(n) => {
+                            let inner = g.inner_devices();
+                            let (path, d) = inner.get(usize::try_from(n).ok()?)?;
+                            if d.id.is_some() { json!(d.id.0) } else { json!(path) }
+                        }
+                    };
+                    Some(json!({ "device": device, "param": x.param, "min": number(x.min), "max": number(x.max) }))
+                })
                 .collect();
             json!({ "name": m.name, "mappings": mappings })
         })
@@ -626,18 +635,18 @@ fn clip_value(c: &Clip) -> Value {
     out
 }
 
-/// A launch mapping; its scene counts from 1, as in the commands.
-fn mapping_value(m: &LaunchMapping) -> Value {
-    let mut out = json!({ "source": m.source.name(), "target": m.target.kind() });
-    if let Some(map) = out.as_object_mut() {
-        if let Some(track) = m.target.track() {
-            map.insert("track".into(), json!(track.0));
-        }
-        if let Some(scene) = m.target.scene() {
-            map.insert("scene".into(), json!(scene.saturating_add(1)));
-        }
+/// A controller mapping: its source, and its target as the command and the parameters it fixes,
+/// the scene from 0, as in the commands (version 9, #1162).
+fn mapping_value(m: &ControllerMapping) -> Value {
+    let mut target = Map::new();
+    target.insert("command".into(), json!(m.target.command()));
+    if let Some(track) = m.target.track() {
+        target.insert("track".into(), json!(track.0));
     }
-    out
+    if let Some(scene) = m.target.scene() {
+        target.insert("scene".into(), json!(scene));
+    }
+    json!({ "source": m.source.name(), "target": target })
 }
 
 fn launch_value(l: &LaunchSettings) -> Value {
@@ -865,7 +874,8 @@ fn time_signature_changes(t: &Obj) -> Result<Vec<TimeSignatureChange>, ProjectFi
         .collect()
 }
 
-fn read_project(value: &Value) -> Result<Project, ProjectFileError> {
+/// The project of a file of `version`.
+fn read_project(value: &Value, version: u64) -> Result<Project, ProjectFileError> {
     let p = object(value, "project")?;
     let transport = match p.get("transport") {
         None | Some(Value::Null) => Transport::default(),
@@ -894,7 +904,7 @@ fn read_project(value: &Value) -> Result<Project, ProjectFileError> {
                 time_signature: signature,
                 loop_range,
                 loop_enabled,
-                tempo_changes: tempo_changes(t)?,
+                tempo_changes: tempo_changes(t)?.into(),
                 time_signature_changes: time_signature_changes(t)?,
             }
         }
@@ -942,7 +952,7 @@ fn read_project(value: &Value) -> Result<Project, ProjectFileError> {
                 if beat < 0.0 {
                     return Err(format!("{at}.beat: expected a beat from 0 on").into());
                 }
-                markers.push(Marker { beat, name: text(m, "name", &at)? });
+                markers.push(Marker::new(beat, text(m, "name", &at)?));
             }
             let mut takes = Vec::new();
             for (i, v) in list(a, "takes", "project.arrangement")?.iter().enumerate() {
@@ -962,11 +972,14 @@ fn read_project(value: &Value) -> Result<Project, ProjectFileError> {
                     color: read_color(take.get("color"), &at)?,
                 });
             }
-            let mut arrangement = Arrangement { lanes, markers, takes };
+            let mut arrangement = Arrangement { lanes, markers: markers.into(), takes };
             arrangement.sort_markers();
             arrangement
         }
     };
+    // Before version 9 a project's mappings were the launcher's launch mappings (#1162).
+    let mut older_mappings: Vec<ControllerMapping> = Vec::new();
+    let mut older_sources = HashSet::new();
     let launcher = match p.get("launcher") {
         None | Some(Value::Null) => Launcher::default(),
         Some(l) => {
@@ -998,19 +1011,25 @@ fn read_project(value: &Value) -> Result<Project, ProjectFileError> {
                 }
                 columns.push(LauncherColumn { track: TrackId(whole(c, "track", &at)?), slots });
             }
-            let mut mappings: Vec<LaunchMapping> = Vec::new();
-            for (i, v) in list(l, "mappings", "project.launcher")?.iter().enumerate() {
-                let mapping = read_mapping(v, &format!("project.launcher.mappings[{i}]"))?;
-                if mappings.iter().any(|m| m.source == mapping.source) {
-                    return Err(ProjectFileError(format!(
-                        "project.launcher.mappings[{i}]: {} is mapped twice",
-                        mapping.source.name()
-                    )));
+            if version < 9 {
+                for (i, v) in list(l, "mappings", "project.launcher")?.iter().enumerate() {
+                    let at = format!("project.launcher.mappings[{i}]");
+                    push_mapping(&mut older_mappings, &mut older_sources, read_launch_mapping(v, &at, version)?, &at)?;
                 }
-                mappings.push(mapping);
             }
-            Launcher { scenes, columns, mappings }
+            Launcher { scenes, columns }
         }
+    };
+    let controller_mappings = if version < 9 {
+        older_mappings
+    } else {
+        let mut mappings = Vec::new();
+        let mut sources = HashSet::new();
+        for (i, v) in list(p, "controller_mappings", "project")?.iter().enumerate() {
+            let at = format!("project.controller_mappings[{i}]");
+            push_mapping(&mut mappings, &mut sources, read_controller_mapping(v, &at)?, &at)?;
+        }
+        mappings
     };
     let mut project = Project {
         transport,
@@ -1021,11 +1040,13 @@ fn read_project(value: &Value) -> Result<Project, ProjectFileError> {
         launcher,
         extensions: extensions(p, "project")?,
         default_scale: read_scale(p, "default_scale", "project")?,
+        controller_mappings,
         next_id: optional_whole(p, "next_id", "project")?.unwrap_or(0),
     };
     // A file written before ids, or an object added by hand without one: the objects without an
     // id get the next ones in document order, so the same file always reads with the same ids.
-    // A stale `next_id` moves past the ids in use.
+    // A stale `next_id` moves past the ids in use. Markers, automation points and tempo changes
+    // got new ids as their lists were built: the file holds none (#763 › 1).
     project.assign_ids().map_err(|e| ProjectFileError(format!("project: {e}")))?;
     Ok(project)
 }
@@ -1194,13 +1215,15 @@ fn read_lanes(map: &Obj, at: &str) -> Result<Vec<AutomationLane>, ProjectFileErr
             let at = format!("{at}.points[{j}]");
             let p = object(p, &at)?;
             let curve = read_curve(p, &at)?;
-            points.push(AutomationPoint { beat: float(p, "beat", &at)?, value: float(p, "value", &at)?, curve });
+            let (beat, value) = (float(p, "beat", &at)?, float(p, "value", &at)?);
+            points.push(AutomationPoint { beat, value, curve });
         }
         // In beat order, as the model keeps them; points at the same beat keep their order.
         points.sort_by(|a, b| a.beat.total_cmp(&b.beat));
+        // Each point gets a new id: the file holds none (#763 › 1).
         automation.push(AutomationLane {
             param: required_text(lane, "param", &at)?,
-            points,
+            points: points.into(),
             enabled: flag(lane, "enabled", true, &at)?,
         });
     }
@@ -1258,10 +1281,12 @@ fn read_device(value: &Value, at: &str) -> Result<Device, ProjectFileError> {
     }
     let automation = read_lanes(d, at)?;
     Ok(Device {
+        // From version 6 (#763 › 1); earlier files' devices get theirs when the project is opened.
+        id: DeviceId(read_id(d, at)?),
         name: text(d, "name", at)?,
         kind,
         enabled: flag(d, "enabled", true, at)?,
-        state: bytes(d, "state", at)?,
+        state: bytes(d, "state", at)?.map(Into::into),
         params,
         automation,
         clip_host: flag(d, "clip_host", false, at)?,
@@ -1291,7 +1316,7 @@ fn read_group(k: &Obj, at: &str) -> Result<DeviceGroup, ProjectFileError> {
             extensions: extensions(b, &at)?,
         });
     }
-    let mut macros = Vec::new();
+    let mut group = DeviceGroup { branches, macros: Vec::new() };
     for (i, v) in list(k, "macros", at)?.iter().enumerate() {
         let at = format!("{at}.macros[{i}]");
         let m = object(v, &at)?;
@@ -1299,21 +1324,37 @@ fn read_group(k: &Obj, at: &str) -> Result<DeviceGroup, ProjectFileError> {
         for (j, v) in list(m, "mappings", &at)?.iter().enumerate() {
             let at = format!("{at}.mappings[{j}]");
             let x = object(v, &at)?;
-            let mut device = Vec::new();
-            for step in list(x, "device", &at)? {
-                let step = step.as_u64().and_then(|n| u32::try_from(n).ok());
-                device.push(step.ok_or_else(|| format!("{at}.device: expected a list of whole numbers"))?);
-            }
             mappings.push(MacroMapping {
-                device,
+                device: read_mapped_device(&group, x, &at)?,
                 param: required_text(x, "param", &at)?,
                 min: float_or(x, "min", 0.0, &at)?,
                 max: float_or(x, "max", 1.0, &at)?,
             });
         }
-        macros.push(Macro { name: text(m, "name", &at)?, mappings });
+        group.macros.push(Macro { name: text(m, "name", &at)?, mappings });
     }
-    Ok(DeviceGroup { branches, macros })
+    Ok(group)
+}
+
+/// A macro mapping's device: its id from version 7 (#763 › 1), or before that its path relative
+/// to the group (`[branch, index, …]`), read as its place among the group's devices until the
+/// project gives them ids.
+fn read_mapped_device(group: &DeviceGroup, x: &Obj, at: &str) -> Result<MappedDevice, ProjectFileError> {
+    match x.get("device") {
+        Some(Value::Number(n)) => {
+            let id = n.as_u64().and_then(|n| u32::try_from(n).ok()).filter(|&n| n != 0);
+            id.map(|id| MappedDevice::Id(DeviceId(id)))
+                .ok_or_else(|| format!("{at}.device: expected a device id, a whole number from 1").into())
+        }
+        _ => {
+            let mut path = Vec::new();
+            for step in list(x, "device", at)? {
+                let step = step.as_u64().and_then(|n| u32::try_from(n).ok());
+                path.push(step.ok_or_else(|| format!("{at}.device: expected a list of whole numbers"))?);
+            }
+            group.nth_at(&path).ok_or_else(|| format!("{at}.device: no device in the group at {path:?}").into())
+        }
+    }
 }
 
 fn read_content(value: &Value, at: &str) -> Result<ClipContent, ProjectFileError> {
@@ -1345,7 +1386,7 @@ fn read_content(value: &Value, at: &str) -> Result<ClipContent, ProjectFileError
                         muted: flag(n, "muted", false, &at)?,
                     });
                 }
-                LaneData::Notes(notes)
+                LaneData::Notes(notes.into())
             }
             (None, Some(audio)) => LaneData::Audio(read_audio(audio, &format!("{at}.audio"))?),
             _ => return Err(format!("{at}: a lane has either notes or audio").into()),
@@ -1356,7 +1397,7 @@ fn read_content(value: &Value, at: &str) -> Result<ClipContent, ProjectFileError
         id: ContentId(whole(c, "id", at)?),
         name: text(c, "name", at)?,
         length: float(c, "length", at)?,
-        lanes,
+        lanes: lanes.into(),
         extensions: extensions(c, at)?,
         scale: read_scale(c, "scale", at)?,
     })
@@ -1488,19 +1529,70 @@ fn read_follow(c: &Obj, at: &str) -> Result<FollowAction, ProjectFileError> {
     Ok(follow)
 }
 
-/// A launch mapping: `source` (`key:Q`, `note:1:60`), `target` (slot, scene or stop) and the
-/// `track` and 1-based `scene` the target needs. The track need not exist: a mapping whose track
-/// is gone is kept, unused.
-fn read_mapping(value: &Value, at: &str) -> Result<LaunchMapping, ProjectFileError> {
-    let m = object(value, at)?;
+/// Adds `mapping` to `mappings`, refusing a source that is mapped already (a source has one
+/// target at most) and a project with more than [`MAX_MAPPINGS`], so a file cannot make opening
+/// it slow or leave a project that refuses every `mapping.add`.
+fn push_mapping(
+    mappings: &mut Vec<ControllerMapping>,
+    sources: &mut HashSet<MappingSource>,
+    mapping: ControllerMapping,
+    at: &str,
+) -> Result<(), ProjectFileError> {
+    if mappings.len() >= MAX_MAPPINGS {
+        return Err(ProjectFileError(format!("{at}: a project keeps at most {MAX_MAPPINGS} mappings")));
+    }
+    if !sources.insert(mapping.source.clone()) {
+        return Err(ProjectFileError(format!("{at}: {} is mapped twice", mapping.source.name())));
+    }
+    mappings.push(mapping);
+    Ok(())
+}
+
+/// A mapping's `source`: `key:Q`, `note:1:60`.
+fn read_source(m: &Obj, at: &str) -> Result<MappingSource, ProjectFileError> {
     let name = match m.get("source") {
         Some(Value::String(name)) => name.as_str(),
         _ => return Err(ProjectFileError(format!("{at}.source: expected a key or a note"))),
     };
-    let source = MappingSource::from_name(name)
-        .ok_or_else(|| ProjectFileError(format!("{at}.source: unknown source {name:?}")))?;
+    MappingSource::from_name(name).ok_or_else(|| ProjectFileError(format!("{at}.source: unknown source {name:?}")))
+}
+
+/// A controller mapping (version 9, #1162): `source`, and `target` with its `command` and the
+/// `track` and `scene` that command needs, the scene from 0. The track and scene need not exist:
+/// a mapping whose target is gone is kept, unused.
+fn read_controller_mapping(value: &Value, at: &str) -> Result<ControllerMapping, ProjectFileError> {
+    let m = object(value, at)?;
+    let source = read_source(m, at)?;
+    let at_target = format!("{at}.target");
+    let t = object(m.get("target").unwrap_or(&Value::Null), &at_target)?;
+    let command = required_text(t, "command", &at_target)?;
+    if let Some(takes) = MappingTarget::takes(&command)
+        && let Some(key) = t.keys().find(|k| k.as_str() != "command" && !takes.contains(&k.as_str()))
+    {
+        return Err(ProjectFileError(format!("{at_target}: {command} takes {}, not {key:?}", takes.join(" and "))));
+    }
+    let track = optional_whole(t, "track", &at_target)?.map(TrackId);
+    let scene = optional_whole(t, "scene", &at_target)?;
+    let target = MappingTarget::from_command(&command, track, scene).ok_or_else(|| {
+        ProjectFileError(format!(
+            "{at_target}: expected clip.launch with a track and a scene, scene.launch with a scene, or track.stop with a track, got {command:?}"
+        ))
+    })?;
+    Ok(ControllerMapping { source, target })
+}
+
+/// A launch mapping of a file before version 9, read as a controller mapping: `source`, `target`
+/// (slot, scene or stop) and the `track` and `scene` the target needs, the scene from 0 (from
+/// version 8, #763 › 1; from 1 before). The track need not exist: a mapping whose track is gone
+/// is kept, unused.
+fn read_launch_mapping(value: &Value, at: &str, version: u64) -> Result<ControllerMapping, ProjectFileError> {
+    let m = object(value, at)?;
+    let source = read_source(m, at)?;
     let scene = || -> Result<usize, ProjectFileError> {
         let number: usize = whole(m, "scene", at)?;
+        if version >= 8 {
+            return Ok(number);
+        }
         number.checked_sub(1).ok_or_else(|| ProjectFileError(format!("{at}.scene: scenes count from 1")))
     };
     let track = || whole(m, "track", at).map(TrackId);
@@ -1510,7 +1602,7 @@ fn read_mapping(value: &Value, at: &str) -> Result<LaunchMapping, ProjectFileErr
         Some("stop") => MappingTarget::Stop { track: track()? },
         _ => return Err(ProjectFileError(format!("{at}.target: expected slot, scene or stop"))),
     };
-    Ok(LaunchMapping { source, target })
+    Ok(ControllerMapping { source, target })
 }
 
 /// A clip's launch settings, `launch`: the defaults when missing (files written before launch

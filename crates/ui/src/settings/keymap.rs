@@ -110,7 +110,7 @@ pub struct Action {
 }
 
 /// Actions the window does itself or on the selection, with their labels.
-const WINDOW_ACTIONS: [(&str, &str, &str); 82] = [
+const WINDOW_ACTIONS: [(&str, &str, &str); 87] = [
     ("file.new", "New project or open one", "File"),
     ("file.open", "Open a project", "File"),
     ("file.save", "Save the project", "File"),
@@ -127,6 +127,7 @@ const WINDOW_ACTIONS: [(&str, &str, &str); 82] = [
     ("view.mappingMode", "Map keys to clip slots, scenes and stop buttons, or stop mapping", "View"),
     ("view.browser", "Show or hide the browser", "View"),
     ("browser.search", "Search in the browser", "View"),
+    ("view.quickAdd", "Search devices, plug-ins and samples and add one (quick add)", "View"),
     ("view.sampleMap", "Show or hide the sample map in the main area", "View"),
     ("view.sampleMapWindow", "Open the sample map in a window of its own, or put it back", "View"),
     ("view.zoomIn", "Make the whole window larger", "View"),
@@ -146,7 +147,7 @@ const WINDOW_ACTIONS: [(&str, &str, &str); 82] = [
     ("selection.mute", "Mute or unmute the selected clips, or turn the device clicked last off or on", "Edit"),
     ("selection.rename", "Rename the selected clip", "Edit"),
     ("selection.selectAll", "Select every clip in the arrangement", "Edit"),
-    ("selection.split", "Split the selected clip at the playhead", "Edit"),
+    ("selection.split", "Split the selected clip where it was clicked", "Edit"),
     ("selection.consolidate", "Consolidate the selected clip into a new one", "Edit"),
     ("selection.group", "Group the selected tracks, or the picked devices into a device group", "Tracks"),
     ("selection.ungroup", "Take the picked device group of one branch apart", "Edit"),
@@ -162,14 +163,22 @@ const WINDOW_ACTIONS: [(&str, &str, &str); 82] = [
     ("pianoRoll.quantize", "Quantise the piano roll's selected notes, or all its notes", PIANO_ROLL),
     ("pianoRoll.selectAll", "Select every note in the piano roll", PIANO_ROLL),
     ("pianoRoll.deselect", "Clear the piano roll's note selection", PIANO_ROLL),
-    ("pianoRoll.earlier", "Move the selected notes one grid step earlier", PIANO_ROLL),
-    ("pianoRoll.later", "Move the selected notes one grid step later", PIANO_ROLL),
+    ("pianoRoll.earlier", "Move the selected notes to the previous grid line", PIANO_ROLL),
+    ("pianoRoll.later", "Move the selected notes to the next grid line", PIANO_ROLL),
+    ("pianoRoll.earlierFine", "Move the selected notes a fine step earlier, off the grid", PIANO_ROLL),
+    ("pianoRoll.laterFine", "Move the selected notes a fine step later, off the grid", PIANO_ROLL),
     ("pianoRoll.up", "Move the selected notes a semitone up", PIANO_ROLL),
     ("pianoRoll.down", "Move the selected notes a semitone down", PIANO_ROLL),
     ("pianoRoll.octaveUp", "Move the selected notes an octave up", PIANO_ROLL),
     ("pianoRoll.octaveDown", "Move the selected notes an octave down", PIANO_ROLL),
     ("pianoRoll.shorter", "Make the selected notes one grid step shorter", PIANO_ROLL),
-    ("pianoRoll.longer", "Make the selected notes one grid step longer", PIANO_ROLL),
+    (
+        "pianoRoll.longer",
+        "Make the selected notes longer, to the next grid line or the next note of the key",
+        PIANO_ROLL,
+    ),
+    ("pianoRoll.shorterFine", "Make the selected notes a fine step shorter, off the grid", PIANO_ROLL),
+    ("pianoRoll.longerFine", "Make the selected notes a fine step longer, off the grid", PIANO_ROLL),
     ("pianoRoll.draw", "Switch the piano roll between the Select and Draw tools", PIANO_ROLL),
     ("pianoRoll.tool1", "Choose the Select tool", PIANO_ROLL),
     ("pianoRoll.tool2", "Choose the Draw tool", PIANO_ROLL),
@@ -445,7 +454,7 @@ const PRESET_KEY: &str = "preset";
 /// The duplicate key of Draw-first, and the browser's key otherwise.
 const CTRL_B: Shortcut = Shortcut::new(Modifiers::COMMAND, Key::B);
 
-const DEFAULTS: [(&str, &[&str]); 83] = [
+const DEFAULTS: [(&str, &[&str]); 88] = [
     ("file.new", &["Ctrl+N"]),
     ("track.addAudio", &["Ctrl+T"]),
     ("track.addMidi", &["Ctrl+Shift+T"]),
@@ -462,6 +471,7 @@ const DEFAULTS: [(&str, &[&str]); 83] = [
     ("view.mappingMode", &["Ctrl+M"]),
     ("view.browser", &["Ctrl+B"]),
     ("browser.search", &["Ctrl+F"]),
+    ("view.quickAdd", &["Ctrl+P"]),
     ("view.sampleMap", &["Ctrl+Alt+Shift+M"]),
     ("view.sampleMapWindow", &["Ctrl+Alt+M"]),
     ("settings.open", &["Ctrl+Comma"]),
@@ -510,12 +520,16 @@ const DEFAULTS: [(&str, &[&str]); 83] = [
     ("pianoRoll.deselect", &["Escape"]),
     ("pianoRoll.earlier", &["Left"]),
     ("pianoRoll.later", &["Right"]),
+    ("pianoRoll.earlierFine", &["Alt+Left"]),
+    ("pianoRoll.laterFine", &["Alt+Right"]),
     ("pianoRoll.up", &["Up"]),
     ("pianoRoll.down", &["Down"]),
     ("pianoRoll.octaveUp", &["Shift+Up"]),
     ("pianoRoll.octaveDown", &["Shift+Down"]),
     ("pianoRoll.shorter", &["Shift+Left"]),
     ("pianoRoll.longer", &["Shift+Right"]),
+    ("pianoRoll.shorterFine", &["Alt+Shift+Left"]),
+    ("pianoRoll.longerFine", &["Alt+Shift+Right"]),
     ("pianoRoll.draw", &["B"]),
     ("pianoRoll.tool1", &["1"]),
     ("pianoRoll.tool2", &["2"]),

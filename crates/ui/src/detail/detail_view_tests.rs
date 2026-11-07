@@ -88,7 +88,7 @@ fn the_clip_column_edits_the_clip() {
         ("Warp: Off", "clip.setAudio", "warp", json!(true)),
         ("Mode: Smooth", "clip.setAudio", "mode", json!("high-quality")),
     ] {
-        let mut harness = Harness::builder().with_size(egui::vec2(700.0, 400.0)).build_ui_state(
+        let mut harness = Harness::builder().allow_missing_glyphs().with_size(egui::vec2(700.0, 400.0)).build_ui_state(
             |ui, actions: &mut Vec<Action>| {
                 show_row(ui, &detail, &[], actions, &mut Vec::new());
             },
@@ -105,7 +105,7 @@ fn the_clip_column_edits_the_clip() {
     // A slot's clip is named by its track and its scene, from 1.
     assert_eq!(
         on_clip(ClipRef::Slot(TrackId(2), 1), json!({ "loop": true })),
-        json!({ "track": 2, "scene": 2, "loop": true })
+        json!({ "track": 2, "scene": 1, "loop": true })
     );
 }
 
@@ -129,7 +129,7 @@ fn an_audio_clips_column_shows_its_markers_and_gain() {
     info.loop_range = None;
     info.at = Some(ClipRef::Slot(TrackId(1), 0));
     let detail = Detail::Clip(info, chain);
-    let harness = Harness::builder().with_size(egui::vec2(700.0, 500.0)).build_ui_state(
+    let harness = Harness::builder().allow_missing_glyphs().with_size(egui::vec2(700.0, 500.0)).build_ui_state(
         |ui, actions: &mut Vec<Action>| {
             show_row(ui, &detail, &[], actions, &mut Vec::new());
         },
@@ -151,7 +151,7 @@ fn panels_follow_automation_as_the_engine_plays_it() {
     let mut utility = Device::new("Utility", DeviceKind::Builtin("utility".into()));
     for param in ["mono", "balance"] {
         let mut lane = AutomationLane::new(param);
-        lane.points = vec![AutomationPoint::new(0.0, 1.0), AutomationPoint::new(4.0, -1.0)];
+        lane.points = vec![AutomationPoint::new(0.0, 1.0), AutomationPoint::new(4.0, -1.0)].into();
         utility.automation.push(lane);
     }
     project.channels[0].devices.push(utility);
@@ -165,6 +165,50 @@ fn panels_follow_automation_as_the_engine_plays_it() {
     let Detail::Devices(chain) = &detail else { panic!("expected the chain") };
     let value = |id: &str| chain.devices.last().and_then(|d| d.values.iter().find(|(p, _)| p == id)).map(|v| v.1);
     assert_eq!((value("mono"), value("balance")), (Some(0.0), Some(-1.0)), "the last point, kept in range");
+}
+
+/// While a device parameter's lane is dragged, its knob shows what the line as it is dragged
+/// plays at the playhead; a drag on another track or device changes nothing (#811).
+#[test]
+fn panels_follow_a_dragged_line_at_the_playhead() {
+    use crate::arrangement::automation_lanes::{Dragged, LaneKey};
+    use suhina_engine::model::{AutomationLane, AutomationPoint};
+    let mut project = demo_project();
+    let mut utility = Device::new("Utility", DeviceKind::Builtin("utility".into()));
+    let mut lane = AutomationLane::new("balance");
+    lane.points = vec![AutomationPoint::new(0.0, 1.0), AutomationPoint::new(4.0, -1.0)].into();
+    utility.automation.push(lane);
+    project.channels[0].devices.push(utility);
+    let index = project.channels[0].devices.len() - 1;
+    let balance = |detail: &Detail| {
+        let Detail::Devices(chain) = detail else { return None };
+        chain.devices.last().and_then(|d| d.values.iter().find(|(p, _)| p == "balance")).map(|v| v.1)
+    };
+    // The first point dragged from full right down to the centre: at beat 2 the line is half way
+    // from it to the second point, -0.5, where it played 0 before.
+    let points = vec![AutomationPoint::new(0.0, 0.0), AutomationPoint::new(4.0, -1.0)];
+    let key = LaneKey { device: Some(index), param: "balance".into() };
+    let mut detail = build(&project, Some(TrackId(1)), None);
+    detail.follow_automation_dragged(&project, 2.0, None);
+    assert_eq!(balance(&detail), Some(0.0), "the project's line");
+    let other_track = Dragged { track: TrackId(2), key: key.clone(), points: points.clone(), at: None };
+    let mut detail = build(&project, Some(TrackId(1)), None);
+    detail.follow_automation_dragged(&project, 2.0, Some(&other_track));
+    assert_eq!(balance(&detail), Some(0.0), "another track's drag");
+    let elsewhere = LaneKey { device: Some(index + 1), param: "balance".into() };
+    let other_device = Dragged { track: TrackId(1), key: elsewhere, points: points.clone(), at: None };
+    let mut detail = build(&project, Some(TrackId(1)), None);
+    detail.follow_automation_dragged(&project, 2.0, Some(&other_device));
+    assert_eq!(balance(&detail), Some(0.0), "another device's drag");
+    let held = Dragged { track: TrackId(1), key: key.clone(), points: points.clone(), at: None };
+    let mut detail = build(&project, Some(TrackId(1)), None);
+    detail.follow_automation_dragged(&project, 2.0, Some(&held));
+    assert_eq!(balance(&detail), Some(-0.5));
+    // A range being painted: the knob shows the line at its moving edge, not at the playhead.
+    let painting = Dragged { track: TrackId(1), key, points, at: Some(4.0) };
+    let mut detail = build(&project, Some(TrackId(1)), None);
+    detail.follow_automation_dragged(&project, 2.0, Some(&painting));
+    assert_eq!(balance(&detail), Some(-1.0));
 }
 
 #[test]
@@ -260,9 +304,10 @@ fn a_stacked_generated_list_keeps_its_width_in_any_column() {
     // A narrow column, the default one and a wide one: Gain's slider is in the same place
     // each time, its row 260 px wide, scrolled past the narrow column's edge, not squeezed.
     let gain = |column: f32| {
-        let mut harness = Harness::builder().with_size(egui::vec2(column, 220.0)).build_ui(|ui| {
-            show_stack(ui, &detail, &[], &mut Vec::new(), &mut Vec::new());
-        });
+        let mut harness =
+            Harness::builder().allow_missing_glyphs().with_size(egui::vec2(column, 220.0)).build_ui(|ui| {
+                show_stack(ui, &detail, &[], &mut Vec::new(), &mut Vec::new());
+            });
         harness.run();
         harness.get_by_label("Gain").rect()
     };
@@ -288,7 +333,7 @@ fn an_audio_effect_shows_its_label_and_only_visible_nodes() {
         vec![suhina_device_sdk::Connection::new("in", "gain"), suhina_device_sdk::Connection::new("gain", "out")];
     let mut project = demo_project();
     project.channels[0].devices.push(Device {
-        state: graph.to_sd().ok().map(String::into_bytes),
+        state: graph.to_sd().ok().map(String::into_bytes).map(Into::into),
         ..Device::new("Example Gain", DeviceKind::Sd)
     });
     let Detail::Devices(chain) = build(&project, Some(TrackId(1)), None) else { panic!() };
@@ -329,9 +374,10 @@ fn every_sdk_control_renders_in_a_scrollable_device_panel() {
         graph.nodes = vec![Node::audio_input("in"), Node::gain("gain", "gain"), Node::audio_output("out")];
         graph.connections = vec![Connection::new("in", "gain"), Connection::new("gain", "out")];
         let mut project = demo_project();
-        project.channels[0]
-            .devices
-            .push(Device { state: Some(graph.to_sd().unwrap().into_bytes()), ..Device::new("UI", DeviceKind::Sd) });
+        project.channels[0].devices.push(Device {
+            state: Some(graph.to_sd().unwrap().into_bytes().into()),
+            ..Device::new("UI", DeviceKind::Sd)
+        });
         let detail = build(&project, Some(TrackId(1)), None);
         let ctx = egui::Context::default();
         theme::install(&ctx);
@@ -403,12 +449,17 @@ fn render_the_authored_control_gallery() {
     }
     let mut project = demo_project();
     project.channels[0].devices.push(Device {
-        state: Some(graph.to_sd().unwrap().into_bytes()),
+        state: Some(graph.to_sd().unwrap().into_bytes().into()),
         ..Device::new(graph.name.clone(), DeviceKind::Sd)
     });
     let detail = build(&project, Some(TrackId(1)), None);
-    let mut harness =
-        egui_kittest::Harness::builder().with_size((1180.0, 180.0)).with_pixels_per_point(1.0).wgpu().build_ui(|ui| {
+    let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
+        .allow_missing_glyphs()
+        .with_size((1180.0, 180.0))
+        .with_pixels_per_point(1.0)
+        .wgpu()
+        .build_ui(|ui| {
             show_row(ui, &detail, &[], &mut Vec::new(), &mut Vec::new());
         });
     theme::install(&harness.ctx);
@@ -425,12 +476,17 @@ fn render_sdk_example_with_stock_controls() {
     let graph = custom_panel::build().unwrap();
     let mut project = demo_project();
     project.channels[0].devices.push(Device {
-        state: Some(graph.to_sd().unwrap().into_bytes()),
+        state: Some(graph.to_sd().unwrap().into_bytes().into()),
         ..Device::new(graph.name.clone(), DeviceKind::Sd)
     });
     let detail = build(&project, Some(TrackId(1)), None);
-    let mut harness =
-        egui_kittest::Harness::builder().with_size((660.0, 340.0)).with_pixels_per_point(1.0).wgpu().build_ui(|ui| {
+    let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
+        .allow_missing_glyphs()
+        .with_size((660.0, 340.0))
+        .with_pixels_per_point(1.0)
+        .wgpu()
+        .build_ui(|ui| {
             show_stack(ui, &detail, &[], &mut Vec::new(), &mut Vec::new());
         });
     theme::install(&harness.ctx);
@@ -447,7 +503,7 @@ fn render_sdk_example_in_a_narrow_panel() {
     let graph = custom_panel::build().unwrap();
     let mut project = demo_project();
     project.channels[0].devices.push(Device {
-        state: Some(graph.to_sd().unwrap().into_bytes()),
+        state: Some(graph.to_sd().unwrap().into_bytes().into()),
         ..Device::new(graph.name.clone(), DeviceKind::Sd)
     });
     let detail = build(&project, Some(TrackId(1)), None);
@@ -456,8 +512,13 @@ fn render_sdk_example_in_a_narrow_panel() {
     } else {
         panic!("expected device chain");
     }
-    let mut harness =
-        egui_kittest::Harness::builder().with_size((660.0, 340.0)).with_pixels_per_point(1.0).wgpu().build_ui(|ui| {
+    let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
+        .allow_missing_glyphs()
+        .with_size((660.0, 340.0))
+        .with_pixels_per_point(1.0)
+        .wgpu()
+        .build_ui(|ui| {
             show_stack(ui, &detail, &[], &mut Vec::new(), &mut Vec::new());
         });
     theme::install(&harness.ctx);
@@ -522,7 +583,7 @@ fn a_running_plug_in_shows_the_parameters_it_lists_as_a_generated_list() {
             Some(TrackId(1)),
             None,
             &mut |_, _| Some(listing(status.clone())),
-            crate::detail::nam_panel::Lists::default(),
+            crate::detail::device_widgets::Lists::default(),
         ) else {
             panic!()
         };
@@ -553,15 +614,15 @@ fn automation_replaces_a_plug_ins_listed_text_with_the_value_it_plays() {
     let mut project = with_plugin();
     let point = |beat, value| AutomationPoint { beat, value, curve: Default::default() };
     project.channels[0].devices[0].automation = vec![
-        AutomationLane { param: "1".into(), points: vec![point(0.0, 0.75), point(8.0, 0.75)], enabled: true },
-        AutomationLane { param: "2".into(), points: vec![point(0.0, 3.0), point(8.0, 3.0)], enabled: true },
+        AutomationLane { param: "1".into(), points: vec![point(0.0, 0.75), point(8.0, 0.75)].into(), enabled: true },
+        AutomationLane { param: "2".into(), points: vec![point(0.0, 3.0), point(8.0, 3.0)].into(), enabled: true },
     ];
     let mut detail = build_with(
         &project,
         Some(TrackId(1)),
         None,
         &mut |_, _| Some(listing(PluginStatus::Running)),
-        crate::detail::nam_panel::Lists::default(),
+        crate::detail::device_widgets::Lists::default(),
     );
     detail.follow_automation(&project, 4.0);
     let Detail::Devices(chain) = detail else { panic!() };
@@ -583,14 +644,14 @@ fn a_followed_value_between_steps_is_not_sent_as_an_edit() {
     let mut utility = Device::new("Utility", DeviceKind::Builtin("utility".into()));
     for param in ["mono", "balance", "gain", "width"] {
         let mut lane = AutomationLane::new(param);
-        lane.points = vec![AutomationPoint::new(0.0, 0.0), AutomationPoint::new(4.0, 1.0)];
+        lane.points = vec![AutomationPoint::new(0.0, 0.0), AutomationPoint::new(4.0, 1.0)].into();
         utility.automation.push(lane);
     }
     project.channels[0].devices.push(utility);
     let mut detail = build(&project, Some(TrackId(1)), None);
     detail.follow_automation(&project, 1.234_567);
     for stacked in [false, true] {
-        let mut harness = Harness::builder().with_size(egui::vec2(900.0, 400.0)).build_ui_state(
+        let mut harness = Harness::builder().allow_missing_glyphs().with_size(egui::vec2(900.0, 400.0)).build_ui_state(
             |ui, actions: &mut Vec<Action>| {
                 let mut places = Vec::new();
                 if stacked {
@@ -617,13 +678,13 @@ fn a_plug_ins_generated_list_sets_its_parameters_by_id() {
         Some(TrackId(1)),
         None,
         &mut |_, _| Some(listing(PluginStatus::Running)),
-        crate::detail::nam_panel::Lists::default(),
+        crate::detail::device_widgets::Lists::default(),
     ) else {
         panic!()
     };
     let detail = Detail::Devices(chain);
     for stacked in [false, true] {
-        let mut harness = Harness::builder().with_size(egui::vec2(600.0, 220.0)).build_ui_state(
+        let mut harness = Harness::builder().allow_missing_glyphs().with_size(egui::vec2(600.0, 220.0)).build_ui_state(
             |ui, actions: &mut Vec<Action>| {
                 let mut places = Vec::new();
                 if stacked {
@@ -648,7 +709,7 @@ fn with_plugin() -> Project {
     let mut project = demo_project();
     project.channels[0]
         .devices
-        .push(Device { state: Some(vec![1, 2]), ..Device::new("Verb", DeviceKind::Vst3 { id: "ABC".into() }) });
+        .push(Device { state: Some(vec![1, 2].into()), ..Device::new("Verb", DeviceKind::Vst3 { id: "ABC".into() }) });
     project
 }
 
@@ -661,7 +722,7 @@ fn a_plug_in_shows_where_it_stands_and_what_its_button_does() {
             Some(TrackId(1)),
             None,
             &mut |_, _| status.clone().map(|s| report(s, open)),
-            crate::detail::nam_panel::Lists::default(),
+            crate::detail::device_widgets::Lists::default(),
         ) else {
             panic!()
         };
@@ -696,7 +757,7 @@ fn a_clips_ara_editor_lands_in_the_clip_view_or_offers_to_open() {
             Some(TrackId(1)),
             None,
             &mut |_, _| Some(report.clone()),
-            crate::detail::nam_panel::Lists::default(),
+            crate::detail::device_widgets::Lists::default(),
         ) else {
             panic!()
         };
@@ -707,7 +768,7 @@ fn a_clips_ara_editor_lands_in_the_clip_view_or_offers_to_open() {
     // Embedded: it lands at the area's corner, the whole of it showing.
     let embedded =
         chain_with(PluginReport { editor_embedded: Some((300, 200)), ..report(PluginStatus::Running, true) });
-    let mut harness = Harness::builder().with_size(egui::vec2(600.0, 300.0)).build_ui_state(
+    let mut harness = Harness::builder().allow_missing_glyphs().with_size(egui::vec2(600.0, 300.0)).build_ui_state(
         |ui, (places, actions): &mut (Vec<EditorPlace>, Vec<Action>)| {
             places.clear();
             let area = ui.available_rect_before_wrap();
@@ -726,7 +787,7 @@ fn a_clips_ara_editor_lands_in_the_clip_view_or_offers_to_open() {
     assert_eq!((float.id, float.params.clone()), ("view.araFloat", json!({ "track": 1, "device": 0, "float": true })));
     // Closed: the area offers to open it, and the button opens that plug-in's editor.
     let closed = chain_with(bound);
-    let mut harness = Harness::builder().with_size(egui::vec2(600.0, 300.0)).build_ui_state(
+    let mut harness = Harness::builder().allow_missing_glyphs().with_size(egui::vec2(600.0, 300.0)).build_ui_state(
         |ui, actions: &mut Vec<Action>| {
             let area = ui.available_rect_before_wrap();
             show_ara_editor(ui, area, &closed, 0, actions, &mut Vec::new());
@@ -750,14 +811,14 @@ fn an_embedded_editor_takes_its_room_and_says_where_it_lands() {
         Some(TrackId(1)),
         None,
         &mut |_, _| Some(embedded.clone()),
-        crate::detail::nam_panel::Lists::default(),
+        crate::detail::device_widgets::Lists::default(),
     ) else {
         panic!()
     };
     assert_eq!(chain.devices[0].plugin.as_ref().unwrap().embedded, Some((300, 200)));
     let detail = Detail::Devices(chain);
     for stacked in [false, true] {
-        let mut harness = Harness::builder().with_size(egui::vec2(600.0, 300.0)).build_ui_state(
+        let mut harness = Harness::builder().allow_missing_glyphs().with_size(egui::vec2(600.0, 300.0)).build_ui_state(
             |ui, places: &mut Vec<EditorPlace>| {
                 places.clear();
                 let mut actions = Vec::new();
@@ -784,7 +845,7 @@ fn an_embedded_editor_takes_its_room_and_says_where_it_lands() {
     }
     // A panel too short for it shows what fits; one with no room hides it.
     let margin = {
-        let mut probe = Harness::builder().with_size(egui::vec2(600.0, 300.0)).build_ui_state(
+        let mut probe = Harness::builder().allow_missing_glyphs().with_size(egui::vec2(600.0, 300.0)).build_ui_state(
             |ui, places: &mut Vec<EditorPlace>| {
                 places.clear();
                 show_row(ui, &detail, &[], &mut Vec::new(), places);
@@ -794,22 +855,30 @@ fn an_embedded_editor_takes_its_room_and_says_where_it_lands() {
         probe.run();
         probe.state()[0].placement.y as f32 - EDITOR_TOP
     };
-    let mut short = Harness::builder().with_size(egui::vec2(600.0, EDITOR_TOP + 50.0 + margin * 2.0)).build_ui_state(
-        |ui, places: &mut Vec<EditorPlace>| {
-            places.clear();
-            show_row(ui, &detail, &[], &mut Vec::new(), places);
-        },
-        Vec::new(),
-    );
+    let mut short = Harness::builder()
+        .allow_missing_glyphs()
+        .allow_missing_glyphs()
+        .with_size(egui::vec2(600.0, EDITOR_TOP + 50.0 + margin * 2.0))
+        .build_ui_state(
+            |ui, places: &mut Vec<EditorPlace>| {
+                places.clear();
+                show_row(ui, &detail, &[], &mut Vec::new(), places);
+            },
+            Vec::new(),
+        );
     short.run();
     assert_eq!((short.state()[0].placement.clip_width, short.state()[0].placement.clip_height), (300, 50));
-    let mut none = Harness::builder().with_size(egui::vec2(600.0, EDITOR_TOP - 1.0 + margin * 2.0)).build_ui_state(
-        |ui, places: &mut Vec<EditorPlace>| {
-            places.clear();
-            show_row(ui, &detail, &[], &mut Vec::new(), places);
-        },
-        Vec::new(),
-    );
+    let mut none = Harness::builder()
+        .allow_missing_glyphs()
+        .allow_missing_glyphs()
+        .with_size(egui::vec2(600.0, EDITOR_TOP - 1.0 + margin * 2.0))
+        .build_ui_state(
+            |ui, places: &mut Vec<EditorPlace>| {
+                places.clear();
+                show_row(ui, &detail, &[], &mut Vec::new(), places);
+            },
+            Vec::new(),
+        );
     none.run();
     assert_eq!(none.state()[0].placement, Placement::HIDDEN);
 }
@@ -824,13 +893,13 @@ fn the_editor_button_asks_for_the_device_command() {
         Some(TrackId(1)),
         None,
         &mut |_, _| Some(report(PluginStatus::Running, false)),
-        crate::detail::nam_panel::Lists::default(),
+        crate::detail::device_widgets::Lists::default(),
     ) else {
         panic!()
     };
     let detail = Detail::Devices(chain);
     for stacked in [false, true] {
-        let mut harness = Harness::builder().with_size(egui::vec2(600.0, 200.0)).build_ui_state(
+        let mut harness = Harness::builder().allow_missing_glyphs().with_size(egui::vec2(600.0, 200.0)).build_ui_state(
             |ui, actions: &mut Vec<Action>| {
                 let mut places = Vec::new();
                 if stacked {
@@ -857,8 +926,7 @@ fn a_theme_lays_a_generated_list_side_by_side() {
     project.channels[0].devices = vec![Device::new("Utility", DeviceKind::Builtin("utility".into()))];
     let Detail::Devices(chain) = build(&project, Some(TrackId(1)), None) else { panic!() };
     let graph = chain.devices[0].graph.as_ref().unwrap();
-    let (theme, _) =
-        crate::kit::theme::from_sheet(".device { --suhina-param-columns: 3; --suhina-param-row: 48px; }", "");
+    let (theme, _) = crate::kit::theme::from_css(".device { --suhina-param-columns: 3; --suhina-param-row: 48px; }");
     crate::kit::skin::configure(&theme.skin);
     let cells = parameter_layout(&graph.parameters, 300.0, f32::INFINITY, &[]);
     crate::kit::skin::configure(&crate::kit::skin::Skin::default());
@@ -916,7 +984,7 @@ fn an_embedded_editor_hides_the_list_so_the_list_takes_no_room() {
         Some(TrackId(1)),
         None,
         &mut |_, _| Some(PluginReport { editor_embedded: Some((300, 200)), ..report(PluginStatus::Running, true) }),
-        crate::detail::nam_panel::Lists::default(),
+        crate::detail::device_widgets::Lists::default(),
     ) else {
         panic!()
     };

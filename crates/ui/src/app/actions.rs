@@ -119,6 +119,8 @@ impl App {
             "view.araEditor" => self.open_ara_editor(),
             "view.plugin" => self.toggle_plugin_editor(),
             "view.mappingMode" => self.toggle_mapping_mode(),
+            "view.quickAdd" if self.quick_add_open() => {}
+            "view.quickAdd" => self.open_quick_add(),
             "track.addAudio" | "track.addMidi" => {
                 let kind = if action == "track.addAudio" { "audio" } else { "midi" };
                 let mut params = json!({ "kind": kind });
@@ -176,15 +178,23 @@ impl App {
                     actions.push(quantize);
                 }
             }
-            // Delete in the piano roll deletes its selected notes, not the clip.
-            "selection.delete" if let Some(delete) = self.piano_roll.delete_selected() => actions.push(delete),
-            // Copy, cut, paste and duplicate in the piano roll act on its notes, when it has some
-            // to act on; its own keys act only there.
-            "selection.copy" | "selection.cut" | "selection.paste" | "selection.duplicate"
-                if let Some(edit) = self.piano_key(action) =>
-            {
-                actions.push(edit)
+            // While the piano roll has the keyboard, the edit keys act on its notes, or on nothing
+            // when it has none to act on: never on the clip or the view behind it.
+            "selection.delete" if self.piano_has_keyboard() || self.piano_edits_focused_clip() => {
+                actions.extend(self.piano_roll.delete_selected())
             }
+            "selection.copy" | "selection.cut" | "selection.paste" | "selection.duplicate"
+                if self.piano_has_keyboard() || self.piano_edits_focused_clip() =>
+            {
+                actions.extend(self.piano_key(action))
+            }
+            "selection.mute"
+            | "selection.rename"
+            | "selection.split"
+            | "selection.consolidate"
+            | "selection.takeUp"
+            | "selection.takeDown"
+                if self.piano_has_keyboard() => {}
             _ if crate::settings::keymap::piano_roll_only(action) => actions.extend(self.piano_key(action)),
             // A range painted on an automation lane: copy, cut, paste (from its start), duplicate
             // (right after it) and delete act on it (#916).
@@ -269,7 +279,7 @@ impl App {
                     self.status = Status::Hint("Click a clip slot first".into());
                     return;
                 };
-                let params = json!({ "track": track.0, "scene": scene + 1 });
+                let params = json!({ "track": track.0, "scene": scene });
                 actions.push(Action::new(if action == "selection.copy" { "clip.copy" } else { "clip.paste" }, params));
             }
             // Cut and duplicate of a slot's clip wait for launcher clip commands; Delete works,
@@ -277,8 +287,27 @@ impl App {
             "selection.cut" | "selection.duplicate" if self.shown == View::Session => {
                 self.status = Status::Hint("In the Launcher view, a slot's clip can be copied and pasted".into());
             }
-            // Take pieces picked with Ctrl and a click: Delete deletes them, the last take first so
-            // the numbers of the others hold when an emptied take goes (#989).
+            // Take lanes picked by their headers: Delete deletes them, in one undo step.
+            "selection.delete" if self.shown == View::Arrangement && !self.arrangement.take_lanes_picked.is_empty() => {
+                let picked = std::mem::take(&mut self.arrangement.take_lanes_picked);
+                let Some((track, _)) = picked.first() else { return };
+                let takes: Vec<usize> = picked.iter().map(|(_, n)| *n).collect();
+                actions.push(Action::new("take.delete", json!({ "track": track.0, "takes": takes })));
+            }
+            // An area painted across take lanes with Ctrl and a drag: Delete and Cut take what is
+            // in it, in one undo step (#1078).
+            "selection.delete" | "selection.cut"
+                if self.shown == View::Arrangement && self.arrangement.take_area.is_some() =>
+            {
+                let Some(area) = self.arrangement.take_area.take() else { return };
+                self.arrangement.take_selected.clear();
+                let id = if action == "selection.cut" { "take.cutRange" } else { "take.deleteRange" };
+                let params =
+                    json!({ "track": area.track.0, "takes": area.takes, "start": area.start, "end": area.end });
+                actions.push(Action::new(id, params));
+            }
+            // Take pieces picked with Ctrl and a click: Delete deletes them, one undo step per take
+            // (#989).
             "selection.delete" if self.shown == View::Arrangement && !self.arrangement.take_selected.is_empty() => {
                 let mut picked = std::mem::take(&mut self.arrangement.take_selected);
                 picked.sort_unstable_by_key(|(t, n, p)| (t.0, std::cmp::Reverse(*n), *p));
@@ -286,7 +315,7 @@ impl App {
                 takes.dedup();
                 for (track, take) in takes {
                     let pieces: Vec<usize> =
-                        picked.iter().filter(|(t, n, _)| *t == track && *n == take).map(|(_, _, p)| p + 1).collect();
+                        picked.iter().filter(|(t, n, _)| *t == track && *n == take).map(|(_, _, p)| *p).collect();
                     actions.push(Action::new(
                         "take.deletePieces",
                         json!({ "track": track.0, "take": take, "pieces": pieces }),
@@ -427,7 +456,7 @@ impl App {
                         })
                     {
                         self.view.selected_slot = None;
-                        actions.push(Action::new("clip.delete", json!({ "track": track.0, "scene": scene + 1 })));
+                        actions.push(Action::new("clip.delete", json!({ "track": track.0, "scene": scene })));
                     }
                     return;
                 }
@@ -500,7 +529,7 @@ impl App {
                         let grid = self.session().map(|s| TrackGrid::build(s.project(), None))?;
                         let slot = grid.columns.iter().find(|c| c.track == track)?.slots.get(scene)?;
                         (slot.state != crate::interaction::grid::SlotState::Empty)
-                            .then(|| (json!({ "track": track.0, "scene": scene + 1 }), slot.name.clone()))
+                            .then(|| (json!({ "track": track.0, "scene": scene }), slot.name.clone()))
                     }),
                 };
                 match target {
@@ -514,12 +543,23 @@ impl App {
                     return;
                 };
                 let timeline = self.timeline.as_ref().map(|(_, _, t)| t);
-                let beat = timeline.map_or(0.0, |t| t.beat);
                 let clip = timeline
                     .and_then(|t| t.lanes.iter().find(|l| l.track == track))
                     .and_then(|l| l.clips.iter().find(|c| c.id == id))
                     .map(|c| (c.start, c.length));
                 let Some((start, length)) = clip else { return };
+                // Where the clip was clicked, while that click's marker stands, playing or not;
+                // never at the playhead, which moves on while playing (#1186).
+                let clicked = self
+                    .arrangement
+                    .insert
+                    .filter(|(t, at)| {
+                        *t == track
+                            && *at > start
+                            && *at < start + length
+                            && timeline.is_some_and(|tl| (tl.start_beat - at).abs() < 1e-6)
+                    })
+                    .map(|(_, at)| at);
                 if action == "selection.consolidate" {
                     // The selected clips on its track, from the first start to the last end,
                     // become one new clip.
@@ -534,10 +574,10 @@ impl App {
                     self.arrangement.clear_selected_clip();
                     let params = json!({ "track": track.0, "start": from, "end": to });
                     actions.push(Action::new("clip.consolidate", params));
-                } else if beat > start && beat < start + length {
+                } else if let Some(beat) = clicked {
                     actions.push(Action::new("clip.split", json!({ "clip": id.0, "at": beat })));
                 } else {
-                    self.status = Status::Hint("Move the playhead into the selected clip to split it there".into());
+                    self.status = Status::Hint("Click inside the selected clip where it should be split".into());
                 }
             }
             "selection.mute" => {
@@ -798,7 +838,7 @@ impl App {
             }
             "selection.launch" => {
                 if let (View::Session, Some((track, scene))) = (self.shown, self.view.selected_slot) {
-                    actions.push(Action::new("clip.launch", json!({ "track": track.0, "scene": scene + 1 })));
+                    actions.push(Action::new("clip.launch", json!({ "track": track.0, "scene": scene })));
                 }
             }
             // Points selected on an automation lane: the arrows move them, a grid step in time or a
@@ -1043,16 +1083,33 @@ impl App {
         }
     }
 
+    /// Ends the window's open gesture once no mouse button is down, so a drag is one undo step
+    /// that closes on mouse up (#1146), and the next drag of a selection counts from where it
+    /// stands then. A range tool's gesture ([`crate::arrangement::automation_lanes::RANGE_GESTURE`])
+    /// stays open: its next click joins it, and any other edit ends it.
+    pub(super) fn end_gesture_on_release(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.pointer.any_down()) {
+            return;
+        }
+        let range = crate::arrangement::automation_lanes::RANGE_GESTURE;
+        let Some(gesture) = self.open_gesture.take_if(|g| !g.starts_with(range)) else { return };
+        self.selection_drag = None;
+        if let Ok(session) = self.projects.session_mut(None) {
+            // Ending a gesture that is no longer open (an edit ended it) does nothing.
+            let _ = session.execute("history.endGesture", &json!({ "gesture": gesture }));
+        }
+    }
+
     /// A fader, pan or send moved on one of several selected tracks (a drag, the wheel, the arrow
     /// keys), as `track.setMixerValues` on all of them: each keeps its distance from the one
     /// moved, counted from where the selection stood when the drag began, so going to the end of
     /// the range and back leaves it as it was. A send at silence counts as the bottom of the
-    /// range, so sends not used yet come up together. A send without `continue` was typed or
+    /// range, so sends not used yet come up together. A send without a `gesture` was typed or
     /// reset: every track takes that value. `None` when it is not part of a selection.
     pub(super) fn drag_to_selection(&mut self, action: &Action) -> Option<Action> {
         let id = |v: &serde_json::Value| v.as_u64().and_then(|n| u32::try_from(n).ok()).map(TrackId);
         let (control, moved, target, value) = match action.id {
-            "track.setVolume" | "track.setPan" if action.params.get("continue").is_some() => {
+            "track.setVolume" | "track.setPan" if action.params.get("gesture").is_some() => {
                 let [one] = action.params["tracks"].as_array()?.as_slice() else { return None };
                 match action.id {
                     "track.setVolume" => ("volume", id(one)?, None, &action.params["db"]),
@@ -1070,10 +1127,10 @@ impl App {
             return None;
         }
         let (floor, top) = if control == "send" { SEND_RANGE } else { VOLUME_RANGE };
-        let continued = action.params["continue"].as_bool() == Some(true);
-        let outright = action.params.get("continue").is_none();
+        // The drag's first frame finds no selection drag: the window drops it when a drag ends.
+        let outright = action.params.get("gesture").is_none();
         let same = |d: &&SelectionDrag| d.control == control && d.moved == moved && d.target == target;
-        let start = match self.selection_drag.as_ref().filter(same).filter(|_| continued) {
+        let start = match self.selection_drag.as_ref().filter(same).filter(|_| !outright) {
             Some(drag) => drag.start.clone(),
             None => {
                 let project = self.session()?.project();
@@ -1100,7 +1157,10 @@ impl App {
             })
             .collect();
         let tracks: Vec<u32> = start.iter().map(|(t, _)| t.0).collect();
-        let mut params = json!({ "tracks": tracks, "control": control, "values": values, "continue": continued });
+        let mut params = json!({ "tracks": tracks, "control": control, "values": values });
+        if let Some(gesture) = action.params.get("gesture") {
+            params["gesture"] = gesture.clone();
+        }
         if let Some(target) = target {
             params["return"] = json!(target.0);
         }
@@ -1205,12 +1265,19 @@ fn mixer_value(
     }
 }
 
+/// A scene as the window shows it: from 1, where the commands count from 0.
+fn shown_scene(scene: &serde_json::Value) -> String {
+    scene.as_u64().map_or_else(|| scene.to_string(), |n| n.saturating_add(1).to_string())
+}
+
 /// A mapping command's target in words: "track 2 scene 1", "scene 3", "the stop button of track 2".
 pub(super) fn mapping_target(p: &serde_json::Value) -> String {
-    match p["target"].as_str() {
-        Some("slot") => format!("track {} scene {}", p["track"], p["scene"]),
-        Some("scene") => format!("scene {}", p["scene"]),
-        _ => format!("the stop button of track {}", p["track"]),
+    let t = &p["target"];
+    match t["command"].as_str() {
+        Some("clip.launch") => format!("track {} scene {}", t["track"], shown_scene(&t["scene"])),
+        Some("scene.launch") => format!("scene {}", shown_scene(&t["scene"])),
+        Some("track.stop") => format!("the stop button of track {}", t["track"]),
+        _ => String::new(),
     }
 }
 
@@ -1218,17 +1285,22 @@ pub(super) fn mapping_target(p: &serde_json::Value) -> String {
 pub(super) fn describe(action: &Action) -> Option<String> {
     let p = &action.params;
     Some(match action.id {
-        "clip.launch" => format!("Launched scene {} on track {}", p["scene"], p["track"]),
-        "scene.launch" => format!("Launched scene {}", p["scene"]),
+        "clip.launch" => format!("Launched scene {} on track {}", shown_scene(&p["scene"]), p["track"]),
+        "scene.launch" => format!("Launched scene {}", shown_scene(&p["scene"])),
         "track.stop" => format!("Stopping track {}", p["track"]),
         "launcher.stopAll" => "Stopping all clips".into(),
-        "launcher.addMapping" => format!(
+        "mapping.add" => format!(
             "Mapped {} to {}",
             p["source"].as_str().unwrap_or_default().trim_start_matches("key:"),
             mapping_target(p)
         ),
-        "launcher.removeMapping" => format!("Removed the keys of {}", mapping_target(p)),
-        "launcher.setQuantization" => format!("Grid {}", p["value"].as_str().unwrap_or_default()),
+        "mapping.remove" => match (p.get("target"), p["source"].as_str(), p["index"].as_u64()) {
+            (Some(_), ..) => format!("Removed the keys of {}", mapping_target(p)),
+            (None, Some(source), _) => format!("Removed the mapping of {}", source.trim_start_matches("key:")),
+            (None, None, Some(index)) => format!("Removed mapping {index}"),
+            _ => "Removed a mapping".into(),
+        },
+        "launcher.setQuantization" => format!("Launch quantisation {}", p["value"].as_str().unwrap_or_default()),
         "clip.setLaunchMode" => format!("Launch mode {}", p["mode"].as_str().unwrap_or_default()),
         "clip.setQuantization" => format!("Clip launch quantisation {}", p["value"].as_str().unwrap_or_default()),
         "clip.setLegato" => {
@@ -1240,7 +1312,9 @@ pub(super) fn describe(action: &Action) -> Option<String> {
         }
         "transport.setTempo" => format!("Tempo {}", p["bpm"]),
         "clip.copy" => "Copied the clip".into(),
-        "clip.paste" if p.get("scene").is_some() => format!("Pasted into scene {} on track {}", p["scene"], p["track"]),
+        "clip.paste" if p.get("scene").is_some() => {
+            format!("Pasted into scene {} on track {}", shown_scene(&p["scene"]), p["track"])
+        }
         "clip.paste" => "Pasted the clip".into(),
         "edit.undo" => "Undone".into(),
         "edit.redo" => "Redone".into(),

@@ -117,19 +117,23 @@ impl crate::Controller {
             from,
             gain: 1.0,
             resume: true,
-        })
+        })?;
+        Ok(())
     }
     pub fn deck_pause(&mut self, deck: usize) -> Result<(), String> {
-        self.decks.voices.get_mut(deck).ok_or("unknown DJ deck")?.send(PreviewCommand::Pause(true))
+        self.decks.voices.get_mut(deck).ok_or("unknown DJ deck")?.send(PreviewCommand::Pause(true))?;
+        Ok(())
     }
     pub fn deck_stop(&mut self, deck: usize) -> Result<(), String> {
-        self.decks.voices.get_mut(deck).ok_or("unknown DJ deck")?.send(PreviewCommand::Stop)
+        self.decks.voices.get_mut(deck).ok_or("unknown DJ deck")?.send(PreviewCommand::Stop)?;
+        Ok(())
     }
     pub fn deck_seek(&mut self, deck: usize, from: f64) -> Result<(), String> {
         if !from.is_finite() || from < 0.0 {
             return Err("invalid DJ seek position".into());
         }
-        self.decks.voices.get_mut(deck).ok_or("unknown DJ deck")?.send(PreviewCommand::Seek(from))
+        self.decks.voices.get_mut(deck).ok_or("unknown DJ deck")?.send(PreviewCommand::Seek(from))?;
+        Ok(())
     }
     pub fn deck_monitor(&self, deck: usize) -> Option<Arc<PreviewMonitor>> {
         self.decks.monitors.get(deck).cloned()

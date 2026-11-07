@@ -14,6 +14,7 @@ fn the_visible_lan_entry_creates_a_separate_tab_and_keeps_other_projects() {
     app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
@@ -46,6 +47,7 @@ fn an_online_host_shows_the_short_code_beside_the_full_invitation() {
     app.multiplayer.open = true;
     app.multiplayer_command("multiplayer.host", json!({"address":suhina_multiplayer::ONLINE_LOOPBACK}));
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     let deadline = Instant::now() + Duration::from_secs(20);
@@ -151,6 +153,7 @@ fn render_multiplayer_panel_for_review() {
     app.multiplayer.address = "127.0.0.1:0".into();
     app.multiplayer.open = true;
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 800.0))
         .wgpu()
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
@@ -200,6 +203,7 @@ fn sharing_the_current_midi_project_opens_a_copy_of_its_real_music() {
     app.multiplayer.address = "127.0.0.1:0".into();
     let original = app.projects.active().unwrap();
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
@@ -265,6 +269,7 @@ fn visible_note_buttons_edit_the_shared_music_and_refuse_a_stale_draft() {
     app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 900.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
@@ -349,7 +354,8 @@ fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_reboun
     app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let mut harness = egui_kittest::Harness::builder()
-        .with_size(Vec2::new(1280.0, 900.0))
+        .allow_missing_glyphs()
+        .with_size(Vec2::new(1280.0, 1100.0)) // tall enough for every clip action row
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
     let before = harness.state().projects.get(original).unwrap().project().clone();
@@ -389,7 +395,12 @@ fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_reboun
             harness.run_steps(2);
             std::thread::sleep(Duration::from_millis(10));
         }
-        assert_eq!(harness.state().multiplayer.controls.as_ref().unwrap().revision, base + 1, "{button}");
+        assert_eq!(
+            harness.state().multiplayer.controls.as_ref().unwrap().revision,
+            base + 1,
+            "{button} {:?}",
+            harness.state().multiplayer.error
+        );
         harness.run_steps(2);
         assert!(harness.query_by_label("Refresh clip draft").is_some());
         assert!(harness.get_by_label("Create clip").accesskit_node().is_disabled());
@@ -444,6 +455,7 @@ fn the_audio_share_button_opens_a_collected_copy_and_keeps_the_original_file() {
     app.multiplayer.address = "127.0.0.1:0".into();
     let original = app.projects.active().unwrap();
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 900.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
@@ -513,6 +525,7 @@ fn render_shared_audio_panel_for_review() {
     app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 900.0))
         .wgpu()
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
@@ -590,6 +603,7 @@ fn the_publish_button_uses_a_finished_local_sound_and_keeps_original_and_shared_
     app.multiplayer.take_track = 1;
     app.multiplayer.take_start = 12.0;
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 1000.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run_steps(3);
@@ -638,6 +652,7 @@ fn visible_track_creation_adds_midi_and_audio_to_both_tabs_and_refuses_a_stale_d
     }
     let remote = guest.multiplayer.bound.unwrap();
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 900.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), host);
     harness.run_steps(3);
@@ -750,7 +765,7 @@ fn guest_take_button(render: bool) {
     guest.multiplayer.take_file = "Recorded/My guest take.wav".into();
     guest.multiplayer.take_track = 1;
     guest.multiplayer.take_start = 12.0;
-    let builder = egui_kittest::Harness::builder().with_size(Vec2::new(1280.0, 900.0));
+    let builder = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(Vec2::new(1280.0, 900.0));
     let builder = if render { builder.wgpu() } else { builder };
     let mut harness = builder.build_ui_state(|ui, app: &mut App| app.ui(ui), guest);
     theme::install(&harness.ctx);
@@ -816,7 +831,7 @@ fn invitation_renewal_button(render: bool) {
         std::thread::sleep(Duration::from_millis(10));
     }
     let old_guest_tab = guest.multiplayer.bound.unwrap();
-    let builder = egui_kittest::Harness::builder().with_size(Vec2::new(1280.0, 900.0));
+    let builder = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(Vec2::new(1280.0, 900.0));
     let builder = if render { builder.wgpu() } else { builder };
     let mut harness = builder.build_ui_state(|ui, app: &mut App| app.ui(ui), host);
     theme::install(&harness.ctx);
@@ -922,7 +937,7 @@ fn shared_device_buttons(render: bool) {
         std::thread::sleep(Duration::from_millis(10));
     }
     let remote = guest.multiplayer.bound.unwrap();
-    let builder = egui_kittest::Harness::builder().with_size(Vec2::new(1280., 900.));
+    let builder = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(Vec2::new(1280., 900.));
     let builder = if render { builder.wgpu() } else { builder };
     let mut h = builder.build_ui_state(|ui, app: &mut App| app.ui(ui), host);
     theme::install(&h.ctx);
@@ -932,10 +947,12 @@ fn shared_device_buttons(render: bool) {
     h.run_steps(3);
     assert_eq!(h.state().multiplayer.devices.param.as_deref(), Some("volume"));
     assert!(h.query_by_label("Parameter value").is_some());
+    let published = h.state().projects.get(local).unwrap().project().channels[0].devices[0].params.clone();
     h.state_mut().multiplayer.devices.value = -12.;
     h.run_steps(2);
-    assert!(
-        h.state().projects.get(local).unwrap().project().channels[0].devices[0].params.is_empty(),
+    assert_eq!(
+        h.state().projects.get(local).unwrap().project().channels[0].devices[0].params,
+        published,
         "changing a draft must not publish it"
     );
     if render {
@@ -1059,6 +1076,7 @@ fn synchronous_refusals_survive_state_refreshes_and_can_be_acknowledged_without_
         assert_eq!(app.multiplayer.error.as_deref(), Some(error.as_str()));
     }
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 1000.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run_steps(4);

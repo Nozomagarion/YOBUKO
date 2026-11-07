@@ -8,13 +8,13 @@
 use serde_json::json;
 use suhina_model::*;
 use suhina_session::{Session, blank_project};
+use suhina_test_support::ProjectBuilder;
 
 use crate::support::run;
 
 /// The blank project with an 8-beat audio clip (4 s at 120 BPM) at beat 4 on track 3, and a
 /// 4-beat MIDI clip at beat 0 on track 1.
 fn project() -> Project {
-    let mut p = blank_project();
     let region = AudioRegion {
         file: "loop.wav".into(),
         absolute_file: None,
@@ -23,32 +23,17 @@ fn project() -> Project {
         duration_seconds: Some(4.0),
         warped: false,
         stretch: StretchMode::default(),
-        warp_markers: Vec::new(),
+        warp_markers: Default::default(),
         gain: 1.0,
         transpose: 0.0,
         stream: None,
     };
-    p.contents.push(ClipContent {
-        id: ContentId(1),
-        name: "Loop".into(),
-        length: 8.0,
-        lanes: vec![ContentLane { target: None, data: LaneData::Audio(region) }],
-        extensions: Extensions::default(),
-        scale: None,
-    });
-    p.contents.push(ClipContent {
-        id: ContentId(2),
-        name: "Riff".into(),
-        length: 4.0,
-        lanes: vec![ContentLane { target: None, data: LaneData::Notes(vec![Note::new(0.0, 1.0, 60, 0.8)]) }],
-        extensions: Extensions::default(),
-        scale: None,
-    });
-    p.arrangement.lanes.iter_mut().find(|l| l.track == Some(TrackId(3))).unwrap().clips =
-        vec![Clip::new(ContentId(1), 4.0, 8.0)];
-    p.arrangement.lanes.iter_mut().find(|l| l.track == Some(TrackId(1))).unwrap().clips =
-        vec![Clip::new(ContentId(2), 0.0, 4.0)];
-    p
+    ProjectBuilder::from(blank_project())
+        .audio(1, "Loop", 8.0, region)
+        .notes(2, "Riff", 4.0, vec![Note::new(0.0, 1.0, 60, 0.8)])
+        .clip(3, Clip::new(ContentId(1), 4.0, 8.0))
+        .clip(1, Clip::new(ContentId(2), 0.0, 4.0))
+        .build_without_ids()
 }
 
 fn first(session: &Session, track: u32) -> Clip {
@@ -169,7 +154,7 @@ fn warp_turned_on_marks_the_audio_s_end_at_the_song_s_tempo_now() {
 fn warp_turned_on_for_a_clip_whose_content_plays_at_another_tempo_elsewhere_gets_its_own_copy() {
     let mut p = project();
     p.transport.tempo_bpm = 120.0;
-    p.transport.tempo_changes = vec![TempoPoint { beat: 20.0, bpm: 90.0, ramp: false }];
+    p.transport.tempo_changes = vec![TempoPoint { beat: 20.0, bpm: 90.0, ramp: false }].into();
     p.arrangement.lanes.iter_mut().find(|l| l.track == Some(TrackId(3))).unwrap().clips.push(Clip::new(
         ContentId(1),
         24.0,
@@ -213,7 +198,7 @@ fn warp_turned_on_for_a_clip_whose_content_plays_at_another_tempo_elsewhere_gets
 fn warp_turned_on_again_for_marked_audio_another_clip_plays_at_another_tempo_gets_its_own_copy() {
     let mut p = project();
     p.transport.tempo_bpm = 120.0;
-    p.transport.tempo_changes = vec![TempoPoint { beat: 20.0, bpm: 90.0, ramp: false }];
+    p.transport.tempo_changes = vec![TempoPoint { beat: 20.0, bpm: 90.0, ramp: false }].into();
     let markers = vec![WarpMarker { time: 0.0, audio_time: 0.0 }, WarpMarker { time: 8.0, audio_time: 4.0 }];
     if let LaneData::Audio(region) = &mut p.contents[0].lanes[0].data {
         region.warp_markers = markers.clone();
@@ -268,14 +253,14 @@ fn warp_turned_on_in_a_slot_marks_the_audio_s_end_at_the_song_s_tempo_not_the_ar
     // beat 2) does not reach it, and its 4 s are 8 beats at the song's 120.
     let mut p = project();
     p.transport.tempo_bpm = 120.0;
-    p.transport.tempo_changes = vec![TempoPoint { beat: 2.0, bpm: 60.0, ramp: false }];
+    p.transport.tempo_changes = vec![TempoPoint { beat: 2.0, bpm: 60.0, ramp: false }].into();
     p.launcher.scenes = vec![Scene::default()];
     p.launcher.columns = vec![LauncherColumn {
         track: TrackId(3),
         slots: vec![Slot { clip: Some(Clip::new(ContentId(1), 0.0, 8.0)), has_stop: true }],
     }];
     let mut session = Session::new(p);
-    run(&mut session, "clip.setAudio", json!({ "track": 3, "scene": 1, "warp": true })).unwrap();
+    run(&mut session, "clip.setAudio", json!({ "track": 3, "scene": 0, "warp": true })).unwrap();
     // The arrangement's clip of the same content plays at 120 then 60, so the slot's clip got its
     // own copy (#874).
     let slot = session.project().launcher.columns[0].slots[0].clip.as_ref().unwrap().content;

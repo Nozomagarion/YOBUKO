@@ -19,7 +19,10 @@ Every change a user makes to a project is a command (AGENTS.md rule 6). The regi
    and part of `project.*` in `projects.rs` and `backup.rs`. `NAMESPACES` lists them all.
 2. **Add a `CommandSpec`** to that `COMMANDS`: `id` in `area.verb` form (stable: agents call it),
    a one-line `label`, `params` built with `param`/`optional` and a `ParamType` (shared ones such
-   as `CLIPS` and `MARKER` are constants beside them), `kind`, `run`, and `policy`:
+   as `CLIPS`, `MARKER` and `POINT` are constants beside them; `ParamType::Item` takes an index or `{"id": n}`), `kind`, `run`, and `policy`. `kind` is
+   what it runs on and what it does (#764 › 12): `CommandKind::EDIT`, `READ`, `HISTORY` or
+   `TRANSPORT` on a project, or `CommandKind::on(Target::Library, Effect::Change)` and the like
+   for what is Suhina's rather than a project's. A drag's command takes `GESTURE`.
    - `Policy::DEFAULT`: heard, so the playing graph is rebuilt after it;
    - `Policy::UNHEARD`: changes only what is shown (a name, a colour, a marker);
    - `Policy::CRITICAL`: a backup is written just before it;
@@ -30,9 +33,12 @@ Every change a user makes to a project is a command (AGENTS.md rule 6). The regi
    `PathKind::WriteFolder`) needs the command's own case in `confine` in
    `crates/automation/src/confine.rs`, with a test in `confine_tests.rs`. Without it, the path
    sweep in `crates/automation/src/server.rs` fails. `docs/mcp.md` describes each such rule.
-3. **Read the parameters** with `Args` (`crates/session/src/commands/args.rs`) in new code. Only
-   `marker.*` uses it so far (#764 › 1); older commands read `params` by hand, and a new
-   parameter on one follows the code around it.
+3. **Read the parameters** with `Args` (`crates/session/src/commands/args.rs`): `f64`, `index`,
+   `bool`, `flag`, `text` and their `opt_` forms, `has` and `value`. Every command reads through
+   it, so a rule (a finite number, a trimmed text, `null` as left out) and its error are written
+   once; add a reader there rather than a helper beside the command. What a command does after
+   it has run, for the open projects (share a clipboard, record a recent item, a save's steps), is
+   its `Policy`'s `after`, not a check of its id.
 4. **Return** the ids of what it made or changed as JSON (`{ "clips": [...] }`): the UI selects
    from it and agents chain on it.
 5. **Tests** in `crates/session/tests/<area>.rs` with `support::run(&mut session, "id", json!(..))`

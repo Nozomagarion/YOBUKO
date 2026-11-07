@@ -32,12 +32,17 @@ fn target(session: &Session, params: &Value) -> Result<(usize, usize), CommandEr
     Ok((column, row))
 }
 pub(crate) fn create(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    target(session, params)?;
+    let (_, row) = target(session, params)?;
     let length = crate::commands::number(params, "length")?;
     if !(0.0..=120_000.0).contains(&length) || length == 0.0 {
         return Err("invalid slot clip length".into());
     }
-    crate::files::create_clip(session, params)
+    // Shared commands count scenes from 1; the native command counts them from 0.
+    let mut native = params.clone();
+    native["scene"] = json!(row);
+    let mut result = crate::files::create_clip(session, &native)?;
+    result["scene"] = json!(row + 1);
+    Ok(result)
 }
 pub(crate) fn copy(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let (column, row) = target(session, params)?;

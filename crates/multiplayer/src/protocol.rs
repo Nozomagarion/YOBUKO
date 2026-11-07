@@ -190,19 +190,20 @@ impl WireEdit {
                 "clip.insertAudio",
                 json!({"track":track,"start":start,"file":file,"rate":rate,"channels":channels,"frames":frames}),
             ),
-            Self::SceneInsert { scene, name } => ("scene.insert", json!({"scene":scene,"name":name})),
-            Self::SceneRename { scene, name } => ("scene.rename", json!({"scene":scene,"name":name})),
-            Self::SceneDuplicate { scene } => ("scene.duplicate", json!({"scene":scene})),
-            Self::SceneDelete { scene } => ("scene.delete", json!({"scene":scene})),
+            Self::SceneInsert { scene, name } => ("scene.insert", json!({"scene":native_scene(*scene),"name":name})),
+            Self::SceneRename { scene, name } => ("scene.rename", json!({"scene":native_scene(*scene),"name":name})),
+            Self::SceneDuplicate { scene } => ("scene.duplicate", json!({"scene":native_scene(*scene)})),
+            Self::SceneDelete { scene } => ("scene.delete", json!({"scene":native_scene(*scene)})),
             Self::SlotCreate { track, scene, length } => {
                 ("clip.createSharedSlot", json!({"track":track,"scene":scene,"length":length}))
             }
             Self::SlotCopy { source, track, scene } => {
                 ("clip.copyToSharedSlot", json!({"source":source,"track":track,"scene":scene}))
             }
-            Self::SlotMove { track, scene, to_track, to_scene } => {
-                ("clip.moveSlot", json!({"track":track,"scene":scene,"toTrack":to_track,"toScene":to_scene}))
-            }
+            Self::SlotMove { track, scene, to_track, to_scene } => (
+                "clip.moveSlot",
+                json!({"track":track,"scene":native_scene(*scene),"toTrack":to_track,"toScene":native_scene(*to_scene)}),
+            ),
             Self::ClipCreate { track, start, length } => {
                 ("clip.create", json!({"track":track,"start":start,"length":length,"stack":true}))
             }
@@ -538,4 +539,11 @@ pub fn write<T: Serialize>(io: &mut impl Write, value: &T) -> Result<(), String>
         .and_then(|_| io.write_all(&bytes))
         .and_then(|_| io.flush())
         .map_err(|e| format!("connection write failed: {e}"))
+}
+
+/// Shared edits count scenes from 1 on the wire (and the policy checks 1..=128); Suhina's native
+/// scene commands count them from 0 since upstream #1156.
+/// A wire scene 0 has no native number: it becomes one the policy refuses.
+fn native_scene(scene: usize) -> usize {
+    scene.checked_sub(1).unwrap_or(usize::MAX)
 }

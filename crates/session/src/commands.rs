@@ -9,12 +9,11 @@ use serde_json::{Value, json};
 use suhina_engine::{ColumnStatus, LaunchCommand, MAX_START_BEAT, Quantization, Queued};
 use suhina_model::{
     ArrangementLane, Channel, ChannelId, ChannelRole, Clip, ClipContent, ClipId, ClipPlace, FadeCurve, FadeShape,
-    LaneData, LoopRange, MAX_GROUP_DEPTH, Marker, MidiPort, Project, Scene, Slot, TimeSignature, Track, TrackId,
+    LaneData, LoopRange, MAX_GROUP_DEPTH, Marker, MidiPort, Project, Scene, SceneId, Slot, TimeSignature, Track,
+    TrackId,
 };
 
-use crate::{
-    CommandError, Session, device_groups, devices, editing, files, follow, launch, mapping, meters, note_tools, notes,
-};
+use crate::{CommandError, Session, device_groups, devices, editing, files, follow, launch, meters, note_tools, notes};
 
 mod args;
 mod automation;
@@ -23,6 +22,7 @@ mod clip;
 mod device;
 mod history;
 mod launcher;
+mod mapping;
 mod marker;
 mod mixer;
 mod note;
@@ -36,37 +36,68 @@ pub(crate) mod take;
 mod tempo;
 mod time_signature;
 mod track;
+pub(crate) use track::parse_input_channels;
 mod transport;
 
 pub(crate) use args::Args;
 
+/// What a command runs on (#764 › 12): one project's session, or something of Suhina's that
+/// every open project shares.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CommandKind {
-    /// Reads the project; never changes it.
+pub enum Target {
+    /// One open project: its session, its undo history, its player.
+    Project,
+    /// The open projects, like tabs: opening, switching, closing. Runs on [`crate::Projects`].
+    Projects,
+    /// The plug-ins installed and where scans look (ADR 0006). Runs on [`crate::Projects`].
+    Plugins,
+    /// One of the project's running plug-ins: its editor, a restart.
+    Plugin,
+    /// The browser's library and the sample map (ADR 0012, ADR 0013). Runs on [`crate::Projects`].
+    Library,
+    /// The audio output and the MIDI inputs (ADR 0017). Runs on [`crate::Projects`].
+    Audio,
+}
+
+/// What a command does to what it runs on (#764 › 12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Effect {
+    /// Reads; changes nothing.
     Read,
     /// Changes the project and records one undo step.
     Edit,
     /// Moves through the undo history.
     History,
-    /// Controls playback in the attached audio engine (transport, clip launching); never
-    /// changes the project or its undo history.
+    /// Controls playback in the attached audio engine (transport, clip launching); never changes
+    /// the project or its undo history.
     Transport,
-    /// Opens, switches or closes whole projects (the open projects, like tabs); never changes a
-    /// project or its undo history. Runs on [`crate::Projects`], not on one session.
-    Projects,
-    /// Scans for plug-ins or changes where scans look (ADR 0006); belongs to Suhina, not to
-    /// one project. Runs on [`crate::Projects`].
-    Plugins,
-    /// Acts on one of the project's running plug-ins (opens or closes its editor, restarts
-    /// it); never changes the project or its undo history.
-    Plugin,
-    /// The browser's library: folders, search, pins, recent items, tags (ADR 0012); belongs
-    /// to Suhina, not to one project. Runs on [`crate::Projects`].
-    Library,
-    /// Lists or chooses the audio output (host, device, sample rate, buffer size) or the MIDI
-    /// inputs, or reports on them; belongs to Suhina, not to one project. Runs on
-    /// [`crate::Projects`].
-    Audio,
+    /// Changes something outside a project's undo history: the open projects, the library, the
+    /// plug-in folders, the audio device, a running plug-in.
+    Change,
+}
+
+/// What a command runs on and what it does to it: two axes, where they were one list of kinds
+/// (#764 › 12).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommandKind {
+    pub target: Target,
+    pub effect: Effect,
+}
+
+impl CommandKind {
+    /// Reads the project; never changes it.
+    pub const READ: Self = Self::on(Target::Project, Effect::Read);
+    /// Changes the project and records one undo step.
+    pub const EDIT: Self = Self::on(Target::Project, Effect::Edit);
+    /// Moves through the project's undo history.
+    pub const HISTORY: Self = Self::on(Target::Project, Effect::History);
+    /// Controls the project's playback.
+    pub const TRANSPORT: Self = Self::on(Target::Project, Effect::Transport);
+
+    /// A command on `target` with `effect`.
+    pub const fn on(target: Target, effect: Effect) -> Self {
+        Self { target, effect }
+    }
 }
 
 impl ParamType {
@@ -90,6 +121,9 @@ impl ParamType {
             Self::Clip => "clip",
             Self::DevicePath => "device path",
             Self::NameOrNumber => "name or number",
+            Self::Item => "index or id",
+            Self::Items => "indices or ids",
+            Self::MappingTarget => "mapping target",
             Self::Path(PathKind::File) => "file",
             Self::Path(PathKind::Files) => "files",
             Self::Path(PathKind::Folder) => "folder",
@@ -121,8 +155,11 @@ impl ParamType {
             Self::Clips => "a list of clips",
             Self::Range => "a range, {start, end}",
             Self::Clip => "a clip id or name",
-            Self::DevicePath => "a device index or path",
+            Self::DevicePath => "a device index or path, or {\"id\": its device_id}",
             Self::NameOrNumber => "a name or a number",
+            Self::Item => "an index, from 0, or {\"id\": n}",
+            Self::Items => "a list of indices, from 0, or {\"id\": n}",
+            Self::MappingTarget => "a target, {\"command\", \"track\", \"scene\"}",
             Self::Path(_) => "a path",
         }
     }
@@ -135,8 +172,11 @@ impl ParamType {
             Self::Number => value.is_number(),
             Self::Integer => value.is_i64() || value.is_u64() || value.as_f64().is_some_and(|n| n.fract() == 0.0),
             Self::Bool => value.is_boolean(),
-            Self::Track | Self::Clip | Self::DevicePath => id_or_name(value),
+            Self::Track | Self::Clip => id_or_name(value),
+            // A device by its place, or by its id: `{"id": 7}` (#763 › 1).
+            Self::DevicePath => id_or_name(value) || value.get("id").is_some_and(Value::is_u64),
             Self::NameOrNumber => value.is_number() || value.is_string(),
+            Self::Item => value.is_u64() || value.get("id").is_some_and(Value::is_u64),
             Self::Decibels => value.is_number() || value.is_string(),
             Self::AutomationValue => value.is_number() || value.is_string() || value.is_boolean(),
             Self::Curve => {
@@ -146,19 +186,17 @@ impl ParamType {
             | Self::Path(PathKind::File | PathKind::Folder | PathKind::WriteFile)
             | Self::Path(PathKind::WriteFolder | PathKind::LibraryItem | PathKind::Place) => value.is_string(),
             Self::Tracks | Self::Texts | Self::Integers | Self::Notes | Self::Numbers | Self::Clips => value.is_array(),
+            Self::Items => value.is_array(),
             Self::Path(PathKind::Files) => value.is_array(),
-            Self::Range => value.is_object(),
+            Self::Range | Self::MappingTarget => value.is_object(),
         }
     }
 }
 
-impl CommandKind {
+impl Target {
     pub fn name(self) -> &'static str {
         match self {
-            Self::Read => "read",
-            Self::Edit => "edit",
-            Self::History => "history",
-            Self::Transport => "transport",
+            Self::Project => "project",
             Self::Projects => "projects",
             Self::Plugins => "plugins",
             Self::Plugin => "plugin",
@@ -168,7 +206,19 @@ impl CommandKind {
     }
 }
 
-/// How a command runs: on one session, or (for [`CommandKind::Projects`]) on the open projects.
+impl Effect {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Read => "read",
+            Self::Edit => "edit",
+            Self::History => "history",
+            Self::Transport => "transport",
+            Self::Change => "change",
+        }
+    }
+}
+
+/// How a command runs: on one session, or (for a [`Target`] other than a project) on the open projects.
 pub type Run<T> = fn(&mut T, &Value) -> Result<Value, CommandError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -207,6 +257,14 @@ pub enum ParamType {
     DevicePath,
     /// A name, or a number standing for it: a scale's root, "C#" or 1.
     NameOrNumber,
+    /// One of a list's items: its index (from 0), or `{"id": n}` with its id, which names it
+    /// wherever it has moved (a marker, an automation point, a tempo change; #763 › 1).
+    Item,
+    /// A list of [`ParamType::Item`]s.
+    Items,
+    /// What a controller mapping runs: `{ "command", "track", "scene" }`, the command and the
+    /// parameters it fixes (`docs/spec/midi-mapping.md`).
+    MappingTarget,
     /// A place on disk the command reads or writes, as text (a list of them for
     /// [`PathKind::Files`]). An agent's is checked against its roots before the command runs
     /// (`suhina-automation`'s `confine`), by this kind.
@@ -253,20 +311,12 @@ const TRACK: Param = param("track", ParamType::Track, "track id or name, from pr
 /// The track of a command on a channel's devices or lanes, which may be the main channel (#687).
 const DEVICE_TRACK: Param =
     param("track", ParamType::Track, "track id or name, from project.tracks, or \"main\" for the main channel");
-/// Lets the calls of one drag make one undo step.
-const CONTINUE: Param = optional(
-    "continue",
-    ParamType::Bool,
-    "true adds the change to the undo step of the previous call of this command on this track, \
-     when no other edit came between (one drag, one step)",
-);
-/// With `continue`, starts each call from the project as it was before the step it continues, so
-/// a slider's live value replaces the one before instead of adding to it.
-const REPLACE: Param = optional(
-    "replace",
-    ParamType::Bool,
-    "with continue: the change starts from where the step it continues began, so each call replaces \
-     the last (a slider's live value) instead of adding to it",
+/// Lets the calls of one drag make one undo step (#1146): the session keeps the open gesture.
+pub(crate) const GESTURE: Param = optional(
+    "gesture",
+    ParamType::Text,
+    "an id of 1 to 128 bytes the caller picks for one drag: calls with the gesture that is open make \
+     one undo step; history.endGesture, any other edit, undo, redo or another gesture ends it",
 );
 const TRACKS: Param = param("tracks", ParamType::Tracks, "the tracks to act on (ids or names), at least one");
 const RANGE_START: Param =
@@ -290,7 +340,11 @@ const DEVICES: Param = param(
     "device indices on the track, from 0, or paths through groups such as \"2/1/0\", as in track.devices; at least one",
 );
 const RETURN: Param = param("return", ParamType::Track, "return track id or name, from project.tracks");
-const SCENE: Param = param("scene", ParamType::Integer, "scene number, from 1, as in project.launcher");
+const SCENE: Param = param(
+    "scene",
+    ParamType::Item,
+    "the scene: its number, from 0, or {\"id\": n} with its scene_id, which names it wherever it has moved, as in project.launcher",
+);
 /// A clip command's clip by its id (ADR 0025): it stays the same when other clips move.
 const CLIP: Param = optional(
     "clip",
@@ -306,8 +360,11 @@ const CLIP_INDEX: Param = optional(
     ParamType::Integer,
     "an arrangement clip's index on the track, from project.clips (deprecated, use clip; accepted until the project format's next version (ADR 0025))",
 );
-const CLIP_SCENE: Param =
-    optional("scene", ParamType::Integer, "instead of index: the clip in the track's slot of this scene, from 1");
+const CLIP_SCENE: Param = optional(
+    "scene",
+    ParamType::Item,
+    "instead of index: the clip in the track's slot of this scene, its number from 0 or {\"id\": n} with its scene_id",
+);
 /// A scale's root and mode, for `clip.setScale` and `project.setDefaultScale`.
 const SCALE_ROOT: Param = optional(
     "root",
@@ -319,10 +376,19 @@ const SCALE_MODE: Param = optional(
     ParamType::Text,
     "major, minor, harmonicMinor, melodicMinor, dorian, phrygian, lydian, mixolydian, locrian, majorPentatonic, minorPentatonic or blues (default: the scale's mode now, else major)",
 );
-const NOTES: Param = param("notes", ParamType::Integers, "note indices, from note.list; at most 10000");
+/// The notes a `note.*` command names: each by its index or, wherever it has moved since, by its
+/// id (#1182).
+const NOTES: Param = param(
+    "notes",
+    ParamType::Items,
+    "the notes, each its index, from 0, or {\"id\": n} with its id, as in note.list; at most 10000",
+);
 /// The notes a MIDI tool acts on: the named ones, or every note of the clip.
-const NOTE_SELECTION: Param =
-    optional("notes", ParamType::Integers, "note indices, from note.list; every note when left out");
+const NOTE_SELECTION: Param = optional(
+    "notes",
+    ParamType::Items,
+    "the notes, each its index, from 0, or {\"id\": n} with its id, as in note.list; every note when left out",
+);
 const AUTOMATED: Param = param(
     "param",
     ParamType::Text,
@@ -333,14 +399,21 @@ const AUTOMATED_DEVICE: Param = optional(
     ParamType::Integer,
     "device index on the track, from 0, as in track.devices; left out for the track's mixer",
 );
-const POINT: Param =
-    param("point", ParamType::Integer, "point index on the lane, from 0 in beat order, as in automation.list");
+const POINT: Param = param(
+    "point",
+    ParamType::Item,
+    "the point: its index on the lane, from 0 in beat order, or {\"id\": n} with its id, as in automation.list",
+);
 const CURVE: Param = optional(
     "curve",
     ParamType::Curve,
     "shape of the segment to the next point: [x1, y1, x2, y2], the two control points of a cubic Bezier from (0, 0) to (1, 1) in (share of the time, share of the way), each from 0 to 1 (from -0.5 to 1.5 for the halves of a split, which can lie outside); or one bend from -1 to 1 for the mirrored curve (0 straight, the default; above 0 fast first, below 0 slow first)",
 );
-const MARKER: Param = param("index", ParamType::Integer, "marker index, from 0, as in project.markers");
+const MARKER: Param = param(
+    "index",
+    ParamType::Item,
+    "the marker: its index, from 0 in beat order, or {\"id\": n} with its id, as in project.markers",
+);
 /// `clip.delete` takes a list of arrangement clips, or one clip by `track` with `index` or `scene`.
 const DELETE_CLIPS: Param = optional(
     "clips",
@@ -381,15 +454,69 @@ pub struct Policy {
     pub critical: bool,
     /// Whether an agent may run it over MCP (ADR 0028).
     pub agents: Agents,
+    /// What the open projects do once it has run (#764 › 1).
+    pub after: After,
+    /// A preview: with no project open it runs in the previews' own session, not on a project.
+    pub previews: bool,
+    /// The parameters a gesture's calls of this command change live (a shape's depth dragged over
+    /// a lane). A call that joins an open gesture whose last change was this command on the same
+    /// target (its other parameters) starts from the project as it was before that run of calls,
+    /// so each call replaces the last instead of adding to it; on another target, or after
+    /// another command's change, it adds to the step like any call. Empty: calls add. A command
+    /// that sets values needs none: setting a value again replaces it anyway, and a gesture may
+    /// set several (#1146).
+    pub gesture_replaces: &'static [&'static str],
 }
 
 impl Policy {
-    /// Heard, not critical, open to agents.
-    pub const DEFAULT: Self = Self { heard: true, critical: false, agents: Agents::Allowed };
+    /// Heard, not critical, open to agents, nothing after it.
+    pub const DEFAULT: Self = Self {
+        heard: true,
+        critical: false,
+        agents: Agents::Allowed,
+        after: After::Nothing,
+        previews: false,
+        gesture_replaces: &[],
+    };
+    /// A gesture's calls replace each other while `live`, the parameters they change, vary.
+    pub const fn replacing(live: &'static [&'static str]) -> Self {
+        Self { gesture_replaces: live, ..Self::DEFAULT }
+    }
     /// An edit only seen: a name, a colour, a marker.
     pub const UNHEARD: Self = Self { heard: false, ..Self::DEFAULT };
     /// Backed up before it runs.
     pub const CRITICAL: Self = Self { critical: true, ..Self::DEFAULT };
+    /// A preview of a file or a device, which plays with or without a project.
+    pub const PREVIEW: Self = Self { previews: true, ..Self::DEFAULT };
+}
+
+/// What [`crate::Projects`] does after a command that succeeded, besides what the command did
+/// to its project.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum After {
+    Nothing,
+    /// It filled a clipboard, which every open project shares.
+    Copies,
+    /// It saved the project: the tab takes the file's name, its backups need no offering, and the
+    /// audio it plays is trusted from then on.
+    Saves,
+    /// It added something the browser lists among the recent items (`docs/spec/browser.md` ›
+    /// Sidebar).
+    Recent(Recent),
+}
+
+/// Which recent items a command adds to, and from which of its parameters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Recent {
+    /// The files of `paths` that were placed: samples, Stems and MIDI files.
+    Files,
+    /// The built-in device, plug-in, `.sd` file or preset the command added (`id`, `device`,
+    /// `sd`, `preset`).
+    Device,
+    /// The `.sd` file at `path`.
+    SdFile,
+    /// The plug-in named by `plugin`.
+    Plugin,
 }
 
 /// Who may run a command over MCP.
@@ -469,15 +596,19 @@ impl<T> CommandSpec<T> {
                 | ParamType::Notes
                 | ParamType::Numbers
                 | ParamType::Clips
+                | ParamType::Items
                 | ParamType::Path(PathKind::Files) => json!("array"),
                 ParamType::Number => json!("number"),
                 ParamType::Integer => json!("integer"),
                 ParamType::Bool => json!("boolean"),
                 ParamType::AutomationValue => json!(["number", "string", "boolean"]),
                 ParamType::Curve => json!(["number", "array"]),
-                ParamType::Track | ParamType::Clip | ParamType::DevicePath => json!(["integer", "string"]),
+                ParamType::Track | ParamType::Clip => json!(["integer", "string"]),
+                // A device or an item by its place, or by its id as `{"id": n}` (#763 › 1).
+                ParamType::DevicePath => json!(["integer", "string", "object"]),
+                ParamType::Item => json!(["integer", "object"]),
                 ParamType::Decibels | ParamType::NameOrNumber => json!(["number", "string"]),
-                ParamType::Range => json!("object"),
+                ParamType::Range | ParamType::MappingTarget => json!("object"),
                 ParamType::Text | ParamType::Path(_) => json!("string"),
             };
             properties.insert(p.name.to_string(), json!({ "type": ty, "description": p.doc }));
@@ -498,12 +629,21 @@ impl<T> CommandSpec<T> {
             })
             .collect();
         let params = if params.is_empty() { "none".to_string() } else { params.join("; ") };
-        format!("| `{}` | {} | {} | {params} |", self.id, self.kind.name(), cell(self.label))
+        format!(
+            "| `{}` | {} {} | {} | {params} |",
+            self.id,
+            self.kind.target.name(),
+            self.kind.effect.name(),
+            cell(self.label)
+        )
     }
 
     /// The command as `command.list` and the MCP server's `command_list` show it.
     pub fn describe(&self) -> Value {
-        json!({ "id": self.id, "label": self.label, "kind": self.kind.name(), "params": self.input_schema() })
+        json!({
+            "id": self.id, "label": self.label, "target": self.kind.target.name(),
+            "effect": self.kind.effect.name(), "params": self.input_schema(),
+        })
     }
 }
 
@@ -555,6 +695,7 @@ static NAMESPACES: &[&[CommandSpec]] = &[
     range::COMMANDS,
     marker::COMMANDS,
     launcher::COMMANDS,
+    mapping::COMMANDS,
     scene::COMMANDS,
     device::COMMANDS,
     preview::COMMANDS,
@@ -571,7 +712,10 @@ fn list(_: &mut Session, _: &Value) -> Result<Value, CommandError> {
         commands()
             .iter()
             .map(|c| {
-                json!({ "id": c.id, "label": c.label, "params": c.input_schema()["properties"], "kind": c.kind.name() })
+                json!({
+                    "id": c.id, "label": c.label, "params": c.input_schema()["properties"],
+                    "target": c.kind.target.name(), "effect": c.kind.effect.name(),
+                })
             })
             .collect(),
     ))
@@ -629,7 +773,7 @@ fn tracks(session: &mut Session, _: &Value) -> Result<Value, CommandError> {
 
 fn clips(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let p = session.project();
-    let only = match params.get("track") {
+    let only = match Args::new(params).value("track") {
         Some(_) => Some(track_id(p, params)?),
         None => None,
     };
@@ -686,14 +830,14 @@ fn loop_value(p: &Project) -> Value {
 
 /// `params.enabled`: true or false, or `None` when left out.
 fn optional_enabled(params: &Value) -> Result<Option<bool>, CommandError> {
-    match params.get("enabled") {
-        None | Some(Value::Null) => Ok(None),
+    match Args::new(params).value("enabled") {
+        None => Ok(None),
         Some(v) => v.as_bool().map(Some).ok_or_else(|| "enabled must be true or false".into()),
     }
 }
 
 fn set_loop(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let (start, end) = (number(params, "start")?, number(params, "end")?);
+    let (start, end) = (Args::new(params).f64("start")?, Args::new(params).f64("end")?);
     if !(0.0..MAX_START_BEAT).contains(&start) {
         return Err(format!("start must be from 0 and before {MAX_START_BEAT}, got {start}").into());
     }
@@ -731,7 +875,10 @@ pub(crate) fn gain_of_db(db: f64) -> f64 {
 
 /// The ids in `params.tracks`, each resolved like a track parameter.
 pub(crate) fn track_list(p: &Project, params: &Value) -> Result<Vec<TrackId>, CommandError> {
-    let list = params.get("tracks").and_then(Value::as_array).ok_or("tracks must be a list of track ids or names")?;
+    let list = Args::new(params)
+        .value("tracks")
+        .and_then(Value::as_array)
+        .ok_or("tracks must be a list of track ids or names")?;
     let mut ids = Vec::new();
     for value in list {
         let id = track_at(p, &json!({ "track": value }), "track")?;
@@ -762,7 +909,7 @@ pub(crate) fn group_tracks(session: &mut Session, params: &Value) -> Result<Valu
     if deepest + 1 > MAX_GROUP_DEPTH {
         return Err(format!("groups nest at most {MAX_GROUP_DEPTH} deep; this grouping would go deeper").into());
     }
-    let name = match params.get("name") {
+    let name = match Args::new(params).value("name") {
         None => "Group".to_string(),
         Some(v) => v.as_str().filter(|n| !n.trim().is_empty()).ok_or("name must be a text, not empty")?.to_string(),
     };
@@ -833,7 +980,8 @@ pub(crate) fn remove_track(p: &mut Project, track: TrackId, channel: ChannelId) 
 /// The clips `params.clips` names, each `{ "track": …, "index": n }` as `project.clips` lists
 /// them: at least one, without duplicates, every one of them there.
 pub(crate) fn clip_list(p: &Project, params: &Value) -> Result<Vec<(TrackId, usize)>, CommandError> {
-    let list = params.get("clips").and_then(Value::as_array).ok_or("clips must be a list of {track, index}")?;
+    let list =
+        Args::new(params).value("clips").and_then(Value::as_array).ok_or("clips must be a list of {track, index}")?;
     let mut out: Vec<(TrackId, usize)> = Vec::new();
     for entry in list {
         let track = track_at(p, entry, "track")?;
@@ -862,7 +1010,10 @@ pub(crate) fn clip_list(p: &Project, params: &Value) -> Result<Vec<(TrackId, usi
 /// The lane of `params.track` and the clip index in it, checked.
 pub(crate) fn lane_and_index(p: &Project, params: &Value) -> Result<(usize, usize), CommandError> {
     let track = track_id(p, params)?;
-    let index = params.get("index").and_then(Value::as_u64).ok_or("index must be a whole number from project.clips")?;
+    let index = Args::new(params)
+        .value("index")
+        .and_then(Value::as_u64)
+        .ok_or("index must be a whole number from project.clips")?;
     let lane =
         p.arrangement.lanes.iter().position(|l| l.track == Some(track)).ok_or("the track has no arrangement lane")?;
     let count = p.arrangement.lanes.get(lane).map_or(0, |l| l.clips.len());
@@ -905,7 +1056,7 @@ pub(crate) fn new_content_id(p: &Project) -> Result<suhina_model::ContentId, Com
 
 /// `clip.renameMany {clips, name}` (#693).
 fn rename_clips(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let name = match params.get("name") {
+    let name = match Args::new(params).value("name") {
         Some(Value::String(name)) => name.trim().to_string(),
         _ => return Err("name must be a text (empty clears it)".into()),
     };
@@ -927,14 +1078,20 @@ fn rename_clips(session: &mut Session, params: &Value) -> Result<Value, CommandE
     Ok(json!({ "name": name, "clips": contents.len() }))
 }
 
-/// A track's audio input as commands show it: `input` "none", "3" or "1/2", and `monitor`.
-pub(crate) fn audio_input_json(input: &suhina_model::AudioInput) -> Value {
-    use suhina_model::{InputChannels, Monitor};
-    let channels = match input.channels {
+/// Input channels as commands show and take them: "none", "3" or "1/2".
+pub(crate) fn input_channels_text(channels: suhina_model::InputChannels) -> String {
+    use suhina_model::InputChannels;
+    match channels {
         InputChannels::None => "none".to_string(),
         InputChannels::Mono(c) => c.to_string(),
         InputChannels::Stereo(c) => format!("{c}/{}", c.saturating_add(1)),
-    };
+    }
+}
+
+/// A track's audio input as commands show it: `input` "none", "3" or "1/2", and `monitor`.
+pub(crate) fn audio_input_json(input: &suhina_model::AudioInput) -> Value {
+    use suhina_model::Monitor;
+    let channels = input_channels_text(input.channels);
     let monitor = match input.monitor {
         Monitor::Auto => "auto",
         Monitor::In => "in",
@@ -1018,9 +1175,9 @@ fn markers(session: &mut Session, _: &Value) -> Result<Value, CommandError> {
     let markers = &session.project().arrangement.markers;
     Ok(Value::Array(
         markers
-            .iter()
+            .entries()
             .enumerate()
-            .map(|(index, m)| json!({ "index": index, "beat": m.beat, "name": m.name }))
+            .map(|(index, (id, m))| json!({ "index": index, "id": id.0, "beat": m.beat, "name": m.name }))
             .collect(),
     ))
 }
@@ -1031,13 +1188,13 @@ fn send(session: &mut Session, command: LaunchCommand) -> Result<(), CommandErro
 
 fn play(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     session.player_mut()?;
-    let start = match params.get("from") {
+    let start = match Args::new(params).value("from") {
         None => None,
         Some(Value::String(s)) if s == "marker" => None,
         Some(Value::String(s)) if s == "clip" => Some(clip_start(&session.project, params)?),
         Some(other) => return Err(format!("from must be \"marker\" or \"clip\", got {other}").into()),
     };
-    if start.is_none() && (params.get("track").is_some() || params.get("index").is_some()) {
+    if start.is_none() && (Args::new(params).has("track") || Args::new(params).has("index")) {
         return Err("track and index go with from: \"clip\"".into());
     }
     // The marker moves first, so playback starts there; while playing, that is a jump.
@@ -1062,7 +1219,7 @@ fn clip_start(p: &Project, params: &Value) -> Result<f64, CommandError> {
 }
 
 fn stop(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let command = match params.get("return") {
+    let command = match Args::new(params).value("return") {
         None => LaunchCommand::Stop,
         Some(Value::String(s)) if s == "marker" => LaunchCommand::Stop,
         Some(Value::String(s)) if s == "here" => LaunchCommand::StopHere,
@@ -1079,7 +1236,7 @@ fn signature_text(ts: TimeSignature) -> String {
 }
 
 fn set_quantization(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let text = params.get("value").and_then(Value::as_str).ok_or("value must be a string such as \"1 bar\"")?;
+    let text = Args::new(params).raw_str("value").ok_or("value must be a string such as \"1 bar\"")?;
     let quantization = parse_quantization(text)?;
     session.set_quantization(quantization)?;
     Ok(json!({ "quantization": text.trim() }))
@@ -1127,15 +1284,50 @@ pub(crate) fn column_index(p: &Project, params: &Value) -> Result<usize, Command
         .ok_or_else(|| format!("track {} has no clip slots", track_name(p, track)).into())
 }
 
-/// The 0-based scene index of the 1-based `params.scene`.
+/// The scene index `params.scene` names, counted from 0: its number, or `{"id": n}` (#1156).
 pub(crate) fn scene_index(p: &Project, params: &Value) -> Result<usize, CommandError> {
     let count = p.launcher.scenes.len();
-    let number = params.get("scene").and_then(Value::as_u64).ok_or("scene must be a whole number from 1")?;
-    usize::try_from(number)
-        .ok()
-        .and_then(|n| n.checked_sub(1))
-        .filter(|i| *i < count)
-        .ok_or_else(|| format!("scene {number} does not exist; the project has {count} scenes").into())
+    let index = opt_scene_at(p, params, "scene")?.ok_or("scene must be a whole number from 0, or {\"id\": n}")?;
+    (index < count)
+        .then_some(index)
+        .ok_or_else(|| format!("scene {index} does not exist; the project has {count} scenes").into())
+}
+
+/// The scene `params[key]` names, counted from 0, or `None` when it is left out: a number, which
+/// is not checked against the scenes (a command that makes scenes may take one past the end), or
+/// `{"id": n}` with a scene's id, found where the scene is now (#1156), which must exist.
+pub(crate) fn opt_scene_at(p: &Project, params: &Value, key: &str) -> Result<Option<usize>, CommandError> {
+    let Some(value) = Args::new(params).value(key) else { return Ok(None) };
+    if let Some(id) = value.get("id") {
+        let id = id
+            .as_u64()
+            .and_then(|n| u32::try_from(n).ok())
+            .ok_or_else(|| format!("{key}'s id must be a whole number"))?;
+        return p
+            .launcher
+            .scenes
+            .iter()
+            .position(|s| s.id.is_some() && s.id.0 == id)
+            .map(Some)
+            .ok_or_else(|| format!("no scene has id {id}").into());
+    }
+    value
+        .as_u64()
+        .and_then(|n| usize::try_from(n).ok())
+        .map(Some)
+        .ok_or_else(|| format!("{key} must be a whole number from 0, or {{\"id\": n}}").into())
+}
+
+/// The id of the scene at `index`, for results that report a scene beside its number (#1156);
+/// `null` past the end, and for a scene with no id (a project whose ids ran out), since `{"id": 0}`
+/// names no scene.
+pub(crate) fn scene_id(p: &Project, index: usize) -> Value {
+    p.launcher.scenes.get(index).map_or(Value::Null, |s| scene_id_value(s.id))
+}
+
+/// A scene's id as a result reports it: `null` when it has none.
+pub(crate) fn scene_id_value(id: SceneId) -> Value {
+    if id.is_some() { json!(id.0) } else { Value::Null }
 }
 
 fn track_name(p: &Project, track: TrackId) -> String {
@@ -1163,7 +1355,7 @@ pub(crate) fn track_or_main_id(p: &Project, params: &Value) -> Result<TrackId, C
 /// [`track_or_main_id`] for `params[key]`.
 pub(crate) fn track_or_main_at(p: &Project, params: &Value, key: &str) -> Result<TrackId, CommandError> {
     let main = p.main_channel().is_some();
-    match params.get(key) {
+    match Args::new(params).value(key) {
         Some(Value::Number(n)) if main && n.as_u64() == Some(u64::from(TrackId::MAIN.0)) => Ok(TrackId::MAIN),
         Some(Value::String(name))
             if main
@@ -1178,7 +1370,7 @@ pub(crate) fn track_or_main_at(p: &Project, params: &Value, key: &str) -> Result
 
 /// Resolves the track id or name in `params[key]`.
 pub(crate) fn track_at(p: &Project, params: &Value, key: &str) -> Result<TrackId, CommandError> {
-    match params.get(key) {
+    match Args::new(params).value(key) {
         Some(Value::Number(n)) => {
             let id = n.as_u64().and_then(|n| u32::try_from(n).ok()).ok_or("track id must be a whole number")?;
             p.tracks
@@ -1202,7 +1394,10 @@ pub(crate) fn track_at(p: &Project, params: &Value, key: &str) -> Result<TrackId
             match matches.as_slice() {
                 [id] => Ok(*id),
                 [] => Err(format!("no track named {name:?}; project.tracks lists them").into()),
-                _ => Err(format!("several tracks are named {name:?}; use the track id").into()),
+                ids => {
+                    let ids: Vec<String> = ids.iter().map(|id| id.0.to_string()).collect();
+                    Err(format!("several tracks are named {name:?} (ids {}); use the track id", ids.join(", ")).into())
+                }
             }
         }
         _ => Err(format!("{key} must be a track id or name").into()),
@@ -1230,22 +1425,6 @@ pub(crate) fn device_channel_read<'a>(session: &'a Session, params: &Value) -> R
 fn channel_of<'a>(p: &'a Project, track: &Track) -> Option<&'a Channel> {
     let id = track.channel?;
     p.channel(id)
-}
-
-pub(crate) fn number(params: &Value, name: &str) -> Result<f64, CommandError> {
-    params
-        .get(name)
-        .and_then(Value::as_f64)
-        .filter(|n| n.is_finite())
-        .ok_or_else(|| format!("{name} must be a number").into())
-}
-
-/// Like [`number`], but also accepts the string "-inf".
-pub(crate) fn number_or_neg_infinity(params: &Value, name: &str) -> Result<f64, CommandError> {
-    match params.get(name) {
-        Some(Value::String(s)) if s == "-inf" => Ok(f64::NEG_INFINITY),
-        _ => number(params, name),
-    }
 }
 
 /// Linear gain to decibels, rounded to 0.01 dB; `None` (JSON null) for silence.
@@ -1342,7 +1521,7 @@ pub(crate) fn resolve_clip_ids<T>(
                 out.insert("clips".into(), json!([{ "track": track.0, "index": index }]));
             }
             ClipPlace::Slot { slot, .. } if takes("scene") => {
-                out.insert("scene".into(), json!(slot + 1));
+                out.insert("scene".into(), json!(slot));
             }
             ClipPlace::Lane { .. } => {
                 return Err(format!("clip {id} is on the arrangement; {} takes a clip slot's clip", spec.id).into());
@@ -1368,4 +1547,14 @@ pub(crate) fn resolve_clip_ids<T>(
         }
     }
     Ok(Some(Value::Object(out)))
+}
+
+/// A finite number parameter. Fork-only: the shared (multiplayer) commands still read their
+/// parameters this way; upstream's own commands use [`Args`].
+pub(crate) fn number(params: &Value, name: &str) -> Result<f64, CommandError> {
+    params
+        .get(name)
+        .and_then(Value::as_f64)
+        .filter(|n| n.is_finite())
+        .ok_or_else(|| format!("{name} must be a number").into())
 }

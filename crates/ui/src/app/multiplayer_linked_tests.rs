@@ -27,6 +27,7 @@ fn the_link_toggle_sends_play_and_stop_to_every_participant() {
     let mut guest = App::new();
     guest.multiplayer_command("multiplayer.join", json!({"invitation":host.multiplayer.invitation}));
     let mut h = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 1000.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), host);
     pump_until(&mut h, &mut guest, "the guest", |host, guest| {

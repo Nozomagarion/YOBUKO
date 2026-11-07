@@ -32,7 +32,8 @@ fn plug_in_settings_travel_and_built_in_effects_are_edited_together() {
         let mut project = suhina_multiplayer::starter_project();
         let mut synth = Device::new("Serum", DeviceKind::Vst3 { id: "0123456789abcdef0123456789abcdef".into() });
         // Larger than one transfer chunk and than the old 2 MiB document.
-        synth.state = Some((0..3_000_000u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8).collect());
+        synth.state =
+            Some((0..3_000_000u32).map(|i| (i.wrapping_mul(2_654_435_761) >> 24) as u8).collect::<Vec<u8>>().into());
         synth.params = vec![DeviceParam::new("7", 0.5)];
         project.channels[0].devices = vec![synth, Device::new("Reverb", DeviceKind::Builtin("reverb".into()))];
         let mut host = Service::default();

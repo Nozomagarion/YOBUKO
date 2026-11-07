@@ -24,6 +24,7 @@ use suhina_model::{ChannelId, ChannelRole, Project, TrackId};
 use crate::buses::gains_until;
 use crate::chain::{CHAIN_INPUT_GAIN, Chain, MAX_BLOCK};
 use crate::route;
+use crate::spectrum;
 
 /// Tracks that are metered; a project's tracks after these have no meter.
 pub const MAX_METERED_TRACKS: usize = 512;
@@ -117,18 +118,23 @@ impl Row {
 }
 
 /// The levels of the main output and of every metered track, written by the audio thread
-/// and readable from any thread. Clip indicators are reset from any thread.
+/// and readable from any thread. Clip indicators are reset from any thread. It also carries
+/// the watched devices' output rings the EQ panel's analyser reads
+/// ([`spectrum::Spectrum`], docs/spec/eq.md › The panel › The analyser).
 #[derive(Debug)]
 pub struct MeterMonitor {
     main: Row,
     tracks: Box<[Row]>,
+    /// Shared with the graph's chains, which capture their watched devices' output into it on
+    /// every path that runs them.
+    pub(crate) spectrum: std::sync::Arc<spectrum::Spectrum>,
 }
 
 impl Default for MeterMonitor {
     fn default() -> Self {
         let tracks: Box<[Row]> =
             (0..MAX_METERED_TRACKS).map(|_| Row { track: AtomicU32::new(NO_TRACK), ..Row::default() }).collect();
-        Self { main: Row::default(), tracks }
+        Self { main: Row::default(), tracks, spectrum: std::sync::Arc::new(spectrum::Spectrum::new()) }
     }
 }
 
@@ -166,6 +172,12 @@ impl MeterMonitor {
     /// The main output's level.
     pub fn main(&self) -> Level {
         self.main.level()
+    }
+
+    /// The watched devices' output rings, the EQ panel's analyser's source
+    /// (docs/spec/eq.md › The panel › The analyser).
+    pub fn spectrum(&self) -> &spectrum::Spectrum {
+        &self.spectrum
     }
 
     /// The level of `track`, or `None` when the engine plays no such track or it has no meter.
@@ -399,12 +411,12 @@ impl Levels {
         for slot in 0..self.tracks.len() {
             let touched = self.touched.get_mut(slot).map(std::mem::take).unwrap_or(false);
             if !touched {
-                writer.measure(Meter::Track(slot), &[], frames);
+                writer.measure(MeterTarget::Track(slot), &[], frames);
                 continue;
             }
             let at = slot * MAX_BLOCK * 2;
             if let Some(block) = self.buffer.get_mut(at..at + frames * 2) {
-                writer.measure(Meter::Track(slot), block, frames);
+                writer.measure(MeterTarget::Track(slot), block, frames);
                 block.fill(0.0);
             }
         }
@@ -413,7 +425,7 @@ impl Levels {
 
 /// Which meter a block is measured for.
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Meter {
+pub(crate) enum MeterTarget {
     Main,
     Track(usize),
 }
@@ -443,8 +455,10 @@ pub(crate) struct MeterWriter {
 impl MeterWriter {
     /// Allocates: call it off the audio thread.
     pub(crate) fn new(sample_rate: u32) -> Self {
+        let monitor = Arc::new(MeterMonitor::default());
+        monitor.spectrum.set_rate(sample_rate);
         Self {
-            monitor: Arc::new(MeterMonitor::default()),
+            monitor,
             sample_rate: f64::from(sample_rate.max(1)),
             main: Ballistics::default(),
             tracks: vec![Ballistics::default(); MAX_METERED_TRACKS],
@@ -455,8 +469,10 @@ impl MeterWriter {
     }
 
     /// Shows the tracks of a new graph, slot by slot. A slot that now meters another track
-    /// starts from silence with its clip indicator off. Never allocates.
+    /// starts from silence with its clip indicator off, and no device is watched any more:
+    /// the panels claim their rows again next frame. Never allocates.
     pub(crate) fn assign(&mut self, tracks: &[TrackId]) {
+        self.monitor.spectrum.clear();
         for (slot, row) in self.monitor.tracks.iter().enumerate() {
             row.sample.store(0, Ordering::Relaxed);
             row.readouts.iter().for_each(|entry| entry.device.store(0, Ordering::Relaxed));
@@ -475,7 +491,7 @@ impl MeterWriter {
 
     /// Measures `block` (interleaved stereo; empty for silence) of `frames` frames for `meter`
     /// and publishes the result. Never allocates.
-    pub(crate) fn measure(&mut self, meter: Meter, block: &[f32], frames: usize) {
+    pub(crate) fn measure(&mut self, meter: MeterTarget, block: &[f32], frames: usize) {
         if frames == 0 {
             return;
         }
@@ -497,8 +513,8 @@ impl MeterWriter {
             }
         }
         let (state, row) = match meter {
-            Meter::Main => (&mut self.main, &self.monitor.main),
-            Meter::Track(slot) => match (self.tracks.get_mut(slot), self.monitor.tracks.get(slot)) {
+            MeterTarget::Main => (&mut self.main, &self.monitor.main),
+            MeterTarget::Track(slot) => match (self.tracks.get_mut(slot), self.monitor.tracks.get(slot)) {
                 (Some(state), Some(row)) => (state, row),
                 _ => return,
             },

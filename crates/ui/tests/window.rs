@@ -63,7 +63,7 @@ pub(super) fn view() -> Harness<'static, SessionHarness> {
         state: SessionViewState::default(),
         actions: Vec::new(),
     };
-    let mut harness = Harness::builder().with_size(SIZE).build_ui_state(
+    let mut harness = Harness::builder().allow_missing_glyphs().with_size(SIZE).build_ui_state(
         |ui, v: &mut SessionHarness| session_view::show(ui, &v.grid, &[], &mut v.state, &mut v.actions),
         view,
     );
@@ -89,6 +89,8 @@ pub(super) fn window_with_step(mut app: App, step: f32) -> Harness<'static, App>
     // The window's tests place clips, fades and markers on a bar grid.
     app.set_arrangement_grid(suhina_ui::arrangement::arrangement_view::PianoGrid::from_value("1 bar"));
     let mut harness = Harness::builder()
+        .allow_missing_glyphs()
+        .allow_missing_glyphs()
         .with_size(SIZE)
         .with_step_dt(step)
         .with_max_steps((1.0 / step).ceil() as u64)
@@ -204,7 +206,7 @@ pub(super) fn project_with_audio() -> (suhina_engine::model::Project, suhina_ui:
         id: ContentId(300),
         name: "Loop".into(),
         length: 4.0,
-        lanes: vec![ContentLane { target: None, data: LaneData::Audio(region) }],
+        lanes: vec![ContentLane { target: None, data: LaneData::Audio(region) }].into(),
         extensions: Extensions::default(),
         scale: None,
     });
@@ -254,6 +256,7 @@ pub(super) fn project_with_a_device() -> suhina_engine::model::Project {
     use suhina_engine::model::{Device, DeviceKind, DeviceParam, Extensions};
     let mut project = demo_project();
     project.channels[0].devices.push(Device {
+        id: Default::default(),
         name: "Utility".into(),
         kind: DeviceKind::Builtin("utility".into()),
         enabled: true,
@@ -322,7 +325,8 @@ impl suhina_session::AudioSystem for StandAudio {
         _choice: &suhina_session::OutputChoice,
         _previous: Option<suhina_session::Player>,
     ) -> Result<suhina_session::audio::Opened, String> {
-        let mut renderer = suhina_engine::Renderer::stopped(project, audio, 48_000).map_err(|e| e.to_string())?;
+        let mut renderer = suhina_engine::Renderer::stopped(project, audio, 48_000, suhina_session::devices())
+            .map_err(|e| e.to_string())?;
         let player = suhina_session::Player::new(renderer.controller(), None);
         Ok(suhina_session::audio::Opened { player, notice: None, plugins_kept: true })
     }

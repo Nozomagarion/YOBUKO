@@ -9,6 +9,7 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
     let mut app = App::new();
     app.set_session(Session::new(crate::demo::demo_project()), &[]);
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
@@ -26,6 +27,7 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
     app.dj.active = true;
     app.settings.view.menu_bar = false;
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
@@ -66,6 +68,7 @@ fn render_dj_workspace_for_review() {
     let mut app = App::new();
     app.dj.active = true;
     let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 800.0))
         .with_pixels_per_point(1.5)
         .wgpu()

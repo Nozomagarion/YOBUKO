@@ -800,28 +800,10 @@ fn render_ahead(
     renderer
 }
 
-/// A stream playing a project with its transport stopped, and what it needs to be heard.
-pub struct Stopped {
-    pub controller: Controller,
-    pub output: Output,
-    pub progress: Arc<Progress>,
-    pub stream: Stream,
-}
-
 /// `notice` the first time one is given with `told` not yet set, `None` after: what is told once
 /// per process.
 fn tell_once(told: &AtomicBool, notice: Option<String>) -> Option<String> {
     notice.filter(|_| !told.swap(true, Ordering::Relaxed))
-}
-
-/// Opens the default output and plays `project` on it with the transport stopped.
-pub fn start_stopped(project: &Project, audio: &AudioPool) -> Result<Stopped, String> {
-    let output = Output::open()?;
-    let mut renderer = Renderer::stopped(project, audio, output.sample_rate).map_err(|e| e.to_string())?;
-    let mut controller = renderer.controller();
-    let progress = Arc::new(Progress::default());
-    let stream = output.start(renderer, &mut controller, &progress)?;
-    Ok(Stopped { controller, output, progress, stream })
 }
 
 /// Opens the device for `choice` and its stream: as chosen, then without a buffer size of its
@@ -972,15 +954,6 @@ impl LiveOutput for Live {
     }
 }
 
-/// Plays `project` on the default output with its transport stopped, from a thread that owns
-/// the audio stream (a stream cannot move between threads on every platform). Returns a player
-/// for the session and a description of the device; dropping the player closes the stream.
-pub fn open_player(project: &Project, audio: &AudioPool) -> Result<(Player, String), String> {
-    let opened = open_chosen(project, audio, &suhina_engine::DeviceAssets::new(), &OutputChoice::default(), None)?;
-    let description = opened.player.output_info().map(|i| i.describe()).unwrap_or_default();
-    Ok((opened.player, description))
-}
-
 /// Plays `project` with its transport stopped on the output `choice` names (see
 /// [`AudioSystem::open`]), from a thread that owns the stream. `previous` is closed first; its
 /// plug-ins carry over, reconfigured while quiescent when the sample rate changes.
@@ -1019,7 +992,9 @@ pub fn open_chosen(
                 };
                 let mut renderer = Renderer::build(
                     &project,
-                    RenderInputs::from_audio(&audio).with_assets(&assets).with_plugins(plugins),
+                    RenderInputs::from_audio(&audio, suhina_session::devices())
+                        .with_assets(&assets)
+                        .with_plugins(plugins),
                     output.sample_rate,
                     RenderOptions::STOPPED,
                 )

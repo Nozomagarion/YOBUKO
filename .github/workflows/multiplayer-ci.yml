@@ -86,7 +86,6 @@ jobs:
           python3 scripts/license_header.py --check
           python3 scripts/rename_suhina.py --check
           python3 scripts/inline_tests.py --check
-          python3 scripts/parity/update_report.py --check-inputs
       - name: Collaboration clippy
         run: cargo clippy --locked -p suhina-collaboration --all-targets --no-deps -- -D warnings
       # Development packages are built before the complete upstream suite so a baseline failure

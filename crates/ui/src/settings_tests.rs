@@ -60,7 +60,6 @@ audio_input = Line In
 zoom = 120
 waveform_scale = db
 piano_roll_top = window
-piano_roll_grid = control_bar
 piano_roll_toolbar = larger
 backup = 1m
 backup_clean_up = off
@@ -118,7 +117,6 @@ fn a_settings_file_from_before_the_regrouping_loads_with_the_same_values() {
         zoom: 120,
         waveform_db: true,
         piano_roll_top: PianoRollTop::Window,
-        piano_grid_follows: true,
         toolbar_size: ToolbarSize::Larger,
         backup: suhina_session::backup::Interval::Minutes(1),
         backup_clean_up: false,
@@ -133,6 +131,8 @@ fn a_settings_file_from_before_the_regrouping_loads_with_the_same_values() {
 #[test]
 fn settings_survive_a_round_trip() {
     let settings = Settings {
+        piano_key_style: PianoKeyStyle::Night,
+        piano_key_names: PianoKeyNames::All,
         animations: false,
         setting_descriptions: crate::settings::Descriptions::Icon,
         track_headers: Some(Side::Left),
@@ -150,7 +150,6 @@ fn settings_survive_a_round_trip() {
         updates: crate::settings::update_settings::UpdateSettings::default(),
         piano_roll_top: PianoRollTop::Window,
         toolbar_size: ToolbarSize::Larger,
-        piano_grid_follows: true,
         mixer_controls: MixerControls::Knob,
         plugin_editors: EditorPlacement::DeviceView,
         theme: "Night blue".into(),
@@ -183,6 +182,11 @@ fn settings_survive_a_round_trip() {
         audio_cue_pair: 2,
         audio_cue_volume: -6,
         audio_input: "Line In (Interface)".into(),
+        audio_device_inputs: [
+            ("asio|universal audio thunderbolt".into(), ["Line In (Interface)".into(), "3/4".into()]),
+            ("wasapi|default".into(), ["off".into(), "1".into()]),
+        ]
+        .into(),
         midi_inputs_off: vec!["Keys, port 1".into(), "Pads:Pads MIDI 1 20:0".into()],
         zoom: 130,
         map_window: true,
@@ -216,12 +220,78 @@ fn at_start_reads_each_choice_and_keeps_the_panel_for_anything_else() {
 }
 
 #[test]
+fn the_retired_piano_roll_grid_line_loads_without_a_warning() {
+    for value in ["own", "control_bar"] {
+        let (settings, warnings) = Settings::from_text(&format!("piano_roll_grid = {value}\n"));
+        assert_eq!((settings, warnings.len()), (Settings::default(), 0), "{value}");
+    }
+    let (_, warnings) = Settings::from_text("piano_roll_grid = sideways\nno_such_setting = 1\n");
+    assert_eq!(warnings.len(), 2, "{warnings:?}");
+}
+
+#[test]
 fn browser_values_out_of_range_are_limited() {
     let (settings, warnings) =
         Settings::from_text("browser_width = 5000\npreview_volume = -900\nwarp_mode = elastic\n");
     assert_eq!((settings.browser_width, settings.preview_volume), (BROWSER_WIDTHS.1, PREVIEW_VOLUMES.0));
     assert_eq!(settings.warp_mode, WarpMode::Rhythmic);
     assert_eq!(warnings.len(), 1);
+}
+
+#[test]
+fn each_audio_device_keeps_its_input_and_default_track_input() {
+    use suhina_engine::model::InputChannels;
+    let mut settings =
+        Settings { audio_host: "ASIO".into(), audio_device: "Thunderbolt".into(), ..Settings::default() };
+    assert_eq!(settings.track_input(), InputChannels::None);
+    // While Input is off there is nothing to hear it on.
+    settings.set_track_input(InputChannels::Stereo(1));
+    assert!(settings.audio_device_inputs.is_empty());
+
+    settings.audio_input = "default".into();
+    settings.set_track_input(InputChannels::Mono(1));
+    settings.audio_device = "SSL 2+".into();
+    assert_eq!(settings.track_input(), InputChannels::None, "another card has none yet");
+    settings.audio_input = "SSL 2+ In".into();
+    settings.set_track_input(InputChannels::Stereo(1));
+    settings.audio_device = "THUNDERBOLT".into();
+    settings.audio_input = "default".into();
+    assert_eq!(settings.track_input(), InputChannels::Mono(1), "the card's own comes back");
+
+    let choice = |device: &str| suhina_session::OutputChoice {
+        host: Some("ASIO".into()),
+        device: Some(device.into()),
+        ..suhina_session::OutputChoice::default()
+    };
+    assert_eq!(
+        settings.remembered_input(&choice("SSL 2+")),
+        Some(suhina_session::InputChoice::Named("SSL 2+ In".into()))
+    );
+    assert_eq!(settings.remembered_input(&choice("USB Mic")), None);
+
+    let (read, warnings) = Settings::from_text(&settings.to_text());
+    assert_eq!((read.device_inputs(), warnings.len()), (settings.device_inputs(), 0));
+    assert_eq!(
+        read.device_inputs().get("asio|ssl 2+"),
+        Some(&suhina_session::DeviceInputs {
+            input: suhina_session::InputChoice::Named("SSL 2+ In".into()),
+            track_input: InputChannels::Stereo(1),
+        })
+    );
+    // What the session keeps comes back as the settings keep it.
+    let mut kept = Settings::default();
+    kept.keep_device_inputs(&settings.device_inputs());
+    assert_eq!(kept.audio_device_inputs, settings.audio_device_inputs);
+
+    for nonsense in [
+        r#"{"asio|x": ["default", "2/4"]}"#,
+        r#"{"asio|x": ["default", "0"]}"#,
+        r#"{"asio|x": ["default"]}"#,
+        "not json",
+    ] {
+        let (settings, warnings) = Settings::from_text(&format!("audio_device_inputs = {nonsense}\n"));
+        assert_eq!((settings.audio_device_inputs.len(), warnings.len()), (0, 1), "{nonsense:?}");
+    }
 }
 
 #[test]
@@ -376,4 +446,25 @@ fn the_map_label_size_is_kept_and_only_its_steps_are_read() {
     }
     let settings = Settings { map_label_size: 50, ..Settings::default() };
     assert_eq!(Settings::from_text(&settings.to_text()).0.map_label_size, 50);
+}
+
+#[test]
+fn a_saved_built_in_theme_that_went_is_read_as_what_took_its_place() {
+    for (saved, read) in [
+        ("editor-dark", "suhina-studio@darker"),
+        ("suhina-dark", "suhina-studio"),
+        ("suhina-dark@light", "suhina-studio@light"),
+        ("suhina-studio-dark", "suhina-studio"),
+        ("suhina-studio-light", "suhina-studio@light"),
+        ("dracula", "suhina-studio"),
+        ("solarized-dark", "suhina-studio"),
+        ("suhina-forest-amber", "suhina-studio"),
+        ("nord", "nord"),
+    ] {
+        assert_eq!(Settings::from_text(&format!("theme = {saved}\n")).0.theme, read, "{saved}");
+    }
+    // A variant that is a path is no theme id, renamed or not, and is said so.
+    let (settings, warnings) = Settings::from_text("theme = suhina-dark@../x\n");
+    assert_eq!(settings.theme, Settings::default().theme);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
 }

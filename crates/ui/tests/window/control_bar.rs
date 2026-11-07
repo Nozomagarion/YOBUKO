@@ -50,8 +50,13 @@ fn tab_only_switches_the_view() {
 #[test]
 fn the_control_bar_shows_the_cpu_load_only_while_an_engine_plays() {
     // With an engine attached as its player, the control bar shows the load.
-    let mut renderer =
-        suhina_engine::Renderer::stopped(&demo_project(), &suhina_engine::AudioPool::new(), 48_000).unwrap();
+    let mut renderer = suhina_engine::Renderer::stopped(
+        &demo_project(),
+        &suhina_engine::AudioPool::new(),
+        48_000,
+        suhina_session::devices(),
+    )
+    .unwrap();
     let mut session = Session::new(demo_project());
     session.attach_player(suhina_session::Player::new(renderer.controller(), None));
     let mut app = App::new();
@@ -86,8 +91,13 @@ fn the_control_bar_shows_the_ram_usage_whether_or_not_an_engine_plays() {
 #[test]
 fn the_view_switch_is_the_last_control_at_the_right_with_the_cpu_and_ram_left_of_it() {
     // With an engine attached, all four show: RAM, CPU, then the view switch at the edge.
-    let mut renderer =
-        suhina_engine::Renderer::stopped(&demo_project(), &suhina_engine::AudioPool::new(), 48_000).unwrap();
+    let mut renderer = suhina_engine::Renderer::stopped(
+        &demo_project(),
+        &suhina_engine::AudioPool::new(),
+        48_000,
+        suhina_session::devices(),
+    )
+    .unwrap();
     let mut session = Session::new(demo_project());
     session.attach_player(suhina_session::Player::new(renderer.controller(), None));
     let mut app = App::new();
@@ -110,14 +120,21 @@ fn the_view_switch_is_the_last_control_at_the_right_with_the_cpu_and_ram_left_of
 fn a_narrow_window_leaves_out_what_would_reach_the_position_readout() {
     // At the smallest window the app allows, the blocks that show keep their order and stay
     // right of the transport in the centre (play, stop and the 64 px position).
-    let mut renderer =
-        suhina_engine::Renderer::stopped(&demo_project(), &suhina_engine::AudioPool::new(), 48_000).unwrap();
+    let mut renderer = suhina_engine::Renderer::stopped(
+        &demo_project(),
+        &suhina_engine::AudioPool::new(),
+        48_000,
+        suhina_session::devices(),
+    )
+    .unwrap();
     let mut session = Session::new(demo_project());
     session.attach_player(suhina_session::Player::new(renderer.controller(), None));
     let mut app = App::new();
     app.set_session(session, &[]);
     let size = (640.0, 400.0);
     let mut harness = Harness::builder()
+        .allow_missing_glyphs()
+        .allow_missing_glyphs()
         .with_size(size)
         .with_step_dt(0.25)
         .with_max_steps(4)
@@ -140,6 +157,15 @@ fn a_narrow_window_leaves_out_what_would_reach_the_position_readout() {
         assert!(ram.left() >= transport_end, "RAM at {ram:?}");
         assert!(cpu.is_some_and(|cpu| ram.right() <= cpu.left()), "RAM {ram:?} left of the CPU");
     }
+}
+
+#[test]
+fn the_control_bar_box_leaves_the_arrangement_grid_alone() {
+    let mut harness = arrangement_app();
+    choose_arrangement_grid(&mut harness, "1/16");
+    choose_grid(&mut harness, "1/2");
+    assert_eq!(grid_of(&harness), Some(suhina_engine::Quantization::Beats(2.0)));
+    assert_eq!(harness.state().arrangement().grid.label(), "1/16");
 }
 
 #[test]

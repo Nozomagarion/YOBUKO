@@ -118,7 +118,7 @@ pub(super) fn parameter_cell(
                 if value != previous {
                     response.mark_changed();
                 }
-                response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, &parameter.name));
+                response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::SpinButton, true, &parameter.name));
                 response.on_hover_text(&style.tooltip)
             })
             .inner
@@ -134,11 +134,13 @@ pub(super) fn parameter_cell(
         let color = style.text_color.map_or_else(theme::text_value, rgb);
         widgets::text_in(painter, rect, align, &value_text(parameter, value), font, color);
     }
-    if let Some(response) = response.filter(|r| r.changed() || r.drag_stopped()) {
-        let continuous = (response.drag_started() || response.dragged()) && !response.drag_stopped();
+    if response.as_ref().is_some_and(|r| r.changed() || r.drag_stopped()) {
+        // Every frame of a drag, its last too, is one gesture; the window ends it on mouse up.
+        let gesture =
+            crate::interaction::commands::gesture(format_args!("param:{}:{}:{}", track.0, at.value(), parameter.id));
         actions.push(Action::new(
             "device.setParam",
-            json!({ "track": track.0, "device": at.value(), "param": parameter.id, "value": value, "continuous": continuous }),
+            json!({ "track": track.0, "device": at.value(), "param": parameter.id, "value": value, "gesture": gesture }),
         ));
     }
 }
@@ -459,7 +461,7 @@ pub(super) fn knob(
     let angle = (-135.0 + 270.0 * position as f32).to_radians();
     let tip = center + Vec2::new(angle.sin(), -angle.cos()) * (radius - 1.0);
     painter.line_segment([center, tip], egui::Stroke::new(1.5, accent.unwrap_or_else(theme::text_primary)));
-    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::DragValue, true, &parameter.name));
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::SpinButton, true, &parameter.name));
     response
 }
 
@@ -473,7 +475,8 @@ pub(super) fn switch(ui: &Ui, painter: &egui::Painter, rect: Rect, showing: Show
             Pos2::new(rect.left() + index as f32 * (part + 1.0), rect.top()),
             Vec2::new(part, rect.height()),
         );
-        let response = widgets::button_area(ui, cell, egui::Id::new(("detail-switch", index)), format!("Show {text}"));
+        let response =
+            widgets::button_area(ui, cell, egui::Id::unique(("detail-switch", index)), format!("Show {text}"));
         if response.clicked() && value != showing {
             picked = Some(value);
         }

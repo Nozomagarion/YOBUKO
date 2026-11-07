@@ -204,8 +204,8 @@ fn two_real_renderers_keep_different_positions_and_stop_independently_during_edi
     let editor = host.add_peer(Role::Editor).unwrap();
     let mut a = Replica::new(host.snapshot());
     let mut b = Replica::new(host.snapshot());
-    let mut render_a = Renderer::stopped(a.project(), &AudioPool::default(), SR).unwrap();
-    let mut render_b = Renderer::stopped(b.project(), &AudioPool::default(), SR).unwrap();
+    let mut render_a = Renderer::stopped(a.project(), &AudioPool::default(), SR, suhina_session::devices()).unwrap();
+    let mut render_b = Renderer::stopped(b.project(), &AudioPool::default(), SR, suhina_session::devices()).unwrap();
     let monitor_a = render_a.monitor();
     let monitor_b = render_b.monitor();
     a.attach_player(Player::new(render_a.controller(), None));
@@ -246,7 +246,8 @@ fn two_real_renderers_keep_different_positions_and_stop_independently_during_edi
 fn a_failed_player_update_requires_explicit_recovery_instead_of_silent_retry() {
     let mut host = Host::new(project()).unwrap();
     let mut replica = Replica::new(host.snapshot());
-    let mut render = Renderer::stopped(replica.project(), &AudioPool::default(), 8000).unwrap();
+    let mut render =
+        Renderer::stopped(replica.project(), &AudioPool::default(), 8000, suhina_session::devices()).unwrap();
     replica.attach_player(Player::new(render.controller(), None));
     drop(render);
     let mut failed = None;
@@ -401,7 +402,7 @@ fn shared_device_parameters_keep_roles_replays_and_stale_or_invalid_requests_ato
     assert!(
         host.submit(
             peer,
-            request(2, 1, "device.setSharedParam", json!({"track":1,"device":0,"param":"algorithm","value":40}))
+            request(2, 1, "device.setSharedParam", json!({"track":1,"device":0,"param":"algorithm","value":44}))
         )
         .is_err()
     );
@@ -472,7 +473,7 @@ fn shared_launcher_policy_refuses_extra_keys_names_paths_and_remote_launches() {
     for (command, params) in [
         ("scene.rename", json!({"scene":1,"name":"Intro","file":"/private"})),
         ("scene.insert", json!({"scene":"1","name":"Intro"})),
-        ("scene.duplicate", json!({"scene":0})),
+        ("scene.duplicate", json!({"scene":128})),
         ("scene.delete", json!({"scene":129})),
         ("clip.createSharedSlot", json!({"track":1,"scene":1,"length":4,"start":0})),
         ("clip.copyToSharedSlot", json!({"source":1,"track":"Lead","scene":1})),

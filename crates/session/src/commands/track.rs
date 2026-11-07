@@ -12,9 +12,9 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         params: &[
             TRACKS,
             param("db", ParamType::Decibels, "level in dB, at most +6; \"-inf\" or below -150 is silence"),
-            CONTINUE,
+            GESTURE,
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_volume,
         policy: Policy::DEFAULT,
     },
@@ -22,15 +22,15 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.adjustVolume",
         label: "Move the volume of each named track by the same number of decibels, keeping their differences",
         params: &[TRACKS, param("db", ParamType::Number, "how far to move it, in dB; positive is louder")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: adjust_volume,
         policy: Policy::DEFAULT,
     },
     CommandSpec {
         id: "track.setPan",
         label: "Set the pan of each named track",
-        params: &[TRACKS, param("pan", ParamType::Number, "-1 is full left, 0 centre, 1 full right"), CONTINUE],
-        kind: CommandKind::Edit,
+        params: &[TRACKS, param("pan", ParamType::Number, "-1 is full left, 0 centre, 1 full right"), GESTURE],
+        kind: CommandKind::EDIT,
         run: set_pan,
         policy: Policy::DEFAULT,
     },
@@ -38,7 +38,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.adjustPan",
         label: "Move the pan of each named track by the same amount, keeping their differences",
         params: &[TRACKS, param("pan", ParamType::Number, "how far to move it, -1 … +1; positive is right")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: adjust_pan,
         policy: Policy::DEFAULT,
     },
@@ -46,7 +46,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.setMute",
         label: "Mute or unmute each named track",
         params: &[TRACKS, param("mute", ParamType::Bool, "true mutes the tracks")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_mute,
         policy: Policy::DEFAULT,
     },
@@ -57,7 +57,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             param("tracks", ParamType::Tracks, "the tracks to group (ids or names), all in the same group or none"),
             optional("name", ParamType::Text, "the group's name (\"Group\" if left out)"),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: group_tracks,
         policy: Policy::DEFAULT,
     },
@@ -73,7 +73,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
                 "its place among the tracks directly in that group (or at the top level), from 0; the end if left out",
             ),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_group,
         policy: Policy::DEFAULT,
     },
@@ -81,7 +81,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.ungroup",
         label: "Dissolve a group track: its tracks stay, playing into where the group played",
         params: &[TRACK],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: ungroup_track,
         policy: Policy::DEFAULT,
     },
@@ -89,7 +89,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.move",
         label: "Move a track (a group with its tracks) to another place in the track order",
         params: &[TRACK, param("to", ParamType::Integer, "its new position, from 0, in project.tracks order")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: move_track,
         policy: Policy::DEFAULT,
     },
@@ -97,7 +97,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.rename",
         label: "Rename a track",
         params: &[TRACK, param("name", ParamType::Text, "the new name, not empty")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: rename_track,
         policy: Policy::UNHEARD,
     },
@@ -105,7 +105,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.setColor",
         label: "Set a track's colour",
         params: &[TRACK, param("color", ParamType::Text, "\"#rrggbb\", or \"none\" for the default")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_color,
         policy: Policy::UNHEARD,
     },
@@ -125,7 +125,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
                 "true: the clips of the group and of every track inside it show their track's colour again",
             ),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: color_group,
         policy: Policy::UNHEARD,
     },
@@ -133,7 +133,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.delete",
         label: "Delete a track with its clips; a deleted group's tracks stay",
         params: &[TRACK],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: delete_track,
         policy: Policy::CRITICAL,
     },
@@ -141,17 +141,17 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.copy",
         label: "Copy whole tracks for track.paste: each with its channel, devices, automation, clips, take lanes and slots, a group with its tracks",
         params: &[param("tracks", ParamType::Tracks, "the tracks to copy (ids or names), in project order")],
-        kind: CommandKind::Read,
+        kind: CommandKind::READ,
         run: copy_tracks,
-        policy: Policy::DEFAULT,
+        policy: Policy { after: After::Copies, ..Policy::DEFAULT },
     },
     CommandSpec {
         id: "track.cut",
         label: "Copy whole tracks for track.paste and delete them, as one undo step",
         params: &[param("tracks", ParamType::Tracks, "the tracks to cut (ids or names)")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: cut_tracks,
-        policy: Policy::CRITICAL,
+        policy: Policy { after: After::Copies, ..Policy::CRITICAL },
     },
     CommandSpec {
         id: "track.paste",
@@ -164,7 +164,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             ),
             optional("suffix", ParamType::Text, COPY_SUFFIX),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: paste_tracks,
         policy: Policy::DEFAULT,
     },
@@ -172,7 +172,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.setKind",
         label: "Make an empty track a MIDI or an audio track; a MIDI track that becomes an audio track loses its instrument and MIDI effects",
         params: &[TRACK, param("kind", ParamType::Text, "midi or audio")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: crate::track_kind::set_kind,
         policy: Policy::DEFAULT,
     },
@@ -183,7 +183,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             param("tracks", ParamType::Tracks, "the tracks to duplicate (ids or names)"),
             optional("suffix", ParamType::Text, COPY_SUFFIX),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: duplicate_tracks,
         policy: Policy::DEFAULT,
     },
@@ -191,7 +191,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.renameClips",
         label: "Name every clip of a track, in the arrangement and in its slots, after the track",
         params: &[TRACK],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: crate::clip_color::rename_clips,
         policy: Policy::DEFAULT,
     },
@@ -199,7 +199,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.setOutput",
         label: "Route a track's audio to the main output or into a group track",
         params: &[TRACK, param("to", ParamType::Track, "\"main\", or a group track (id or name) to play into")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_output,
         policy: Policy::DEFAULT,
     },
@@ -211,7 +211,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             param("solo", ParamType::Bool, "true solos the tracks"),
             optional("exclusive", ParamType::Bool, "true also ends every other solo (false by default)"),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_solo,
         policy: Policy::DEFAULT,
     },
@@ -219,7 +219,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.setCue",
         label: "Turn a track's cue on or off: a cued track is also heard on the cue output (headphones, output.setCuePair), after its own volume and pan, while the main mix stays as it is",
         params: &[TRACK, param("cue", ParamType::Bool, "true cues the track")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_cue,
         policy: Policy::DEFAULT,
     },
@@ -236,7 +236,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             optional("channel", ParamType::Integer, "1 to 16, or 0 for every channel; left out keeps the channel"),
             optional("monitor", ParamType::Text, "auto, in or off; left out keeps the mode"),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_midi_input,
         policy: Policy::DEFAULT,
     },
@@ -252,7 +252,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             ),
             optional("monitor", ParamType::Text, "auto (the default), in or off; left out keeps it"),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_audio_input,
         policy: Policy::DEFAULT,
     },
@@ -264,7 +264,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             param("armed", ParamType::Bool, "true arms the track"),
             optional("exclusive", ParamType::Bool, "true also disarms every other track (false by default)"),
         ],
-        kind: CommandKind::Transport,
+        kind: CommandKind::TRANSPORT,
         run: set_arm,
         policy: Policy::DEFAULT,
     },
@@ -272,7 +272,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.stop",
         label: "Stop the clip a track is playing, at the next quantisation boundary",
         params: &[TRACK],
-        kind: CommandKind::Transport,
+        kind: CommandKind::TRANSPORT,
         run: stop_track,
         policy: Policy::DEFAULT,
     },
@@ -280,7 +280,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.devices",
         label: "List the devices on a track in order, with each built-in and .sd device's role and parameter values",
         params: &[TRACK],
-        kind: CommandKind::Read,
+        kind: CommandKind::READ,
         run: devices::track_devices,
         policy: Policy::DEFAULT,
     },
@@ -291,7 +291,7 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             param("kind", ParamType::Text, "audio or midi"),
             param("name", ParamType::Text, "nonblank track name, at most 256 UTF-8 bytes, no control characters"),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: files::create_shared_track,
         policy: Policy::DEFAULT,
     },
@@ -323,7 +323,12 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             optional(
                 "preset",
                 ParamType::Path(PathKind::File),
-                "a preset file for the device (DX7 voice data for the FM synth)",
+                "a preset file for the device (a device preset, or DX7 voice data for the FM synth)",
+            ),
+            optional(
+                "stock",
+                ParamType::Text,
+                "a preset that ships with Suhina, by its key: what follows stock: in library.search",
             ),
             optional(
                 "sd",
@@ -333,9 +338,9 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             optional("sample", ParamType::Path(PathKind::File), "audio file for the SDK graph resource named sample"),
             optional("voice", ParamType::Integer, "which voice of a preset bank, from 1"),
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: files::add_track,
-        policy: Policy::DEFAULT,
+        policy: Policy { after: After::Recent(Recent::Device), ..Policy::DEFAULT },
     },
     CommandSpec {
         id: "track.setSend",
@@ -344,9 +349,9 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
             TRACK,
             RETURN,
             param("level", ParamType::Decibels, "send level in dB, at most 0; \"-inf\" or below -150 is silence"),
-            CONTINUE,
+            GESTURE,
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: crate::sends::set_send,
         policy: Policy::DEFAULT,
     },
@@ -362,9 +367,9 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
                 "one per track: dB, at most +6 for a volume and 0 for a send (below -150 is silence), -1 to 1 for a pan",
             ),
             optional("return", ParamType::Track, "with control send: the return track they send to"),
-            CONTINUE,
+            GESTURE,
         ],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: set_mixer_values,
         policy: Policy::DEFAULT,
     },
@@ -372,14 +377,14 @@ pub(super) static COMMANDS: &[CommandSpec] = &[
         id: "track.setSendMode",
         label: "Take a track's send to a return before its volume and pan (pre) or after them (post, the default)",
         params: &[TRACK, RETURN, param("mode", ParamType::Text, "\"pre\" or \"post\"")],
-        kind: CommandKind::Edit,
+        kind: CommandKind::EDIT,
         run: crate::sends::set_send_mode,
         policy: Policy::DEFAULT,
     },
 ];
 
 fn set_volume(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let db = number_or_neg_infinity(params, "db")?;
+    let db = Args::new(params).f64_or_neg_infinity("db")?;
     if db > MAX_VOLUME_DB {
         return Err(format!("db must be at most +{MAX_VOLUME_DB}, got {db}").into());
     }
@@ -418,11 +423,12 @@ fn set_volume(session: &mut Session, params: &Value) -> Result<Value, CommandErr
 /// them can be, otherwise with one new graph.
 fn set_mixer_values(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let tracks = track_list(&session.project, params)?;
-    let values = params.get("values").and_then(Value::as_array).ok_or("values must be a list of numbers")?;
+    let values =
+        Args::new(params).value("values").and_then(Value::as_array).ok_or("values must be a list of numbers")?;
     if values.len() != tracks.len() {
         return Err(format!("values must hold one number per track: {} for {}", values.len(), tracks.len()).into());
     }
-    let control = params.get("control").and_then(Value::as_str).unwrap_or_default();
+    let control = Args::new(params).raw_str("control").unwrap_or_default();
     let mut edits = Vec::new();
     let mut new_graph = false;
     for (track, value) in tracks.iter().zip(values) {
@@ -431,7 +437,7 @@ fn set_mixer_values(session: &mut Session, params: &Value) -> Result<Value, Comm
             "volume" => set_volume(session, &json!({ "tracks": [track.0], "db": value }))?,
             "pan" => set_pan(session, &json!({ "tracks": [track.0], "pan": value }))?,
             "send" => {
-                let target = params.get("return").ok_or("control send needs return, the return track")?;
+                let target = Args::new(params).value("return").ok_or("control send needs return, the return track")?;
                 crate::sends::set_send(session, &json!({ "track": track.0, "return": target, "level": value }))?
             }
             _ => return Err("control must be \"volume\", \"pan\" or \"send\"".into()),
@@ -449,7 +455,7 @@ fn set_mixer_values(session: &mut Session, params: &Value) -> Result<Value, Comm
 }
 
 fn adjust_volume(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let db = number(params, "db")?;
+    let db = Args::new(params).f64("db")?;
     let channels = channel_ids(&session.project, params)?;
     let mut volumes = Vec::with_capacity(channels.len());
     let mut off = false;
@@ -462,11 +468,21 @@ fn adjust_volume(session: &mut Session, params: &Value) -> Result<Value, Command
             crate::automation::override_lane(&mut channel.automation, |l| l.param == suhina_model::automation::VOLUME);
         volumes.push(to_db(channel.volume));
     }
+    // As a fader's move, a message to a playing engine where it can take it (#763 › 4).
+    if !off {
+        session.sync.mixer_edits = channels
+            .iter()
+            .filter_map(|(track, id)| {
+                let value = session.project.channel(*id)?.volume;
+                Some(crate::ParamEdit { track: *track, device: suhina_engine::MIXER_VOLUME, param: 0, value })
+            })
+            .collect();
+    }
     Ok(with_override(json!({ "tracks": track_ids(&channels), "volume_db": volumes }), off))
 }
 
 fn set_pan(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let pan = number(params, "pan")?;
+    let pan = Args::new(params).f64("pan")?;
     if !(-1.0..=1.0).contains(&pan) {
         return Err(format!("pan must be between -1 and 1, got {pan}").into());
     }
@@ -497,7 +513,7 @@ fn set_pan(session: &mut Session, params: &Value) -> Result<Value, CommandError>
 }
 
 fn adjust_pan(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let pan = number(params, "pan")?;
+    let pan = Args::new(params).f64("pan")?;
     if !(-1.0..=1.0).contains(&pan) {
         return Err(format!("pan must be between -1 and 1, got {pan}").into());
     }
@@ -526,7 +542,7 @@ fn adjust_pan(session: &mut Session, params: &Value) -> Result<Value, CommandErr
 }
 
 fn set_mute(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let mute = params.get("mute").and_then(Value::as_bool).ok_or("mute must be true or false")?;
+    let mute = Args::new(params).bool("mute")?;
     let channels = channel_ids(&session.project, params)?;
     let mut off = false;
     for (_, id) in &channels {
@@ -584,12 +600,12 @@ fn set_group(session: &mut Session, params: &Value) -> Result<Value, CommandErro
     if matches!(role_of(p, track), Some(ChannelRole::Effect | ChannelRole::Master)) {
         return Err("a return track cannot go into a group".into());
     }
-    let group = match params.get("group") {
+    let group = match Args::new(params).value("group") {
         Some(Value::String(none)) if none.eq_ignore_ascii_case("none") => None,
         Some(_) => Some(track_at(p, params, "group")?),
         None => return Err("group must be a group track or \"none\"".into()),
     };
-    let index = match params.get("index") {
+    let index = match Args::new(params).value("index") {
         None => None,
         Some(v) => Some(v.as_u64().ok_or("index must be a whole number from 0")?),
     };
@@ -648,7 +664,7 @@ fn set_group(session: &mut Session, params: &Value) -> Result<Value, CommandErro
 fn move_track(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let p = &mut session.project;
     let track = track_id(p, params)?;
-    let to = params.get("to").and_then(Value::as_u64).ok_or("to must be a whole number from 0")?;
+    let to = Args::new(params).value("to").and_then(Value::as_u64).ok_or("to must be a whole number from 0")?;
     let family = p.with_descendants(track);
     let block: Vec<Track> = p.tracks.iter().filter(|t| family.contains(&t.id)).cloned().collect();
     p.tracks.retain(|t| !family.contains(&t.id));
@@ -658,7 +674,7 @@ fn move_track(session: &mut Session, params: &Value) -> Result<Value, CommandErr
 }
 
 fn rename_track(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let name = params.get("name").and_then(Value::as_str).map(str::trim).filter(|n| !n.is_empty());
+    let name = Args::new(params).raw_str("name").map(str::trim).filter(|n| !n.is_empty());
     let name = name.ok_or("name must be a text, not empty")?.to_string();
     let track = track_id(&session.project, params)?;
     if let Some(t) = session.project.track_mut(track) {
@@ -677,8 +693,8 @@ fn color_group(session: &mut Session, params: &Value) -> Result<Value, CommandEr
     let group = track_id(&session.project, params)?;
     let p = &mut session.project;
     let own = p.track(group).map(|t| t.color).ok_or("the track is missing")?;
-    let colour = match params.get("color") {
-        None | Some(Value::Null) => own,
+    let colour = match Args::new(params).value("color") {
+        None => own,
         Some(_) => crate::clip_color::parse_color(params, "color")?.or(own),
     };
     let parent_of =
@@ -711,7 +727,7 @@ fn color_group(session: &mut Session, params: &Value) -> Result<Value, CommandEr
     }
     // Their clips follow the tracks' colour again, the group's own too.
     let mut clips = 0usize;
-    if params.get("clips").and_then(Value::as_bool) == Some(true) {
+    if Args::new(params).value("clips").and_then(Value::as_bool) == Some(true) {
         let held = |track: Option<TrackId>| track.is_some_and(|t| t == group || inside.contains(&t));
         for lane in p.arrangement.lanes.iter_mut().filter(|l| held(l.track)) {
             for clip in &mut lane.clips {
@@ -730,7 +746,7 @@ fn color_group(session: &mut Session, params: &Value) -> Result<Value, CommandEr
 }
 
 fn set_color(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let text = params.get("color").and_then(Value::as_str).ok_or("color must be \"#rrggbb\" or \"none\"")?;
+    let text = Args::new(params).raw_str("color").ok_or("color must be \"#rrggbb\" or \"none\"")?;
     let color = if text.eq_ignore_ascii_case("none") {
         None
     } else {
@@ -777,8 +793,8 @@ fn cut_tracks(session: &mut Session, params: &Value) -> Result<Value, CommandErr
 const COPY_SUFFIX: &str = "how a copy of a taken name reads: wrapped (\"Bass (2)\", default) or hash (\"Bass #2\"); a name with # (the track's number) stays as it is";
 
 fn paste_tracks(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let after = match params.get("after") {
-        None | Some(Value::Null) => None,
+    let after = match Args::new(params).value("after") {
+        None => None,
         Some(_) => Some(track_at(&session.project, params, "after")?),
     };
     let clipboard = session.clipboards.whole_tracks.clone();
@@ -798,7 +814,7 @@ fn duplicate_tracks(session: &mut Session, params: &Value) -> Result<Value, Comm
 /// The `suffix` parameter of `track.paste` and `track.duplicate`: how a taken name says it is a
 /// copy ("wrapped": "Bass (2)", "hash": "Bass #2"); wrapped when it is left out.
 fn suffix(params: &Value) -> Result<crate::track_copy::Suffix, CommandError> {
-    match params.get("suffix").and_then(Value::as_str) {
+    match Args::new(params).raw_str("suffix") {
         None => Ok(crate::track_copy::Suffix::default()),
         Some(name) => crate::track_copy::Suffix::parse(name)
             .ok_or_else(|| format!("suffix is \"wrapped\" or \"hash\", not {name:?}").into()),
@@ -830,7 +846,7 @@ fn delete_track(session: &mut Session, params: &Value) -> Result<Value, CommandE
 fn set_output(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let from = channel_param(session, params)?.id;
     let p = &session.project;
-    let to = match params.get("to") {
+    let to = match Args::new(params).value("to") {
         Some(Value::String(main)) if main.eq_ignore_ascii_case("main") => None,
         Some(_) => {
             let track = track_at(p, params, "to")?;
@@ -868,8 +884,8 @@ fn set_output(session: &mut Session, params: &Value) -> Result<Value, CommandErr
 }
 
 fn set_solo(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let solo = params.get("solo").and_then(Value::as_bool).ok_or("solo must be true or false")?;
-    let exclusive = match params.get("exclusive") {
+    let solo = Args::new(params).bool("solo")?;
+    let exclusive = match Args::new(params).value("exclusive") {
         None => false,
         Some(v) => v.as_bool().ok_or("exclusive must be true or false")?,
     };
@@ -886,14 +902,14 @@ fn set_solo(session: &mut Session, params: &Value) -> Result<Value, CommandError
 }
 
 fn set_cue(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let cue = params.get("cue").and_then(Value::as_bool).ok_or("cue must be true or false")?;
+    let cue = Args::new(params).bool("cue")?;
     channel_param(session, params)?.cue = cue;
     Ok(json!({ "cue": cue }))
 }
 
 fn set_midi_input(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
     let id = track_id(&session.project, params)?;
-    let port = match params.get("port") {
+    let port = match Args::new(params).value("port") {
         None => None,
         Some(Value::String(s)) => Some(match s.trim() {
             "" => return Err("port must be \"all\", \"none\" or a port's name".into()),
@@ -903,7 +919,7 @@ fn set_midi_input(session: &mut Session, params: &Value) -> Result<Value, Comman
         }),
         Some(_) => return Err("port must be a text".into()),
     };
-    let channel = match params.get("channel") {
+    let channel = match Args::new(params).value("channel") {
         None => None,
         Some(v) => match v.as_u64() {
             Some(0) => Some(None),
@@ -911,7 +927,7 @@ fn set_midi_input(session: &mut Session, params: &Value) -> Result<Value, Comman
             _ => return Err("channel must be 0 (every channel) or 1 to 16".into()),
         },
     };
-    let monitor = match params.get("monitor") {
+    let monitor = match Args::new(params).value("monitor") {
         None => None,
         Some(v) => Some(match v.as_str() {
             Some("auto") => suhina_model::Monitor::Auto,
@@ -933,30 +949,34 @@ fn set_midi_input(session: &mut Session, params: &Value) -> Result<Value, Comman
     Ok(json!({ "midi_input": midi_input_json(&track.midi_input) }))
 }
 
-fn set_audio_input(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    use suhina_model::{InputChannels, MAX_INPUT_CHANNEL, Monitor};
-    let id = track_id(&session.project, params)?;
+/// The input channels `text` names, as `track.setAudioInput` and `audio.setTrackInput` take
+/// them: "none", a channel from 1 ("3") or a pair of neighbouring channels ("1/2").
+pub(crate) fn parse_input_channels(value: &Value) -> Result<suhina_model::InputChannels, CommandError> {
+    use suhina_model::{InputChannels, MAX_INPUT_CHANNEL};
     let bad = || {
         CommandError(format!("input must be \"none\", a channel from 1 to {MAX_INPUT_CHANNEL} or a pair like \"1/2\""))
     };
     let channel = |text: &str| text.trim().parse::<u16>().ok().filter(|c| (1..=MAX_INPUT_CHANNEL).contains(c));
-    let channels = match params.get("input") {
-        None => None,
-        Some(Value::String(text)) => Some(match text.trim() {
-            "none" => InputChannels::None,
-            pair if pair.contains('/') => {
-                let (left, right) = pair.split_once('/').ok_or_else(bad)?;
-                let (left, right) = (channel(left).ok_or_else(bad)?, channel(right).ok_or_else(bad)?);
-                if left.checked_add(1) != Some(right) {
-                    return Err("a stereo pair is two neighbouring channels, like \"1/2\" or \"3/4\"".into());
-                }
-                InputChannels::Stereo(left)
+    let text = value.as_str().ok_or_else(bad)?;
+    Ok(match text.trim() {
+        "none" => InputChannels::None,
+        pair if pair.contains('/') => {
+            let (left, right) = pair.split_once('/').ok_or_else(bad)?;
+            let (left, right) = (channel(left).ok_or_else(bad)?, channel(right).ok_or_else(bad)?);
+            if left.checked_add(1) != Some(right) {
+                return Err("a stereo pair is two neighbouring channels, like \"1/2\" or \"3/4\"".into());
             }
-            one => InputChannels::Mono(channel(one).ok_or_else(bad)?),
-        }),
-        Some(_) => return Err(bad()),
-    };
-    let monitor = match params.get("monitor") {
+            InputChannels::Stereo(left)
+        }
+        one => InputChannels::Mono(channel(one).ok_or_else(bad)?),
+    })
+}
+
+fn set_audio_input(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
+    use suhina_model::Monitor;
+    let id = track_id(&session.project, params)?;
+    let channels = Args::new(params).value("input").map(parse_input_channels).transpose()?;
+    let monitor = match Args::new(params).value("monitor") {
         None => None,
         Some(v) => Some(match v.as_str() {
             Some("auto") => Monitor::Auto,
@@ -976,8 +996,8 @@ fn set_audio_input(session: &mut Session, params: &Value) -> Result<Value, Comma
 }
 
 fn set_arm(session: &mut Session, params: &Value) -> Result<Value, CommandError> {
-    let armed = params.get("armed").and_then(Value::as_bool).ok_or("armed must be true or false")?;
-    let exclusive = match params.get("exclusive") {
+    let armed = Args::new(params).bool("armed")?;
+    let exclusive = match Args::new(params).value("exclusive") {
         None => false,
         Some(v) => v.as_bool().ok_or("exclusive must be true or false")?,
     };

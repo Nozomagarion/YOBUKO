@@ -330,7 +330,7 @@ fn quota_preflight_refuses_copy_on_write_growth_before_the_host_or_sequence_chan
             id: ContentId(2000 + i as u32),
             name: "Empty".into(),
             length: 4.0,
-            lanes: vec![],
+            lanes: vec![].into(),
             extensions: Default::default(),
             scale: None,
         });
@@ -464,7 +464,7 @@ fn creating_a_clip_cannot_overrun_the_content_quota_or_consume_an_operation_numb
             id: ContentId(2000 + i as u32),
             name: "Empty".into(),
             length: 4.0,
-            lanes: vec![],
+            lanes: vec![].into(),
             extensions: Default::default(),
             scale: None,
         });
@@ -1094,7 +1094,9 @@ fn full_shared_chains_refuse_addition_without_consuming_revision_or_owner_sequen
     project.channels[0].devices = (0..16)
         .map(|_| suhina_model::Device::new("Utility", suhina_model::DeviceKind::Builtin("utility".into())))
         .collect();
-    let mut state = canonical(project.clone());
+    let mut state = canonical(project);
+    // The host's copy has its device ids; the refused addition changes nothing after that.
+    let project = state.host.project().clone();
     assert!(state.submit(Host::owner(), 1, 0, WireEdit::DeviceAdd { track: 1, kind: "utility".into() }).is_err());
     assert_eq!(state.host.project(), &project);
     assert_eq!(state.host.revision(), 0);

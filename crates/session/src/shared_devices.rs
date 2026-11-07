@@ -36,7 +36,7 @@ pub(crate) fn set_param(session: &mut Session, params: &Value) -> Result<Value, 
     if spec.clamp(value) != value {
         return Err("shared parameter value must be in range and canonical for its type".into());
     }
-    if device.params.len() > 512 || (device.params.len() == 512 && !device.params.iter().any(|p| p.id == param)) {
+    if device.params.len() > 1024 || (device.params.len() == 1024 && !device.params.iter().any(|p| p.id == param)) {
         return Err("too many shared device parameters".into());
     }
     // Only validated built-in parameters reach the native fast parameter-message/automation-override path;

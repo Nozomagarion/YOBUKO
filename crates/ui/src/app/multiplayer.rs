@@ -486,7 +486,7 @@ impl App {
         if files.is_empty() {
             ui.label("Select an ordinary local project tab with a finished, loaded audio take. Leave this panel open while switching tabs.");
         }
-        egui::ComboBox::from_id_salt("publish_take_file")
+        egui::ComboBox::new("publish_take_file", "Loaded take")
             .selected_text(if self.multiplayer.take_file.is_empty() {
                 "Choose loaded take"
             } else {
@@ -511,7 +511,7 @@ impl App {
                     .map(|t| (t.id.0, t.name.clone()))
             })
             .collect();
-        egui::ComboBox::from_id_salt("publish_take_track")
+        egui::ComboBox::new("publish_take_track", "Shared audio track")
             .selected_text(
                 tracks
                     .iter()
@@ -527,8 +527,9 @@ impl App {
             ui.label("Add an audio track in the Tracks tab, then choose it here.");
         }
         ui.horizontal(|ui| {
-            ui.label("Start beat");
-            ui.add(egui::DragValue::new(&mut self.multiplayer.take_start).range(0.0..=120_000.0).speed(0.25));
+            let label = ui.label("Start beat");
+            ui.add(egui::DragValue::new(&mut self.multiplayer.take_start).range(0.0..=120_000.0).speed(0.25))
+                .labelled_by(label.id);
         });
         let data = files.iter().find(|(key, _)| key == &self.multiplayer.take_file).map(|(_, data)| Arc::clone(data));
         let ready = data.is_some()
@@ -564,10 +565,11 @@ impl App {
             });
             ui.horizontal(|ui| {
                 if !self.multiplayer.online {
-                    ui.label("Host address");
+                    let label = ui.label("Host address");
                     ui.add(
                         egui::TextEdit::singleline(&mut self.multiplayer.address).desired_width(200.0).char_limit(64),
-                    );
+                    )
+                    .labelled_by(label.id);
                 }
                 if ui.button("Create session").clicked() {
                     let address = self.multiplayer.host_address();
@@ -588,14 +590,15 @@ impl App {
                 ui.weak("Use your private network address for another computer. 127.0.0.1 is only for two instances on this computer; :0 selects a free port.");
             }
             ui.add_space(theme::PAD);
-            ui.label("Invitation code from the host");
+            let label = ui.label("Invitation code from the host");
             ui.add(
                 egui::TextEdit::multiline(&mut self.multiplayer.join)
                     .hint_text("Short code such as 7-piano-tigre-lune, or the full invitation")
                     .desired_rows(3)
                     .char_limit(8192)
                     .desired_width(f32::INFINITY),
-            );
+            )
+            .labelled_by(label.id);
             if ui.button("Join session").clicked() {
                 let invitation = self.multiplayer.join.clone();
                 self.multiplayer_command("multiplayer.join", json!({"invitation":invitation}));
@@ -747,7 +750,10 @@ impl App {
                                     }
                                     ui.end_row();
                                     for track in &mut draft.tracks {
-                                        ui.add(
+                                        super::multiplayer::named(
+                                            ui,
+                                            egui::Role::TextInput,
+                                            "Track name",
                                             egui::TextEdit::singleline(&mut track.name)
                                                 .desired_width(180.0)
                                                 .char_limit(256),
@@ -757,13 +763,23 @@ impl App {
                                                 json!({"command":"track.rename","track":track.track,"name":track.name}),
                                             );
                                         }
-                                        ui.add(egui::DragValue::new(&mut track.db).range(-150.0..=6.0).speed(0.1));
+                                        super::multiplayer::named(
+                                            ui,
+                                            egui::Role::SpinButton,
+                                            "Volume (dB)",
+                                            egui::DragValue::new(&mut track.db).range(-150.0..=6.0).speed(0.1),
+                                        );
                                         if ui.button("Set volume").clicked() {
                                             edit = Some(
                                                 json!({"command":"track.setVolume","track":track.track,"db":track.db}),
                                             );
                                         }
-                                        ui.add(egui::DragValue::new(&mut track.pan).range(-1.0..=1.0).speed(0.01));
+                                        super::multiplayer::named(
+                                            ui,
+                                            egui::Role::SpinButton,
+                                            "Pan",
+                                            egui::DragValue::new(&mut track.pan).range(-1.0..=1.0).speed(0.01),
+                                        );
                                         if ui.button("Set pan").clicked() {
                                             edit = Some(
                                                 json!({"command":"track.setPan","track":track.track,"pan":track.pan}),
@@ -816,3 +832,10 @@ pub(super) fn status_text(mode: &str) -> &str {
 #[cfg(test)]
 #[path = "multiplayer_tests.rs"]
 mod tests;
+
+/// Adds `widget` under `name`, the name screen readers (and the UI tests) know it by.
+pub(crate) fn named(ui: &mut egui::Ui, role: egui::Role, name: &str, widget: impl egui::Widget) -> egui::Response {
+    let response = ui.add(widget);
+    response.widget_info(|| egui::WidgetInfo::labeled(role, response.enabled(), name));
+    response
+}

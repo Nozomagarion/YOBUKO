@@ -13,7 +13,7 @@ use suhina_plugins::SavedState;
 use suhina_plugins::matching::Match;
 use suhina_plugins::scan::{Catalog, FolderFormat, NO_PLUGINS, Report};
 
-use crate::commands::{CommandKind, CommandSpec, Param, ParamType, optional, param};
+use crate::commands::{Args, CommandKind, CommandSpec, Param, ParamType, optional, param};
 use crate::projects::project_param;
 use crate::{Agents, CommandError, PathKind, Policy, Projects};
 
@@ -30,7 +30,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
             ParamType::Bool,
             "also list the files that hold no plug-ins, which scans pass over (default false)",
         )],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Read),
         run: list,
         policy: Policy::DEFAULT,
     },
@@ -38,7 +38,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "plugin.scan",
         label: "Look for installed plug-ins in the standard folders and the added ones; reads new and changed files and tries failed ones again (a hung one once a day), every file if all is true",
         params: &[optional("all", ParamType::Bool, "read every file again, failed ones too (default false)")],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Change),
         run: scan,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -46,7 +46,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "plugin.folders",
         label: "List the folders a scan looks in: the system's standard ones and the ones added, each with its format and whether it is switched on",
         params: &[],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Read),
         run: folders,
         policy: Policy::DEFAULT,
     },
@@ -57,7 +57,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
             FOLDER,
             optional("format", ParamType::Text, "any (default: every format Suhina hosts), vst3, clap or vst2"),
         ],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Change),
         run: add_folder,
         policy: Policy {
             agents: Agents::Denied("the user chooses plug-in folders (suhina-cli plugins add-folder)"),
@@ -68,7 +68,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "plugin.setFolderEnabled",
         label: "Switch a plug-in folder (standard or added) on or off for scans; the plug-ins of a folder switched off leave the list with the next scan",
         params: &[param("folder", ParamType::Text, "a folder the user added, as plugin.folders lists them"), ENABLED],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Change),
         run: set_folder_enabled,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -76,7 +76,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "plugin.setEnabled",
         label: "Switch an installed plug-in on or off: one switched off is not offered in the browser and does not load, and a project that uses it finds it missing",
         params: &[PLUGIN, ENABLED],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Change),
         run: set_enabled,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -84,7 +84,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "plugin.scanFile",
         label: "Read one plug-in file of the list again now, a failed one too",
         params: &[param("file", ParamType::Text, "the plug-in file, as plugin.list gives it")],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Change),
         run: scan_file,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -92,7 +92,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "plugin.removeFolder",
         label: "Stop looking in a folder that was added",
         params: &[FOLDER],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Change),
         run: remove_folder,
         policy: Policy {
             agents: Agents::Denied("the user chooses plug-in folders (suhina-cli plugins add-folder)"),
@@ -106,7 +106,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
             param("plugin", ParamType::Text, "plug-in name, id or file, from plugin.list"),
             param("hosting", ParamType::Text, "binary, vendor or instance"),
         ],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Change),
         run: set_hosting,
         policy: Policy { agents: Agents::NotWhenAttached(Agents::SETTINGS), ..Policy::DEFAULT },
     },
@@ -114,7 +114,7 @@ static PLUGIN_COMMANDS: &[CommandSpec<Projects>] = &[
         id: "plugin.check",
         label: "List a project's plug-in devices and the installed plug-in found for each: how it was found (same, declared, vst2-id, same-name, newer-version) and whether its saved settings are promised to carry over",
         params: &[optional("project", ParamType::Integer, "project id, from project.list (default the active one)")],
-        kind: CommandKind::Plugins,
+        kind: CommandKind::on(crate::commands::Target::Plugins, crate::commands::Effect::Read),
         run: check,
         policy: Policy::DEFAULT,
     },
@@ -139,7 +139,7 @@ fn paths(list: &[std::path::PathBuf]) -> Vec<String> {
 }
 
 fn list(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let ignored = bool_param(params, "ignored")?;
+    let ignored = Args::new(params).flag("ignored")?;
     let library = projects.library_mut();
     let specs: Vec<String> = library.catalog().plugins().map(|p| p.spec()).collect();
     let hosting: std::collections::HashMap<String, suhina_plugins::library::Hosting> =
@@ -175,12 +175,6 @@ fn list(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> 
     Ok(listed)
 }
 
-/// The optional true-or-false parameter `name` (default false).
-fn bool_param(params: &Value, name: &str) -> Result<bool, CommandError> {
-    let value = params.get(name).map(|v| v.as_bool().ok_or_else(|| format!("{name} must be true or false")));
-    Ok(value.transpose()?.unwrap_or(false))
-}
-
 fn report(report: &Report, found: usize) -> Value {
     json!({
         "plugins": found,
@@ -205,7 +199,7 @@ fn reasons(list: &[(std::path::PathBuf, String)]) -> Vec<Value> {
 }
 
 fn scan(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let all = bool_param(params, "all")?;
+    let all = Args::new(params).flag("all")?;
     let library = projects.library_mut();
     let done = library.scan(all)?;
     let found = library.catalog().plugins().count();
@@ -231,7 +225,7 @@ fn folders(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
 }
 
 fn add_folder(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let format = match params.get("format") {
+    let format = match Args::new(params).value("format") {
         None => FolderFormat::Any,
         Some(v) => v.as_str().and_then(FolderFormat::parse).ok_or("format must be any, vst3, clap or vst2")?,
     };
@@ -240,14 +234,14 @@ fn add_folder(projects: &mut Projects, params: &Value) -> Result<Value, CommandE
 }
 
 fn set_folder_enabled(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let enabled = params.get("enabled").and_then(Value::as_bool).ok_or("enabled must be true or false")?;
+    let enabled = Args::new(params).bool("enabled")?;
     let changed = projects.library_mut().set_folder_enabled(folder_param(params)?, enabled)?;
     Ok(json!({ "changed": changed, "enabled": enabled }))
 }
 
 fn set_enabled(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let name = params.get("plugin").and_then(Value::as_str).ok_or("plugin must be a plug-in name, id or spec")?;
-    let enabled = params.get("enabled").and_then(Value::as_bool).ok_or("enabled must be true or false")?;
+    let name = Args::new(params).raw_str("plugin").ok_or("plugin must be a plug-in name, id or spec")?;
+    let enabled = Args::new(params).bool("enabled")?;
     let library = projects.library_mut();
     let catalog = library.catalog();
     let plugin = catalog
@@ -261,7 +255,7 @@ fn set_enabled(projects: &mut Projects, params: &Value) -> Result<Value, Command
 }
 
 fn scan_file(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let file = params.get("file").and_then(Value::as_str).filter(|f| !f.is_empty()).ok_or("file must be a path")?;
+    let file = Args::new(params).raw_str("file").filter(|f| !f.is_empty()).ok_or("file must be a path")?;
     let library = projects.library_mut();
     let done = library.scan_file_again(Path::new(file))?;
     let found = library.catalog().plugins().count();
@@ -270,7 +264,7 @@ fn scan_file(projects: &mut Projects, params: &Value) -> Result<Value, CommandEr
 
 fn set_hosting(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
     use suhina_plugins::library::Hosting;
-    let name = params.get("plugin").and_then(Value::as_str).ok_or("plugin must be a plug-in name, id or file")?;
+    let name = Args::new(params).raw_str("plugin").ok_or("plugin must be a plug-in name, id or file")?;
     let hosting = params
         .get("hosting")
         .and_then(Value::as_str)
@@ -316,7 +310,7 @@ fn found<'a>(catalog: &'a Catalog, kind: &DeviceKind, name: &str) -> Option<Opti
 pub fn device_plugin<'a>(catalog: &'a Catalog, device: &Device) -> Option<(Match<'a>, Option<SavedState>)> {
     let found = found(catalog, &device.kind, &device.name)??;
     let controller = device.extensions.0.iter().find(|e| e.key == "Vst3ControllerState").map(|e| e.data.clone());
-    let state = device.state.clone().map(|data| SavedState { data, controller });
+    let state = device.state.as_deref().map(|data| SavedState { data: data.to_vec(), controller });
     Some((found, state))
 }
 
@@ -333,7 +327,7 @@ fn device_format(kind: &DeviceKind) -> (&'static str, String) {
 }
 
 fn check(projects: &mut Projects, params: &Value) -> Result<Value, CommandError> {
-    let id = params.get("project").map(|_| project_param(params)).transpose()?;
+    let id = Args::new(params).value("project").map(|_| project_param(params)).transpose()?;
     let devices: Vec<(String, suhina_model::Device)> = projects
         .session_mut(id)?
         .project()

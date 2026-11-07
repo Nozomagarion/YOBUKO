@@ -4,7 +4,7 @@
 //! Shared multiresolution waveform summaries; compute on a file worker, never the audio callback.
 
 use std::{collections::HashMap, sync::Arc};
-use suhina_engine::{AudioData, AudioPool};
+use suhina_model::{AudioData, AudioPool};
 
 /// Frames per bucket at each level, finest first; each level is eight of the one before.
 pub const LEVELS: [usize; 3] = [256, 2048, 16384];

@@ -142,6 +142,19 @@ impl Scale {
         }
     }
 
+    /// `value` as [`Self::command`] sets it, back in the lane's unit: the pan rounded to a
+    /// thousandth, the volume to a hundredth of a decibel (silent at its floor), so text shown
+    /// before a command is the text the point has after it.
+    fn committed(&self, value: f64) -> f64 {
+        match self {
+            Self::Volume => match self.number(value) {
+                db if value <= 0.0 || db <= VOLUME_FLOOR => 0.0,
+                db => 10f64.powf(db / 20.0),
+            },
+            _ => self.number(value),
+        }
+    }
+
     /// A value as `automation.addPoint` takes it, unrounded, so a point added on the envelope
     /// keeps the envelope's value exactly.
     fn exact(&self, value: f64) -> Value {
@@ -257,7 +270,7 @@ impl Scale {
             Self::Volume => format!("{} dB", widgets::format_db(gain_to_db(value))),
             Self::Pan => widgets::format_pan(value),
             Self::Mute => if value >= 0.5 { "Muted" } else { "Sounding" }.into(),
-            Self::Device(info) => match info.kind {
+            Self::Device(info) => match &info.kind {
                 ParamKind::Toggle => if value >= 0.5 { "On" } else { "Off" }.into(),
                 ParamKind::Choice(options) => {
                     options.get(info.clamp(value) as usize).map_or_else(String::new, |o| (*o).to_string())
@@ -377,7 +390,7 @@ impl Params {
                     group: None,
                     scale,
                     enabled: lane.as_ref().is_none_or(|l| l.enabled),
-                    points: lane.map(|l| l.points).unwrap_or_default(),
+                    points: lane.map(|l| l.points.into_values()).unwrap_or_default(),
                     current,
                 }
             })
@@ -387,17 +400,17 @@ impl Params {
                 match &device.kind {
                     DeviceKind::Builtin(id) => {
                         let Some(info) = suhina_device_registry::info(id) else { continue };
-                        for spec in info.params {
-                            let lane = lane_of(&device.automation, spec.id);
+                        for spec in info.params.iter() {
+                            let lane = lane_of(&device.automation, &spec.id);
                             params.push(Param {
-                                key: LaneKey { device: Some(index), param: spec.id.into() },
-                                name: spec.name.into(),
+                                key: LaneKey { device: Some(index), param: spec.id.to_string() },
+                                name: spec.name.to_string(),
                                 device_name: Some(device.name.clone()),
                                 group: (!spec.group.is_empty()).then(|| spec.group.to_string()),
-                                scale: Scale::Device(*spec),
+                                scale: Scale::Device(spec.clone()),
                                 enabled: lane.as_ref().is_none_or(|l| l.enabled),
-                                points: lane.map(|l| l.points).unwrap_or_default(),
-                                current: set(spec.id).unwrap_or(spec.default),
+                                points: lane.map(|l| l.points.into_values()).unwrap_or_default(),
+                                current: set(&spec.id).unwrap_or(spec.default),
                             });
                         }
                     }
@@ -419,7 +432,7 @@ impl Params {
                                 group: (!spec.ui.group.is_empty()).then(|| spec.ui.group.clone()),
                                 scale: Scale::Sd(Box::new(spec.clone())),
                                 enabled: lane.as_ref().is_none_or(|l| l.enabled),
-                                points: lane.map(|l| l.points).unwrap_or_default(),
+                                points: lane.map(|l| l.points.into_values()).unwrap_or_default(),
                                 current: set(&spec.id).unwrap_or(spec.default),
                             });
                         }
@@ -501,11 +514,53 @@ struct PointDrag {
     body: bool,
 }
 
-/// Where a point drag is now from `pos`: with Shift, only along the axis the pointer has moved
-/// further on, and up or down at a quarter of the pointer's speed for a finer value.
-fn dragged_to(grab: (f64, f64), beat: f64, position: f64, plot: Rect, geometry: &Geometry, shift: bool) -> (f64, f64) {
+/// A lane whose points or curves are being dragged, or a range being painted on it, or either let
+/// go of this frame: its track, its lane and its points where the drag puts them, as the lane draws
+/// them. The parameter's controls show what this line plays at the playhead while the drag lasts,
+/// not only once the command is in, or at `at` (#811).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Dragged {
+    pub track: TrackId,
+    pub key: LaneKey,
+    pub points: Vec<AutomationPoint>,
+    /// The beat the controls show the line at instead of the playhead: the moving edge of a range
+    /// being painted, then its start until the play start marker has moved there.
+    pub at: Option<f64>,
+}
+
+/// How near the top or bottom of a lane's plot a point has to be to take the parameter's maximum
+/// or minimum exactly (#811): one point of the plot is about 3 % of a default lane, and a point
+/// a pixel short of the top looks the same as one on it.
+const END_SNAP: f32 = 2.0;
+
+/// `position` (0 … 1 on the lane), at 1 or 0 when it lies within [`END_SNAP`] of the plot's top
+/// or bottom.
+fn at_ends(plot: Rect, position: f64) -> f64 {
+    let edge = if plot.height() > 0.0 { f64::from(END_SNAP / plot.height()) } else { 0.0 };
+    if position >= 1.0 - edge {
+        1.0
+    } else if position <= edge {
+        0.0
+    } else {
+        position
+    }
+}
+
+/// Where a point drag is now from `pos`: the dragged point, which sat at `start` on the lane,
+/// goes to the lane's end when it comes within [`END_SNAP`] of it ([`at_ends`]). With Shift,
+/// only along the axis the pointer has moved further on, and up or down at a quarter of the
+/// pointer's speed for a finer value, without the ends.
+fn dragged_to(
+    grab: (f64, f64),
+    beat: f64,
+    position: f64,
+    start: f64,
+    plot: Rect,
+    geometry: &Geometry,
+    shift: bool,
+) -> (f64, f64) {
     if !shift {
-        return (beat, position);
+        return (beat, grab.1 + at_ends(plot, start + position - grab.1) - start);
     }
     let across = (beat - grab.0).abs() as f32 * geometry.beat_width;
     let along = (position - grab.1).abs() as f32 * plot.height();
@@ -790,9 +845,20 @@ pub struct LanesState {
     /// begun on a track that reaches over its lanes.
     placed: Vec<(TrackId, LaneKey, usize, Pos2)>,
     placed_pass: u64,
+    /// The lane a drag held when the view was last drawn, with its points where the drag put
+    /// them, for the headers and panels drawn before the lanes in the next frame.
+    pub dragged: Option<Dragged>,
+    /// The same, as the lanes draw it this frame.
+    drawn_drag: Option<Dragged>,
 }
 
 impl LanesState {
+    /// Takes the lane a drag holds as the lanes drew it this frame: `None` without a drag, or
+    /// on a lane that is off.
+    pub fn take_drawn_drag(&mut self) -> Option<Dragged> {
+        self.drawn_drag.take()
+    }
+
     /// Whether `track` shows its automation lanes.
     pub fn is_open(&self, track: TrackId) -> bool {
         self.open.contains(&track)
@@ -1064,12 +1130,16 @@ pub struct Geometry {
 impl Geometry {
     /// Where `beat` is on screen, after the timeline's scroll.
     fn x_of(&self, beat: f64) -> f32 {
-        self.time.min - self.scroll_x + beat as f32 * self.beat_width
+        self.axis().x_of(beat)
     }
 
     /// The beat at `x` on screen: the inverse of [`Geometry::x_of`].
     fn beat_of(&self, x: f32) -> f64 {
-        f64::from((x - self.time.min + self.scroll_x) / self.beat_width)
+        self.axis().beat_at(x)
+    }
+
+    fn axis(&self) -> crate::kit::time_axis::TimeViewport {
+        crate::kit::time_axis::TimeViewport::scrolled(self.time.min, self.scroll_x, self.beat_width)
     }
 
     /// `beat` on the nearest grid line, or free (to a thousandth) with `free` or a grid that does
@@ -1096,6 +1166,13 @@ fn position_of(plot: Rect, y: f32) -> f64 {
     if plot.height() > 0.0 { f64::from((plot.bottom() - y) / plot.height()).clamp(0.0, 1.0) } else { 0.0 }
 }
 
+/// The lane position at height `y` in `plot`, not held in the lane: 1.2 is a fifth of the plot
+/// above its top. A point drag measures the pointer with it, so a point taken hold of off its
+/// centre still reaches the lane's ends when the pointer goes past them (#811).
+fn place_of(plot: Rect, y: f32) -> f64 {
+    if plot.height() > 0.0 { f64::from((plot.bottom() - y) / plot.height()) } else { 0.0 }
+}
+
 /// A track colour from the project as egui draws it.
 fn color(rgb: Rgb) -> Color32 {
     Color32::from_rgb(rgb.0, rgb.1, rgb.2)
@@ -1113,7 +1190,7 @@ pub fn header_button(
 ) {
     let open = state.is_open(track);
     let label = if open { format!("Hide automation of {name}") } else { format!("Show automation of {name}") };
-    let response = widgets::button_area(ui, rect, Id::new(("automation-toggle", track.0)), label);
+    let response = widgets::button_area(ui, rect, Id::unique(("automation-toggle", track.0)), label);
     if response.clicked() {
         state.toggle(track, params);
     }
@@ -1200,7 +1277,7 @@ fn resize_edge(
     if !edge.is_positive() {
         return;
     }
-    let id = Id::new(("automation-resize", lanes.track.0, key.device, key.param.as_str()));
+    let id = Id::unique(("automation-resize", lanes.track.0, key.device, key.param.as_str()));
     let response = ui.interact(edge, id, Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical);
     if response.double_clicked() {
         state.set_lane_height(lanes.track, key, LANE);
@@ -1251,6 +1328,19 @@ fn drag_delta(drag: &PointDrag, param: &Param, geometry: &Geometry, free: bool) 
     let new = param.scale.value_at(position);
     let delta = param.scale.number(new) - param.scale.number(grabbed.value);
     (beats, delta)
+}
+
+/// What the point a drag holds will be when it is let go of: "50R at beat 25.25".
+fn dragged_text(param: &Param, drag: &PointDrag, geometry: &Geometry, free: bool) -> Option<String> {
+    let point = param.points.get(drag.point)?;
+    let (beats, delta) = drag_delta(drag, param, geometry, free);
+    let value = moved_value(param, drag, point.value, delta);
+    Some(format!("{} at beat {}", param.scale.text(param.scale.committed(value)), round(point.beat + beats, 1000.0)))
+}
+
+/// Where the point a drag holds sat on the lane before the drag.
+fn grabbed_at(param: &Param, drag: &PointDrag) -> f64 {
+    param.points.get(drag.point).map_or(drag.grab.1, |p| param.scale.position(p.value))
 }
 
 /// Where a point drag puts a value: one point lands where the pointer is; points moved
@@ -1372,7 +1462,7 @@ fn lane(
     // Points added and dragged and a painted range go on the grid; Alt, or Snap to grid off in the
     // lane's menu, frees them (#916).
     let free = ui.input(|i| i.modifiers.alt) || state.snap_off;
-    let id = Id::new(("automation-lane", track.0, key.device, key.param.as_str()));
+    let id = Id::unique(("automation-lane", track.0, key.device, key.param.as_str()));
     let label = param.label();
 
     // The lane itself: a click adds a point (on the envelope when near it, so the envelope keeps
@@ -1380,7 +1470,7 @@ fn lane(
     // other drag draws a box that selects the points in it.
     let body = ui.interact(visible, id, Sense::click_and_drag());
     body.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("{label} automation on {}", lanes.name))
+        egui::WidgetInfo::labeled(egui::Role::Unknown, true, format!("{label} automation on {}", lanes.name))
     });
     let level = level_points(param);
     let near_line = |pos: Pos2| distance_to(&envelope(&level, &param.scale, plot, geometry), pos) <= segment_hit(plot);
@@ -1413,7 +1503,7 @@ fn lane(
             params["shape"] = json!(shape);
         }
         actions.push(Action::new("automation.addPoint", params));
-        let grab = (geometry.beat_of(pos.x), position_of(plot, pos.y));
+        let grab = (geometry.beat_of(pos.x), place_of(plot, pos.y));
         state.new_point = Some(NewPoint { track, key: key.clone(), beat, grab });
         state.selection = None;
         state.range = None;
@@ -1449,9 +1539,9 @@ fn lane(
             let beat = geometry.snap(geometry.beat_of(pos.x), free);
             params["beat"] = json!(beat);
             // On a whole-number lane a value between two numbers cannot be kept: the point goes
-            // where the pointer is, as off the line.
+            // where the pointer is, as off the line. Next to the top or bottom it takes the end.
             if !near {
-                params["value"] = param.scale.command(param.scale.value_at(position_of(plot, pos.y)));
+                params["value"] = param.scale.command(param.scale.value_at(at_ends(plot, position_of(plot, pos.y))));
             } else if param.points.is_empty() {
                 let value =
                     automation::value_at(&level, beat, param.scale.stepped(), &param.scale).unwrap_or(param.current);
@@ -1516,7 +1606,7 @@ fn lane(
                 state.curve_drag = Some(CurveDrag { track, key: key.clone(), point, paths, moved: 0.0, curve });
             }
             Some(point) if shift => {
-                let grab = (geometry.beat_of(pos.x), position_of(plot, pos.y));
+                let grab = (geometry.beat_of(pos.x), place_of(plot, pos.y));
                 state.point_drag = Some(PointDrag {
                     track,
                     key: key.clone(),
@@ -1542,13 +1632,21 @@ fn lane(
         && let Some(drag) =
             state.point_drag.as_mut().filter(|d| d.body && !d.segment && d.track == track && &d.key == key)
     {
-        drag.now = dragged_to(drag.grab, geometry.beat_of(pos.x), position_of(plot, pos.y), plot, geometry, shift);
+        drag.now = dragged_to(
+            drag.grab,
+            geometry.beat_of(pos.x),
+            place_of(plot, pos.y),
+            grabbed_at(param, drag),
+            plot,
+            geometry,
+            shift,
+        );
     }
     if body.dragged_by(egui::PointerButton::Primary)
         && let Some(pos) = body.interact_pointer_pos()
         && let Some(drag) = state.point_drag.as_mut().filter(|d| d.segment && d.track == track && &d.key == key)
     {
-        let position = position_of(plot, pos.y);
+        let position = place_of(plot, pos.y);
         drag.now = (drag.grab.0, drag.grab.1 + (position - drag.grab.1) * 0.25);
     }
     if body.dragged_by(egui::PointerButton::Primary) {
@@ -1611,6 +1709,17 @@ fn lane(
                 .collect();
             state.selection = (!points.is_empty()).then(|| Selection { track, key: key.clone(), points });
             state.range = (end - start > 1e-6).then(|| LaneRange { track, key: key.clone(), start, end });
+            // A range painted moves the play start marker to its start, as a time selection does
+            // (#937): the parameter's controls show the value there, and Play starts there (#811).
+            if state.range.is_some() {
+                let beats = start.min(suhina_engine::MAX_START_BEAT);
+                actions.push(Action::new("transport.setStart", json!({ "beats": beats })));
+                // Until the marker is there, after this frame, the controls show the line there.
+                if param.enabled {
+                    let points = param.points.clone();
+                    state.drawn_drag = Some(Dragged { track, key: key.clone(), points, at: Some(beats) });
+                }
+            }
         }
     }
     // The lane's menu: shapes inserted into the painted range, or into the bar under the pointer.
@@ -1680,7 +1789,32 @@ fn lane(
     if let Some(drag) = state.point_drag.as_mut().filter(|d| !d.segment && d.track == track && &d.key == key)
         && let Some(pos) = ui.input(|i| i.pointer.primary_down().then(|| i.pointer.latest_pos()).flatten())
     {
-        drag.now = dragged_to(drag.grab, geometry.beat_of(pos.x), position_of(plot, pos.y), plot, geometry, shift);
+        drag.now = dragged_to(
+            drag.grab,
+            geometry.beat_of(pos.x),
+            place_of(plot, pos.y),
+            grabbed_at(param, drag),
+            plot,
+            geometry,
+            shift,
+        );
+    }
+    // While a point is dragged, its value and beat show beside the pointer, as its tooltip does
+    // when it is let go of, so 47R can be told from 50R before the button comes up (#811).
+    if let Some(text) = state
+        .point_drag
+        .as_ref()
+        .filter(|d| d.track == track && &d.key == key && ui.input(|i| i.pointer.primary_down()))
+        .and_then(|drag| dragged_text(param, drag, geometry, free))
+    {
+        egui::Tooltip::always_open(
+            ui.ctx().clone(),
+            ui.layer_id(),
+            id.with("dragged-value"),
+            egui::PopupAnchor::Pointer,
+        )
+        .gap(12.0)
+        .show(|ui| ui.add(egui::Label::new(text).wrap_mode(egui::TextWrapMode::Extend)));
     }
     // Points moved together are picked again where they went, once the move is in.
     if let Some((_, _, beats, frames)) = state.reselect.as_mut().filter(|(t, k, _, _)| *t == track && k == key) {
@@ -1704,6 +1838,19 @@ fn lane(
         }
     }
     let points = shown_points(param, track, geometry, free, state);
+    // A lane being dragged: the controls of its parameter follow the line as it is drawn (#811).
+    let held = state.point_drag.as_ref().or(state.dropped.as_ref()).is_some_and(|d| d.track == track && &d.key == key)
+        || state.curve_drag.as_ref().is_some_and(|d| d.track == track && &d.key == key);
+    // A range being painted: they show the line where its moving edge is, under the pointer.
+    let painting = state
+        .box_drag
+        .as_ref()
+        .filter(|d| !d.select && d.track == track && &d.key == key)
+        .map(|d| geometry.snap(geometry.beat_of(d.to.x), free).max(0.0));
+    if (held || painting.is_some()) && param.enabled {
+        let at = if held { None } else { painting };
+        state.drawn_drag = Some(Dragged { track, key: key.clone(), points: points.clone(), at });
+    }
     let ink = if param.enabled { color(lanes.color) } else { theme::text_hint() };
     let line = envelope(&points, &param.scale, plot, geometry);
     // A finished bend asks for its command only now, after the envelope above drew it: the
@@ -1822,7 +1969,7 @@ fn lane(
             let response = ui.interact(hit, id.with(("curve", index)), Sense::click_and_drag());
             response.widget_info(|| {
                 egui::WidgetInfo::labeled(
-                    egui::WidgetType::Slider,
+                    egui::Role::Slider,
                     true,
                     format!("{label} curve {} on {}", index + 1, lanes.name),
                 )
@@ -1899,7 +2046,7 @@ fn lane(
         let text = param.scale.text(point.value);
         response.widget_info(|| {
             let mut info = egui::WidgetInfo::labeled(
-                egui::WidgetType::Button,
+                egui::Role::Button,
                 true,
                 format!("{label} point {} on {}", index + 1, lanes.name),
             );
@@ -1929,7 +2076,7 @@ fn lane(
                 .as_ref()
                 .filter(|s| s.track == track && &s.key == key)
                 .map_or_else(|| vec![index], |s| s.points.clone());
-            let grab = (geometry.beat_of(pos.x), position_of(plot, pos.y));
+            let grab = (geometry.beat_of(pos.x), place_of(plot, pos.y));
             state.point_drag = Some(PointDrag {
                 track,
                 key: key.clone(),
@@ -1947,7 +2094,15 @@ fn lane(
                 state.point_drag.as_mut().filter(|d| d.track == track && &d.key == key && d.point == index)
         {
             let shift = ui.input(|i| i.modifiers.shift);
-            drag.now = dragged_to(drag.grab, geometry.beat_of(pos.x), position_of(plot, pos.y), plot, geometry, shift);
+            drag.now = dragged_to(
+                drag.grab,
+                geometry.beat_of(pos.x),
+                place_of(plot, pos.y),
+                grabbed_at(param, drag),
+                plot,
+                geometry,
+                shift,
+            );
         }
         if response.drag_stopped_by(egui::PointerButton::Primary)
             && let Some(drag) = state.point_drag.take_if(|d| d.track == track && &d.key == key && d.point == index)
@@ -2021,6 +2176,7 @@ fn lane(
                     .font(theme::mono_font(theme::TEXT_SMALL))
                     .desired_width(60.0),
             );
+            response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Point value"));
             // It opens with the whole value selected, so typing replaces it.
             if !response.has_focus() && !response.lost_focus() {
                 response.request_focus();
@@ -2091,14 +2247,14 @@ fn range_menu(
         params["cycles"] = json!((((end - start) / rate.max(1e-6)).round() as usize).clamp(1, 512));
         params["depth"] = json!(state.shape_depth.unwrap_or(1.0));
         // Put in again in the same range, the shape swings around the place the first one did,
-        // and replaces it when nothing else changed since (`continue` with `replace`), so the
-        // range's edges come from the line as it was, not from the shape before.
+        // and replaces it when nothing else changed since (one gesture of a command whose calls
+        // replace each other), so the range's edges come from the line as it was, not from the
+        // shape before.
         let again =
             state.last_shape.clone().filter(|l| l.track == track && &l.key == key && l.start == start && l.end == end);
         let center = again.as_ref().map_or(center, |l| l.center);
         params["center"] = json!(center.clamp(0.0, 1.0));
-        params["continue"] = json!(again.is_some());
-        params["replace"] = json!(again.is_some());
+        range_gesture(&mut params, actions, "shape", again.is_some());
         actions.push(Action::new("automation.insertShape", params));
         state.selection = None;
         state.smooth = None;
@@ -2163,8 +2319,7 @@ fn range_menu(
         let mut params = ranged();
         params["factor"] = json!(factor);
         params["around"] = json!(if state.scale_bottom { "bottom" } else { "middle" });
-        params["continue"] = json!(again);
-        params["replace"] = json!(again);
+        range_gesture(&mut params, actions, "scale", again);
         actions.push(Action::new("automation.scaleRange", params));
         // The shape is scaled now: Depth and Rate would put the unscaled one back, and Smooth and
         // Simplify start again from the scaled line.
@@ -2183,12 +2338,11 @@ fn range_menu(
     let amount = amount / 100.0;
     state.smooth = Some(Smoothed { of: of.clone(), amount });
     if live(ui, state, &smooth_slider) {
-        // Each amount replaces the one before in this range's step (`continue` with `replace`),
-        // so it rounds the line as it was; a line it does not change (a sine's) stays as it is.
+        // Each amount replaces the one before in this range's step (one gesture), so it rounds
+        // the line as it was; a line it does not change (a sine's) stays as it is.
         let mut params = ranged();
         params["amount"] = json!(amount.clamp(0.0, 1.0));
-        params["continue"] = json!(kept.is_some());
-        params["replace"] = json!(kept.is_some());
+        range_gesture(&mut params, actions, "smooth", kept.is_some());
         actions.push(Action::new("automation.smooth", params));
         state.selection = None;
         state.last_shape = None;
@@ -2220,8 +2374,7 @@ fn range_menu(
         // Each amount replaces the one before in this range's step, so it thins the line as it was.
         let mut params = ranged();
         params["tolerance"] = json!(simplify_tolerance(amount));
-        params["continue"] = json!(kept.is_some());
-        params["replace"] = json!(kept.is_some());
+        range_gesture(&mut params, actions, "simplify", kept.is_some());
         actions.push(Action::new("automation.simplify", params));
         state.selection = None;
         state.smooth = None;
@@ -2262,11 +2415,25 @@ fn picked_menu(
         params["points"] = json!(points);
         params["factor"] = json!(factor);
         params["around"] = json!(if state.scale_bottom { "bottom" } else { "middle" });
-        params["continue"] = json!(again);
-        params["replace"] = json!(again);
+        range_gesture(&mut params, actions, "scale", again);
         actions.push(Action::new("automation.scaleRange", params));
     }
 }
+
+/// Puts a range tool's call in its gesture (#1146): `again` joins the open one, so the call
+/// replaces the last; otherwise the gesture is ended first and this call starts another. A range
+/// gesture stays open when the mouse is let go (its id starts with [`RANGE_GESTURE`]): the next
+/// click on the same tool joins it, and any other edit ends it.
+fn range_gesture(params: &mut serde_json::Value, actions: &mut Vec<Action>, tool: &str, again: bool) {
+    let gesture = format!("{RANGE_GESTURE}{tool}");
+    if !again {
+        actions.push(Action::new("history.endGesture", json!({ "gesture": gesture })));
+    }
+    params["gesture"] = json!(gesture);
+}
+
+/// The start of a range tool's gesture id, which the window does not end on mouse up.
+pub const RANGE_GESTURE: &str = "range:";
 
 /// The grid entries at the end of the lanes' menus: the Arrangement's grid, as its toolbar and
 /// its lanes' menus offer it.
@@ -2289,7 +2456,7 @@ fn shape_menu(ui: &mut Ui, title: &str, chosen: Option<&str>) -> Option<&'static
             for &name in row {
                 let (rect, response) = ui.allocate_exact_size(Vec2::new(30.0, 20.0), Sense::click());
                 let label = format!("Insert {}", name.replace('_', " "));
-                response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &label));
+                response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
                 let response = response.on_hover_text(&label);
                 let painter = ui.painter();
                 let fill = if chosen == Some(name) {
@@ -2443,7 +2610,7 @@ fn heading_row(ui: &mut Ui, name: &str, count: usize, marked: bool, open: bool, 
         let end = Pos2::new(rect.right() - 4.0, rect.center().y);
         painter.text(end, Align2::RIGHT_CENTER, count, font, theme::text_hint());
     }
-    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::CollapsingHeader, true, open, name));
+    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::DisclosureTriangle, true, open, name));
     response
 }
 
@@ -2458,7 +2625,7 @@ fn parameter_row(ui: &mut Ui, choice: &Param, current: &LaneKey, free: bool, scr
     let button = egui::Button::selectable(selected, text);
     let response = ui.add_enabled(free, button);
     let label = choice.label();
-    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, free, selected, &label));
+    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, free, selected, &label));
     if scroll && selected {
         response.scroll_to_me(Some(egui::Align::Center));
     }
@@ -2476,7 +2643,7 @@ fn automated_row(ui: &mut Ui, choice: &Param, current: &LaneKey, free: bool, scr
     let text = if selected { text.color(theme::text_on(ui.visuals().selection.bg_fill)) } else { text };
     let response = ui.add_enabled(free, egui::Button::selectable(selected, text));
     let label = format!("{label} (automated)");
-    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, free, selected, &label));
+    response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, free, selected, &label));
     if scroll && selected {
         response.scroll_to_me(Some(egui::Align::Center));
     }
@@ -2530,7 +2697,7 @@ fn parameter_menu(
             .font(theme::ui_font(theme::TEXT_SMALL))
             .desired_width(f32::INFINITY),
     );
-    field.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::TextEdit, true, "Search parameters"));
+    field.widget_info(|| egui::WidgetInfo::labeled(egui::Role::TextInput, true, "Search parameters"));
     if first_frame {
         field.request_focus();
     }
@@ -2651,7 +2818,7 @@ fn lane_header(
     let painter = painter.with_clip_rect(clip);
     painter.fill_background(rect, 0.0, theme::panel_background());
     let track = lanes.track;
-    let id = Id::new(("automation-header", track.0, param.key.device, param.key.param.as_str()));
+    let id = Id::unique(("automation-header", track.0, param.key.device, param.key.param.as_str()));
     // A right-click on the header's free space: the lane's height back to normal (#818).
     let background = ui.interact(clip, id.with("background"), Sense::click());
     background.context_menu(|ui| {

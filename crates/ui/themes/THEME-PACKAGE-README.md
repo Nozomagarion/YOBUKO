@@ -26,9 +26,10 @@ package in its place (its variants go with it), **Copy** brings it in under a ne
 
 ```text
 my-theme/
-  theme.css           # the theme's style sheet: its look and the values of its settings
-  variants/*.json     # optional variants: other values for the same settings
-  layout.css          # written by Suhina: placements, toolbar, artwork and name set in the app
+  theme.json          # the theme's name, author, description, swatch and suggested toolbar
+  theme.css           # the theme's style sheet: its look, layout and the values of its settings
+  thumbnail.svg       # optional 16:9 picture for the theme's card in the picker
+  variants/*.json     # optional variants: other values for the theme's declared controls
   assets/*.svg        # vector control artwork
   assets/*.png        # optional raster artwork and sequence frames
   background.png      # optional background image
@@ -37,10 +38,56 @@ my-theme/
   examples/compact-session.css  # optional native Launcher density; not enabled automatically
 ```
 
-`theme.css` is yours: Suhina reads it and never writes it. What a user changes in Suhina's
-theme editor (colours, meter, liquid, gradients and any setting your theme offers) is saved in a
-variant file, and their toolbar order and artwork choices in `layout.css`. So you edit CSS, users
-edit variants, and no file is written by both.
+`theme.css` is yours. What a user changes in Suhina's theme editor (colours, meter, liquid,
+gradients and any setting your theme offers) is saved in a variant file. Moving a control or
+choosing artwork in the app edits only that declaration in `theme.css` (Suhina changes or adds
+the one declaration and leaves your comments, `@media` rules and everything else as you wrote
+them); renaming the theme or rearranging the toolbar writes `theme.json`. There is no
+`layout.css` any more: a folder that still has one is warned about and the file is not read, so
+move its rules into `theme.css`.
+
+### theme.json
+
+```json
+{
+  "format": 1,
+  "name": "My theme",
+  "author": "Your name",
+  "description": "Dark slate with a mint accent",
+  "default-variant": "Dark",
+  "swatch": "color-mix(in oklab, var(--panel-background), var(--accent) 35%)"
+}
+```
+
+- `format` (required) is `1`. A Suhina that reads only an older format refuses the theme and
+  says to update.
+- `name` (required) is the theme's name. It comes only from here; `theme { name }` in CSS is
+  not read.
+- `author` and `description` (optional) are shown with the theme.
+- `default-variant` (optional) names the theme's own values, which are never a file in
+  `variants/`; *Default* when left out.
+- `swatch` (required) is the colour the picker shows for the theme and each variant: any CSS
+  colour value, such as `#7FD1B9`, `var(--accent)` or a `color-mix()`. It is worked out for
+  each variant from your `@property` rules and `:root` values alone, without applying the rest
+  of the sheet, so `currentColor`, `attr()` and units relative to an element do not work in it.
+  A theme whose swatch does not give a colour for every variant is refused on import.
+- `toolbar` (optional) suggests a toolbar arrangement:
+  `{ "items": ["browser", "tempo", "transport"], "hidden": ["agents"] }`.
+
+### Swatches and the thumbnail
+
+The picker draws each swatch as a `theme-swatch` element with a `color` attribute, styled by
+the theme in use. Suhina's default is a rounded rectangle filled with the colour; your sheet may change it:
+
+```css
+theme-swatch { background: attr(color type(<color>)); border-radius: 50%; }
+```
+
+`thumbnail.svg` is the picture on the theme's card. Make it 16:9 (`viewBox="0 0 160 90"`, say).
+It may use your properties through `var()`; they are filled in for each variant as for the
+swatch, colours as plain colours. The artwork rules apply: no scripts, embedded images, foreign
+objects or links. Without a thumbnail the card is filled with the swatch colour. The built-in
+themes' `thumbnail.svg` (in the template's `examples/`) is a good start.
 
 Installed themes are the same folders, named by their id. Relative image paths in the sheets are
 authoritative; keep the whole folder together. A theme saved by an earlier Suhina version (JSON,
@@ -49,13 +96,15 @@ or a `theme.css` that imports `advanced.css`) is converted once; its original fi
 Drop the ZIP on Suhina to import it, then select it in Settings → Appearance → Themes.
 Open the themes folder from that page to edit the installed files.
 
-A folder in the themes folder is a theme when it holds a file named exactly `theme.css` (on
-Windows, check that it is not `theme.css.txt` with the extension hidden). Suhina finds a new
+A folder in the themes folder is a theme when it holds files named exactly `theme.json` and
+`theme.css` (on Windows, check that they are not `theme.css.txt` or `theme.json.txt` with the
+extension hidden). A theme made for the format before `theme.json` needs one added by hand. Suhina finds a new
 folder within about a second, or at once with **More › Reload themes**; a folder that is not a
 theme is named in the status bar with what it is missing. The folder's name is the theme's id:
 it stays when the theme is renamed. Two themes with the same name show their folder names on
-their cards. **Duplicate theme** copies the whole theme, its `layout.css` placements included;
-delete the copy's `layout.css` to start from Suhina's own placements.
+their cards. **Duplicate theme** copies the whole theme, its placements included; delete the
+copy's `.control-NAME` rules to start from Suhina's own placements. Built-in themes cannot be
+edited, only duplicated.
 The template ZIP also has the built-in themes as reference folders in `examples/`;
 the importable example is `my-theme/`, with an example variant.
 
@@ -70,7 +119,7 @@ A theme's settings are custom properties. Every theme has the core set: each pal
 `--background-image` (`none` or `url("background.png")`), `--background-opacity` and
 `--background-blur` (0–100), and `--session-track-width`, `--session-return-width`,
 `--session-scene-width`, `--session-slot-height`, `--session-header-height` (`auto` or pixels).
-Set them in `:root`; what you leave out keeps Suhina Dark's value.
+Set them in `:root`; what you leave out keeps Suhina Studio's value.
 
 Offer your own settings with `@property`. A property with a `label` appears under **Theme
 settings** in the editor, with a control for its type:
@@ -86,21 +135,22 @@ Supported syntaxes: `<color>`, `<number>`, `<integer>`, `<length>`, `<percentage
 `<length-percentage>`, `<angle>`, `<string>`, `<image>`, keywords joined by `|`, `+` for a
 space-separated list, and `*`. A value that does not match its syntax uses the initial value.
 
-A variant is a JSON file in `variants/`; its file name is its id and it lists only the values
-that differ from the theme's:
+A variant is a JSON file in `variants/`; its file name is its id and it holds its name and only
+the values that differ from the theme's:
 
 ```json
-{ "name": "Frost", "appearance": "light", "values": { "--accent": "#88C0D0", "--window-background": "var(--nord-snow)" } }
+{ "name": "Frost", "values": { "--accent": "#88C0D0", "--window-background": "var(--nord-snow)" } }
 ```
 
-Values are CSS text and may refer to the theme's own variables. A variant may set a core
-property, one of your `@property` settings, or any other variable your `:root` sets (a helper
-such as `--my-well`, without `@property`); variables of yours that refer to it follow, in the
-painted sheet and in the colours the editor shows. A name your sheet never sets is refused with
+Values are CSS text and may refer to the theme's own variables. A variant may set only the
+controls your theme declares with `@property` and Suhina's core properties; a value for any other
+variable (a helper such as `--my-well`) is left out with a warning, so declare a helper with
+`@property` when variants should change it. Anything in the file besides `name` and `values` is
 a warning. A variant's values win over the
 theme's rules for the same property, including ones inside `@media`. The editor shows a theme's
-variants as swatches under its card. A built-in theme's variants are kept in a folder of its id
-holding only `variants/`, without a copy of its CSS.
+variants as swatches under its card. A built-in theme can come with variants of its own; variants you
+add or edit for one are kept in a folder of its id holding only `variants/`, without a copy of
+its CSS.
 
 ### Your own overrides and device panels
 
@@ -118,10 +168,9 @@ of a device panel is `#its-id`, for example:
 ## How and when to edit each file
 
 1. Duplicate a bundled theme in the editor or start with the supplied example.
-2. Set `theme { name: "My theme"; }` in `theme.css`. Theme folder ids use letters, digits and `-`.
+2. Set the name and swatch in `theme.json`. Theme folder ids use letters, digits and `-`.
    The folder's name stays its id when the name changes. A name given in Suhina (the editor's
-   name field) is kept in `layout.css` and wins over the one in `theme.css`: to name the theme
-   in `theme.css` again, remove the `name` line from `layout.css`.
+   name field) is written to `theme.json`.
 3. For palette and other settings, set the core properties in `theme.css`'s `:root`. For example:
 
    ```css
@@ -131,14 +180,14 @@ of a device panel is `#its-id`, for example:
    Colours may be any CSS colour the engine reads (`#RRGGBB`, `#RRGGBBAA`, `rgb()`, `hsl()`,
    `color-mix()`, names), and `var()` of your own variables.
 4. For conditional styles, selectors, variables, effects, motion or connected Flex/Grid
-   layout, write them in `theme.css` too. It is kept exactly as you write it.
+   layout, write them in `theme.css` too. Suhina changes only the declarations its editors set.
 5. For a new control silhouette, edit an SVG or PNG and name it in `theme.css`, e.g.
    `play { image: url("assets/play.svg"); }`.
    For layout positions, the toolbar's right-click → Edit toolbar mode is usually
-   easier: drag the actual controls on the 8-point grid. Done saves to `layout.css`; Cancel or
+   easier: drag the actual controls on the 8-point grid. Done saves to `theme.json`; Cancel or
    Escape discards. Entering/leaving edit mode alone preserves the layout.
 6. Save one file at a time and inspect Suhina's warnings and the actual interface.
-   Files are watched approximately once a second. Suhina never writes `theme.css`; a save of
+   Files are watched approximately once a second. A save of
    a variant over an edit you made to that variant's file outside Suhina is refused and your
    file is kept.
 7. Test normal, hover, active and disabled states, narrow/wide windows, interaction,
@@ -200,7 +249,7 @@ Controls are placed with `.control-NAME` rules; matching instances share the rul
 containing panel bounds each element. The visual placement editor (**Edit interface**) has been
 removed for now, while layout moves to plain CSS
 ([issue #995](https://github.com/suhina-daw/suhina-daw/issues/995)), so write these rules by
-hand in `theme.css` (a `layout.css` from an earlier build is still read):
+hand in `theme.css`:
 
 ```css
 .control-mixer-name { bottom: 0px; }
@@ -294,8 +343,10 @@ theme's folder and a `manifest.json` with the theme's id, its name and the SHA-2
 file. Drop a package on Suhina's window (Settings open or not) or open it with Suhina (a
 double-click, once the system knows the ending) to bring the theme in. Before anything is
 written Suhina checks the manifest, every file's sum, the paths, the sizes and what each file
-holds (a `theme.css` that reads, SVGs that are SVG, PNGs that are PNG, variants that are JSON);
-a damaged or changed package is refused and says why. The same checks run on every import.
+holds (a `theme.json` with a name and a swatch that gives a colour for every variant, a
+`theme.css` that reads, SVGs that are SVG, a 16:9 thumbnail, PNGs that are PNG, variants that are
+JSON); a damaged or changed package is refused and says why. The same checks run on every
+import. The package's name comes from `theme.json`.
 
 From a terminal:
 
@@ -327,13 +378,9 @@ Use self-contained SVG paths and shapes; native labels stay native. `currentColo
 uses the current theme/control colour. Default body/rail/cap SVGs additionally use
 `data-suhina-ink` to retain their semantic palette colour when copied or exported.
 
-`themes/_defaults/assets/` is a protected reference library. Editing its valid artwork
-creates a numbered `Suhina Default (modified N)` user theme before restoring the
-original. Select that new theme in the gallery to use the edit. Missing default
-files and `_defaults/suhina-default.zip` are recreated from SVGs embedded in the app.
-Malformed edits are preserved in a recovery ZIP before restoration when within
-the resource limit; oversized or inaccessible files remain untouched with a warning.
-Edit an ordinary user theme's own `assets/` for direct live changes.
+Suhina's default artwork is built into the app (its sources are in the repository's
+`assets/themes/default/`); there is no copy in the themes folder to edit. To change a control's
+look, put your own SVG in your theme's `assets/` and name it in `theme.css`.
 Portable exports include inherited artwork so another machine receives the same images.
 
 ## What's possible now
@@ -409,7 +456,7 @@ clip gain), `.track-button` (solo, cue, arm, track-on, monitor, automation), `.t
 | Arrangement header `.arrangement .track-header` | `.track-name`, `.track-number`, `#control-track-on`, `#control-solo`, `#control-cue`, `#control-arm`, `#control-automation`, `#control-monitor`, `.fold`, `#arrangement-volume`, `#arrangement-pan`, `.send`, `.value-fill`, `.value-handle` |
 | Timeline `.arrangement` | `.ruler`, `.ruler-number`, `.ruler-tick`, `.loop-region`, `.loop-line`, `.playhead`, `.clip`, `.clip-name`, `.clip-waveform`, `.clip-notes`, `.clip-gain`, `.clip-fade-handle`, `.add-track`, `#add-midi-track`, `#add-audio-track`, `#add-return-track` |
 | Launcher and mixer `.session`, `.mixer` | `.track-column`, `.slot`, `.scene`, `.scene-column`, `#mixer-volume`, `#mixer-pan`, `#mixer-send-N`, `.fader`, `.fader-cap`, `.fader-rail`, `.fader-scale`, `.meter`, `#mixer-divider` |
-| Piano roll `.piano-roll` | `.piano-grid`, `.piano-row`, `.piano-row-black`, `.piano-key`, `.piano-key-black`, `.piano-note`, `.velocity`, `.piano-tool` with `#piano-<tool>`, `.midi-tools` (`#quantise-amount`), `.clip-info`, `.editor-tab` |
+| Piano roll `.piano-roll` | `.piano-grid`, `.piano-row`, `.piano-row-black`, `.piano-key`, `.piano-key-black`, `.piano-key-c`, `.piano-key-hover`, `.piano-key-black-hover`, `.piano-key-line`, `.piano-scale-mark`, `.piano-scale-strip`, `.piano-range`, `.piano-time-selection`, `.piano-insert-mark`, `.piano-note`, `.velocity`, `.piano-tool` with `#piano-<tool>`, `.midi-tools` (`#quantise-amount`), `.clip-info`, `.editor-tab` |
 | Browser `.browser` | `.browser-place`, `.browser-row`, `.browser-play`, `.browser-tag-dot`, `.browser-preview-wave`, `#browser-search` (`.text-input`) |
 | Devices `.device`, `#device-<id>` | `.device-header`, `.device-control`, `.slider`, `.slider-rail`, `.slider-fill`, `.slider-handle`, `.knob`, `.value` |
 | Dialogs `.settings`, `.dialog`, `.start-page`, `.plugin-manager` | `.button` (also egui's check boxes and drop-downs), `.button:checked` (a chosen item), `.text-input`, `.settings-nav`, `.progress`, `.progress-fill`, `.menu`, `.popup` |
@@ -453,7 +500,11 @@ Classes, each the native element it styles:
 | `.divider` | the line between a strip's device list and its controls (`#mixer-divider`) |
 | `.clip-name`, `.clip-waveform`, `.clip-notes`, `.clip-gain`, `.clip-fade-handle` | an arrangement clip's name bar, waveform, notes, gain field and fade handles |
 | `.value-handle`, `.fader-rail` | the handle where a level bar's fill ends; a fader's rail |
-| `.piano-grid`, `.piano-row`, `.piano-row-black`, `.piano-key`, `.piano-key-black`, `.piano-note`, `.velocity` | the piano roll's grid, its rows, its keys, the notes and their velocity stems |
+| `.piano-grid`, `.piano-row`, `.piano-row-black`, `.piano-key`, `.piano-key-black`, `.piano-note`, `.velocity` | the piano roll's grid, its rows, its keys (with `:selected` and `:playing`), the notes and their velocity stems |
+| `.piano-key-c`, `.piano-key-hover`, `.piano-key-black-hover`, `.piano-key-line`, `.piano-scale-mark` | a C key, a key under the pointer, the line between white keys, the mark on a key in the clip's scale |
+| `.piano-scale-strip`, `.piano-range` | the strip left of the keys that names the octaves and the row under the pointer, and the range a drag on the keys is selecting |
+| `.piano-clip-strip` | the strip over the ruler that shows several picked clips (background) |
+| `.piano-time-selection`, `.piano-insert-mark` | what is selected in time (background over the rows, `border-color` for its edges and the bar on the ruler), and the mark a click leaves where a paste goes (background) |
 | `.piano-tool`, `.midi-tools`, `.clip-info`, `.editor-tab` | the piano roll's tool buttons, the MIDI tools column, the clip's column and the **Clip** / **Devices** tabs |
 | `.device`, `.device-header` | a device's panel in the device chain, and its header row |
 
@@ -674,12 +725,10 @@ tints its Arrangement header, over the user's header colour strength: 0 leaves t
 
 `border-radius` takes a percentage: `50%` makes a control round, and its `box-shadow` follows.
 
-### Which file wins
+### One sheet
 
-`layout.css` is read after `theme.css`, so where both set the same thing (a placement, or the
-artwork of one role such as `solo` or `track.body.arrangement`) the value in `layout.css` wins.
-Suhina writes `layout.css` when you place controls or choose artwork in the app; delete a rule
-from it to let your sheet's value show.
+There is one sheet, `theme.css`. When you place controls or choose artwork in the app, Suhina
+changes that declaration in it, or adds it at the end when the sheet has none.
 
 ### Placement names
 
@@ -755,7 +804,7 @@ control with no room left is not drawn, without a notice: check narrow tracks an
 - **Settings folder:** Settings › Projects and backups › Projects › Settings folder moves all of Suhina's
   data. Changing it or the themes folder asks first, backs the files up beside the old folder
   and moves them.
-- **A copy of a theme** says how many placed controls it keeps in its `layout.css`.
+- **A copy of a theme** says how many placed controls it keeps in its `theme.css`.
 - **Choosing a theme** keeps the Themes page where it was.
 - **Layers:** `--suhina-*`, `.control-*` and artwork rules work inside `@layer` blocks too; inside
   `@media` they do not (use plain CSS properties there).

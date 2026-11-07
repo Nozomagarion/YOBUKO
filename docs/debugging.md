@@ -3,11 +3,12 @@ description: How to find out what the running app does around a bug: the trace l
 read_when: debugging, bug hunting, trace, SUHINA_TRACE, --trace, diagnostic log, live debugging, UI lag, slow frame, frame time, stutter, plug-in host log, ARA, Melodyne, playhead jumps, flicker, timing, latency, screen recording, video frames, contact sheet, tester, hang, freeze, working a bug through
 type: howto
 status: current
-last_verified: 2026-10-30
+last_verified: 2026-11-06
 covers:
-  - apps/suhina/src/liquid.rs
+  - crates/ui-gpu/src/liquid.rs
   - apps/suhina/src/main.rs
   - apps/suhina/src/theme_io.rs
+  - apps/suhina-cli/src/play.rs
   - crates/plugins/src/trace.rs
   - crates/ui/src/kit/frame_trace.rs
   - crates/ui/src/kit/native_css.rs
@@ -71,7 +72,7 @@ host process have their own id, so `grep "\[12345\]"` shows one process. To foll
 | `app gets ara notes for clip-N: count` | app | notes an ARA plug-in found, taken in |
 | `app: ara position S -> beat B` | app | an ARA plug-in's click in its timeline, as the transport takes it |
 | `midi in <port>: [bytes] read as …` | app (`crates/midi`) | every MIDI message from a controller but notes (wheels, knobs, pedals, pressure), and what it was read as (`None`: ignored) |
-| `vst3 midi mapping: …` | host (`vst3_events.rs`) | a VST3 plug-in starting: how many controllers its `IMidiMapping` maps and to which parameter the mod wheel, aftertouch and pitch bend go, or that it has none (then it cannot be sent controllers at all) |
+| `vst3 midi mapping: …` | host (`vst3/events.rs`) | a VST3 plug-in starting: how many controllers its `IMidiMapping` maps and to which parameter the mod wheel, aftertouch and pitch bend go, or that it has none (then it cannot be sent controllers at all) |
 | `vst3 events N: notes …, controllers …, bends …, pressure …; mapped …, last …` | host (`vst3.rs`) | once a second of audio, when instance N was given any: how many notes, controllers, pitch bends and pressure messages reached it, how many its `IMidiMapping` turned into parameter changes, and the last of those (id, value) |
 | `host up, connecting` / `host connected` | host | the host process starting |
 | `host gets <message>` / `host sends <message>` | host (`plugin-host/src/main.rs`) | every control message in and out, cut to 300–400 characters |
@@ -186,6 +187,12 @@ What is normal: a few late plug-in blocks in the first second of playback (every
 once), and a few thousand stretched frames late right after a jump of the play position (the
 stretched clips there are made from the new place first). Late blocks that keep coming while it
 plays, or underruns at all, are the bug.
+
+From the command line, `suhina-cli play` (the arrangement once, or the clip launcher with
+`--launcher`) writes no trace, but says when it ends how many times the device was not given its
+sound in time (the device underruns above, a cpal xrun among them) and how many stretched frames
+were late, each as a `warning:` line; a clean run prints neither. A tester on another system can
+send those lines with a recording of a click.
 
 ### Further reading on audio timing
 

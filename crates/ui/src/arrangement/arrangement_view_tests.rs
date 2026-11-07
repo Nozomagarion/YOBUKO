@@ -4,6 +4,16 @@
 use super::*;
 
 #[test]
+fn picked_clips_follow_their_move_to_another_track() {
+    let mut state = ArrangementViewState::default();
+    let (a, b, c) = (ClipId(1), ClipId(2), ClipId(3));
+    state.select_clips(vec![(TrackId(1), a), (TrackId(1), b)]);
+    state.clips_moved(&[(TrackId(2), a), (TrackId(2), b), (TrackId(2), c)]);
+    assert_eq!(state.selected_clips(), [(TrackId(2), a), (TrackId(2), b)]);
+    assert_eq!(state.selected_clip(), Some((TrackId(2), a)));
+}
+
+#[test]
 fn shift_click_takes_the_rectangle_from_the_anchor_across_tracks() {
     // Two tracks alike, each with a clip at bar 1 and one at bar 5 (#694).
     let spot = |track: u32, clip: u32, row: usize, start: f64| ClipSpot {
@@ -356,6 +366,23 @@ fn an_adaptive_grid_follows_the_zoom_and_the_keys_change_it() {
 }
 
 #[test]
+fn a_lanes_menu_changes_the_grid_and_sends_no_command() {
+    use egui_kittest::kittest::Queryable;
+    let mut h = egui_kittest::Harness::builder().allow_missing_glyphs().build_ui_state(
+        |ui, (state, actions): &mut (ArrangementViewState, Vec<Action>)| {
+            empty_lane_menu(ui, TrackId(1), true, false, state, actions);
+        },
+        (ArrangementViewState::default(), Vec::new()),
+    );
+    h.run();
+    h.get_by_label("1/8").click_accesskit();
+    h.run();
+    let (state, actions) = h.state();
+    assert_eq!(state.grid.label(), "1/8");
+    assert!(actions.is_empty(), "{actions:?}");
+}
+
+#[test]
 fn snap_off_draws_the_lines_and_does_not_snap() {
     // Snap off keeps its value's lines (1/16 here), as the piano roll's grid does.
     let grid = arrangement_grid(PianoGrid::from_value("none"), 400.0, 4.0);
@@ -420,9 +447,85 @@ fn a_tracks_take_lanes_show_under_it_and_fold_away() {
     assert_eq!(timeline.takes[0].clips.len(), 1);
     let mut state = ArrangementViewState::default();
     let automation = state.automation.height(track, &timeline.automation);
-    assert_eq!(state.below(track, &timeline), 2.0 * (TAKE_ROW + 1.0) + automation);
+    // As tall as a track that has not been resized, each (#1078).
+    let row = state.lane_height(TrackId(999));
+    assert_eq!(state.below(track, &timeline), 2.0 * (row + 1.0) + automation);
     state.takes_hidden.insert(track);
     assert_eq!(state.below(track, &timeline), automation, "folded away");
+}
+
+/// While a take records, the passes already done add no lanes under the track (#1078).
+#[test]
+fn a_take_still_recording_has_no_lanes_under_its_track() {
+    let project = crate::demo::demo_project();
+    let track = project.arrangement.lanes.iter().find_map(|l| l.track).unwrap();
+    let mut timeline = Timeline::build(&project, None);
+    let state = ArrangementViewState::default();
+    let before = state.below(track, &timeline);
+    let pass = |finished| suhina_session::LiveTake {
+        track,
+        start: 0.0,
+        end: 4.0,
+        notes: Vec::new(),
+        audio: false,
+        peaks: Vec::new(),
+        peaks_end: 0.0,
+        finished,
+    };
+    timeline.live_takes = vec![pass(true), pass(true), pass(false)];
+    assert_eq!(state.below(track, &timeline), before);
+}
+
+/// Each take lane has a height of its own, the lanes' zoom takes every one along, and a lane left
+/// alone stays as tall as a track (#1078).
+#[test]
+fn take_lanes_size_and_zoom_like_tracks() {
+    let mut project = crate::demo::demo_project();
+    let lane = project.arrangement.lanes.iter().find(|l| l.track.is_some() && !l.clips.is_empty()).unwrap();
+    let (track, clip) = (lane.track.unwrap(), lane.clips[0].clone());
+    let take = |name: &str| suhina_engine::model::TakeLane {
+        track,
+        name: name.into(),
+        clips: vec![suhina_engine::model::Clip { id: ClipId::NONE, ..clip.clone() }],
+        color: None,
+    };
+    // A take deleted earlier: the lanes keep the numbers the commands know them by.
+    project.arrangement.takes = vec![take("Take 2"), take("Take 3")];
+    let timeline = Timeline::build(&project, None);
+    assert_eq!(timeline.takes.iter().map(|t| t.number).collect::<Vec<_>>(), [2, 3]);
+    let mut state = ArrangementViewState::default();
+    let row = state.lane_height(TrackId(999));
+    assert_eq!(state.take_row(track, 2), row);
+    state.take_heights.insert((track, 2), 100.0);
+    assert_eq!(state.take_row(track, 3), row, "the other lane stays");
+    state.zoom_lanes(&timeline.lanes, 2.0, 0.0);
+    assert_eq!(state.take_row(track, 2), 200.0);
+    assert_eq!(state.take_row(track, 3), state.lane_height(TrackId(999)));
+    assert!(state.take_row(track, 3) > row);
+    assert_eq!(state.takes_height(track, &timeline), 200.0 + 1.0 + state.take_row(track, 3) + 1.0);
+}
+
+/// Small wheel steps add up on a take lane, as they do on a track: its height keeps the fraction.
+#[test]
+fn small_wheel_steps_add_up_on_the_take_lane_under_the_pointer() {
+    let mut project = crate::demo::demo_project();
+    let lane = project.arrangement.lanes.iter().find(|l| l.track.is_some() && !l.clips.is_empty()).unwrap();
+    let (track, clip) = (lane.track.unwrap(), lane.clips[0].clone());
+    let clips = vec![suhina_engine::model::Clip { id: ClipId::NONE, ..clip }];
+    project.arrangement.takes =
+        vec![suhina_engine::model::TakeLane { track, name: "Take 1".into(), clips, color: None }];
+    let timeline = Timeline::build(&project, None);
+    let tracks: Vec<&Lane> = timeline.lanes.iter().filter(|l| l.kind != ColumnKind::Return).collect();
+    let mut state = ArrangementViewState::default();
+    state.zoom_one = true;
+    state.take_heights.insert((track, 1), 64.0);
+    let above: f32 = tracks.iter().take_while(|l| l.track != track).map(|l| state.height(l) + 1.0).sum();
+    let at = tracks.iter().find(|l| l.track == track).map_or(0.0, |l| state.height(l) + 1.0);
+    let offset = above + at + 2.0;
+    for _ in 0..100 {
+        state.zoom_wheel(&tracks, &timeline, 1.004, offset);
+    }
+    assert!(state.take_row(track, 1) >= 90.0, "{}", state.take_row(track, 1));
 }
 
 #[test]
@@ -451,7 +554,7 @@ fn a_stretch_goes_past_the_audio_and_a_midi_clip_before_its_notes() {
         id: audio,
         name: "Loop".into(),
         length: 4.0,
-        lanes: vec![ContentLane { target: None, data: LaneData::Audio(AudioRegion::new("loop.wav")) }],
+        lanes: vec![ContentLane { target: None, data: LaneData::Audio(AudioRegion::new("loop.wav")) }].into(),
         extensions: Extensions::default(),
         scale: None,
     });
@@ -511,13 +614,19 @@ fn select_all_spans_every_track_from_the_first_clip_to_the_last() {
 #[test]
 fn a_click_in_a_clip_body_stays_inside_the_clip() {
     let bar = arrangement_grid(PianoGrid::from_value("1 bar"), 40.0, 4.0);
-    // Late in a bar-long clip: its start, not the next bar.
-    assert_eq!(clip_body_beat(7.5, 4.0, bar, false), 4.0);
-    // A clip starting inside the bar: never before its start.
-    assert_eq!(clip_body_beat(7.5, 6.0, bar, false), 6.0);
+    // Late in a bar-long clip: the nearest line is its end, so the line before the click.
+    assert_eq!(clip_body_beat(7.5, 4.0, 8.0, bar, false), 4.0);
+    // A short clip inside the bar: the nearest line is past its end and the one before is
+    // before its start, so its start.
+    assert_eq!(clip_body_beat(6.5, 6.0, 7.5, bar, false), 6.0);
+    // The nearest line inside the clip, after the click too.
+    assert_eq!(clip_body_beat(7.5, 6.0, 10.0, bar, false), 8.0);
+    let quarter = arrangement_grid(PianoGrid::from_value("1/4"), 40.0, 4.0);
+    assert_eq!(clip_body_beat(5.6, 4.0, 8.0, quarter, false), 6.0, "a click that misses a line goes to the nearest");
+    assert_eq!(clip_body_beat(5.4, 4.0, 8.0, quarter, false), 5.0);
     let sixteenth = arrangement_grid(PianoGrid::from_value("1/16"), 200.0, 4.0);
-    assert_eq!(clip_body_beat(5.3, 4.0, sixteenth, false), 5.25);
-    assert_eq!(clip_body_beat(5.3, 4.0, sixteenth, true), 5.3);
+    assert_eq!(clip_body_beat(5.3, 4.0, 8.0, sixteenth, false), 5.25);
+    assert_eq!(clip_body_beat(5.3, 4.0, 8.0, sixteenth, true), 5.3);
 }
 
 #[test]
@@ -552,4 +661,62 @@ fn a_drag_starts_from_the_height_drawn() {
     let mut state = ArrangementViewState::default();
     state.resize_lanes(TrackId(9), 14.0, 2.0);
     assert_eq!(state.lane_height(TrackId(9)), MIN_LANE.max(16.0));
+}
+
+/// A time selection gone on over more time and tracks holds both.
+#[test]
+fn a_time_selection_goes_on_over_both() {
+    let first = TimeSelection { tracks: vec![TrackId(1)], start: 4.0, end: 6.0, row: Some((0, 2)) };
+    let same = first.gone_on(&[TrackId(1)], 8.0, 10.0, Some((0, 2)));
+    assert_eq!((same.start, same.end, same.row), (4.0, 10.0, Some((0, 2))));
+    assert_eq!(first.gone_on(&[TrackId(1)], 8.0, 10.0, Some((1, 2))).row, None, "into another row of the stack");
+    let more = first.gone_on(&[TrackId(1), TrackId(2)], 0.0, 5.0, None);
+    assert_eq!((more.start, more.end, more.row), (0.0, 6.0, None));
+    assert_eq!(more.tracks, [TrackId(1), TrackId(2)]);
+}
+
+/// A clip a few points wide, as far zoomed out: no name or ellipsis, and nothing it draws leaves
+/// its own rect for the lane or the clip beside it (#1198). Wide enough, the name is drawn.
+#[test]
+fn a_narrow_clip_draws_no_name_and_nothing_outside_itself() {
+    let timeline = Timeline::build(&crate::demo::demo_project(), None);
+    let lane = timeline.lanes.iter().find(|l| l.clips.iter().any(|c| !c.name.is_empty())).unwrap();
+    let clip = lane.clips.iter().find(|c| !c.name.is_empty()).cloned().unwrap();
+    let view = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(800.0, 200.0));
+    let draw = |width: f32| {
+        let rect = Rect::from_min_size(Pos2::new(100.0, 40.0), Vec2::new(width, 60.0));
+        let ctx = egui::Context::default();
+        let mut output = ctx.run_ui(Default::default(), |ui| {
+            let lanes = ui.painter().with_clip_rect(view);
+            let beat_width = width / clip.length.max(1e-3) as f32;
+            let x_of = |beat: f64| rect.left() + (beat - clip.start) as f32 * beat_width;
+            let look = ArrangementViewState::default().clip_look();
+            paint_clip(
+                &lanes,
+                rect,
+                lane,
+                &clip,
+                Shown::of(&clip),
+                clip.start,
+                &x_of,
+                beat_width,
+                &timeline,
+                true,
+                &look,
+            );
+        });
+        output.textures_delta.clear();
+        // The clip's own shapes: those painted within the lanes' view.
+        let shapes: Vec<egui::epaint::ClippedShape> =
+            output.shapes.into_iter().filter(|s| view.contains_rect(s.clip_rect)).collect();
+        (rect, shapes)
+    };
+    let (rect, shapes) = draw(6.0);
+    assert!(!shapes.is_empty(), "the clip's body is drawn");
+    for shape in &shapes {
+        assert!(rect.expand(0.5).contains_rect(shape.clip_rect), "{:?} leaves {rect:?}", shape.clip_rect);
+    }
+    assert!(!shapes.iter().any(|s| matches!(s.shape, egui::Shape::Text(_))), "no name, no lone ellipsis");
+    let (_, shapes) = draw(240.0);
+    assert!(shapes.iter().any(|s| matches!(s.shape, egui::Shape::Text(_))), "a wide clip shows its name");
 }

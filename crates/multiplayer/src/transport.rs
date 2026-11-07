@@ -22,7 +22,7 @@ use subtle::ConstantTimeEq;
 use suhina_collaboration::{Host, PeerId, Request, Role};
 use suhina_engine::AudioPool;
 use suhina_model::Project;
-use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, ParamType, Policy};
+use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, Effect, ParamType, Policy, Target};
 
 use crate::invitation::{Invitation, Invite, new_secret, private, secret_hash};
 use crate::linked::{ClockEstimate, Linked, SharedTransport, TransportRequest};
@@ -700,7 +700,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         id: "multiplayer.host",
         label: "Host a restricted LAN starter session",
         params: &[param("address", ParamType::Text, "private IPv4 address:port; port 0 chooses a free port")],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Change),
         run: start_host,
         policy: LOCAL,
     },
@@ -708,7 +708,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         id: "multiplayer.hostProject",
         label: "Host a copy of the selected project and its prepared audio",
         params: &[param("address", ParamType::Text, "private IPv4 address:port")],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Change),
         run: start_selected_host,
         policy: LOCAL,
     },
@@ -716,7 +716,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         id: "multiplayer.join",
         label: "Join using a private invitation",
         params: &[param("invitation", ParamType::Text, "private invitation")],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Change),
         run: start_guest,
         policy: LOCAL,
     },
@@ -724,7 +724,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         id: "multiplayer.renewInvitation",
         label: "Create a new invitation without replacing the hosted project",
         params: &[],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Change),
         run: renew_invitation,
         policy: LOCAL,
     },
@@ -735,7 +735,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
             param("base_revision", ParamType::Integer, "last observed revision"),
             param("edit", ParamType::Text, "typed edit as JSON text"),
         ],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Change),
         run: edit,
         policy: LOCAL,
     },
@@ -747,7 +747,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
             param("track", ParamType::Integer, "existing audio-only track id"),
             param("start", ParamType::Number, "arrangement beat, 0..120000"),
         ],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Change),
         run: publish_take,
         policy: LOCAL,
     },
@@ -755,7 +755,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         id: "multiplayer.linkPlayback",
         label: "Link or unlink playback: every participant then plays, stops and moves together",
         params: &[param("linked", ParamType::Bool, "true links playback for everyone, false unlinks it")],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Change),
         run: link_playback,
         policy: LOCAL,
     },
@@ -766,7 +766,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
             param("action", ParamType::Text, "play, stop or seek"),
             param("beats", ParamType::Number, "where play or seek starts, 0..120000; stop ignores it"),
         ],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Change),
         run: shared_transport,
         policy: LOCAL,
     },
@@ -774,7 +774,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         id: "multiplayer.state",
         label: "Poll local LAN state",
         params: &[],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Read),
         run: state,
         policy: LOCAL,
     },
@@ -782,7 +782,7 @@ const COMMANDS: &[CommandSpec<Service>] = &[
         id: "multiplayer.stop",
         label: "Leave and revoke the LAN session",
         params: &[],
-        kind: CommandKind::Projects,
+        kind: CommandKind::on(Target::Projects, Effect::Change),
         run: stop,
         policy: LOCAL,
     },

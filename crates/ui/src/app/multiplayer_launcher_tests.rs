@@ -57,7 +57,7 @@ fn buttons(render: bool) {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert!(guest.multiplayer.bound.is_some());
-    let builder = egui_kittest::Harness::builder().with_size(Vec2::new(1400., 1150.));
+    let builder = egui_kittest::Harness::builder().allow_missing_glyphs().with_size(Vec2::new(1400., 1150.));
     let builder = if render { builder.wgpu() } else { builder };
     let mut h = builder.build_ui_state(|ui, app: &mut App| app.ui(ui), host);
     theme::install(&h.ctx);
@@ -139,6 +139,7 @@ fn buttons(render: bool) {
         h.state().projects.get(local).unwrap().project(),
         &suhina_engine::AudioPool::default(),
         8000,
+        suhina_session::devices(),
     )
     .unwrap();
     let remote_id = guest.multiplayer.bound.unwrap();
@@ -146,6 +147,7 @@ fn buttons(render: bool) {
         guest.projects.get(remote_id).unwrap().project(),
         &suhina_engine::AudioPool::default(),
         8000,
+        suhina_session::devices(),
     )
     .unwrap();
     h.state_mut().projects.get_mut(local).unwrap().attach_player(suhina_session::Player::new(a.controller(), None));
