@@ -34,6 +34,8 @@ impl App {
         let galley = ui.painter().layout_no_wrap(current.label().to_owned(), font.clone(), egui::Color32::WHITE);
         let size = Vec2::new(galley.size().x + 30.0, (row.height() - 6.0).clamp(14.0, 20.0));
         let rect = Rect::from_min_size(Pos2::new(row.right() - size.x - 4.0, row.center().y - size.y / 2.0), size);
+        self.paint_identity(ui, current, rect);
+        self.publish_look(false);
         let response =
             widgets::button_area(ui, rect, Id::unique("workspace-mode-pill"), format!("App mode: {}", current.label()));
         let hover = widgets::hover(ui, &response);
@@ -273,7 +275,7 @@ impl App {
 
 /// The app's three modes, as the mode pill names and colors them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum WorkspaceMode {
+pub(crate) enum WorkspaceMode {
     Studio,
     Multiplayer,
     Dj,

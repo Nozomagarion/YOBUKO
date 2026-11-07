@@ -1,0 +1,13 @@
+{
+  "name": "Midnight",
+  "values": {
+    "--ground": "#08080A",
+    "--surface": "#111115",
+    "--ink": "#D8D6E0",
+    "--tint": "#7F8CFF",
+    "--highlight": "#5BD6C0",
+    "--recording": "#FF5C6C",
+    "--meter-normal": "#4FBF7A",
+    "--meter-hot": "#E0B84C"
+  }
+}

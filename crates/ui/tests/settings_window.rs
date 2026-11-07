@@ -375,12 +375,12 @@ fn theme_cards_show_a_thumbnail_or_a_card_in_the_swatch_colour() {
             egui::Shape::Rect(rect) if card.contains_rect(rect.rect) && rect.fill == swatch && rect.rect.width() > 100.0)),
         "Plain's card is filled with its swatch"
     );
-    // A built-in theme's card shows its thumbnail, an SVG drawn with the theme's own values.
-    let card = harness.get_by_label("Theme in use: Suhina Studio").rect();
+    // A built-in theme's card (YOBUKO, the one in use) shows its thumbnail, an SVG drawn with the theme's own values.
+    let card = harness.get_by_label("Theme in use: YOBUKO").rect();
     assert!(
         harness.output().shapes.iter().any(|shape| matches!(&shape.shape,
             egui::Shape::Rect(rect) if card.contains_rect(rect.rect) && rect.fill_texture_id() != egui::TextureId::default())),
-        "Suhina Studio's card shows its thumbnail"
+        "YOBUKO's card shows its thumbnail"
     );
 }
 
@@ -1349,13 +1349,13 @@ fn the_theme_in_use_is_marked_as_selected_in_the_list() {
     let selected = |harness: &Harness<'static, App>, label: &str| {
         harness.get_by_label(label).accesskit_node().toggled() == Some(egui::accesskit::Toggled::True)
     };
-    assert!(selected(&harness, "Theme in use: Suhina Studio"));
-    assert!(selected(&harness, "Theme: Suhina Studio"));
+    assert!(selected(&harness, "Theme in use: YOBUKO"));
+    assert!(selected(&harness, "Theme: YOBUKO"));
     assert!(!selected(&harness, "Theme: Suhina Light"));
     wheel_to(&mut harness, "Theme: Suhina Light", 40);
     harness.get_by_label("Theme: Suhina Light").click();
     harness.run();
     assert!(selected(&harness, "Theme: Suhina Light"));
-    assert!(!selected(&harness, "Theme: Suhina Studio"));
+    assert!(!selected(&harness, "Theme: YOBUKO"));
     theme::set_palette(&harness.ctx, theme::Palette::DARK);
 }

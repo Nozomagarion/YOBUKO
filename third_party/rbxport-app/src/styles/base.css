@@ -31,6 +31,18 @@ body {
    pane. */
 :focus-visible:not([tabindex="-1"]) { outline: 1px solid var(--c-accent); outline-offset: -1px; }
 
+/* YOBUKO patch: the thin line in DJ mode's pink along the top of the window,
+   as on every YOBUKO window (src/lib/yobukoLook.ts). */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--yobuko-mode, transparent);
+  pointer-events: none;
+  z-index: 2147483647;
+}
+
 /* Numeric columns line up. */
 .tabular { font-variant-numeric: tabular-nums; }
 

@@ -1,0 +1,13 @@
+{
+  "name": "Sakura",
+  "values": {
+    "--ground": "#FBEFF3",
+    "--surface": "#F3E1EA",
+    "--ink": "#4A3A45",
+    "--tint": "#D9578F",
+    "--highlight": "#5FA88F",
+    "--recording": "#D93036",
+    "--meter-normal": "#4F9F6A",
+    "--meter-hot": "#C9A227"
+  }
+}

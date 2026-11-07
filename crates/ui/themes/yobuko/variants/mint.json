@@ -1,0 +1,13 @@
+{
+  "name": "Mint",
+  "values": {
+    "--ground": "#ECF6F1",
+    "--surface": "#DDEDE5",
+    "--ink": "#2F4A40",
+    "--tint": "#2F9E77",
+    "--highlight": "#E08A3C",
+    "--recording": "#D93036",
+    "--meter-normal": "#2F9E77",
+    "--meter-hot": "#C9A227"
+  }
+}

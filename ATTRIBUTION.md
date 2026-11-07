@@ -82,6 +82,15 @@ GPL-2.0-or-later. The macOS and Windows packages ship the official, unmodified M
 fetched by `scripts/mixxx_fetch.sh` (its version and source location are in the package's
 `LICENSE-Mixxx.txt`); on Linux YOBUKO uses the distribution's Mixxx. YOBUKO only starts it and
 reads and writes its library database to share it with rbxport (`crates/dj/src/mixxx.rs`).
+To give it YOBUKO's look, YOBUKO copies the LateNight skin of the Mixxx on the DJ's computer
+(© the Mixxx team, GPL-2.0-or-later) into its profile as a skin named "YOBUKO", with its colours
+moved onto the studio's theme and Mixxx's logo replaced by YOBUKO's (`crates/dj/src/mixxx_skin.rs`);
+no copy of LateNight is kept in this repository.
+
+## YOBUKO seal
+
+`crates/ui/brand/yobuko-seal.png` (the red 呼子 seal) was drawn for YOBUKO with the Noto Serif JP
+typeface (Google, SIL Open Font License 1.1).
 
 ## Pioneer DDJ-FLX4 mapping for Mixxx
 

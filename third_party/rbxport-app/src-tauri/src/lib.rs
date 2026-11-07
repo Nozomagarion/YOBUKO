@@ -508,6 +508,7 @@ pub fn run() {
             });
         })
         .invoke_handler(tauri::generate_handler![
+            yobuko::yobuko_look,
             browse_settings::rekordbox_browse_settings,
             startup::startup_milestone,
             startup::show_window,

@@ -22,6 +22,7 @@ mod exports;
 pub mod folder_drop_dialog;
 mod keys;
 pub mod loading_dialog;
+mod look;
 mod menu_bar;
 pub mod menus;
 pub mod missing_files;

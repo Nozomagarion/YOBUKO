@@ -1,0 +1,10 @@
+{
+  "name": "Piou Pop",
+  "values": {
+    "--ground": "#211C2A",
+    "--surface": "#2D2638",
+    "--ink": "#FFF7FB",
+    "--tint": "#FFD45C",
+    "--highlight": "#FF77BE"
+  }
+}

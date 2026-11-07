@@ -1,0 +1,10 @@
+{
+  "name": "Lantern",
+  "values": {
+    "--ground": "#22140F",
+    "--surface": "#2F1D16",
+    "--ink": "#FFEBD6",
+    "--tint": "#FF8A3D",
+    "--highlight": "#FFD23F"
+  }
+}

@@ -25,6 +25,8 @@ pub(super) struct DjPanel {
     pub(super) note: Option<Result<String, String>>,
     /// Where requests for rbxport go instead of this user's inbox (tests).
     pub(super) inbox: Option<PathBuf>,
+    /// The theme revision and mode last written to `look.json` (`look.rs`).
+    pub(super) look_published: Option<(u64, super::menu_bar::WorkspaceMode)>,
 }
 
 impl App {
@@ -82,6 +84,12 @@ impl App {
                 problems.push(format!("The DDJ-FLX4 could not be set up: {e}"));
             }
         }
+        let look = self.publish_look(true);
+        if let Some((profile, _)) = &profile
+            && let Err(e) = dress_mixxx(&found, profile, &look)
+        {
+            problems.push(format!("Mixxx could not take YOBUKO's look: {e}"));
+        }
         let shared = self.share_library(true);
         if let Some(shared) = &shared {
             problems.extend(shared.problems.iter().cloned());
@@ -124,6 +132,7 @@ impl App {
 
     /// Starts rbxport, or opens its download page when this build has none.
     pub(super) fn open_rbxport(&mut self, ctx: &egui::Context) {
+        self.publish_look(true);
         self.dj.note = Some(match rbxport::find() {
             Some(app) => match rbxport::launch(&app) {
                 Ok(()) => {
@@ -238,4 +247,15 @@ impl App {
             });
         });
     }
+}
+
+/// Gives the Mixxx in `profile` YOBUKO's skin in `look`'s colours, made from the LateNight
+/// of the Mixxx at `found` (`suhina_dj::mixxx_skin`). A Mixxx without LateNight keeps its own.
+fn dress_mixxx(found: &mixxx::Mixxx, profile: &std::path::Path, look: &suhina_dj::look::Look) -> std::io::Result<()> {
+    let Some(source) = suhina_dj::mixxx_skin::source(&found.path) else {
+        return Ok(());
+    };
+    suhina_dj::mixxx_skin::install(&source, profile, look)?;
+    suhina_dj::mixxx_skin::select(profile, found.shipped)?;
+    Ok(())
 }

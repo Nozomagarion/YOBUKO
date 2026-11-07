@@ -1,0 +1,13 @@
+{
+  "name": "Washi",
+  "values": {
+    "--ground": "#F4EFE6",
+    "--surface": "#E9E2D5",
+    "--ink": "#2A2723",
+    "--tint": "#C8372D",
+    "--highlight": "#3F7FBF",
+    "--recording": "#C8372D",
+    "--meter-normal": "#3F8F4F",
+    "--meter-hot": "#C9A227"
+  }
+}
