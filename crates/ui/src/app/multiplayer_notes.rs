@@ -92,7 +92,7 @@ impl App {
             return;
         }
         let before = editor.clip;
-        egui::ComboBox::from_id_salt("shared-midi-clip")
+        egui::ComboBox::new("shared-midi-clip", "Shared MIDI clip")
             .width(420.0)
             .wrap_mode(egui::TextWrapMode::Truncate)
             .selected_text(clips.iter().find(|c| Some(c.0) == editor.clip).map_or("Choose clip", |c| c.1.as_str()))
@@ -187,14 +187,16 @@ impl App {
         ui.separator();
         ui.label(if editor.selected { "Selected note" } else { "New note" });
         ui.horizontal_wrapped(|ui| {
-            ui.label("Beat");
-            ui.add(egui::DragValue::new(&mut editor.draft.time).range(0.0..=120_000.0).speed(0.25));
-            ui.label("Length");
-            ui.add(egui::DragValue::new(&mut editor.draft.length).range(0.001..=120_000.0).speed(0.25));
-            ui.label("Key");
-            ui.add(egui::DragValue::new(&mut editor.draft.key).range(0..=127));
-            ui.label("Velocity");
-            ui.add(egui::DragValue::new(&mut editor.draft.velocity).range(1.0..=127.0));
+            let label = ui.label("Beat");
+            ui.add(egui::DragValue::new(&mut editor.draft.time).range(0.0..=120_000.0).speed(0.25))
+                .labelled_by(label.id);
+            let label = ui.label("Length");
+            ui.add(egui::DragValue::new(&mut editor.draft.length).range(0.001..=120_000.0).speed(0.25))
+                .labelled_by(label.id);
+            let label = ui.label("Key");
+            ui.add(egui::DragValue::new(&mut editor.draft.key).range(0..=127)).labelled_by(label.id);
+            let label = ui.label("Velocity");
+            ui.add(egui::DragValue::new(&mut editor.draft.velocity).range(1.0..=127.0)).labelled_by(label.id);
             if editor.selected {
                 ui.checkbox(&mut editor.draft.muted, "Muted");
             }

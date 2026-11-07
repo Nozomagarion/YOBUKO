@@ -116,9 +116,8 @@ impl App {
         let mut edit = None;
         let mut local = None;
         ui.separator();
-        let name_label = ui.label("Scene name");
-        ui.add(egui::TextEdit::singleline(&mut editor.name).char_limit(256).desired_width(220.))
-            .labelled_by(name_label.id);
+        let label = ui.label("Scene name");
+        ui.add(egui::TextEdit::singleline(&mut editor.name).char_limit(256).desired_width(220.)).labelled_by(label.id);
         ui.horizontal_wrapped(|ui| {
             if ui.add_enabled(editable && scenes.len() < 128, egui::Button::new("Append shared scene")).clicked() {
                 edit = Some(WireEdit::SceneInsert { scene: scenes.len() + 1, name: editor.name.clone() });
@@ -180,8 +179,9 @@ impl App {
                                 ui.selectable_value(&mut editor.destination_track, c.track.0, name);
                             }
                         });
-                    ui.label("Destination scene");
-                    ui.add(egui::DragValue::new(&mut editor.destination_scene).range(1..=scenes.len()));
+                    let label = ui.label("Destination scene");
+                    ui.add(egui::DragValue::new(&mut editor.destination_scene).range(1..=scenes.len()))
+                        .labelled_by(label.id);
                     if ui.add_enabled(editable, egui::Button::new("Move or swap shared slot")).clicked() {
                         edit = Some(WireEdit::SlotMove {
                             track,
@@ -193,8 +193,9 @@ impl App {
                 });
             } else {
                 ui.horizontal_wrapped(|ui| {
-                    ui.label("Clip length");
-                    ui.add(egui::DragValue::new(&mut editor.length).range(0.001..=120_000.).speed(0.25));
+                    let label = ui.label("Clip length");
+                    ui.add(egui::DragValue::new(&mut editor.length).range(0.001..=120_000.).speed(0.25))
+                        .labelled_by(label.id);
                     if ui.add_enabled(editable, egui::Button::new("Create empty shared slot")).clicked() {
                         edit = Some(WireEdit::SlotCreate { track, scene, length: editor.length });
                     }

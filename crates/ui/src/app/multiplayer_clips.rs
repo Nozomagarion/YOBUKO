@@ -118,11 +118,12 @@ impl App {
             ui.separator();
             ui.label(format!("Selected clip #{} · {}", draft.id, draft.name));
             ui.horizontal_wrapped(|ui| {
-                ui.label("Start beat");
-                ui.add(egui::DragValue::new(&mut draft.start).range(0.0..=120_000.0).speed(0.25));
-                ui.label("Length");
-                ui.add(egui::DragValue::new(&mut draft.length).range(0.001..=120_000.0).speed(0.25));
-                egui::ComboBox::from_id_salt("shared-clip-track")
+                let label = ui.label("Start beat");
+                ui.add(egui::DragValue::new(&mut draft.start).range(0.0..=120_000.0).speed(0.25)).labelled_by(label.id);
+                let label = ui.label("Length");
+                ui.add(egui::DragValue::new(&mut draft.length).range(0.001..=120_000.0).speed(0.25))
+                    .labelled_by(label.id);
+                egui::ComboBox::new("shared-clip-track", "Clip track")
                     .width(180.0)
                     .wrap_mode(egui::TextWrapMode::Truncate)
                     .selected_text(tracks.iter().find(|t| t.0 == draft.track).map_or("Track", |t| t.1.as_str()))
@@ -161,7 +162,7 @@ impl App {
         ui.separator();
         ui.label("New clip");
         ui.horizontal_wrapped(|ui| {
-            egui::ComboBox::from_id_salt("shared-new-clip-track")
+            egui::ComboBox::new("shared-new-clip-track", "New clip track")
                 .width(180.0)
                 .wrap_mode(egui::TextWrapMode::Truncate)
                 .selected_text(
@@ -172,10 +173,12 @@ impl App {
                         ui.selectable_value(&mut editor.create_track, Some(*id), name);
                     }
                 });
-            ui.label("Start beat");
-            ui.add(egui::DragValue::new(&mut editor.create_start).range(0.0..=120_000.0).speed(0.25));
-            ui.label("Length");
-            ui.add(egui::DragValue::new(&mut editor.create_length).range(0.001..=120_000.0).speed(0.25));
+            let label = ui.label("Start beat");
+            ui.add(egui::DragValue::new(&mut editor.create_start).range(0.0..=120_000.0).speed(0.25))
+                .labelled_by(label.id);
+            let label = ui.label("Length");
+            ui.add(egui::DragValue::new(&mut editor.create_length).range(0.001..=120_000.0).speed(0.25))
+                .labelled_by(label.id);
             if ui.add_enabled(!stale, egui::Button::new("Create clip")).clicked()
                 && let Some(track) = editor.create_track
             {

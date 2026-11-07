@@ -349,7 +349,7 @@ fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_reboun
     app.multiplayer.online = false;
     app.multiplayer.address = "127.0.0.1:0".into();
     let mut harness = egui_kittest::Harness::builder()
-        .with_size(Vec2::new(1280.0, 900.0))
+        .with_size(Vec2::new(1280.0, 1100.0)) // tall enough for every clip action row
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
     let before = harness.state().projects.get(original).unwrap().project().clone();
@@ -389,7 +389,12 @@ fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_reboun
             harness.run_steps(2);
             std::thread::sleep(Duration::from_millis(10));
         }
-        assert_eq!(harness.state().multiplayer.controls.as_ref().unwrap().revision, base + 1, "{button}");
+        assert_eq!(
+            harness.state().multiplayer.controls.as_ref().unwrap().revision,
+            base + 1,
+            "{button} {:?}",
+            harness.state().multiplayer.error
+        );
         harness.run_steps(2);
         assert!(harness.query_by_label("Refresh clip draft").is_some());
         assert!(harness.get_by_label("Create clip").accesskit_node().is_disabled());
@@ -932,10 +937,12 @@ fn shared_device_buttons(render: bool) {
     h.run_steps(3);
     assert_eq!(h.state().multiplayer.devices.param.as_deref(), Some("volume"));
     assert!(h.query_by_label("Parameter value").is_some());
+    let published = h.state().projects.get(local).unwrap().project().channels[0].devices[0].params.clone();
     h.state_mut().multiplayer.devices.value = -12.;
     h.run_steps(2);
-    assert!(
-        h.state().projects.get(local).unwrap().project().channels[0].devices[0].params.is_empty(),
+    assert_eq!(
+        h.state().projects.get(local).unwrap().project().channels[0].devices[0].params,
+        published,
         "changing a draft must not publish it"
     );
     if render {

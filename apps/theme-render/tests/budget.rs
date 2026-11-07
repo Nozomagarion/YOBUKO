@@ -9,6 +9,8 @@
 use suhina_theme_render::budget::{Counts, count};
 use suhina_theme_render::{Subject, scenes};
 
+/// YOBUKO fork: one more theme-change approximation than upstream in each scene, for the app-mode
+/// pill (Studio, Multiplayer, DJ) in the menu bar.
 /// The counts recorded for each scene. `approximations` and `context_misses` are those of a
 /// settled frame; the `*_approximations` are summed over the frames a change takes to settle.
 #[cfg(not(windows))]
@@ -22,7 +24,7 @@ const RECORDED: [(&str, Counts); 2] = [
             context_misses: 0,
             paint_callbacks: 138,
             theme_change_frames: 3,
-            theme_change_approximations: 1040,
+            theme_change_approximations: 1041,
             hover_frames: 3,
             hover_approximations: 0,
         },
@@ -36,7 +38,7 @@ const RECORDED: [(&str, Counts); 2] = [
             context_misses: 0,
             paint_callbacks: 163,
             theme_change_frames: 3,
-            theme_change_approximations: 2157,
+            theme_change_approximations: 2158,
             hover_frames: 4,
             hover_approximations: 0,
         },
@@ -56,7 +58,7 @@ const RECORDED: [(&str, Counts); 2] = [
             context_misses: 0,
             paint_callbacks: 139,
             theme_change_frames: 3,
-            theme_change_approximations: 1097,
+            theme_change_approximations: 1098,
             hover_frames: 4,
             hover_approximations: 0,
         },
@@ -70,7 +72,7 @@ const RECORDED: [(&str, Counts); 2] = [
             context_misses: 0,
             paint_callbacks: 164,
             theme_change_frames: 3,
-            theme_change_approximations: 2214,
+            theme_change_approximations: 2215,
             hover_frames: 4,
             hover_approximations: 0,
         },
