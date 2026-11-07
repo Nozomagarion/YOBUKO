@@ -140,13 +140,13 @@ impl Edit {
                     && object
                         .get("scene")
                         .and_then(Value::as_u64)
-                        .is_some_and(|n| (1..=if command == "scene.insert" { 129 } else { 128 }).contains(&n))
+                        .is_some_and(|n| n <= if command == "scene.insert" { 128 } else { 127 })
                     && object
                         .get("name")
                         .and_then(Value::as_str)
                         .is_some_and(|s| s.len() <= 256 && !s.chars().any(char::is_control))
             }
-            "scene.duplicate" | "scene.delete" => keys(object, &["scene"]) && scene(object, "scene"),
+            "scene.duplicate" | "scene.delete" => keys(object, &["scene"]) && native_scene(object, "scene"),
             "clip.createSharedSlot" => {
                 keys(object, &["track", "scene", "length"])
                     && object.get("track").is_some_and(valid_id)
@@ -163,8 +163,8 @@ impl Edit {
                 keys(object, &["track", "scene", "toTrack", "toScene"])
                     && object.get("track").is_some_and(valid_id)
                     && object.get("toTrack").is_some_and(valid_id)
-                    && scene(object, "scene")
-                    && scene(object, "toScene")
+                    && native_scene(object, "scene")
+                    && native_scene(object, "toScene")
             }
             "clip.create" => {
                 keys(object, &["track", "start", "length", "stack"])
@@ -206,6 +206,12 @@ impl Edit {
 
 fn scene(object: &Map<String, Value>, key: &str) -> bool {
     object.get(key).and_then(Value::as_u64).is_some_and(|n| (1..=128).contains(&n))
+}
+
+/// A scene of Suhina's native scene commands, which count from 0 (upstream #1156); the fork's own
+/// shared slot commands still count from 1 ([`scene`]).
+fn native_scene(object: &Map<String, Value>, key: &str) -> bool {
+    object.get(key).and_then(Value::as_u64).is_some_and(|n| n <= 127)
 }
 
 fn stacked(object: &Map<String, Value>) -> bool {

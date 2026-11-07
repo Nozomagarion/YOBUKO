@@ -402,7 +402,7 @@ fn shared_device_parameters_keep_roles_replays_and_stale_or_invalid_requests_ato
     assert!(
         host.submit(
             peer,
-            request(2, 1, "device.setSharedParam", json!({"track":1,"device":0,"param":"algorithm","value":40}))
+            request(2, 1, "device.setSharedParam", json!({"track":1,"device":0,"param":"algorithm","value":44}))
         )
         .is_err()
     );
@@ -473,7 +473,7 @@ fn shared_launcher_policy_refuses_extra_keys_names_paths_and_remote_launches() {
     for (command, params) in [
         ("scene.rename", json!({"scene":1,"name":"Intro","file":"/private"})),
         ("scene.insert", json!({"scene":"1","name":"Intro"})),
-        ("scene.duplicate", json!({"scene":0})),
+        ("scene.duplicate", json!({"scene":128})),
         ("scene.delete", json!({"scene":129})),
         ("clip.createSharedSlot", json!({"track":1,"scene":1,"length":4,"start":0})),
         ("clip.copyToSharedSlot", json!({"source":1,"track":"Lead","scene":1})),

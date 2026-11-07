@@ -1094,7 +1094,9 @@ fn full_shared_chains_refuse_addition_without_consuming_revision_or_owner_sequen
     project.channels[0].devices = (0..16)
         .map(|_| suhina_model::Device::new("Utility", suhina_model::DeviceKind::Builtin("utility".into())))
         .collect();
-    let mut state = canonical(project.clone());
+    let mut state = canonical(project);
+    // The host's copy has its device ids; the refused addition changes nothing after that.
+    let project = state.host.project().clone();
     assert!(state.submit(Host::owner(), 1, 0, WireEdit::DeviceAdd { track: 1, kind: "utility".into() }).is_err());
     assert_eq!(state.host.project(), &project);
     assert_eq!(state.host.revision(), 0);

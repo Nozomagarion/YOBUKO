@@ -162,7 +162,11 @@ fn an_actual_midi_project_crosses_tls_in_chunks_and_keeps_its_ids_notes_and_soun
     assert_eq!(received.transport, project.transport);
     assert_eq!(received.contents, project.contents);
     assert_eq!(received.arrangement, project.arrangement);
-    assert_eq!(received.channels[0].devices, project.channels[0].devices);
+    // Device ids are given by the host's session; everything else about the device crosses as it was.
+    let without_ids = |devices: &[Device]| {
+        devices.iter().cloned().map(|d| Device { id: Default::default(), ..d }).collect::<Vec<_>>()
+    };
+    assert_eq!(without_ids(&received.channels[0].devices), without_ids(&project.channels[0].devices));
     assert_eq!(project, before, "the source is never mutated");
     assert!(suhina_project_file::to_json(&received).len() > 32768, "must exercise multiple frames");
     // The receiver prepares a real independent renderer from the received musical document.
@@ -758,7 +762,7 @@ fn launcher_scenes_cross_tls_keep_originals_private_launches_and_rejoin_state() 
     assert!((a.monitor().beat() - b.monitor().beat()).abs() > 10.);
     assert!(a.monitor().running() && b.monitor().running());
     local.execute("launcher.setQuantization", &json!({"value":"none"})).unwrap();
-    local.execute("scene.launch", &json!({"scene":2})).unwrap();
+    local.execute("scene.launch", &json!({"scene":1})).unwrap();
     a.process(&mut out);
     b.process(&mut out);
     assert_eq!(a.monitor().column(1).unwrap().playing, Some(1));

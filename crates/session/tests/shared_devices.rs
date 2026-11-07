@@ -74,7 +74,7 @@ fn shared_parameters_refuse_bad_types_paths_values_and_opaque_or_other_devices_a
         ("param", json!("../voice.syx")),
         ("param", json!("x".repeat(65))),
         ("value", json!(0)),
-        ("value", json!(33)),
+        ("value", json!(44)),
         ("value", json!(4.5)),
         ("value", json!(null)),
         ("value", json!(1e300)),
@@ -96,7 +96,9 @@ fn shared_parameters_refuse_bad_types_paths_values_and_opaque_or_other_devices_a
     ] {
         let mut p = before.clone();
         p.channels[0].devices[0] = Device::new("Unsupported", kind);
-        let mut s = Session::new(p.clone());
+        let mut s = Session::new(p);
+        // A new session gives the devices their ids; the refused edit changes nothing after that.
+        let p = s.project().clone();
         assert!(s.execute("device.setSharedParam", &good).is_err());
         assert_eq!(s.project(), &p);
     }
@@ -107,8 +109,9 @@ fn shared_parameters_refuse_bad_types_paths_values_and_opaque_or_other_devices_a
     s.execute("device.setSharedParam", &good).unwrap();
     assert_eq!(s.project().channels[0].devices[0].state, Some(vec![1, 2, 3].into()));
     let mut p = before.clone();
-    p.channels[0].devices[0].params = (0..512).map(|i| DeviceParam::new(format!("unknown{i}"), 0.)).collect();
-    let mut s = Session::new(p.clone());
+    p.channels[0].devices[0].params = (0..1024).map(|i| DeviceParam::new(format!("unknown{i}"), 0.)).collect();
+    let mut s = Session::new(p);
+    let p = s.project().clone();
     assert!(s.execute("device.setSharedParam", &good).is_err());
     assert_eq!(s.project(), &p);
 }
@@ -181,7 +184,8 @@ fn shared_project_gate_admits_only_the_guarded_parameter_command_and_keeps_its_c
     assert!(projects.apply_shared_control(id, "device.setSharedParam", &bad).is_err());
     assert_eq!(projects.get(id).unwrap().project(), &before);
     projects.apply_shared_control(id, "device.setSharedParam", &good).unwrap();
-    assert_eq!(projects.get(id).unwrap().project().channels[0].devices[0].params[0], DeviceParam::new("volume", -9.));
+    let params = &projects.get(id).unwrap().project().channels[0].devices[0].params;
+    assert_eq!(params.iter().find(|p| p.id == "volume"), Some(&DeviceParam::new("volume", -9.)));
 }
 
 #[test]
@@ -201,7 +205,8 @@ fn shared_chain_placement_removal_undo_and_save_preserve_notes_inputs_and_other_
     assert_eq!(s.project().tracks, original.tracks);
     assert_eq!(s.project().contents, original.contents);
     assert_eq!(s.project().arrangement, original.arrangement);
-    assert_eq!(s.project().next_id, original.next_id);
+    // Each added device takes a new device id; nothing else takes one.
+    assert_eq!(s.project().next_id, original.next_id + 2);
     let before = s.project().clone();
     assert!(s.execute("device.addShared", &json!({"track":1,"kind":"fm-synth"})).is_err());
     assert_eq!(s.project(), &before);
@@ -210,7 +215,10 @@ fn shared_chain_placement_removal_undo_and_save_preserve_notes_inputs_and_other_
     for _ in 0..4 {
         s.execute("edit.undo", &json!({})).unwrap();
     }
-    assert_eq!(s.project(), &original);
+    // Undo keeps the id counter where it was, so an id is never handed out twice.
+    let mut undone = s.project().clone();
+    undone.next_id = original.next_id;
+    assert_eq!(&undone, &original);
     s.execute("device.setEnabled", &json!({"track":1,"device":0,"enabled":false})).unwrap();
     let before = s.project().clone();
     assert!(s.execute("device.addShared", &json!({"track":1,"kind":"fm-synth"})).is_err());
@@ -245,7 +253,9 @@ fn shared_chain_guards_reject_paths_unknown_kinds_opaque_chains_wrong_indices_an
             p.channels[0].devices[0] =
                 Device::new("Unsupported", DeviceKind::Clap { id: "/must-not-load.clap".into() });
         }
-        let mut s = Session::new(p.clone());
+        let mut s = Session::new(p);
+        // A new session gives the devices their ids; nothing below changes the project after that.
+        let p = s.project().clone();
         // Neither the plug-in nor a built-in holding state is removed, and FM Synth never joins
         // a chain that may already hold an instrument.
         for (id, params) in [
@@ -260,7 +270,11 @@ fn shared_chain_guards_reject_paths_unknown_kinds_opaque_chains_wrong_indices_an
         assert_eq!(s.project().channels[0].devices[0], p.channels[0].devices[0]);
         let last = s.project().channels[0].devices.len() - 1;
         s.execute("device.removeShared", &json!({"track":1,"device":last})).unwrap();
-        assert_eq!(s.project(), &p);
+        // Only the id counter moved on, past the Utility's device id.
+        let mut after = s.project().clone();
+        assert_eq!(after.next_id, p.next_id + 1);
+        after.next_id = p.next_id;
+        assert_eq!(after, p);
     }
     let mut audio = Session::new(ProjectBuilder::new().audio_track(1, "Audio").build());
     let before = audio.project().clone();
@@ -275,8 +289,9 @@ fn shared_chain_channel_and_project_quotas_fail_without_mutation() {
     project.channels[0].devices =
         (0..16).map(|_| Device::new("Utility", DeviceKind::Builtin("utility".into()))).collect();
     let mut s = Session::new(project.clone());
+    let loaded = s.project().clone();
     assert!(s.execute("device.addShared", &json!({"track":1,"kind":"utility"})).is_err());
-    assert_eq!(s.project(), &project);
+    assert_eq!(s.project(), &loaded);
     let mut builder = ProjectBuilder::new();
     for id in 1..=9 {
         builder = builder.midi_track(id, &format!("Track {id}"));
@@ -285,7 +300,8 @@ fn shared_chain_channel_and_project_quotas_fail_without_mutation() {
     for c in p.channels.iter_mut().take(8) {
         c.devices = project.channels[0].devices.clone();
     }
-    let mut s = Session::new(p.clone());
+    let mut s = Session::new(p);
+    let p = s.project().clone();
     assert!(s.execute("device.addShared", &json!({"track":9,"kind":"utility"})).is_err());
     assert_eq!(s.project(), &p);
 }

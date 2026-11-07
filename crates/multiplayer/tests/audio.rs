@@ -874,7 +874,7 @@ fn audio_copies_to_launcher_keep_verified_assets_after_scene_duplicate_and_delet
     local.attach_player(Player::new(a.controller(), None));
     remote.attach_player(Player::new(b.controller(), None));
     local.execute("launcher.setQuantization", &json!({"value":"none"})).unwrap();
-    local.execute("clip.launch", &json!({"track":1,"scene":2})).unwrap();
+    local.execute("clip.launch", &json!({"track":1,"scene":1})).unwrap();
     let mut left = [0.; 512];
     let mut right = [0.; 512];
     a.process(&mut left);

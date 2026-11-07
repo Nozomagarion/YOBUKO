@@ -144,7 +144,7 @@ impl App {
                     )
                     .clicked()
                 {
-                    local = Some(Action::new("scene.launch", json!({"scene":scene})));
+                    local = Some(Action::new("scene.launch", json!({"scene":scene - 1})));
                 }
             }
         });
@@ -168,7 +168,7 @@ impl App {
                         )
                         .clicked()
                     {
-                        local = Some(Action::new("clip.launch", json!({"track":track,"scene":scene})));
+                        local = Some(Action::new("clip.launch", json!({"track":track,"scene":scene - 1})));
                     }
                 });
                 ui.horizontal_wrapped(|ui| {
