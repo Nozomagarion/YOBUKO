@@ -38,6 +38,7 @@ sha256() {
 
 fetch() {
   local name=$1
+  echo "Downloading $BASE/$name"
   curl --fail --location --retry 4 --retry-delay 2 --silent --show-error -o "$work/$name" "$BASE/$name"
   local got pinned
   got=$(sha256 "$work/$name")
@@ -70,12 +71,23 @@ case "$(uname -s)" in
     fetch "$name"
     mount="$work/mount"
     mkdir -p "$mount"
-    hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$work/$name" >/dev/null
+    # Mixxx's disk image carries its licence (GPL) as an agreement that `hdiutil attach` asks to
+    # accept, and without anyone to answer it the attach is cancelled: answer it. Accepting it
+    # changes nothing; YOBUKO ships Mixxx under that same licence.
+    echo "Opening $name"
+    hdiutil attach -nobrowse -noautoopen -readonly -mountpoint "$mount" "$work/$name" < <(yes) >/dev/null
     trap 'hdiutil detach "$mount" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+    app=$(find "$mount" -maxdepth 1 -iname 'mixxx*.app' -print -quit)
+    if [ -z "$app" ]; then
+      echo "no Mixxx app in $name; it holds:" >&2
+      ls -la "$mount" >&2
+      exit 1
+    fi
     helpers="$package/Suhina.app/Contents/Helpers"
     mkdir -p "$helpers"
     rm -rf "$helpers/Mixxx.app"
-    ditto "$mount/Mixxx.app" "$helpers/Mixxx.app"
+    echo "Copying $(basename "$app") into $helpers/Mixxx.app"
+    ditto "$app" "$helpers/Mixxx.app"
     hdiutil detach "$mount" >/dev/null
     xattr -dr com.apple.quarantine "$helpers/Mixxx.app" 2>/dev/null || true
     echo "$MIXXX_VERSION" > "$helpers/Mixxx.version"
