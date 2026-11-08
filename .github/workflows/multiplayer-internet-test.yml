@@ -129,6 +129,17 @@ jobs:
             ln -sf "$(command -v python3)" "$RUNNER_TEMP/bin/python"
             echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
           fi
+          # Ubuntu 22.04's python3 is 3.10; the scripts need 3.11 or later (tomllib), as on
+          # GitHub's machines, so the Linux runner uses Ubuntu's python3.11 package.
+          if [ "$RUNNER_OS" = Linux ] && ! python3 -c 'import tomllib' 2>/dev/null; then
+            if ! command -v python3.11 >/dev/null 2>&1; then
+              sudo apt-get update && sudo apt-get install -y python3.11
+            fi
+            mkdir -p "$RUNNER_TEMP/bin"
+            ln -sf "$(command -v python3.11)" "$RUNNER_TEMP/bin/python3"
+            ln -sf "$(command -v python3.11)" "$RUNNER_TEMP/bin/python"
+            echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+          fi
       - if: runner.os == 'Linux' && matrix.index <= fromJSON(inputs.guests || '3')
         # The owner's Linux runner has these installed by scripts/self-hosted/yobuko-linux-runner.sh,
         # so apt only runs (with sudo) when one is missing.
