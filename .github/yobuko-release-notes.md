@@ -1,37 +1,48 @@
-## 🙏 Built on Suhina and rbxport
+## 💜 Built on Suhina, Mixxx and rbxport
 
-YOBUKO is made from two open-source projects. All credit for the foundations goes to them:
+YOBUKO is a mix of three open-source projects. It would not exist without them and their authors:
 
-- **[Suhina](https://github.com/suhina-daw/suhina-daw)**: the open-source, Ableton-style DAW written in Rust that provides YOBUKO's whole studio (engine, interface, instruments, effects, plug-in hosting).
-- **[rbxport](https://github.com/chrisle/rbxport)** by chrisle and contributors: tempo/key analysis and the Rekordbox USB exporter that makes sticks Pioneer CDJ/XDJ players read.
+- **[Suhina](https://github.com/suhina-daw/suhina-daw)** 🎛️ **The studio.** The open-source, Ableton-style music studio written in Rust: its engine, instruments, effects and plug-in hosting are YOBUKO's whole Studio side.
+- **[Mixxx](https://github.com/mixxxdj/mixxx)** 🎧 **The live DJ**, by the Mixxx team. YOBUKO's DJ mode is Mixxx itself, ready for the Pioneer DDJ-FLX4.
+- **[rbxport](https://github.com/chrisle/rbxport)** 💾 **The USB export**, by chrisle and contributors: a DJ library app with a real Rekordbox USB exporter for Pioneer CDJ / XDJ players.
+
+Their authors keep their copyright and credits. YOBUKO is an independent fork, not endorsed by any of these projects.
 
 ## 🎶 YOBUKO @VERSION@
 
 **YOBUKO is about making music with your friends, even when you're not in the same room.** One person starts a session and shares a short code; the others type it and everyone is in the same project, each on their own computer.
 
-Make music alone or **together over the Internet** with one invitation code, prepare your DJ library and **export it to a Rekordbox USB stick**. Three buttons at the top right switch between **Multiplayer**, **Studio** and **DJ**.
+**Make it together, play it live, take it to the club: one app.** The mode pill at the top right switches between **Studio**, **Multiplayer** and **DJ**.
+
+### ✨ New in this version
+
+- **DJ mode is now Mixxx.** Pick **DJ**, then **Open Mixxx**: it fills the screen in YOBUKO's look, and quitting it brings the studio back. Plug in a **Pioneer DDJ-FLX4** and play; YOBUKO sets up its mapping.
+- **One music library** shared by Mixxx and rbxport: playlists made in one show up in the other, and **Send this project to DJ…** puts a finished track in it.
+- **USB stick for the club** with rbxport, shipped inside YOBUKO.
+- **One look for the three apps**, with selectable YOBUKO themes.
 
 ### ⬇️ Download
 
 | System | File | How to install |
 |---|---|---|
-| 🍎 **Mac** (Apple Silicon and Intel, macOS 11+) | `YOBUKO-Mac.dmg` | Open it and drag **YOBUKO** into **Applications**. First launch: **right-click › Open › Open**. |
+| 🍎 **Mac** (macOS 11+) | `YOBUKO-Mac.dmg` | Open it and drag **YOBUKO** into **Applications**. First launch: **right-click › Open › Open**. |
 | 🪟 **Windows** 10 / 11 | `YOBUKO-Windows-Setup.exe` | Double-click it. If Windows says "Windows protected your PC": **More info › Run anyway**. |
 | 🐧 **Linux** (most distributions) | `YOBUKO-…-x86_64.AppImage` | Right-click › Properties › **Allow executing as program**, then double-click. |
 | 🐧 **Linux** (Ubuntu, Debian, Mint…) | `yobuko_…_amd64.deb` | Double-click to install; YOBUKO appears in the menu. |
 
 > The *Source code* files at the bottom are the source code: you don't need them to play.
 
-The apps are not signed by Apple or Microsoft yet, hence the first-launch warnings.
+- Mixxx comes **inside YOBUKO** on Windows and on Macs with Apple Silicon (M1 and later). On Linux, install Mixxx 2.4 or later from your distribution (the `.deb` recommends it).
+- The apps are not signed by Apple or Microsoft yet, hence the first-launch warnings.
 
 ### 🎛️ Play together
 
-1. One person clicks **Multiplayer** (top right), then **Create session**: a short **code** appears.
+1. One person clicks the mode pill, picks **Multiplayer**, then **Create session**: a short **code** appears.
 2. They send the code to the others (Discord, text message…).
-3. The others click **Multiplayer**, type the code and click **Join session**. Up to 8 people; the code works for 30 minutes.
+3. The others pick **Multiplayer**, type the code and click **Join session**. Up to 8 people; the code works for 30 minutes.
 
-Everyone needs **the same version** of YOBUKO. Full guide: [GUIDE_MULTIPLAYER.md](https://github.com/Nozomagarion/YOBUKO/blob/feature/online/GUIDE_MULTIPLAYER.md).
+Everyone needs **the same version** of YOBUKO. Full guide: [GUIDE_MULTIPLAYER.md](https://github.com/Nozomagarion/YOBUKO/blob/feature/multiplayer/GUIDE_MULTIPLAYER.md).
 
 ---
 
-YOBUKO is licensed GPL-3.0-or-later, like Suhina. Original authors keep their copyright.
+YOBUKO is licensed GPL-3.0-or-later, like Suhina. Mixxx and rbxport are GPL-2.0-or-later; original authors keep their copyright.

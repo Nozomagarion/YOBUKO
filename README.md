@@ -82,9 +82,6 @@ The full Suhina studio: session and arrangement views, MIDI and audio tracks, in
 
 ## 💿 DJ
 
-> [!NOTE]
-> The Mixxx DJ mode and the shared library ship with the **next release**. Installers released before it still open rbxport from the DJ pill.
-
 <p align="center"><img src="assets/readme/mixxx.webp" alt="DJ mode: Mixxx with two decks, hot cues and the music library" width="100%"></p>
 
 **Play live with Mixxx.** Click the mode pill at the top right, pick **DJ**, then **Open Mixxx**.
