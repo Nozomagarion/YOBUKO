@@ -2649,6 +2649,7 @@ impl App {
     }
 
     fn ui_content(&mut self, ui: &mut Ui) {
+        self.after_mixxx(ui.ctx());
         application_bar::resize_edges(ui);
         if let Some(theme) = self.themes.get(&self.settings.theme) {
             crate::kit::skin::configure(&theme.skin);
