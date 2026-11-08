@@ -35,7 +35,7 @@ echo "== Ubuntu packages (what GitHub's Ubuntu 22.04 machines had for these jobs
 apt-get update
 apt-get install -y --no-install-recommends \
   build-essential ca-certificates curl git git-lfs gnupg jq sudo file zip unzip xz-utils \
-  pkg-config cmake clang libclang-dev perl python3 python3-pip python3-venv dpkg-dev \
+  pkg-config cmake clang libclang-dev perl python3 python3.11 python3-pip python3-venv dpkg-dev \
   libasound2-dev libfontconfig1-dev libssl-dev xvfb xauth imagemagick \
   libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev patchelf \
   libgl1-mesa-dri libegl1 libxkbcommon-x11-0 libxkbcommon-dev libx11-dev libxcursor1 libxi6 \
