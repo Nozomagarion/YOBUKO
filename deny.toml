@@ -124,6 +124,13 @@ ignore = [
     # support (usvg) shapes `<text>` in theme artwork with it, on the bundled fonts only, never on
     # fonts from the system or a package. Remove this when resvg moves to harfrust.
     { id = "RUSTSEC-2026-0206", reason = "rustybuzz: unmaintained, shapes SVG text in theme artwork with the bundled fonts; waits for resvg on harfrust" },
+    # SQLite before 3.54.0 can return stale page-cache bytes when it opens a database together
+    # with a crafted `-wal` file of another page size (local, needs the victim to open the
+    # files). YOBUKO's SQLite is the SQLCipher that rusqlite builds for rbxport's Rekordbox USB
+    # export (`bundled-sqlcipher-vendored-openssl`, which also serves the Mixxx library reader in
+    # crates/dj). No SQLCipher release has the fix yet: even rusqlite 0.41's sqlcipher-src bundles
+    # SQLite 3.53.4. Remove this when a sqlcipher-src with SQLite 3.54+ is out and rusqlite moves to it.
+    { id = "RUSTSEC-2026-0459", reason = "SQLite wal page-size leak: no SQLCipher release bundles SQLite 3.54 yet; local, needs a crafted database and -wal pair" },
     # zbus 5 and its zvariant, zvariant_derive and zbus_names are unmaintained since development
     # moved to zbus 6. It is not a vulnerability, and it is Linux only. Two things pull in zbus 5:
     # the realtime crate, which asks rtkit for real-time priority over D-Bus (ADR 0006), and
