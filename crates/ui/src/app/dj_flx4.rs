@@ -49,6 +49,8 @@ pub(super) enum Flx4 {
     BeatLoop(usize, f64),
     /// A pad in BEAT JUMP mode, or the quick jumps: this many beats, back when negative.
     BeatJump(usize, f64),
+    /// A pad in SAMPLER mode, 0 … 7: that sampler slot played; with SHIFT, stopped.
+    Sampler(usize, bool),
     /// BEAT FX SELECT: the next effect (1), or with SHIFT the one before (−1).
     FxSelect(i32),
     /// BEAT ◀ and ▶: the effect's length shorter (−1) or longer (1).
@@ -79,6 +81,7 @@ fn pad(channel: usize, number: u8) -> Option<Flx4> {
     let index = usize::from(number & 0x07);
     match (number & 0xF8, shifted) {
         (0x00, _) => Some(Flx4::HotCue(deck, index, shifted)),
+        (0x30, _) => Some(Flx4::Sampler(index, shifted)),
         (0x60, false) => BEAT_LOOPS.get(index).map(|beats| Flx4::BeatLoop(deck, *beats)),
         (0x20, false) => BEAT_JUMPS.get(index).map(|beats| Flx4::BeatJump(deck, *beats)),
         _ => None,
@@ -163,6 +166,8 @@ mod tests {
         assert_eq!(read([0x90, 0x58, 0x7F]), Some(Flx4::Sync(0)));
         assert_eq!(read([0x91, 0x54, 0x7F]), Some(Flx4::Phones(1)));
         assert_eq!(read([0x90, 0x68, 0x7F]), Some(Flx4::Tap(0)));
+        assert_eq!(read([0x97, 0x32, 0x7F]), Some(Flx4::Sampler(2, false)));
+        assert_eq!(read([0x9A, 0x37, 0x7F]), Some(Flx4::Sampler(7, true)));
         assert_eq!(read([0x94, 0x63, 0x7F]), Some(Flx4::FxSelect(1)));
         assert_eq!(read([0x94, 0x64, 0x7F]), Some(Flx4::FxSelect(-1)));
         assert_eq!(read([0x94, 0x4B, 0x7F]), Some(Flx4::FxBeats(1)));
@@ -201,8 +206,8 @@ mod tests {
         assert_eq!(read([0x99, 0x64, 0x7F]), Some(Flx4::BeatLoop(1, 4.0)));
         assert_eq!(read([0x97, 0x26, 0x7F]), Some(Flx4::BeatJump(0, -32.0)));
         assert_eq!(read([0x90, 0x3D, 0x7F]), Some(Flx4::BeatJump(0, 16.0)));
-        // Sampler, keyboard, pad FX and pitch pads are not the decks' yet.
-        for later in [[0x97, 0x30, 0x7F], [0x97, 0x40, 0x7F], [0x97, 0x10, 0x7F], [0x99, 0x70, 0x7F]] {
+        // Keyboard, pad FX and pitch pads are not the decks' yet.
+        for later in [[0x97, 0x40, 0x7F], [0x97, 0x10, 0x7F], [0x99, 0x70, 0x7F]] {
             assert_eq!(read(later), None, "{later:02x?}");
         }
         // The least significant halves of 14-bit controls, and other channels, are left alone.

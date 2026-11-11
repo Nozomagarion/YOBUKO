@@ -12,7 +12,9 @@ use suhina_media::waveform::Peaks;
 
 /// The most samples a deck holds decoded: 384 MiB, a 16-minute stereo track at 48 kHz.
 pub(crate) const MAX_SAMPLES: usize = suhina_engine::DECK_MAX_SAMPLES;
-pub(crate) type Loaded = (usize, u64, Result<(Arc<AudioData>, Arc<Peaks>), String>);
+/// A loaded track: its audio, its peaks and its colours.
+pub(crate) type Track = (Arc<AudioData>, Arc<Peaks>, Arc<crate::WaveColors>);
+pub(crate) type Loaded = (usize, u64, Result<Track, String>);
 #[derive(Clone)]
 struct Binding {
     target: Option<ProjectId>,
@@ -22,6 +24,7 @@ struct Source {
     track: suhina_dj::Track,
     data: Arc<AudioData>,
     peaks: Arc<Peaks>,
+    colors: Arc<crate::WaveColors>,
 }
 struct Deck {
     source: Option<Source>,
@@ -66,7 +69,7 @@ impl Deck {
 #[derive(Default)]
 pub(crate) struct Decks {
     states: [Deck; 2],
-    serial: u64,
+    pub(crate) serial: u64,
     loaded: Option<Loaded>,
     stopping: bool,
     clear_after: bool,
@@ -75,6 +78,8 @@ pub(crate) struct Decks {
     master: Option<Arc<DeckMeter>>,
     /// The two effect units.
     fx: [DeckFxUnit; DECK_FX_UNITS],
+    /// The sampler's slots.
+    pub(crate) samplers: crate::dj_sampler::Samplers,
 }
 impl Decks {
     pub(crate) fn apply(&mut self, result: Loaded) {
@@ -149,22 +154,13 @@ pub(crate) fn sync(p: &mut Projects) {
     {
         p.dj.error = Some(e.to_string());
     }
-    if let Some((i, token, result)) = p.dj.decks.loaded.take() {
-        let d = &mut p.dj.decks.states[i];
-        if d.pending.as_ref().is_some_and(|(t, _)| *t == token)
-            && let Some((_, track)) = d.pending.take()
-        {
-            match result {
-                Ok((data, peaks)) => {
-                    d.source = Some(Source { track, data, peaks });
-                    d.looping = None;
-                    d.loop_on = false;
-                    d.binding = None;
-                    d.from = 0.0;
-                    d.error = None;
-                }
-                Err(e) => d.error = Some(e),
-            }
+    let loaded = p.dj.decks.loaded.take();
+    if let Some((i, token, result)) = loaded {
+        // Above the two decks, the load is for the sampler.
+        match (i.checked_sub(crate::dj_sampler::FIRST), p.dj.decks.states.get_mut(i)) {
+            (Some(slot), _) => p.dj.decks.samplers.loaded(slot, token, result.map(|(data, ..)| data)),
+            (None, Some(d)) => deck_loaded(d, token, result),
+            (None, None) => {}
         }
     }
     for i in 0..2 {
@@ -174,6 +170,26 @@ pub(crate) fn sync(p: &mut Projects) {
         {
             p.dj.decks.states[i].binding = None;
             p.dj.decks.states[i].from = 0.0;
+        }
+    }
+}
+/// A load the DJ worker finished for a deck, kept when it is still the one asked for.
+fn deck_loaded(d: &mut Deck, token: u64, result: Result<Track, String>) {
+    {
+        if d.pending.as_ref().is_some_and(|(t, _)| *t == token)
+            && let Some((_, track)) = d.pending.take()
+        {
+            match result {
+                Ok((data, peaks, colors)) => {
+                    d.source = Some(Source { track, data, peaks, colors });
+                    d.looping = None;
+                    d.loop_on = false;
+                    d.binding = None;
+                    d.from = 0.0;
+                    d.error = None;
+                }
+                Err(e) => d.error = Some(e),
+            }
         }
     }
 }
@@ -414,6 +430,11 @@ impl Projects {
     pub fn dj_deck_peaks(&self, deck: usize) -> Option<Arc<Peaks>> {
         self.dj.decks.states.get(deck)?.source.as_ref().map(|s| Arc::clone(&s.peaks))
     }
+
+    /// The colours of deck `deck`'s waveform: its lows, mids and highs over time.
+    pub fn dj_deck_colors(&self, deck: usize) -> Option<Arc<crate::WaveColors>> {
+        self.dj.decks.states.get(deck)?.source.as_ref().map(|s| Arc::clone(&s.colors))
+    }
 }
 pub(crate) fn mixer(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     let old = p.dj.decks.mixer;
@@ -591,6 +612,7 @@ pub(crate) fn snapshot(p: &Projects) -> Value {
         "masterMeter": master.map_or([0.0; 2], |m| m.take()),
         "separate_cue": p.output_choice().cue_pair.is_some(),
         "fx": p.dj.decks.fx.iter().map(fx_json).collect::<Vec<_>>(),
+        "samplers": crate::dj_sampler::snapshot(p),
         "effects": DeckFxKind::ALL.iter().map(|k| json!({"id": k.id(), "name": k.name()})).collect::<Vec<_>>(),
     })
 }

@@ -428,3 +428,31 @@ fn every_effect_plays_on_a_deck_without_blowing_up() {
         assert_eq!(DeckFxKind::from_id(kind.id()), Some(kind));
     }
 }
+#[test]
+fn a_sampler_slot_plays_from_its_start_into_the_master_at_its_level() {
+    let (mut r, mut c) = setup();
+    c.sampler_play(3, signal(0.4, 8000)).unwrap();
+    let out = block(&mut r);
+    assert!((out[1600] - 0.4 * 0.501_187_2).abs() < 1e-5, "{}", out[1600]);
+    assert!(c.sampler_monitor(3).unwrap().playing());
+    // Played again, it starts over.
+    block(&mut r);
+    c.sampler_play(3, signal(0.4, 8000)).unwrap();
+    block(&mut r);
+    assert!((c.sampler_monitor(3).unwrap().seconds() - 0.128).abs() < 1e-6);
+    // Its level, then stopped.
+    c.sampler_gain(3, 0.5).unwrap();
+    block(&mut r);
+    let out = block(&mut r);
+    assert!((out[1600] - 0.2 * 0.501_187_2).abs() < 1e-5, "{}", out[1600]);
+    // The master level and the master's effects follow it too.
+    c.deck_mix(DeckMix { master: 0.5, ..DeckMix::default() }).unwrap();
+    block(&mut r);
+    let out = block(&mut r);
+    assert!((out[1600] - 0.1 * 0.501_187_2).abs() < 1e-5, "{}", out[1600]);
+    c.sampler_stop(3).unwrap();
+    assert!(block(&mut r).iter().all(|s| *s == 0.0));
+    assert!(!c.sampler_monitor(3).unwrap().playing());
+    assert!(c.sampler_play(8, signal(0.4, 8000)).is_err());
+    assert!(c.sampler_gain(0, 1.5).is_err());
+}

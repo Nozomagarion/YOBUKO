@@ -561,6 +561,40 @@ fn the_effect_units_pick_switch_and_place_their_effects() {
 }
 
 #[test]
+fn the_sampler_loads_from_the_library_and_the_pads_play_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 2));
+    harness.state_mut().dj.decks.show_sampler = Some(true);
+    harness.run();
+    for label in ["Sampler 1", "Sampler 8", "Sampler 3 level", "Pad mode A"] {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    // An empty slot clicked loads the library's selected track.
+    harness.get_by_label("Sampler 3").click();
+    until(&mut harness, "the sampler slot", |app| app.dj.decks.sampler(2)["track"] == 1);
+    // Deck A's pads switched to the sampler: pad S3 plays the slot.
+    harness.get_by_label("Pad mode A").click();
+    harness.run();
+    assert!(harness.query_by_label("Hot cue 1 A").is_none());
+    // A test has no audio device: the pad asks the session to play, which says so.
+    let asked = |app: &App| app.dj.decks.error.as_deref().is_some_and(|e| e.contains("audio"));
+    harness.get_by_label("Sampler pad 3 A").click();
+    harness.run();
+    assert!(asked(harness.state()), "{:?}", harness.state().dj.decks.error);
+    harness.state_mut().dj.decks.error = None;
+    harness.get_by_label("Sampler pad 3 A").click_secondary();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.error, None, "stopping a slot that is not playing is fine");
+    // The controller's sampler pads do the same.
+    harness.state_mut().flx4(super::flx4::Flx4::Sampler(2, false));
+    harness.run();
+    assert!(asked(harness.state()));
+    harness.state_mut().load_sampler(5, 2);
+    until(&mut harness, "slot 6", |app| app.dj.decks.sampler(5)["track"] == 2);
+}
+
+#[test]
 fn the_library_searches_sorts_and_shows_a_playlist() {
     let dir = tempfile::tempdir().unwrap();
     let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns", "Mountain Call"]);

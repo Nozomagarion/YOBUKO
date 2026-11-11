@@ -154,6 +154,8 @@ impl Mix {
 }
 /// The headroom the decks leave, so two full tracks summed do not clip: −6 dB.
 const HEADROOM: f32 = 0.501_187_2;
+/// The sampler's slots: short sounds a pad plays from their start, straight to the master.
+pub const SAMPLERS: usize = 8;
 
 pub(crate) struct DeckSender {
     pub voices: [DeckVoiceSender; 2],
@@ -162,6 +164,9 @@ pub(crate) struct DeckSender {
     pub mix: Producer<Mix>,
     pub tone: Producer<(usize, Tone)>,
     pub fx: FxSender,
+    pub samplers: [DeckVoiceSender; SAMPLERS],
+    pub sampler_monitors: [Arc<DeckMonitor>; SAMPLERS],
+    pub sampler_gains: Producer<(usize, f32)>,
 }
 pub(crate) struct Decks {
     voices: [DeckVoice; 2],
@@ -179,6 +184,9 @@ pub(crate) struct Decks {
     master: Arc<DeckMeter>,
     settings: Mix,
     fx: DeckFx,
+    samplers: [DeckVoice; SAMPLERS],
+    sampler_gains: Option<Consumer<(usize, f32)>>,
+    sampler_levels: [Smoother; SAMPLERS],
 }
 impl Decks {
     pub fn new(rate: u32) -> Self {
@@ -198,6 +206,9 @@ impl Decks {
             master: Arc::new(DeckMeter::default()),
             settings: Mix::default(),
             fx: DeckFx::new(rate),
+            samplers: std::array::from_fn(|_| DeckVoice::new(rate)),
+            sampler_gains: None,
+            sampler_levels: [Smoother::new(1.0, ramp); SAMPLERS],
         }
     }
     pub fn sender(&mut self, devices: suhina_device_sdk::Devices) -> DeckSender {
@@ -212,6 +223,13 @@ impl Decks {
             mix: tx,
             tone,
             fx: self.fx.sender(devices),
+            samplers: std::array::from_fn(|i| self.samplers[i].sender()),
+            sampler_monitors: std::array::from_fn(|i| Arc::clone(&self.samplers[i].monitor)),
+            sampler_gains: {
+                let (tx, rx) = RingBuffer::new(64);
+                self.sampler_gains = Some(rx);
+                tx
+            },
         }
     }
     pub fn finish(&mut self, out: &mut [f32], cue: &mut [f32], frames: usize, separate: bool) {
@@ -224,6 +242,11 @@ impl Decks {
             }
         }
         self.fx.receive();
+        while let Some((i, gain)) = self.sampler_gains.as_mut().and_then(|r| r.pop().ok()) {
+            if let Some(level) = self.sampler_levels.get_mut(i) {
+                level.set_target(gain);
+            }
+        }
         let frames = frames.min(MAX_BLOCK);
         let Some(sum) = self.sum.get_mut(..frames * 2) else { return };
         sum.fill(0.0);
@@ -280,6 +303,28 @@ impl Decks {
             }
             // The channel meter: after the EQ, trim and fader, before the crossfader.
             voice.monitor.meter.add(peak_l * fader, peak_r * fader);
+        }
+        // The sampler's slots, straight into the mix, before the master's effects and level.
+        for (voice, level) in self.samplers.iter_mut().zip(&mut self.sampler_levels) {
+            voice.receive();
+            if !voice.playing() {
+                voice.finish(&mut [], 0);
+                continue;
+            }
+            let Some(buffer) = self.buffer.get_mut(..frames * 2) else { return };
+            buffer.fill(0.0);
+            voice.finish(buffer, frames);
+            any = true;
+            let (mut peak_l, mut peak_r) = (0.0f32, 0.0f32);
+            for (dst, src) in sum.as_chunks_mut::<2>().0.iter_mut().zip(buffer.as_chunks::<2>().0) {
+                let g = HEADROOM * level.next_value();
+                let (l, r) = (src[0] * g, src[1] * g);
+                peak_l = peak_l.max(l.abs());
+                peak_r = peak_r.max(r.abs());
+                dst[0] += l;
+                dst[1] += r;
+            }
+            voice.monitor.meter.add(peak_l, peak_r);
         }
         let phones_master = if separate { mix.phones * mix.phones_mix } else { 0.0 };
         if !any {
@@ -409,6 +454,36 @@ impl crate::Controller {
     /// The decks' master meter.
     pub fn deck_master_meter(&self) -> Arc<DeckMeter> {
         Arc::clone(&self.decks.master)
+    }
+    /// Plays sampler slot `slot` from the start of `data`.
+    pub fn sampler_play(&mut self, slot: usize, data: Arc<AudioData>) -> Result<(), String> {
+        if !(1..=2).contains(&data.channels)
+            || !(1000..=96000).contains(&data.sample_rate)
+            || data.samples.is_empty()
+            || data.samples.len() > MAX_SAMPLES
+        {
+            return Err("invalid or oversized sampler audio".into());
+        }
+        let voice = self.decks.samplers.get_mut(slot).ok_or("unknown sampler slot")?;
+        voice.send(DeckCommand::Stop)?;
+        voice.send(DeckCommand::Play { data, from: 0.0 })
+    }
+    /// Stops sampler slot `slot`.
+    pub fn sampler_stop(&mut self, slot: usize) -> Result<(), String> {
+        self.decks.samplers.get_mut(slot).ok_or("unknown sampler slot")?.send(DeckCommand::Stop)
+    }
+    /// Sampler slot `slot`'s level, 0 … 1.
+    pub fn sampler_gain(&mut self, slot: usize, gain: f32) -> Result<(), String> {
+        if slot >= SAMPLERS || !gain.is_finite() || !(0.0..=1.0).contains(&gain) {
+            return Err("a sampler slot's level must be 0–1".into());
+        }
+        self.decks
+            .sampler_gains
+            .push((slot, gain))
+            .map_err(|_| "the audio engine has not taken the previous sampler levels".into())
+    }
+    pub fn sampler_monitor(&self, slot: usize) -> Option<Arc<DeckMonitor>> {
+        self.decks.sampler_monitors.get(slot).cloned()
     }
     /// Sets effect unit `unit` (0 or 1): its effects, their knobs, its mix, length and tempo,
     /// and where it goes.

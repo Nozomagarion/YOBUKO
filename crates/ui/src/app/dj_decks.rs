@@ -78,6 +78,11 @@ pub(in crate::app) struct Decks {
     show_fx: Option<bool>,
     /// Whether they showed last frame.
     fx_shown: bool,
+    /// The same for the sampler's row.
+    show_sampler: Option<bool>,
+    sampler_shown: bool,
+    /// Whether each deck's pads play the sampler's slots instead of its hot cues.
+    sampler_pads: [bool; 2],
     /// The library's search, sort and playlist.
     pub(in crate::app) library: library::LibraryView,
 }
@@ -381,6 +386,12 @@ impl App {
             self.fx_row(ui);
             ui.add_space(GAP);
         }
+        let room = ui.available_height() > sampler::SAMPLER_HEIGHT + GAP + 260.0;
+        self.dj.decks.sampler_shown = self.dj.decks.show_sampler.unwrap_or(room);
+        if self.dj.decks.sampler_shown {
+            self.sampler_row(ui);
+            ui.add_space(GAP);
+        }
         self.library_card(ui);
     }
 
@@ -402,6 +413,14 @@ impl App {
                 );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let shown = self.dj.decks.show_sampler.unwrap_or(self.dj.decks.sampler_shown);
+                if ui
+                    .add(egui::Button::selectable(shown, "Sampler").corner_radius(BUTTON_RADIUS))
+                    .on_hover_text("Show or hide the sampler's eight slots")
+                    .clicked()
+                {
+                    self.dj.decks.show_sampler = Some(!shown);
+                }
                 let shown = self.dj.decks.show_fx.unwrap_or(self.dj.decks.fx_shown);
                 if ui
                     .add(egui::Button::selectable(shown, "Effects").corner_radius(BUTTON_RADIUS))
@@ -523,7 +542,11 @@ impl App {
                 ui.add_space(theme::PAD);
                 self.transport(ui, deck, ready);
                 ui.add_space(theme::PAD);
-                self.pads(ui, deck, ready);
+                if self.dj.decks.sampler_pads[deck] {
+                    self.sampler_pads(ui, deck);
+                } else {
+                    self.pads(ui, deck, ready);
+                }
                 ui.add_space(6.0);
                 self.loop_row(ui, deck, ready);
                 ui.add_space(6.0);
@@ -552,6 +575,8 @@ impl App {
             looped: self.dj.decks.current_loop(deck),
             loop_in: self.dj.decks.tools[deck].loop_in,
             cue: self.dj.decks.track(deck).map(|_| self.dj.decks.cue[deck]),
+            beat: self.dj.decks.beat(deck),
+            colors: self.projects.dj_deck_colors(deck),
         }
     }
 
@@ -567,7 +592,7 @@ impl App {
             let inner = rect.shrink2(Vec2::new(4.0, 3.0));
             marks.paint(&painter, inner, 0.0, length);
             let played = (position / length).clamp(0.0, 1.0);
-            draw_wave(&painter, inner, peaks, 0.0, length, color, Some(position));
+            draw_wave(&painter, inner, peaks, marks.colors.as_deref(), (0.0, length), color, Some(position));
             let x = inner.left() + inner.width() * played as f32;
             painter.vline(x, rect.y_range(), Stroke::new(2.0, theme::text_primary()));
             if let Some(pointer) = response.interact_pointer_pos()
@@ -636,6 +661,7 @@ impl App {
                 {
                     self.back_to_start(deck);
                 }
+                self.pad_mode(ui, deck);
             });
         });
     }
@@ -1019,6 +1045,13 @@ impl App {
             Flx4::BeatLoop(deck, beats) => self.beat_loop(deck, beats),
             Flx4::BeatJump(deck, beats) => self.beat_jump(deck, beats),
             // BEAT FX drives effect unit 1's first effect.
+            Flx4::Sampler(slot, stop) => {
+                if stop {
+                    self.stop_sampler(slot);
+                } else {
+                    self.sampler_pad(slot);
+                }
+            }
             Flx4::FxSelect(by) => self.step_fx(0, 0, by),
             Flx4::FxBeats(by) => self.step_fx_beats(0, by),
             Flx4::FxOn => self.toggle_fx(0, 0),
@@ -1061,6 +1094,10 @@ struct Marks {
     loop_in: Option<f64>,
     /// The cue point the CUE button goes back to.
     cue: Option<f64>,
+    /// The beat grid: the first beat and one beat's length, in seconds.
+    beat: Option<(f64, f64)>,
+    /// The waveform's colours: lows, mids and highs over time.
+    colors: Option<std::sync::Arc<suhina_session::WaveColors>>,
 }
 
 impl Marks {
@@ -1080,6 +1117,18 @@ impl Marks {
                     Color32::from_white_alpha(18)
                 };
                 painter.rect_filled(Rect::from_x_y_ranges(left..=right, rect.y_range()), CornerRadius::same(4), fill);
+            }
+        }
+        // The beat grid, where it is not too dense to read: every beat, the bars brighter.
+        if let Some((first, beat)) = self.beat
+            && f64::from(rect.width()) / (span / beat) >= 6.0
+        {
+            let start = ((from - first) / beat).ceil() as i64;
+            let end = ((to - first) / beat).floor() as i64;
+            for n in start..=end.min(start + 4096) {
+                let line =
+                    if n.rem_euclid(4) == 0 { Color32::from_white_alpha(70) } else { Color32::from_white_alpha(26) };
+                painter.vline(x(first + n as f64 * beat), rect.y_range(), Stroke::new(1.0, line));
             }
         }
         let stroke = |color: Color32| Stroke::new(1.5, color);
@@ -1116,7 +1165,8 @@ fn close_wave(ui: &mut Ui, deck: usize, peaks: Option<&Peaks>, position: f64, ra
         let half = CLOSE_SECONDS / 2.0 * rate.clamp(0.5, 2.0);
         let inner = rect.shrink2(Vec2::new(0.0, 6.0));
         marks.paint(&painter, inner, position - half, position + half);
-        draw_wave(&painter, inner, peaks, position - half, position + half, deck_color(deck), Some(position));
+        let shown = (position - half, position + half);
+        draw_wave(&painter, inner, peaks, marks.colors.as_deref(), shown, deck_color(deck), Some(position));
     }
     painter.vline(rect.center().x, rect.y_range(), Stroke::new(2.0, theme::text_primary()));
 }
@@ -1163,8 +1213,8 @@ fn draw_wave(
     painter: &egui::Painter,
     rect: Rect,
     peaks: &Peaks,
-    from: f64,
-    to: f64,
+    colors: Option<&suhina_session::WaveColors>,
+    (from, to): (f64, f64),
     color: Color32,
     played: Option<f64>,
 ) {
@@ -1172,7 +1222,6 @@ fn draw_wave(
     let columns = rect.width().max(1.0) as usize;
     let span = (to - from) / columns as f64;
     let half = rect.height() / 2.0;
-    let dim = color.gamma_multiply(0.35);
     let mut shapes = Vec::with_capacity(columns);
     for column in 0..columns {
         let start = from + span * column as f64;
@@ -1180,13 +1229,29 @@ fn draw_wave(
         let top = bucket.max.clamp(-1.0, 1.0).max(0.02);
         let bottom = bucket.min.clamp(-1.0, 1.0).min(-0.02);
         let x = rect.left() + column as f32 + 0.5;
-        let colour = if played.is_some_and(|p| start + span <= p) { dim } else { color };
+        // Coloured by what sounds there (lows red, mids green, highs blue), else the deck's.
+        let own = colors.and_then(|c| c.column(start, start + span)).map_or(color, band_color);
+        let colour = if played.is_some_and(|p| start + span <= p) { own.gamma_multiply(0.35) } else { own };
         shapes.push(egui::Shape::line_segment(
             [Pos2::new(x, rect.center().y - top * half), Pos2::new(x, rect.center().y - bottom * half)],
             Stroke::new(1.0, colour),
         ));
     }
     painter.extend(shapes);
+}
+
+/// The colour of a waveform column from its low, mid and high levels: red for the lows, green
+/// for the mids, blue for the highs, mixed by how loud each is.
+fn band_color([low, mid, high]: [f32; 3]) -> Color32 {
+    let total = (low + mid + high).max(1e-6);
+    let mix = |l: f32, m: f32, h: f32| (low * l + mid * m + high * h) / total;
+    let bright = 0.45 + 0.55 * low.max(mid).max(high);
+    let channel = |v: f32| (v * bright).clamp(0.0, 255.0) as u8;
+    Color32::from_rgb(
+        channel(mix(255.0, 70.0, 80.0)),
+        channel(mix(60.0, 220.0, 140.0)),
+        channel(mix(90.0, 120.0, 255.0)),
+    )
 }
 
 /// A round button with `text`, filled with `fill` when given; `label` names it for screen
@@ -1335,6 +1400,8 @@ mod beats;
 mod fx;
 #[path = "dj_library.rs"]
 pub(in crate::app) mod library;
+#[path = "dj_sampler.rs"]
+mod sampler;
 #[path = "dj_deck_tools.rs"]
 mod tools;
 

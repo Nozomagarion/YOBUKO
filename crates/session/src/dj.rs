@@ -93,7 +93,13 @@ impl Dj {
                             })
                             .map(|data| {
                                 let peaks = std::sync::Arc::new(suhina_media::waveform::peaks(&data).without_samples());
-                                (data, peaks)
+                                // The sampler's slots draw no waveform.
+                                let colors = if i < crate::dj_sampler::FIRST {
+                                    crate::dj_colors::analyse(&data)
+                                } else {
+                                    crate::WaveColors::default()
+                                };
+                                (data, peaks, std::sync::Arc::new(colors))
                             })
                             .map_err(|e| format!("Deck loading (128 MiB decoded maximum): {e}"));
                         if done
@@ -366,6 +372,36 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
             optional("master", ParamType::Bool, "on the master")
         ],
         fx_set
+    ),
+    command!(
+        "dj.sampler.load",
+        "Load a DJ library track into a sampler slot",
+        &[param("slot", ParamType::Number, "sampler slot 1–8"), TRACK],
+        sampler_load
+    ),
+    command!(
+        "dj.sampler.play",
+        "Play a sampler slot from its start, into the master",
+        &[param("slot", ParamType::Number, "sampler slot 1–8")],
+        sampler_play
+    ),
+    command!(
+        "dj.sampler.stop",
+        "Stop a sampler slot",
+        &[param("slot", ParamType::Number, "sampler slot 1–8")],
+        sampler_stop
+    ),
+    command!(
+        "dj.sampler.clear",
+        "Stop a sampler slot and take its track out",
+        &[param("slot", ParamType::Number, "sampler slot 1–8")],
+        sampler_clear
+    ),
+    command!(
+        "dj.sampler.gain",
+        "Set a sampler slot's level",
+        &[param("slot", ParamType::Number, "sampler slot 1–8"), param("gain", ParamType::Number, "level 0–1")],
+        sampler_gain
     ),
     command!("dj.deck.stopAll", "Stop decks and cancel pending loads", &[], deck_stop_all),
     command!(
@@ -652,6 +688,21 @@ fn deck_key(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn fx_set(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::fx(p, v)
+}
+fn sampler_load(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::load(p, v)
+}
+fn sampler_play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::play(p, v)
+}
+fn sampler_stop(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::stop(p, v)
+}
+fn sampler_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::clear(p, v)
+}
+fn sampler_gain(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::gain(p, v)
 }
 fn deck_stop_all(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::stop_all(p, v)

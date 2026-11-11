@@ -345,6 +345,7 @@ impl App {
         let shown = self.dj.decks.library.playlist;
         let mut action: Option<(&str, Value)> = None;
         let mut load = None;
+        let mut sampler = None;
         response.context_menu(|ui| {
             ui.label(egui::RichText::new(title).strong());
             for (deck, name) in NAMES.into_iter().enumerate() {
@@ -356,6 +357,14 @@ impl App {
                     ui.close();
                 }
             }
+            ui.menu_button("Load in the sampler", |ui| {
+                for slot in 0..super::sampler::SLOTS {
+                    if ui.button(format!("Slot {}", slot + 1)).clicked() {
+                        sampler = Some(slot);
+                        ui.close();
+                    }
+                }
+            });
             ui.separator();
             ui.menu_button("Add to playlist", |ui| {
                 if playlists.is_empty() {
@@ -383,6 +392,9 @@ impl App {
         {
             self.dj.decks.cue[deck] = 0.0;
             self.dj.decks.set(Some(deck), "loading", json!(true));
+        }
+        if let Some(slot) = sampler {
+            self.load_sampler(slot, id);
         }
         if let Some((command, mut params)) = action {
             params["revision"] = json!(self.dj.decks.revision());

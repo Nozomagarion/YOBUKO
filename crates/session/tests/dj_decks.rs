@@ -276,3 +276,37 @@ fn an_effect_unit_is_set_kept_and_handed_to_the_audio_when_a_deck_plays() {
     }
     assert!(matches!(suhina_session::policy("dj.fx.set").unwrap().agents, suhina_session::Agents::Denied(_)));
 }
+#[test]
+fn a_sampler_slot_loads_a_track_and_plays_it_from_its_start_at_its_level() {
+    let dir = TempDir::new("dj-sampler");
+    let (mut p, out) = seeded(&dir);
+    p.execute("dj.sampler.load", &json!({"slot":2,"track":1})).unwrap();
+    let s = idle(&mut p);
+    let slot = &s["performance"]["samplers"][1];
+    assert_eq!((&slot["track"], &slot["loading"]), (&json!(1), &json!(false)), "{slot}");
+    assert!(s["performance"]["decks"][0]["track"].is_null(), "a sampler load is not a deck load");
+    p.execute("dj.sampler.gain", &json!({"slot":2,"gain":0.5})).unwrap();
+    p.execute("dj.sampler.play", &json!({"slot":2})).unwrap();
+    let mut audio = vec![0.0; 4096];
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    let s = idle(&mut p);
+    let slot = &s["performance"]["samplers"][1];
+    assert_eq!((&slot["playing"], &slot["gain"]), (&json!(true), &json!(0.5)), "{slot}");
+    assert!(audio.iter().any(|x| x.abs() > 0.0), "it sounds");
+    p.execute("dj.sampler.stop", &json!({"slot":2})).unwrap();
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    assert_eq!(idle(&mut p)["performance"]["samplers"][1]["playing"], false);
+    p.execute("dj.sampler.clear", &json!({"slot":2})).unwrap();
+    assert!(idle(&mut p)["performance"]["samplers"][1]["track"].is_null());
+    assert!(p.execute("dj.sampler.play", &json!({"slot":2})).is_err(), "nothing loaded");
+    for wrong in [json!({"slot":9,"track":1}), json!({"slot":0,"track":1}), json!({"slot":1,"track":99})] {
+        assert!(p.execute("dj.sampler.load", &wrong).is_err(), "{wrong}");
+    }
+    assert!(p.execute("dj.sampler.gain", &json!({"slot":1,"gain":1.5})).is_err());
+    // A deck still loads after the sampler did.
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    assert_eq!(idle(&mut p)["performance"]["decks"][0]["track"], 1);
+    for id in ["dj.sampler.load", "dj.sampler.play", "dj.sampler.gain"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}
