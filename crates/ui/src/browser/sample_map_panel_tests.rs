@@ -61,8 +61,9 @@ fn the_map_shows_the_place_and_acts_on_the_browser() {
         output.textures_delta.clear();
     };
     draw(&mut panel, &mut state, &mut projects, &mut settings);
-    // The layout runs on a thread of its own; it arrives on a later frame.
-    for _ in 0..200 {
+    // The layout runs on a thread of its own; it arrives on a later frame. The wait ends as soon
+    // as it does; a loaded CI machine can take far longer than two seconds (YOBUKO).
+    for _ in 0..6000 {
         if panel.map.is_some() {
             break;
         }
@@ -109,7 +110,7 @@ fn the_map_shows_the_place_and_acts_on_the_browser() {
     // A longer limit takes in the long sample.
     settings.map_max_seconds = 10;
     state.place = None;
-    for _ in 0..200 {
+    for _ in 0..6000 {
         draw(&mut panel, &mut state, &mut projects, &mut settings);
         if panel.map.as_ref().is_some_and(|m| m.points.len() == 17) {
             break;
@@ -128,7 +129,7 @@ fn the_map_shows_the_place_and_acts_on_the_browser() {
     panel.handle(MapEvent::SetKind { item: hat, kind: Some(Kind::Tom) }, &mut state, &mut projects, &mut settings);
     assert_eq!(panel.map.as_ref().unwrap().points[hat].kind, Kind::Tom);
     assert!(panel.map.as_ref().unwrap().points[hat].by_hand);
-    for _ in 0..200 {
+    for _ in 0..6000 {
         draw(&mut panel, &mut state, &mut projects, &mut settings);
         if panel.shown.as_ref().map(|k| k.layout_key) != key && panel.job.is_none() {
             break;
@@ -140,7 +141,7 @@ fn the_map_shows_the_place_and_acts_on_the_browser() {
     assert_eq!(panel.points[hat].kind, Kind::Tom);
     assert!(panel.points[hat].by_hand);
     panel.handle(MapEvent::SetKind { item: hat, kind: None }, &mut state, &mut projects, &mut settings);
-    for _ in 0..200 {
+    for _ in 0..6000 {
         draw(&mut panel, &mut state, &mut projects, &mut settings);
         if panel.map.as_ref().is_some_and(|m| m.points[index(&panel)].kind == Kind::Hat) {
             break;

@@ -20,3 +20,11 @@ sign-in. Running it again updates everything.
 
 Ubuntu 22.04 is kept on purpose: the Linux packages need the glibc of the system they are built
 on, or newer, so building on 22.04 lets them run on distributions as old as it.
+
+## The virtual display for the Linux tests
+
+Tests that open a plug-in editor's window need an X display. In WSL, `/tmp/.X11-unix` belongs
+to WSLg, and a display made by `xvfb-run` there refused every connection ("could not open the
+editor's window: Connection refused"). The workflows run the test suite through
+`with-xvfb.sh` instead: it starts a private Xvfb with its own authority file and gives the tests
+a display reached over TCP on `127.0.0.1`, which does not use that folder.

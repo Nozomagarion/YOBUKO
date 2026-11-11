@@ -211,7 +211,7 @@ pub fn hover(ui: &Ui, response: &Response) -> f32 {
 /// Geometry stays inside the caller's hit target, including compact mixer strips.
 pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Response, fill: Color32) {
     let _style = crate::kit::style_class::control("button", response);
-    let radius = super::style_class::radius((rect.height() * 0.25).min(5.0));
+    let radius = super::shape::soften(super::style_class::radius((rect.height() * 0.25).min(5.0)), rect);
     button_surface(painter, rect, response, false, fill, radius);
     if response.has_focus() || response.hovered() {
         let edge = if response.has_focus() { theme::accent() } else { theme::border_strong() };
@@ -222,6 +222,7 @@ pub fn track_button_face(_ui: &Ui, painter: &Painter, rect: Rect, response: &Res
 /// CSS paint remains above the SVG body, below the control's glyph and label.
 pub fn button_surface(painter: &Painter, rect: Rect, response: &Response, on: bool, fill: Color32, radius: f32) {
     let _style = super::style_class::control("button", response);
+    let radius = super::shape::soften(radius, rect);
     super::native_css::mark(super::native_css::HostState::Checked, on);
     // A shape the sheet gives the button wins over the artwork Suhina ships, not over the theme's own.
     let shaped = super::style_class::computed()
@@ -614,7 +615,21 @@ pub fn form_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Response
     } else {
         motion::mix(theme::border(), theme::border_strong(), hover)
     };
-    painter.hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline(border));
+    if super::shape::round() {
+        // YOBUKO: a soft filled field instead of an underline.
+        let fill = motion::mix(theme::control_background(), theme::control_hover(), hover);
+        painter.rect_filled(rect, super::shape::soften(0.0, rect), fill);
+        if response.has_focus() {
+            painter.rect_stroke(
+                rect,
+                super::shape::soften(0.0, rect),
+                theme::hairline(border),
+                egui::StrokeKind::Inside,
+            );
+        }
+    } else {
+        painter.hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline(border));
+    }
     dropdown_contents(painter, rect, text, theme::text_value(), theme::text_hint());
 }
 
@@ -630,7 +645,11 @@ pub fn subtle_dropdown(ui: &Ui, painter: &Painter, rect: Rect, response: &Respon
     } else {
         motion::mix(background, theme::text_on(background), 0.25 + 0.25 * amount)
     };
-    painter.hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline(line));
+    if super::shape::round() {
+        painter.rect_filled(rect, super::shape::soften(0.0, rect), surface);
+    } else {
+        painter.hline(rect.x_range(), rect.bottom() - 0.5, theme::hairline(line));
+    }
     let ink = theme::text_on(surface);
     dropdown_contents(painter, rect, text, ink, motion::mix(surface, ink, 0.65));
 }
@@ -1072,7 +1091,7 @@ pub(crate) fn button(ui: &Ui, painter: &egui::Painter, rect: Rect, text: &str, l
     let response = button_area(ui, rect, Id::unique(("dialog-button", label)), label);
     let _style = super::style_class::enter_response("button", &response);
     let fill = motion::mix(theme::control_background(), theme::control_hover(), hover(ui, &response));
-    let radius = super::style_class::radius(0.0);
+    let radius = super::shape::soften(super::style_class::radius(0.0), rect);
     button_surface(painter, rect, &response, false, fill, radius);
     painter.rect_stroke(rect, radius, theme::hairline(theme::border_strong()), egui::StrokeKind::Inside);
     let small = theme::ui_font(theme::TEXT_SMALL);

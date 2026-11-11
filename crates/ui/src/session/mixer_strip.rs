@@ -18,6 +18,7 @@ use crate::interaction::menus;
 use crate::kit::control_layout::{self, Direction};
 use crate::kit::meter;
 use crate::kit::motion;
+use crate::kit::shape;
 use crate::kit::theme::{self, PAD};
 use crate::kit::widgets::{self, Action, Drag};
 use crate::session::session_view::{Control, SessionViewState};
@@ -434,7 +435,7 @@ pub fn show(
         tint,
         egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2),
     ) {
-        painter.fill_background(rect, 0.0, tint);
+        painter.fill_background(shape::inset(rect, 3.0), shape::corner(shape::STRIP), tint);
     }
     crate::kit::liquid::paint(painter, rect, tint, crate::kit::liquid::Surface::Track);
     crate::kit::native_css::background(painter, rect);
@@ -461,7 +462,14 @@ pub fn show(
         rect,
     );
     if !control_layout::placement("mixer-color").hidden {
-        painter.fill_background(band, 0.0, colour_picker::fill(column.color, column.mute));
+        // With soft shapes the band is the strip's rounded left edge.
+        let drawn = if shape::round() { band.intersect(shape::inset(rect, 3.0)) } else { band };
+        let r = shape::corner(shape::STRIP);
+        painter.fill_background(
+            drawn,
+            egui::CornerRadius { nw: r.nw, sw: r.sw, ne: 0, se: 0 },
+            colour_picker::fill(column.color, column.mute),
+        );
     }
     let band_hit = band.intersect(painter.clip_rect());
     if band_hit.is_positive() && !control_layout::placement("mixer-color").hidden {
@@ -574,17 +582,17 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
         fill,
         egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2),
     ) {
-        painter.fill_background(rect, 0.0, fill);
+        painter.fill_background(shape::cell(rect), shape::corner(shape::CELL), fill);
     }
     crate::kit::liquid::paint(painter, rect, fill, crate::kit::liquid::Surface::Track);
     crate::kit::native_css::background(painter, rect);
-    let text = rect.shrink2(Vec2::new(4.0, 0.0));
+    let text = shape::cell(rect).shrink2(Vec2::new(4.0, 0.0));
     widgets::text_in(
         painter,
         text,
         Align2::LEFT_CENTER,
         &column.name,
-        theme::ui_font(theme::TEXT),
+        theme::strong_font(theme::TEXT),
         // Ink that reads on the fill, unless the sheet gives the name a colour.
         crate::kit::style_class::foreground(theme::text_on(fill)),
     );
@@ -632,7 +640,7 @@ fn output_row(
 
 /// The main channel's devices in its strip, at the same height as every track's list (#683).
 pub fn main_devices(painter: &egui::Painter, rect: Rect, devices: &[crate::interaction::grid::StripDevice]) {
-    painter.fill_background(rect, 0.0, theme::window_background());
+    painter.fill_background(rect, shape::corner(shape::CAP), theme::window_background());
     let list_painter = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
     if devices.is_empty() {
         widgets::text_in(
@@ -665,7 +673,7 @@ pub fn main_devices(painter: &egui::Painter, rect: Rect, devices: &[crate::inter
 /// The track's devices and plug-ins, one row each; the wheel scrolls them, a click shows the
 /// track's chain in the detail area.
 fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state: &mut SessionViewState, id: Id) {
-    painter.fill_background(rect, 0.0, theme::window_background());
+    painter.fill_background(rect, shape::corner(shape::CAP), theme::window_background());
     let track = column.track;
     if column.devices.is_empty() {
         widgets::text_in(
@@ -730,7 +738,7 @@ fn devices(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, state:
         } else {
             motion::mix(theme::window_background(), theme::control_hover(), widgets::hover(ui, &response))
         };
-        list_painter.fill_background(row, 0.0, fill);
+        list_painter.fill_background(row, shape::corner(shape::CAP), fill);
         let text = row.shrink2(Vec2::new(4.0, 0.0));
         let color = if device.enabled { theme::text_secondary() } else { theme::text_hint() };
         let tag = match device.group {
@@ -872,7 +880,7 @@ fn audio_block(
         } else {
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response))
         };
-        painter.fill_background(area, 0.0, fill);
+        painter.fill_background(shape::inset(area, 1.0), shape::corner(shape::BUTTON), fill);
         widgets::text_in(
             painter,
             area.shrink2(Vec2::new(3.0, 0.0)),
@@ -1136,7 +1144,7 @@ fn paint_fader(
         theme::text_value(),
         0.0,
     ) {
-        painter.fill_background(rail, 2.0, recess);
+        painter.fill_background(rail, shape::corner_or(shape::PILL, 2.0), recess);
     }
     let _scale_style = crate::kit::style_class::enter("fader-scale");
     let native_scale = Rect::from_min_size(
@@ -1189,7 +1197,7 @@ fn paint_horizontal_fader(painter: &egui::Painter, fader: Rect, db: f64, hover: 
     if !crate::kit::skin::paint(painter, rail, "fader.rail", state, theme::text_value(), std::f32::consts::FRAC_PI_2) {
         painter.fill_background(
             Rect::from_center_size(fader.center(), Vec2::new(fader.width(), 5.0)),
-            2.0,
+            shape::corner_or(shape::PILL, 2.0),
             theme::control_background(),
         );
     }
@@ -1233,7 +1241,11 @@ fn paint_horizontal_fader(painter: &egui::Painter, fader: Rect, db: f64, hover: 
     );
     if !crate::kit::skin::paint(painter, cap, "fader.cap", state, theme::text_value(), std::f32::consts::FRAC_PI_2) {
         let cap = Rect::from_center_size(centre, Vec2::new(length, thickness));
-        painter.fill_background(cap, 2.0, motion::mix(theme::control_background(), theme::text_value(), hover * 0.3));
+        painter.fill_background(
+            cap,
+            shape::corner_or(shape::CAP, 2.0),
+            motion::mix(theme::control_background(), theme::text_value(), hover * 0.3),
+        );
         painter.vline(centre.x, cap.shrink(2.0).y_range(), theme::hairline(theme::text_value()));
     }
 }
@@ -1275,11 +1287,12 @@ fn compact_volume(
             Some(&response),
         );
     } else {
-        painter.fill_background(rect, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+        let round = shape::corner(shape::CAP);
+        painter.fill_background(rect, round, motion::mix(theme::control_background(), theme::control_hover(), hover));
         let x = rect.left() + rect.width() * position;
         painter.fill_background(
             Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom())),
-            0.0,
+            round,
             theme::control_playing(),
         );
     }
