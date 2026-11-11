@@ -5,7 +5,6 @@
 //! column, a ruler, the note grid and a velocity lane. Every edit is a `note.*` command; the view
 //! keeps only what is on screen: zoom, scroll, the selected notes and a gesture in progress.
 
-use crate::kit::surface::Backgrounds as _;
 use std::collections::BTreeSet;
 
 use egui::{Align2, Color32, CursorIcon, Id, PointerButton, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
@@ -15,11 +14,15 @@ use suhina_engine::model::{Clip, ClipId, LaneData, Note, NoteId, Notes, Project,
 use crate::detail::detail_view::ClipRef;
 use crate::detail::midi_tools::ToolSettings;
 use crate::detail::piano_roll_ghosts::{self as ghost_view, GhostSource, Ghosts};
-use crate::detail::piano_roll_grid::{FIXED_VALUES, GridMode, PianoGrid, Width};
+use crate::detail::piano_roll_grid::PianoGrid;
 use crate::detail::piano_roll_ruler::{self as ruler_view, ClipShape, RulerState};
 use crate::detail::piano_roll_scale::{self as scale_view, Fold, KeyRows};
 use crate::interaction::grid::track_colour;
+use crate::interaction::grid_menu::{grid_entries, grid_key_labels};
+use crate::interaction::key_name::key_name;
+use crate::interaction::scroll::most_scroll_x;
 use crate::interaction::timeline_grid::TimelineGrid;
+use crate::interaction::toolbar::{IconButton, menu_arrow};
 use crate::kit::theme;
 use crate::kit::time_axis::{PIANO_ROLL_BEAT_WIDTHS, clamp_beat_width};
 use crate::kit::widgets::{self, Action};
@@ -41,7 +44,6 @@ mod layout;
 mod span;
 mod state;
 mod toolbar;
-pub(crate) use toolbar::{grid_entries, grid_key_labels, menu_arrow};
 
 pub use self::clip::*;
 #[cfg(test)]
@@ -53,7 +55,6 @@ use self::keys::*;
 pub use self::layout::*;
 use self::span::*;
 pub use self::state::*;
-pub use self::toolbar::IconButton;
 pub(crate) use self::toolbar::*;
 
 pub use gestures::start_by;
@@ -103,14 +104,6 @@ const EPSILON: f64 = 1e-9;
 /// (› Double-click in `docs/spec/ui-clip-editor.md`).
 const DOUBLE_CLICK_TIME: f64 = 0.3;
 const DOUBLE_CLICK_DISTANCE: f32 = 6.0;
-
-const NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-
-/// The name of MIDI key `key`, with 60 as C3.
-pub fn key_name(key: u8) -> String {
-    let name = NAMES.get(usize::from(key % 12)).copied().unwrap_or("?");
-    format!("{name}{}", i32::from(key / 12) - 2)
-}
 
 fn is_black(key: u8) -> bool {
     matches!(key % 12, 1 | 3 | 6 | 8 | 10)
@@ -189,8 +182,12 @@ pub fn show(
     cx: Context<'_>,
     actions: &mut Vec<Action>,
 ) {
-    let _style_class = crate::kit::style_class::enter("piano-roll");
-    let mut styled_ui = crate::kit::style_class::ui(ui);
+    // `--clip-colour`, the clip's colour, for the notes drawn inside it.
+    let el = crate::kit::element::PIANO_ROLL
+        .native(crate::kit::element::Native::default())
+        .variable("--clip-colour", crate::kit::native_css::hex(clip.color))
+        .enter();
+    let mut styled_ui = el.ui(ui);
     let ui = &mut *styled_ui;
     let Context { options, keymap, copied, playhead, start_marker, seeks } = cx;
     let scale = options.toolbar_size.scale();
@@ -220,10 +217,10 @@ pub fn show(
     }
     // The toolbar along the top; the editor under it. The toolbar's height follows Settings ›
     // Clip editor › Piano roll › Toolbar size, and never takes more than the room the editor has.
-    // A theme's taller tool buttons (`.piano-tool { height }`) grow the band to hold them.
+    // A theme's taller tool buttons (`piano-tool { height }`) grow the band to hold them.
     let tool_height = {
-        let _style = crate::kit::style_class::enter("piano-tool");
-        crate::kit::style_class::computed().and_then(|c| c.height).map_or(0.0, |h| h.clamp(8.0, 96.0) + 6.0)
+        let el = crate::kit::element::PIANO_TOOL.enter();
+        el.style().and_then(|c| c.height).map_or(0.0, |h| h.clamp(8.0, 96.0) + 6.0)
     };
     let band = (TOOLBAR * scale).max(tool_height).min(area.height());
     let toolbar_rect = Rect::from_min_max(area.min, Pos2::new(area.right(), area.top() + band));
@@ -286,7 +283,7 @@ pub fn show(
     // The view goes on past the clip over the ghost notes, so the other picked clips' notes can
     // be reached (#1054).
     let ghosts_end = clip.ghosts.notes.iter().map(|n| n.start + n.length).fold(0.0, f64::max);
-    let most = crate::arrangement::arrangement_view::most_scroll_x(
+    let most = most_scroll_x(
         clip.length.max(ghosts_end) + clip.bar_beats * 4.0,
         state.zoom_reach,
         state.beat_width,
@@ -422,6 +419,27 @@ pub fn show(
             }
         }
     }
+    // Every press says which modifiers its drag is chosen by, and one outside the grid none, so
+    // a drag never takes an earlier press's (#1048).
+    if ui.input(|i| i.pointer.button_pressed(PointerButton::Primary)) {
+        // The modifiers the press event carries, not those of a later frame (Alt can change in
+        // between), and the press that is the latest of the frame, the one a drag comes from. Where
+        // it was pressed is the event's position too: the pointer may have moved on in the frame.
+        let press = ui.input(|i| {
+            i.events.iter().rev().find_map(|event| match event {
+                egui::Event::PointerButton { button: PointerButton::Primary, pressed: true, modifiers, pos } => {
+                    Some((*modifiers, *pos))
+                }
+                _ => None,
+            })
+        });
+        state.pressed_with = match press {
+            Some((held, pos)) => {
+                (grid_rect.contains(pos) && ui.ctx().layer_id_at(pos) == Some(ui.layer_id())).then_some(held)
+            }
+            None => widgets::pointer_over(ui, grid_rect).map(|_| ui.input(|i| i.modifiers)),
+        };
+    }
     // The audition starts on the press: a note pressed, or the note a press is about to draw, sounds
     // for as long as the button is held (› Playing the keys).
     if ui.input(|i| i.pointer.button_pressed(PointerButton::Primary))
@@ -443,6 +461,14 @@ pub fn show(
     }
     if response.drag_started_by(PointerButton::Primary) {
         let from = ui.input(|i| i.pointer.press_origin()).or(pointer).unwrap_or(grid_rect.center());
+        // Alt, Ctrl and Shift count as they were when the button went down (› Moving): Alt
+        // pressed between the press and the drag frees the move, it does not change velocity.
+        let inputs = state.pressed_with.take().map_or(inputs, |held| Inputs {
+            shift: held.shift,
+            alt: held.alt,
+            command: held.command || held.ctrl,
+            ..inputs
+        });
         state.stroke.clear();
         state.erasing.clear();
         state.muting.clear();
@@ -623,7 +649,7 @@ pub fn show(
     }
 
     let shape = shape.unwrap_or(clip.shape);
-    draw(ui, &layout, clip, state, grid, preview, shape.played());
+    draw(ui, &el, &layout, clip, state, grid, preview, shape.played());
     draw_strip(ui, &layout, state);
     view_menu(
         ui,

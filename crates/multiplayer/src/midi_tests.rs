@@ -65,8 +65,8 @@ fn the_remote_document_requires_canonical_bytes_and_the_file_free_subset() {
     assert!(decode(&vec![b' '; MAX_DOCUMENT + 1]).is_err());
     for altered in [
         String::from_utf8(bytes.clone()).unwrap() + " ",
-        String::from_utf8(bytes.clone()).unwrap().replace("\"version\": 9", "\"version\": 9, \"version\": 9"),
-        String::from_utf8(bytes.clone()).unwrap().replace("\"version\": 9", "\"version\": 99"),
+        String::from_utf8(bytes.clone()).unwrap().replace("\"version\": 11", "\"version\": 11, \"version\": 11"),
+        String::from_utf8(bytes.clone()).unwrap().replace("\"version\": 11", "\"version\": 99"),
         String::from_utf8(bytes.clone()).unwrap().replacen(
             "\"project\": {",
             "\"project\": {\"file\":\"/private/audio.wav\",",
@@ -101,7 +101,7 @@ fn authored_v3_automation_migrates_to_the_current_version_before_canonical_shari
     assert_eq!(input, before);
     assert_eq!(decode(&bytes).unwrap(), copy);
     assert!(decode(input.as_bytes()).is_err(), "portable copies require the current exact version");
-    assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap()["version"], 9);
+    assert_eq!(serde_json::from_slice::<Value>(&bytes).unwrap()["version"], 11);
     assert_eq!(migrated.channels[0].automation, copy.channels[0].automation);
     assert_eq!(
         suhina_engine::render_offline(&migrated, 8000, 512, suhina_session::devices()).unwrap(),

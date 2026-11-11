@@ -2,8 +2,8 @@
 
 The whole [rbxport](https://github.com/chrisle/rbxport) desktop app by Chris Le — a
 Rekordbox-style DJ library manager with track analysis, decks, USB export for CDJ/XDJ
-players and PRO DJ LINK — at revision `b739d369665b492534dc2eae0733322c040a26d5`
-(rbxport 1.9.0), under **GPL-2.0-or-later** (see `LICENSE` and
+players and PRO DJ LINK — at revision `d0ff75b378ec85be891d9f3067ada1e82bad4cae`
+(rbxport 1.10.0), under **GPL-2.0-or-later** (see `LICENSE` and
 `crates/rbl-deck/vendor/rubberband/COPYING`), used under GPLv3 with YOBUKO.
 
 It is the **USB stick** side of YOBUKO's DJ mode (which mixes live in Mixxx):

@@ -21,7 +21,12 @@ fn private_background_removes_the_opaque_workspace_backdrop_and_keeps_native_pan
     }
     let mut h = window(demo_app());
     let border = theme::border();
-    assert!(h.output().shapes.iter().any(|shape| covers_workspace(&shape.shape, border)));
+    // The line between the bars and the views is a line in the gap, never a fill under the views
+    // that a translucent one would show (#1233).
+    assert!(!h.output().shapes.iter().any(|shape| covers_workspace(&shape.shape, border)));
+    assert!(h.output().shapes.iter().any(|shape| matches!(&shape.shape,
+        egui::Shape::Rect(rect) if rect.fill == border && rect.rect.width() > SIZE.0 * 0.9 && rect.rect.height() <= 1.0
+    )));
     let before = h.state().session().unwrap().project().clone();
     let ctx = h.ctx.clone();
     let mut paper = theme::Theme { name: "Private paper".into(), ..Default::default() };
@@ -54,8 +59,11 @@ fn private_background_removes_the_opaque_workspace_backdrop_and_keeps_native_pan
     assert_eq!(h.state().session().unwrap().project(), &before);
 }
 
+/// Every background blends (#1233): in a see-through theme, with the window's clearing host
+/// installed, nothing in a settled launcher replaces the window's pixels, so no fill can erase the
+/// column artwork under an empty slot.
 #[test]
-fn textured_empty_slots_do_not_clear_their_artwork_on_native_alpha_surfaces() {
+fn no_background_replaces_the_window_pixels_on_native_alpha_surfaces() {
     use std::sync::{Arc, Mutex};
     struct Replacement(Arc<Mutex<Vec<(egui::Rect, egui::Color32)>>>);
     impl suhina_ui::kit::surface::Provider for Replacement {
@@ -68,20 +76,16 @@ fn textured_empty_slots_do_not_clear_their_artwork_on_native_alpha_surfaces() {
     }
     let mut h = window(demo_app());
     let ctx = h.ctx.clone();
-    h.state_mut().use_theme(&ctx, "suhina-blocks");
+    h.state_mut().use_theme(&ctx, "suhina-glass");
     let fills = Arc::new(Mutex::new(Vec::new()));
     suhina_ui::kit::surface::install(&ctx, Arc::new(Replacement(fills.clone())));
     for _ in 0..4 {
         fills.lock().unwrap().clear();
         h.step();
     }
-    let slot = h.get_by_label("Stop Keys (scene 1)").rect();
-    assert!(
-        !fills.lock().unwrap().iter().any(|(rect, color)| color.a() == 0
-            && rect.min.distance(slot.min) < 1.0
-            && rect.max.distance(slot.max) < 1.0),
-        "transparent replacement fills erase the column artwork on a native GPU surface"
-    );
+    assert!(theme::window_background().a() < u8::MAX, "a see-through theme");
+    assert!(fills.lock().unwrap().is_empty(), "nothing replaces pixels: {:?}", fills.lock().unwrap());
+    theme::set_palette(&ctx, theme::Palette::DARK);
 }
 
 #[test]
@@ -203,17 +207,24 @@ fn blocks_artwork_covers_slot_columns_and_keeps_native_clip_launches() {
     theme::set_palette(&h.ctx, blocks.colors);
     h.run_steps(3);
     let slot = h.get_by_label("Launch Root on Bass (scene 1)").rect();
+    // The artwork is a rectangle or a nine-slice (at most 16 corners), not the fan of a CSS
+    // gradient the sheet gives the column.
     let has_body = |h: &Harness<'static, SessionHarness>| {
-        h.output().shapes.iter().any(|shape| matches!(&shape.shape,
-        egui::Shape::Mesh(mesh) if mesh.calc_bounds().contains(slot.center()) && mesh.calc_bounds().height() > slot.height() * 3.0
-    ))
+        h.output().shapes.iter().any(|shape| {
+            matches!(&shape.shape,
+                egui::Shape::Mesh(mesh) if mesh.vertices.len() <= 16
+                    && mesh.calc_bounds().contains(slot.center())
+                    && mesh.calc_bounds().height() > slot.height() * 3.0
+            )
+        })
     };
     assert!(has_body(&h), "colour-keyed body artwork spans the slot column");
     assert_eq!(
         clicked(&mut h, "Launch Walk on Bass (scene 2)"),
         [Action::new("clip.launch", json!({"track":2,"scene":1}))]
     );
-    blocks.skin.styles.get_mut(".track-column").unwrap().insert("--suhina-track-artwork".into(), "off".into());
+    let css = blocks.skin.css.as_deref().unwrap_or("").replace("track-artwork: on", "track-artwork: off");
+    blocks.skin.css = Some(css.into());
     skin::configure(&blocks.skin);
     h.run_steps(3);
     assert!(!has_body(&h), "opting out restores native column fills");
@@ -226,7 +237,7 @@ fn a_horizontal_session_fader_drags_on_its_drawn_axis_and_keeps_the_native_comma
     use suhina_ui::kit::{skin, theme_css};
     let mut harness = view();
     let mut theme = theme::Theme::default();
-    assert!(theme_css::apply(&mut theme, ".control-mixer-volume { --suhina-direction: horizontal; }").is_empty());
+    assert!(theme_css::apply(&mut theme, ".control-mixer-volume { direction: horizontal; }").is_empty());
     skin::configure(&theme.skin);
     harness.run_steps(3);
     let rect = harness.get_by_label("Drums volume").rect();
@@ -312,7 +323,7 @@ fn session_pan_knob_keeps_the_native_drag_command_and_value() {
     let mut harness = view();
     assert!(!harness.state().state.knobs);
     let mut theme = theme::Theme::default();
-    assert!(theme_css::apply(&mut theme, ".pan { --suhina-appearance: knob; }").is_empty());
+    assert!(theme_css::apply(&mut theme, "pan { appearance: knob; }").is_empty());
     skin::configure(&theme.skin);
     harness.run_steps(3);
     let start = harness.get_by_label("Bass pan").rect().center();
@@ -751,7 +762,7 @@ fn the_browser_s_places_and_rows_take_their_own_rules() {
         }
     }
     let magenta = egui::Color32::from_rgb(0xFF, 0x00, 0xFF);
-    suhina_ui::kit::native_css::set_user_sheet(Some(".browser-place:checked { background-color: #ff00ff; }".into()));
+    suhina_ui::kit::native_css::set_user_sheet(Some("browser-place[checked] { background-color: #ff00ff; }".into()));
     let mut h = window(demo_app());
     if let Some(show) = h.query_by_label("Show browser") {
         show.click();
@@ -759,7 +770,7 @@ fn the_browser_s_places_and_rows_take_their_own_rules() {
     h.run();
     let shown = h.output().shapes.iter().any(|s| filled(&s.shape, magenta));
     suhina_ui::kit::native_css::set_user_sheet(None);
-    assert!(shown, "the chosen place takes .browser-place:checked");
+    assert!(shown, "the chosen place takes browser-place[checked]");
 }
 
 #[test]
@@ -778,7 +789,7 @@ fn the_loop_lines_reach_down_past_the_returns_to_main() {
     project.transport.loop_enabled = true;
     let mut app = App::new();
     app.set_session(Session::new(project), &[]);
-    suhina_ui::kit::native_css::set_user_sheet(Some(".loop-line { color: #00ff00; }".into()));
+    suhina_ui::kit::native_css::set_user_sheet(Some("loop-line { color: #00ff00; }".into()));
     let mut h = window(app);
     h.get_by_label("Arrangement view").click();
     h.run();
@@ -786,7 +797,7 @@ fn the_loop_lines_reach_down_past_the_returns_to_main() {
     let tallest = h.output().shapes.iter().map(|s| tallest_line(&s.shape, green)).fold(0.0, f32::max);
     let main = h.query_all_by_label_contains("Main").map(|n| n.rect().top()).fold(0.0, f32::max);
     suhina_ui::kit::native_css::set_user_sheet(None);
-    assert!(tallest > 0.0, "the line takes .loop-line's colour");
+    assert!(tallest > 0.0, "the line takes loop-line's colour");
     assert!(tallest > main, "it reaches down past Main's row: ends at {tallest}, Main at {main}");
 }
 
@@ -808,7 +819,7 @@ fn a_loop_line_under_the_track_headers_is_not_drawn_over_them() {
     project.transport.loop_enabled = true;
     let mut app = App::new();
     app.set_session(Session::new(project), &[]);
-    suhina_ui::kit::native_css::set_user_sheet(Some(".loop-line { color: #00ff00; }".into()));
+    suhina_ui::kit::native_css::set_user_sheet(Some("loop-line { color: #00ff00; }".into()));
     let mut h = window(app);
     h.get_by_label("Arrangement view").click();
     h.run();
@@ -885,7 +896,7 @@ fn a_theme_with_a_background_image_lets_the_window_rest() {
 }
 
 /// Main's volume field in the Arrangement view is an element of its own, `#main-volume`: it does
-/// not paint `.arrangement`'s style as its own, and a `#main-volume` rule reaches it (#1237).
+/// not paint `arrangement`'s style as its own, and a `#main-volume` rule reaches it (#1237).
 #[test]
 fn mains_volume_field_has_an_element_of_its_own() {
     fn fills(shape: &egui::Shape, inside: egui::Rect, out: &mut Vec<egui::Color32>) {
@@ -898,7 +909,7 @@ fn mains_volume_field_has_an_element_of_its_own() {
     let mut app = App::new();
     app.set_session(Session::new(demo_project()), &[]);
     suhina_ui::kit::native_css::set_user_sheet(Some(
-        ".arrangement { background-color: #ff0000; } #main-volume { background-color: #00ff00; }".into(),
+        "arrangement { background-color: #ff0000; } #main-volume { background-color: #00ff00; }".into(),
     ));
     let mut h = window(app);
     h.get_by_label("Arrangement view").click();
@@ -911,7 +922,7 @@ fn mains_volume_field_has_an_element_of_its_own() {
     assert!(seen.contains(&egui::Color32::from_rgb(0, 0xFF, 0)), "#main-volume reaches it: {seen:?}");
 }
 
-/// A clip in a slot takes the pointer's hover: `.clip:hover { background-color }` replaces the
+/// A clip in a slot takes the pointer's hover: `clip:hover { background-color }` replaces the
 /// lighter mix under the pointer (#1241).
 #[test]
 fn a_hovered_clip_takes_the_themes_hover_background() {
@@ -924,7 +935,7 @@ fn a_hovered_clip_takes_the_themes_hover_background() {
     }
     let mut app = App::new();
     app.set_session(Session::new(demo_project()), &[]);
-    suhina_ui::kit::native_css::set_user_sheet(Some(".clip:hover { background-color: #00ff00; }".into()));
+    suhina_ui::kit::native_css::set_user_sheet(Some("clip:hover { background-color: #00ff00; }".into()));
     let mut h = window(app);
     h.get_by_label("Launcher view").click();
     h.run();
@@ -947,7 +958,7 @@ fn a_hovered_clip_takes_the_themes_hover_background() {
     assert!(!left.contains(&green), "and gives it back once the pointer has gone");
 }
 
-/// A clip's own background rule is not a hover's: `.clip { background-color }` alone leaves a
+/// A clip's own background rule is not a hover's: `clip { background-color }` alone leaves a
 /// hovered clip its lighter mix, as its colour fills it at rest (#1252).
 #[test]
 fn a_clips_background_rule_alone_does_not_fill_it_when_hovered() {
@@ -960,7 +971,7 @@ fn a_clips_background_rule_alone_does_not_fill_it_when_hovered() {
     }
     let mut app = App::new();
     app.set_session(Session::new(demo_project()), &[]);
-    suhina_ui::kit::native_css::set_user_sheet(Some(".clip { background-color: #222222; }".into()));
+    suhina_ui::kit::native_css::set_user_sheet(Some("clip { background-color: #222222; }".into()));
     let mut h = window(app);
     h.get_by_label("Launcher view").click();
     h.run();

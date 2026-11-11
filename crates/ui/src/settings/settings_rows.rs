@@ -640,6 +640,75 @@ pub(crate) static ROWS: &[Entry] = &[
     ),
     row(
         Page::Arrangement,
+        "Automation",
+        "Group plug-in lanes",
+        "Whether a lane mounted from a plug-in goes into a group of that plug-in's lanes, one group a plug-in",
+        &["automation_group"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.automation_group_plugins),
+    ),
+    row(
+        Page::Arrangement,
+        "Automation",
+        "Top lane shows",
+        "What a track's top automation lane shows when you open its lanes, before you choose a parameter in it or move a control",
+        &["automation_top_lane"],
+        |cx, r| {
+            use crate::arrangement::automation_lanes::TopLane;
+            cx.choose(r, &[("None", TopLane::None), ("Volume", TopLane::Volume), ("Pan", TopLane::Pan)], |s| {
+                &mut s.view.automation_top_lane
+            })
+        },
+    ),
+    row(
+        Page::Arrangement,
+        "Gain envelope",
+        "Show gain envelope",
+        "Audio clips with gain envelope points show the line on their waveform when you are not editing it",
+        &["gain_envelope_show"],
+        |cx, r| cx.on_off(r, |s| &mut s.view.envelope_show),
+    ),
+    row(
+        Page::Arrangement,
+        "Gain envelope",
+        "Gain envelope ceiling",
+        "The most a gain envelope point can raise a clip, so a slip of the mouse cannot make it very loud",
+        &["gain_envelope_ceiling"],
+        |cx, r| {
+            cx.choose(r, &[("+3 dB", 3u8), ("+6 dB", 6), ("+12 dB", 12), ("+24 dB", 24)], |s| {
+                &mut s.view.envelope_ceiling
+            })
+        },
+    ),
+    row(
+        Page::Arrangement,
+        "Gain envelope",
+        "Gain envelope grid",
+        "The steps a gain envelope point moves in, up and down, when it is not moved freely",
+        &["gain_envelope_step"],
+        |cx, r| {
+            cx.choose(r, &[("0.5 dB", 5u8), ("1 dB", 10), ("2 dB", 20), ("3 dB", 30), ("6 dB", 60)], |s| {
+                &mut s.view.envelope_step
+            })
+        },
+    ),
+    row(
+        Page::Arrangement,
+        "Gain envelope",
+        "Envelope points move",
+        "Whether gain envelope points move on the dB grid or freely until you switch the button under the clip name",
+        &["gain_envelope_move"],
+        |cx, r| cx.choose(r, &[("On the grid", false), ("Freely", true)], |s| &mut s.view.envelope_free),
+    ),
+    row(
+        Page::Arrangement,
+        "Gain envelope",
+        "Envelope editing",
+        "Whether Edit gain envelope opens every audio clip's envelope at once, to set several side by side, or one clip's at a time",
+        &["gain_envelope_editing"],
+        |cx, r| cx.choose(r, &[("All audio clips", true), ("One clip at a time", false)], |s| &mut s.view.envelope_all),
+    ),
+    row(
+        Page::Arrangement,
         "Advanced",
         "Edge drag stretches audio",
         "Dragging an audio clip's edge with Ctrl and Alt held stretches its sound to the new length",
@@ -861,6 +930,14 @@ pub(crate) static ROWS: &[Entry] = &[
         "Things fade and slide briefly when they change",
         &["animations"],
         |cx, r| cx.on_off(r, |s| &mut s.animations),
+    ),
+    row(
+        Page::Appearance,
+        "Window",
+        "Hide pointer while dragging",
+        "The pointer disappears while a knob, fader or value is dragged",
+        &["drag_hides_pointer"],
+        |cx, r| cx.on_off(r, |s| &mut s.drag_hides_pointer),
     ),
     row(
         Page::Appearance,
