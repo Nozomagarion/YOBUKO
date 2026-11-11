@@ -96,6 +96,15 @@ order: a code is the positions of its words. Still no account and no server of o
   lobby is reachable, on the LAN, and after leaving). The view shows the short code with
   **Copy code**, and **Copy full invitation** as a fallback, for example when a network blocks
   the public address lookup.
+- **The page before a session.** Multiplayer opens on two cards. **Open a room** has the choice
+  between the Internet and the local network, **Create session** (the four-track demo) and the
+  two ways to open the room with the project showing. **Join a friend** has the code field and
+  **Join session**, which is off until something is typed. After a join that was accepted,
+  **Rejoin last session** sits above the field for 30 minutes (the time an invitation admits
+  guests) and joins with the same invitation in one click, for someone who left by mistake or
+  whose connection stayed down longer than the minute a guest keeps retrying
+  ([session-resume.md](session-resume.md)). It is kept in memory only: closing the program
+  forgets it. The details of what is shared wait behind **How sharing works**.
 - **Loopback.** `online-loopback` lobbies take number 0, which Internet codes never use, and
   are found through an address directory kept in this process instead of the public lookup.
   Their codes therefore work only between sessions of one process (the tests); two instances on

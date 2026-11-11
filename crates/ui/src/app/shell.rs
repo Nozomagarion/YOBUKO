@@ -188,9 +188,14 @@ impl App {
         let fill = motion::mix(theme::control_background(), theme::control_hover(), hover);
         ui.painter().rect_filled(rect, height / 2.0, fill);
         // The dot breathes while the session is not settled.
-        let alive = if matches!(mode, "reconnecting" | "starting") { 0.45 + 0.55 * motion::pulse(ui.ctx()) } else { 1.0 };
+        let alive =
+            if matches!(mode, "reconnecting" | "starting") { 0.45 + 0.55 * motion::pulse(ui.ctx()) } else { 1.0 };
         ui.painter().circle_filled(Pos2::new(rect.left() + 9.0, rect.center().y), 3.0, colour.gamma_multiply(alive));
-        ui.painter().galley(Pos2::new(rect.left() + 16.0, rect.center().y - galley.size().y / 2.0), galley, theme::text_primary());
+        ui.painter().galley(
+            Pos2::new(rect.left() + 16.0, rect.center().y - galley.size().y / 2.0),
+            galley,
+            theme::text_primary(),
+        );
         if response.clicked() {
             *picked = Some(WorkspaceMode::Multiplayer);
         }
@@ -273,12 +278,25 @@ impl App {
                     .corner_radius(12)
                     .inner_margin(egui::Margin::symmetric(10, 6))
                     .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let (bird, _) = ui.allocate_exact_size(Vec2::splat(44.0), Sense::hover());
-                            piou::show(ui.ctx(), ui.painter(), bird, mood, space.coat(), beat);
-                            ui.set_max_width(300.0);
-                            ui.label(egui::RichText::new(text).color(theme::text_primary()));
-                        });
+                        // Piou, then the text beside it, laid out by hand: an area sizes itself
+                        // from the frame before, which a wrapping label would not survive.
+                        const BIRD: f32 = 44.0;
+                        let galley = ui.painter().layout(
+                            text.clone(),
+                            theme::ui_font(theme::TEXT),
+                            theme::text_primary(),
+                            280.0,
+                        );
+                        let size = Vec2::new(BIRD + 8.0 + galley.size().x, galley.size().y.max(BIRD));
+                        let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+                        response.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, &text));
+                        let bird = Rect::from_min_size(
+                            Pos2::new(rect.left(), rect.center().y - BIRD / 2.0),
+                            Vec2::splat(BIRD),
+                        );
+                        piou::show(ui.ctx(), ui.painter(), bird, mood, space.coat(), beat);
+                        let at = Pos2::new(bird.right() + 8.0, rect.center().y - galley.size().y / 2.0);
+                        ui.painter().galley(at, galley, theme::text_primary());
                     });
             });
     }
@@ -302,7 +320,7 @@ impl App {
                 let (bird, _) = ui.allocate_exact_size(Vec2::splat(96.0), Sense::hover());
                 piou::show(ui.ctx(), ui.painter(), bird, mood, space.coat(), beat);
                 ui.add_space(theme::PAD);
-                ui.heading(heading);
+                ui.heading(egui::RichText::new(heading).size(20.0).strong());
                 ui.add_space(theme::PAD / 2.0);
                 ui.label(about);
                 ui.add_space(theme::PAD * 2.0);

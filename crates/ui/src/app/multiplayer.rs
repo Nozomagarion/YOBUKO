@@ -668,7 +668,10 @@ impl App {
         .labelled_by(label.id);
         ui.add_space(theme::PAD / 2.0);
         let typed = !self.multiplayer.join.trim().is_empty();
-        if ui.add_enabled(typed, egui::Button::new("Join session")).on_disabled_hover_text("Type the code first").clicked()
+        if ui
+            .add_enabled(typed, egui::Button::new("Join session"))
+            .on_disabled_hover_text("Type the code first")
+            .clicked()
         {
             let invitation = self.multiplayer.join.clone();
             self.join_session(invitation);

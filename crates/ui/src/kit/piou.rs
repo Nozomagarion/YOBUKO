@@ -43,29 +43,17 @@ pub struct Coat {
 impl Coat {
     /// Cream down, for the studio and the USB space.
     pub const fn cream(headphones: Color32) -> Self {
-        Self {
-            headphones,
-            body: Color32::from_rgb(0xFF, 0xF9, 0xF0),
-            shade: Color32::from_rgb(0xF1, 0xE4, 0xD3),
-        }
+        Self { headphones, body: Color32::from_rgb(0xFF, 0xF9, 0xF0), shade: Color32::from_rgb(0xF1, 0xE4, 0xD3) }
     }
 
     /// Yellow down, for Multiplayer.
     pub const fn yellow(headphones: Color32) -> Self {
-        Self {
-            headphones,
-            body: Color32::from_rgb(0xFF, 0xF3, 0xC4),
-            shade: Color32::from_rgb(0xF5, 0xDF, 0x95),
-        }
+        Self { headphones, body: Color32::from_rgb(0xFF, 0xF3, 0xC4), shade: Color32::from_rgb(0xF5, 0xDF, 0x95) }
     }
 
     /// Lavender down, for DJ.
     pub const fn lavender(headphones: Color32) -> Self {
-        Self {
-            headphones,
-            body: Color32::from_rgb(0xF4, 0xE6, 0xFF),
-            shade: Color32::from_rgb(0xDE, 0xC6, 0xF2),
-        }
+        Self { headphones, body: Color32::from_rgb(0xF4, 0xE6, 0xFF), shade: Color32::from_rgb(0xDE, 0xC6, 0xF2) }
     }
 }
 
@@ -98,7 +86,8 @@ struct Pose {
 }
 
 impl Pose {
-    const STILL: Self = Self { scale: Vec2::splat(1.0), turn: 0.0, lift: 0.0, shift: 0.0, eyes: 1.0, flap: 0.0, effect: 0.35 };
+    const STILL: Self =
+        Self { scale: Vec2::splat(1.0), turn: 0.0, lift: 0.0, shift: 0.0, eyes: 1.0, flap: 0.0, effect: 0.35 };
 }
 
 /// The pose of `mood` at `time` seconds, on a beat of `beat` seconds. `moving` off gives the
@@ -247,7 +236,8 @@ fn shapes(rect: Rect, mood: Mood, coat: Coat, pose: Pose) -> Vec<Shape> {
     let headphones = if mood == Mood::Lost { GREYED } else { coat.headphones };
     let on_body = |points: &[(f32, f32)]| points.iter().map(|&(x, y)| space.body(x, y)).collect::<Vec<_>>();
     let on_page = |points: &[(f32, f32)]| points.iter().map(|&(x, y)| space.fixed(x, y)).collect::<Vec<_>>();
-    let filled = |points: Vec<(f32, f32)>, fill: Color32, stroke: Stroke| Shape::convex_polygon(on_body(&points), fill, stroke);
+    let filled =
+        |points: Vec<(f32, f32)>, fill: Color32, stroke: Stroke| Shape::convex_polygon(on_body(&points), fill, stroke);
     let mut out = Vec::with_capacity(40);
 
     // Its shadow, smaller while it is in the air.
@@ -330,12 +320,17 @@ fn shapes(rect: Rect, mood: Mood, coat: Coat, pose: Pose) -> Vec<Shape> {
                 let (nx, ny) = (x + 6.0 * at, y - 14.0 * at);
                 let colour = ink(fade(at));
                 out.push(Shape::convex_polygon(on_page(&ellipse((nx, ny), (3.4, 2.6), -0.4)), colour, Stroke::NONE));
-                out.push(Shape::line(on_page(&[(nx + 2.9, ny - 0.8), (nx + 2.9, ny - 11.0), (nx + 7.5, ny - 9.0)]), space.stroke(1.8, colour)));
+                out.push(Shape::line(
+                    on_page(&[(nx + 2.9, ny - 0.8), (nx + 2.9, ny - 11.0), (nx + 7.5, ny - 9.0)]),
+                    space.stroke(1.8, colour),
+                ));
             }
         }
         Mood::Call => {
             for (i, (from, control, to)) in
-                [((100.0, 40.0), (108.0, 44.0), (109.0, 56.0)), ((106.0, 30.0), (119.0, 37.0), (120.0, 55.0))].into_iter().enumerate()
+                [((100.0, 40.0), (108.0, 44.0), (109.0, 56.0)), ((106.0, 30.0), (119.0, 37.0), (120.0, 55.0))]
+                    .into_iter()
+                    .enumerate()
             {
                 let at = (pose.effect + 0.8 * i as f32).fract();
                 out.push(Shape::line(on_page(&curve(from, control, to)), space.stroke(3.0, ink(fade(at)))));
@@ -383,7 +378,10 @@ mod tests {
                     assert!(frame.len() >= 12, "{mood:?} draws {} shapes", frame.len());
                     let drawn = bounds(&frame);
                     // A hop and the notes may leave the box by a little, never by much.
-                    assert!(rect.expand(side * 0.2).contains_rect(drawn), "{mood:?} at {side}: {drawn:?} outside {rect:?}");
+                    assert!(
+                        rect.expand(side * 0.2).contains_rect(drawn),
+                        "{mood:?} at {side}: {drawn:?} outside {rect:?}"
+                    );
                 }
             }
         }
