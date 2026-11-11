@@ -853,6 +853,14 @@ pub fn ui_font(size: f32) -> FontId {
     FontId::new(super::style_class::font_size(size), FontFamily::Proportional)
 }
 
+/// Names that should stand out (clips, tracks, scenes, buttons): Manrope, bolder.
+pub fn strong_font(size: f32) -> FontId {
+    FontId::new(super::style_class::font_size(size), FontFamily::Name(STRONG.into()))
+}
+
+/// The family of [`strong_font`].
+pub const STRONG: &str = "manrope-strong";
+
 /// Every number, time and position is monospaced.
 pub fn mono_font(size: f32) -> FontId {
     FontId::new(super::style_class::font_size(size), FontFamily::Monospace)
@@ -879,12 +887,21 @@ fn fonts() -> egui::FontDefinitions {
         ..Default::default()
     });
     fonts.font_data.insert("manrope".into(), std::sync::Arc::new(manrope));
+    let strong = egui::FontData::from_static(UI_FONT).tweak(egui::FontTweak {
+        coords: egui::epaint::text::VariationCoords::new([(b"wght", 700.0)]),
+        ..Default::default()
+    });
+    fonts.font_data.insert(STRONG.into(), std::sync::Arc::new(strong));
     fonts.font_data.insert("encode-sans".into(), std::sync::Arc::new(egui::FontData::from_static(LEGACY_UI_FONT)));
     fonts.font_data.insert("ibm-plex-mono".into(), std::sync::Arc::new(egui::FontData::from_static(MONO_FONT)));
     fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "encode-sans".into());
     fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "manrope".into());
     fonts.families.insert(FontFamily::Name("encode-sans".into()), vec!["encode-sans".into()]);
     fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "ibm-plex-mono".into());
+    // The bold family falls back on the regular one's fallbacks for characters Manrope lacks.
+    let mut strong = vec![STRONG.to_owned()];
+    strong.extend(fonts.families.get(&FontFamily::Proportional).into_iter().flatten().skip(1).cloned());
+    fonts.families.insert(FontFamily::Name(STRONG.into()), strong);
     fonts
 }
 
@@ -922,8 +939,9 @@ fn visuals(visuals: &mut egui::Visuals, p: &Palette) {
     visuals.text_edit_bg_color = Some(Color32::TRANSPARENT);
     visuals.faint_bg_color = p.panel_background;
     visuals.window_stroke = hairline(p.border);
-    visuals.window_corner_radius = egui::CornerRadius::ZERO;
-    visuals.menu_corner_radius = egui::CornerRadius::ZERO;
+    // YOBUKO's themes round windows, menus and buttons (`shape`); Suhina's are square.
+    visuals.window_corner_radius = super::shape::corner(super::shape::PANEL);
+    visuals.menu_corner_radius = super::shape::corner(super::shape::BUTTON);
     visuals.window_shadow = egui::epaint::Shadow::NONE;
     visuals.popup_shadow = egui::epaint::Shadow::NONE;
     visuals.selection.bg_fill = p.control_active;
@@ -938,7 +956,7 @@ fn visuals(visuals: &mut egui::Visuals, p: &Palette) {
     ] {
         widget.bg_fill = fill;
         widget.weak_bg_fill = fill;
-        widget.corner_radius = egui::CornerRadius::ZERO;
+        widget.corner_radius = super::shape::corner(super::shape::BUTTON);
         widget.bg_stroke = Stroke::NONE;
         widget.expansion = 0.0;
     }

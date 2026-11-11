@@ -1302,6 +1302,7 @@ impl App {
             self.sample_map.set_window(true, &mut self.browser);
         }
         self.settings = settings;
+        crate::kit::shape::set_round(crate::kit::shape::theme_is_round(&self.settings.theme));
         theme::set_palette(ctx, self.themes.palette(&self.settings.theme));
     }
 
@@ -1322,6 +1323,7 @@ impl App {
             self.settings.theme = base.to_owned();
             self.settings_changed = true;
         }
+        crate::kit::shape::set_round(crate::kit::shape::theme_is_round(&self.settings.theme));
         theme::set_palette(ctx, self.themes.palette(&self.settings.theme));
     }
 
@@ -1342,6 +1344,7 @@ impl App {
         if self.themes.get(id).is_some() {
             self.settings.theme = id.to_string();
             self.settings_changed = true;
+            crate::kit::shape::set_round(crate::kit::shape::theme_is_round(id));
             theme::set_palette(ctx, self.themes.palette(id));
         }
     }
@@ -2277,6 +2280,7 @@ impl App {
     /// theme in use.
     pub fn put_theme(&mut self, ctx: &egui::Context, entry: ThemeEntry) {
         if self.themes.put(entry) {
+            crate::kit::shape::set_round(crate::kit::shape::theme_is_round(&self.settings.theme));
             theme::set_palette(ctx, self.themes.palette(&self.settings.theme));
         }
     }
@@ -2966,9 +2970,10 @@ impl App {
         let workspace_base = if crate::kit::liquid::background_image(ui.ctx()).is_some() {
             egui::Color32::TRANSPARENT
         } else {
-            // `#workspace { border-color }` is this line's own colour.
+            // `#workspace { border-color }` is this line's own colour; with YOBUKO's soft shapes
+            // the panels are cards on the window's background instead.
             let _workspace = crate::kit::style_class::enter_named("workspace", "workspace");
-            theme::border()
+            if crate::kit::shape::round() { crate::kit::shape::ground() } else { theme::border() }
         };
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(workspace_base)).show(ui, |ui| {
             let _workspace_style = crate::kit::style_class::enter_named("workspace", "workspace");
@@ -3426,6 +3431,10 @@ impl App {
                     }
                     (None, _) => self.start_panel(ui),
                 });
+                // YOBUKO's soft shapes: the view is a card too.
+                if grid.is_some() {
+                    crate::kit::shape::card_edges(ui.painter(), inner, crate::kit::shape::ground());
+                }
             }
             // A device's expanded panel, over the views (and the large sample map); not while a
             // dialog is open, which it would cover.

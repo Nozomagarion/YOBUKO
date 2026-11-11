@@ -122,6 +122,7 @@ fn render_the_shell_for_review() {
             .wgpu()
             .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
         theme::install(&harness.ctx);
+        crate::kit::shape::set_round(crate::kit::shape::theme_is_round(&theme_id));
         theme::set_palette(&harness.ctx, crate::settings::themes::Themes::default().palette(&theme_id));
         harness.run_steps(6);
         harness.render().unwrap().save(folder.join(format!("shell-{name}.png"))).unwrap();

@@ -175,7 +175,11 @@ pub fn surface(painter: &Painter, rect: Rect, radius: f32, fill: egui::Color32) 
         return 0.0;
     }
     let style = super::super::style_class::computed();
-    let radius = style.as_ref().filter(|s| s.authored.radius).map_or(radius, |s| s.radius);
+    // YOBUKO's soft shapes round every control the sheet gives no radius of its own.
+    let radius = style
+        .as_ref()
+        .filter(|s| s.authored.radius)
+        .map_or_else(|| super::super::shape::soften(radius, rect), |s| s.radius);
     let radius = radius.min(rect.height().min(rect.width()) / 2.0).max(0.0);
     let fill = style.as_ref().filter(|s| s.authored.background).map_or(fill, |s| s.background);
     if fill.a() > 0 {

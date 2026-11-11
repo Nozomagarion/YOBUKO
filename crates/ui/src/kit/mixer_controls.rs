@@ -18,7 +18,7 @@ pub fn pan_field(painter: &egui::Painter, rect: Rect, pan: f64, hover: f32) {
     crate::kit::native_css::surface(
         painter,
         rect,
-        0.0,
+        super::shape::radius(super::shape::CAP),
         motion::mix(theme::pan_background(), theme::panel_hover(), hover),
     );
     let centre = rect.center().x.round() - 0.5;
@@ -190,7 +190,7 @@ pub fn send_field(
         Pos2::new(rect.right() - 4.0, rect.bottom() - 1.5),
     );
     let quiet = motion::mix(theme::control_background(), pointer, 0.25);
-    painter.fill_background(rail, 1.0, quiet);
+    painter.fill_background(rail, super::shape::corner_or(super::shape::PILL, 1.0), quiet);
     let level = Rect::from_min_size(rail.min, Vec2::new(rail.width() * position.clamp(0.0, 1.0), rail.height()));
     if level.width() >= 1.0
         && !super::skin::paint(painter, level, "send.fill", super::skin::State::Normal, pointer, 0.0)
@@ -239,6 +239,19 @@ pub fn send_field(
 /// A tactile vertical fader cap. Its centre marker, rather than its edges, indicates the gain.
 pub fn fader_cap(painter: &egui::Painter, cap: Rect, hover: f32, state: super::skin::State) {
     let _style = super::style_class::enter("fader-cap");
+    if super::shape::round() {
+        // YOBUKO's cap: a soft, flat tab in the text's colour with a thin line across its
+        // middle, as on the mock-up.
+        let face = motion::mix(theme::text_value(), theme::text_primary(), hover);
+        painter.rect_filled(cap.translate(Vec2::new(0.0, 1.0)), super::shape::CAP, Color32::from_black_alpha(70));
+        painter.rect_filled(cap, super::shape::CAP, face);
+        painter.hline(
+            cap.shrink2(Vec2::new(3.0, 0.0)).x_range(),
+            cap.center().y.round() + 0.5,
+            egui::Stroke::new(1.0, theme::text_on(face)),
+        );
+        return;
+    }
     super::native_css::background_rounded(painter, cap, 2.0);
     if super::skin::paint(painter, cap, "fader.cap", state, theme::text_value(), 0.0) {
         return;

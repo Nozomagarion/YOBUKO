@@ -2060,7 +2060,13 @@ fn place_style(response: &egui::Response, chosen: bool) -> crate::kit::style_cla
 /// A row's background: the sheet's `background-color` for the element in scope, else `fill`,
 /// and its gradients and shadows.
 fn paint_row(painter: &egui::Painter, rect: Rect, fill: egui::Color32) {
-    painter.fill_background(rect, 0.0, crate::kit::style_class::background(fill));
+    // With YOBUKO's soft shapes a lit row is a rounded pill inside the list, as on the mock-up.
+    let (shown, round) = if crate::kit::shape::round() {
+        (rect.shrink2(Vec2::new(4.0, 1.0)), crate::kit::shape::corner(crate::kit::shape::CELL))
+    } else {
+        (rect, egui::CornerRadius::ZERO)
+    };
+    painter.fill_background(shown, round, crate::kit::style_class::background(fill));
     crate::kit::native_css::background(painter, rect);
 }
 

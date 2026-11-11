@@ -120,7 +120,7 @@ impl App {
             self.toggle_typing_keys();
         }
         let (fill, ink) = widgets::toggle_colors(ui, &response, self.typing.on);
-        painter.rect_filled(keys_rect, 0.0, fill);
+        painter.rect_filled(keys_rect, crate::kit::shape::soften(0.0, keys_rect), fill);
         let text = if self.typing.on { self.typing.label() } else { "Keys".into() };
         widgets::text_in(&painter, keys_rect, Align2::CENTER_CENTER, &text, theme::ui_font(theme::TEXT_SMALL), ink);
         x = keys_rect.right() + PAD;
