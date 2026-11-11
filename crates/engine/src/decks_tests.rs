@@ -124,3 +124,62 @@ fn a_fader_moved_while_paused_cannot_flash_a_hidden_deck_on_resume() {
     c.deck_play(1, source, 0.0).unwrap();
     assert!(block(&mut r).iter().all(|s| *s == 0.0));
 }
+
+fn sine(hz: f32, rate: u32) -> Arc<AudioData> {
+    let samples = (0..rate as usize * 4)
+        .flat_map(|i| {
+            let s = 0.5 * (std::f32::consts::TAU * hz * i as f32 / rate as f32).sin();
+            [s, s]
+        })
+        .collect();
+    Arc::new(AudioData { sample_rate: rate, channels: 2, samples })
+}
+/// The loudest sample of a block's second half, once the filters have settled.
+fn peak(r: &mut Renderer) -> f32 {
+    block(r);
+    block(r)[1024..].iter().fold(0.0f32, |m, s| m.max(s.abs()))
+}
+#[test]
+fn a_deck_plays_faster_or_slower_and_its_clock_follows() {
+    let (mut r, mut c) = setup();
+    c.deck_rate(0, 1.5).unwrap();
+    c.deck_play(0, signal(0.2, 8000), 0.0).unwrap();
+    block(&mut r);
+    assert!((c.deck_monitor(0).unwrap().seconds() - 0.192).abs() < 1e-6);
+    c.deck_rate(0, 1.0).unwrap();
+    block(&mut r);
+    assert!((c.deck_monitor(0).unwrap().seconds() - 0.32).abs() < 1e-6);
+    for wrong in [0.49, 2.01, f64::NAN, f64::INFINITY] {
+        assert!(c.deck_rate(0, wrong).is_err(), "{wrong}");
+    }
+    assert!(c.deck_rate(2, 1.0).is_err());
+}
+#[test]
+fn a_deck_eq_kills_its_band_and_the_filter_closes_from_either_side() {
+    let (mut r, mut c) = setup();
+    c.deck_mix(0.0, [1.0; 2], [false; 2]).unwrap();
+    c.deck_play(0, sine(80.0, 8000), 0.0).unwrap();
+    let flat = peak(&mut r);
+    assert!((flat - 0.5 * 0.501_187_2).abs() < 0.01, "{flat}");
+    c.deck_tone(0, DeckTone { eq: [DECK_KILL_DB, 0.0, 0.0], filter: 0.0 }).unwrap();
+    assert!(peak(&mut r) < flat * 0.1);
+    c.deck_tone(0, DeckTone { eq: [0.0, 0.0, DECK_KILL_DB], filter: 0.0 }).unwrap();
+    assert!(peak(&mut r) > flat * 0.9, "the high band leaves a bass alone");
+    c.deck_tone(0, DeckTone { eq: [0.0; 3], filter: 1.0 }).unwrap();
+    assert!(peak(&mut r) < flat * 0.1, "the high-pass turned fully removes a bass");
+    c.deck_tone(0, DeckTone { eq: [0.0; 3], filter: -1.0 }).unwrap();
+    assert!(peak(&mut r) > flat * 0.8, "the low-pass keeps a bass");
+    c.deck_play(0, sine(2500.0, 8000), 0.0).unwrap();
+    assert!(peak(&mut r) < flat * 0.1, "the low-pass turned fully removes a high tone");
+    c.deck_tone(0, DeckTone::default()).unwrap();
+    assert!((peak(&mut r) - flat).abs() < 0.02);
+    for wrong in [
+        DeckTone { eq: [-41.0, 0.0, 0.0], filter: 0.0 },
+        DeckTone { eq: [0.0, 7.0, 0.0], filter: 0.0 },
+        DeckTone { eq: [0.0; 3], filter: 1.5 },
+        DeckTone { eq: [f32::NAN, 0.0, 0.0], filter: 0.0 },
+    ] {
+        assert!(c.deck_tone(0, wrong).is_err(), "{wrong:?}");
+    }
+    assert!(c.deck_tone(2, DeckTone::default()).is_err());
+}

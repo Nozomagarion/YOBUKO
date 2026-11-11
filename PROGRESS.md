@@ -5,6 +5,32 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## DJ mixing inside YOBUKO's window — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the owner wants live DJ mixing in the same window as the studio, never in Mixxx's
+separate window (asked again on 11 November after the shell merged). A program cannot put
+another program's window inside its own on macOS, so YOBUKO now draws its own decks.
+
+- **Code written:** the **DJ** tab shows two decks and a mixer in YOBUKO's window. Each deck has
+  its track's waveform (the whole track and a close view around the playhead), **Cue**, **Play**,
+  **Sync** and a tempo slider; the mixer has **High**, **Mid**, **Low** and **Filter** knobs,
+  headphones and a level per deck, and a crossfader. The DJ library sits under them with **Load
+  A** / **Load B**; audio files and folders dropped on the page, the Music folder and projects
+  sent to DJ go into it. A **Pioneer DDJ-FLX4** plugged in drives it all (Play, Cue, Sync, Load,
+  browse, faders, EQ, filter, tempo, crossfader, jog wheels) while the DJ space shows. The sound
+  is the engine's two decks, which gained a speed, a three-band EQ and a filter each. Mixxx is
+  still one button away (**Open Mixxx instead**).
+- **Checks passed (Linux, cloud container):** engine tests for the speed, the EQ kills and the
+  filter; session tests for the new `dj.deck.rate` and `dj.deck.tone` commands; UI tests for the
+  page, loading, Sync, drops into the library and the FLX4 (with a simulated controller); a
+  screenshot drawn by the real program.
+- **Limits:** not tried with a real DDJ-FLX4, real speakers or headphones, or on Windows and
+  macOS. No key lock (the pitch follows the tempo), no loops, hot cues, effects or recording yet;
+  the controller's lights stay off. Beat-matching is by tempo only: Sync does not line up the
+  beats.
+- **Next criterion:** the owner mixes two tracks with the FLX4 in a Windows test build and says
+  whether it feels right.
+
 ## One shell for every space, and Piou — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
 
 **Goal:** the studio, live DJ mixing and USB export should feel like one program that is pleasant

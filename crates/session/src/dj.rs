@@ -91,6 +91,10 @@ impl Dj {
                             .and_then(|t| {
                                 crate::dj_preview::prepare_limited(t, &mut cache, crate::dj_decks::MAX_SAMPLES)
                             })
+                            .map(|data| {
+                                let peaks = std::sync::Arc::new(suhina_media::waveform::peaks(&data).without_samples());
+                                (data, peaks)
+                            })
                             .map_err(|e| format!("Deck loading (128 MiB decoded maximum): {e}"));
                         if done
                             .send(Ok(Reply {
@@ -294,6 +298,24 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
         "Seek a DJ deck in source seconds",
         &[DECK, param("from", ParamType::Number, "source seconds")],
         deck_seek
+    ),
+    command!(
+        "dj.deck.rate",
+        "Set how fast a DJ deck plays (its tempo; the pitch follows)",
+        &[DECK, param("rate", ParamType::Number, "speed: 1 = the track's own, 0.5–2")],
+        deck_rate
+    ),
+    command!(
+        "dj.deck.tone",
+        "Set a DJ deck's three-band EQ and filter",
+        &[
+            DECK,
+            param("low", ParamType::Number, "low band in dB, −40 (kill) to +6"),
+            param("mid", ParamType::Number, "mid band in dB, −40 (kill) to +6"),
+            param("high", ParamType::Number, "high band in dB, −40 (kill) to +6"),
+            param("filter", ParamType::Number, "−1 low-pass … 0 off … 1 high-pass")
+        ],
+        deck_tone
     ),
     command!("dj.deck.stopAll", "Stop decks and cancel pending loads", &[], deck_stop_all),
     command!(
@@ -559,6 +581,12 @@ fn deck_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn deck_seek(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::seek(p, v)
+}
+fn deck_rate(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::rate(p, v)
+}
+fn deck_tone(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::tone(p, v)
 }
 fn deck_stop_all(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::stop_all(p, v)

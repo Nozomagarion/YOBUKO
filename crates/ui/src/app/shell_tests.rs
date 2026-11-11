@@ -30,13 +30,12 @@ fn each_space_has_a_tab_and_the_usb_space_is_rbxports_page() {
     assert_eq!(harness.state().workspace_mode(), WorkspaceMode::Usb);
     assert!(harness.query_by_label("USB export · rbxport").is_some());
     assert!(harness.query_by_label("Open rbxport").is_some());
-    assert!(harness.query_by_label("Open Mixxx").is_none(), "Mixxx's page belongs to the DJ space");
+    assert!(harness.query_by_label("Crossfader").is_none(), "the decks belong to the DJ space");
     assert!(harness.state().dj.note.is_some(), "entering the USB space starts rbxport or says why not");
     super::super::menu_bar::pick_mode(&mut harness, "DJ");
     assert_eq!(harness.state().workspace_mode(), WorkspaceMode::Dj);
-    assert!(harness.query_by_label("Open Mixxx").is_some());
-    harness.get_by_label("Prepare a USB stick (rbxport)").click();
-    harness.run();
+    assert!(harness.query_by_label("Crossfader").is_some());
+    super::super::menu_bar::pick_mode(&mut harness, "USB");
     assert_eq!(harness.state().workspace_mode(), WorkspaceMode::Usb);
     super::super::menu_bar::pick_mode(&mut harness, "Studio");
     assert_eq!(harness.state().workspace_mode(), WorkspaceMode::Studio);
