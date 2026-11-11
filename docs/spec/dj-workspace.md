@@ -6,6 +6,7 @@ status: current
 last_verified: 2026-11-11
 covers:
   - crates/engine/src/decks.rs
+  - crates/engine/src/deck_voice.rs
   - crates/engine/src/decks_tests.rs
   - crates/session/src/dj_decks.rs
   - crates/session/tests/dj_decks.rs
@@ -16,6 +17,8 @@ covers:
   - crates/ui/src/app/dj_decks.rs
   - crates/ui/src/app/dj_decks_tests.rs
   - crates/ui/src/app/dj_flx4.rs
+  - crates/ui/src/app/dj_deck_tools.rs
+  - crates/ui/src/app/dj_library.rs
   - crates/engine/src/preview.rs
   - crates/midi/src/lib.rs
   - crates/session/tests/dj.rs
@@ -64,19 +67,44 @@ studio's control bar, and shows:
   and tempo (the track's BPM times the deck's speed), the whole track with the part played
   dimmed (a click or a drag goes there), a close waveform of eight seconds around the playhead,
   which stays in the middle, the time played and left, **Cue**, **Play** and **Sync**, and a
-  **Tempo** slider (±8 %, widening to ±16 % and ±50 % when the speed is beyond; a double click
-  returns to the track's own speed). The pitch follows the speed.
+  **Tempo** slider (±8 %, ±16 % or ±50 %: a click on the range button goes to the next, and the
+  range widens by itself when the speed is beyond; a double click returns to the track's own
+  speed). The pitch follows the speed. Both waveforms mark the hot cues in their pads' colours,
+  the loop (green while it plays), LOOP IN waiting for LOOP OUT, and the cue point.
+  - **EJECT** takes the track out of a deck that does not play; **|◀** goes back to the start;
+    **−** and **+**, held, nudge a playing deck 4 % slower or faster to bring the beats
+    together (`dj.deck.bend`).
+  - **Hot cues 1–8**: a pad with no cue puts one where the deck is; a lit pad jumps there;
+    a right-click deletes. They are the track's cue points in the DJ library named
+    `Hot cue 1` … `Hot cue 8` (`dj.cue.add`, `dj.cue.delete`), so they stay with the track.
+  - **Loops**: **IN** marks where a loop starts, **OUT** ends it there and plays it,
+    **RELOOP / EXIT** lets a playing loop go or plays the last one again (from its start when
+    the deck is outside it). **LOOP n** is a loop of n beats from the nearest beat (pressed again,
+    it lets go); **/2** and **×2** halve or double it, and the loop that plays with it. A loop
+    crosses its end without a seam: the last 2 ms fade into what follows its start.
+  - **Beat jump**: **◀** and **▶** jump n beats back or on (a loop that plays moves with it);
+    a click on **JUMP n** doubles n, a right-click halves it. Beats come from the track's beat
+    grid when it has one, else from its BPM; without either, beat loops and jumps are off.
   - **Cue**: stopped, it sets the cue point where the deck is; playing, the deck goes back to
     the cue point and stops there. Loading a track puts the cue point at its start.
   - **Sync**: the deck plays at the other deck's tempo. Both tracks need a known BPM.
-- **The mixer** between them: per deck **High**, **Mid** and **Low** knobs (the middle is flat,
+- **The mixer** between them: per deck a **Trim** knob (−12 to +12 dB, the middle 0), **High**, **Mid** and **Low** knobs (the middle is flat,
   the right end +6 dB, the left end −40 dB, a cut that falls along a curve so the first half of
   the turn trims), a **Filter** knob (left of the middle a low-pass closing down to 150 Hz,
   right of it a high-pass opening up to 8 kHz, the middle off), **Phones** (the deck in the
-  headphones, on a separate cue output only) and a level fader; the crossfader under them. A
-  knob is dragged up or down; a double click puts it back.
+  headphones, on a separate cue output only), a level fader and a meter beside it (after the
+  trim, EQ and fader, before the crossfader: green, yellow from −6 dB, red from 0 dB); in the
+  middle **Master** (the decks' level on the main output) with a stereo meter, the headphones'
+  level and **Cue/Mst** (what the headphones hear: the cued decks at the left, the master at
+  the right, a blend between); the crossfader under them. A knob is dragged up or down; a
+  double click puts it back.
 - **The library** under them: each track with its BPM, key and length, and **Load A** /
-  **Load B** (refused on a deck that plays). A click selects a row. Audio files and folders
+  **Load B** (refused on a deck that plays). A click selects a row. **Search** keeps the
+  tracks whose title, key or BPM hold every word typed; a click on **TITLE**, **BPM**, **KEY**
+  or **TIME** sorts by it, again the other way, a third time back to the library's order. The
+  **Playlists** on the left show all tracks or one playlist; **+ New playlist** makes one, and a
+  row's right-click menu loads it on a deck, adds it to a playlist or removes it from the one
+  shown; a playlist's right-click deletes it. Audio files and folders
   dropped anywhere on the page, **Add my Music folder** (the person's `Music` folder) and
   **Send this project to DJ…** (a render) go into it, analysed one file at a time, with the
   count said on the page. A folder gives at most 1000 audio files; files already in the
@@ -105,10 +133,21 @@ open-source DDJ-FLX4 mapping for Mixxx by Robert904 and ElHanko (MIT), vendored 
 | CFX (filter) | CC 0x17 (A) or 0x18 (B), channel 7 | Filter |
 | TEMPO | CC 0x00, channel 1 or 2 | ±8 %, read as the mapping reads it |
 | CROSSFADER | CC 0x1F, channel 7 | crossfader |
-| JOG (top or side) | CC 0x21–0x23, channel 1 or 2, 64 still | playing, a nudge of 4 ms a step; stopped, 20 ms |
+| JOG (top or side) | CC 0x21–0x23, channel 1 or 2, 64 still | playing, a nudge of 1 % of the speed a step, for 120 ms after the last; stopped, a scrub of 20 ms a step |
+| SHIFT | note 0x3F, channel 1 or 2, read pressed and let go | held, a hot cue pad deletes |
+| SHIFT + CUE | note 0x48, channel 1 or 2 | back to the start |
+| TRIM | CC 0x04, channel 1 or 2 | Trim |
+| HEADPHONES MIX | CC 0x0C, channel 7 | Cue/Mst |
+| LOOP IN, LOOP OUT, RELOOP/EXIT | note 0x10, 0x11, 0x4D (0x50 with SHIFT), channel 1 or 2 | IN, OUT, RELOOP / EXIT |
+| CUE/LOOP CALL ◀ ▶ | note 0x51, 0x53, channel 1 or 2 | /2, ×2 |
+| Quick jumps | note 0x3E, 0x3D, channel 1 or 2 | 16 beats back, on |
+| Pads, HOT CUE mode | notes 0x00–0x07 on channel 8 (A) or 10 (B); 9 or 11 with SHIFT | hot cue 1–8; with SHIFT, deleted |
+| Pads, BEAT LOOP mode | notes 0x60–0x67, channel 8 or 10 | loops of 1/4, 1/2, 1, 2, 4, 8, 16, 32 beats |
+| Pads, BEAT JUMP mode | notes 0x20–0x27, channel 8 or 10 | 1, 2, 4 and 32 beats back (left) and on (right) |
 
-Only the most significant 7 bits of the 14-bit controls are read. The controller's lights are
-not driven. Not verified on the hardware yet.
+Only the most significant 7 bits of the 14-bit controls are read. The SAMPLER, KEYBOARD, PAD FX
+and pitch pad modes, the Beat FX section, tap tempo and the jog wheels' touch are not read yet.
+The controller's lights are not driven. Not verified on the hardware yet.
 
 The USB space is rbxport's page (**Open rbxport**, **Add this project to the library…**,
 **Share library now**). Entering it opens rbxport with Mixxx's tracks and playlists, and does
@@ -402,9 +441,11 @@ migration and concurrent-write tests cover refusal paths; do not experiment on a
 
 ## Two local performance decks (fork extension)
 
-A/B are two independent sample voices on the existing Renderer and audio output, outside the
-Studio graph/undo/project file. They reuse the Preview sample reader, interpolation, rate
-conversion and click guards. Each has its own bounded command/retirement queues and monitor;
+A/B are two independent deck players (`crates/engine/src/deck_voice.rs`, YOBUKO's own, so
+Suhina's preview voice stays as upstream has it) on the existing Renderer and audio output,
+outside the Studio graph/undo/project file. They read with the model's interpolating
+`AudioData::frame_at` and the engine's 2 ms click guard. Each has its own bounded
+command/retirement queues and monitor;
 no decoding, allocation, locks, file access or destruction of audio occurs on the callback.
 Pause retains the exact source position; Play resumes the same source or starts again after
 end/stop. Seek is in source seconds, before the decoded end. Stop rewinds; Clear also unloads.
@@ -420,22 +461,34 @@ its error; a token prevents cancelled/old worker results from retargeting anothe
 
 Only Play may open the chosen output, which remains the active Session output or the existing
 empty preview Session when no project is open. A block-smoothed linear crossfader (0=A, 1=B),
-channel levels 0–1 and fixed −6 dB trim feed main. A single bounded mixer message changes both
-sides together. Each deck plays at its own speed, 0.5 to 2 (`dj.deck.rate {deck,rate}`; the
+channel levels 0–1, a fixed −6 dB of headroom and the master level (0–1, smoothed) feed main.
+A single bounded mixer message changes both sides, the master and the headphones together. Each deck plays at its own speed, 0.5 to 2 (`dj.deck.rate {deck,rate}`; the
 pitch follows, no key lock), and through its own low shelf (250 Hz), mid bell (1 kHz) and high
 shelf (3 kHz), −40 to +6 dB, then a filter (`dj.deck.tone {deck,low,mid,high,filter}`), before
-its level; a flat deck skips them. Speed and tone are kept per deck in the session and handed
-to the engine on Play. No loops, scratching, key lock or recording is included.
+its level; a flat deck skips them; the trim (−12 to +12 dB, `trim` in `dj.deck.tone`, kept when
+left out) is a gain with the fader. `dj.deck.bend {deck,amount}` nudges a deck's speed by
+−0.25 … 0.25 on top of its rate until it is sent 0. `dj.deck.loop {deck,from?,to?,on?}` sets a
+loop in source seconds (both or neither, at least 10 ms) and plays it (`on`, true when left
+out) or lets it go; a loop let go is kept for reloop, and loading a track clears it. The
+player rounds a loop at its end, cross-fading its last 2 ms into its start; a seek beyond the
+loop plays on from there. Speed, tone and the loop are kept per deck in the session and
+handed to the engine on Play. Meters: each deck's peak after its tone, trim and fader, and the
+master's, kept as the loudest sample since the last read (`DeckMeter::take`); the library
+snapshot reads them (`meter`, `masterMeter`), so a read resets them. No scratching, key lock,
+effects or recording is included.
 CUE A/B is post-channel level, pre-crossfader, on the separate configured cue pair only; absence
-of a separate pair never leaks an otherwise muted deck into main. The existing cue volume scales
-it. Source samples and mix controls are sanitised/bounded; summing decks is not a general limiter.
+of a separate pair never leaks an otherwise muted deck into main. The headphones hear the cued
+decks times `phones × (1 − phonesMix)` and the master times `phones × phonesMix`; the existing
+cue volume scales it all. Source samples and mix controls are sanitised/bounded; summing decks is not a general limiter.
 
 Commands: `dj.deck.load {deck,track}`, `.play`, `.pause`, `.stop`, `.clear` (deck A/B), `.seek
 {deck,from}`, `.rate {deck,rate}`, `.tone {deck,low,mid,high,filter}`, `.stopAll {}` and
-`dj.mixer.set {crossfade,levelA,levelB,cueA,cueB}`. These are
+`dj.mixer.set {crossfade,levelA,levelB,cueA,cueB,master?,phones?,phonesMix?}` (the last three
+keep their values when left out), `dj.deck.loop {deck,from?,to?,on?}` and
+`dj.deck.bend {deck,amount}`. These are
 person-only Library commands. Playback controls and mixer work while another worker job is
 busy. Pausing/stopping/clearing never opens output; full queues are visible errors and leaving
-DJ retries stopping rather than claiming silence. Library snapshots include loaded metadata,
+DJ retries stopping rather than claiming silence. Library snapshots include loaded metadata, key, trim, the loop, the meters,
 source position, playing/loading and per-deck errors plus mixer values.
 
 `dj.deck.stopAll` stops both decks and cancels pending loads. Switching project/output invalidates

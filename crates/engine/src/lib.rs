@@ -41,6 +41,7 @@ mod crossfade;
 mod cue;
 #[cfg(test)]
 mod cue_tests;
+mod deck_voice;
 mod decks;
 mod declick;
 #[cfg(test)]
@@ -110,7 +111,11 @@ use audio::{AudioEvent, Fades};
 use chain::{CHAIN_INPUT_GAIN, Chain, MAX_BLOCK, run_as_answered};
 pub use cpu::CpuMonitor;
 pub use cue::MAX_CUE_GAIN;
-pub use decks::{BOOST_DB as DECK_BOOST_DB, KILL_DB as DECK_KILL_DB, Tone as DeckTone};
+pub use deck_voice::{DeckMeter, DeckMonitor};
+pub use decks::{
+    BOOST_DB as DECK_BOOST_DB, KILL_DB as DECK_KILL_DB, MAX_SAMPLES as DECK_MAX_SAMPLES, Mix as DeckMix,
+    TRIM_DB as DECK_TRIM_DB, Tone as DeckTone,
+};
 pub use group::{GROUP_PARAMS, SILENT_DB, group_param_index, group_param_values};
 pub use input::MAX_INPUT_CHANNELS;
 use launcher::ClipLauncher;
