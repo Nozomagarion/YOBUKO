@@ -51,7 +51,12 @@ fn dj_window(dir: &Path, tracks: &[&str]) -> egui_kittest::Harness<'static, App>
 fn until(harness: &mut egui_kittest::Harness<'static, App>, what: &str, done: impl Fn(&App) -> bool) {
     let end = Instant::now() + Duration::from_secs(60);
     while !done(harness.state()) {
-        assert!(Instant::now() < end, "timed out waiting for {what}: {}", harness.state().dj.decks.snapshot);
+        assert!(
+            Instant::now() < end,
+            "timed out waiting for {what}: {:?} {}",
+            harness.state().dj.decks.error,
+            harness.state().dj.decks.snapshot
+        );
         std::thread::sleep(Duration::from_millis(20));
         harness.step();
     }
@@ -235,9 +240,33 @@ fn render_the_decks_for_review() {
     app.deck_command("dj.deck.tone", json!({"deck":"A","low":-40.0,"mid":0.0,"high":2.0,"filter":0.0}));
     app.deck_command("dj.deck.tone", json!({"deck":"B","low":0.0,"mid":-6.0,"high":0.0,"filter":0.45}));
     app.deck_command("dj.mixer.set", json!({"crossfade":0.38,"levelA":0.9,"levelB":0.72,"cueA":false,"cueB":false}));
+    // Hot cues on deck A, a beat loop playing on deck B, a playlist.
+    for (pad, seconds) in [(0, 2.0), (1, 9.7), (2, 12.4), (4, 21.0)] {
+        harness.state_mut().seek(0, seconds);
+        harness.state_mut().hot_cue(0, pad);
+        until(&mut harness, "a hot cue", |app| app.dj.decks.hot_cues(0)[pad].is_some());
+    }
+    let revision = harness.state().dj.decks.snapshot["revision"].clone();
+    harness.state_mut().deck_command("dj.playlist.create", json!({"name": "Friday warm-up", "revision": revision}));
+    until(&mut harness, "a playlist", |app| {
+        app.dj.decks.snapshot["playlists"].as_array().is_some_and(|p| !p.is_empty())
+    });
+    let app = harness.state_mut();
+    app.seek(0, 12.4);
+    app.beat_loop(1, 4.0);
+    app.deck_command("dj.deck.tone", json!({"deck":"A","low":-40.0,"mid":0.0,"high":2.0,"filter":0.0,"trim":3.0}));
+    app.dj.decks.tools[0].meter = [0.62, 0.58];
+    app.dj.decks.tools[1].meter = [0.3, 0.34];
+    app.dj.decks.master_meter = [0.71, 0.66];
     app.dj.decks.read_at = None;
     app.dj.decks.snapshot["busy"] = json!(true);
-    harness.run_steps(6);
+    harness.run_steps(3);
+    // The meters as a playing mix has them (nothing plays in a test).
+    let app = harness.state_mut();
+    app.dj.decks.tools[0].meter = [0.62, 0.58];
+    app.dj.decks.tools[1].meter = [0.3, 0.34];
+    app.dj.decks.master_meter = [0.71, 0.66];
+    harness.run_steps(1);
     harness.render().unwrap().save(folder.join("dj-decks.png")).unwrap();
 }
 
@@ -298,4 +327,159 @@ fn a_ddj_flx4_drives_the_decks_while_the_dj_space_shows() {
     harness.step();
     assert!(harness.state().dj.decks.controller.is_none());
     assert!(!input.offer(flx4, &[0x90, 0x0B, 0x7F]));
+}
+
+#[test]
+fn a_deck_has_hot_cues_loops_beat_jumps_and_the_mixer_its_trim_master_and_meters() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 1));
+    for label in [
+        "Hot cue 1 A",
+        "Hot cue 8 B",
+        "Loop in A",
+        "Loop out A",
+        "Reloop A",
+        "Beat loop B",
+        "Halve loop A",
+        "Double loop B",
+        "Jump back A",
+        "Jump forward B",
+        "Beat jump size A",
+        "Nudge faster A",
+        "Nudge slower B",
+        "Back to start A",
+        "Eject B",
+        "Tempo range A",
+        "Trim A",
+        "Meter B",
+        "Master",
+        "Master meter",
+        "Headphones level",
+        "Headphones mix",
+        "Sort by bpm",
+        "Show all tracks",
+    ] {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    harness.get_by_label("Load Moonlit Echo on deck A").click();
+    until(&mut harness, "deck A to load", |app| app.dj.decks.deck(0)["track"] == 1);
+    // A hot cue is put where the deck is, kept in the library, and jumped back to.
+    harness.state_mut().seek(0, 0.5);
+    harness.run();
+    harness.get_by_label("Hot cue 3 A").click();
+    until(&mut harness, "the hot cue", |app| app.dj.decks.hot_cues(0)[2].is_some());
+    assert_eq!(harness.state().dj.decks.hot_cues(0)[2].map(|c| c.1), Some(0.5));
+    harness.state_mut().seek(0, 1.5);
+    harness.run();
+    harness.get_by_label("Hot cue 3 A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.position(0), 0.5);
+    // A beat loop at 120 BPM: four beats are two seconds, past this track's end; one is half.
+    harness.get_by_label("Beat loop A").click();
+    harness.run();
+    assert!(harness.state().dj.decks.error.as_deref().is_some_and(|e| e.contains("past the end")));
+    for _ in 0..2 {
+        harness.get_by_label("Halve loop A").click();
+        harness.run();
+    }
+    assert_eq!(harness.state().dj.decks.tools[0].loop_beats, 1.0);
+    harness.get_by_label("Beat loop A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.current_loop(0), Some((0.5, 1.0, true)));
+    harness.get_by_label("Reloop A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.current_loop(0), Some((0.5, 1.0, false)), "exit keeps the loop");
+    // Loop in and out by hand.
+    harness.state_mut().seek(0, 0.2);
+    harness.get_by_label("Loop in A").click();
+    harness.run();
+    harness.state_mut().seek(0, 0.7);
+    harness.get_by_label("Loop out A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.current_loop(0), Some((0.2, 0.7, true)));
+    // A beat jump of one beat: half a second on.
+    harness.get_by_label("Beat jump size A").click_secondary();
+    harness.run();
+    harness.get_by_label("Beat jump size A").click_secondary();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.tools[0].jump_beats, 1.0);
+    harness.state_mut().send_loop_off(0);
+    harness.state_mut().seek(0, 0.2);
+    harness.run();
+    harness.get_by_label("Jump forward A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.position(0), 0.7, "{:?}", harness.state().dj.decks.error);
+    // The tempo range goes ±8, ±16, ±50 %.
+    harness.get_by_label("Tempo range A").click();
+    harness.run();
+    assert_eq!(tools::TEMPO_RANGES[harness.state().dj.decks.tools[0].range], 16.0);
+    // Back to the start, then out of the deck.
+    harness.get_by_label("Back to start A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.position(0), 0.0);
+    harness.get_by_label("Eject A").click();
+    harness.run();
+    assert!(harness.state().dj.decks.track(0).is_none());
+    // The mixer's trim and master go to the session.
+    harness.state_mut().dj.decks.set(Some(0), "trim", json!(4.0));
+    harness.state_mut().send_tone(0);
+    harness.state_mut().dj.decks.set(None, "master", json!(0.8));
+    harness.state_mut().send_mixer();
+    harness.state_mut().dj.decks.read_at = None;
+    harness.step();
+    assert_eq!(harness.state().dj.decks.deck(0)["trim"], 4.0);
+    assert_eq!(harness.state().dj.decks.snapshot["performance"]["master"], json!(0.8f32 as f64));
+    assert_eq!(trim_db(trim_knob(-12.0)), -12.0);
+    assert_eq!(trim_db(0.5), 0.0);
+    assert_eq!(tools::beats_text(0.25), "1/4");
+}
+
+#[test]
+fn the_library_searches_sorts_and_shows_a_playlist() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns", "Mountain Call"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 3));
+    let titles = |app: &App| -> Vec<String> {
+        app.dj.decks.shown_tracks().iter().map(|t| t["title"].as_str().unwrap_or_default().to_owned()).collect()
+    };
+    harness.state_mut().dj.decks.library.search = "moun".into();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Mountain Call"]);
+    assert!(harness.query_by_label("Load Paper Lanterns on deck A").is_none());
+    harness.state_mut().dj.decks.library.search.clear();
+    harness.get_by_label("Sort by title").click();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Moonlit Echo", "Mountain Call", "Paper Lanterns"]);
+    harness.get_by_label("Sort by title").click();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Paper Lanterns", "Mountain Call", "Moonlit Echo"]);
+    harness.get_by_label("Sort by title").click();
+    harness.run();
+    assert_eq!(
+        titles(harness.state()),
+        ["Moonlit Echo", "Paper Lanterns", "Mountain Call"],
+        "back to the library's order"
+    );
+    // A playlist made here, a track added to it, and the playlist shown.
+    harness.get_by_label("+ New playlist").click();
+    until(&mut harness, "the playlist", |app| {
+        app.dj.decks.snapshot["playlists"].as_array().is_some_and(|p| p.len() == 1)
+            && app.dj.decks.snapshot["busy"] != true
+    });
+    let playlist = harness.state().dj.decks.snapshot["playlists"][0]["id"].as_u64().unwrap();
+    assert_eq!(harness.state().dj.decks.snapshot["playlists"][0]["name"], "Playlist 1");
+    let revision = harness.state().dj.decks.snapshot["revision"].clone();
+    harness
+        .state_mut()
+        .deck_command("dj.playlist.addTrack", json!({"playlist": playlist, "track": 2, "revision": revision}));
+    until(&mut harness, "the track in the playlist", |app| {
+        app.dj.decks.snapshot["playlists"][0]["tracks"].as_array().is_some_and(|t| t.len() == 1)
+    });
+    harness.get_by_label("Show playlist Playlist 1").click();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Paper Lanterns"]);
+    harness.get_by_label("Show all tracks").click();
+    harness.run();
+    assert_eq!(titles(harness.state()).len(), 3);
 }

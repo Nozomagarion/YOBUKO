@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The DJ space's own mixer, drawn in YOBUKO's window: two decks (A and B) with their
-//! waveforms, Play, Cue, Sync and tempo, a mixer with a three-band EQ, a filter, a level and a
-//! headphone cue per deck and a crossfader, and the DJ library below to load them from. It
-//! drives the session's `dj.*` commands; the sound is the engine's two decks
-//! (`suhina_engine::decks`), on the same audio output as the studio.
+//! waveforms, Play, Cue, Sync, nudge, tempo, hot cues, loops and beat jumps (`dj_deck_tools.rs`);
+//! a mixer with a trim, a three-band EQ, a filter, a level, a meter and a headphone cue per deck,
+//! the master and headphone levels and a crossfader; and the DJ library below to search, sort and
+//! load them from, with its playlists (`dj_library.rs`). It drives the session's `dj.*`
+//! commands; the sound is the engine's two decks (`suhina_engine::decks`), on the same audio
+//! output as the studio.
 
 use super::*;
 use crate::kit::piou::{self, Mood};
@@ -27,7 +29,9 @@ const CLOSE_SECONDS: f64 = 8.0;
 const MAX_FOUND: usize = 1000;
 const MAX_LOOKED_AT: usize = 20_000;
 /// The mixer's width between the decks.
-const MIXER_WIDTH: f32 = 236.0;
+const MIXER_WIDTH: f32 = 300.0;
+/// The decks' and the mixer's height.
+const DECK_HEIGHT: f32 = 440.0;
 /// The space between the cards.
 const GAP: f32 = 12.0;
 /// The corners of the DJ space's cards and buttons.
@@ -62,9 +66,33 @@ pub(in crate::app) struct Decks {
     selected: usize,
     /// The DJ controllers whose ports the decks have taken, by name, and what they send.
     controller: Option<(Vec<String>, std::sync::mpsc::Receiver<suhina_session::ControllerMessage>)>,
+    /// Each deck's loops, nudge, tempo range and meter, kept by the page.
+    tools: [tools::DeckTools; 2],
+    /// The master meter's needles.
+    master_meter: [f32; 2],
+    /// The controller's SHIFT buttons, held.
+    shift: [bool; 2],
+    /// The library's search, sort and playlist.
+    pub(in crate::app) library: library::LibraryView,
 }
 
 impl Decks {
+    /// Moves the meters' needles to the peaks just read, falling back slowly from the last.
+    fn read_meters(&mut self) {
+        let fall = |shown: f32, peak: f32| peak.max(shown * 0.6);
+        for deck in 0..2 {
+            let peaks = &self.snapshot["performance"]["decks"][deck]["meter"];
+            for side in 0..2 {
+                let peak = peaks[side].as_f64().unwrap_or(0.0) as f32;
+                self.tools[deck].meter[side] = fall(self.tools[deck].meter[side], peak);
+            }
+        }
+        for side in 0..2 {
+            let peak = self.snapshot["performance"]["masterMeter"][side].as_f64().unwrap_or(0.0) as f32;
+            self.master_meter[side] = fall(self.master_meter[side], peak);
+        }
+    }
+
     fn deck(&self, deck: usize) -> &Value {
         &self.snapshot["performance"]["decks"][deck]
     }
@@ -203,6 +231,17 @@ fn db_of_knob(knob: f32) -> f64 {
     }
 }
 
+/// The trim knob's place (0 … 1, the middle 0 dB) for its dB, and back: ± 12 dB evenly.
+fn trim_knob(db: f64) -> f32 {
+    let range = f64::from(suhina_engine::DECK_TRIM_DB);
+    (0.5 + 0.5 * db.clamp(-range, range) / range) as f32
+}
+
+fn trim_db(knob: f32) -> f64 {
+    let db = f64::from(suhina_engine::DECK_TRIM_DB) * (f64::from(knob.clamp(0.0, 1.0)) - 0.5) / 0.5;
+    if db.abs() < 0.3 { 0.0 } else { db }
+}
+
 impl App {
     /// Reads the decks and the library when it is time, sends the next file to analyse, and
     /// asks for the frames a playing deck needs.
@@ -218,8 +257,9 @@ impl App {
         let due = decks.snapshot.is_null()
             || match (every, decks.read_at) {
                 (Some(every), Some(at)) => at.elapsed() >= every,
-                (Some(_), None) => true,
-                (None, _) => false,
+                // A command just ran: read what it changed.
+                (_, None) => true,
+                (None, Some(_)) => false,
             };
         if due {
             match self.projects.execute("dj.library", &json!({})) {
@@ -229,6 +269,12 @@ impl App {
                     }
                     self.dj.decks.snapshot = snapshot;
                     self.dj.decks.read_at = Some(Instant::now());
+                    self.dj.decks.read_meters();
+                    if !self.dj.decks.any_playing() {
+                        // Nothing plays: the meters drop.
+                        self.dj.decks.tools.iter_mut().for_each(|t| t.meter = [0.0; 2]);
+                        self.dj.decks.master_meter = [0.0; 2];
+                    }
                 }
                 Err(e) => {
                     self.dj.decks.error = Some(e.to_string());
@@ -307,8 +353,8 @@ impl App {
         self.dj_header(ui, space);
         ui.add_space(GAP);
         let width = ui.available_width();
-        let deck_width = ((width - MIXER_WIDTH - GAP * 2.0) / 2.0).max(200.0);
-        let height = 300.0;
+        let deck_width = ((width - MIXER_WIDTH - GAP * 2.0) / 2.0).max(300.0);
+        let height = DECK_HEIGHT;
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = GAP;
             let down = egui::Layout::top_down(egui::Align::Min);
@@ -376,10 +422,12 @@ impl App {
         });
     }
 
-    /// One deck: its track, waveforms, transport and tempo.
+    /// One deck: its track, waveforms, transport, hot cues, loops and tempo.
     fn deck_card(&mut self, ui: &mut Ui, deck: usize, height: f32) {
         let color = deck_color(deck);
         let name = NAMES[deck];
+        // A nudge button held this frame says so while it is drawn.
+        self.dj.decks.tools[deck].held = 0.0;
         egui::Frame::NONE
             .fill(theme::panel_background())
             .stroke(Stroke::new(1.0, theme::border()))
@@ -391,7 +439,8 @@ impl App {
                 let d = self.dj.decks.deck(deck).clone();
                 let loaded = d["track"].is_number();
                 let loading = d["loading"] == true;
-                // Title and tempo.
+                let ready = loaded && !loading;
+                // Title, key, tempo and eject.
                 ui.horizontal(|ui| {
                     let (badge, _) = ui.allocate_exact_size(Vec2::splat(26.0), Sense::hover());
                     ui.painter().rect_filled(badge, CornerRadius::same(8), color);
@@ -407,20 +456,32 @@ impl App {
                     } else {
                         d["title"].as_str().unwrap_or("Empty deck: load a track from the library").to_owned()
                     };
-                    ui.add(egui::Label::new(egui::RichText::new(title).strong().size(14.0)).truncate());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if tools::small_button(ui, &format!("Eject {name}"), "EJECT", false, color, ready)
+                            .on_hover_text("Take the track out of the deck")
+                            .clicked()
+                        {
+                            self.eject(deck);
+                        }
                         let bpm = self.dj.decks.bpm(deck).map_or_else(|| "—".to_owned(), |b| format!("{b:.1}"));
                         ui.label(egui::RichText::new("BPM").small().color(theme::text_hint()));
                         ui.label(egui::RichText::new(bpm).font(theme::mono_font(18.0)).color(color));
+                        if let Some(key) = d["key"].as_str().filter(|k| !k.is_empty()) {
+                            ui.label(egui::RichText::new(key).font(theme::mono_font(13.0)).color(theme::text_hint()));
+                        }
+                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            ui.add(egui::Label::new(egui::RichText::new(title).strong().size(14.0)).truncate());
+                        });
                     });
                 });
                 ui.add_space(theme::PAD);
                 let peaks = self.projects.dj_deck_peaks(deck);
                 let position = self.dj.decks.position(deck);
                 let length = d["seconds"].as_f64().unwrap_or(0.0);
-                self.overview(ui, deck, peaks.as_deref(), position, length);
+                let marks = self.marks(deck);
+                self.overview(ui, deck, peaks.as_deref(), position, length, &marks);
                 ui.add_space(theme::PAD);
-                close_wave(ui, deck, peaks.as_deref(), position, self.dj.decks.number(deck, "rate", 1.0));
+                close_wave(ui, deck, peaks.as_deref(), position, self.dj.decks.number(deck, "rate", 1.0), &marks);
                 ui.add_space(theme::PAD);
                 // Times.
                 ui.horizontal(|ui| {
@@ -434,17 +495,40 @@ impl App {
                     });
                 });
                 ui.add_space(theme::PAD);
-                self.transport(ui, deck, loaded && !loading);
+                self.transport(ui, deck, ready);
+                ui.add_space(theme::PAD);
+                self.pads(ui, deck, ready);
+                ui.add_space(6.0);
+                self.loop_row(ui, deck, ready);
                 ui.add_space(theme::PAD);
                 self.tempo(ui, deck, loaded);
                 if let Some(error) = d["error"].as_str() {
                     ui.colored_label(theme::recording(), error);
                 }
             });
+        self.apply_bend(deck);
+    }
+
+    /// What the waveforms mark: the hot cues, the loop and the cue point.
+    fn marks(&self, deck: usize) -> Marks {
+        let cues = self
+            .dj
+            .decks
+            .hot_cues(deck)
+            .iter()
+            .enumerate()
+            .filter_map(|(pad, cue)| cue.map(|(_, seconds)| (seconds, tools::PAD_COLORS[pad])))
+            .collect();
+        Marks {
+            cues,
+            looped: self.dj.decks.current_loop(deck),
+            loop_in: self.dj.decks.tools[deck].loop_in,
+            cue: self.dj.decks.track(deck).map(|_| self.dj.decks.cue[deck]),
+        }
     }
 
     /// The whole track, the part played dimmed; a click or a drag goes there.
-    fn overview(&mut self, ui: &mut Ui, deck: usize, peaks: Option<&Peaks>, position: f64, length: f64) {
+    fn overview(&mut self, ui: &mut Ui, deck: usize, peaks: Option<&Peaks>, position: f64, length: f64, marks: &Marks) {
         let (rect, response) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), Sense::click_and_drag());
         let label = format!("Deck {} track overview", NAMES[deck]);
         response.widget_info(|| egui::WidgetInfo::slider(peaks.is_some(), position, &label));
@@ -452,14 +536,16 @@ impl App {
         painter.rect_filled(rect, CornerRadius::same(8), theme::window_background());
         let color = deck_color(deck);
         if let Some(peaks) = peaks.filter(|_| length > 0.0) {
+            let inner = rect.shrink2(Vec2::new(4.0, 3.0));
+            marks.paint(&painter, inner, 0.0, length);
             let played = (position / length).clamp(0.0, 1.0);
-            draw_wave(&painter, rect.shrink2(Vec2::new(4.0, 3.0)), peaks, 0.0, length, color, Some(position));
-            let x = rect.left() + rect.width() * played as f32;
+            draw_wave(&painter, inner, peaks, 0.0, length, color, Some(position));
+            let x = inner.left() + inner.width() * played as f32;
             painter.vline(x, rect.y_range(), Stroke::new(2.0, theme::text_primary()));
             if let Some(pointer) = response.interact_pointer_pos()
                 && (response.clicked() || response.drag_stopped())
             {
-                let to = f64::from((pointer.x - rect.left()) / rect.width()).clamp(0.0, 1.0) * length;
+                let to = f64::from((pointer.x - inner.left()) / inner.width()).clamp(0.0, 1.0) * length;
                 self.seek(deck, to);
             }
         } else {
@@ -481,7 +567,7 @@ impl App {
         }
     }
 
-    /// Cue, Play / Pause and Sync.
+    /// Cue, Play / Pause and Sync; the nudge buttons and back to the start.
     fn transport(&mut self, ui: &mut Ui, deck: usize, ready: bool) {
         let name = NAMES[deck];
         let color = deck_color(deck);
@@ -505,6 +591,24 @@ impl App {
             if sync.clicked() {
                 self.sync_deck(deck);
             }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                let faster = round_button(ui, &format!("Nudge faster {name}"), "+", 34.0, None, ready && playing)
+                    .on_hover_text("Hold: a little faster, to bring the beats together");
+                let slower = round_button(ui, &format!("Nudge slower {name}"), "−", 34.0, None, ready && playing)
+                    .on_hover_text("Hold: a little slower, to bring the beats together");
+                if faster.is_pointer_button_down_on() {
+                    self.dj.decks.tools[deck].held = tools::NUDGE;
+                } else if slower.is_pointer_button_down_on() {
+                    self.dj.decks.tools[deck].held = -tools::NUDGE;
+                }
+                if round_button(ui, &format!("Back to start {name}"), "|◀", 34.0, None, ready)
+                    .on_hover_text("Back to the start of the track")
+                    .clicked()
+                {
+                    self.back_to_start(deck);
+                }
+            });
         });
     }
 
@@ -549,7 +653,7 @@ impl App {
         self.send_mixer();
     }
 
-    /// Sends the deck's EQ and filter as the page shows them.
+    /// Sends the deck's EQ, filter and trim as the page shows them.
     fn send_tone(&mut self, deck: usize) {
         let d = self.dj.decks.deck(deck);
         let params = json!({
@@ -558,13 +662,15 @@ impl App {
             "mid": d["mid"].as_f64().unwrap_or(0.0),
             "high": d["high"].as_f64().unwrap_or(0.0),
             "filter": d["filter"].as_f64().unwrap_or(0.0),
+            "trim": d["trim"].as_f64().unwrap_or(0.0),
         });
         self.deck_command("dj.deck.tone", params);
     }
 
     /// Loads the library's selected track on `deck`, unless it plays.
     fn load_selected(&mut self, deck: usize) {
-        let Some(id) = self.dj.decks.snapshot["tracks"][self.dj.decks.selected]["id"].as_u64() else { return };
+        let shown = self.dj.decks.shown_tracks();
+        let Some(id) = shown.get(self.dj.decks.selected).and_then(|t| t["id"].as_u64()) else { return };
         if !self.dj.decks.playing(deck) && self.deck_command("dj.deck.load", json!({"deck": NAMES[deck], "track": id}))
         {
             self.dj.decks.cue[deck] = 0.0;
@@ -579,24 +685,39 @@ impl App {
     }
 
     /// The tempo slider, in percent of the track's own speed; a double click goes back to 0.
+    /// Its range (±8, ±16 or ±50 %) changes with a click on the range.
     fn tempo(&mut self, ui: &mut Ui, deck: usize, loaded: bool) {
         let rate = self.dj.decks.number(deck, "rate", 1.0);
         let mut percent = (rate - 1.0) * 100.0;
-        let range = if percent.abs() <= 8.0 {
-            8.0
-        } else if percent.abs() <= 16.0 {
-            16.0
-        } else {
-            50.0
-        };
+        let tools = &mut self.dj.decks.tools[deck];
+        // A tempo beyond the range (a sync, the controller) widens it.
+        while percent.abs() > tools::TEMPO_RANGES[tools.range] + 1e-9 && tools.range + 1 < tools::TEMPO_RANGES.len() {
+            tools.range += 1;
+        }
+        let range = tools::TEMPO_RANGES[tools.range];
+        let name = NAMES[deck];
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Tempo").small().color(theme::text_hint()));
-            let label = format!("Tempo {}", NAMES[deck]);
+            let label = format!("Tempo {name}");
             let slider = egui::Slider::new(&mut percent, -range..=range).show_value(false).trailing_fill(true);
-            ui.spacing_mut().slider_width = (ui.available_width() - 70.0).max(60.0);
+            ui.spacing_mut().slider_width = (ui.available_width() - 130.0).max(60.0);
             let response = ui.add_enabled(loaded, slider).on_hover_text("Double-click: back to the track's own tempo");
             response.widget_info(|| egui::WidgetInfo::slider(loaded, percent, &label));
             ui.label(egui::RichText::new(format!("{percent:+.1} %")).font(theme::mono_font(12.0)));
+            let shown = format!("±{range:.0} %");
+            if tools::small_button(ui, &format!("Tempo range {name}"), &shown, false, deck_color(deck), true)
+                .on_hover_text("How far the tempo fader goes")
+                .clicked()
+            {
+                let tools = &mut self.dj.decks.tools[deck];
+                let next = (tools.range + 1) % tools::TEMPO_RANGES.len();
+                // A narrower range than the tempo brings the tempo inside it.
+                tools.range = next;
+                let limit = tools::TEMPO_RANGES[next];
+                if percent.abs() > limit {
+                    self.set_rate(deck, 1.0 + percent.clamp(-limit, limit) / 100.0);
+                }
+            }
             if response.double_clicked() {
                 self.set_rate(deck, 1.0);
             } else if response.changed() {
@@ -605,7 +726,8 @@ impl App {
         });
     }
 
-    /// The mixer: per deck an EQ, a filter, a headphone cue and a level; the crossfader under.
+    /// The mixer: per deck a trim, an EQ, a filter, a headphone cue, a level and a meter; the
+    /// master and headphones in the middle; the crossfader under.
     fn mixer_card(&mut self, ui: &mut Ui, height: f32) {
         egui::Frame::NONE
             .fill(theme::panel_background())
@@ -618,16 +740,14 @@ impl App {
                 ui.vertical_centered(|ui| {
                     ui.label(egui::RichText::new("MIXER").small().color(theme::text_hint()));
                 });
-                let strip = ((ui.available_width() - GAP) / 2.0).max(50.0);
+                let middle = 64.0;
+                let strip = ((ui.available_width() - middle - GAP * 2.0) / 2.0).max(50.0);
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = GAP;
-                    for deck in 0..2 {
-                        ui.allocate_ui_with_layout(
-                            Vec2::new(strip, 0.0),
-                            egui::Layout::top_down(egui::Align::Center),
-                            |ui| self.channel(ui, deck),
-                        );
-                    }
+                    let down = egui::Layout::top_down(egui::Align::Center);
+                    ui.allocate_ui_with_layout(Vec2::new(strip, 0.0), down, |ui| self.channel(ui, 0));
+                    ui.allocate_ui_with_layout(Vec2::new(middle, 0.0), down, |ui| self.master_strip(ui));
+                    ui.allocate_ui_with_layout(Vec2::new(strip, 0.0), down, |ui| self.channel(ui, 1));
                 });
                 ui.add_space(theme::PAD);
                 let mut crossfade = self.dj.decks.snapshot["performance"]["crossfade"].as_f64().unwrap_or(0.5) as f32;
@@ -648,6 +768,8 @@ impl App {
         let name = NAMES[deck];
         let color = deck_color(deck);
         ui.spacing_mut().item_spacing.y = 2.0;
+        let mut trim = trim_knob(self.dj.decks.number(deck, "trim", 0.0));
+        let trim_changed = dj_knob(ui, &format!("Trim {name}"), "Trim", &mut trim, 0.5, color, true);
         let mut tone_changed = false;
         let mut bands = [0.0f32; 3];
         for (band, key) in bands.iter_mut().zip(["high", "mid", "low"]) {
@@ -658,11 +780,12 @@ impl App {
         }
         let mut filter = (self.dj.decks.number(deck, "filter", 0.0) as f32 + 1.0) / 2.0;
         let filter_changed = dj_knob(ui, &format!("Filter {name}"), "Filter", &mut filter, 0.5, color, true);
-        if tone_changed || filter_changed {
+        if tone_changed || filter_changed || trim_changed {
             let [high, mid, low] = bands.map(db_of_knob);
             let filter = f64::from(filter) * 2.0 - 1.0;
             let filter = if filter.abs() < 0.03 { 0.0 } else { filter };
-            for (key, value) in [("high", high), ("mid", mid), ("low", low), ("filter", filter)] {
+            let trim = trim_db(trim);
+            for (key, value) in [("high", high), ("mid", mid), ("low", low), ("filter", filter), ("trim", trim)] {
                 self.dj.decks.set(Some(deck), key, json!(value));
             }
             self.send_tone(deck);
@@ -687,8 +810,45 @@ impl App {
         ui.add_space(4.0);
         let level_key = if deck == 0 { "levelA" } else { "levelB" };
         let mut level = self.dj.decks.snapshot["performance"][level_key].as_f64().unwrap_or(1.0) as f32;
-        if fader(ui, &format!("Level {name}"), &mut level, color) {
-            self.dj.decks.set(None, level_key, json!(level));
+        let meter_levels = self.dj.decks.tools[deck].meter;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            let side = (ui.available_width() - 36.0 - 14.0) / 2.0;
+            ui.add_space(side.max(0.0));
+            if fader(ui, &format!("Level {name}"), &mut level, color) {
+                self.dj.decks.set(None, level_key, json!(level));
+                self.send_mixer();
+            }
+            meter(ui, &format!("Meter {name}"), meter_levels, Vec2::new(10.0, 92.0));
+        });
+    }
+
+    /// The master level and its meter, the headphones' level and their cue / master blend.
+    fn master_strip(&mut self, ui: &mut Ui) {
+        ui.spacing_mut().item_spacing.y = 2.0;
+        let p = &self.dj.decks.snapshot["performance"];
+        let mut master = p["master"].as_f64().unwrap_or(1.0) as f32;
+        let mut phones = p["phones"].as_f64().unwrap_or(1.0) as f32;
+        let mut blend = p["phonesMix"].as_f64().unwrap_or(0.0) as f32;
+        let separate = p["separate_cue"] == true;
+        let ink = theme::text_primary();
+        let mut changed = dj_knob(ui, "Master", "Master", &mut master, 1.0, ink, false);
+        ui.add_space(4.0);
+        let levels = self.dj.decks.master_meter;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 3.0;
+            ui.add_space(((ui.available_width() - 23.0) / 2.0).max(0.0));
+            meter(ui, "Master meter", levels, Vec2::new(20.0, 120.0));
+        });
+        ui.add_space(6.0);
+        ui.add_enabled_ui(separate, |ui| {
+            changed |= dj_knob(ui, "Headphones level", "Phones", &mut phones, 1.0, ink, false);
+            changed |= dj_knob(ui, "Headphones mix", "Cue/Mst", &mut blend, 0.0, ink, false);
+        });
+        if changed {
+            self.dj.decks.set(None, "master", json!(master));
+            self.dj.decks.set(None, "phones", json!(phones));
+            self.dj.decks.set(None, "phonesMix", json!(blend));
             self.send_mixer();
         }
     }
@@ -701,133 +861,11 @@ impl App {
             "levelB": p["levelB"].as_f64().unwrap_or(1.0),
             "cueA": p["cueA"].as_bool().unwrap_or(false),
             "cueB": p["cueB"].as_bool().unwrap_or(false),
+            "master": p["master"].as_f64().unwrap_or(1.0),
+            "phones": p["phones"].as_f64().unwrap_or(1.0),
+            "phonesMix": p["phonesMix"].as_f64().unwrap_or(0.0),
         });
         self.deck_command("dj.mixer.set", params);
-    }
-
-    /// The DJ library: what is in it, Load A / Load B, and how to bring music in.
-    fn library_card(&mut self, ui: &mut Ui) {
-        egui::Frame::NONE
-            .fill(theme::panel_background())
-            .stroke(Stroke::new(1.0, theme::border()))
-            .corner_radius(CARD_RADIUS)
-            .inner_margin(egui::Margin::same(14))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.set_min_height(ui.available_height().max(160.0) - 28.0);
-                let tracks: Vec<Value> = self.dj.decks.snapshot["tracks"].as_array().cloned().unwrap_or_default();
-                ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("LIBRARY").small().color(theme::text_hint()));
-                    ui.label(egui::RichText::new(format!("{} tracks", tracks.len())).small().color(theme::text_hint()));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(
-                            egui::RichText::new("Drop audio files or folders anywhere on this page")
-                                .small()
-                                .color(theme::text_hint()),
-                        );
-                    });
-                });
-                let decks = &self.dj.decks;
-                if !decks.imports.is_empty() || (decks.queued > 0 && decks.snapshot["busy"] == true) {
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "Analysing tracks for the library: {} of {}…",
-                            decks.imported.min(decks.queued),
-                            decks.queued
-                        ))
-                        .color(deck_color(0)),
-                    );
-                }
-                if let Some(error) = self.dj.decks.error.clone() {
-                    ui.colored_label(theme::recording(), error);
-                }
-                ui.add_space(theme::PAD);
-                if tracks.is_empty() {
-                    ui.add_space(theme::PAD * 3.0);
-                    ui.vertical_centered(|ui| {
-                        ui.label(egui::RichText::new("Your DJ library is empty").strong().size(15.0));
-                        ui.label(
-                            egui::RichText::new(
-                                "Drop audio files or a folder here, click Add my Music folder, or send a project you made.",
-                            )
-                            .color(theme::text_hint()),
-                        );
-                    });
-                    return;
-                }
-                let row = 28.0;
-                egui::ScrollArea::vertical().id_salt("dj-library").auto_shrink([false, true]).show_rows(
-                    ui,
-                    row,
-                    tracks.len(),
-                    |ui, rows| {
-                        for index in rows {
-                            if let Some(track) = tracks.get(index) {
-                                self.library_row(ui, track, index, row);
-                            }
-                        }
-                    },
-                );
-            });
-    }
-
-    fn library_row(&mut self, ui: &mut Ui, track: &Value, index: usize, height: f32) {
-        let title = track["title"].as_str().unwrap_or("Untitled");
-        let (rect, response) = ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::click());
-        if response.clicked() {
-            self.dj.decks.selected = index;
-        }
-        if index == self.dj.decks.selected {
-            ui.painter().rect_filled(rect, CornerRadius::same(8), theme::control_hover());
-            ui.painter().rect_stroke(
-                rect,
-                CornerRadius::same(8),
-                Stroke::new(1.0, theme::border()),
-                StrokeKind::Inside,
-            );
-        } else if index % 2 == 1 {
-            ui.painter().rect_filled(rect, CornerRadius::same(8), theme::control_background().gamma_multiply(0.5));
-        }
-        let mut row = ui.new_child(
-            egui::UiBuilder::new()
-                .max_rect(rect.shrink2(Vec2::new(8.0, 0.0)))
-                .layout(egui::Layout::left_to_right(egui::Align::Center)),
-        );
-        let buttons = 2.0 * 64.0 + 8.0;
-        let numbers = 150.0;
-        let title_width = (row.available_width() - buttons - numbers).max(60.0);
-        let line = egui::Layout::left_to_right(egui::Align::Center);
-        row.allocate_ui_with_layout(Vec2::new(title_width, height), line, |ui| {
-            ui.set_min_width(title_width);
-            ui.add(egui::Label::new(egui::RichText::new(title).size(13.0)).truncate());
-        });
-        row.allocate_ui_with_layout(Vec2::new(numbers, height), line, |ui| {
-            ui.set_min_width(numbers);
-            let bpm = track["bpm"].as_f64().map_or_else(|| "—".to_owned(), |b| format!("{b:.1}"));
-            let key = track["key"].as_str().unwrap_or("");
-            let length = clock(track["seconds"].as_f64().unwrap_or(0.0));
-            let length = length.split('.').next().unwrap_or_default().to_owned();
-            ui.label(egui::RichText::new(format!("{bpm:>6}  {key:<4} {length:>6}")).font(theme::mono_font(12.0)));
-        });
-        for (deck, name) in NAMES.into_iter().enumerate() {
-            let busy = self.dj.decks.playing(deck);
-            let load = row
-                .add_enabled(
-                    !busy,
-                    egui::Button::new(egui::RichText::new(format!("Load {name}")).color(Color32::WHITE).size(12.0))
-                        .fill(deck_color(deck))
-                        .corner_radius(BUTTON_RADIUS)
-                        .min_size(Vec2::new(60.0, 22.0)),
-                )
-                .on_disabled_hover_text(format!("Deck {name} is playing: pause it first"));
-            load.widget_info(|| {
-                egui::WidgetInfo::labeled(egui::Role::Button, !busy, format!("Load {title} on deck {name}"))
-            });
-            if load.clicked() {
-                self.dj.decks.selected = index;
-                self.load_selected(deck);
-            }
-        }
     }
 }
 
@@ -858,6 +896,12 @@ impl App {
         for message in read {
             self.flx4(message);
         }
+        // A jog wheel's nudge ends a moment after its last turn.
+        for deck in 0..2 {
+            if self.dj.decks.tools[deck].jog.is_some() {
+                self.apply_bend(deck);
+            }
+        }
         // The controller is read at the next frames even when nothing else moves.
         ctx.request_repaint_after(FRAME);
     }
@@ -875,7 +919,7 @@ impl App {
             }
             Flx4::Load(deck) => self.load_selected(deck),
             Flx4::Browse(steps) => {
-                let tracks = self.dj.decks.snapshot["tracks"].as_array().map_or(0, Vec::len);
+                let tracks = self.dj.decks.shown_tracks().len();
                 let to = i64::try_from(self.dj.decks.selected).unwrap_or(0) + i64::from(steps);
                 self.dj.decks.selected =
                     usize::try_from(to.clamp(0, i64::try_from(tracks).unwrap_or(0) - 1).max(0)).unwrap_or(0);
@@ -910,33 +954,148 @@ impl App {
             }
             Flx4::Jog(deck, steps) => {
                 if self.dj.decks.deck(deck)["track"].is_number() && steps != 0 {
-                    // Playing, a nudge of a few milliseconds a step; stopped, a scrub.
-                    let step = if self.dj.decks.playing(deck) { 0.004 } else { 0.02 };
-                    self.seek(deck, self.dj.decks.position(deck) + f64::from(steps) * step);
+                    if self.dj.decks.playing(deck) {
+                        // Playing, the wheel's turn nudges the deck faster or slower.
+                        self.jog_nudge(deck, steps);
+                    } else {
+                        // Stopped, it scrubs.
+                        self.seek(deck, self.dj.decks.position(deck) + f64::from(steps) * 0.02);
+                    }
                 }
             }
+            Flx4::Shift(deck, held) => self.dj.decks.shift[deck] = held,
+            Flx4::ToStart(deck) => self.back_to_start(deck),
+            Flx4::Trim(deck, knob) => {
+                let knob = if (knob - 0.5).abs() < 0.01 { 0.5 } else { knob };
+                self.dj.decks.set(Some(deck), "trim", json!(trim_db(knob)));
+                self.send_tone(deck);
+            }
+            Flx4::PhonesMix(knob) => {
+                self.dj.decks.set(None, "phonesMix", json!(knob));
+                self.send_mixer();
+            }
+            Flx4::LoopIn(deck) => self.loop_in(deck),
+            Flx4::LoopOut(deck) => self.loop_out(deck),
+            Flx4::ReloopExit(deck) => self.reloop(deck),
+            Flx4::LoopCall(deck, longer) => self.scale_loop(deck, if longer { 2.0 } else { 0.5 }),
+            Flx4::HotCue(deck, pad, delete) => {
+                if delete || self.dj.decks.shift[deck] {
+                    self.delete_hot_cue(deck, pad);
+                } else {
+                    self.hot_cue(deck, pad);
+                }
+            }
+            Flx4::BeatLoop(deck, beats) => self.beat_loop(deck, beats),
+            Flx4::BeatJump(deck, beats) => self.beat_jump(deck, beats),
+        }
+    }
+}
+
+/// What a deck's waveforms mark besides the sound.
+struct Marks {
+    /// The hot cues, in seconds, in their pads' colours.
+    cues: Vec<(f64, Color32)>,
+    /// The loop: from, to, and whether it plays.
+    looped: Option<(f64, f64, bool)>,
+    /// Where LOOP IN was pressed, waiting for LOOP OUT.
+    loop_in: Option<f64>,
+    /// The cue point the CUE button goes back to.
+    cue: Option<f64>,
+}
+
+impl Marks {
+    /// Paints the marks across `rect`, which shows `from` to `to` seconds; the loop under the
+    /// waveform, the cues over it.
+    fn paint(&self, painter: &egui::Painter, rect: Rect, from: f64, to: f64) {
+        let span = (to - from).max(1e-6);
+        let x = |seconds: f64| rect.left() + rect.width() * ((seconds - from) / span) as f32;
+        let inside = |seconds: f64| seconds >= from && seconds <= to;
+        if let Some((a, b, on)) = self.looped {
+            let left = x(a).max(rect.left());
+            let right = x(b).min(rect.right());
+            if right > left {
+                let fill = if on {
+                    Color32::from_rgba_unmultiplied(0x22, 0xC5, 0x5E, 60)
+                } else {
+                    Color32::from_white_alpha(18)
+                };
+                painter.rect_filled(Rect::from_x_y_ranges(left..=right, rect.y_range()), CornerRadius::same(4), fill);
+            }
+        }
+        let stroke = |color: Color32| Stroke::new(1.5, color);
+        if let Some(seconds) = self.loop_in.filter(|s| inside(*s)) {
+            painter.vline(x(seconds), rect.y_range(), stroke(Color32::from_rgb(0x22, 0xC5, 0x5E)));
+        }
+        if let Some(seconds) = self.cue.filter(|s| inside(*s)) {
+            let top = Pos2::new(x(seconds), rect.top());
+            painter.add(egui::Shape::convex_polygon(
+                vec![top + Vec2::new(-5.0, 0.0), top + Vec2::new(5.0, 0.0), top + Vec2::new(0.0, 6.0)],
+                Color32::from_rgb(0xF5, 0x9E, 0x0B),
+                Stroke::NONE,
+            ));
+        }
+        for &(seconds, color) in self.cues.iter().filter(|(s, _)| inside(*s)) {
+            let at = x(seconds);
+            painter.vline(at, rect.y_range(), stroke(color));
+            let bottom = Pos2::new(at, rect.bottom());
+            painter.add(egui::Shape::convex_polygon(
+                vec![bottom + Vec2::new(-5.0, 0.0), bottom + Vec2::new(0.0, -6.0), bottom + Vec2::new(5.0, 0.0)],
+                color,
+                Stroke::NONE,
+            ));
         }
     }
 }
 
 /// A deck's close waveform: [`CLOSE_SECONDS`] around the playhead, which stays in the middle.
-fn close_wave(ui: &mut Ui, deck: usize, peaks: Option<&Peaks>, position: f64, rate: f64) {
+fn close_wave(ui: &mut Ui, deck: usize, peaks: Option<&Peaks>, position: f64, rate: f64, marks: &Marks) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 96.0), Sense::hover());
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, CornerRadius::same(10), theme::window_background());
     if let Some(peaks) = peaks {
         let half = CLOSE_SECONDS / 2.0 * rate.clamp(0.5, 2.0);
-        draw_wave(
-            &painter,
-            rect.shrink2(Vec2::new(0.0, 6.0)),
-            peaks,
-            position - half,
-            position + half,
-            deck_color(deck),
-            Some(position),
-        );
+        let inner = rect.shrink2(Vec2::new(0.0, 6.0));
+        marks.paint(&painter, inner, position - half, position + half);
+        draw_wave(&painter, inner, peaks, position - half, position + half, deck_color(deck), Some(position));
     }
     painter.vline(rect.center().x, rect.y_range(), Stroke::new(2.0, theme::text_primary()));
+}
+
+/// A level meter, one bar per side: green, then yellow from −6 dB, red from 0 dB.
+fn meter(ui: &mut Ui, label: &str, levels: [f32; 2], size: Vec2) {
+    let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
+    let db = |v: f32| if v > 1e-6 { 20.0 * v.log10() } else { -96.0 };
+    let loudest = db(levels[0].max(levels[1]));
+    response.widget_info(|| egui::WidgetInfo::slider(false, f64::from(loudest.max(-96.0)), label));
+    let painter = ui.painter();
+    let bars = if size.x >= 16.0 { 2 } else { 1 };
+    let gap = 2.0;
+    let width = (rect.width() - gap * (bars as f32 - 1.0)) / bars as f32;
+    // −48 dB at the bottom, +6 dB at the top.
+    let place = |d: f32| ((d + 48.0) / 54.0).clamp(0.0, 1.0);
+    for bar in 0..bars {
+        let level = if bars == 1 { levels[0].max(levels[1]) } else { levels[bar] };
+        let left = rect.left() + bar as f32 * (width + gap);
+        let column = Rect::from_min_size(Pos2::new(left, rect.top()), Vec2::new(width, rect.height()));
+        painter.rect_filled(column, CornerRadius::same(3), theme::control_background());
+        let top = column.bottom() - column.height() * place(db(level));
+        let segments = [
+            (-48.0, -6.0, Color32::from_rgb(0x22, 0xC5, 0x5E)),
+            (-6.0, 0.0, Color32::from_rgb(0xEA, 0xB3, 0x08)),
+            (0.0, 6.0, Color32::from_rgb(0xEF, 0x44, 0x44)),
+        ];
+        for (low, high, color) in segments {
+            let bottom = column.bottom() - column.height() * place(low);
+            let ceiling = (column.bottom() - column.height() * place(high)).max(top);
+            if ceiling < bottom {
+                painter.rect_filled(
+                    Rect::from_x_y_ranges(column.x_range(), ceiling..=bottom),
+                    CornerRadius::same(2),
+                    color,
+                );
+            }
+        }
+    }
 }
 
 /// Draws `peaks` from `from` to `to` seconds across `rect`, what is before `played` dimmed.
@@ -1008,7 +1167,7 @@ fn round_button(
 /// A round knob turned by dragging up or down; a double click puts it back at `rest`.
 /// `centred` draws the coloured arc from the middle (a filter), else from `rest` too.
 fn dj_knob(ui: &mut Ui, label: &str, title: &str, value: &mut f32, rest: f32, color: Color32, centred: bool) -> bool {
-    let size = Vec2::new(46.0, 50.0);
+    let size = Vec2::new(46.0, 46.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
     let before = *value;
     if response.dragged() {
@@ -1021,8 +1180,8 @@ fn dj_knob(ui: &mut Ui, label: &str, title: &str, value: &mut f32, rest: f32, co
     response.widget_info(|| egui::WidgetInfo::slider(true, f64::from(shown), label));
     let response = response.on_hover_text(format!("{title}: drag up or down, double-click to reset"));
     let painter = ui.painter();
-    let center = Pos2::new(rect.center().x, rect.top() + 18.0);
-    let radius = 16.0;
+    let center = Pos2::new(rect.center().x, rect.top() + 16.0);
+    let radius = 15.0;
     let arc = |from: f32, to: f32| -> Vec<Pos2> {
         let steps = 32;
         (0..=steps)
@@ -1045,10 +1204,10 @@ fn dj_knob(ui: &mut Ui, label: &str, title: &str, value: &mut f32, rest: f32, co
     let tip = center + Vec2::new(a.sin(), -a.cos()) * (radius - 7.0);
     painter.line_segment([center, tip], Stroke::new(2.5, theme::text_primary()));
     painter.text(
-        Pos2::new(rect.center().x, rect.bottom() - 6.0),
+        Pos2::new(rect.center().x, rect.bottom() - 5.0),
         Align2::CENTER_CENTER,
         title,
-        FontId::proportional(10.5),
+        FontId::proportional(10.0),
         theme::text_hint(),
     );
     (*value - before).abs() > f32::EPSILON
@@ -1109,6 +1268,11 @@ fn crossfader(ui: &mut Ui, value: &mut f32, width: f32) -> bool {
     painter.vline(cap.center().x, cap.shrink2(Vec2::new(0.0, 6.0)).y_range(), Stroke::new(2.0, mix));
     (*value - before).abs() > f32::EPSILON
 }
+
+#[path = "dj_library.rs"]
+pub(in crate::app) mod library;
+#[path = "dj_deck_tools.rs"]
+mod tools;
 
 #[cfg(test)]
 #[path = "dj_decks_tests.rs"]

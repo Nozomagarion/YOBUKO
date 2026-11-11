@@ -313,20 +313,41 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
             param("low", ParamType::Number, "low band in dB, −40 (kill) to +6"),
             param("mid", ParamType::Number, "mid band in dB, −40 (kill) to +6"),
             param("high", ParamType::Number, "high band in dB, −40 (kill) to +6"),
-            param("filter", ParamType::Number, "−1 low-pass … 0 off … 1 high-pass")
+            param("filter", ParamType::Number, "−1 low-pass … 0 off … 1 high-pass"),
+            optional("trim", ParamType::Number, "the trim (gain) knob in dB, −12 to +12; unchanged when left out")
         ],
         deck_tone
+    ),
+    command!(
+        "dj.deck.loop",
+        "Set, play or let go of a DJ deck's loop",
+        &[
+            DECK,
+            optional("from", ParamType::Number, "loop start, source seconds (with to)"),
+            optional("to", ParamType::Number, "loop end, source seconds (with from)"),
+            optional("on", ParamType::Bool, "play the loop (true) or let it go (false); on when left out")
+        ],
+        deck_loop
+    ),
+    command!(
+        "dj.deck.bend",
+        "Nudge a DJ deck faster or slower while held",
+        &[DECK, param("amount", ParamType::Number, "−0.25 … 0.25 of its speed; 0 lets go")],
+        deck_bend
     ),
     command!("dj.deck.stopAll", "Stop decks and cancel pending loads", &[], deck_stop_all),
     command!(
         "dj.mixer.set",
-        "Set the DJ crossfader, channel levels and headphone cues",
+        "Set the DJ crossfader, channel levels, headphone cues, master and headphones",
         &[
             param("crossfade", ParamType::Number, "0=A, 1=B"),
             param("levelA", ParamType::Number, "A level 0–1"),
             param("levelB", ParamType::Number, "B level 0–1"),
             param("cueA", ParamType::Bool, "A headphone cue"),
-            param("cueB", ParamType::Bool, "B headphone cue")
+            param("cueB", ParamType::Bool, "B headphone cue"),
+            optional("master", ParamType::Number, "master level 0–1; unchanged when left out"),
+            optional("phones", ParamType::Number, "headphone level 0–1; unchanged when left out"),
+            optional("phonesMix", ParamType::Number, "headphones: 0 cued decks … 1 master; unchanged when left out")
         ],
         deck_mixer
     ),
@@ -587,6 +608,12 @@ fn deck_rate(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn deck_tone(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::tone(p, v)
+}
+fn deck_loop(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::set_loop(p, v)
+}
+fn deck_bend(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::bend(p, v)
 }
 fn deck_stop_all(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::stop_all(p, v)

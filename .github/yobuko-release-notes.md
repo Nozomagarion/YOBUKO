@@ -16,7 +16,7 @@ Their authors keep their copyright and credits. YOBUKO is an independent fork, n
 
 ### ✨ New in this version
 
-- **DJ mode mixes in YOBUKO's own window.** Pick **DJ**: two decks with waveforms, Cue, Play, Sync and tempo, a mixer with EQ, filter and crossfader, and your library under them. Plug in a **Pioneer DDJ-FLX4** and play; nothing to set up. Mixxx is still there: **Open Mixxx instead**.
+- **DJ mode mixes in YOBUKO's own window.** Pick **DJ**: two decks with waveforms, Cue, Play, Sync, nudge and tempo, 8 hot cues, loops and beat jumps; a mixer with trim, EQ, filter, meters, master and headphones; and your library under them, searchable and sortable, with playlists. Plug in a **Pioneer DDJ-FLX4** and play; nothing to set up. Mixxx is still there: **Open Mixxx instead**.
 - **One music library** shared by Mixxx and rbxport: playlists made in one show up in the other, and **Send this project to DJ…** puts a finished track in it.
 - **USB stick for the club** with rbxport, shipped inside YOBUKO.
 - **One look for the three apps**, with selectable YOBUKO themes.

@@ -5,6 +5,35 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## The DJ space gets Mixxx's deck and mixer functions, part 1 — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the owner wants every function of Mixxx in YOBUKO's own DJ space, drawn in the rounded
+look, not a short selection. The work comes in three parts; this is the first (decks, mixer,
+library and the controller's pads). Upstream Suhina must stay easy to pull in, so the DJ code
+lives in YOBUKO's own files.
+
+- **Code written:** each deck now has **8 hot cues** (coloured pads, kept with the track in the
+  DJ library), **loops** (IN, OUT, RELOOP/EXIT, beat loops of 1/32 to 64 beats with /2 and ×2),
+  **beat jumps**, **nudge** buttons, **back to start**, **EJECT** and a tempo range button
+  (±8, ±16, ±50 %); the waveforms mark the cues and the loop. The mixer gained a **Trim** knob
+  and a **meter** per deck, a **Master** level with a stereo meter, the **headphones' level**
+  and their **cue/master blend**. The library can be **searched**, **sorted** by title, BPM, key
+  or length, and shows **playlists** (new playlist, add to / remove from, delete). The
+  **DDJ-FLX4** drives the new parts too: SHIFT, hot cue, beat loop and beat jump pads, loop
+  buttons, CUE/LOOP CALL, the quick jumps, TRIM and the headphones mix; its jog wheels now
+  nudge a playing deck. The decks play through a player of YOBUKO's own
+  (`crates/engine/src/deck_voice.rs`), and Suhina's preview player is back to upstream's code.
+- **Checks passed (Linux, cloud container):** engine tests for loops without a seam, the nudge,
+  trim, master, meters and the headphones blend; session tests for `dj.deck.loop`,
+  `dj.deck.bend`, the trim and the mixer's new values; UI tests for the hot cues, loops, beat
+  jumps, tempo range, eject, the mixer and the library's search, sort and playlists; a
+  screenshot drawn by the real program.
+- **Limits:** still no key lock, effects, beat-aligned sync, sampler, tap tempo, recording or
+  four decks (parts 2 and 3). A hot cue cannot be set while the library analyses a file. Not
+  tried with a real DDJ-FLX4, real speakers or headphones, or on Windows and macOS.
+- **Next criterion:** the owner checks in a test build that the decks and mixer have the
+  buttons they use in Mixxx; then part 2 (key lock, effects, beat sync and grid, sampler).
+
 ## Soft, rounded studio like the YOBUKO One mock-up — 11 November 2026 (branch `claude/project-thread-mkzv4x`)
 
 **Goal:** the owner found the studio "all square" with a thin font, and liked the rounder look of
