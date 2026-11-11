@@ -6,9 +6,10 @@
 //! headphones take the colour of the space showing; its mood says what is going on (music
 //! playing, a room waiting for friends, a friend arriving, a dropped connection).
 //!
-//! A still Piou asks for no repaint: at rest it only blinks, which is scheduled, and the moods
-//! that move repaint at [`FRAME`] while they last. With animations off (`motion::enabled`)
-//! every mood is one still pose.
+//! A Piou at rest asks for no frame, so a window nobody touches stays asleep: its blink rides
+//! on frames drawn for another reason (the pointer moving, music playing) and only asks for the
+//! few that reopen its eyes. The moods that move repaint at [`FRAME`] while they last. With
+//! animations off (`motion::enabled`) every mood is one still pose.
 
 use egui::{Color32, Context, Painter, Pos2, Rect, Shape, Stroke, Vec2};
 
@@ -99,7 +100,7 @@ fn pose(mood: Mood, time: f64, beat: f64, moving: bool) -> Pose {
     let mut pose = Pose::STILL;
     match mood {
         Mood::Idle => {
-            if moving && time.rem_euclid(BLINK_EVERY) < BLINK {
+            if moving && blinking(time) {
                 pose.eyes = 0.1;
             }
         }
@@ -141,19 +142,20 @@ fn moves(mood: Mood) -> bool {
     matches!(mood, Mood::Play | Mood::Call | Mood::Joy | Mood::Lost)
 }
 
+/// Whether a Piou at rest has its eyes shut at `time`: the last moment of each period, so a
+/// window that has only just opened never starts with a blink.
+fn blinking(time: f64) -> bool {
+    time.rem_euclid(BLINK_EVERY) >= BLINK_EVERY - BLINK
+}
+
 /// Draws Piou in `rect` (it keeps its square shape, centred), in `mood`, and asks for the
 /// repaint its next frame needs. `beat` is the length of a beat in seconds, for `Mood::Play`.
 pub fn show(ctx: &Context, painter: &Painter, rect: Rect, mood: Mood, coat: Coat, beat: f64) {
     let moving = motion::enabled(ctx);
     let time = ctx.input(|i| i.time);
-    if moving {
-        if moves(mood) {
-            ctx.request_repaint_after(FRAME);
-        } else if mood == Mood::Idle {
-            let into = time.rem_euclid(BLINK_EVERY);
-            let wait = if into < BLINK { FRAME.as_secs_f64() } else { BLINK_EVERY - into };
-            ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait.max(0.001)));
-        }
+    // A moving mood runs on its own; a blink that a frame happened to start is seen through.
+    if moving && (moves(mood) || (mood == Mood::Idle && blinking(time))) {
+        ctx.request_repaint_after(FRAME);
     }
     painter.extend(shapes(rect, mood, coat, pose(mood, time, beat, moving)));
 }
@@ -409,11 +411,11 @@ mod tests {
         // With them on, the moods that move do, and the bird at rest only blinks.
         assert_ne!(pose(Mood::Play, 0.1, 0.5, true), pose(Mood::Play, 0.3, 0.5, true));
         assert_eq!(pose(Mood::Idle, 1.0, 0.5, true), pose(Mood::Idle, 2.0, 0.5, true));
-        assert!(pose(Mood::Idle, 0.05, 0.5, true).eyes < 0.5);
+        assert!(pose(Mood::Idle, BLINK_EVERY - 0.05, 0.5, true).eyes < 0.5);
     }
 
     #[test]
-    fn a_still_piou_never_asks_for_an_immediate_repaint() {
+    fn piou_never_asks_for_an_immediate_repaint_and_at_rest_for_none_at_all() {
         // `harness.run()` waits until nothing repaints at once: a mascot must not hold it.
         for mood in MOODS {
             let mut harness = egui_kittest::Harness::builder().with_size(Vec2::splat(200.0)).build_ui(move |ui| {
@@ -421,6 +423,10 @@ mod tests {
                 show(ui.ctx(), ui.painter(), rect, mood, COAT, 0.5);
             });
             harness.run();
+            // A window nobody touches wakes for nothing.
+            if matches!(mood, Mood::Idle | Mood::Sleep) {
+                assert!(!harness.ctx.has_requested_repaint(), "{mood:?} at rest asked for a frame");
+            }
         }
     }
 }

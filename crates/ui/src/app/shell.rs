@@ -19,7 +19,6 @@ const NOTE_FADE: f64 = 0.2;
 const JOY_SECONDS: f64 = 2.2;
 /// Without a key or a click for this long, Piou falls asleep.
 const SLEEP_AFTER: f64 = 300.0;
-
 #[derive(Default)]
 pub(super) struct Shell {
     /// What Piou says now.
@@ -31,8 +30,8 @@ pub(super) struct Shell {
     joy_until: f64,
     /// Good news that arrived where no clock was at hand: Piou hops from the next frame.
     joy_asked: bool,
-    /// When a key or the pointer was last used.
-    last_input: f64,
+    /// When a key was last pressed or something clicked; `None` until one is.
+    last_input: Option<f64>,
 }
 
 /// One of Piou's notes: what happened, and the mood it comes with.
@@ -203,10 +202,25 @@ impl App {
 
     /// Piou's mood now, from what the app is doing.
     pub(super) fn piou_mood(&mut self, ctx: &egui::Context) -> Mood {
-        let (time, used) = ctx.input(|i| (i.time, !i.events.is_empty() || i.pointer.any_down()));
-        if used || self.shell.last_input == 0.0 {
-            self.shell.last_input = time;
+        // A key, a click or the wheel wakes Piou; the pointer passing by does not, so someone
+        // coming back to the window finds it asleep. Nothing here asks for a frame: it falls
+        // asleep on the first one drawn after the wait.
+        let (time, used) = ctx.input(|i| {
+            let acted = i.events.iter().any(|event| {
+                matches!(
+                    event,
+                    egui::Event::Key { .. }
+                        | egui::Event::Text(_)
+                        | egui::Event::PointerButton { .. }
+                        | egui::Event::MouseWheel { .. }
+                )
+            });
+            (i.time, acted || i.pointer.any_down())
+        });
+        if used {
+            self.shell.last_input = Some(time);
         }
+        let idle_for = self.shell.last_input.map(|at| time - at);
         if std::mem::take(&mut self.shell.joy_asked) {
             self.shell.joy_until = time + JOY_SECONDS;
         }
@@ -219,7 +233,7 @@ impl App {
             Mood::Call
         } else if self.session().and_then(|s| s.player()).is_some_and(|p| p.monitor().running()) {
             Mood::Play
-        } else if time - self.shell.last_input > SLEEP_AFTER {
+        } else if idle_for.is_some_and(|idle| idle > SLEEP_AFTER) {
             Mood::Sleep
         } else {
             Mood::Idle
