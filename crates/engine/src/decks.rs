@@ -8,7 +8,7 @@
 use crate::AudioData;
 use crate::chain::MAX_BLOCK;
 use crate::deck_voice::{
-    DeckCommand, DeckMeter, DeckMonitor, DeckVoice, DeckVoiceSender, MAX_BEND, MAX_RATE, MIN_RATE,
+    DeckCommand, DeckMeter, DeckMonitor, DeckVoice, DeckVoiceSender, MAX_BEND, MAX_KEY, MAX_RATE, MIN_RATE,
 };
 use rtrb::{Consumer, Producer, RingBuffer};
 use std::sync::Arc;
@@ -332,6 +332,14 @@ impl crate::Controller {
         }
         self.deck(deck)?.send(DeckCommand::Seek(from))
     }
+    /// Moves a deck by `by` seconds of its track from wherever it is when this lands, so a beat
+    /// alignment measured a moment ago still holds.
+    pub fn deck_shift(&mut self, deck: usize, by: f64) -> Result<(), String> {
+        if !by.is_finite() {
+            return Err("invalid DJ shift".into());
+        }
+        self.deck(deck)?.send(DeckCommand::Shift(by))
+    }
     /// How fast a deck plays, 1 at the track's own speed (0.5 … 2; the pitch follows).
     pub fn deck_rate(&mut self, deck: usize, rate: f64) -> Result<(), String> {
         if !rate.is_finite() || !(MIN_RATE..=MAX_RATE).contains(&rate) {
@@ -346,6 +354,17 @@ impl crate::Controller {
             return Err("a DJ deck's nudge must be −0.25 to 0.25".into());
         }
         self.deck(deck)?.send(DeckCommand::Bend(bend))
+    }
+    /// Keeps a deck's key where it is when its speed changes (a time-stretcher plays it).
+    pub fn deck_key_lock(&mut self, deck: usize, on: bool) -> Result<(), String> {
+        self.deck(deck)?.send(DeckCommand::KeyLock(on))
+    }
+    /// Moves a deck's key up (above 0) or down, in semitones, −12 … 12.
+    pub fn deck_key(&mut self, deck: usize, semitones: f64) -> Result<(), String> {
+        if !semitones.is_finite() || !(-MAX_KEY..=MAX_KEY).contains(&semitones) {
+            return Err("a DJ deck's key moves at most 12 semitones up or down".into());
+        }
+        self.deck(deck)?.send(DeckCommand::Key(semitones))
     }
     /// Loops a deck between two points of its track, in seconds; `None` plays straight on.
     pub fn deck_loop(&mut self, deck: usize, region: Option<(f64, f64)>) -> Result<(), String> {

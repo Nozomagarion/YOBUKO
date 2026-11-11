@@ -295,8 +295,12 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
     command!("dj.deck.clear", "Stop and unload a DJ deck", &[DECK], deck_clear),
     command!(
         "dj.deck.seek",
-        "Seek a DJ deck in source seconds",
-        &[DECK, param("from", ParamType::Number, "source seconds")],
+        "Seek a DJ deck in source seconds, to a place or by an amount",
+        &[
+            DECK,
+            optional("from", ParamType::Number, "source seconds to play from"),
+            optional("by", ParamType::Number, "or: seconds to move on (back when negative) from where it is")
+        ],
         deck_seek
     ),
     command!(
@@ -334,6 +338,16 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
         "Nudge a DJ deck faster or slower while held",
         &[DECK, param("amount", ParamType::Number, "−0.25 … 0.25 of its speed; 0 lets go")],
         deck_bend
+    ),
+    command!(
+        "dj.deck.key",
+        "Lock a DJ deck's key (tempo changes keep the pitch) or move its key up or down",
+        &[
+            DECK,
+            optional("lock", ParamType::Bool, "keep the key when the tempo changes; unchanged when left out"),
+            optional("shift", ParamType::Number, "semitones up or down, −12 to 12; unchanged when left out")
+        ],
+        deck_key
     ),
     command!("dj.deck.stopAll", "Stop decks and cancel pending loads", &[], deck_stop_all),
     command!(
@@ -614,6 +628,9 @@ fn deck_loop(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn deck_bend(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::bend(p, v)
+}
+fn deck_key(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::key(p, v)
 }
 fn deck_stop_all(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::stop_all(p, v)

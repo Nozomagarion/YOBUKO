@@ -33,6 +33,9 @@ struct Deck {
     /// kept, to play again with reloop).
     looping: Option<(f64, f64)>,
     loop_on: bool,
+    /// Whether the key stays when the speed changes, and how far it is moved, in semitones.
+    key_lock: bool,
+    key: f64,
 }
 impl Default for Deck {
     fn default() -> Self {
@@ -46,6 +49,8 @@ impl Default for Deck {
             tone: DeckTone::default(),
             looping: None,
             loop_on: false,
+            key_lock: false,
+            key: 0.0,
         }
     }
 }
@@ -201,7 +206,7 @@ pub(crate) fn play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     let from = d.from;
     let mix = p.dj.decks.mixer;
     let deck = &p.dj.decks.states[i];
-    let (rate, tone, looping) = (deck.rate, deck.tone, deck.playing_loop());
+    let (rate, tone, looping, key_lock, key) = (deck.rate, deck.tone, deck.playing_loop(), deck.key_lock, deck.key);
     let target = p.active();
     let player = p.preview_session_mut()?.player_mut()?;
     let ctl = player.controller_mut();
@@ -209,6 +214,8 @@ pub(crate) fn play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     ctl.deck_rate(i, rate).map_err(CommandError)?;
     ctl.deck_tone(i, tone).map_err(CommandError)?;
     ctl.deck_loop(i, looping).map_err(CommandError)?;
+    ctl.deck_key_lock(i, key_lock).map_err(CommandError)?;
+    ctl.deck_key(i, key).map_err(CommandError)?;
     ctl.deck_play(i, data, from).map_err(CommandError)?;
     let monitor = ctl.deck_monitor(i).ok_or("missing DJ deck monitor")?;
     let master = ctl.deck_master_meter();
@@ -238,6 +245,9 @@ pub(crate) fn seek(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     let i = index(v)?;
     let source = p.dj.decks.states[i].source.as_ref().ok_or("load a deck first")?;
     let end = source.data.frames() as f64 / f64::from(source.data.sample_rate);
+    if !v["by"].is_null() {
+        return shift(p, i, v, end);
+    }
     let from = v["from"]
         .as_f64()
         .filter(|s| s.is_finite() && *s >= 0.0 && *s < end)
@@ -250,6 +260,22 @@ pub(crate) fn seek(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     }
     p.dj.decks.states[i].from = from;
     Ok(json!({"position":from}))
+}
+/// Moves a deck on (or back) by `by` seconds from where the audio has it when this lands.
+fn shift(p: &mut Projects, i: usize, v: &Value, end: f64) -> Result<Value, CommandError> {
+    let by =
+        v["by"].as_f64().filter(|n| n.is_finite() && n.abs() <= end).ok_or("by must be seconds within the track")?;
+    if !v["from"].is_null() {
+        return Err("give from or by, not both".into());
+    }
+    match bound(p, i) {
+        Some(s) => s.player_mut()?.controller_mut().deck_shift(i, by).map_err(CommandError)?,
+        None => {
+            let d = &mut p.dj.decks.states[i];
+            d.from = (d.from + by).clamp(0.0, (end - 0.001).max(0.0));
+        }
+    }
+    Ok(json!({"by":by}))
 }
 pub(crate) fn rate(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     let i = index(v)?;
@@ -349,6 +375,30 @@ pub(crate) fn bend(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     }
     Ok(json!({"amount":amount}))
 }
+/// Locks or frees a deck's key, and moves it up or down: `lock` and `shift` (semitones,
+/// −12 … 12), either or both.
+pub(crate) fn key(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    let i = index(v)?;
+    let lock = match &v["lock"] {
+        Value::Null => p.dj.decks.states[i].key_lock,
+        lock => lock.as_bool().ok_or("lock must be true or false")?,
+    };
+    let shift = match &v["shift"] {
+        Value::Null => p.dj.decks.states[i].key,
+        shift => {
+            shift.as_f64().filter(|n| n.is_finite() && n.abs() <= 12.0).ok_or("shift must be −12 to 12 semitones")?
+        }
+    };
+    if let Some(s) = bound(p, i) {
+        let ctl = s.player_mut()?.controller_mut();
+        ctl.deck_key_lock(i, lock).map_err(CommandError)?;
+        ctl.deck_key(i, shift).map_err(CommandError)?;
+    }
+    let d = &mut p.dj.decks.states[i];
+    d.key_lock = lock;
+    d.key = shift;
+    Ok(json!({"lock":lock,"shift":shift}))
+}
 impl Projects {
     /// The waveform of what deck `deck` (0 for A, 1 for B) holds, to draw it; `None` while it
     /// holds nothing.
@@ -415,6 +465,8 @@ pub(crate) fn snapshot(p: &Projects) -> Value {
                     "loopFrom": d.looping.map(|r| r.0),
                     "loopTo": d.looping.map(|r| r.1),
                     "loopOn": d.loop_on,
+                    "keyLock": d.key_lock,
+                    "keyShift": d.key,
                     "meter": meter,
                 })
             })

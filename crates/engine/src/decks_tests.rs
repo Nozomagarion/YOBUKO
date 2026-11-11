@@ -286,3 +286,73 @@ fn the_headphones_blend_the_cued_deck_with_the_master() {
     let (_, head) = heard(&mut c, DeckMix { crossfade: 0.0, cue: [false, true], phones: 0.5, ..DeckMix::default() });
     assert!((head - 0.2 * 0.501_187_2).abs() < 1e-5, "{head}");
 }
+/// The pitch of the left side over the next `blocks` blocks, from its rising zero crossings.
+fn pitch(r: &mut Renderer, blocks: usize) -> f64 {
+    let left: Vec<f32> = (0..blocks).flat_map(|_| block(r).into_iter().step_by(2)).collect();
+    let rising = left.windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count();
+    rising as f64 / (left.len() as f64 / 8000.0)
+}
+#[test]
+fn the_key_lock_keeps_the_pitch_when_the_speed_changes_and_the_key_moves_it() {
+    let (mut r, mut c) = setup();
+    c.deck_rate(0, 1.5).unwrap();
+    c.deck_play(0, sine(440.0, 8000), 0.0).unwrap();
+    let free = pitch(&mut r, 4);
+    assert!((free - 660.0).abs() < 8.0, "{free}");
+    c.deck_key_lock(0, true).unwrap();
+    block(&mut r);
+    let at = c.deck_monitor(0).unwrap().seconds();
+    let locked = pitch(&mut r, 4);
+    assert!((locked - 440.0).abs() < 8.0, "{locked}");
+    // The clock still runs at the deck's speed: 4 blocks of 0.128 s, 1.5 times as fast.
+    let moved = c.deck_monitor(0).unwrap().seconds() - at;
+    assert!((moved - 0.768).abs() < 1e-6, "{moved}");
+    c.deck_rate(0, 1.0).unwrap();
+    c.deck_key(0, 12.0).unwrap();
+    block(&mut r);
+    let up = pitch(&mut r, 4);
+    assert!((up - 880.0).abs() < 12.0, "{up}");
+    // Unlocked and a key moved: the speed and the key both move the pitch.
+    c.deck_key_lock(0, false).unwrap();
+    c.deck_rate(0, 0.75).unwrap();
+    c.deck_key(0, -12.0).unwrap();
+    c.deck_seek(0, 0.5).unwrap();
+    block(&mut r);
+    let down = pitch(&mut r, 4);
+    assert!((down - 165.0).abs() < 6.0, "{down}");
+    for wrong in [12.01, -12.01, f64::NAN] {
+        assert!(c.deck_key(0, wrong).is_err(), "{wrong}");
+    }
+}
+#[test]
+fn a_locked_deck_starts_at_once_and_loops_without_a_gap() {
+    let (mut r, mut c) = setup();
+    c.deck_key_lock(0, true).unwrap();
+    c.deck_rate(0, 1.25).unwrap();
+    c.deck_play(0, sine(200.0, 8000), 1.0).unwrap();
+    let first = block(&mut r);
+    // Sound from the first few milliseconds, not after the stretcher's latency.
+    assert!(first[..2 * 80].iter().any(|s| s.abs() > 0.05));
+    c.deck_loop(0, Some((1.0, 1.5))).unwrap();
+    for _ in 0..12 {
+        let b = block(&mut r);
+        let seconds = c.deck_monitor(0).unwrap().seconds();
+        assert!((1.0..1.5).contains(&seconds), "{seconds}");
+        // No silent hole: every 20 ms of the block has sound.
+        for piece in b.chunks(2 * 160) {
+            assert!(piece.iter().any(|s| s.abs() > 0.05));
+        }
+    }
+}
+#[test]
+fn a_shift_moves_a_deck_from_wherever_it_is_when_it_lands() {
+    let (mut r, mut c) = setup();
+    c.deck_play(0, signal(0.2, 8000), 1.0).unwrap();
+    block(&mut r);
+    // Measured a moment ago; the deck has moved on since, and the shift adds to where it is.
+    c.deck_shift(0, -0.25).unwrap();
+    block(&mut r);
+    let seconds = c.deck_monitor(0).unwrap().seconds();
+    assert!((seconds - (1.0 + 0.128 - 0.25 + 0.128)).abs() < 1e-6, "{seconds}");
+    assert!(c.deck_shift(0, f64::NAN).is_err());
+}

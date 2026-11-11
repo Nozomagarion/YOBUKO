@@ -205,3 +205,38 @@ fn a_deck_loops_nudges_and_trims_and_the_mixer_meters_master_and_headphones() {
         assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
     }
 }
+#[test]
+fn a_deck_key_is_locked_or_moved_and_kept_for_the_next_play() {
+    let dir = TempDir::new("dj-decks-key");
+    let (mut p, out) = seeded(&dir);
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    p.execute("dj.deck.key", &json!({"deck":"A","lock":true})).unwrap();
+    p.execute("dj.deck.rate", &json!({"deck":"A","rate":1.08})).unwrap();
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let mut audio = vec![0.0; 4096];
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    p.execute("dj.deck.key", &json!({"deck":"A","shift":-2.0})).unwrap();
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    let s = idle(&mut p);
+    let a = &s["performance"]["decks"][0];
+    assert_eq!((&a["keyLock"], &a["keyShift"]), (&json!(true), &json!(-2.0)), "{a}");
+    assert!(a["position"].as_f64().unwrap() > 0.0);
+    // Leaving one out keeps it.
+    p.execute("dj.deck.key", &json!({"deck":"A","lock":false})).unwrap();
+    assert_eq!(idle(&mut p)["performance"]["decks"][0]["keyShift"], -2.0);
+    for wrong in [json!({"deck":"A","shift":13.0}), json!({"deck":"A","lock":"on"}), json!({"deck":"C","lock":true})] {
+        assert!(p.execute("dj.deck.key", &wrong).is_err(), "{wrong}");
+    }
+    assert!(matches!(suhina_session::policy("dj.deck.key").unwrap().agents, suhina_session::Agents::Denied(_)));
+    // A seek by an amount moves on from where the deck is; one way or the other, not both.
+    p.execute("dj.deck.pause", &json!({"deck":"A"})).unwrap();
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    let before = idle(&mut p)["performance"]["decks"][0]["position"].as_f64().unwrap();
+    p.execute("dj.deck.seek", &json!({"deck":"A","by":0.01})).unwrap();
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    let after = idle(&mut p)["performance"]["decks"][0]["position"].as_f64().unwrap();
+    assert!((after - before - 0.01).abs() < 1e-6, "{before} {after}");
+    assert!(p.execute("dj.deck.seek", &json!({"deck":"A","by":0.01,"from":0.0})).is_err());
+    assert!(p.execute("dj.deck.seek", &json!({"deck":"A"})).is_err());
+}

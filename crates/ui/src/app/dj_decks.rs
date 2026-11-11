@@ -72,6 +72,8 @@ pub(in crate::app) struct Decks {
     master_meter: [f32; 2],
     /// The controller's SHIFT buttons, held.
     shift: [bool; 2],
+    /// Whether each deck quantizes: cues and loops land on the beat, jumps keep the beat.
+    quantize: [bool; 2],
     /// The library's search, sort and playlist.
     pub(in crate::app) library: library::LibraryView,
 }
@@ -124,9 +126,14 @@ impl Decks {
         (at + since * self.number(deck, "rate", 1.0)).min(length)
     }
 
+    /// The track's own tempo: its beat grid's, else the analysed one.
+    fn track_bpm(&self, deck: usize) -> Option<f64> {
+        self.beat(deck).map(|(_, beat)| 60.0 / beat)
+    }
+
     /// The deck's tempo as it plays: the track's BPM times its speed.
     fn bpm(&self, deck: usize) -> Option<f64> {
-        self.deck(deck)["bpm"].as_f64().map(|bpm| bpm * self.number(deck, "rate", 1.0))
+        self.track_bpm(deck).map(|bpm| bpm * self.number(deck, "rate", 1.0))
     }
 
     /// Writes a value into the last read, so the page shows a change before the next read.
@@ -500,6 +507,8 @@ impl App {
                 self.pads(ui, deck, ready);
                 ui.add_space(6.0);
                 self.loop_row(ui, deck, ready);
+                ui.add_space(6.0);
+                self.key_row(ui, deck, ready);
                 ui.add_space(theme::PAD);
                 self.tempo(ui, deck, loaded);
                 if let Some(error) = d["error"].as_str() {
@@ -584,9 +593,9 @@ impl App {
                 self.toggle_play(deck);
             }
             let other = 1 - deck;
-            let can_sync = ready && self.dj.decks.deck(deck)["bpm"].is_number() && self.dj.decks.bpm(other).is_some();
+            let can_sync = ready && self.dj.decks.track_bpm(deck).is_some() && self.dj.decks.bpm(other).is_some();
             let sync = round_button(ui, &format!("Sync {name}"), "SYNC", 52.0, None, can_sync)
-                .on_hover_text("Play at the other deck's tempo")
+                .on_hover_text("Play at the other deck's tempo, with the beats lined up")
                 .on_disabled_hover_text("Both decks need a track with a known tempo");
             if sync.clicked() {
                 self.sync_deck(deck);
@@ -634,14 +643,16 @@ impl App {
             self.seek(deck, self.dj.decks.cue[deck]);
             self.dj.decks.set(Some(deck), "playing", json!(false));
         } else {
-            self.dj.decks.cue[deck] = self.dj.decks.position(deck);
+            self.dj.decks.cue[deck] = self.dj.decks.quantized(deck, self.dj.decks.position(deck));
         }
     }
 
-    /// Sync: the deck plays at the other deck's tempo.
+    /// Sync: the deck plays at the other deck's tempo, its beats lined up with the other's
+    /// when both play.
     fn sync_deck(&mut self, deck: usize) {
-        if let (Some(own), Some(target)) = (self.dj.decks.deck(deck)["bpm"].as_f64(), self.dj.decks.bpm(1 - deck)) {
+        if let (Some(own), Some(target)) = (self.dj.decks.track_bpm(deck), self.dj.decks.bpm(1 - deck)) {
             self.set_rate(deck, (target / own.max(1.0)).clamp(0.5, 2.0));
+            self.align_beats(deck);
         }
     }
 
@@ -964,6 +975,7 @@ impl App {
                 }
             }
             Flx4::Shift(deck, held) => self.dj.decks.shift[deck] = held,
+            Flx4::Tap(deck) => self.tap(deck),
             Flx4::ToStart(deck) => self.back_to_start(deck),
             Flx4::Trim(deck, knob) => {
                 let knob = if (knob - 0.5).abs() < 0.01 { 0.5 } else { knob };
@@ -1269,6 +1281,8 @@ fn crossfader(ui: &mut Ui, value: &mut f32, width: f32) -> bool {
     (*value - before).abs() > f32::EPSILON
 }
 
+#[path = "dj_deck_beats.rs"]
+mod beats;
 #[path = "dj_library.rs"]
 pub(in crate::app) mod library;
 #[path = "dj_deck_tools.rs"]

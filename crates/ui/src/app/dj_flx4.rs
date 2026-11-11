@@ -30,6 +30,8 @@ pub(super) enum Flx4 {
     Jog(usize, i32),
     /// The deck's SHIFT button, pressed (true) or let go.
     Shift(usize, bool),
+    /// SHIFT and a mixer channel's CUE: a tap of the tempo.
+    Tap(usize),
     /// SHIFT and CUE: back to the start of the track.
     ToStart(usize),
     Trim(usize, f32),
@@ -93,6 +95,7 @@ pub(super) fn read(message: [u8; 3]) -> Option<Flx4> {
             (0 | 1, 0x0C) => Some(Flx4::Cue(channel)),
             (0 | 1, 0x58) => Some(Flx4::Sync(channel)),
             (0 | 1, 0x54) => Some(Flx4::Phones(channel)),
+            (0 | 1, 0x68) => Some(Flx4::Tap(channel)),
             (0 | 1, 0x48) => Some(Flx4::ToStart(channel)),
             (0 | 1, 0x10) => Some(Flx4::LoopIn(channel)),
             (0 | 1, 0x11) => Some(Flx4::LoopOut(channel)),
@@ -138,6 +141,7 @@ mod tests {
         assert_eq!(read([0x91, 0x0C, 0x7F]), Some(Flx4::Cue(1)));
         assert_eq!(read([0x90, 0x58, 0x7F]), Some(Flx4::Sync(0)));
         assert_eq!(read([0x91, 0x54, 0x7F]), Some(Flx4::Phones(1)));
+        assert_eq!(read([0x90, 0x68, 0x7F]), Some(Flx4::Tap(0)));
         assert_eq!(read([0x96, 0x46, 0x7F]), Some(Flx4::Load(0)));
         assert_eq!(read([0x96, 0x47, 0x7F]), Some(Flx4::Load(1)));
         assert_eq!(read([0xB0, 0x13, 0x7F]), Some(Flx4::Level(0, 1.0)));

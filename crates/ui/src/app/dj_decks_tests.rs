@@ -28,7 +28,7 @@ fn dj_window(dir: &Path, tracks: &[&str]) -> egui_kittest::Harness<'static, App>
                     source_project: None,
                     seconds: 2.0,
                     bpm: Some(120.0),
-                    key: None,
+                    key: Some(["8A", "10A", "11B"][i % 3].into()),
                 }
             })
             .collect(),
@@ -433,6 +433,77 @@ fn a_deck_has_hot_cues_loops_beat_jumps_and_the_mixer_its_trim_master_and_meters
     assert_eq!(trim_db(trim_knob(-12.0)), -12.0);
     assert_eq!(trim_db(0.5), 0.0);
     assert_eq!(tools::beats_text(0.25), "1/4");
+}
+
+#[test]
+fn a_deck_locks_moves_and_matches_its_key_taps_its_tempo_and_quantizes() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 2));
+    harness.get_by_label("Load Moonlit Echo on deck A").click();
+    until(&mut harness, "deck A to load", |app| app.dj.decks.deck(0)["track"] == 1);
+    harness.get_by_label("Load Paper Lanterns on deck B").click();
+    until(&mut harness, "deck B to load", |app| app.dj.decks.deck(1)["track"] == 2);
+    for label in
+        ["Key lock A", "Key down B", "Key A", "Key up A", "Key sync B", "Quantize A", "Tap tempo B", "Beat grid A"]
+    {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    // Faster without the key lock, the key goes up with the speed; locked, it stays.
+    harness.state_mut().set_rate(0, 1.06);
+    harness.run();
+    assert_eq!(harness.state().dj.decks.shown_key(0).map(beats::Key::text).as_deref(), Some("3A"));
+    harness.get_by_label("Key lock A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.shown_key(0).map(beats::Key::text).as_deref(), Some("8A"));
+    harness.get_by_label("Key up A").click();
+    harness.run();
+    harness.get_by_label("Key up A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.shown_key(0).map(beats::Key::text).as_deref(), Some("10A"));
+    // The session has it too.
+    harness.state_mut().dj.decks.read_at = None;
+    harness.step();
+    let a = harness.state().dj.decks.deck(0).clone();
+    assert_eq!((&a["keyLock"], &a["keyShift"]), (&json!(true), &json!(2.0)), "{a}");
+    harness.get_by_label("Key A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.deck(0)["keyShift"], 0.0, "a click on the key puts it back");
+    // Key sync: B (10A) moves to A's 8A, two semitones down.
+    harness.get_by_label("Key sync B").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.shown_key(1).map(beats::Key::text).as_deref(), Some("8A"));
+    assert_eq!(harness.state().dj.decks.deck(1)["keyShift"], -2.0);
+    // Quantize: a hot cue set off the beat lands on it (120 BPM: a beat each half second).
+    harness.get_by_label("Quantize A").click();
+    harness.run();
+    harness.state_mut().seek(0, 0.62);
+    harness.run();
+    harness.get_by_label("Hot cue 1 A").click();
+    until(&mut harness, "the hot cue", |app| app.dj.decks.hot_cues(0)[0].is_some());
+    assert_eq!(harness.state().dj.decks.hot_cues(0)[0].map(|c| c.1), Some(0.5));
+    // Tapping 100 BPM sets the track's beat grid (the deck plays at its own speed again).
+    harness.state_mut().set_rate(0, 1.0);
+    let start = Instant::now();
+    let revision = harness.state().dj.decks.snapshot["revision"].as_u64();
+    for i in 0..4 {
+        harness.state_mut().tap_at(0, start + Duration::from_millis(600 * i));
+    }
+    until(&mut harness, "the tapped grid", |app| app.dj.decks.snapshot["revision"].as_u64() > revision);
+    let bpm = harness.state().dj.decks.track_bpm(0).unwrap();
+    assert!((bpm - 100.0).abs() < 1.0, "{bpm}");
+    // The grid moved to where the deck is, then nudged later.
+    harness.state_mut().seek(0, 0.75);
+    harness.run();
+    let revision = harness.state().dj.decks.snapshot["revision"].as_u64();
+    harness.state_mut().grid_here(0);
+    until(&mut harness, "the moved grid", |app| app.dj.decks.snapshot["revision"].as_u64() > revision);
+    let (first, beat) = harness.state().dj.decks.beat(0).unwrap();
+    assert!((first - 0.15).abs() < 1e-3 && (beat - 0.6).abs() < 0.01, "{first} {beat}");
+    let revision = harness.state().dj.decks.snapshot["revision"].as_u64();
+    harness.state_mut().grid_tempo(0, 0.1);
+    until(&mut harness, "the faster grid", |app| app.dj.decks.snapshot["revision"].as_u64() > revision);
+    assert!((harness.state().dj.decks.track_bpm(0).unwrap() - bpm - 0.1).abs() < 1e-6);
 }
 
 #[test]
