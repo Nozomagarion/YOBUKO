@@ -21,7 +21,7 @@ fn portable_audio_placement_is_pure_stacked_deterministic_and_one_undo_step() {
     let content = a.project().contents.last().unwrap();
     assert_eq!(content.name, "Shared take");
     let LaneData::Audio(region) = &content.lanes[0].data else { panic!("audio") };
-    assert!(!region.warped);
+    assert!(a.project().arrangement.lanes[0].clips.iter().all(|clip| !clip.audio.warped));
     assert!(region.absolute_file.is_none());
     assert_eq!(region.duration_seconds, Some(1.0));
     assert!(a.audio().files.is_empty(), "pure placement does not follow paths or load files");

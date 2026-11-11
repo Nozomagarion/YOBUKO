@@ -17,7 +17,7 @@ pub const MAX_STATES: usize = 32 * 1024 * 1024;
 const MAX_PORTABLE_DEVICES: usize = 256;
 pub const MAX_TRACKS: usize = 64;
 // Upstream source integration must explicitly review this adapter when the native format changes.
-const NATIVE_VERSION: u64 = 9;
+const NATIVE_VERSION: u64 = 11;
 
 fn input() -> MidiInput {
     MidiInput { port: MidiPort::Nothing, channel: None, monitor: Monitor::Off }
