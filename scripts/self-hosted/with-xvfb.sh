@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright (C) 2026 The Suhina contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 # Runs a command with a private virtual X display that it reaches over TCP on 127.0.0.1.
 #
 # xvfb-run gives the command a display reached through /tmp/.X11-unix. On the owner's Linux
