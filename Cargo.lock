@@ -7800,6 +7800,7 @@ dependencies = [
  "suhina-device-registry",
  "suhina-device-sdk",
  "suhina-dj",
+ "suhina-dsp",
  "suhina-engine",
  "suhina-fs",
  "suhina-library",

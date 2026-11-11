@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The colours of a DJ deck's waveform: how loud the lows, mids and highs of a track are, a
-//! hundred times a second, worked out by the DJ worker when a deck loads, so the page can draw
-//! kicks red, voices and synths green and hats blue.
+//! hundred times a second, split by two 24 dB/octave crossovers and worked out by the DJ worker
+//! when a deck loads, so the page can draw kicks red, voices and synths green and hats blue.
 
+use suhina_dsp::crossover::LinkwitzRiley;
 use suhina_engine::AudioData;
 
 /// Columns of band levels per second of the track.
@@ -12,10 +13,12 @@ const PER_SECOND: f64 = 100.0;
 /// Where the lows end and the highs start, in hertz.
 const LOW_HZ: f64 = 250.0;
 const HIGH_HZ: f64 = 2_500.0;
+/// How much each band is raised before they share one scale.
+const WEIGHTS: [f32; 3] = [1.0, 2.0, 4.0];
 /// The most columns kept, so a hostile length cannot exhaust memory (about 33 minutes).
 const MAX_COLUMNS: usize = 200_000;
 
-/// A track's low, mid and high levels over time, each 0 … 1 of the loudest of its band.
+/// A track's low, mid and high levels over time, 0 … 1 of the loudest band anywhere in it.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct WaveColors {
     pub per_second: f64,
@@ -38,27 +41,22 @@ impl WaveColors {
     }
 }
 
-/// One-pole filter coefficient for `hz` at `rate`.
-fn pole(hz: f64, rate: f64) -> f32 {
-    (1.0 - (-std::f64::consts::TAU * hz / rate).exp()) as f32
-}
-
 /// Splits the track into lows, mids and highs and measures each, column by column.
 pub(crate) fn analyse(data: &AudioData) -> WaveColors {
     let rate = f64::from(data.sample_rate.max(1));
     let channels = usize::from(data.channels.max(1));
     let frames = data.frames();
     let per_column = ((rate / PER_SECOND) as usize).max(1);
-    let (low_k, high_k) = (pole(LOW_HZ, rate), pole(HIGH_HZ, rate));
-    let (mut low, mut below_high) = (0.0f32, 0.0f32);
+    // Two 24 dB/octave crossovers: the lows off first, then the rest split into mids and highs.
+    let (mut lows, mut highs) = (LinkwitzRiley::new(rate, LOW_HZ), LinkwitzRiley::new(rate, HIGH_HZ));
     let mut bands = Vec::with_capacity((frames / per_column + 1).min(MAX_COLUMNS));
     let mut sums = [0.0f32; 3];
     let mut count = 0;
     for frame in data.samples.chunks(channels) {
         let x = frame.iter().copied().filter(|s| s.is_finite()).sum::<f32>() / channels as f32;
-        low += low_k * (x - low);
-        below_high += high_k * (x - below_high);
-        let parts = [low, below_high - low, x - below_high];
+        let (low, rest) = lows.split(f64::from(x));
+        let (mid, high) = highs.split(rest);
+        let parts = [low as f32, mid as f32, high as f32];
         for (sum, part) in sums.iter_mut().zip(parts) {
             *sum += part * part;
         }
@@ -72,16 +70,18 @@ pub(crate) fn analyse(data: &AudioData) -> WaveColors {
             count = 0;
         }
     }
-    // Each band against its own loudest, so a quiet hi-hat still shows.
-    let mut top = [0.0f32; 3];
-    for c in &bands {
-        for (t, v) in top.iter_mut().zip(c) {
-            *t = t.max(*v);
+    // All bands on one scale, so a kick reads red and a hat blue; the mids and highs, which
+    // carry less energy in music, are raised so a quiet hi-hat still shows.
+    let mut top = 0.0f32;
+    for c in &mut bands {
+        for (v, w) in c.iter_mut().zip(WEIGHTS) {
+            *v *= w;
+            top = top.max(*v);
         }
     }
     for c in &mut bands {
-        for (v, t) in c.iter_mut().zip(top) {
-            *v = if t > 1e-9 { (*v / t).clamp(0.0, 1.0) } else { 0.0 };
+        for v in c.iter_mut() {
+            *v = if top > 1e-9 { (*v / top).clamp(0.0, 1.0) } else { 0.0 };
         }
     }
     WaveColors { per_second: rate / per_column as f64, bands }
@@ -103,8 +103,9 @@ mod tests {
         let colors = analyse(&AudioData { sample_rate: 8000, channels: 1, samples });
         let first = colors.column(0.2, 0.8).unwrap();
         let second = colors.column(1.2, 1.8).unwrap();
-        assert!(first[0] > 0.8 && first[2] < 0.2, "{first:?}");
-        assert!(second[2] > 0.8 && second[0] < 0.2, "{second:?}");
+        // The lows lead where the kick is, the highs where the hat is: red, then blue.
+        assert!(first[0] > 0.1 && first[0] > 10.0 * first[1].max(first[2]), "{first:?}");
+        assert!(second[2] > 0.9 && second[2] > 10.0 * second[0].max(second[1]), "{second:?}");
         assert!(colors.column(5.0, 6.0).is_none());
         assert!(colors.column(f64::NAN, 1.0).is_none());
     }

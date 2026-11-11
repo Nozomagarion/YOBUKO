@@ -82,14 +82,15 @@ The full Suhina studio: session and arrangement views, MIDI and audio tracks, in
 
 ## 💿 DJ
 
-<p align="center"><img src="assets/readme/dj-decks.webp" alt="DJ mode in YOBUKO's window: two decks with waveforms, hot cues and loops, a mixer with trim, EQ, filter, meters and crossfader, and the music library" width="100%"></p>
+<p align="center"><img src="assets/readme/dj-decks.webp" alt="DJ mode in YOBUKO's window: two decks with coloured waveforms, hot cues, loops and key lock, a mixer with trim, EQ, filter, meters and crossfader, two effect units and the music library" width="100%"></p>
 
 **Mix live, right in YOBUKO.** Click the **DJ** tab at the top right: two decks and a mixer, in the same window as the studio.
 
-- **The decks:** Cue, Play, Sync, nudge, tempo (±8, ±16 or ±50 %), 8 hot cues kept with each track, loops (in, out, reloop, beat loops) and beat jumps.
+- **The decks:** Cue, Play, Sync that lines up the beats, nudge, tempo (±8, ±16 or ±50 %), key lock and key change, key sync, quantize, tap tempo, 8 hot cues kept with each track, loops (in, out, reloop, beat loops) and beat jumps, on waveforms coloured by lows, mids and highs.
+- **Effects and sampler:** two effect units with three effects each (echo, ping pong, reverb, filter, flanger, phaser, trans, autopan, bitcrusher, distortion, noise) in time with the music, on a deck or the master; an eight-slot sampler the pads can play.
 - **The mixer:** trim, three-band EQ, filter, level and meter per deck, master level and meter, headphones with a cue/master blend, crossfader.
 - **The library:** search, sort by title, BPM, key or length, and playlists.
-- **Plug in a Pioneer DDJ-FLX4 and play.** Play, Cue, Sync, Load, the faders, EQ, trim, filters, tempo, crossfader, jog wheels, loop buttons and the hot cue, beat loop and beat jump pads drive the decks, nothing to set up.
+- **Plug in a Pioneer DDJ-FLX4 and play.** Play, Cue, Sync, Load, the faders, EQ, trim, filters, tempo, crossfader, jog wheels, loop buttons, TAP, the Beat FX section and the hot cue, beat loop, beat jump and sampler pads drive the decks, nothing to set up.
 - **Your music:** drop audio files or folders on the page, or click **Add my Music folder**. Finished a track in the studio? **Send this project to DJ…**
 - **Prefer Mixxx?** **Open Mixxx instead** starts Mixxx, which comes inside YOBUKO on macOS (Apple Silicon) and Windows, with its hundreds of controller mappings.
 

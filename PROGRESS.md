@@ -5,6 +5,30 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## The DJ space gets Mixxx's deck and mixer functions, part 2 — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the second of three parts toward every Mixxx function in YOBUKO's own DJ space: key
+lock, effects, beat sync, quantize, tap tempo, the sampler and coloured waveforms.
+
+- **Code written:** each deck has **KEY LOCK** (the pitch stays when the tempo moves), **KEY −/+**
+  (±12 semitones) and **KEY SYNC**; **Sync** now lines up the beats, not only the tempo;
+  **QUANTIZE** snaps cues, hot cues and loops to the beat; **TAP** sets the tempo; **GRID** moves
+  the beat grid. Two **effect units** (three effects each, eleven effects: echo, ping pong,
+  reverb, filter, flanger, phaser, trans, autopan, bitcrusher, distortion, noise) go on deck A,
+  deck B or the master, in time with the music. An **eight-slot sampler** plays library tracks
+  over the mix; the pads switch between hot cues and the sampler. The waveforms are **coloured**
+  (red lows, green mids, blue highs) and show the **beat grid**. The DDJ-FLX4's TAP, Beat FX
+  section and SAMPLER pads work.
+- **Checks passed (Linux, cloud container):** engine tests (key lock keeps the pitch and loops
+  without a gap, an echo repeats on the beat and rings out, every effect plays without blowing
+  up, a sampler slot plays at its level), session tests for `dj.deck.key`, `dj.fx.set` and
+  `dj.sampler.*`, UI tests for the new buttons, a screenshot drawn by the real program.
+- **Limits:** the effects are YOBUKO's own versions of the usual DJ effects, not copies of
+  Mixxx's sound. No recording, four decks, Auto DJ, history, crates or microphone yet (part 3).
+  Not tried with a real DDJ-FLX4, real speakers or on Windows and macOS.
+- **Next criterion:** the owner tries the key lock, an echo and the sampler in a test build;
+  then part 3.
+
 ## Suhina and rbxport brought up to date — 11 November 2026 (branch `claude/project-thread-9g0703`)
 
 **Goal:** YOBUKO carries everything Suhina and rbxport have released since the last sync, and a
