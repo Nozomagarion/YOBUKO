@@ -240,3 +240,62 @@ fn render_the_decks_for_review() {
     harness.run_steps(6);
     harness.render().unwrap().save(folder.join("dj-decks.png")).unwrap();
 }
+
+/// A computer with a DDJ-FLX4 plugged in: the port is there, opening it keeps where it sends.
+struct Flx4Plugged(std::sync::Mutex<Option<std::sync::Arc<suhina_session::LiveInput>>>);
+impl suhina_session::MidiSystem for Flx4Plugged {
+    fn ports(&self) -> Result<Vec<String>, String> {
+        Ok(vec!["DDJ-FLX4 MIDI 1".into(), "Keys In".into()])
+    }
+    fn open(
+        &self,
+        _name: &str,
+        input: std::sync::Arc<suhina_session::LiveInput>,
+    ) -> Result<Box<dyn std::any::Any + Send>, String> {
+        *self.0.lock().unwrap() = Some(input);
+        Ok(Box::new(()))
+    }
+}
+
+#[test]
+fn a_ddj_flx4_drives_the_decks_while_the_dj_space_shows() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns"]);
+    let midi = std::sync::Arc::new(Flx4Plugged(std::sync::Mutex::new(None)));
+    harness.state_mut().projects.set_midi_system(midi.clone());
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 2));
+    let input = midi.0.lock().unwrap().clone().unwrap();
+    let flx4 = suhina_engine::port_id("DDJ-FLX4 MIDI 1");
+    let keys = suhina_engine::port_id("Keys In");
+    assert!(harness.state().dj.decks.controller.is_some(), "the controller is taken in the DJ space");
+    // The browse knob down one track, then LOAD on the right deck.
+    assert!(input.offer(flx4, &[0xB6, 0x40, 0x01]));
+    assert!(input.offer(flx4, &[0x96, 0x47, 0x7F]));
+    assert!(!input.offer(keys, &[0x90, 60, 100]), "a keyboard still plays the studio");
+    harness.step();
+    until(&mut harness, "deck B to load", |app| app.dj.decks.deck(1)["track"] == 2);
+    // Faders and knobs.
+    for message in [[0xB6, 0x1F, 0x7F], [0xB1, 0x13, 0x40], [0xB1, 0x0F, 0x00], [0xB6, 0x18, 0x7F], [0xB1, 0x00, 0x00]]
+    {
+        assert!(input.offer(flx4, &message));
+    }
+    harness.step();
+    let decks = &harness.state().dj.decks;
+    assert_eq!(decks.snapshot["performance"]["crossfade"], 1.0);
+    assert!((decks.snapshot["performance"]["levelB"].as_f64().unwrap() - 64.0 / 127.0).abs() < 1e-6);
+    assert_eq!(decks.deck(1)["low"], f64::from(suhina_engine::DECK_KILL_DB));
+    assert_eq!(decks.deck(1)["filter"], 1.0);
+    assert!((decks.number(1, "rate", 1.0) - 1.08).abs() < 1e-9, "the tempo fader at one end is +8 %");
+    // The page read back what the session holds.
+    harness.state_mut().dj.decks.read_at = None;
+    harness.state_mut().dj.decks.snapshot["busy"] = json!(true);
+    harness.step();
+    let decks = &harness.state().dj.decks;
+    assert_eq!(decks.snapshot["performance"]["crossfade"], 1.0);
+    assert!((decks.number(1, "rate", 1.0) - 1.08).abs() < 1e-9);
+    // Back in the studio, the controller is let go.
+    super::super::menu_bar::pick_mode(&mut harness, "Studio");
+    harness.step();
+    assert!(harness.state().dj.decks.controller.is_none());
+    assert!(!input.offer(flx4, &[0x90, 0x0B, 0x7F]));
+}

@@ -403,3 +403,22 @@ fn two_controllers_play_two_armed_tracks_each_its_own() {
     run(&mut projects, "track.setMidiInput", json!({ "track": ids[1], "port": "all", "channel": 0 })).unwrap();
     assert!(heard(&mut projects, ids[0], keys) > 0.0, "track 2 now hears the keyboard too");
 }
+
+#[test]
+fn a_captured_controller_goes_to_the_window_as_it_came_and_not_to_the_engine() {
+    let input = LiveInput::default();
+    assert!(!input.offer(5, &[0x90, 0x0B, 0x7F]), "nothing is captured at first");
+    let messages = input.capture(vec![5]);
+    assert!(input.offer(5, &[0x90, 0x0B, 0x7F]));
+    assert!(input.offer(5, &[0xD0, 0x40]), "a short message is padded");
+    assert!(!input.offer(6, &[0x90, 0x0B, 0x7F]), "another port still plays notes");
+    assert_eq!(messages.try_recv(), Ok((5, [0x90, 0x0B, 0x7F])));
+    assert_eq!(messages.try_recv(), Ok((5, [0xD0, 0x40, 0])));
+    assert!(messages.try_recv().is_err());
+    // A window that does not read loses messages past the queue, never blocks the driver.
+    for _ in 0..5000 {
+        assert!(input.offer(5, &[0xB0, 0x13, 0x10]));
+    }
+    input.release();
+    assert!(!input.offer(5, &[0x90, 0x0B, 0x7F]));
+}

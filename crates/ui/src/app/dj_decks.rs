@@ -58,6 +58,10 @@ pub(in crate::app) struct Decks {
     cue: [f64; 2],
     /// What went wrong last, said on the page.
     pub(in crate::app) error: Option<String>,
+    /// The library's row a controller's Load buttons load, moved by its browse knob or a click.
+    selected: usize,
+    /// The DJ controllers whose ports the decks have taken, by name, and what they send.
+    controller: Option<(Vec<String>, std::sync::mpsc::Receiver<suhina_session::ControllerMessage>)>,
 }
 
 impl Decks {
@@ -486,38 +490,86 @@ impl App {
             ui.spacing_mut().item_spacing.x = 8.0;
             let cue = round_button(ui, &format!("Cue {name}"), "CUE", 52.0, None, ready);
             if cue.clicked() {
-                if playing {
-                    // Back to the cue point, stopped there.
-                    self.deck_command("dj.deck.pause", json!({"deck": name}));
-                    self.seek(deck, self.dj.decks.cue[deck]);
-                    self.dj.decks.set(Some(deck), "playing", json!(false));
-                } else {
-                    // Stopped: the cue point is set here.
-                    self.dj.decks.cue[deck] = self.dj.decks.position(deck);
-                }
+                self.press_cue(deck);
             }
             let play_text = if playing { "❚❚" } else { "▶" };
             let play = round_button(ui, &format!("Play deck {name}"), play_text, 52.0, Some(color), ready);
             if play.clicked() {
-                if playing {
-                    if self.deck_command("dj.deck.pause", json!({"deck": name})) {
-                        self.dj.decks.set(Some(deck), "playing", json!(false));
-                    }
-                } else if self.deck_command("dj.deck.play", json!({"deck": name})) {
-                    self.dj.decks.set(Some(deck), "playing", json!(true));
-                }
+                self.toggle_play(deck);
             }
             let other = 1 - deck;
             let can_sync = ready && self.dj.decks.deck(deck)["bpm"].is_number() && self.dj.decks.bpm(other).is_some();
             let sync = round_button(ui, &format!("Sync {name}"), "SYNC", 52.0, None, can_sync)
                 .on_hover_text("Play at the other deck's tempo")
                 .on_disabled_hover_text("Both decks need a track with a known tempo");
-            if sync.clicked()
-                && let (Some(own), Some(target)) = (self.dj.decks.deck(deck)["bpm"].as_f64(), self.dj.decks.bpm(other))
-            {
-                self.set_rate(deck, (target / own.max(1.0)).clamp(0.5, 2.0));
+            if sync.clicked() {
+                self.sync_deck(deck);
             }
         });
+    }
+
+    /// Play, or pause when playing.
+    fn toggle_play(&mut self, deck: usize) {
+        let name = NAMES[deck];
+        if self.dj.decks.playing(deck) {
+            if self.deck_command("dj.deck.pause", json!({"deck": name})) {
+                self.dj.decks.set(Some(deck), "playing", json!(false));
+            }
+        } else if self.dj.decks.deck(deck)["track"].is_number()
+            && self.deck_command("dj.deck.play", json!({"deck": name}))
+        {
+            self.dj.decks.set(Some(deck), "playing", json!(true));
+        }
+    }
+
+    /// Cue: while playing, back to the cue point and stopped there; stopped, the cue point is
+    /// set where the deck is.
+    fn press_cue(&mut self, deck: usize) {
+        if self.dj.decks.playing(deck) {
+            self.deck_command("dj.deck.pause", json!({"deck": NAMES[deck]}));
+            self.seek(deck, self.dj.decks.cue[deck]);
+            self.dj.decks.set(Some(deck), "playing", json!(false));
+        } else {
+            self.dj.decks.cue[deck] = self.dj.decks.position(deck);
+        }
+    }
+
+    /// Sync: the deck plays at the other deck's tempo.
+    fn sync_deck(&mut self, deck: usize) {
+        if let (Some(own), Some(target)) = (self.dj.decks.deck(deck)["bpm"].as_f64(), self.dj.decks.bpm(1 - deck)) {
+            self.set_rate(deck, (target / own.max(1.0)).clamp(0.5, 2.0));
+        }
+    }
+
+    /// The deck in the headphones, or out of them.
+    fn toggle_phones(&mut self, deck: usize) {
+        let key = if deck == 0 { "cueA" } else { "cueB" };
+        let cued = self.dj.decks.snapshot["performance"][key] == true;
+        self.dj.decks.set(None, key, json!(!cued));
+        self.send_mixer();
+    }
+
+    /// Sends the deck's EQ and filter as the page shows them.
+    fn send_tone(&mut self, deck: usize) {
+        let d = self.dj.decks.deck(deck);
+        let params = json!({
+            "deck": NAMES[deck],
+            "low": d["low"].as_f64().unwrap_or(0.0),
+            "mid": d["mid"].as_f64().unwrap_or(0.0),
+            "high": d["high"].as_f64().unwrap_or(0.0),
+            "filter": d["filter"].as_f64().unwrap_or(0.0),
+        });
+        self.deck_command("dj.deck.tone", params);
+    }
+
+    /// Loads the library's selected track on `deck`, unless it plays.
+    fn load_selected(&mut self, deck: usize) {
+        let Some(id) = self.dj.decks.snapshot["tracks"][self.dj.decks.selected]["id"].as_u64() else { return };
+        if !self.dj.decks.playing(deck) && self.deck_command("dj.deck.load", json!({"deck": NAMES[deck], "track": id}))
+        {
+            self.dj.decks.cue[deck] = 0.0;
+            self.dj.decks.set(Some(deck), "loading", json!(true));
+        }
     }
 
     fn set_rate(&mut self, deck: usize, rate: f64) {
@@ -613,15 +665,12 @@ impl App {
             for (key, value) in [("high", high), ("mid", mid), ("low", low), ("filter", filter)] {
                 self.dj.decks.set(Some(deck), key, json!(value));
             }
-            self.deck_command(
-                "dj.deck.tone",
-                json!({"deck": name, "low": low, "mid": mid, "high": high, "filter": filter}),
-            );
+            self.send_tone(deck);
         }
         ui.add_space(4.0);
         let separate = self.dj.decks.snapshot["performance"]["separate_cue"] == true;
         let key = if deck == 0 { "cueA" } else { "cueB" };
-        let mut cued = self.dj.decks.snapshot["performance"][key] == true;
+        let cued = self.dj.decks.snapshot["performance"][key] == true;
         let headphones = ui
             .add_enabled(
                 separate,
@@ -633,9 +682,7 @@ impl App {
             egui::WidgetInfo::selected(egui::Role::Button, separate, cued, format!("Headphones {name}"))
         });
         if headphones.clicked() {
-            cued = !cued;
-            self.dj.decks.set(None, key, json!(cued));
-            self.send_mixer();
+            self.toggle_phones(deck);
         }
         ui.add_space(4.0);
         let level_key = if deck == 0 { "levelA" } else { "levelB" };
@@ -725,10 +772,20 @@ impl App {
     }
 
     fn library_row(&mut self, ui: &mut Ui, track: &Value, index: usize, height: f32) {
-        let id = track["id"].as_u64().unwrap_or(0);
         let title = track["title"].as_str().unwrap_or("Untitled");
-        let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::hover());
-        if index % 2 == 1 {
+        let (rect, response) = ui.allocate_exact_size(Vec2::new(ui.available_width(), height), Sense::click());
+        if response.clicked() {
+            self.dj.decks.selected = index;
+        }
+        if index == self.dj.decks.selected {
+            ui.painter().rect_filled(rect, CornerRadius::same(8), theme::control_hover());
+            ui.painter().rect_stroke(
+                rect,
+                CornerRadius::same(8),
+                Stroke::new(1.0, theme::border()),
+                StrokeKind::Inside,
+            );
+        } else if index % 2 == 1 {
             ui.painter().rect_filled(rect, CornerRadius::same(8), theme::control_background().gamma_multiply(0.5));
         }
         let mut row = ui.new_child(
@@ -766,9 +823,97 @@ impl App {
             load.widget_info(|| {
                 egui::WidgetInfo::labeled(egui::Role::Button, !busy, format!("Load {title} on deck {name}"))
             });
-            if load.clicked() && self.deck_command("dj.deck.load", json!({"deck": name, "track": id})) {
-                self.dj.decks.cue[deck] = 0.0;
-                self.dj.decks.set(Some(deck), "loading", json!(true));
+            if load.clicked() {
+                self.dj.decks.selected = index;
+                self.load_selected(deck);
+            }
+        }
+    }
+}
+
+impl App {
+    /// While the DJ space shows, a DDJ-FLX4 drives the decks: its port is taken from the
+    /// studio's armed tracks and what it sends is read here. Called every frame.
+    pub(in crate::app) fn dj_controller(&mut self, ctx: &egui::Context) {
+        let showing = self.dj.active && !self.dj.usb;
+        let wanted: Vec<String> = if showing {
+            self.projects.midi_ports().iter().filter(|p| super::flx4::is_flx4(p)).cloned().collect()
+        } else {
+            Vec::new()
+        };
+        let current = self.dj.decks.controller.as_ref().map(|(ports, _)| ports.clone()).unwrap_or_default();
+        if wanted != current {
+            let input = self.projects.live_input();
+            if wanted.is_empty() {
+                input.release();
+                self.dj.decks.controller = None;
+            } else {
+                let ids = wanted.iter().map(|p| suhina_engine::port_id(p)).collect();
+                self.dj.decks.controller = Some((wanted, input.capture(ids)));
+                self.shell.say(Mood::Joy, "Your DDJ-FLX4 drives the decks.");
+            }
+        }
+        let Some((_, messages)) = self.dj.decks.controller.as_ref() else { return };
+        let read: Vec<_> = messages.try_iter().take(256).filter_map(|(_, m)| super::flx4::read(m)).collect();
+        for message in read {
+            self.flx4(message);
+        }
+        // The controller is read at the next frames even when nothing else moves.
+        ctx.request_repaint_after(FRAME);
+    }
+
+    fn flx4(&mut self, message: super::flx4::Flx4) {
+        use super::flx4::Flx4;
+        match message {
+            Flx4::Play(deck) => self.toggle_play(deck),
+            Flx4::Cue(deck) => self.press_cue(deck),
+            Flx4::Sync(deck) => self.sync_deck(deck),
+            Flx4::Phones(deck) => {
+                if self.dj.decks.snapshot["performance"]["separate_cue"] == true {
+                    self.toggle_phones(deck);
+                }
+            }
+            Flx4::Load(deck) => self.load_selected(deck),
+            Flx4::Browse(steps) => {
+                let tracks = self.dj.decks.snapshot["tracks"].as_array().map_or(0, Vec::len);
+                let to = i64::try_from(self.dj.decks.selected).unwrap_or(0) + i64::from(steps);
+                self.dj.decks.selected =
+                    usize::try_from(to.clamp(0, i64::try_from(tracks).unwrap_or(0) - 1).max(0)).unwrap_or(0);
+            }
+            Flx4::Level(deck, level) => {
+                self.dj.decks.set(None, if deck == 0 { "levelA" } else { "levelB" }, json!(level));
+                self.send_mixer();
+            }
+            Flx4::Crossfader(position) => {
+                self.dj.decks.set(None, "crossfade", json!(position));
+                self.send_mixer();
+            }
+            Flx4::Eq(deck, band, knob) => {
+                // The knob's middle detent sends 64, a hair past the middle: flat.
+                let knob = if (knob - 0.5).abs() < 0.01 { 0.5 } else { knob };
+                let key = ["low", "mid", "high"][band.min(2)];
+                self.dj.decks.set(Some(deck), key, json!(db_of_knob(knob)));
+                self.send_tone(deck);
+            }
+            Flx4::Filter(deck, knob) => {
+                let filter = f64::from(knob) * 2.0 - 1.0;
+                let filter = if filter.abs() < 0.03 { 0.0 } else { filter.clamp(-1.0, 1.0) };
+                self.dj.decks.set(Some(deck), "filter", json!(filter));
+                self.send_tone(deck);
+            }
+            Flx4::Tempo(deck, fader) => {
+                // ±8 % over the fader's length, the way the controller's own mapping reads it.
+                let percent = 8.0 * (1.0 - 2.0 * f64::from(fader));
+                if self.dj.decks.deck(deck)["track"].is_number() {
+                    self.set_rate(deck, 1.0 + percent / 100.0);
+                }
+            }
+            Flx4::Jog(deck, steps) => {
+                if self.dj.decks.deck(deck)["track"].is_number() && steps != 0 {
+                    // Playing, a nudge of a few milliseconds a step; stopped, a scrub.
+                    let step = if self.dj.decks.playing(deck) { 0.004 } else { 0.02 };
+                    self.seek(deck, self.dj.decks.position(deck) + f64::from(steps) * step);
+                }
             }
         }
     }

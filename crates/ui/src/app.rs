@@ -2754,6 +2754,7 @@ impl App {
         self.frame_trace.mark("plug-in scan");
         self.poll_export(ui.ctx());
         self.poll_multiplayer(ui.ctx());
+        self.dj_controller(ui.ctx());
         self.frame_trace.mark("export");
         self.poll_plugins(ui.ctx());
         self.frame_trace.mark("plug-ins");

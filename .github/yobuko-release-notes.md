@@ -3,7 +3,7 @@
 YOBUKO is a mix of three open-source projects. It would not exist without them and their authors:
 
 - **[Suhina](https://github.com/suhina-daw/suhina-daw)** 🎛️ **The studio.** The open-source, Ableton-style music studio written in Rust: its engine, instruments, effects and plug-in hosting are YOBUKO's whole Studio side.
-- **[Mixxx](https://github.com/mixxxdj/mixxx)** 🎧 **The live DJ**, by the Mixxx team. YOBUKO's DJ mode is Mixxx itself, ready for the Pioneer DDJ-FLX4.
+- **[Mixxx](https://github.com/mixxxdj/mixxx)** 🎧 **The live DJ**, by the Mixxx team. Shipped with YOBUKO, one click from its own DJ decks.
 - **[rbxport](https://github.com/chrisle/rbxport)** 💾 **The USB export**, by chrisle and contributors: a DJ library app with a real Rekordbox USB exporter for Pioneer CDJ / XDJ players.
 
 Their authors keep their copyright and credits. YOBUKO is an independent fork, not endorsed by any of these projects.
@@ -16,7 +16,7 @@ Their authors keep their copyright and credits. YOBUKO is an independent fork, n
 
 ### ✨ New in this version
 
-- **DJ mode is now Mixxx.** Pick **DJ**, then **Open Mixxx**: it fills the screen in YOBUKO's look, and quitting it brings the studio back. Plug in a **Pioneer DDJ-FLX4** and play; YOBUKO sets up its mapping.
+- **DJ mode mixes in YOBUKO's own window.** Pick **DJ**: two decks with waveforms, Cue, Play, Sync and tempo, a mixer with EQ, filter and crossfader, and your library under them. Plug in a **Pioneer DDJ-FLX4** and play; nothing to set up. Mixxx is still there: **Open Mixxx instead**.
 - **One music library** shared by Mixxx and rbxport: playlists made in one show up in the other, and **Send this project to DJ…** puts a finished track in it.
 - **USB stick for the club** with rbxport, shipped inside YOBUKO.
 - **One look for the three apps**, with selectable YOBUKO themes.

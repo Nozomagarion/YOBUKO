@@ -11,6 +11,8 @@ use super::*;
 
 #[path = "dj_decks.rs"]
 pub(super) mod decks;
+#[path = "dj_flx4.rs"]
+pub(super) mod flx4;
 #[path = "dj_mixxx.rs"]
 pub(super) mod mixxx;
 #[path = "dj_rbxport.rs"]
