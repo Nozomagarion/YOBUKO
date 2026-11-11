@@ -12,7 +12,7 @@ Their authors keep their copyright and credits. YOBUKO is an independent fork, n
 
 **YOBUKO is about making music with your friends, even when you're not in the same room.** One person starts a session and shares a short code; the others type it and everyone is in the same project, each on their own computer.
 
-**Make it together, play it live, take it to the club: one app.** The mode pill at the top right switches between **Studio**, **Multiplayer** and **DJ**.
+**Make it together, play it live, take it to the club: one app.** The tabs at the top right switch between **Studio**, **Multiplayer**, **DJ** and **USB**.
 
 ### ✨ New in this version
 
@@ -37,7 +37,7 @@ Their authors keep their copyright and credits. YOBUKO is an independent fork, n
 
 ### 🎛️ Play together
 
-1. One person clicks the mode pill, picks **Multiplayer**, then **Create session**: a short **code** appears.
+1. One person clicks the **Multiplayer** tab, then **Create session**: a short **code** appears.
 2. They send the code to the others (Discord, text message…).
 3. The others pick **Multiplayer**, type the code and click **Join session**. Up to 8 people; the code works for 30 minutes.
 

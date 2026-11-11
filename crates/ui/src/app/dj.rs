@@ -16,7 +16,10 @@ pub(super) mod rbxport;
 
 #[derive(Default)]
 pub(super) struct DjPanel {
+    /// DJ mode shows: Mixxx's page, or the USB page when `usb`.
     pub active: bool,
+    /// Of DJ mode's two pages, the USB space (rbxport) shows.
+    pub usb: bool,
     /// The next export (File › Export… opened from this page) goes to the DJ library.
     pub next_export_to_dj: bool,
     /// The running export goes to the DJ library.
@@ -43,12 +46,22 @@ impl App {
     /// DJ mode starts: Mixxx opens, or comes forward when it is already open.
     pub(super) fn enter_dj(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         self.dj.active = true;
+        self.dj.usb = false;
         self.settings_open = false;
         if self.session().is_some() {
             actions.push(Action::new("transport.stop", json!({})));
         }
         actions.push(Action::new("preview.stop", json!({})));
         self.open_mixxx(ctx);
+    }
+
+    /// The USB space starts: rbxport opens with Mixxx's tracks and playlists, to put them on a
+    /// stick for club players. The studio keeps playing: nothing here makes sound.
+    pub(super) fn enter_usb(&mut self, ctx: &egui::Context, _actions: &mut Vec<Action>) {
+        self.dj.active = true;
+        self.dj.usb = true;
+        self.settings_open = false;
+        self.prepare_usb(ctx);
     }
 
     fn rbxport_inbox(&self) -> Option<PathBuf> {
@@ -138,7 +151,8 @@ impl App {
 
     pub(super) fn come_back_from_mixxx(&mut self, ctx: &egui::Context) {
         self.dj.note = Some(Ok("Mixxx is closed: welcome back to the studio. DJ mode opens it again.".into()));
-        if self.dj.active {
+        // Someone preparing a USB stick meanwhile stays on that page.
+        if self.dj.active && !self.dj.usb {
             self.dj.active = false;
             self.multiplayer.open = false;
         }
@@ -213,73 +227,110 @@ impl App {
             Some(Ok(text)) => format!(" {text}"),
             _ => String::new(),
         };
+        self.shell.say(crate::kit::piou::Mood::Joy, format!("{name} is in your DJ library."));
         self.dj.note = Some(Ok(format!("{name} is in your DJ library: {place}.{opened}")));
     }
 
     pub(super) fn show_dj(&mut self, ui: &mut Ui) {
-        egui::ScrollArea::vertical().id_salt("dj-workspace").show(ui, |ui| {
-            ui.add_space(theme::PAD * 4.0);
-            ui.vertical_centered(|ui| {
-                ui.set_max_width(600.0);
-                ui.heading("DJ mode · Mixxx");
+        use super::menu_bar::WorkspaceMode;
+        self.space_page(
+            ui,
+            WorkspaceMode::Dj,
+            "DJ mode · Mixxx",
+            "Mix live in Mixxx, which comes with YOBUKO and fills the screen in YOBUKO's look. Plug in your \
+             controller: a Pioneer DDJ-FLX4 is set up by itself, and Mixxx knows hundreds of others \
+             (choose yours once in Mixxx › Preferences › Controllers).",
+            |app, ui| {
+                if shell::main_button(ui, WorkspaceMode::Dj, "Open Mixxx").clicked() {
+                    app.open_mixxx(ui.ctx());
+                }
                 ui.add_space(theme::PAD);
-                ui.label(
-                    "Mix live in Mixxx, which comes with YOBUKO and fills the screen in YOBUKO's look. Plug in your \
-                     controller: a Pioneer DDJ-FLX4 is set up by itself, and Mixxx knows hundreds of others \
-                     (choose yours once in Mixxx › Preferences › Controllers).",
-                );
-                ui.add_space(theme::PAD);
-                ui.label(
-                    "Playing on CDJ or XDJ players? rbxport, also inside YOBUKO, prepares the USB stick. Your \
-                     tracks, playlists and hot cues are shared between the two each time you open one.",
-                );
-                ui.add_space(theme::PAD * 2.0);
                 ui.horizontal_wrapped(|ui| {
-                    if ui.button("Open Mixxx").clicked() {
-                        self.open_mixxx(ui.ctx());
-                    }
                     if ui
-                        .button("Prepare a USB stick (rbxport)")
-                        .on_hover_text(
-                            "Open rbxport with your Mixxx tracks and playlists, to export them for CDJ / XDJ",
-                        )
-                        .clicked()
-                    {
-                        self.prepare_usb(ui.ctx());
-                    }
-                    if ui
-                        .add_enabled(self.session().is_some(), egui::Button::new("Send this project to DJ…"))
+                        .add_enabled(app.session().is_some(), egui::Button::new("Send this project to DJ…"))
                         .on_hover_text("Render the project to audio and add it to your DJ library")
                         .on_disabled_hover_text("Open a project first")
                         .clicked()
                     {
-                        self.open_export();
-                        self.dj.next_export_to_dj = true;
+                        app.open_export();
+                        app.dj.next_export_to_dj = true;
                     }
                     if ui
                         .button("Share library now")
                         .on_hover_text("Bring Mixxx and rbxport up to date with each other")
                         .clicked()
                     {
-                        self.share_library_now();
+                        app.share_library_now();
+                    }
+                    if ui
+                        .button("Prepare a USB stick (rbxport)")
+                        .on_hover_text("Go to the USB space: rbxport opens with your Mixxx tracks and playlists")
+                        .clicked()
+                    {
+                        app.enter_usb(ui.ctx(), &mut Vec::new());
                     }
                 });
-                ui.add_space(theme::PAD);
-                match &self.dj.note {
-                    Some(Ok(text)) => {
-                        ui.label(text);
-                    }
-                    Some(Err(text)) => {
-                        ui.colored_label(theme::accent(), text);
-                    }
-                    None => {}
-                }
+                app.dj_note(ui);
                 ui.add_space(theme::PAD * 3.0);
                 ui.weak("Mixxx by the Mixxx team, free software (GPL-2.0-or-later): mixxx.org");
-                ui.weak("rbxport by Chris Le, free software (GPL-2.0-or-later): github.com/chrisle/rbxport");
                 ui.weak("DDJ-FLX4 mapping by Robert904 and ElHanko (MIT): github.com/ElHanko/mixxx-ddj-flx4-mapping");
-            });
-        });
+            },
+        );
+    }
+
+    /// The USB space: rbxport, shipped inside YOBUKO, puts the DJ library on a stick for CDJ and
+    /// XDJ players.
+    pub(super) fn show_usb(&mut self, ui: &mut Ui) {
+        use super::menu_bar::WorkspaceMode;
+        self.space_page(
+            ui,
+            WorkspaceMode::Usb,
+            "USB export · rbxport",
+            "Playing on CDJ or XDJ players? rbxport, which comes with YOBUKO, puts your playlists on a USB \
+             stick with their beat grids and hot cues. Your tracks and playlists are the same here and in \
+             Mixxx: they are shared each time you open one.",
+            |app, ui| {
+                if shell::main_button(ui, WorkspaceMode::Usb, "Open rbxport").clicked() {
+                    app.prepare_usb(ui.ctx());
+                }
+                ui.add_space(theme::PAD);
+                ui.horizontal_wrapped(|ui| {
+                    if ui
+                        .add_enabled(app.session().is_some(), egui::Button::new("Add this project to the library…"))
+                        .on_hover_text("Render the project to audio and add it to your DJ library")
+                        .on_disabled_hover_text("Open a project first")
+                        .clicked()
+                    {
+                        app.open_export();
+                        app.dj.next_export_to_dj = true;
+                    }
+                    if ui
+                        .button("Share library now")
+                        .on_hover_text("Bring Mixxx and rbxport up to date with each other")
+                        .clicked()
+                    {
+                        app.share_library_now();
+                    }
+                });
+                app.dj_note(ui);
+                ui.add_space(theme::PAD * 3.0);
+                ui.weak("rbxport by Chris Le, free software (GPL-2.0-or-later): github.com/chrisle/rbxport");
+            },
+        );
+    }
+
+    /// What happened last in DJ mode, under a page's buttons.
+    fn dj_note(&self, ui: &mut Ui) {
+        ui.add_space(theme::PAD);
+        match &self.dj.note {
+            Some(Ok(text)) => {
+                ui.label(text);
+            }
+            Some(Err(text)) => {
+                ui.colored_label(theme::accent(), text);
+            }
+            None => {}
+        }
     }
 }
 

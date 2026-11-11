@@ -5,6 +5,36 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## One shell for every space, and Piou — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the studio, live DJ mixing and USB export should feel like one program that is pleasant
+to move around in, with the themes kept, and coming back into a shared session should take one
+click. The whole proposal is a clickable mock-up ("YOBUKO One"); it is built in three steps.
+
+- **Code written (step 1, the studio):** the mode pill became four **tabs** at the top right,
+  **Studio**, **Multiplayer**, **DJ** and **USB**; the tab of the space showing is filled in its
+  colour. **Piou**, the mascot, lives beside the tabs and on each space's page: it nods on the beat
+  while the project plays, calls while a room waits for friends, hops when one arrives, worries
+  while a dropped connection is being restored and sleeps when nothing moves. It also says in a
+  short note what happens away from the page that would tell it (a friend joined, the connection
+  dropped, a track reached the DJ library). While a shared session runs, its state shows beside
+  the tabs in every space. The Multiplayer page before a session is two cards, **Open a room**
+  and **Join a friend**, with **Rejoin last session** for the invitation just used; the long
+  explanations wait behind **How sharing works**. USB export has its own page instead of a button
+  on the DJ page.
+- **Checks passed (Linux, cloud container):** the UI tests, including new ones for the tabs, the
+  USB space, Piou's moods and notes and the rejoin button; screenshots of the four spaces drawn by
+  the real program.
+- **Limits:** Piou is redrawn from shapes (the first bird pictures are no longer available as
+  separate files), and the owner has not yet said whether this drawing is the one to keep.
+  **Rejoin last session** is remembered until YOBUKO closes, not after a restart. Mixxx and
+  rbxport still open as their own windows without the tabs.
+- **Planned, not written:** step 2, the same bar in rbxport's window and over Mixxx, with the
+  window staying in place when the space changes; step 3, friends remembered after a first
+  session so that they join an open room without any code.
+- **Next criterion:** the owner tries the mock-up and a test build of step 1 on Windows and says
+  whether the direction and Piou are right.
+
 ## Ready-to-install releases and an English repository — 1 November 2026 (branch `feature/online`)
 
 **Goal:** friends download one file from the Releases page and double-click it; the repository

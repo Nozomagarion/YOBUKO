@@ -37,6 +37,7 @@ pub mod name_clash_dialog;
 mod plugin_host;
 pub mod project_dialog;
 mod quick_add;
+mod shell;
 pub mod splash;
 pub mod start_panel;
 mod tabs;
@@ -326,6 +327,7 @@ struct AutoArm {
 pub struct App {
     multiplayer: multiplayer::MultiplayerPanel,
     dj: dj::DjPanel,
+    shell: shell::Shell,
     background: background::Background,
     /// When the level meters last showed something new (`ui.input` time).
     meters_moved_at: f64,
@@ -717,6 +719,7 @@ impl App {
             pick_request: None,
             save_prompt: None,
             dj: dj::DjPanel::default(),
+            shell: shell::Shell::default(),
             multiplayer: multiplayer::MultiplayerPanel::default(),
             export_dialog: None,
             export: None,
@@ -2970,7 +2973,11 @@ impl App {
         egui::CentralPanel::default().frame(egui::Frame::NONE.fill(workspace_base)).show(ui, |ui| {
             let _workspace_style = crate::kit::style_class::enter_named("workspace", "workspace");
             if self.dj.active {
-                self.show_dj(ui);
+                if self.dj.usb {
+                    self.show_usb(ui);
+                } else {
+                    self.show_dj(ui);
+                }
                 return;
             }
             if self.multiplayer_visible() {

@@ -33,7 +33,7 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
     harness.run();
     assert!(harness.query_by_label("Open Mixxx").is_some());
     assert!(harness.query_by_label("Prepare a USB stick (rbxport)").is_some());
-    assert!(harness.query_by_label("App mode: DJ").is_some());
+    assert!(harness.query_by_label("DJ space").is_some());
 }
 
 #[test]

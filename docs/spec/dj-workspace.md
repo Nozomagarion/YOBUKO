@@ -3,7 +3,7 @@ description: The fork's Studio and DJ workspaces (DJ mode is the rbxport app), l
 read_when: DJ library, playlists, cue points, audition, waveform preparation, rbxport integration, render a project for DJ preparation
 type: spec
 status: current
-last_verified: 2026-11-01
+last_verified: 2026-11-11
 covers:
   - crates/engine/src/decks.rs
   - crates/engine/src/decks_tests.rs
@@ -24,6 +24,9 @@ covers:
   - third_party/rbxport-analysis
   - crates/ui/src/app/dj_rbxport.rs
   - crates/ui/src/app/menu_bar.rs
+  - crates/ui/src/app/shell.rs
+  - crates/ui/src/app/shell_tests.rs
+  - crates/ui/src/kit/piou.rs
   - scripts/rbxport_build.sh
   - third_party/rbxport-app/VENDORED.md
 ---
@@ -32,10 +35,25 @@ covers:
 
 ## DJ mode is rbxport
 
-The app's mode (Studio, Multiplayer or DJ) is one small colored pill at the right end of the
-menu bar (or of its own row when the menu bar is hidden): blue Studio, green Multiplayer, pink
-DJ. Clicking it lists the three modes; View > Studio workspace / Multiplayer / DJ library do the
-same from the native menu.
+The app has four spaces, each a tab at the right end of the menu bar (or of its own row when
+the menu bar is hidden): blue Studio, green Multiplayer, pink DJ and amber USB. The tab of the
+space showing is filled in its colour, and clicking another switches to it; View > Studio
+workspace / Multiplayer / DJ library / USB export do the same from the native menu
+(`crates/ui/src/app/shell.rs`). Left of the tabs sit YOBUKO's seal, Piou the mascot
+(`crates/ui/src/kit/piou.rs`) and, while a shared session runs, its state ("Room open · 2
+friends", "Reconnecting…"), which opens Multiplayer when clicked.
+
+Piou's mood follows the app: it nods on the beat while the project plays, calls while a room
+waits for friends, hops when one arrives or a track reaches the DJ library, worries (headphones
+greyed) while the connection is being restored, and sleeps after five minutes without a key or
+a click. Its headphones take the space's colour. What happens away from the page that would say
+it (a friend joining while the studio shows, the connection dropping) is also told in a note
+beside Piou at the bottom right of the window for four seconds; the note takes no click. With
+animations off Piou is still.
+
+The DJ space is Mixxx's page; the USB space is rbxport's (**Open rbxport**, **Add this project
+to the library…**, **Share library now**). Entering the USB space opens rbxport with Mixxx's
+tracks and playlists, and does not stop the project.
 
 Switching to DJ stops the active project's transport and sample preview, then starts
 **rbxport**, Chris Le's DJ library app, or brings it forward when it is already open. YOBUKO
