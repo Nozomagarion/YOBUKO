@@ -26,6 +26,9 @@ export type Action =
   // Enter loads the highlighted track onto Player 1 (deck A), wherever the
   // focus is in the browser — the keyboard counterpart of double-clicking it.
   | "loadPlayer1"
+  // Shift+Enter is the same, but onto Player 2 (deck B) — only meaningful in
+  // two-player mode, where a second deck exists to load it onto.
+  | "loadPlayer2"
   // Track > Locate track loaded on deck (command + L): scrolls the list to
   // the track a deck holds and highlights it.
   | "locateLoaded"
@@ -51,6 +54,9 @@ export type Action =
   | "deletePlaylist"
   | "exportPlaylistTxt"
   | "exportPlaylistM3u8"
+  // Playlist > Sort Items: the selected folder's children put in name
+  // order. rekordbox's command 0x500d, which no preset binds either.
+  | "sortItems"
   // The deck. Every key below is rekordbox's own, transcribed from the Export
   // preset in `KeyMappings/rekordbox_0000000000030.mappings` — the key map the
   // mode we clone ships with, not a guess at what feels natural. The same
@@ -431,7 +437,11 @@ export function actionFor(chord: KeyChord, platform: Platform, overrides: KeyOve
 export interface FocusTarget {
   tagName?: string;
   isContentEditable?: boolean;
+  closest?: (selector: string) => unknown;
 }
+
+/** Marks a control that keeps Space and Enter for its own activation (#832). */
+export const OWN_ACTIVATION = "data-own-activation";
 
 /**
  * Whether a key press should be ignored because the user is typing into a
@@ -480,6 +490,9 @@ export function dispatchBinding(
   const binding = matchBinding(chord, platform, overrides);
   if (binding?.action === undefined) return null;
   if (isTyping(target) && !WHILE_TYPING.has(binding.action)) return null;
+  // Space is Play/Pause and Enter loads a track, but on a focused control that
+  // marks itself (the zoom buttons) they press that control, not the deck.
+  if ((chord.key === " " || chord.key === "Enter") && target?.closest?.(`[${OWN_ACTIVATION}]`)) return null;
   return binding;
 }
 
@@ -616,8 +629,9 @@ export const BINDINGS: readonly Binding[] = [
   { id: "toBottom.arrow", group: "Browse", label: "Cursor to Bottom", chord: { key: "ArrowDown", metaKey: true }, action: "toBottom", alias: true },
   { id: "analyseSelection", group: "Browse", label: "Analyze Track", chord: { key: "a", metaKey: true, shiftKey: true }, action: "analyseSelection", pane: "Browse" },
   { id: "loadPlayer1", group: "Browse", label: "Load on Player 1", chord: { key: "Enter" }, action: "loadPlayer1", pane: "Browse" },
-  { id: "loadPlayer1.shift", group: "Browse", label: "Load on Player 1", chord: { key: "Enter", shiftKey: true }, action: "loadPlayer1", alias: true },
+  { id: "loadPlayer2", group: "Browse", label: "Load on Player 2", chord: { key: "Enter", shiftKey: true }, action: "loadPlayer2", pane: "Browse" },
   { id: "locateLoaded", group: "Browse", label: "Locate track loaded on deck", chord: { key: "l", metaKey: true }, action: "locateLoaded", command: "b139" },
+  { id: "sortItems", group: "Playlist", label: "Sort Items", chord: { key: "" }, action: "sortItems", command: "500d" },
   { id: "renumberTrackOrder", group: "Playlist", label: "Renumber Track Order", chord: { key: "" }, action: "renumberTrackOrder", command: "500e" },
   ...PLAYER_A.map((row): Binding => ({ ...row, id: row.action ?? row.label, group: "Player A", deck: "a" })),
   // The preset gives Player B no clears for its pads, no `Adjust

@@ -5,6 +5,23 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## Suhina and rbxport brought up to date — 11 November 2026 (branch `claude/project-thread-9g0703`)
+
+**Goal:** YOBUKO carries everything Suhina and rbxport have released since the last sync, and a
+fresh Windows installer is built from it.
+
+- **Code written:** upstream Suhina `main` merged up to `6230850b` (185 commits: per-clip gain,
+  pitch and warp with a gain envelope, tag folders in the browser, the new styling system, and
+  more). The bundled rbxport app goes from 1.9.0 to 1.10.0 (`d0ff75b3`, 286 commits: selectable
+  My Tag columns in the Track Filter, safer USB sync and export fixes, the audio output device
+  remembered across launches, and more), with YOBUKO's patches put back (inbox, shared look, no
+  self-update, own identifier). Shared multiplayer projects now use project format 11.
+- **Limits:** the two rbxport library crates the studio itself links (`third_party/rbxport-analysis`
+  and `third_party/rbxport-export`) stay at 1.9.0; the DJ features people use are in the bundled
+  app, which is at 1.10.0. Mixxx is unchanged.
+- **Next criterion:** the Windows installer built from this branch installs and opens the studio,
+  Mixxx and rbxport on the owner's PC.
+
 ## Ready-to-install releases and an English repository — 1 November 2026 (branch `feature/online`)
 
 **Goal:** friends download one file from the Releases page and double-click it; the repository
