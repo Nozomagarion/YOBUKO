@@ -102,7 +102,7 @@ shipped with Mixxx. Copyright (c) 2026 ElHanko, MIT; see its LICENSE and VENDORE
 ## rbxport app (USB sticks in DJ mode)
 
 The whole rbxport desktop app (`third_party/rbxport-app/`) is copied from Chris Le's rbxport
-at revision `b739d369665b492534dc2eae0733322c040a26d5` (version 1.9.0) and shipped inside
+at revision `d0ff75b378ec85be891d9f3067ada1e82bad4cae` (version 1.10.0) and shipped inside
 YOBUKO to prepare USB sticks for CDJ / XDJ players.
 Copyright (c) 2026 Chris Le, GPL-2.0-or-later (used under GPLv3 with Suhina).
 YOBUKO's small changes (an inbox for rendered tracks and Mixxx playlists, the library published

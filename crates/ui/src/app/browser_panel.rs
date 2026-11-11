@@ -26,7 +26,7 @@ impl App {
     /// left for the view. With `geometry` the theme's layout places it: its rectangle, the view's,
     /// and whether its width follows the handle (`Workspace::browser_follows`).
     pub(super) fn browser_panel(&mut self, ui: &mut Ui, area: Rect, geometry: Option<(Rect, Rect, bool)>) -> Rect {
-        let _panel_style = crate::kit::style_class::enter_named("workspace-panel", "panel-browser");
+        let panel_style = crate::kit::element::WORKSPACE_PANEL.id("panel-browser").enter();
         let (low, high) = crate::settings::BROWSER_WIDTHS;
         let widest = (high as f32).min(area.width() * crate::settings::BROWSER_SHARE).max(low as f32);
         let width = (self.settings.browser_width as f32).clamp(low as f32, widest);
@@ -66,6 +66,8 @@ impl App {
             );
             (panel, handle, Rect::from_min_max(area.min, Pos2::new(handle.left(), area.bottom())))
         };
+        // The panel clips its children's shadows (`overflow`).
+        panel_style.occupies(panel, ui.clip_rect());
         let default_width = crate::settings::Settings::default().browser_width;
         let (resized, done) = if part >= 1.0 && handle.is_positive() {
             browser_view::resize_handle(ui, handle, width, left, default_width as f32)
@@ -84,6 +86,11 @@ impl App {
         let search_key = self.keymap.label("browser.search").unwrap_or_default();
         let selected_track = self.selected_track();
         let revision = self.revision;
+        // A drag that started in the map's own window carries through to the main window's
+        // views with the drag's own position: the main window's pointer is unset or stale
+        // while the map window has it ([#1254] review). Otherwise the hits test the pointer
+        // as ever.
+        self.browser.drag_pointer = if self.map_window.drag.is_some() { self.drag_pointer(ui.ctx()) } else { None };
         let mut map_settings = self.settings.clone();
         let map_panel = &mut self.sample_map;
         let mut draw_map = |ui: &mut Ui, rect: Rect, state: &mut BrowserState, projects: &mut Projects| {
@@ -247,7 +254,7 @@ impl App {
                 ui.max_rect()
             };
             ui.allocate_rect(rect, egui::Sense::hover());
-            ui.painter().fill_background(rect, 0.0, theme::window_background());
+            ui.painter().rect_filled(rect, 0.0, crate::kit::style_class::surface_or(theme::window_background()));
             let changed = panel.show(ui, rect, browser, projects, &mut settings, revision);
             // The window has its own keyboard: its keys run the same actions as the main window's,
             // unless a field in it is being typed in. Embedded, the main window reads them.

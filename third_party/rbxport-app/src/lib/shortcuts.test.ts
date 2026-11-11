@@ -50,9 +50,9 @@ describe("actionFor", () => {
     expect(actionFor({ key: "ArrowUp", ctrlKey: true }, WIN)).toBe("toTop");
   });
 
-  it("loads Player 1 on plain Enter, but leaves modified Enter alone", () => {
+  it("loads Player 1 on plain Enter and Player 2 on Shift+Enter, but leaves other modified Enter alone", () => {
     expect(actionFor({ key: "Enter" }, MAC)).toBe("loadPlayer1");
-    expect(actionFor({ key: "Enter", shiftKey: true }, MAC)).toBe("loadPlayer1");
+    expect(actionFor({ key: "Enter", shiftKey: true }, MAC)).toBe("loadPlayer2");
     expect(actionFor({ key: "Enter", metaKey: true }, MAC)).toBeNull();
     expect(actionFor({ key: "Enter", ctrlKey: true }, WIN)).toBeNull();
   });
@@ -88,6 +88,16 @@ describe("detectPlatform", () => {
 
 describe("dispatch", () => {
   const field = { tagName: "INPUT" };
+
+  it("leaves Space and Enter to a focused control that keeps them for itself (#832)", () => {
+    const rst = { tagName: "BUTTON", closest: (selector: string) => (selector === "[data-own-activation]" ? {} : null) };
+    const plain = { tagName: "BUTTON", closest: () => null };
+    expect(dispatch({ key: " " }, MAC, plain)).toBe("playPause");
+    expect(dispatch({ key: " " }, MAC, rst)).toBeNull();
+    expect(dispatch({ key: "Enter" }, MAC, rst)).toBeNull();
+    // Only those two keys: the rest of the map still applies beside the zoom.
+    expect(dispatch({ key: "q" }, MAC, rst)).toBe(dispatch({ key: "q" }, MAC, plain));
+  });
   const list = { tagName: "DIV" };
 
   it("lets a field keep its own arrow keys and selection", () => {
@@ -429,6 +439,25 @@ describe("Renumber Track Order (#413)", () => {
     expect(actionFor({ key: "r", ctrlKey: true, altKey: true }, WIN, overrides)).toBe("renumberTrackOrder");
     // Not while typing into a field.
     expect(dispatch({ key: "r", metaKey: true, altKey: true }, MAC, { tagName: "INPUT" }, overrides)).toBeNull();
+  });
+});
+
+describe("Sort Items (#443)", () => {
+  const binding = BINDINGS.find((b) => b.action === "sortItems");
+
+  it("is rekordbox's Playlist command 0x500d, which no preset binds", () => {
+    expect(binding).toMatchObject({ group: "Playlist", label: "Sort Items", command: "500d" });
+    expect(binding?.chord.key).toBe("");
+    for (const chord of [{ key: "s" }, { key: "s", metaKey: true }]) {
+      expect(actionFor(chord, MAC)).not.toBe("sortItems");
+      expect(actionFor(chord, WIN)).not.toBe("sortItems");
+    }
+  });
+
+  it("answers the key the Keyboard pane gives it", () => {
+    const overrides = { sortItems: { key: "s", metaKey: true, altKey: true } };
+    expect(actionFor({ key: "s", metaKey: true, altKey: true }, MAC, overrides)).toBe("sortItems");
+    expect(actionFor({ key: "s", ctrlKey: true, altKey: true }, WIN, overrides)).toBe("sortItems");
   });
 });
 

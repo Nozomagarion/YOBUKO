@@ -18,10 +18,10 @@ use crate::kit::widgets::{self, Action};
 /// The column's width, taken from the left of the detail area before the note grid.
 pub const TOOLS_WIDTH: f32 = 112.0;
 
-/// The column's width: `.midi-tools { width }` in the theme (80 to 400 points), else [`TOOLS_WIDTH`].
+/// The column's width: `midi-tools { width }` in the theme (80 to 400 points), else [`TOOLS_WIDTH`].
 pub fn tools_width() -> f32 {
-    let _style = crate::kit::style_class::enter("midi-tools");
-    crate::kit::style_class::computed().and_then(|c| c.width).map_or(TOOLS_WIDTH, |w| w.clamp(80.0, 400.0))
+    let el = crate::kit::element::MIDI_TOOLS.enter();
+    el.style().and_then(|c| c.width).map_or(TOOLS_WIDTH, |w| w.clamp(80.0, 400.0))
 }
 const PAD: f32 = 6.0;
 const ROW: f32 = 20.0;
@@ -181,9 +181,16 @@ pub fn show(ui: &mut Ui, area: Rect, tools: &Tools<'_>, state: &mut PianoRollSta
     let column = Rect::from_min_max(area.min, Pos2::new(area.left() + width, area.bottom()));
     ui.allocate_rect(column, egui::Sense::hover());
     let painter = ui.painter_at(column);
-    // `.midi-tools` styles the column: its background and, through the scope, its controls' text.
-    let _style = crate::kit::style_class::enter("midi-tools");
-    crate::kit::native_css::surface(&painter, column, 0.0, theme::panel_background());
+    // `midi-tools` styles the column: its background and, through the scope, its controls' text.
+    let el = crate::kit::element::MIDI_TOOLS.enter();
+    el.paint_with(
+        &painter,
+        column,
+        crate::kit::element::Native {
+            radius: 0.0,
+            fill: crate::kit::style_class::surface_or(theme::panel_background()),
+        },
+    );
     painter.line_segment(
         [Pos2::new(column.right() - 0.5, column.top()), Pos2::new(column.right() - 0.5, column.bottom())],
         egui::Stroke::new(1.0, theme::border()),
@@ -225,14 +232,14 @@ pub fn show(ui: &mut Ui, area: Rect, tools: &Tools<'_>, state: &mut PianoRollSta
         }
         // A button or field too narrow for its text shortens it; nothing wraps onto more lines.
         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-        // `.midi-tools { --suhina-gap: 2px }` packs the rows closer (0 to 16 points), and
-        // `.midi-tools .button { height }` sets the buttons' and fields' height.
-        if let Some(gap) = crate::kit::style_class::property("--suhina-gap").and_then(|v| px_value(&v)) {
+        // `midi-tools { gap: 2px }` packs the rows closer (0 to 16 points), and
+        // `midi-tools button { height }` sets the buttons' and fields' height.
+        if let Some(gap) = el.style().and_then(|style| style.points(suhina_style::property::Property::RowGap)) {
             ui.spacing_mut().item_spacing.y = gap.clamp(0.0, 16.0);
         }
         let button_height = {
-            let _button = crate::kit::style_class::enter("button");
-            crate::kit::style_class::computed().and_then(|c| c.height)
+            let button = crate::kit::element::BUTTON.enter();
+            button.style().and_then(|c| c.height)
         };
         if let Some(height) = button_height {
             ui.spacing_mut().interact_size.y = height.clamp(10.0, 40.0);
@@ -274,11 +281,11 @@ fn quantise_block(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, ac
     );
     menu.response
         .widget_info(|| egui::WidgetInfo::labeled(egui::Role::ComboBox, true, format!("Quantise grid {shown}")));
-    // `.midi-tools .slider { --suhina-appearance: knob }` draws the amount as a knob, dragged up
+    // `midi-tools slider { appearance: knob }` draws the amount as a knob, dragged up
     // or down; `#quantise-amount` selects it alone.
-    let slider_style = crate::kit::style_class::enter_named("slider", "quantise-amount");
-    let slider = if crate::kit::style_class::knob_preference(false) {
-        let size = crate::kit::style_class::computed().and_then(|c| c.height).map_or(32.0, |h| h.clamp(16.0, 96.0));
+    let slider_style = crate::kit::element::SLIDER.id("quantise-amount").enter();
+    let slider = if crate::kit::style_class::knob_preference(&slider_style, false) {
+        let size = slider_style.style().and_then(|c| c.height).map_or(32.0, |h| h.clamp(16.0, 96.0));
         let (rect, response) = ui.allocate_exact_size(Vec2::new(size * 2.4, size), egui::Sense::drag());
         if response.dragged() {
             settings.amount = (settings.amount - f64::from(response.drag_delta().y) * 0.5).clamp(0.0, 100.0).round();
@@ -291,6 +298,7 @@ fn quantise_block(ui: &mut Ui, tools: &Tools<'_>, state: &mut PianoRollState, ac
         crate::kit::widgets::knob_with_value(
             ui.painter(),
             rect,
+            &slider_style,
             position,
             pointer,
             Some(&response),
@@ -518,9 +526,4 @@ fn button(ui: &mut Ui, name: &str, font: &egui::FontId) -> bool {
 fn heading(ui: &mut Ui, text: &str, color: egui::Color32) {
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), LABEL + 3.0), egui::Sense::hover());
     widgets::text_in(ui.painter(), rect, Align2::LEFT_CENTER, text, theme::ui_font(theme::TEXT_SMALL), color);
-}
-
-/// `12px` as 12.0.
-fn px_value(value: &str) -> Option<f32> {
-    value.trim().strip_suffix("px").and_then(|v| v.trim().parse::<f32>().ok()).filter(|v| v.is_finite())
 }
