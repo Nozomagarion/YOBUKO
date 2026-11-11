@@ -144,7 +144,7 @@ impl Player {
     }
 
     /// Independent DJ source monitor, without opening another output.
-    pub fn deck_monitor(&self, deck: usize) -> Option<std::sync::Arc<suhina_engine::PreviewMonitor>> {
+    pub fn deck_monitor(&self, deck: usize) -> Option<std::sync::Arc<suhina_engine::DeckMonitor>> {
         self.controller.deck_monitor(deck)
     }
 
