@@ -22,9 +22,9 @@ YOBUKO is three programs: the studio (Suhina), live DJ mixing (Mixxx) and USB st
 The default theme, **YOBUKO › Ink & Echo**, keeps Suhina's calm warm graphite and square
 corners. YOBUKO's identity sits in two small marks shown in every window:
 
-- a **2 px line along the top of the window in the colour of the app mode** (blue Studio,
-  green Multiplayer, pink DJ; rbxport, the DJ side's USB tool, is always pink);
-- the **red 呼子 seal** (`crates/ui/brand/yobuko-seal.png`): left of the mode pill in the
+- a **2 px line along the top of the window in the colour of the space showing** (blue Studio,
+  green Multiplayer, pink DJ, amber USB; rbxport's own window is always pink);
+- the **red 呼子 seal** (`crates/ui/brand/yobuko-seal.png`): left of the space tabs in the
   studio, and in place of Mixxx's logo in Mixxx.
 
 ## Themes

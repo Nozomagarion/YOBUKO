@@ -84,7 +84,7 @@ The full Suhina studio: session and arrangement views, MIDI and audio tracks, in
 
 <p align="center"><img src="assets/readme/mixxx.webp" alt="DJ mode: Mixxx with two decks, hot cues and the music library" width="100%"></p>
 
-**Play live with Mixxx.** Click the mode pill at the top right, pick **DJ**, then **Open Mixxx**.
+**Play live with Mixxx.** Click the **DJ** tab at the top right, then **Open Mixxx**.
 
 - **Plug in a Pioneer DDJ-FLX4 and play.** YOBUKO sets up its mapping for you. Other controllers work too: Mixxx has 200+ built-in mappings and MIDI Learn.
 - Mixxx comes **inside YOBUKO** on macOS (Apple Silicon) and Windows. On Linux, YOBUKO uses the Mixxx installed on your computer.
@@ -207,7 +207,7 @@ Please follow [CONTRIBUTING.md](CONTRIBUTING.md) and the [security notes](docs/s
 | Project | What comes from it | What YOBUKO adds |
 |---|---|---|
 | **[Suhina](https://github.com/suhina-daw/suhina-daw)** | The music studio: native interface, audio engine, project model, instruments, effects, plug-in hosting, CLI and automation. | Online multiplayer, the DJ bridge and the combined distribution. |
-| **[Mixxx](https://github.com/mixxxdj/mixxx)** by **the Mixxx team** | The Mixxx DJ application (GPL-2.0-or-later), shipped as YOBUKO's live DJ mode, and the community DDJ-FLX4 mapping by [ElHanko](https://github.com/ElHanko/mixxx-ddj-flx4-mapping) (MIT). | YOBUKO opens Mixxx from its DJ pill, installs the FLX4 mapping and keeps its library in sync with rbxport. |
+| **[Mixxx](https://github.com/mixxxdj/mixxx)** by **the Mixxx team** | The Mixxx DJ application (GPL-2.0-or-later), shipped as YOBUKO's live DJ mode, and the community DDJ-FLX4 mapping by [ElHanko](https://github.com/ElHanko/mixxx-ddj-flx4-mapping) (MIT). | YOBUKO opens Mixxx from its DJ tab, installs the FLX4 mapping and keeps its library in sync with rbxport. |
 | **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The rbxport desktop app (library, analysis, USB export, PRO DJ LINK) and its analysis and Rekordbox USB export libraries. | rbxport ships inside YOBUKO for USB export, and shares its library with Mixxx. |
 
 Read [Suhina's original README](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md), [NOTICE](NOTICE), the rbxport provenance files ([analysis](third_party/rbxport-analysis/VENDORED.md), [exporter](third_party/rbxport-export/VENDORED.md), [app](third_party/rbxport-app/VENDORED.md)) and the exact [source pins](fork-sources.json). Original authors keep their copyright. This is an independent experimental fork, not an official release or endorsement from any of these projects, and it contains no proprietary music-software code or content.

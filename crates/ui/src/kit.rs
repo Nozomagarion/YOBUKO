@@ -17,6 +17,7 @@ pub mod meter;
 pub mod mixer_controls;
 pub mod motion;
 pub mod native_css;
+pub mod piou;
 pub mod scroll;
 pub mod session_geometry;
 pub mod skin;
