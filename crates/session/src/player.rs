@@ -172,6 +172,11 @@ impl Player {
         self.controller.deck_monitor(deck)
     }
 
+    /// A DJ sampler slot's monitor.
+    pub fn sampler_monitor(&self, slot: usize) -> Option<std::sync::Arc<suhina_engine::DeckMonitor>> {
+        self.controller.sampler_monitor(slot)
+    }
+
     /// The audio thread's CPU load: the smoothed share of wall time it spends rendering,
     /// in per mille (1000 is busy all of the time).
     pub fn cpu_monitor(&self) -> &suhina_engine::CpuMonitor {

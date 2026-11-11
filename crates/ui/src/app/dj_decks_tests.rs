@@ -28,7 +28,7 @@ fn dj_window(dir: &Path, tracks: &[&str]) -> egui_kittest::Harness<'static, App>
                     source_project: None,
                     seconds: 2.0,
                     bpm: Some(120.0),
-                    key: None,
+                    key: Some(["8A", "10A", "11B"][i % 3].into()),
                 }
             })
             .collect(),
@@ -220,7 +220,7 @@ fn render_the_decks_for_review() {
     app.set_session(Session::new(crate::demo::demo_project()), &[]);
     let mut harness = egui_kittest::Harness::builder()
         .allow_missing_glyphs()
-        .with_size(Vec2::new(1280.0, 800.0))
+        .with_size(Vec2::new(1280.0, 920.0))
         .with_pixels_per_point(1.5)
         .wgpu()
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
@@ -254,6 +254,14 @@ fn render_the_decks_for_review() {
     let app = harness.state_mut();
     app.seek(0, 12.4);
     app.beat_loop(1, 4.0);
+    // Effects: an echo and a filter on deck A, a reverb ready on the master; the units showing.
+    app.dj.decks.show_fx = Some(true);
+    app.set_fx(0, json!({"slot": 1, "effect": "echo", "on": true, "meta": 0.6}));
+    app.set_fx(0, json!({"slot": 2, "effect": "filter", "meta": 0.3}));
+    app.set_fx(0, json!({"deckA": true, "mix": 0.7, "beats": 0.5}));
+    app.set_fx(1, json!({"slot": 1, "effect": "reverb", "meta": 0.8}));
+    app.set_fx(1, json!({"master": true}));
+    app.key_sync(1);
     app.deck_command("dj.deck.tone", json!({"deck":"A","low":-40.0,"mid":0.0,"high":2.0,"filter":0.0,"trim":3.0}));
     app.dj.decks.tools[0].meter = [0.62, 0.58];
     app.dj.decks.tools[1].meter = [0.3, 0.34];
@@ -433,6 +441,157 @@ fn a_deck_has_hot_cues_loops_beat_jumps_and_the_mixer_its_trim_master_and_meters
     assert_eq!(trim_db(trim_knob(-12.0)), -12.0);
     assert_eq!(trim_db(0.5), 0.0);
     assert_eq!(tools::beats_text(0.25), "1/4");
+}
+
+#[test]
+fn a_deck_locks_moves_and_matches_its_key_taps_its_tempo_and_quantizes() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 2));
+    harness.get_by_label("Load Moonlit Echo on deck A").click();
+    until(&mut harness, "deck A to load", |app| app.dj.decks.deck(0)["track"] == 1);
+    harness.get_by_label("Load Paper Lanterns on deck B").click();
+    until(&mut harness, "deck B to load", |app| app.dj.decks.deck(1)["track"] == 2);
+    for label in
+        ["Key lock A", "Key down B", "Key A", "Key up A", "Key sync B", "Quantize A", "Tap tempo B", "Beat grid A"]
+    {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    // Faster without the key lock, the key goes up with the speed; locked, it stays.
+    harness.state_mut().set_rate(0, 1.06);
+    harness.run();
+    assert_eq!(harness.state().dj.decks.shown_key(0).map(beats::Key::text).as_deref(), Some("3A"));
+    harness.get_by_label("Key lock A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.shown_key(0).map(beats::Key::text).as_deref(), Some("8A"));
+    harness.get_by_label("Key up A").click();
+    harness.run();
+    harness.get_by_label("Key up A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.shown_key(0).map(beats::Key::text).as_deref(), Some("10A"));
+    // The session has it too.
+    harness.state_mut().dj.decks.read_at = None;
+    harness.step();
+    let a = harness.state().dj.decks.deck(0).clone();
+    assert_eq!((&a["keyLock"], &a["keyShift"]), (&json!(true), &json!(2.0)), "{a}");
+    harness.get_by_label("Key A").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.deck(0)["keyShift"], 0.0, "a click on the key puts it back");
+    // Key sync: B (10A) moves to A's 8A, two semitones down.
+    harness.get_by_label("Key sync B").click();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.shown_key(1).map(beats::Key::text).as_deref(), Some("8A"));
+    assert_eq!(harness.state().dj.decks.deck(1)["keyShift"], -2.0);
+    // Quantize: a hot cue set off the beat lands on it (120 BPM: a beat each half second).
+    harness.get_by_label("Quantize A").click();
+    harness.run();
+    harness.state_mut().seek(0, 0.62);
+    harness.run();
+    harness.get_by_label("Hot cue 1 A").click();
+    until(&mut harness, "the hot cue", |app| app.dj.decks.hot_cues(0)[0].is_some());
+    assert_eq!(harness.state().dj.decks.hot_cues(0)[0].map(|c| c.1), Some(0.5));
+    // Tapping 100 BPM sets the track's beat grid (the deck plays at its own speed again).
+    harness.state_mut().set_rate(0, 1.0);
+    let start = Instant::now();
+    let revision = harness.state().dj.decks.snapshot["revision"].as_u64();
+    for i in 0..4 {
+        harness.state_mut().tap_at(0, start + Duration::from_millis(600 * i));
+    }
+    until(&mut harness, "the tapped grid", |app| app.dj.decks.snapshot["revision"].as_u64() > revision);
+    let bpm = harness.state().dj.decks.track_bpm(0).unwrap();
+    assert!((bpm - 100.0).abs() < 1.0, "{bpm}");
+    // The grid moved to where the deck is, then nudged later.
+    harness.state_mut().seek(0, 0.75);
+    harness.run();
+    let revision = harness.state().dj.decks.snapshot["revision"].as_u64();
+    harness.state_mut().grid_here(0);
+    until(&mut harness, "the moved grid", |app| app.dj.decks.snapshot["revision"].as_u64() > revision);
+    let (first, beat) = harness.state().dj.decks.beat(0).unwrap();
+    assert!((first - 0.15).abs() < 1e-3 && (beat - 0.6).abs() < 0.01, "{first} {beat}");
+    let revision = harness.state().dj.decks.snapshot["revision"].as_u64();
+    harness.state_mut().grid_tempo(0, 0.1);
+    until(&mut harness, "the faster grid", |app| app.dj.decks.snapshot["revision"].as_u64() > revision);
+    assert!((harness.state().dj.decks.track_bpm(0).unwrap() - bpm - 0.1).abs() < 1e-6);
+}
+
+#[test]
+fn the_effect_units_pick_switch_and_place_their_effects() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 1));
+    harness.state_mut().dj.decks.show_fx = Some(true);
+    harness.run();
+    for label in
+        ["FX 1 effect 1", "FX 2 on 3", "FX 1 knob 2", "FX 2 mix", "FX 1 on deck A", "FX 2 on the master", "FX 1 longer"]
+    {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    // The next effect, switched on, put on deck A, its length doubled.
+    harness.get_by_label("FX 1 effect 1").click_secondary();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.fx(0)["slots"][0]["effect"], "echo");
+    harness.get_by_label("FX 1 on 1").click();
+    harness.run();
+    harness.get_by_label("FX 1 on deck A").click();
+    harness.run();
+    harness.get_by_label("FX 1 longer").click();
+    harness.run();
+    // The session has it all.
+    harness.state_mut().dj.decks.read_at = None;
+    harness.step();
+    let fx = harness.state().dj.decks.fx(0).clone();
+    assert_eq!((&fx["slots"][0]["on"], &fx["deckA"], &fx["beats"]), (&json!(true), &json!(true), &json!(2.0)), "{fx}");
+    // The DDJ-FLX4's BEAT FX: the next effect, off, the level, and the channel switch to B.
+    let app = harness.state_mut();
+    app.flx4(super::flx4::Flx4::FxSelect(1));
+    app.flx4(super::flx4::Flx4::FxOn);
+    app.flx4(super::flx4::Flx4::FxLevel(0.25));
+    app.flx4(super::flx4::Flx4::FxChannel(1, true));
+    app.dj.decks.read_at = None;
+    harness.step();
+    let fx = harness.state().dj.decks.fx(0).clone();
+    assert_eq!(fx["slots"][0]["effect"], "pingPong");
+    assert_eq!(fx["slots"][0]["on"], false);
+    assert_eq!(fx["mix"], 0.25);
+    assert_eq!((&fx["deckA"], &fx["deckB"], &fx["master"]), (&json!(false), &json!(true), &json!(false)));
+    // The switch off both decks puts the unit on the master.
+    harness.state_mut().flx4(super::flx4::Flx4::FxChannel(1, false));
+    harness.run();
+    assert_eq!(harness.state().dj.decks.fx(0)["master"], true);
+}
+
+#[test]
+fn the_sampler_loads_from_the_library_and_the_pads_play_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 2));
+    harness.state_mut().dj.decks.show_sampler = Some(true);
+    harness.run();
+    for label in ["Sampler 1", "Sampler 8", "Sampler 3 level", "Pad mode A"] {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    // An empty slot clicked loads the library's selected track.
+    harness.get_by_label("Sampler 3").click();
+    until(&mut harness, "the sampler slot", |app| app.dj.decks.sampler(2)["track"] == 1);
+    // Deck A's pads switched to the sampler: pad S3 plays the slot.
+    harness.get_by_label("Pad mode A").click();
+    harness.run();
+    assert!(harness.query_by_label("Hot cue 1 A").is_none());
+    // A test has no audio device: the pad asks the session to play, which says so.
+    let asked = |app: &App| app.dj.decks.error.as_deref().is_some_and(|e| e.contains("audio"));
+    harness.get_by_label("Sampler pad 3 A").click();
+    harness.run();
+    assert!(asked(harness.state()), "{:?}", harness.state().dj.decks.error);
+    harness.state_mut().dj.decks.error = None;
+    harness.get_by_label("Sampler pad 3 A").click_secondary();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.error, None, "stopping a slot that is not playing is fine");
+    // The controller's sampler pads do the same.
+    harness.state_mut().flx4(super::flx4::Flx4::Sampler(2, false));
+    harness.run();
+    assert!(asked(harness.state()));
+    harness.state_mut().load_sampler(5, 2);
+    until(&mut harness, "slot 6", |app| app.dj.decks.sampler(5)["track"] == 2);
 }
 
 #[test]

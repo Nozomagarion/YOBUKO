@@ -7,8 +7,11 @@ last_verified: 2026-11-11
 covers:
   - crates/engine/src/decks.rs
   - crates/engine/src/deck_voice.rs
+  - crates/engine/src/deck_fx.rs
   - crates/engine/src/decks_tests.rs
   - crates/session/src/dj_decks.rs
+  - crates/session/src/dj_sampler.rs
+  - crates/session/src/dj_colors.rs
   - crates/session/tests/dj_decks.rs
   - crates/dj
   - crates/session/src/dj.rs
@@ -18,6 +21,9 @@ covers:
   - crates/ui/src/app/dj_decks_tests.rs
   - crates/ui/src/app/dj_flx4.rs
   - crates/ui/src/app/dj_deck_tools.rs
+  - crates/ui/src/app/dj_deck_beats.rs
+  - crates/ui/src/app/dj_fx.rs
+  - crates/ui/src/app/dj_sampler.rs
   - crates/ui/src/app/dj_library.rs
   - crates/engine/src/preview.rs
   - crates/midi/src/lib.rs
@@ -144,9 +150,16 @@ open-source DDJ-FLX4 mapping for Mixxx by Robert904 and ElHanko (MIT), vendored 
 | Pads, HOT CUE mode | notes 0x00–0x07 on channel 8 (A) or 10 (B); 9 or 11 with SHIFT | hot cue 1–8; with SHIFT, deleted |
 | Pads, BEAT LOOP mode | notes 0x60–0x67, channel 8 or 10 | loops of 1/4, 1/2, 1, 2, 4, 8, 16, 32 beats |
 | Pads, BEAT JUMP mode | notes 0x20–0x27, channel 8 or 10 | 1, 2, 4 and 32 beats back (left) and on (right) |
+| Pads, SAMPLER mode | notes 0x30–0x37, channel 8 or 10; 9 or 11 with SHIFT | plays sampler slot 1–8 from its start (an empty slot loads the selected library row); with SHIFT, stops it |
+| SHIFT + mixer CUE (TAP) | note 0x68, channel 1 or 2 | taps the deck's tempo |
+| BEAT FX SELECT (SHIFT: back) | note 0x63 (0x64), channel 5 | next (previous) effect in unit 1, slot 1 |
+| BEAT ◀ ▶ | note 0x4A, 0x4B, channel 5 | halves, doubles unit 1's beats |
+| BEAT FX ON/OFF (SHIFT) | note 0x47 (0x43), channel 5 or 6 | switches unit 1, slot 1 (switches all of unit 1 off) |
+| BEAT FX CH SELECT | note 0x10 channel 5, 0x11 channel 6; 0 when it leaves | puts unit 1 on deck A, deck B or both (the master when neither) |
+| BEAT FX LEVEL/DEPTH | CC 0x02, channel 5 or 6 | unit 1's mix; with SHIFT, slot 1's knob |
 
-Only the most significant 7 bits of the 14-bit controls are read. The SAMPLER, KEYBOARD, PAD FX
-and pitch pad modes, the Beat FX section, tap tempo and the jog wheels' touch are not read yet.
+Only the most significant 7 bits of the 14-bit controls are read. The KEYBOARD, PAD FX and pitch
+pad modes and the jog wheels' touch are not read yet.
 The controller's lights are not driven. Not verified on the hardware yet.
 
 The USB space is rbxport's page (**Open rbxport**, **Add this project to the library…**,
@@ -463,7 +476,7 @@ Only Play may open the chosen output, which remains the active Session output or
 empty preview Session when no project is open. A block-smoothed linear crossfader (0=A, 1=B),
 channel levels 0–1, a fixed −6 dB of headroom and the master level (0–1, smoothed) feed main.
 A single bounded mixer message changes both sides, the master and the headphones together. Each deck plays at its own speed, 0.5 to 2 (`dj.deck.rate {deck,rate}`; the
-pitch follows, no key lock), and through its own low shelf (250 Hz), mid bell (1 kHz) and high
+pitch follows unless the key is locked, see part 2 below), and through its own low shelf (250 Hz), mid bell (1 kHz) and high
 shelf (3 kHz), −40 to +6 dB, then a filter (`dj.deck.tone {deck,low,mid,high,filter}`), before
 its level; a flat deck skips them; the trim (−12 to +12 dB, `trim` in `dj.deck.tone`, kept when
 left out) is a gain with the fader. `dj.deck.bend {deck,amount}` nudges a deck's speed by
@@ -474,8 +487,8 @@ player rounds a loop at its end, cross-fading its last 2 ms into its start; a se
 loop plays on from there. Speed, tone and the loop are kept per deck in the session and
 handed to the engine on Play. Meters: each deck's peak after its tone, trim and fader, and the
 master's, kept as the loudest sample since the last read (`DeckMeter::take`); the library
-snapshot reads them (`meter`, `masterMeter`), so a read resets them. No scratching, key lock,
-effects or recording is included.
+snapshot reads them (`meter`, `masterMeter`), so a read resets them. Key lock, effects and the
+sampler are described in the next section; no scratching or recording is included.
 CUE A/B is post-channel level, pre-crossfader, on the separate configured cue pair only; absence
 of a separate pair never leaks an otherwise muted deck into main. The headphones hear the cued
 decks times `phones × (1 − phonesMix)` and the master times `phones × phonesMix`; the existing
@@ -526,5 +539,82 @@ Offline Renderer tests are the audio oracle; physical headphones and two compute
    file or catalog edit is produced by deck controls. Missing files and the decoded 128 MiB cap
    give an error while keeping a previously loaded source stopped.
 
-These are original-speed decks: the saved beat grid does not yet sync their tempos. Automated
+Sync matches tempos from the saved beat grid and aligns the beats (next section). Automated
 UI checks use a real offline Renderer; the GPU image uses fixture metadata for visual review.
+
+## Deck and mixer functions, part 2 (fork extension)
+
+This part adds key lock, effects, beat-aligned sync with quantize, tap tempo, a sampler and
+waveforms coloured by band. It lives in YOBUKO's own files, so upstream Suhina merges stay easy.
+
+**Key lock and key.** `dj.deck.key {deck, lock?, shift?}` locks a deck's key (its pitch stays
+when its speed changes) and moves it by −12 … +12 semitones (`shift`), each kept when left out
+and handed to the engine on Play. The deck player stretches through `suhina_stretch` when the
+key is moved, or when the key is locked and the speed is not 1; otherwise it reads the source
+directly, as before. The stretcher's buffers are made when the deck is built, so `process`
+never allocates; it is primed again on Play, Seek, a shift, Stop and a loop change, so the first
+block starts at once and a loop wraps without a gap. The snapshot adds `keyLock` and
+`keyShift`. The page shows the key (Camelot or musical), **KEY LOCK**, **KEY −**, **+**, and
+**KEY SYNC**, which moves a deck's key to the other deck's, read from both tracks' keys.
+
+**Beat sync, quantize, tap and grid.** Sync matches the tempo from each track's saved beat
+grid, then moves the deck by the difference of the two beat phases, with `dj.deck.seek {deck,
+by}` (a relative move from wherever the deck is when the move reaches the audio; `from` stays an
+absolute position). **QUANTIZE** snaps the cue point, hot cue set, loop in/out and a hot cue
+jump of a playing deck to the nearest beat of the grid. **TAP** (or SHIFT + CUE on the
+controller) averages the last eight taps (from the fourth; a pause over 2 seconds starts again)
+into the grid's tempo; **GRID**
+puts the grid's first beat at the playhead and ◀ ▶ nudge it; both save through the existing
+grid command. The waveforms draw the grid's beats when they are at least 6 pixels apart, bars
+brighter.
+
+**Effects.** Two effect units (`crates/engine/src/deck_fx.rs`), each with three slots in a row,
+a dry/wet mix, a length in beats (1/16 … 32) at a tempo, and where it goes: deck A, deck B
+(after its EQ and filter, before its fader) or the master. Effects: Echo, Ping Pong, Reverb
+(Suhina's reverb device), Filter, Flanger, Phaser, Trans, Autopan, Bitcrusher, Distortion and
+Noise. Each slot has an on switch and one knob. The control thread builds a changed effect and
+hands it over; the audio thread only swaps it. Switching on or off fades over a block; Echo,
+Ping Pong and Reverb keep ringing out after they are switched off, until they are quiet (at
+most 10 seconds). `dj.fx.set {unit, slot?, effect?, on?, meta?, mix?, beats?, bpm?, deckA?,
+deckB?, master?}` changes a unit, keeping what is left out; the snapshot adds `fx` (both units)
+and `effects` (the list of ids and names). The page keeps each unit's tempo with the deck it
+is on, or else a playing deck.
+
+**Sampler.** Eight slots, each holding a library track that plays from its start straight into
+the master, before the master effects and level, at its own level 0 … 1. `dj.sampler.load
+{slot, track}` decodes on the DJ worker like a deck (it is refused while another DJ job runs);
+`dj.sampler.play {slot}` opens the output like a deck's Play and starts the slot from its start,
+again if it plays; `.stop`, `.clear` and `.gain {slot, gain}` stop it, empty it (keeping its
+level) and set its level. The snapshot adds `samplers` (track, title, seconds, loading, playing,
+position, gain, error). The page shows the eight slots under the decks when there is room
+(**Sampler** toggles them); each deck's pads switch between hot cues and the sampler
+(**HOT CUE** / **SAMPLER**); a library row's menu loads a track into a slot.
+
+**Coloured waveforms.** When a deck loads, the DJ worker also measures the track's lows (below
+250 Hz), mids and highs (above 2.5 kHz), split by two 24 dB/octave crossovers from
+`suhina-dsp`, a hundred times a second, on one scale with the mids raised ×2 and the highs ×4
+so a quiet hi-hat still shows (`crates/session/src/dj_colors.rs`, at most 200 000 columns). The waveforms colour each column
+from them: red for kicks and bass, green for voices and synths, blue for hats; played columns
+are dimmed.
+
+### Check part 2
+
+1. Load two tracks with different tempos on A and B and play both. On deck A click **KEY LOCK**,
+   then move its tempo: the speed changes, the pitch does not. Click **+** twice: the pitch
+   rises two semitones. **KEY SYNC** moves A's key to B's.
+2. Click **Sync** on deck B: its tempo matches A's and their kicks land together. Click
+   **QUANTIZE**, then set a hot cue between two beats: it lands on the nearer beat.
+3. Click **TAP** four times in time: the tempo shown follows the taps.
+4. Click **Effects** in the DJ space's header. In **FX 1**, pick **Echo**, switch it on and put
+   it on **A**: deck A echoes. Switch it off: the echo rings out. Put **FX 2** on the master with
+   **Reverb**: both decks get reverb.
+5. Right-click a library row, **Load in the sampler › Slot 1**. Click the slot: the track plays
+   from its start over the decks; its slider changes its level. Switch deck A's pads to
+   **SAMPLER**: pad S1 plays it too, right-click stops it.
+6. The waveforms show red where the kicks are and blue on the hi-hats, with thin beat lines when
+   zoomed in.
+
+Automated: engine tests for the key lock, effects and the sampler on a real Renderer; session
+tests for `dj.deck.key`, `dj.fx.set` and `dj.sampler.*`; UI tests for the key row, tap,
+quantize, the effect units and the sampler; a unit test for the band colours. Not tried with a
+real DDJ-FLX4 or real speakers.

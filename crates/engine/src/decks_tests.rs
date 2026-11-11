@@ -286,3 +286,173 @@ fn the_headphones_blend_the_cued_deck_with_the_master() {
     let (_, head) = heard(&mut c, DeckMix { crossfade: 0.0, cue: [false, true], phones: 0.5, ..DeckMix::default() });
     assert!((head - 0.2 * 0.501_187_2).abs() < 1e-5, "{head}");
 }
+/// The pitch of the left side over the next `blocks` blocks, from its rising zero crossings.
+fn pitch(r: &mut Renderer, blocks: usize) -> f64 {
+    let left: Vec<f32> = (0..blocks).flat_map(|_| block(r).into_iter().step_by(2)).collect();
+    let rising = left.windows(2).filter(|w| w[0] <= 0.0 && w[1] > 0.0).count();
+    rising as f64 / (left.len() as f64 / 8000.0)
+}
+#[test]
+fn the_key_lock_keeps_the_pitch_when_the_speed_changes_and_the_key_moves_it() {
+    let (mut r, mut c) = setup();
+    c.deck_rate(0, 1.5).unwrap();
+    c.deck_play(0, sine(440.0, 8000), 0.0).unwrap();
+    let free = pitch(&mut r, 4);
+    assert!((free - 660.0).abs() < 8.0, "{free}");
+    c.deck_key_lock(0, true).unwrap();
+    block(&mut r);
+    let at = c.deck_monitor(0).unwrap().seconds();
+    let locked = pitch(&mut r, 4);
+    assert!((locked - 440.0).abs() < 8.0, "{locked}");
+    // The clock still runs at the deck's speed: 4 blocks of 0.128 s, 1.5 times as fast.
+    let moved = c.deck_monitor(0).unwrap().seconds() - at;
+    assert!((moved - 0.768).abs() < 1e-6, "{moved}");
+    c.deck_rate(0, 1.0).unwrap();
+    c.deck_key(0, 12.0).unwrap();
+    block(&mut r);
+    let up = pitch(&mut r, 4);
+    assert!((up - 880.0).abs() < 12.0, "{up}");
+    // Unlocked and a key moved: the speed and the key both move the pitch.
+    c.deck_key_lock(0, false).unwrap();
+    c.deck_rate(0, 0.75).unwrap();
+    c.deck_key(0, -12.0).unwrap();
+    c.deck_seek(0, 0.5).unwrap();
+    block(&mut r);
+    let down = pitch(&mut r, 4);
+    assert!((down - 165.0).abs() < 6.0, "{down}");
+    for wrong in [12.01, -12.01, f64::NAN] {
+        assert!(c.deck_key(0, wrong).is_err(), "{wrong}");
+    }
+}
+#[test]
+fn a_locked_deck_starts_at_once_and_loops_without_a_gap() {
+    let (mut r, mut c) = setup();
+    c.deck_key_lock(0, true).unwrap();
+    c.deck_rate(0, 1.25).unwrap();
+    c.deck_play(0, sine(200.0, 8000), 1.0).unwrap();
+    let first = block(&mut r);
+    // Sound from the first few milliseconds, not after the stretcher's latency.
+    assert!(first[..2 * 80].iter().any(|s| s.abs() > 0.05));
+    c.deck_loop(0, Some((1.0, 1.5))).unwrap();
+    for _ in 0..12 {
+        let b = block(&mut r);
+        let seconds = c.deck_monitor(0).unwrap().seconds();
+        assert!((1.0..1.5).contains(&seconds), "{seconds}");
+        // No silent hole: every 20 ms of the block has sound.
+        for piece in b.chunks(2 * 160) {
+            assert!(piece.iter().any(|s| s.abs() > 0.05));
+        }
+    }
+}
+#[test]
+fn a_shift_moves_a_deck_from_wherever_it_is_when_it_lands() {
+    let (mut r, mut c) = setup();
+    c.deck_play(0, signal(0.2, 8000), 1.0).unwrap();
+    block(&mut r);
+    // Measured a moment ago; the deck has moved on since, and the shift adds to where it is.
+    c.deck_shift(0, -0.25).unwrap();
+    block(&mut r);
+    let seconds = c.deck_monitor(0).unwrap().seconds();
+    assert!((seconds - (1.0 + 0.128 - 0.25 + 0.128)).abs() < 1e-6, "{seconds}");
+    assert!(c.deck_shift(0, f64::NAN).is_err());
+}
+fn click(rate: u32) -> Arc<AudioData> {
+    let mut samples = vec![0.0; rate as usize * 4 * 2];
+    // After the deck's and the effect's fade in.
+    samples[800] = 0.8;
+    samples[801] = 0.8;
+    Arc::new(AudioData { sample_rate: rate, channels: 2, samples })
+}
+fn unit(kind: DeckFxKind, meta: f32, targets: [bool; 3]) -> DeckFxUnit {
+    let mut unit = DeckFxUnit { mix: 1.0, beats: 0.5, bpm: 120.0, targets, ..DeckFxUnit::default() };
+    unit.slots[0] = DeckFxSlot { kind: Some(kind), on: true, meta };
+    unit
+}
+#[test]
+fn an_echo_repeats_the_deck_a_number_of_beats_later_and_rings_out_when_switched_off() {
+    let (mut r, mut c) = setup();
+    c.deck_mix(DeckMix { crossfade: 0.0, ..DeckMix::default() }).unwrap();
+    // Half a beat at 120 BPM: a quarter second, 2000 frames at 8 kHz.
+    c.deck_fx(0, unit(DeckFxKind::Echo, 0.5, [true, false, false])).unwrap();
+    c.deck_play(0, click(8000), 0.0).unwrap();
+    let left: Vec<f32> = (0..5).flat_map(|_| block(&mut r).into_iter().step_by(2)).collect();
+    let loudest_after =
+        |from: usize, to: usize| (from..to).max_by(|a, b| left[*a].abs().total_cmp(&left[*b].abs())).unwrap();
+    let echo = loudest_after(500, 3400);
+    assert!((2395..=2405).contains(&echo), "the echo is at {echo}");
+    assert!(left[echo].abs() > 0.05, "{}", left[echo]);
+    let second = loudest_after(3400, 5120);
+    assert!((4395..=4405).contains(&second) && left[second].abs() < left[echo].abs(), "{second}");
+    // Off: nothing new goes in, but what it holds still rings.
+    let mut off = unit(DeckFxKind::Echo, 0.5, [true, false, false]);
+    off.slots[0].on = false;
+    c.deck_fx(0, off).unwrap();
+    let tail: Vec<f32> = (0..2).flat_map(|_| block(&mut r)).collect();
+    assert!(tail.iter().any(|s| s.abs() > 0.001), "the echo rings out");
+}
+#[test]
+fn a_filter_effect_closes_and_goes_only_where_its_unit_is_put() {
+    let (mut r, mut c) = setup();
+    c.deck_play(0, sine(2000.0, 8000), 0.0).unwrap();
+    let open = peak(&mut r);
+    c.deck_fx(1, unit(DeckFxKind::Filter, 0.0, [false, true, false])).unwrap();
+    assert!((peak(&mut r) - open).abs() < 0.01, "on deck B, deck A is untouched");
+    c.deck_fx(1, unit(DeckFxKind::Filter, 0.0, [true, false, false])).unwrap();
+    let closed = peak(&mut r);
+    assert!(closed < open * 0.1, "{closed} vs {open}");
+    // On the master it filters too.
+    c.deck_fx(1, unit(DeckFxKind::Filter, 0.0, [false, false, true])).unwrap();
+    assert!(peak(&mut r) < open * 0.1);
+    let mut wrong = unit(DeckFxKind::Filter, 0.0, [true, false, false]);
+    wrong.beats = 64.0;
+    assert!(c.deck_fx(0, wrong).is_err());
+    wrong.beats = 1.0;
+    wrong.mix = 1.5;
+    assert!(c.deck_fx(0, wrong).is_err());
+    assert!(c.deck_fx(2, DeckFxUnit::default()).is_err());
+}
+#[test]
+fn every_effect_plays_on_a_deck_without_blowing_up() {
+    for kind in DeckFxKind::ALL {
+        let (mut r, mut c) = setup();
+        c.deck_fx(0, unit(kind, 0.8, [true, false, false])).unwrap();
+        c.deck_play(0, sine(440.0, 8000), 0.0).unwrap();
+        let mut loudest = 0.0f32;
+        for _ in 0..8 {
+            for s in block(&mut r) {
+                assert!(s.is_finite(), "{kind:?}");
+                loudest = loudest.max(s.abs());
+            }
+        }
+        assert!(loudest > 0.01 && loudest < 2.0, "{kind:?}: {loudest}");
+        assert_eq!(DeckFxKind::from_id(kind.id()), Some(kind));
+    }
+}
+#[test]
+fn a_sampler_slot_plays_from_its_start_into_the_master_at_its_level() {
+    let (mut r, mut c) = setup();
+    c.sampler_play(3, signal(0.4, 8000)).unwrap();
+    let out = block(&mut r);
+    assert!((out[1600] - 0.4 * 0.501_187_2).abs() < 1e-5, "{}", out[1600]);
+    assert!(c.sampler_monitor(3).unwrap().playing());
+    // Played again, it starts over.
+    block(&mut r);
+    c.sampler_play(3, signal(0.4, 8000)).unwrap();
+    block(&mut r);
+    assert!((c.sampler_monitor(3).unwrap().seconds() - 0.128).abs() < 1e-6);
+    // Its level, then stopped.
+    c.sampler_gain(3, 0.5).unwrap();
+    block(&mut r);
+    let out = block(&mut r);
+    assert!((out[1600] - 0.2 * 0.501_187_2).abs() < 1e-5, "{}", out[1600]);
+    // The master level and the master's effects follow it too.
+    c.deck_mix(DeckMix { master: 0.5, ..DeckMix::default() }).unwrap();
+    block(&mut r);
+    let out = block(&mut r);
+    assert!((out[1600] - 0.1 * 0.501_187_2).abs() < 1e-5, "{}", out[1600]);
+    c.sampler_stop(3).unwrap();
+    assert!(block(&mut r).iter().all(|s| *s == 0.0));
+    assert!(!c.sampler_monitor(3).unwrap().playing());
+    assert!(c.sampler_play(8, signal(0.4, 8000)).is_err());
+    assert!(c.sampler_gain(0, 1.5).is_err());
+}

@@ -1181,7 +1181,7 @@ impl Renderer {
             monitor: Arc::clone(&self.graph.launcher.monitor),
             updater: self.updater(),
             preview: self.preview.sender(),
-            decks: self.decks.sender(),
+            decks: self.decks.sender(Arc::clone(&self.devices)),
             preview_monitor: Arc::clone(&self.preview.monitor),
             cpu_monitor: Arc::clone(&self.cpu.monitor),
             meter_monitor: Arc::clone(&self.meters.monitor),

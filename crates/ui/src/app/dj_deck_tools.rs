@@ -50,6 +50,8 @@ pub(in crate::app) struct DeckTools {
     pub(super) held: f64,
     /// The meter's needle, left and right, falling back slowly after a peak.
     pub(super) meter: [f32; 2],
+    /// When TAP was pressed, the last few times.
+    pub(super) taps: Vec<Instant>,
 }
 
 impl Default for DeckTools {
@@ -63,6 +65,7 @@ impl Default for DeckTools {
             jog: None,
             held: 0.0,
             meter: [0.0; 2],
+            taps: Vec::new(),
         }
     }
 }
@@ -115,10 +118,18 @@ impl App {
     pub(super) fn hot_cue(&mut self, deck: usize, pad: usize) {
         let Some(track) = self.dj.decks.track(deck) else { return };
         match self.dj.decks.hot_cues(deck).get(pad).copied().flatten() {
-            Some((_, seconds)) => self.seek(deck, seconds),
+            Some((_, seconds)) => {
+                // Quantized and playing, the jump keeps where in its beat the deck is.
+                let here = self.dj.decks.position(deck);
+                let offset = match self.dj.decks.nearest_beat(deck, here) {
+                    Some(beat) if self.dj.decks.quantize[deck] && self.dj.decks.playing(deck) => here - beat,
+                    _ => 0.0,
+                };
+                self.seek(deck, (seconds + offset).max(0.0));
+            }
             None => {
                 let revision = self.dj.decks.snapshot["revision"].as_u64().unwrap_or(0);
-                let seconds = self.dj.decks.position(deck);
+                let seconds = self.dj.decks.quantized(deck, self.dj.decks.position(deck));
                 let params =
                     json!({"track": track, "revision": revision, "name": hot_cue_name(pad), "seconds": seconds});
                 self.deck_command("dj.cue.add", params);
@@ -162,13 +173,13 @@ impl App {
     /// LOOP IN: the loop will start here.
     pub(super) fn loop_in(&mut self, deck: usize) {
         if self.dj.decks.track(deck).is_some() {
-            self.dj.decks.tools[deck].loop_in = Some(self.dj.decks.position(deck));
+            self.dj.decks.tools[deck].loop_in = Some(self.dj.decks.quantized(deck, self.dj.decks.position(deck)));
         }
     }
 
     /// LOOP OUT: the loop ends here and plays, from LOOP IN or the loop's start.
     pub(super) fn loop_out(&mut self, deck: usize) {
-        let here = self.dj.decks.position(deck);
+        let here = self.dj.decks.quantized(deck, self.dj.decks.position(deck));
         let from = self.dj.decks.tools[deck].loop_in.or_else(|| self.dj.decks.current_loop(deck).map(|l| l.0));
         let Some(from) = from.filter(|from| here - from >= 0.01) else {
             self.dj.decks.error = Some("Press LOOP IN first, then LOOP OUT a little later.".into());

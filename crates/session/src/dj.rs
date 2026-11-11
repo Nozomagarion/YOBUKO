@@ -93,7 +93,13 @@ impl Dj {
                             })
                             .map(|data| {
                                 let peaks = std::sync::Arc::new(suhina_media::waveform::peaks(&data).without_samples());
-                                (data, peaks)
+                                // The sampler's slots draw no waveform.
+                                let colors = if i < crate::dj_sampler::FIRST {
+                                    crate::dj_colors::analyse(&data)
+                                } else {
+                                    crate::WaveColors::default()
+                                };
+                                (data, peaks, std::sync::Arc::new(colors))
                             })
                             .map_err(|e| format!("Deck loading (128 MiB decoded maximum): {e}"));
                         if done
@@ -295,8 +301,12 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
     command!("dj.deck.clear", "Stop and unload a DJ deck", &[DECK], deck_clear),
     command!(
         "dj.deck.seek",
-        "Seek a DJ deck in source seconds",
-        &[DECK, param("from", ParamType::Number, "source seconds")],
+        "Seek a DJ deck in source seconds, to a place or by an amount",
+        &[
+            DECK,
+            optional("from", ParamType::Number, "source seconds to play from"),
+            optional("by", ParamType::Number, "or: seconds to move on (back when negative) from where it is")
+        ],
         deck_seek
     ),
     command!(
@@ -334,6 +344,64 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
         "Nudge a DJ deck faster or slower while held",
         &[DECK, param("amount", ParamType::Number, "−0.25 … 0.25 of its speed; 0 lets go")],
         deck_bend
+    ),
+    command!(
+        "dj.deck.key",
+        "Lock a DJ deck's key (tempo changes keep the pitch) or move its key up or down",
+        &[
+            DECK,
+            optional("lock", ParamType::Bool, "keep the key when the tempo changes; unchanged when left out"),
+            optional("shift", ParamType::Number, "semitones up or down, −12 to 12; unchanged when left out")
+        ],
+        deck_key
+    ),
+    command!(
+        "dj.fx.set",
+        "Set a DJ effect unit: a slot's effect, on button and knob, the unit's mix, length in beats, tempo and where it goes",
+        &[
+            param("unit", ParamType::Number, "effect unit 1 or 2"),
+            optional("slot", ParamType::Number, "slot 1–3, for effect, on and meta"),
+            optional("effect", ParamType::Text, "the slot's effect id, or none"),
+            optional("on", ParamType::Bool, "the slot's effect on or off"),
+            optional("meta", ParamType::Number, "the slot's effect knob, 0–1"),
+            optional("mix", ParamType::Number, "how much of the unit's effects is heard, 0–1"),
+            optional("beats", ParamType::Number, "the length echoes and sweeps follow, 1/16 to 32 beats"),
+            optional("bpm", ParamType::Number, "the tempo they count beats at, 20–400"),
+            optional("deckA", ParamType::Bool, "on deck A"),
+            optional("deckB", ParamType::Bool, "on deck B"),
+            optional("master", ParamType::Bool, "on the master")
+        ],
+        fx_set
+    ),
+    command!(
+        "dj.sampler.load",
+        "Load a DJ library track into a sampler slot",
+        &[param("slot", ParamType::Number, "sampler slot 1–8"), TRACK],
+        sampler_load
+    ),
+    command!(
+        "dj.sampler.play",
+        "Play a sampler slot from its start, into the master",
+        &[param("slot", ParamType::Number, "sampler slot 1–8")],
+        sampler_play
+    ),
+    command!(
+        "dj.sampler.stop",
+        "Stop a sampler slot",
+        &[param("slot", ParamType::Number, "sampler slot 1–8")],
+        sampler_stop
+    ),
+    command!(
+        "dj.sampler.clear",
+        "Stop a sampler slot and take its track out",
+        &[param("slot", ParamType::Number, "sampler slot 1–8")],
+        sampler_clear
+    ),
+    command!(
+        "dj.sampler.gain",
+        "Set a sampler slot's level",
+        &[param("slot", ParamType::Number, "sampler slot 1–8"), param("gain", ParamType::Number, "level 0–1")],
+        sampler_gain
     ),
     command!("dj.deck.stopAll", "Stop decks and cancel pending loads", &[], deck_stop_all),
     command!(
@@ -614,6 +682,27 @@ fn deck_loop(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn deck_bend(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::bend(p, v)
+}
+fn deck_key(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::key(p, v)
+}
+fn fx_set(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::fx(p, v)
+}
+fn sampler_load(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::load(p, v)
+}
+fn sampler_play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::play(p, v)
+}
+fn sampler_stop(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::stop(p, v)
+}
+fn sampler_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::clear(p, v)
+}
+fn sampler_gain(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_sampler::gain(p, v)
 }
 fn deck_stop_all(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::stop_all(p, v)
