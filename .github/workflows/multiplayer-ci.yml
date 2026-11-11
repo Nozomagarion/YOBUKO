@@ -91,7 +91,7 @@ jobs:
         # The owner's Linux runner has these installed by scripts/self-hosted/yobuko-linux-runner.sh,
         # so apt only runs (with sudo) when one is missing.
         run: |
-          missing=$(for p in libasound2-dev pkg-config xvfb imagemagick libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev patchelf; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || echo "$p"; done)
+          missing=$(for p in libasound2-dev pkg-config xvfb xauth imagemagick libwebkit2gtk-4.1-dev librsvg2-dev libgtk-3-dev libayatana-appindicator3-dev patchelf; do dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed' || echo "$p"; done)
           if [ -n "$missing" ]; then sudo apt-get update && sudo apt-get install -y $missing; fi
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
@@ -229,7 +229,7 @@ jobs:
         if: always() && !cancelled()
         run: |
           if [ "$RUNNER_OS" = 'Linux' ]; then
-            xvfb-run -a -s "-screen 0 1280x1024x24 -noreset" cargo test --locked --workspace --no-fail-fast
+            scripts/self-hosted/with-xvfb.sh cargo test --locked --workspace --no-fail-fast
           else
             cargo test --locked --workspace --no-fail-fast
           fi

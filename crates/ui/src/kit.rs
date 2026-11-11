@@ -20,6 +20,7 @@ pub mod native_css;
 pub mod piou;
 pub mod scroll;
 pub mod session_geometry;
+pub mod shape;
 pub mod skin;
 pub mod style_class;
 pub mod surface;

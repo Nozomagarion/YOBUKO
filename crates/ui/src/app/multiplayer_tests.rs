@@ -5,6 +5,11 @@ use super::*;
 use egui_kittest::kittest::{NodeT, Queryable};
 use std::time::{Duration, Instant};
 
+/// How long a test waits for a session's threads before it gives up. The waits end as soon as
+/// what they wait for happens; this only has to outlast the slowest CI machine under load (the
+/// owner's Linux runner took more than ten seconds for one test while the whole workspace ran).
+const SLOW_RUNNER: Duration = Duration::from_secs(60);
+
 #[test]
 fn the_visible_lan_entry_creates_a_separate_tab_and_keeps_other_projects() {
     let mut app = App::new();
@@ -23,7 +28,7 @@ fn the_visible_lan_entry_creates_a_separate_tab_and_keeps_other_projects() {
     harness.run();
     assert!(harness.query_by_label("Create session").is_some());
     harness.get_by_label("Create session").click();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
         harness.run_steps(2);
         std::thread::sleep(Duration::from_millis(10));
@@ -50,7 +55,7 @@ fn an_online_host_shows_the_short_code_beside_the_full_invitation() {
         .allow_missing_glyphs()
         .with_size(Vec2::new(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while harness.state().multiplayer.short_code.is_empty() && Instant::now() < deadline {
         harness.run_steps(2);
         std::thread::sleep(Duration::from_millis(10));
@@ -74,7 +79,7 @@ fn two_desktop_projects_apply_confirmed_controls_and_unlock_on_disconnect() {
     let mut host = App::new();
     let mut guest = App::new();
     host.multiplayer_command("multiplayer.host", json!({"address":"127.0.0.1:0"}));
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while host.multiplayer.invitation.is_empty() && Instant::now() < deadline {
         host.poll_multiplayer(&ctx);
         std::thread::sleep(Duration::from_millis(10));
@@ -163,7 +168,7 @@ fn render_multiplayer_panel_for_review() {
     std::fs::create_dir_all(&folder).unwrap();
     harness.render().unwrap().save(folder.join("multiplayer-lan.png")).unwrap();
     harness.get_by_label("Share current MIDI project").click();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
         harness.run_steps(2);
         std::thread::sleep(Duration::from_millis(10));
@@ -209,7 +214,7 @@ fn sharing_the_current_midi_project_opens_a_copy_of_its_real_music() {
     harness.run();
     let before = harness.state().projects.get(original).unwrap().project().clone();
     harness.get_by_label("Share current MIDI project").click();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
         harness.run_steps(2);
         std::thread::sleep(Duration::from_millis(10));
@@ -275,7 +280,7 @@ fn visible_note_buttons_edit_the_shared_music_and_refuse_a_stale_draft() {
     harness.run();
     let before = harness.state().projects.get(original).unwrap().project().clone();
     harness.get_by_label("Share current MIDI project").click();
-    let deadline = Instant::now() + Duration::from_secs(8);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
         harness.run_steps(2);
         std::thread::sleep(Duration::from_millis(10));
@@ -360,7 +365,7 @@ fn visible_clip_buttons_keep_neighbours_and_deleted_note_drafts_cannot_be_reboun
     harness.run();
     let before = harness.state().projects.get(original).unwrap().project().clone();
     harness.get_by_label("Share current MIDI project").click();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
         harness.run_steps(2);
         std::thread::sleep(Duration::from_millis(10));
@@ -461,7 +466,7 @@ fn the_audio_share_button_opens_a_collected_copy_and_keeps_the_original_file() {
     harness.run();
     let before = harness.state().projects.get(original).unwrap().project().clone();
     harness.get_by_label("Share project + audio").click();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
         harness.run_steps(2);
         std::thread::sleep(Duration::from_millis(10));
@@ -535,7 +540,7 @@ fn render_shared_audio_panel_for_review() {
     std::fs::create_dir_all(&folder).unwrap();
     harness.render().unwrap().save(folder.join("multiplayer-audio-entry.png")).unwrap();
     harness.get_by_label("Share project + audio").click();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while harness.state().multiplayer.bound.is_none() && Instant::now() < deadline {
         harness.run_steps(2);
         std::thread::sleep(Duration::from_millis(10));
@@ -577,7 +582,7 @@ fn the_publish_button_uses_a_finished_local_sound_and_keeps_original_and_shared_
     app.multiplayer.address = "127.0.0.1:0".into();
     app.host_current_audio();
     let ctx = egui::Context::default();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while app.multiplayer.bound.is_none() && Instant::now() < deadline {
         app.poll_multiplayer(&ctx);
         std::thread::sleep(Duration::from_millis(10));
@@ -637,7 +642,7 @@ fn visible_track_creation_adds_midi_and_audio_to_both_tabs_and_refuses_a_stale_d
     host.multiplayer.address = "127.0.0.1:0".into();
     let original = host.projects.active().unwrap();
     host.host_current_midi();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while host.multiplayer.bound.is_none() && Instant::now() < deadline {
         host.poll_multiplayer(&ctx);
         std::thread::sleep(Duration::from_millis(10));
@@ -734,7 +739,7 @@ fn guest_take_button(render: bool) {
     host.multiplayer.online = false;
     host.multiplayer.address = "127.0.0.1:0".into();
     host.host_current_audio();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while host.multiplayer.bound.is_none() && Instant::now() < deadline {
         host.poll_multiplayer(&ctx);
         std::thread::sleep(Duration::from_millis(10));
@@ -815,7 +820,7 @@ fn invitation_renewal_button(render: bool) {
     host.set_default_data_folder(root.path().join("Host"));
     host.multiplayer.open = true;
     host.multiplayer_command("multiplayer.host", json!({"address":"127.0.0.1:0"}));
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while host.multiplayer.bound.is_none() && Instant::now() < deadline {
         host.poll_multiplayer(&ctx);
         std::thread::sleep(Duration::from_millis(10));
@@ -922,7 +927,7 @@ fn shared_device_buttons(render: bool) {
     host.multiplayer.online = false;
     host.multiplayer.address = "127.0.0.1:0".into();
     host.host_current_midi();
-    let deadline = Instant::now() + Duration::from_secs(20);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while host.multiplayer.bound.is_none() && Instant::now() < deadline {
         host.poll_multiplayer(&ctx);
         std::thread::sleep(Duration::from_millis(10));
@@ -1058,7 +1063,7 @@ fn synchronous_refusals_survive_state_refreshes_and_can_be_acknowledged_without_
     let mut app = App::new();
     app.multiplayer.open = true;
     app.multiplayer_command("multiplayer.host", json!({"address":"127.0.0.1:0"}));
-    let deadline = Instant::now() + Duration::from_secs(5);
+    let deadline = Instant::now() + SLOW_RUNNER;
     while app.multiplayer.bound.is_none() && Instant::now() < deadline {
         app.poll_multiplayer(&ctx);
         std::thread::sleep(Duration::from_millis(10));

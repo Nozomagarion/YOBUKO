@@ -34,6 +34,26 @@ lives in YOBUKO's own files.
 - **Next criterion:** the owner checks in a test build that the decks and mixer have the
   buttons they use in Mixxx; then part 2 (key lock, effects, beat sync and grid, sampler).
 
+## Soft, rounded studio like the YOBUKO One mock-up — 11 November 2026 (branch `claude/project-thread-mkzv4x`)
+
+**Goal:** the owner found the studio "all square" with a thin font, and liked the rounder look of
+the YOBUKO One mock-up much better. The real studio should look like the mock-up, in every one of
+the twelve YOBUKO themes.
+
+- **Code written:** with a YOBUKO theme (`yobuko` and its eleven variants), the studio draws
+  **soft shapes** (`crates/ui/src/kit/shape.rs`): clips, track headers, scene and stop buttons are
+  rounded and stand a little apart with no grid lines between them; the launcher, the mixer, the
+  browser and the detail area are rounded **cards** on a deeper background; mixer strips, buttons,
+  value fields, dropdowns, menus and windows have round corners; fader caps are flat soft tabs;
+  browser rows light up as rounded pills. Clip, track and strip names use **Manrope Bold**, which
+  reads better than the regular weight. Nothing moves: every button still answers clicks in the
+  same place, so the tests and the muscle memory stay valid. Suhina's own themes stay square.
+- **Checks passed (Linux, cloud container):** the UI tests; screenshots drawn by the real program
+  in Ink & Echo and Sakura, and Suhina Studio to check it is unchanged.
+- **Limits:** the toolbar layout and text sizes are unchanged (making them larger would move
+  controls); the DJ page is restyled in its own branch.
+- **Next criterion:** the owner opens a test build and says whether it now feels like the mock-up.
+
 ## DJ mixing inside YOBUKO's window — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
 
 **Goal:** the owner wants live DJ mixing in the same window as the studio, never in Mixxx's
