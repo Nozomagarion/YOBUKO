@@ -1,14 +1,16 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! DJ mode: Mixxx, free DJ software shipped inside YOBUKO, to mix live with a controller
-//! (the Pioneer DDJ-FLX4 is set up by itself), and rbxport by Chris Le, also shipped inside,
-//! to prepare USB sticks for CDJ / XDJ players. Mixxx fills the screen in YOBUKO's look, and
-//! quitting it brings the studio back; rbxport opens in its own window. YOBUKO shares one music
-//! library between them each time either is opened (`suhina_dj::mixxx`).
+//! DJ mode: YOBUKO's own two decks and mixer, drawn in its window (`dj_decks.rs`), with the DJ
+//! library under them. Mixxx, free DJ software shipped inside YOBUKO, stays a button away for
+//! whoever wants it, and rbxport by Chris Le, also shipped inside, prepares USB sticks for CDJ /
+//! XDJ players in the USB space. YOBUKO shares one music library between Mixxx and rbxport each
+//! time either is opened (`suhina_dj::mixxx`).
 
 use super::*;
 
+#[path = "dj_decks.rs"]
+pub(super) mod decks;
 #[path = "dj_mixxx.rs"]
 pub(super) mod mixxx;
 #[path = "dj_rbxport.rs"]
@@ -33,6 +35,8 @@ pub(super) struct DjPanel {
     pub(super) look_published: Option<(u64, super::menu_bar::WorkspaceMode)>,
     /// The Mixxx YOBUKO started or brought forward: when it closes, the studio comes back.
     pub(super) mixxx_watch: Option<mixxx::Watch>,
+    /// The decks, the mixer and the library of the DJ space.
+    pub(super) decks: decks::Decks,
 }
 
 /// What the DJ page says while Mixxx is open, so nobody looks for a way back.
@@ -43,7 +47,8 @@ pub(super) const WAY_BACK: &str = if cfg!(target_os = "macos") {
 };
 
 impl App {
-    /// DJ mode starts: Mixxx opens, or comes forward when it is already open.
+    /// DJ mode starts: the decks and the mixer show in this window. The studio's project stops,
+    /// so only the decks play.
     pub(super) fn enter_dj(&mut self, ctx: &egui::Context, actions: &mut Vec<Action>) {
         self.dj.active = true;
         self.dj.usb = false;
@@ -52,7 +57,9 @@ impl App {
             actions.push(Action::new("transport.stop", json!({})));
         }
         actions.push(Action::new("preview.stop", json!({})));
-        self.open_mixxx(ctx);
+        // Read the library at the next frame.
+        self.dj.decks.snapshot = Value::Null;
+        ctx.request_repaint();
     }
 
     /// The USB space starts: rbxport opens with Mixxx's tracks and playlists, to put them on a
@@ -221,61 +228,15 @@ impl App {
                 suhina_dj::mixxx::MirrorTrack { path: track.to_string_lossy().into_owned(), ..Default::default() };
             in_mixxx = suhina_dj::mixxx::add_to_mixxx(&profile.join(suhina_dj::mixxx::DATABASE), &[rendered]).is_ok();
         }
-        self.open_mixxx(ctx);
+        self.dj.decks.add([(track.to_path_buf(), None)]);
+        ctx.request_repaint();
         let place = if in_mixxx { "Mixxx and rbxport" } else { "rbxport (and Mixxx the next time it opens)" };
-        let opened = match &self.dj.note {
-            Some(Ok(text)) => format!(" {text}"),
-            _ => String::new(),
-        };
         self.shell.say(crate::kit::piou::Mood::Joy, format!("{name} is in your DJ library."));
-        self.dj.note = Some(Ok(format!("{name} is in your DJ library: {place}.{opened}")));
+        self.dj.note = Some(Ok(format!("{name} is in your DJ library, and shared with {place}.")));
     }
 
     pub(super) fn show_dj(&mut self, ui: &mut Ui) {
-        use super::menu_bar::WorkspaceMode;
-        self.space_page(
-            ui,
-            WorkspaceMode::Dj,
-            "DJ mode · Mixxx",
-            "Mix live in Mixxx, which comes with YOBUKO and fills the screen in YOBUKO's look. Plug in your \
-             controller: a Pioneer DDJ-FLX4 is set up by itself, and Mixxx knows hundreds of others \
-             (choose yours once in Mixxx › Preferences › Controllers).",
-            |app, ui| {
-                if shell::main_button(ui, WorkspaceMode::Dj, "Open Mixxx").clicked() {
-                    app.open_mixxx(ui.ctx());
-                }
-                ui.add_space(theme::PAD);
-                ui.horizontal_wrapped(|ui| {
-                    if ui
-                        .add_enabled(app.session().is_some(), egui::Button::new("Send this project to DJ…"))
-                        .on_hover_text("Render the project to audio and add it to your DJ library")
-                        .on_disabled_hover_text("Open a project first")
-                        .clicked()
-                    {
-                        app.open_export();
-                        app.dj.next_export_to_dj = true;
-                    }
-                    if ui
-                        .button("Share library now")
-                        .on_hover_text("Bring Mixxx and rbxport up to date with each other")
-                        .clicked()
-                    {
-                        app.share_library_now();
-                    }
-                    if ui
-                        .button("Prepare a USB stick (rbxport)")
-                        .on_hover_text("Go to the USB space: rbxport opens with your Mixxx tracks and playlists")
-                        .clicked()
-                    {
-                        app.enter_usb(ui.ctx(), &mut Vec::new());
-                    }
-                });
-                app.dj_note(ui);
-                ui.add_space(theme::PAD * 3.0);
-                ui.weak("Mixxx by the Mixxx team, free software (GPL-2.0-or-later): mixxx.org");
-                ui.weak("DDJ-FLX4 mapping by Robert904 and ElHanko (MIT): github.com/ElHanko/mixxx-ddj-flx4-mapping");
-            },
-        );
+        self.show_decks(ui);
     }
 
     /// The USB space: rbxport, shipped inside YOBUKO, puts the DJ library on a stick for CDJ and

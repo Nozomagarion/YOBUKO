@@ -2937,14 +2937,17 @@ impl App {
                 self.tab_row(ui, &mut actions)
             });
         }
-        with_bar_line(ui, "toolbar", |ui| {
-            egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
-                let _style_class = crate::kit::style_class::enter("toolbar");
-                ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
-                crate::kit::native_css::background(ui.painter(), ui.max_rect());
-                self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions)
-            })
-        });
+        // The DJ space has its own transport on each deck: the studio's bar would only confuse.
+        if !(self.dj.active && !self.dj.usb) {
+            with_bar_line(ui, "toolbar", |ui| {
+                egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+                    let _style_class = crate::kit::style_class::enter("toolbar");
+                    ui.painter().fill_background(ui.max_rect(), 0.0, theme::panel_background());
+                    crate::kit::native_css::background(ui.painter(), ui.max_rect());
+                    self.control_bar(ui, grid.as_ref(), cpu, ram, &mut actions)
+                })
+            });
+        }
         self.frame_trace.mark("control bar");
         egui::Panel::bottom("status-bar").exact_size(theme::STATUS_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
             let bottom = egui::CornerRadius { nw: 0, ne: 0, sw: corner, se: corner };

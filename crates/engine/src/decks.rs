@@ -179,10 +179,8 @@ impl Decks {
             let sounding = voice.playing();
             buffer.fill(0.0);
             voice.finish(buffer, frames, &mut []);
-            if let Some(shaper) = self.shapers.get_mut(i) {
-                if sounding {
-                    shaper.process(buffer);
-                }
+            if sounding && let Some(shaper) = self.shapers.get_mut(i) {
+                shaper.process(buffer);
             }
             let weight = if i == 0 { 1.0 - self.settings.crossfade } else { self.settings.crossfade };
             let main_gain = 0.501_187_2 * self.settings.levels[i] * weight;
