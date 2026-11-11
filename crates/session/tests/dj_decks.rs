@@ -240,3 +240,39 @@ fn a_deck_key_is_locked_or_moved_and_kept_for_the_next_play() {
     assert!(p.execute("dj.deck.seek", &json!({"deck":"A","by":0.01,"from":0.0})).is_err());
     assert!(p.execute("dj.deck.seek", &json!({"deck":"A"})).is_err());
 }
+#[test]
+fn an_effect_unit_is_set_kept_and_handed_to_the_audio_when_a_deck_plays() {
+    let dir = TempDir::new("dj-decks-fx");
+    let (mut p, out) = seeded(&dir);
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    p.execute("dj.fx.set", &json!({"unit":1,"slot":1,"effect":"echo","on":true,"meta":0.7})).unwrap();
+    p.execute("dj.fx.set", &json!({"unit":1,"mix":0.8,"beats":0.5,"bpm":124.0,"deckA":true})).unwrap();
+    p.execute("dj.fx.set", &json!({"unit":2,"slot":3,"effect":"filter"})).unwrap();
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let mut audio = vec![0.0; 4096];
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    let s = idle(&mut p);
+    let fx = &s["performance"]["fx"];
+    assert_eq!(fx[0]["slots"][0], json!({"effect":"echo","on":true,"meta":0.7f32 as f64}), "{fx}");
+    assert_eq!((&fx[0]["deckA"], &fx[0]["deckB"], &fx[0]["beats"]), (&json!(true), &json!(false), &json!(0.5)));
+    assert_eq!(fx[1]["slots"][2]["effect"], "filter");
+    assert_eq!(fx[1]["slots"][2]["on"], false, "a new effect starts off");
+    assert!(s["performance"]["effects"].as_array().unwrap().iter().any(|e| e["id"] == "reverb"));
+    // Changes while it plays go to the audio at once.
+    p.execute("dj.fx.set", &json!({"unit":1,"slot":1,"effect":"none"})).unwrap();
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    assert_eq!(idle(&mut p)["performance"]["fx"][0]["slots"][0]["effect"], serde_json::Value::Null);
+    for wrong in [
+        json!({"unit":3}),
+        json!({"unit":1,"slot":4,"on":true}),
+        json!({"unit":1,"effect":"echo"}),
+        json!({"unit":1,"slot":1,"effect":"wah"}),
+        json!({"unit":1,"mix":2.0}),
+        json!({"unit":1,"beats":64.0}),
+        json!({"unit":1,"deckA":"yes"}),
+    ] {
+        assert!(p.execute("dj.fx.set", &wrong).is_err(), "{wrong}");
+    }
+    assert!(matches!(suhina_session::policy("dj.fx.set").unwrap().agents, suhina_session::Agents::Denied(_)));
+}

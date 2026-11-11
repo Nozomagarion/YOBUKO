@@ -356,3 +356,75 @@ fn a_shift_moves_a_deck_from_wherever_it_is_when_it_lands() {
     assert!((seconds - (1.0 + 0.128 - 0.25 + 0.128)).abs() < 1e-6, "{seconds}");
     assert!(c.deck_shift(0, f64::NAN).is_err());
 }
+fn click(rate: u32) -> Arc<AudioData> {
+    let mut samples = vec![0.0; rate as usize * 4 * 2];
+    // After the deck's and the effect's fade in.
+    samples[800] = 0.8;
+    samples[801] = 0.8;
+    Arc::new(AudioData { sample_rate: rate, channels: 2, samples })
+}
+fn unit(kind: DeckFxKind, meta: f32, targets: [bool; 3]) -> DeckFxUnit {
+    let mut unit = DeckFxUnit { mix: 1.0, beats: 0.5, bpm: 120.0, targets, ..DeckFxUnit::default() };
+    unit.slots[0] = DeckFxSlot { kind: Some(kind), on: true, meta };
+    unit
+}
+#[test]
+fn an_echo_repeats_the_deck_a_number_of_beats_later_and_rings_out_when_switched_off() {
+    let (mut r, mut c) = setup();
+    c.deck_mix(DeckMix { crossfade: 0.0, ..DeckMix::default() }).unwrap();
+    // Half a beat at 120 BPM: a quarter second, 2000 frames at 8 kHz.
+    c.deck_fx(0, unit(DeckFxKind::Echo, 0.5, [true, false, false])).unwrap();
+    c.deck_play(0, click(8000), 0.0).unwrap();
+    let left: Vec<f32> = (0..5).flat_map(|_| block(&mut r).into_iter().step_by(2)).collect();
+    let loudest_after =
+        |from: usize, to: usize| (from..to).max_by(|a, b| left[*a].abs().total_cmp(&left[*b].abs())).unwrap();
+    let echo = loudest_after(500, 3400);
+    assert!((2395..=2405).contains(&echo), "the echo is at {echo}");
+    assert!(left[echo].abs() > 0.05, "{}", left[echo]);
+    let second = loudest_after(3400, 5120);
+    assert!((4395..=4405).contains(&second) && left[second].abs() < left[echo].abs(), "{second}");
+    // Off: nothing new goes in, but what it holds still rings.
+    let mut off = unit(DeckFxKind::Echo, 0.5, [true, false, false]);
+    off.slots[0].on = false;
+    c.deck_fx(0, off).unwrap();
+    let tail: Vec<f32> = (0..2).flat_map(|_| block(&mut r)).collect();
+    assert!(tail.iter().any(|s| s.abs() > 0.001), "the echo rings out");
+}
+#[test]
+fn a_filter_effect_closes_and_goes_only_where_its_unit_is_put() {
+    let (mut r, mut c) = setup();
+    c.deck_play(0, sine(2000.0, 8000), 0.0).unwrap();
+    let open = peak(&mut r);
+    c.deck_fx(1, unit(DeckFxKind::Filter, 0.0, [false, true, false])).unwrap();
+    assert!((peak(&mut r) - open).abs() < 0.01, "on deck B, deck A is untouched");
+    c.deck_fx(1, unit(DeckFxKind::Filter, 0.0, [true, false, false])).unwrap();
+    let closed = peak(&mut r);
+    assert!(closed < open * 0.1, "{closed} vs {open}");
+    // On the master it filters too.
+    c.deck_fx(1, unit(DeckFxKind::Filter, 0.0, [false, false, true])).unwrap();
+    assert!(peak(&mut r) < open * 0.1);
+    let mut wrong = unit(DeckFxKind::Filter, 0.0, [true, false, false]);
+    wrong.beats = 64.0;
+    assert!(c.deck_fx(0, wrong).is_err());
+    wrong.beats = 1.0;
+    wrong.mix = 1.5;
+    assert!(c.deck_fx(0, wrong).is_err());
+    assert!(c.deck_fx(2, DeckFxUnit::default()).is_err());
+}
+#[test]
+fn every_effect_plays_on_a_deck_without_blowing_up() {
+    for kind in DeckFxKind::ALL {
+        let (mut r, mut c) = setup();
+        c.deck_fx(0, unit(kind, 0.8, [true, false, false])).unwrap();
+        c.deck_play(0, sine(440.0, 8000), 0.0).unwrap();
+        let mut loudest = 0.0f32;
+        for _ in 0..8 {
+            for s in block(&mut r) {
+                assert!(s.is_finite(), "{kind:?}");
+                loudest = loudest.max(s.abs());
+            }
+        }
+        assert!(loudest > 0.01 && loudest < 2.0, "{kind:?}: {loudest}");
+        assert_eq!(DeckFxKind::from_id(kind.id()), Some(kind));
+    }
+}

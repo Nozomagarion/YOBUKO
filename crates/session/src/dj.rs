@@ -349,6 +349,24 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
         ],
         deck_key
     ),
+    command!(
+        "dj.fx.set",
+        "Set a DJ effect unit: a slot's effect, on button and knob, the unit's mix, length in beats, tempo and where it goes",
+        &[
+            param("unit", ParamType::Number, "effect unit 1 or 2"),
+            optional("slot", ParamType::Number, "slot 1–3, for effect, on and meta"),
+            optional("effect", ParamType::Text, "the slot's effect id, or none"),
+            optional("on", ParamType::Bool, "the slot's effect on or off"),
+            optional("meta", ParamType::Number, "the slot's effect knob, 0–1"),
+            optional("mix", ParamType::Number, "how much of the unit's effects is heard, 0–1"),
+            optional("beats", ParamType::Number, "the length echoes and sweeps follow, 1/16 to 32 beats"),
+            optional("bpm", ParamType::Number, "the tempo they count beats at, 20–400"),
+            optional("deckA", ParamType::Bool, "on deck A"),
+            optional("deckB", ParamType::Bool, "on deck B"),
+            optional("master", ParamType::Bool, "on the master")
+        ],
+        fx_set
+    ),
     command!("dj.deck.stopAll", "Stop decks and cancel pending loads", &[], deck_stop_all),
     command!(
         "dj.mixer.set",
@@ -631,6 +649,9 @@ fn deck_bend(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn deck_key(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::key(p, v)
+}
+fn fx_set(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::fx(p, v)
 }
 fn deck_stop_all(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::stop_all(p, v)

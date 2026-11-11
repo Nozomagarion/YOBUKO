@@ -49,6 +49,17 @@ pub(super) enum Flx4 {
     BeatLoop(usize, f64),
     /// A pad in BEAT JUMP mode, or the quick jumps: this many beats, back when negative.
     BeatJump(usize, f64),
+    /// BEAT FX SELECT: the next effect (1), or with SHIFT the one before (−1).
+    FxSelect(i32),
+    /// BEAT ◀ and ▶: the effect's length shorter (−1) or longer (1).
+    FxBeats(i32),
+    /// BEAT FX ON/OFF, and with SHIFT every effect of the unit off.
+    FxOn,
+    FxAllOff,
+    /// The BEAT FX channel switch: on (true) or off deck A (0) or B (1).
+    FxChannel(usize, bool),
+    /// The LEVEL/DEPTH knob, 0 … 1.
+    FxLevel(f32),
 }
 
 /// The beat loops of the BEAT LOOP pads, left to right, top to bottom.
@@ -90,6 +101,9 @@ pub(super) fn read(message: [u8; 3]) -> Option<Flx4> {
         // SHIFT is held: it is read when let go too.
         0x90 if number == 0x3F && channel < 2 => Some(Flx4::Shift(channel, value > 0)),
         0x90 if value > 0 && (7..=10).contains(&channel) => pad(channel, number),
+        // The BEAT FX channel switch says when it leaves a position too.
+        0x90 if (channel, number) == (4, 0x10) => Some(Flx4::FxChannel(0, value > 0)),
+        0x90 if (channel, number) == (5, 0x11) => Some(Flx4::FxChannel(1, value > 0)),
         0x90 if value > 0 => match (channel, number) {
             (0 | 1, 0x0B) => Some(Flx4::Play(channel)),
             (0 | 1, 0x0C) => Some(Flx4::Cue(channel)),
@@ -106,6 +120,12 @@ pub(super) fn read(message: [u8; 3]) -> Option<Flx4> {
             (0 | 1, 0x3D) => Some(Flx4::BeatJump(channel, 16.0)),
             (6, 0x46) => Some(Flx4::Load(0)),
             (6, 0x47) => Some(Flx4::Load(1)),
+            (4, 0x63) => Some(Flx4::FxSelect(1)),
+            (4, 0x64) => Some(Flx4::FxSelect(-1)),
+            (4, 0x4A) => Some(Flx4::FxBeats(-1)),
+            (4, 0x4B) => Some(Flx4::FxBeats(1)),
+            (4 | 5, 0x47) => Some(Flx4::FxOn),
+            (4 | 5, 0x43) => Some(Flx4::FxAllOff),
             _ => None,
         },
         0xB0 => match (channel, number) {
@@ -121,6 +141,7 @@ pub(super) fn read(message: [u8; 3]) -> Option<Flx4> {
             (6, 0x18) => Some(Flx4::Filter(1, level)),
             (6, 0x1F) => Some(Flx4::Crossfader(level)),
             (6, 0x0C) => Some(Flx4::PhonesMix(level)),
+            (4 | 5, 0x02) => Some(Flx4::FxLevel(level)),
             // Relative: 1 … 63 down the list, 65 … 127 up it.
             (6, 0x40) => Some(Flx4::Browse(if value < 64 { i32::from(value) } else { i32::from(value) - 128 })),
             _ => None,
@@ -142,6 +163,14 @@ mod tests {
         assert_eq!(read([0x90, 0x58, 0x7F]), Some(Flx4::Sync(0)));
         assert_eq!(read([0x91, 0x54, 0x7F]), Some(Flx4::Phones(1)));
         assert_eq!(read([0x90, 0x68, 0x7F]), Some(Flx4::Tap(0)));
+        assert_eq!(read([0x94, 0x63, 0x7F]), Some(Flx4::FxSelect(1)));
+        assert_eq!(read([0x94, 0x64, 0x7F]), Some(Flx4::FxSelect(-1)));
+        assert_eq!(read([0x94, 0x4B, 0x7F]), Some(Flx4::FxBeats(1)));
+        assert_eq!(read([0x95, 0x47, 0x7F]), Some(Flx4::FxOn));
+        assert_eq!(read([0x94, 0x43, 0x7F]), Some(Flx4::FxAllOff));
+        assert_eq!(read([0x94, 0x10, 0x7F]), Some(Flx4::FxChannel(0, true)));
+        assert_eq!(read([0x95, 0x11, 0x00]), Some(Flx4::FxChannel(1, false)));
+        assert_eq!(read([0xB4, 0x02, 0x7F]), Some(Flx4::FxLevel(1.0)));
         assert_eq!(read([0x96, 0x46, 0x7F]), Some(Flx4::Load(0)));
         assert_eq!(read([0x96, 0x47, 0x7F]), Some(Flx4::Load(1)));
         assert_eq!(read([0xB0, 0x13, 0x7F]), Some(Flx4::Level(0, 1.0)));

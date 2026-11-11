@@ -74,6 +74,10 @@ pub(in crate::app) struct Decks {
     shift: [bool; 2],
     /// Whether each deck quantizes: cues and loops land on the beat, jumps keep the beat.
     quantize: [bool; 2],
+    /// Whether the effect units show; `None` until chosen, when they show if there is room.
+    show_fx: Option<bool>,
+    /// Whether they showed last frame.
+    fx_shown: bool,
     /// The library's search, sort and playlist.
     pub(in crate::app) library: library::LibraryView,
 }
@@ -370,6 +374,13 @@ impl App {
             ui.allocate_ui_with_layout(Vec2::new(deck_width, height), down, |ui| self.deck_card(ui, 1, height));
         });
         ui.add_space(GAP);
+        // The effects show when there is room for them and a few library rows, or when asked.
+        let room = ui.available_height() > fx::FX_HEIGHT + GAP + 260.0;
+        self.dj.decks.fx_shown = self.dj.decks.show_fx.unwrap_or(room);
+        if self.dj.decks.fx_shown {
+            self.fx_row(ui);
+            ui.add_space(GAP);
+        }
         self.library_card(ui);
     }
 
@@ -391,6 +402,14 @@ impl App {
                 );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let shown = self.dj.decks.show_fx.unwrap_or(self.dj.decks.fx_shown);
+                if ui
+                    .add(egui::Button::selectable(shown, "Effects").corner_radius(BUTTON_RADIUS))
+                    .on_hover_text("Show or hide the two effect units")
+                    .clicked()
+                {
+                    self.dj.decks.show_fx = Some(!shown);
+                }
                 if ui
                     .add(egui::Button::new("Open Mixxx instead").corner_radius(BUTTON_RADIUS))
                     .on_hover_text("Mixxx, the free DJ program shipped with YOBUKO, in its own window")
@@ -999,6 +1018,35 @@ impl App {
             }
             Flx4::BeatLoop(deck, beats) => self.beat_loop(deck, beats),
             Flx4::BeatJump(deck, beats) => self.beat_jump(deck, beats),
+            // BEAT FX drives effect unit 1's first effect.
+            Flx4::FxSelect(by) => self.step_fx(0, 0, by),
+            Flx4::FxBeats(by) => self.step_fx_beats(0, by),
+            Flx4::FxOn => self.toggle_fx(0, 0),
+            Flx4::FxAllOff => {
+                for slot in 0..3 {
+                    self.set_fx(0, json!({"slot": slot + 1, "on": false}));
+                }
+            }
+            Flx4::FxChannel(deck, on) => {
+                let other = self.dj.decks.fx(0)[if deck == 0 { "deckB" } else { "deckA" }] == true;
+                let mut targets = json!({"deckA": false, "deckB": false, "master": false});
+                if on {
+                    targets[if deck == 0 { "deckA" } else { "deckB" }] = json!(true);
+                } else if !other {
+                    targets["master"] = json!(true);
+                } else {
+                    targets[if deck == 0 { "deckB" } else { "deckA" }] = json!(true);
+                }
+                self.set_fx(0, targets);
+            }
+            Flx4::FxLevel(knob) => {
+                // LEVEL/DEPTH is the unit's mix; with SHIFT, the effect's own knob.
+                if self.dj.decks.shift.iter().any(|s| *s) {
+                    self.set_fx(0, json!({"slot": 1, "meta": f64::from(knob)}));
+                } else {
+                    self.set_fx(0, json!({"mix": f64::from(knob)}));
+                }
+            }
         }
     }
 }
@@ -1283,6 +1331,8 @@ fn crossfader(ui: &mut Ui, value: &mut f32, width: f32) -> bool {
 
 #[path = "dj_deck_beats.rs"]
 mod beats;
+#[path = "dj_fx.rs"]
+mod fx;
 #[path = "dj_library.rs"]
 pub(in crate::app) mod library;
 #[path = "dj_deck_tools.rs"]

@@ -4,7 +4,10 @@
 use crate::{CommandError, ProjectId, Projects, Session};
 use serde_json::{Value, json};
 use std::sync::Arc;
-use suhina_engine::{AudioData, DECK_BOOST_DB, DECK_KILL_DB, DECK_TRIM_DB, DeckMeter, DeckMix, DeckMonitor, DeckTone};
+use suhina_engine::{
+    AudioData, DECK_BOOST_DB, DECK_FX_MAX_BEATS, DECK_FX_MIN_BEATS, DECK_FX_SLOTS, DECK_FX_UNITS, DECK_KILL_DB,
+    DECK_TRIM_DB, DeckFxKind, DeckFxUnit, DeckMeter, DeckMix, DeckMonitor, DeckTone,
+};
 use suhina_media::waveform::Peaks;
 
 /// The most samples a deck holds decoded: 384 MiB, a 16-minute stereo track at 48 kHz.
@@ -70,6 +73,8 @@ pub(crate) struct Decks {
     mixer: DeckMix,
     /// The decks' master meter, from the audio that plays them.
     master: Option<Arc<DeckMeter>>,
+    /// The two effect units.
+    fx: [DeckFxUnit; DECK_FX_UNITS],
 }
 impl Decks {
     pub(crate) fn apply(&mut self, result: Loaded) {
@@ -205,12 +210,16 @@ pub(crate) fn play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     let data = Arc::clone(&source.data);
     let from = d.from;
     let mix = p.dj.decks.mixer;
+    let fx = p.dj.decks.fx;
     let deck = &p.dj.decks.states[i];
     let (rate, tone, looping, key_lock, key) = (deck.rate, deck.tone, deck.playing_loop(), deck.key_lock, deck.key);
     let target = p.active();
     let player = p.preview_session_mut()?.player_mut()?;
     let ctl = player.controller_mut();
     ctl.deck_mix(mix).map_err(CommandError)?;
+    for (unit, settings) in fx.into_iter().enumerate() {
+        ctl.deck_fx(unit, settings).map_err(CommandError)?;
+    }
     ctl.deck_rate(i, rate).map_err(CommandError)?;
     ctl.deck_tone(i, tone).map_err(CommandError)?;
     ctl.deck_loop(i, looping).map_err(CommandError)?;
@@ -434,6 +443,102 @@ pub(crate) fn mixer(p: &mut Projects, v: &Value) -> Result<Value, CommandError> 
     p.dj.decks.mixer = mix;
     Ok(json!({"changed":true}))
 }
+/// Changes an effect unit: one slot's effect, on button or knob, and the unit's mix, length,
+/// tempo or places, whichever are given.
+pub(crate) fn fx(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    let unit = v["unit"]
+        .as_u64()
+        .and_then(|u| usize::try_from(u).ok())
+        .filter(|u| (1..=DECK_FX_UNITS).contains(u))
+        .ok_or("unit must be 1 or 2")?
+        - 1;
+    let mut settings = p.dj.decks.fx[unit];
+    let unit_number = |key: &str, range: std::ops::RangeInclusive<f64>| -> Result<Option<f32>, CommandError> {
+        match &v[key] {
+            Value::Null => Ok(None),
+            n => n
+                .as_f64()
+                .filter(|n| n.is_finite() && range.contains(n))
+                .map(|n| Some(n as f32))
+                .ok_or_else(|| CommandError(format!("{key} must be {}–{}", range.start(), range.end()))),
+        }
+    };
+    let flag = |key: &str| -> Result<Option<bool>, CommandError> {
+        match &v[key] {
+            Value::Null => Ok(None),
+            b => b.as_bool().map(Some).ok_or_else(|| CommandError(format!("{key} must be true or false"))),
+        }
+    };
+    if let Some(mix) = unit_number("mix", 0.0..=1.0)? {
+        settings.mix = mix;
+    }
+    let beats = f64::from(DECK_FX_MIN_BEATS)..=f64::from(DECK_FX_MAX_BEATS);
+    if let Some(beats) = unit_number("beats", beats)? {
+        settings.beats = beats;
+    }
+    if let Some(bpm) = unit_number("bpm", 20.0..=400.0)? {
+        settings.bpm = bpm;
+    }
+    for (place, key) in ["deckA", "deckB", "master"].into_iter().enumerate() {
+        if let Some(on) = flag(key)? {
+            settings.targets[place] = on;
+        }
+    }
+    let slot_fields = ["effect", "on", "meta"].iter().any(|k| !v[*k].is_null());
+    match &v["slot"] {
+        Value::Null if slot_fields => return Err("choose the slot (1–3) the effect, on or meta is for".into()),
+        Value::Null => {}
+        slot => {
+            let slot = slot
+                .as_u64()
+                .and_then(|s| usize::try_from(s).ok())
+                .filter(|s| (1..=DECK_FX_SLOTS).contains(s))
+                .ok_or("slot must be 1, 2 or 3")?
+                - 1;
+            let s = &mut settings.slots[slot];
+            match &v["effect"] {
+                Value::Null => {}
+                Value::String(id) if id == "none" => {
+                    s.kind = None;
+                    s.on = false;
+                }
+                effect => {
+                    let id = effect.as_str().unwrap_or_default();
+                    s.kind = Some(DeckFxKind::from_id(id).ok_or_else(|| {
+                        let ids: Vec<_> = DeckFxKind::ALL.iter().map(|k| k.id()).collect();
+                        CommandError(format!("effect must be none or one of {}", ids.join(", ")))
+                    })?);
+                }
+            }
+            if let Some(on) = flag("on")? {
+                s.on = on && s.kind.is_some();
+            }
+            if let Some(meta) = unit_number("meta", 0.0..=1.0)? {
+                s.meta = meta;
+            }
+        }
+    }
+    if p.dj.decks.states.iter().any(|s| s.binding.is_some()) && p.preview_session().and_then(|s| s.player()).is_some() {
+        p.preview_session_mut()?.player_mut()?.controller_mut().deck_fx(unit, settings).map_err(CommandError)?;
+    }
+    p.dj.decks.fx[unit] = settings;
+    Ok(fx_json(&settings))
+}
+fn fx_json(unit: &DeckFxUnit) -> Value {
+    json!({
+        "mix": unit.mix,
+        "beats": unit.beats,
+        "bpm": unit.bpm,
+        "deckA": unit.targets[0],
+        "deckB": unit.targets[1],
+        "master": unit.targets[2],
+        "slots": unit.slots.iter().map(|s| json!({
+            "effect": s.kind.map(|k| k.id()),
+            "on": s.on,
+            "meta": s.meta,
+        })).collect::<Vec<_>>(),
+    })
+}
 pub(crate) fn snapshot(p: &Projects) -> Value {
     let states: Vec<_> =
         p.dj.decks
@@ -485,5 +590,7 @@ pub(crate) fn snapshot(p: &Projects) -> Value {
         "phonesMix": m.phones_mix,
         "masterMeter": master.map_or([0.0; 2], |m| m.take()),
         "separate_cue": p.output_choice().cue_pair.is_some(),
+        "fx": p.dj.decks.fx.iter().map(fx_json).collect::<Vec<_>>(),
+        "effects": DeckFxKind::ALL.iter().map(|k| json!({"id": k.id(), "name": k.name()})).collect::<Vec<_>>(),
     })
 }

@@ -7,6 +7,7 @@
 //! themselves are [`crate::deck_voice`]; meters read how loud each deck and the master are.
 use crate::AudioData;
 use crate::chain::MAX_BLOCK;
+use crate::deck_fx::{DeckFx, FxSender, FxUnit};
 use crate::deck_voice::{
     DeckCommand, DeckMeter, DeckMonitor, DeckVoice, DeckVoiceSender, MAX_BEND, MAX_KEY, MAX_RATE, MIN_RATE,
 };
@@ -160,6 +161,7 @@ pub(crate) struct DeckSender {
     pub master: Arc<DeckMeter>,
     pub mix: Producer<Mix>,
     pub tone: Producer<(usize, Tone)>,
+    pub fx: FxSender,
 }
 pub(crate) struct Decks {
     voices: [DeckVoice; 2],
@@ -176,6 +178,7 @@ pub(crate) struct Decks {
     phones_master: Smoother,
     master: Arc<DeckMeter>,
     settings: Mix,
+    fx: DeckFx,
 }
 impl Decks {
     pub fn new(rate: u32) -> Self {
@@ -194,9 +197,10 @@ impl Decks {
             phones_master: Smoother::new(0.0, ramp),
             master: Arc::new(DeckMeter::default()),
             settings: Mix::default(),
+            fx: DeckFx::new(rate),
         }
     }
-    pub fn sender(&mut self) -> DeckSender {
+    pub fn sender(&mut self, devices: suhina_device_sdk::Devices) -> DeckSender {
         let (tx, rx) = RingBuffer::new(16);
         self.mix = Some(rx);
         let (tone, tones) = RingBuffer::new(32);
@@ -207,6 +211,7 @@ impl Decks {
             master: Arc::clone(&self.master),
             mix: tx,
             tone,
+            fx: self.fx.sender(devices),
         }
     }
     pub fn finish(&mut self, out: &mut [f32], cue: &mut [f32], frames: usize, separate: bool) {
@@ -218,6 +223,7 @@ impl Decks {
                 shaper.set(tone, self.rate);
             }
         }
+        self.fx.receive();
         let frames = frames.min(MAX_BLOCK);
         let Some(sum) = self.sum.get_mut(..frames * 2) else { return };
         sum.fill(0.0);
@@ -232,6 +238,8 @@ impl Decks {
             let Some(shaper) = self.shapers.get_mut(i) else { continue };
             if sounding {
                 shaper.process(buffer);
+                // The deck's effects: after its EQ, before its fader.
+                self.fx.process(i, buffer);
             }
             let trim = db_to_gain(shaper.tone.trim);
             let weight = if i == 0 { 1.0 - mix.crossfade } else { mix.crossfade };
@@ -281,6 +289,10 @@ impl Decks {
         }
         self.master_gain.set_target(mix.master);
         self.phones_master.set_target(phones_master);
+        // The master's effects, before the master level.
+        if self.fx.active(2) {
+            self.fx.process(2, sum);
+        }
         let (mut peak_l, mut peak_r) = (0.0f32, 0.0f32);
         for ((dst, head), src) in
             out.as_chunks_mut::<2>().0.iter_mut().zip(cue.as_chunks_mut::<2>().0.iter_mut()).zip(sum.as_chunks::<2>().0)
@@ -397,6 +409,11 @@ impl crate::Controller {
     /// The decks' master meter.
     pub fn deck_master_meter(&self) -> Arc<DeckMeter> {
         Arc::clone(&self.decks.master)
+    }
+    /// Sets effect unit `unit` (0 or 1): its effects, their knobs, its mix, length and tempo,
+    /// and where it goes.
+    pub fn deck_fx(&mut self, unit: usize, settings: FxUnit) -> Result<(), String> {
+        self.decks.fx.set(unit, settings)
     }
     pub fn deck_mix(&mut self, mix: Mix) -> Result<(), String> {
         if !mix.is_valid() {

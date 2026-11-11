@@ -220,7 +220,7 @@ fn render_the_decks_for_review() {
     app.set_session(Session::new(crate::demo::demo_project()), &[]);
     let mut harness = egui_kittest::Harness::builder()
         .allow_missing_glyphs()
-        .with_size(Vec2::new(1280.0, 800.0))
+        .with_size(Vec2::new(1280.0, 920.0))
         .with_pixels_per_point(1.5)
         .wgpu()
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
@@ -254,6 +254,14 @@ fn render_the_decks_for_review() {
     let app = harness.state_mut();
     app.seek(0, 12.4);
     app.beat_loop(1, 4.0);
+    // Effects: an echo and a filter on deck A, a reverb ready on the master; the units showing.
+    app.dj.decks.show_fx = Some(true);
+    app.set_fx(0, json!({"slot": 1, "effect": "echo", "on": true, "meta": 0.6}));
+    app.set_fx(0, json!({"slot": 2, "effect": "filter", "meta": 0.3}));
+    app.set_fx(0, json!({"deckA": true, "mix": 0.7, "beats": 0.5}));
+    app.set_fx(1, json!({"slot": 1, "effect": "reverb", "meta": 0.8}));
+    app.set_fx(1, json!({"master": true}));
+    app.key_sync(1);
     app.deck_command("dj.deck.tone", json!({"deck":"A","low":-40.0,"mid":0.0,"high":2.0,"filter":0.0,"trim":3.0}));
     app.dj.decks.tools[0].meter = [0.62, 0.58];
     app.dj.decks.tools[1].meter = [0.3, 0.34];
@@ -504,6 +512,52 @@ fn a_deck_locks_moves_and_matches_its_key_taps_its_tempo_and_quantizes() {
     harness.state_mut().grid_tempo(0, 0.1);
     until(&mut harness, "the faster grid", |app| app.dj.decks.snapshot["revision"].as_u64() > revision);
     assert!((harness.state().dj.decks.track_bpm(0).unwrap() - bpm - 0.1).abs() < 1e-6);
+}
+
+#[test]
+fn the_effect_units_pick_switch_and_place_their_effects() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 1));
+    harness.state_mut().dj.decks.show_fx = Some(true);
+    harness.run();
+    for label in
+        ["FX 1 effect 1", "FX 2 on 3", "FX 1 knob 2", "FX 2 mix", "FX 1 on deck A", "FX 2 on the master", "FX 1 longer"]
+    {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    // The next effect, switched on, put on deck A, its length doubled.
+    harness.get_by_label("FX 1 effect 1").click_secondary();
+    harness.run();
+    assert_eq!(harness.state().dj.decks.fx(0)["slots"][0]["effect"], "echo");
+    harness.get_by_label("FX 1 on 1").click();
+    harness.run();
+    harness.get_by_label("FX 1 on deck A").click();
+    harness.run();
+    harness.get_by_label("FX 1 longer").click();
+    harness.run();
+    // The session has it all.
+    harness.state_mut().dj.decks.read_at = None;
+    harness.step();
+    let fx = harness.state().dj.decks.fx(0).clone();
+    assert_eq!((&fx["slots"][0]["on"], &fx["deckA"], &fx["beats"]), (&json!(true), &json!(true), &json!(2.0)), "{fx}");
+    // The DDJ-FLX4's BEAT FX: the next effect, off, the level, and the channel switch to B.
+    let app = harness.state_mut();
+    app.flx4(super::flx4::Flx4::FxSelect(1));
+    app.flx4(super::flx4::Flx4::FxOn);
+    app.flx4(super::flx4::Flx4::FxLevel(0.25));
+    app.flx4(super::flx4::Flx4::FxChannel(1, true));
+    app.dj.decks.read_at = None;
+    harness.step();
+    let fx = harness.state().dj.decks.fx(0).clone();
+    assert_eq!(fx["slots"][0]["effect"], "pingPong");
+    assert_eq!(fx["slots"][0]["on"], false);
+    assert_eq!(fx["mix"], 0.25);
+    assert_eq!((&fx["deckA"], &fx["deckB"], &fx["master"]), (&json!(false), &json!(true), &json!(false)));
+    // The switch off both decks puts the unit on the master.
+    harness.state_mut().flx4(super::flx4::Flx4::FxChannel(1, false));
+    harness.run();
+    assert_eq!(harness.state().dj.decks.fx(0)["master"], true);
 }
 
 #[test]
