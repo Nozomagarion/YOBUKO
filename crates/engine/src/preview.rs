@@ -61,6 +61,9 @@ pub(crate) enum PreviewCommand {
     },
     Pause(bool),
     Seek(f64),
+    /// How fast a sample plays, 1 at its own speed (a DJ deck's tempo; the pitch follows). Kept
+    /// for the samples played after it.
+    Rate(f64),
     Notes {
         notes: Box<PreviewNotes>,
         gain: f32,
@@ -202,6 +205,8 @@ pub(crate) struct Preview {
     buffer: Vec<f32>,
     sample_rate: u32,
     paused: bool,
+    /// How fast a sample plays ([`PreviewCommand::Rate`]).
+    rate: f64,
     /// How far a level glides towards its target each frame.
     glide: f32,
     pub(crate) monitor: Arc<PreviewMonitor>,
@@ -209,6 +214,10 @@ pub(crate) struct Preview {
 
 /// The most a command, or a preview's end, sends back at once: a sample, notes and a tail.
 const RETIRED_AT_ONCE: usize = 3;
+
+/// The slowest and fastest a sample plays ([`PreviewCommand::Rate`]).
+pub(crate) const MIN_RATE: f64 = 0.5;
+pub(crate) const MAX_RATE: f64 = 2.0;
 
 /// About how long a change of level takes.
 const GLIDE_SECONDS: f64 = 0.01;
@@ -231,6 +240,7 @@ impl Preview {
             buffer: vec![0.0; MAX_BLOCK * 2],
             sample_rate,
             paused: false,
+            rate: 1.0,
             glide: (1.0 - (-1.0 / (GLIDE_SECONDS * f64::from(sample_rate.max(1)))).exp()) as f32,
             monitor: Arc::new(PreviewMonitor::default()),
         }
@@ -276,6 +286,11 @@ impl Preview {
             match command {
                 PreviewCommand::Pause(paused) => {
                     self.paused = paused;
+                }
+                PreviewCommand::Rate(rate) => {
+                    if rate.is_finite() {
+                        self.rate = rate.clamp(MIN_RATE, MAX_RATE);
+                    }
                 }
                 PreviewCommand::Seek(from) => {
                     if let Some(play) = self.sample.as_mut() {
@@ -538,7 +553,8 @@ impl Preview {
         if let Some(play) = self.sample.as_mut() {
             let frames_in_file = play.data.frames() as f64;
             let guard = (CLICK_GUARD_SECONDS * f64::from(self.sample_rate)).max(1.0);
-            let left_in_file = |position: f64| (frames_in_file - position) / play.step.max(f64::MIN_POSITIVE);
+            let step = play.step * self.rate;
+            let left_in_file = |position: f64| (frames_in_file - position) / step.max(f64::MIN_POSITIVE);
             for [l, r] in out.as_chunks_mut::<2>().0.iter_mut().take(frames) {
                 if play.position >= frames_in_file {
                     break;
@@ -550,7 +566,7 @@ impl Preview {
                 let gain = play.gain * (fade_in * fade_out) as f32;
                 *l += left * gain;
                 *r += right * gain;
-                play.position += play.step;
+                play.position += step;
                 play.played += 1;
             }
             let seconds = play.position / f64::from(play.data.sample_rate.max(1));

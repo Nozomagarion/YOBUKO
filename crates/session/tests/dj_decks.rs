@@ -109,3 +109,49 @@ fn controls_remain_available_while_loading_and_switching_projects_cancels_pendin
     assert_eq!(p.get(id).unwrap().project(), &project);
     assert_eq!(out.renderers.lock().unwrap().len(), 1);
 }
+#[test]
+fn a_deck_keeps_its_speed_eq_and_filter_and_hands_them_to_the_audio_when_it_plays() {
+    let dir = TempDir::new("dj-decks-tone");
+    let (mut p, out) = seeded(&dir);
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    assert!(p.dj_deck_peaks(0).is_some_and(|w| w.frames > 0));
+    assert!(p.dj_deck_peaks(1).is_none());
+    p.execute("dj.deck.rate", &json!({"deck":"A","rate":1.25})).unwrap();
+    p.execute("dj.deck.tone", &json!({"deck":"A","low":-40.0,"mid":0.0,"high":6.0,"filter":-0.5})).unwrap();
+    let s = idle(&mut p);
+    let a = &s["performance"]["decks"][0];
+    assert_eq!(a["rate"], 1.25);
+    assert_eq!(a["low"], -40.0);
+    assert_eq!(a["high"], 6.0);
+    assert_eq!(a["filter"], -0.5);
+    assert_eq!(s["performance"]["decks"][1]["rate"], 1.0);
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let mut audio = vec![0.0; 2048];
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    let seconds = idle(&mut p)["performance"]["decks"][0]["position"].as_f64().unwrap();
+    assert!(seconds > 1024.0 / 44_100.0 * 1.2, "the deck plays at its speed: {seconds}");
+    p.execute("dj.deck.rate", &json!({"deck":"A","rate":1.0})).unwrap();
+    p.execute("dj.deck.tone", &json!({"deck":"A","low":0.0,"mid":0.0,"high":0.0,"filter":0.0})).unwrap();
+    for wrong in [
+        json!({"deck":"A","rate":0.4}),
+        json!({"deck":"A","rate":2.5}),
+        json!({"deck":"A"}),
+        json!({"deck":"C","rate":1.0}),
+        json!({"deck":"A","rate":"fast"}),
+    ] {
+        assert!(p.execute("dj.deck.rate", &wrong).is_err(), "{wrong}");
+    }
+    for wrong in [
+        json!({"deck":"A","low":-41.0,"mid":0.0,"high":0.0,"filter":0.0}),
+        json!({"deck":"A","low":0.0,"mid":7.0,"high":0.0,"filter":0.0}),
+        json!({"deck":"A","low":0.0,"mid":0.0,"high":0.0,"filter":1.5}),
+        json!({"deck":"A","low":0.0,"mid":0.0,"high":0.0}),
+        json!({"deck":"B","low":0.0,"mid":0.0,"high":"x","filter":0.0}),
+    ] {
+        assert!(p.execute("dj.deck.tone", &wrong).is_err(), "{wrong}");
+    }
+    for id in ["dj.deck.rate", "dj.deck.tone"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}
