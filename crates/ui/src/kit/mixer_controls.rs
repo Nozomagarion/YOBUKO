@@ -18,7 +18,7 @@ pub fn pan_field(painter: &egui::Painter, rect: Rect, el: &Entered, pan: f64, ho
     // The native look: a flat field with centre ticks and a thin bar along its bottom.
     // `pan` and `#mixer-pan` colour it as well: the theme's background, border and text.
     let fill = motion::mix(theme::pan_background(), theme::panel_hover(), hover);
-    el.paint_with(painter, rect, Native { radius: 0.0, fill });
+    el.paint_with(painter, rect, Native { radius: super::shape::radius(super::shape::CAP), fill });
     let centre = rect.center().x.round() - 0.5;
     painter.vline(centre, egui::Rangef::new(rect.top(), rect.top() + 2.0), theme::hairline(theme::pan_centre()));
     painter.vline(centre, egui::Rangef::new(rect.bottom() - 2.0, rect.bottom()), theme::hairline(theme::pan_centre()));
@@ -188,7 +188,7 @@ pub fn send_field(
         Pos2::new(rect.right() - 4.0, rect.bottom() - 1.5),
     );
     let quiet = motion::mix(theme::control_background(), pointer, 0.25);
-    painter.rect_filled(rail, 1.0, quiet);
+    painter.rect_filled(rail, super::shape::corner_or(super::shape::PILL, 1.0), quiet);
     let level = Rect::from_min_size(rail.min, Vec2::new(rail.width() * position.clamp(0.0, 1.0), rail.height()));
     if level.width() >= 1.0
         && !super::skin::paint(painter, level, "send.fill", super::skin::State::Normal, pointer, 0.0)
@@ -262,6 +262,19 @@ pub fn rail_ink(el: &super::element::Entered) -> Color32 {
 pub fn fader_cap(painter: &egui::Painter, cap: Rect, hover: f32, response: &egui::Response) {
     let state = super::skin::State::response(response, false);
     let el = super::element::FADER_CAP.response(response).enter();
+    if super::shape::round() {
+        // YOBUKO's cap: a soft, flat tab in the text's colour with a thin line across its
+        // middle, as on the mock-up.
+        let face = motion::mix(theme::text_value(), theme::text_primary(), hover);
+        painter.rect_filled(cap.translate(Vec2::new(0.0, 1.0)), super::shape::CAP, Color32::from_black_alpha(70));
+        painter.rect_filled(cap, super::shape::CAP, face);
+        painter.hline(
+            cap.shrink2(Vec2::new(3.0, 0.0)).x_range(),
+            cap.center().y.round() + 0.5,
+            egui::Stroke::new(1.0, theme::text_on(face)),
+        );
+        return;
+    }
     el.paint_background(painter, cap, 2.0);
     if super::skin::paint(painter, cap, "fader.cap", state, cap_ink(&el, state), 0.0) {
         return;

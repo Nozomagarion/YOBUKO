@@ -25,48 +25,11 @@ impl App {
         }
     }
 
-    /// The app mode (Studio, Multiplayer or DJ) as one small colored pill at the bar's right end.
-    /// Its text and color follow the mode; clicking it lists the modes to switch to.
-    pub(super) fn workspace_modes(&mut self, ui: &mut Ui, actions: &mut Vec<Action>) {
-        let current = self.workspace_mode();
-        let row = ui.max_rect();
-        let font = theme::ui_font(theme::TEXT_SMALL);
-        let galley = ui.painter().layout_no_wrap(current.label().to_owned(), font.clone(), egui::Color32::WHITE);
-        let size = Vec2::new(galley.size().x + 30.0, (row.height() - 6.0).clamp(14.0, 20.0));
-        let rect = Rect::from_min_size(Pos2::new(row.right() - size.x - 4.0, row.center().y - size.y / 2.0), size);
-        self.paint_identity(ui, current, rect);
-        self.publish_look(false);
-        let response =
-            widgets::button_area(ui, rect, Id::unique("workspace-mode-pill"), format!("App mode: {}", current.label()));
-        let hover = widgets::hover(ui, &response);
-        let fill = current.color().gamma_multiply(0.85 + 0.15 * hover);
-        ui.painter().rect_filled(rect, size.y / 2.0, fill);
-        let text_at = Pos2::new(rect.left() + 10.0, rect.center().y - galley.size().y / 2.0);
-        ui.painter().galley(text_at, galley, egui::Color32::WHITE);
-        // A small "opens a list" arrow after the name.
-        let arrow = Pos2::new(rect.right() - 11.0, rect.center().y);
-        ui.painter().add(egui::Shape::convex_polygon(
-            vec![arrow + Vec2::new(-3.5, -1.5), arrow + Vec2::new(3.5, -1.5), arrow + Vec2::new(0.0, 2.5)],
-            egui::Color32::WHITE,
-            egui::Stroke::NONE,
-        ));
-        let mut picked = None;
-        egui::Popup::menu(&response).show(|ui| {
-            for mode in WorkspaceMode::ALL {
-                let label = egui::RichText::new(mode.label()).font(font.clone()).color(mode.color());
-                if ui.selectable_label(mode == current, label).clicked() && mode != current {
-                    picked = Some(mode);
-                }
-            }
-        });
-        if let Some(mode) = picked {
-            self.run_menu_item(mode.menu_item(), ui.ctx(), actions);
-        }
-    }
-
-    /// Which of the three app modes shows now.
+    /// Which of the four spaces shows now.
     pub(super) fn workspace_mode(&self) -> WorkspaceMode {
-        if self.dj.active {
+        if self.dj.active && self.dj.usb {
+            WorkspaceMode::Usb
+        } else if self.dj.active {
             WorkspaceMode::Dj
         } else if self.multiplayer_visible() {
             WorkspaceMode::Multiplayer
@@ -121,6 +84,7 @@ impl App {
             Item::new("workspace.studio", "Studio workspace").into(),
             Item::new("workspace.multiplayer", "Multiplayer").into(),
             Item::new("workspace.dj", "DJ library").into(),
+            Item::new("workspace.usb", "USB export").into(),
             Entry::Separator,
             item("view.session", "Launcher").enabled(has_project).into(),
             item("view.arrangement", "Arrangement").enabled(has_project).into(),
@@ -193,6 +157,7 @@ impl App {
                 self.settings_open = false;
             }
             "workspace.dj" => self.enter_dj(ctx, actions),
+            "workspace.usb" => self.enter_usb(ctx, actions),
             // The start panel already offers new and open; the dialog would only cover it.
             "file.new" if !self.start_panel_open() => self.open_project_dialog(false),
             "file.new" => {}
@@ -273,49 +238,53 @@ impl App {
     }
 }
 
-/// The app's three modes, as the mode pill names and colors them.
+/// The app's four spaces, as their tabs name and color them (`shell.rs`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum WorkspaceMode {
     Studio,
     Multiplayer,
     Dj,
+    /// Preparing USB sticks for club players, in rbxport.
+    Usb,
 }
 
 impl WorkspaceMode {
-    pub(super) const ALL: [Self; 3] = [Self::Studio, Self::Multiplayer, Self::Dj];
+    pub(super) const ALL: [Self; 4] = [Self::Studio, Self::Multiplayer, Self::Dj, Self::Usb];
 
     pub(super) fn label(self) -> &'static str {
         match self {
             Self::Studio => "Studio",
             Self::Multiplayer => "Multiplayer",
             Self::Dj => "DJ",
+            Self::Usb => "USB",
         }
     }
 
-    /// Blue for making music, green for playing with friends, pink for DJing.
+    /// Blue for making music, green for playing with friends, pink for DJing, amber for the
+    /// USB stick.
     pub(super) fn color(self) -> egui::Color32 {
         match self {
             Self::Studio => egui::Color32::from_rgb(0x3B, 0x82, 0xF6),
             Self::Multiplayer => egui::Color32::from_rgb(0x16, 0xA3, 0x4A),
             Self::Dj => egui::Color32::from_rgb(0xDB, 0x27, 0x77),
+            Self::Usb => egui::Color32::from_rgb(0xD9, 0x77, 0x06),
         }
     }
 
-    fn menu_item(self) -> &'static str {
+    pub(super) fn menu_item(self) -> &'static str {
         match self {
             Self::Studio => "workspace.studio",
             Self::Multiplayer => "workspace.multiplayer",
             Self::Dj => "workspace.dj",
+            Self::Usb => "workspace.usb",
         }
     }
 }
 
-/// Switches the app mode through the mode pill: open its list, then pick `mode`.
+/// Switches to the space `mode` ("Studio", "Multiplayer", "DJ" or "USB") through its tab.
 #[cfg(test)]
 pub(super) fn pick_mode<S>(harness: &mut egui_kittest::Harness<'_, S>, mode: &str) {
     use egui_kittest::kittest::Queryable;
-    harness.get_by_label_contains("App mode:").click();
-    harness.run();
-    harness.get_by_label(mode).click();
+    harness.get_by_label(&format!("{mode} space")).click();
     harness.run();
 }

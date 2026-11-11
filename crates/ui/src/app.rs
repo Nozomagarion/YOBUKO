@@ -38,6 +38,7 @@ mod plugin_host;
 pub mod project_dialog;
 mod quick_add;
 mod running_copies;
+mod shell;
 pub mod splash;
 pub mod start_panel;
 mod tabs;
@@ -326,6 +327,7 @@ struct AutoArm {
 pub struct App {
     multiplayer: multiplayer::MultiplayerPanel,
     dj: dj::DjPanel,
+    shell: shell::Shell,
     background: background::Background,
     /// When the level meters last showed something new (`ui.input` time).
     meters_moved_at: f64,
@@ -741,6 +743,7 @@ impl App {
             pick_request: None,
             save_prompt: None,
             dj: dj::DjPanel::default(),
+            shell: shell::Shell::default(),
             multiplayer: multiplayer::MultiplayerPanel::default(),
             export_dialog: None,
             export: None,
@@ -1345,6 +1348,7 @@ impl App {
             self.sample_map.set_window(true, &mut self.browser);
         }
         self.settings = settings;
+        crate::kit::shape::set_round(crate::kit::shape::theme_is_round(&self.settings.theme));
         theme::set_palette(ctx, self.themes.palette(&self.settings.theme));
     }
 
@@ -1365,6 +1369,7 @@ impl App {
             self.settings.theme = base.to_owned();
             self.settings_changed = true;
         }
+        crate::kit::shape::set_round(crate::kit::shape::theme_is_round(&self.settings.theme));
         theme::set_palette(ctx, self.themes.palette(&self.settings.theme));
     }
 
@@ -1385,6 +1390,7 @@ impl App {
         if self.themes.get(id).is_some() {
             self.settings.theme = id.to_string();
             self.settings_changed = true;
+            crate::kit::shape::set_round(crate::kit::shape::theme_is_round(id));
             theme::set_palette(ctx, self.themes.palette(id));
         }
     }
@@ -2320,6 +2326,7 @@ impl App {
     /// theme in use.
     pub fn put_theme(&mut self, ctx: &egui::Context, entry: ThemeEntry) {
         if self.themes.put(entry) {
+            crate::kit::shape::set_round(crate::kit::shape::theme_is_round(&self.settings.theme));
             theme::set_palette(ctx, self.themes.palette(&self.settings.theme));
         }
     }
@@ -2812,6 +2819,7 @@ impl App {
         self.frame_trace.mark("plug-in scan");
         self.poll_export(ui.ctx());
         self.poll_multiplayer(ui.ctx());
+        self.dj_controller(ui.ctx());
         self.frame_trace.mark("export");
         self.poll_plugins(ui.ctx());
         self.frame_trace.mark("plug-ins");
@@ -3002,18 +3010,21 @@ impl App {
                 .frame(egui::Frame::NONE)
                 .show(ui, |ui| self.tab_row(ui, &mut actions));
         }
-        with_bar_line(ui, "toolbar", |ui| {
-            egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
-                let style_class = crate::kit::element::TOOLBAR.enter();
-                ui.painter().rect_filled(
-                    ui.max_rect(),
-                    0.0,
-                    crate::kit::style_class::surface_or(theme::panel_background()),
-                );
-                style_class.paint_background(ui.painter(), ui.max_rect(), 0.0);
-                self.control_bar(ui, &style_class, grid.as_ref(), cpu, ram, &mut actions)
-            })
-        });
+        // The DJ space has its own transport on each deck: the studio's bar would only confuse.
+        if !(self.dj.active && !self.dj.usb) {
+            with_bar_line(ui, "toolbar", |ui| {
+                egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
+                    let style_class = crate::kit::element::TOOLBAR.enter();
+                    ui.painter().rect_filled(
+                        ui.max_rect(),
+                        0.0,
+                        crate::kit::style_class::surface_or(theme::panel_background()),
+                    );
+                    style_class.paint_background(ui.painter(), ui.max_rect(), 0.0);
+                    self.control_bar(ui, &style_class, grid.as_ref(), cpu, ram, &mut actions)
+                })
+            });
+        }
         self.frame_trace.mark("control bar");
         egui::Panel::bottom("status-bar").exact_size(theme::STATUS_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
             let bottom = egui::CornerRadius { nw: 0, ne: 0, sw: corner, se: corner };
@@ -3040,14 +3051,19 @@ impl App {
         let workspace_line = if crate::kit::liquid::background_image(ui.ctx()).is_some() {
             egui::Color32::TRANSPARENT
         } else {
-            // `#workspace { border-color }` is this line's own colour.
+            // `#workspace { border-color }` is this line's own colour; with YOBUKO's soft shapes
+            // the panels are cards on the window's background instead.
             let _workspace = crate::kit::element::WORKSPACE.id("workspace").enter();
-            theme::border()
+            if crate::kit::shape::round() { crate::kit::shape::ground() } else { theme::border() }
         };
         egui::CentralPanel::default().frame(egui::Frame::NONE).show(ui, |ui| {
             let _workspace_style = crate::kit::element::WORKSPACE.id("workspace").enter();
             if self.dj.active {
-                self.show_dj(ui);
+                if self.dj.usb {
+                    self.show_usb(ui);
+                } else {
+                    self.show_dj(ui);
+                }
                 return;
             }
             if self.multiplayer_visible() {
@@ -3514,6 +3530,10 @@ impl App {
                     }
                     (None, _) => self.start_panel(ui),
                 });
+                // YOBUKO's soft shapes: the view is a card too.
+                if grid.is_some() {
+                    crate::kit::shape::card_edges(ui.painter(), inner, crate::kit::shape::ground());
+                }
             }
             // A device's expanded panel, over the views (and the large sample map); not while a
             // dialog is open, which it would cover.

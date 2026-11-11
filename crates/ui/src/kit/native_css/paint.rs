@@ -184,7 +184,9 @@ pub(in crate::kit) fn box_begin(
     if !rect.is_positive() || !rect.is_finite() {
         return 0.0;
     }
-    let radius = style.filter(|s| s.authored.radius).map_or(radius, |s| s.radius);
+    // YOBUKO's soft shapes round every control the sheet gives no radius of its own.
+    let radius =
+        style.filter(|s| s.authored.radius).map_or_else(|| super::super::shape::soften(radius, rect), |s| s.radius);
     let radius = radius.min(rect.height().min(rect.width()) / 2.0).max(0.0);
     let fill = style.filter(|s| s.authored.background).map_or(fill, |s| s.background);
     let Some(style) = style else {

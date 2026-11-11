@@ -18,6 +18,7 @@ use crate::kit::control_layout::{self, Direction};
 use crate::kit::element::{Checked, Muted, Selected};
 use crate::kit::meter;
 use crate::kit::motion;
+use crate::kit::shape;
 use crate::kit::theme::{self, PAD};
 use crate::kit::widgets::{self, Action, Drag};
 use crate::session::session_view::{Control, SessionViewState};
@@ -443,7 +444,7 @@ pub fn show(
         tint,
         egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2),
     ) {
-        painter.rect_filled(rect, 0.0, tint);
+        painter.rect_filled(shape::inset(rect, 3.0), shape::corner(shape::STRIP), tint);
     }
     crate::kit::liquid::paint(painter, rect, &style_class, tint, crate::kit::liquid::Surface::Track);
     style_class.paint_background(painter, rect, 0.0);
@@ -470,7 +471,14 @@ pub fn show(
         rect,
     );
     if !control_layout::placement("mixer-color").hidden {
-        painter.rect_filled(band, 0.0, colour_picker::fill(column.color, column.mute));
+        // With soft shapes the band is the strip's rounded left edge.
+        let drawn = if shape::round() { band.intersect(shape::inset(rect, 3.0)) } else { band };
+        let r = shape::corner(shape::STRIP);
+        painter.rect_filled(
+            drawn,
+            egui::CornerRadius { nw: r.nw, sw: r.sw, ne: 0, se: 0 },
+            colour_picker::fill(column.color, column.mute),
+        );
     }
     let band_hit = band.intersect(painter.clip_rect());
     if band_hit.is_positive() && !control_layout::placement("mixer-color").hidden {
@@ -578,17 +586,17 @@ fn name_row(ui: &Ui, painter: &egui::Painter, rect: Rect, column: &Column, id: I
         fill,
         egui::Color32::from_rgb(column.color.0, column.color.1, column.color.2),
     ) {
-        painter.rect_filled(rect, 0.0, fill);
+        painter.rect_filled(shape::cell(rect), shape::corner(shape::CELL), fill);
     }
     crate::kit::liquid::paint(painter, rect, &name_style, fill, crate::kit::liquid::Surface::Track);
     name_style.paint_background(painter, rect, 0.0);
-    let text = rect.shrink2(Vec2::new(4.0, 0.0));
+    let text = shape::cell(rect).shrink2(Vec2::new(4.0, 0.0));
     widgets::text_in(
         painter,
         text,
         Align2::LEFT_CENTER,
         &column.name,
-        theme::ui_font(theme::TEXT),
+        theme::strong_font(theme::TEXT),
         // Ink that reads on the fill, unless the sheet gives the name a colour.
         name_style.color_or(theme::text_on(fill)),
     );
@@ -667,7 +675,11 @@ fn device_list(
     state: &mut SessionViewState,
     id: Id,
 ) {
-    painter.rect_filled(rect, 0.0, crate::kit::style_class::surface_or(theme::window_background()));
+    painter.rect_filled(
+        rect,
+        shape::corner(shape::CAP),
+        crate::kit::style_class::surface_or(theme::window_background()),
+    );
     if devices.is_empty() {
         widgets::text_in(
             painter,
@@ -731,7 +743,7 @@ fn device_list(
         } else {
             motion::mix(egui::Color32::TRANSPARENT, theme::control_hover(), widgets::hover(ui, &response))
         };
-        list_painter.rect_filled(row, 0.0, fill);
+        list_painter.rect_filled(row, shape::corner(shape::CAP), fill);
         let text = row.shrink2(Vec2::new(4.0, 0.0));
         let color = if device.enabled { theme::text_secondary() } else { theme::text_hint() };
         let tag = match device.group {
@@ -873,7 +885,7 @@ fn audio_block(
         } else {
             motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response))
         };
-        painter.rect_filled(area, 0.0, fill);
+        painter.rect_filled(shape::inset(area, 1.0), shape::corner(shape::BUTTON), fill);
         widgets::text_in(
             painter,
             area.shrink2(Vec2::new(3.0, 0.0)),
@@ -1140,7 +1152,7 @@ fn paint_fader(
         crate::kit::mixer_controls::rail_ink(&rail_el),
         0.0,
     ) {
-        painter.rect_filled(rail, 2.0, crate::kit::mixer_controls::recess());
+        painter.rect_filled(rail, shape::corner_or(shape::PILL, 2.0), crate::kit::mixer_controls::recess());
     }
     drop(rail_el);
     let _scale_style = crate::kit::element::FADER_SCALE.enter();
@@ -1196,7 +1208,7 @@ fn paint_horizontal_fader(painter: &egui::Painter, fader: Rect, db: f64, hover: 
     if !crate::kit::skin::paint(painter, rail, "fader.rail", state, rail_ink, std::f32::consts::FRAC_PI_2) {
         painter.rect_filled(
             Rect::from_center_size(fader.center(), Vec2::new(fader.width(), 5.0)),
-            2.0,
+            shape::corner_or(shape::PILL, 2.0),
             theme::control_background(),
         );
     }
@@ -1238,7 +1250,11 @@ fn paint_horizontal_fader(painter: &egui::Painter, fader: Rect, db: f64, hover: 
     let cap_ink = crate::kit::mixer_controls::cap_ink(&cap_style, state);
     if !crate::kit::skin::paint(painter, cap, "fader.cap", state, cap_ink, std::f32::consts::FRAC_PI_2) {
         let cap = Rect::from_center_size(centre, Vec2::new(length, thickness));
-        painter.rect_filled(cap, 2.0, motion::mix(theme::control_background(), theme::text_value(), hover * 0.3));
+        painter.rect_filled(
+            cap,
+            shape::corner_or(shape::CAP, 2.0),
+            motion::mix(theme::control_background(), theme::text_value(), hover * 0.3),
+        );
         painter.vline(centre.x, cap.shrink(2.0).y_range(), theme::hairline(theme::text_value()));
     }
 }
@@ -1280,9 +1296,10 @@ fn compact_volume(
             Some(&response),
         );
     } else {
-        painter.rect_filled(rect, 0.0, motion::mix(theme::control_background(), theme::control_hover(), hover));
+        let round = shape::corner(shape::CAP);
+        painter.rect_filled(rect, round, motion::mix(theme::control_background(), theme::control_hover(), hover));
         let x = rect.left() + rect.width() * position;
-        painter.rect_filled(Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom())), 0.0, theme::control_playing());
+        painter.rect_filled(Rect::from_min_max(rect.min, Pos2::new(x, rect.bottom())), round, theme::control_playing());
     }
     widgets::text_in(painter, text, Align2::RIGHT_CENTER, &widgets::format_db(db), font, theme::text_primary());
 }

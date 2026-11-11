@@ -109,3 +109,99 @@ fn controls_remain_available_while_loading_and_switching_projects_cancels_pendin
     assert_eq!(p.get(id).unwrap().project(), &project);
     assert_eq!(out.renderers.lock().unwrap().len(), 1);
 }
+#[test]
+fn a_deck_keeps_its_speed_eq_and_filter_and_hands_them_to_the_audio_when_it_plays() {
+    let dir = TempDir::new("dj-decks-tone");
+    let (mut p, out) = seeded(&dir);
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    assert!(p.dj_deck_peaks(0).is_some_and(|w| w.frames > 0));
+    assert!(p.dj_deck_peaks(1).is_none());
+    p.execute("dj.deck.rate", &json!({"deck":"A","rate":1.25})).unwrap();
+    p.execute("dj.deck.tone", &json!({"deck":"A","low":-40.0,"mid":0.0,"high":6.0,"filter":-0.5})).unwrap();
+    let s = idle(&mut p);
+    let a = &s["performance"]["decks"][0];
+    assert_eq!(a["rate"], 1.25);
+    assert_eq!(a["low"], -40.0);
+    assert_eq!(a["high"], 6.0);
+    assert_eq!(a["filter"], -0.5);
+    assert_eq!(s["performance"]["decks"][1]["rate"], 1.0);
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let mut audio = vec![0.0; 2048];
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    let seconds = idle(&mut p)["performance"]["decks"][0]["position"].as_f64().unwrap();
+    assert!(seconds > 1024.0 / 44_100.0 * 1.2, "the deck plays at its speed: {seconds}");
+    p.execute("dj.deck.rate", &json!({"deck":"A","rate":1.0})).unwrap();
+    p.execute("dj.deck.tone", &json!({"deck":"A","low":0.0,"mid":0.0,"high":0.0,"filter":0.0})).unwrap();
+    for wrong in [
+        json!({"deck":"A","rate":0.4}),
+        json!({"deck":"A","rate":2.5}),
+        json!({"deck":"A"}),
+        json!({"deck":"C","rate":1.0}),
+        json!({"deck":"A","rate":"fast"}),
+    ] {
+        assert!(p.execute("dj.deck.rate", &wrong).is_err(), "{wrong}");
+    }
+    for wrong in [
+        json!({"deck":"A","low":-41.0,"mid":0.0,"high":0.0,"filter":0.0}),
+        json!({"deck":"A","low":0.0,"mid":7.0,"high":0.0,"filter":0.0}),
+        json!({"deck":"A","low":0.0,"mid":0.0,"high":0.0,"filter":1.5}),
+        json!({"deck":"A","low":0.0,"mid":0.0,"high":0.0}),
+        json!({"deck":"B","low":0.0,"mid":0.0,"high":"x","filter":0.0}),
+    ] {
+        assert!(p.execute("dj.deck.tone", &wrong).is_err(), "{wrong}");
+    }
+    for id in ["dj.deck.rate", "dj.deck.tone"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}
+#[test]
+fn a_deck_loops_nudges_and_trims_and_the_mixer_meters_master_and_headphones() {
+    let dir = TempDir::new("dj-decks-loop");
+    let (mut p, out) = seeded(&dir);
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    // A loop set before playing is kept, and handed to the audio when it plays.
+    p.execute("dj.deck.loop", &json!({"deck":"A","from":0.0,"to":0.02})).unwrap();
+    let mix = json!({"crossfade":0.0,"levelA":1.0,"levelB":1.0,"cueA":false,"cueB":false,"master":0.5});
+    p.execute("dj.mixer.set", &mix).unwrap();
+    p.execute("dj.deck.tone", &json!({"deck":"A","low":0.0,"mid":0.0,"high":0.0,"filter":0.0,"trim":-6.0})).unwrap();
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let mut audio = vec![0.0; 4096];
+    for _ in 0..4 {
+        out.renderers.lock().unwrap()[0].process(&mut audio);
+    }
+    let s = idle(&mut p);
+    let a = &s["performance"]["decks"][0];
+    assert!(a["position"].as_f64().unwrap() <= 0.02, "{a}");
+    assert_eq!((a["loopFrom"].as_f64(), a["loopTo"].as_f64(), &a["loopOn"]), (Some(0.0), Some(0.02), &json!(true)));
+    assert_eq!(a["trim"], -6.0);
+    assert_eq!(s["performance"]["master"], 0.5);
+    assert_eq!(s["performance"]["phones"], 1.0, "left out, the headphones keep their level");
+    let channel = a["meter"][0].as_f64().unwrap();
+    assert!(channel > 0.0 && channel < 0.2, "the channel meter is after the trim: {channel}");
+    assert!(s["performance"]["masterMeter"][0].as_f64().unwrap() > 0.0);
+    // Let go, the loop is kept for reloop; reloop plays it again.
+    p.execute("dj.deck.loop", &json!({"deck":"A","on":false})).unwrap();
+    assert_eq!(idle(&mut p)["performance"]["decks"][0]["loopOn"], false);
+    p.execute("dj.deck.loop", &json!({"deck":"A","on":true})).unwrap();
+    p.execute("dj.deck.bend", &json!({"deck":"A","amount":0.04})).unwrap();
+    p.execute("dj.deck.bend", &json!({"deck":"A","amount":0.0})).unwrap();
+    for wrong in [
+        json!({"deck":"A","from":0.5,"to":0.5}),
+        json!({"deck":"A","from":0.1}),
+        json!({"deck":"A","from":-1.0,"to":0.5}),
+        json!({"deck":"A","on":"yes"}),
+    ] {
+        assert!(p.execute("dj.deck.loop", &wrong).is_err(), "{wrong}");
+    }
+    assert!(p.execute("dj.deck.loop", &json!({"deck":"B","on":true})).is_err(), "nothing loaded on B");
+    assert!(p.execute("dj.deck.bend", &json!({"deck":"A","amount":0.5})).is_err());
+    let trim = json!({"deck":"A","low":0.0,"mid":0.0,"high":0.0,"filter":0.0,"trim":13.0});
+    assert!(p.execute("dj.deck.tone", &trim).is_err());
+    let loud = json!({"crossfade":0.0,"levelA":1.0,"levelB":1.0,"cueA":false,"cueB":false,"phones":2.0});
+    assert!(p.execute("dj.mixer.set", &loud).is_err());
+    for id in ["dj.deck.loop", "dj.deck.bend"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}

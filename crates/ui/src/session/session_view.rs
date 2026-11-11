@@ -5,6 +5,7 @@
 //! along the bottom (`docs/spec/ui-session-view.md`, sizes in `docs/design/components.md`).
 //! It draws a [`TrackGrid`] and turns clicks into [`Action`]s; it never changes the project itself.
 
+use crate::kit::shape;
 use std::collections::BTreeSet;
 
 use egui::{Align2, Color32, Id, Pos2, Rect, Response, Sense, StrokeKind, Ui, Vec2};
@@ -249,7 +250,11 @@ pub fn show(
     let area = ui.available_rect_before_wrap();
     ui.allocate_rect(area, Sense::hover());
     let painter = ui.painter_at(area);
-    // The view's own background, over the window's (#1233).
+    // The view's own background, over the window's (#1233); with YOBUKO's soft shapes the view is
+    // a card in the panels' colour on a deeper ground.
+    if shape::round() {
+        painter.rect_filled(area, 0.0, theme::panel_background());
+    }
     let _ = style_class.paint(&painter, area);
 
     // Fixed bands: header on top, mixer at the bottom, scene column on the right.
@@ -336,8 +341,8 @@ pub fn show(
     state.scroll.y = state.scroll.y.clamp(0.0, (content_height - body.height()).max(0.0));
 
     // Lines between the bands.
-    painter.hline(area.x_range(), header.bottom(), theme::hairline(theme::border_strong()));
-    painter.hline(area.x_range(), mixer.top() - 1.0, theme::hairline(theme::border_strong()));
+    painter.hline(area.x_range(), header.bottom(), shape::grid_line(theme::border_strong()));
+    painter.hline(area.x_range(), mixer.top() - 1.0, shape::grid_line(theme::border_strong()));
 
     let groups =
         grid.columns.iter().filter(|c| c.kind == ColumnKind::Group).map(|c| (c.track, c.name.clone())).collect();
@@ -477,20 +482,20 @@ pub fn show(
     }
 
     if returns_width > 0.0 {
-        painter.vline(returns_x - 0.5, area.y_range(), theme::hairline(theme::border_strong()));
+        painter.vline(returns_x - 0.5, area.y_range(), shape::grid_line(theme::border_strong()));
     }
 
     // Scene column, fixed on the right.
-    painter.vline(scenes_x - 0.5, area.y_range(), theme::hairline(theme::border_strong()));
+    painter.vline(scenes_x - 0.5, area.y_range(), shape::grid_line(theme::border_strong()));
     let scene_span = egui::Rangef::new(scenes_x, area.right());
     let header_rect = Rect::from_x_y_ranges(scene_span, header.y_range());
-    painter.rect_filled(header_rect, 0.0, theme::control_background());
+    painter.rect_filled(shape::cell(header_rect), shape::corner(shape::CELL), theme::control_background());
     widgets::text_in(
         &painter,
         header_rect.shrink2(Vec2::new(PAD, 0.0)),
         Align2::LEFT_CENTER,
         "Main",
-        theme::ui_font(theme::TEXT),
+        theme::strong_font(theme::TEXT),
         theme::text_primary(),
     );
     scene_column(
@@ -525,10 +530,15 @@ pub fn show(
         probe.offer(header_rect.union(main_mixer), DropTarget::Track(TrackId::MAIN));
     }
     let main_fill = crate::kit::style_class::surface_or(theme::panel_background());
-    painter.rect_filled(main_mixer, 0.0, main_fill);
+    painter.rect_filled(shape::inset(main_mixer, 3.0), shape::corner(shape::STRIP), main_fill);
     crate::kit::liquid::paint(&painter, main_mixer, &style_class, main_fill, crate::kit::liquid::Surface::Track);
     if main_selected {
-        painter.rect_stroke(header_rect.shrink(0.5), 0.0, egui::Stroke::new(1.0, theme::accent()), StrokeKind::Inside);
+        painter.rect_stroke(
+            shape::cell(header_rect.shrink(0.5)),
+            shape::corner(shape::CELL),
+            egui::Stroke::new(1.0, theme::accent()),
+            StrokeKind::Inside,
+        );
     }
     let level = state.meters.main;
     // The main meter stands where a track's does: beside the fader, or at the top of the strip
@@ -573,6 +583,12 @@ pub fn show(
     if !crate::kit::control_layout::placement("mixer-metronome").hidden {
         main_metronome(ui, &painter.with_clip_rect(main_mixer), click, grid.metronome, actions);
     }
+    // YOBUKO's soft shapes: the launcher and the mixer are two cards, as on the mock-up.
+    if mixer.height() > 0.0 {
+        let ground = shape::ground();
+        shape::card_edges(&painter, Rect::from_min_max(area.min, Pos2::new(area.right(), mixer.top())), ground);
+        shape::card_edges(&painter, Rect::from_min_max(Pos2::new(area.left(), mixer.top()), area.max), ground);
+    }
     mixer_edge(ui, &painter, area, mixer, mixer_height, state);
 }
 
@@ -593,7 +609,7 @@ fn main_metronome(
         actions.push(Action::new("transport.setMetronome", json!({ "on": !on })));
     }
     let fill = if on { theme::control_active() } else { theme::control_background() };
-    painter.rect_filled(rect, 0.0, fill);
+    painter.rect_filled(shape::cell(rect), shape::corner(shape::BUTTON), fill);
     let glyph = if on { theme::accent() } else { theme::text_primary() };
     crate::session::record_controls::metronome_glyph(painter, rect, glyph);
     // Held: the level's slider beside the button, where there is room.
@@ -718,7 +734,7 @@ fn draw_column(
     track_menu_on(&strip, column, bands, actions);
     // Column separator through header, grid and mixer.
     let full = egui::Rangef::new(bands.header.top(), bands.mixer.bottom());
-    painter.with_clip_rect(clip).vline(span.max + 0.5, full, theme::hairline(theme::border_strong()));
+    painter.with_clip_rect(clip).vline(span.max + 0.5, full, shape::grid_line(theme::border_strong()));
     // A selected track is outlined along its whole column, header, slots and strip (#916).
     if state.selected_tracks.contains(&column.track) || state.selected == Some(column.track) {
         let outline = Rect::from_x_y_ranges(span, full);
@@ -835,7 +851,7 @@ fn column_header(
         fill,
         rgb(column.color),
     ) {
-        painter.rect_filled(rect, 0.0, fill);
+        painter.rect_filled(shape::cell(rect), shape::corner(shape::CELL), fill);
     }
     crate::kit::liquid::paint(painter, rect, &own, fill, crate::kit::liquid::Surface::Track);
     // The sheet's own background for the header (`track-header[selected]`) over the native one;
@@ -851,7 +867,12 @@ fn column_header(
     // Ink that reads on the fill, unless the sheet gives the name a colour.
     let color = name_style.color_or(theme::text_on(shown));
     if state.selected == Some(column.track) || state.selected_tracks.contains(&column.track) {
-        painter.rect_stroke(rect, 0.0, egui::Stroke::new(1.5, color), StrokeKind::Inside);
+        painter.rect_stroke(
+            shape::cell(rect),
+            shape::corner(shape::CELL),
+            egui::Stroke::new(1.5, color),
+            StrokeKind::Inside,
+        );
     }
     // Nested tracks step in a little; a group's name follows its fold arrow.
     let mut text = rect.shrink2(Vec2::new(PAD, 0.0));
@@ -877,7 +898,7 @@ fn column_header(
         );
         text.min.x = (type_rect.right() + 3.0).min(text.right());
     }
-    widgets::text_in(painter, text, Align2::LEFT_CENTER, &column.name, theme::ui_font(theme::TEXT), color);
+    widgets::text_in(painter, text, Align2::LEFT_CENTER, &column.name, theme::strong_font(theme::TEXT), color);
     // The name's place, for a rename in place (Ctrl+R, #696).
     let pass = ui.ctx().cumulative_pass_nr();
     ui.ctx().data_mut(|d| {
@@ -961,7 +982,7 @@ fn column_body(
                 state.launch_keys.mode.selected == Some(target),
                 0.0,
             );
-            painter.hline(span, rect.bottom() + 0.5, theme::hairline(theme::border()));
+            painter.hline(span, rect.bottom() + 0.5, shape::grid_line(theme::border()));
             continue;
         }
         let key = (column.track, scene);
@@ -1154,7 +1175,7 @@ fn column_body(
         if selected && !selectable {
             painter.rect_stroke(rect, 0.0, theme::hairline(theme::text_primary()), StrokeKind::Inside);
         }
-        painter.hline(span, rect.bottom() + 0.5, theme::hairline(theme::border()));
+        painter.hline(span, rect.bottom() + 0.5, shape::grid_line(theme::border()));
     }
 
     if column.kind == ColumnKind::Return {
@@ -1163,7 +1184,7 @@ fn column_body(
             painter.hline(
                 span,
                 top + scene as f32 * slot_pitch() + slot_height() + 0.5,
-                theme::hairline(theme::border()),
+                shape::grid_line(theme::border()),
             );
         }
         return;
@@ -1189,7 +1210,7 @@ fn column_body(
         theme::panel_hover(),
         widgets::hover(ui, &response),
     );
-    painter.rect_filled(stop_rect, 0.0, fill);
+    painter.rect_filled(shape::cell(stop_rect), shape::corner(shape::CELL), fill);
     let square = Rect::from_center_size(stop_rect.center(), Vec2::splat(7.0));
     let color = if column.stop_queued { theme::accent() } else { theme::text_secondary() };
     painter.rect_stroke(square, 0.0, theme::hairline(color), StrokeKind::Inside);
@@ -1276,7 +1297,11 @@ fn slot_cell(
         Pos2::new(rect.left() + PAD + CLIP_MARK + PAD, rect.top()),
         Pos2::new(rect.right() - PAD, rect.bottom()),
     );
-    let font = theme::ui_font(theme::TEXT);
+    let font = theme::strong_font(theme::TEXT);
+    // With YOBUKO's soft shapes a clip is drawn a little inside its slot, with round corners,
+    // so slots stand apart; its slot still answers clicks to its edges.
+    let rect = shape::cell(rect);
+    let round = shape::corner(shape::CELL);
     // A clip under the pointer: `base` toward the theme's hovered background, or lighter.
     let lit = |base: Color32, light: f32| match hover_fill {
         Some(fill) => motion::mix(motion::mix(base, Color32::WHITE, light), fill, hover),
@@ -1285,7 +1310,7 @@ fn slot_cell(
     match slot.state {
         SlotState::Empty => {
             if !textured {
-                painter.rect_filled(rect, 0.0, empty);
+                painter.rect_filled(rect, round, empty);
             }
         }
         SlotState::EmptyStop => {
@@ -1294,13 +1319,13 @@ fn slot_cell(
                 // would erase the texture on native GPU surfaces.
                 painter.rect_filled(
                     rect,
-                    0.0,
+                    round,
                     crate::kit::style_class::surface_or(theme::panel_background()).gamma_multiply(hover),
                 );
             } else {
                 painter.rect_filled(
                     rect,
-                    0.0,
+                    round,
                     motion::mix(empty, crate::kit::style_class::surface_or(theme::panel_background()), hover),
                 );
             }
@@ -1311,7 +1336,7 @@ fn slot_cell(
             let base = if slot.enabled { clip_color } else { theme::control_background() };
             let fill = lit(base, 0.0);
             let fill = if column.mute { motion::mix(theme::control_background(), fill, 0.45) } else { fill };
-            painter.rect_filled(rect, 0.0, fill);
+            painter.rect_filled(rect, round, fill);
             crate::kit::liquid::paint(painter, rect, el, fill, crate::kit::liquid::Surface::Clip);
             let (mark, text) = if slot.enabled {
                 (theme::text_on(fill), theme::text_on(fill))
@@ -1323,7 +1348,7 @@ fn slot_cell(
                 // The outline breathes while the clip waits for its launch.
                 let accent = theme::accent().gamma_multiply(0.45 + 0.55 * pulse);
                 painter.rect_stroke(mark_rect(CLIP_MARK), 0.0, theme::hairline(accent), StrokeKind::Outside);
-                painter.rect_stroke(rect, 0.0, theme::hairline(accent), StrokeKind::Inside);
+                painter.rect_stroke(rect, round, theme::hairline(accent), StrokeKind::Inside);
             } else {
                 // The mark is the shape its click does: a play triangle while stopped.
                 let box_rect = mark_rect(CLIP_MARK);
@@ -1343,7 +1368,7 @@ fn slot_cell(
             // A playing clip keeps its colour, brighter, so the column still reads as its track.
             let fill = lit(clip_color, 0.10);
             let fill = if column.mute { motion::mix(theme::control_background(), fill, 0.45) } else { fill };
-            painter.rect_filled(rect, 0.0, fill);
+            painter.rect_filled(rect, round, fill);
             crate::kit::liquid::paint(painter, rect, el, fill, crate::kit::liquid::Surface::Clip);
             let ink = theme::text_on(fill);
             // The mark is the shape its click does: a stop square while playing. A stopped
@@ -1363,7 +1388,7 @@ fn slot_cell(
     // A selected clip is outlined as a selected arrangement clip is; a queued one keeps its
     // breathing outline.
     if selected && slot.state != SlotState::Queued {
-        painter.rect_stroke(rect, 0.0, egui::Stroke::new(2.0, theme::text_primary()), StrokeKind::Inside);
+        painter.rect_stroke(rect, round, egui::Stroke::new(2.0, theme::text_primary()), StrokeKind::Inside);
     }
 }
 
@@ -1409,7 +1434,7 @@ fn scene_column(
         let hover = motion::mix(theme::control_background(), theme::control_hover(), widgets::hover(ui, &response));
         let playing = motion::toward(ui.ctx(), response.id.with("playing"), scene.playing, motion::VALUE);
         let fill = motion::mix(hover, theme::control_playing(), playing);
-        painter.rect_filled(rect, 0.0, fill);
+        painter.rect_filled(shape::cell(rect), shape::corner(shape::CELL), fill);
         // The row's glyph: the play arrow while its clips wait for a launch, the stop square
         // while the row plays — the click does what the glyph says.
         let glyph = Rect::from_min_size(
@@ -1461,7 +1486,7 @@ fn scene_column(
                 18.0,
             );
         }
-        painter.hline(span, rect.bottom() + 0.5, theme::hairline(theme::border()));
+        painter.hline(span, rect.bottom() + 0.5, shape::grid_line(theme::border()));
     }
     let stop_top = top + grid.scenes.len() as f32 * slot_pitch();
     let rect = Rect::from_x_y_ranges(span, egui::Rangef::new(stop_top, stop_top + slot_height()));
@@ -1471,8 +1496,8 @@ fn scene_column(
             actions.push(Action::new("launcher.stopAll", json!({})));
         }
         painter.rect_filled(
-            rect,
-            0.0,
+            shape::cell(rect),
+            shape::corner(shape::CELL),
             motion::mix(
                 crate::kit::style_class::surface_or(theme::panel_background()),
                 theme::panel_hover(),

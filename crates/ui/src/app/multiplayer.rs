@@ -49,6 +49,8 @@ pub(super) struct MultiplayerPanel {
     linked_pending: Option<(suhina_multiplayer::SharedTransport, Option<std::time::Instant>)>,
     /// Plug-ins the shared tab uses that are not installed here: "Serum (vst3) on Lead".
     pub(super) missing_plugins: Vec<String>,
+    /// The invitation last joined with and when, for "Rejoin last session".
+    pub(super) last_join: Option<(String, std::time::Instant)>,
 }
 impl Default for MultiplayerPanel {
     fn default() -> Self {
@@ -80,10 +82,29 @@ impl Default for MultiplayerPanel {
             linked_applied: 0,
             linked_pending: None,
             missing_plugins: Vec::new(),
+            last_join: None,
         }
     }
 }
 impl MultiplayerPanel {
+    /// The running session's mode ("starting", "hosting", "connected", "reconnecting",
+    /// "disconnected", "error"), or `None` without a session.
+    pub(super) fn mode(&self) -> Option<&str> {
+        self.service.active().then(|| self.state["mode"].as_str().unwrap_or("starting"))
+    }
+
+    /// How many guests are connected to the session this computer hosts.
+    pub(super) fn guests(&self) -> u64 {
+        if self.service.active() { self.state["guests_connected"].as_u64().unwrap_or(0) } else { 0 }
+    }
+
+    /// The invitation "Rejoin last session" uses: the one last joined with, while it can still
+    /// let someone in (an invitation admits guests for 30 minutes).
+    pub(super) fn rejoinable(&self) -> Option<&str> {
+        const LASTS: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+        self.last_join.as_ref().filter(|(_, since)| since.elapsed() < LASTS).map(|(invitation, _)| invitation.as_str())
+    }
+
     /// The online code by default; the typed private address when hosting on the local network.
     fn host_address(&self) -> String {
         if self.online { suhina_multiplayer::ONLINE.to_owned() } else { self.address.clone() }
@@ -552,58 +573,147 @@ impl App {
             ui.label("Waiting for the host to confirm publication…");
         }
     }
-    pub(super) fn show_multiplayer(&mut self, ui: &mut Ui) {
-        let active = self.multiplayer.service.active();
-        ui.add_space(theme::PAD);
-        ui.heading("Multiplayer");
-        ui.label("Make music together over the Internet: create a session, read the short code to your partner (in a voice chat, for example) or send it, and they type it to join. No account needed.");
-        ui.weak("Share a project with its loaded audio, share a MIDI-only copy, or create the four-track demo. MIDI notes, clips and mixer controls are shared; each computer has its own playback.");
-        if !active {
+    /// Multiplayer before a session runs: Piou, then two cards, one to open a room and one to
+    /// join a friend's. What the buttons do in detail waits behind "How sharing works".
+    fn show_multiplayer_lobby(&mut self, ui: &mut Ui) {
+        use super::menu_bar::WorkspaceMode;
+        self.space_page(
+            ui,
+            WorkspaceMode::Multiplayer,
+            "Multiplayer",
+            "Make music together over the Internet, wherever your friends are. One of you opens a room and \
+             reads its short code out loud; the others type it. No account needed.",
+            |app, ui| {
+                ui.columns(2, |columns| {
+                    shell::card(&mut columns[0], "Open a room", |ui| app.lobby_host(ui));
+                    shell::card(&mut columns[1], "Join a friend", |ui| app.lobby_join(ui));
+                });
+                app.multiplayer_messages(ui);
+                ui.add_space(theme::PAD);
+                egui::CollapsingHeader::new("How sharing works").id_salt("multiplayer-how").show(ui, |ui| {
+                    ui.weak("Share a project with its loaded audio, share a MIDI-only copy, or create the four-track demo. MIDI notes, clips and mixer controls are shared; each computer has its own playback.");
+                    ui.weak("Audio sharing copies loaded sounds into portable WAV files, stored under the application data Shared projects folder. Up to 4096 sounds, 2 GiB each and 16 GiB total. Each computer keeps received sounds in a Sound cache (up to 20 GiB), so a sound is sent only once and a cut transfer resumes. A heavy project opens before all its sounds arrive; their clips stay silent until then. Original files stay intact.");
+                    ui.weak("MIDI copies support up to 64 tracks, FM Synth and Utility parameters. Audio, plugins and other instruments are refused. Local metadata and hardware mappings are omitted; the original stays intact.");
+                    if app.multiplayer.online {
+                        ui.weak("Computers connect directly, through home routers, with nothing to configure. When a router blocks that, a free public relay forwards the encrypted traffic; it cannot read the project. Both computers need the same Suhina version.");
+                    } else {
+                        ui.weak("Use your private network address for another computer. 127.0.0.1 is only for two instances on this computer; :0 selects a free port.");
+                    }
+                });
+            },
+        );
+    }
+
+    /// The lobby's first card: where the room is reachable, and what it starts with.
+    fn lobby_host(&mut self, ui: &mut Ui) {
+        ui.horizontal_wrapped(|ui| {
+            ui.radio_value(&mut self.multiplayer.online, true, "Over the Internet");
+            ui.radio_value(&mut self.multiplayer.online, false, "On this local network");
+        });
+        if !self.multiplayer.online {
             ui.horizontal(|ui| {
-                ui.radio_value(&mut self.multiplayer.online, true, "Over the Internet");
-                ui.radio_value(&mut self.multiplayer.online, false, "On this local network");
-            });
-            ui.horizontal(|ui| {
-                if !self.multiplayer.online {
-                    let label = ui.label("Host address");
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.multiplayer.address).desired_width(200.0).char_limit(64),
-                    )
+                let label = ui.label("Host address");
+                ui.add(egui::TextEdit::singleline(&mut self.multiplayer.address).desired_width(200.0).char_limit(64))
                     .labelled_by(label.id);
-                }
-                if ui.button("Create session").clicked() {
-                    let address = self.multiplayer.host_address();
-                    self.multiplayer_command("multiplayer.host", json!({"address":address}));
-                }
             });
-            if ui.add_enabled(self.session().is_some(), egui::Button::new("Share current MIDI project")).clicked() {
-                self.host_current_midi();
-            }
-            if ui.add_enabled(self.session().is_some(), egui::Button::new("Share project + audio")).clicked() {
+        }
+        ui.add_space(theme::PAD);
+        if shell::main_button(ui, super::menu_bar::WorkspaceMode::Multiplayer, "Create session")
+            .on_hover_text("Open a room with the four-track demo")
+            .clicked()
+        {
+            let address = self.multiplayer.host_address();
+            self.multiplayer_command("multiplayer.host", json!({"address":address}));
+        }
+        ui.add_space(theme::PAD);
+        ui.weak("Or open it with the project showing:");
+        ui.horizontal_wrapped(|ui| {
+            if ui
+                .add_enabled(self.session().is_some(), egui::Button::new("Share project + audio"))
+                .on_disabled_hover_text("Open a project first")
+                .clicked()
+            {
                 self.host_current_audio();
             }
-            ui.weak("Audio sharing copies loaded sounds into portable WAV files, stored under the application data Shared projects folder. Up to 4096 sounds, 2 GiB each and 16 GiB total. Each computer keeps received sounds in a Sound cache (up to 20 GiB), so a sound is sent only once and a cut transfer resumes. A heavy project opens before all its sounds arrive; their clips stay silent until then. Original files stay intact.");
-            ui.weak("MIDI copies support up to 64 tracks, FM Synth and Utility parameters. Audio, plugins and other instruments are refused. Local metadata and hardware mappings are omitted; the original stays intact.");
-            if self.multiplayer.online {
-                ui.weak("Computers connect directly, through home routers, with nothing to configure. When a router blocks that, a free public relay forwards the encrypted traffic; it cannot read the project. Both computers need the same Suhina version.");
-            } else {
-                ui.weak("Use your private network address for another computer. 127.0.0.1 is only for two instances on this computer; :0 selects a free port.");
+            if ui
+                .add_enabled(self.session().is_some(), egui::Button::new("Share current MIDI project"))
+                .on_disabled_hover_text("Open a project first")
+                .clicked()
+            {
+                self.host_current_midi();
             }
+        });
+    }
+
+    /// The lobby's second card: back into the session just left in one click, or a code to type.
+    fn lobby_join(&mut self, ui: &mut Ui) {
+        if let Some(invitation) = self.multiplayer.rejoinable().map(str::to_owned) {
+            if shell::main_button(ui, super::menu_bar::WorkspaceMode::Multiplayer, "Rejoin last session")
+                .on_hover_text("Go back into the session you were in, with the same invitation")
+                .clicked()
+            {
+                self.join_session(invitation);
+            }
+            ui.weak("An invitation lets you back in for 30 minutes after the host made it.");
             ui.add_space(theme::PAD);
-            let label = ui.label("Invitation code from the host");
-            ui.add(
-                egui::TextEdit::multiline(&mut self.multiplayer.join)
-                    .hint_text("Short code such as 7-piano-tigre-lune, or the full invitation")
-                    .desired_rows(3)
-                    .char_limit(8192)
-                    .desired_width(f32::INFINITY),
-            )
-            .labelled_by(label.id);
-            if ui.button("Join session").clicked() {
-                let invitation = self.multiplayer.join.clone();
-                self.multiplayer_command("multiplayer.join", json!({"invitation":invitation}));
+        }
+        let label = ui.label("Invitation code from the host");
+        ui.add(
+            egui::TextEdit::multiline(&mut self.multiplayer.join)
+                .hint_text("Short code such as 7-piano-tigre-lune, or the full invitation")
+                .desired_rows(2)
+                .char_limit(8192)
+                .desired_width(f32::INFINITY),
+        )
+        .labelled_by(label.id);
+        ui.add_space(theme::PAD / 2.0);
+        let typed = !self.multiplayer.join.trim().is_empty();
+        if ui
+            .add_enabled(typed, egui::Button::new("Join session"))
+            .on_disabled_hover_text("Type the code first")
+            .clicked()
+        {
+            let invitation = self.multiplayer.join.clone();
+            self.join_session(invitation);
+        }
+    }
+
+    /// Joins the session `invitation` (a short code or a full invitation) leads to, and keeps it
+    /// for "Rejoin last session".
+    fn join_session(&mut self, invitation: String) {
+        self.multiplayer_command("multiplayer.join", json!({"invitation":invitation}));
+        if self.multiplayer.error.is_none() {
+            self.multiplayer.last_join = Some((invitation.trim().to_owned(), std::time::Instant::now()));
+        }
+    }
+
+    /// Missing plug-ins and the last refusal, under either page.
+    fn multiplayer_messages(&mut self, ui: &mut Ui) {
+        if !self.multiplayer.missing_plugins.is_empty() {
+            ui.add_space(theme::PAD);
+            ui.colored_label(theme::recording(), "Plug-ins missing on this computer");
+            for plugin in &self.multiplayer.missing_plugins {
+                ui.label(plugin);
             }
-        } else {
+            ui.weak("These devices stay silent here; their settings are kept. Install the same plug-ins to hear what the host hears.");
+        }
+        if let Some(error) = &self.multiplayer.error {
+            ui.colored_label(theme::recording(), error);
+            if ui.button("Dismiss multiplayer message").clicked() {
+                self.multiplayer.error = None;
+            }
+        }
+    }
+
+    pub(super) fn show_multiplayer(&mut self, ui: &mut Ui) {
+        let active = self.multiplayer.service.active();
+        if !active {
+            self.show_multiplayer_lobby(ui);
+            return;
+        }
+        ui.add_space(theme::PAD);
+        ui.heading("Multiplayer");
+        {
             let mode = self.multiplayer.state["mode"].as_str().unwrap_or("starting").to_owned();
             ui.horizontal(|ui| {
                 ui.label(format!("Status: {}", status_text(&mode)));
@@ -797,20 +907,7 @@ impl App {
                 }
             }
         }
-        if !self.multiplayer.missing_plugins.is_empty() {
-            ui.add_space(theme::PAD);
-            ui.colored_label(theme::recording(), "Plug-ins missing on this computer");
-            for plugin in &self.multiplayer.missing_plugins {
-                ui.label(plugin);
-            }
-            ui.weak("These devices stay silent here; their settings are kept. Install the same plug-ins to hear what the host hears.");
-        }
-        if let Some(error) = &self.multiplayer.error {
-            ui.colored_label(theme::recording(), error);
-            if ui.button("Dismiss multiplayer message").clicked() {
-                self.multiplayer.error = None;
-            }
-        }
+        self.multiplayer_messages(ui);
         ui.add_space(theme::PAD);
         ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Plug-ins and their settings travel with the copy; each computer runs its own installed plug-ins. Recording directly in the shared tab comes later.");
     }

@@ -22,6 +22,111 @@ fresh Windows installer is built from it.
 - **Next criterion:** the Windows installer built from this branch installs and opens the studio,
   Mixxx and rbxport on the owner's PC.
 
+## The DJ space gets Mixxx's deck and mixer functions, part 1 — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the owner wants every function of Mixxx in YOBUKO's own DJ space, drawn in the rounded
+look, not a short selection. The work comes in three parts; this is the first (decks, mixer,
+library and the controller's pads). Upstream Suhina must stay easy to pull in, so the DJ code
+lives in YOBUKO's own files.
+
+- **Code written:** each deck now has **8 hot cues** (coloured pads, kept with the track in the
+  DJ library), **loops** (IN, OUT, RELOOP/EXIT, beat loops of 1/32 to 64 beats with /2 and ×2),
+  **beat jumps**, **nudge** buttons, **back to start**, **EJECT** and a tempo range button
+  (±8, ±16, ±50 %); the waveforms mark the cues and the loop. The mixer gained a **Trim** knob
+  and a **meter** per deck, a **Master** level with a stereo meter, the **headphones' level**
+  and their **cue/master blend**. The library can be **searched**, **sorted** by title, BPM, key
+  or length, and shows **playlists** (new playlist, add to / remove from, delete). The
+  **DDJ-FLX4** drives the new parts too: SHIFT, hot cue, beat loop and beat jump pads, loop
+  buttons, CUE/LOOP CALL, the quick jumps, TRIM and the headphones mix; its jog wheels now
+  nudge a playing deck. The decks play through a player of YOBUKO's own
+  (`crates/engine/src/deck_voice.rs`), and Suhina's preview player is back to upstream's code.
+- **Checks passed (Linux, cloud container):** engine tests for loops without a seam, the nudge,
+  trim, master, meters and the headphones blend; session tests for `dj.deck.loop`,
+  `dj.deck.bend`, the trim and the mixer's new values; UI tests for the hot cues, loops, beat
+  jumps, tempo range, eject, the mixer and the library's search, sort and playlists; a
+  screenshot drawn by the real program.
+- **Limits:** still no key lock, effects, beat-aligned sync, sampler, tap tempo, recording or
+  four decks (parts 2 and 3). A hot cue cannot be set while the library analyses a file. Not
+  tried with a real DDJ-FLX4, real speakers or headphones, or on Windows and macOS.
+- **Next criterion:** the owner checks in a test build that the decks and mixer have the
+  buttons they use in Mixxx; then part 2 (key lock, effects, beat sync and grid, sampler).
+
+## Soft, rounded studio like the YOBUKO One mock-up — 11 November 2026 (branch `claude/project-thread-mkzv4x`)
+
+**Goal:** the owner found the studio "all square" with a thin font, and liked the rounder look of
+the YOBUKO One mock-up much better. The real studio should look like the mock-up, in every one of
+the twelve YOBUKO themes.
+
+- **Code written:** with a YOBUKO theme (`yobuko` and its eleven variants), the studio draws
+  **soft shapes** (`crates/ui/src/kit/shape.rs`): clips, track headers, scene and stop buttons are
+  rounded and stand a little apart with no grid lines between them; the launcher, the mixer, the
+  browser and the detail area are rounded **cards** on a deeper background; mixer strips, buttons,
+  value fields, dropdowns, menus and windows have round corners; fader caps are flat soft tabs;
+  browser rows light up as rounded pills. Clip, track and strip names use **Manrope Bold**, which
+  reads better than the regular weight. Nothing moves: every button still answers clicks in the
+  same place, so the tests and the muscle memory stay valid. Suhina's own themes stay square.
+- **Checks passed (Linux, cloud container):** the UI tests; screenshots drawn by the real program
+  in Ink & Echo and Sakura, and Suhina Studio to check it is unchanged.
+- **Limits:** the toolbar layout and text sizes are unchanged (making them larger would move
+  controls); the DJ page is restyled in its own branch.
+- **Next criterion:** the owner opens a test build and says whether it now feels like the mock-up.
+
+## DJ mixing inside YOBUKO's window — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the owner wants live DJ mixing in the same window as the studio, never in Mixxx's
+separate window (asked again on 11 November after the shell merged). A program cannot put
+another program's window inside its own on macOS, so YOBUKO now draws its own decks.
+
+- **Code written:** the **DJ** tab shows two decks and a mixer in YOBUKO's window. Each deck has
+  its track's waveform (the whole track and a close view around the playhead), **Cue**, **Play**,
+  **Sync** and a tempo slider; the mixer has **High**, **Mid**, **Low** and **Filter** knobs,
+  headphones and a level per deck, and a crossfader. The DJ library sits under them with **Load
+  A** / **Load B**; audio files and folders dropped on the page, the Music folder and projects
+  sent to DJ go into it. A **Pioneer DDJ-FLX4** plugged in drives it all (Play, Cue, Sync, Load,
+  browse, faders, EQ, filter, tempo, crossfader, jog wheels) while the DJ space shows. The sound
+  is the engine's two decks, which gained a speed, a three-band EQ and a filter each. Mixxx is
+  still one button away (**Open Mixxx instead**).
+- **Checks passed (Linux, cloud container):** engine tests for the speed, the EQ kills and the
+  filter; session tests for the new `dj.deck.rate` and `dj.deck.tone` commands; UI tests for the
+  page, loading, Sync, drops into the library and the FLX4 (with a simulated controller); a
+  screenshot drawn by the real program.
+- **Limits:** not tried with a real DDJ-FLX4, real speakers or headphones, or on Windows and
+  macOS. No key lock (the pitch follows the tempo), no loops, hot cues, effects or recording yet;
+  the controller's lights stay off. Beat-matching is by tempo only: Sync does not line up the
+  beats.
+- **Next criterion:** the owner mixes two tracks with the FLX4 in a Windows test build and says
+  whether it feels right.
+
+## One shell for every space, and Piou — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the studio, live DJ mixing and USB export should feel like one program that is pleasant
+to move around in, with the themes kept, and coming back into a shared session should take one
+click. The whole proposal is a clickable mock-up ("YOBUKO One"); it is built in three steps.
+
+- **Code written (step 1, the studio):** the mode pill became four **tabs** at the top right,
+  **Studio**, **Multiplayer**, **DJ** and **USB**; the tab of the space showing is filled in its
+  colour. **Piou**, the mascot, lives beside the tabs and on each space's page: it nods on the beat
+  while the project plays, calls while a room waits for friends, hops when one arrives, worries
+  while a dropped connection is being restored and sleeps when nothing moves. It also says in a
+  short note what happens away from the page that would tell it (a friend joined, the connection
+  dropped, a track reached the DJ library). While a shared session runs, its state shows beside
+  the tabs in every space. The Multiplayer page before a session is two cards, **Open a room**
+  and **Join a friend**, with **Rejoin last session** for the invitation just used; the long
+  explanations wait behind **How sharing works**. USB export has its own page instead of a button
+  on the DJ page.
+- **Checks passed (Linux, cloud container):** the UI tests, including new ones for the tabs, the
+  USB space, Piou's moods and notes and the rejoin button; screenshots of the four spaces drawn by
+  the real program.
+- **Limits:** Piou is redrawn from shapes (the first bird pictures are no longer available as
+  separate files), and the owner has not yet said whether this drawing is the one to keep.
+  **Rejoin last session** is remembered until YOBUKO closes, not after a restart. Mixxx and
+  rbxport still open as their own windows without the tabs.
+- **Planned, not written:** step 2, the same bar in rbxport's window and over Mixxx, with the
+  window staying in place when the space changes; step 3, friends remembered after a first
+  session so that they join an open room without any code.
+- **Next criterion:** the owner tries the mock-up and a test build of step 1 on Windows and says
+  whether the direction and Piou are right.
+
 ## Ready-to-install releases and an English repository — 1 November 2026 (branch `feature/online`)
 
 **Goal:** friends download one file from the Releases page and double-click it; the repository

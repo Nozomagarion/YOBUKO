@@ -57,10 +57,7 @@ pub(crate) enum PreviewCommand {
         data: Arc<AudioData>,
         from: f64,
         gain: f32,
-        resume: bool,
     },
-    Pause(bool),
-    Seek(f64),
     Notes {
         notes: Box<PreviewNotes>,
         gain: f32,
@@ -201,7 +198,6 @@ pub(crate) struct Preview {
     events: Vec<(usize, NoteEvent)>,
     buffer: Vec<f32>,
     sample_rate: u32,
-    paused: bool,
     /// How far a level glides towards its target each frame.
     glide: f32,
     pub(crate) monitor: Arc<PreviewMonitor>,
@@ -230,7 +226,6 @@ impl Preview {
             events: Vec::with_capacity(MAX_EVENTS),
             buffer: vec![0.0; MAX_BLOCK * 2],
             sample_rate,
-            paused: false,
             glide: (1.0 - (-1.0 / (GLIDE_SECONDS * f64::from(sample_rate.max(1)))).exp()) as f32,
             monitor: Arc::new(PreviewMonitor::default()),
         }
@@ -246,7 +241,7 @@ impl Preview {
     }
 
     pub(crate) fn playing(&self) -> bool {
-        !self.paused && (self.sample.is_some() || self.notes.is_some())
+        self.sample.is_some() || self.notes.is_some()
     }
 
     /// Applies the commands that have arrived. A command waits while the retired queue has no
@@ -274,27 +269,7 @@ impl Preview {
                 continue;
             }
             match command {
-                PreviewCommand::Pause(paused) => {
-                    self.paused = paused;
-                }
-                PreviewCommand::Seek(from) => {
-                    if let Some(play) = self.sample.as_mut() {
-                        play.position = (from * f64::from(play.data.sample_rate)).clamp(0.0, play.data.frames() as f64);
-                        play.played = 0;
-                        self.monitor.seconds.store(
-                            (play.position / f64::from(play.data.sample_rate.max(1))).to_bits(),
-                            Ordering::Relaxed,
-                        );
-                    }
-                }
-                PreviewCommand::Sample { data, from, gain, resume } => {
-                    if resume && self.sample.as_ref().is_some_and(|p| Arc::ptr_eq(&p.data, &data)) {
-                        if let Some(retired) = self.retired.as_mut() {
-                            let _full = retired.push(Retired::Sample(data));
-                        }
-                        self.paused = false;
-                        continue;
-                    }
+                PreviewCommand::Sample { data, from, gain } => {
                     self.stop(chains, 0);
                     let rate = f64::from(data.sample_rate.max(1));
                     let position = (from.max(0.0) * rate).min(data.frames() as f64);
@@ -380,7 +355,6 @@ impl Preview {
     /// Stops whatever plays, releasing its held notes at `frame` of the block, and sends it
     /// back. Only called when the retired queue has room for [`RETIRED_AT_ONCE`].
     fn stop(&mut self, chains: &mut [Chain], frame: usize) {
-        self.paused = false;
         if let Some(sample) = self.sample.take()
             && let Some(retired) = self.retired.as_mut()
         {
@@ -495,10 +469,6 @@ impl Preview {
     /// Adds the preview to a block of `frames` frames after the track chains have run.
     pub(crate) fn finish(&mut self, out: &mut [f32], frames: usize, chains: &mut [Chain]) {
         self.finish_tail(out, frames);
-        if self.paused {
-            self.monitor.playing.store(false, Ordering::Relaxed);
-            return;
-        }
         let mut ended = false;
         if let Some(play) = self.notes.as_mut() {
             if play.chain.is_none()

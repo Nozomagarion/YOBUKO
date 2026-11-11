@@ -1393,7 +1393,7 @@ pub(super) fn paint_clip(
         strength,
         off,
     ));
-    let radius = own.radius_or(2.0);
+    let radius = own.radius_or(if crate::kit::shape::round() { f32::from(crate::kit::shape::CAP) + 1.0 } else { 2.0 });
     // A clip is content, not a background: it blends with the lane under it, so its alpha never
     // reaches the window and the desktop never shows through it.
     painter.rect_filled(rect, radius, body);

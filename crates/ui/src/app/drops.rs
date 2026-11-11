@@ -50,6 +50,13 @@ impl App {
         let dropped: Vec<PathBuf> = ui.input(|i| {
             i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect()
         });
+        // The DJ space takes audio files and folders into its library.
+        if self.dj.active && !self.dj.usb {
+            if !dropped.is_empty() {
+                self.take_dj_drops(dropped);
+            }
+            return Vec::new();
+        }
         let is = |path: &PathBuf, ext: &str| path.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext));
         let mut opened = false;
         let mut clips = Vec::new();

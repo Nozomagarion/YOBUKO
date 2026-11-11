@@ -111,6 +111,12 @@ impl App {
                 browser_view::show(ui, panel, &mut self.browser, cx)
             })
             .inner;
+        // YOBUKO's soft shapes: the browser is a card apart from the view beside it.
+        crate::kit::shape::card_edges(
+            &ui.painter().with_clip_rect(panel.intersect(area)),
+            panel,
+            crate::kit::shape::ground(),
+        );
         // A press anywhere outside the browser gives the arrow keys back to the window.
         if ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !panel.contains(p))) {
             self.browser.list_focused = false;

@@ -337,6 +337,7 @@ impl App {
             if let Some(notice) = self.themes.take_notice() {
                 self.status = Status::Hint(notice);
             }
+            crate::kit::shape::set_round(crate::kit::shape::theme_is_round(&self.settings.theme));
             theme::set_palette(ui.ctx(), self.themes.palette(&self.settings.theme));
         }
         if outcome.keymap_changed {

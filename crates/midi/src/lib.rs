@@ -141,6 +141,10 @@ impl MidiSystem for Midi {
                 &port,
                 &format!("{CLIENT} input"),
                 move |stamp, message, _| {
+                    // A DJ controller driving the decks takes its messages as they are.
+                    if sink.offer(id, message) {
+                        return;
+                    }
                     let parsed = parse(message);
                     // Everything but notes, which a player sends many of: whether a wheel or a
                     // knob arrives at all, and what it was read as (docs/debugging.md).

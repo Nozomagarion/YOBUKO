@@ -27,7 +27,7 @@
       <p align="center"><a href="https://github.com/mixxxdj/mixxx"><img src="assets/readme/logo-mixxx.png" alt="Mixxx logo" width="88"></a></p>
       <h3 align="center"><a href="https://github.com/mixxxdj/mixxx">Mixxx</a></h3>
       <p align="center"><strong>🎧 The live DJ</strong></p>
-      <p align="center">The free DJ software <strong>by the Mixxx team</strong>: decks, effects, hot cues and mappings for hundreds of controllers. <strong>YOBUKO's DJ mode is Mixxx itself</strong>, ready for the Pioneer DDJ-FLX4.</p>
+      <p align="center">The free DJ software <strong>by the Mixxx team</strong>: decks, effects, hot cues and mappings for hundreds of controllers. Ships with YOBUKO, one click from its own DJ decks.</p>
       <p align="center"><a href="https://github.com/mixxxdj/mixxx"><code>mixxxdj/mixxx</code></a></p>
     </td>
     <td width="33%" valign="top">
@@ -52,7 +52,7 @@
 
 One of you starts a session and reads out a short code. The others type it, and you are all in the same project, whether you live on the next street or on the other side of the country. Each person plays and listens on their own computer, and every change lands for everyone.
 
-When the track is ready, switch to **DJ** mode: play it live in **Mixxx** with your controller, or put it on a USB stick for the club's players with **rbxport**. **Make it together, play it live, take it to the club: one app.**
+When the track is ready, switch to **DJ** mode: play it live on YOBUKO's own decks with your controller, or put it on a USB stick for the club's players with **rbxport**. **Make it together, play it live, take it to the club: one app.**
 
 <br>
 
@@ -82,17 +82,20 @@ The full Suhina studio: session and arrangement views, MIDI and audio tracks, in
 
 ## 💿 DJ
 
-<p align="center"><img src="assets/readme/mixxx.webp" alt="DJ mode: Mixxx with two decks, hot cues and the music library" width="100%"></p>
+<p align="center"><img src="assets/readme/dj-decks.webp" alt="DJ mode in YOBUKO's window: two decks with waveforms, hot cues and loops, a mixer with trim, EQ, filter, meters and crossfader, and the music library" width="100%"></p>
 
-**Play live with Mixxx.** Click the mode pill at the top right, pick **DJ**, then **Open Mixxx**.
+**Mix live, right in YOBUKO.** Click the **DJ** tab at the top right: two decks and a mixer, in the same window as the studio.
 
-- **Plug in a Pioneer DDJ-FLX4 and play.** YOBUKO sets up its mapping for you. Other controllers work too: Mixxx has 200+ built-in mappings and MIDI Learn.
-- Mixxx comes **inside YOBUKO** on macOS (Apple Silicon) and Windows. On Linux, YOBUKO uses the Mixxx installed on your computer.
-- Already use Mixxx? Your own copy keeps its settings: the one inside YOBUKO has its own profile.
+- **The decks:** Cue, Play, Sync, nudge, tempo (±8, ±16 or ±50 %), 8 hot cues kept with each track, loops (in, out, reloop, beat loops) and beat jumps.
+- **The mixer:** trim, three-band EQ, filter, level and meter per deck, master level and meter, headphones with a cue/master blend, crossfader.
+- **The library:** search, sort by title, BPM, key or length, and playlists.
+- **Plug in a Pioneer DDJ-FLX4 and play.** Play, Cue, Sync, Load, the faders, EQ, trim, filters, tempo, crossfader, jog wheels, loop buttons and the hot cue, beat loop and beat jump pads drive the decks, nothing to set up.
+- **Your music:** drop audio files or folders on the page, or click **Add my Music folder**. Finished a track in the studio? **Send this project to DJ…**
+- **Prefer Mixxx?** **Open Mixxx instead** starts Mixxx, which comes inside YOBUKO on macOS (Apple Silicon) and Windows, with its hundreds of controller mappings.
 
 <p align="center"><img src="assets/readme/rbxport.webp" alt="USB export: the rbxport app with a waveform, cue points and a playlist" width="100%"></p>
 
-**Take it to the club with rbxport.** Click **Prepare a USB stick (rbxport)** to write your music, playlists and cues to a Rekordbox stick for Pioneer CDJ / XDJ players.
+**Take it to the club with rbxport.** Click the **USB** tab, then **Open rbxport**, to write your music, playlists and cues to a Rekordbox stick for Pioneer CDJ / XDJ players.
 
 ### 📚 One music library for both
 
@@ -207,7 +210,7 @@ Please follow [CONTRIBUTING.md](CONTRIBUTING.md) and the [security notes](docs/s
 | Project | What comes from it | What YOBUKO adds |
 |---|---|---|
 | **[Suhina](https://github.com/suhina-daw/suhina-daw)** | The music studio: native interface, audio engine, project model, instruments, effects, plug-in hosting, CLI and automation. | Online multiplayer, the DJ bridge and the combined distribution. |
-| **[Mixxx](https://github.com/mixxxdj/mixxx)** by **the Mixxx team** | The Mixxx DJ application (GPL-2.0-or-later), shipped as YOBUKO's live DJ mode, and the community DDJ-FLX4 mapping by [ElHanko](https://github.com/ElHanko/mixxx-ddj-flx4-mapping) (MIT). | YOBUKO opens Mixxx from its DJ pill, installs the FLX4 mapping and keeps its library in sync with rbxport. |
+| **[Mixxx](https://github.com/mixxxdj/mixxx)** by **the Mixxx team** | The Mixxx DJ application (GPL-2.0-or-later), shipped as YOBUKO's live DJ mode, and the community DDJ-FLX4 mapping by [ElHanko](https://github.com/ElHanko/mixxx-ddj-flx4-mapping) (MIT). | YOBUKO opens Mixxx from its DJ tab, installs the FLX4 mapping and keeps its library in sync with rbxport. |
 | **[rbxport](https://github.com/chrisle/rbxport)** by **chrisle and contributors** | The rbxport desktop app (library, analysis, USB export, PRO DJ LINK) and its analysis and Rekordbox USB export libraries. | rbxport ships inside YOBUKO for USB export, and shares its library with Mixxx. |
 
 Read [Suhina's original README](UPSTREAM_README.md), [ATTRIBUTION.md](ATTRIBUTION.md), [NOTICE](NOTICE), the rbxport provenance files ([analysis](third_party/rbxport-analysis/VENDORED.md), [exporter](third_party/rbxport-export/VENDORED.md), [app](third_party/rbxport-app/VENDORED.md)) and the exact [source pins](fork-sources.json). Original authors keep their copyright. This is an independent experimental fork, not an official release or endorsement from any of these projects, and it contains no proprietary music-software code or content.

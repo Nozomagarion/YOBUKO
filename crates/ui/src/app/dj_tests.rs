@@ -17,8 +17,8 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
     super::menu_bar::pick_mode(&mut harness, "DJ");
     harness.run();
     assert!(harness.state().dj.active);
-    assert!(harness.query_by_label("DJ mode · Mixxx").is_some());
-    assert!(harness.state().dj.note.is_some(), "switching to DJ starts Mixxx or says why not");
+    assert!(harness.query_by_label("Play deck A").is_some(), "the decks are in the window");
+    assert!(harness.state().dj.mixxx_watch.is_none(), "switching to DJ opens no other window");
     super::menu_bar::pick_mode(&mut harness, "Studio");
     harness.run();
     assert!(!harness.state().dj.active);
@@ -31,9 +31,9 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
         .with_size(Vec2::new(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
-    assert!(harness.query_by_label("Open Mixxx").is_some());
-    assert!(harness.query_by_label("Prepare a USB stick (rbxport)").is_some());
-    assert!(harness.query_by_label("App mode: DJ").is_some());
+    assert!(harness.query_by_label("Open Mixxx instead").is_some());
+    assert!(harness.query_by_label("Crossfader").is_some());
+    assert!(harness.query_by_label("DJ space").is_some());
 }
 
 #[test]
@@ -88,6 +88,7 @@ fn a_project_rendered_for_dj_mode_joins_the_dj_library_even_when_another_tab_is_
     app.poll_export(&egui::Context::default());
     assert!(app.dj.active);
     assert!(!app.dj.running_export_to_dj);
+    assert_eq!(app.dj.decks.imports.front().map(|(file, _)| file), Some(&audio), "it joins the decks' library");
     let requests: Vec<_> = std::fs::read_dir(inbox.path()).unwrap().map(|e| e.unwrap().path()).collect();
     assert_eq!(requests.len(), 1);
     assert_eq!(std::fs::read_to_string(&requests[0]).unwrap(), format!("{}\n", audio.display()));
