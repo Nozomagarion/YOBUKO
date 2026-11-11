@@ -9,6 +9,7 @@
 //! `midi.*` commands belong to Suhina, not to one project.
 
 use std::collections::BTreeSet;
+use std::sync::mpsc::{Receiver, SyncSender};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde_json::{Value, json};
@@ -35,7 +36,17 @@ pub trait MidiSystem: Send + Sync {
 #[derive(Debug, Default)]
 pub struct LiveInput {
     sender: Mutex<Option<LiveSender>>,
+    /// The ports whose messages go, untouched, to the window instead (a DJ controller while the
+    /// DJ space shows), and where.
+    capture: Mutex<Option<(Vec<u64>, SyncSender<ControllerMessage>)>>,
 }
+
+/// A message from a captured controller: its port ([`suhina_engine::port_id`]) and the three
+/// bytes of a MIDI channel message (fewer are padded with 0).
+pub type ControllerMessage = (u64, [u8; 3]);
+
+/// How many controller messages wait for the window at most; more are dropped.
+const CAPTURED: usize = 1024;
 
 impl LiveInput {
     /// Sends `event`, from an unknown port, to the engine that plays now: only tracks that hear
@@ -56,6 +67,42 @@ impl LiveInput {
     /// went nowhere.
     pub fn send_at(&self, source: LiveSource, event: LiveEvent, time: u64) -> bool {
         self.lock().as_mut().is_some_and(|sender| sender.send_at(source, event, time))
+    }
+
+    /// From now on, what the ports `ports` send goes to the returned receiver as it came, and
+    /// no longer to the engine: a DJ controller drives the decks, not an armed track. Replaces
+    /// the capture before.
+    pub fn capture(&self, ports: Vec<u64>) -> Receiver<ControllerMessage> {
+        let (sender, receiver) = std::sync::mpsc::sync_channel(CAPTURED);
+        *self.captured() = Some((ports, sender));
+        receiver
+    }
+
+    /// Every port plays into the engine again.
+    pub fn release(&self) {
+        *self.captured() = None;
+    }
+
+    /// Called by the MIDI layer with each message `port` sends, before reading it as a note:
+    /// true when a capture took it, and then it goes no further.
+    pub fn offer(&self, port: u64, message: &[u8]) -> bool {
+        let captured = self.captured();
+        let Some((ports, sender)) = captured.as_ref() else { return false };
+        if !ports.contains(&port) {
+            return false;
+        }
+        let mut bytes = [0; 3];
+        for (byte, from) in bytes.iter_mut().zip(message) {
+            *byte = *from;
+        }
+        // A full queue drops the message: the window is not reading, and a knob's next value
+        // follows.
+        let _dropped = sender.try_send((port, bytes));
+        true
+    }
+
+    fn captured(&self) -> MutexGuard<'_, Option<(Vec<u64>, SyncSender<ControllerMessage>)>> {
+        self.capture.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Notes go to `sender` from now on.

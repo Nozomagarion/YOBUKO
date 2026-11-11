@@ -27,7 +27,7 @@
       <p align="center"><a href="https://github.com/mixxxdj/mixxx"><img src="assets/readme/logo-mixxx.png" alt="Mixxx logo" width="88"></a></p>
       <h3 align="center"><a href="https://github.com/mixxxdj/mixxx">Mixxx</a></h3>
       <p align="center"><strong>🎧 The live DJ</strong></p>
-      <p align="center">The free DJ software <strong>by the Mixxx team</strong>: decks, effects, hot cues and mappings for hundreds of controllers. <strong>YOBUKO's DJ mode is Mixxx itself</strong>, ready for the Pioneer DDJ-FLX4.</p>
+      <p align="center">The free DJ software <strong>by the Mixxx team</strong>: decks, effects, hot cues and mappings for hundreds of controllers. Ships with YOBUKO, one click from its own DJ decks.</p>
       <p align="center"><a href="https://github.com/mixxxdj/mixxx"><code>mixxxdj/mixxx</code></a></p>
     </td>
     <td width="33%" valign="top">
@@ -52,7 +52,7 @@
 
 One of you starts a session and reads out a short code. The others type it, and you are all in the same project, whether you live on the next street or on the other side of the country. Each person plays and listens on their own computer, and every change lands for everyone.
 
-When the track is ready, switch to **DJ** mode: play it live in **Mixxx** with your controller, or put it on a USB stick for the club's players with **rbxport**. **Make it together, play it live, take it to the club: one app.**
+When the track is ready, switch to **DJ** mode: play it live on YOBUKO's own decks with your controller, or put it on a USB stick for the club's players with **rbxport**. **Make it together, play it live, take it to the club: one app.**
 
 <br>
 
@@ -82,17 +82,17 @@ The full Suhina studio: session and arrangement views, MIDI and audio tracks, in
 
 ## 💿 DJ
 
-<p align="center"><img src="assets/readme/mixxx.webp" alt="DJ mode: Mixxx with two decks, hot cues and the music library" width="100%"></p>
+<p align="center"><img src="assets/readme/dj-decks.webp" alt="DJ mode in YOBUKO's window: two decks with waveforms, a mixer with EQ, filter and crossfader, and the music library" width="100%"></p>
 
-**Play live with Mixxx.** Click the **DJ** tab at the top right, then **Open Mixxx**.
+**Mix live, right in YOBUKO.** Click the **DJ** tab at the top right: two decks and a mixer, in the same window as the studio.
 
-- **Plug in a Pioneer DDJ-FLX4 and play.** YOBUKO sets up its mapping for you. Other controllers work too: Mixxx has 200+ built-in mappings and MIDI Learn.
-- Mixxx comes **inside YOBUKO** on macOS (Apple Silicon) and Windows. On Linux, YOBUKO uses the Mixxx installed on your computer.
-- Already use Mixxx? Your own copy keeps its settings: the one inside YOBUKO has its own profile.
+- **Plug in a Pioneer DDJ-FLX4 and play.** Play, Cue, Sync, Load, the faders, EQ, filters, tempo, crossfader and jog wheels drive the decks, nothing to set up.
+- **Your music:** drop audio files or folders on the page, or click **Add my Music folder**. Finished a track in the studio? **Send this project to DJ…**
+- **Prefer Mixxx?** **Open Mixxx instead** starts Mixxx, which comes inside YOBUKO on macOS (Apple Silicon) and Windows, with its hundreds of controller mappings.
 
 <p align="center"><img src="assets/readme/rbxport.webp" alt="USB export: the rbxport app with a waveform, cue points and a playlist" width="100%"></p>
 
-**Take it to the club with rbxport.** Click **Prepare a USB stick (rbxport)** to write your music, playlists and cues to a Rekordbox stick for Pioneer CDJ / XDJ players.
+**Take it to the club with rbxport.** Click the **USB** tab, then **Open rbxport**, to write your music, playlists and cues to a Rekordbox stick for Pioneer CDJ / XDJ players.
 
 ### 📚 One music library for both
 

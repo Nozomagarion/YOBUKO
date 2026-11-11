@@ -110,6 +110,7 @@ use audio::{AudioEvent, Fades};
 use chain::{CHAIN_INPUT_GAIN, Chain, MAX_BLOCK, run_as_answered};
 pub use cpu::CpuMonitor;
 pub use cue::MAX_CUE_GAIN;
+pub use decks::{BOOST_DB as DECK_BOOST_DB, KILL_DB as DECK_KILL_DB, Tone as DeckTone};
 pub use group::{GROUP_PARAMS, SILENT_DB, group_param_index, group_param_values};
 pub use input::MAX_INPUT_CHANNELS;
 use launcher::ClipLauncher;

@@ -4,10 +4,12 @@
 use crate::{CommandError, ProjectId, Projects, Session};
 use serde_json::{Value, json};
 use std::sync::Arc;
-use suhina_engine::{AudioData, PreviewMonitor};
+use suhina_engine::{AudioData, DECK_BOOST_DB, DECK_KILL_DB, DeckTone, PreviewMonitor};
+use suhina_media::waveform::Peaks;
 
-pub(crate) const MAX_SAMPLES: usize = 128 * 1024 * 1024 / 4;
-pub(crate) type Loaded = (usize, u64, Result<Arc<AudioData>, String>);
+/// The most samples a deck holds decoded: 384 MiB, a 16-minute stereo track at 48 kHz.
+pub(crate) const MAX_SAMPLES: usize = 384 * 1024 * 1024 / 4;
+pub(crate) type Loaded = (usize, u64, Result<(Arc<AudioData>, Arc<Peaks>), String>);
 #[derive(Clone)]
 struct Binding {
     target: Option<ProjectId>,
@@ -16,14 +18,30 @@ struct Binding {
 struct Source {
     track: suhina_dj::Track,
     data: Arc<AudioData>,
+    peaks: Arc<Peaks>,
 }
-#[derive(Default)]
 struct Deck {
     source: Option<Source>,
     pending: Option<(u64, suhina_dj::Track)>,
     binding: Option<Binding>,
     from: f64,
     error: Option<String>,
+    /// How fast it plays, 1 at the track's own speed.
+    rate: f64,
+    tone: DeckTone,
+}
+impl Default for Deck {
+    fn default() -> Self {
+        Self {
+            source: None,
+            pending: None,
+            binding: None,
+            from: 0.0,
+            error: None,
+            rate: 1.0,
+            tone: DeckTone::default(),
+        }
+    }
 }
 #[derive(Clone, Copy)]
 struct Mixer {
@@ -122,8 +140,8 @@ pub(crate) fn sync(p: &mut Projects) {
             && let Some((_, track)) = d.pending.take()
         {
             match result {
-                Ok(data) => {
-                    d.source = Some(Source { track, data });
+                Ok((data, peaks)) => {
+                    d.source = Some(Source { track, data, peaks });
                     d.binding = None;
                     d.from = 0.0;
                     d.error = None;
@@ -175,10 +193,13 @@ pub(crate) fn play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     let data = Arc::clone(&source.data);
     let from = d.from;
     let mix = p.dj.decks.mixer;
+    let (rate, tone) = (p.dj.decks.states[i].rate, p.dj.decks.states[i].tone);
     let target = p.active();
     let player = p.preview_session_mut()?.player_mut()?;
     let ctl = player.controller_mut();
     ctl.deck_mix(mix.crossfade, mix.levels, mix.cue).map_err(CommandError)?;
+    ctl.deck_rate(i, rate).map_err(CommandError)?;
+    ctl.deck_tone(i, tone).map_err(CommandError)?;
     ctl.deck_play(i, data, from).map_err(CommandError)?;
     let monitor = ctl.deck_monitor(i).ok_or("missing DJ deck monitor")?;
     p.dj.decks.states[i].binding = Some(Binding { target, monitor });
@@ -219,6 +240,52 @@ pub(crate) fn seek(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     p.dj.decks.states[i].from = from;
     Ok(json!({"position":from}))
 }
+pub(crate) fn rate(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    let i = index(v)?;
+    let rate = v["rate"]
+        .as_f64()
+        .filter(|r| r.is_finite() && (0.5..=2.0).contains(r))
+        .ok_or("rate must be 0.5–2 (1 is the track's own speed)")?;
+    let binding = p.dj.decks.states[i].binding.clone();
+    if let Some(b) = binding
+        && let Some(s) = bound_session(p, &b, i)
+    {
+        s.player_mut()?.controller_mut().deck_rate(i, rate).map_err(CommandError)?;
+    }
+    p.dj.decks.states[i].rate = rate;
+    Ok(json!({"rate":rate}))
+}
+pub(crate) fn tone(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    let i = index(v)?;
+    let band = |key: &str| {
+        v[key]
+            .as_f64()
+            .filter(|n| n.is_finite() && (f64::from(DECK_KILL_DB)..=f64::from(DECK_BOOST_DB)).contains(n))
+            .map(|n| n as f32)
+            .ok_or_else(|| CommandError(format!("{key} must be −40 to +6 dB")))
+    };
+    let filter = v["filter"]
+        .as_f64()
+        .filter(|n| n.is_finite() && (-1.0..=1.0).contains(n))
+        .map(|n| n as f32)
+        .ok_or("filter must be −1 to 1")?;
+    let tone = DeckTone { eq: [band("low")?, band("mid")?, band("high")?], filter };
+    let binding = p.dj.decks.states[i].binding.clone();
+    if let Some(b) = binding
+        && let Some(s) = bound_session(p, &b, i)
+    {
+        s.player_mut()?.controller_mut().deck_tone(i, tone).map_err(CommandError)?;
+    }
+    p.dj.decks.states[i].tone = tone;
+    Ok(json!({"changed":true}))
+}
+impl Projects {
+    /// The waveform of what deck `deck` (0 for A, 1 for B) holds, to draw it; `None` while it
+    /// holds nothing.
+    pub fn dj_deck_peaks(&self, deck: usize) -> Option<Arc<Peaks>> {
+        self.dj.decks.states.get(deck)?.source.as_ref().map(|s| Arc::clone(&s.peaks))
+    }
+}
 pub(crate) fn mixer(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     let number = |key: &str| {
         v[key]
@@ -251,7 +318,8 @@ pub(crate) fn snapshot(p: &Projects) -> Value {
         let active=d.binding.as_ref().filter(|b|b.target==p.active());
         json!({"deck":if i==0 {"A"} else {"B"},"track":d.source.as_ref().map(|s|s.track.id),
             "title":d.source.as_ref().map(|s|s.track.title.as_str()),"seconds":d.source.as_ref().map(|s|s.data.frames() as f64/f64::from(s.data.sample_rate)),
-            "position":active.map_or(d.from,|b|b.monitor.seconds()),"playing":active.is_some_and(|b|b.monitor.playing()),"loading":d.pending.is_some(),"error":d.error})
+            "position":active.map_or(d.from,|b|b.monitor.seconds()),"playing":active.is_some_and(|b|b.monitor.playing()),"loading":d.pending.is_some(),"error":d.error,
+            "bpm":d.source.as_ref().and_then(|s|s.track.bpm),"rate":d.rate,"low":d.tone.eq[0],"mid":d.tone.eq[1],"high":d.tone.eq[2],"filter":d.tone.filter})
     }).collect();
     let m = p.dj.decks.mixer;
     json!({"decks":states,"crossfade":m.crossfade,"levelA":m.levels[0],"levelB":m.levels[1],"cueA":m.cue[0],"cueB":m.cue[1],"separate_cue":p.output_choice().cue_pair.is_some()})

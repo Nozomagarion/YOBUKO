@@ -1,6 +1,6 @@
 ---
-description: The fork's Studio and DJ workspaces (DJ mode is the rbxport app), local playlists and cues, rbxport analysis, engine audition and waveform preparation
-read_when: DJ library, playlists, cue points, audition, waveform preparation, rbxport integration, render a project for DJ preparation
+description: The fork's Studio and DJ workspaces (two decks and a mixer in YOBUKO's window, driven by mouse or a DDJ-FLX4), local playlists and cues, rbxport analysis, engine audition and waveform preparation
+read_when: DJ decks, DJ mixer, DDJ-FLX4, DJ library, playlists, cue points, audition, waveform preparation, rbxport integration, render a project for DJ preparation
 type: spec
 status: current
 last_verified: 2026-11-11
@@ -13,6 +13,11 @@ covers:
   - crates/session/src/dj.rs
   - crates/ui/src/app/dj.rs
   - crates/ui/src/app/dj_tests.rs
+  - crates/ui/src/app/dj_decks.rs
+  - crates/ui/src/app/dj_decks_tests.rs
+  - crates/ui/src/app/dj_flx4.rs
+  - crates/engine/src/preview.rs
+  - crates/midi/src/lib.rs
   - crates/session/tests/dj.rs
   - crates/media/src/waveform.rs
   - crates/session/src/dj_waveform.rs
@@ -33,7 +38,7 @@ covers:
 
 # DJ workspace
 
-## DJ mode is rbxport
+## Spaces, and the DJ space
 
 The app has four spaces, each a tab at the right end of the menu bar (or of its own row when
 the menu bar is hidden): blue Studio, green Multiplayer, pink DJ and amber USB. The tab of the
@@ -51,27 +56,69 @@ it (a friend joining while the studio shows, the connection dropping) is also to
 beside Piou at the bottom right of the window for four seconds; the note takes no click. With
 animations off Piou is still.
 
-The DJ space is Mixxx's page; the USB space is rbxport's (**Open rbxport**, **Add this project
-to the library…**, **Share library now**). Entering the USB space opens rbxport with Mixxx's
-tracks and playlists, and does not stop the project.
+The DJ space mixes in YOBUKO's own window (`crates/ui/src/app/dj_decks.rs`); nothing opens
+beside it. Entering it stops the active project's transport and sample preview, hides the
+studio's control bar, and shows:
 
-Switching to DJ stops the active project's transport and sample preview, then starts
-**rbxport**, Chris Le's DJ library app, or brings it forward when it is already open. YOBUKO
-ships its own copy, built from `third_party/rbxport-app` by `scripts/rbxport_build.sh`:
-`YOBUKO.app/Contents/Helpers/rbxport.app` on macOS, `rbxport/rbxport[.exe]` beside the program
-on Windows and Linux. Without it (a development build) an rbxport installed on its own is
-used, else its download page opens. rbxport brings the library, analysis, decks, USB sticks for
-CDJ/XDJ players and PRO DJ LINK.
+- **Two decks**, A (pink) on the left and B (mint) on the right. Each shows its track's title
+  and tempo (the track's BPM times the deck's speed), the whole track with the part played
+  dimmed (a click or a drag goes there), a close waveform of eight seconds around the playhead,
+  which stays in the middle, the time played and left, **Cue**, **Play** and **Sync**, and a
+  **Tempo** slider (±8 %, widening to ±16 % and ±50 % when the speed is beyond; a double click
+  returns to the track's own speed). The pitch follows the speed.
+  - **Cue**: stopped, it sets the cue point where the deck is; playing, the deck goes back to
+    the cue point and stops there. Loading a track puts the cue point at its start.
+  - **Sync**: the deck plays at the other deck's tempo. Both tracks need a known BPM.
+- **The mixer** between them: per deck **High**, **Mid** and **Low** knobs (the middle is flat,
+  the right end +6 dB, the left end −40 dB, a cut that falls along a curve so the first half of
+  the turn trims), a **Filter** knob (left of the middle a low-pass closing down to 150 Hz,
+  right of it a high-pass opening up to 8 kHz, the middle off), **Phones** (the deck in the
+  headphones, on a separate cue output only) and a level fader; the crossfader under them. A
+  knob is dragged up or down; a double click puts it back.
+- **The library** under them: each track with its BPM, key and length, and **Load A** /
+  **Load B** (refused on a deck that plays). A click selects a row. Audio files and folders
+  dropped anywhere on the page, **Add my Music folder** (the person's `Music` folder) and
+  **Send this project to DJ…** (a render) go into it, analysed one file at a time, with the
+  count said on the page. A folder gives at most 1000 audio files; files already in the
+  library are left out.
 
-The DJ page itself only says this, with **Open rbxport** and **Send this project to rbxport…**.
-The latter opens the normal export dialog; when the render is done, YOBUKO writes a `.paths`
-request (the file's path) into `<data dir>/YOBUKO/rbxport-inbox` and brings rbxport forward.
-YOBUKO's copy of rbxport looks at that folder every two seconds and imports the files into its
-collection (`third_party/rbxport-app/src-tauri/src/yobuko.rs`); a request it cannot import yet
-(no library open, or a read-only one) waits there. A normal File > Export sends nothing.
+**Open Mixxx instead** starts Mixxx, which comes with YOBUKO, the way earlier versions did (full
+screen in YOBUKO's look; quitting it brings the studio back). Switching to another space leaves
+the decks playing.
 
-The sections below describe the `dj.*` session commands, the in-house catalog and the engine's
-decks. They remain for the CLI and the session layer, but the window no longer shows them.
+### The DDJ-FLX4
+
+While the DJ space shows, a MIDI port whose name contains `FLX4` is taken for the decks:
+`LiveInput::capture` hands what it sends, unread, to the window, and it no longer plays an
+armed track. Going to another space gives it back. The MIDI numbers are those of the
+open-source DDJ-FLX4 mapping for Mixxx by Robert904 and ElHanko (MIT), vendored in
+`third_party/mixxx-ddj-flx4-mapping` (`crates/ui/src/app/dj_flx4.rs`):
+
+| Control | Message | Does |
+|---|---|---|
+| PLAY/PAUSE, CUE, BEAT SYNC | note 0x0B, 0x0C, 0x58 on channel 1 (deck A) or 2 (deck B) | Play, Cue, Sync |
+| Mixer CUE | note 0x54, channel 1 or 2 | Phones |
+| LOAD | note 0x46 (A) or 0x47 (B), channel 7 | loads the selected library row |
+| BROWSE | CC 0x40, channel 7, relative | moves the selected row |
+| Channel fader | CC 0x13, channel 1 or 2 | level |
+| EQ HI, MID, LOW | CC 0x07, 0x0B, 0x0F, channel 1 or 2 | High, Mid, Low |
+| CFX (filter) | CC 0x17 (A) or 0x18 (B), channel 7 | Filter |
+| TEMPO | CC 0x00, channel 1 or 2 | ±8 %, read as the mapping reads it |
+| CROSSFADER | CC 0x1F, channel 7 | crossfader |
+| JOG (top or side) | CC 0x21–0x23, channel 1 or 2, 64 still | playing, a nudge of 4 ms a step; stopped, 20 ms |
+
+Only the most significant 7 bits of the 14-bit controls are read. The controller's lights are
+not driven. Not verified on the hardware yet.
+
+The USB space is rbxport's page (**Open rbxport**, **Add this project to the library…**,
+**Share library now**). Entering it opens rbxport with Mixxx's tracks and playlists, and does
+not stop the project. YOBUKO ships its own copy of rbxport, built from `third_party/rbxport-app`
+by `scripts/rbxport_build.sh`: `YOBUKO.app/Contents/Helpers/rbxport.app` on macOS,
+`rbxport/rbxport[.exe]` beside the program on Windows and Linux. Without it (a development
+build) an rbxport installed on its own is used, else its download page opens. A render sent to
+DJ is also written as a `.paths` request into `<data dir>/YOBUKO/rbxport-inbox`, which YOBUKO's
+copy of rbxport imports (`third_party/rbxport-app/src-tauri/src/yobuko.rs`), and added to
+Mixxx's library when Mixxx is closed.
 
 ## Commands and storage
 
@@ -363,8 +410,10 @@ Pause retains the exact source position; Play resumes the same source or starts 
 end/stop. Seek is in source seconds, before the decoded end. Stop rewinds; Clear also unloads.
 
 Load A/B queues decode on the existing DJ worker, without opening output or starting audio.
-Files share audition validation/cache, with an additional 128 MiB decoded sample budget per
-deck (256 MiB retained decks, one pending load may retain another 128 MiB). The bounded decoder
+Files share audition validation/cache, with a 384 MiB decoded sample budget per deck (a
+16-minute stereo track at 48 kHz; two loaded decks may retain 768 MiB, and one pending load
+another 384 MiB). The worker computes the deck's waveform with its audio
+(`Projects::dj_deck_peaks`), for the window to draw. The bounded decoder
 checks headers and accumulated decoded samples. The catalog's wider import/audition limits
 remain unchanged. A failed replacement keeps the previous loaded source stopped and reports
 its error; a token prevents cancelled/old worker results from retargeting another load.
@@ -372,19 +421,24 @@ its error; a token prevents cancelled/old worker results from retargeting anothe
 Only Play may open the chosen output, which remains the active Session output or the existing
 empty preview Session when no project is open. A block-smoothed linear crossfader (0=A, 1=B),
 channel levels 0–1 and fixed −6 dB trim feed main. A single bounded mixer message changes both
-sides together. No automatic sync, pitch change, loops, scratching or recording is included.
+sides together. Each deck plays at its own speed, 0.5 to 2 (`dj.deck.rate {deck,rate}`; the
+pitch follows, no key lock), and through its own low shelf (250 Hz), mid bell (1 kHz) and high
+shelf (3 kHz), −40 to +6 dB, then a filter (`dj.deck.tone {deck,low,mid,high,filter}`), before
+its level; a flat deck skips them. Speed and tone are kept per deck in the session and handed
+to the engine on Play. No loops, scratching, key lock or recording is included.
 CUE A/B is post-channel level, pre-crossfader, on the separate configured cue pair only; absence
 of a separate pair never leaks an otherwise muted deck into main. The existing cue volume scales
 it. Source samples and mix controls are sanitised/bounded; summing decks is not a general limiter.
 
 Commands: `dj.deck.load {deck,track}`, `.play`, `.pause`, `.stop`, `.clear` (deck A/B), `.seek
-{deck,from}`, `.stopAll {}` and `dj.mixer.set {crossfade,levelA,levelB,cueA,cueB}`. These are
+{deck,from}`, `.rate {deck,rate}`, `.tone {deck,low,mid,high,filter}`, `.stopAll {}` and
+`dj.mixer.set {crossfade,levelA,levelB,cueA,cueB}`. These are
 person-only Library commands. Playback controls and mixer work while another worker job is
 busy. Pausing/stopping/clearing never opens output; full queues are visible errors and leaving
 DJ retries stopping rather than claiming silence. Library snapshots include loaded metadata,
 source position, playing/loading and per-deck errors plus mixer values.
 
-Leaving DJ stops both decks and cancels pending loads. Switching project/output invalidates
+`dj.deck.stopAll` stops both decks and cancels pending loads. Switching project/output invalidates
 old engine bindings and requires another explicit Play; it cannot start a late decoded result.
 Reloading the library or changing its folder stops and clears decks; stop state is retained
 across a folder reset if a queue is full. Deck choices and mixer are transient, not catalog
