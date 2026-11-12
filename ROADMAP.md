@@ -675,7 +675,8 @@ From Live Sets we authored ourselves in Live 12.4 ([format spec](docs/spec/als-f
   commit), the platform and the licence, and copies one line naming the build for a bug report
   ([spec](docs/spec/about.md)).
 - The whole window zooms from 50 % to 200 % (Ctrl and + or -, Cmd on macOS; Ctrl and 0 for
-  100 %; View › Zoom in and Settings › Appearance › Zoom), and the zoom is kept for the next run
+  100 %; View › Zoom in and Settings › Appearance › Window zoom, whose slider resizes the window
+  while it is dragged), and the zoom is kept for the next run
   ([spec](docs/spec/window-zoom.md)).
 - **Themes**: every colour comes from the theme in use, a folder with a `theme.css` in the
   `themes` folder (`theme { name: …; } :root { --accent: #A6A3FF; … }`), which Suhina never

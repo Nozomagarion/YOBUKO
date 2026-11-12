@@ -5,6 +5,24 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## A slider for the size of the whole interface — 12 November 2026 (branch `claude/project-thread-j96gyr`)
+
+**Goal:** the owner can pick the size of YOBUKO's whole interface in Settings and see it change
+while dragging.
+
+- **Code written:** Settings › Appearance › **Window zoom** gets a slider (50 % to 200 %, 5 %
+  steps) in front of the existing −, value and + buttons. While the slider is held, the whole
+  window (studio, DJ, USB, multiplayer, Settings itself) grows or shrinks at once; the value is
+  saved when it is let go. The slider moves with the window as it rescales, so the drag is
+  measured in screen pixels: the value follows the hand and never jumps by itself. Ctrl/Cmd and
+  + / − / 0 still work.
+- **Checks passed (Linux, cloud container):** a new UI test (the window grows while the slider
+  is held, a still pointer keeps the value, the value button still goes back to 100 %), all
+  `suhina-ui` tests, clippy, the settings help export check and `docs.py check`.
+- **Limits:** not tried on a real Mac or Windows screen yet; plug-in editor windows keep their
+  own size.
+- **Next criterion:** the owner drags the slider in a test build and finds a size they like.
+
 ## The DJ space gets Mixxx's deck and mixer functions, part 2 — 11 November 2026 (branch `claude/project-thread-fz5ul5`)
 
 **Goal:** the second of three parts toward every Mixxx function in YOBUKO's own DJ space: key

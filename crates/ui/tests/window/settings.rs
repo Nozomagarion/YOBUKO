@@ -45,6 +45,46 @@ fn a_saved_zoom_is_used_from_the_start_and_settings_can_change_it() {
     assert_eq!(harness.ctx.zoom_factor(), 1.0);
 }
 
+/// The Window zoom slider resizes the whole window while it is held, and a pointer that stays
+/// still after the window grew leaves the value where it is: the slider moving under the pointer
+/// does not move the value again.
+#[test]
+fn the_window_zoom_slider_resizes_the_window_while_it_is_dragged() {
+    let mut harness = window(demo_app());
+    harness.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+    harness.run();
+    harness.get_by_label("Settings page: Appearance").click();
+    harness.run();
+    let slider = harness.get_by_label("Window zoom").rect();
+    // The knob sits a third of the way along at 100 % (50 … 200 %).
+    let knob = slider.height() - 4.0;
+    let travel = slider.width() - knob;
+    let press = egui::pos2(slider.left() + knob / 2.0 + travel / 3.0, slider.center().y);
+    harness.hover_at(press);
+    harness.step();
+    harness.drag_at(press);
+    harness.step();
+    harness.hover_at(press + egui::vec2(travel / 3.0, 0.0));
+    // The settings are drawn after the window takes its zoom, so the new size shows a frame later.
+    for _ in 0..4 {
+        harness.step();
+    }
+    assert_eq!(harness.state().settings().zoom, 150);
+    assert!((harness.ctx.zoom_factor() - 1.5).abs() < 1e-6, "the window grew while the slider is held");
+    for _ in 0..4 {
+        harness.step();
+    }
+    assert_eq!(harness.state().settings().zoom, 150, "a still pointer keeps the value");
+    let at = harness.get_by_label("Window zoom").rect().center();
+    harness.drop_at(at);
+    harness.run();
+    assert_eq!(harness.state().settings().zoom, 150);
+    assert!((harness.ctx.zoom_factor() - 1.5).abs() < 1e-6);
+    harness.get_by_label("Window zoom: 150 %").click();
+    harness.run();
+    assert_eq!(harness.state().settings().zoom, 100, "the value button still goes back to 100 %");
+}
+
 #[test]
 fn settings_change_right_away_and_are_handed_out_to_be_saved() {
     let mut harness = window(demo_app());

@@ -3,7 +3,7 @@ description: Zooming the whole window (every panel, text and control larger or s
 read_when: zoom, UI zoom, window zoom, interface size, scale, Ctrl+Plus, Ctrl+Minus, Cmd+Plus, bigger text, high-DPI, zoom display
 type: spec
 status: current
-last_verified: 2026-10-25
+last_verified: 2026-11-12
 covers:
   - crates/ui/src/settings.rs
   - crates/ui/src/settings/keymap.rs
@@ -35,7 +35,14 @@ Settings › Display & Input), read on 2026-10-13. No binaries or files were loo
 - The keys are actions in the keymap (`view.zoomIn`, `view.zoomOut`, `view.zoomReset`), so they
   can be changed in Settings › Keys ([shortcuts](../shortcuts.md)). View › Window zoom in, Zoom out
   and Actual size do the same.
-- Settings › Appearance › Window zoom shows the value between - and + buttons; clicking the value goes
-  back to 100 %.
+- Settings › Appearance › Window zoom has a slider, then the value between - and + buttons;
+  clicking the value goes back to 100 %. A click on the slider puts the zoom there and a drag
+  moves it, in 5 % steps from 50 % to 200 %. The window is drawn at the new size while the slider
+  is held, so the person sees every panel grow or shrink as they drag; the value is saved when the
+  slider is let go. Since the slider itself grows, shrinks and moves with the window, the drag is
+  measured in screen pixels against the slider's width in pixels when the drag began, not by where
+  the pointer lies on the rescaled slider: the value follows the hand and never jumps on its own.
+  The pointer hides during the drag, as for any value drag (Appearance › Hide pointer while
+  dragging).
 - The zoom is saved in `settings.txt` as `zoom = <percent>`. A value out of range is limited to
   it; one that is not a number is skipped with a warning and leaves 100 %.

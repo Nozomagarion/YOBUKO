@@ -867,10 +867,17 @@ impl Cx<'_> {
     }
 
     /// Three buttons, none of them chosen: smaller, back to 100 %, larger.
+    /// Window zoom: a slider that resizes the whole window while it is dragged, then the -, value
+    /// (back to 100 %) and + buttons that step it.
     pub fn zoom(&mut self, row: Rect) {
+        let slider = Rect::from_min_size(Pos2::new(control_x(row), row.top() + 1.0), Vec2::new(ZOOM_SLIDER, SEGMENT));
+        let (changed, held) = zoom_slider(self.ui, self.painter, slider, self.name, &mut self.settings.zoom);
+        self.outcome.changed |= changed;
+        self.outcome.adjusting |= held;
         let actual = format!("{} %", self.settings.zoom);
         let options = [("-", Some(-1)), (actual.as_str(), Some(0)), ("+", Some(1))];
-        match segmented(self.ui, self.painter, options_rect(self.ui, row, &options), self.name, &options, None) {
+        let buttons = options_rect(self.ui, row, &options).translate(Vec2::new(ZOOM_SLIDER + PAD, 0.0));
+        match segmented(self.ui, self.painter, buttons, self.name, &options, None) {
             Some(Some(0)) if self.settings.zoom != crate::settings::ZOOM => {
                 self.settings.zoom = crate::settings::ZOOM;
                 self.outcome.changed = true;
@@ -3017,6 +3024,75 @@ fn control_x(row: Rect) -> f32 {
 fn control_rect(row: Rect, parts: usize) -> Rect {
     let width = 64.0 * parts as f32;
     Rect::from_min_size(Pos2::new(control_x(row), row.top() + 1.0), Vec2::new(width, SEGMENT))
+}
+
+/// The width of the Window zoom slider.
+const ZOOM_SLIDER: f32 = 150.0;
+/// The Window zoom slider moves in steps this large, in percent.
+const ZOOM_SLIDER_STEP: u32 = 5;
+
+/// The Window zoom slider: a click puts the zoom where it is clicked, a drag moves it, and the
+/// window is drawn at the new size from the next frame on, so it grows and shrinks under the
+/// drag. The window rescales while the slider is held, so the slider itself moves and changes
+/// size under the pointer: the drag is therefore read in screen pixels and measured against the
+/// slider's width in pixels when the drag began, which a rescale does not change. Reading the
+/// pointer's place in the rescaled slider would move the value again each frame and make it jump.
+/// Returns whether the zoom changed and whether the slider is held.
+fn zoom_slider(ui: &Ui, painter: &egui::Painter, rect: Rect, name: &str, zoom: &mut u32) -> (bool, bool) {
+    use crate::settings::{ZOOM, ZOOMS};
+    let (min, max) = (ZOOMS.0 as f32, ZOOMS.1 as f32);
+    let response = ui.interact(rect, Id::unique(("setting-slider", name)), Sense::click_and_drag());
+    let current = (*zoom).clamp(ZOOMS.0, ZOOMS.1);
+    response.widget_info(|| egui::WidgetInfo::slider(true, f64::from(current), name));
+    let knob = SEGMENT - 4.0;
+    let travel = (rect.width() - knob).max(1.0);
+    let at_pointer = |x: f32| ((x - rect.left() - knob / 2.0) / travel).clamp(0.0, 1.0);
+    let fraction = (current as f32 - min) / (max - min);
+    // Where the drag holds the slider, 0 … 1, and the slider's width in pixels when it began.
+    let held_id = response.id.with("held");
+    let per_point = ui.ctx().pixels_per_point().max(0.01);
+    let position = if response.dragged_by(egui::PointerButton::Primary) {
+        let held = ui.ctx().data(|d| d.get_temp::<(f32, f32)>(held_id)).filter(|_| !response.drag_started());
+        let (from, travel_pixels) = held.unwrap_or_else(|| {
+            let press = ui.input(|i| i.pointer.press_origin()).map_or(rect.center().x, |p| p.x);
+            let on_knob = ((press - rect.left() - knob / 2.0) - fraction * travel).abs() <= knob;
+            (if on_knob { fraction } else { at_pointer(press) }, travel * per_point)
+        });
+        let moved_pixels = widgets::value_drag_delta(ui, &response).x * per_point;
+        let position = (from + moved_pixels / travel_pixels.max(1.0)).clamp(0.0, 1.0);
+        ui.ctx().data_mut(|d| d.insert_temp(held_id, (position, travel_pixels)));
+        let back = rect.left() + knob / 2.0 + travel * position;
+        widgets::value_drag_returns_to(ui.ctx(), Pos2::new(back, rect.center().y));
+        Some(position)
+    } else if response.clicked() {
+        response.interact_pointer_pos().map(|p| at_pointer(p.x))
+    } else {
+        None
+    };
+    let mut changed = false;
+    if let Some(position) = position {
+        let wanted = min + position * (max - min);
+        let step = ZOOM_SLIDER_STEP as f32;
+        let snapped = ((wanted / step).round() * step).clamp(min, max);
+        // `snapped` lies within the limits, so the conversion cannot fail.
+        let next = u32::try_from(snapped as i64).unwrap_or(ZOOM);
+        changed = next != *zoom;
+        *zoom = next;
+    }
+    let held = response.dragged() || response.is_pointer_button_down_on();
+
+    // The rail, the part up to the value lit, and the knob.
+    let shown = ((*zoom).clamp(ZOOMS.0, ZOOMS.1) as f32 - min) / (max - min);
+    let hover = widgets::hover(ui, &response);
+    let rail = Rect::from_center_size(rect.center(), Vec2::new(rect.width(), 4.0));
+    let radius = crate::kit::shape::corner(2);
+    painter.rect_filled(rail, radius, motion::mix(theme::control_background(), theme::control_hover(), hover));
+    let knob_x = rect.left() + shown * travel;
+    let lit = Rect::from_min_max(rail.min, Pos2::new(knob_x + knob / 2.0, rail.bottom()));
+    painter.rect_filled(lit, radius, theme::text_value());
+    let knob_rect = Rect::from_min_size(Pos2::new(knob_x, rect.top() + 2.0), Vec2::splat(knob));
+    painter.rect_filled(knob_rect, crate::kit::shape::corner(6), theme::text_value());
+    (changed, held)
 }
 
 /// A segmented control (components › Dropdown and segmented control). Returns the option

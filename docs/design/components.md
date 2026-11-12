@@ -455,7 +455,7 @@ wheel over it, as far as its last row and no further.
 | Browser › Sample map | Preview on map hover | On (default), Off |
 | Browser › Sample map | Map sample length limit | 5, 10 (default), 30, 60 s |
 | Browser › Tags | Colour tag limit | 64 (default), 128, 256, 1024 colour tags (`library.setTag`'s `limit`) |
-| Appearance › Window | Window zoom | Three parts: −, the value ("100 %", a click goes back to 100 %), +; 50–200 % in 10 % steps, the size of the whole window ([spec](../spec/window-zoom.md)) |
+| Appearance › Window | Window zoom | A slider (5 % steps, the window resizes live while it is dragged), then three parts: −, the value ("100 %", a click goes back to 100 %), +; 50–200 %, the buttons in 10 % steps, the size of the whole window ([spec](../spec/window-zoom.md)) |
 | Appearance › Window | Animations | On (default), Off |
 | Appearance › Waveforms | Waveform scale | Linear (default), dB ([waveforms](../spec/waveforms.md)) |
 | Appearance › Advanced | Graphics renderer | GPU (wgpu, default), OpenGL (glow) |

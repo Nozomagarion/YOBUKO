@@ -1886,7 +1886,7 @@
   "Appearance/Window/zoom": {
     "sourceFingerprint": "246fd1b59140c0413ae702ff9f3818887340ebfa9a8bb9f8c1bd9f663f3d5d30",
     "summary": "Scale all interface text, panels and controls together.",
-    "description": "Window zoom changes the drawing size of the whole interface from 50 to 200 percent. Use the minus and plus controls to change it in ten-percentage-point steps; click the value to return to 100 percent. Ctrl+Plus or Ctrl+Equals, Ctrl+Minus and Ctrl+0 provide the same actions; use Cmd on macOS. This is separate from zooming time in the Arrangement or piano roll.",
+    "description": "Window zoom changes the drawing size of the whole interface from 50 to 200 percent. Drag the slider and the whole window grows or shrinks as you drag, in five-percentage-point steps, so you can see the size before you let go; click on the slider to jump to a size. The minus and plus controls change it in ten-percentage-point steps; click the value to return to 100 percent. Ctrl+Plus or Ctrl+Equals, Ctrl+Minus and Ctrl+0 provide the same actions; use Cmd on macOS. This is separate from zooming time in the Arrangement or piano roll.",
     "options": [],
     "whenToChange": "Increase it when interface text and controls feel too small, or decrease it to show more controls in the available window.",
     "references": [
