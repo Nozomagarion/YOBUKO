@@ -11,7 +11,7 @@ use std::sync::Arc;
 use suhina_engine::{AudioData, DJ_SAMPLERS, DeckMonitor};
 
 /// Where the DJ worker's loads for the sampler start: deck numbers above the two decks.
-pub(crate) const FIRST: usize = 2;
+pub(crate) const FIRST: usize = suhina_engine::DJ_DECKS;
 
 #[derive(Clone)]
 struct Slot {

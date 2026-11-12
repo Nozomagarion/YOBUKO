@@ -328,7 +328,7 @@ impl App {
     fn track_table(&mut self, ui: &mut Ui, tracks: &[Value]) {
         let row = 28.0;
         let numbers = 150.0;
-        let buttons = 2.0 * 64.0 + 8.0;
+        let buttons = self.dj.decks.count() as f32 * 72.0 + 8.0;
         ui.horizontal(|ui| {
             ui.add_space(8.0);
             let title_width = (ui.available_width() - buttons - numbers).max(60.0);
@@ -406,7 +406,7 @@ impl App {
                 .max_rect(rect.shrink2(Vec2::new(8.0, 0.0)))
                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
         );
-        let buttons = 2.0 * 64.0 + 8.0;
+        let buttons = self.dj.decks.count() as f32 * 72.0 + 8.0;
         let numbers = 150.0;
         let title_width = (row.available_width() - buttons - numbers).max(60.0);
         let line = egui::Layout::left_to_right(egui::Align::Center);
@@ -422,7 +422,7 @@ impl App {
             let length = length.split('.').next().unwrap_or_default().to_owned();
             ui.label(egui::RichText::new(format!("{bpm:>6}  {key:<4} {length:>6}")).font(theme::mono_font(12.0)));
         });
-        for (deck, name) in NAMES.into_iter().enumerate() {
+        for (deck, name) in NAMES.into_iter().enumerate().take(self.dj.decks.count()) {
             let busy = self.dj.decks.playing(deck);
             let load = row
                 .add_enabled(
@@ -456,7 +456,7 @@ impl App {
         let mut sampler = None;
         response.context_menu(|ui| {
             ui.label(egui::RichText::new(title).strong());
-            for (deck, name) in NAMES.into_iter().enumerate() {
+            for (deck, name) in NAMES.into_iter().enumerate().take(self.dj.decks.count()) {
                 if ui
                     .add_enabled(!self.dj.decks.playing(deck), egui::Button::new(format!("Load on deck {name}")))
                     .clicked()

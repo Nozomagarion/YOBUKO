@@ -1,9 +1,9 @@
 ---
-description: The fork's Studio and DJ workspaces (two decks and a mixer in YOBUKO's window, driven by mouse or a DDJ-FLX4), local playlists and cues, rbxport analysis, engine audition and waveform preparation
-read_when: DJ decks, DJ mixer, DDJ-FLX4, DJ library, playlists, cue points, audition, waveform preparation, rbxport integration, render a project for DJ preparation
+description: The fork's Studio and DJ workspaces (two or four decks and a mixer in YOBUKO's window, driven by mouse or a DDJ-FLX4), local playlists and cues, rbxport analysis, engine audition and waveform preparation
+read_when: DJ decks, four decks, crossfader sides, DJ mixer, DDJ-FLX4, DJ library, playlists, cue points, audition, waveform preparation, rbxport integration, render a project for DJ preparation
 type: spec
 status: current
-last_verified: 2026-11-11
+last_verified: 2026-11-12
 covers:
   - crates/engine/src/decks.rs
   - crates/engine/src/deck_voice.rs
@@ -705,8 +705,8 @@ meter. `dj.mic.set {on?, channel? (1–64), gain?, duck?}` keeps what is left ou
 it opens the output like Play, and Play hands it to the audio. The mixer card's **MIC** row has
 TALK, the input (**IN n**, stepping 1–8), the level and the ducking.
 
-**Not yet:** four decks (C and D), Auto DJ's intro and outro ends (only where they start is
-read), its shuffle and random tracks, and recording to another format than WAV.
+**Not yet:** Auto DJ's intro and outro ends (only where they start is read), its shuffle and
+random tracks, and recording to another format than WAV. Four decks are in part 4.
 
 ### Check part 3
 
@@ -726,3 +726,43 @@ Automated: engine tests for the recording tap and the microphone; session tests 
 `dj.record.*`, the history and crates, Auto DJ from outro to intro, and `dj.mic.set`; UI tests
 for REC, the side bar, Auto DJ, intro and outro, and the MIC row. Not tried with a real
 microphone or speakers.
+
+## Four decks (fork extension, part 4)
+
+**Engine.** The DJ mix has four deck voices, A to D (`DJ_DECKS`), each with its EQ, filter,
+trim, effects send, fader, headphone button and meter. Each deck sits on a side of the
+crossfader (`Side`: left, thru, right); A and C start on the left, B and D on the right. A
+deck on the left passes `1 − crossfade`, on the right `crossfade`, through the middle all of
+it. Effect units go to any of the four decks or the master (targets 0–3, then 4).
+
+**Session.** `deck` is `A`, `B`, `C` or `D` in every `dj.deck.*` command. `dj.mixer.set` still
+needs the crossfader and A and B; `levelC`, `levelD`, `cueC`, `cueD` and `sideA`…`sideD`
+(`left`, `thru`, `right`) keep their value when left out, so a caller that knows two decks
+leaves C and D as they are. `dj.fx.set` adds `deckC` and `deckD`. The snapshot lists four decks
+and adds `levelC`, `levelD`, `cueC`, `cueD` and `sideA`…`sideD`. The sampler's loads come after
+the four decks. Auto DJ stays on A and B and moves the crossfader from the outgoing deck's
+side to the incoming one's.
+
+**Page.** **4 decks** in the header shows decks C and D in a second row, C on the left and D on
+the right, and the mixer's channels as C A | master | B D; the page then scrolls, with the
+library kept at a usable height. The button cannot hide C and D while either holds a track.
+Each channel has a crossfader side button (◀ left, ◀▶ through, ▶ right); the letters beside the
+crossfader name the decks on each side. SYNC and KEY SYNC follow the deck's neighbour (A with B,
+C with D) when it plays with a known tempo, else the first other deck that does. The library
+rows and menus offer **Load C** and **Load D**, and the effect units **C** and **D**, while four
+decks show. The DDJ-FLX4 drives decks A and B.
+
+### Check part 4
+
+1. On the DJ page click **4 decks**: decks C (violet) and D (amber) appear under A and B, and
+   the mixer has four channels.
+2. Click **Load C** on a library row, then Play on C: with the crossfader to the left you hear
+   it; to the right you do not.
+3. Click deck C's side button by its **Phones** button until it shows ◀▶: C is heard wherever the
+   crossfader is.
+4. Put effect unit 1 on **C**: deck C gets the effect.
+5. Eject C and D, then click **4 decks** again: the page goes back to two decks.
+
+Automated: an engine test for four decks on the crossfader's sides; a session test for decks C
+and D, the sides and the effect unit; a UI test for the button, the channels, the side button
+and hiding. Not tried on speakers.

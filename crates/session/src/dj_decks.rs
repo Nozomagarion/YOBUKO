@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use suhina_engine::{
     AudioData, DECK_BOOST_DB, DECK_FX_MAX_BEATS, DECK_FX_MIN_BEATS, DECK_FX_SLOTS, DECK_FX_UNITS, DECK_KILL_DB,
-    DECK_TRIM_DB, DeckFxKind, DeckFxUnit, DeckMeter, DeckMix, DeckMonitor, DeckTone,
+    DECK_TRIM_DB, DJ_DECKS, DeckFxKind, DeckFxUnit, DeckMeter, DeckMix, DeckMonitor, DeckSide, DeckTone,
 };
 use suhina_media::waveform::Peaks;
 
@@ -71,7 +71,7 @@ impl Deck {
 }
 #[derive(Default)]
 pub(crate) struct Decks {
-    states: [Deck; 2],
+    states: [Deck; DJ_DECKS],
     pub(crate) serial: u64,
     loaded: Option<Loaded>,
     stopping: bool,
@@ -98,11 +98,17 @@ impl Decks {
         self.loaded = Some(result);
     }
 }
+/// The decks' names, in order.
+pub(crate) const NAMES: [&str; DJ_DECKS] = ["A", "B", "C", "D"];
 fn index(v: &Value) -> Result<usize, CommandError> {
-    match v["deck"].as_str() {
-        Some("A") => Ok(0),
-        Some("B") => Ok(1),
-        _ => Err("choose deck A or B".into()),
+    v["deck"].as_str().and_then(|d| NAMES.iter().position(|n| *n == d)).ok_or_else(|| "choose deck A, B, C or D".into())
+}
+/// A crossfader side's name.
+fn side_name(side: DeckSide) -> &'static str {
+    match side {
+        DeckSide::Left => "left",
+        DeckSide::Thru => "thru",
+        DeckSide::Right => "right",
     }
 }
 fn bound_session<'a>(p: &'a mut Projects, b: &Binding, i: usize) -> Option<&'a mut Session> {
@@ -141,7 +147,7 @@ pub(crate) fn stop_all(p: &mut Projects, _: &Value) -> Result<Value, CommandErro
         d.pending = None;
     }
     let mut error = None;
-    for i in 0..2 {
+    for i in 0..DJ_DECKS {
         if let Err(e) = stop_one(p, i, p.dj.decks.clear_after) {
             error = Some(e);
         }
@@ -159,7 +165,7 @@ pub(crate) fn invalidate(p: &mut Projects) {
 }
 pub(crate) fn sync(p: &mut Projects) {
     if p.output_choice().cue_pair.is_none() {
-        p.dj.decks.mixer.cue = [false; 2];
+        p.dj.decks.mixer.cue = [false; DJ_DECKS];
     }
     if p.dj.decks.stopping
         && let Err(e) = stop_all(p, &json!({}))
@@ -168,14 +174,14 @@ pub(crate) fn sync(p: &mut Projects) {
     }
     let loaded = p.dj.decks.loaded.take();
     if let Some((i, token, result)) = loaded {
-        // Above the two decks, the load is for the sampler.
+        // Above the decks, the load is for the sampler.
         match (i.checked_sub(crate::dj_sampler::FIRST), p.dj.decks.states.get_mut(i)) {
             (Some(slot), _) => p.dj.decks.samplers.loaded(slot, token, result.map(|(data, ..)| data)),
             (None, Some(d)) => deck_loaded(d, token, result),
             (None, None) => {}
         }
     }
-    for i in 0..2 {
+    for i in 0..DJ_DECKS {
         let binding = p.dj.decks.states[i].binding.clone();
         if let Some(b) = binding
             && (b.target != p.active() || bound_session(p, &b, i).is_none())
@@ -471,11 +477,34 @@ pub(crate) fn mixer(p: &mut Projects, v: &Value) -> Result<Value, CommandError> 
             .map(|n| n as f32)
             .ok_or_else(|| CommandError(format!("{key} must be 0–1"))),
     };
-    let boolean = |key: &str| v[key].as_bool().ok_or_else(|| CommandError(format!("{key} must be a boolean")));
+    let boolean = |key: &str, old: Option<bool>| match (&v[key], old) {
+        (Value::Null, Some(old)) => Ok(old),
+        (b, _) => b.as_bool().ok_or_else(|| CommandError(format!("{key} must be a boolean"))),
+    };
+    // Decks A and B are always given; C and D, and the sides, keep what they were when left out.
+    let mut levels = old.levels;
+    let mut cue = old.cue;
+    let mut sides = old.sides;
+    for (i, name) in NAMES.iter().enumerate() {
+        let required = i < 2;
+        levels[i] = number(&format!("level{name}"), (!required).then_some(old.levels[i]))?;
+        cue[i] = boolean(&format!("cue{name}"), (!required).then_some(old.cue[i]))?;
+        let key = format!("side{name}");
+        sides[i] = match &v[&key] {
+            Value::Null => old.sides[i],
+            side => match side.as_str() {
+                Some("left") => DeckSide::Left,
+                Some("thru") => DeckSide::Thru,
+                Some("right") => DeckSide::Right,
+                _ => return Err(CommandError(format!("{key} must be left, thru or right"))),
+            },
+        };
+    }
     let mix = DeckMix {
         crossfade: number("crossfade", None)?,
-        levels: [number("levelA", None)?, number("levelB", None)?],
-        cue: [boolean("cueA")?, boolean("cueB")?],
+        levels,
+        cue,
+        sides,
         master: number("master", Some(old.master))?,
         phones: number("phones", Some(old.phones))?,
         phones_mix: number("phonesMix", Some(old.phones_mix))?,
@@ -526,11 +555,20 @@ pub(crate) fn mic(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     p.dj.decks.mic = mic;
     Ok(json!({"on": mic.on}))
 }
-/// Moves the crossfader (0 = A, 1 = B), keeping the rest of the mixer.
+/// Moves the crossfader (0 = left, 1 = right), keeping the rest of the mixer.
 pub(crate) fn crossfade(p: &mut Projects, x: f64) -> Result<(), CommandError> {
     let m = p.dj.decks.mixer;
     let params = json!({"crossfade": x.clamp(0.0, 1.0), "levelA": m.levels[0], "levelB": m.levels[1], "cueA": m.cue[0], "cueB": m.cue[1]});
     mixer(p, &params).map(|_| ())
+}
+/// Where the crossfader goes to hear deck `i` alone on its side: 0 left, 1 right; `None` for a
+/// deck heard through the middle.
+pub(crate) fn side_x(p: &Projects, i: usize) -> Option<f64> {
+    match p.dj.decks.mixer.sides.get(i)? {
+        DeckSide::Left => Some(0.0),
+        DeckSide::Right => Some(1.0),
+        DeckSide::Thru => None,
+    }
 }
 /// What a deck holds and where it is, for Auto DJ.
 pub(crate) struct DeckState {
@@ -590,7 +628,7 @@ pub(crate) fn fx(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     if let Some(bpm) = unit_number("bpm", 20.0..=400.0)? {
         settings.bpm = bpm;
     }
-    for (place, key) in ["deckA", "deckB", "master"].into_iter().enumerate() {
+    for (place, key) in FX_PLACES.into_iter().enumerate() {
         if let Some(on) = flag(key)? {
             settings.targets[place] = on;
         }
@@ -635,20 +673,27 @@ pub(crate) fn fx(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     p.dj.decks.fx[unit] = settings;
     Ok(fx_json(&settings))
 }
+/// Where an effect unit goes, in the engine's order: the decks, then the master.
+const FX_PLACES: [&str; DJ_DECKS + 1] = ["deckA", "deckB", "deckC", "deckD", "master"];
 fn fx_json(unit: &DeckFxUnit) -> Value {
-    json!({
+    let mut places = serde_json::Map::new();
+    for (key, on) in FX_PLACES.iter().zip(unit.targets) {
+        places.insert((*key).to_owned(), json!(on));
+    }
+    let mut v = json!({
         "mix": unit.mix,
         "beats": unit.beats,
         "bpm": unit.bpm,
-        "deckA": unit.targets[0],
-        "deckB": unit.targets[1],
-        "master": unit.targets[2],
         "slots": unit.slots.iter().map(|s| json!({
             "effect": s.kind.map(|k| k.id()),
             "on": s.on,
             "meta": s.meta,
         })).collect::<Vec<_>>(),
-    })
+    });
+    if let Some(o) = v.as_object_mut() {
+        o.extend(places);
+    }
+    v
 }
 pub(crate) fn snapshot(p: &Projects) -> Value {
     let states: Vec<_> =
@@ -662,7 +707,7 @@ pub(crate) fn snapshot(p: &Projects) -> Value {
                 // How loud since the last look: read once, here, for the meters.
                 let meter = active.map_or([0.0; 2], |b| b.monitor.meter.take());
                 json!({
-                    "deck": if i == 0 { "A" } else { "B" },
+                    "deck": NAMES.get(i),
                     "track": source.map(|s| s.track.id),
                     "title": source.map(|s| s.track.title.as_str()),
                     "seconds": source.map(|s| s.data.frames() as f64 / f64::from(s.data.sample_rate)),
@@ -694,8 +739,16 @@ pub(crate) fn snapshot(p: &Projects) -> Value {
         "crossfade": m.crossfade,
         "levelA": m.levels[0],
         "levelB": m.levels[1],
+        "levelC": m.levels[2],
+        "levelD": m.levels[3],
         "cueA": m.cue[0],
         "cueB": m.cue[1],
+        "cueC": m.cue[2],
+        "cueD": m.cue[3],
+        "sideA": side_name(m.sides[0]),
+        "sideB": side_name(m.sides[1]),
+        "sideC": side_name(m.sides[2]),
+        "sideD": side_name(m.sides[3]),
         "master": m.master,
         "phones": m.phones,
         "phonesMix": m.phones_mix,

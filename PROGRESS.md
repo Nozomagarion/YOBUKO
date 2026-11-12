@@ -5,6 +5,23 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## The DJ space gets four decks, part 4 — 12 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the last missing Mixxx deck function: four decks, in YOBUKO's own DJ space.
+
+- **Code written:** a **4 decks** button shows decks C and D under A and B, with four channels
+  in the mixer (C A | master | B D). Each deck can sit on the left, the right or the middle
+  (through) of the crossfader. Effect units can go on C and D; library rows load on C and D.
+  SYNC follows the neighbouring deck (A with B, C with D). Part 3 was merged as #40.
+- **Checks passed (Linux, cloud container):** engine test (four decks on their crossfader
+  sides), session test (decks C and D, sides kept, an effect on C), UI test (the button,
+  channels, side button, hiding again), screenshots of two and four decks, clippy.
+  `shared_project_gate_admits_only_the_guarded_parameter_command_and_keeps_its_checks` fails
+  the same way on `feature/multiplayer` without this change.
+- **Limits:** the DDJ-FLX4 drives A and B only (it has two channels). With four decks the page
+  scrolls. Not tried on speakers.
+- **Next criterion:** the owner loads four tracks in a test build and mixes C into A.
+
 ## rbxport inside YOBUKO's window, and no other window left — 12 November 2026 (branch `claude/project-thread-4g4ffl`)
 
 **Goal:** the owner's hard rule: studio, DJ mixing and the USB/CDJ export all live in the one
@@ -49,7 +66,7 @@ merged as #36).
   the master sends and keeps silences, the microphone ducks the music), session tests
   (`dj.record.*` writes a real WAV file, history and crates, Auto DJ fading from outro to intro
   on an offline renderer, `dj.mic.set`), UI tests for the new buttons, a screenshot.
-- **Limits:** still two decks (four decks next), Auto DJ reads where the intro and outro start
+- **Limits:** two decks in this part (four decks: part 4 above), Auto DJ reads where the intro and outro start
   only and has no shuffle. Not tried with a real microphone, real speakers or the DDJ-FLX4.
 - **Next criterion:** the owner records a short mix and runs Auto DJ on two tracks in a test
   build; then four decks.

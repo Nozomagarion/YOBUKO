@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The DJ decks' effects, for [`crate::decks`]: two effect units of three effects each, put on
-//! deck A, deck B or the master. Each effect has an on button and one knob (its "meta": how
+//! decks A–D or the master. Each effect has an on button and one knob (its "meta": how
 //! much); the unit has a mix knob (how much of its effects is heard) and a length in beats that
 //! the echoes and the sweeping effects follow at the deck's tempo.
 //!
@@ -22,10 +22,10 @@ use suhina_dsp::{DelayLine, FirstOrder, FirstOrderCoefficients, OnePole, Smoothe
 
 use crate::chain::MAX_BLOCK;
 
-/// Effect units, effects in a unit, and the places a unit goes: deck A, deck B, the master.
+/// Effect units, effects in a unit, and the places a unit goes: decks A–D, then the master.
 pub const UNITS: usize = 2;
 pub const SLOTS: usize = 3;
-pub const TARGETS: usize = 3;
+pub const TARGETS: usize = crate::decks::DECKS + 1;
 /// The shortest and longest length in beats.
 pub const MIN_BEATS: f32 = 1.0 / 16.0;
 pub const MAX_BEATS: f32 = 32.0;
@@ -129,7 +129,7 @@ impl Default for FxSlot {
 }
 
 /// An effect unit: its three effects, how much of them is heard (0 … 1), the length the echoes
-/// and sweeps follow in beats, the tempo they count beats at, and where it goes (deck A, deck B,
+/// and sweeps follow in beats, the tempo they count beats at, and where it goes (decks A–D,
 /// the master).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct FxUnit {
@@ -595,7 +595,7 @@ impl DeckFx {
         }
     }
 
-    /// Runs the units that go to `target` (0 deck A, 1 deck B, 2 the master) over `buffer`
+    /// Runs the units that go to `target` (0 deck A … 3 deck D, 4 the master) over `buffer`
     /// (interleaved stereo), in unit and slot order.
     pub(crate) fn process(&mut self, target: usize, buffer: &mut [f32]) {
         let frames = (buffer.len() / 2).min(MAX_BLOCK);

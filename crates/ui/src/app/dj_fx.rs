@@ -3,7 +3,7 @@
 
 //! The DJ space's effects: two effect units under the decks, each with three effects (chosen
 //! from a list, switched on, and turned with one knob), a mix knob, a length in beats, and the
-//! places it goes (deck A, deck B, the master). They drive the session's `dj.fx.set`; the
+//! places it goes (decks A–D, the master). They drive the session's `dj.fx.set`; the
 //! units' tempo follows the deck they are on.
 
 use super::tools::small_button;
@@ -151,8 +151,16 @@ impl App {
                         ui.label(egui::RichText::new(&name).strong().color(color));
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 3.0;
+                            let places = [
+                                ("deckA", "A", "deck A"),
+                                ("deckB", "B", "deck B"),
+                                ("deckC", "C", "deck C"),
+                                ("deckD", "D", "deck D"),
+                                ("master", "MST", "the master"),
+                            ];
+                            let four = self.dj.decks.four;
                             for (key, text, place) in
-                                [("deckA", "A", "deck A"), ("deckB", "B", "deck B"), ("master", "MST", "the master")]
+                                places.into_iter().filter(|(k, ..)| four || !matches!(*k, "deckC" | "deckD"))
                             {
                                 let on = fx[key] == true;
                                 if small_button(ui, &format!("{name} on {place}"), text, on, color, ready)

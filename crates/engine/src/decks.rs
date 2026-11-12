@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Two sample-only Preview voices, mixed after the graph through the same output. Each deck
+//! Four sample-only Preview voices (decks A–D), mixed after the graph through the same output. Each deck
 //! plays at its own tempo (the pitch follows) through its own three-band EQ and filter
 //! ([`Tone`]) before the channel level and the crossfader, then the master level. The decks
 //! themselves are [`crate::deck_voice`]; meters read how loud each deck and the master are.
@@ -121,16 +121,43 @@ impl Shaper {
     }
 }
 
-/// The mixer: the crossfader, each channel's fader and headphone button, the master level, and
-/// what the headphones hear.
+/// The decks: A, B, C and D.
+pub const DECKS: usize = 4;
+
+/// Which side of the crossfader a deck is on.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Side {
+    /// Heard with the crossfader to the left.
+    #[default]
+    Left,
+    /// Heard whatever the crossfader does.
+    Thru,
+    /// Heard with the crossfader to the right.
+    Right,
+}
+impl Side {
+    /// How much of a deck on this side passes the crossfader at `x` (0 left … 1 right).
+    fn weight(self, x: f32) -> f32 {
+        match self {
+            Self::Left => 1.0 - x,
+            Self::Thru => 1.0,
+            Self::Right => x,
+        }
+    }
+}
+
+/// The mixer: the crossfader, each channel's fader, headphone button and crossfader side, the
+/// master level, and what the headphones hear.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Mix {
-    /// 0 all deck A, 1 all deck B.
+    /// 0 all the left side (deck A by default), 1 all the right side (deck B).
     pub crossfade: f32,
     /// Each channel's fader, 0 … 1.
-    pub levels: [f32; 2],
+    pub levels: [f32; DECKS],
     /// Which decks the headphones hear.
-    pub cue: [bool; 2],
+    pub cue: [bool; DECKS],
+    /// Each deck's side of the crossfader: A and C left, B and D right unless moved.
+    pub sides: [Side; DECKS],
     /// The master level, 0 … 1 (1 leaves the mix as it is).
     pub master: f32,
     /// The headphones' level, 0 … 1.
@@ -140,7 +167,15 @@ pub struct Mix {
 }
 impl Default for Mix {
     fn default() -> Self {
-        Self { crossfade: 0.5, levels: [1.0; 2], cue: [false; 2], master: 1.0, phones: 1.0, phones_mix: 0.0 }
+        Self {
+            crossfade: 0.5,
+            levels: [1.0; DECKS],
+            cue: [false; DECKS],
+            sides: [Side::Left, Side::Right, Side::Left, Side::Right],
+            master: 1.0,
+            phones: 1.0,
+            phones_mix: 0.0,
+        }
     }
 }
 impl Mix {
@@ -183,8 +218,8 @@ const HEADROOM: f32 = 0.501_187_2;
 pub const SAMPLERS: usize = 8;
 
 pub(crate) struct DeckSender {
-    pub voices: [DeckVoiceSender; 2],
-    pub monitors: [Arc<DeckMonitor>; 2],
+    pub voices: [DeckVoiceSender; DECKS],
+    pub monitors: [Arc<DeckMonitor>; DECKS],
     pub master: Arc<DeckMeter>,
     pub mix: Producer<Mix>,
     pub tone: Producer<(usize, Tone)>,
@@ -198,16 +233,16 @@ pub(crate) struct DeckSender {
     pub mic_meter: Arc<DeckMeter>,
 }
 pub(crate) struct Decks {
-    voices: [DeckVoice; 2],
+    voices: [DeckVoice; DECKS],
     mix: Option<Consumer<Mix>>,
     tone: Option<Consumer<(usize, Tone)>>,
-    shapers: [Shaper; 2],
+    shapers: [Shaper; DECKS],
     rate: f64,
     buffer: Vec<f32>,
-    /// Both decks after their faders and the crossfader, before the master level.
+    /// The decks after their faders and the crossfader, before the master level.
     sum: Vec<f32>,
-    main: [Smoother; 2],
-    cue: [Smoother; 2],
+    main: [Smoother; DECKS],
+    cue: [Smoother; DECKS],
     master_gain: Smoother,
     phones_master: Smoother,
     master: Arc<DeckMeter>,
@@ -232,12 +267,12 @@ impl Decks {
             voices: std::array::from_fn(|_| DeckVoice::new(rate)),
             mix: None,
             tone: None,
-            shapers: [Shaper::new(), Shaper::new()],
+            shapers: std::array::from_fn(|_| Shaper::new()),
             rate: f64::from(rate.max(1)),
             buffer: vec![0.0; MAX_BLOCK * 2],
             sum: vec![0.0; MAX_BLOCK * 2],
-            main: [Smoother::new(0.0, ramp); 2],
-            cue: [Smoother::new(0.0, ramp); 2],
+            main: [Smoother::new(0.0, ramp); DECKS],
+            cue: [Smoother::new(0.0, ramp); DECKS],
             master_gain: Smoother::new(1.0, ramp),
             phones_master: Smoother::new(0.0, ramp),
             master: Arc::new(DeckMeter::default()),
@@ -261,7 +296,7 @@ impl Decks {
         let (tone, tones) = RingBuffer::new(32);
         self.tone = Some(tones);
         DeckSender {
-            voices: [self.voices[0].sender(), self.voices[1].sender()],
+            voices: std::array::from_fn(|i| self.voices[i].sender()),
             monitors: std::array::from_fn(|i| Arc::clone(&self.voices[i].monitor)),
             master: Arc::clone(&self.master),
             mix: tx,
@@ -326,20 +361,26 @@ impl Decks {
                 self.fx.process(i, buffer);
             }
             let trim = db_to_gain(shaper.tone.trim);
-            let weight = if i == 0 { 1.0 - mix.crossfade } else { mix.crossfade };
-            let fader = mix.levels[i] * trim;
+            let weight = mix.sides.get(i).map_or(0.0, |s| s.weight(mix.crossfade));
+            let fader = mix.levels.get(i).copied().unwrap_or(0.0) * trim;
             let main_gain = HEADROOM * fader * weight;
-            let cue_gain =
-                if separate && mix.cue[i] { HEADROOM * fader * mix.phones * (1.0 - mix.phones_mix) } else { 0.0 };
+            let cue_gain = if separate && mix.cue.get(i).copied().unwrap_or(false) {
+                HEADROOM * fader * mix.phones * (1.0 - mix.phones_mix)
+            } else {
+                0.0
+            };
             if !sounding {
                 // Changes made while paused must already be settled when resumed.
-                self.main[i].reset(main_gain);
-                self.cue[i].reset(cue_gain);
+                if let (Some(m), Some(c)) = (self.main.get_mut(i), self.cue.get_mut(i)) {
+                    m.reset(main_gain);
+                    c.reset(cue_gain);
+                }
                 continue;
             }
             any = true;
-            self.main[i].set_target(main_gain);
-            self.cue[i].set_target(cue_gain);
+            let (Some(main), Some(head_gain)) = (self.main.get_mut(i), self.cue.get_mut(i)) else { continue };
+            main.set_target(main_gain);
+            head_gain.set_target(cue_gain);
             let (mut peak_l, mut peak_r) = (0.0f32, 0.0f32);
             for ((dst, head), src) in sum
                 .as_chunks_mut::<2>()
@@ -348,8 +389,8 @@ impl Decks {
                 .zip(cue.as_chunks_mut::<2>().0.iter_mut())
                 .zip(buffer.as_chunks::<2>().0)
             {
-                let m = self.main[i].next_value();
-                let c = self.cue[i].next_value();
+                let m = main.next_value();
+                let c = head_gain.next_value();
                 let clean = |s: f32| if s.is_finite() { s.clamp(-f32::MAX / 16.0, f32::MAX / 16.0) } else { 0.0 };
                 let (l, r) = (clean(src[0]), clean(src[1]));
                 peak_l = peak_l.max(l.abs());
@@ -415,8 +456,8 @@ impl Decks {
         self.master_gain.set_target(mix.master);
         self.phones_master.set_target(phones_master);
         // The master's effects, before the master level.
-        if self.fx.active(2) {
-            self.fx.process(2, sum);
+        if self.fx.active(DECKS) {
+            self.fx.process(DECKS, sum);
         }
         let (mut peak_l, mut peak_r) = (0.0f32, 0.0f32);
         for ((dst, head), src) in out
@@ -521,7 +562,7 @@ impl crate::Controller {
     }
     /// A deck's EQ (dB, [`KILL_DB`] … [`BOOST_DB`]), filter (−1 … 1) and trim (± [`TRIM_DB`]).
     pub fn deck_tone(&mut self, deck: usize, tone: Tone) -> Result<(), String> {
-        if deck > 1 {
+        if deck >= DECKS {
             return Err("unknown DJ deck".into());
         }
         if tone.eq.iter().any(|g| !g.is_finite() || !(KILL_DB..=BOOST_DB).contains(g))

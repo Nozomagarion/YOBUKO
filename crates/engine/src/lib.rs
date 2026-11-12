@@ -125,8 +125,8 @@ pub use deck_record::DeckRecording;
 pub use deck_voice::{DeckMeter, DeckMonitor};
 pub use decks::SAMPLERS as DJ_SAMPLERS;
 pub use decks::{
-    BOOST_DB as DECK_BOOST_DB, KILL_DB as DECK_KILL_DB, MAX_SAMPLES as DECK_MAX_SAMPLES, Mic as DeckMic,
-    Mix as DeckMix, TRIM_DB as DECK_TRIM_DB, Tone as DeckTone,
+    BOOST_DB as DECK_BOOST_DB, DECKS as DJ_DECKS, KILL_DB as DECK_KILL_DB, MAX_SAMPLES as DECK_MAX_SAMPLES,
+    Mic as DeckMic, Mix as DeckMix, Side as DeckSide, TRIM_DB as DECK_TRIM_DB, Tone as DeckTone,
 };
 pub use group::{GROUP_PARAMS, SILENT_DB, group_param_index, group_param_values};
 pub use input::{InputDiagnostics, InputSnapshot, MAX_INPUT_CHANNELS};

@@ -1,7 +1,7 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Auto DJ (`dj.autodj.*`): a queue of library tracks the two decks play one after the other
+//! Auto DJ (`dj.autodj.*`): a queue of library tracks decks A and B play one after the other
 //! on their own. While one deck plays, the next track loads on the other; at the playing
 //! track's outro (its cue named "Outro", else a fade's length before its end) the other deck
 //! starts at its intro (its cue named "Intro", else its start) and the crossfader moves across
@@ -114,8 +114,10 @@ fn advance(p: &mut Projects) -> Result<(), CommandError> {
     if let Some((from, to, began, length)) = p.dj.decks.auto.fading {
         let gone = decks[from].playing.then(|| ((decks[from].position - began) / length.max(0.01)).clamp(0.0, 1.0));
         let progress = gone.unwrap_or(1.0);
-        let x = if to == 1 { progress } else { 1.0 - progress };
-        crate::dj_decks::crossfade(p, x)?;
+        // From the outgoing deck's side of the crossfader to the incoming one's.
+        let end = crate::dj_decks::side_x(p, to).unwrap_or(if to == 1 { 1.0 } else { 0.0 });
+        let start = crate::dj_decks::side_x(p, from).unwrap_or(1.0 - end);
+        crate::dj_decks::crossfade(p, start + (end - start) * progress)?;
         if progress >= 1.0 {
             p.dj.decks.auto.fading = None;
             crate::dj_decks::stop(p, &deck(from))?;
@@ -128,7 +130,8 @@ fn advance(p: &mut Projects) -> Result<(), CommandError> {
         match p.dj.decks.auto.next {
             Some((i, track)) if decks[i].track == Some(track) && !decks[i].loading => {
                 p.dj.decks.auto.next = None;
-                crate::dj_decks::crossfade(p, if i == 1 { 1.0 } else { 0.0 })?;
+                let x = crate::dj_decks::side_x(p, i).unwrap_or(if i == 1 { 1.0 } else { 0.0 });
+                crate::dj_decks::crossfade(p, x)?;
                 start(p, i, track)?;
             }
             Some(_) => {}
