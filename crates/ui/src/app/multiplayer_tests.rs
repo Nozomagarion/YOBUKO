@@ -1099,3 +1099,6 @@ fn synchronous_refusals_survive_state_refreshes_and_can_be_acknowledged_without_
     assert!(harness.state().multiplayer.error.is_none());
     harness.state_mut().leave_multiplayer();
 }
+
+#[path = "multiplayer_studio_tests.rs"]
+mod studio_tests;

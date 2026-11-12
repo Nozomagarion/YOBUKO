@@ -413,6 +413,7 @@ impl App {
                 );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                self.record_button(ui);
                 let shown = self.dj.decks.show_sampler.unwrap_or(self.dj.decks.sampler_shown);
                 if ui
                     .add(egui::Button::selectable(shown, "Sampler").corner_radius(BUTTON_RADIUS))
@@ -570,6 +571,8 @@ impl App {
             cue: self.dj.decks.track(deck).map(|_| self.dj.decks.cue[deck]),
             beat: self.dj.decks.beat(deck),
             colors: self.projects.dj_deck_colors(deck),
+            intro: self.dj.decks.named_cue(deck, auto::INTRO).map(|(_, s)| s),
+            outro: self.dj.decks.named_cue(deck, auto::OUTRO).map(|(_, s)| s),
         }
     }
 
@@ -594,6 +597,7 @@ impl App {
                 let to = f64::from((pointer.x - inner.left()) / inner.width()).clamp(0.0, 1.0) * length;
                 self.seek(deck, to);
             }
+            self.marks_menu(&response, deck);
         } else {
             painter.text(
                 rect.center(),
@@ -809,6 +813,7 @@ impl App {
                         self.send_mixer();
                     }
                 });
+                self.mic_row(ui);
             });
     }
 
@@ -1091,6 +1096,9 @@ struct Marks {
     beat: Option<(f64, f64)>,
     /// The waveform's colours: lows, mids and highs over time.
     colors: Option<std::sync::Arc<suhina_session::WaveColors>>,
+    /// Where the track's intro and outro start, for Auto DJ.
+    intro: Option<f64>,
+    outro: Option<f64>,
 }
 
 impl Marks {
@@ -1135,6 +1143,14 @@ impl Marks {
                 Color32::from_rgb(0xF5, 0x9E, 0x0B),
                 Stroke::NONE,
             ));
+        }
+        let sky = Color32::from_rgb(0x38, 0xBD, 0xF8);
+        for (seconds, text) in [(self.intro, "INTRO"), (self.outro, "OUTRO")] {
+            if let Some(seconds) = seconds.filter(|s| inside(*s)) {
+                painter.vline(x(seconds), rect.y_range(), Stroke::new(1.5, sky));
+                let at = Pos2::new(x(seconds) + 3.0, rect.top() + 1.0);
+                painter.text(at, Align2::LEFT_TOP, text, FontId::proportional(9.0), sky);
+            }
         }
         for &(seconds, color) in self.cues.iter().filter(|(s, _)| inside(*s)) {
             let at = x(seconds);
@@ -1387,12 +1403,18 @@ fn crossfader(ui: &mut Ui, value: &mut f32, width: f32) -> bool {
     (*value - before).abs() > f32::EPSILON
 }
 
+#[path = "dj_auto.rs"]
+mod auto;
 #[path = "dj_deck_beats.rs"]
 mod beats;
 #[path = "dj_fx.rs"]
 mod fx;
 #[path = "dj_library.rs"]
 pub(in crate::app) mod library;
+#[path = "dj_mic.rs"]
+mod mic;
+#[path = "dj_record.rs"]
+mod record;
 #[path = "dj_sampler.rs"]
 mod sampler;
 #[path = "dj_deck_tools.rs"]

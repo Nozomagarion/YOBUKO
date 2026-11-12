@@ -11,16 +11,51 @@ pub struct Playlist {
     pub id: u32,
     pub name: String,
     pub tracks: Vec<u32>,
+    /// A playlist (an order to play in) or a crate (a bin of tracks, shown sorted like the
+    /// library). Left out for a playlist, so libraries written before crates read and write as
+    /// they were.
+    #[serde(default, skip_serializing_if = "PlaylistKind::is_playlist")]
+    pub kind: PlaylistKind,
+}
+
+/// What a [`Playlist`] is for.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum PlaylistKind {
+    #[default]
+    Playlist,
+    Crate,
+}
+
+impl PlaylistKind {
+    fn is_playlist(&self) -> bool {
+        *self == PlaylistKind::Playlist
+    }
 }
 
 #[derive(Debug)]
 pub enum PlaylistEdit {
     Create(String),
-    Rename { playlist: u32, name: String },
+    /// A new, empty crate.
+    CreateCrate(String),
+    Rename {
+        playlist: u32,
+        name: String,
+    },
     Delete(u32),
-    Add { playlist: u32, track: u32 },
-    Remove { playlist: u32, track: u32 },
-    Move { playlist: u32, track: u32, position: usize },
+    Add {
+        playlist: u32,
+        track: u32,
+    },
+    Remove {
+        playlist: u32,
+        track: u32,
+    },
+    Move {
+        playlist: u32,
+        track: u32,
+        position: usize,
+    },
 }
 
 fn valid_name(name: &str) -> bool {
@@ -28,6 +63,17 @@ fn valid_name(name: &str) -> bool {
 }
 
 impl Catalog {
+    /// Adds an empty list; its id.
+    fn push_list(&mut self, name: &str, kind: PlaylistKind) -> Result<u32, String> {
+        if self.playlists.len() >= MAX_PLAYLISTS {
+            return Err("the DJ playlist limit was reached".into());
+        }
+        let id = u32::try_from(self.next_playlist_id).map_err(|_| "DJ playlist ids exhausted")?;
+        self.next_playlist_id = self.next_playlist_id.checked_add(1).ok_or("DJ playlist ids exhausted")?;
+        self.playlists.push(Playlist { id, name: name.into(), tracks: Vec::new(), kind });
+        Ok(id)
+    }
+
     pub(super) fn validate_playlists(&self, tracks: &HashSet<u32>) -> Result<(), String> {
         let mut ids = HashSet::new();
         let mut count = 0usize;
@@ -60,7 +106,9 @@ impl Catalog {
             return Err("the DJ library changed; refresh before editing".into());
         }
         let input_name = match &edit {
-            PlaylistEdit::Create(name) | PlaylistEdit::Rename { name, .. } => Some(name),
+            PlaylistEdit::Create(name) | PlaylistEdit::CreateCrate(name) | PlaylistEdit::Rename { name, .. } => {
+                Some(name)
+            }
             _ => None,
         };
         if input_name.is_some_and(|name| name.len() > 128 || name.chars().any(char::is_control)) {
@@ -69,15 +117,8 @@ impl Catalog {
         let mut next = self.clone();
         let mut created = None;
         match edit {
-            PlaylistEdit::Create(name) => {
-                if next.playlists.len() >= MAX_PLAYLISTS {
-                    return Err("the DJ playlist limit was reached".into());
-                }
-                let id = u32::try_from(next.next_playlist_id).map_err(|_| "DJ playlist ids exhausted")?;
-                next.next_playlist_id = next.next_playlist_id.checked_add(1).ok_or("DJ playlist ids exhausted")?;
-                next.playlists.push(Playlist { id, name: name.trim().into(), tracks: Vec::new() });
-                created = Some(id);
-            }
+            PlaylistEdit::Create(name) => created = Some(next.push_list(name.trim(), PlaylistKind::Playlist)?),
+            PlaylistEdit::CreateCrate(name) => created = Some(next.push_list(name.trim(), PlaylistKind::Crate)?),
             PlaylistEdit::Delete(id) => {
                 let index = next.playlists.iter().position(|p| p.id == id).ok_or("unknown DJ playlist")?;
                 next.playlists.remove(index);

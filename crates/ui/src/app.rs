@@ -2491,6 +2491,11 @@ impl App {
             }
             return;
         }
+        // In the multiplayer session's tab, an edit goes to the session's host, which runs it on
+        // every computer's copy (`docs/spec/shared-studio.md`).
+        if self.shared_studio_action(action) {
+            return;
+        }
         // Playing stops a sample previewing in the browser: the two would play over each other.
         if action.id == "transport.play" {
             browser_view::stop_preview(&mut self.browser, &mut self.projects);
@@ -3072,6 +3077,9 @@ impl App {
             if self.multiplayer_visible() {
                 self.show_multiplayer(ui);
                 return;
+            }
+            if self.shared_studio_shown() {
+                self.show_shared_strip(ui);
             }
             let area = ui.available_rect_before_wrap();
             // A 1 px line between the bars and the view, in the line colour: drawn in the gap

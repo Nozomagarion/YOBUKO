@@ -44,6 +44,7 @@ mod cue;
 #[cfg(test)]
 mod cue_tests;
 mod deck_fx;
+mod deck_record;
 mod deck_voice;
 mod decks;
 mod declick;
@@ -120,11 +121,12 @@ pub use deck_fx::{
     FxKind as DeckFxKind, FxSlot as DeckFxSlot, FxUnit as DeckFxUnit, MAX_BEATS as DECK_FX_MAX_BEATS,
     MIN_BEATS as DECK_FX_MIN_BEATS, SLOTS as DECK_FX_SLOTS, UNITS as DECK_FX_UNITS,
 };
+pub use deck_record::DeckRecording;
 pub use deck_voice::{DeckMeter, DeckMonitor};
 pub use decks::SAMPLERS as DJ_SAMPLERS;
 pub use decks::{
-    BOOST_DB as DECK_BOOST_DB, KILL_DB as DECK_KILL_DB, MAX_SAMPLES as DECK_MAX_SAMPLES, Mix as DeckMix,
-    TRIM_DB as DECK_TRIM_DB, Tone as DeckTone,
+    BOOST_DB as DECK_BOOST_DB, KILL_DB as DECK_KILL_DB, MAX_SAMPLES as DECK_MAX_SAMPLES, Mic as DeckMic,
+    Mix as DeckMix, TRIM_DB as DECK_TRIM_DB, Tone as DeckTone,
 };
 pub use group::{GROUP_PARAMS, SILENT_DB, group_param_index, group_param_values};
 pub use input::{InputDiagnostics, InputSnapshot, MAX_INPUT_CHANNELS};
@@ -1368,7 +1370,7 @@ impl Renderer {
         if let Some(preview) = self.cue.preview.get_mut(..frames * 2) {
             self.preview.finish(preview, frames, &mut self.graph.chains);
         }
-        self.decks.finish(out, &mut self.cue.bus, frames, self.cue.separate);
+        self.decks.finish(out, &mut self.cue.bus, frames, self.cue.separate, &self.input);
         self.cue.finish(out, frames);
         if let Some(bus) = self.cue.bus.get_mut(..frames * 2) {
             self.start_guard.process(out, bus);

@@ -456,3 +456,79 @@ fn a_sampler_slot_plays_from_its_start_into_the_master_at_its_level() {
     assert!(c.sampler_play(8, signal(0.4, 8000)).is_err());
     assert!(c.sampler_gain(0, 1.5).is_err());
 }
+#[test]
+fn the_master_is_recorded_as_heard_with_silence_while_the_decks_rest() {
+    let (mut r, mut c) = setup();
+    let mut rec = c.take_deck_recording().unwrap();
+    assert!(c.take_deck_recording().is_none(), "one writer at a time");
+    assert_eq!(rec.sample_rate(), 8000);
+    // Not recording: nothing is copied.
+    c.sampler_play(0, signal(0.4, 8000)).unwrap();
+    block(&mut r);
+    let mut got = Vec::new();
+    rec.drain(&mut got);
+    assert!(got.is_empty());
+    rec.start();
+    let out = block(&mut r);
+    rec.drain(&mut got);
+    assert_eq!(got, out, "the recording is what the master sends");
+    // Quiet decks still take time in the recording.
+    c.sampler_stop(0).unwrap();
+    block(&mut r);
+    rec.drain(&mut got);
+    got.clear();
+    block(&mut r);
+    rec.drain(&mut got);
+    assert_eq!(got.len(), 2048);
+    assert!(got.iter().all(|s| *s == 0.0));
+    // A full ring loses frames and says so; it never waits.
+    // (four seconds at 8 kHz: 32 blocks of 1024 frames)
+    for _ in 0..40 {
+        block(&mut r);
+    }
+    assert!(rec.dropped_frames() > 0);
+    rec.stop();
+    got.clear();
+    rec.drain(&mut got);
+    block(&mut r);
+    let before = got.len();
+    rec.drain(&mut got);
+    assert_eq!(got.len(), before, "stopped, nothing more is copied");
+    c.return_deck_recording(rec);
+    assert!(c.take_deck_recording().is_some());
+}
+#[test]
+fn the_microphone_talks_over_the_music_which_ducks_under_it() {
+    let (mut r, mut c) = setup();
+    let (mut tx, rx) = rtrb::RingBuffer::new(1 << 16);
+    r.set_audio_input(rx, 2, Arc::new(std::sync::atomic::AtomicU64::new(0)));
+    let feed = |tx: &mut rtrb::Producer<f32>| {
+        for _ in 0..1024 {
+            tx.push(0.0).unwrap(); // input 1
+            tx.push(0.3).unwrap(); // input 2: the microphone
+        }
+    };
+    c.sampler_play(0, signal(0.4, 8000)).unwrap();
+    feed(&mut tx);
+    let music = block(&mut r)[1600];
+    assert!((music - 0.4 * 0.501_187_2).abs() < 1e-5);
+    // Talking on input 2, at half level, the music ducked by half.
+    c.deck_mic(DeckMic { on: true, channel: 1, gain: 0.5, duck: 0.5 }).unwrap();
+    feed(&mut tx);
+    let out = block(&mut r);
+    assert!((out[1600] - (music * 0.5 + 0.15)).abs() < 1e-4, "{}", out[1600]);
+    assert!(c.deck_mic_meter().take()[0] > 0.1);
+    // Off: the music comes back up and the voice goes.
+    c.deck_mic(DeckMic { on: false, ..DeckMic::default() }).unwrap();
+    feed(&mut tx);
+    block(&mut r);
+    feed(&mut tx);
+    assert!((block(&mut r)[1600] - music).abs() < 1e-5);
+    // With nothing else playing it is still heard.
+    c.sampler_stop(0).unwrap();
+    c.deck_mic(DeckMic { on: true, channel: 1, gain: 1.0, duck: 0.0 }).unwrap();
+    feed(&mut tx);
+    assert!((block(&mut r)[1600] - 0.3).abs() < 1e-4);
+    assert!(c.deck_mic(DeckMic { gain: 2.0, ..DeckMic::default() }).is_err());
+    assert!(c.deck_mic(DeckMic { channel: 64, ..DeckMic::default() }).is_err());
+}

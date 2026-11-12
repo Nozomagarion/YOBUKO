@@ -641,3 +641,117 @@ fn the_library_searches_sorts_and_shows_a_playlist() {
     harness.run();
     assert_eq!(titles(harness.state()).len(), 3);
 }
+
+#[test]
+fn the_rec_button_records_the_mix_and_shows_its_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 1));
+    assert!(harness.query_by_label("Record the mix").is_some());
+    // A test has no audio device: recording asks the session, which says so, and stays off.
+    harness.state_mut().toggle_recording(Some(dir.path().join("Recordings")));
+    harness.run();
+    assert!(harness.state().dj.decks.error.as_deref().is_some_and(|e| e.contains("audio")));
+    assert_eq!(harness.state().dj.decks.recording()["on"], false);
+    // While the session records, the button counts.
+    assert_eq!(super::record::rec_text(true, 3675.4), "REC 1:01:15");
+    assert_eq!(super::record::rec_text(false, 12.0), "REC");
+    assert!(super::record::recordings_folder().is_none_or(|f| f.ends_with("YOBUKO Recordings")));
+}
+
+#[test]
+fn the_library_makes_crates_and_shows_each_days_history() {
+    let dir = tempfile::tempdir().unwrap();
+    let history = serde_json::json!({"format": 1, "days": [
+        {"day": "2026-11-12", "plays": [{"track": 2, "title": "Paper Lanterns", "at": "22:10"}, {"track": 1, "title": "Moonlit Echo", "at": "22:14"}]}
+    ]});
+    std::fs::write(dir.path().join("dj-history.json"), serde_json::to_vec(&history).unwrap()).unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns", "Mountain Call"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 3));
+    let titles = |app: &App| -> Vec<String> {
+        app.dj.decks.shown_tracks().iter().map(|t| t["title"].as_str().unwrap_or_default().to_owned()).collect()
+    };
+    // The day's history, in the order played.
+    harness.get_by_label("Show the history of 2026-11-12").click();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Paper Lanterns", "Moonlit Echo"]);
+    // A crate, made and filled.
+    harness.get_by_label("+ New crate").click();
+    until(&mut harness, "the crate", |app| app.dj.decks.lists().iter().any(|l| l.is_crate && l.name == "Crate 1"));
+    let id = harness.state().dj.decks.lists().iter().find(|l| l.is_crate).map(|l| l.id).unwrap();
+    let revision = harness.state().dj.decks.snapshot["revision"].clone();
+    harness
+        .state_mut()
+        .deck_command("dj.playlist.addTrack", serde_json::json!({"playlist": id, "track": 3, "revision": revision}));
+    until(&mut harness, "the crate's track", |app| app.dj.decks.lists().iter().any(|l| l.is_crate && l.count == 1));
+    harness.get_by_label("Show crate Crate 1").click();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Mountain Call"]);
+    assert!(harness.state().dj.decks.library.day.is_none());
+    harness.get_by_label("Show all tracks").click();
+    harness.run();
+    assert_eq!(titles(harness.state()).len(), 3);
+}
+
+#[test]
+fn auto_dj_queues_from_the_library_and_a_deck_marks_its_intro_and_outro() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 2));
+    harness.state_mut().queue_auto_dj(2);
+    harness.state_mut().queue_auto_dj(1);
+    until(&mut harness, "the queue", |app| app.dj.decks.auto_queue() == [2, 1]);
+    harness.get_by_label("Show the Auto DJ list").click();
+    harness.run();
+    let titles: Vec<String> = harness
+        .state()
+        .dj
+        .decks
+        .shown_tracks()
+        .iter()
+        .map(|t| t["title"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(titles, ["Paper Lanterns", "Moonlit Echo"]);
+    for label in ["Auto DJ", "Skip to the next track", "Longer fade"] {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    harness.get_by_label("Longer fade").click();
+    until(&mut harness, "the fade", |app| app.dj.decks.auto()["fade"] == 9.0);
+    // A test has no audio device: switched on, Auto DJ loads deck A and then says it cannot play.
+    harness.get_by_label("Auto DJ").click();
+    until(&mut harness, "deck A loaded", |app| app.dj.decks.track(0) == Some(2));
+    until(&mut harness, "Auto DJ off", |app| {
+        app.dj.decks.auto()["on"] == false && app.dj.decks.snapshot["busy"] == false
+    });
+    assert!(harness.state().dj.decks.auto()["error"].as_str().is_some_and(|e| e.contains("audio")));
+    assert_eq!(harness.state().dj.decks.auto_queue(), [1], "the second track waits");
+    // The intro and outro, at the playhead.
+    harness.state_mut().set_named_cue(0, super::auto::INTRO);
+    until(&mut harness, "the intro", |app| {
+        app.dj.decks.named_cue(0, "Intro").is_some() && app.dj.decks.snapshot["busy"] == false
+    });
+    harness.state_mut().set_named_cue(0, super::auto::OUTRO);
+    until(&mut harness, "the outro", |app| {
+        app.dj.decks.named_cue(0, "Outro").is_some() && app.dj.decks.snapshot["busy"] == false
+    });
+    harness.state_mut().clear_named_cue(0, super::auto::INTRO);
+    until(&mut harness, "no intro", |app| app.dj.decks.named_cue(0, "Intro").is_none());
+}
+
+#[test]
+fn the_microphone_row_sets_its_input_level_and_ducking() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 1));
+    for label in ["Talk on the microphone", "Microphone input", "Microphone level", "Music ducking"] {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    harness.get_by_label("Microphone input").click();
+    until(&mut harness, "input 2", |app| app.dj.decks.mic()["channel"] == 2);
+    harness.state_mut().set_mic(serde_json::json!({"duck": 0.8}));
+    until(&mut harness, "the ducking", |app| (app.dj.decks.mic()["duck"].as_f64().unwrap_or(0.0) - 0.8).abs() < 1e-6);
+    // A test has no audio device: TALK asks the session, which says so.
+    harness.get_by_label("Talk on the microphone").click();
+    harness.run();
+    assert!(harness.state().dj.decks.error.as_deref().is_some_and(|e| e.contains("audio")));
+}

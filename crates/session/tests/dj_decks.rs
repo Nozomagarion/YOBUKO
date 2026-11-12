@@ -310,3 +310,186 @@ fn a_sampler_slot_loads_a_track_and_plays_it_from_its_start_at_its_level() {
         assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
     }
 }
+#[test]
+fn the_mix_is_recorded_to_a_wav_file_until_stopped() {
+    let dir = TempDir::new("dj-record");
+    let (mut p, out) = seeded(&dir);
+    let folder = dir.join("Recordings");
+    assert!(p.execute("dj.record.start", &json!({"folder": ""})).is_err(), "a folder is needed");
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    let started = p.execute("dj.record.start", &json!({"folder": folder})).unwrap();
+    assert!(p.execute("dj.record.start", &json!({"folder": folder})).is_err(), "one recording at a time");
+    let s = idle(&mut p);
+    assert_eq!(s["performance"]["recording"]["on"], true, "{s}");
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let mut audio = vec![0.0; 2048];
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    let mut quiet = vec![0.0; 2048];
+    p.execute("dj.deck.pause", &json!({"deck":"A"})).unwrap();
+    out.renderers.lock().unwrap()[0].process(&mut quiet);
+    let stopped = p.execute("dj.record.stop", &json!({})).unwrap();
+    let path = std::path::PathBuf::from(stopped["path"].as_str().unwrap());
+    assert_eq!(stopped["path"], started["path"]);
+    assert!(path.starts_with(&folder) && path.extension().is_some_and(|e| e == "wav"), "{path:?}");
+    let s = idle(&mut p);
+    let rec = &s["performance"]["recording"];
+    assert_eq!((&rec["on"], &rec["last"], &rec["error"]), (&json!(false), &stopped["path"], &json!(null)), "{rec}");
+    let wav = hound::WavReader::open(&path).unwrap();
+    assert_eq!((wav.spec().channels, wav.spec().bits_per_sample), (2, 16));
+    let samples: Vec<i16> = wav.into_samples().map(Result::unwrap).collect();
+    assert_eq!(samples.len(), 4096, "both blocks, the quiet one too");
+    let heard = (audio[1600] * f32::from(i16::MAX)).round() as i16;
+    assert!((samples[1600] - heard).abs() <= 1, "{} vs {heard}", samples[1600]);
+    // Stopped twice is fine; a new recording starts on the same output and gets its own file.
+    assert_eq!(p.execute("dj.record.stop", &json!({})).unwrap()["recording"], false);
+    let again = p.execute("dj.record.start", &json!({"folder": folder})).unwrap();
+    assert_ne!(again["path"], stopped["path"]);
+    p.execute("dj.record.stop", &json!({})).unwrap();
+    for id in ["dj.record.start", "dj.record.stop"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}
+#[test]
+fn each_track_played_goes_in_the_days_history_once_a_load_and_crates_are_made() {
+    let dir = TempDir::new("dj-history");
+    let (mut p, out) = seeded(&dir);
+    let render = || {
+        if let Some(r) = out.renderers.lock().unwrap().first_mut() {
+            r.process(&mut [0.0; 512]);
+        }
+    };
+    assert_eq!(idle(&mut p)["history"]["days"], json!([]));
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    // Play, pause and play again: one play. Loaded again and played: another.
+    for command in ["dj.deck.play", "dj.deck.pause", "dj.deck.play", "dj.deck.stop"] {
+        p.execute(command, &json!({"deck":"A"})).unwrap();
+        render();
+    }
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let s = idle(&mut p);
+    let days = s["history"]["days"].as_array().unwrap();
+    assert_eq!(days.len(), 1, "{s}");
+    let plays = days[0]["plays"].as_array().unwrap();
+    assert_eq!(plays.len(), 2);
+    assert_eq!((&plays[0]["track"], &plays[0]["title"]), (&json!(1), &json!("Song")));
+    assert_eq!(plays[0]["at"].as_str().map(str::len), Some(5), "hh:mm");
+    // It is kept in its own file, read again by a new session.
+    let file: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join("dj-history.json")).unwrap()).unwrap();
+    assert_eq!(file["days"][0]["plays"].as_array().map(Vec::len), Some(2));
+    let day = days[0]["day"].as_str().unwrap().to_owned();
+    assert!(p.execute("dj.history.delete", &json!({"day":"1999-01-01"})).is_err());
+    p.execute("dj.history.delete", &json!({"day": day})).unwrap();
+    assert_eq!(idle(&mut p)["history"]["days"], json!([]));
+    // A damaged history file is reported and never written over.
+    std::fs::write(dir.join("dj-history.json"), b"{oops").unwrap();
+    let (mut q, _out) = seeded(&dir);
+    assert!(idle(&mut q)["history"]["error"].is_string());
+    q.execute("dj.deck.load", &json!({"deck":"B","track":1})).unwrap();
+    idle(&mut q);
+    q.execute("dj.deck.play", &json!({"deck":"B"})).unwrap();
+    assert_eq!(std::fs::read(dir.join("dj-history.json")).unwrap(), b"{oops");
+    // Crates.
+    let revision = idle(&mut p)["revision"].clone();
+    p.execute("dj.crate.create", &json!({"name":"House","revision":revision})).unwrap();
+    let s = idle(&mut p);
+    assert_eq!((&s["playlists"][0]["name"], &s["playlists"][0]["kind"]), (&json!("House"), &json!("crate")), "{s}");
+    for id in ["dj.crate.create", "dj.history.delete"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}
+#[test]
+fn auto_dj_plays_its_queue_on_both_decks_fading_from_outro_to_intro() {
+    let dir = TempDir::new("dj-autodj");
+    let (mut p, out) = seeded(&dir);
+    let revision = idle(&mut p)["revision"].clone();
+    // The song (2 s) has its intro at 0.5 s and its outro at 1.2 s.
+    p.execute("dj.cue.add", &json!({"track":1,"revision":revision,"name":"Intro","seconds":0.5})).unwrap();
+    let revision = idle(&mut p)["revision"].clone();
+    p.execute("dj.cue.add", &json!({"track":1,"revision":revision,"name":"Outro","seconds":1.2})).unwrap();
+    idle(&mut p);
+    assert!(p.execute("dj.autodj.set", &json!({"on":true})).is_err(), "an empty queue");
+    for _ in 0..2 {
+        p.execute("dj.autodj.add", &json!({"track":1})).unwrap();
+    }
+    assert!(p.execute("dj.autodj.add", &json!({"track":99})).is_err());
+    assert!(p.execute("dj.autodj.set", &json!({"fade":31})).is_err());
+    p.execute("dj.autodj.set", &json!({"on":true,"fade":0.5})).unwrap();
+    // The first track loads on A and starts at its intro, the crossfader on A.
+    let mut s = idle(&mut p);
+    for _ in 0..10 {
+        if let Some(r) = out.renderers.lock().unwrap().first_mut() {
+            r.process(&mut [0.0; 2]);
+        }
+        s = idle(&mut p);
+        if s["performance"]["decks"][0]["playing"] == true {
+            break;
+        }
+    }
+    let a = &s["performance"]["decks"][0];
+    assert_eq!((&a["playing"], &s["performance"]["crossfade"]), (&json!(true), &json!(0.0)), "{s}");
+    assert!((a["position"].as_f64().unwrap() - 0.5).abs() < 0.01, "{a}");
+    // Played on: B loads the next, and at A's outro B starts at its intro and the fader moves.
+    let mut faded = false;
+    let mut moved = false;
+    for _ in 0..200 {
+        out.renderers.lock().unwrap()[0].process(&mut [0.0; 512]);
+        s = idle(&mut p);
+        let x = s["performance"]["crossfade"].as_f64().unwrap();
+        moved |= x > 0.0 && x < 1.0;
+        if s["performance"]["decks"][1]["playing"] == true && s["performance"]["decks"][0]["playing"] == false {
+            faded = true;
+            break;
+        }
+    }
+    assert!(faded && moved, "{s}");
+    assert_eq!(s["performance"]["crossfade"], 1.0);
+    let auto = &s["performance"]["autoDj"];
+    assert_eq!((&auto["on"], &auto["queue"]), (&json!(true), &json!([])), "{auto}");
+    // The queue is empty: B plays out and Auto DJ switches off.
+    for _ in 0..200 {
+        out.renderers.lock().unwrap()[0].process(&mut [0.0; 512]);
+        s = idle(&mut p);
+        if s["performance"]["autoDj"]["on"] == false {
+            break;
+        }
+    }
+    assert_eq!(s["performance"]["autoDj"]["on"], false, "{s}");
+    p.execute("dj.autodj.add", &json!({"track":1})).unwrap();
+    assert!(p.execute("dj.autodj.remove", &json!({"position":2})).is_err());
+    p.execute("dj.autodj.remove", &json!({"position":1})).unwrap();
+    for id in ["dj.autodj.set", "dj.autodj.add", "dj.autodj.skip"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}
+#[test]
+fn the_microphone_is_set_kept_and_handed_to_the_audio() {
+    let dir = TempDir::new("dj-mic");
+    let (mut p, out) = seeded(&dir);
+    // Set while nothing plays: kept, no output opened.
+    p.execute("dj.mic.set", &json!({"gain":0.5,"duck":0.25,"channel":2})).unwrap();
+    assert!(out.renderers.lock().unwrap().is_empty());
+    let mic = &idle(&mut p)["performance"]["mic"];
+    assert_eq!(
+        (&mic["on"], &mic["channel"], &mic["gain"], &mic["duck"]),
+        (&json!(false), &json!(2), &json!(0.5), &json!(0.25))
+    );
+    for wrong in [json!({"gain":1.5}), json!({"channel":0}), json!({"channel":65}), json!({"on":"yes"})] {
+        assert!(p.execute("dj.mic.set", &wrong).is_err(), "{wrong}");
+    }
+    // Switched on, it opens the output; a deck played after (the crossfader in the middle) is ducked.
+    p.execute("dj.mic.set", &json!({"on":true})).unwrap();
+    assert_eq!(out.renderers.lock().unwrap().len(), 1);
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let mut audio = vec![0.0; 2048];
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    assert!((audio[1600] - 0.2 * 0.501_187_2 * 0.5 * 0.75).abs() < 1e-3, "{}", audio[1600]);
+    assert_eq!(idle(&mut p)["performance"]["mic"]["on"], true);
+    assert!(matches!(suhina_session::policy("dj.mic.set").unwrap().agents, suhina_session::Agents::Denied(_)));
+}

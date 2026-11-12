@@ -99,7 +99,8 @@ fn shared_project_gate_blocks_edits_and_history_but_accepts_only_host_owned_cont
     assert!(projects.execute("track.setArm", &json!({"track":1,"arm":true})).is_err());
     assert_eq!(projects.get(id).unwrap().project(), &before);
     projects.apply_shared_control(id, "track.rename", &json!({"track":1,"name":"Confirmed"})).unwrap();
-    assert!(projects.apply_shared_control(id, "track.delete", &json!({"track":1})).is_err());
+    assert!(projects.apply_shared_control(id, "clip.paste", &json!({"track":1,"start":0})).is_err());
+    assert!(projects.apply_shared_control(id, "track.add", &json!({"kind":"midi","preset":"x.fxp"})).is_err());
     projects.restrict_shared_project(id, false).unwrap();
     assert!(projects.execute("track.rename", &json!({"track":1,"name":"Local again"})).is_ok());
 }

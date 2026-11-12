@@ -914,41 +914,44 @@ impl Projects {
         Ok(())
     }
 
-    /// Apply only an authoritative track, note, clip or guarded device edit to the tab bound by the host application.
+    /// Apply only an authoritative edit to the tab bound by the host application: one of the
+    /// fork's typed shared controls, or a shared studio edit (`shared_studio_params`).
     pub fn apply_shared_control(
         &mut self,
         project: ProjectId,
         id: &str,
         params: &Value,
     ) -> Result<Value, CommandError> {
+        let studio = crate::shared_studio_params(id, params).is_ok();
         if !self.shared_controls.contains(&project)
-            || !matches!(
-                id,
-                "track.rename"
-                    | "track.createShared"
-                    | "track.setVolume"
-                    | "track.setPan"
-                    | "device.addShared"
-                    | "device.removeShared"
-                    | "device.setSharedParam"
-                    | "note.add"
-                    | "note.update"
-                    | "note.delete"
-                    | "scene.insert"
-                    | "scene.rename"
-                    | "scene.duplicate"
-                    | "scene.delete"
-                    | "clip.createSharedSlot"
-                    | "clip.copyToSharedSlot"
-                    | "clip.moveSlot"
-                    | "clip.create"
-                    | "clip.insertAudio"
-                    | "clip.move"
-                    | "clip.trim"
-                    | "clip.duplicate"
-                    | "clip.delete"
-                    | "clip.setEnabled"
-            )
+            || !studio
+                && !matches!(
+                    id,
+                    "track.rename"
+                        | "track.createShared"
+                        | "track.setVolume"
+                        | "track.setPan"
+                        | "device.addShared"
+                        | "device.removeShared"
+                        | "device.setSharedParam"
+                        | "note.add"
+                        | "note.update"
+                        | "note.delete"
+                        | "scene.insert"
+                        | "scene.rename"
+                        | "scene.duplicate"
+                        | "scene.delete"
+                        | "clip.createSharedSlot"
+                        | "clip.copyToSharedSlot"
+                        | "clip.moveSlot"
+                        | "clip.create"
+                        | "clip.insertAudio"
+                        | "clip.move"
+                        | "clip.trim"
+                        | "clip.duplicate"
+                        | "clip.delete"
+                        | "clip.setEnabled"
+                )
         {
             return Err("this is not an authoritative shared control".into());
         }
@@ -998,7 +1001,7 @@ impl Projects {
                 )
             {
                 return Err(
-                    "this shared MIDI tab only accepts confirmed multiplayer edits; leave to edit it freely".into()
+                    "this change is not shared in a multiplayer session yet; leave the session to make it".into()
                 );
             }
         }

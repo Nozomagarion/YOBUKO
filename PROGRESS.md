@@ -24,7 +24,7 @@ YOBUKO window. The 12 November test build still opened rbxport as a separate win
 - **Checks passed (Linux, cloud container):** new UI tests for the USB space (rbxport's menus,
   tabs, waiting and failure messages, the web view hiding under an open menu and when leaving),
   link tests (frames, token, a fake rbxport), rbxport's embedding tests, all workspace tests
-  except one existing library test that cannot fail when run as root, clippy, `docs.py check`.
+  except two that fail the same way on `feature/multiplayer` itself (a library test that cannot fail when run as root, and `shared_project_gate_admits_only_the_guarded_parameter_command_and_keeps_its_checks` in the session tests), clippy, `docs.py check`.
   The real program was started under a virtual screen: rbxport's library, its first-run dialog
   and its Preferences tab were drawn inside YOBUKO's window (screenshots shared with the owner).
 - **Not run here:** `cargo deny check` (not installed in the container; CI runs it); new
@@ -33,6 +33,69 @@ YOBUKO window. The 12 November test build still opened rbxport as a separate win
   WKWebView rather than the Linux one tested here. A real USB stick and CDJ were not used.
 - **Next criterion:** in the new test installer, clicking **USB** shows rbxport inside the
   YOBUKO window on Windows and macOS, and no second window or taskbar entry appears.
+
+## The DJ space gets Mixxx's functions, part 3 — 12 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the third part toward every Mixxx function in YOBUKO's own DJ space (part 2 was
+merged as #36).
+
+- **Code written:** a **REC** button records the mix to a WAV file in Music › YOBUKO
+  Recordings. The library keeps **crates** besides playlists, and a **history** of every track
+  played, day by day. **Auto DJ** plays a queue on its own, fading from each track's outro to the
+  next one's intro (set from a deck's overview menu), with ON, SKIP and the fade's length. A
+  **microphone** talks over the master while the music ducks under it (TALK, input, level,
+  ducking).
+- **Checks passed (Linux, cloud container):** engine tests (the recording copies exactly what
+  the master sends and keeps silences, the microphone ducks the music), session tests
+  (`dj.record.*` writes a real WAV file, history and crates, Auto DJ fading from outro to intro
+  on an offline renderer, `dj.mic.set`), UI tests for the new buttons, a screenshot.
+- **Limits:** still two decks (four decks next), Auto DJ reads where the intro and outro start
+  only and has no shuffle. Not tried with a real microphone, real speakers or the DDJ-FLX4.
+- **Next criterion:** the owner records a short mix and runs Auto DJ on two tracks in a test
+  build; then four decks.
+
+## Multiplayer in the real studio — 12 November 2026 (branch `claude/project-thread-9iiran`)
+
+**Goal:** a multiplayer session is the same studio project on every computer, edited together
+live, instead of a separate tab with a form of tables and "Set volume" buttons.
+
+**Why it behaved that way before:** sharing made a copy of the project in a locked tab. The
+studio refused to edit that tab, and only a short list of typed edits from the dedicated form
+reached the others. Edits in the original tab ("Untitled 1") were never sent.
+
+- **Code written:** on the Multiplayer page, **Open the shared session in Studio** brings the
+  shared tab to the front in the ordinary studio (arrangement, launcher, clip editor, devices,
+  mixer). A strip above it shows the session, its code and guests, **Session page** and **Leave
+  session**. Every studio edit made there (drawing a MIDI clip, moving notes, adding a track,
+  moving a fader, devices, scenes, automation, tempo…) goes to the host, which runs it in order
+  on its copy and every guest's: all computers keep the same project. Two people editing at the
+  same moment both get their edit in (the last one wins). Edits that reach outside the project
+  are refused with a sentence: pasting, undo/redo, adding plug-ins or files, audio/MIDI inputs.
+  The old form pages all stay on the Session page. Protocol 19: both computers need this build.
+- **Checks passed (Linux, cloud container):** see the pull request.
+- **Limits:** undo, paste, recording into the shared tab and adding plug-ins are not shared yet;
+  an edit shows on screen once the host confirmed it (a short delay over the Internet). Not yet
+  tried between two real computers.
+- **Next criterion:** the owner and a friend open the shared session in the studio on two
+  computers, each draws a MIDI clip, and both see both clips.
+- **Planned next (owner's requests of 12 November):** save the shared session under a name on
+  every computer and resume it later; the creator keeps the main version and the others a
+  clearly marked backup copy; the multiplayer pages in the rounded DJ look.
+
+## The studio's rounded look pushed closer to the DJ page — 12 November 2026 (branch `claude/project-thread-mkzv4x`)
+
+**What changed.** With a YOBUKO theme, the studio now borrows more from the DJ page the owner
+likes: the launcher, mixer, browser and detail area are outlined cards with the DJ page's 14 px
+corners; clips and buttons are rounder and stand a little further apart; play, stop and record
+are round buttons; and the picked view (Launcher or Arrangement) sits on a pill instead of an
+underline. Every control is still there and still answers clicks in the same place; Suhina's
+own themes keep their square look.
+
+**Checked.** `cargo test -p suhina-ui` (all passed), `cargo clippy -p suhina-ui --all-targets
+-- -D warnings` (clean); before/after render with `render_the_shell_for_review`. Not yet seen on
+a physical machine.
+
+**Next.** The owner looks at it in the app and says what to push further.
 
 ## A slider for the size of the whole interface — 12 November 2026 (branch `claude/project-thread-j96gyr`)
 

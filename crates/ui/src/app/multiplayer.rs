@@ -51,6 +51,8 @@ pub(super) struct MultiplayerPanel {
     pub(super) missing_plugins: Vec<String>,
     /// The invitation last joined with and when, for "Rejoin last session".
     pub(super) last_join: Option<(String, std::time::Instant)>,
+    /// Studio edits made in the shared tab, waiting to go to the host in order.
+    pub(super) outbox: std::collections::VecDeque<(&'static str, serde_json::Value)>,
 }
 impl Default for MultiplayerPanel {
     fn default() -> Self {
@@ -83,6 +85,7 @@ impl Default for MultiplayerPanel {
             linked_pending: None,
             missing_plugins: Vec::new(),
             last_join: None,
+            outbox: Default::default(),
         }
     }
 }
@@ -111,13 +114,110 @@ impl MultiplayerPanel {
     }
 }
 impl App {
+    /// Whether the Multiplayer page shows. The shared session itself shows in the Studio, like
+    /// any project, with the session's strip above it ([`App::shared_studio_shown`]).
     pub(super) fn multiplayer_visible(&self) -> bool {
+        !self.dj.active && self.multiplayer.open
+    }
+
+    /// Whether the Studio shows the shared session now: its tab is in front, a session runs and
+    /// neither the Multiplayer page nor the DJ space covers it.
+    pub(super) fn shared_studio_shown(&self) -> bool {
         !self.dj.active
-            && (self.multiplayer.open
-                || self
-                    .multiplayer
-                    .bound
-                    .is_some_and(|id| Some(id) == self.projects.active() && self.multiplayer.service.active()))
+            && !self.multiplayer.open
+            && self.multiplayer.service.active()
+            && self.multiplayer.bound.is_some_and(|id| Some(id) == self.projects.active())
+    }
+
+    /// Shows the shared session in the Studio: its tab comes to the front.
+    pub(super) fn open_shared_studio(&mut self) {
+        let Some(id) = self.multiplayer.bound else { return };
+        if self.projects.active() != Some(id)
+            && let Err(e) = self.projects.execute("project.switch", &json!({"project": id.0}))
+        {
+            self.multiplayer.error = Some(e.message().to_owned());
+            return;
+        }
+        self.dj.active = false;
+        self.multiplayer.open = false;
+    }
+
+    /// A Studio action on the shared tab: an edit goes to the session's host, which runs it in
+    /// order on every computer's copy (`docs/spec/shared-studio.md`); an edit the session does not
+    /// share yet is refused with a sentence. Returns whether the action was handled here; reads,
+    /// playback and everything that is not a project command run as usual.
+    pub(super) fn shared_studio_action(&mut self, action: &Action) -> bool {
+        if self.multiplayer.bound.is_none_or(|id| Some(id) != self.projects.active())
+            || !self.multiplayer.service.active()
+        {
+            return false;
+        }
+        let kind = suhina_session::commands().iter().find(|c| c.id == action.id).map(|c| c.kind);
+        let Some(kind) = kind.filter(|k| k.target == suhina_session::Target::Project) else {
+            return false;
+        };
+        match kind.effect {
+            suhina_session::Effect::Edit => {}
+            suhina_session::Effect::History => {
+                self.status = Status::Hint("Undo and redo are not shared yet: make the opposite edit instead".into());
+                return true;
+            }
+            _ => return false,
+        }
+        let mut params = action.params.clone();
+        if suhina_session::SEEDED.contains(&action.id)
+            && let Some(object) = params.as_object_mut()
+            && !object.contains_key("seed")
+        {
+            let seed = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(1, |d| d.subsec_nanos() ^ d.as_secs() as u32);
+            object.insert("seed".into(), json!(seed));
+        }
+        if let Err(error) = suhina_session::shared_studio_params(action.id, &params) {
+            self.status = Status::Hint(format!("{error}; leave the session to make this change"));
+            return true;
+        }
+        self.queue_shared_edit(action.id, params);
+        true
+    }
+
+    /// Queues a studio edit for the host. A drag sends one edit per frame: while the host has not
+    /// taken the last one yet, the next one of the same drag replaces it.
+    fn queue_shared_edit(&mut self, id: &'static str, params: serde_json::Value) {
+        const MOST: usize = 256;
+        let outbox = &mut self.multiplayer.outbox;
+        let gesture = params.get("gesture").filter(|g| g.is_string()).cloned();
+        if let (Some(gesture), Some((last_id, last))) = (gesture, outbox.back_mut())
+            && *last_id == id
+            && last.get("gesture") == Some(&gesture)
+        {
+            *last = params;
+        } else if outbox.len() < MOST {
+            outbox.push_back((id, params));
+        } else {
+            self.status = Status::Error("too many edits wait for the host; wait a moment".into());
+            return;
+        }
+        self.send_shared_edits();
+    }
+
+    /// Hands the waiting studio edits to the session, in order, until it is busy.
+    pub(super) fn send_shared_edits(&mut self) {
+        while let Some((id, params)) = self.multiplayer.outbox.front() {
+            let edit = json!({"command": "studio", "id": id, "params": params}).to_string();
+            let request = json!({"base_revision": self.multiplayer.applied_revision, "edit": edit});
+            match self.multiplayer.service.execute("multiplayer.edit", &request) {
+                Ok(_) => {
+                    self.multiplayer.outbox.pop_front();
+                }
+                Err(e) if e.message().contains("busy") => return,
+                Err(e) => {
+                    self.multiplayer.outbox.pop_front();
+                    self.multiplayer.error = Some(e.message().to_owned());
+                }
+            }
+        }
     }
     pub(super) fn multiplayer_command(&mut self, id: &str, params: serde_json::Value) {
         if matches!(id, "multiplayer.host" | "multiplayer.hostProject" | "multiplayer.join") {
@@ -202,6 +302,7 @@ impl App {
     }
     fn leave_multiplayer(&mut self) {
         let _ = self.multiplayer.service.execute("multiplayer.stop", &json!({}));
+        self.multiplayer.outbox.clear();
         self.multiplayer.missing_plugins.clear();
         if let Some(id) = self.multiplayer.bound.take() {
             let _ = self.projects.restrict_shared_project(id, false);
@@ -369,6 +470,7 @@ impl App {
             self.leave_multiplayer();
             return;
         }
+        self.send_shared_edits();
         self.follow_linked_transport(ctx, &state);
         if self.multiplayer.controls.as_ref() == Some(&controls) {
             if disconnected {
@@ -705,6 +807,53 @@ impl App {
         }
     }
 
+    /// The strip above the Studio while it shows the shared session: who is in, the code to
+    /// read out, the edits still on their way, and the way back to the session's page or out.
+    pub(super) fn show_shared_strip(&mut self, ui: &mut Ui) {
+        let mode = self.multiplayer.state["mode"].as_str().unwrap_or("starting").to_owned();
+        let guests = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0);
+        ui.horizontal_wrapped(|ui| {
+            ui.add_space(theme::PAD);
+            ui.colored_label(theme::accent(), "●");
+            ui.strong("Shared session");
+            ui.label(status_text(&mode));
+            if mode == "hosting" {
+                ui.label(format!("· {guests} friend{}", if guests == 1 { "" } else { "s" }));
+            }
+            if !self.multiplayer.short_code.is_empty() {
+                ui.label("· Code");
+                ui.label(egui::RichText::new(&self.multiplayer.short_code).monospace().strong());
+                if ui.button("Copy code").clicked() {
+                    ui.ctx().copy_text(self.multiplayer.short_code.clone());
+                }
+            }
+            let waiting = self.multiplayer.outbox.len();
+            if waiting > 0 {
+                ui.weak(format!("{waiting} edit(s) on their way"));
+            }
+            if ui
+                .button("Session page")
+                .on_hover_text("Invitations, linked playback, takes and the session's other controls")
+                .clicked()
+            {
+                self.multiplayer.open = true;
+            }
+            if ui.button("Leave session").clicked() {
+                self.leave_multiplayer();
+            }
+        });
+        if let Some(error) = self.multiplayer.error.clone() {
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(theme::PAD);
+                ui.colored_label(theme::recording(), error);
+                if ui.button("Dismiss multiplayer message").clicked() {
+                    self.multiplayer.error = None;
+                }
+            });
+        }
+        ui.add_space(theme::PAD / 2.0);
+    }
+
     pub(super) fn show_multiplayer(&mut self, ui: &mut Ui) {
         let active = self.multiplayer.service.active();
         if !active {
@@ -713,6 +862,20 @@ impl App {
         }
         ui.add_space(theme::PAD);
         ui.heading("Multiplayer");
+        if self.multiplayer.bound.is_some() {
+            ui.add_space(theme::PAD / 2.0);
+            if shell::main_button(ui, super::menu_bar::WorkspaceMode::Multiplayer, "Open the shared session in Studio")
+                .on_hover_text(
+                    "The shared project in the Studio, with its arrangement, launcher, clips and devices: \
+                     what anyone changes there reaches everyone",
+                )
+                .clicked()
+            {
+                self.open_shared_studio();
+            }
+            ui.weak("Everyone in the session edits the same project in the Studio. The controls below stay available.");
+            ui.add_space(theme::PAD / 2.0);
+        }
         {
             let mode = self.multiplayer.state["mode"].as_str().unwrap_or("starting").to_owned();
             ui.horizontal(|ui| {
@@ -909,7 +1072,7 @@ impl App {
         }
         self.multiplayer_messages(ui);
         ui.add_space(theme::PAD);
-        ui.weak("Original projects are preserved. Leave to edit this copy freely. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Plug-ins and their settings travel with the copy; each computer runs its own installed plug-ins. Recording directly in the shared tab comes later.");
+        ui.weak("Original projects are preserved. Edits made in the shared session's Studio reach everyone; undo, pasting, recording and adding plug-ins are not shared yet. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Plug-ins and their settings travel with the copy; each computer runs its own installed plug-ins. Recording directly in the shared tab comes later.");
     }
 }
 
