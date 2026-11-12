@@ -497,3 +497,38 @@ fn the_master_is_recorded_as_heard_with_silence_while_the_decks_rest() {
     c.return_deck_recording(rec);
     assert!(c.take_deck_recording().is_some());
 }
+#[test]
+fn the_microphone_talks_over_the_music_which_ducks_under_it() {
+    let (mut r, mut c) = setup();
+    let (mut tx, rx) = rtrb::RingBuffer::new(1 << 16);
+    r.set_audio_input(rx, 2, Arc::new(std::sync::atomic::AtomicU64::new(0)));
+    let feed = |tx: &mut rtrb::Producer<f32>| {
+        for _ in 0..1024 {
+            tx.push(0.0).unwrap(); // input 1
+            tx.push(0.3).unwrap(); // input 2: the microphone
+        }
+    };
+    c.sampler_play(0, signal(0.4, 8000)).unwrap();
+    feed(&mut tx);
+    let music = block(&mut r)[1600];
+    assert!((music - 0.4 * 0.501_187_2).abs() < 1e-5);
+    // Talking on input 2, at half level, the music ducked by half.
+    c.deck_mic(DeckMic { on: true, channel: 1, gain: 0.5, duck: 0.5 }).unwrap();
+    feed(&mut tx);
+    let out = block(&mut r);
+    assert!((out[1600] - (music * 0.5 + 0.15)).abs() < 1e-4, "{}", out[1600]);
+    assert!(c.deck_mic_meter().take()[0] > 0.1);
+    // Off: the music comes back up and the voice goes.
+    c.deck_mic(DeckMic { on: false, ..DeckMic::default() }).unwrap();
+    feed(&mut tx);
+    block(&mut r);
+    feed(&mut tx);
+    assert!((block(&mut r)[1600] - music).abs() < 1e-5);
+    // With nothing else playing it is still heard.
+    c.sampler_stop(0).unwrap();
+    c.deck_mic(DeckMic { on: true, channel: 1, gain: 1.0, duck: 0.0 }).unwrap();
+    feed(&mut tx);
+    assert!((block(&mut r)[1600] - 0.3).abs() < 1e-4);
+    assert!(c.deck_mic(DeckMic { gain: 2.0, ..DeckMic::default() }).is_err());
+    assert!(c.deck_mic(DeckMic { channel: 64, ..DeckMic::default() }).is_err());
+}

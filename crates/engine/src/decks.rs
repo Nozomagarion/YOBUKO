@@ -153,6 +153,30 @@ impl Mix {
             && unit(self.phones_mix)
     }
 }
+/// The microphone on the master: which input channel, how loud, and how far the music ducks
+/// under it while it talks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Mic {
+    /// Talking: the microphone is heard, and the music ducks.
+    pub on: bool,
+    /// The audio input channel it reads, from 0.
+    pub channel: usize,
+    /// Its level, 0 … 1.
+    pub gain: f32,
+    /// How much the music drops while it talks, 0 (not at all) … 1 (silent).
+    pub duck: f32,
+}
+impl Default for Mic {
+    fn default() -> Self {
+        Self { on: false, channel: 0, gain: 1.0, duck: 0.5 }
+    }
+}
+impl Mic {
+    fn is_valid(&self) -> bool {
+        let unit = |n: f32| n.is_finite() && (0.0..=1.0).contains(&n);
+        unit(self.gain) && unit(self.duck) && self.channel < crate::input::MAX_INPUT_CHANNELS
+    }
+}
 /// The headroom the decks leave, so two full tracks summed do not clip: −6 dB.
 const HEADROOM: f32 = 0.501_187_2;
 /// The sampler's slots: short sounds a pad plays from their start, straight to the master.
@@ -170,6 +194,8 @@ pub(crate) struct DeckSender {
     pub sampler_gains: Producer<(usize, f32)>,
     /// The master's recording, while no writer holds it.
     pub recording: Option<DeckRecording>,
+    pub mic: Producer<Mic>,
+    pub mic_meter: Arc<DeckMeter>,
 }
 pub(crate) struct Decks {
     voices: [DeckVoice; 2],
@@ -192,6 +218,11 @@ pub(crate) struct Decks {
     sampler_levels: [Smoother; SAMPLERS],
     tap: DeckTap,
     recording: Option<DeckRecording>,
+    mic: Mic,
+    mics: Option<Consumer<Mic>>,
+    mic_level: Smoother,
+    duck: Smoother,
+    mic_meter: Arc<DeckMeter>,
 }
 impl Decks {
     pub fn new(rate: u32) -> Self {
@@ -217,6 +248,11 @@ impl Decks {
             sampler_levels: [Smoother::new(1.0, ramp); SAMPLERS],
             tap,
             recording: Some(recording),
+            mic: Mic::default(),
+            mics: None,
+            mic_level: Smoother::new(0.0, ramp),
+            duck: Smoother::new(1.0, ramp),
+            mic_meter: Arc::new(DeckMeter::default()),
         }
     }
     pub fn sender(&mut self, devices: suhina_device_sdk::Devices) -> DeckSender {
@@ -239,9 +275,25 @@ impl Decks {
                 tx
             },
             recording: self.recording.take(),
+            mic: {
+                let (tx, rx) = RingBuffer::new(16);
+                self.mics = Some(rx);
+                tx
+            },
+            mic_meter: Arc::clone(&self.mic_meter),
         }
     }
-    pub fn finish(&mut self, out: &mut [f32], cue: &mut [f32], frames: usize, separate: bool) {
+    pub fn finish(
+        &mut self,
+        out: &mut [f32],
+        cue: &mut [f32],
+        frames: usize,
+        separate: bool,
+        input: &crate::input::Input,
+    ) {
+        while let Some(mic) = self.mics.as_mut().and_then(|r| r.pop().ok()) {
+            self.mic = mic;
+        }
         while let Some(mix) = self.mix.as_mut().and_then(|r| r.pop().ok()) {
             self.settings = mix;
         }
@@ -334,6 +386,22 @@ impl Decks {
                 dst[1] += r;
             }
             voice.monitor.meter.add(peak_l, peak_r);
+        }
+        // The microphone, over the music, which ducks under it while it talks.
+        let mic = self.mic;
+        self.mic_level.set_target(if mic.on { mic.gain } else { 0.0 });
+        self.duck.set_target(if mic.on { 1.0 - mic.duck } else { 1.0 });
+        if mic.on || !self.mic_level.is_settled() || !self.duck.is_settled() {
+            any = true;
+            let mut peak = 0.0f32;
+            for (frame, dst) in sum.as_chunks_mut::<2>().0.iter_mut().enumerate() {
+                let duck = self.duck.next_value();
+                let voice = input.sample(frame, mic.channel) * self.mic_level.next_value();
+                peak = peak.max(voice.abs());
+                dst[0] = dst[0] * duck + voice;
+                dst[1] = dst[1] * duck + voice;
+            }
+            self.mic_meter.add(peak, peak);
         }
         let phones_master = if separate { mix.phones * mix.phones_mix } else { 0.0 };
         if !any {
@@ -518,6 +586,17 @@ impl crate::Controller {
     /// Gives the master's recording back when its writer is done.
     pub fn return_deck_recording(&mut self, recording: DeckRecording) {
         self.decks.recording = Some(recording);
+    }
+    /// The microphone on the master.
+    pub fn deck_mic(&mut self, mic: Mic) -> Result<(), String> {
+        if !mic.is_valid() {
+            return Err("the microphone's level and ducking must be 0–1, its input channel 1–64".into());
+        }
+        self.decks.mic.push(mic).map_err(|_| "the audio engine has not taken the previous microphone change".into())
+    }
+    /// The microphone's meter.
+    pub fn deck_mic_meter(&self) -> Arc<DeckMeter> {
+        Arc::clone(&self.decks.mic_meter)
     }
     pub fn deck_mix(&mut self, mix: Mix) -> Result<(), String> {
         if !mix.is_valid() {

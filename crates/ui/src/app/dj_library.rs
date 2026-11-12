@@ -216,7 +216,7 @@ impl App {
     }
 
     /// All tracks, the playlists, the crates and the days of history, to choose what the table
-    /// shows; New playlist and New crate under.
+    /// shows; New playlist and New crate above them.
     fn playlist_list(&mut self, ui: &mut Ui) {
         ui.set_width(170.0);
         let view = &self.dj.decks.library;
@@ -241,9 +241,23 @@ impl App {
         let mut show_auto = choose(ui, auto, format!("Auto DJ  ·  {queued}"), "Show the Auto DJ list".into()).clicked();
         let lists = self.dj.decks.lists();
         let days = self.dj.decks.days();
+        let taken: Vec<String> = lists.iter().map(|l| l.name.clone()).collect();
+        let free = |word: &str| (1..).map(|n| format!("{word} {n}")).find(|n| !taken.contains(n)).unwrap_or_default();
+        let mut make = None;
+        ui.horizontal(|ui| {
+            let new = [
+                ("+ New playlist", "+ PLAYLIST", "Playlist", "dj.playlist.create"),
+                ("+ New crate", "+ CRATE", "Crate", "dj.crate.create"),
+            ];
+            for (label, text, word, command) in new {
+                if tools::small_button(ui, label, text, false, deck_color(0), true).clicked() {
+                    make = Some((command, free(word)));
+                }
+            }
+        });
         let mut delete = None;
         let mut forget = None;
-        egui::ScrollArea::vertical().id_salt("dj-playlists").max_height(ui.available_height() - 64.0).show(ui, |ui| {
+        egui::ScrollArea::vertical().id_salt("dj-playlists").max_height(ui.available_height()).show(ui, |ui| {
             for crates in [false, true] {
                 heading(ui, if crates { "CRATES" } else { "PLAYLISTS" });
                 for list in lists.iter().filter(|l| l.is_crate == crates) {
@@ -278,6 +292,10 @@ impl App {
                 });
             }
         });
+        if let Some((command, name)) = make {
+            let revision = self.dj.decks.revision();
+            self.deck_command(command, json!({"name": name, "revision": revision}));
+        }
         if let Some((list, day)) = picked {
             self.dj.decks.library.playlist = list;
             self.dj.decks.library.day = day;
@@ -303,16 +321,6 @@ impl App {
             && self.dj.decks.library.day.as_ref() == Some(&d)
         {
             self.dj.decks.library.day = None;
-        }
-        let taken: Vec<String> = lists.iter().map(|l| l.name.clone()).collect();
-        let free = |word: &str| (1..).map(|n| format!("{word} {n}")).find(|n| !taken.contains(n)).unwrap_or_default();
-        for (text, word, command) in
-            [("+ New playlist", "Playlist", "dj.playlist.create"), ("+ New crate", "Crate", "dj.crate.create")]
-        {
-            if ui.add(egui::Button::new(text).corner_radius(BUTTON_RADIUS)).clicked() {
-                let revision = self.dj.decks.revision();
-                self.deck_command(command, json!({"name": free(word), "revision": revision}));
-            }
         }
     }
 

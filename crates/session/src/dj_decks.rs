@@ -89,6 +89,9 @@ pub(crate) struct Decks {
     pub(crate) history: crate::dj_history::History,
     /// Auto DJ: its queue and where it is.
     pub(crate) auto: crate::dj_auto::AutoDj,
+    /// The microphone, and its meter in the audio that last heard it.
+    mic: suhina_engine::DeckMic,
+    mic_meter: Option<Arc<DeckMeter>>,
 }
 impl Decks {
     pub(crate) fn apply(&mut self, result: Loaded) {
@@ -237,12 +240,15 @@ pub(crate) fn play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     let from = d.from;
     let mix = p.dj.decks.mixer;
     let fx = p.dj.decks.fx;
+    let mic = p.dj.decks.mic;
     let deck = &p.dj.decks.states[i];
     let (rate, tone, looping, key_lock, key) = (deck.rate, deck.tone, deck.playing_loop(), deck.key_lock, deck.key);
     let target = p.active();
     let player = p.preview_session_mut()?.player_mut()?;
     let ctl = player.controller_mut();
     ctl.deck_mix(mix).map_err(CommandError)?;
+    ctl.deck_mic(mic).map_err(CommandError)?;
+    let mic_meter = ctl.deck_mic_meter();
     for (unit, settings) in fx.into_iter().enumerate() {
         ctl.deck_fx(unit, settings).map_err(CommandError)?;
     }
@@ -264,6 +270,7 @@ pub(crate) fn play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
         crate::dj_history::played(p, &track);
     }
     p.dj.decks.master = Some(master);
+    p.dj.decks.mic_meter = Some(mic_meter);
     Ok(json!({"playing":true}))
 }
 pub(crate) fn pause(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
@@ -482,6 +489,43 @@ pub(crate) fn mixer(p: &mut Projects, v: &Value) -> Result<Value, CommandError> 
     p.dj.decks.mixer = mix;
     Ok(json!({"changed":true}))
 }
+/// `dj.mic.set {on?, channel?, gain?, duck?}`: the microphone on the master. Switched on, it
+/// opens the audio output like Play.
+pub(crate) fn mic(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    let mut mic = p.dj.decks.mic;
+    let unit = |key: &str| -> Result<Option<f32>, CommandError> {
+        match &v[key] {
+            Value::Null => Ok(None),
+            n => n
+                .as_f64()
+                .filter(|n| n.is_finite() && (0.0..=1.0).contains(n))
+                .map(|n| Some(n as f32))
+                .ok_or_else(|| CommandError(format!("{key} must be 0–1"))),
+        }
+    };
+    if let Some(gain) = unit("gain")? {
+        mic.gain = gain;
+    }
+    if let Some(duck) = unit("duck")? {
+        mic.duck = duck;
+    }
+    if !v["channel"].is_null() {
+        let channel = v["channel"].as_u64().filter(|c| (1..=64).contains(c)).ok_or("channel must be 1–64")?;
+        mic.channel = usize::try_from(channel - 1).unwrap_or(0);
+    }
+    if !v["on"].is_null() {
+        mic.on = v["on"].as_bool().ok_or("on must be true or false")?;
+    }
+    let open = p.preview_session().and_then(|s| s.player()).is_some();
+    if mic.on || open {
+        let ctl = p.preview_session_mut()?.player_mut()?.controller_mut();
+        ctl.deck_mic(mic).map_err(CommandError)?;
+        let meter = ctl.deck_mic_meter();
+        p.dj.decks.mic_meter = Some(meter);
+    }
+    p.dj.decks.mic = mic;
+    Ok(json!({"on": mic.on}))
+}
 /// Moves the crossfader (0 = A, 1 = B), keeping the rest of the mixer.
 pub(crate) fn crossfade(p: &mut Projects, x: f64) -> Result<(), CommandError> {
     let m = p.dj.decks.mixer;
@@ -661,6 +705,13 @@ pub(crate) fn snapshot(p: &Projects) -> Value {
         "samplers": crate::dj_sampler::snapshot(p),
         "recording": crate::dj_record::snapshot(p),
         "autoDj": crate::dj_auto::snapshot(p),
+        "mic": {
+            "on": p.dj.decks.mic.on,
+            "channel": p.dj.decks.mic.channel + 1,
+            "gain": p.dj.decks.mic.gain,
+            "duck": p.dj.decks.mic.duck,
+            "meter": p.dj.decks.mic_meter.as_ref().map_or([0.0; 2], |m| m.take()),
+        },
         "effects": DeckFxKind::ALL.iter().map(|k| json!({"id": k.id(), "name": k.name()})).collect::<Vec<_>>(),
     })
 }

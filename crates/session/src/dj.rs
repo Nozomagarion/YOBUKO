@@ -529,6 +529,17 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
     ),
     command!("dj.autodj.clear", "Empty the Auto DJ queue", &[], autodj_clear),
     command!("dj.autodj.skip", "Fade to Auto DJ's next track now", &[], autodj_skip),
+    command!(
+        "dj.mic.set",
+        "Set the DJ microphone: talking on the master over the music, which ducks under it",
+        &[
+            optional("on", ParamType::Bool, "talking: heard on the master; unchanged when left out"),
+            optional("channel", ParamType::Integer, "the audio input it reads, 1–64"),
+            optional("gain", ParamType::Number, "its level, 0–1"),
+            optional("duck", ParamType::Number, "how much the music drops while it talks, 0–1")
+        ],
+        mic_set
+    ),
     command!("dj.playlist.rename", "Rename a local DJ playlist", &[PLAYLIST, NAME, REVISION], rename),
     command!("dj.playlist.delete", "Delete a local DJ playlist without deleting audio", &[PLAYLIST, REVISION], delete),
     command!("dj.playlist.addTrack", "Add a library track to a DJ playlist", &[PLAYLIST, TRACK, REVISION], add),
@@ -761,6 +772,9 @@ fn autodj_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn autodj_skip(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_auto::skip(p, v)
+}
+fn mic_set(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_decks::mic(p, v)
 }
 fn history_delete(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_history::delete(p, v)

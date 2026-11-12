@@ -820,6 +820,7 @@ impl App {
                         self.send_mixer();
                     }
                 });
+                self.mic_row(ui);
             });
     }
 
@@ -1417,6 +1418,8 @@ mod beats;
 mod fx;
 #[path = "dj_library.rs"]
 pub(in crate::app) mod library;
+#[path = "dj_mic.rs"]
+mod mic;
 #[path = "dj_record.rs"]
 mod record;
 #[path = "dj_sampler.rs"]

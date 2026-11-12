@@ -738,3 +738,21 @@ fn auto_dj_queues_from_the_library_and_a_deck_marks_its_intro_and_outro() {
     harness.state_mut().clear_named_cue(0, super::auto::INTRO);
     until(&mut harness, "no intro", |app| app.dj.decks.named_cue(0, "Intro").is_none());
 }
+
+#[test]
+fn the_microphone_row_sets_its_input_level_and_ducking() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 1));
+    for label in ["Talk on the microphone", "Microphone input", "Microphone level", "Music ducking"] {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    harness.get_by_label("Microphone input").click();
+    until(&mut harness, "input 2", |app| app.dj.decks.mic()["channel"] == 2);
+    harness.state_mut().set_mic(serde_json::json!({"duck": 0.8}));
+    until(&mut harness, "the ducking", |app| (app.dj.decks.mic()["duck"].as_f64().unwrap_or(0.0) - 0.8).abs() < 1e-6);
+    // A test has no audio device: TALK asks the session, which says so.
+    harness.get_by_label("Talk on the microphone").click();
+    harness.run();
+    assert!(harness.state().dj.decks.error.as_deref().is_some_and(|e| e.contains("audio")));
+}

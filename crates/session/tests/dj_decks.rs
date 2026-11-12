@@ -465,3 +465,31 @@ fn auto_dj_plays_its_queue_on_both_decks_fading_from_outro_to_intro() {
         assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
     }
 }
+#[test]
+fn the_microphone_is_set_kept_and_handed_to_the_audio() {
+    let dir = TempDir::new("dj-mic");
+    let (mut p, out) = seeded(&dir);
+    // Set while nothing plays: kept, no output opened.
+    p.execute("dj.mic.set", &json!({"gain":0.5,"duck":0.25,"channel":2})).unwrap();
+    assert!(out.renderers.lock().unwrap().is_empty());
+    let mic = &idle(&mut p)["performance"]["mic"];
+    assert_eq!(
+        (&mic["on"], &mic["channel"], &mic["gain"], &mic["duck"]),
+        (&json!(false), &json!(2), &json!(0.5), &json!(0.25))
+    );
+    for wrong in [json!({"gain":1.5}), json!({"channel":0}), json!({"channel":65}), json!({"on":"yes"})] {
+        assert!(p.execute("dj.mic.set", &wrong).is_err(), "{wrong}");
+    }
+    // Switched on, it opens the output; a deck played after (the crossfader in the middle) is ducked.
+    p.execute("dj.mic.set", &json!({"on":true})).unwrap();
+    assert_eq!(out.renderers.lock().unwrap().len(), 1);
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let mut audio = vec![0.0; 2048];
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    assert!((audio[1600] - 0.2 * 0.501_187_2 * 0.5 * 0.75).abs() < 1e-3, "{}", audio[1600]);
+    assert_eq!(idle(&mut p)["performance"]["mic"]["on"], true);
+    assert!(matches!(suhina_session::policy("dj.mic.set").unwrap().agents, suhina_session::Agents::Denied(_)));
+}
