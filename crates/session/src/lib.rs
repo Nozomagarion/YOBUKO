@@ -49,6 +49,7 @@ pub use suhina_dj::BeatGrid as DjBeatGrid;
 mod dj;
 mod dj_colors;
 mod dj_decks;
+mod dj_history;
 mod dj_record;
 mod dj_sampler;
 pub use dj_colors::WaveColors;

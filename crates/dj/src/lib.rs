@@ -18,7 +18,7 @@ mod cue;
 pub use cue::{Cue, CueEdit, CueSet};
 mod playlist;
 mod storage;
-pub use playlist::{Playlist, PlaylistEdit};
+pub use playlist::{Playlist, PlaylistEdit, PlaylistKind};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]

@@ -42,6 +42,8 @@ struct Deck {
     /// Whether the key stays when the speed changes, and how far it is moved, in semitones.
     key_lock: bool,
     key: f64,
+    /// Whether this load of the track is in the day's history yet.
+    logged: bool,
 }
 impl Default for Deck {
     fn default() -> Self {
@@ -57,6 +59,7 @@ impl Default for Deck {
             loop_on: false,
             key_lock: false,
             key: 0.0,
+            logged: false,
         }
     }
 }
@@ -82,6 +85,8 @@ pub(crate) struct Decks {
     pub(crate) samplers: crate::dj_sampler::Samplers,
     /// The mix's recording.
     pub(crate) recorder: crate::dj_record::Recorder,
+    /// The tracks played, by day.
+    pub(crate) history: crate::dj_history::History,
 }
 impl Decks {
     pub(crate) fn apply(&mut self, result: Loaded) {
@@ -189,6 +194,7 @@ fn deck_loaded(d: &mut Deck, token: u64, result: Result<Track, String>) {
                     d.binding = None;
                     d.from = 0.0;
                     d.error = None;
+                    d.logged = false;
                 }
                 Err(e) => d.error = Some(e),
             }
@@ -246,7 +252,15 @@ pub(crate) fn play(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     ctl.deck_play(i, data, from).map_err(CommandError)?;
     let monitor = ctl.deck_monitor(i).ok_or("missing DJ deck monitor")?;
     let master = ctl.deck_master_meter();
-    p.dj.decks.states[i].binding = Some(Binding { target, monitor });
+    let d = &mut p.dj.decks.states[i];
+    d.binding = Some(Binding { target, monitor });
+    if !d.logged
+        && let Some(source) = d.source.as_ref()
+    {
+        d.logged = true;
+        let track = source.track.clone();
+        crate::dj_history::played(p, &track);
+    }
     p.dj.decks.master = Some(master);
     Ok(json!({"playing":true}))
 }

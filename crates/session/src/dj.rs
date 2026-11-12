@@ -499,6 +499,18 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
         usb_export
     ),
     command!("dj.playlist.create", "Create a local DJ playlist", &[NAME, REVISION], create),
+    command!(
+        "dj.crate.create",
+        "Create a local DJ crate (a bin of tracks, shown sorted)",
+        &[NAME, REVISION],
+        create_crate
+    ),
+    command!(
+        "dj.history.delete",
+        "Forget one day of the DJ history (the tracks played)",
+        &[param("day", ParamType::Text, "the day, YYYY-MM-DD")],
+        history_delete
+    ),
     command!("dj.playlist.rename", "Rename a local DJ playlist", &[PLAYLIST, NAME, REVISION], rename),
     command!("dj.playlist.delete", "Delete a local DJ playlist without deleting audio", &[PLAYLIST, REVISION], delete),
     command!("dj.playlist.addTrack", "Add a library track to a DJ playlist", &[PLAYLIST, TRACK, REVISION], add),
@@ -529,7 +541,8 @@ pub(crate) fn ready(projects: &mut Projects) -> Result<(), CommandError> {
 }
 fn library(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
     ready(projects)?;
-    Ok(json!({"tracks": projects.dj.catalog.tracks, "playlists": projects.dj.catalog.playlists,
+    let history = crate::dj_history::snapshot(projects);
+    Ok(json!({"tracks": projects.dj.catalog.tracks, "playlists": projects.dj.catalog.playlists, "history": history,
         "performance":crate::dj_decks::snapshot(projects), "grids":projects.dj.catalog.grids, "waveform":projects.dj.waveform.snapshot(),
         "cues": projects.dj.catalog.cues, "preview": crate::dj_preview::snapshot(projects),
         "revision": projects.dj.catalog.revision, "created_playlist": projects.dj.created.take(),
@@ -592,6 +605,9 @@ fn edit(projects: &mut Projects, params: &Value, edit: PlaylistEdit) -> Result<V
 }
 fn create(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     edit(p, v, PlaylistEdit::Create(name(v)?))
+}
+fn create_crate(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    edit(p, v, PlaylistEdit::CreateCrate(name(v)?))
 }
 fn rename(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     edit(p, v, PlaylistEdit::Rename { playlist: id(v, "playlist")?, name: name(v)? })
@@ -711,6 +727,9 @@ fn sampler_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn sampler_gain(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_sampler::gain(p, v)
+}
+fn history_delete(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_history::delete(p, v)
 }
 fn record_start(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_record::start(p, v)

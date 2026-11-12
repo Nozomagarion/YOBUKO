@@ -1,8 +1,9 @@
 // Copyright (C) 2026 The Suhina contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! The DJ space's library: every track, or one playlist's, searched by title, tempo or key and
-//! sorted by any column; playlists made, filled and emptied here; Load A / Load B on each row.
+//! The DJ space's library: every track, or one playlist's, crate's or day of history's,
+//! searched by title, tempo or key and sorted by any column; playlists and crates made, filled
+//! and emptied here; Load A / Load B on each row.
 
 use super::*;
 
@@ -24,8 +25,18 @@ pub(in crate::app) struct LibraryView {
     pub(in crate::app) search: String,
     pub(in crate::app) sort: Sort,
     pub(in crate::app) descending: bool,
-    /// The playlist shown, by id; every track when `None`.
+    /// The playlist or crate shown, by id; every track when `None`.
     pub(in crate::app) playlist: Option<u64>,
+    /// The day of history shown, instead.
+    pub(in crate::app) day: Option<String>,
+}
+
+/// A list in the library's side bar: a playlist or a crate.
+pub(in crate::app) struct List {
+    pub(in crate::app) id: u64,
+    pub(in crate::app) name: String,
+    pub(in crate::app) count: usize,
+    pub(in crate::app) is_crate: bool,
 }
 
 impl Decks {
@@ -33,9 +44,18 @@ impl Decks {
     pub(in crate::app) fn shown_tracks(&self) -> Vec<Value> {
         let all = self.snapshot["tracks"].as_array().cloned().unwrap_or_default();
         let view = &self.library;
-        let mut tracks: Vec<Value> = match view.playlist {
-            None => all,
-            Some(id) => {
+        let by_id = |ids: Vec<&Value>| -> Vec<Value> {
+            ids.into_iter().filter_map(|t| all.iter().find(|track| track["id"] == *t).cloned()).collect()
+        };
+        let mut tracks: Vec<Value> = match (&view.day, view.playlist) {
+            (Some(day), _) => {
+                let days = self.snapshot["history"]["days"].as_array().cloned().unwrap_or_default();
+                let plays = days.iter().find(|d| d["day"] == day.as_str()).and_then(|d| d["plays"].as_array().cloned());
+                let plays = plays.unwrap_or_default();
+                by_id(plays.iter().map(|p| &p["track"]).collect())
+            }
+            (None, None) => all.clone(),
+            (None, Some(id)) => {
                 let playlist =
                     self.snapshot["playlists"].as_array().into_iter().flatten().find(|p| p["id"].as_u64() == Some(id));
                 playlist
@@ -75,14 +95,30 @@ impl Decks {
         tracks
     }
 
-    fn playlists(&self) -> Vec<(u64, String, usize)> {
+    /// The playlists and crates.
+    pub(in crate::app) fn lists(&self) -> Vec<List> {
         self.snapshot["playlists"]
             .as_array()
             .into_iter()
             .flatten()
             .filter_map(|p| {
-                Some((p["id"].as_u64()?, p["name"].as_str()?.to_owned(), p["tracks"].as_array().map_or(0, Vec::len)))
+                Some(List {
+                    id: p["id"].as_u64()?,
+                    name: p["name"].as_str()?.to_owned(),
+                    count: p["tracks"].as_array().map_or(0, Vec::len),
+                    is_crate: p["kind"] == "crate",
+                })
             })
+            .collect()
+    }
+
+    /// The days of history, newest first, with how many tracks were played.
+    fn days(&self) -> Vec<(String, usize)> {
+        self.snapshot["history"]["days"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|d| Some((d["day"].as_str()?.to_owned(), d["plays"].as_array().map_or(0, Vec::len))))
             .collect()
     }
 
@@ -168,38 +204,69 @@ impl App {
             });
     }
 
-    /// All tracks and the playlists, to choose what the table shows; New playlist under.
+    /// All tracks, the playlists, the crates and the days of history, to choose what the table
+    /// shows; New playlist and New crate under.
     fn playlist_list(&mut self, ui: &mut Ui) {
         ui.set_width(170.0);
-        ui.label(egui::RichText::new("PLAYLISTS").small().color(theme::text_hint()));
-        let current = self.dj.decks.library.playlist;
-        let choose = |ui: &mut Ui, id: Option<u64>, text: String, label: String| {
+        let view = &self.dj.decks.library;
+        let (current, day) = (view.playlist, view.day.clone());
+        let choose = |ui: &mut Ui, on: bool, text: String, label: String| {
             let response = ui.add_sized(
                 Vec2::new(ui.available_width(), 24.0),
-                egui::Button::selectable(current == id, egui::RichText::new(text).size(12.5)).corner_radius(8),
+                egui::Button::selectable(on, egui::RichText::new(text).size(12.5)).corner_radius(8),
             );
-            response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, current == id, &label));
+            response.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, on, &label));
             response
         };
-        let mut picked = choose(ui, None, "All tracks".into(), "Show all tracks".into()).clicked().then_some(None);
-        let playlists = self.dj.decks.playlists();
+        let heading = |ui: &mut Ui, text: &str| {
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new(text).small().color(theme::text_hint()));
+        };
+        let all_on = current.is_none() && day.is_none();
+        let mut picked: Option<(Option<u64>, Option<String>)> =
+            choose(ui, all_on, "All tracks".into(), "Show all tracks".into()).clicked().then_some((None, None));
+        let lists = self.dj.decks.lists();
+        let days = self.dj.decks.days();
         let mut delete = None;
-        egui::ScrollArea::vertical().id_salt("dj-playlists").max_height(ui.available_height() - 34.0).show(ui, |ui| {
-            for (id, name, count) in &playlists {
-                let response = choose(ui, Some(*id), format!("{name}  ·  {count}"), format!("Show playlist {name}"));
+        let mut forget = None;
+        egui::ScrollArea::vertical().id_salt("dj-playlists").max_height(ui.available_height() - 64.0).show(ui, |ui| {
+            for crates in [false, true] {
+                heading(ui, if crates { "CRATES" } else { "PLAYLISTS" });
+                for list in lists.iter().filter(|l| l.is_crate == crates) {
+                    let (kind, name) = (if crates { "crate" } else { "playlist" }, &list.name);
+                    let on = current == Some(list.id) && day.is_none();
+                    let response = choose(ui, on, format!("{name}  ·  {}", list.count), format!("Show {kind} {name}"));
+                    if response.clicked() {
+                        picked = Some((Some(list.id), None));
+                    }
+                    response.context_menu(|ui| {
+                        if ui.button(format!("Delete {kind} {name}")).clicked() {
+                            delete = Some(list.id);
+                            ui.close();
+                        }
+                    });
+                }
+            }
+            if !days.is_empty() {
+                heading(ui, "HISTORY");
+            }
+            for (d, count) in &days {
+                let on = day.as_deref() == Some(d.as_str());
+                let response = choose(ui, on, format!("{d}  ·  {count}"), format!("Show the history of {d}"));
                 if response.clicked() {
-                    picked = Some(Some(*id));
+                    picked = Some((None, Some(d.clone())));
                 }
                 response.context_menu(|ui| {
-                    if ui.button(format!("Delete playlist {name}")).clicked() {
-                        delete = Some(*id);
+                    if ui.button(format!("Forget the history of {d}")).clicked() {
+                        forget = Some(d.clone());
                         ui.close();
                     }
                 });
             }
         });
-        if let Some(id) = picked {
-            self.dj.decks.library.playlist = id;
+        if let Some((list, day)) = picked {
+            self.dj.decks.library.playlist = list;
+            self.dj.decks.library.day = day;
             self.dj.decks.selected = 0;
         }
         if let Some(id) = delete {
@@ -210,12 +277,21 @@ impl App {
                 self.dj.decks.library.playlist = None;
             }
         }
-        let new = ui.add(egui::Button::new("+ New playlist").corner_radius(BUTTON_RADIUS));
-        if new.clicked() {
-            let taken: Vec<String> = playlists.iter().map(|(_, name, _)| name.clone()).collect();
-            let name = (1..).map(|n| format!("Playlist {n}")).find(|n| !taken.contains(n)).unwrap_or_default();
-            let revision = self.dj.decks.revision();
-            self.deck_command("dj.playlist.create", json!({"name": name, "revision": revision}));
+        if let Some(d) = forget
+            && self.deck_command("dj.history.delete", json!({"day": d}))
+            && self.dj.decks.library.day.as_ref() == Some(&d)
+        {
+            self.dj.decks.library.day = None;
+        }
+        let taken: Vec<String> = lists.iter().map(|l| l.name.clone()).collect();
+        let free = |word: &str| (1..).map(|n| format!("{word} {n}")).find(|n| !taken.contains(n)).unwrap_or_default();
+        for (text, word, command) in
+            [("+ New playlist", "Playlist", "dj.playlist.create"), ("+ New crate", "Crate", "dj.crate.create")]
+        {
+            if ui.add(egui::Button::new(text).corner_radius(BUTTON_RADIUS)).clicked() {
+                let revision = self.dj.decks.revision();
+                self.deck_command(command, json!({"name": free(word), "revision": revision}));
+            }
         }
     }
 
@@ -341,8 +417,8 @@ impl App {
     /// A row's right-click menu: load it, add it to a playlist, take it out of the one shown.
     fn row_menu(&mut self, response: &egui::Response, track: &Value, title: &str) {
         let Some(id) = track["id"].as_u64() else { return };
-        let playlists = self.dj.decks.playlists();
-        let shown = self.dj.decks.library.playlist;
+        let lists = self.dj.decks.lists();
+        let shown = self.dj.decks.library.playlist.filter(|_| self.dj.decks.library.day.is_none());
         let mut action: Option<(&str, Value)> = None;
         let mut load = None;
         let mut sampler = None;
@@ -366,19 +442,26 @@ impl App {
                 }
             });
             ui.separator();
-            ui.menu_button("Add to playlist", |ui| {
-                if playlists.is_empty() {
-                    ui.label(
-                        egui::RichText::new("No playlist yet: make one with + New playlist").color(theme::text_hint()),
-                    );
-                }
-                for (playlist, name, _) in &playlists {
-                    if ui.button(name).clicked() {
-                        action = Some(("dj.playlist.addTrack", json!({"playlist": playlist, "track": id})));
-                        ui.close();
+            for crates in [false, true] {
+                let (menu, none) = if crates {
+                    ("Add to crate", "No crate yet: make one with + New crate")
+                } else {
+                    ("Add to playlist", "No playlist yet: make one with + New playlist")
+                };
+                ui.menu_button(menu, |ui| {
+                    let mut any = false;
+                    for list in lists.iter().filter(|l| l.is_crate == crates) {
+                        any = true;
+                        if ui.button(&list.name).clicked() {
+                            action = Some(("dj.playlist.addTrack", json!({"playlist": list.id, "track": id})));
+                            ui.close();
+                        }
                     }
-                }
-            });
+                    if !any {
+                        ui.label(egui::RichText::new(none).color(theme::text_hint()));
+                    }
+                });
+            }
             if let Some(playlist) = shown
                 && ui.button("Remove from this playlist").clicked()
             {

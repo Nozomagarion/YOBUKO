@@ -659,3 +659,37 @@ fn the_rec_button_records_the_mix_and_shows_its_time() {
     assert_eq!(super::record::rec_text(false, 12.0), "REC");
     assert!(super::record::recordings_folder().is_none_or(|f| f.ends_with("YOBUKO Recordings")));
 }
+
+#[test]
+fn the_library_makes_crates_and_shows_each_days_history() {
+    let dir = tempfile::tempdir().unwrap();
+    let history = serde_json::json!({"format": 1, "days": [
+        {"day": "2026-11-12", "plays": [{"track": 2, "title": "Paper Lanterns", "at": "22:10"}, {"track": 1, "title": "Moonlit Echo", "at": "22:14"}]}
+    ]});
+    std::fs::write(dir.path().join("dj-history.json"), serde_json::to_vec(&history).unwrap()).unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns", "Mountain Call"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 3));
+    let titles = |app: &App| -> Vec<String> {
+        app.dj.decks.shown_tracks().iter().map(|t| t["title"].as_str().unwrap_or_default().to_owned()).collect()
+    };
+    // The day's history, in the order played.
+    harness.get_by_label("Show the history of 2026-11-12").click();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Paper Lanterns", "Moonlit Echo"]);
+    // A crate, made and filled.
+    harness.get_by_label("+ New crate").click();
+    until(&mut harness, "the crate", |app| app.dj.decks.lists().iter().any(|l| l.is_crate && l.name == "Crate 1"));
+    let id = harness.state().dj.decks.lists().iter().find(|l| l.is_crate).map(|l| l.id).unwrap();
+    let revision = harness.state().dj.decks.snapshot["revision"].clone();
+    harness
+        .state_mut()
+        .deck_command("dj.playlist.addTrack", serde_json::json!({"playlist": id, "track": 3, "revision": revision}));
+    until(&mut harness, "the crate's track", |app| app.dj.decks.lists().iter().any(|l| l.is_crate && l.count == 1));
+    harness.get_by_label("Show crate Crate 1").click();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Mountain Call"]);
+    assert!(harness.state().dj.decks.library.day.is_none());
+    harness.get_by_label("Show all tracks").click();
+    harness.run();
+    assert_eq!(titles(harness.state()).len(), 3);
+}

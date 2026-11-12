@@ -350,3 +350,54 @@ fn the_mix_is_recorded_to_a_wav_file_until_stopped() {
         assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
     }
 }
+#[test]
+fn each_track_played_goes_in_the_days_history_once_a_load_and_crates_are_made() {
+    let dir = TempDir::new("dj-history");
+    let (mut p, out) = seeded(&dir);
+    let render = || {
+        if let Some(r) = out.renderers.lock().unwrap().first_mut() {
+            r.process(&mut [0.0; 512]);
+        }
+    };
+    assert_eq!(idle(&mut p)["history"]["days"], json!([]));
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    // Play, pause and play again: one play. Loaded again and played: another.
+    for command in ["dj.deck.play", "dj.deck.pause", "dj.deck.play", "dj.deck.stop"] {
+        p.execute(command, &json!({"deck":"A"})).unwrap();
+        render();
+    }
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let s = idle(&mut p);
+    let days = s["history"]["days"].as_array().unwrap();
+    assert_eq!(days.len(), 1, "{s}");
+    let plays = days[0]["plays"].as_array().unwrap();
+    assert_eq!(plays.len(), 2);
+    assert_eq!((&plays[0]["track"], &plays[0]["title"]), (&json!(1), &json!("Song")));
+    assert_eq!(plays[0]["at"].as_str().map(str::len), Some(5), "hh:mm");
+    // It is kept in its own file, read again by a new session.
+    let file: serde_json::Value = serde_json::from_slice(&std::fs::read(dir.join("dj-history.json")).unwrap()).unwrap();
+    assert_eq!(file["days"][0]["plays"].as_array().map(Vec::len), Some(2));
+    let day = days[0]["day"].as_str().unwrap().to_owned();
+    assert!(p.execute("dj.history.delete", &json!({"day":"1999-01-01"})).is_err());
+    p.execute("dj.history.delete", &json!({"day": day})).unwrap();
+    assert_eq!(idle(&mut p)["history"]["days"], json!([]));
+    // A damaged history file is reported and never written over.
+    std::fs::write(dir.join("dj-history.json"), b"{oops").unwrap();
+    let (mut q, _out) = seeded(&dir);
+    assert!(idle(&mut q)["history"]["error"].is_string());
+    q.execute("dj.deck.load", &json!({"deck":"B","track":1})).unwrap();
+    idle(&mut q);
+    q.execute("dj.deck.play", &json!({"deck":"B"})).unwrap();
+    assert_eq!(std::fs::read(dir.join("dj-history.json")).unwrap(), b"{oops");
+    // Crates.
+    let revision = idle(&mut p)["revision"].clone();
+    p.execute("dj.crate.create", &json!({"name":"House","revision":revision})).unwrap();
+    let s = idle(&mut p);
+    assert_eq!((&s["playlists"][0]["name"], &s["playlists"][0]["kind"]), (&json!("House"), &json!("crate")), "{s}");
+    for id in ["dj.crate.create", "dj.history.delete"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}
