@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use suhina_collaboration::Edit;
 use suhina_model::Project;
 
-pub const PROTOCOL: u16 = 18;
+pub const PROTOCOL: u16 = 19;
 pub const COPY_FORMAT: u16 = 3;
 
 pub(crate) fn engine_revision() -> Result<String, String> {
@@ -20,7 +20,9 @@ pub(crate) fn engine_revision() -> Result<String, String> {
     Ok(revision.to_owned())
 }
 
-pub const MAX_FRAME: usize = 65536;
+/// One network message at most. A state carries up to 32 operations, each a studio edit of up
+/// to `suhina_session::MAX_SHARED_PARAMS` bytes, besides the track controls.
+pub const MAX_FRAME: usize = 256 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -155,12 +157,19 @@ pub enum WireEdit {
     ClipDelete { clip: u32 },
     #[serde(rename = "clip.setEnabled")]
     ClipEnabled { clip: u32, enabled: bool },
+    /// Any studio edit of a shared tab (`suhina_session::shared_studio_params`), run as the studio
+    /// ran it: `id` is the command, `params` its parameters.
+    #[serde(rename = "studio")]
+    Studio { id: String, params: Value },
 }
 
 impl WireEdit {
     pub fn edit(&self) -> Result<Edit, String> {
         if matches!(self,Self::Rename{name,..} if name.chars().any(char::is_control)) {
             return Err("shared track names cannot contain control characters".into());
+        }
+        if let Self::Studio { id, params } = self {
+            return Edit::studio(id, params.clone()).map_err(|e| e.to_string());
         }
         let (id, params) = self.command();
         Edit::new(id, params).map_err(|e| e.to_string())
@@ -218,6 +227,8 @@ impl WireEdit {
             Self::ClipEnabled { clip, enabled } => {
                 ("clip.setEnabled", json!({"clips":[{"clip":clip}],"enabled":enabled}))
             }
+            // An unknown command runs nothing: `edit` refuses it before anyone asks for this.
+            Self::Studio { id, params } => (suhina_session::shared_studio_id(id).unwrap_or(""), params.clone()),
         }
     }
 }

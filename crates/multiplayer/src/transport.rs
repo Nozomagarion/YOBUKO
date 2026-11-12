@@ -941,7 +941,7 @@ fn start_guest(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
 }
 fn edit(s: &mut Service, p: &Value) -> Result<Value, CommandError> {
     let text = p["edit"].as_str().ok_or("edit must be JSON text")?;
-    if text.len() > 1024 {
+    if text.len() > suhina_session::MAX_SHARED_PARAMS + 512 {
         return Err("edit is too large".into());
     }
     let edit: WireEdit = serde_json::from_str(text).map_err(|_| CommandError::from("invalid shared edit"))?;

@@ -16,8 +16,8 @@ covers:
 
 Self-authored extension of the host-ordered session adapter
 ([several guests](lan-multiple-guests.md)). The collaboration protocol, its limits and its
-admission rules are unchanged; only the transport between computers changes. Protocol 18
-(17 before one code admitted the whole group, 16 before [plug-ins in shared sessions](shared-plugins.md), 14 before [heavy sessions](heavy-sessions.md) and [session resume](session-resume.md), each
+admission rules are unchanged; only the transport between computers changes. Protocol 19
+(18 before [studio edits](shared-studio.md) and 256 KiB messages, 17 before one code admitted the whole group, 16 before [plug-ins in shared sessions](shared-plugins.md), 14 before [heavy sessions](heavy-sessions.md) and [session resume](session-resume.md), each
 developed as 15 on its own, 13 before [linked playback](linked-playback.md) added the shared
 transport).
 

@@ -85,6 +85,7 @@ mod scales;
 mod sends;
 mod shared_devices;
 mod shared_launcher;
+mod shared_studio;
 mod soundmap;
 mod take_carry;
 mod tempo;
@@ -128,6 +129,7 @@ pub use rack::{
 pub use recording::{COUNT_IN_BARS, LiveTake, RECORDED_FOLDER};
 pub use relink::COLLECTED;
 pub use relink::{MAX_RELINK, search as find_candidates};
+pub use shared_studio::{MAX_SHARED_PARAMS, SEEDED, shared_studio_command, shared_studio_id, shared_studio_params};
 pub use soundmap::{scope_files, sound_map_commands};
 pub use suhina_plugins::Placement;
 pub use suhina_project_file::{EXTENSION as PROJECT_EXTENSION, is_project_file};
