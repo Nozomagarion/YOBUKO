@@ -8,10 +8,14 @@ covers:
   - crates/engine/src/decks.rs
   - crates/engine/src/deck_voice.rs
   - crates/engine/src/deck_fx.rs
+  - crates/engine/src/deck_record.rs
   - crates/engine/src/decks_tests.rs
   - crates/session/src/dj_decks.rs
   - crates/session/src/dj_sampler.rs
   - crates/session/src/dj_colors.rs
+  - crates/session/src/dj_record.rs
+  - crates/session/src/dj_history.rs
+  - crates/session/src/dj_auto.rs
   - crates/session/tests/dj_decks.rs
   - crates/dj
   - crates/session/src/dj.rs
@@ -24,6 +28,10 @@ covers:
   - crates/ui/src/app/dj_deck_beats.rs
   - crates/ui/src/app/dj_fx.rs
   - crates/ui/src/app/dj_sampler.rs
+  - crates/ui/src/app/dj_record.rs
+  - crates/ui/src/app/dj_auto.rs
+  - crates/ui/src/app/dj_mic.rs
+  - crates/dj/src/playlist.rs
   - crates/ui/src/app/dj_library.rs
   - crates/engine/src/preview.rs
   - crates/midi/src/lib.rs
@@ -488,7 +496,8 @@ loop plays on from there. Speed, tone and the loop are kept per deck in the sess
 handed to the engine on Play. Meters: each deck's peak after its tone, trim and fader, and the
 master's, kept as the loudest sample since the last read (`DeckMeter::take`); the library
 snapshot reads them (`meter`, `masterMeter`), so a read resets them. Key lock, effects and the
-sampler are described in the next section; no scratching or recording is included.
+sampler are described in the next sections, recording, the microphone and Auto DJ in part 3;
+no scratching is included.
 CUE A/B is post-channel level, pre-crossfader, on the separate configured cue pair only; absence
 of a separate pair never leaks an otherwise muted deck into main. The headphones hear the cued
 decks times `phones × (1 − phonesMix)` and the master times `phones × phonesMix`; the existing
@@ -618,3 +627,74 @@ Automated: engine tests for the key lock, effects and the sampler on a real Rend
 tests for `dj.deck.key`, `dj.fx.set` and `dj.sampler.*`; UI tests for the key row, tap,
 quantize, the effect units and the sampler; a unit test for the band colours. Not tried with a
 real DDJ-FLX4 or real speakers.
+
+## Deck and mixer functions, part 3 (fork extension)
+
+**Recording the mix.** While a recording runs, the audio thread copies what the DJ master sends
+(after the master effects and level) into a ring of four seconds made with the decks
+(`crates/engine/src/deck_record.rs`); a writer thread empties it into a 16-bit stereo WAV
+file. Quiet moments are kept, so the file runs as long as the recording. Frames the ring has
+no room for are counted (`dropped`), never waited for; a WAV file stops short of 4 GB with an
+error. `dj.record.start {folder}` makes the folder and a file `Mix YYYY-MM-DD HH-MM-SS.wav` in
+it, and opens the output like Play; `dj.record.stop` finishes the file. Closing the app
+finishes it too. The page's **REC** button records into `Music/YOBUKO Recordings` (the home
+folder when there is no Music folder), lights up and counts the time; its tip names the last
+file. The snapshot adds `recording {on, seconds, path, dropped, last, error}`.
+
+**Crates.** A library list is a playlist or a crate (`kind: "crate"`, left out for a playlist,
+so a library written before crates reads and writes unchanged; catalog format 4 stays).
+`dj.crate.create {name, revision}` makes one; the playlist commands add, remove, rename and
+delete in both. The library's side bar shows **PLAYLISTS** and **CRATES** with **+ PLAYLIST**
+and **+ CRATE**, and a row's menu has **Add to playlist** and **Add to crate**.
+
+**History.** Each track a deck starts playing after a load is written, with the time
+(`HH:MM`), into that day's history in `dj-history.json` beside the library (format 1, at most
+366 days of 2000 plays; titles kept, so a day still reads after a track leaves the library). It
+is written at once through a file beside it, so it never waits for the library's worker; a
+damaged file is reported and never written over. The library snapshot adds `history {days,
+error}` (the newest 60 days, newest first); `dj.history.delete {day}` forgets a day. The side
+bar shows **HISTORY**, one entry per day.
+
+**Auto DJ and intro / outro.** Auto DJ (`crates/session/src/dj_auto.rs`) plays a queue of
+library tracks on the two decks by itself. While one deck plays, the next track loads on the
+other. At the playing track's outro (its cue named `Outro`, else the fade's length before its
+end) the other deck starts at its intro (its cue named `Intro`, else its start), and the
+crossfader moves across over the fade (0–30 s, 8 by default) as the outgoing deck plays on;
+then that deck stops. It steps each time the page reads the library, from the positions the
+audio reports; a deck it has just started counts as playing until the audio says so. A deck
+that cannot play stops Auto DJ with the reason; an empty queue stops it once the last track
+has started fading out. Commands: `dj.autodj.set {on?, fade?}`, `.add {track}`, `.remove
+{position}`, `.clear`, `.skip`; the snapshot adds `autoDj {on, fade, queue, next, fading,
+error}`. The library's **Auto DJ** list shows the queue, with **ON**, **SKIP** and **FADE** ◀ ▶
+in its bar; a row's menu has **Add to Auto DJ** and, in the list, **Remove from Auto DJ**. A
+deck's track overview menu sets or clears the intro and outro at the playhead; the waveforms
+mark them.
+
+**Microphone.** One audio input is mixed into the DJ master after the decks and the sampler,
+before the master effects and level. While **TALK** is on the music ducks by `duck` (0 not at
+all … 1 silent) and the microphone plays at `gain`, both smoothed over 10 ms; it has its own
+meter. `dj.mic.set {on?, channel? (1–64), gain?, duck?}` keeps what is left out; switched on
+it opens the output like Play, and Play hands it to the audio. The mixer card's **MIC** row has
+TALK, the input (**IN n**, stepping 1–8), the level and the ducking.
+
+**Not yet:** four decks (C and D), Auto DJ's intro and outro ends (only where they start is
+read), its shuffle and random tracks, and recording to another format than WAV.
+
+### Check part 3
+
+1. Click **REC** at the top right of the DJ page, play a deck for ten seconds, click **REC**
+   again. A file `Mix … .wav` is in your Music folder › YOBUKO Recordings and plays what you
+   heard.
+2. In the library's side bar click **+ CRATE**; right-click a track › **Add to crate** ›
+   **Crate 1**. Click **Crate 1**: the track is there.
+3. Play a track on a deck. A day appears under **HISTORY** with the track.
+4. Right-click two tracks › **Add to Auto DJ**. Click **Auto DJ** in the side bar, then **ON**:
+   the first track plays on A, the second loads on B and fades in before the first ends.
+   Right-click a deck's overview › **Set the outro at the playhead** to choose where it starts.
+5. With a microphone set as the audio input, click **TALK**: your voice is heard and the music
+   drops; move **DUCK** and **LEVEL**.
+
+Automated: engine tests for the recording tap and the microphone; session tests for
+`dj.record.*`, the history and crates, Auto DJ from outro to intro, and `dj.mic.set`; UI tests
+for REC, the side bar, Auto DJ, intro and outro, and the MIC row. Not tried with a real
+microphone or speakers.
