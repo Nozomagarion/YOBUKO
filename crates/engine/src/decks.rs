@@ -8,6 +8,7 @@
 use crate::AudioData;
 use crate::chain::MAX_BLOCK;
 use crate::deck_fx::{DeckFx, FxSender, FxUnit};
+use crate::deck_record::{DeckRecording, DeckTap};
 use crate::deck_voice::{
     DeckCommand, DeckMeter, DeckMonitor, DeckVoice, DeckVoiceSender, MAX_BEND, MAX_KEY, MAX_RATE, MIN_RATE,
 };
@@ -167,6 +168,8 @@ pub(crate) struct DeckSender {
     pub samplers: [DeckVoiceSender; SAMPLERS],
     pub sampler_monitors: [Arc<DeckMonitor>; SAMPLERS],
     pub sampler_gains: Producer<(usize, f32)>,
+    /// The master's recording, while no writer holds it.
+    pub recording: Option<DeckRecording>,
 }
 pub(crate) struct Decks {
     voices: [DeckVoice; 2],
@@ -187,10 +190,13 @@ pub(crate) struct Decks {
     samplers: [DeckVoice; SAMPLERS],
     sampler_gains: Option<Consumer<(usize, f32)>>,
     sampler_levels: [Smoother; SAMPLERS],
+    tap: DeckTap,
+    recording: Option<DeckRecording>,
 }
 impl Decks {
     pub fn new(rate: u32) -> Self {
         let ramp = Smoother::ramp_frames(0.01, f64::from(rate));
+        let (tap, recording) = crate::deck_record::tap(rate);
         Self {
             voices: std::array::from_fn(|_| DeckVoice::new(rate)),
             mix: None,
@@ -209,6 +215,8 @@ impl Decks {
             samplers: std::array::from_fn(|_| DeckVoice::new(rate)),
             sampler_gains: None,
             sampler_levels: [Smoother::new(1.0, ramp); SAMPLERS],
+            tap,
+            recording: Some(recording),
         }
     }
     pub fn sender(&mut self, devices: suhina_device_sdk::Devices) -> DeckSender {
@@ -230,6 +238,7 @@ impl Decks {
                 self.sampler_gains = Some(rx);
                 tx
             },
+            recording: self.recording.take(),
         }
     }
     pub fn finish(&mut self, out: &mut [f32], cue: &mut [f32], frames: usize, separate: bool) {
@@ -330,6 +339,9 @@ impl Decks {
         if !any {
             self.master_gain.reset(mix.master);
             self.phones_master.reset(phones_master);
+            if self.tap.on() {
+                self.tap.silence(frames);
+            }
             return;
         }
         self.master_gain.set_target(mix.master);
@@ -339,12 +351,18 @@ impl Decks {
             self.fx.process(2, sum);
         }
         let (mut peak_l, mut peak_r) = (0.0f32, 0.0f32);
-        for ((dst, head), src) in
-            out.as_chunks_mut::<2>().0.iter_mut().zip(cue.as_chunks_mut::<2>().0.iter_mut()).zip(sum.as_chunks::<2>().0)
+        for ((dst, head), src) in out
+            .as_chunks_mut::<2>()
+            .0
+            .iter_mut()
+            .zip(cue.as_chunks_mut::<2>().0.iter_mut())
+            .zip(sum.as_chunks_mut::<2>().0.iter_mut())
         {
             let g = self.master_gain.next_value();
             let p = self.phones_master.next_value();
             let (l, r) = (src[0] * g, src[1] * g);
+            // What the master sends, kept for the recording.
+            *src = [l, r];
             peak_l = peak_l.max(l.abs());
             peak_r = peak_r.max(r.abs());
             dst[0] += l;
@@ -355,6 +373,9 @@ impl Decks {
             }
         }
         self.master.add(peak_l, peak_r);
+        if self.tap.on() {
+            self.tap.write(sum);
+        }
     }
 }
 fn db_to_gain(db: f32) -> f32 {
@@ -489,6 +510,14 @@ impl crate::Controller {
     /// and where it goes.
     pub fn deck_fx(&mut self, unit: usize, settings: FxUnit) -> Result<(), String> {
         self.decks.fx.set(unit, settings)
+    }
+    /// The master's recording, for a writer to hold while it records; `None` while one does.
+    pub fn take_deck_recording(&mut self) -> Option<DeckRecording> {
+        self.decks.recording.take()
+    }
+    /// Gives the master's recording back when its writer is done.
+    pub fn return_deck_recording(&mut self, recording: DeckRecording) {
+        self.decks.recording = Some(recording);
     }
     pub fn deck_mix(&mut self, mix: Mix) -> Result<(), String> {
         if !mix.is_valid() {

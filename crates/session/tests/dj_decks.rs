@@ -310,3 +310,43 @@ fn a_sampler_slot_loads_a_track_and_plays_it_from_its_start_at_its_level() {
         assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
     }
 }
+#[test]
+fn the_mix_is_recorded_to_a_wav_file_until_stopped() {
+    let dir = TempDir::new("dj-record");
+    let (mut p, out) = seeded(&dir);
+    let folder = dir.join("Recordings");
+    assert!(p.execute("dj.record.start", &json!({"folder": ""})).is_err(), "a folder is needed");
+    p.execute("dj.deck.load", &json!({"deck":"A","track":1})).unwrap();
+    idle(&mut p);
+    let started = p.execute("dj.record.start", &json!({"folder": folder})).unwrap();
+    assert!(p.execute("dj.record.start", &json!({"folder": folder})).is_err(), "one recording at a time");
+    let s = idle(&mut p);
+    assert_eq!(s["performance"]["recording"]["on"], true, "{s}");
+    p.execute("dj.deck.play", &json!({"deck":"A"})).unwrap();
+    let mut audio = vec![0.0; 2048];
+    out.renderers.lock().unwrap()[0].process(&mut audio);
+    let mut quiet = vec![0.0; 2048];
+    p.execute("dj.deck.pause", &json!({"deck":"A"})).unwrap();
+    out.renderers.lock().unwrap()[0].process(&mut quiet);
+    let stopped = p.execute("dj.record.stop", &json!({})).unwrap();
+    let path = std::path::PathBuf::from(stopped["path"].as_str().unwrap());
+    assert_eq!(stopped["path"], started["path"]);
+    assert!(path.starts_with(&folder) && path.extension().is_some_and(|e| e == "wav"), "{path:?}");
+    let s = idle(&mut p);
+    let rec = &s["performance"]["recording"];
+    assert_eq!((&rec["on"], &rec["last"], &rec["error"]), (&json!(false), &stopped["path"], &json!(null)), "{rec}");
+    let wav = hound::WavReader::open(&path).unwrap();
+    assert_eq!((wav.spec().channels, wav.spec().bits_per_sample), (2, 16));
+    let samples: Vec<i16> = wav.into_samples().map(Result::unwrap).collect();
+    assert_eq!(samples.len(), 4096, "both blocks, the quiet one too");
+    let heard = (audio[1600] * f32::from(i16::MAX)).round() as i16;
+    assert!((samples[1600] - heard).abs() <= 1, "{} vs {heard}", samples[1600]);
+    // Stopped twice is fine; a new recording starts on the same output and gets its own file.
+    assert_eq!(p.execute("dj.record.stop", &json!({})).unwrap()["recording"], false);
+    let again = p.execute("dj.record.start", &json!({"folder": folder})).unwrap();
+    assert_ne!(again["path"], stopped["path"]);
+    p.execute("dj.record.stop", &json!({})).unwrap();
+    for id in ["dj.record.start", "dj.record.stop"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}

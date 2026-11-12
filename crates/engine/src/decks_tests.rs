@@ -456,3 +456,44 @@ fn a_sampler_slot_plays_from_its_start_into_the_master_at_its_level() {
     assert!(c.sampler_play(8, signal(0.4, 8000)).is_err());
     assert!(c.sampler_gain(0, 1.5).is_err());
 }
+#[test]
+fn the_master_is_recorded_as_heard_with_silence_while_the_decks_rest() {
+    let (mut r, mut c) = setup();
+    let mut rec = c.take_deck_recording().unwrap();
+    assert!(c.take_deck_recording().is_none(), "one writer at a time");
+    assert_eq!(rec.sample_rate(), 8000);
+    // Not recording: nothing is copied.
+    c.sampler_play(0, signal(0.4, 8000)).unwrap();
+    block(&mut r);
+    let mut got = Vec::new();
+    rec.drain(&mut got);
+    assert!(got.is_empty());
+    rec.start();
+    let out = block(&mut r);
+    rec.drain(&mut got);
+    assert_eq!(got, out, "the recording is what the master sends");
+    // Quiet decks still take time in the recording.
+    c.sampler_stop(0).unwrap();
+    block(&mut r);
+    rec.drain(&mut got);
+    got.clear();
+    block(&mut r);
+    rec.drain(&mut got);
+    assert_eq!(got.len(), 2048);
+    assert!(got.iter().all(|s| *s == 0.0));
+    // A full ring loses frames and says so; it never waits.
+    // (four seconds at 8 kHz: 32 blocks of 1024 frames)
+    for _ in 0..40 {
+        block(&mut r);
+    }
+    assert!(rec.dropped_frames() > 0);
+    rec.stop();
+    got.clear();
+    rec.drain(&mut got);
+    block(&mut r);
+    let before = got.len();
+    rec.drain(&mut got);
+    assert_eq!(got.len(), before, "stopped, nothing more is copied");
+    c.return_deck_recording(rec);
+    assert!(c.take_deck_recording().is_some());
+}

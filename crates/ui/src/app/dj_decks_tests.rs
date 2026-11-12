@@ -642,3 +642,20 @@ fn the_library_searches_sorts_and_shows_a_playlist() {
     harness.run();
     assert_eq!(titles(harness.state()).len(), 3);
 }
+
+#[test]
+fn the_rec_button_records_the_mix_and_shows_its_time() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 1));
+    assert!(harness.query_by_label("Record the mix").is_some());
+    // A test has no audio device: recording asks the session, which says so, and stays off.
+    harness.state_mut().toggle_recording(Some(dir.path().join("Recordings")));
+    harness.run();
+    assert!(harness.state().dj.decks.error.as_deref().is_some_and(|e| e.contains("audio")));
+    assert_eq!(harness.state().dj.decks.recording()["on"], false);
+    // While the session records, the button counts.
+    assert_eq!(super::record::rec_text(true, 3675.4), "REC 1:01:15");
+    assert_eq!(super::record::rec_text(false, 12.0), "REC");
+    assert!(super::record::recordings_folder().is_none_or(|f| f.ends_with("YOBUKO Recordings")));
+}

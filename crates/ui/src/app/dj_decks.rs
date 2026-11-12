@@ -413,6 +413,7 @@ impl App {
                 );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                self.record_button(ui);
                 let shown = self.dj.decks.show_sampler.unwrap_or(self.dj.decks.sampler_shown);
                 if ui
                     .add(egui::Button::selectable(shown, "Sampler").corner_radius(BUTTON_RADIUS))
@@ -1400,6 +1401,8 @@ mod beats;
 mod fx;
 #[path = "dj_library.rs"]
 pub(in crate::app) mod library;
+#[path = "dj_record.rs"]
+mod record;
 #[path = "dj_sampler.rs"]
 mod sampler;
 #[path = "dj_deck_tools.rs"]

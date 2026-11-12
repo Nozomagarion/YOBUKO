@@ -80,6 +80,8 @@ pub(crate) struct Decks {
     fx: [DeckFxUnit; DECK_FX_UNITS],
     /// The sampler's slots.
     pub(crate) samplers: crate::dj_sampler::Samplers,
+    /// The mix's recording.
+    pub(crate) recorder: crate::dj_record::Recorder,
 }
 impl Decks {
     pub(crate) fn apply(&mut self, result: Loaded) {
@@ -613,6 +615,7 @@ pub(crate) fn snapshot(p: &Projects) -> Value {
         "separate_cue": p.output_choice().cue_pair.is_some(),
         "fx": p.dj.decks.fx.iter().map(fx_json).collect::<Vec<_>>(),
         "samplers": crate::dj_sampler::snapshot(p),
+        "recording": crate::dj_record::snapshot(p),
         "effects": DeckFxKind::ALL.iter().map(|k| json!({"id": k.id(), "name": k.name()})).collect::<Vec<_>>(),
     })
 }

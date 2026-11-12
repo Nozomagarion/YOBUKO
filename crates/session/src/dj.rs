@@ -403,6 +403,13 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
         &[param("slot", ParamType::Number, "sampler slot 1–8"), param("gain", ParamType::Number, "level 0–1")],
         sampler_gain
     ),
+    command!(
+        "dj.record.start",
+        "Record the DJ mix (what the master sends) to a new WAV file in a folder",
+        &[param("folder", ParamType::Path(PathKind::WriteFolder), "folder the recording is saved in")],
+        record_start
+    ),
+    command!("dj.record.stop", "Stop recording the DJ mix and finish its file", &[], record_stop),
     command!("dj.deck.stopAll", "Stop decks and cancel pending loads", &[], deck_stop_all),
     command!(
         "dj.mixer.set",
@@ -535,6 +542,7 @@ fn reload(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
     }
     crate::dj_preview::stop(projects, &json!({}))?;
     crate::dj_decks::stop_all(projects, &json!({}))?;
+    crate::dj_record::stop(projects, &json!({}))?;
     projects.dj = Dj::default();
     ready(projects)?;
     Ok(json!({"queued": true}))
@@ -703,6 +711,12 @@ fn sampler_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn sampler_gain(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_sampler::gain(p, v)
+}
+fn record_start(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_record::start(p, v)
+}
+fn record_stop(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_record::stop(p, v)
 }
 fn deck_stop_all(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::stop_all(p, v)

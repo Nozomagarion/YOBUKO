@@ -44,6 +44,7 @@ mod cue;
 #[cfg(test)]
 mod cue_tests;
 mod deck_fx;
+mod deck_record;
 mod deck_voice;
 mod decks;
 mod declick;
@@ -120,6 +121,7 @@ pub use deck_fx::{
     FxKind as DeckFxKind, FxSlot as DeckFxSlot, FxUnit as DeckFxUnit, MAX_BEATS as DECK_FX_MAX_BEATS,
     MIN_BEATS as DECK_FX_MIN_BEATS, SLOTS as DECK_FX_SLOTS, UNITS as DECK_FX_UNITS,
 };
+pub use deck_record::DeckRecording;
 pub use deck_voice::{DeckMeter, DeckMonitor};
 pub use decks::SAMPLERS as DJ_SAMPLERS;
 pub use decks::{
