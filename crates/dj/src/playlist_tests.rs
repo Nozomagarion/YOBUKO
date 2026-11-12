@@ -218,3 +218,22 @@ fn reanalysis_keeps_the_playlist_track_reference() {
     assert_eq!(c.playlists[0].tracks, [track]);
     assert_eq!(std::fs::read(&path).unwrap(), bytes);
 }
+
+#[test]
+fn crates_are_lists_of_their_own_kind_and_playlists_are_written_as_before() {
+    let mut c = catalog();
+    let bin = apply(&mut c, CreateCrate("House".into())).unwrap();
+    apply(&mut c, Add { playlist: bin, track: 2 });
+    apply(&mut c, Add { playlist: bin, track: 1 });
+    let list = apply(&mut c, Create("Set".into())).unwrap();
+    let kinds: Vec<_> = c.playlists.iter().map(|p| (p.id, p.kind, p.tracks.clone())).collect();
+    assert_eq!(kinds, [(bin, PlaylistKind::Crate, vec![2, 1]), (list, PlaylistKind::Playlist, vec![])]);
+    let json = serde_json::to_value(&c.playlists).unwrap();
+    assert_eq!(json[0]["kind"], "crate");
+    assert!(json[1].get("kind").is_none(), "a playlist is written as before crates");
+    let back: Vec<Playlist> = serde_json::from_value(json).unwrap();
+    assert_eq!(back, c.playlists);
+    assert!(
+        serde_json::from_value::<Playlist>(serde_json::json!({"id":1,"name":"x","tracks":[],"kind":"box"})).is_err()
+    );
+}

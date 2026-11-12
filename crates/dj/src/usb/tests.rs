@@ -53,7 +53,7 @@ fn the_library_is_written_as_a_rekordbox_stick_and_a_second_export_reuses_it() {
     clicks(&audio);
     let mut catalog = Catalog::default();
     let id = catalog.import(&audio, None).unwrap();
-    catalog.playlists.push(Playlist { id: 1, name: "Saturday".into(), tracks: vec![id] });
+    catalog.playlists.push(Playlist { id: 1, name: "Saturday".into(), tracks: vec![id], kind: Default::default() });
     catalog.cues.push(CueSet { track: id, next_id: 2, points: vec![Cue { id: 1, name: "Drop".into(), seconds: 1.0 }] });
 
     let stick = dir.path().join("stick");

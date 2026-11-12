@@ -5,6 +5,26 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## The DJ space gets Mixxx's functions, part 3 — 12 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the third part toward every Mixxx function in YOBUKO's own DJ space (part 2 was
+merged as #36).
+
+- **Code written:** a **REC** button records the mix to a WAV file in Music › YOBUKO
+  Recordings. The library keeps **crates** besides playlists, and a **history** of every track
+  played, day by day. **Auto DJ** plays a queue on its own, fading from each track's outro to the
+  next one's intro (set from a deck's overview menu), with ON, SKIP and the fade's length. A
+  **microphone** talks over the master while the music ducks under it (TALK, input, level,
+  ducking).
+- **Checks passed (Linux, cloud container):** engine tests (the recording copies exactly what
+  the master sends and keeps silences, the microphone ducks the music), session tests
+  (`dj.record.*` writes a real WAV file, history and crates, Auto DJ fading from outro to intro
+  on an offline renderer, `dj.mic.set`), UI tests for the new buttons, a screenshot.
+- **Limits:** still two decks (four decks next), Auto DJ reads where the intro and outro start
+  only and has no shuffle. Not tried with a real microphone, real speakers or the DDJ-FLX4.
+- **Next criterion:** the owner records a short mix and runs Auto DJ on two tracks in a test
+  build; then four decks.
+
 ## Multiplayer in the real studio — 12 November 2026 (branch `claude/project-thread-9iiran`)
 
 **Goal:** a multiplayer session is the same studio project on every computer, edited together
