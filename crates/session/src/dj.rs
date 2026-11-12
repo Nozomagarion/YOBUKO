@@ -292,7 +292,7 @@ const REVISION: crate::commands::Param = param("revision", ParamType::Integer, "
 const PLAYLIST: crate::commands::Param = param("playlist", ParamType::Integer, "local DJ playlist id");
 const TRACK: crate::commands::Param = param("track", ParamType::Integer, "local DJ catalog track id");
 const NAME: crate::commands::Param = param("name", ParamType::Text, "playlist name");
-const DECK: crate::commands::Param = param("deck", ParamType::Text, "deck A or B");
+const DECK: crate::commands::Param = param("deck", ParamType::Text, "deck A, B, C or D");
 static COMMANDS: &[CommandSpec<Projects>] = &[
     command!("dj.deck.load", "Load a local track into a stopped DJ deck", &[DECK, TRACK], deck_load),
     command!("dj.deck.play", "Play or resume a DJ deck", &[DECK], deck_play),
@@ -369,6 +369,8 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
             optional("bpm", ParamType::Number, "the tempo they count beats at, 20–400"),
             optional("deckA", ParamType::Bool, "on deck A"),
             optional("deckB", ParamType::Bool, "on deck B"),
+            optional("deckC", ParamType::Bool, "on deck C"),
+            optional("deckD", ParamType::Bool, "on deck D"),
             optional("master", ParamType::Bool, "on the master")
         ],
         fx_set
@@ -413,13 +415,21 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
     command!("dj.deck.stopAll", "Stop decks and cancel pending loads", &[], deck_stop_all),
     command!(
         "dj.mixer.set",
-        "Set the DJ crossfader, channel levels, headphone cues, master and headphones",
+        "Set the DJ crossfader, channel levels, headphone cues, crossfader sides, master and headphones",
         &[
-            param("crossfade", ParamType::Number, "0=A, 1=B"),
+            param("crossfade", ParamType::Number, "0=left (A), 1=right (B)"),
             param("levelA", ParamType::Number, "A level 0–1"),
             param("levelB", ParamType::Number, "B level 0–1"),
             param("cueA", ParamType::Bool, "A headphone cue"),
             param("cueB", ParamType::Bool, "B headphone cue"),
+            optional("levelC", ParamType::Number, "C level 0–1; unchanged when left out"),
+            optional("levelD", ParamType::Number, "D level 0–1; unchanged when left out"),
+            optional("cueC", ParamType::Bool, "C headphone cue; unchanged when left out"),
+            optional("cueD", ParamType::Bool, "D headphone cue; unchanged when left out"),
+            optional("sideA", ParamType::Text, "A's crossfader side: left, thru or right"),
+            optional("sideB", ParamType::Text, "B's crossfader side: left, thru or right"),
+            optional("sideC", ParamType::Text, "C's crossfader side: left, thru or right"),
+            optional("sideD", ParamType::Text, "D's crossfader side: left, thru or right"),
             optional("master", ParamType::Number, "master level 0–1; unchanged when left out"),
             optional("phones", ParamType::Number, "headphone level 0–1; unchanged when left out"),
             optional("phonesMix", ParamType::Number, "headphones: 0 cued decks … 1 master; unchanged when left out")

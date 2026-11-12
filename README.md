@@ -90,6 +90,7 @@ The full Suhina studio: session and arrangement views, MIDI and audio tracks, in
 - **Effects and sampler:** two effect units with three effects each (echo, ping pong, reverb, filter, flanger, phaser, trans, autopan, bitcrusher, distortion, noise) in time with the music, on a deck or the master; an eight-slot sampler the pads can play.
 - **Record, Auto DJ and the mic:** **REC** records your mix to a WAV file; **Auto DJ** plays a queue on its own, fading from each track's outro to the next one's intro; a **microphone** talks over the music, which ducks under it. The library keeps **crates** and a **history** of what you played, day by day.
 - **The mixer:** trim, three-band EQ, filter, level and meter per deck, master level and meter, headphones with a cue/master blend, crossfader.
+- **Four decks:** click **4 decks** for decks C and D, with four channels in the mixer and each deck on the left, right or middle of the crossfader.
 - **The library:** search, sort by title, BPM, key or length, and playlists.
 - **Plug in a Pioneer DDJ-FLX4 and play.** Play, Cue, Sync, Load, the faders, EQ, trim, filters, tempo, crossfader, jog wheels, loop buttons, TAP, the Beat FX section and the hot cue, beat loop, beat jump and sampler pads drive the decks, nothing to set up.
 - **Your music:** drop audio files or folders on the page, or click **Add my Music folder**. Finished a track in the studio? **Send this project to DJ…**

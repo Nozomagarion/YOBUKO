@@ -29,7 +29,7 @@ fn decks_mix_independent_sample_rates_at_crossfader_endpoints_and_midpoint() {
     c.deck_play(0, signal(0.2, 8000), 0.0).unwrap();
     c.deck_play(1, signal(0.4, 16000), 0.5).unwrap();
     for (x, expected) in [(0.0, 0.2), (0.5, 0.3), (1.0, 0.4)] {
-        c.deck_mix(DeckMix { crossfade: x, levels: [1.0; 2], cue: [false; 2], ..DeckMix::default() }).unwrap();
+        c.deck_mix(DeckMix { crossfade: x, ..DeckMix::default() }).unwrap();
         let b = block(&mut r);
         assert!((b[1600] - expected * 0.501_187_2).abs() < 1e-5);
     }
@@ -74,7 +74,7 @@ fn deck_pause_resume_seek_end_and_replay_use_the_same_source_clock() {
 fn deck_headphones_are_before_crossfader_and_do_not_leak_into_main() {
     let (mut r, mut c) = setup();
     c.deck_play(1, signal(0.4, 8000), 0.0).unwrap();
-    c.deck_mix(DeckMix { crossfade: 0.0, levels: [1.0; 2], cue: [false, true], ..DeckMix::default() }).unwrap();
+    c.deck_mix(DeckMix { crossfade: 0.0, cue: [false, true, false, false], ..DeckMix::default() }).unwrap();
     c.send(LaunchCommand::SetCue { gain: Some(0.5), separate: Some(true) }).unwrap();
     let (mut main, mut cue) = (vec![0.0; 2048], vec![0.0; 2048]);
     r.process_with_cue(&mut main, &mut cue);
@@ -104,10 +104,8 @@ fn deck_queue_pressure_is_bounded_and_retired_audio_is_freed_by_the_controller()
     block(&mut r);
     c.deck_stop(0).unwrap();
     assert!(block(&mut r).iter().all(|s| *s == 0.0));
-    assert!(
-        c.deck_mix(DeckMix { crossfade: f32::NAN, levels: [1.0; 2], cue: [false; 2], ..DeckMix::default() }).is_err()
-    );
-    assert!(c.deck_play(2, signal(0.2, 8000), 0.0).is_err());
+    assert!(c.deck_mix(DeckMix { crossfade: f32::NAN, ..DeckMix::default() }).is_err());
+    assert!(c.deck_play(crate::DJ_DECKS, signal(0.2, 8000), 0.0).is_err());
     c.deck_play(0, signal(f32::NAN, 8000), 0.0).unwrap();
     assert!(block(&mut r).iter().all(|s| s.is_finite()));
 }
@@ -116,12 +114,12 @@ fn deck_queue_pressure_is_bounded_and_retired_audio_is_freed_by_the_controller()
 fn a_fader_moved_while_paused_cannot_flash_a_hidden_deck_on_resume() {
     let (mut r, mut c) = setup();
     let source = signal(0.4, 8000);
-    c.deck_mix(DeckMix { crossfade: 1.0, levels: [1.0; 2], cue: [false; 2], ..DeckMix::default() }).unwrap();
+    c.deck_mix(DeckMix { crossfade: 1.0, ..DeckMix::default() }).unwrap();
     c.deck_play(1, source.clone(), 0.0).unwrap();
     block(&mut r);
     c.deck_pause(1).unwrap();
     block(&mut r);
-    c.deck_mix(DeckMix { crossfade: 0.0, levels: [1.0; 2], cue: [false; 2], ..DeckMix::default() }).unwrap();
+    c.deck_mix(DeckMix { crossfade: 0.0, ..DeckMix::default() }).unwrap();
     block(&mut r);
     c.deck_play(1, source, 0.0).unwrap();
     assert!(block(&mut r).iter().all(|s| *s == 0.0));
@@ -154,12 +152,12 @@ fn a_deck_plays_faster_or_slower_and_its_clock_follows() {
     for wrong in [0.49, 2.01, f64::NAN, f64::INFINITY] {
         assert!(c.deck_rate(0, wrong).is_err(), "{wrong}");
     }
-    assert!(c.deck_rate(2, 1.0).is_err());
+    assert!(c.deck_rate(crate::DJ_DECKS, 1.0).is_err());
 }
 #[test]
 fn a_deck_eq_kills_its_band_and_the_filter_closes_from_either_side() {
     let (mut r, mut c) = setup();
-    c.deck_mix(DeckMix { crossfade: 0.0, levels: [1.0; 2], cue: [false; 2], ..DeckMix::default() }).unwrap();
+    c.deck_mix(DeckMix { crossfade: 0.0, ..DeckMix::default() }).unwrap();
     c.deck_play(0, sine(80.0, 8000), 0.0).unwrap();
     let flat = peak(&mut r);
     assert!((flat - 0.5 * 0.501_187_2).abs() < 0.01, "{flat}");
@@ -183,7 +181,7 @@ fn a_deck_eq_kills_its_band_and_the_filter_closes_from_either_side() {
     ] {
         assert!(c.deck_tone(0, wrong).is_err(), "{wrong:?}");
     }
-    assert!(c.deck_tone(2, DeckTone::default()).is_err());
+    assert!(c.deck_tone(crate::DJ_DECKS, DeckTone::default()).is_err());
 }
 /// A track whose every sample says where it is: frame `i` holds `i / frames`.
 fn ramp(rate: u32, seconds: usize) -> Arc<AudioData> {
@@ -219,7 +217,7 @@ fn a_deck_loops_round_and_round_until_the_loop_is_let_go() {
     for wrong in [Some((0.5, 0.5)), Some((-1.0, 0.5)), Some((0.0, f64::NAN))] {
         assert!(c.deck_loop(0, wrong).is_err(), "{wrong:?}");
     }
-    assert!(c.deck_loop(2, None).is_err());
+    assert!(c.deck_loop(crate::DJ_DECKS, None).is_err());
 }
 #[test]
 fn a_nudge_speeds_a_deck_up_or_slows_it_down_while_it_is_held() {
@@ -275,15 +273,19 @@ fn the_headphones_blend_the_cued_deck_with_the_master() {
         (main[1600], cue[1600])
     };
     // Deck B cued, all the way to "cue": only B in the headphones, A only on the master.
-    let (main, head) = heard(&mut c, DeckMix { crossfade: 0.0, cue: [false, true], ..DeckMix::default() });
+    let (main, head) =
+        heard(&mut c, DeckMix { crossfade: 0.0, cue: [false, true, false, false], ..DeckMix::default() });
     assert!((main - 0.2 * 0.501_187_2).abs() < 1e-5);
     assert!((head - 0.4 * 0.501_187_2).abs() < 1e-5, "{head}");
     // All the way to "master": the headphones hear what the room hears.
-    let (main, head) =
-        heard(&mut c, DeckMix { crossfade: 0.0, cue: [false, true], phones_mix: 1.0, ..DeckMix::default() });
+    let (main, head) = heard(
+        &mut c,
+        DeckMix { crossfade: 0.0, cue: [false, true, false, false], phones_mix: 1.0, ..DeckMix::default() },
+    );
     assert!((head - main).abs() < 1e-5, "{head} {main}");
     // The headphones' level.
-    let (_, head) = heard(&mut c, DeckMix { crossfade: 0.0, cue: [false, true], phones: 0.5, ..DeckMix::default() });
+    let (_, head) =
+        heard(&mut c, DeckMix { crossfade: 0.0, cue: [false, true, false, false], phones: 0.5, ..DeckMix::default() });
     assert!((head - 0.2 * 0.501_187_2).abs() < 1e-5, "{head}");
 }
 /// The pitch of the left side over the next `blocks` blocks, from its rising zero crossings.
@@ -363,8 +365,12 @@ fn click(rate: u32) -> Arc<AudioData> {
     samples[801] = 0.8;
     Arc::new(AudioData { sample_rate: rate, channels: 2, samples })
 }
-fn unit(kind: DeckFxKind, meta: f32, targets: [bool; 3]) -> DeckFxUnit {
-    let mut unit = DeckFxUnit { mix: 1.0, beats: 0.5, bpm: 120.0, targets, ..DeckFxUnit::default() };
+/// A unit on deck A, deck B and the master as `[a, b, master]` says.
+fn unit(kind: DeckFxKind, meta: f32, [a, b, master]: [bool; 3]) -> DeckFxUnit {
+    let mut unit = DeckFxUnit { mix: 1.0, beats: 0.5, bpm: 120.0, ..DeckFxUnit::default() };
+    unit.targets[0] = a;
+    unit.targets[1] = b;
+    unit.targets[crate::DJ_DECKS] = master;
     unit.slots[0] = DeckFxSlot { kind: Some(kind), on: true, meta };
     unit
 }
@@ -531,4 +537,32 @@ fn the_microphone_talks_over_the_music_which_ducks_under_it() {
     assert!((block(&mut r)[1600] - 0.3).abs() < 1e-4);
     assert!(c.deck_mic(DeckMic { gain: 2.0, ..DeckMic::default() }).is_err());
     assert!(c.deck_mic(DeckMic { channel: 64, ..DeckMic::default() }).is_err());
+}
+
+#[test]
+fn four_decks_play_through_the_crossfader_on_the_side_each_is_put() {
+    use crate::DeckSide;
+    let (mut r, mut c) = setup();
+    for (deck, value) in [(0, 0.1), (1, 0.2), (2, 0.3), (3, 0.4)] {
+        c.deck_play(deck, signal(value, 8000), 0.0).unwrap();
+    }
+    let heard = |r: &mut Renderer, c: &mut Controller, mix: DeckMix| {
+        c.deck_mix(mix).unwrap();
+        block(r)[1600] / 0.501_187_2
+    };
+    // By default A and C are on the left, B and D on the right.
+    assert!((heard(&mut r, &mut c, DeckMix { crossfade: 0.0, ..DeckMix::default() }) - 0.4).abs() < 1e-5);
+    assert!((heard(&mut r, &mut c, DeckMix { crossfade: 1.0, ..DeckMix::default() }) - 0.6).abs() < 1e-5);
+    // C through the middle is heard at both ends; D moved left joins A.
+    let sides = [DeckSide::Left, DeckSide::Right, DeckSide::Thru, DeckSide::Left];
+    assert!((heard(&mut r, &mut c, DeckMix { crossfade: 0.0, sides, ..DeckMix::default() }) - 0.8).abs() < 1e-5);
+    assert!((heard(&mut r, &mut c, DeckMix { crossfade: 1.0, sides, ..DeckMix::default() }) - 0.5).abs() < 1e-5);
+    // Deck D's fader down takes it out; its meter still reads before the crossfader.
+    let mut levels = [1.0; crate::DJ_DECKS];
+    levels[3] = 0.0;
+    assert!(
+        (heard(&mut r, &mut c, DeckMix { crossfade: 0.0, sides, levels, ..DeckMix::default() }) - 0.4).abs() < 1e-5
+    );
+    assert!(c.deck_monitor(3).unwrap().playing());
+    assert!(c.deck_play(4, signal(0.1, 8000), 0.0).is_err(), "there is no fifth deck");
 }

@@ -184,6 +184,16 @@ fn music(path: &Path, root: f32) {
 #[test]
 #[ignore = "requires a GPU adapter; renders a review artifact"]
 fn render_the_decks_for_review() {
+    render_decks("dj-decks.png", false);
+}
+
+#[test]
+#[ignore = "writes a picture of four decks for review; run with --ignored"]
+fn render_four_decks_for_review() {
+    render_decks("dj-decks-four.png", true);
+}
+
+fn render_decks(file: &str, four: bool) {
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
     std::fs::create_dir_all(&folder).unwrap();
     let theme_id = std::env::var("YOBUKO_SHELL_THEME").unwrap_or_else(|_| theme::YOBUKO.to_owned());
@@ -220,7 +230,7 @@ fn render_the_decks_for_review() {
     app.set_session(Session::new(crate::demo::demo_project()), &[]);
     let mut harness = egui_kittest::Harness::builder()
         .allow_missing_glyphs()
-        .with_size(Vec2::new(1280.0, 920.0))
+        .with_size(Vec2::new(1280.0, if four { 1420.0 } else { 920.0 }))
         .with_pixels_per_point(1.5)
         .wgpu()
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
@@ -233,13 +243,28 @@ fn render_the_decks_for_review() {
     until(&mut harness, "deck A", |app| app.dj.decks.deck(0)["track"] == 1);
     harness.get_by_label("Load Paper Lanterns on deck B").click();
     until(&mut harness, "deck B", |app| app.dj.decks.deck(1)["track"] == 2);
+    if four {
+        harness.state_mut().dj.decks.four = true;
+        harness.run_steps(1);
+        harness.state_mut().deck_command("dj.deck.load", json!({"deck":"C","track":3}));
+        until(&mut harness, "deck C", |app| app.dj.decks.deck(2)["track"] == 3);
+        harness.state_mut().deck_command("dj.deck.load", json!({"deck":"D","track":4}));
+        until(&mut harness, "deck D", |app| app.dj.decks.deck(3)["track"] == 4);
+        let app = harness.state_mut();
+        app.seek(2, 0.6);
+        app.deck_command("dj.deck.tone", json!({"deck":"D","low":0.0,"mid":0.0,"high":-8.0,"filter":-0.3}));
+        app.dj.decks.tools[2].meter = [0.44, 0.41];
+    }
     let app = harness.state_mut();
     app.seek(0, 12.4);
     app.seek(1, 3.1);
     app.set_rate(0, 1.016);
     app.deck_command("dj.deck.tone", json!({"deck":"A","low":-40.0,"mid":0.0,"high":2.0,"filter":0.0}));
     app.deck_command("dj.deck.tone", json!({"deck":"B","low":0.0,"mid":-6.0,"high":0.0,"filter":0.45}));
-    app.deck_command("dj.mixer.set", json!({"crossfade":0.38,"levelA":0.9,"levelB":0.72,"cueA":false,"cueB":false}));
+    app.deck_command(
+        "dj.mixer.set",
+        json!({"crossfade":0.38,"levelA":0.9,"levelB":0.72,"cueA":false,"cueB":false,"levelC":0.8,"sideD":"thru"}),
+    );
     // Hot cues on deck A, a beat loop playing on deck B, a playlist.
     for (pad, seconds) in [(0, 2.0), (1, 9.7), (2, 12.4), (4, 21.0)] {
         harness.state_mut().seek(0, seconds);
@@ -275,7 +300,7 @@ fn render_the_decks_for_review() {
     app.dj.decks.tools[1].meter = [0.3, 0.34];
     app.dj.decks.master_meter = [0.71, 0.66];
     harness.run_steps(1);
-    harness.render().unwrap().save(folder.join("dj-decks.png")).unwrap();
+    harness.render().unwrap().save(folder.join(file)).unwrap();
 }
 
 /// A computer with a DDJ-FLX4 plugged in: the port is there, opening it keeps where it sends.
@@ -755,4 +780,39 @@ fn the_microphone_row_sets_its_input_level_and_ducking() {
     harness.get_by_label("Talk on the microphone").click();
     harness.run();
     assert!(harness.state().dj.decks.error.as_deref().is_some_and(|e| e.contains("audio")));
+}
+
+#[test]
+fn four_decks_show_c_and_d_with_their_channels_and_crossfader_sides() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 2));
+    assert!(harness.query_by_label("Play deck C").is_none());
+    assert!(harness.query_by_label("Load Moonlit Echo on deck C").is_none());
+    harness.get_by_label("4 decks").click();
+    harness.run();
+    for label in ["Play deck C", "Play deck D", "Level C", "Level D", "Crossfader side C", "Crossfader side D"] {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    // The library's Load C (below the decks, out of this small window's view) loads the row.
+    assert!(harness.query_by_label("Load Moonlit Echo on deck C").is_some());
+    harness.state_mut().dj.decks.selected = 0;
+    harness.state_mut().load_selected(2);
+    until(&mut harness, "deck C", |app| app.dj.decks.deck(2)["track"] == 1);
+    // With a track on C, four decks keep showing.
+    harness.get_by_label("4 decks").click();
+    harness.run();
+    assert!(harness.state().dj.decks.four);
+    // Deck C goes from the left of the crossfader through the middle, then right.
+    harness.get_by_label("Crossfader side C").click();
+    until(&mut harness, "C through", |app| app.dj.decks.snapshot["performance"]["sideC"] == "thru");
+    harness.get_by_label("Crossfader side C").click();
+    until(&mut harness, "C right", |app| app.dj.decks.snapshot["performance"]["sideC"] == "right");
+    assert_eq!(harness.state().dj.decks.crossfader_sides(), (vec![0], vec![1, 2, 3]));
+    // Ejected, C and D can hide again.
+    harness.get_by_label("Eject C").click();
+    until(&mut harness, "C empty", |app| app.dj.decks.deck(2)["track"].is_null());
+    harness.get_by_label("4 decks").click();
+    harness.run();
+    assert!(!harness.state().dj.decks.four);
 }

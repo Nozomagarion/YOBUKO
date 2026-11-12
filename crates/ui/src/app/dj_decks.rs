@@ -17,7 +17,9 @@ use std::time::{Duration, Instant};
 use suhina_media::waveform::{Lane, Peaks};
 
 /// The decks' names, as the commands take them.
-pub(super) const NAMES: [&str; 2] = ["A", "B"];
+pub(super) const NAMES: [&str; DECKS] = ["A", "B", "C", "D"];
+/// The decks the page can show: A and B, and C and D when four show.
+pub(super) const DECKS: usize = 4;
 /// How often the page reads the decks while one plays, and while the library works.
 const PLAYING_POLL: Duration = Duration::from_millis(100);
 const BUSY_POLL: Duration = Duration::from_millis(250);
@@ -28,19 +30,27 @@ const CLOSE_SECONDS: f64 = 8.0;
 /// The most audio files one look into a folder adds, and the most entries it reads.
 const MAX_FOUND: usize = 1000;
 const MAX_LOOKED_AT: usize = 20_000;
-/// The mixer's width between the decks.
+/// The mixer's width between the decks, with two channels and with four.
 const MIXER_WIDTH: f32 = 300.0;
+const MIXER_WIDTH_FOUR: f32 = 400.0;
 /// The decks' and the mixer's height.
 const DECK_HEIGHT: f32 = 440.0;
+/// The library's height under four decks, where the page scrolls.
+const LIBRARY_HEIGHT_FOUR: f32 = 460.0;
 /// The space between the cards.
 const GAP: f32 = 12.0;
 /// The corners of the DJ space's cards and buttons.
 const CARD_RADIUS: u8 = 14;
 const BUTTON_RADIUS: u8 = 10;
 
-/// A deck's colour: A in the DJ space's pink, B in mint.
+/// A deck's colour: A in the DJ space's pink, B in mint, C in violet, D in amber.
 pub(super) fn deck_color(deck: usize) -> Color32 {
-    if deck == 0 { Color32::from_rgb(0xDB, 0x27, 0x77) } else { Color32::from_rgb(0x10, 0xB9, 0x81) }
+    match deck {
+        0 => Color32::from_rgb(0xDB, 0x27, 0x77),
+        1 => Color32::from_rgb(0x10, 0xB9, 0x81),
+        2 => Color32::from_rgb(0x8B, 0x5C, 0xF6),
+        _ => Color32::from_rgb(0xF5, 0x9E, 0x0B),
+    }
 }
 
 /// What the page knows of the decks and the library, between two reads.
@@ -59,7 +69,7 @@ pub(in crate::app) struct Decks {
     imported: usize,
     queued: usize,
     /// Where each deck's Cue button goes back to, in seconds.
-    cue: [f64; 2],
+    cue: [f64; DECKS],
     /// What went wrong last, said on the page.
     pub(in crate::app) error: Option<String>,
     /// The library's row a controller's Load buttons load, moved by its browse knob or a click.
@@ -67,13 +77,13 @@ pub(in crate::app) struct Decks {
     /// The DJ controllers whose ports the decks have taken, by name, and what they send.
     controller: Option<(Vec<String>, std::sync::mpsc::Receiver<suhina_session::ControllerMessage>)>,
     /// Each deck's loops, nudge, tempo range and meter, kept by the page.
-    tools: [tools::DeckTools; 2],
+    tools: [tools::DeckTools; DECKS],
     /// The master meter's needles.
     master_meter: [f32; 2],
     /// The controller's SHIFT buttons, held.
     shift: [bool; 2],
     /// Whether each deck quantizes: cues and loops land on the beat, jumps keep the beat.
-    quantize: [bool; 2],
+    quantize: [bool; DECKS],
     /// Whether the effect units show; `None` until chosen, when they show if there is room.
     show_fx: Option<bool>,
     /// Whether they showed last frame.
@@ -82,7 +92,9 @@ pub(in crate::app) struct Decks {
     show_sampler: Option<bool>,
     sampler_shown: bool,
     /// Whether each deck's pads play the sampler's slots instead of its hot cues.
-    sampler_pads: [bool; 2],
+    sampler_pads: [bool; DECKS],
+    /// Whether decks C and D show, with their channels in the mixer.
+    pub(in crate::app) four: bool,
     /// The library's search, sort and playlist.
     pub(in crate::app) library: library::LibraryView,
 }
@@ -91,7 +103,7 @@ impl Decks {
     /// Moves the meters' needles to the peaks just read, falling back slowly from the last.
     fn read_meters(&mut self) {
         let fall = |shown: f32, peak: f32| peak.max(shown * 0.6);
-        for deck in 0..2 {
+        for deck in 0..DECKS {
             let peaks = &self.snapshot["performance"]["decks"][deck]["meter"];
             for side in 0..2 {
                 let peak = peaks[side].as_f64().unwrap_or(0.0) as f32;
@@ -113,11 +125,32 @@ impl Decks {
     }
 
     fn any_playing(&self) -> bool {
-        (0..2).any(|d| self.playing(d))
+        (0..DECKS).any(|d| self.playing(d))
+    }
+
+    /// The decks shown: two, or four.
+    pub(super) fn count(&self) -> usize {
+        if self.four { DECKS } else { 2 }
+    }
+
+    /// Whether deck C or D holds a track, so four decks must keep showing.
+    fn far_decks_used(&self) -> bool {
+        (2..DECKS).any(|d| self.playing(d) || self.deck(d)["track"].is_number() || self.deck(d)["loading"] == true)
+    }
+
+    /// The deck `deck` syncs to: its neighbour (A with B, C with D) when it plays with a known
+    /// tempo, else the first other deck shown that does, else its neighbour.
+    pub(super) fn partner(&self, deck: usize) -> usize {
+        let pair = deck ^ 1;
+        let ready = |d: usize| self.playing(d) && self.bpm(d).is_some();
+        if ready(pair) {
+            return pair;
+        }
+        (0..self.count()).find(|&d| d != deck && ready(d)).unwrap_or(pair)
     }
 
     fn busy(&self) -> bool {
-        self.snapshot["busy"] == true || !self.imports.is_empty() || (0..2).any(|d| self.deck(d)["loading"] == true)
+        self.snapshot["busy"] == true || !self.imports.is_empty() || (0..DECKS).any(|d| self.deck(d)["loading"] == true)
     }
 
     fn number(&self, deck: usize, key: &str, default: f64) -> f64 {
@@ -368,16 +401,38 @@ impl App {
         ui.add_space(theme::PAD * 2.0);
         self.dj_header(ui, space);
         ui.add_space(GAP);
+        // Four decks do not fit one screen: the page scrolls, the library keeps a good height.
+        if self.dj.decks.four {
+            egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| self.decks_body(ui));
+        } else {
+            self.decks_body(ui);
+        }
+    }
+
+    /// The decks and the mixer, the effects and the sampler when shown, and the library.
+    fn decks_body(&mut self, ui: &mut Ui) {
+        let four = self.dj.decks.four;
         let width = ui.available_width();
-        let deck_width = ((width - MIXER_WIDTH - GAP * 2.0) / 2.0).max(300.0);
+        let mixer_width = if four { MIXER_WIDTH_FOUR } else { MIXER_WIDTH };
+        let deck_width = ((width - mixer_width - GAP * 2.0) / 2.0).max(300.0);
         let height = DECK_HEIGHT;
+        let down = egui::Layout::top_down(egui::Align::Min);
         ui.horizontal_top(|ui| {
             ui.spacing_mut().item_spacing.x = GAP;
-            let down = egui::Layout::top_down(egui::Align::Min);
             ui.allocate_ui_with_layout(Vec2::new(deck_width, height), down, |ui| self.deck_card(ui, 0, height));
-            ui.allocate_ui_with_layout(Vec2::new(MIXER_WIDTH, height), down, |ui| self.mixer_card(ui, height));
+            ui.allocate_ui_with_layout(Vec2::new(mixer_width, height), down, |ui| self.mixer_card(ui, height));
             ui.allocate_ui_with_layout(Vec2::new(deck_width, height), down, |ui| self.deck_card(ui, 1, height));
         });
+        if four {
+            // Decks C and D under, each half the width: C on the left, D on the right.
+            ui.add_space(GAP);
+            let half = ((width - GAP) / 2.0).max(300.0);
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = GAP;
+                ui.allocate_ui_with_layout(Vec2::new(half, height), down, |ui| self.deck_card(ui, 2, height));
+                ui.allocate_ui_with_layout(Vec2::new(half, height), down, |ui| self.deck_card(ui, 3, height));
+            });
+        }
         ui.add_space(GAP);
         // The effects show when there is room for them and a few library rows, or when asked.
         let room = ui.available_height() > fx::FX_HEIGHT + GAP + 260.0;
@@ -392,14 +447,19 @@ impl App {
             self.sampler_row(ui);
             ui.add_space(GAP);
         }
-        self.library_card(ui);
+        if four {
+            let size = Vec2::new(ui.available_width(), ui.available_height().max(LIBRARY_HEIGHT_FOUR));
+            ui.allocate_ui_with_layout(size, down, |ui| self.library_card(ui));
+        } else {
+            self.library_card(ui);
+        }
     }
 
     /// Piou and the page's name on the left, what brings music in on the right.
     fn dj_header(&mut self, ui: &mut Ui, space: super::menu_bar::WorkspaceMode) {
         ui.horizontal(|ui| {
             let (rect, _) = ui.allocate_exact_size(Vec2::splat(48.0), Sense::hover());
-            let playing = (0..2).find(|&d| self.dj.decks.playing(d));
+            let playing = (0..DECKS).find(|&d| self.dj.decks.playing(d));
             let (mood, beat) = match playing {
                 Some(deck) => (Mood::Play, self.dj.decks.bpm(deck).map_or(0.5, |bpm| 60.0 / bpm.max(1.0))),
                 None => (self.piou_mood(ui.ctx()), self.beat_seconds()),
@@ -408,12 +468,26 @@ impl App {
             ui.vertical(|ui| {
                 ui.label(egui::RichText::new("DJ").size(22.0).strong().color(theme::text_primary()));
                 ui.label(
-                    egui::RichText::new("Two decks and a mixer, right here. Plug in your controller or use the mouse.")
-                        .color(theme::text_hint()),
+                    egui::RichText::new(if self.dj.decks.four {
+                        "Four decks and a mixer, right here. Plug in your controller or use the mouse."
+                    } else {
+                        "Two decks and a mixer, right here. Plug in your controller or use the mouse."
+                    })
+                    .color(theme::text_hint()),
                 );
             });
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 self.record_button(ui);
+                let four = self.dj.decks.four;
+                let keep = four && self.dj.decks.far_decks_used();
+                if ui
+                    .add_enabled(!keep, egui::Button::selectable(four, "4 decks").corner_radius(BUTTON_RADIUS))
+                    .on_hover_text("Show decks C and D, with their channels in the mixer")
+                    .on_disabled_hover_text("Eject the tracks of decks C and D first")
+                    .clicked()
+                {
+                    self.dj.decks.four = !four;
+                }
                 let shown = self.dj.decks.show_sampler.unwrap_or(self.dj.decks.sampler_shown);
                 if ui
                     .add(egui::Button::selectable(shown, "Sampler").corner_radius(BUTTON_RADIUS))
@@ -640,10 +714,10 @@ impl App {
             if play.clicked() {
                 self.toggle_play(deck);
             }
-            let other = 1 - deck;
+            let other = self.dj.decks.partner(deck);
             let can_sync = ready && self.dj.decks.track_bpm(deck).is_some() && self.dj.decks.bpm(other).is_some();
             let sync = round_button(ui, &format!("Sync {name}"), "SYNC", 52.0, None, can_sync)
-                .on_hover_text("Play at the other deck's tempo, with the beats lined up")
+                .on_hover_text(format!("Play at deck {}'s tempo, with the beats lined up", NAMES[other]))
                 .on_disabled_hover_text("Both decks need a track with a known tempo");
             if sync.clicked() {
                 self.sync_deck(deck);
@@ -699,7 +773,9 @@ impl App {
     /// Sync: the deck plays at the other deck's tempo, its beats lined up with the other's
     /// when both play.
     fn sync_deck(&mut self, deck: usize) {
-        if let (Some(own), Some(target)) = (self.dj.decks.track_bpm(deck), self.dj.decks.bpm(1 - deck)) {
+        if let (Some(own), Some(target)) =
+            (self.dj.decks.track_bpm(deck), self.dj.decks.bpm(self.dj.decks.partner(deck)))
+        {
             self.set_rate(deck, (target / own.max(1.0)).clamp(0.5, 2.0));
             self.align_beats(deck);
         }
@@ -707,7 +783,8 @@ impl App {
 
     /// The deck in the headphones, or out of them.
     fn toggle_phones(&mut self, deck: usize) {
-        let key = if deck == 0 { "cueA" } else { "cueB" };
+        let key = format!("cue{}", NAMES[deck]);
+        let key = key.as_str();
         let cued = self.dj.decks.snapshot["performance"][key] == true;
         self.dj.decks.set(None, key, json!(!cued));
         self.send_mixer();
@@ -801,20 +878,31 @@ impl App {
                     ui.label(egui::RichText::new("MIXER").small().color(theme::text_hint()));
                 });
                 let middle = 64.0;
-                let strip = ((ui.available_width() - middle - GAP * 2.0) / 2.0).max(50.0);
+                // With four decks the channels go C A | master | B D, as the decks sit.
+                let (left, right): (&[usize], &[usize]) =
+                    if self.dj.decks.four { (&[2, 0], &[1, 3]) } else { (&[0], &[1]) };
+                let strips = (left.len() + right.len()) as f32;
+                let gap = if self.dj.decks.four { 6.0 } else { GAP };
+                let strip = ((ui.available_width() - middle - gap * strips) / strips).max(50.0);
                 ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = GAP;
+                    ui.spacing_mut().item_spacing.x = gap;
                     let down = egui::Layout::top_down(egui::Align::Center);
-                    ui.allocate_ui_with_layout(Vec2::new(strip, 0.0), down, |ui| self.channel(ui, 0));
+                    for &deck in left {
+                        ui.allocate_ui_with_layout(Vec2::new(strip, 0.0), down, |ui| self.channel(ui, deck));
+                    }
                     ui.allocate_ui_with_layout(Vec2::new(middle, 0.0), down, |ui| self.master_strip(ui));
-                    ui.allocate_ui_with_layout(Vec2::new(strip, 0.0), down, |ui| self.channel(ui, 1));
+                    for &deck in right {
+                        ui.allocate_ui_with_layout(Vec2::new(strip, 0.0), down, |ui| self.channel(ui, deck));
+                    }
                 });
                 ui.add_space(theme::PAD);
                 let mut crossfade = self.dj.decks.snapshot["performance"]["crossfade"].as_f64().unwrap_or(0.5) as f32;
+                let (left, right) = self.dj.decks.crossfader_sides();
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("A").strong().color(deck_color(0)));
-                    let changed = crossfader(ui, &mut crossfade, ui.available_width() - 16.0);
-                    ui.label(egui::RichText::new("B").strong().color(deck_color(1)));
+                    side_letters(ui, &left);
+                    let room = ui.available_width() - 8.0 - 9.0 * right.len().max(1) as f32;
+                    let changed = crossfader(ui, &mut crossfade, room);
+                    side_letters(ui, &right);
                     if changed {
                         self.dj.decks.set(None, "crossfade", json!(crossfade));
                         self.send_mixer();
@@ -853,23 +941,41 @@ impl App {
         }
         ui.add_space(4.0);
         let separate = self.dj.decks.snapshot["performance"]["separate_cue"] == true;
-        let key = if deck == 0 { "cueA" } else { "cueB" };
-        let cued = self.dj.decks.snapshot["performance"][key] == true;
-        let headphones = ui
-            .add_enabled(
-                separate,
-                egui::Button::selectable(cued, egui::RichText::new("Phones").size(11.5)).corner_radius(BUTTON_RADIUS),
-            )
-            .on_hover_text(format!("Hear deck {name} in the headphones"))
-            .on_disabled_hover_text("Choose a separate headphone output first: Options › Settings › Audio, cue output");
-        headphones.widget_info(|| {
-            egui::WidgetInfo::selected(egui::Role::Button, separate, cued, format!("Headphones {name}"))
-        });
-        if headphones.clicked() {
-            self.toggle_phones(deck);
+        let key = format!("cue{name}");
+        let cued = self.dj.decks.snapshot["performance"][key.as_str()] == true;
+        // The headphone button and the crossfader side: side by side when the strip is wide
+        // enough (two decks), one over the other with four.
+        let row = |this: &mut Self, ui: &mut Ui| {
+            let headphones = ui
+                .add_enabled(
+                    separate,
+                    egui::Button::selectable(cued, egui::RichText::new("Phones").size(11.5))
+                        .corner_radius(BUTTON_RADIUS),
+                )
+                .on_hover_text(format!("Hear deck {name} in the headphones"))
+                .on_disabled_hover_text(
+                    "Choose a separate headphone output first: Options › Settings › Audio, cue output",
+                );
+            headphones.widget_info(|| {
+                egui::WidgetInfo::selected(egui::Role::Button, separate, cued, format!("Headphones {name}"))
+            });
+            if headphones.clicked() {
+                this.toggle_phones(deck);
+            }
+            this.side_button(ui, deck);
+        };
+        if ui.available_width() >= 86.0 {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 4.0;
+                ui.add_space(((ui.available_width() - 86.0) / 2.0).max(0.0));
+                row(self, ui);
+            });
+        } else {
+            row(self, ui);
         }
         ui.add_space(4.0);
-        let level_key = if deck == 0 { "levelA" } else { "levelB" };
+        let level_key = format!("level{name}");
+        let level_key = level_key.as_str();
         let mut level = self.dj.decks.snapshot["performance"][level_key].as_f64().unwrap_or(1.0) as f32;
         let meter_levels = self.dj.decks.tools[deck].meter;
         ui.horizontal(|ui| {
@@ -916,17 +1022,41 @@ impl App {
 
     fn send_mixer(&mut self) {
         let p = &self.dj.decks.snapshot["performance"];
-        let params = json!({
+        let mut params = json!({
             "crossfade": p["crossfade"].as_f64().unwrap_or(0.5),
-            "levelA": p["levelA"].as_f64().unwrap_or(1.0),
-            "levelB": p["levelB"].as_f64().unwrap_or(1.0),
-            "cueA": p["cueA"].as_bool().unwrap_or(false),
-            "cueB": p["cueB"].as_bool().unwrap_or(false),
             "master": p["master"].as_f64().unwrap_or(1.0),
             "phones": p["phones"].as_f64().unwrap_or(1.0),
             "phonesMix": p["phonesMix"].as_f64().unwrap_or(0.0),
         });
+        for (deck, name) in NAMES.into_iter().enumerate() {
+            params[format!("level{name}")] = json!(p[format!("level{name}")].as_f64().unwrap_or(1.0));
+            params[format!("cue{name}")] = json!(p[format!("cue{name}")].as_bool().unwrap_or(false));
+            params[format!("side{name}")] = json!(p[format!("side{name}")].as_str().unwrap_or(default_side(deck)));
+        }
         self.deck_command("dj.mixer.set", params);
+    }
+
+    /// A channel's crossfader side: a click goes left, through the middle, right.
+    fn side_button(&mut self, ui: &mut Ui, deck: usize) {
+        let name = NAMES[deck];
+        let key = format!("side{name}");
+        let side =
+            self.dj.decks.snapshot["performance"][key.as_str()].as_str().unwrap_or(default_side(deck)).to_owned();
+        let (text, next) = match side.as_str() {
+            "left" => ("◀", "thru"),
+            "thru" => ("◀▶", "right"),
+            _ => ("▶", "left"),
+        };
+        if tools::small_button(ui, &format!("Crossfader side {name}"), text, side == "thru", deck_color(deck), true)
+            .on_hover_text(format!(
+                "Deck {name} on the {} of the crossfader. Click: left, through the middle, right",
+                if side == "thru" { "middle" } else { side.as_str() }
+            ))
+            .clicked()
+        {
+            self.dj.decks.set(None, &key, json!(next));
+            self.send_mixer();
+        }
     }
 }
 
@@ -1380,6 +1510,36 @@ fn fader(ui: &mut Ui, label: &str, value: &mut f32, color: Color32) -> bool {
 }
 
 /// The crossfader, A at the left, B at the right; a double click puts it in the middle.
+/// A deck's crossfader side when the session has not said: A and C left, B and D right.
+fn default_side(deck: usize) -> &'static str {
+    if deck.is_multiple_of(2) { "left" } else { "right" }
+}
+
+/// The letters of the decks on one side of the crossfader, in their colours.
+fn side_letters(ui: &mut Ui, decks: &[usize]) {
+    ui.spacing_mut().item_spacing.x = 2.0;
+    if decks.is_empty() {
+        ui.label(egui::RichText::new("–").color(theme::text_hint()));
+    }
+    for &deck in decks {
+        ui.label(egui::RichText::new(NAMES[deck]).strong().color(deck_color(deck)));
+    }
+}
+
+impl Decks {
+    /// The decks shown on the crossfader's left and right sides.
+    fn crossfader_sides(&self) -> (Vec<usize>, Vec<usize>) {
+        let side = |deck: usize| {
+            let key = format!("side{}", NAMES[deck]);
+            self.snapshot["performance"][key.as_str()].as_str().unwrap_or(default_side(deck)).to_owned()
+        };
+        let shown = 0..self.count();
+        let left = shown.clone().filter(|&d| side(d) == "left").collect();
+        let right = shown.filter(|&d| side(d) == "right").collect();
+        (left, right)
+    }
+}
+
 fn crossfader(ui: &mut Ui, value: &mut f32, width: f32) -> bool {
     let (rect, response) = ui.allocate_exact_size(Vec2::new(width.max(80.0), 30.0), Sense::click_and_drag());
     let before = *value;

@@ -159,7 +159,7 @@ impl App {
     /// way, and locks it so a tempo change keeps it.
     pub(super) fn key_sync(&mut self, deck: usize) {
         let own = Key::parse(self.dj.decks.deck(deck)["key"].as_str().unwrap_or_default());
-        let (Some(own), Some(target)) = (own, self.dj.decks.shown_key(1 - deck)) else {
+        let (Some(own), Some(target)) = (own, self.dj.decks.shown_key(self.dj.decks.partner(deck))) else {
             self.dj.decks.error = Some("Both decks need a track with a known key to match keys.".into());
             return;
         };
@@ -175,10 +175,11 @@ impl App {
     /// with known beats.
     pub(super) fn align_beats(&mut self, deck: usize) {
         let decks = &self.dj.decks;
-        if !decks.playing(deck) || !decks.playing(1 - deck) {
+        let other = decks.partner(deck);
+        if !decks.playing(deck) || !decks.playing(other) {
             return;
         }
-        let (Some(own), Some(target), Some((_, beat))) = (decks.phase(deck), decks.phase(1 - deck), decks.beat(deck))
+        let (Some(own), Some(target), Some((_, beat))) = (decks.phase(deck), decks.phase(other), decks.beat(deck))
         else {
             return;
         };
@@ -289,7 +290,7 @@ impl App {
             {
                 self.move_key(deck, 1);
             }
-            let other_known = self.dj.decks.shown_key(1 - deck).is_some();
+            let other_known = self.dj.decks.shown_key(self.dj.decks.partner(deck)).is_some();
             if small_button(ui, &format!("Key sync {name}"), "KEY SYNC", false, color, ready && known && other_known)
                 .on_hover_text("Move the key to match the other deck's")
                 .clicked()

@@ -137,7 +137,7 @@ fn a_deck_keeps_its_speed_eq_and_filter_and_hands_them_to_the_audio_when_it_play
         json!({"deck":"A","rate":0.4}),
         json!({"deck":"A","rate":2.5}),
         json!({"deck":"A"}),
-        json!({"deck":"C","rate":1.0}),
+        json!({"deck":"E","rate":1.0}),
         json!({"deck":"A","rate":"fast"}),
     ] {
         assert!(p.execute("dj.deck.rate", &wrong).is_err(), "{wrong}");
@@ -225,7 +225,7 @@ fn a_deck_key_is_locked_or_moved_and_kept_for_the_next_play() {
     // Leaving one out keeps it.
     p.execute("dj.deck.key", &json!({"deck":"A","lock":false})).unwrap();
     assert_eq!(idle(&mut p)["performance"]["decks"][0]["keyShift"], -2.0);
-    for wrong in [json!({"deck":"A","shift":13.0}), json!({"deck":"A","lock":"on"}), json!({"deck":"C","lock":true})] {
+    for wrong in [json!({"deck":"A","shift":13.0}), json!({"deck":"A","lock":"on"}), json!({"deck":"E","lock":true})] {
         assert!(p.execute("dj.deck.key", &wrong).is_err(), "{wrong}");
     }
     assert!(matches!(suhina_session::policy("dj.deck.key").unwrap().agents, suhina_session::Agents::Denied(_)));
@@ -492,4 +492,53 @@ fn the_microphone_is_set_kept_and_handed_to_the_audio() {
     assert!((audio[1600] - 0.2 * 0.501_187_2 * 0.5 * 0.75).abs() < 1e-3, "{}", audio[1600]);
     assert_eq!(idle(&mut p)["performance"]["mic"]["on"], true);
     assert!(matches!(suhina_session::policy("dj.mic.set").unwrap().agents, suhina_session::Agents::Denied(_)));
+}
+#[test]
+fn decks_c_and_d_play_on_the_crossfader_side_each_is_put() {
+    let dir = TempDir::new("dj-four");
+    let (mut p, out) = seeded(&dir);
+    assert!(p.execute("dj.deck.load", &json!({"deck":"E","track":1})).is_err());
+    for deck in ["C", "D"] {
+        p.execute("dj.deck.load", &json!({"deck":deck,"track":1})).unwrap();
+        idle(&mut p);
+    }
+    let s = idle(&mut p);
+    let decks = s["performance"]["decks"].as_array().unwrap();
+    assert_eq!(decks.iter().map(|d| d["deck"].as_str().unwrap()).collect::<Vec<_>>(), ["A", "B", "C", "D"]);
+    assert_eq!((decks[2]["track"].as_u64(), decks[3]["track"].as_u64()), (Some(1), Some(1)));
+    assert_eq!((&s["performance"]["sideC"], &s["performance"]["sideD"]), (&json!("left"), &json!("right")));
+    let base = json!({"crossfade":0.0,"levelA":1.0,"levelB":1.0,"cueA":false,"cueB":false});
+    p.execute("dj.mixer.set", &base).unwrap();
+    for deck in ["C", "D"] {
+        p.execute("dj.deck.play", &json!({"deck":deck})).unwrap();
+    }
+    let mut audio = vec![0.0; 2048];
+    let mut hear = |p: &mut suhina_session::Projects, params: serde_json::Value| {
+        let mut params = params;
+        for (k, v) in base.as_object().unwrap() {
+            params.as_object_mut().unwrap().entry(k.clone()).or_insert(v.clone());
+        }
+        p.execute("dj.mixer.set", &params).unwrap();
+        out.renderers.lock().unwrap()[0].process(&mut audio);
+        out.renderers.lock().unwrap()[0].process(&mut audio);
+        audio[1600] / 0.501_187_2
+    };
+    // Crossfader left: deck C (left) alone; D through the middle joins it.
+    assert!((hear(&mut p, json!({})) - 0.2).abs() < 1e-3);
+    assert!((hear(&mut p, json!({"sideD":"thru"})) - 0.4).abs() < 1e-3);
+    // C's fader down; the sides are kept when a later change leaves them out.
+    assert!((hear(&mut p, json!({"levelC":0.0})) - 0.2).abs() < 1e-3);
+    let s = idle(&mut p);
+    assert_eq!((&s["performance"]["sideD"], &s["performance"]["levelC"]), (&json!("thru"), &json!(0.0)));
+    assert!(
+        p.execute(
+            "dj.mixer.set",
+            &json!({"crossfade":0.0,"levelA":1.0,"levelB":1.0,"cueA":false,"cueB":false,"sideC":"up"})
+        )
+        .is_err()
+    );
+    // An effect unit goes on deck C.
+    p.execute("dj.fx.set", &json!({"unit":1,"deckC":true})).unwrap();
+    let fx = &idle(&mut p)["performance"]["fx"][0];
+    assert_eq!((&fx["deckC"], &fx["deckD"], &fx["master"]), (&json!(true), &json!(false), &json!(false)));
 }
