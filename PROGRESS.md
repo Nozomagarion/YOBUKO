@@ -5,6 +5,21 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## The studio's rounded look pushed closer to the DJ page — 12 November 2026 (branch `claude/project-thread-mkzv4x`)
+
+**What changed.** With a YOBUKO theme, the studio now borrows more from the DJ page the owner
+likes: the launcher, mixer, browser and detail area are outlined cards with the DJ page's 14 px
+corners; clips and buttons are rounder and stand a little further apart; play, stop and record
+are round buttons; and the picked view (Launcher or Arrangement) sits on a pill instead of an
+underline. Every control is still there and still answers clicks in the same place; Suhina's
+own themes keep their square look.
+
+**Checked.** `cargo test -p suhina-ui` (all passed), `cargo clippy -p suhina-ui --all-targets
+-- -D warnings` (clean); before/after render with `render_the_shell_for_review`. Not yet seen on
+a physical machine.
+
+**Next.** The owner looks at it in the app and says what to push further.
+
 ## A slider for the size of the whole interface — 12 November 2026 (branch `claude/project-thread-j96gyr`)
 
 **Goal:** the owner can pick the size of YOBUKO's whole interface in Settings and see it change
