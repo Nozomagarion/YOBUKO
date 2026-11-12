@@ -104,7 +104,9 @@ impl Host {
         if request.sequence != peer.next_sequence {
             return Err(Error::SequenceGap);
         }
-        if request.base_revision != self.revision {
+        // A studio edit seen against an older revision runs on the latest one (last edit wins).
+        let rebased = request.edit.rebase && request.base_revision < self.revision;
+        if request.base_revision != self.revision && !rebased {
             return Err(Error::StaleRevision { expected: self.revision, received: request.base_revision });
         }
         self.revision.checked_add(1).ok_or(Error::CounterExhausted)?;
