@@ -271,6 +271,9 @@ impl App {
         let fits = |right: f32, width: f32| right - width >= centre_end;
         let mut right = bar.right() - PAD;
         let mut underline_at = None;
+        // With soft shapes the picked view sits on a pill, like the DJ page's chips; it is drawn
+        // under the names, so its place is kept here and filled in once the names are placed.
+        let pill_slot = painter.add(egui::Shape::Noop);
         // A clip dragged in the Arrangement view, or carried, switches the view when it hovers
         // over the other view's name for a moment.
         let carrying = self.carrying_clip(ui.ctx());
@@ -296,7 +299,7 @@ impl App {
             let pos = Pos2::new(rect.left(), rect.center().y - size.y / 2.0);
             widgets::paint_text(&painter, pos, galley, color);
             if self.shown == view {
-                underline_at = Some((pos.x, pos.y + size.y + 1.0, size.x, theme::text_primary()));
+                underline_at = Some((pos.x, pos.y + size.y + 1.0, size.x, theme::text_primary(), pos.y, size.y));
             }
         }
         right += 12.0 - PAD;
@@ -406,11 +409,24 @@ impl App {
         drop(native_styles);
         self.hover_switch(ui.ctx(), hovered_switch);
         // The underline slides to the view that was picked.
-        if let Some((x, y, width, color)) = underline_at {
+        if let Some((x, y, width, color, text_top, text_height)) = underline_at {
             let ctx = ui.ctx();
             let x = motion::value(ctx, Id::unique("view-underline-x"), x, motion::SLIDE);
             let width = motion::value(ctx, Id::unique("view-underline-width"), width, motion::SLIDE);
-            painter.rect_filled(Rect::from_min_size(Pos2::new(x, y), Vec2::new(width, 1.0)), 0.0, color);
+            if crate::kit::shape::round() {
+                let pill = Rect::from_min_size(Pos2::new(x, text_top), Vec2::new(width, text_height))
+                    .expand2(Vec2::new(8.0, 3.0));
+                painter.set(
+                    pill_slot,
+                    egui::epaint::RectShape::filled(
+                        pill,
+                        crate::kit::shape::corner(crate::kit::shape::PILL),
+                        theme::control_background(),
+                    ),
+                );
+            } else {
+                painter.rect_filled(Rect::from_min_size(Pos2::new(x, y), Vec2::new(width, 1.0)), 0.0, color);
+            }
         }
         painter.hline(bar.x_range(), bar.bottom() - 0.5, theme::hairline(theme::border()));
         self.toolbar_edit_overlay(ui, bar);

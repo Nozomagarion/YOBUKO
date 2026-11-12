@@ -20,15 +20,16 @@ thread_local! {
 }
 
 /// Corner radii, in points, of each kind of shape.
-pub const CELL: u8 = 6;
-pub const BUTTON: u8 = 7;
-pub const STRIP: u8 = 8;
-pub const PANEL: u8 = 12;
+pub const CELL: u8 = 8;
+pub const BUTTON: u8 = 9;
+pub const STRIP: u8 = 10;
+/// The DJ page's cards use the same radius.
+pub const PANEL: u8 = 14;
 pub const CAP: u8 = 4;
 pub const PILL: u8 = 255;
 
 /// How far a cell is drawn inside its rectangle on each side.
-pub const CELL_INSET: f32 = 2.0;
+pub const CELL_INSET: f32 = 3.0;
 /// Half the gap between two panels (and the margin around the workspace).
 pub const PANEL_GAP: f32 = 4.0;
 
@@ -58,9 +59,15 @@ pub fn radius(radius: u8) -> f32 {
 }
 
 /// A button's corner `radius` (from Suhina or the theme's sheet), made soft with soft shapes:
-/// at least [`BUTTON`], never more than half the button's height.
+/// at least [`BUTTON`], never more than half the button's height. A button about as wide as it
+/// is tall (play, stop, record) becomes a circle, like the DJ page's transport.
 pub fn soften(radius: f32, rect: Rect) -> f32 {
-    if round() { radius.max(f32::from(BUTTON)).min(rect.height().min(rect.width()) / 2.0) } else { radius }
+    if !round() {
+        return radius;
+    }
+    let half = rect.height().min(rect.width()) / 2.0;
+    let squarish = rect.width() <= rect.height() * 1.25 && rect.height() <= rect.width() * 1.25;
+    if squarish && rect.height() <= 40.0 { half } else { radius.max(f32::from(BUTTON)).min(half) }
 }
 
 /// `radius` with soft shapes, `square` without: for shapes Suhina already rounds a little.
@@ -101,8 +108,9 @@ pub fn grid_line(color: Color32) -> egui::Stroke {
 }
 
 /// Paints the edges of the panel `rect` in `ground`, the window's background, so the panel
-/// reads as a card with rounded corners set apart from its neighbours. It paints over the
-/// panel's outermost points only and moves nothing. Nothing is drawn without soft shapes.
+/// reads as a card with rounded corners set apart from its neighbours, outlined with a hairline
+/// like the DJ page's cards. It paints over the panel's outermost points only and moves
+/// nothing. Nothing is drawn without soft shapes.
 pub fn card_edges(painter: &Painter, rect: Rect, ground: Color32) {
     if !round() || !rect.is_positive() {
         return;
@@ -144,6 +152,12 @@ pub fn card_edges(painter: &Painter, rect: Rect, ground: Color32) {
         }
     }
     painter.add(mesh);
+    painter.rect_stroke(
+        card,
+        CornerRadius::same(radius.round() as u8),
+        egui::Stroke::new(1.0, super::theme::border()),
+        egui::StrokeKind::Inside,
+    );
 }
 
 #[cfg(test)]
@@ -178,6 +192,12 @@ mod tests {
         // A tiny cell is never shrunk to nothing.
         let tiny = Rect::from_min_size(Pos2::ZERO, Vec2::new(4.0, 4.0));
         assert!(cell(tiny).is_positive());
+        // A square transport button is a circle; a wide one or a tall panel keeps soft corners.
+        let play = Rect::from_min_size(Pos2::ZERO, Vec2::new(28.0, 28.0));
+        assert_eq!(soften(0.0, play), 14.0);
+        assert_eq!(soften(0.0, rect), f32::from(BUTTON));
+        let column = Rect::from_min_size(Pos2::ZERO, Vec2::new(150.0, 160.0));
+        assert_eq!(soften(0.0, column), f32::from(BUTTON));
         set_round(false);
     }
 }
