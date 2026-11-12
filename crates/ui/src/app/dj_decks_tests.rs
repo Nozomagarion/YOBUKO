@@ -14,6 +14,12 @@ fn song(path: &Path) {
 
 /// A window on the DJ space, its DJ library in `dir` holding `tracks` files.
 fn dj_window(dir: &Path, tracks: &[&str]) -> egui_kittest::Harness<'static, App> {
+    dj_window_sized(dir, tracks, 800.0)
+}
+
+/// The same, `height` points tall: a test that clicks the library's side bar gives it room, so
+/// what it clicks is on screen whatever the platform's text measures.
+fn dj_window_sized(dir: &Path, tracks: &[&str], height: f32) -> egui_kittest::Harness<'static, App> {
     let catalog = suhina_dj::Catalog {
         tracks: tracks
             .iter()
@@ -40,7 +46,7 @@ fn dj_window(dir: &Path, tracks: &[&str]) -> egui_kittest::Harness<'static, App>
     app.set_session(Session::new(crate::demo::demo_project()), &[]);
     let mut harness = egui_kittest::Harness::builder()
         .allow_missing_glyphs()
-        .with_size(Vec2::new(1280.0, 800.0))
+        .with_size(Vec2::new(1280.0, height))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
     super::super::menu_bar::pick_mode(&mut harness, "DJ");
@@ -691,12 +697,18 @@ fn the_library_makes_crates_and_shows_each_days_history() {
         {"day": "2026-11-12", "plays": [{"track": 2, "title": "Paper Lanterns", "at": "22:10"}, {"track": 1, "title": "Moonlit Echo", "at": "22:14"}]}
     ]});
     std::fs::write(dir.path().join("dj-history.json"), serde_json::to_vec(&history).unwrap()).unwrap();
-    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns", "Mountain Call"]);
+    // A tall window without the effects and sampler rows, so the side bar's last entries show.
+    let height = 1100.0;
+    let mut harness = dj_window_sized(dir.path(), &["Moonlit Echo", "Paper Lanterns", "Mountain Call"], height);
+    harness.state_mut().dj.decks.show_fx = Some(false);
+    harness.state_mut().dj.decks.show_sampler = Some(false);
     until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 3));
     let titles = |app: &App| -> Vec<String> {
         app.dj.decks.shown_tracks().iter().map(|t| t["title"].as_str().unwrap_or_default().to_owned()).collect()
     };
     // The day's history, in the order played.
+    let day = harness.get_by_label("Show the history of 2026-11-12").rect();
+    assert!(day.bottom() < height - 40.0, "the history entry is off screen: {day:?}");
     harness.get_by_label("Show the history of 2026-11-12").click();
     harness.run();
     assert_eq!(titles(harness.state()), ["Paper Lanterns", "Moonlit Echo"]);
