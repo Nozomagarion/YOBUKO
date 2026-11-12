@@ -6,7 +6,7 @@
 //! lines the daily log file has. It loads the same bundle at `index.html#log`,
 //! as the Preferences and the Sync Manager do.
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{AppError, AppResult, ErrorKind};
@@ -24,13 +24,13 @@ const HEIGHT: f64 = 560.0;
 pub async fn open_log_window(app: tauri::AppHandle) -> AppResult<()> {
     if let Some(window) = app.get_webview_window(WINDOW) {
         let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+        crate::yobuko_embed::show(&window);
+        crate::yobuko_embed::focus(&window);
         return Ok(());
     }
     // The hash from an initialization script rather than the URL, for the
     // reason `sync_window.rs` gives; top frame only (see `report.rs`).
-    let builder = WebviewWindowBuilder::new(&app, WINDOW, WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(&app, WINDOW, crate::yobuko_embed::page())
         .initialization_script("if (window === window.top && !location.hash) location.hash = '#log';")
         .title("Log");
     let builder = match crate::browser_args() {

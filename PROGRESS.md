@@ -22,6 +22,35 @@ original is in the git history.)
   scrolls. Not tried on speakers.
 - **Next criterion:** the owner loads four tracks in a test build and mixes C into A.
 
+## rbxport inside YOBUKO's window, and no other window left — 12 November 2026 (branch `claude/project-thread-4g4ffl`)
+
+**Goal:** the owner's hard rule: studio, DJ mixing and the USB/CDJ export all live in the one
+YOBUKO window. The 12 November test build still opened rbxport as a separate window.
+
+- **Code written:** YOBUKO starts rbxport hidden and draws rbxport's whole interface itself, in
+  a web view placed inside the **USB** space. Every rbxport screen, button and function is
+  there, because it is rbxport's own interface, not a copy. rbxport's menus (File, Edit,
+  Track, Playlist, View, Help) sit in YOBUKO's menu bar while the USB space is shown (in the
+  system bar on macOS). Preferences, sync, log and report open as **tabs** in the USB space.
+  File dialogs, drag and drop into and out of rbxport, copy and paste and rbxport's shortcuts
+  work through YOBUKO. rbxport talks to YOBUKO over a private local connection; its own
+  windows stay hidden and off the taskbar or Dock. Leaving the USB space hides it; the look
+  and rounded shapes of the DJ space are applied to rbxport's controls, cards and dialogs.
+- **Removed:** the "Open rbxport" and "Open Mixxx instead" buttons and the code that launched
+  either program in a window of its own. Nothing in YOBUKO opens another program's window now.
+- **Checks passed (Linux, cloud container):** new UI tests for the USB space (rbxport's menus,
+  tabs, waiting and failure messages, the web view hiding under an open menu and when leaving),
+  link tests (frames, token, a fake rbxport), rbxport's embedding tests, all workspace tests
+  except two that fail the same way on `feature/multiplayer` itself (a library test that cannot fail when run as root, and `shared_project_gate_admits_only_the_guarded_parameter_command_and_keeps_its_checks` in the session tests), clippy, `docs.py check`.
+  The real program was started under a virtual screen: rbxport's library, its first-run dialog
+  and its Preferences tab were drawn inside YOBUKO's window (screenshots shared with the owner).
+- **Not run here:** `cargo deny check` (not installed in the container; CI runs it); new
+  dependencies `wry`, `http`, `arboard`, `gtk` are MIT or Apache-2.0.
+- **Limits:** not tried yet on a real Windows PC or Mac, where the web view is WebView2 and
+  WKWebView rather than the Linux one tested here. A real USB stick and CDJ were not used.
+- **Next criterion:** in the new test installer, clicking **USB** shows rbxport inside the
+  YOBUKO window on Windows and macOS, and no second window or taskbar entry appears.
+
 ## The DJ space gets Mixxx's functions, part 3 — 12 November 2026 (branch `claude/project-thread-fz5ul5`)
 
 **Goal:** the third part toward every Mixxx function in YOBUKO's own DJ space (part 2 was

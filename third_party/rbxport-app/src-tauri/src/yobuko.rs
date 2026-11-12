@@ -355,7 +355,7 @@ pub fn start(app: tauri::AppHandle) {
                     Ok(report) => {
                         tracing::info!(imported = report.imported, request = %request.display(), "tracks from YOBUKO");
                         let _ = std::fs::remove_file(&request);
-                        if !quiet {
+                        if !quiet && !crate::yobuko_embed::embedded() {
                             if let Some(main) = app.get_webview_window(crate::MAIN_WINDOW) {
                                 let _ = main.set_focus();
                             }

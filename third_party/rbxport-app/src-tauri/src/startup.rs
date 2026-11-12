@@ -103,7 +103,8 @@ pub fn reveal_if_page_stalls<R: tauri::Runtime>(window: &tauri::Window<R>) {
             visible = ?visible,
             "the window's page did not ask to be shown: it did not finish its first render, or could not reach the app"
         );
-        if needs_rescue(asked, visible, headless()) {
+        // YOBUKO patch: inside YOBUKO the windows stay hidden for good.
+        if needs_rescue(asked, visible, headless() || crate::yobuko_embed::embedded()) {
             if let Err(e) = window.show() {
                 tracing::warn!(window = %label, error = %e, "could not show the window");
                 return;
@@ -125,7 +126,7 @@ pub fn show_window(window: tauri::WebviewWindow) -> Result<(), String> {
     // Recorded before the headless check: in that mode the page still ran,
     // and the reveal timer must not report it as having failed.
     REVEALS.asked(window.label());
-    if headless() {
+    if headless() || crate::yobuko_embed::embedded() {
         return Ok(());
     }
     window.show().map_err(|e| e.to_string())?;

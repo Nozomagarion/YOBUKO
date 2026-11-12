@@ -6,9 +6,10 @@ players and PRO DJ LINK — at revision `d0ff75b378ec85be891d9f3067ada1e82bad4ca
 (rbxport 1.10.0), under **GPL-2.0-or-later** (see `LICENSE` and
 `crates/rbl-deck/vendor/rubberband/COPYING`), used under GPLv3 with YOBUKO.
 
-It is the **USB stick** side of YOBUKO's DJ mode (which mixes live in Mixxx):
-`scripts/rbxport_build.sh` builds it and ships it inside the YOBUKO packages, and the DJ
-page's "Prepare a USB stick (rbxport)" opens it (`crates/ui/src/app/dj_rbxport.rs`).
+It is the **USB stick** side of YOBUKO's DJ mode: `scripts/rbxport_build.sh` builds it and
+ships it inside the YOBUKO packages, and YOBUKO's USB space runs it hidden and shows its
+interface **inside YOBUKO's own window** (`apps/suhina/src/rbxport_panel.rs` and
+`crates/ui/src/app/usb_space.rs` in YOBUKO); it never shows a window of its own there.
 
 It is its own Cargo and pnpm workspace, excluded from YOBUKO's (`Cargo.toml` › `exclude`).
 Left out of the copy: `.git`, `.github` and `docs/assets` (brand artwork).
@@ -27,6 +28,19 @@ Left out of the copy: `.git`, `.github` and `docs/assets` (brand artwork).
   `src/lib/yobukoLook.ts` (new, started from `src/main.tsx` before the first paint) moves the
   interface's grey tokens onto them and its blue highlights onto the theme's accent, and
   `src/styles/base.css` draws DJ mode's pink line along the top of the window.
+- Drawn inside YOBUKO's window: `src-tauri/src/yobuko_embed.rs` (new). Started by YOBUKO
+  with `YOBUKO_EMBED=<port>:<token>`, every window (main, Preferences, Sync Manager, Report
+  bug, Log) is still built, hidden and out of the taskbar (an accessory app on macOS), and
+  loads `public/yobuko-bridge.html` + `.js` (new) instead of the interface; YOBUKO shows the
+  interface in a webview of its own window and its commands, events, callbacks, the
+  interface's files, the `rbl:` pictures and sounds and the menu bar travel over a local TCP
+  connection. `lib.rs` (main window page, setup, four commands, window events),
+  `startup.rs` (never reveals a hidden window), `preferences.rs`, `sync_window.rs`,
+  `report.rs`, `log_window.rs` (page, show, focus and eval through `yobuko_embed`) and
+  `yobuko.rs` (no bringing forward) carry one-line hooks. Without the variable nothing
+  changes.
+- YOBUKO's soft shapes: `src/styles/yobuko-soft.css` (new, imported in `src/main.tsx`)
+  rounds buttons, fields, menus and dialogs like YOBUKO's DJ space once YOBUKO's look is on.
 - `src-tauri/src/update.rs`: the update check always answers "up to date", so this copy is
   never replaced by upstream's build; YOBUKO's releases update it.
 - `src-tauri/tauri.conf.json`: identifier `com.yobuko.rbxport` (its settings stay apart

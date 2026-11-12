@@ -505,13 +505,6 @@ impl App {
                     self.dj.decks.show_fx = Some(!shown);
                 }
                 if ui
-                    .add(egui::Button::new("Open Mixxx instead").corner_radius(BUTTON_RADIUS))
-                    .on_hover_text("Mixxx, the free DJ program shipped with YOBUKO, in its own window")
-                    .clicked()
-                {
-                    self.open_mixxx(ui.ctx());
-                }
-                if ui
                     .add_enabled(
                         self.session().is_some(),
                         egui::Button::new("Send this project to DJ…").corner_radius(BUTTON_RADIUS),

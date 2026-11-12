@@ -58,6 +58,8 @@ mod elevated_update;
 mod update;
 // YOBUKO patch: this copy ships inside YOBUKO (inbox, no self-update).
 mod yobuko;
+// YOBUKO patch: drawn inside YOBUKO's window (`yobuko_embed.rs`).
+pub mod yobuko_embed;
 
 pub use error::{AppError, AppResult, ErrorKind};
 
@@ -405,6 +407,15 @@ pub fn run() {
             window.create = false;
         }
     }
+    // YOBUKO patch: inside YOBUKO's window, the main window stays hidden and
+    // loads the bridge page; YOBUKO draws the interface (`yobuko_embed.rs`).
+    if yobuko_embed::embedded() {
+        for window in &mut context.config_mut().app.windows {
+            window.url = yobuko_embed::page();
+            window.visible = false;
+            window.skip_taskbar = true;
+        }
+    }
     if let Some(args) = browser_args() {
         tracing::debug!(port = %std::env::var(DEVTOOLS_PORT_ENV).unwrap_or_default(), "webview remote debugging on");
         for window in &mut context.config_mut().app.windows {
@@ -473,6 +484,12 @@ pub fn run() {
             spawn_library_load(app.handle().clone());
             // YOBUKO patch: tracks rendered in YOBUKO come in through its inbox.
             crate::yobuko::start(app.handle().clone());
+            // YOBUKO patch: serve YOBUKO's window when it started this program.
+            if crate::yobuko_embed::embedded() {
+                #[cfg(target_os = "macos")]
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                crate::yobuko_embed::start(app.handle());
+            }
             // Join the network on start: a passive watcher that hears every
             // player and mixer and reports them, so the shell can offer LINK
             // the moment one appears. Nothing is transmitted until LINK is on.
@@ -510,6 +527,7 @@ pub fn run() {
         // the process stayed alive showing nothing but Preferences (0.5.1 on
         // Windows, where the main window's close box is the way out).
         .on_window_event(|window, event| {
+            crate::yobuko_embed::window_event(window, event);
             if window.label() == MAIN_WINDOW && matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 for label in [crate::preferences::WINDOW, crate::sync_window::WINDOW, crate::log_window::WINDOW] {
                     if let Some(extra) = window.app_handle().get_webview_window(label) {
@@ -535,6 +553,10 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             yobuko::yobuko_look,
+            yobuko_embed::yobuko_bridge_ready,
+            yobuko_embed::yobuko_bridge_reply,
+            yobuko_embed::yobuko_bridge_callback,
+            yobuko_embed::yobuko_track_paths,
             browse_settings::rekordbox_browse_settings,
             startup::startup_milestone,
             startup::show_window,

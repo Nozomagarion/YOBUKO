@@ -14,7 +14,7 @@ impl App {
         let file_menu_was_open = std::mem::take(&mut self.file_menu_open);
         let shown = menus::show(ui, &self.menus());
         self.workspace_modes(ui, actions);
-        if shown.open.contains(&"File") {
+        if shown.open.iter().any(|title| title == "File") {
             self.file_menu_open = true;
             if !file_menu_was_open {
                 self.lists_wanted = true;
@@ -41,6 +41,10 @@ impl App {
     /// The menu bar as it is now: what the window's bar draws and the macOS bar is built from.
     pub fn menus(&self) -> Vec<menus::Menu> {
         use menus::{Entry, Item, Menu};
+        // YOBUKO: the USB space's bar is rbxport's (`usb_space.rs`).
+        if let Some(usb) = self.usb_menus() {
+            return usb;
+        }
         let has_project = self.session().is_some();
         let (can_undo, can_redo) = self.session().map_or((false, false), |s| (s.can_undo(), s.can_redo()));
         let several = self.projects.len() >= 2;
@@ -128,13 +132,13 @@ impl App {
             projects.push(Item::new("menu.closeProject", "Close project").into());
         }
         vec![
-            Menu { title: "File", entries: file },
-            Menu { title: "Edit", entries: edit },
-            Menu { title: "View", entries: view },
-            Menu { title: "Projects", entries: projects },
-            Menu { title: "Options", entries: vec![item("settings.open", "Settings").into()] },
+            Menu { title: "File".into(), entries: file },
+            Menu { title: "Edit".into(), entries: edit },
+            Menu { title: "View".into(), entries: view },
+            Menu { title: "Projects".into(), entries: projects },
+            Menu { title: "Options".into(), entries: vec![item("settings.open", "Settings").into()] },
             Menu {
-                title: "Help",
+                title: "Help".into(),
                 entries: vec![
                     Item::new("menu.checkUpdates", "Check for updates…").into(),
                     item("help.about", "About Suhina").into(),
@@ -146,6 +150,10 @@ impl App {
     /// Runs the menu item `id` (`menus`), picked from the window's bar or the system's.
     pub fn run_menu_item(&mut self, id: &str, ctx: &egui::Context, actions: &mut Vec<Action>) {
         let has_project = self.session().is_some();
+        if let Some(usb) = id.strip_prefix("usb:") {
+            self.usb_menu_picked(usb);
+            return;
+        }
         match id {
             "workspace.studio" => {
                 self.dj.active = false;
