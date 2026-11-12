@@ -45,6 +45,7 @@ mod tabs;
 mod themed_toolbar;
 mod typing_keys;
 pub mod updates;
+pub mod usb_space;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -2709,6 +2710,8 @@ impl App {
         if self.settings.track_headers.is_none() {
             self.arrangement.headers_left = headers_left(None);
         }
+        // The USB space says again where rbxport goes, if it shows this frame.
+        self.dj.space.view = None;
         // The frame's placed controls, for anchors between them (`anchor-*`).
         let _capture = crate::kit::control_layout::Capture::begin(ui.ctx());
         self.ui_content(ui);
@@ -2716,7 +2719,6 @@ impl App {
     }
 
     fn ui_content(&mut self, ui: &mut Ui) {
-        self.after_mixxx(ui.ctx());
         application_bar::resize_edges(ui);
         if let Some(theme) = self.themes.get(&self.settings.theme) {
             crate::kit::skin::configure(&theme.skin);
@@ -3015,8 +3017,9 @@ impl App {
                 .frame(egui::Frame::NONE)
                 .show(ui, |ui| self.tab_row(ui, &mut actions));
         }
-        // The DJ space has its own transport on each deck: the studio's bar would only confuse.
-        if !(self.dj.active && !self.dj.usb) {
+        // The DJ space has its own transport on each deck, and the USB space is rbxport's: the
+        // studio's bar would only confuse.
+        if !self.dj.active {
             with_bar_line(ui, "toolbar", |ui| {
                 egui::Panel::top("control-bar").exact_size(theme::CONTROL_BAR).frame(egui::Frame::NONE).show(ui, |ui| {
                     let style_class = crate::kit::element::TOOLBAR.enter();

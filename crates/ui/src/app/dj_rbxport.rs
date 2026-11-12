@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! rbxport (Chris Le's DJ library app, vendored in `third_party/rbxport-app`) prepares USB
-//! sticks for CDJ / XDJ players in DJ mode: where the copy shipped inside YOBUKO is, how it is
-//! started, and how tracks reach its library (the inbox, read by
+//! sticks for CDJ / XDJ players in DJ mode: where the copy shipped inside YOBUKO is (the desktop
+//! app runs it hidden and shows it inside its window, `usb_space.rs`), and how tracks reach its
+//! library (the inbox, read by
 //! `third_party/rbxport-app/src-tauri/src/yobuko.rs`).
 
 use std::path::{Path, PathBuf};
@@ -61,43 +62,6 @@ fn home() -> Option<PathBuf> {
 pub(crate) fn find() -> Option<PathBuf> {
     let shipped = std::env::current_exe().ok().map(|exe| bundled(&exe)).filter(|p| p.exists());
     shipped.or_else(|| candidates(home().as_deref(), &|name| std::env::var(name).ok()).into_iter().find(|p| p.exists()))
-}
-
-/// Whether `app` is the copy shipped inside this YOBUKO.
-fn is_bundled(app: &Path) -> bool {
-    std::env::current_exe().is_ok_and(|exe| bundled(&exe) == app)
-}
-
-/// Starts rbxport, detached; YOBUKO keeps running. Started again, it is only brought forward.
-pub(crate) fn launch(app: &Path) -> std::io::Result<()> {
-    let mut command = if cfg!(target_os = "macos") {
-        // The copy inside YOBUKO.app arrives quarantined from the disk image. The person already
-        // allowed YOBUKO itself, so its helper is cleared too, or macOS would refuse to open it
-        // ("rbxport is damaged" / "cannot be opened"). Nothing to clear is fine.
-        if is_bundled(app) {
-            let _ = std::process::Command::new("xattr")
-                .args(["-dr", "com.apple.quarantine"])
-                .arg(app)
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status();
-        }
-        let mut c = std::process::Command::new("open");
-        c.arg(app);
-        c
-    } else {
-        let mut c = std::process::Command::new(app);
-        if let Some(dir) = app.parent() {
-            c.current_dir(dir);
-        }
-        c
-    };
-    command
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .spawn()
-        .map(drop)
 }
 
 /// The folder rbxport imports requests from: the system's per-user data folder (what the

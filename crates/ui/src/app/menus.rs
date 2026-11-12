@@ -13,7 +13,8 @@ use crate::kit::theme;
 /// One menu of the bar.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Menu {
-    pub title: &'static str,
+    /// Its name in the bar: the studio's own, or rbxport's in the USB space (`usb_space.rs`).
+    pub title: std::borrow::Cow<'static, str>,
     pub entries: Vec<Entry>,
 }
 
@@ -70,7 +71,7 @@ pub struct Shown {
     /// The item picked, by id.
     pub picked: Option<String>,
     /// The menus whose items showed.
-    pub open: Vec<&'static str>,
+    pub open: Vec<std::borrow::Cow<'static, str>>,
 }
 
 /// Draws `menus` as the window's menu bar.
@@ -79,13 +80,28 @@ pub fn show(ui: &mut Ui, menus: &[Menu]) -> Shown {
     ui.style_mut().visuals.widgets.inactive.fg_stroke = theme::hairline(theme::text_secondary());
     egui::MenuBar::new().ui(ui, |ui| {
         for menu in menus {
-            bar_menu(ui, menu.title, |ui| {
-                shown.open.push(menu.title);
+            bar_menu(ui, &menu.title, |ui| {
+                shown.open.push(menu.title.clone());
                 entries(ui, &menu.entries, &mut shown.picked);
             });
         }
     });
     shown
+}
+
+/// Draws menus named at run time (`(title, enabled, entries)`), in the bar's look: the USB space
+/// shows rbxport's menus so. Returns the item picked, by id.
+pub fn show_named(ui: &mut Ui, menus: &[(String, bool, Vec<Entry>)]) -> Option<String> {
+    let mut picked = None;
+    ui.style_mut().visuals.widgets.inactive.fg_stroke = theme::hairline(theme::text_secondary());
+    egui::MenuBar::new().ui(ui, |ui| {
+        for (title, enabled, entries) in menus {
+            ui.add_enabled_ui(*enabled, |ui| {
+                bar_menu(ui, title, |ui| self::entries(ui, entries, &mut picked));
+            });
+        }
+    });
+    picked
 }
 
 fn entries(ui: &mut Ui, entries: &[Entry], picked: &mut Option<String>) {
@@ -209,7 +225,7 @@ mod tests {
     #[test]
     fn without_a_project_saving_is_greyed_out_and_opening_is_not() {
         let menus = crate::App::new().menus();
-        let titles: Vec<_> = menus.iter().map(|menu| menu.title).collect();
+        let titles: Vec<_> = menus.iter().map(|menu| menu.title.as_ref()).collect();
         assert_eq!(titles, ["File", "Edit", "View", "Projects", "Options", "Help"]);
         let file = &menus[0].entries;
         assert!(find(file, "file.open").is_some_and(|item| item.enabled));

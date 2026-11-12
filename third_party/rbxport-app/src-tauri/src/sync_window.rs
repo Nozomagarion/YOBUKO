@@ -7,7 +7,7 @@
 //! so the DJ System defaults a fresh stick is given are the ones set in
 //! Preferences, whichever window set them.
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewWindowBuilder};
 
 use crate::error::{AppError, AppResult, ErrorKind};
 
@@ -29,14 +29,14 @@ const HEIGHT: f64 = 620.0;
 pub async fn open_sync_window(app: tauri::AppHandle) -> AppResult<()> {
     if let Some(window) = app.get_webview_window(WINDOW) {
         let _ = window.unminimize();
-        let _ = window.set_focus();
+        crate::yobuko_embed::focus(&window);
         return Ok(());
     }
     // The hash is set from an initialization script rather than carried in
     // the URL: `index.html#sync` opens blank on Windows, where a `#` inside
     // an `App` path does not survive the `http://tauri.localhost` route
     // (what 0.5.1's Preferences window taught).
-    let builder = WebviewWindowBuilder::new(&app, WINDOW, WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(&app, WINDOW, crate::yobuko_embed::page())
         // Top frame only: on Windows wry runs it in every frame (see `report.rs`).
         .initialization_script("if (window === window.top && !location.hash) location.hash = '#sync';")
         .title("Sync Manager");

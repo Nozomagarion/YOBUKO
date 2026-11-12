@@ -109,7 +109,7 @@ fn build(menus: &[menus::Menu], picked: Arc<Mutex<Vec<MenuId>>>) -> Option<MacMe
     }
     menu.append(&app).ok()?;
     for bar_menu in menus {
-        let submenu = Submenu::new(bar_menu.title, true);
+        let submenu = Submenu::new(&bar_menu.title, true);
         append(&submenu, &bar_menu.entries, &mut lines, &mut items)?;
         menu.append(&submenu).ok()?;
     }
@@ -243,7 +243,7 @@ mod tests {
 
     fn bar(label: &str, recent: usize) -> Vec<menus::Menu> {
         vec![menus::Menu {
-            title: "File",
+            title: "File".into(),
             entries: vec![
                 Item::new("file.open", label).into(),
                 Entry::Separator,

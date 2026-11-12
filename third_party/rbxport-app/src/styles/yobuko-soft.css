@@ -1,0 +1,54 @@
+/* YOBUKO patch (not in upstream rbxport): the soft, rounded shapes of
+   YOBUKO's DJ space on rbxport's controls, once YOBUKO's look is on
+   (src/lib/yobukoLook.ts sets data-yobuko-look). Shapes only: every control
+   keeps its place, size and function. */
+
+:root[data-yobuko-look] button:not([role="gridcell"]):not([role="row"]):not([role="columnheader"]),
+:root[data-yobuko-look] select,
+:root[data-yobuko-look] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+:root[data-yobuko-look] textarea {
+  border-radius: 8px;
+}
+
+:root[data-yobuko-look] dialog,
+:root[data-yobuko-look] [role="dialog"],
+:root[data-yobuko-look] [role="alertdialog"],
+:root[data-yobuko-look] [role="menu"],
+:root[data-yobuko-look] [role="listbox"],
+:root[data-yobuko-look] [role="tooltip"] {
+  border-radius: 12px;
+}
+
+:root[data-yobuko-look] [role="menuitem"],
+:root[data-yobuko-look] [role="option"] {
+  border-radius: 6px;
+}
+
+:root[data-yobuko-look] [role="tab"] {
+  border-radius: 8px 8px 0 0;
+}
+
+/* Scroll bars as pills. */
+:root[data-yobuko-look] ::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+}
+
+/* Cards and sections as soft blocks, like the DJ space's panels. rbxport's
+   CSS modules name classes `_<name>_<hash>_<line>`, so the match is on the
+   name: only the radius changes, never a size or a place. */
+:root[data-yobuko-look] [class*="_section_"],
+:root[data-yobuko-look] [class*="_card_"],
+:root[data-yobuko-look] [class*="_panel_"],
+:root[data-yobuko-look] [class*="_well_"],
+:root[data-yobuko-look] [class*="_notice_"] {
+  border-radius: 12px;
+}
+
+:root[data-yobuko-look] [class*="_chip_"],
+:root[data-yobuko-look] [class*="_keyBadge_"],
+:root[data-yobuko-look] [class*="_hotCueBadge_"],
+:root[data-yobuko-look] [class*="_search_"],
+:root[data-yobuko-look] [class*="_field_"],
+:root[data-yobuko-look] [class*="_pad_"] {
+  border-radius: 8px;
+}

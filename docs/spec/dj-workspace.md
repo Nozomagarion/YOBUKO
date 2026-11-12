@@ -45,6 +45,11 @@ covers:
   - crates/ui/src/interaction/pick.rs
   - third_party/rbxport-analysis
   - crates/ui/src/app/dj_rbxport.rs
+  - crates/ui/src/app/usb_space.rs
+  - crates/ui/src/app/usb_space_tests.rs
+  - apps/suhina/src/rbxport_panel.rs
+  - apps/suhina/src/rbxport_panel
+  - third_party/rbxport-app/src-tauri/src/yobuko_embed.rs
   - crates/ui/src/app/menu_bar.rs
   - crates/ui/src/app/shell.rs
   - crates/ui/src/app/shell_tests.rs
@@ -124,9 +129,8 @@ studio's control bar, and shows:
   count said on the page. A folder gives at most 1000 audio files; files already in the
   library are left out.
 
-**Open Mixxx instead** starts Mixxx, which comes with YOBUKO, the way earlier versions did (full
-screen in YOBUKO's look; quitting it brings the studio back). Switching to another space leaves
-the decks playing.
+Nothing in the DJ space opens another program's window: Mixxx is not started. Switching to
+another space leaves the decks playing.
 
 ### The DDJ-FLX4
 
@@ -170,15 +174,39 @@ Only the most significant 7 bits of the 14-bit controls are read. The KEYBOARD, 
 pad modes and the jog wheels' touch are not read yet.
 The controller's lights are not driven. Not verified on the hardware yet.
 
-The USB space is rbxport's page (**Open rbxport**, **Add this project to the library…**,
-**Share library now**). Entering it opens rbxport with Mixxx's tracks and playlists, and does
-not stop the project. YOBUKO ships its own copy of rbxport, built from `third_party/rbxport-app`
-by `scripts/rbxport_build.sh`: `YOBUKO.app/Contents/Helpers/rbxport.app` on macOS,
-`rbxport/rbxport[.exe]` beside the program on Windows and Linux. Without it (a development
-build) an rbxport installed on its own is used, else its download page opens. A render sent to
-DJ is also written as a `.paths` request into `<data dir>/YOBUKO/rbxport-inbox`, which YOBUKO's
-copy of rbxport imports (`third_party/rbxport-app/src-tauri/src/yobuko.rs`), and added to
-Mixxx's library when Mixxx is closed.
+The USB space shows rbxport inside YOBUKO's window (`crates/ui/src/app/usb_space.rs`), with
+**Add this project to the library…** and **Share library now** in its strip. YOBUKO ships its
+own copy of rbxport, built from `third_party/rbxport-app` by `scripts/rbxport_build.sh`:
+`YOBUKO.app/Contents/Helpers/rbxport.app` on macOS, `rbxport/rbxport[.exe]` beside the program
+on Windows and Linux. Without it (a development build) an rbxport installed on its own is used;
+without any, the space offers **Get rbxport**.
+
+Entering the space starts rbxport with `YOBUKO_EMBED=<port>:<token>`
+(`apps/suhina/src/rbxport_panel.rs`, `rbxport_panel/link.rs`). rbxport connects back to that
+local port, sends the token, and keeps its own windows hidden and off the taskbar or Dock
+(`third_party/rbxport-app/src-tauri/src/yobuko_embed.rs`); they load a bridge page
+(`public/yobuko-bridge.html`) instead of the interface. YOBUKO opens one child web view per
+rbxport window over the space's rectangle and serves rbxport's interface into it from rbxport,
+through the link. Messages are a 4-byte big-endian length and JSON:
+
+- YOBUKO to rbxport: `invoke` (a command the page called, run in the matching hidden window),
+  `asset` (a file of the interface or an `rbl://` request), `menu` (a menu item picked),
+  `closed` (a tab closed), `quit`.
+- rbxport to YOBUKO: `hello`, `reply`, `callback` (events and channels), `page` (a window
+  opened: Preferences, sync, log and report become tabs), `focus`, `gone`, `eval`, `menu` (its
+  menu tree) and `asset` answers.
+
+The page runs with a stand-in for Tauri's page interface (`rbxport_panel/shim.js`): window
+calls act on the tab, dialogs are YOBUKO's file and message dialogs, a drop on the page reaches
+rbxport's drop handling and a drag out of a track list goes through YOBUKO's drag-out. While
+the space is shown, rbxport's menus are in YOBUKO's menu bar (the system bar on macOS, or the
+strip when the window has no menu bar) and its shortcuts act. The web view hides under an open
+menu or popup and when another space is chosen; rbxport keeps running until YOBUKO quits. When
+YOBUKO's look is on, rbxport's controls, cards and dialogs get the DJ space's rounded shapes
+(`src/styles/yobuko-soft.css`).
+
+A render sent to DJ is also written as a `.paths` request into `<data dir>/YOBUKO/rbxport-inbox`,
+which YOBUKO's copy of rbxport imports (`third_party/rbxport-app/src-tauri/src/yobuko.rs`).
 
 ## Commands and storage
 
