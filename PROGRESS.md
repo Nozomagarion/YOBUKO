@@ -101,7 +101,11 @@ reached the others. Edits in the original tab ("Untitled 1") were never sent.
   and **Open for friends** hosts it again; a friend's says **Backup copy** and, when the creator
   is away, **Open copy for friends** hosts it, marked for everyone as not the main version.
   **Open alone** opens it in the Studio. Spec: `docs/spec/saved-sessions.md`.
-- **Planned next:** the multiplayer pages in the rounded DJ look.
+- **Code written, rounded look (12 November, evening):** the Multiplayer page and the strip
+  above the shared session in the Studio take the DJ space's rounded look: round cards
+  (Session, Playback and transfers, Shared controls), round buttons, fields and tabs, the
+  strip as a rounded bar. The lobby's cards and every space's main button are rounder too. The
+  shared tab takes the session's name. Nothing was removed; every label stays the same.
 
 ## The studio's rounded look pushed closer to the DJ page — 12 November 2026 (branch `claude/project-thread-mkzv4x`)
 

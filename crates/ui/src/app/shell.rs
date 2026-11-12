@@ -367,7 +367,7 @@ pub(super) fn main_button(ui: &mut Ui, space: WorkspaceMode, text: &str) -> egui
     ui.add(
         egui::Button::new(egui::RichText::new(text).strong().color(egui::Color32::WHITE))
             .fill(space.color())
-            .corner_radius(8)
+            .corner_radius(10)
             .min_size(Vec2::new(180.0, 30.0)),
     )
 }
@@ -377,7 +377,7 @@ pub(super) fn card<R>(ui: &mut Ui, title: &str, body: impl FnOnce(&mut Ui) -> R)
     egui::Frame::NONE
         .fill(theme::panel_background())
         .stroke(egui::Stroke::new(1.0, theme::border()))
-        .corner_radius(10)
+        .corner_radius(14)
         .inner_margin(egui::Margin::same(12))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
