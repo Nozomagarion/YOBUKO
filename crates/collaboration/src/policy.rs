@@ -13,9 +13,25 @@ use crate::Error;
 pub struct Edit {
     pub(crate) command: &'static str,
     pub(crate) params: Value,
+    /// A studio edit runs on the host's latest revision, even when its author had not seen the
+    /// last ones yet: whoever edits last wins, as in a shared document.
+    pub(crate) rebase: bool,
 }
 
 impl Edit {
+    /// A studio edit from a shared tab (`suhina_session::shared_studio_params`): any edit the
+    /// studio makes that touches nothing but the project. The command checks the rest when it runs.
+    pub fn studio(command: &str, params: Value) -> Result<Self, Error> {
+        let command = suhina_session::shared_studio_id(command).ok_or(Error::UnsupportedCommand)?;
+        suhina_session::shared_studio_params(command, &params).map_err(|_| Error::InvalidParameters)?;
+        Ok(Self { command, params, rebase: true })
+    }
+
+    /// Whether this edit runs on the host's latest revision whatever its author saw.
+    pub fn rebases(&self) -> bool {
+        self.rebase
+    }
+
     pub fn new(command: &str, params: Value) -> Result<Self, Error> {
         let command = match command {
             "track.rename" => "track.rename",
@@ -200,7 +216,7 @@ impl Edit {
         if !valid {
             return Err(Error::InvalidParameters);
         }
-        Ok(Self { command, params })
+        Ok(Self { command, params, rebase: false })
     }
 }
 

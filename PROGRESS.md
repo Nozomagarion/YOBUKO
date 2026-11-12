@@ -5,6 +5,34 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## Multiplayer in the real studio — 12 November 2026 (branch `claude/project-thread-9iiran`)
+
+**Goal:** a multiplayer session is the same studio project on every computer, edited together
+live, instead of a separate tab with a form of tables and "Set volume" buttons.
+
+**Why it behaved that way before:** sharing made a copy of the project in a locked tab. The
+studio refused to edit that tab, and only a short list of typed edits from the dedicated form
+reached the others. Edits in the original tab ("Untitled 1") were never sent.
+
+- **Code written:** on the Multiplayer page, **Open the shared session in Studio** brings the
+  shared tab to the front in the ordinary studio (arrangement, launcher, clip editor, devices,
+  mixer). A strip above it shows the session, its code and guests, **Session page** and **Leave
+  session**. Every studio edit made there (drawing a MIDI clip, moving notes, adding a track,
+  moving a fader, devices, scenes, automation, tempo…) goes to the host, which runs it in order
+  on its copy and every guest's: all computers keep the same project. Two people editing at the
+  same moment both get their edit in (the last one wins). Edits that reach outside the project
+  are refused with a sentence: pasting, undo/redo, adding plug-ins or files, audio/MIDI inputs.
+  The old form pages all stay on the Session page. Protocol 19: both computers need this build.
+- **Checks passed (Linux, cloud container):** see the pull request.
+- **Limits:** undo, paste, recording into the shared tab and adding plug-ins are not shared yet;
+  an edit shows on screen once the host confirmed it (a short delay over the Internet). Not yet
+  tried between two real computers.
+- **Next criterion:** the owner and a friend open the shared session in the studio on two
+  computers, each draws a MIDI clip, and both see both clips.
+- **Planned next (owner's requests of 12 November):** save the shared session under a name on
+  every computer and resume it later; the creator keeps the main version and the others a
+  clearly marked backup copy; the multiplayer pages in the rounded DJ look.
+
 ## A slider for the size of the whole interface — 12 November 2026 (branch `claude/project-thread-j96gyr`)
 
 **Goal:** the owner can pick the size of YOBUKO's whole interface in Settings and see it change
