@@ -12,8 +12,7 @@ original is in the git history.)
 - **Code written:** a **4 decks** button shows decks C and D under A and B, with four channels
   in the mixer (C A | master | B D). Each deck can sit on the left, the right or the middle
   (through) of the crossfader. Effect units can go on C and D; library rows load on C and D.
-  SYNC follows the neighbouring deck (A with B, C with D). Added to the same pull request as
-  part 3 (#40), since that one is not merged yet.
+  SYNC follows the neighbouring deck (A with B, C with D). Part 3 was merged as #40.
 - **Checks passed (Linux, cloud container):** engine test (four decks on their crossfader
   sides), session test (decks C and D, sides kept, an effect on C), UI test (the button,
   channels, side button, hiding again), screenshots of two and four decks, clippy.
