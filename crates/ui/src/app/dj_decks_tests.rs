@@ -693,3 +693,48 @@ fn the_library_makes_crates_and_shows_each_days_history() {
     harness.run();
     assert_eq!(titles(harness.state()).len(), 3);
 }
+
+#[test]
+fn auto_dj_queues_from_the_library_and_a_deck_marks_its_intro_and_outro() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns"]);
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 2));
+    harness.state_mut().queue_auto_dj(2);
+    harness.state_mut().queue_auto_dj(1);
+    until(&mut harness, "the queue", |app| app.dj.decks.auto_queue() == [2, 1]);
+    harness.get_by_label("Show the Auto DJ list").click();
+    harness.run();
+    let titles: Vec<String> = harness
+        .state()
+        .dj
+        .decks
+        .shown_tracks()
+        .iter()
+        .map(|t| t["title"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(titles, ["Paper Lanterns", "Moonlit Echo"]);
+    for label in ["Auto DJ", "Skip to the next track", "Longer fade"] {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    harness.get_by_label("Longer fade").click();
+    until(&mut harness, "the fade", |app| app.dj.decks.auto()["fade"] == 9.0);
+    // A test has no audio device: switched on, Auto DJ loads deck A and then says it cannot play.
+    harness.get_by_label("Auto DJ").click();
+    until(&mut harness, "deck A loaded", |app| app.dj.decks.track(0) == Some(2));
+    until(&mut harness, "Auto DJ off", |app| {
+        app.dj.decks.auto()["on"] == false && app.dj.decks.snapshot["busy"] == false
+    });
+    assert!(harness.state().dj.decks.auto()["error"].as_str().is_some_and(|e| e.contains("audio")));
+    assert_eq!(harness.state().dj.decks.auto_queue(), [1], "the second track waits");
+    // The intro and outro, at the playhead.
+    harness.state_mut().set_named_cue(0, super::auto::INTRO);
+    until(&mut harness, "the intro", |app| {
+        app.dj.decks.named_cue(0, "Intro").is_some() && app.dj.decks.snapshot["busy"] == false
+    });
+    harness.state_mut().set_named_cue(0, super::auto::OUTRO);
+    until(&mut harness, "the outro", |app| {
+        app.dj.decks.named_cue(0, "Outro").is_some() && app.dj.decks.snapshot["busy"] == false
+    });
+    harness.state_mut().clear_named_cue(0, super::auto::INTRO);
+    until(&mut harness, "no intro", |app| app.dj.decks.named_cue(0, "Intro").is_none());
+}

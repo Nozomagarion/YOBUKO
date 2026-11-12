@@ -401,3 +401,67 @@ fn each_track_played_goes_in_the_days_history_once_a_load_and_crates_are_made() 
         assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
     }
 }
+#[test]
+fn auto_dj_plays_its_queue_on_both_decks_fading_from_outro_to_intro() {
+    let dir = TempDir::new("dj-autodj");
+    let (mut p, out) = seeded(&dir);
+    let revision = idle(&mut p)["revision"].clone();
+    // The song (2 s) has its intro at 0.5 s and its outro at 1.2 s.
+    p.execute("dj.cue.add", &json!({"track":1,"revision":revision,"name":"Intro","seconds":0.5})).unwrap();
+    let revision = idle(&mut p)["revision"].clone();
+    p.execute("dj.cue.add", &json!({"track":1,"revision":revision,"name":"Outro","seconds":1.2})).unwrap();
+    idle(&mut p);
+    assert!(p.execute("dj.autodj.set", &json!({"on":true})).is_err(), "an empty queue");
+    for _ in 0..2 {
+        p.execute("dj.autodj.add", &json!({"track":1})).unwrap();
+    }
+    assert!(p.execute("dj.autodj.add", &json!({"track":99})).is_err());
+    assert!(p.execute("dj.autodj.set", &json!({"fade":31})).is_err());
+    p.execute("dj.autodj.set", &json!({"on":true,"fade":0.5})).unwrap();
+    // The first track loads on A and starts at its intro, the crossfader on A.
+    let mut s = idle(&mut p);
+    for _ in 0..10 {
+        if let Some(r) = out.renderers.lock().unwrap().first_mut() {
+            r.process(&mut [0.0; 2]);
+        }
+        s = idle(&mut p);
+        if s["performance"]["decks"][0]["playing"] == true {
+            break;
+        }
+    }
+    let a = &s["performance"]["decks"][0];
+    assert_eq!((&a["playing"], &s["performance"]["crossfade"]), (&json!(true), &json!(0.0)), "{s}");
+    assert!((a["position"].as_f64().unwrap() - 0.5).abs() < 0.01, "{a}");
+    // Played on: B loads the next, and at A's outro B starts at its intro and the fader moves.
+    let mut faded = false;
+    let mut moved = false;
+    for _ in 0..200 {
+        out.renderers.lock().unwrap()[0].process(&mut [0.0; 512]);
+        s = idle(&mut p);
+        let x = s["performance"]["crossfade"].as_f64().unwrap();
+        moved |= x > 0.0 && x < 1.0;
+        if s["performance"]["decks"][1]["playing"] == true && s["performance"]["decks"][0]["playing"] == false {
+            faded = true;
+            break;
+        }
+    }
+    assert!(faded && moved, "{s}");
+    assert_eq!(s["performance"]["crossfade"], 1.0);
+    let auto = &s["performance"]["autoDj"];
+    assert_eq!((&auto["on"], &auto["queue"]), (&json!(true), &json!([])), "{auto}");
+    // The queue is empty: B plays out and Auto DJ switches off.
+    for _ in 0..200 {
+        out.renderers.lock().unwrap()[0].process(&mut [0.0; 512]);
+        s = idle(&mut p);
+        if s["performance"]["autoDj"]["on"] == false {
+            break;
+        }
+    }
+    assert_eq!(s["performance"]["autoDj"]["on"], false, "{s}");
+    p.execute("dj.autodj.add", &json!({"track":1})).unwrap();
+    assert!(p.execute("dj.autodj.remove", &json!({"position":2})).is_err());
+    p.execute("dj.autodj.remove", &json!({"position":1})).unwrap();
+    for id in ["dj.autodj.set", "dj.autodj.add", "dj.autodj.skip"] {
+        assert!(matches!(suhina_session::policy(id).unwrap().agents, suhina_session::Agents::Denied(_)));
+    }
+}

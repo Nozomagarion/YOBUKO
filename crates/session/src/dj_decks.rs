@@ -87,6 +87,8 @@ pub(crate) struct Decks {
     pub(crate) recorder: crate::dj_record::Recorder,
     /// The tracks played, by day.
     pub(crate) history: crate::dj_history::History,
+    /// Auto DJ: its queue and where it is.
+    pub(crate) auto: crate::dj_auto::AutoDj,
 }
 impl Decks {
     pub(crate) fn apply(&mut self, result: Loaded) {
@@ -480,6 +482,34 @@ pub(crate) fn mixer(p: &mut Projects, v: &Value) -> Result<Value, CommandError> 
     p.dj.decks.mixer = mix;
     Ok(json!({"changed":true}))
 }
+/// Moves the crossfader (0 = A, 1 = B), keeping the rest of the mixer.
+pub(crate) fn crossfade(p: &mut Projects, x: f64) -> Result<(), CommandError> {
+    let m = p.dj.decks.mixer;
+    let params = json!({"crossfade": x.clamp(0.0, 1.0), "levelA": m.levels[0], "levelB": m.levels[1], "cueA": m.cue[0], "cueB": m.cue[1]});
+    mixer(p, &params).map(|_| ())
+}
+/// What a deck holds and where it is, for Auto DJ.
+pub(crate) struct DeckState {
+    pub(crate) track: Option<u32>,
+    pub(crate) loading: bool,
+    pub(crate) playing: bool,
+    pub(crate) position: f64,
+    pub(crate) seconds: f64,
+}
+pub(crate) fn state(p: &Projects, i: usize) -> DeckState {
+    let Some(d) = p.dj.decks.states.get(i) else {
+        return DeckState { track: None, loading: false, playing: false, position: 0.0, seconds: 0.0 };
+    };
+    let active = d.binding.as_ref().filter(|b| b.target == p.active());
+    let source = d.source.as_ref();
+    DeckState {
+        track: source.map(|s| s.track.id),
+        loading: d.pending.is_some(),
+        playing: active.is_some_and(|b| b.monitor.playing()),
+        position: active.map_or(d.from, |b| b.monitor.seconds()),
+        seconds: source.map_or(0.0, |s| s.data.frames() as f64 / f64::from(s.data.sample_rate.max(1))),
+    }
+}
 /// Changes an effect unit: one slot's effect, on button or knob, and the unit's mix, length,
 /// tempo or places, whichever are given.
 pub(crate) fn fx(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
@@ -630,6 +660,7 @@ pub(crate) fn snapshot(p: &Projects) -> Value {
         "fx": p.dj.decks.fx.iter().map(fx_json).collect::<Vec<_>>(),
         "samplers": crate::dj_sampler::snapshot(p),
         "recording": crate::dj_record::snapshot(p),
+        "autoDj": crate::dj_auto::snapshot(p),
         "effects": DeckFxKind::ALL.iter().map(|k| json!({"id": k.id(), "name": k.name()})).collect::<Vec<_>>(),
     })
 }

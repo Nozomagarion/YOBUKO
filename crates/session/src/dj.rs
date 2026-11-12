@@ -511,6 +511,24 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
         &[param("day", ParamType::Text, "the day, YYYY-MM-DD")],
         history_delete
     ),
+    command!(
+        "dj.autodj.set",
+        "Switch Auto DJ on or off (the decks play its queue one after the other) or set its fade",
+        &[
+            optional("on", ParamType::Bool, "Auto DJ on or off; unchanged when left out"),
+            optional("fade", ParamType::Number, "seconds the crossfader takes from one track to the next, 0–30")
+        ],
+        autodj_set
+    ),
+    command!("dj.autodj.add", "Add a DJ library track to the end of the Auto DJ queue", &[TRACK], autodj_add),
+    command!(
+        "dj.autodj.remove",
+        "Take a track out of the Auto DJ queue",
+        &[param("position", ParamType::Integer, "its one-based place in the queue")],
+        autodj_remove
+    ),
+    command!("dj.autodj.clear", "Empty the Auto DJ queue", &[], autodj_clear),
+    command!("dj.autodj.skip", "Fade to Auto DJ's next track now", &[], autodj_skip),
     command!("dj.playlist.rename", "Rename a local DJ playlist", &[PLAYLIST, NAME, REVISION], rename),
     command!("dj.playlist.delete", "Delete a local DJ playlist without deleting audio", &[PLAYLIST, REVISION], delete),
     command!("dj.playlist.addTrack", "Add a library track to a DJ playlist", &[PLAYLIST, TRACK, REVISION], add),
@@ -541,6 +559,7 @@ pub(crate) fn ready(projects: &mut Projects) -> Result<(), CommandError> {
 }
 fn library(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
     ready(projects)?;
+    crate::dj_auto::step(projects);
     let history = crate::dj_history::snapshot(projects);
     Ok(json!({"tracks": projects.dj.catalog.tracks, "playlists": projects.dj.catalog.playlists, "history": history,
         "performance":crate::dj_decks::snapshot(projects), "grids":projects.dj.catalog.grids, "waveform":projects.dj.waveform.snapshot(),
@@ -727,6 +746,21 @@ fn sampler_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn sampler_gain(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_sampler::gain(p, v)
+}
+fn autodj_set(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_auto::set(p, v)
+}
+fn autodj_add(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_auto::add(p, v)
+}
+fn autodj_remove(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_auto::remove(p, v)
+}
+fn autodj_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_auto::clear(p, v)
+}
+fn autodj_skip(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_auto::skip(p, v)
 }
 fn history_delete(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_history::delete(p, v)

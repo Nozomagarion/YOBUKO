@@ -29,6 +29,8 @@ pub(in crate::app) struct LibraryView {
     pub(in crate::app) playlist: Option<u64>,
     /// The day of history shown, instead.
     pub(in crate::app) day: Option<String>,
+    /// The Auto DJ queue shown, instead.
+    pub(in crate::app) auto: bool,
 }
 
 /// A list in the library's side bar: a playlist or a crate.
@@ -48,6 +50,10 @@ impl Decks {
             ids.into_iter().filter_map(|t| all.iter().find(|track| track["id"] == *t).cloned()).collect()
         };
         let mut tracks: Vec<Value> = match (&view.day, view.playlist) {
+            _ if view.auto => {
+                let queue: Vec<Value> = self.auto_queue().into_iter().map(Value::from).collect();
+                by_id(queue.iter().collect())
+            }
             (Some(day), _) => {
                 let days = self.snapshot["history"]["days"].as_array().cloned().unwrap_or_default();
                 let plays = days.iter().find(|d| d["day"] == day.as_str()).and_then(|d| d["plays"].as_array().cloned());
@@ -157,13 +163,18 @@ impl App {
                     {
                         self.dj.decks.library.search.clear();
                     }
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(
-                            egui::RichText::new("Drop audio files or folders anywhere on this page")
-                                .small()
-                                .color(theme::text_hint()),
-                        );
-                    });
+                    if self.dj.decks.library.auto || self.dj.decks.auto()["on"] == true {
+                        ui.add_space(GAP);
+                        self.auto_dj_bar(ui);
+                    } else {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(
+                                egui::RichText::new("Drop audio files or folders anywhere on this page")
+                                    .small()
+                                    .color(theme::text_hint()),
+                            );
+                        });
+                    }
                 });
                 let decks = &self.dj.decks;
                 if !decks.imports.is_empty() || (decks.queued > 0 && decks.snapshot["busy"] == true) {
@@ -222,9 +233,12 @@ impl App {
             ui.add_space(4.0);
             ui.label(egui::RichText::new(text).small().color(theme::text_hint()));
         };
-        let all_on = current.is_none() && day.is_none();
+        let auto = view.auto;
+        let all_on = current.is_none() && day.is_none() && !auto;
         let mut picked: Option<(Option<u64>, Option<String>)> =
             choose(ui, all_on, "All tracks".into(), "Show all tracks".into()).clicked().then_some((None, None));
+        let queued = self.dj.decks.auto_queue().len();
+        let mut show_auto = choose(ui, auto, format!("Auto DJ  ·  {queued}"), "Show the Auto DJ list".into()).clicked();
         let lists = self.dj.decks.lists();
         let days = self.dj.decks.days();
         let mut delete = None;
@@ -234,7 +248,7 @@ impl App {
                 heading(ui, if crates { "CRATES" } else { "PLAYLISTS" });
                 for list in lists.iter().filter(|l| l.is_crate == crates) {
                     let (kind, name) = (if crates { "crate" } else { "playlist" }, &list.name);
-                    let on = current == Some(list.id) && day.is_none();
+                    let on = current == Some(list.id) && day.is_none() && !auto;
                     let response = choose(ui, on, format!("{name}  ·  {}", list.count), format!("Show {kind} {name}"));
                     if response.clicked() {
                         picked = Some((Some(list.id), None));
@@ -251,7 +265,7 @@ impl App {
                 heading(ui, "HISTORY");
             }
             for (d, count) in &days {
-                let on = day.as_deref() == Some(d.as_str());
+                let on = day.as_deref() == Some(d.as_str()) && !auto;
                 let response = choose(ui, on, format!("{d}  ·  {count}"), format!("Show the history of {d}"));
                 if response.clicked() {
                     picked = Some((None, Some(d.clone())));
@@ -267,6 +281,13 @@ impl App {
         if let Some((list, day)) = picked {
             self.dj.decks.library.playlist = list;
             self.dj.decks.library.day = day;
+            self.dj.decks.library.auto = false;
+            self.dj.decks.selected = 0;
+            show_auto = false;
+        }
+        if show_auto {
+            let view = &mut self.dj.decks.library;
+            (view.playlist, view.day, view.auto) = (None, None, true);
             self.dj.decks.selected = 0;
         }
         if let Some(id) = delete {
@@ -418,7 +439,10 @@ impl App {
     fn row_menu(&mut self, response: &egui::Response, track: &Value, title: &str) {
         let Some(id) = track["id"].as_u64() else { return };
         let lists = self.dj.decks.lists();
-        let shown = self.dj.decks.library.playlist.filter(|_| self.dj.decks.library.day.is_none());
+        let view = &self.dj.decks.library;
+        let shown = view.playlist.filter(|_| view.day.is_none() && !view.auto);
+        let in_queue = view.auto.then(|| self.dj.decks.auto_queue().iter().position(|t| *t == id)).flatten();
+        let mut queue = false;
         let mut action: Option<(&str, Value)> = None;
         let mut load = None;
         let mut sampler = None;
@@ -442,6 +466,16 @@ impl App {
                 }
             });
             ui.separator();
+            if ui.button("Add to Auto DJ").clicked() {
+                queue = true;
+                ui.close();
+            }
+            if let Some(at) = in_queue
+                && ui.button("Remove from Auto DJ").clicked()
+            {
+                action = Some(("dj.autodj.remove", json!({"position": at + 1})));
+                ui.close();
+            }
             for crates in [false, true] {
                 let (menu, none) = if crates {
                     ("Add to crate", "No crate yet: make one with + New crate")
@@ -478,6 +512,9 @@ impl App {
         }
         if let Some(slot) = sampler {
             self.load_sampler(slot, id);
+        }
+        if queue {
+            self.queue_auto_dj(id);
         }
         if let Some((command, mut params)) = action {
             params["revision"] = json!(self.dj.decks.revision());
