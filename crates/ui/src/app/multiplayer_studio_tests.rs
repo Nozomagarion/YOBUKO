@@ -130,3 +130,63 @@ fn the_session_page_opens_the_shared_session_in_the_studio() {
     assert!(harness.state().multiplayer_visible());
     harness.state_mut().leave_multiplayer();
 }
+
+#[test]
+fn a_named_session_is_saved_on_both_computers_and_a_backup_copy_reopens_as_one() {
+    let root = tempfile::tempdir().unwrap();
+    let ctx = egui::Context::default();
+    let mut host = App::new();
+    let mut guest = App::new();
+    host.set_default_data_folder(root.path().join("Host"));
+    guest.set_default_data_folder(root.path().join("Guest"));
+    host.multiplayer.online = false;
+    host.multiplayer.address = "127.0.0.1:0".into();
+    host.multiplayer.session_name = "Sunday jam".into();
+    host.multiplayer.my_name = "Nozo".into();
+    host.set_session(Session::new(suhina_multiplayer::starter_project()), &[]);
+    host.host_current_midi();
+    let deadline = Instant::now() + SLOW_RUNNER;
+    while (host.multiplayer.invitation.is_empty() || host.multiplayer.bound.is_none()) && Instant::now() < deadline {
+        host.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    guest.multiplayer_command("multiplayer.join", json!({"invitation":host.multiplayer.invitation}));
+    until(&mut host, &mut guest, &ctx, |_, g| g.session_info().is_some());
+    let info = host.session_info().unwrap().clone();
+    assert_eq!((info.name.as_str(), info.owner.as_str(), info.main), ("Sunday jam", "Nozo", true));
+    assert_eq!(guest.session_info(), Some(&info));
+    assert_eq!(host.session_role().unwrap(), "Main version · yours");
+    assert_eq!(guest.session_role().unwrap(), "Main version · Nozo's");
+
+    guest.run(&Action::new("track.rename", json!({"track": 1, "name": "Saved everywhere"})));
+    until(&mut host, &mut guest, &ctx, |h, _| shared(h).tracks[0].name == "Saved everywhere");
+    host.leave_multiplayer();
+    guest.leave_multiplayer();
+
+    let kept = |app: &App| suhina_multiplayer::saved::list(&app.shared_root().unwrap());
+    let (on_host, on_guest) = (kept(&host), kept(&guest));
+    assert_eq!(on_host.len(), 1);
+    assert!(on_host[0].mine, "the creator keeps the main version");
+    assert_eq!(on_guest.len(), 1);
+    assert!(!on_guest[0].mine, "a guest keeps a backup copy");
+    assert_eq!(on_guest[0].info.id, info.id);
+    assert_eq!(suhina_multiplayer::saved::my_name(&host.shared_root().unwrap()).as_deref(), Some("Nozo"));
+    let reopened = Session::open(&on_guest[0].project()).unwrap().0;
+    assert_eq!(reopened.project().tracks[0].name, "Saved everywhere");
+
+    // The creator is away: the guest opens their copy for friends, and it says it is a copy.
+    guest.multiplayer.online = false;
+    guest.multiplayer.address = "127.0.0.1:0".into();
+    let copy = on_guest[0].clone();
+    guest.open_saved_session(&copy, true);
+    let deadline = Instant::now() + SLOW_RUNNER;
+    while guest.session_info().is_none() && Instant::now() < deadline {
+        guest.poll_multiplayer(&ctx);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let hosted = guest.session_info().unwrap().clone();
+    assert_eq!(hosted.id, info.id);
+    assert!(!hosted.main);
+    assert_eq!(guest.session_role().unwrap(), "Backup copy · the main version belongs to Nozo");
+    guest.leave_multiplayer();
+}

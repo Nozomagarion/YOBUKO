@@ -70,5 +70,5 @@ controls.
 
 ## Not yet
 
-Shared undo, pasting, recording into the shared tab, adding plug-ins or files while connected,
-saving the shared session under a name on every computer and resuming it later.
+Shared undo, pasting, recording into the shared tab, adding plug-ins or files while connected.
+Sessions are named, saved on every computer and opened again later as [saved sessions](saved-sessions.md).

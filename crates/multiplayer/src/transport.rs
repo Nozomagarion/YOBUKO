@@ -27,7 +27,9 @@ use suhina_session::{Agents, CommandError, CommandKind, CommandSpec, Effect, Par
 use crate::invitation::{Invitation, Invite, new_secret, private, secret_hash};
 use crate::linked::{ClockEstimate, Linked, SharedTransport, TransportRequest};
 use crate::online::{Lobby, Net, OnlineInvitation, Reach, ShortCode};
-use crate::protocol::{self, ClientMessage, Controls, Operation, PROTOCOL, Refusal, ServerMessage, WireEdit};
+use crate::protocol::{
+    self, ClientMessage, Controls, Operation, PROTOCOL, Refusal, ServerMessage, SessionInfo, WireEdit,
+};
 use crate::resume::{Backoff, FAREWELL, Tuning, Watch};
 
 pub const MAX_GUESTS: usize = 7;
@@ -50,6 +52,8 @@ struct Canonical {
     assets: Vec<Arc<assets::Encoded>>,
     pending_audio: Vec<AudioAddition>,
     linked: Linked,
+    /// The session's name and owner, sent with every state.
+    info: Option<SessionInfo>,
 }
 /// One admitted guest. Its place lasts while it is connected and for a grace period after its
 /// link drops, during which its token resumes it as the same peer.
@@ -287,7 +291,8 @@ impl Canonical {
         self.expire(Instant::now());
         let current = (self.host.revision(), self.connected());
         if current != (last.0, last.1) {
-            let controls = Controls::from_project(self.host.project(), current.0)?;
+            let mut controls = Controls::from_project(self.host.project(), current.0)?;
+            controls.session = self.info.clone();
             let operations = self.since(last.0)?;
             let audio = std::mem::take(&mut self.pending_audio);
             match events.try_send(Event::State(controls, operations, current.1, audio)) {
@@ -323,7 +328,10 @@ impl Canonical {
         Ok(ServerMessage::State {
             protocol: PROTOCOL,
             guests: self.connected(),
-            controls: Box::new(Controls::from_project(self.host.project(), self.host.revision())?),
+            controls: Box::new(Controls {
+                session: self.info.clone(),
+                ..Controls::from_project(self.host.project(), self.host.revision())?
+            }),
             operations,
             accepted,
             error,
@@ -467,6 +475,8 @@ pub struct Service {
     /// Host: guests whose link dropped and who still hold their place.
     guests_away: usize,
     tuning: Tuning,
+    /// The name and owner the next hosted session goes by.
+    info: Option<SessionInfo>,
 }
 
 impl Service {
@@ -511,6 +521,17 @@ impl Service {
             }
         }
         self.selected = Some((project.clone(), wanted));
+        Ok(())
+    }
+    /// The name and owner the next session this computer hosts goes by; `None` hosts it unnamed.
+    pub fn set_session_info(&mut self, info: Option<SessionInfo>) -> Result<(), CommandError> {
+        if self.active() {
+            return Err("leave the current session first".into());
+        }
+        if let Some(info) = &info {
+            info.validate().map_err(CommandError::from)?;
+        }
+        self.info = info;
         Ok(())
     }
     /// Trusted local destination only. A peer can never choose this path.
@@ -894,8 +915,9 @@ fn start_selected_host(s: &mut Service, p: &Value) -> Result<Value, CommandError
     start_source(s, place, source, audio)
 }
 fn start_source(s: &mut Service, place: Place, source: Project, audio: AudioPool) -> Result<Value, CommandError> {
-    let (storage, tuning) = (s.storage.clone(), s.tuning.clone());
+    let (storage, tuning, info) = (s.storage.clone(), s.tuning.clone(), s.info.clone());
     s.start(move |stop, sockets, inputs, events| {
+        let source = (source, info);
         if let Err(e) = host((place, &tuning), source, (audio, storage), &stop, &sockets, inputs, &events) {
             let _ = events.try_send(Event::Failed(e));
         }
@@ -1103,7 +1125,7 @@ fn lan_listener(address: SocketAddr, secret: String) -> Result<(TcpListener, Arc
 }
 fn host(
     (place, tuning): (Place, &Tuning),
-    source: Project,
+    (source, info): (Project, Option<SessionInfo>),
     resources: (AudioPool, Option<PathBuf>),
     stop: &Arc<AtomicBool>,
     sockets: &Arc<Mutex<Vec<TcpStream>>>,
@@ -1129,7 +1151,7 @@ fn host(
     };
     let invite = invitation.encode()?;
     let host = Host::new(source.clone()).map_err(|e| e.to_string())?;
-    let initial = Controls::from_project(host.project(), 0)?;
+    let initial = Controls { session: info.clone(), ..Controls::from_project(host.project(), 0)? };
     let canonical = Arc::new(Mutex::new(Canonical {
         host,
         journal: VecDeque::new(),
@@ -1140,6 +1162,7 @@ fn host(
         assets: initial_assets,
         pending_audio: Vec::new(),
         linked: Linked::new(),
+        info,
     }));
     events
         .try_send(Event::Ready(invite.clone(), initial, Box::new(prepared.snapshot)))

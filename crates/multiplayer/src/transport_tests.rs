@@ -17,6 +17,7 @@ fn expiration_and_wrong_secrets_do_not_admit_a_peer_while_one_code_admits_the_gr
         members: BTreeMap::new(),
         away_shown: 0,
         linked: Linked::new(),
+        info: None,
     };
     assert!(host.admit(&"b".repeat(64), now).is_err());
     assert!(host.admit(&secret, now + Duration::from_secs(2)).is_err());
@@ -247,6 +248,12 @@ fn sixty_four_tracks_with_json_escaped_names_fit_a_control_frame() {
         tracks: (1..=64)
             .map(|track| crate::TrackControl { track, name: "\\".repeat(256), db: 0.0, pan: 0.0 })
             .collect(),
+        session: Some(SessionInfo {
+            id: "a".repeat(32),
+            name: "\\".repeat(crate::MAX_SESSION_TEXT),
+            owner: "\\".repeat(crate::MAX_SESSION_TEXT),
+            main: false,
+        }),
     };
     controls.validate().unwrap();
     let mut bytes = vec![];
@@ -298,6 +305,7 @@ fn canonical(project: Project) -> Canonical {
         members: BTreeMap::new(),
         away_shown: 0,
         linked: Linked::new(),
+        info: None,
     }
 }
 
@@ -1457,4 +1465,23 @@ fn resume_tokens_are_bound_rotated_refused_when_forged_and_expire_with_the_grace
     state.depart(peer, generation, Departure::Left, now, grace);
     assert_eq!(state.seats(), 0);
     assert_eq!(refusal(&mut state, resume(&token, None), now), Refusal::Resume);
+}
+
+#[test]
+fn a_session_name_and_owner_are_checked() {
+    let info = SessionInfo::create("Sunday jam", "Nozo").unwrap();
+    assert_eq!(info.id.len(), 32);
+    assert!(info.main);
+    assert_ne!(info.id, SessionInfo::create("Sunday jam", "Nozo").unwrap().id);
+    for bad in [
+        SessionInfo { name: " ".into(), ..info.clone() },
+        SessionInfo { owner: "x".repeat(crate::MAX_SESSION_TEXT + 1), ..info.clone() },
+        SessionInfo { name: "a\nb".into(), ..info.clone() },
+        SessionInfo { id: "Z".repeat(32), ..info.clone() },
+    ] {
+        assert!(bad.validate().is_err(), "{bad:?}");
+    }
+    let mut service = Service::default();
+    assert!(service.set_session_info(Some(SessionInfo { id: "short".into(), ..info.clone() })).is_err());
+    service.set_session_info(Some(info)).unwrap();
 }
