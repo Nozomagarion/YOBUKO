@@ -13,6 +13,7 @@ mod midi;
 mod online;
 mod protocol;
 mod resume;
+pub mod saved;
 mod sound;
 mod starter;
 mod transfer;
@@ -20,6 +21,6 @@ mod transport;
 
 pub use assets::{AudioAddition, SharedSnapshot};
 pub use linked::{LEAD_MS, SharedTransport, TransportRequest, beat_after, starts_in_ms};
-pub use protocol::{Controls, Operation, TrackControl, WireEdit};
+pub use protocol::{Controls, MAX_SESSION_TEXT, Operation, SessionInfo, TrackControl, WireEdit};
 pub use starter::starter_project;
 pub use transport::{MAX_GUESTS, ONLINE, ONLINE_LOOPBACK, Service, commands, suggested_address};

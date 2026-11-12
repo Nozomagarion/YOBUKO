@@ -33,15 +33,59 @@ pub struct TrackControl {
     pub pan: f64,
 }
 
+/// The name a session goes by, so every participant can save it and come back to it later
+/// (`docs/spec/saved-sessions.md`): its id, the name its creator gave it, the creator's name and
+/// whether the computer hosting it holds the main version or a backup copy.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SessionInfo {
+    /// 32 lowercase hex digits, the same on every computer and at every resume.
+    pub id: String,
+    pub name: String,
+    /// Who created the session and keeps its main version.
+    pub owner: String,
+    /// Whether the host plays the main version; false when a friend hosts a backup copy.
+    pub main: bool,
+}
+
+/// Most bytes of a session's name or its owner's.
+pub const MAX_SESSION_TEXT: usize = 64;
+
+impl SessionInfo {
+    /// A new session `name` created by `owner`, with a fresh random id.
+    pub fn create(name: &str, owner: &str) -> Result<Self, String> {
+        let id = crate::invitation::new_secret()?.chars().take(32).collect();
+        let info = Self { id, name: name.trim().to_owned(), owner: owner.trim().to_owned(), main: true };
+        info.validate()?;
+        Ok(info)
+    }
+    pub fn validate(&self) -> Result<(), String> {
+        let text = |t: &str| !t.trim().is_empty() && t.len() <= MAX_SESSION_TEXT && !t.chars().any(char::is_control);
+        if self.id.len() != 32 || !self.id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err("invalid session id".into());
+        }
+        if !text(&self.name) || !text(&self.owner) {
+            return Err(format!("a session's name and its owner's take 1 to {MAX_SESSION_TEXT} bytes"));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct Controls {
     pub revision: u64,
     pub tracks: Vec<TrackControl>,
+    /// The session's name and owner, when the host gave it one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<SessionInfo>,
 }
 
 impl Controls {
     pub fn validate(&self) -> Result<(), String> {
+        if let Some(session) = &self.session {
+            session.validate()?;
+        }
         if self.tracks.is_empty() || self.tracks.len() > crate::midi::MAX_TRACKS {
             return Err("invalid shared track count".into());
         }
@@ -78,7 +122,7 @@ impl Controls {
                 pan: channel.pan,
             });
         }
-        let value = Self { revision, tracks };
+        let value = Self { revision, tracks, session: None };
         value.validate()?;
         Ok(value)
     }
