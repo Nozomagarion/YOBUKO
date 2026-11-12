@@ -1,7 +1,7 @@
 //! Local support report attachments. The attachment is captured once for
 //! preview before the user explicitly chooses whether to submit it.
 use std::fmt::Write as _;
-use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, State, WebviewWindowBuilder};
 use crate::error::{AppError, AppResult};
 
 #[tauri::command]
@@ -9,10 +9,10 @@ use crate::error::{AppError, AppResult};
 pub async fn open_report_window(app: tauri::AppHandle) -> AppResult<()> {
     if let Some(window) = app.get_webview_window("report") {
         let _ = window.unminimize();
-        let _ = window.set_focus();
+        crate::yobuko_embed::focus(&window);
         return Ok(());
     }
-    let builder = WebviewWindowBuilder::new(&app, "report", WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(&app, "report", crate::yobuko_embed::page())
         // Top frame only. On Windows wry runs initialization scripts in every
         // frame whatever it is told, and this one used to set `#report` on
         // Cloudflare's Turnstile frames inside the window, which Turnstile

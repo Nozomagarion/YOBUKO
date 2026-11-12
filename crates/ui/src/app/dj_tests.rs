@@ -18,7 +18,6 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
     harness.run();
     assert!(harness.state().dj.active);
     assert!(harness.query_by_label("Play deck A").is_some(), "the decks are in the window");
-    assert!(harness.state().dj.mixxx_watch.is_none(), "switching to DJ opens no other window");
     super::menu_bar::pick_mode(&mut harness, "Studio");
     harness.run();
     assert!(!harness.state().dj.active);
@@ -31,39 +30,9 @@ fn dj_mode_is_available_without_a_project_and_returning_keeps_the_project_intact
         .with_size(Vec2::new(1280.0, 800.0))
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
     harness.run();
-    assert!(harness.query_by_label("Open Mixxx instead").is_some());
+    assert!(harness.query_by_label("Open Mixxx instead").is_none(), "nothing in DJ mode opens a window of its own");
     assert!(harness.query_by_label("Crossfader").is_some());
     assert!(harness.query_by_label("DJ space").is_some());
-}
-
-#[test]
-fn quitting_mixxx_brings_the_studio_back_with_the_project_intact() {
-    let mut app = App::new();
-    app.set_session(Session::new(crate::demo::demo_project()), &[]);
-    let mut harness = egui_kittest::Harness::builder()
-        .allow_missing_glyphs()
-        .with_size(Vec2::new(1280.0, 800.0))
-        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
-    super::menu_bar::pick_mode(&mut harness, "DJ");
-    harness.run();
-    let before = harness.state().session().unwrap().project().clone();
-    // A Mixxx that ran and has now closed.
-    fn ran() -> bool {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        static LOOKS: AtomicUsize = AtomicUsize::new(0);
-        LOOKS.fetch_add(1, Ordering::SeqCst) == 0
-    }
-    let watch = super::dj::mixxx::Watch::start_with(egui::Context::default(), ran);
-    let since = std::time::Instant::now();
-    while !watch.closed() {
-        assert!(since.elapsed() < std::time::Duration::from_secs(10));
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-    harness.state_mut().dj.mixxx_watch = Some(watch);
-    harness.run();
-    assert!(!harness.state().dj.active, "the studio is back once Mixxx closes");
-    assert!(harness.state().dj.mixxx_watch.is_none());
-    assert_eq!(harness.state().session().unwrap().project(), &before);
 }
 
 #[test]

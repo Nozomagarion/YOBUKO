@@ -37,6 +37,7 @@ mod crash_log;
 mod data_folder;
 #[cfg(target_os = "macos")]
 mod mac_menu;
+mod rbxport_panel;
 mod recent;
 mod save_error;
 mod theme_files;
@@ -231,6 +232,7 @@ fn main() -> ExitCode {
         recent,
         #[cfg(target_os = "macos")]
         mac_menu: None,
+        rbxport: rbxport_panel::RbxportPanel::default(),
         splash: Some(Splash::new(env!("CARGO_PKG_VERSION"))),
         start_up: Some(StartUp {
             source: args.source,
@@ -414,6 +416,8 @@ struct Window {
     /// The macOS menu bar, once installed (#650).
     #[cfg(target_os = "macos")]
     mac_menu: Option<mac_menu::MacMenu>,
+    /// YOBUKO: rbxport inside the window, in the USB space.
+    rbxport: rbxport_panel::RbxportPanel,
 }
 
 /// The slow part of starting, done in the window once the splash shows rather than before the
@@ -532,6 +536,12 @@ impl Window {
             }
         }
         suhina_plugins::trace::timed("desktop UI", || self.app.ui(ui));
+        // YOBUKO: rbxport's interface over the USB space's rectangle, inside this window.
+        let usb_view = self.app.take_usb_view(ui.ctx());
+        let usb_asks = self.app.take_usb_asks();
+        let usb_shown = self.app.usb_space_shown();
+        self.rbxport.frame(ui.ctx(), frame, usb_shown, usb_view, usb_asks);
+        self.app.set_usb_host(self.rbxport.host());
         if let Some(files) = self.app.take_drag_out() {
             let result = drag_out(frame, files);
             self.app.drag_out_ended(result);

@@ -9,9 +9,6 @@ use std::path::{Path, PathBuf};
 
 use suhina_dj::mixxx;
 
-/// Where to get Mixxx when no copy is found (a Linux system without it, say).
-pub(crate) const DOWNLOAD_PAGE: &str = "https://mixxx.org/download/";
-
 /// The Mixxx shipped with YOBUKO, relative to YOBUKO's own program `exe`.
 /// macOS: `YOBUKO.app/Contents/MacOS/suhina` → `YOBUKO.app/Contents/Helpers/Mixxx.app`.
 /// Windows and Linux: a `mixxx` folder beside the program.
@@ -81,20 +78,6 @@ pub(crate) fn find() -> Option<Mixxx> {
         .map(|path| Mixxx { path, shipped: false })
 }
 
-/// Its version: the `VERSION` note YOBUKO's packages write beside the Mixxx they ship, or a
-/// macOS app's `Info.plist`.
-pub(crate) fn version(mixxx: &Mixxx) -> Option<(u32, u32)> {
-    if mixxx.path.extension().is_some_and(|e| e == "app") {
-        let plist = std::fs::read_to_string(mixxx.path.join("Contents").join("Info.plist")).unwrap_or_default();
-        return mixxx::plist_version(&plist).or_else(|| {
-            let note = std::fs::read_to_string(mixxx.path.with_file_name("Mixxx.version")).ok()?;
-            mixxx::parse_version(&note)
-        });
-    }
-    let note = std::fs::read_to_string(mixxx.path.parent()?.join("VERSION")).ok()?;
-    mixxx::parse_version(&note)
-}
-
 /// The profile it runs with, and whether it must be told so (`--settings-path`): YOBUKO's own
 /// for the shipped copy; for one installed on its own, that Mixxx's usual profile, so the
 /// DJ's library is the one they already have.
@@ -132,124 +115,6 @@ pub(crate) fn is_running() -> bool {
         Ok(out) if cfg!(windows) => String::from_utf8_lossy(&out.stdout).to_lowercase().contains("mixxx.exe"),
         Ok(out) => out.status.success(),
         Err(_) => false,
-    }
-}
-
-/// The arguments Mixxx is started with: full screen, so DJ mode fills the screen in YOBUKO's
-/// look instead of opening one more window, and the YOBUKO profile when there is one.
-pub(crate) fn arguments(settings_path: Option<&Path>) -> Vec<std::ffi::OsString> {
-    let mut args = vec![std::ffi::OsString::from("--full-screen")];
-    if let Some(profile) = settings_path {
-        args.push("--settings-path".into());
-        args.push(profile.as_os_str().to_owned());
-    }
-    args
-}
-
-/// Starts Mixxx full screen, detached; YOBUKO keeps running behind it.
-pub(crate) fn launch(mixxx: &Mixxx, settings_path: Option<&Path>) -> std::io::Result<()> {
-    let mut command = if cfg!(target_os = "macos") {
-        // The copy inside YOBUKO.app arrives quarantined from the disk image. The person already
-        // allowed YOBUKO itself, so its Mixxx is cleared too, or macOS would refuse to open it
-        // ("Mixxx is damaged" / "cannot be opened"). Nothing to clear is fine.
-        if mixxx.shipped {
-            let _ = quiet(std::process::Command::new("xattr").args(["-dr", "com.apple.quarantine"]).arg(&mixxx.path))
-                .status();
-        }
-        let mut c = std::process::Command::new("open");
-        c.arg(&mixxx.path).arg("--args").args(arguments(settings_path));
-        c
-    } else {
-        let mut c = std::process::Command::new(&mixxx.path);
-        c.args(arguments(settings_path));
-        if let Some(dir) = mixxx.path.parent() {
-            c.current_dir(dir);
-        }
-        c
-    };
-    quiet(&mut command).spawn().map(drop)
-}
-
-/// Brings the Mixxx that is already running in front of everything, without starting another.
-/// Best effort: on Linux it needs `wmctrl`, which not every desktop has.
-pub(crate) fn bring_forward(mixxx: &Mixxx) {
-    if cfg!(test) {
-        return;
-    }
-    let mut command = if cfg!(target_os = "macos") {
-        // `open` on an app that runs only brings it forward.
-        let mut c = std::process::Command::new("open");
-        c.arg(&mixxx.path);
-        c
-    } else if cfg!(windows) {
-        let mut c = std::process::Command::new("powershell");
-        c.args([
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            "$p = Get-Process mixxx -ErrorAction SilentlyContinue | Select-Object -First 1; \
-             if ($p) { (New-Object -ComObject WScript.Shell).AppActivate($p.Id) | Out-Null }",
-        ]);
-        c
-    } else {
-        let mut c = std::process::Command::new("wmctrl");
-        c.args(["-x", "-a", "mixxx"]);
-        c
-    };
-    let _ = quiet(&mut command).spawn();
-}
-
-fn quiet(command: &mut std::process::Command) -> &mut std::process::Command {
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        // No console window flashing up beside Mixxx.
-        command.creation_flags(0x0800_0000);
-    }
-    command.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null())
-}
-
-/// Watches the Mixxx YOBUKO started: once it has been seen running and then closes, `closed`
-/// says so and YOBUKO's window is asked to repaint, so it can come back to the studio.
-pub(crate) struct Watch {
-    closed: std::sync::Arc<std::sync::atomic::AtomicBool>,
-}
-
-impl Watch {
-    /// How long Mixxx may take to appear (a first start scans the library) before the watch
-    /// gives up, and how often it looks.
-    const APPEAR: std::time::Duration = std::time::Duration::from_secs(90);
-    const EVERY: std::time::Duration = std::time::Duration::from_millis(if cfg!(test) { 5 } else { 1500 });
-
-    pub(crate) fn start(ctx: egui::Context) -> Self {
-        Self::start_with(ctx, is_running)
-    }
-
-    pub(crate) fn start_with(ctx: egui::Context, running: fn() -> bool) -> Self {
-        let closed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let flag = closed.clone();
-        let spawned = std::thread::Builder::new().name("mixxx-watch".into()).spawn(move || {
-            let since = std::time::Instant::now();
-            while !running() {
-                if since.elapsed() > Self::APPEAR {
-                    return;
-                }
-                std::thread::sleep(Self::EVERY);
-            }
-            while running() {
-                std::thread::sleep(Self::EVERY);
-            }
-            flag.store(true, std::sync::atomic::Ordering::Release);
-            ctx.request_repaint();
-        });
-        if spawned.is_err() {
-            eprintln!("YOBUKO: could not watch Mixxx, so the studio will not come back by itself when it closes");
-        }
-        Self { closed }
-    }
-
-    pub(crate) fn closed(&self) -> bool {
-        self.closed.load(std::sync::atomic::Ordering::Acquire)
     }
 }
 
@@ -321,40 +186,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mixxx_starts_full_screen_with_yobukos_profile() {
-        assert_eq!(arguments(None), vec![std::ffi::OsString::from("--full-screen")]);
-        let args = arguments(Some(Path::new("/data/YOBUKO/Mixxx")));
-        assert_eq!(args, ["--full-screen", "--settings-path", "/data/YOBUKO/Mixxx"].map(std::ffi::OsString::from));
-    }
-
-    #[test]
-    fn the_watch_tells_once_mixxx_has_opened_and_closed() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        // Not yet running, running for a while, then closed.
-        static LOOKS: AtomicUsize = AtomicUsize::new(0);
-        fn running() -> bool {
-            matches!(LOOKS.fetch_add(1, Ordering::SeqCst), 2..=5)
-        }
-        let watch = Watch::start_with(egui::Context::default(), running);
-        let since = std::time::Instant::now();
-        while !watch.closed() {
-            assert!(since.elapsed() < std::time::Duration::from_secs(10), "the watch never saw Mixxx close");
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-        assert!(LOOKS.load(Ordering::SeqCst) >= 7);
-    }
-
-    #[test]
-    fn a_mixxx_that_never_runs_is_not_taken_for_closed() {
-        fn never() -> bool {
-            false
-        }
-        let watch = Watch::start_with(egui::Context::default(), never);
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        assert!(!watch.closed());
-    }
-
-    #[test]
     fn the_shipped_mixxx_sits_where_the_packages_put_it() {
         if cfg!(target_os = "macos") {
             let exe = Path::new("/Applications/YOBUKO.app/Contents/MacOS/suhina");
@@ -383,7 +214,6 @@ mod tests {
             assert_eq!(found[0], PathBuf::from("/usr/local/bin/mixxx"));
             assert!(found.contains(&PathBuf::from("/usr/bin/mixxx")));
         }
-        assert!(DOWNLOAD_PAGE.starts_with("https://mixxx.org"));
     }
 
     #[test]
@@ -403,18 +233,6 @@ mod tests {
         } else {
             assert_eq!(path, home.join(".mixxx"));
         }
-    }
-
-    #[test]
-    fn a_shipped_version_note_picks_the_flx4_mapping() {
-        let dir = tempfile::tempdir().unwrap();
-        let exe = dir.path().join("mixxx");
-        std::fs::write(&exe, b"").unwrap();
-        let shipped = Mixxx { path: exe, shipped: true };
-        assert_eq!(version(&shipped), None);
-        std::fs::write(dir.path().join("VERSION"), "2.6.0\n").unwrap();
-        assert_eq!(version(&shipped), Some((2, 6)));
-        assert_eq!(mixxx::Mapping::for_version(version(&shipped)), mixxx::Mapping::Community);
     }
 
     #[test]

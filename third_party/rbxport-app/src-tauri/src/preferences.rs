@@ -6,7 +6,7 @@
 //! Preferences alone. The two windows share `localStorage`, so a choice made
 //! here reaches the main window through its `storage` event.
 
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewWindowBuilder};
 
 use crate::error::{AppError, AppResult, ErrorKind};
 
@@ -34,9 +34,9 @@ pub async fn open_preferences(app: tauri::AppHandle, pane: String) -> AppResult<
     let pane: String = pane.chars().filter(char::is_ascii_alphanumeric).collect();
     if let Some(window) = app.get_webview_window(WINDOW) {
         // The window reads its pane from the hash, and listens for it to change.
-        let _ = window.eval(format!("location.hash = '#preferences/{pane}?open=' + Date.now()"));
+        crate::yobuko_embed::eval(&window, format!("location.hash = '#preferences/{pane}?open=' + Date.now()"));
         let _ = window.unminimize();
-        let _ = window.set_focus();
+        crate::yobuko_embed::focus(&window);
         return Ok(());
     }
     // The page, then the pane. The pane used to ride in the URL as
@@ -46,7 +46,7 @@ pub async fn open_preferences(app: tauri::AppHandle, pane: String) -> AppResult<
     // loads at all (0.5.1, verified on chris-win11). Setting the hash from
     // an initialization script runs before the page's own scripts on every
     // platform and puts no fragment in a path.
-    let builder = WebviewWindowBuilder::new(&app, WINDOW, WebviewUrl::App("index.html".into()))
+    let builder = WebviewWindowBuilder::new(&app, WINDOW, crate::yobuko_embed::page())
         .initialization_script(format!(
             // Top frame only: on Windows wry runs it in every frame (see `report.rs`).
             "if (window === window.top && !location.hash) location.hash = '#preferences/{pane}';"

@@ -1,6 +1,8 @@
 import { StrictMode, Suspense, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/base.css";
+// YOBUKO patch: the soft shapes of YOBUKO's DJ space (src/styles/yobuko-soft.css).
+import "./styles/yobuko-soft.css";
 import { Localization } from "./i18n";
 import { syncRekordboxBrowseAtStartup } from "./lib/rekordboxBrowse";
 import { initializeSentry } from "./lib/sentry";

@@ -68,7 +68,6 @@ fn the_dj_space_mixes_in_the_window_with_two_decks_a_mixer_and_the_library() {
     let dir = tempfile::tempdir().unwrap();
     let mut harness = dj_window(dir.path(), &["Moonlit Echo", "Paper Lanterns"]);
     until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 2));
-    assert!(harness.state().dj.mixxx_watch.is_none(), "the DJ space no longer opens Mixxx by itself");
     for label in [
         "Play deck A",
         "Play deck B",
@@ -83,11 +82,11 @@ fn the_dj_space_mixes_in_the_window_with_two_decks_a_mixer_and_the_library() {
         "Headphones A",
         "Level B",
         "Crossfader",
-        "Open Mixxx instead",
         "Add my Music folder",
     ] {
         assert!(harness.query_by_label(label).is_some(), "{label}");
     }
+    assert!(harness.query_by_label("Open Mixxx instead").is_none(), "the DJ space opens no other window");
     harness.get_by_label("Load Paper Lanterns on deck B").click();
     until(&mut harness, "deck B to load", |app| app.dj.decks.deck(1)["track"] == 2);
     assert!(harness.state().projects.dj_deck_peaks(1).is_some_and(|w| w.frames == 88_200));

@@ -40,6 +40,13 @@ eframe = { version = "0.37", features = ["glow", "persistence"] }  # MIT OR Apac
 # The system's own file and folder dialogs (Browse… beside a path field); on Linux through the
 # desktop portal, in Rust, with no GTK.
 rfd = "0.17"  # MIT
+# YOBUKO: rbxport's interface inside this window, in the system's own web view (WebView2,
+# WKWebView, WebKitGTK) as a child of the window (`rbxport_panel.rs`).
+wry = "0.55"  # Apache-2.0 OR MIT
+http = "1"  # MIT OR Apache-2.0
+base64.workspace = true
+# Paste into rbxport's text fields on macOS, where the web view takes it from the Edit menu.
+arboard = { version = "3", default-features = false }  # MIT OR Apache-2.0
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # DWM's acrylic blur behind a see-through window, with no unsafe code here.
@@ -64,6 +71,8 @@ winresource.workspace = true
 [target.'cfg(target_os = "linux")'.dependencies]
 # Opening the window as an X11 one when an X server is there (eframe's own winit).
 winit = { version = "0.30", default-features = false, features = ["x11"] }  # Apache-2.0
+# WebKitGTK, which shows rbxport in the USB space, turns on GTK's loop (`rbxport_panel.rs`).
+gtk = "0.18"  # MIT
 
 [lints]
 workspace = true

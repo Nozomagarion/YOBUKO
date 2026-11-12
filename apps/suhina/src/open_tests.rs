@@ -37,6 +37,7 @@ fn a_project_blocked_by_a_native_panel_is_not_remembered() {
         data_folder: String::new(),
         theme_error: None,
         recent: recent::Recent::load(None),
+        rbxport: rbxport_panel::RbxportPanel::default(),
         #[cfg(target_os = "macos")]
         mac_menu: None,
     };
