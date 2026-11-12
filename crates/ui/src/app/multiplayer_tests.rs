@@ -186,6 +186,9 @@ fn render_multiplayer_panel_for_review() {
     harness.get_by_label(&format!("Edit clip {clip}")).click();
     harness.run_steps(2);
     harness.render().unwrap().save(folder.join("multiplayer-clips.png")).unwrap();
+    harness.get_by_label("Open the shared session in Studio").click();
+    harness.run_steps(3);
+    harness.render().unwrap().save(folder.join("multiplayer-studio.png")).unwrap();
 }
 
 #[test]

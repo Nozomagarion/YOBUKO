@@ -457,7 +457,9 @@ impl App {
                     return;
                 }
             };
-            match self.projects.add(session, Some("Shared session".into())) {
+            // The tab goes by the session's name when its host gave it one.
+            let title = controls.session.as_ref().map_or_else(|| "Shared session".to_owned(), |info| info.name.clone());
+            match self.projects.add(session, Some(title)) {
                 Ok(id) => {
                     if let Err(e) = self.projects.restrict_shared_project(id, true) {
                         self.multiplayer.error = Some(e.to_string());
@@ -878,13 +880,16 @@ impl App {
             "Make music together over the Internet, wherever your friends are. One of you opens a room and \
              reads its short code out loud; the others type it. No account needed.",
             |app, ui| {
+                soften_widgets(ui);
                 app.refresh_saved_sessions();
                 ui.columns(2, |columns| {
                     shell::card(&mut columns[0], "Open a room", |ui| app.lobby_host(ui));
                     shell::card(&mut columns[1], "Join a friend", |ui| app.lobby_join(ui));
                 });
                 ui.add_space(theme::PAD);
-                shell::card(ui, "Your sessions", |ui| app.lobby_saved(ui));
+                shell::card(ui, "Your sessions", |ui| {
+                    ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| app.lobby_saved(ui))
+                });
                 app.multiplayer_messages(ui);
                 ui.add_space(theme::PAD);
                 egui::CollapsingHeader::new("How sharing works").id_salt("multiplayer-how").show(ui, |ui| {
@@ -1077,52 +1082,59 @@ impl App {
     pub(super) fn show_shared_strip(&mut self, ui: &mut Ui) {
         let mode = self.multiplayer.state["mode"].as_str().unwrap_or("starting").to_owned();
         let guests = self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0);
-        ui.horizontal_wrapped(|ui| {
-            ui.add_space(theme::PAD);
-            ui.colored_label(theme::accent(), "●");
-            match self.session_info().map(|info| info.name.clone()) {
-                Some(name) => ui.strong(name),
-                None => ui.strong("Shared session"),
-            };
-            if let Some(role) = self.session_role() {
-                ui.weak(role);
-            }
-            ui.label(status_text(&mode));
-            if mode == "hosting" {
-                ui.label(format!("· {guests} friend{}", if guests == 1 { "" } else { "s" }));
-            }
-            if !self.multiplayer.short_code.is_empty() {
-                ui.label("· Code");
-                ui.label(egui::RichText::new(&self.multiplayer.short_code).monospace().strong());
-                if ui.button("Copy code").clicked() {
-                    ui.ctx().copy_text(self.multiplayer.short_code.clone());
-                }
-            }
-            let waiting = self.multiplayer.outbox.len();
-            if waiting > 0 {
-                ui.weak(format!("{waiting} edit(s) on their way"));
-            }
-            if ui
-                .button("Session page")
-                .on_hover_text("Invitations, linked playback, takes and the session's other controls")
-                .clicked()
-            {
-                self.multiplayer.open = true;
-            }
-            if ui.button("Leave session").clicked() {
-                self.leave_multiplayer();
-            }
-        });
-        if let Some(error) = self.multiplayer.error.clone() {
-            ui.horizontal_wrapped(|ui| {
-                ui.add_space(theme::PAD);
-                ui.colored_label(theme::recording(), error);
-                if ui.button("Dismiss multiplayer message").clicked() {
-                    self.multiplayer.error = None;
+        soften_widgets(ui);
+        egui::Frame::NONE
+            .fill(theme::panel_background())
+            .stroke(egui::Stroke::new(1.0, theme::border()))
+            .corner_radius(CARD_RADIUS)
+            .inner_margin(egui::Margin::symmetric(12, 6))
+            .outer_margin(egui::Margin::symmetric(8, 4))
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    let (dot, _) = ui.allocate_exact_size(Vec2::splat(10.0), egui::Sense::hover());
+                    ui.painter().circle_filled(dot.center(), 4.0, theme::accent());
+                    match self.session_info().map(|info| info.name.clone()) {
+                        Some(name) => ui.strong(name),
+                        None => ui.strong("Shared session"),
+                    };
+                    if let Some(role) = self.session_role() {
+                        ui.weak(role);
+                    }
+                    ui.label(status_text(&mode));
+                    if mode == "hosting" {
+                        ui.label(format!("· {guests} friend{}", if guests == 1 { "" } else { "s" }));
+                    }
+                    if !self.multiplayer.short_code.is_empty() {
+                        ui.label("· Code");
+                        ui.label(egui::RichText::new(&self.multiplayer.short_code).monospace().strong());
+                        if ui.button("Copy code").clicked() {
+                            ui.ctx().copy_text(self.multiplayer.short_code.clone());
+                        }
+                    }
+                    let waiting = self.multiplayer.outbox.len();
+                    if waiting > 0 {
+                        ui.weak(format!("{waiting} edit(s) on their way"));
+                    }
+                    if ui
+                        .button("Session page")
+                        .on_hover_text("Invitations, linked playback, takes and the session's other controls")
+                        .clicked()
+                    {
+                        self.multiplayer.open = true;
+                    }
+                    if ui.button("Leave session").clicked() {
+                        self.leave_multiplayer();
+                    }
+                });
+                if let Some(error) = self.multiplayer.error.clone() {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.colored_label(theme::recording(), error);
+                        if ui.button("Dismiss multiplayer message").clicked() {
+                            self.multiplayer.error = None;
+                        }
+                    });
                 }
             });
-        }
-        ui.add_space(theme::PAD / 2.0);
     }
 
     pub(super) fn show_multiplayer(&mut self, ui: &mut Ui) {
@@ -1131,45 +1143,55 @@ impl App {
             self.show_multiplayer_lobby(ui);
             return;
         }
+        soften_widgets(ui);
         ui.add_space(theme::PAD);
-        ui.heading("Multiplayer");
-        if let (Some(name), Some(role)) = (self.session_info().map(|i| i.name.clone()), self.session_role()) {
-            ui.horizontal_wrapped(|ui| {
-                ui.strong(name);
-                ui.weak(role);
-            });
-            ui.weak("Saved on this computer as it changes: find it again under Your sessions.");
-        }
-        if self.multiplayer.bound.is_some() {
-            ui.add_space(theme::PAD / 2.0);
-            if shell::main_button(ui, super::menu_bar::WorkspaceMode::Multiplayer, "Open the shared session in Studio")
+        ui.heading(egui::RichText::new("Multiplayer").size(20.0).strong());
+        ui.add_space(theme::PAD / 2.0);
+        let mode = self.multiplayer.state["mode"].as_str().unwrap_or("starting").to_owned();
+        ui.columns(2, |columns| {
+        soft_card(&mut columns[0], "Session", |ui| {
+            if let (Some(name), Some(role)) = (self.session_info().map(|i| i.name.clone()), self.session_role()) {
+                ui.horizontal_wrapped(|ui| {
+                    ui.strong(name);
+                    ui.weak(role);
+                });
+                ui.weak("Saved on this computer as it changes: find it again under Your sessions.");
+            }
+            if self.multiplayer.bound.is_some() {
+                ui.add_space(theme::PAD / 2.0);
+                if shell::main_button(
+                    ui,
+                    super::menu_bar::WorkspaceMode::Multiplayer,
+                    "Open the shared session in Studio",
+                )
                 .on_hover_text(
                     "The shared project in the Studio, with its arrangement, launcher, clips and devices: \
                      what anyone changes there reaches everyone",
                 )
                 .clicked()
-            {
-                self.open_shared_studio();
-            }
-            ui.weak("Everyone in the session edits the same project in the Studio. The controls below stay available.");
-            ui.add_space(theme::PAD / 2.0);
-        }
-        {
-            let mode = self.multiplayer.state["mode"].as_str().unwrap_or("starting").to_owned();
-            ui.horizontal(|ui| {
-                ui.label(format!("Status: {}", status_text(&mode)));
-                if ui.button("Leave session").clicked() {
-                    self.leave_multiplayer();
+                {
+                    self.open_shared_studio();
                 }
-            });
-            if !self.multiplayer.short_code.is_empty() {
-                ui.horizontal(|ui| {
-                    ui.label("Code to read out:");
-                    ui.label(egui::RichText::new(&self.multiplayer.short_code).monospace().strong().size(20.0));
-                });
+                ui.weak(
+                    "Everyone in the session edits the same project in the Studio. The controls below stay available.",
+                );
+                ui.add_space(theme::PAD / 2.0);
             }
-            if !self.multiplayer.invitation.is_empty() {
+            {
                 ui.horizontal(|ui| {
+                    ui.label(format!("Status: {}", status_text(&mode)));
+                    if ui.button("Leave session").clicked() {
+                        self.leave_multiplayer();
+                    }
+                });
+                if !self.multiplayer.short_code.is_empty() {
+                    ui.horizontal(|ui| {
+                        ui.label("Code to read out:");
+                        ui.label(egui::RichText::new(&self.multiplayer.short_code).monospace().strong().size(20.0));
+                    });
+                }
+                if !self.multiplayer.invitation.is_empty() {
+                    ui.horizontal(|ui| {
                     if self.multiplayer.short_code.is_empty() {
                         if ui.button("Copy invitation code").clicked() {
                             ui.ctx().copy_text(self.multiplayer.invitation.clone());
@@ -1198,25 +1220,28 @@ impl App {
                     }
 
                 });
-            }
-            ui.label(format!(
-                "Guests: {} / {}",
-                self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0),
-                suhina_multiplayer::MAX_GUESTS
-            ));
-            let away = self.multiplayer.state["guests_reconnecting"].as_u64().unwrap_or(0);
-            if away > 0 {
-                ui.weak(format!(
+                }
+                ui.label(format!(
+                    "Guests: {} / {}",
+                    self.multiplayer.state["guests_connected"].as_u64().unwrap_or(0),
+                    suhina_multiplayer::MAX_GUESTS
+                ));
+                let away = self.multiplayer.state["guests_reconnecting"].as_u64().unwrap_or(0);
+                if away > 0 {
+                    ui.weak(format!(
                     "{away} guest(s) reconnecting. Their place is kept for two minutes after the connection dropped."
                 ));
+                }
+                if mode == "reconnecting" {
+                    ui.weak("The connection to the host dropped. Suhina keeps trying for a minute; your edits wait and are sent once it is back.");
+                }
+                if mode == "hosting" {
+                    // Keep this row when a guest connects: controls must not move during a click.
+                    ui.weak("One host and up to seven guests. Send the same code to everyone: it lets each of them in for 30 minutes, until the session is full. New invitation replaces it and the old one stops working; connected guests stay.");
+                }
             }
-            if mode == "reconnecting" {
-                ui.weak("The connection to the host dropped. Suhina keeps trying for a minute; your edits wait and are sent once it is back.");
-            }
-            if mode == "hosting" {
-                // Keep this row when a guest connects: controls must not move during a click.
-                ui.weak("One host and up to seven guests. Send the same code to everyone: it lets each of them in for 30 minutes, until the session is full. New invitation replaces it and the old one stops working; connected guests stay.");
-            }
+        });
+        soft_card(&mut columns[1], "Playback and transfers", |ui| {
             if self.multiplayer.bound == self.projects.active() {
                 self.show_playback_buttons(ui);
             }
@@ -1234,6 +1259,16 @@ impl App {
                 let total = progress.get(1).and_then(serde_json::Value::as_u64).unwrap_or(0);
                 ui.label(format!("Receiving project/audio: {} / {} MiB", done >> 20, total >> 20));
             }
+            if self.multiplayer.bound != self.projects.active()
+                && self.multiplayer.state["sending"].is_null()
+                && self.multiplayer.state["receiving"].is_null()
+            {
+                ui.weak("Play and stop from the shared session in the Studio, or bring it to the front for the playback buttons.");
+            }
+        });
+        });
+        ui.add_space(theme::PAD);
+        soft_card(ui, "Shared controls", |ui| {
             if let Some(session) = self.multiplayer.bound.and_then(|id| self.projects.get(id)) {
                 let project = session.project();
                 let notes: usize = project
@@ -1252,7 +1287,7 @@ impl App {
                     session.audio().files.len()
                 ));
             }
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Mixer, "Mixer");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Tracks, "Tracks");
                 ui.selectable_value(&mut self.multiplayer.page, SharedPage::Devices, "Devices");
@@ -1347,11 +1382,46 @@ impl App {
                     self.multiplayer_command("multiplayer.edit", json!({"base_revision":base,"edit":edit.to_string()}));
                 }
             }
-        }
+        });
         self.multiplayer_messages(ui);
         ui.add_space(theme::PAD);
         ui.weak("Original projects are preserved. Edits made in the shared session's Studio reach everyone; undo, pasting, recording and adding plug-ins are not shared yet. Publish finished loaded takes from a local Studio tab. Both participants can publish finished takes. Plug-ins and their settings travel with the copy; each computer runs its own installed plug-ins. Recording directly in the shared tab comes later.");
     }
+}
+
+/// How round the multiplayer pages' cards are: as round as the DJ space's.
+const CARD_RADIUS: u8 = 14;
+/// How round their buttons and fields are, as the DJ space's.
+const BUTTON_RADIUS: u8 = 10;
+
+/// Rounds the buttons, fields and tabs drawn in `ui` from now on, as the DJ space does.
+fn soften_widgets(ui: &mut Ui) {
+    let visuals = &mut ui.style_mut().visuals;
+    for widget in [
+        &mut visuals.widgets.noninteractive,
+        &mut visuals.widgets.inactive,
+        &mut visuals.widgets.hovered,
+        &mut visuals.widgets.active,
+        &mut visuals.widgets.open,
+    ] {
+        widget.corner_radius = egui::CornerRadius::same(BUTTON_RADIUS);
+    }
+}
+
+/// One rounded card of the Multiplayer page, with a small title, as wide as the page.
+fn soft_card<R>(ui: &mut Ui, title: &str, body: impl FnOnce(&mut Ui) -> R) -> R {
+    egui::Frame::NONE
+        .fill(theme::panel_background())
+        .stroke(egui::Stroke::new(1.0, theme::border()))
+        .corner_radius(CARD_RADIUS)
+        .inner_margin(egui::Margin::same(14))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(egui::RichText::new(title.to_uppercase()).small().color(theme::text_hint()));
+            ui.add_space(theme::PAD / 2.0);
+            body(ui)
+        })
+        .inner
 }
 
 /// How long ago a session was saved, in words.
