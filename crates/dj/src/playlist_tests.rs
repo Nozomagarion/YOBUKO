@@ -16,6 +16,7 @@ fn catalog() -> Catalog {
                 seconds: 2.0,
                 bpm: None,
                 key: None,
+                ..Default::default()
             })
             .collect(),
         ..Catalog::default()

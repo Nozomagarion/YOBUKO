@@ -13,6 +13,7 @@ fn catalog() -> Catalog {
             seconds: 2.0,
             bpm: Some(121.0),
             key: None,
+            ..Default::default()
         }],
         ..Catalog::default()
     }

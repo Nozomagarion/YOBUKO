@@ -7,8 +7,13 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 pub const FORMAT: u32 = 4;
-pub const MAX_TRACKS: usize = 2000;
-const MAX_BYTES: u64 = 4 * 1024 * 1024;
+/// The most tracks a library holds: a large collection's, as music folders bring in.
+pub const MAX_TRACKS: usize = 100_000;
+const MAX_BYTES: u64 = 128 * 1024 * 1024;
+/// The longest track kept, in seconds (4 hours: a recorded set).
+pub const MAX_SECONDS: f64 = 4.0 * 3600.0;
+/// The longest track rbxport's analysis decodes, in seconds.
+pub const MAX_ANALYSED_SECONDS: f64 = 20.0 * 60.0;
 pub const MAX_PLAYLISTS: usize = 128;
 pub const MAX_PLAYLIST_ENTRIES: usize = 16000;
 
@@ -17,19 +22,62 @@ pub use grid::{BeatGrid, GridLine};
 mod cue;
 pub use cue::{Cue, CueEdit, CueSet};
 mod playlist;
+pub mod scan;
 mod storage;
 pub use playlist::{Playlist, PlaylistEdit, PlaylistKind};
+pub use scan::{Analysed, Found, MAX_FOLDERS, is_dj_audio};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Track {
     pub id: u32,
     pub path: PathBuf,
     pub title: String,
     pub source_project: Option<PathBuf>,
+    /// The length in seconds; 0 while unknown (a file whose header does not say, until it is
+    /// analysed).
     pub seconds: f64,
     pub bpm: Option<f64>,
     pub key: Option<String>,
+    /// The file's tags. Each is left out of the file when empty, so a library written before
+    /// them reads and writes unchanged.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub artist: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub album: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub genre: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub comment: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub year: Option<u16>,
+    /// When the track came into the library, in seconds since 1970.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub added: Option<u64>,
+    /// rbxport's analysis has run on it (its tempo and key, or none found).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub analysed: bool,
+    /// Its file was not found at the last scan of the music folders.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub missing: bool,
+    /// 0 to 5 stars.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub rating: u8,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+fn is_zero(n: &u8) -> bool {
+    *n == 0
+}
+
+impl Track {
+    /// Whether rbxport's analysis still has to run on it: a track a music folder brought in
+    /// and not analysed yet. (A track imported one by one was analysed as it came in.)
+    pub fn needs_analysis(&self) -> bool {
+        !self.analysed && self.added.is_some() && !self.missing
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -42,6 +90,9 @@ pub struct Catalog {
     pub next_playlist_id: u64,
     pub cues: Vec<CueSet>,
     pub grids: Vec<BeatGrid>,
+    /// The music folders scanned into the library, like Mixxx's library folders.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub folders: Vec<PathBuf>,
 }
 
 impl Default for Catalog {
@@ -54,6 +105,7 @@ impl Default for Catalog {
             next_playlist_id: 1,
             cues: Vec::new(),
             grids: Vec::new(),
+            folders: Vec::new(),
         }
     }
 }
@@ -74,14 +126,21 @@ impl Catalog {
                 || t.title.is_empty()
                 || t.title.len() > 512
                 || !t.seconds.is_finite()
-                || t.seconds <= 0.0
-                || t.seconds > 1200.0
+                || t.seconds < 0.0
+                || t.seconds > MAX_SECONDS
+                || [&t.artist, &t.album, &t.genre, &t.comment].iter().any(|s| s.len() > 512)
+                || t.rating > 5
                 || t.bpm.is_some_and(|b| !b.is_finite() || !(20.0..=400.0).contains(&b))
                 || t.key.as_ref().is_some_and(|k| k.len() > 32)
                 || t.source_project.as_ref().is_some_and(|p| !p.is_absolute() || p.as_os_str().len() > 4096)
             {
                 return Err("invalid DJ catalog track".into());
             }
+        }
+        if self.folders.len() > MAX_FOLDERS
+            || self.folders.iter().any(|f| !f.is_absolute() || f.as_os_str().len() > 4096)
+        {
+            return Err("invalid DJ music folders".into());
         }
         self.validate_playlists(&ids)?;
         self.validate_cues()?;
@@ -95,11 +154,12 @@ impl Catalog {
         if self.tracks.len() >= MAX_TRACKS && !self.tracks.iter().any(|t| t.path == path) {
             return Err("the DJ catalog is full".into());
         }
-        if suhina_media::info::kind_of(&path) != Some(suhina_media::info::FileKind::Sample) {
-            return Err("choose a WAV, AIFF, FLAC, MP3 or Ogg audio file".into());
+        if !is_dj_audio(&path) {
+            return Err("choose an M4A, AAC, MP3, FLAC, WAV, AIFF or Ogg audio file".into());
         }
+        let found = scan::read(&path)?;
         let info = suhina_media::info::sample_info(&path)?;
-        if !info.duration_seconds.is_some_and(|s| s > 0.0 && s <= 1200.0)
+        if !info.duration_seconds.is_some_and(|s| s > 0.0 && s <= MAX_ANALYSED_SECONDS)
             || info.sample_rate.is_none_or(|r| !(1000..=96000).contains(&r))
             || !info.channels.is_some_and(|c| (1..=2).contains(&c))
         {
@@ -118,16 +178,19 @@ impl Catalog {
                 self.tracks.iter().map(|t| t.id).max().unwrap_or(0).checked_add(1).ok_or("DJ track ids exhausted")?
             }
         };
+        let old = existing.and_then(|i| self.tracks.get(i));
         let track = Track {
             id,
-            title: path.file_stem().and_then(|s| s.to_str()).unwrap_or("Untitled").to_owned(),
             path,
-            source_project: source_project
-                .or_else(|| existing.and_then(|i| self.tracks.get(i)).and_then(|t| t.source_project.clone())),
+            source_project: source_project.or_else(|| old.and_then(|t| t.source_project.clone())),
             seconds,
             bpm: (result.tempo.bpm.is_finite() && (20.0..=400.0).contains(&result.tempo.bpm))
                 .then_some(result.tempo.bpm),
             key: result.key.map(|k| k.name),
+            analysed: true,
+            added: old.and_then(|t| t.added).or_else(scan::now),
+            rating: old.map_or(0, |t| t.rating),
+            ..found.track()
         };
         let mut next = self.clone();
         if let Some(t) = existing.and_then(|i| next.tracks.get_mut(i)) {
@@ -179,3 +242,6 @@ mod cue_tests;
 
 #[cfg(test)]
 mod grid_tests;
+
+#[cfg(test)]
+mod scan_tests;

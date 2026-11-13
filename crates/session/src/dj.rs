@@ -21,6 +21,8 @@ pub(crate) enum Job {
     Deck(usize, u64, u32),
     /// Write the library to a Rekordbox USB stick (rbxport's exporter) at this folder.
     UsbExport(PathBuf),
+    /// Music folders, tags found by a scan, analysis and ratings ([`crate::dj_scan`]).
+    Library(crate::dj_scan::LibraryEdit),
 }
 struct Reply {
     catalog: Catalog,
@@ -39,7 +41,16 @@ pub(crate) struct Dj {
     pub(crate) waveform: crate::dj_waveform::Waveform,
     worker: Option<SyncSender<Job>>,
     results: Option<Receiver<Result<Reply, String>>>,
+    /// A job the person asked for is with the worker.
     pub(crate) busy: bool,
+    /// The jobs with the worker, oldest first: true for the background scan's and analysis's.
+    in_flight: std::collections::VecDeque<bool>,
+    /// The worker has sent the library it read from disk.
+    loaded: bool,
+    /// The revision after the last change the person made: a background change since then
+    /// does not make the person's edits stale.
+    user_revision: u64,
+    pub(crate) scanner: crate::dj_scan::Scanner,
     pub(crate) error: Option<String>,
     created: Option<u32>,
     /// Where a running USB export has got to, written by the worker.
@@ -54,7 +65,8 @@ impl Dj {
             return Ok(());
         }
         let path = path.ok_or("the DJ library needs a settings folder")?;
-        let (send, jobs) = mpsc::sync_channel::<Job>(1);
+        // Room for a job the person asked for behind one from the background scan.
+        let (send, jobs) = mpsc::sync_channel::<Job>(2);
         let (done, results) = mpsc::sync_channel(2);
         let usb_progress = self.usb_progress.clone();
         std::thread::Builder::new()
@@ -193,6 +205,7 @@ impl Dj {
                         Job::Playlist(revision, edit) => next.edit_playlist(revision, edit),
                         Job::Cue(revision, track, edit) => next.edit_cue(revision, track, edit).map(|_| None),
                         Job::Grid(revision, track, value) => next.set_grid(revision, track, value).map(|_| None),
+                        Job::Library(edit) => edit.apply(&mut next).map(|_| None),
                         Job::Preview(..) | Job::Waveform(..) | Job::Deck(..) | Job::UsbExport(..) => {
                             Err("invalid DJ worker job".into())
                         }
@@ -214,63 +227,121 @@ impl Dj {
         self.worker = Some(send);
         self.results = Some(results);
         self.busy = true;
+        self.in_flight.push_back(false);
         Ok(())
     }
 
     fn poll(&mut self) {
-        let Some(results) = &self.results else { return };
         loop {
+            let Some(results) = &self.results else { return };
             match results.try_recv() {
-                Ok(result) => {
-                    self.busy = false;
-                    match result {
-                        Ok(reply) => {
-                            self.audition.loaded = reply.audio;
-                            if let Some(deck) = reply.deck {
-                                self.decks.apply(deck);
-                            }
-                            if let Some(usb) = reply.usb {
-                                self.usb = Some(usb);
-                            }
-                            if let Some(waveform) = reply.waveform {
-                                self.waveform.apply(waveform);
-                            }
-                            self.catalog = reply.catalog;
-                            self.created = reply.created;
-                            self.error = None;
-                        }
-                        Err(e) => self.error = Some(e),
-                    }
-                }
+                Ok(result) => self.take(result),
                 Err(mpsc::TryRecvError::Empty) => break,
                 Err(mpsc::TryRecvError::Disconnected) => {
-                    self.busy = false;
-                    self.error.get_or_insert_with(|| "the DJ worker stopped; use Refresh DJ library".into());
+                    self.stopped();
                     break;
                 }
             }
         }
     }
 
-    pub(crate) fn queue(&mut self, job: Job) -> Result<Value, CommandError> {
-        if self.busy {
-            return Err("the DJ library is busy; wait for its current job".into());
+    /// Waits for the worker's next reply, when it has a job.
+    pub(crate) fn wait(&mut self) {
+        let Some(results) = &self.results else { return };
+        if self.in_flight.is_empty() {
+            return;
         }
-        let importing = matches!(job, Job::Import(..));
-        if matches!(job, Job::UsbExport(..)) {
-            self.usb = None;
+        match results.recv() {
+            Ok(result) => self.take(result),
+            Err(_) => self.stopped(),
+        }
+    }
+
+    fn stopped(&mut self) {
+        self.busy = false;
+        self.in_flight.clear();
+        self.error.get_or_insert_with(|| "the DJ worker stopped; use Refresh DJ library".into());
+    }
+
+    fn take(&mut self, result: Result<Reply, String>) {
+        let background = self.in_flight.pop_front().unwrap_or(false);
+        self.busy = self.in_flight.iter().any(|b| !b);
+        match result {
+            // A background change only brings the library up to date.
+            Ok(reply) if background => self.catalog = reply.catalog,
+            Err(e) if background => self.scanner.failed(e),
+            Ok(reply) => {
+                self.audition.loaded = reply.audio;
+                if let Some(deck) = reply.deck {
+                    self.decks.apply(deck);
+                }
+                if let Some(usb) = reply.usb {
+                    self.usb = Some(usb);
+                }
+                if let Some(waveform) = reply.waveform {
+                    self.waveform.apply(waveform);
+                }
+                self.catalog = reply.catalog;
+                self.user_revision = self.catalog.revision;
+                self.loaded = true;
+                self.created = reply.created;
+                self.error = None;
+            }
+            Err(e) => self.error = Some(e),
+        }
+    }
+
+    /// Nothing is with the worker.
+    pub(crate) fn idle(&self) -> bool {
+        self.in_flight.is_empty()
+    }
+
+    /// The library has been read from disk, so its music folders can be scanned.
+    pub(crate) fn catalog_read(&self) -> bool {
+        self.loaded
+    }
+
+    /// Background jobs with the worker.
+    pub(crate) fn background(&self) -> usize {
+        self.in_flight.iter().filter(|b| **b).count()
+    }
+
+    /// Hands the worker a change from the background scan or analysis, when it has no job.
+    pub(crate) fn queue_background(&mut self, job: Job) -> Result<(), CommandError> {
+        if !self.in_flight.is_empty() {
+            return Err("the DJ library is busy".into());
         }
         self.worker
             .as_ref()
             .ok_or("the DJ worker is unavailable")?
             .try_send(job)
             .map_err(|_| CommandError::from("the DJ worker is unavailable; use Refresh DJ library"))?;
+        self.in_flight.push_back(true);
+        Ok(())
+    }
+
+    /// Hands the worker a job the person asked for. It may wait behind one background job.
+    pub(crate) fn queue(&mut self, job: Job) -> Result<Value, CommandError> {
+        if self.busy || self.in_flight.len() > 1 {
+            return Err("the DJ library is busy; wait for its current job".into());
+        }
+        let importing = matches!(job, Job::Import(..));
+        if matches!(job, Job::UsbExport(..)) {
+            self.usb = None;
+        }
+        self.worker.as_ref().ok_or("the DJ worker is unavailable")?.try_send(job).map_err(|e| match e {
+            mpsc::TrySendError::Full(_) => CommandError::from("the DJ library is busy; wait for its current job"),
+            mpsc::TrySendError::Disconnected(_) => {
+                CommandError::from("the DJ worker is unavailable; use Refresh DJ library")
+            }
+        })?;
         if importing {
             self.waveform.clear();
         }
         self.error = None;
         self.created = None;
         self.busy = true;
+        self.in_flight.push_back(false);
         Ok(json!({"queued": true}))
     }
 }
@@ -491,7 +562,47 @@ static COMMANDS: &[CommandSpec<Projects>] = &[
         &[TRACK, REVISION, param("cue", ParamType::Integer, "local cue id")],
         cue_delete
     ),
-    command!("dj.library", "Read the local DJ library and analysis status", &[], library),
+    command!(
+        "dj.library",
+        "Read the local DJ library, its music folders and the scan and analysis status",
+        &[optional(
+            "revision",
+            ParamType::Integer,
+            "the revision already shown: tracks, playlists, cues and grids are left out while it is current"
+        )],
+        library
+    ),
+    command!(
+        "dj.folders.add",
+        "Add a music folder to the DJ library: it is scanned now, in the background, and each time the library opens",
+        &[param("folder", ParamType::Path(PathKind::Folder), "the folder of music")],
+        folders_add
+    ),
+    command!(
+        "dj.folders.remove",
+        "Stop scanning a music folder (its tracks stay in the DJ library)",
+        &[param("folder", ParamType::Text, "the music folder, as the library lists it")],
+        folders_remove
+    ),
+    command!("dj.folders.scan", "Look through the DJ library's music folders again now", &[], folders_scan),
+    command!(
+        "dj.files.add",
+        "Add audio files to the DJ library in the background (their tags now, their tempo and key after)",
+        &[param("paths", ParamType::Path(PathKind::Files), "audio files")],
+        files_add
+    ),
+    command!(
+        "dj.analysis.set",
+        "Pause or resume the DJ library's background analysis (tempo and key)",
+        &[param("on", ParamType::Bool, "analyse new tracks in the background")],
+        analysis_set
+    ),
+    command!(
+        "dj.track.rate",
+        "Rate a DJ library track from 0 to 5 stars",
+        &[TRACK, REVISION, param("stars", ParamType::Integer, "0–5 stars")],
+        track_rate
+    ),
     command!("dj.reload", "Refresh DJ library from disk", &[], reload),
     command!(
         "dj.import",
@@ -576,17 +687,31 @@ pub(crate) fn ready(projects: &mut Projects) -> Result<(), CommandError> {
     projects.dj.poll();
     crate::dj_preview::sync(projects);
     crate::dj_decks::sync(projects);
+    crate::dj_scan::tick(projects);
     Ok(())
 }
-fn library(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
+fn library(projects: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     ready(projects)?;
     crate::dj_auto::step(projects);
     let history = crate::dj_history::snapshot(projects);
-    Ok(json!({"tracks": projects.dj.catalog.tracks, "playlists": projects.dj.catalog.playlists, "history": history,
-        "performance":crate::dj_decks::snapshot(projects), "grids":projects.dj.catalog.grids, "waveform":projects.dj.waveform.snapshot(),
-        "cues": projects.dj.catalog.cues, "preview": crate::dj_preview::snapshot(projects),
-        "revision": projects.dj.catalog.revision, "created_playlist": projects.dj.created.take(),
-        "busy": projects.dj.busy, "error": projects.dj.error, "analysis": "rbxport", "usb": usb_snapshot(projects), "format": suhina_dj::FORMAT}))
+    let catalog = &projects.dj.catalog;
+    // A large library is sent again only when it changed since the page last read it.
+    // Before the library is read from disk its revision says nothing of its tracks.
+    let loaded = projects.dj.catalog_read();
+    let unchanged = loaded && v["revision"].as_u64() == Some(catalog.revision);
+    let mut snapshot = json!({"history": history,
+        "performance":crate::dj_decks::snapshot(projects), "waveform":projects.dj.waveform.snapshot(),
+        "preview": crate::dj_preview::snapshot(projects), "library": crate::dj_scan::snapshot(projects),
+        "revision": catalog.revision, "created_playlist": projects.dj.created.take(), "unchanged": unchanged, "loaded": loaded,
+        "busy": projects.dj.busy, "error": projects.dj.error, "analysis": "rbxport", "usb": usb_snapshot(projects), "format": suhina_dj::FORMAT});
+    if !unchanged {
+        let catalog = &projects.dj.catalog;
+        snapshot["tracks"] = json!(catalog.tracks);
+        snapshot["playlists"] = json!(catalog.playlists);
+        snapshot["cues"] = json!(catalog.cues);
+        snapshot["grids"] = json!(catalog.grids);
+    }
+    Ok(snapshot)
 }
 fn reload(projects: &mut Projects, _: &Value) -> Result<Value, CommandError> {
     ready(projects)?;
@@ -626,6 +751,18 @@ fn usb_snapshot(projects: &Projects) -> Value {
         "error": projects.dj.usb.as_ref().and_then(|r| r.as_ref().err()),
     })
 }
+/// The revision an edit is checked against. Changes the background scan and analysis made
+/// since the person's last change do not make the revision the page shows stale.
+pub(crate) fn revision(p: &Projects, v: &Value) -> Result<u64, CommandError> {
+    let shown = number(v, "revision")?;
+    let current = p.dj.catalog.revision;
+    if shown >= p.dj.user_revision && shown <= current {
+        return current
+            .checked_add(p.dj.background() as u64)
+            .ok_or_else(|| CommandError::from("DJ catalog revision exhausted"));
+    }
+    Ok(shown)
+}
 fn number(params: &Value, name: &str) -> Result<u64, CommandError> {
     params[name].as_u64().ok_or_else(|| CommandError::from(format!("{name} must be an unsigned integer")))
 }
@@ -641,7 +778,8 @@ fn name(params: &Value) -> Result<String, CommandError> {
 }
 fn edit(projects: &mut Projects, params: &Value, edit: PlaylistEdit) -> Result<Value, CommandError> {
     ready(projects)?;
-    projects.dj.queue(Job::Playlist(number(params, "revision")?, edit))
+    let revision = revision(projects, params)?;
+    projects.dj.queue(Job::Playlist(revision, edit))
 }
 fn create(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     edit(p, v, PlaylistEdit::Create(name(v)?))
@@ -680,7 +818,7 @@ fn seconds(v: &Value) -> Result<f64, CommandError> {
 }
 fn cue_edit(p: &mut Projects, v: &Value, edit: CueEdit) -> Result<Value, CommandError> {
     ready(p)?;
-    p.dj.queue(Job::Cue(number(v, "revision")?, id(v, "track")?, edit))
+    p.dj.queue(Job::Cue(revision(p, v)?, id(v, "track")?, edit))
 }
 fn cue_add(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     cue_edit(p, v, CueEdit::Add { name: name(v)?, seconds: seconds(v)? })
@@ -710,11 +848,11 @@ fn grid_set(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
         .as_f64()
         .filter(|n| n.is_finite() && *n >= 0.0)
         .ok_or("grid first beat must be nonnegative seconds")?;
-    p.dj.queue(Job::Grid(number(v, "revision")?, id(v, "track")?, Some((bpm, first))))
+    p.dj.queue(Job::Grid(revision(p, v)?, id(v, "track")?, Some((bpm, first))))
 }
 fn grid_clear(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     ready(p)?;
-    p.dj.queue(Job::Grid(number(v, "revision")?, id(v, "track")?, None))
+    p.dj.queue(Job::Grid(revision(p, v)?, id(v, "track")?, None))
 }
 
 fn deck_load(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
@@ -800,4 +938,25 @@ fn deck_stop_all(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
 }
 fn deck_mixer(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     crate::dj_decks::mixer(p, v)
+}
+fn folders_add(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_scan::add(p, v)
+}
+fn folders_remove(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_scan::remove(p, v)
+}
+fn folders_scan(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_scan::rescan(p, v)
+}
+fn files_add(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    ready(p)?;
+    let paths = v["paths"].as_array().ok_or("choose audio files")?;
+    let paths = paths.iter().filter_map(Value::as_str).map(PathBuf::from).collect();
+    crate::dj_scan::add_files(p, paths)
+}
+fn analysis_set(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_scan::set_analysis(p, v)
+}
+fn track_rate(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
+    crate::dj_scan::rate(p, v)
 }

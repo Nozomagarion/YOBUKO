@@ -5,6 +5,33 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## The DJ library rebuilt around music folders, part 5 — 13 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the owner's report: the DJ library "holds on to nothing", has no setting for where
+the music is, asks for files to be dropped (which a large collection made crash) and refused
+M4A, the owner's main format.
+
+- **Code written:** **+ FOLDER** in the library chooses music folders (several); YOBUKO scans
+  them in the background, reads each file's tags (title, artist, album, genre, year, comment,
+  BPM, key) and analyses tempo and key one track at a time, without blocking the page or the
+  decks. M4A/AAC/ALAC are read on every system (pure-Rust decoder, nothing to install). The
+  folders are scanned again at each start and on **RESCAN**; vanished files are marked
+  missing, not deleted. New columns (Artist, Album, Genre, Year, Rating), a search across
+  them, ratings, a **Missing files** list, pause/resume of the analysis, **Send to the USB
+  space** (into rbxport's library). The library holds 100 000 tracks (was 2000) and is sent to
+  the page only when it changed. Four decks was merged as #42, the history test fix as #43.
+- **Checks passed (Linux, cloud container):** library tests (a real M4A file's tags, decoding
+  and analysis; the folder walk; missing tracks; a 20 000-track library), 7 session tests (scan,
+  start-up scan, missing and found, revisions during background work, dropped files, folders,
+  pause), UI tests (drop, columns, search by artist, missing list, ratings, USB), screenshots,
+  clippy on the changed crates. `cargo deny` is not installed here; `Cargo.lock` only gains a
+  link to Symphonia, already used (MPL-2.0).
+- **Limits:** no tag editing, cover art, folder browser view or watching folders while YOBUKO
+  runs (start and RESCAN only). rbxport's own collection is fed with **Send to the USB space**.
+  Not yet tried on the owner's real collection.
+- **Next criterion:** in a test build the owner adds their music folder and finds their M4A
+  tracks, with artist and album, without a freeze.
+
 ## The DJ space gets four decks, part 4 — 12 November 2026 (branch `claude/project-thread-fz5ul5`)
 
 **Goal:** the last missing Mixxx deck function: four decks, in YOBUKO's own DJ space.

@@ -35,6 +35,7 @@ fn dj_window_sized(dir: &Path, tracks: &[&str], height: f32) -> egui_kittest::Ha
                     seconds: 2.0,
                     bpm: Some(120.0),
                     key: Some(["8A", "10A", "11B"][i % 3].into()),
+                    ..Default::default()
                 }
             })
             .collect(),
@@ -139,15 +140,28 @@ fn audio_files_and_folders_dropped_on_the_dj_space_join_the_library() {
     std::fs::create_dir_all(music.join("set")).unwrap();
     song(&music.join("set").join("Night Run.wav"));
     std::fs::write(music.join("notes.txt"), "not audio").unwrap();
-    harness.input_mut().dropped_files.push(std::sync::Arc::new(Dropped(music)));
+    assert!(harness.query_by_label("+ Add a music folder…").is_some(), "the empty library asks for a music folder");
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(Dropped(music.clone())));
+    // A loose file and a file the library does not take, dropped too.
+    let loose = dir.path().join("Loose Groove.wav");
+    song(&loose);
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(Dropped(loose)));
+    harness.input_mut().dropped_files.push(std::sync::Arc::new(Dropped(music.join("notes.txt"))));
     harness.step();
-    assert_eq!(harness.state().dj.decks.imports.len() + harness.state().dj.decks.imported, 1, "only the audio file");
-    until(&mut harness, "the import", |app| {
-        app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 1)
-            && app.dj.decks.snapshot["busy"] != true
-    });
-    assert_eq!(harness.state().dj.decks.snapshot["tracks"][0]["title"], "Night Run");
+    assert!(harness.state().dj.decks.error.as_deref().is_some_and(|e| e.contains("notes.txt")));
+    // The scan and the analysis run in the background; this waits for them to finish.
+    harness.state_mut().projects.sync_dj_library().unwrap();
+    harness.state_mut().dj.decks.read_at = None;
+    harness.step();
+    harness.step();
+    let snapshot = &harness.state().dj.decks.snapshot;
+    assert_eq!(snapshot["tracks"].as_array().map(Vec::len), Some(2), "{snapshot}");
+    // The dropped folder became a music folder; the loose file did not.
+    assert_eq!(harness.state().dj.decks.folders(), vec![music.canonicalize().unwrap()]);
     assert!(harness.query_by_label("Load Night Run on deck A").is_some());
+    assert!(harness.query_by_label("Load Loose Groove on deck A").is_some());
+    assert!(harness.query_by_label("📁 music").is_some(), "the music folder is listed");
+    assert!(harness.query_by_label("Add a music folder").is_some());
     assert!(harness.state().session().is_some(), "a drop on the DJ space opens nothing in the studio");
 }
 
@@ -189,27 +203,38 @@ fn music(path: &Path, root: f32) {
 #[test]
 #[ignore = "requires a GPU adapter; renders a review artifact"]
 fn render_the_decks_for_review() {
-    render_decks("dj-decks.png", false);
+    render_decks("dj-decks.png", false, 920.0);
+}
+
+#[test]
+#[ignore = "writes a picture of the library with its music folders for review; run with --ignored"]
+fn render_library_for_review() {
+    render_decks("dj-library.png", false, 1500.0);
 }
 
 #[test]
 #[ignore = "writes a picture of four decks for review; run with --ignored"]
 fn render_four_decks_for_review() {
-    render_decks("dj-decks-four.png", true);
+    render_decks("dj-decks-four.png", true, 1420.0);
 }
 
-fn render_decks(file: &str, four: bool) {
+fn render_decks(file: &str, four: bool, height: f32) {
     let folder = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/ui-snapshots");
     std::fs::create_dir_all(&folder).unwrap();
     let theme_id = std::env::var("YOBUKO_SHELL_THEME").unwrap_or_else(|_| theme::YOBUKO.to_owned());
     let dir = tempfile::tempdir().unwrap();
     let names = ["Moonlit Echo", "Paper Lanterns", "Mountain Call", "Vocal Steps", "Night Run"];
+    // The tracks sit in a music folder the library scans.
+    let songs = dir.path().join("Music");
+    std::fs::create_dir_all(&songs).unwrap();
+    let songs = songs.canonicalize().unwrap();
     let catalog = suhina_dj::Catalog {
+        folders: vec![songs.clone()],
         tracks: names
             .iter()
             .enumerate()
             .map(|(i, name)| {
-                let path = dir.path().join(format!("{name}.wav"));
+                let path = songs.join(format!("{name}.wav"));
                 if i < 2 {
                     music(&path, if i == 0 { 220.0 } else { 196.0 });
                 } else {
@@ -223,6 +248,13 @@ fn render_decks(file: &str, four: bool) {
                     seconds: if i < 2 { 30.0 } else { 2.0 },
                     bpm: Some([124.0, 126.0, 122.0, 128.0, 174.0][i]),
                     key: Some(["8A", "5A", "11A", "9A", "4A"][i].into()),
+                    artist: ["Nozo Band", "Akari", "Hoshi Trio", "Akari", "Kumo"][i].into(),
+                    album: ["Tides", "Lanterns", "Peaks", "Lanterns", "City"][i].into(),
+                    genre: ["House", "Deep House", "Techno", "House", "Drum & Bass"][i].into(),
+                    year: Some([2024, 2023, 2025, 2023, 2022][i]),
+                    rating: [5, 4, 3, 0, 4][i],
+                    analysed: true,
+                    ..Default::default()
                 }
             })
             .collect(),
@@ -235,7 +267,7 @@ fn render_decks(file: &str, four: bool) {
     app.set_session(Session::new(crate::demo::demo_project()), &[]);
     let mut harness = egui_kittest::Harness::builder()
         .allow_missing_glyphs()
-        .with_size(Vec2::new(1280.0, if four { 1420.0 } else { 920.0 }))
+        .with_size(Vec2::new(1280.0, height))
         .with_pixels_per_point(1.5)
         .wgpu()
         .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
@@ -826,4 +858,98 @@ fn four_decks_show_c_and_d_with_their_channels_and_crossfader_sides() {
     harness.get_by_label("4 decks").click();
     harness.run();
     assert!(!harness.state().dj.decks.four);
+}
+
+#[test]
+fn the_library_shows_tags_rates_searches_by_artist_and_keeps_missing_tracks_apart() {
+    use egui_kittest::kittest::NodeT as _;
+    let dir = tempfile::tempdir().unwrap();
+    let tracks = [
+        ("Sea Song", "Nozo Band", "Tides", "House", false),
+        ("Night Run", "Akari", "City", "Techno", false),
+        ("Lost Tape", "Akari", "Archive", "Disco", true),
+    ];
+    let catalog = suhina_dj::Catalog {
+        tracks: tracks
+            .iter()
+            .enumerate()
+            .map(|(i, (title, artist, album, genre, missing))| {
+                let path = dir.path().join(format!("{title}.wav"));
+                if !missing {
+                    song(&path);
+                }
+                suhina_dj::Track {
+                    id: i as u32 + 1,
+                    path,
+                    title: (*title).into(),
+                    artist: (*artist).into(),
+                    album: (*album).into(),
+                    genre: (*genre).into(),
+                    year: Some(2020 + i as u16),
+                    seconds: 2.0,
+                    bpm: Some(120.0 + i as f64),
+                    missing: *missing,
+                    ..Default::default()
+                }
+            })
+            .collect(),
+        ..Default::default()
+    };
+    catalog.save(&dir.path().join("dj-library.json")).unwrap();
+    let mut app = App::new();
+    app.set_file_library(suhina_library::Library::new(Some(dir.path().to_path_buf())));
+    app.set_session(Session::new(crate::demo::demo_project()), &[]);
+    let mut harness = egui_kittest::Harness::builder()
+        .allow_missing_glyphs()
+        .with_size(Vec2::new(1600.0, 1000.0))
+        .build_ui_state(|ui, app: &mut App| app.ui(ui), app);
+    harness.run();
+    super::super::menu_bar::pick_mode(&mut harness, "DJ");
+    until(&mut harness, "the library", |app| app.dj.decks.snapshot["tracks"].as_array().is_some_and(|t| t.len() == 3));
+    let titles = |app: &App| -> Vec<String> {
+        app.dj.decks.shown_tracks().iter().map(|t| t["title"].as_str().unwrap_or_default().to_owned()).collect()
+    };
+    // The tags have their columns, and the search looks in them.
+    for label in
+        ["Sort by artist", "Sort by album", "Sort by genre", "Sort by year", "Sort by rating", "Nozo Band", "Tides"]
+    {
+        assert!(harness.query_by_label(label).is_some(), "{label}");
+    }
+    harness.state_mut().dj.decks.library.search = "akari".into();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Night Run", "Lost Tape"]);
+    harness.state_mut().dj.decks.library.search = "tides".into();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Sea Song"]);
+    harness.state_mut().dj.decks.library.search.clear();
+    harness.get_by_label("Sort by artist").click();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Lost Tape", "Night Run", "Sea Song"], "by artist, then album");
+    // A missing track cannot be loaded, and has a list of its own.
+    assert!(harness.get_by_label("Load Lost Tape on deck A").accesskit_node().is_disabled());
+    assert!(!harness.get_by_label("Load Night Run on deck A").accesskit_node().is_disabled());
+    harness.get_by_label("Show the tracks whose files are missing").click();
+    harness.run();
+    assert_eq!(titles(harness.state()), ["Lost Tape"]);
+    harness.get_by_label("Show all tracks").click();
+    harness.run();
+    // A rating is kept in the library.
+    let revision = harness.state().dj.decks.snapshot["revision"].clone();
+    assert!(harness.state_mut().deck_command("dj.track.rate", json!({"track": 2, "stars": 4, "revision": revision})));
+    until(&mut harness, "the rating", |app| app.dj.decks.snapshot["tracks"][1]["rating"] == 4);
+    assert!(harness.query_by_label("★★★★☆").is_some());
+    harness.get_by_label("Sort by rating").click();
+    harness.run();
+    assert_eq!(titles(harness.state()).last().map(String::as_str), Some("Night Run"));
+    // The tracks that are there go to rbxport's library in the USB space; the missing one not.
+    let inbox = dir.path().join("inbox");
+    let app = harness.state_mut();
+    app.dj.inbox = Some(inbox.clone());
+    let tracks = app.dj.decks.files(|_| true);
+    app.send_to_usb_space(tracks);
+    let requests: Vec<_> = std::fs::read_dir(&inbox).unwrap().flatten().map(|e| e.path()).collect();
+    assert_eq!(requests.len(), 1);
+    let request = std::fs::read_to_string(&requests[0]).unwrap();
+    assert_eq!(request.lines().count(), 2, "{request}");
+    assert!(!request.contains("Lost Tape"));
 }

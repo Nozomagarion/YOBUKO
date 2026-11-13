@@ -93,7 +93,7 @@ The full Suhina studio: session and arrangement views, MIDI and audio tracks, in
 - **Four decks:** click **4 decks** for decks C and D, with four channels in the mixer and each deck on the left, right or middle of the crossfader.
 - **The library:** search, sort by title, BPM, key or length, and playlists.
 - **Plug in a Pioneer DDJ-FLX4 and play.** Play, Cue, Sync, Load, the faders, EQ, trim, filters, tempo, crossfader, jog wheels, loop buttons, TAP, the Beat FX section and the hot cue, beat loop, beat jump and sampler pads drive the decks, nothing to set up.
-- **Your music:** drop audio files or folders on the page, or click **Add my Music folder**. Finished a track in the studio? **Send this project to DJ…**
+- **Your music:** click **+ FOLDER** in the library (or **Add my Music folder**) and YOBUKO finds every track in it, M4A and AAC included, reads artist, album and genre, and works out tempo and key in the background, without blocking anything, even for a large collection. Search, sort by any column, rate tracks, and see which files went missing. Finished a track in the studio? **Send this project to DJ…**
 - **Prefer Mixxx?** **Open Mixxx instead** starts Mixxx, which comes inside YOBUKO on macOS (Apple Silicon) and Windows, with its hundreds of controller mappings.
 
 <p align="center"><img src="assets/readme/rbxport.webp" alt="USB export: the rbxport app with a waveform, cue points and a playlist" width="100%"></p>

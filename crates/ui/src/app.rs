@@ -1716,6 +1716,7 @@ impl App {
             PickField::BrowserFolder
             | PickField::McpWriteFolder
             | PickField::CopyToFolder
+            | PickField::DjMusicFolder
             | PickField::PluginFolder
             | PickField::BackgroundImage => None,
         };
@@ -1780,6 +1781,10 @@ impl App {
                         self.projects.execute("library.copyTo", &json!({ "items": items, "folder": text })),
                     );
                 }
+                return;
+            }
+            PickField::DjMusicFolder => {
+                self.add_music_folder(path);
                 return;
             }
             PickField::BrowserFolder => {

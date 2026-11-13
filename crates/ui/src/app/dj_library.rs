@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The DJ space's library: every track, or one playlist's, crate's or day of history's,
-//! searched by title, tempo or key and sorted by any column; playlists and crates made, filled
-//! and emptied here; Load A / Load B on each row.
+//! searched by title, artist, album, genre, tempo or key and sorted by any column; the music
+//! folders it scans in the background, with the scan's and the analysis's progress; playlists
+//! and crates made, filled and emptied here; a Load button for each deck on each row.
 
 use super::*;
 
@@ -14,9 +15,71 @@ pub(in crate::app) enum Sort {
     #[default]
     Added,
     Title,
+    Artist,
+    Album,
+    Genre,
+    Year,
     Bpm,
     Key,
     Length,
+    Rating,
+}
+
+/// A column of the track table: what it sorts by, its heading and its width.
+type Column = (Sort, &'static str, f32);
+
+/// The track table's columns for this width, with the room the Load buttons take: album,
+/// genre and year are left out when the title would get too narrow.
+fn columns(width: f32, buttons: f32) -> Vec<Column> {
+    let all: [Column; 8] = [
+        (Sort::Artist, "ARTIST", 130.0),
+        (Sort::Album, "ALBUM", 120.0),
+        (Sort::Genre, "GENRE", 80.0),
+        (Sort::Year, "YEAR", 42.0),
+        (Sort::Bpm, "BPM", 50.0),
+        (Sort::Key, "KEY", 40.0),
+        (Sort::Length, "TIME", 46.0),
+        (Sort::Rating, "RATING", 64.0),
+    ];
+    let optional = [Sort::Album, Sort::Genre, Sort::Year];
+    let mut shown: Vec<Column> = all.to_vec();
+    let used = |c: &[Column]| c.iter().map(|(_, _, w)| w + 4.0).sum::<f32>();
+    for drop in optional.iter().rev() {
+        if width - buttons - used(&shown) >= 200.0 {
+            break;
+        }
+        shown.retain(|(sort, _, _)| sort != drop);
+    }
+    let title = (width - buttons - used(&shown)).max(60.0);
+    let mut columns = vec![(Sort::Title, "TITLE", title)];
+    columns.extend(shown);
+    columns
+}
+
+/// What a track shows in a column.
+fn cell(track: &Value, sort: Sort) -> String {
+    let text = |key: &str| track[key].as_str().unwrap_or_default().to_owned();
+    match sort {
+        Sort::Title => track["title"].as_str().unwrap_or("Untitled").to_owned(),
+        Sort::Artist => text("artist"),
+        Sort::Album => text("album"),
+        Sort::Genre => text("genre"),
+        Sort::Year => track["year"].as_u64().map(|y| y.to_string()).unwrap_or_default(),
+        Sort::Bpm => track["bpm"].as_f64().map_or_else(|| "—".to_owned(), |b| format!("{b:.1}")),
+        Sort::Key => text("key"),
+        Sort::Length => {
+            let length = clock(track["seconds"].as_f64().unwrap_or(0.0));
+            length.split('.').next().unwrap_or_default().to_owned()
+        }
+        Sort::Rating => stars(track["rating"].as_u64().unwrap_or(0)),
+        Sort::Added => String::new(),
+    }
+}
+
+/// A rating as five stars, the given number of them full.
+fn stars(rating: u64) -> String {
+    let full = usize::try_from(rating.min(5)).unwrap_or(0);
+    format!("{}{}", "★".repeat(full), "☆".repeat(5 - full))
 }
 
 /// How the library shows: the search, the sort and the playlist.
@@ -31,6 +94,8 @@ pub(in crate::app) struct LibraryView {
     pub(in crate::app) day: Option<String>,
     /// The Auto DJ queue shown, instead.
     pub(in crate::app) auto: bool,
+    /// The tracks whose files are missing shown, instead.
+    pub(in crate::app) missing: bool,
 }
 
 /// A list in the library's side bar: a playlist or a crate.
@@ -42,47 +107,77 @@ pub(in crate::app) struct List {
 }
 
 impl Decks {
-    /// The tracks the library shows, in the order it shows them.
-    pub(in crate::app) fn shown_tracks(&self) -> Vec<Value> {
-        let all = self.snapshot["tracks"].as_array().cloned().unwrap_or_default();
+    /// The tracks the library shows, in the order it shows them; kept while nothing they
+    /// depend on changes.
+    pub(in crate::app) fn shown_tracks(&self) -> std::sync::Arc<Vec<Value>> {
         let view = &self.library;
-        let by_id = |ids: Vec<&Value>| -> Vec<Value> {
-            ids.into_iter().filter_map(|t| all.iter().find(|track| track["id"] == *t).cloned()).collect()
+        let all = self.snapshot["tracks"].as_array();
+        let list = if view.auto {
+            json!(self.auto_queue())
+        } else if let Some(day) = &view.day {
+            let days = self.snapshot["history"]["days"].as_array();
+            days.into_iter().flatten().find(|d| d["day"] == day.as_str()).map_or(Value::Null, |d| d["plays"].clone())
+        } else {
+            Value::Null
         };
-        let mut tracks: Vec<Value> = match (&view.day, view.playlist) {
-            _ if view.auto => {
-                let queue: Vec<Value> = self.auto_queue().into_iter().map(Value::from).collect();
-                by_id(queue.iter().collect())
-            }
-            (Some(day), _) => {
-                let days = self.snapshot["history"]["days"].as_array().cloned().unwrap_or_default();
-                let plays = days.iter().find(|d| d["day"] == day.as_str()).and_then(|d| d["plays"].as_array().cloned());
-                let plays = plays.unwrap_or_default();
-                by_id(plays.iter().map(|p| &p["track"]).collect())
-            }
-            (None, None) => all.clone(),
-            (None, Some(id)) => {
-                let playlist =
-                    self.snapshot["playlists"].as_array().into_iter().flatten().find(|p| p["id"].as_u64() == Some(id));
-                playlist
-                    .and_then(|p| p["tracks"].as_array())
-                    .into_iter()
-                    .flatten()
-                    .filter_map(|t| all.iter().find(|track| track["id"] == *t).cloned())
-                    .collect()
-            }
+        let key = format!(
+            "{}|{}|{}|{:?}|{}|{:?}|{:?}|{}|{}|{list}",
+            self.snapshot["revision"],
+            all.map_or(0, Vec::len),
+            view.search,
+            view.sort,
+            view.descending,
+            view.playlist,
+            view.day,
+            view.auto,
+            view.missing
+        );
+        if let Ok(shown) = self.shown.try_borrow()
+            && let Some((cached, tracks)) = shown.as_ref()
+            && *cached == key
+        {
+            return tracks.clone();
+        }
+        let tracks = std::sync::Arc::new(self.filter_tracks(&list));
+        if let Ok(mut shown) = self.shown.try_borrow_mut() {
+            *shown = Some((key, tracks.clone()));
+        }
+        tracks
+    }
+
+    fn filter_tracks(&self, list: &Value) -> Vec<Value> {
+        let empty = Vec::new();
+        let all = self.snapshot["tracks"].as_array().unwrap_or(&empty);
+        let view = &self.library;
+        let index: std::collections::HashMap<u64, &Value> =
+            all.iter().filter_map(|t| Some((t["id"].as_u64()?, t))).collect();
+        let by_id = |ids: Vec<&Value>| -> Vec<Value> {
+            ids.into_iter().filter_map(|t| index.get(&t.as_u64()?).map(|t| (*t).clone())).collect()
+        };
+        let mut tracks: Vec<Value> = if view.auto {
+            by_id(list.as_array().into_iter().flatten().collect())
+        } else if view.day.is_some() {
+            by_id(list.as_array().into_iter().flatten().map(|p| &p["track"]).collect())
+        } else if view.missing {
+            all.iter().filter(|t| t["missing"] == true).cloned().collect()
+        } else if let Some(id) = view.playlist {
+            let playlist =
+                self.snapshot["playlists"].as_array().into_iter().flatten().find(|p| p["id"].as_u64() == Some(id));
+            by_id(playlist.and_then(|p| p["tracks"].as_array()).into_iter().flatten().collect())
+        } else {
+            all.clone()
         };
         let words: Vec<String> = view.search.split_whitespace().map(str::to_lowercase).collect();
         if !words.is_empty() {
             tracks.retain(|t| {
                 let bpm = t["bpm"].as_f64().map(|b| format!("{b:.0}")).unwrap_or_default();
-                let text = format!(
-                    "{} {} {}",
-                    t["title"].as_str().unwrap_or_default(),
-                    t["key"].as_str().unwrap_or_default(),
-                    bpm
-                )
-                .to_lowercase();
+                let text = ["title", "artist", "album", "genre", "key", "comment"]
+                    .iter()
+                    .map(|k| t[*k].as_str().unwrap_or_default())
+                    .chain([bpm.as_str()])
+                    .collect::<Vec<_>>()
+                    .join(" ")
+                    .to_lowercase();
                 words.iter().all(|w| text.contains(w.as_str()))
             });
         }
@@ -90,10 +185,15 @@ impl Decks {
         let text = |t: &Value, key: &str| t[key].as_str().unwrap_or_default().to_lowercase();
         match view.sort {
             Sort::Added => {}
-            Sort::Title => tracks.sort_by_key(|t| text(t, "title")),
-            Sort::Key => tracks.sort_by_key(|t| text(t, "key")),
+            Sort::Title => tracks.sort_by_cached_key(|t| text(t, "title")),
+            Sort::Artist => tracks.sort_by_cached_key(|t| (text(t, "artist"), text(t, "album"), text(t, "title"))),
+            Sort::Album => tracks.sort_by_cached_key(|t| (text(t, "album"), text(t, "title"))),
+            Sort::Genre => tracks.sort_by_cached_key(|t| (text(t, "genre"), text(t, "artist"))),
+            Sort::Key => tracks.sort_by_cached_key(|t| text(t, "key")),
+            Sort::Year => tracks.sort_by(|a, b| number(a, "year").total_cmp(&number(b, "year"))),
             Sort::Bpm => tracks.sort_by(|a, b| number(a, "bpm").total_cmp(&number(b, "bpm"))),
             Sort::Length => tracks.sort_by(|a, b| number(a, "seconds").total_cmp(&number(b, "seconds"))),
+            Sort::Rating => tracks.sort_by_key(|t| t["rating"].as_u64().unwrap_or(0)),
         }
         if view.descending {
             tracks.reverse();
@@ -128,6 +228,16 @@ impl Decks {
             .collect()
     }
 
+    /// The files of the library's tracks that are there and pass `keep`.
+    pub(in crate::app) fn files(&self, keep: impl Fn(&std::path::Path) -> bool) -> Vec<PathBuf> {
+        let tracks = self.snapshot["tracks"].as_array().into_iter().flatten();
+        tracks
+            .filter(|t| t["missing"] != true)
+            .filter_map(|t| t["path"].as_str().map(PathBuf::from))
+            .filter(|p| keep(p))
+            .collect()
+    }
+
     fn revision(&self) -> u64 {
         self.snapshot["revision"].as_u64().unwrap_or(0)
     }
@@ -152,7 +262,7 @@ impl App {
                     ui.add_space(GAP);
                     let name = ui.label(egui::RichText::new("Search").small().color(theme::text_hint()));
                     let search = egui::TextEdit::singleline(&mut self.dj.decks.library.search)
-                        .hint_text("Title, key or BPM")
+                        .hint_text("Title, artist, album, genre, key or BPM")
                         .desired_width(220.0);
                     let search = ui.add(search).labelled_by(name.id);
                     if search.changed() {
@@ -168,8 +278,9 @@ impl App {
                         self.auto_dj_bar(ui);
                     } else {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            self.folder_buttons(ui);
                             ui.label(
-                                egui::RichText::new("Drop audio files or folders anywhere on this page")
+                                egui::RichText::new("Drop audio files or a folder anywhere on this page")
                                     .small()
                                     .color(theme::text_hint()),
                             );
@@ -187,6 +298,7 @@ impl App {
                         .color(deck_color(0)),
                     );
                 }
+                self.library_progress(ui);
                 if let Some(error) = self.dj.decks.error.clone() {
                     ui.colored_label(theme::recording(), error);
                 }
@@ -197,8 +309,25 @@ impl App {
                         ui.label(egui::RichText::new("Your DJ library is empty").strong().size(15.0));
                         ui.label(
                             egui::RichText::new(
-                                "Drop audio files or a folder here, click Add my Music folder, or send a project you made.",
+                                "Choose the folders your music is in: YOBUKO finds every track in them and keeps them up to date.",
                             )
+                            .color(theme::text_hint()),
+                        );
+                        ui.add_space(theme::PAD);
+                        let add = egui::Button::new(
+                            egui::RichText::new("+ Add a music folder…").strong().color(Color32::WHITE),
+                        )
+                        .fill(deck_color(0))
+                        .corner_radius(BUTTON_RADIUS);
+                        if ui.add(add).clicked() {
+                            self.ask_pick(crate::interaction::pick::PickField::DjMusicFolder);
+                        }
+                        ui.add_space(theme::PAD);
+                        ui.label(
+                            egui::RichText::new(
+                                "M4A, AAC, MP3, FLAC, WAV, AIFF and Ogg. You can also drop files or a folder here, or send a project you made.",
+                            )
+                            .small()
                             .color(theme::text_hint()),
                         );
                     });
@@ -213,6 +342,51 @@ impl App {
                     ui.allocate_ui_with_layout(Vec2::new(rest, height), down, |ui| self.track_table(ui, &tracks));
                 });
             });
+    }
+
+    /// The music folders' scan and the analysis of new tracks, while they run.
+    fn library_progress(&mut self, ui: &mut Ui) {
+        let library = self.dj.decks.snapshot["library"].clone();
+        let hint = |text: String| egui::RichText::new(text).small().color(deck_color(0));
+        if let Some(scan) = library["scan"].as_object() {
+            let looked = scan.get("looked").and_then(Value::as_u64).unwrap_or(0);
+            let new = scan.get("new").and_then(Value::as_u64).unwrap_or(0);
+            ui.label(hint(format!("Scanning your music folders: {looked} audio files looked at, {new} new…")));
+        } else if library["waiting"].as_u64().is_some_and(|n| n > 0) {
+            ui.label(hint("Adding the new tracks to the library…".into()));
+        }
+        let left = library["analysis"]["left"].as_u64().unwrap_or(0);
+        if left > 0 {
+            let on = library["analysis"]["on"] == true;
+            ui.horizontal(|ui| {
+                let text = match (on, library["analysis"]["title"].as_str()) {
+                    (true, Some(title)) => format!("Analysing tempo and key: {left} tracks left · {title}"),
+                    (true, None) => format!("Analysing tempo and key: {left} tracks left"),
+                    (false, _) => format!("Analysis paused: {left} tracks still to analyse"),
+                };
+                ui.label(hint(text));
+                let (label, text) =
+                    if on { ("Pause the analysis", "PAUSE") } else { ("Resume the analysis", "RESUME") };
+                if tools::small_button(ui, label, text, false, deck_color(0), true).clicked() {
+                    self.deck_command("dj.analysis.set", json!({"on": !on}));
+                }
+            });
+        }
+        if let Some(error) = library["error"].as_str() {
+            ui.colored_label(theme::recording(), error);
+        }
+    }
+
+    /// + FOLDER adds a music folder the library scans, RESCAN looks through them again.
+    fn folder_buttons(&mut self, ui: &mut Ui) {
+        let scanning = self.dj.decks.snapshot["library"]["scan"].is_object();
+        let can = !self.dj.decks.folders().is_empty() && !scanning;
+        if tools::small_button(ui, "Scan the music folders again", "RESCAN", false, deck_color(0), can).clicked() {
+            self.deck_command("dj.folders.scan", json!({}));
+        }
+        if tools::small_button(ui, "Add a music folder", "+ FOLDER", false, deck_color(0), true).clicked() {
+            self.ask_pick(crate::interaction::pick::PickField::DjMusicFolder);
+        }
     }
 
     /// All tracks, the playlists, the crates and the days of history, to choose what the table
@@ -233,12 +407,21 @@ impl App {
             ui.add_space(4.0);
             ui.label(egui::RichText::new(text).small().color(theme::text_hint()));
         };
-        let auto = view.auto;
-        let all_on = current.is_none() && day.is_none() && !auto;
+        let (auto, missing_on) = (view.auto, view.missing);
+        let all_on = current.is_none() && day.is_none() && !auto && !missing_on;
         let mut picked: Option<(Option<u64>, Option<String>)> =
             choose(ui, all_on, "All tracks".into(), "Show all tracks".into()).clicked().then_some((None, None));
         let queued = self.dj.decks.auto_queue().len();
         let mut show_auto = choose(ui, auto, format!("Auto DJ  ·  {queued}"), "Show the Auto DJ list".into()).clicked();
+        let missing = self.dj.decks.snapshot["library"]["missing"].as_u64().unwrap_or(0);
+        let mut show_missing = missing > 0
+            && choose(
+                ui,
+                missing_on,
+                format!("Missing files  ·  {missing}"),
+                "Show the tracks whose files are missing".into(),
+            )
+            .clicked();
         let lists = self.dj.decks.lists();
         let days = self.dj.decks.days();
         let taken: Vec<String> = lists.iter().map(|l| l.name.clone()).collect();
@@ -257,6 +440,9 @@ impl App {
         });
         let mut delete = None;
         let mut forget = None;
+        let folders = self.dj.decks.folders();
+        let mut stop = None;
+        let mut send = None;
         egui::ScrollArea::vertical().id_salt("dj-playlists").max_height(ui.available_height()).show(ui, |ui| {
             for crates in [false, true] {
                 heading(ui, if crates { "CRATES" } else { "PLAYLISTS" });
@@ -291,7 +477,37 @@ impl App {
                     }
                 });
             }
+            // The music folders the library scans; a folder's menu stops scanning it.
+            heading(ui, "MUSIC FOLDERS");
+            if folders.is_empty() {
+                ui.label(egui::RichText::new("None yet: + FOLDER").small().color(theme::text_hint()));
+            }
+            for folder in &folders {
+                let name =
+                    folder.file_name().map_or_else(|| folder.display().to_string(), |n| n.to_string_lossy().into());
+                let text = egui::RichText::new(format!("📁 {name}")).size(12.5);
+                let response = ui
+                    .add(egui::Label::new(text).truncate().sense(Sense::click()))
+                    .on_hover_text(folder.display().to_string());
+                response.context_menu(|ui| {
+                    if ui.button(format!("Send the tracks of {name} to the USB space")).clicked() {
+                        send = Some(folder.clone());
+                        ui.close();
+                    }
+                    if ui.button(format!("Stop scanning {name} (its tracks stay)")).clicked() {
+                        stop = Some(folder.display().to_string());
+                        ui.close();
+                    }
+                });
+            }
         });
+        if let Some(folder) = stop {
+            self.deck_command("dj.folders.remove", json!({"folder": folder}));
+        }
+        if let Some(folder) = send {
+            let tracks = self.dj.decks.files(|path| path.starts_with(&folder));
+            self.send_to_usb_space(tracks);
+        }
         if let Some((command, name)) = make {
             let revision = self.dj.decks.revision();
             self.deck_command(command, json!({"name": name, "revision": revision}));
@@ -300,12 +516,19 @@ impl App {
             self.dj.decks.library.playlist = list;
             self.dj.decks.library.day = day;
             self.dj.decks.library.auto = false;
+            self.dj.decks.library.missing = false;
             self.dj.decks.selected = 0;
             show_auto = false;
+            show_missing = false;
         }
         if show_auto {
             let view = &mut self.dj.decks.library;
-            (view.playlist, view.day, view.auto) = (None, None, true);
+            (view.playlist, view.day, view.auto, view.missing) = (None, None, true, false);
+            self.dj.decks.selected = 0;
+        }
+        if show_missing {
+            let view = &mut self.dj.decks.library;
+            (view.playlist, view.day, view.auto, view.missing) = (None, None, false, true);
             self.dj.decks.selected = 0;
         }
         if let Some(id) = delete {
@@ -327,18 +550,11 @@ impl App {
     /// The tracks, with their column headings to sort by.
     fn track_table(&mut self, ui: &mut Ui, tracks: &[Value]) {
         let row = 28.0;
-        let numbers = 150.0;
         let buttons = self.dj.decks.count() as f32 * 72.0 + 8.0;
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
             ui.add_space(8.0);
-            let title_width = (ui.available_width() - buttons - numbers).max(60.0);
-            let columns = [
-                (Sort::Title, "TITLE", title_width),
-                (Sort::Bpm, "BPM", 54.0),
-                (Sort::Key, "KEY", 40.0),
-                (Sort::Length, "TIME", 52.0),
-            ];
-            for (sort, text, width) in columns {
+            for (sort, text, width) in columns(ui.available_width() - 8.0, buttons) {
                 let view = &self.dj.decks.library;
                 let arrow = match (view.sort == sort, view.descending) {
                     (true, false) => " ▲",
@@ -349,7 +565,7 @@ impl App {
                     egui::Button::new(egui::RichText::new(format!("{text}{arrow}")).small().color(theme::text_hint()))
                         .frame(false)
                         .min_size(Vec2::new(width, 18.0));
-                let response = ui.add(heading);
+                let response = ui.add_sized(Vec2::new(width, 18.0), heading);
                 response.widget_info(|| {
                     egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Sort by {}", text.to_lowercase()))
                 });
@@ -407,23 +623,31 @@ impl App {
                 .layout(egui::Layout::left_to_right(egui::Align::Center)),
         );
         let buttons = self.dj.decks.count() as f32 * 72.0 + 8.0;
-        let numbers = 150.0;
-        let title_width = (row.available_width() - buttons - numbers).max(60.0);
+        let missing = track["missing"] == true;
         let line = egui::Layout::left_to_right(egui::Align::Center);
-        row.allocate_ui_with_layout(Vec2::new(title_width, height), line, |ui| {
-            ui.set_min_width(title_width);
-            ui.add(egui::Label::new(egui::RichText::new(title).size(13.0)).truncate());
-        });
-        row.allocate_ui_with_layout(Vec2::new(numbers, height), line, |ui| {
-            ui.set_min_width(numbers);
-            let bpm = track["bpm"].as_f64().map_or_else(|| "—".to_owned(), |b| format!("{b:.1}"));
-            let key = track["key"].as_str().unwrap_or("");
-            let length = clock(track["seconds"].as_f64().unwrap_or(0.0));
-            let length = length.split('.').next().unwrap_or_default().to_owned();
-            ui.label(egui::RichText::new(format!("{bpm:>6}  {key:<4} {length:>6}")).font(theme::mono_font(12.0)));
-        });
+        row.spacing_mut().item_spacing.x = 4.0;
+        for (sort, _, width) in columns(row.available_width(), buttons) {
+            row.allocate_ui_with_layout(Vec2::new(width, height), line, |ui| {
+                ui.set_min_width(width);
+                ui.set_max_width(width);
+                let text = cell(track, sort);
+                let text = match sort {
+                    Sort::Title => egui::RichText::new(if missing { format!("⚠ {text}") } else { text }).size(13.0),
+                    Sort::Bpm | Sort::Key | Sort::Length | Sort::Year => {
+                        egui::RichText::new(text).font(theme::mono_font(12.0))
+                    }
+                    Sort::Rating => egui::RichText::new(text).size(12.0).color(deck_color(0)),
+                    _ => egui::RichText::new(text).size(12.5).color(theme::text_hint()),
+                };
+                let text = if missing { text.color(theme::text_hint()) } else { text };
+                let label = ui.add(egui::Label::new(text).truncate());
+                if missing && sort == Sort::Title {
+                    label.on_hover_text("The file is missing: its drive or folder is not there");
+                }
+            });
+        }
         for (deck, name) in NAMES.into_iter().enumerate().take(self.dj.decks.count()) {
-            let busy = self.dj.decks.playing(deck);
+            let busy = self.dj.decks.playing(deck) || missing;
             let load = row
                 .add_enabled(
                     !busy,
@@ -432,7 +656,11 @@ impl App {
                         .corner_radius(BUTTON_RADIUS)
                         .min_size(Vec2::new(60.0, 22.0)),
                 )
-                .on_disabled_hover_text(format!("Deck {name} is playing: pause it first"));
+                .on_disabled_hover_text(if missing {
+                    "The file is missing".to_owned()
+                } else {
+                    format!("Deck {name} is playing: pause it first")
+                });
             load.widget_info(|| {
                 egui::WidgetInfo::labeled(egui::Role::Button, !busy, format!("Load {title} on deck {name}"))
             });
@@ -451,6 +679,7 @@ impl App {
         let shown = view.playlist.filter(|_| view.day.is_none() && !view.auto);
         let in_queue = view.auto.then(|| self.dj.decks.auto_queue().iter().position(|t| *t == id)).flatten();
         let mut queue = false;
+        let mut usb = false;
         let mut action: Option<(&str, Value)> = None;
         let mut load = None;
         let mut sampler = None;
@@ -473,6 +702,19 @@ impl App {
                     }
                 }
             });
+            ui.menu_button("Rate", |ui| {
+                for rating in 0..=5u64 {
+                    let text = if rating == 0 { "No rating".to_owned() } else { stars(rating) };
+                    if ui.button(text).clicked() {
+                        action = Some(("dj.track.rate", json!({"track": id, "stars": rating})));
+                        ui.close();
+                    }
+                }
+            });
+            if ui.button("Send to the USB space").clicked() {
+                usb = true;
+                ui.close();
+            }
             ui.separator();
             if ui.button("Add to Auto DJ").clicked() {
                 queue = true;
@@ -523,6 +765,11 @@ impl App {
         }
         if queue {
             self.queue_auto_dj(id);
+        }
+        if usb {
+            let path = track["path"].as_str().map(PathBuf::from);
+            let tracks = path.into_iter().filter(|_| track["missing"] != true).collect();
+            self.send_to_usb_space(tracks);
         }
         if let Some((command, mut params)) = action {
             params["revision"] = json!(self.dj.decks.revision());

@@ -26,6 +26,7 @@ mod dj;
 mod dj_audition;
 mod dj_decks;
 mod dj_grid;
+mod dj_library;
 mod dj_waveform;
 mod editing;
 mod export;

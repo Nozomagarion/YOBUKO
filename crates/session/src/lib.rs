@@ -53,6 +53,7 @@ mod dj_decks;
 mod dj_history;
 mod dj_record;
 mod dj_sampler;
+mod dj_scan;
 pub use dj_colors::WaveColors;
 mod dj_preview;
 mod dj_waveform;

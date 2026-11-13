@@ -12,6 +12,7 @@ fn track() -> Track {
         seconds: 1.0,
         bpm: Some(120.0),
         key: None,
+        ..Default::default()
     }
 }
 

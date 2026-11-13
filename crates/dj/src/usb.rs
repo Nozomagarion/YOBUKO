@@ -127,9 +127,19 @@ fn source_track(catalog: &Catalog, track: &Track) -> Result<rbl_export::SourceTr
         id: u64::from(track.id),
         source_path: track.path.clone(),
         title: track.title.clone(),
-        artist: if track.source_project.is_some() { "YOBUKO".into() } else { String::new() },
+        artist: if !track.artist.is_empty() {
+            track.artist.clone()
+        } else if track.source_project.is_some() {
+            "YOBUKO".into()
+        } else {
+            String::new()
+        },
+        album: track.album.clone(),
+        genre: track.genre.clone(),
+        year: track.year.unwrap_or(0),
+        rating: track.rating,
         key: track.key.clone().unwrap_or_default(),
-        comment: "Exported from YOBUKO".into(),
+        comment: if track.comment.is_empty() { "Exported from YOBUKO".into() } else { track.comment.clone() },
         bpm_x100: (bpm * 100.0).round().clamp(0.0, f64::from(u32::MAX)) as u32,
         duration_sec: seconds.round().clamp(0.0, f64::from(u16::MAX)) as u16,
         sample_rate,

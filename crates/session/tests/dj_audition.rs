@@ -46,6 +46,7 @@ pub(super) fn seeded(dir: &std::path::Path) -> (Projects, Arc<Output>) {
             seconds: 2.0,
             bpm: None,
             key: None,
+            ..Default::default()
         }],
         ..Default::default()
     }

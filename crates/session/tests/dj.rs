@@ -40,6 +40,7 @@ fn seed(dir: &std::path::Path) {
             bpm: Some(120.0),
             key: None,
             source_project: Some(dir.join("original.suhina")),
+            ..Default::default()
         })
         .collect();
     suhina_dj::Catalog { tracks, ..Default::default() }.save(&dir.join("dj-library.json")).unwrap();

@@ -15,6 +15,8 @@ rbl-export = { path = "../../third_party/rbxport-export/rbl-export" }
 rbl-anlz = { path = "../../third_party/rbxport-export/rbl-anlz" }
 rbl-core = { path = "../../third_party/rbxport-export/rbl-core" }
 tempfile = "3"
+# Reading the tags of the music folders' files (title, artist, album, genre, year).
+symphonia = { version = "0.6", default-features = false, features = ["wav", "aiff", "pcm", "flac", "mp3", "ogg", "vorbis", "isomp4", "aac", "alac"] }  # MPL-2.0
 # Mixxx's library (DJ mode). Already built for rbl-onelibrary, with SQLCipher, which opens
 # plain SQLite files too.
 rusqlite = "0.40"
