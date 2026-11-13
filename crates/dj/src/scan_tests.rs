@@ -143,7 +143,8 @@ fn found_files_come_in_once_lost_ones_are_marked_and_analysis_is_kept() {
     };
     let text = serde_json::to_string(&old).unwrap();
     for field in ["artist", "album", "genre", "rating", "missing", "analysed", "folders"] {
-        assert!(!text.contains(field), "{field} is left out when empty");
+        // As a key: a temporary folder's path can hold the word (macOS's /var/folders).
+        assert!(!text.contains(&format!("\"{field}\":")), "{field} is left out when empty");
     }
 }
 
