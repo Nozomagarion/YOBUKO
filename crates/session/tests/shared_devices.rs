@@ -168,7 +168,7 @@ fn shared_parameter_messages_sound_like_native_edits_during_a_held_note_without_
 }
 
 #[test]
-fn shared_project_gate_admits_only_the_guarded_parameter_command_and_keeps_its_checks() {
+fn shared_project_gate_admits_only_confirmed_edits_and_keeps_their_checks() {
     let mut projects = suhina_session::Projects::new();
     let id = projects.add(session().unwrap(), None).unwrap();
     projects.restrict_shared_project(id, true).unwrap();
@@ -178,7 +178,10 @@ fn shared_project_gate_admits_only_the_guarded_parameter_command_and_keeps_its_c
         assert!(projects.execute_in(Some(id), command, &good).is_err());
         assert_eq!(projects.get(id).unwrap().project(), &before);
     }
-    assert!(projects.apply_shared_control(id, "device.setParam", &good).is_err());
+    // The host confirms a studio edit before a shared tab applies it (docs/spec/shared-studio.md);
+    // an edit that names a file never is one.
+    let file = json!({"track":1,"device":0,"path":"/elsewhere/sample.wav"});
+    assert!(projects.apply_shared_control(id, "device.loadSample", &file).is_err());
     let mut bad = good.clone();
     bad["device"] = json!("0/0/0");
     assert!(projects.apply_shared_control(id, "device.setSharedParam", &bad).is_err());

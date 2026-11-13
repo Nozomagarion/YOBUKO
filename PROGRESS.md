@@ -122,9 +122,17 @@ reached the others. Edits in the original tab ("Untitled 1") were never sent.
   tried between two real computers.
 - **Next criterion:** the owner and a friend open the shared session in the studio on two
   computers, each draws a MIDI clip, and both see both clips.
-- **Planned next (owner's requests of 12 November):** save the shared session under a name on
-  every computer and resume it later; the creator keeps the main version and the others a
-  clearly marked backup copy; the multiplayer pages in the rounded DJ look.
+- **Code written, saved sessions:** the host gives the session a **name** and **their name**.
+  Every participant's computer saves the session as it changes (every few seconds and when it
+  ends). The lobby's **Your sessions** lists them: the creator's says **Main version · yours**
+  and **Open for friends** hosts it again; a friend's says **Backup copy** and, when the creator
+  is away, **Open copy for friends** hosts it, marked for everyone as not the main version.
+  **Open alone** opens it in the Studio. Spec: `docs/spec/saved-sessions.md`.
+- **Code written, rounded look (12 November, evening):** the Multiplayer page and the strip
+  above the shared session in the Studio take the DJ space's rounded look: round cards
+  (Session, Playback and transfers, Shared controls), round buttons, fields and tabs, the
+  strip as a rounded bar. The lobby's cards and every space's main button are rounder too. The
+  shared tab takes the session's name. Nothing was removed; every label stays the same.
 
 ## The studio's rounded look pushed closer to the DJ page — 12 November 2026 (branch `claude/project-thread-mkzv4x`)
 
