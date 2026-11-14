@@ -67,6 +67,25 @@ impl App {
         self.prepare_usb();
     }
 
+    /// Hands tracks of the DJ library to rbxport's library in the USB space, to put them on a
+    /// stick for club players: one request in rbxport's inbox, which it imports.
+    pub(in crate::app) fn send_to_usb_space(&mut self, tracks: Vec<PathBuf>) {
+        if tracks.is_empty() {
+            self.dj.decks.error = Some("No track to send: the files are missing.".into());
+            return;
+        }
+        let sent = match self.rbxport_inbox() {
+            Some(inbox) => rbxport::send_to(&inbox, &tracks),
+            None => Err(std::io::Error::other("no folder for rbxport's inbox")),
+        };
+        match sent {
+            Ok(_) => {
+                self.shell.say(crate::kit::piou::Mood::Joy, format!("{} tracks sent to the USB space.", tracks.len()))
+            }
+            Err(e) => self.dj.decks.error = Some(format!("Could not send the tracks to the USB space: {e}")),
+        }
+    }
+
     fn rbxport_inbox(&self) -> Option<PathBuf> {
         self.dj.inbox.clone().or_else(|| rbxport::user_data_dir().map(|d| d.join("YOBUKO").join("rbxport-inbox")))
     }

@@ -28,8 +28,6 @@ const FRAME: Duration = Duration::from_millis(33);
 /// The seconds of a track a deck's close waveform shows.
 const CLOSE_SECONDS: f64 = 8.0;
 /// The most audio files one look into a folder adds, and the most entries it reads.
-const MAX_FOUND: usize = 1000;
-const MAX_LOOKED_AT: usize = 20_000;
 /// The mixer's width between the decks, with two channels and with four.
 const MIXER_WIDTH: f32 = 300.0;
 const MIXER_WIDTH_FOUR: f32 = 400.0;
@@ -97,6 +95,9 @@ pub(in crate::app) struct Decks {
     pub(in crate::app) four: bool,
     /// The library's search, sort and playlist.
     pub(in crate::app) library: library::LibraryView,
+    /// The tracks the library shows, kept until the library, the search, the sort or the list
+    /// shown changes (a large library is not filtered and sorted again each frame).
+    pub(in crate::app) shown: std::cell::RefCell<Option<(String, std::sync::Arc<Vec<Value>>)>>,
 }
 
 impl Decks {
@@ -150,7 +151,24 @@ impl Decks {
     }
 
     fn busy(&self) -> bool {
-        self.snapshot["busy"] == true || !self.imports.is_empty() || (0..DECKS).any(|d| self.deck(d)["loading"] == true)
+        self.snapshot["busy"] == true
+            || !self.imports.is_empty()
+            || (0..DECKS).any(|d| self.deck(d)["loading"] == true)
+            || self.scanning()
+    }
+
+    /// The library's music folders are being scanned or its new tracks analysed.
+    pub(in crate::app) fn scanning(&self) -> bool {
+        let library = &self.snapshot["library"];
+        library["scan"].is_object()
+            || library["waiting"].as_u64().is_some_and(|n| n > 0)
+            || (library["analysis"]["on"] == true && library["analysis"]["left"].as_u64().is_some_and(|n| n > 0))
+    }
+
+    /// The library's music folders.
+    pub(in crate::app) fn folders(&self) -> Vec<PathBuf> {
+        let folders = self.snapshot["library"]["folders"].as_array();
+        folders.into_iter().flatten().filter_map(|f| f.as_str().map(PathBuf::from)).collect()
     }
 
     fn number(&self, deck: usize, key: &str, default: f64) -> f64 {
@@ -202,48 +220,6 @@ impl Decks {
             }
         }
     }
-
-    /// The library's tracks' files, to leave out those already in it.
-    fn known(&self) -> std::collections::HashSet<PathBuf> {
-        self.snapshot["tracks"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(|t| t["path"].as_str().map(PathBuf::from))
-            .collect()
-    }
-}
-
-/// Whether YOBUKO's DJ library takes this file: a WAV, AIFF, FLAC, MP3 or Ogg file.
-fn is_audio(path: &Path) -> bool {
-    suhina_media::info::kind_of(path) == Some(suhina_media::info::FileKind::Sample)
-}
-
-/// The audio files in `folder` and below, hidden folders left out, at most [`MAX_FOUND`].
-pub(super) fn audio_in(folder: &Path) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    let mut looked_at = 0;
-    let mut folders = vec![folder.to_path_buf()];
-    while let Some(folder) = folders.pop() {
-        let Ok(entries) = std::fs::read_dir(&folder) else { continue };
-        let mut entries: Vec<_> = entries.flatten().map(|e| e.path()).collect();
-        entries.sort();
-        for path in entries {
-            looked_at += 1;
-            if looked_at > MAX_LOOKED_AT || found.len() >= MAX_FOUND {
-                return found;
-            }
-            if path.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.')) {
-                continue;
-            }
-            if path.is_dir() {
-                folders.push(path);
-            } else if is_audio(&path) {
-                found.push(path);
-            }
-        }
-    }
-    found
 }
 
 /// This person's Music folder, where it is.
@@ -311,8 +287,16 @@ impl App {
                 (None, Some(_)) => false,
             };
         if due {
-            match self.projects.execute("dj.library", &json!({})) {
-                Ok(snapshot) => {
+            // The tracks are sent again only when the library changed.
+            let old = &self.dj.decks.snapshot;
+            let shown = (old["loaded"] == true && old["tracks"].is_array()).then(|| old["revision"].clone());
+            match self.projects.execute("dj.library", &json!({"revision": shown})) {
+                Ok(mut snapshot) => {
+                    if snapshot["unchanged"] == true {
+                        for key in ["tracks", "playlists", "cues", "grids"] {
+                            snapshot[key] = self.dj.decks.snapshot[key].take();
+                        }
+                    }
                     if let Some(error) = snapshot["error"].as_str() {
                         self.dj.decks.error = Some(error.to_owned());
                     }
@@ -373,25 +357,35 @@ impl App {
         }
     }
 
-    /// Files and folders dropped on the DJ space go into the library.
+    /// Files and folders dropped on the DJ space go into the library: a folder becomes one of
+    /// its music folders, scanned in the background; files are read in the background too.
     pub(in crate::app) fn take_dj_drops(&mut self, dropped: Vec<PathBuf>) {
-        let known = self.dj.decks.known();
         let mut files = Vec::new();
+        let mut refused = None;
         for path in dropped {
             if path.is_dir() {
-                files.extend(audio_in(&path));
-            } else if is_audio(&path) {
-                files.push(path);
+                self.add_music_folder(path);
+            } else if suhina_dj::is_dj_audio(&path) {
+                files.push(path.display().to_string());
             } else {
                 let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into());
-                self.dj.decks.error = Some(format!("{name} is not a WAV, AIFF, FLAC, MP3 or Ogg file."));
+                refused = Some(format!("{name} is not an M4A, AAC, MP3, FLAC, WAV, AIFF or Ogg file."));
             }
         }
-        let files: Vec<_> = files.into_iter().filter(|f| !known.contains(f)).collect();
-        if !files.is_empty() {
+        if !files.is_empty() && self.deck_command("dj.files.add", json!({"paths": files})) {
             self.shell.say(Mood::Joy, format!("{} tracks on their way to your DJ library.", files.len()));
         }
-        self.dj.decks.add(files.into_iter().map(|f| (f, None)));
+        if refused.is_some() {
+            self.dj.decks.error = refused;
+        }
+    }
+
+    /// Adds a music folder to the DJ library; it is scanned in the background.
+    pub(in crate::app) fn add_music_folder(&mut self, folder: PathBuf) {
+        if self.deck_command("dj.folders.add", json!({"folder": folder.display().to_string()})) {
+            let name = folder.file_name().map_or_else(|| folder.display().to_string(), |n| n.to_string_lossy().into());
+            self.shell.say(Mood::Joy, format!("{name} is now a music folder: its tracks are on their way."));
+        }
     }
 
     /// The DJ space: two decks and the mixer, the library below.
@@ -517,19 +511,27 @@ impl App {
                     self.dj.next_export_to_dj = true;
                 }
                 let music = music_folder();
+                let added = music.as_ref().is_some_and(|m| {
+                    let m = m.canonicalize().unwrap_or_else(|_| m.clone());
+                    self.dj.decks.folders().iter().any(|f| m.starts_with(f))
+                });
                 if ui
                     .add_enabled(
-                        music.is_some(),
+                        music.is_some() && !added,
                         egui::Button::new(egui::RichText::new("Add my Music folder").strong().color(Color32::WHITE))
                             .fill(space.color())
                             .corner_radius(BUTTON_RADIUS),
                     )
-                    .on_hover_text("Bring the audio files of your Music folder into the DJ library")
-                    .on_disabled_hover_text("No Music folder found: drop files or a folder on this page instead")
+                    .on_hover_text("Make your Music folder a music folder of the DJ library: scanned now and each time")
+                    .on_disabled_hover_text(if added {
+                        "Your Music folder is already in the DJ library"
+                    } else {
+                        "No Music folder found: add a folder with + FOLDER in the library instead"
+                    })
                     .clicked()
                     && let Some(music) = music
                 {
-                    self.take_dj_drops(vec![music]);
+                    self.add_music_folder(music);
                 }
             });
         });

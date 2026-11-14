@@ -7897,6 +7897,7 @@ dependencies = [
  "serde",
  "serde_json",
  "suhina-media",
+ "symphonia 0.6.1",
  "tempfile",
 ]
 

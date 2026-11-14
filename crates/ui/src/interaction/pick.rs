@@ -41,6 +41,8 @@ pub enum PickField {
     IrFolder,
     /// The folder Copy to folder… copies samples into (`library.copyTo`, #865).
     CopyToFolder,
+    /// A music folder for the DJ library (`dj.folders.add`).
+    DjMusicFolder,
 }
 
 impl PickField {
@@ -67,6 +69,7 @@ impl PickField {
             Self::DataFolder => "Settings folder",
             Self::IrFolder => "Cabinet sounds folder",
             Self::CopyToFolder => "Copy the samples to",
+            Self::DjMusicFolder => "Add a music folder to the DJ library",
         }
     }
 

@@ -1,9 +1,9 @@
 ---
-description: The fork's Studio and DJ workspaces (two or four decks and a mixer in YOBUKO's window, driven by mouse or a DDJ-FLX4), local playlists and cues, rbxport analysis, engine audition and waveform preparation
-read_when: DJ decks, four decks, crossfader sides, DJ mixer, DDJ-FLX4, DJ library, playlists, cue points, audition, waveform preparation, rbxport integration, render a project for DJ preparation
+description: The fork's Studio and DJ workspaces (two or four decks and a mixer in YOBUKO's window, driven by mouse or a DDJ-FLX4), the DJ library's music folders scanned and analysed in the background (M4A and AAC included), local playlists and cues, rbxport analysis, engine audition and waveform preparation
+read_when: DJ library, music folders, library scan, M4A, AAC, track tags, ratings, missing tracks, DJ decks, four decks, crossfader sides, DJ mixer, DDJ-FLX4, DJ library, playlists, cue points, audition, waveform preparation, rbxport integration, render a project for DJ preparation
 type: spec
 status: current
-last_verified: 2026-11-12
+last_verified: 2026-11-13
 covers:
   - crates/engine/src/decks.rs
   - crates/engine/src/deck_voice.rs
@@ -19,6 +19,8 @@ covers:
   - crates/session/tests/dj_decks.rs
   - crates/dj
   - crates/session/src/dj.rs
+  - crates/session/src/dj_scan.rs
+  - crates/session/tests/dj_library.rs
   - crates/ui/src/app/dj.rs
   - crates/ui/src/app/dj_tests.rs
   - crates/ui/src/app/dj_decks.rs
@@ -211,7 +213,11 @@ which YOBUKO's copy of rbxport imports (`third_party/rbxport-app/src-tauri/src/y
 ## Commands and storage
 
 `dj.library` polls the worker and returns tracks, playlists, cues, revision, preview status, busy,
-error, analysis and format.
+error, analysis and format, and `library`: the music folders, the scan and the background
+analysis (see [Music folders](#music-folders-and-the-library-fork-extension-part-5)). Given the
+`revision` the caller already shows, it leaves the tracks, playlists, cues and grids out while
+that revision is current (`unchanged: true`), so a large library is not sent ten times a
+second.
 `dj.import` queues one audio file, with an optional `sourceProject` path. All DJ operations are Library
 commands on Projects and are denied to MCP agents: managing the local DJ collection is the
 person's action. Typed file parameters retain their path classification. No Rekordbox database
@@ -224,13 +230,13 @@ worker. The UI receives snapshots over a channel. Changing the configured file l
 the old worker, clears library selections/drafts and starts the next catalog lazily. An invalid existing catalog is reported
 without overwriting it. A failed import does not prevent another file from being attempted.
 
-The initial catalog format 1 contains at most 2000 tracks and is at most 4 MiB. Each track has a local id,
+The catalog (format 4) holds at most 100 000 tracks and 128 MiB; format 1 held 2000 and 4 MiB. Each track has a local id,
 absolute audio path, title, optional source project, duration, optional BPM and key. Duplicate
 ids/paths and unsupported formats are refused. Save validates the complete next catalog, writes
 a unique sibling temporary file, flushes it and persists it over the destination. Only after
 a successful save is the in-memory catalog replaced. Audio remains at its source path.
 
-The importer accepts WAV, AIFF, FLAC, MP3 and Ogg, up to 20 minutes, mono or stereo, at up to
+The importer accepts M4A/AAC/ALAC, WAV, AIFF, FLAC, MP3 and Ogg, up to 20 minutes, mono or stereo, at up to
 96 kHz. It uses Suhina's bounded decoder and averages channels for rbxport analysis. It rejects
 nonfinite samples and files whose size or modification time changes during analysis. Reimport
 of the same canonical path retains its id and source-project association. Unknown tempo/key
@@ -766,3 +772,78 @@ decks show. The DDJ-FLX4 drives decks A and B.
 Automated: an engine test for four decks on the crossfader's sides; a session test for decks C
 and D, the sides and the effect unit; a UI test for the button, the channels, the side button
 and hiding. Not tried on speakers.
+
+## Music folders and the library (fork extension, part 5)
+
+The library is built from **music folders** the person chooses, like a desktop DJ program's
+library, instead of files dropped one by one.
+
+**Formats.** M4A and AAC (and ALAC in M4A), MP3, FLAC, WAV, AIFF and Ogg, on every system:
+Symphonia's MP4 reader and AAC/ALAC decoders are pure Rust (MPL-2.0), so no system codec is
+needed. A scan reads each file's header and tags only (title, artist, album, genre, comment,
+year, BPM and key tags); the title falls back to the file name.
+
+**Catalog.** `dj-library.json` keeps `folders` (at most 32, absolute) and, per track, `artist`,
+`album`, `genre`, `comment`, `year`, `added` (seconds since 1970), `analysed`, `missing` and
+`rating` (0–5). Each is left out when empty, so older libraries read unchanged and are not
+analysed again. Tracks may be up to 4 hours long in the catalog; analysis and the decks take
+20 minutes at most.
+
+**Background work** (`crates/session/src/dj_scan.rs`). Two threads besides the library's worker:
+
+- the **scanner** walks the music folders (hidden files and folders and links skipped, at most a
+  million entries) and reads the tags of files the library does not hold, in batches of 250;
+- the **analyser** runs rbxport's tempo and key analysis on one new track at a time.
+
+What they find goes to the worker as `Library` jobs only when the worker is idle, in batches
+that grow with the library (so a large one is not rewritten for every file); a job the person
+asks for may wait behind one of them. A background change does not make the revision the page
+shows stale: an edit with a revision at or after the person's last change is checked against
+the current one. The music folders are scanned when the library opens and on **RESCAN**; a
+track inside a music folder whose file is gone after a whole scan is marked **missing**, not
+deleted (it keeps its cues and playlists), and comes back with its id when the file does.
+`Projects::sync_dj_library` waits for all of it, the signal the tests use.
+
+**Commands.** `dj.folders.add {folder}` (a folder inside a music folder is refused; one that
+holds music folders replaces them), `dj.folders.remove {folder}` (the tracks stay),
+`dj.folders.scan`, `dj.files.add {paths}` (dropped files, read in the background; not a music
+folder), `dj.analysis.set {on}` (pause or resume the analysis) and
+`dj.track.rate {track, revision, stars}`. All are the person's only.
+
+**Page.** The library header has **+ FOLDER** (the system's folder picker) and **RESCAN**; the
+side bar lists the **MUSIC FOLDERS** (right-click: send its tracks to the USB space, or stop
+scanning it) and, when some are missing, **Missing files**. Under the header: the scan's count
+of files looked at and new, then the analysis's tracks left and the one being analysed, with
+**PAUSE**/**RESUME**. The table has Title, Artist, Album, Genre, Year (the last three left out
+when the title would get too narrow), BPM, Key, Time and Rating columns, each sortable; the
+search looks in title, artist, album, genre, key, comment and tempo. A missing track is grey
+and cannot be loaded. A row's menu adds **Rate** and **Send to the USB space** (a request in
+rbxport's inbox, which imports it). A dropped folder becomes a music folder; dropped files are
+added in the background. **Add my Music folder** makes the person's Music folder a music folder.
+The page keeps the tracks it shows and filters and sorts them again only when the library, the
+search, the sort or the list shown changes.
+
+**Not yet.** Editing a track's tags, cover art, a folder browser view, a separate analysis
+view, hiding tracks, and watching folders while YOBUKO runs (they are scanned at start and on
+RESCAN). rbxport's own collection in the USB space is fed by **Send to the USB space**, not
+kept in step automatically.
+
+### Check part 5
+
+1. On the DJ page click **+ FOLDER** in the library and choose the folder your music is in.
+2. The line under the header counts the files it looks at; tracks appear while it goes,
+   M4A files included, with their artist, album and genre.
+3. The analysis line counts down as tempo and key arrive; **PAUSE** stops it, **RESUME**
+   goes on.
+4. Type an artist's name in the search: only their tracks show. Click **ARTIST** to sort.
+5. Right-click a track › **Rate** › four stars: the stars show in the Rating column.
+6. Quit YOBUKO, move a file out of the folder, start again: the track shows grey, under
+   **Missing files**. Put it back and click **RESCAN**: it is back.
+
+Automated: library tests for tags, M4A decoding and analysis, the walk, missing tracks,
+ratings and a 20 000-track catalog; session tests for a music folder scanned, tagged and
+analysed in the background, a scan at start, missing and found again, revisions across
+background changes, dropped files, nesting and removing folders, pausing the analysis; UI tests
+for dropping a folder, the columns, search by artist, the missing list, ratings and sending to
+the USB space. Not tried on a real collection of thousands of files.
+
