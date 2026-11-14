@@ -89,3 +89,60 @@ fn the_skin_is_made_once_and_selected_only_where_it_is_ours_to_choose() {
     let fresh = dir.path().join("fresh");
     assert!(select(&fresh, false).unwrap(), "a Mixxx with no skin chosen yet takes YOBUKO");
 }
+
+#[test]
+fn the_soft_shapes_fill_every_name_with_the_look_and_the_deck_colours() {
+    for colours in [Look::default().colours(), washi()] {
+        let shapes = soft_shapes(&colours);
+        assert!(!shapes.contains('@'), "a name is left: {shapes}");
+        assert!(shapes.contains(&colours.surface.to_hex()), "the look's cards");
+        for colour in DECKS.iter().chain(CUES.iter()) {
+            assert!(shapes.contains(colour), "{colour} is missing");
+        }
+        assert!(shapes.contains("border-radius: 18px"), "round cards");
+    }
+}
+
+#[test]
+fn the_soft_shapes_are_laid_once_over_the_sheet_kept_as_it_was() {
+    let shapes = soft_shapes(&Look::default().colours());
+    let sheet = "#Deck1 { color: red; }\n";
+    let once = with_soft_shapes(sheet, &shapes);
+    assert!(once.starts_with("#Deck1 { color: red; }"));
+    assert!(!once.contains("SPDX"), "the file's own header stays out of Mixxx's sheet");
+    assert_eq!(with_soft_shapes(&once, &shapes), once, "laid again: still once");
+    assert_eq!(once.matches(SOFT_MARK).count(), 1);
+}
+
+#[test]
+fn the_made_skin_has_big_transport_buttons_and_pads_and_a_white_play_icon() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("LateNight");
+    for folder in ["decks", "controls", "palemoon/buttons"] {
+        std::fs::create_dir_all(source.join(folder)).unwrap();
+    }
+    std::fs::write(source.join("skin.xml"), "<skin><title>LateNight</title></skin>").unwrap();
+    std::fs::write(source.join("style.qss"), "WPushButton { color: #fff; }\n").unwrap();
+    std::fs::write(source.join("style_palemoon.qss"), "WLabel { color: #ccc; }\n").unwrap();
+    std::fs::write(
+        source.join("decks").join("row_5_transportLoopJump.xml"),
+        "<ObjectName>CueDeck</ObjectName>\n<Size>42f,26f</Size>\n<Size>68f,26f</Size>\n",
+    )
+    .unwrap();
+    std::fs::write(source.join("controls").join("button_hotcue.xml"), "<MinimumSize>26,26</MinimumSize>").unwrap();
+    std::fs::write(source.join("palemoon/buttons/btn__play_deck.svg"), r##"<svg fill="#908e89"/>"##).unwrap();
+    let profile = dir.path().join("profile");
+    assert!(install(&source, &profile, &Look::default()).unwrap());
+    let made = profile.join("skins").join(SKIN);
+    let read = |path: &str| std::fs::read_to_string(made.join(path)).unwrap();
+    for sheet in STYLE_SHEETS {
+        let text = read(sheet);
+        assert_eq!(text.matches(SOFT_MARK).count(), 1, "{sheet}");
+        assert!(text.contains(DECKS[0]), "{sheet}");
+    }
+    let transport = read("decks/row_5_transportLoopJump.xml");
+    assert!(transport.contains("<Size>48f,34f</Size>") && transport.contains("<Size>76f,34f</Size>"), "{transport}");
+    assert!(transport.contains("<ObjectName>CueDeck</ObjectName>"), "every control stays");
+    assert_eq!(read("controls/button_hotcue.xml"), "<MinimumSize>30,30</MinimumSize>");
+    assert!(read("palemoon/buttons/btn__play_deck.svg").contains("fill=\"#ffffff\""));
+}

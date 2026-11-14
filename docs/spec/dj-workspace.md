@@ -880,6 +880,18 @@ decks stop reading the controller. With Mixxx 2.5 (the one shipped), the DDJ-FLX
 community mapping's Basic preset (`Mapping::CommunityBasic`, `third_party/mixxx-ddj-flx4-mapping`)
 with its Beat FX, jog and pad fixes and its effect chains; Mixxx 2.6 gets its Extended preset.
 
+**The look.** Mixxx's own LateNight skin, copied and recoloured to the studio's theme, then
+given YOBUKO's soft shapes (`mixxx_skin::soft_shapes`, `crates/dj/src/mixxx_skin_soft.qss`,
+appended to `style.qss` and `style_palemoon.qss`), to match YOBUKO's own DJ page: rounded
+cards with an outline in each deck's colour (A pink, B green, C violet, D amber), pill buttons
+in bold, CUE and PLAY taller (34 px), PLAY filled with the deck's colour and a white icon, CUE
+amber while lit, hot cue pads each in its own colour (1 red, 2 orange, 3 yellow, 4 green, 5 cyan,
+6 blue, 7 violet, 8 pink; a set cue takes its cue's colour), active loops and key lock green,
+sampler play buttons violet, effect selectors and the search field outlined in violet, the
+library's selected track pink. Only looks and two sizes change: every control of the skin stays.
+YOBUKO's font (Manrope) is copied into Mixxx's own fonts folder by `scripts/mixxx_fetch.sh`; a
+Mixxx installed on the computer falls back to its system font.
+
 **Quitting.** Quitting YOBUKO asks Mixxx to close as its own close button would and waits up
 to 5 seconds before stopping it. Mixxx closing by itself shows **Start Mixxx again**.
 
@@ -897,8 +909,11 @@ size: a smaller DJ space cuts its right or bottom edge.
    its beats, its channel and its level.
 4. Click **YOBUKO decks**: YOBUKO's own decks show; **Back to Mixxx** returns.
 5. Quit YOBUKO: Mixxx closes with it.
+6. Look at Mixxx: rounded cards with a pink outline on deck A and a green one on deck B, a big
+   pink PLAY on A and a green one on B, hot cue pads 1 to 8 each in a colour.
 
-Automated: the `--adopt` protocol's lines and placements, the title filter, lending MIDI ports,
+Automated: the soft shapes (every colour filled in, laid once, the bigger buttons and the
+white play icon in a made skin), the `--adopt` protocol's lines and placements, the title filter, lending MIDI ports,
 the mapping for each Mixxx version, the music folder of a new profile, and which page the DJ
 space shows. Checked by hand on Linux (X11, no window manager) with Mixxx 2.4: Mixxx inside the
 window, hidden in Studio, back in DJ, closed with YOBUKO. Not yet tried on Windows or with a

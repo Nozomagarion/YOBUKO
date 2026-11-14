@@ -17,6 +17,12 @@ section was not right in plain Mixxx).
   DJ shows it again; quitting YOBUKO closes it. While Mixxx runs, YOBUKO lets go of the
   DDJ-FLX4 so Mixxx can open it, and Mixxx 2.5 now gets the community DDJ-FLX4 mapping (Basic
   preset, with its Beat FX fixes). YOBUKO's own decks stay as **YOBUKO decks** and on macOS.
+- **New look (14 November, after the owner said the first one looked nothing like YOBUKO):**
+  Mixxx now wears YOBUKO's soft shapes, like YOBUKO's own DJ page: rounded cards outlined in
+  each deck's colour, big PLAY buttons filled pink (A) and green (B), CUE amber, hot cue pads
+  each in their own colour, violet sampler and effects, pink selection in the library, the
+  Manrope font. Only the look changes; every Mixxx control is still there. The owner saw the
+  screenshots and said it is good this way.
 - **Checks passed (Linux, cloud container):** the real Mixxx 2.4 shown inside YOBUKO under
   Xvfb (screenshot), hidden and shown again, closed with YOBUKO (Mixxx's log: shutdown complete);
   tests for the `--adopt` protocol, lending MIDI ports, the mapping per version, the music
