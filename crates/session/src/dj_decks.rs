@@ -456,6 +456,19 @@ pub(crate) fn key(p: &mut Projects, v: &Value) -> Result<Value, CommandError> {
     Ok(json!({"lock":lock,"shift":shift}))
 }
 impl Projects {
+    /// YOBUKO: lends MIDI ports to another program (Mixxx in the DJ space) by name: they close
+    /// here now and stay closed until lent no more, without turning them off in the settings.
+    /// A port held open here would be refused to the other program on Windows. Returns what
+    /// the user should hear about, as opening the ports does.
+    pub fn lend_midi_ports(&mut self, ports: std::collections::BTreeSet<String>) -> Vec<String> {
+        let midi = self.midi_mut();
+        if midi.lent == ports {
+            return Vec::new();
+        }
+        midi.lent = ports;
+        midi.sync()
+    }
+
     /// The waveform of what deck `deck` (0 for A, 1 for B) holds, to draw it; `None` while it
     /// holds nothing.
     pub fn dj_deck_peaks(&self, deck: usize) -> Option<Arc<Peaks>> {

@@ -183,6 +183,21 @@ fn ports_turned_off_in_the_settings_stay_closed() {
 }
 
 #[test]
+fn ports_lent_to_another_program_close_and_come_back_without_being_turned_off() {
+    let midi = ports(&["Keys", "DDJ-FLX4"], None);
+    let mut projects = Projects::new();
+    projects.set_midi_system(midi.clone());
+    assert_eq!(*midi.opened.lock().unwrap(), ["Keys", "DDJ-FLX4"]);
+    projects.lend_midi_ports(["DDJ-FLX4".to_string()].into());
+    assert_eq!(*midi.closed.lock().unwrap(), ["DDJ-FLX4"]);
+    let listed = run(&mut projects, "midi.inputs", json!({})).unwrap();
+    assert_eq!(listed["inputs"][1]["open"], json!(false));
+    assert_eq!(listed["inputs"][1]["enabled"], json!(true), "lent, not turned off");
+    projects.lend_midi_ports(std::collections::BTreeSet::new());
+    assert_eq!(*midi.opened.lock().unwrap(), ["Keys", "DDJ-FLX4", "DDJ-FLX4"]);
+}
+
+#[test]
 fn a_port_that_cannot_be_opened_is_said_once_and_listed_with_why() {
     let midi = ports(&["Keys", "Busy"], Some("Busy"));
     let mut projects = Projects::new();

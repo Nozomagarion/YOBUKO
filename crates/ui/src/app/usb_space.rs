@@ -193,7 +193,7 @@ pub fn shortcut(accelerator: &str, mac: bool) -> String {
 }
 
 /// Whether anything of YOBUKO's own floats over `rect`: a menu, a popup, a window or a dialog.
-fn covered(ctx: &egui::Context, rect: Rect) -> bool {
+pub(super) fn covered(ctx: &egui::Context, rect: Rect) -> bool {
     ctx.memory(|memory| {
         memory.areas().visible_layer_ids().into_iter().any(|layer| {
             matches!(layer.order, egui::Order::Middle | egui::Order::Foreground)

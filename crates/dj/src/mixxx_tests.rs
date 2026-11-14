@@ -315,7 +315,25 @@ fn versions_read_from_a_note_or_an_info_plist() {
                  <key>CFBundleShortVersionString</key><string>2.6.0</string></dict>";
     assert_eq!(plist_version(plist), Some((2, 6)));
     assert_eq!(Mapping::for_version(None), Mapping::BuiltIn);
-    assert_eq!(Mapping::for_version(Some((2, 5))), Mapping::BuiltIn);
+    assert_eq!(Mapping::for_version(Some((2, 4))), Mapping::BuiltIn);
+    assert_eq!(Mapping::for_version(Some((2, 5))), Mapping::CommunityBasic);
+    assert_eq!(Mapping::for_version(Some((2, 6))), Mapping::Community);
+}
+
+#[test]
+fn mixxx_2_5_gets_the_community_mappings_basic_preset_and_its_effect_chains() {
+    let dir = tempfile::tempdir().unwrap();
+    let profile = dir.path().join("Mixxx");
+    configure(&profile, Mapping::for_version(Some((2, 5)))).unwrap();
+    let settings = Settings::parse(&std::fs::read_to_string(profile.join(CONFIG)).unwrap());
+    for name in FLX4_NAMES {
+        assert_eq!(settings.get("[ControllerPreset]", name), Some(BASIC));
+    }
+    let basic = std::fs::read_to_string(profile.join("controllers").join(BASIC)).unwrap();
+    assert!(basic.contains("<name>Pioneer DDJ-FLX4 (Basic)</name>"));
+    assert!(!basic.contains("Stem"), "nothing Mixxx 2.5 lacks");
+    assert!(profile.join("controllers/Pioneer-DDJ-FLX4-2.0.script.js").is_file());
+    assert!(profile.join("effects/chains/01_ECHO_1_4.xml").is_file());
 }
 
 #[test]
@@ -343,4 +361,19 @@ fn a_rendered_track_joins_mixxx_without_touching_its_playlists() {
     assert_eq!(playlists, 1);
     let title: String = conn.query_row("SELECT title FROM library ORDER BY id DESC", [], |r| r.get(0)).unwrap();
     assert_eq!(title, "render", "named after its file until Mixxx reads its tags");
+}
+
+#[test]
+fn a_new_profile_gets_its_music_folder_so_mixxx_asks_for_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let profile = dir.path().join("Mixxx");
+    let music = dir.path().join("My Music");
+    assert!(seed_music_folder(&profile, &music).unwrap());
+    let settings = Settings::parse(&std::fs::read_to_string(profile.join(CONFIG)).unwrap());
+    assert_eq!(settings.get("[Playlist]", "Directory"), Some(music.to_string_lossy().as_ref()));
+    assert!(!seed_music_folder(&profile, Path::new("/elsewhere")).unwrap(), "set once");
+    let other = dir.path().join("Ran before");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join(DATABASE), b"").unwrap();
+    assert!(!seed_music_folder(&other, &music).unwrap(), "Mixxx has its library already");
 }

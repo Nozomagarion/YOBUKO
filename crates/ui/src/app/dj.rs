@@ -15,6 +15,8 @@ pub(super) mod decks;
 pub(super) mod flx4;
 #[path = "dj_mixxx.rs"]
 pub(super) mod mixxx;
+#[path = "dj_mixxx_space.rs"]
+pub mod mixxx_space;
 #[path = "dj_rbxport.rs"]
 pub(super) mod rbxport;
 
@@ -39,6 +41,8 @@ pub(super) struct DjPanel {
     pub(super) decks: decks::Decks,
     /// The USB space: rbxport inside this window (`usb_space.rs`).
     pub(super) space: super::usb_space::UsbSpace,
+    /// Mixxx inside this window, in the DJ space (`dj_mixxx_space.rs`).
+    pub(super) mixxx: mixxx_space::MixxxSpace,
 }
 
 impl App {
@@ -155,10 +159,6 @@ impl App {
         let place = if in_mixxx { "Mixxx and rbxport" } else { "rbxport (and Mixxx the next time it opens)" };
         self.shell.say(crate::kit::piou::Mood::Joy, format!("{name} is in your DJ library."));
         self.dj.note = Some(Ok(format!("{name} is in your DJ library, and shared with {place}.")));
-    }
-
-    pub(super) fn show_dj(&mut self, ui: &mut Ui) {
-        self.show_decks(ui);
     }
 
     /// What happened last in DJ mode, under a page's buttons.

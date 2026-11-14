@@ -1059,7 +1059,8 @@ impl App {
     /// While the DJ space shows, a DDJ-FLX4 drives the decks: its port is taken from the
     /// studio's armed tracks and what it sends is read here. Called every frame.
     pub(in crate::app) fn dj_controller(&mut self, ctx: &egui::Context) {
-        let showing = self.dj.active && !self.dj.usb;
+        // YOBUKO: while Mixxx is the DJ space, the controller is Mixxx's (`dj_mixxx_space.rs`).
+        let showing = self.dj.active && !self.dj.usb && !self.dj.mixxx.wanted();
         let wanted: Vec<String> = if showing {
             self.projects.midi_ports().iter().filter(|p| super::flx4::is_flx4(p)).cloned().collect()
         } else {

@@ -128,6 +128,8 @@ pub(crate) struct MidiInputs {
     pub(crate) input: Arc<LiveInput>,
     /// Ports turned off by name (`midi.setInput`, the window's settings).
     pub(crate) off: BTreeSet<String>,
+    /// YOBUKO: ports lent to another program (Mixxx in the DJ space), closed here meanwhile.
+    pub(crate) lent: BTreeSet<String>,
     /// Open ports and what keeps each open.
     open: Vec<(String, Box<dyn std::any::Any + Send>)>,
     /// Ports that could not be opened, with why, so the same failure is said once.
@@ -159,12 +161,12 @@ impl MidiInputs {
             }
         };
         self.ports.clone_from(&ports);
-        let off = &self.off;
-        self.open.retain(|(name, _)| ports.contains(name) && !off.contains(name));
-        self.failed.retain(|(name, _)| ports.contains(name) && !off.contains(name));
+        let (off, lent) = (&self.off, &self.lent);
+        self.open.retain(|(name, _)| ports.contains(name) && !off.contains(name) && !lent.contains(name));
+        self.failed.retain(|(name, _)| ports.contains(name) && !off.contains(name) && !lent.contains(name));
         let mut notices = Vec::new();
         for name in &ports {
-            if self.off.contains(name) || self.open.iter().any(|(open, _)| open == name) {
+            if self.off.contains(name) || self.lent.contains(name) || self.open.iter().any(|(open, _)| open == name) {
                 continue;
             }
             match system.open(name, Arc::clone(&self.input)) {
