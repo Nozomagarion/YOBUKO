@@ -18,7 +18,7 @@ QTableView, QHeaderView::section, QMenu, QMenuBar, QComboBox, WEffectSelector, W
 #FxSlotsCollapsed, #MicDuckingContainer, #MicAuxUnit, #MicAuxAddFrame, #Sampler, #SamplerMini {
   background-color: @surface;
   border: 2px solid @line;
-  border-radius: 18px;
+  border-radius: 10px;
 }
 #Deck1, #DeckCompact1, #DeckMini1 { border: 2px solid @deck1soft; }
 #Deck2, #DeckCompact2, #DeckMini2 { border: 2px solid @deck2soft; }

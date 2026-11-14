@@ -99,7 +99,7 @@ fn the_soft_shapes_fill_every_name_with_the_look_and_the_deck_colours() {
         for colour in DECKS.iter().chain(CUES.iter()) {
             assert!(shapes.contains(colour), "{colour} is missing");
         }
-        assert!(shapes.contains("border-radius: 18px"), "round cards");
+        assert!(shapes.contains("border-radius: 10px"), "round cards");
     }
 }
 
