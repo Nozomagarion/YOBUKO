@@ -38,6 +38,8 @@ fn a_project_blocked_by_a_native_panel_is_not_remembered() {
         theme_error: None,
         recent: recent::Recent::load(None),
         rbxport: rbxport_panel::RbxportPanel::default(),
+        mixxx: crate::mixxx_panel::MixxxPanel::default(),
+        owner: None,
         #[cfg(target_os = "macos")]
         mac_menu: None,
     };

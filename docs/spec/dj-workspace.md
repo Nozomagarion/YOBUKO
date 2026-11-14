@@ -847,3 +847,59 @@ background changes, dropped files, nesting and removing folders, pausing the ana
 for dropping a folder, the columns, search by artist, the missing list, ratings and sending to
 the USB space. Not tried on a real collection of thousands of files.
 
+
+## Mixxx inside the window (fork extension, part 6)
+
+The owner asked for the DJ space to be Mixxx one to one: every function of Mixxx, only in
+YOBUKO's look, and inside YOBUKO's window. Rebuilding Mixxx's functions one by one (parts 1 to
+5) cannot reach that, so the DJ space now shows **Mixxx itself**, the copy shipped with YOBUKO
+(or one installed on the computer), skinned in YOBUKO's colours (`crates/dj/src/mixxx_skin.rs`).
+
+**How it gets inside.** When the DJ space first shows, the desktop app
+(`apps/suhina/src/mixxx_panel.rs`) asks the page for the Mixxx to start
+(`App::mixxx_launch`: the DDJ-FLX4 mapping, the YOBUKO skin, a music folder for a new profile,
+the library shared with rbxport), starts it, then starts the plug-in host with
+`--adopt <window> <pid> Mixxx` (`crates/plugin-host/src/adopt.rs`). The host opens an embedded
+window over YOBUKO's (the same clip and view an embedded plug-in editor uses, ADR 0006 › 10),
+waits for the Mixxx process's main window (shown, not a dialog, its title has "Mixxx", the
+largest), takes its title bar and borders away and makes it a child of that view: `SetParent`
+on Windows, `ReparentWindow` on X11 (Mixxx runs with `QT_QPA_PLATFORM=xcb`). It then follows
+lines on its standard input: `place X Y WIDTH HEIGHT` (pixels of YOBUKO's window), `hide`
+(another space shows, or something of YOBUKO's covers the rectangle) and `close`, and answers
+`adopted`, `gone` or `error …`. On X11 the pointer entering the view gives Mixxx the keyboard.
+
+**The page** (`crates/ui/src/app/dj_mixxx_space.rs`) shows a slim strip ("Mixxx inside
+YOBUKO", the last note, **YOBUKO decks**) above the rectangle Mixxx fills; while Mixxx starts or
+after it closed, a page that says so with **Start Mixxx again** and **Use YOBUKO decks**.
+YOBUKO's own decks (parts 1 to 5) show instead where Mixxx cannot be inside the window (macOS,
+a Wayland session), where no Mixxx is found, or when the DJ asks; **Back to Mixxx** returns.
+
+**The controller.** While Mixxx runs, YOBUKO closes the DDJ-FLX4's MIDI ports
+(`Projects::lend_midi_ports`, not a setting) so Windows lets Mixxx open them, and its own
+decks stop reading the controller. With Mixxx 2.5 (the one shipped), the DDJ-FLX4 now gets the
+community mapping's Basic preset (`Mapping::CommunityBasic`, `third_party/mixxx-ddj-flx4-mapping`)
+with its Beat FX, jog and pad fixes and its effect chains; Mixxx 2.6 gets its Extended preset.
+
+**Quitting.** Quitting YOBUKO asks Mixxx to close as its own close button would and waits up
+to 5 seconds before stopping it. Mixxx closing by itself shows **Start Mixxx again**.
+
+**Not yet.** macOS (no window of another process can be inside another one there; a Mixxx
+built for YOBUKO would be needed). On a new profile Mixxx may still ask for its music folder
+and its sound card in dialogs of its own, shown over YOBUKO's window. Mixxx has a smallest
+size: a smaller DJ space cuts its right or bottom edge.
+
+### Check part 6
+
+1. On Windows, open the **DJ** space: after a few seconds Mixxx appears inside YOBUKO's window,
+   under the slim strip, without a title bar of its own.
+2. Click **Studio**: Mixxx hides. Click **DJ**: it is back, still playing if it was.
+3. Plug in the DDJ-FLX4: Mixxx drives its decks, and the **Beat FX** section changes the effect,
+   its beats, its channel and its level.
+4. Click **YOBUKO decks**: YOBUKO's own decks show; **Back to Mixxx** returns.
+5. Quit YOBUKO: Mixxx closes with it.
+
+Automated: the `--adopt` protocol's lines and placements, the title filter, lending MIDI ports,
+the mapping for each Mixxx version, the music folder of a new profile, and which page the DJ
+space shows. Checked by hand on Linux (X11, no window manager) with Mixxx 2.4: Mixxx inside the
+window, hidden in Studio, back in DJ, closed with YOBUKO. Not yet tried on Windows or with a
+real DDJ-FLX4.

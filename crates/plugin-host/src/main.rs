@@ -42,6 +42,8 @@
 //! state. The second crate allowed `unsafe`: opening plug-in files and the VST3 COM calls, each
 //! block documented.
 
+// YOBUKO: another program's window shown inside the app's (`--adopt`).
+mod adopt;
 mod ara;
 #[allow(
     non_camel_case_types,
@@ -178,6 +180,7 @@ fn main() {
         (Some("--control"), Some(address)) => address,
         (Some("--scan"), Some(file)) => scan(file),
         (Some("--scan-worker"), None) => scan_worker(),
+        (Some("--adopt"), Some(parent)) => adopt::main(parent, args.get(3), args.get(4)),
         #[cfg(feature = "vst2")]
         (Some("--vst2-probe"), Some(name)) => vst2_probe(name),
         _ => {

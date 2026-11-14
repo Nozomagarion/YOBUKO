@@ -548,6 +548,9 @@ pub enum Mapping {
     /// ElHanko's community mapping, Extended preset (Mixxx 2.6 and later): adds Pad FX,
     /// Key Shift, stems, Smart CFX. Vendored in `third_party/mixxx-ddj-flx4-mapping`.
     Community,
+    /// The same mapping's Basic preset (Mixxx 2.5): its fixes to the Beat FX section, the
+    /// jogs and the pads, with only the controls Mixxx 2.5 has (no stems, which 2.6 adds).
+    CommunityBasic,
 }
 
 impl Mapping {
@@ -555,6 +558,7 @@ impl Mapping {
     pub fn for_version(version: Option<(u32, u32)>) -> Self {
         match version {
             Some(v) if v >= (2, 6) => Self::Community,
+            Some(v) if v >= (2, 5) => Self::CommunityBasic,
             _ => Self::BuiltIn,
         }
     }
@@ -565,6 +569,7 @@ impl Mapping {
         match self {
             Self::BuiltIn => "Pioneer-DDJ-FLX4.midi.xml",
             Self::Community => EXTENDED,
+            Self::CommunityBasic => BASIC,
         }
     }
 }
@@ -714,13 +719,13 @@ impl Settings {
 /// by YOBUKO, so YOBUKO may change it; one set to anything else is the DJ's own choice.
 const OURS: [&str; 3] = ["Pioneer-DDJ-FLX4.midi.xml", EXTENDED, BASIC];
 
-/// Sets `profile` up for a DDJ-FLX4: the mapping files (for [`Mapping::Community`]), and the
+/// Sets `profile` up for a DDJ-FLX4: the mapping files (for the community ones), and the
 /// controller enabled with that mapping in Mixxx's settings, unless the DJ chose another
 /// mapping for it in Mixxx. A settings file without a version stays without one, so Mixxx
 /// still runs its first-start setup (sound card, music folder) and keeps these lines.
 pub fn configure(profile: &Path, mapping: Mapping) -> std::io::Result<()> {
     std::fs::create_dir_all(profile)?;
-    if mapping == Mapping::Community {
+    if mapping != Mapping::BuiltIn {
         install_community_mapping(profile)?;
     }
     let path = profile.join(CONFIG);
@@ -746,6 +751,27 @@ pub fn configure(profile: &Path, mapping: Mapping) -> std::io::Result<()> {
         std::fs::rename(&partial, &path)?;
     }
     Ok(())
+}
+
+/// Gives a Mixxx that has never run with `profile` its music folder, so it does not ask for
+/// one in a dialog of its own at first start: Mixxx takes the folder from its older setting
+/// (`[Playlist] Directory`) into its library. Nothing changes once Mixxx has made its library
+/// or has the setting. Returns whether it was given.
+pub fn seed_music_folder(profile: &Path, folder: &Path) -> std::io::Result<bool> {
+    if profile.join(DATABASE).exists() {
+        return Ok(false);
+    }
+    std::fs::create_dir_all(profile)?;
+    let path = profile.join(CONFIG);
+    let mut settings = Settings::parse(&std::fs::read_to_string(&path).unwrap_or_default());
+    if settings.get("[Playlist]", "Directory").is_some() {
+        return Ok(false);
+    }
+    settings.set("[Playlist]", "Directory", &folder.to_string_lossy());
+    let partial = path.with_extension("cfg.tmp");
+    std::fs::write(&partial, settings.render())?;
+    std::fs::rename(&partial, &path)?;
+    Ok(true)
 }
 
 /// The version of a Mixxx from its `VERSION` note (YOBUKO's packages write one beside the

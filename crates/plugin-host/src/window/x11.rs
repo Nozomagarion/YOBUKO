@@ -152,7 +152,9 @@ impl Window {
         let parent = u32::try_from(parent).map_err(|_| "no window to embed the editor in")?;
         let (connection, screen) = x11rb::connect(None).map_err(|e| connect(e.to_string()))?;
         let root = connection.setup().roots.get(screen).ok_or("no X screen")?;
-        let (depth, background) = (root.root_depth, root.black_pixel);
+        // The parent's depth and visual, whatever they are: the engine's window may be a 32-bit
+        // one that shows the desktop through it, and a window of another depth is refused there.
+        let (depth, background) = (x11rb::COPY_DEPTH_FROM_PARENT, root.black_pixel);
         let atoms = Atoms::new(&connection).map_err(|e| connect(e.to_string()))?;
         let atoms = atoms.reply().map_err(|e| connect(e.to_string()))?;
         let clip = connection.generate_id().map_err(|e| connect(e.to_string()))?;

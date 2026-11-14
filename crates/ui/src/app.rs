@@ -15,6 +15,8 @@ pub mod closing_dialog;
 mod control_bar;
 mod detail_area;
 mod dj;
+/// YOBUKO: Mixxx inside the window, in the DJ space.
+pub use dj::mixxx_space;
 mod drops;
 pub use drops::is_theme_package;
 pub mod export_dialog;

@@ -5,6 +5,29 @@ next. Newest first. Planned work, written code, packaged builds and real-world t
 apart. (Until 1 November 2026 this file was kept in French as `SUIVI_PROJET.md`; the full
 original is in the git history.)
 
+## The DJ space is Mixxx itself, inside YOBUKO's window, part 6 — 14 November 2026 (branch `claude/project-thread-fz5ul5`)
+
+**Goal:** the owner's request: the DJ space must be Mixxx one to one (every function, only
+YOBUKO's look), inside YOBUKO's single window, with a DDJ-FLX4 that works fully (the Beat FX
+section was not right in plain Mixxx).
+
+- **Code written:** opening the DJ space starts the Mixxx shipped with YOBUKO, in the YOBUKO
+  skin, and puts its window **inside YOBUKO's window**, without its title bar (Windows and
+  Linux/X11, through the plug-in host's new `--adopt`). A slim strip above it; Studio hides it,
+  DJ shows it again; quitting YOBUKO closes it. While Mixxx runs, YOBUKO lets go of the
+  DDJ-FLX4 so Mixxx can open it, and Mixxx 2.5 now gets the community DDJ-FLX4 mapping (Basic
+  preset, with its Beat FX fixes). YOBUKO's own decks stay as **YOBUKO decks** and on macOS.
+- **Checks passed (Linux, cloud container):** the real Mixxx 2.4 shown inside YOBUKO under
+  Xvfb (screenshot), hidden and shown again, closed with YOBUKO (Mixxx's log: shutdown complete);
+  tests for the `--adopt` protocol, lending MIDI ports, the mapping per version, the music
+  folder of a new profile and the DJ page's choice; clippy on the workspace, and on the plug-in
+  host for Windows.
+- **Limits:** macOS cannot hold another program's window inside YOBUKO's, so the Mac keeps
+  YOBUKO's own decks for now. On a new profile Mixxx may ask for its music folder and sound card
+  in its own dialogs. Not tried on Windows or with a real DDJ-FLX4 yet.
+- **Next criterion:** on the owner's PC, the DJ space shows Mixxx inside YOBUKO and the
+  DDJ-FLX4's Beat FX works.
+
 ## The DJ library rebuilt around music folders, part 5 — 13 November 2026 (branch `claude/project-thread-fz5ul5`)
 
 **Goal:** the owner's report: the DJ library "holds on to nothing", has no setting for where

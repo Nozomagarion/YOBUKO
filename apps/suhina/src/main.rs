@@ -37,6 +37,7 @@ mod crash_log;
 mod data_folder;
 #[cfg(target_os = "macos")]
 mod mac_menu;
+mod mixxx_panel;
 mod rbxport_panel;
 mod recent;
 mod save_error;
@@ -233,6 +234,8 @@ fn main() -> ExitCode {
         #[cfg(target_os = "macos")]
         mac_menu: None,
         rbxport: rbxport_panel::RbxportPanel::default(),
+        mixxx: mixxx_panel::MixxxPanel::default(),
+        owner: None,
         splash: Some(Splash::new(env!("CARGO_PKG_VERSION"))),
         start_up: Some(StartUp {
             source: args.source,
@@ -304,6 +307,7 @@ fn main() -> ExitCode {
             suhina_ui::kit::theme::install(&cc.egui_ctx);
             let owner = native_window(cc);
             window.editors_embeddable = owner.is_some();
+            window.owner = owner;
             window.app.set_editor_owner(owner);
             window.app.set_settings(&cc.egui_ctx, settings);
             // Strengths default to zero. The experimental Appearance controls apply live;
@@ -418,6 +422,10 @@ struct Window {
     mac_menu: Option<mac_menu::MacMenu>,
     /// YOBUKO: rbxport inside the window, in the USB space.
     rbxport: rbxport_panel::RbxportPanel,
+    /// YOBUKO: Mixxx inside the window, in the DJ space.
+    mixxx: mixxx_panel::MixxxPanel,
+    /// The main window as a Win32 or X11 one, which Mixxx's window goes inside.
+    owner: Option<u64>,
 }
 
 /// The slow part of starting, done in the window once the splash shows rather than before the
@@ -472,6 +480,8 @@ impl eframe::App for Window {
         // Each step of the end, with its time, so a trace says which one a slow quit waits on
         // (#823).
         suhina_plugins::trace!("quit: on_exit");
+        // YOBUKO: Mixxx closes with the window it is in.
+        self.mixxx.quit();
         let finished_in_time = self.app.finish_backups();
         suhina_plugins::trace!("quit: backups written ({finished_in_time}) at {:?}", started.elapsed());
         let let_go_in_time = self.app.let_go_of_projects();
@@ -542,6 +552,13 @@ impl Window {
         let usb_shown = self.app.usb_space_shown();
         self.rbxport.frame(ui.ctx(), frame, usb_shown, usb_view, usb_asks);
         self.app.set_usb_host(self.rbxport.host());
+        // YOBUKO: Mixxx's window over the DJ space's rectangle, inside this window.
+        let mixxx_view = self.app.take_mixxx_view(ui.ctx());
+        let mixxx_asks = self.app.take_mixxx_asks();
+        let mixxx_shown = self.app.mixxx_space_shown();
+        let app = &mut self.app;
+        self.mixxx.frame(ui.ctx(), self.owner, mixxx_shown, mixxx_view, mixxx_asks, || app.mixxx_launch());
+        self.app.set_mixxx_host(self.mixxx.host());
         if let Some(files) = self.app.take_drag_out() {
             let result = drag_out(frame, files);
             self.app.drag_out_ended(result);

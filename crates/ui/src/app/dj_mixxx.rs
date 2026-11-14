@@ -78,6 +78,31 @@ pub(crate) fn find() -> Option<Mixxx> {
         .map(|path| Mixxx { path, shipped: false })
 }
 
+/// Its version: the `VERSION` note YOBUKO's packages write beside the Mixxx they ship, or a
+/// macOS app's `Info.plist`.
+pub(crate) fn version(mixxx: &Mixxx) -> Option<(u32, u32)> {
+    if mixxx.path.extension().is_some_and(|e| e == "app") {
+        let plist = std::fs::read_to_string(mixxx.path.join("Contents").join("Info.plist")).unwrap_or_default();
+        return mixxx::plist_version(&plist).or_else(|| {
+            let note = std::fs::read_to_string(mixxx.path.with_file_name("Mixxx.version")).ok()?;
+            mixxx::parse_version(&note)
+        });
+    }
+    let note = std::fs::read_to_string(mixxx.path.parent()?.join("VERSION")).ok()?;
+    mixxx::parse_version(&note)
+}
+
+/// The arguments Mixxx is started with in the DJ space: the YOBUKO profile when there is one.
+/// Never full screen: its window goes inside YOBUKO's.
+pub(crate) fn arguments(settings_path: Option<&Path>) -> Vec<std::ffi::OsString> {
+    let mut args = Vec::new();
+    if let Some(profile) = settings_path {
+        args.push("--settings-path".into());
+        args.push(profile.as_os_str().to_owned());
+    }
+    args
+}
+
 /// The profile it runs with, and whether it must be told so (`--settings-path`): YOBUKO's own
 /// for the shipped copy; for one installed on its own, that Mixxx's usual profile, so the
 /// DJ's library is the one they already have.
