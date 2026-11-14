@@ -1,0 +1,139 @@
+/* Copyright (C) 2026 The Suhina contributors
+   SPDX-License-Identifier: GPL-3.0-or-later
+
+   YOBUKO soft shapes over LateNight: crates/dj/src/mixxx_skin.rs › soft_shapes fills in the
+   placeholders (an at sign and a name) with the look's colours and the deck colours, and appends this to both style sheets. */
+/* ===== YOBUKO soft shapes: rounded cards, round buttons, deck colours ===== */
+/* Qt draws a box square when its radius is over half its height: keep each radius under it. */
+#SkinContainer, #SkinContainer QWidget, WLabel, WPushButton, QPushButton, QLineEdit, QTreeView,
+QTableView, QHeaderView::section, QMenu, QMenuBar, QComboBox, WEffectSelector, WTrackTableView {
+  font-family: "Manrope", "Nunito", "Segoe UI", "Helvetica Neue", sans-serif;
+}
+#SkinContainer { background-color: @ground; }
+
+/* cards: soft, lifted, with breathing room */
+#Deck1, #DeckCompact1, #DeckMini1, #Deck2, #DeckCompact2, #DeckMini2,
+#Deck3, #DeckCompact3, #DeckMini3, #Deck4, #DeckCompact4, #DeckMini4,
+#MixerDecks, #FxUnitControlsExpanded, #FxUnitControlsCollapsed, #FxSlotsExpanded,
+#FxSlotsCollapsed, #MicDuckingContainer, #MicAuxUnit, #MicAuxAddFrame, #Sampler, #SamplerMini {
+  background-color: @surface;
+  border: 2px solid @line;
+  border-radius: 10px;
+}
+#Deck1, #DeckCompact1, #DeckMini1 { border: 2px solid @deck1soft; }
+#Deck2, #DeckCompact2, #DeckMini2 { border: 2px solid @deck2soft; }
+#Deck3, #DeckCompact3, #DeckMini3 { border: 2px solid @deck3soft; }
+#Deck4, #DeckCompact4, #DeckMini4 { border: 2px solid @deck4soft; }
+
+/* every button: a soft pill with bold text */
+#SkinContainer WPushButton, #SkinContainer QPushButton, WEffectSelector,
+WEffectChainPresetSelector, QComboBox {
+  border-radius: 8px;
+  border-image: none;
+  border: none;
+  font-weight: 700;
+}
+#SkinContainer WPushButton[pressed="true"], #SkinContainer WPushButton:pressed { border-image: none; }
+#SkinContainer WPushButton[displayValue="0"] { background-color: @control; color: @text; }
+#SkinContainer WPushButton[displayValue="1"] { background-color: @accent; color: @ink; }
+
+/* the transport: big round CUE / PLAY / SYNC, play filled with the deck colour */
+#SkinContainer WPushButton#CueDeck, #SkinContainer WPushButton#SyncDeck,
+#SkinContainer WPushButton#PlayDeck, #SkinContainer WPushButton#PlayIndicator,
+#SkinContainer WPushButton#PreviewIndicator {
+  border-radius: 13px;
+}
+#SkinContainer WPushButton#PlayIndicator, #SkinContainer WPushButton#PreviewIndicator,
+#SkinContainer WPushButton#PlayIndicator[displayValue="0"], #SkinContainer WPushButton#PlayIndicator[displayValue="1"],
+#SkinContainer WPushButton#PreviewIndicator[displayValue="0"], #SkinContainer WPushButton#PreviewIndicator[displayValue="1"] {
+  background-color: transparent; border: none;
+}
+#SkinContainer WPushButton#CueDeck[displayValue="0"], #SkinContainer WPushButton#SyncDeck[displayValue="0"] {
+  background-color: @control_strong; color: @text;
+}
+#SkinContainer WPushButton#CueDeck[displayValue="1"] { background-color: @deck4; color: @ink; }
+#Deck1 WPushButton#PlayDeck, #DeckCompact1 WPushButton#PlayDeck { background-color: @deck1; }
+#Deck2 WPushButton#PlayDeck, #DeckCompact2 WPushButton#PlayDeck { background-color: @deck2; }
+#Deck3 WPushButton#PlayDeck, #DeckCompact3 WPushButton#PlayDeck { background-color: @deck3; }
+#Deck4 WPushButton#PlayDeck, #DeckCompact4 WPushButton#PlayDeck { background-color: @deck4; }
+#Deck1 WPushButton#PlayDeck[displayValue="0"] { background-color: @deck1; }
+#Deck2 WPushButton#PlayDeck[displayValue="0"] { background-color: @deck2; }
+#Deck3 WPushButton#PlayDeck[displayValue="0"] { background-color: @deck3; }
+#Deck4 WPushButton#PlayDeck[displayValue="0"] { background-color: @deck4; }
+#Deck1 WPushButton#SyncDeck[displayValue="1"], #Deck1 WPushButton#PlayDeck[displayValue="1"] { background-color: @deck1; border: 3px solid @white; }
+#Deck2 WPushButton#SyncDeck[displayValue="1"], #Deck2 WPushButton#PlayDeck[displayValue="1"] { background-color: @deck2; border: 3px solid @white; }
+#Deck3 WPushButton#SyncDeck[displayValue="1"], #Deck3 WPushButton#PlayDeck[displayValue="1"] { background-color: @deck3; border: 3px solid @white; }
+#Deck4 WPushButton#SyncDeck[displayValue="1"], #Deck4 WPushButton#PlayDeck[displayValue="1"] { background-color: @deck4; border: 3px solid @white; }
+
+/* hot cue pads: a colour per number, outlined when empty, filled once set */
+#SkinContainer WPushButton#HotcueButton { border-radius: 10px; border-image: none; font-weight: 800; }
+#Hotcue1 WPushButton#HotcueButton[displayValue="0"] { background-color: @cue1dim; border: 2px solid @cue1; color: @cue1; }
+#Hotcue2 WPushButton#HotcueButton[displayValue="0"] { background-color: @cue2dim; border: 2px solid @cue2; color: @cue2; }
+#Hotcue3 WPushButton#HotcueButton[displayValue="0"] { background-color: @cue3dim; border: 2px solid @cue3; color: @cue3; }
+#Hotcue4 WPushButton#HotcueButton[displayValue="0"] { background-color: @cue4dim; border: 2px solid @cue4; color: @cue4; }
+#Hotcue5 WPushButton#HotcueButton[displayValue="0"] { background-color: @cue5dim; border: 2px solid @cue5; color: @cue5; }
+#Hotcue6 WPushButton#HotcueButton[displayValue="0"] { background-color: @cue6dim; border: 2px solid @cue6; color: @cue6; }
+#Hotcue7 WPushButton#HotcueButton[displayValue="0"] { background-color: @cue7dim; border: 2px solid @cue7; color: @cue7; }
+#Hotcue8 WPushButton#HotcueButton[displayValue="0"] { background-color: @cue8dim; border: 2px solid @cue8; color: @cue8; }
+
+/* loops, beat jump, key, rate: pills, the active ones green */
+#SkinContainer WPushButton#LoopActivate[displayValue="1"], #SkinContainer WPushButton#ReloopToggle[displayValue="1"],
+#SkinContainer WPushButton#KeylockButton[displayValue="1"], #SkinContainer WPushButton#QuantizeButton[displayValue="1"] {
+  background-color: @deck2; color: @ink;
+}
+
+/* the top toolbar: coloured pills, one colour each */
+#ToolBar { background-color: @ground; }
+#ToolBar WPushButton#GuiToggleButton { border-radius: 8px; padding: 2px 10px; }
+#ToolBar WPushButton#GuiToggleButton[displayValue="0"] { background-color: @control; color: @muted; }
+#ToolBar WPushButton#GuiToggleButton[displayValue="1"] { background-color: @deck1; color: @white; }
+
+/* effects: knob cards in violet, sampler pads in amber */
+#FxUnitControlsExpanded WPushButton[displayValue="1"], #FxSlotsExpanded WPushButton[displayValue="1"] { background-color: @deck3; color: @white; }
+#Sampler WPushButton[displayValue="1"], #SamplerMini WPushButton[displayValue="1"] { background-color: @deck4; color: @ink; }
+#Sampler WPushButton#PlayDeck, #SamplerMini WPushButton#PlayDeck { background-color: @deck3soft; border-radius: 12px; }
+
+/* library: a rounded card, airy rows, pink selection */
+#LibraryContainer, WLibrarySidebar, WTrackTableView, QTreeView {
+  border-radius: 16px;
+}
+WTrackTableView, WLibrarySidebar { background-color: @surface; alternate-background-color: @surface_alt; }
+WTrackTableView { outline: none; }
+WTrackTableView::item { padding: 0px 4px; }
+WTrackTableView::item:selected, WLibrarySidebar::item:selected { background-color: @deck1soft; color: @white; }
+WLibrarySidebar::item:selected { border-radius: 8px; }
+QHeaderView::section, WTrackTableViewHeader::section {
+  background-color: @surface; color: @muted; border: none; padding: 6px 8px; font-weight: 700;
+}
+WSearchLineEdit { border-radius: 11px; padding: 4px 12px; background-color: @control; border: 2px solid @deck3soft; }
+/* a cell being renamed in the library keeps the cell's own size: no pill, no padding */
+WTrackTableView QLineEdit, WLibrarySidebar QLineEdit, QTreeView QLineEdit, QTableView QLineEdit {
+  border-radius: 4px; padding: 0px 2px; margin: 0px; border: 1px solid @accent; background-color: @control;
+}
+QMenu { border-radius: 12px; }
+QToolTip { border-radius: 10px; }
+
+/* samplers: rounded pads, play in violet, loaded ones amber */
+#SkinContainer WPushButton#PlaySampler, #SkinContainer WPushButton#PlaySampler[displayValue="0"] {
+  background-color: @deck3; border-radius: 12px; border-image: none;
+}
+#SkinContainer WPushButton#PlaySampler[displayValue="1"] { background-color: @deck4; }
+#SamplerTitle, #SamplerTitleMini, #SamplerTitleBoxMini, #SamplerTitleRow {
+  background-color: @control; border-radius: 12px; border: 2px solid @deck3soft;
+}
+/* effects: power buttons and toggles light up violet */
+#SkinContainer WPushButton#FxToggleButton[displayValue="0"], #FxUnit1 WPushButton[displayValue="0"],
+#FxUnit2 WPushButton[displayValue="0"] { background-color: @control; }
+#SkinContainer WPushButton#FxToggleButton[displayValue="1"] { background-color: @deck3; color: @white; }
+#SkinContainer WEffectSelector, #SkinContainer WEffectChainPresetSelector, #SkinContainer QComboBox {
+  background-color: @control; border: 2px solid @deck3soft; border-radius: 10px; padding: 2px 10px;
+}
+/* breathing room between cards */
+#Deck1, #Deck2, #Deck3, #Deck4, #MixerDecks { margin: 3px; }
+
+/* the beat grid buttons beside the waveforms: small tiles, their icons kept easy to read */
+#BeatgridControls WPushButton, #BeatgridControls WPushButton[displayValue="0"],
+#BeatgridControls WPushButton[displayValue="1"] {
+  background-color: @ground; border: 1px solid @control_strong; border-radius: 6px; margin: 1px;
+}
+#BeatgridControls WPushButton:hover { background-color: @control; border: 1px solid @accent; }

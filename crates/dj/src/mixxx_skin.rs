@@ -22,6 +22,16 @@ pub const SOURCE: &str = "LateNight";
 pub const SCHEME: &str = "PaleMoon";
 /// The note in the made skin saying what it was made from, so it is remade only when needed.
 const STAMP: &str = "yobuko-look.json";
+/// The rounded, colourful YOBUKO shapes laid over LateNight's own style sheets.
+const SOFT: &str = include_str!("mixxx_skin_soft.qss");
+/// Where the soft shapes start in a style sheet, so they are never laid twice.
+const SOFT_MARK: &str = "/* ===== YOBUKO soft shapes";
+/// The style sheets the soft shapes are appended to: LateNight's and its dark scheme's.
+const STYLE_SHEETS: [&str; 2] = ["style.qss", "style_palemoon.qss"];
+/// The deck colours of YOBUKO's own DJ page: A pink, B green, C violet, D amber.
+pub const DECKS: [&str; 4] = ["#DB2777", "#10B981", "#8B5CF6", "#F59E0B"];
+/// The hot cue pads' colours, 1 to 8, as on YOBUKO's own DJ page.
+pub const CUES: [&str; 8] = ["#EF4444", "#F59E0B", "#EAB308", "#22C55E", "#06B6D4", "#3B82F6", "#8B5CF6", "#EC4899"];
 
 /// Mixxx's `skins` folders for the Mixxx at `mixxx` (its app on macOS, its program
 /// elsewhere), most likely first.
@@ -53,7 +63,8 @@ pub fn source(mixxx: &Path) -> Option<PathBuf> {
 pub fn install(source: &Path, profile: &Path, look: &Look) -> std::io::Result<bool> {
     let target = profile.join("skins").join(SKIN);
     let stamp = format!(
-        "{}\n{}\n{}\n",
+        "soft shapes {:016x}\n{}\n{}\n{}\n",
+        fingerprint(SOFT),
         source.display(),
         std::fs::metadata(source.join("skin.xml"))
             .and_then(|m| m.modified())
@@ -77,6 +88,7 @@ pub fn install(source: &Path, profile: &Path, look: &Look) -> std::io::Result<bo
             std::fs::write(path, svg)?;
         }
     }
+    soften(&partial, &colours)?;
     std::fs::write(partial.join(STAMP), stamp)?;
     if target.exists() {
         std::fs::remove_dir_all(&target)?;
@@ -164,6 +176,106 @@ pub fn relink(text: &str, base: &str) -> String {
     out.push_str(rest);
     out
 }
+
+/// Lays the soft shapes over the skin made at `skin`: rounded cards and pills, big CUE and
+/// PLAY buttons, a colour per hot cue pad, the deck colours (style sheets appended to, sizes
+/// changed in two layouts, a white play icon). Only looks change: every control stays.
+fn soften(skin: &Path, colours: &Colours) -> std::io::Result<()> {
+    let shapes = soft_shapes(colours);
+    for name in STYLE_SHEETS {
+        let path = skin.join(name);
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            std::fs::write(&path, with_soft_shapes(&text, &shapes))?;
+        }
+    }
+    for (file, change) in [
+        (["decks", "row_5_transportLoopJump.xml"], bigger_transport as fn(&str) -> String),
+        (["controls", "button_hotcue.xml"], bigger_pads),
+    ] {
+        let path = skin.join(file[0]).join(file[1]);
+        if let Ok(text) = std::fs::read_to_string(&path) {
+            std::fs::write(&path, change(&text))?;
+        }
+    }
+    let play = skin.join("palemoon").join("buttons").join("btn__play_deck.svg");
+    if play.exists() {
+        std::fs::write(play, PLAY_ICON)?;
+    }
+    Ok(())
+}
+
+/// A fingerprint of `text` (FNV-1a), so a changed style sheet remakes every skin made before it.
+fn fingerprint(text: &str) -> u64 {
+    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3))
+}
+
+/// `sheet` with `shapes` at its end, in place of any shapes laid before.
+pub fn with_soft_shapes(sheet: &str, shapes: &str) -> String {
+    let own = sheet.find(SOFT_MARK).map_or(sheet, |at| &sheet[..at]);
+    // The file's own header comment is kept out: only the marked part is laid.
+    let shapes = shapes.find(SOFT_MARK).map_or(shapes, |at| &shapes[at..]);
+    format!("{}\n{shapes}", own.trim_end())
+}
+
+/// The soft shapes' style sheet in `colours` and the deck and hot cue colours.
+pub fn soft_shapes(colours: &Colours) -> String {
+    let c = colours;
+    let deck = |i: usize| Rgba::hex(DECKS[i]).unwrap_or(c.accent);
+    let cue = |i: usize| Rgba::hex(CUES[i]).unwrap_or(c.accent);
+    let mut names: Vec<(String, Rgba)> = vec![
+        ("ground".into(), c.ground),
+        ("surface_alt".into(), c.surface.mix(c.text, 0.03)),
+        ("surface".into(), c.surface),
+        ("control_strong".into(), c.control.mix(c.text, 0.06)),
+        ("control".into(), c.control),
+        ("line".into(), c.line),
+        ("accent".into(), c.accent),
+        ("text".into(), c.text),
+        ("muted".into(), c.text_dim),
+        ("ink".into(), Rgba { r: 0x16, g: 0x11, b: 0x0F, a: 255 }),
+        ("white".into(), Rgba::WHITE),
+    ];
+    for i in 0..DECKS.len() {
+        names.push((format!("deck{}soft", i + 1), deck(i).mix(c.surface, 0.55)));
+        names.push((format!("deck{}", i + 1), deck(i)));
+    }
+    for i in 0..CUES.len() {
+        names.push((format!("cue{}dim", i + 1), cue(i).mix(c.surface, 0.8)));
+        names.push((format!("cue{}", i + 1), cue(i)));
+    }
+    // Longest first, so `@deck1soft` is never read as `@deck1` and `soft`.
+    names.sort_by_key(|name| std::cmp::Reverse(name.0.len()));
+    let mut out = SOFT.to_owned();
+    for (name, colour) in names {
+        out = out.replace(&format!("@{name}"), &colour.to_hex());
+    }
+    out
+}
+
+/// CUE and PLAY taller (34 px, from 26) and PLAY wider, so they read as big round buttons.
+fn bigger_transport(xml: &str) -> String {
+    xml.replace("<Size>42f,26f</Size>", "<Size>48f,34f</Size>")
+        .replace("68f,26f", "76f,34f")
+        .replace(
+            "<SetVariable name=\"Size\">26f,26f</SetVariable>\n                    <SetVariable name=\"BtnSize\">square</SetVariable>\n                    <SetVariable name=\"ConfigKey\"><Variable name=\"Group\"/>,reverse</SetVariable>",
+            "<SetVariable name=\"Size\">26f,34f</SetVariable>\n                    <SetVariable name=\"BtnSize\">square</SetVariable>\n                    <SetVariable name=\"ConfigKey\"><Variable name=\"Group\"/>,reverse</SetVariable>",
+        )
+}
+
+/// Hot cue pads a little bigger (30 px, from 26).
+fn bigger_pads(xml: &str) -> String {
+    xml.replace("26,26", "30,30")
+}
+
+/// LateNight's play and pause icon in white, to sit on the deck's colour.
+const PLAY_ICON: &str = r##"<svg width="100" height="48" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 24">
+  <g transform="translate(1.00049 1)" fill="#ffffff">
+    <path d="m27 5h4v12h-4v-12"/>
+    <path d="m34 5v12h4v-12h-4"/>
+    <path d="m11 5 8.9995 6-8.9995 6v-12"/>
+  </g>
+</svg>
+"##;
 
 /// The skin's own title, shown in Mixxx's preferences.
 fn retitle(xml: &str) -> String {

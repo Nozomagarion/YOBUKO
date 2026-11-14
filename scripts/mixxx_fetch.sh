@@ -13,6 +13,9 @@
 #   Linux:    nothing: Mixxx publishes no Linux build of its own, so YOBUKO uses the Mixxx of
 #             the distribution (the .deb recommends the `mixxx` package)
 #
+# YOBUKO's font (Manrope, SIL Open Font License) goes into Mixxx's own fonts folder, where
+# Mixxx loads fonts from, so its YOBUKO skin reads in the same letters as the studio.
+#
 # A VERSION note goes beside it (YOBUKO picks the DDJ-FLX4 mapping by it), and Mixxx's licence
 # and where its source is go into the package. Checksums of the downloads are pinned in
 # scripts/mixxx.sha256; a download not listed there is reported with its checksum, to pin.
@@ -49,6 +52,15 @@ fetch() {
     echo "$name: SHA-256 $got, expected $pinned" >&2
     exit 1
   fi
+}
+
+manrope="$(cd "$(dirname "$0")/.." && pwd)/crates/ui/fonts/manrope"
+
+# Manrope into Mixxx's fonts folder `$1`.
+fonts() {
+  mkdir -p "$1"
+  cp "$manrope/Manrope-Variable.ttf" "$1/"
+  cp "$manrope/OFL.txt" "$1/Manrope-OFL.txt"
 }
 
 licence() {
@@ -89,6 +101,7 @@ case "$(uname -s)" in
     echo "Copying $(basename "$app") into $helpers/Mixxx.app"
     ditto "$app" "$helpers/Mixxx.app"
     hdiutil detach "$mount" >/dev/null
+    fonts "$helpers/Mixxx.app/Contents/Resources/fonts"
     xattr -dr com.apple.quarantine "$helpers/Mixxx.app" 2>/dev/null || true
     echo "$MIXXX_VERSION" > "$helpers/Mixxx.version"
     ;;
@@ -106,6 +119,7 @@ case "$(uname -s)" in
     fi
     rm -rf "$package/mixxx"
     cp -R "$(dirname "$exe")" "$package/mixxx"
+    fonts "$package/mixxx/fonts"
     echo "$MIXXX_VERSION" > "$package/mixxx/VERSION"
     ;;
   *)
