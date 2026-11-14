@@ -4,6 +4,7 @@
    YOBUKO soft shapes over LateNight: crates/dj/src/mixxx_skin.rs › soft_shapes fills in the
    placeholders (an at sign and a name) with the look's colours and the deck colours, and appends this to both style sheets. */
 /* ===== YOBUKO soft shapes: rounded cards, round buttons, deck colours ===== */
+/* Qt draws a box square when its radius is over half its height: keep each radius under it. */
 #SkinContainer, #SkinContainer QWidget, WLabel, WPushButton, QPushButton, QLineEdit, QTreeView,
 QTableView, QHeaderView::section, QMenu, QMenuBar, QComboBox, WEffectSelector, WTrackTableView {
   font-family: "Manrope", "Nunito", "Segoe UI", "Helvetica Neue", sans-serif;
@@ -27,7 +28,7 @@ QTableView, QHeaderView::section, QMenu, QMenuBar, QComboBox, WEffectSelector, W
 /* every button: a soft pill with bold text */
 #SkinContainer WPushButton, #SkinContainer QPushButton, WEffectSelector,
 WEffectChainPresetSelector, QComboBox {
-  border-radius: 11px;
+  border-radius: 8px;
   border-image: none;
   border: none;
   font-weight: 700;
@@ -40,7 +41,7 @@ WEffectChainPresetSelector, QComboBox {
 #SkinContainer WPushButton#CueDeck, #SkinContainer WPushButton#SyncDeck,
 #SkinContainer WPushButton#PlayDeck, #SkinContainer WPushButton#PlayIndicator,
 #SkinContainer WPushButton#PreviewIndicator {
-  border-radius: 18px;
+  border-radius: 13px;
 }
 #SkinContainer WPushButton#PlayIndicator, #SkinContainer WPushButton#PreviewIndicator,
 #SkinContainer WPushButton#PlayIndicator[displayValue="0"], #SkinContainer WPushButton#PlayIndicator[displayValue="1"],
@@ -83,7 +84,7 @@ WEffectChainPresetSelector, QComboBox {
 
 /* the top toolbar: coloured pills, one colour each */
 #ToolBar { background-color: @ground; }
-#ToolBar WPushButton#GuiToggleButton { border-radius: 12px; padding: 2px 10px; }
+#ToolBar WPushButton#GuiToggleButton { border-radius: 8px; padding: 2px 10px; }
 #ToolBar WPushButton#GuiToggleButton[displayValue="0"] { background-color: @control; color: @muted; }
 #ToolBar WPushButton#GuiToggleButton[displayValue="1"] { background-color: @deck1; color: @white; }
 
@@ -97,12 +98,18 @@ WEffectChainPresetSelector, QComboBox {
   border-radius: 16px;
 }
 WTrackTableView, WLibrarySidebar { background-color: @surface; alternate-background-color: @surface_alt; }
-WTrackTableView::item { padding: 6px 4px; }
-WTrackTableView::item:selected, WLibrarySidebar::item:selected { background-color: @deck1soft; color: @white; border-radius: 8px; }
+WTrackTableView { outline: none; }
+WTrackTableView::item { padding: 0px 4px; }
+WTrackTableView::item:selected, WLibrarySidebar::item:selected { background-color: @deck1soft; color: @white; }
+WLibrarySidebar::item:selected { border-radius: 8px; }
 QHeaderView::section, WTrackTableViewHeader::section {
   background-color: @surface; color: @muted; border: none; padding: 6px 8px; font-weight: 700;
 }
-WSearchLineEdit, QLineEdit { border-radius: 14px; padding: 4px 12px; background-color: @control; border: 2px solid @deck3soft; }
+WSearchLineEdit { border-radius: 11px; padding: 4px 12px; background-color: @control; border: 2px solid @deck3soft; }
+/* a cell being renamed in the library keeps the cell's own size: no pill, no padding */
+WTrackTableView QLineEdit, WLibrarySidebar QLineEdit, QTreeView QLineEdit, QTableView QLineEdit {
+  border-radius: 4px; padding: 0px 2px; margin: 0px; border: 1px solid @accent; background-color: @control;
+}
 QMenu { border-radius: 12px; }
 QToolTip { border-radius: 10px; }
 
@@ -119,7 +126,14 @@ QToolTip { border-radius: 10px; }
 #FxUnit2 WPushButton[displayValue="0"] { background-color: @control; }
 #SkinContainer WPushButton#FxToggleButton[displayValue="1"] { background-color: @deck3; color: @white; }
 #SkinContainer WEffectSelector, #SkinContainer WEffectChainPresetSelector, #SkinContainer QComboBox {
-  background-color: @control; border: 2px solid @deck3soft; border-radius: 12px; padding: 2px 10px;
+  background-color: @control; border: 2px solid @deck3soft; border-radius: 10px; padding: 2px 10px;
 }
 /* breathing room between cards */
 #Deck1, #Deck2, #Deck3, #Deck4, #MixerDecks { margin: 3px; }
+
+/* the beat grid buttons beside the waveforms: small tiles, their icons kept easy to read */
+#BeatgridControls WPushButton, #BeatgridControls WPushButton[displayValue="0"],
+#BeatgridControls WPushButton[displayValue="1"] {
+  background-color: @ground; border: 1px solid @control_strong; border-radius: 6px; margin: 1px;
+}
+#BeatgridControls WPushButton:hover { background-color: @control; border: 1px solid @accent; }

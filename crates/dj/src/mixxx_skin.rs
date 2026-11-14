@@ -22,8 +22,6 @@ pub const SOURCE: &str = "LateNight";
 pub const SCHEME: &str = "PaleMoon";
 /// The note in the made skin saying what it was made from, so it is remade only when needed.
 const STAMP: &str = "yobuko-look.json";
-/// Which soft shapes the made skin has: a new one remakes every skin made before it.
-const SHAPES: &str = "soft shapes 1";
 /// The rounded, colourful YOBUKO shapes laid over LateNight's own style sheets.
 const SOFT: &str = include_str!("mixxx_skin_soft.qss");
 /// Where the soft shapes start in a style sheet, so they are never laid twice.
@@ -65,7 +63,8 @@ pub fn source(mixxx: &Path) -> Option<PathBuf> {
 pub fn install(source: &Path, profile: &Path, look: &Look) -> std::io::Result<bool> {
     let target = profile.join("skins").join(SKIN);
     let stamp = format!(
-        "{SHAPES}\n{}\n{}\n{}\n",
+        "soft shapes {:016x}\n{}\n{}\n{}\n",
+        fingerprint(SOFT),
         source.display(),
         std::fs::metadata(source.join("skin.xml"))
             .and_then(|m| m.modified())
@@ -203,6 +202,11 @@ fn soften(skin: &Path, colours: &Colours) -> std::io::Result<()> {
         std::fs::write(play, PLAY_ICON)?;
     }
     Ok(())
+}
+
+/// A fingerprint of `text` (FNV-1a), so a changed style sheet remakes every skin made before it.
+fn fingerprint(text: &str) -> u64 {
+    text.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, byte| (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3))
 }
 
 /// `sheet` with `shapes` at its end, in place of any shapes laid before.
